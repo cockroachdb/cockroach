@@ -469,7 +469,7 @@ func TestLWWConflictResolution(t *testing.T) {
 			t.Run("cross-cluster-local-delete", func(t *testing.T) {
 				if !useKVProc {
 					// TODO(jeffswenson): re-enable this test
-					skip.WithIssue(t, 146217, "crud writer does not correctly implement lww")
+					skip.WithPublicIssue(t, 146217, "crud writer does not correctly implement lww")
 				}
 
 				tableNameDst, rp, encoder := setup(t, useKVProc)

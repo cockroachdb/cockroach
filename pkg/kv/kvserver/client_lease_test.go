@@ -1073,7 +1073,7 @@ func TestLeasePreferencesDuringOutage(t *testing.T) {
 	skip.UnderShort(t)
 	// The test has 5 nodes. Its possible in stress-race for nodes to be starved
 	// out heartbeating their liveness.
-	skip.UnderDuressWithIssue(t, 144457)
+	skip.UnderDuressWithPublicIssue(t, 144457)
 
 	stickyRegistry := fs.NewStickyRegistry()
 	ctx := context.Background()
@@ -1948,7 +1948,7 @@ func TestLeaseStartTimeIsLargerThanPrevLeaseEndTimeAfterRestart(t *testing.T) {
 			if leaseType == roachpb.LeaseEpoch {
 				// Doesn't work for epoch leases since the liveness record might not be
 				// found in cache.
-				skip.WithIssue(t, 59874)
+				skip.WithPublicIssue(t, 59874)
 			}
 			storeReg := fs.NewStickyRegistry()
 			listenerReg := listenerutil.NewListenerRegistry()

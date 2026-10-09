@@ -177,7 +177,7 @@ func (r *readerCatalogTest) check(t *testing.T, query string, isEqual bool) {
 // replicated.
 func TestReaderCatalog(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.UnderDuressWithIssue(t, 130901)
+	skip.UnderDuressWithPublicIssue(t, 130901)
 
 	ctx := context.Background()
 	r, cleanup := newReaderCatalogTest(t, ctx, base.TestingKnobs{}, nil)
@@ -329,7 +329,7 @@ INSERT INTO t3(n) VALUES (3);
 // mixing timestamps if we didn't use AOST queries.
 func TestReaderCatalogTSAdvance(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	skip.UnderDuressWithIssue(t, 130901)
+	skip.UnderDuressWithPublicIssue(t, 130901)
 
 	ctx := context.Background()
 

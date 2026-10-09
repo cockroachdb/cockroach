@@ -721,7 +721,7 @@ func TestDecommissionSelf(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	skip.UnderRace(t) // can't handle 7-node clusters
-	skip.UnderDeadlockWithIssue(t, 112918)
+	skip.UnderDeadlockWithPublicIssue(t, 112918)
 
 	// Set up test cluster.
 	ctx := context.Background()

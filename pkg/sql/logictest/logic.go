@@ -3480,7 +3480,7 @@ func (t *logicTest) maybeSkipOnRetry(err error) {
 		(t.skipOnRetry && errors.As(err, &pqErr) &&
 			pgcode.MakeCode(string(pqErr.Code)) == pgcode.SerializationFailure) {
 		t.skippedOnRetry = true
-		skip.WithIssue(t.t(), 53724)
+		skip.WithPublicIssue(t.t(), 53724)
 	}
 }
 

@@ -186,7 +186,7 @@ func TestGossipHandlesReplacedNode(t *testing.T) {
 	// this requires some refactoring that remains out of scope for now.
 	err := tc.AddAndStartServerE(newServerArgs)
 	if testutils.IsError(err, `address already in use`) {
-		skip.WithIssue(t, 114036, "could not start server due to port reuse:", err)
+		skip.WithPublicIssue(t, 114036, "could not start server due to port reuse:", err)
 	} else {
 		require.NoError(t, err)
 	}

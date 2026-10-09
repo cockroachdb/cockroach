@@ -1511,7 +1511,7 @@ func TestRestoreRetryProcErr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 120874)
+	skip.WithPublicIssue(t, 120874)
 	testutils.RunTrueAndFalse(t, "restore processor progress", func(t *testing.T, makeProgress bool) {
 		mu := struct {
 			syncutil.Mutex
@@ -1578,7 +1578,7 @@ func TestRestoreRetryProcErr(t *testing.T) {
 func TestRestoreReplanOnLag(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 137098, "move logic to roachtest")
+	skip.WithPublicIssue(t, 137098, "move logic to roachtest")
 
 	skip.UnderRace(t, "slow test under stress race")
 
@@ -3188,7 +3188,7 @@ func TestBackupRestoreIncremental(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	// NB: because of rounding problems, using the end time in the AOST query is
 	// not guaranteed to work. We need to fix this.
-	skip.WithIssue(t, 86830, "restoring via AOST without revision_history is flaky")
+	skip.WithPublicIssue(t, 86830, "restoring via AOST without revision_history is flaky")
 
 	const numAccounts = 10
 	const numBackups = 5
@@ -8978,7 +8978,7 @@ func TestBackupWorkerFailure(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 113125)
+	skip.WithPublicIssue(t, 113125)
 
 	skip.UnderRace(t, "test is too slow to run under race")
 

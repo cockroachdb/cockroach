@@ -203,7 +203,7 @@ func TestProtectedTimestampsPreventGC(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if tc.failsWithSecondaryTenant && srv.TenantController().StartedDefaultTestTenant() {
-				skip.WithIssue(t, 110014)
+				skip.WithPublicIssue(t, 110014)
 			}
 
 			kvAccessor := &manualKVAccessor{}

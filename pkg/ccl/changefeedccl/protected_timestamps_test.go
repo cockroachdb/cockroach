@@ -1075,7 +1075,7 @@ func TestChangefeedPerTableProtectedTimestampProgression(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	skip.WithIssue(t, 93793, "unreleased feature as of 25.4")
+	skip.WithPublicIssue(t, 93793, "unreleased feature as of 25.4")
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)

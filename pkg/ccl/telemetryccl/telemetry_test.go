@@ -22,7 +22,7 @@ func TestTelemetry(t *testing.T) {
 	skip.UnderRace(t, "takes >1min under race")
 	skip.UnderDeadlock(t, "takes >1min under deadlock")
 
-	skip.WithIssue(t, 152123)
+	skip.WithPublicIssue(t, 152123)
 
 	sqltestutils.TelemetryTest(
 		t,

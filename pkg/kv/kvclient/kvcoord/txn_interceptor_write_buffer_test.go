@@ -4042,10 +4042,11 @@ func TestTxnWriteBufferElidesUnnecessaryLockingRequests(t *testing.T) {
 				lockConfigIsValid(t, firstReq)
 				lockConfigIsValid(t, secondReq)
 				if !firstReq.buffersLock {
-					skip.WithIssue(t, 142977, "%s does not buffer its lock", firstReq.name)
+					skip.WithPublicIssue(t, 142977, "%s does not buffer its lock", firstReq.name)
 				}
 				if secondReq.requiresValue && !firstReq.buffersValue {
-					skip.WithIssue(t, 142977, "%s requires a value but %s does not buffer its response", firstReq.name, secondReq.name)
+					skip.WithPublicIssue(t, 142977, "%s requires a value but %s does not buffer its response",
+						firstReq.name, secondReq.name)
 				}
 
 				twb, mockSender, _ := makeMockTxnWriteBuffer(ctx)

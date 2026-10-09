@@ -698,7 +698,7 @@ func TestShowBackupWithDebugIDs(t *testing.T) {
 func TestShowBackupPathIsCollectionRoot(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 152935)
+	skip.WithPublicIssue(t, 152935)
 
 	const numAccounts = 11
 

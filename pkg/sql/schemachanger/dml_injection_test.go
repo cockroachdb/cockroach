@@ -171,7 +171,7 @@ func TestAlterTableDMLInjection(t *testing.T) {
 		scope.Close(t)
 	})
 
-	skip.UnderStressWithIssue(t, 111663)
+	skip.UnderStressWithPublicIssue(t, 111663)
 
 	testCases := []testCase{
 		{

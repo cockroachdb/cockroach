@@ -172,7 +172,7 @@ func TestChangefeedBasics(t *testing.T) {
 func TestDatabaseLevelChangefeedBasics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 154053, "unreleased feature")
+	skip.WithPublicIssue(t, 154053, "unreleased feature")
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -234,7 +234,7 @@ func TestDatabaseLevelChangefeedBasics(t *testing.T) {
 func TestDatabaseLevelChangefeedWithIncludeFilter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 154053, "unreleased feature")
+	skip.WithPublicIssue(t, 154053, "unreleased feature")
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		expectSuccess := func(stmt string) {
@@ -264,7 +264,7 @@ func TestDatabaseLevelChangefeedWithIncludeFilter(t *testing.T) {
 func TestDatabaseLevelChangefeedWithExcludeFilter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 154053, "unreleased feature")
+	skip.WithPublicIssue(t, 154053, "unreleased feature")
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		expectSuccess := func(stmt string) {
@@ -1195,7 +1195,7 @@ func TestChangefeedDiff(t *testing.T) {
 func TestDatabaseLevelChangefeedDiff(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 154053, "unreleased feature")
+	skip.WithPublicIssue(t, 154053, "unreleased feature")
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -1329,7 +1329,7 @@ func TestMissingTableErr(t *testing.T) {
 func TestChangefeedMissingDatabaseErr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 154053, "unreleased feature")
+	skip.WithPublicIssue(t, 154053, "unreleased feature")
 
 	cdcTest(t, func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		expectErrCreatingFeed(t, f, `CREATE CHANGEFEED FOR DATABASE foo`, `database "foo" does not exist`)
@@ -1339,7 +1339,7 @@ func TestChangefeedMissingDatabaseErr(t *testing.T) {
 func TestChangefeedCannotTargetSystemDatabaseErr(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 154053, "unreleased feature")
+	skip.WithPublicIssue(t, 154053, "unreleased feature")
 
 	cdcTest(t, func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		expectErrCreatingFeed(t, f, `CREATE CHANGEFEED FOR DATABASE system`, `changefeed cannot target the system database`)
@@ -8313,7 +8313,7 @@ func TestChangefeedErrors(t *testing.T) {
 	)
 
 	t.Run("sinkless enriched non-json", func(t *testing.T) {
-		skip.WithIssue(t, 130949, "sinkless feed validations are subpar")
+		skip.WithPublicIssue(t, 130949, "sinkless feed validations are subpar")
 		sqlDB.ExpectErrWithTimeout(
 			t, `some error`,
 			`CREATE CHANGEFEED FOR foo WITH envelope=enriched, format=avro, confluent_schema_registry='http://localhost:8888'`,
@@ -8587,7 +8587,7 @@ func TestChangefeedPauseUnpause(t *testing.T) {
 func TestChangefeedPauseUnpauseCursorAndInitialScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderRaceWithIssue(t, 67565)
+	skip.UnderRaceWithPublicIssue(t, 67565)
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -13488,7 +13488,7 @@ func TestChangefeedBareFullProtobuf(t *testing.T) {
 func TestDatabaseRenameDuringDatabaseLevelChangefeed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 154053, "unreleased feature")
+	skip.WithPublicIssue(t, 154053, "unreleased feature")
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)
@@ -13517,7 +13517,7 @@ func TestDatabaseRenameDuringDatabaseLevelChangefeed(t *testing.T) {
 func TestTableRenameDuringDatabaseLevelChangefeed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.WithIssue(t, 154053, "unreleased feature")
+	skip.WithPublicIssue(t, 154053, "unreleased feature")
 
 	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
 		sqlDB := sqlutils.MakeSQLRunner(s.DB)

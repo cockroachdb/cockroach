@@ -1744,7 +1744,7 @@ func TestLeaseManagerLockedTimestampBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	// Skip until future PRs fix this test.
-	skip.WithIssue(t, 153826)
+	skip.WithPublicIssue(t, 153826)
 
 	var blockUpdates atomic.Bool
 	var blockCheckPoint atomic.Bool

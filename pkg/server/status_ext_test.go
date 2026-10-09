@@ -24,7 +24,7 @@ import (
 func TestStatusLocalStacks(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderRaceWithIssue(t, 74133)
+	skip.UnderRaceWithPublicIssue(t, 74133)
 
 	ctx := context.Background()
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
