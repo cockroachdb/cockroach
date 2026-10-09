@@ -5618,10 +5618,10 @@ def go_deps():
         name = "com_github_klauspost_compress",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/klauspost/compress",
-        sha256 = "88dea800cc6a11ccb9dd2f0dd487f30e8701870abdfc11245e41dcfc9f3d428e",
-        strip_prefix = "github.com/klauspost/compress@v1.17.11",
+        sha256 = "eedb58d7e4a65669f9a290536646cbfe4188112368424b56a8c75cfdadb27dea",
+        strip_prefix = "github.com/klauspost/compress@v1.20.1",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/klauspost/compress/com_github_klauspost_compress-v1.17.11.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/klauspost/compress/com_github_klauspost_compress-v1.20.1.zip",
         ],
     )
     go_repository(
@@ -6368,10 +6368,10 @@ def go_deps():
         name = "com_github_minio_minlz",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/minio/minlz",
-        sha256 = "4aa59500780b1b5e209f077c3533aefc351656640b12c21721926300dcf30ea7",
-        strip_prefix = "github.com/minio/minlz@v1.0.2-0.20260119185444-845e64f85661",
+        sha256 = "50edc89786362f70d3adb537e189ce8d8f5e4b99d0e70a8b3216fd5e19aac003",
+        strip_prefix = "github.com/minio/minlz@v1.2.2",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/minio/minlz/com_github_minio_minlz-v1.0.2-0.20260119185444-845e64f85661.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/minio/minlz/com_github_minio_minlz-v1.2.2.zip",
         ],
     )
     go_repository(

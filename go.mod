@@ -191,7 +191,7 @@ require (
 	github.com/jordanlewis/gcassert v0.0.0-20240401195008-3141cbd028c0
 	github.com/kisielk/errcheck v1.8.0
 	github.com/kisielk/gotool v1.0.0
-	github.com/klauspost/compress v1.17.11
+	github.com/klauspost/compress v1.20.1
 	github.com/klauspost/pgzip v1.2.5
 	github.com/knz/bubbline v0.0.0-20230422210153-e176cdfe1c43
 	github.com/knz/strtime v0.0.0-20200318182718-be999391ffa9
@@ -423,7 +423,7 @@ require (
 	github.com/minio/c2goasm v0.0.0-20190812172519-36a3d3bbc4f3 // indirect
 	github.com/minio/md5-simd v1.1.2 // indirect
 	github.com/minio/minio-go/v7 v7.0.21 // indirect
-	github.com/minio/minlz v1.0.2-0.20260119185444-845e64f85661 // indirect
+	github.com/minio/minlz v1.2.2 // indirect
 	github.com/minio/sha256-simd v1.0.0 // indirect
 	github.com/mitchellh/copystructure v1.0.0 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
