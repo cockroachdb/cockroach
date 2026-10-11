@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -29,14 +30,15 @@ import (
 //     before giving up.
 //
 //  2. Once a node exhausts its retries, the fan-out fails fast: the coordinator
-//     cancels the remaining nodes' work and returns the error to the caller rather
-//     than letting the other nodes keep running.
+//     cancels the remaining nodes' work rather than letting it keep running, and
+//     returns that node's error in the response's Errors with its type intact.
 //
-// The test injects a permanent failure on one node (the victim) and blocks a
-// second node (the blocker) until its download context is cancelled. The victim
-// must attempt perNodeMaxDownloadAttempts times, DownloadSpan must return a
-// non-nil error, and the blocker must observe cancellation — proving sibling node
-// work is actually shut down.
+// The test injects a permanent InsufficientSpaceError on one node (the victim)
+// and blocks a second node (the blocker) until its download context is
+// cancelled. The victim must attempt perNodeMaxDownloadAttempts times,
+// DownloadSpan must return no error and a response carrying the victim's
+// InsufficientSpaceError, and the blocker must observe cancellation — proving
+// sibling node work is actually shut down.
 func TestDownloadSpanFailFast(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -60,7 +62,7 @@ func TestDownloadSpanFailFast(t *testing.T) {
 				mu.Lock()
 				attempts[nodeID]++
 				mu.Unlock()
-				return errors.Newf("injected transient download error on n%d", nodeID)
+				return &kvpb.InsufficientSpaceError{StoreID: 1, Op: "ingest data", Required: 0.05}
 			case blocker:
 				<-ctx.Done()
 				select {
@@ -94,8 +96,12 @@ func TestDownloadSpanFailFast(t *testing.T) {
 		Spans: []roachpb.Span{span},
 	})
 
-	require.Error(t, err)
-	require.Nil(t, resp)
+	require.NoError(t, err)
+	encodedErr, ok := resp.Errors[victim]
+	require.True(t, ok, "expected an error for victim node n%d, got %v", victim, resp.Errors)
+	victimErr := errors.DecodeError(ctx, encodedErr)
+	require.True(t, errors.HasType(victimErr, &kvpb.InsufficientSpaceError{}),
+		"expected InsufficientSpaceError, got %+v", victimErr)
 
 	mu.Lock()
 	victimAttempts := attempts[victim]
