@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strings"
 	"sync"
 	"unsafe"
 
@@ -235,6 +236,10 @@ func hasGEOSLibraries(dir string) bool {
 // the paths as parsed in by locs.
 func initGEOS(dirs []string) (*C.CR_GEOS, string, error) {
 	var err error
+	// Only the first directory's error ends up in the message of the combined
+	// error, so a code-signing rejection in a later directory is remembered
+	// separately to be able to hint at it.
+	signatureRejected := false
 	for _, dir := range dirs {
 		var ret *C.CR_GEOS
 		newErr := statusToError(
@@ -247,6 +252,7 @@ func initGEOS(dirs []string) (*C.CR_GEOS, string, error) {
 		if newErr == nil {
 			return ret, dir, nil
 		}
+		signatureRejected = signatureRejected || isCodeSignatureError(newErr)
 		err = errors.CombineErrors(
 			err,
 			errors.Wrapf(
@@ -257,12 +263,32 @@ func initGEOS(dirs []string) (*C.CR_GEOS, string, error) {
 		)
 	}
 	if err != nil {
-		return nil, "", wrapGEOSInitError(errors.Wrap(err, "geos: error during GEOS init"))
+		return nil, "", wrapGEOSInitError(
+			errors.Wrap(err, "geos: error during GEOS init"), signatureRejected,
+		)
 	}
-	return nil, "", wrapGEOSInitError(errors.Newf("geos: no locations to init GEOS"))
+	return nil, "", wrapGEOSInitError(
+		errors.Newf("geos: no locations to init GEOS"), false, /* signatureRejected */
+	)
 }
 
-func wrapGEOSInitError(err error) error {
+// isCodeSignatureError reports whether a dlopen failure was caused by macOS
+// refusing the library's code signature. A hardened (notarized) cockroach
+// binary only loads libraries signed with its own Team ID, and Gatekeeper
+// refuses quarantined libraries that are not notarized; both are reported by
+// dyld as "code signature ... not valid for use in process".
+func isCodeSignatureError(err error) bool {
+	if runtime.GOOS != "darwin" {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "code signature") ||
+		strings.Contains(msg, "not valid for use in process")
+}
+
+// wrapGEOSInitError attaches the user-facing hints and pg code to a GEOS
+// initialization error. signatureRejected adds the macOS code-signing hint.
+func wrapGEOSInitError(err error, signatureRejected bool) error {
 	page := "linux"
 	switch runtime.GOOS {
 	case "darwin":
@@ -270,14 +296,22 @@ func wrapGEOSInitError(err error) error {
 	case "windows":
 		page = "windows"
 	}
-	return pgerror.WithCandidateCode(
-		errors.WithHintf(
-			err,
-			"Ensure you have the spatial libraries installed as per the instructions in %s",
-			docs.URL("install-cockroachdb-"+page),
-		),
-		pgcode.ConfigFile,
+	err = errors.WithHintf(
+		err,
+		"Ensure you have the spatial libraries installed as per the instructions in %s",
+		docs.URL("install-cockroachdb-"+page),
 	)
+	if signatureRejected {
+		err = errors.WithHint(
+			err,
+			"macOS refused to load a GEOS library because of its code signature. "+
+				"The release binary only loads libraries signed by Cockroach Labs, such as the "+
+				"ones shipped in the lib/ directory of the release archive. If those were "+
+				"downloaded with a browser, remove the quarantine attribute with "+
+				"`xattr -d com.apple.quarantine <library>`.",
+		)
+	}
+	return pgerror.WithCandidateCode(err, pgcode.ConfigFile)
 }
 
 // goToCSlice returns a CR_GEOS_Slice from a given Go byte slice.

@@ -9,6 +9,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -35,6 +36,35 @@ func TestInitGEOS(t *testing.T) {
 		require.NotEmpty(t, loc)
 		require.NotNil(t, ret)
 	})
+}
+
+func TestWrapGEOSInitErrorCodeSignatureHint(t *testing.T) {
+	// The dyld message that a hardened binary gets when a library has no, or
+	// a different, Team ID.
+	dlopenErr := errors.New(`geos error: dlopen(/x/lib/libgeos.dylib, 0x0001): tried: ` +
+		`'/x/lib/libgeos.dylib' (code signature in <UUID> '/x/lib/libgeos.dylib' not valid ` +
+		`for use in process: mapping process and mapped file (non-platform) have different Team IDs)`)
+
+	tests := []struct {
+		name              string
+		err               error
+		signatureRejected bool
+		expectedHint      bool
+	}{
+		{name: "signature rejected", err: dlopenErr, signatureRejected: true, expectedHint: true},
+		{name: "library missing", err: errors.New("no such file"), signatureRejected: false, expectedHint: false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			hints := strings.Join(errors.GetAllHints(wrapGEOSInitError(tc.err, tc.signatureRejected)), "\n")
+			require.Contains(t, hints, "Ensure you have the spatial libraries installed")
+			require.Equal(t, tc.expectedHint, strings.Contains(hints, "code signature"))
+		})
+	}
+
+	// Detection is a macOS concern: the message is only produced by dyld.
+	require.Equal(t, runtime.GOOS == "darwin", isCodeSignatureError(dlopenErr))
+	require.False(t, isCodeSignatureError(errors.New("no such file")))
 }
 
 // TestFindLibraryDirectoriesInParentingDirectories checks the ancestor walk

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/democluster"
+	"github.com/cockroachdb/cockroach/pkg/geo/geos"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -233,6 +234,17 @@ func runDemoInternal(
 	defer c.Close(ctx)
 
 	initGEOS(ctx)
+	// The demo shell shows only FATAL log output on stderr, so the warning
+	// initGEOS logs when the libraries cannot be loaded is invisible here; the
+	// user would otherwise only find out from the first failing spatial query.
+	// EnsureInit returns the cached result of the attempt above.
+	if _, err := geos.EnsureInit(geos.EnsureInitErrorDisplayPrivate, startCtx.geoLibsDir); err != nil {
+		fmt.Fprintf(stderr, "#\n# warning: spatial functions are not available: %v\n", err)
+		for _, hint := range errors.GetAllHints(err) {
+			fmt.Fprintf(stderr, "# hint: %s\n", hint)
+		}
+		fmt.Fprintf(stderr, "#\n")
+	}
 
 	if err := c.Start(ctx); err != nil {
 		return clierrorplus.CheckAndMaybeShout(err)
