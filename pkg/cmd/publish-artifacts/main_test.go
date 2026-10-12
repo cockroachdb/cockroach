@@ -138,7 +138,7 @@ func (r *mockExecRunner) run(c *exec.Cmd) ([]byte, error) {
 		paths = append(paths, filepath.Join(r.pkgDir, "LICENSE"))
 		paths = append(paths, filepath.Join(r.pkgDir, "licenses", "THIRD-PARTY-NOTICES.txt"))
 		ext := release.SharedLibraryExtensionFromPlatform(platform)
-		if platform != release.PlatformMacOSArm && platform != release.PlatformWindows {
+		if platform != release.PlatformWindows {
 			for _, lib := range release.CRDBSharedLibraries {
 				paths = append(paths, filepath.Join(r.fakeBazelBin, "c-deps", "libgeos_foreign", "lib", lib+ext))
 			}
@@ -195,7 +195,7 @@ func TestPublish(t *testing.T) {
 				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-apple-darwin19 -c official-binary' -c opt --config=force_build_cdeps --config=pgo --config=crossmacosbase --norun_validations",
 				"env=[] args=bazel info bazel-bin --norun_validations -c opt --config=force_build_cdeps --config=pgo --config=crossmacosbase",
-				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql '--workspace_status_command=./build/bazelutil/stamp.sh -t aarch64-apple-darwin21.2 -c official-binary' -c opt --config=force_build_cdeps --config=pgo --config=crossmacosarmbase --norun_validations",
+				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos '--workspace_status_command=./build/bazelutil/stamp.sh -t aarch64-apple-darwin21.2 -c official-binary' -c opt --config=force_build_cdeps --config=pgo --config=crossmacosarmbase --norun_validations",
 				"env=[] args=bazel info bazel-bin --norun_validations -c opt --config=force_build_cdeps --config=pgo --config=crossmacosarmbase",
 				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql --enable_runfiles '--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-w64-mingw32 -c official-binary' -c opt --config=force_build_cdeps --config=pgo --config=crosswindowsbase --norun_validations",
 				"env=[] args=bazel info bazel-bin --norun_validations -c opt --config=force_build_cdeps --config=pgo --config=crosswindowsbase",
@@ -307,10 +307,14 @@ func TestPublish(t *testing.T) {
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-apple-darwin19 -c official-binary' " +
 					"-c opt --config=force_build_cdeps --config=pgo --config=crossmacosbase --norun_validations",
 				"gs://edge-binaries-bucket/cockroach/lib/libgeos_c.darwin-amd64.dylib.LATEST/no-cache REDIRECT /cockroach/lib/libgeos_c.darwin-amd64.1234567890abcdef.dylib",
-				"gs://edge-binaries-bucket/cockroach/cockroach.darwin-arm64.unsigned.1234567890abcdef CONTENTS env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql '--workspace_status_command=./build/bazelutil/stamp.sh -t aarch64-apple-darwin21.2 -c official-binary' -c opt --config=force_build_cdeps --config=pgo --config=crossmacosarmbase --norun_validations",
+				"gs://edge-binaries-bucket/cockroach/cockroach.darwin-arm64.unsigned.1234567890abcdef CONTENTS env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos '--workspace_status_command=./build/bazelutil/stamp.sh -t aarch64-apple-darwin21.2 -c official-binary' -c opt --config=force_build_cdeps --config=pgo --config=crossmacosarmbase --norun_validations",
 				"gs://edge-binaries-bucket/cockroach/cockroach.darwin-arm64.unsigned.LATEST/no-cache REDIRECT /cockroach/cockroach.darwin-arm64.unsigned.1234567890abcdef",
-				"gs://edge-binaries-bucket/cockroach/cockroach-sql.darwin-arm64.unsigned.1234567890abcdef CONTENTS env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql '--workspace_status_command=./build/bazelutil/stamp.sh -t aarch64-apple-darwin21.2 -c official-binary' -c opt --config=force_build_cdeps --config=pgo --config=crossmacosarmbase --norun_validations",
+				"gs://edge-binaries-bucket/cockroach/cockroach-sql.darwin-arm64.unsigned.1234567890abcdef CONTENTS env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos '--workspace_status_command=./build/bazelutil/stamp.sh -t aarch64-apple-darwin21.2 -c official-binary' -c opt --config=force_build_cdeps --config=pgo --config=crossmacosarmbase --norun_validations",
 				"gs://edge-binaries-bucket/cockroach/cockroach-sql.darwin-arm64.unsigned.LATEST/no-cache REDIRECT /cockroach/cockroach-sql.darwin-arm64.unsigned.1234567890abcdef",
+				"gs://edge-binaries-bucket/cockroach/lib/libgeos.darwin-arm64.unsigned.1234567890abcdef.dylib CONTENTS env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos '--workspace_status_command=./build/bazelutil/stamp.sh -t aarch64-apple-darwin21.2 -c official-binary' -c opt --config=force_build_cdeps --config=pgo --config=crossmacosarmbase --norun_validations",
+				"gs://edge-binaries-bucket/cockroach/lib/libgeos.darwin-arm64.unsigned.dylib.LATEST/no-cache REDIRECT /cockroach/lib/libgeos.darwin-arm64.unsigned.1234567890abcdef.dylib",
+				"gs://edge-binaries-bucket/cockroach/lib/libgeos_c.darwin-arm64.unsigned.1234567890abcdef.dylib CONTENTS env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos '--workspace_status_command=./build/bazelutil/stamp.sh -t aarch64-apple-darwin21.2 -c official-binary' -c opt --config=force_build_cdeps --config=pgo --config=crossmacosarmbase --norun_validations",
+				"gs://edge-binaries-bucket/cockroach/lib/libgeos_c.darwin-arm64.unsigned.dylib.LATEST/no-cache REDIRECT /cockroach/lib/libgeos_c.darwin-arm64.unsigned.1234567890abcdef.dylib",
 				"gs://edge-binaries-bucket/cockroach/cockroach.windows-amd64.1234567890abcdef.exe CONTENTS env=[] args=bazel build " +
 					"//pkg/cmd/cockroach //pkg/cmd/cockroach-sql --enable_runfiles " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-w64-mingw32 -c official-binary' " +
@@ -510,7 +514,7 @@ func TestRelease(t *testing.T) {
 				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-apple-darwin19 -c official-binary -b release' -c opt --config=force_build_cdeps --config=pgo --config=crossmacosbase --norun_validations",
 				"env=[] args=bazel info bazel-bin --norun_validations -c opt --config=force_build_cdeps --config=pgo --config=crossmacosbase",
-				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql '--workspace_status_command=./build/bazelutil/stamp.sh -t aarch64-apple-darwin21.2 -c official-binary -b release' -c opt --config=force_build_cdeps --config=pgo --config=crossmacosarmbase --norun_validations",
+				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos '--workspace_status_command=./build/bazelutil/stamp.sh -t aarch64-apple-darwin21.2 -c official-binary -b release' -c opt --config=force_build_cdeps --config=pgo --config=crossmacosarmbase --norun_validations",
 				"env=[] args=bazel info bazel-bin --norun_validations -c opt --config=force_build_cdeps --config=pgo --config" +
 					"=crossmacosarmbase",
 				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql --enable_runfiles " +
@@ -576,7 +580,7 @@ func TestRelease(t *testing.T) {
 				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos " +
 					"'--workspace_status_command=./build/bazelutil/stamp.sh -t x86_64-apple-darwin19 -c official-binary -b release -d true' -c opt --config=force_build_cdeps --config=pgo --config=crossmacosbase --norun_validations",
 				"env=[] args=bazel info bazel-bin --norun_validations -c opt --config=force_build_cdeps --config=pgo --config=crossmacosbase",
-				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql '--workspace_status_command=./build/bazelutil/stamp.sh -t aarch64-apple-darwin21.2 -c official-binary -b release -d true' -c opt --config=force_build_cdeps --config=pgo --config=crossmacosarmbase --norun_validations",
+				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql //c-deps:libgeos '--workspace_status_command=./build/bazelutil/stamp.sh -t aarch64-apple-darwin21.2 -c official-binary -b release -d true' -c opt --config=force_build_cdeps --config=pgo --config=crossmacosarmbase --norun_validations",
 				"env=[] args=bazel info bazel-bin --norun_validations -c opt --config=force_build_cdeps --config=pgo --config" +
 					"=crossmacosarmbase",
 				"env=[] args=bazel build //pkg/cmd/cockroach //pkg/cmd/cockroach-sql --enable_runfiles " +
