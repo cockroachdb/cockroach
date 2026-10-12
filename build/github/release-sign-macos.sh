@@ -69,21 +69,11 @@ for product in cockroach cockroach-sql; do
     tar -xf "$unsigned_file"
     mv "$unsigned_base" "$base"
 
-    echo "Signing $base/$product..."
-    rcodesign sign \
-      --p12-file "$secrets_dir/cert.p12" --p12-password-file "$secrets_dir/cert.pass" \
-      --code-signature-flags runtime \
-      "$base/$product"
+    "$dir/build/release/sign-macos-release-dir.sh" "$base" "$product" \
+      "$secrets_dir/cert.p12" "$secrets_dir/cert.pass" "$secrets_dir/api_key.json"
     tar -czf "$target" "$base"
 
-    echo "Submitting for notarization..."
-    zip crl.zip "$base/$product"
-    retry rcodesign notary-submit \
-      --api-key-file "$secrets_dir/api_key.json" \
-      --wait \
-      crl.zip
-
-    rm -rf "$base" "$unsigned_file" "$unsigned_file.sha256sum" crl.zip
+    rm -rf "$base" "$unsigned_file" "$unsigned_file.sha256sum"
 
     echo "Uploading signed archive: $target"
     shasum --algorithm 256 "$target" > "$target.sha256sum"

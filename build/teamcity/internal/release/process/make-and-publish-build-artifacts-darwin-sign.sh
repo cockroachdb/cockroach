@@ -79,19 +79,14 @@ for product in cockroach cockroach-sql; do
     gsutil cp "gs://$gcs_bucket/$product-$build_name.$platform.unsigned.tgz" "$product-$build_name.$platform.unsigned.tgz"
     tar -xzf "$product-$build_name.$platform.unsigned.tgz"
     mv "$product-$build_name.$platform.unsigned" "$product-$build_name.$platform"
-    rcodesign sign \
-      --p12-file "$secrets_dir/cert.p12" --p12-password-file "$secrets_dir/cert.pass" \
-      --code-signature-flags runtime \
-      "$product-$build_name.$platform/$product"
-    zip -r crl.zip "$product-$build_name.$platform/$product"
-    retry rcodesign notary-submit --api-key-file "$secrets_dir/api_key.json" --wait crl.zip
+    "$dir/release/sign-macos-release-dir.sh" "$product-$build_name.$platform" "$product" \
+      "$secrets_dir/cert.p12" "$secrets_dir/cert.pass" "$secrets_dir/api_key.json"
     tar -czf "$product-$build_name.$platform.tgz" "$product-$build_name.$platform"
     shasum --algorithm 256 "$product-$build_name.$platform.tgz" > "$product-$build_name.$platform.tgz.sha256sum"
     gsutil cp "$product-$build_name.$platform.tgz" "gs://$gcs_bucket/$product-$build_name.$platform.tgz"
     gsutil cp "$product-$build_name.$platform.tgz.sha256sum" "gs://$gcs_bucket/$product-$build_name.$platform.tgz.sha256sum"
     rm -rf "$product-$build_name.$platform" \
       "$product-$build_name.$platform.tgz" \
-      "$product-$build_name.$platform.tgz.sha256sum" \
-      crl.zip
+      "$product-$build_name.$platform.tgz.sha256sum"
   done
 done

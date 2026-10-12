@@ -66,19 +66,11 @@ for product in cockroach cockroach-sql; do
     tar -xf "$unsigned_file"
     mv "$unsigned_base" "$base"
 
-    rcodesign sign \
-      --p12-file "$curr_dir/.secrets/cert.p12" --p12-password-file "$curr_dir/.secrets/cert.pass" \
-      --code-signature-flags runtime \
-      "$base/$product"
+    "$dir/release/sign-macos-release-dir.sh" "$base" "$product" \
+      "$curr_dir/.secrets/cert.p12" "$curr_dir/.secrets/cert.pass" "$curr_dir/.secrets/api_key.json"
     tar -czf "$target" "$base"
 
-    zip crl.zip "$base/$product"
-    retry rcodesign notary-submit \
-      --api-key-file "$curr_dir/.secrets/api_key.json" \
-      --wait \
-      crl.zip
-
-    rm -rf "$base" "$unsigned_file" "$unsigned_file.sha256sum" crl.zip
+    rm -rf "$base" "$unsigned_file" "$unsigned_file.sha256sum"
 
     shasum --algorithm 256 "$target" > "$target.sha256sum"
     gsutil cp "$target" "gs://$gcs_staged_bucket/$target"
