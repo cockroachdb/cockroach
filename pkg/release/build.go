@@ -164,7 +164,7 @@ func MakeRelease(platform Platform, opts BuildOptions, pkgDir string) error {
 		return errors.Newf("cannot set the telemetry channel to %s, supported channels: %s and %s", opts.Channel, build.DefaultTelemetryChannel, build.FIPSTelemetryChannel)
 	}
 	buildArgs := []string{"build", "//pkg/cmd/cockroach", "//pkg/cmd/cockroach-sql"}
-	if platform != PlatformMacOSArm && platform != PlatformWindows {
+	if platform != PlatformWindows {
 		buildArgs = append(buildArgs, "//c-deps:libgeos")
 	}
 	targetTriple := TargetTripleFromPlatform(platform)
@@ -376,7 +376,7 @@ func stageBinary(
 }
 
 func stageLibraries(platform Platform, bazelBin string, dir string) error {
-	if platform == PlatformMacOSArm || platform == PlatformWindows {
+	if platform == PlatformWindows {
 		return nil
 	}
 	if err := os.MkdirAll(dir, 0755); err != nil {

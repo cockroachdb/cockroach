@@ -87,8 +87,10 @@ EOF
 "$cockroach" sql --insecure -e 'SELECT * FROM bank.accounts' > actual
 diff -u expected actual
 
-# Verify libgeos functionality on all platforms except MacOS ARM64 and Windows
-if [[ $(uname -sm) == "Darwin arm64" || $(uname -s) == "MINGW64_NT"* ]]; then
+# Verify libgeos functionality on all platforms except Windows. On macOS this
+# also exercises code signing: the hardened cockroach binary only loads
+# libraries signed with its own Team ID.
+if [[ $(uname -s) == "MINGW64_NT"* ]]; then
   echo "Skipping libgeos tests"
 else
   echo "Testing libgeos functionality"

@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strings"
 	"sync"
 	"unsafe"
 
@@ -70,12 +71,34 @@ type PreparedGeometry *C.CR_GEOS_PreparedGeometry
 func EnsureInit(
 	errDisplay EnsureInitErrorDisplay, flagLibraryDirectoryValue string,
 ) (string, error) {
-	crdbBinaryLoc := ""
-	if len(os.Args) > 0 {
-		crdbBinaryLoc = os.Args[0]
-	}
-	_, err := ensureInit(errDisplay, flagLibraryDirectoryValue, crdbBinaryLoc)
+	_, err := ensureInit(errDisplay, flagLibraryDirectoryValue, executableLocation())
 	return geosOnce.loc, err
+}
+
+// executableLocation returns the path of the running binary with symlinks
+// resolved, so that library directories are searched next to the real file.
+// Package managers typically expose the binary through a symlink (Homebrew's
+// /opt/homebrew/bin/cockroach points into the Cellar) and os.Args[0] is often
+// just "cockroach" when launched through PATH; neither leads to the lib/
+// directory that ships alongside the binary. Falls back to os.Args[0] when the
+// executable path cannot be determined.
+func executableLocation() string {
+	if exe, err := os.Executable(); err == nil {
+		return resolveSymlinks(exe)
+	}
+	if len(os.Args) > 0 {
+		return os.Args[0]
+	}
+	return ""
+}
+
+// resolveSymlinks returns path with all symlinks resolved, or path itself if
+// resolution fails.
+func resolveSymlinks(path string) string {
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		return resolved
+	}
+	return path
 }
 
 // ensureInitInternal ensures initialization has been done, always displaying
@@ -159,26 +182,33 @@ func findLibraryDirectories(flagLibraryDirectoryValue string, crdbBinaryLoc stri
 	return locs
 }
 
-// findLibraryDirectoriesInParentingDirectories attempts to find GEOS by looking at
-// parenting folders and looking inside `lib/libgeos_c.*`.
-// This is basically only useful for CI runs.
+// libraryDirectoriesRelativeToAncestors lists, relative to each ancestor
+// directory of the binary (or of the working directory), where the GEOS
+// libraries may be found:
+//
+//   - lib/ matches the release archive, where the libraries sit next to the
+//     binary, as well as source checkouts and CI layouts.
+//   - lib/cockroach/ matches the Homebrew formula, which installs the binary
+//     under <keg>/bin/ and the libraries under <keg>/lib/cockroach/ so that
+//     `brew link` does not expose them as a generic libgeos.
+var libraryDirectoriesRelativeToAncestors = []string{
+	"lib",
+	filepath.Join("lib", "cockroach"),
+}
+
+// findLibraryDirectoriesInParentingDirectories attempts to find GEOS by looking
+// at dir and each of its parent directories for the subdirectories listed in
+// libraryDirectoriesRelativeToAncestors. Only directories holding both
+// libgeos and libgeos_c are returned.
 func findLibraryDirectoriesInParentingDirectories(dir string) []string {
 	locs := []string{}
 
 	for {
-		checkDir := filepath.Join(dir, "lib")
-		found := true
-		for _, file := range []string{
-			filepath.Join(checkDir, getLibraryExt(libgeoscFileName)),
-			filepath.Join(checkDir, getLibraryExt(libgeosFileName)),
-		} {
-			if _, err := os.Stat(file); err != nil {
-				found = false
-				break
+		for _, sub := range libraryDirectoriesRelativeToAncestors {
+			checkDir := filepath.Join(dir, sub)
+			if hasGEOSLibraries(checkDir) {
+				locs = append(locs, checkDir)
 			}
-		}
-		if found {
-			locs = append(locs, checkDir)
 		}
 		parentDir := filepath.Dir(dir)
 		if parentDir == dir {
@@ -189,10 +219,27 @@ func findLibraryDirectoriesInParentingDirectories(dir string) []string {
 	return locs
 }
 
+// hasGEOSLibraries returns whether dir contains both GEOS libraries.
+func hasGEOSLibraries(dir string) bool {
+	for _, file := range []string{
+		filepath.Join(dir, getLibraryExt(libgeoscFileName)),
+		filepath.Join(dir, getLibraryExt(libgeosFileName)),
+	} {
+		if _, err := os.Stat(file); err != nil {
+			return false
+		}
+	}
+	return true
+}
+
 // initGEOS initializes the CR_GEOS by attempting to dlopen all
 // the paths as parsed in by locs.
 func initGEOS(dirs []string) (*C.CR_GEOS, string, error) {
 	var err error
+	// Only the first directory's error ends up in the message of the combined
+	// error, so a code-signing rejection in a later directory is remembered
+	// separately to be able to hint at it.
+	signatureRejected := false
 	for _, dir := range dirs {
 		var ret *C.CR_GEOS
 		newErr := statusToError(
@@ -205,6 +252,7 @@ func initGEOS(dirs []string) (*C.CR_GEOS, string, error) {
 		if newErr == nil {
 			return ret, dir, nil
 		}
+		signatureRejected = signatureRejected || isCodeSignatureError(newErr)
 		err = errors.CombineErrors(
 			err,
 			errors.Wrapf(
@@ -215,12 +263,32 @@ func initGEOS(dirs []string) (*C.CR_GEOS, string, error) {
 		)
 	}
 	if err != nil {
-		return nil, "", wrapGEOSInitError(errors.Wrap(err, "geos: error during GEOS init"))
+		return nil, "", wrapGEOSInitError(
+			errors.Wrap(err, "geos: error during GEOS init"), signatureRejected,
+		)
 	}
-	return nil, "", wrapGEOSInitError(errors.Newf("geos: no locations to init GEOS"))
+	return nil, "", wrapGEOSInitError(
+		errors.Newf("geos: no locations to init GEOS"), false, /* signatureRejected */
+	)
 }
 
-func wrapGEOSInitError(err error) error {
+// isCodeSignatureError reports whether a dlopen failure was caused by macOS
+// refusing the library's code signature. A hardened (notarized) cockroach
+// binary only loads libraries signed with its own Team ID, and Gatekeeper
+// refuses quarantined libraries that are not notarized; both are reported by
+// dyld as "code signature ... not valid for use in process".
+func isCodeSignatureError(err error) bool {
+	if runtime.GOOS != "darwin" {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "code signature") ||
+		strings.Contains(msg, "not valid for use in process")
+}
+
+// wrapGEOSInitError attaches the user-facing hints and pg code to a GEOS
+// initialization error. signatureRejected adds the macOS code-signing hint.
+func wrapGEOSInitError(err error, signatureRejected bool) error {
 	page := "linux"
 	switch runtime.GOOS {
 	case "darwin":
@@ -228,14 +296,22 @@ func wrapGEOSInitError(err error) error {
 	case "windows":
 		page = "windows"
 	}
-	return pgerror.WithCandidateCode(
-		errors.WithHintf(
-			err,
-			"Ensure you have the spatial libraries installed as per the instructions in %s",
-			docs.URL("install-cockroachdb-"+page),
-		),
-		pgcode.ConfigFile,
+	err = errors.WithHintf(
+		err,
+		"Ensure you have the spatial libraries installed as per the instructions in %s",
+		docs.URL("install-cockroachdb-"+page),
 	)
+	if signatureRejected {
+		err = errors.WithHint(
+			err,
+			"macOS refused to load a GEOS library because of its code signature. "+
+				"The release binary only loads libraries signed by Cockroach Labs, such as the "+
+				"ones shipped in the lib/ directory of the release archive. If those were "+
+				"downloaded with a browser, remove the quarantine attribute with "+
+				"`xattr -d com.apple.quarantine <library>`.",
+		)
+	}
+	return pgerror.WithCandidateCode(err, pgcode.ConfigFile)
 }
 
 // goToCSlice returns a CR_GEOS_Slice from a given Go byte slice.

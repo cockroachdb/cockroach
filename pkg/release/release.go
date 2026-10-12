@@ -102,7 +102,7 @@ func MakeCRDBLibraryNonReleaseFiles(
 	localAbsoluteBasePath string, platform Platform, versionStr string,
 ) []NonReleaseFile {
 	var files []NonReleaseFile
-	if platform == PlatformMacOSArm || platform == PlatformWindows {
+	if platform == PlatformWindows {
 		return files
 	}
 	suffix := SuffixFromPlatform(platform)
@@ -148,7 +148,7 @@ func MakeCRDBBinaryArchiveFile(localAbsolutePath string, path string) ArchiveFil
 // MakeCRDBLibraryArchiveFiles generates the ArchiveFile object for relevant CRDB helper libraries.
 func MakeCRDBLibraryArchiveFiles(pkgDir string, platform Platform) []ArchiveFile {
 	var files []ArchiveFile
-	if platform == PlatformMacOSArm || platform == PlatformWindows {
+	if platform == PlatformWindows {
 		return files
 	}
 	ext := SharedLibraryExtensionFromPlatform(platform)

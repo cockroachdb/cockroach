@@ -7,6 +7,9 @@ package geos
 
 import (
 	"math"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -33,6 +36,101 @@ func TestInitGEOS(t *testing.T) {
 		require.NotEmpty(t, loc)
 		require.NotNil(t, ret)
 	})
+}
+
+func TestWrapGEOSInitErrorCodeSignatureHint(t *testing.T) {
+	// The dyld message that a hardened binary gets when a library has no, or
+	// a different, Team ID.
+	dlopenErr := errors.New(`geos error: dlopen(/x/lib/libgeos.dylib, 0x0001): tried: ` +
+		`'/x/lib/libgeos.dylib' (code signature in <UUID> '/x/lib/libgeos.dylib' not valid ` +
+		`for use in process: mapping process and mapped file (non-platform) have different Team IDs)`)
+
+	tests := []struct {
+		name              string
+		err               error
+		signatureRejected bool
+		expectedHint      bool
+	}{
+		{name: "signature rejected", err: dlopenErr, signatureRejected: true, expectedHint: true},
+		{name: "library missing", err: errors.New("no such file"), signatureRejected: false, expectedHint: false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			hints := strings.Join(errors.GetAllHints(wrapGEOSInitError(tc.err, tc.signatureRejected)), "\n")
+			require.Contains(t, hints, "Ensure you have the spatial libraries installed")
+			require.Equal(t, tc.expectedHint, strings.Contains(hints, "code signature"))
+		})
+	}
+
+	// Detection is a macOS concern: the message is only produced by dyld.
+	require.Equal(t, runtime.GOOS == "darwin", isCodeSignatureError(dlopenErr))
+	require.False(t, isCodeSignatureError(errors.New("no such file")))
+}
+
+// TestFindLibraryDirectoriesInParentingDirectories checks the ancestor walk
+// against the two layouts in which the libraries ship: next to the binary in
+// lib/ (release archive) and under lib/cockroach/ (Homebrew keg).
+func TestFindLibraryDirectoriesInParentingDirectories(t *testing.T) {
+	// Resolve the temp dir up front: on macOS it lives under a symlinked
+	// /var and the walk reports paths as given, not canonicalized.
+	root := resolveSymlinks(t.TempDir())
+	touch := func(elems ...string) string {
+		p := filepath.Join(append([]string{root}, elems...)...)
+		require.NoError(t, os.MkdirAll(filepath.Dir(p), 0755))
+		require.NoError(t, os.WriteFile(p, nil, 0755))
+		return p
+	}
+	libs := func(dir string) {
+		touch(dir, getLibraryExt(libgeosFileName))
+		touch(dir, getLibraryExt(libgeoscFileName))
+	}
+
+	// Release archive: cockroach-vX/cockroach next to cockroach-vX/lib/.
+	archiveBinary := touch("archive", "cockroach")
+	libs("archive/lib")
+	// Homebrew keg: Cellar/cockroach/X/bin/cockroach, libraries under
+	// Cellar/cockroach/X/lib/cockroach/, and bin/cockroach a symlink to the
+	// binary.
+	kegBinary := touch("Cellar", "cockroach", "1.0", "bin", "cockroach")
+	libs("Cellar/cockroach/1.0/lib/cockroach")
+	symlinkBinary := filepath.Join(root, "bin", "cockroach")
+	require.NoError(t, os.MkdirAll(filepath.Dir(symlinkBinary), 0755))
+	require.NoError(t, os.Symlink(kegBinary, symlinkBinary))
+	// Only one of the two libraries present: must not be returned.
+	incompleteBinary := touch("incomplete", "cockroach")
+	touch("incomplete", "lib", getLibraryExt(libgeosFileName))
+
+	tests := []struct {
+		name         string
+		binary       string
+		expectedDirs []string
+	}{
+		{
+			name:         "libraries next to the binary",
+			binary:       archiveBinary,
+			expectedDirs: []string{filepath.Join(root, "archive", "lib")},
+		},
+		{
+			name:         "homebrew keg layout",
+			binary:       kegBinary,
+			expectedDirs: []string{filepath.Join(root, "Cellar", "cockroach", "1.0", "lib", "cockroach")},
+		},
+		{
+			name:         "homebrew symlink resolves to the keg",
+			binary:       resolveSymlinks(symlinkBinary),
+			expectedDirs: []string{filepath.Join(root, "Cellar", "cockroach", "1.0", "lib", "cockroach")},
+		},
+		{
+			name:         "incomplete library directory is skipped",
+			binary:       incompleteBinary,
+			expectedDirs: []string{},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.expectedDirs, findLibraryDirectoriesInParentingDirectories(tc.binary))
+		})
+	}
 }
 
 func TestEnsureInit(t *testing.T) {
