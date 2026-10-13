@@ -5616,6 +5616,9 @@ def go_deps():
     )
     go_repository(
         name = "com_github_klauspost_compress",
+        build_directives = [
+            "gazelle:go_visibility @com_github_cockroachdb_cockroach//pkg/cmd/dev:__subpackages__",
+        ],
         build_file_proto_mode = "disable_global",
         importpath = "github.com/klauspost/compress",
         sha256 = "eedb58d7e4a65669f9a290536646cbfe4188112368424b56a8c75cfdadb27dea",

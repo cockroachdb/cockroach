@@ -317,6 +317,14 @@ func dumpBuildDirectivesForRepo(repoName string) {
 	} else if repoName == "io_opentelemetry_go_proto_otlp" {
 		directives = append(directives,
 			"gazelle:resolve go go github.com/golang/protobuf/descriptor @com_github_golang_protobuf//descriptor:go_default_library_gen")
+	} else if repoName == "com_github_klauspost_compress" {
+		// pkg/cmd/dev's disallowed-imports allowlist references compress
+		// packages by label (flate, and the internal/le package flate pulls in
+		// as of v1.18). Internal packages are otherwise not visible outside the
+		// module, which fails the allowlist rule's analysis; expose compress to
+		// pkg/cmd/dev so those allowlist entries resolve.
+		directives = append(directives,
+			"gazelle:go_visibility @com_github_cockroachdb_cockroach//pkg/cmd/dev:__subpackages__")
 	}
 
 	if len(directives) > 0 {
