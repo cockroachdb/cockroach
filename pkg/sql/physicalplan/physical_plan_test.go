@@ -7,6 +7,7 @@ package physicalplan
 
 import (
 	"context"
+	"math"
 	"reflect"
 	"strings"
 	"testing"
@@ -280,5 +281,50 @@ func TestProjectionAndRendering(t *testing.T) {
 		if r := strings.Join(resTypes, ","); r != tc.expResultTypes {
 			t.Errorf("%d: incorrect result types: %s expected %s", testIdx, r, tc.expResultTypes)
 		}
+	}
+}
+
+// TestAddLimitDisablesParallelize verifies that merging a limit into the last
+// stage's TableReaders clears their Parallelize flag.
+func TestAddLimitDisablesParallelize(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testCases := []struct {
+		name           string
+		numReaders     int
+		count          int64
+		offset         int64
+		expParallelize bool
+	}{
+		{name: "single reader with limit", numReaders: 1, count: 1, expParallelize: false},
+		{name: "single reader with offset only", numReaders: 1, count: math.MaxInt64, offset: 1, expParallelize: true},
+		{name: "multiple readers with limit", numReaders: 2, count: 1, expParallelize: false},
+		{name: "multiple readers with offset only", numReaders: 2, count: math.MaxInt64, offset: 1, expParallelize: true},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			p := PhysicalPlan{
+				PhysicalInfrastructure: &PhysicalInfrastructure{},
+				Distribution:           LocalPlan,
+			}
+			readers := make([]*execinfrapb.TableReaderSpec, tc.numReaders)
+			for i := range readers {
+				readers[i] = &execinfrapb.TableReaderSpec{Parallelize: true}
+				pIdx := p.AddProcessor(Processor{
+					Spec: execinfrapb.ProcessorSpec{
+						Core:        execinfrapb.ProcessorCoreUnion{TableReader: readers[i]},
+						ResultTypes: types.OneIntCol,
+					},
+				})
+				p.ResultRouters = append(p.ResultRouters, pIdx)
+			}
+			require.NoError(t, p.AddLimit(
+				context.Background(), tc.count, tc.offset, nil /* exprCtx */, nil, /* finalizeLastStageCb */
+			))
+			for _, tr := range readers {
+				require.Equal(t, tc.expParallelize, tr.Parallelize)
+			}
+		})
 	}
 }

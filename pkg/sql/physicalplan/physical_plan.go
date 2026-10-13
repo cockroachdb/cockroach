@@ -930,6 +930,9 @@ func (p *PhysicalPlan) AddLimit(
 			post.Limit = uint64(count)
 		}
 		p.SetLastStagePost(post, p.GetResultTypes())
+		if post.Limit != 0 {
+			p.disableParallelizeInLastStage()
+		}
 		if limitZero {
 			if err := p.AddFilter(ctx, tree.DBoolFalse, exprCtx, nil /* indexVarMap */, finalizeLastStageCb); err != nil {
 				return err
@@ -950,6 +953,7 @@ func (p *PhysicalPlan) AddLimit(
 			post.Limit = localLimit
 			p.SetLastStagePost(post, p.GetResultTypes())
 		}
+		p.disableParallelizeInLastStage()
 	}
 
 	post := execinfrapb.PostProcessSpec{
@@ -972,6 +976,19 @@ func (p *PhysicalPlan) AddLimit(
 		}
 	}
 	return nil
+}
+
+// disableParallelizeInLastStage clears Parallelize on TableReaders in the last
+// stage. Call it after merging a limit into the last stage, since readers can't
+// apply a limit to a parallel scan. The execbuilder doesn't parallelize limited
+// scans, but a limit can still land on one when an operator that blocked limit
+// pushdown (e.g. an RLS barrier) is dropped from the exec plan.
+func (p *PhysicalPlan) disableParallelizeInLastStage() {
+	for _, pIdx := range p.ResultRouters {
+		if tr := p.Processors[pIdx].Spec.Core.TableReader; tr != nil {
+			tr.Parallelize = false
+		}
+	}
 }
 
 // PopulateEndpoints processes p.Streams and adds the corresponding
