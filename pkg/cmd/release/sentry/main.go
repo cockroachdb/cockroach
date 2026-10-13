@@ -116,12 +116,12 @@ type GitHubSearchResponse struct {
 	Items      []GitHubIssue `json:"items"`
 }
 
-// findGitHubIssues searches for GitHub issues in the cockroachdb/cockroach repo
-// with the specified parameters
+// findGitHubIssues searches for GitHub issues in the cockroachlabs/cockroach
+// repo, where cockroach-sentry files them, with the specified parameters
 func findGitHubIssues(token string, version string) ([]GitHubIssue, error) {
 	today := timeutil.Now().Format("2006-01-02")
 	query := url.QueryEscape(
-		fmt.Sprintf("repo:cockroachdb/cockroach is:issue author:cockroach-sentry label:O-sentry sort:updated-desc \"panic\" in:title \"| Cockroach Release | %s |\" in:body created:%s",
+		fmt.Sprintf("repo:cockroachlabs/cockroach is:issue author:cockroach-sentry label:O-sentry sort:updated-desc \"panic\" in:title \"| Cockroach Release | %s |\" in:body created:%s",
 			version, today),
 	)
 
