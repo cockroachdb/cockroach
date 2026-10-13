@@ -76,6 +76,12 @@ disallowed_imports_test(
         "//pkg/cmd/dev/io/os",
         "@com_github_alessio_shellescape//:shellescape",
         "@com_github_klauspost_compress//flate:flate",
+        # klauspost/compress v1.18.0 factored little-endian helpers used by
+        # flate into this internal package; flate (allowed above) pulls it in.
+        "@com_github_klauspost_compress//internal/le:le",
+        # A later klauspost/compress likewise factored register-mask helpers
+        # used by flate into this internal package; flate pulls it in too.
+        "@com_github_klauspost_compress//internal/regmask:regmask",
         "@com_github_google_shlex//:shlex",
         "@com_github_klauspost_pgzip//:pgzip",
         "@com_github_irfansharif_recorder//:recorder",
