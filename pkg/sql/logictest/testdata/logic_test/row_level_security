@@ -6061,3 +6061,58 @@ statement ok
 RESET use_improved_routine_deps_triggers_and_computed_cols;
 
 subtest end
+
+# Regression test for cockroachlabs/cockroach#13830: the RLS barrier blocks
+# LIMIT pushdown, so the scan is parallel but the LIMIT still reaches it.
+subtest rls_limit_parallel_scan
+
+statement ok
+CREATE TABLE rls_limit (
+  id INT PRIMARY KEY,
+  tenant STRING NOT NULL,
+  k STRING NOT NULL,
+  UNIQUE INDEX (tenant, k)
+)
+
+statement ok
+INSERT INTO rls_limit VALUES (1, 'a', 'x'), (2, 'b', 'x'), (3, 'global', 'y')
+
+statement ok
+ALTER TABLE rls_limit ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY
+
+statement ok
+CREATE POLICY p ON rls_limit FOR SELECT
+  USING (tenant = 'global' OR tenant = current_setting('app.tenant', true))
+
+statement ok
+CREATE USER rls_limit_u
+
+statement ok
+GRANT SELECT ON rls_limit TO rls_limit_u
+
+statement ok
+SET ROLE rls_limit_u
+
+statement ok
+SET app.tenant = 'a'
+
+query I
+SELECT id FROM rls_limit WHERE k = 'x'
+----
+1
+
+query I
+SELECT id FROM rls_limit WHERE k = 'x' LIMIT 1
+----
+1
+
+query I rowsort
+SELECT id FROM rls_limit WHERE k IN ('x', 'y') LIMIT 50000
+----
+1
+3
+
+statement ok
+RESET ROLE
+
+subtest end
