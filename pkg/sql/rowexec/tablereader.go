@@ -85,15 +85,14 @@ func newTableReader(
 		return nil, errors.AssertionFailedf("attempting to create a tableReader with uninitialized NodeID")
 	}
 
-	if spec.LimitHint > 0 {
-		// Parallelize shouldn't be set when there's a limit hint, but double-check
-		// just in case.
-		spec.Parallelize = false
-	}
-
 	tr := trPool.Get().(*tableReader)
 
 	tr.limitHint = rowinfra.RowLimit(execinfra.LimitHint(spec.LimitHint, post))
+	if tr.limitHint > 0 {
+		// The limit hint becomes a KV key limit, which requires a batch bytes
+		// limit, so the scan can't be parallel.
+		spec.Parallelize = false
+	}
 	tr.parallelize = spec.Parallelize
 	tr.maxTimestampAge = time.Duration(spec.MaxTimestampAgeNanos)
 	tr.stageID = stageID

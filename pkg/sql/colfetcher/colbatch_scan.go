@@ -180,9 +180,9 @@ func newColBatchScanBase(
 		s.MakeSpansCopy()
 	}
 
-	if spec.LimitHint > 0 {
-		// Parallelize shouldn't be set when there's a limit hint, but double-check
-		// just in case.
+	if limitHint > 0 {
+		// The limit hint becomes a KV key limit, which requires a batch bytes
+		// limit, so the scan can't be parallel.
 		spec.Parallelize = false
 	}
 	var batchBytesLimit rowinfra.BytesLimit
