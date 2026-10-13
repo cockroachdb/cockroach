@@ -909,6 +909,9 @@ jobs:
     permissions:
       id-token: write
       contents: read
+      # The sentry tool searches this repo's issues for the one cockroach-sentry
+      # files for the panic; the repo is private, so the search needs a token.
+      issues: read
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
@@ -936,6 +939,7 @@ jobs:
       - name: Trigger Sentry panic
         env:
           SENTRY_AUTH_TOKEN: ${{ steps.secrets.outputs.sentry_auth_token }}
+          GITHUB_TOKEN: ${{ github.token }}
           # TODO(gh-migration): remove TC_ compat vars once TeamCity is decommissioned.
           TC_BUILD_BRANCH: ${{ github.ref_name }}
           BUILD_VCS_NUMBER: ${{ inputs.sha || github.sha }}
