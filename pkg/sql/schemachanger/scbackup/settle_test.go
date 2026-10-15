@@ -378,6 +378,27 @@ func TestSettle(t *testing.T) {
 			},
 		},
 		{
+			// The release-25.2 hash-sharded ALTER PRIMARY KEY state backed up after
+			// its temporary index is removed; see dropIndexesWithParts.
+			name: "public column of a removed temporary index keeps its target",
+			state: makeState(false,
+				linked(primary(8), scpb.Status_PUBLIC, scpb.Status_VALIDATED),
+				linked(&scpb.IndexColumn{TableID: testTableID, IndexID: 8, ColumnID: 4},
+					scpb.Status_PUBLIC, scpb.Status_PUBLIC),
+				linked(temp(9), scpb.Status_TRANSIENT_ABSENT, scpb.Status_TRANSIENT_ABSENT),
+				linked(&scpb.IndexColumn{TableID: testTableID, IndexID: 9, ColumnID: 1},
+					scpb.Status_TRANSIENT_ABSENT, scpb.Status_TRANSIENT_ABSENT),
+				linked(&scpb.IndexColumn{TableID: testTableID, IndexID: 9, ColumnID: 4},
+					scpb.Status_PUBLIC, scpb.Status_PUBLIC),
+				linked(&scpb.IndexData{TableID: testTableID, IndexID: 9},
+					scpb.Status_TRANSIENT_ABSENT, scpb.Status_PUBLIC),
+			),
+			expectedTargets: []scpb.Status{
+				scpb.Status_ABSENT, scpb.Status_ABSENT,
+				scpb.Status_ABSENT, scpb.Status_ABSENT, scpb.Status_PUBLIC, scpb.Status_ABSENT,
+			},
+		},
+		{
 			name: "recreated index kept when its source is dropped",
 			state: makeState(true,
 				linked(secondary(2, 0), scpb.Status_ABSENT, scpb.Status_VALIDATED),
