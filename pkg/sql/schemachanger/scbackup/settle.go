@@ -363,14 +363,36 @@ func dropPartsOfDroppedIndexes(ds *scpb.DescriptorState) {
 }
 
 // dropIndexesWithParts sets the target of every element of the indexes in drop
-// to ABSENT.
+// to ABSENT, except an IndexColumn of an index already removed from the
+// descriptor. Removing such a column fails because its index no longer
+// exists, so it keeps its target.
+//
+// The exception exists only on release-25.2. Its hash-sharded ALTER PRIMARY
+// KEY adds the shard column to the new primary index's temporary index with a
+// PUBLIC target instead of TRANSIENT_ABSENT, so the column stays PUBLIC after
+// the temporary index is removed. cockroachdb/cockroach#146726, in 25.3,
+// rewrote that builder and gives the column a transient target.
 func dropIndexesWithParts(ds *scpb.DescriptorState, drop map[catid.IndexID]bool) {
 	if len(drop) == 0 {
 		return
 	}
+	removed := make(map[catid.IndexID]bool)
+	for i := range ds.Targets {
+		switch ds.Targets[i].Element().(type) {
+		case *scpb.PrimaryIndex, *scpb.SecondaryIndex, *scpb.TemporaryIndex:
+			switch ds.CurrentStatuses[i] {
+			case scpb.Status_ABSENT, scpb.Status_TRANSIENT_ABSENT:
+				id, _ := owningIndexID(ds.Targets[i].Element())
+				removed[id] = true
+			}
+		}
+	}
 	for i := range ds.Targets {
 		t := &ds.Targets[i]
 		if !isSettleable(t) {
+			continue
+		}
+		if ic, ok := t.Element().(*scpb.IndexColumn); ok && removed[ic.IndexID] {
 			continue
 		}
 		if id, ok := owningIndexID(t.Element()); ok && drop[id] {
