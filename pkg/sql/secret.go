@@ -6,21 +6,81 @@
 package sql
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-// This file houses the classifier that decides whether a statement may carry
-// a secret: a sensitive cluster setting value (see settings.Sensitive), a role
-// password, or an external URI, KMS URI, connection string, or encryption
-// passphrase (which can embed credentials) referenced by a bulk-I/O or
-// replication statement. Observability surfaces that record statement text,
-// placeholder values, or errors - the active-query registry, SQL event
-// details, statement logs and statistics, and statement bundles - consult it
-// to keep such secrets out of diagnostics artifacts, while privileged
-// interactive readback (e.g. SHOW CLUSTER SETTING) remains unaffected.
+// This file houses the classifiers that decide whether a statement may carry
+// a secret, which the observability surfaces that record statement text,
+// placeholder values, or errors consult - the active-query registry, SQL
+// event details, statement logs and statistics, and statement bundles - to
+// keep secrets out of diagnostics artifacts, while privileged interactive
+// readback (e.g. SHOW CLUSTER SETTING) remains unaffected.
+//
+// Two stages contribute, and each records what it alone can see:
+//
+//   - Parsing. astMayCarrySecret classifies the AST by statement form, and
+//     the result is stored on Statement.MayCarrySecret when the Statement is
+//     built.
+//   - Planning. isSecretBearingTable recognizes a secret-bearing system table
+//     in a plan, something the AST cannot reveal (the internal executor's
+//     UPSERT INTO system.settings looks like any other UPSERT). During
+//     execution, optbuild reports each table it resolves, for the statement's
+//     own plan and for the routine bodies, cascades, and triggers planned as
+//     it runs. A memo from the query cache or a prepared statement is not
+//     optbuilt again, so reuseMemo reports its tables instead. Both report
+//     through planner.NotePlannedTable, and a match is recorded on the
+//     instrumentation helper's accumulator. At PREPARE time,
+//     recordPrepareSecretFinding inspects the memo and records a match on
+//     prep.Metadata.MayCarrySecret for the executions that follow.
+//
+// A surface that runs before planning, such as active-query registration,
+// reads Statement.MayCarrySecret, which covers the parse-time finding and
+// whatever an earlier PREPARE stored. A surface that runs after planning reads
+// planner.stmtMayCarrySecret, which adds the current execution's findings.
+
+// stmtMayCarrySecret reports whether the statement the planner is executing
+// may carry a secret, combining every finding made so far. It is the
+// classification for the surfaces that run after planning. Before the
+// instrumentation helper is set up, and on paths that never set it up, it
+// reduces to p.stmt.MayCarrySecret.
+func (p *planner) stmtMayCarrySecret() bool {
+	return p.stmt.MayCarrySecret ||
+		(p.instrumentation.accum != nil && p.instrumentation.accum.mayCarrySecret)
+}
+
+// NotePlannedTable is part of the eval.Planner interface.
+func (p *planner) NotePlannedTable(tab cat.Table) {
+	if p.instrumentation.accum != nil && isSecretBearingTable(tab) {
+		p.instrumentation.accum.mayCarrySecret = true
+	}
+}
+
+// recordPrepareSecretFinding marks the prepared statement as possibly carrying
+// a secret when mem, built while preparing p.stmt, reads or writes a
+// secret-bearing system table.
+func (p *planner) recordPrepareSecretFinding(mem *memo.Memo) {
+	if slices.ContainsFunc(mem.Metadata().AllTables(),
+		func(tm opt.TableMeta) bool { return isSecretBearingTable(tm.Table) }) {
+		p.stmt.Prepared.MayCarrySecret = true
+	}
+}
+
+// isSecretBearingTable reports whether tab is a secret-bearing system table. It
+// matches by name under the system database rather than by descriptor ID
+// because several of these tables have dynamically assigned IDs.
+func isSecretBearingTable(tab cat.Table) bool {
+	return tab.IsSystemTable() &&
+		systemschema.IsSecretBearingTable(catconstants.SystemTableName(tab.Name()))
+}
 
 // astMayCarrySecret reports whether ast contains, anywhere in statement
 // position, a statement whose form can carry a secret in its raw text, bound

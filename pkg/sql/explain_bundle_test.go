@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgtest"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -1152,14 +1153,15 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 
 // TestExplainBundleRawSQLFallback verifies that when the bundle builder falls
 // back to the raw client SQL (no AST available due to an early error), a
-// sensitive SET CLUSTER SETTING is still rendered with its value substituted.
+// redacted bundle elides the statement entirely while an unredacted one keeps
+// it verbatim.
 func TestExplainBundleRawSQLFallback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	mkBuilder := func(stmtRawSQL string) stmtBundleBuilder {
+	mkBuilder := func(stmtRawSQL string, redactValues bool) stmtBundleBuilder {
 		b, err := makeStmtBundleBuilder(
-			explain.Flags{}, nil /* db */, nil /* p */, nil, /* ie */
+			explain.Flags{RedactValues: redactValues}, nil /* db */, nil /* p */, nil, /* ie */
 			"" /* requesterUsername */, stmtRawSQL, &planTop{}, nil, /* trace */
 			nil /* placeholders */, nil, /* sv */
 		)
@@ -1169,17 +1171,16 @@ func TestExplainBundleRawSQLFallback(t *testing.T) {
 
 	const secret = "hunter2-raw-sql"
 	b := mkBuilder(fmt.Sprintf(
-		"SET CLUSTER SETTING server.oidc_authentication.client_secret = '%s'", secret))
-	// A bundle targeting a sensitive SET is forced to redact, so the raw-SQL
-	// fallback elides the whole statement, not just the value.
+		"SET CLUSTER SETTING server.oidc_authentication.client_secret = '%s'", secret),
+		true /* redactValues */)
+	// With redaction on, the raw-SQL fallback elides the whole statement, not
+	// just the value.
 	require.NotContains(t, b.stmt, secret)
 	require.NotContains(t, b.stmt, "server.oidc_authentication.client_secret")
-	require.True(t, b.flags.RedactValues)
 
-	// A non-sensitive statement keeps the raw SQL and is not forced to redact.
-	b = mkBuilder("SELECT 'abc'")
+	// An unredacted bundle keeps the raw SQL.
+	b = mkBuilder("SELECT 'abc'", false /* redactValues */)
 	require.Equal(t, "SELECT 'abc'", b.stmt)
-	require.False(t, b.flags.RedactValues)
 }
 
 func getBundleDownloadURL(t *testing.T, text string) string {
@@ -1317,6 +1318,293 @@ func checkBundleContents(
 	if fmt.Sprint(files) != fmt.Sprint(expList) {
 		t.Errorf("unexpected list of files:\n  %v\nexpected:\n  %v", files, expList)
 	}
+}
+
+// TestStatementBundleRedactsSecretBearingTables verifies that a bundle whose
+// plan touches a secret-bearing system table is collected redacted even though
+// it was not requested as such, whether the statement was issued by the
+// internal executor or by a client session, and that the redaction does not
+// extend to other system tables. The internal UPSERT behind SET CLUSTER
+// SETTING carries the setting's value as a placeholder argument, and a
+// redacted bundle omits both the arguments and the trace files.
+func TestStatementBundleRedactsSecretBearingTables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, godb, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Insecure:          true,
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(155944),
+	})
+	defer srv.Stopper().Stop(ctx)
+	r := sqlutils.MakeSQLRunner(godb)
+
+	const setting = "server.oidc_authentication.client_secret"
+	const secret = "hunter2-bundle-secret"
+
+	// A redacted bundle has no trace, DistSQL diagram, or errors.txt.
+	const redactedBase = "statement.sql opt.txt opt-v.txt opt-vv.txt plan.txt vec.txt vec-v.txt " +
+		"env.sql schema.sql"
+	const redactedFiles = redactedBase + " stats-system.public.settings.sql"
+	// A pausable portal's bundle is collected when the portal is closed and has
+	// no vectorized plan or statistics files.
+	const portalRedactedFiles = "statement.sql opt.txt opt-v.txt opt-vv.txt plan.txt env.sql " +
+		"schema.sql"
+	const unredactedBase = "statement.sql trace.json trace.txt trace-jaeger.json env.sql " +
+		"schema.sql opt.txt opt-v.txt opt-vv.txt plan.txt distsql.html vec.txt vec-v.txt"
+	checkNoSecret := func(name, contents string) error {
+		if strings.Contains(contents, secret) {
+			return errors.Newf("%s contains the secret:\n%s", name, contents)
+		}
+		return nil
+	}
+	// fingerprintOf formats query the way the executor computes statement
+	// fingerprints, so that a request matches a statement issued through the
+	// internal executor.
+	fingerprintOf := func(t *testing.T, query string) string {
+		parsed, err := parser.ParseOne(query)
+		require.NoError(t, err)
+		fmtMask := tree.FmtHideConstants | tree.FmtFlags(
+			tree.QueryFormattingForFingerprintsMask.Get(&srv.ApplicationLayer().ClusterSettings().SV),
+		)
+		return formatStatementHideConstants(parsed.AST, fmtMask)
+	}
+	requestBundle := func(t *testing.T, fingerprint string) {
+		var inserted bool
+		r.QueryRow(t,
+			"SELECT crdb_internal.request_statement_bundle($1, 0::FLOAT, 0::INTERVAL, 0::INTERVAL)",
+			fingerprint,
+		).Scan(&inserted)
+		require.True(t, inserted)
+	}
+	bundleURL := func(t *testing.T, fingerprint string) string {
+		var id int
+		r.QueryRow(t,
+			"SELECT id FROM system.statement_diagnostics WHERE statement_fingerprint = $1", fingerprint,
+		).Scan(&id)
+		return findBundleDownloadURL(t, r, id)
+	}
+
+	t.Run("internal statement", func(t *testing.T) {
+		fingerprint := fingerprintOf(t, writeSettingQuery)
+		requestBundle(t, fingerprint)
+
+		r.Exec(t, fmt.Sprintf("SET CLUSTER SETTING %s = '%s'", setting, secret))
+
+		checkBundleContents(
+			t, bundleURL(t, fingerprint), "", checkNoSecret, false, /* expectErrors */
+			redactedFiles, "statement-prepared.sql statement-no-placeholders.sql",
+		)
+	})
+
+	t.Run("client read", func(t *testing.T) {
+		r.Exec(t, fmt.Sprintf("SET CLUSTER SETTING %s = '%s'", setting, secret))
+		rows := r.QueryStr(t, fmt.Sprintf(
+			"EXPLAIN ANALYZE (DEBUG) SELECT value FROM system.settings WHERE name = '%s'", setting,
+		))
+		checkBundle(t, fmt.Sprint(rows), "", checkNoSecret, false /* expectErrors */, redactedFiles)
+	})
+
+	// Here optbuild resolves system.settings and then fails on the unknown
+	// column, so the statement is never optimized or execbuilt. A bundle is
+	// still produced for the failed statement, and it must be redacted on the
+	// strength of the table having been resolved, since nothing later in
+	// planning ran.
+	t.Run("optbuild error", func(t *testing.T) {
+		const literal = "hunter2-optbuild-error"
+		_, err := r.DB.ExecContext(ctx, fmt.Sprintf(
+			"EXPLAIN ANALYZE (DEBUG) SELECT value FROM system.settings "+
+				"WHERE name = '%s' AND no_such_column = 1", literal,
+		))
+		require.ErrorContains(t, err, "no_such_column")
+		var pqErr *pq.Error
+		require.True(t, errors.As(err, &pqErr))
+		unzip := downloadAndUnzipBundle(t, getBundleDownloadURL(t, pqErr.Detail))
+		for _, f := range unzip.File {
+			contents := readUnzippedFile(t, f)
+			require.NotContains(t, contents, literal, "%s contains the literal", f.Name)
+			require.NotEqual(t, "errors.txt", f.Name, "errors.txt in a redacted bundle")
+		}
+	})
+
+	// The body of a SQL routine with a known return type is planned when the
+	// routine runs, in a memo of its own, so the outer statement's memo lists no
+	// tables at all.
+	t.Run("routine body", func(t *testing.T) {
+		r.Exec(t, fmt.Sprintf(
+			"CREATE FUNCTION secret_setting() RETURNS STRING LANGUAGE SQL AS $$ "+
+				"SELECT value FROM system.settings WHERE name = '%s' $$", setting,
+		))
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT secret_setting()")
+		checkBundle(t, fmt.Sprint(rows), "", checkNoSecret, false /* expectErrors */, redactedFiles)
+	})
+
+	// A single-statement, non-volatile SQL routine is inlined as a correlated
+	// subquery of the outer statement, so its body is built into the outer
+	// statement's memo and the table is found there rather than through the
+	// routine diagnostics.
+	t.Run("inlined routine body", func(t *testing.T) {
+		r.Exec(t, fmt.Sprintf(
+			"CREATE FUNCTION inlined_secret_setting() RETURNS STRING STABLE LANGUAGE SQL AS $$ "+
+				"SELECT value FROM system.settings WHERE name = '%s' $$", setting,
+		))
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT inlined_secret_setting()")
+		checkBundle(t, fmt.Sprint(rows), "", func(name, contents string) error {
+			// An inlined call leaves no routine in the plan, only its subquery.
+			if name == "opt.txt" && strings.Contains(contents, "udf:") {
+				return errors.Newf("%s still has a routine call:\n%s", name, contents)
+			}
+			return checkNoSecret(name, contents)
+		}, false, /* expectErrors */
+			"statement.sql opt.txt opt-v.txt opt-vv.txt plan.txt env.sql schema.sql "+
+				"stats-system.public.settings.sql "+
+				"vec-1-subquery.txt vec-1-subquery-v.txt vec-2-main-query.txt vec-2-main-query-v.txt",
+		)
+	})
+
+	// A deferred body is built one statement at a time, each just before it
+	// runs. When a later statement fails to build, the earlier ones have already
+	// executed and read their tables into the trace, so the redaction must not
+	// depend on the body completing. The bare DELETE builds when the function is
+	// created and is rejected by the optbuilder under sql_safe_updates at call
+	// time.
+	t.Run("routine body build error", func(t *testing.T) {
+		r.Exec(t, "CREATE TABLE safe_updates_target (k INT PRIMARY KEY)")
+		r.Exec(t, fmt.Sprintf(
+			"CREATE FUNCTION secret_then_fail() RETURNS INT VOLATILE LANGUAGE SQL AS $$ "+
+				"SELECT value FROM system.settings WHERE name = '%s'; "+
+				"DELETE FROM safe_updates_target; SELECT 1 $$", setting,
+		))
+		const fingerprint = "SELECT secret_then_fail()"
+		requestBundle(t, fingerprint)
+
+		// sql_safe_updates is a session variable, so the statement must run on
+		// the connection that set it, and the connection must be reset before it
+		// returns to the pool.
+		conn, err := godb.Conn(ctx)
+		require.NoError(t, err)
+		defer func() { require.NoError(t, conn.Close()) }()
+		defer func() {
+			_, err := conn.ExecContext(ctx, "RESET sql_safe_updates")
+			require.NoError(t, err)
+		}()
+		_, err = conn.ExecContext(ctx, "SET sql_safe_updates = true")
+		require.NoError(t, err)
+		_, err = conn.ExecContext(ctx, fingerprint)
+		require.ErrorContains(t, err, "sql_safe_updates")
+
+		// Routine body tables are not recorded at execution time on this branch,
+		// so the failing body's table has no statistics file; the bundle has no
+		// vectorized plan files either.
+		checkBundleContents(
+			t, bundleURL(t, fingerprint), "", checkNoSecret, false, /* expectErrors */
+			"statement.sql opt.txt opt-v.txt opt-vv.txt plan.txt env.sql schema.sql",
+		)
+	})
+
+	// A pausable portal defers the statement's cleanup, its bundle included,
+	// until the portal is closed, after the connection has run other
+	// statements, so the classification must come from the portal's own
+	// statement rather than from the planner at cleanup time. Here the finding
+	// is made at PREPARE time; a finding made during execution, by a routine
+	// body's planning, is exercised by the subtest below. The query matches
+	// the version row and Execute asks for one row, so the portal suspends
+	// once it has produced it and its cleanup, which writes the bundle, runs
+	// when COMMIT closes it.
+	t.Run("pausable portal", func(t *testing.T) {
+		const query = "SELECT value FROM system.settings WHERE name = $1 OR name = 'version'"
+		const boundValue = "probe-bound-value-portal"
+		fingerprint := fingerprintOf(t, query)
+		requestBundle(t, fingerprint)
+
+		pg, err := pgtest.NewPGTest(ctx, srv.ApplicationLayer().AdvSQLAddr(), username.RootUser)
+		require.NoError(t, err)
+		defer func() { require.NoError(t, pg.Close()) }()
+		sendAndWait := func(readyForQueryCount int, lines ...string) {
+			for _, line := range lines {
+				require.NoError(t, pg.SendOneLine(line))
+			}
+			until := pgtest.ParseMessages(strings.TrimSpace(
+				strings.Repeat("ReadyForQuery\n", readyForQueryCount)))
+			_, err := pg.Until(false /* keepErrMsg */, until...)
+			require.NoError(t, err)
+		}
+		sendAndWait(1, `Query {"String": "SET multiple_active_portals_enabled = true"}`)
+		sendAndWait(2,
+			`Query {"String": "BEGIN"}`,
+			fmt.Sprintf(`Parse {"Query": "%s"}`, query),
+			fmt.Sprintf(`Bind {"Parameters": [{"text": "%s"}]}`, boundValue),
+			`Execute {"MaxRows": 1}`,
+			`Sync`,
+		)
+		sendAndWait(1, `Query {"String": "COMMIT"}`)
+
+		checkBundleContents(
+			t, bundleURL(t, fingerprint), "", func(name, contents string) error {
+				if strings.Contains(contents, boundValue) {
+					return errors.Newf("%s contains the bound value:\n%s", name, contents)
+				}
+				return nil
+			}, false /* expectErrors */, portalRedactedFiles,
+		)
+	})
+
+	// A routine body is planned the first time the routine is called. The first
+	// Execute returns only row 1, which takes the ELSE branch and never calls
+	// the routine, so the body is planned by the second Execute. By then the
+	// SELECT 1 in between has reset the connection's planner and eval context,
+	// so the finding made while planning the body has to be recorded on the
+	// portal itself to still be in effect when COMMIT closes the portal and
+	// writes the bundle.
+	t.Run("pausable portal routine body", func(t *testing.T) {
+		r.Exec(t, fmt.Sprintf("SET CLUSTER SETTING %s = '%s'", setting, secret))
+		r.Exec(t, fmt.Sprintf(
+			"CREATE FUNCTION portal_secret_setting() RETURNS STRING VOLATILE LANGUAGE SQL AS $$ "+
+				"SELECT value FROM system.settings WHERE name = '%s' $$", setting,
+		))
+		const query = "SELECT CASE WHEN i > 1 THEN portal_secret_setting() ELSE 'none' END " +
+			"FROM generate_series(1, 3) AS g(i)"
+		fingerprint := fingerprintOf(t, query)
+		requestBundle(t, fingerprint)
+
+		pg, err := pgtest.NewPGTest(ctx, srv.ApplicationLayer().AdvSQLAddr(), username.RootUser)
+		require.NoError(t, err)
+		defer func() { require.NoError(t, pg.Close()) }()
+		sendAndWait := func(readyForQueryCount int, lines ...string) {
+			for _, line := range lines {
+				require.NoError(t, pg.SendOneLine(line))
+			}
+			until := pgtest.ParseMessages(strings.TrimSpace(
+				strings.Repeat("ReadyForQuery\n", readyForQueryCount)))
+			_, err := pg.Until(false /* keepErrMsg */, until...)
+			require.NoError(t, err)
+		}
+		sendAndWait(1, `Query {"String": "SET multiple_active_portals_enabled = true"}`)
+		sendAndWait(2,
+			`Query {"String": "BEGIN"}`,
+			fmt.Sprintf(`Parse {"Query": "%s"}`, query),
+			`Bind`,
+			`Execute {"MaxRows": 1}`,
+			`Sync`,
+		)
+		// Another statement runs while the portal is suspended.
+		sendAndWait(1, `Query {"String": "SELECT 1"}`)
+		// The routine runs its body on this execution.
+		sendAndWait(1, `Execute {"MaxRows": 1}`, `Sync`)
+		sendAndWait(1, `Query {"String": "COMMIT"}`)
+
+		checkBundleContents(
+			t, bundleURL(t, fingerprint), "", checkNoSecret, false /* expectErrors */, portalRedactedFiles,
+		)
+	})
+
+	t.Run("other system table", func(t *testing.T) {
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT latitude FROM system.locations LIMIT 1")
+		checkBundle(
+			t, fmt.Sprint(rows), "", nil, false, /* expectErrors */
+			unredactedBase, "stats-system.public.locations.sql",
+		)
+	})
 }
 
 // TestExplainClientTime verifies that "client time" execution statistic is

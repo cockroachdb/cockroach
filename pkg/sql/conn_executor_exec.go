@@ -674,7 +674,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		// The active query was registered with the EXECUTE p(...) text
 		// constants-hidden, in case its argument was a secret. The resolved
 		// prepared statement is now known, so restore the raw text if its
-		// stored classification proved it secret-free.
+		// stored findings proved it secret-free.
 		if !ps.MayCarrySecret {
 			ex.restoreActiveQueryText(queryID, origSQL)
 		}
@@ -1525,7 +1525,7 @@ func (ex *connExecutor) execStmtInOpenStateWithPausablePortal(
 		// The active query was registered with the EXECUTE p(...) text
 		// constants-hidden, in case its argument was a secret. The resolved
 		// prepared statement is now known, so restore the raw text if its
-		// stored classification proved it secret-free.
+		// stored findings proved it secret-free.
 		if !ps.MayCarrySecret {
 			ex.restoreActiveQueryText(queryID, origSQL)
 		}

@@ -22,12 +22,12 @@ type Statement struct {
 	StmtSummary     string
 	QueryID         clusterunique.ID
 
-	// MayCarrySecret records what is known before this execution plans:
-	// whether the AST contains a statement of a type that can carry a secret
-	// (see astMayCarrySecret). It is set when the Statement is
-	// built and rewritten only when an EXECUTE is resolved: EXECUTE is flagged
-	// at parse time because its target is unknown, and resolution replaces
-	// that with the target's own finding.
+	// MayCarrySecret is the classification known before this execution plans:
+	// the parse-time finding (see astMayCarrySecret) and, for a prepared
+	// statement, what its PREPARE found. It is set when the Statement is built
+	// and replaced by the prepared statement's own value when an EXECUTE
+	// resolves its target. Findings made while this execution plans live on
+	// the instrumentation helper; planner.stmtMayCarrySecret combines both.
 	MayCarrySecret bool
 
 	ExpectedTypes colinfo.ResultColumns
