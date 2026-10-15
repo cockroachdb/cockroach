@@ -143,6 +143,16 @@ type instrumentationHelper struct {
 	// topLevelStats are the statistics collected for every query execution.
 	topLevelStats topLevelQueryStats
 
+	// accum holds the state that is accumulated into through copies of the
+	// helper. Setup allocates it, so it is non-nil from then until the helper
+	// is reset and nil on a zero helper. Every copy made after Setup shares the
+	// same object: the planner copy runPlanInsidePlan makes for an inner plan
+	// (SQL routines, apply joins, recursive CTEs, nested arbitrarily deep), and
+	// the copy a pausable portal keeps across its executions, on which Finish
+	// runs after later statements have reset the planner. Writes to a value
+	// field on those copies would be lost; writes here are seen by all of them.
+	accum *stmtAccumulators
+
 	queryLevelStatsWithErr *execstats.QueryLevelStatsWithErr
 
 	explainPlan      *explain.Plan
@@ -238,6 +248,14 @@ type instrumentationHelper struct {
 	// schemachangerMode indicates which schema changer mode was used to execute
 	// the query.
 	schemaChangerMode schemaChangerMode
+}
+
+// stmtAccumulators is the state behind instrumentationHelper.accum.
+type stmtAccumulators struct {
+	// mayCarrySecret records that a plan built for the statement references a
+	// secret-bearing system table (see planner.NotePlannedTable). It is seeded
+	// from Statement.MayCarrySecret and only ever moves from false to true.
+	mayCarrySecret bool
 }
 
 // outputMode indicates how the statement output needs to be populated (for
@@ -450,6 +468,7 @@ func (ih *instrumentationHelper) Setup(
 	ih.isTenant = execinfra.IncludeRUEstimateInExplainAnalyze.Get(cfg.SV()) && cfg.DistSQLSrv != nil &&
 		cfg.DistSQLSrv.TenantCostController != nil
 	ih.topLevelStats = topLevelQueryStats{}
+	ih.accum = &stmtAccumulators{mayCarrySecret: stmt.MayCarrySecret}
 	stmtFingerprintId := appstatspb.ConstructStatementFingerprintID(
 		stmt.StmtNoConstants, implicitTxn, p.SessionData().Database)
 	ih.fingerprintId = stmtFingerprintId
@@ -707,6 +726,12 @@ func (ih *instrumentationHelper) Finish(
 	var bundle diagnosticsBundle
 	var warnings []string
 	if ih.collectBundle {
+		// A statement that may carry a secret gets a redacted bundle regardless
+		// of the requested mode: its raw text, placeholder arguments, execution
+		// trace, and error text can all carry the secret.
+		if ih.accum.mayCarrySecret {
+			ih.explainFlags.RedactValues = true
+		}
 		ih.inFlightTraceCollector.finish()
 		ie := p.extendedEvalCtx.ExecCfg.InternalDB.Executor(
 			isql.WithSessionData(p.SessionData()),

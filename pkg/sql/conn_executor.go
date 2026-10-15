@@ -3683,8 +3683,12 @@ func (ex *connExecutor) makeErrEvent(err error, stmt tree.Statement) (fsm.Event,
 	// Any error attributed to a statement that may carry a secret may quote
 	// that secret, and the payload error becomes the transaction's recorded
 	// error. Mark it so that recording surfaces reduce it to its
-	// redaction-safe parts; the client still receives the full message.
-	if astMayCarrySecret(stmt) {
+	// redaction-safe parts; the client still receives the full message. The
+	// planner's findings apply only if it was reset for stmt; some callers
+	// report an error before that, when it still describes the previous
+	// statement.
+	if astMayCarrySecret(stmt) ||
+		(ex.planner.stmt.AST == stmt && ex.planner.stmtMayCarrySecret()) {
 		err = sqlstats.MarkSecretError(err)
 	}
 

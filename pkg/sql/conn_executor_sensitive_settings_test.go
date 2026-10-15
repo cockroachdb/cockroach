@@ -53,6 +53,75 @@ func rawActiveQuery(
 	return ""
 }
 
+// activeQueryProbe blocks a statement at the moment it is registered as an
+// active query, so that a test can read the registry entry rendered for it
+// before it plans or executes.
+type activeQueryProbe struct {
+	mu struct {
+		syncutil.Mutex
+		armed   bool
+		reached chan struct{}
+		unblock chan struct{}
+	}
+}
+
+// newActiveQueryProbe returns a probe that, once armed by observe, blocks the
+// next registered statement whose text match accepts, along with the executor
+// knobs that install its hook.
+func newActiveQueryProbe(
+	match func(sql string) bool,
+) (*activeQueryProbe, *sql.ExecutorTestingKnobs) {
+	p := &activeQueryProbe{}
+	knobs := &sql.ExecutorTestingKnobs{
+		AfterActiveQueryAdded: func(sql string) {
+			p.mu.Lock()
+			armed := p.mu.armed
+			reached, unblock := p.mu.reached, p.mu.unblock
+			if armed && match(sql) {
+				p.mu.armed = false
+				p.mu.Unlock()
+				close(reached)
+				<-unblock
+				return
+			}
+			p.mu.Unlock()
+		},
+	}
+	return p, knobs
+}
+
+// observe arms the probe, calls run in a goroutine, waits until the statement
+// run issues is blocked at registration, reads the raw active query of the
+// session tagged with appName, then unblocks the statement and returns the
+// query along with run's error.
+func (p *activeQueryProbe) observe(
+	ctx context.Context,
+	t *testing.T,
+	statusServer serverpb.StatusServer,
+	appName string,
+	run func() error,
+) (string, error) {
+	t.Helper()
+	p.mu.Lock()
+	p.mu.reached = make(chan struct{})
+	p.mu.unblock = make(chan struct{})
+	p.mu.armed = true
+	reached, unblock := p.mu.reached, p.mu.unblock
+	p.mu.Unlock()
+
+	errCh := make(chan error, 1)
+	go func() { errCh <- run() }()
+
+	select {
+	case <-reached:
+	case err := <-errCh:
+		t.Fatalf("statement finished before it was observed in flight: %v", err)
+	}
+	query := rawActiveQuery(ctx, t, statusServer, appName)
+	close(unblock)
+	return query, <-errCh
+}
+
 // TestSensitiveSettingInFlightQueryRedaction verifies that a sensitive
 // SET CLUSTER SETTING running in a session does not expose its value through
 // the live active-query surfaces (crdb_internal.node_queries). It covers the
@@ -252,37 +321,16 @@ func TestSensitiveSettingInFlightQueryRedaction(t *testing.T) {
 // rejected during resolution (EXECUTE arguments must be variable-free), but
 // it sits on the active-query list until then, and its bound argument may be
 // a sensitive setting value with no setting name to key redaction on: like
-// the statement text, the placeholder list must render redacted. The
-// BeforeExecute knob cannot observe this window - the statement fails before
-// dispatch - so the test synchronizes on AfterActiveQueryAdded instead.
+// the statement text, the placeholder list must render redacted.
 func TestSensitiveSettingWireBoundExecuteRedaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
 
-	var mu struct {
-		syncutil.Mutex
-		armed   bool
-		reached chan struct{}
-		unblock chan struct{}
-	}
-	knobs := &sql.ExecutorTestingKnobs{
-		AfterActiveQueryAdded: func(sql string) {
-			mu.Lock()
-			armed := mu.armed
-			reached, unblock := mu.reached, mu.unblock
-			if armed && strings.Contains(sql, "EXECUTE") && strings.Contains(sql, "wire_bound") {
-				mu.armed = false
-				mu.Unlock()
-				close(reached)
-				<-unblock
-				return
-			}
-			mu.Unlock()
-		},
-	}
-
+	probe, knobs := newActiveQueryProbe(func(sql string) bool {
+		return strings.Contains(sql, "EXECUTE") && strings.Contains(sql, "wire_bound")
+	})
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{SQLExecutor: knobs},
 	})
@@ -299,36 +347,18 @@ func TestSensitiveSettingWireBoundExecuteRedaction(t *testing.T) {
 	require.NoError(t, err)
 	defer func() { _ = conn.Close(ctx) }()
 
-	// observeWireBoundExecute arms the knob, runs execStmt with value bound as
-	// a wire-protocol placeholder, reads the raw active query while the
-	// statement is blocked at registration, and returns it along with the
-	// statement's rejection error. The placeholder must be typed by an
-	// explicit parameter OID: EXECUTE argument expressions are never
-	// type-checked during prepare, so a cast in the statement text cannot
-	// type it (which is why an ordinary driver never produces this form).
+	// observeWireBoundExecute runs execStmt with value bound as a
+	// wire-protocol placeholder and returns the raw active query observed at
+	// registration along with the statement's rejection error. The
+	// placeholder must be typed by an explicit parameter OID: EXECUTE argument
+	// expressions are never type-checked during prepare, so a cast in the
+	// statement text cannot type it (which is why an ordinary driver never
+	// produces this form).
 	observeWireBoundExecute := func(t *testing.T, execStmt, value string) (string, error) {
-		mu.Lock()
-		mu.reached = make(chan struct{})
-		mu.unblock = make(chan struct{})
-		mu.armed = true
-		reached, unblock := mu.reached, mu.unblock
-		mu.Unlock()
-
-		errCh := make(chan error, 1)
-		go func() {
-			res := conn.PgConn().ExecParams(ctx, execStmt,
-				[][]byte{[]byte(value)}, []uint32{uint32(oid.T_text)}, nil, nil).Read()
-			errCh <- res.Err
-		}()
-
-		select {
-		case <-reached:
-		case err := <-errCh:
-			t.Fatalf("statement finished before it was observed in flight: %v", err)
-		}
-		query := rawActiveQuery(ctx, t, statusServer, "wire_bound_execute")
-		close(unblock)
-		return query, <-errCh
+		return probe.observe(ctx, t, statusServer, "wire_bound_execute", func() error {
+			return conn.PgConn().ExecParams(ctx, execStmt,
+				[][]byte{[]byte(value)}, []uint32{uint32(oid.T_text)}, nil, nil).Read().Err
+		})
 	}
 
 	t.Run("sensitive", func(t *testing.T) {
@@ -362,6 +392,70 @@ func TestSensitiveSettingWireBoundExecuteRedaction(t *testing.T) {
 		require.ErrorContains(t, execErr, "variable sub-expressions are not allowed")
 		require.NotContains(t, query, "not-a-secret", "expected redacted placeholders, got: %s", query)
 		require.Contains(t, query, "placeholders=[<redacted>]", "expected redacted placeholders, got: %s", query)
+	})
+}
+
+// TestSecretBearingTablePlaceholderRedaction verifies that a statement whose
+// plan touches a secret-bearing system table is classified at prepare time,
+// so that its execution registers in the active-query registry with its bound
+// placeholder values already hidden. The statements that write secrets into
+// system tables (e.g. the internal executor's UPSERT INTO system.settings
+// behind SET CLUSTER SETTING) bind the secret as a placeholder, and the
+// registry is populated before execution plans, so the prepare-time
+// classification is what closes that window. A read of a system table that
+// holds no secrets serves as the control: its bound value stays visible.
+func TestSecretBearingTablePlaceholderRedaction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// The probe recognizes the statement by the probe_table_read alias in its
+	// text.
+	probe, knobs := newActiveQueryProbe(func(sql string) bool {
+		return strings.Contains(sql, "probe_table_read")
+	})
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{SQLExecutor: knobs},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	statusServer := s.StatusServer().(serverpb.StatusServer)
+
+	pgURL, cleanup := s.PGUrl(t, serverutils.User(username.RootUser))
+	defer cleanup()
+	conf, err := pgx.ParseConfig(pgURL.String())
+	require.NoError(t, err)
+	conf.RuntimeParams["application_name"] = "probe_table_read_app"
+	conn, err := pgx.ConnectConfig(ctx, conf)
+	require.NoError(t, err)
+	defer func() { _ = conn.Close(ctx) }()
+
+	// observe runs query with value bound through the extended protocol (pgx
+	// prepares, binds, and executes) and returns the raw active query observed
+	// at registration.
+	observe := func(t *testing.T, query, value string) string {
+		active, err := probe.observe(ctx, t, statusServer, "probe_table_read_app", func() error {
+			_, err := conn.Exec(ctx, query, value)
+			return err
+		})
+		require.NoError(t, err)
+		return active
+	}
+
+	t.Run("secret-bearing table", func(t *testing.T) {
+		const value = "probe-bound-value-settings"
+		active := observe(t,
+			"SELECT value AS probe_table_read FROM system.settings WHERE name = $1", value)
+		require.NotContains(t, active, value, "in-flight query leaked the bound value: %s", active)
+		require.Contains(t, active, "placeholders=[<redacted>]", "expected redacted placeholders, got: %s", active)
+	})
+
+	t.Run("other system table", func(t *testing.T) {
+		const value = "probe-bound-value-locations"
+		active := observe(t,
+			`SELECT latitude AS probe_table_read FROM system.locations WHERE "localityKey" = $1`, value)
+		require.Contains(t, active, "placeholders=['"+value+"']", "expected visible placeholders, got: %s", active)
 	})
 }
 
@@ -568,6 +662,40 @@ func TestSensitiveSettingFailedSetErrorRecording(t *testing.T) {
 			return errors.New("no statement statistics row for the failed non-sensitive SET yet")
 		}
 		require.Contains(t, rows[0][0], "bogus-mode")
+		return nil
+	})
+}
+
+// TestSecretBearingTableFailedStatementErrorRecording verifies that when a
+// statement classified only by its plan (it reads a secret-bearing system
+// table) fails, the transaction's recorded error, as exposed by the
+// transaction insights, is reduced to its redaction-safe parts.
+func TestSecretBearingTableFailedStatementErrorRecording(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	runner := sqlutils.MakeSQLRunner(db)
+
+	const value = "hunter2-not-an-int"
+	runner.Exec(t, `INSERT INTO system.settings (name, value, "lastUpdated", "valueType")
+		VALUES ('probe.setting', $1, now(), 's')`, value)
+	_, err := db.Exec("SELECT value::INT FROM system.settings WHERE name = 'probe.setting'")
+	require.Error(t, err)
+	require.ErrorContains(t, err, value)
+
+	testutils.SucceedsSoon(t, func() error {
+		rows := runner.QueryStr(t,
+			`SELECT last_error_redactable FROM crdb_internal.node_txn_execution_insights
+			 WHERE last_error_redactable IS NOT NULL`)
+		if len(rows) == 0 {
+			return errors.New("no transaction insight for the failed SELECT yet")
+		}
+		for _, row := range rows {
+			require.NotContains(t, row[0], value)
+		}
 		return nil
 	})
 }

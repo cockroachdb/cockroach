@@ -501,7 +501,11 @@ func writeDefaultSettingValue(
 	return reportedValue, expectedEncodedValue, err
 }
 
-// writeDefaultSettingValue performs the data write to change a
+// writeSettingQuery is the statement issued through the internal executor to
+// store a setting's value.
+const writeSettingQuery = `UPSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ($1, $2, now(), $3)`
+
+// writeNonDefaultSettingValue performs the data write to change a
 // setting to a non-DEFAULT value.
 func writeNonDefaultSettingValue(
 	ctx context.Context,
@@ -542,7 +546,7 @@ func writeNonDefaultSettingValue(
 		if _, err = db.Executor().ExecEx(
 			ctx, "update-setting", nil,
 			sessiondata.NodeUserSessionDataOverride,
-			`UPSERT INTO system.settings (name, value, "lastUpdated", "valueType") VALUES ($1, $2, now(), $3)`,
+			writeSettingQuery,
 			setting.InternalKey(), encoded, setting.Typ(),
 		); err != nil {
 			return reportedValue, expectedEncodedValue, err

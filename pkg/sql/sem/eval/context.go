@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirecancel"
@@ -607,6 +608,9 @@ func (p *fakePlannerWithMonitor) ExecMon() *mon.BytesMonitor {
 func (p *fakePlannerWithMonitor) IsANSIDML() bool {
 	return false
 }
+
+// NotePlannedTable is part of the eval.Planner interface.
+func (p *fakePlannerWithMonitor) NotePlannedTable(cat.Table) {}
 
 // EnforceHomeRegion is part of the eval.Planner interface.
 func (p *fakePlannerWithMonitor) EnforceHomeRegion() bool {

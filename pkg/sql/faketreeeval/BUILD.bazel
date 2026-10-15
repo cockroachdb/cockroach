@@ -12,6 +12,7 @@ go_library(
         "//pkg/security/username",
         "//pkg/sql/catalog/descpb",
         "//pkg/sql/hintpb",
+        "//pkg/sql/opt/cat",
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/pgwire/pgnotice",

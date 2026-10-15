@@ -525,6 +525,9 @@ func (b *Builder) buildScanFromTableRef(
 func (b *Builder) addTable(tab cat.Table, alias *tree.TableName) *opt.TableMeta {
 	md := b.factory.Metadata()
 	tabID := md.AddTable(tab, alias)
+	if b.evalCtx.Planner != nil {
+		b.evalCtx.Planner.NotePlannedTable(tab)
+	}
 	// If this is a canary execution and any of the referenced tables has
 	// a canary window with genuinely different canary and stable stats,
 	// disable memo reuse so the canary-built memo is never written to the

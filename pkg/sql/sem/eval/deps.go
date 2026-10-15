@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/hintpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -444,6 +445,15 @@ type Planner interface {
 
 	// Optimizer returns the optimizer associated with this Planner, if any.
 	Optimizer() interface{}
+
+	// NotePlannedTable reports a table referenced by a plan built while the
+	// current statement runs: the statement's own plan, a routine body, a
+	// cascade, or a trigger. Optbuild calls it as soon as it resolves a table,
+	// so a statement that fails later in planning is still classified. A memo
+	// from the query cache or a prepared statement is not optbuilt again, so
+	// the code that reuses it calls this for each of the memo's tables
+	// instead. The same table may be reported more than once.
+	NotePlannedTable(tab cat.Table)
 
 	// GenUniqueCursorName returns a name that is guaranteed to be unique among
 	// the current list of cursors and portals. It is used to implement PLpgSQL
