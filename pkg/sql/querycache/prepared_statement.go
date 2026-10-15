@@ -28,10 +28,11 @@ type PrepareMetadata struct {
 	// StatementSummary is a summarized version of the query.
 	StatementSummary string
 
-	// MayCarrySecret records whether the statement may carry a secret, as
-	// found at parse time and copied from the sql.Statement that was prepared.
-	// Each execution's sql.Statement is rebuilt from here. Once set, it stays
-	// set.
+	// MayCarrySecret records whether the statement may carry a secret, either
+	// because the parse-time check on its AST says so or because the memo
+	// built when it was prepared references a secret-bearing system table. It
+	// is kept here for the surfaces that run before an execution plans, such
+	// as active-query registration; see the overview in pkg/sql/secret.go.
 	MayCarrySecret bool
 
 	// Provides TypeHints and Types fields which contain placeholder typing

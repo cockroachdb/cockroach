@@ -86,7 +86,7 @@ func (b *Builder) buildAlterTableSplit(split *tree.Split, inScope *scope) (outSc
 		inputScope.expr,
 		expiration,
 		&memo.AlterTableSplitPrivate{
-			Table:   b.factory.Metadata().AddTable(table, &tn),
+			Table:   b.addTable(table, &tn).MetaID,
 			Index:   index.Ordinal(),
 			Columns: colsToColList(outScope.cols),
 			Props:   inputScope.makePhysicalProps(),
@@ -123,7 +123,7 @@ func (b *Builder) buildAlterTableUnsplit(unsplit *tree.Unsplit, inScope *scope) 
 	outScope = inScope.push()
 	b.synthesizeResultColumns(outScope, colinfo.AlterTableUnsplitColumns)
 	private := &memo.AlterTableSplitPrivate{
-		Table:   b.factory.Metadata().AddTable(table, &tn),
+		Table:   b.addTable(table, &tn).MetaID,
 		Index:   index.Ordinal(),
 		Columns: colsToColList(outScope.cols),
 	}
@@ -207,7 +207,7 @@ func (b *Builder) buildAlterTableRelocate(
 		&memo.AlterTableRelocatePrivate{
 			SubjectReplicas: relocate.SubjectReplicas,
 			AlterTableSplitPrivate: memo.AlterTableSplitPrivate{
-				Table:   b.factory.Metadata().AddTable(table, &tn),
+				Table:   b.addTable(table, &tn).MetaID,
 				Index:   index.Ordinal(),
 				Columns: colsToColList(outScope.cols),
 				Props:   inputScope.makePhysicalProps(),

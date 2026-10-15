@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -521,6 +522,9 @@ func (ep *DummyEvalPlanner) GetMultiregionConfig(
 func (ep *DummyEvalPlanner) IsANSIDML() bool {
 	return false
 }
+
+// NotePlannedTable is part of the eval.Planner interface.
+func (ep *DummyEvalPlanner) NotePlannedTable(cat.Table) {}
 
 // EnforceHomeRegion is part of the eval.Planner interface.
 func (ep *DummyEvalPlanner) EnforceHomeRegion() bool {

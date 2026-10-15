@@ -157,6 +157,7 @@ func (p *planner) prepareUsingOptimizer(
 					} else {
 						stmt.Prepared.BaseMemo = cachedData.Memo
 					}
+					p.recordPrepareSecretFinding(cachedData.Memo)
 					return opc.flags, nil
 				}
 				opc.log(ctx, "query cache hit but memo is stale (prepare)")
@@ -174,6 +175,7 @@ func (p *planner) prepareUsingOptimizer(
 	if err != nil {
 		return 0, err
 	}
+	p.recordPrepareSecretFinding(memo)
 
 	md := memo.Metadata()
 	physical := memo.RootProps()
@@ -560,6 +562,11 @@ func (opc *optPlanningCtx) buildReusableMemo(
 // The returned memo is only safe to use in one thread, during execution of the
 // current statement.
 func (opc *optPlanningCtx) reuseMemo(cachedMemo *memo.Memo) (*memo.Memo, error) {
+	// A cached memo skipped optbuild, which is where a freshly built memo
+	// reports its tables, so report them here before anything below can fail.
+	for _, tabMeta := range cachedMemo.Metadata().AllTables() {
+		opc.p.NotePlannedTable(tabMeta.Table)
+	}
 	opc.incPlanTypeTelemetry(cachedMemo)
 	if cachedMemo.IsOptimized() {
 		// The query could have been already fully optimized in

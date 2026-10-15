@@ -521,6 +521,9 @@ func (b *Builder) buildScanFromTableRef(
 func (b *Builder) addTable(tab cat.Table, alias *tree.TableName) *opt.TableMeta {
 	md := b.factory.Metadata()
 	tabID := md.AddTable(tab, alias)
+	if b.evalCtx.Planner != nil {
+		b.evalCtx.Planner.NotePlannedTable(tab)
+	}
 	return md.TableMeta(tabID)
 }
 
