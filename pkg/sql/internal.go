@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssmemstorage"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -225,6 +226,11 @@ func (ie *InternalExecutor) runWithEx(
 	errCallback func(error),
 	attributeToUser bool,
 ) error {
+	// The connExecutor goroutine gets its own SQLCPUHandle in
+	// dispatchToExecutionEngine. Shadow any handle inherited from the caller
+	// so the goroutine is not also registered there, where nothing would
+	// close it.
+	ctx = admission.ContextWithoutSQLCPUHandle(ctx)
 	ex, err := ie.initConnEx(ctx, txn, w, mode, sd, stmtBuf, syncCallback, attributeToUser)
 	if err != nil {
 		return err

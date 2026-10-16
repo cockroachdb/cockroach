@@ -29,6 +29,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -778,3 +780,41 @@ func TestInternalExecutorSyntheticDesc(t *testing.T) {
 // there is, they are released by the resetExtraTxnState() call in the
 // Executor. Unfortunately at the moment we don't have a great way to
 // test lease releases.
+
+// TestInternalExecutorDoesNotRegisterWithCallerSQLCPUHandle checks that
+// internal executor statements run under a context carrying a SQLCPUHandle
+// leave no registrations on it.
+func TestInternalExecutorDoesNotRegisterWithCallerSQLCPUHandle(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	sqlDB := sqlutils.MakeSQLRunner(s.SQLConn(t))
+	sqlDB.Exec(t, "CREATE TABLE t (k INT PRIMARY KEY)")
+	sqlDB.Exec(t, "ALTER TABLE t SPLIT AT VALUES (10), (20), (30)")
+
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	handle := execCfg.DistSQLSrv.SQLCPUProvider.GetHandle(
+		admission.SQLWorkInfo{TenantID: execCfg.Codec.TenantID, AtGateway: true})
+	defer handle.Close()
+	ctx = admission.ContextWithSQLCPUHandle(ctx, handle)
+	// Register the caller, as a flow's main goroutine would be.
+	defer handle.RegisterGoroutine().Close(ctx)
+	require.Equal(t, 1, handle.TestingNumRegisteredGoroutines())
+
+	ie := s.InternalExecutor().(*sql.InternalExecutor)
+	for i := 0; i < 20; i++ {
+		_, err := ie.ExecEx(ctx, "test-insert", nil /* txn */, sessiondata.NodeUserSessionDataOverride,
+			"INSERT INTO defaultdb.t VALUES (5), (15), (25), (35)")
+		require.NoError(t, err)
+		_, err = ie.ExecEx(ctx, "test-delete", nil /* txn */, sessiondata.NodeUserSessionDataOverride,
+			"DELETE FROM defaultdb.t WHERE k > 0")
+		require.NoError(t, err)
+	}
+	require.Equal(t, 1, handle.TestingNumRegisteredGoroutines(),
+		"internal executor statements must not leave registrations on the caller's handle")
+}

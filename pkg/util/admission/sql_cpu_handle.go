@@ -67,6 +67,15 @@ func SQLCPUHandleFromContext(ctx context.Context) *SQLCPUHandle {
 	return h
 }
 
+// ContextWithoutSQLCPUHandle shadows any SQLCPUHandle in ctx, so that
+// SQLCPUHandleFromContext returns nil.
+func ContextWithoutSQLCPUHandle(ctx context.Context) context.Context {
+	if SQLCPUHandleFromContext(ctx) == nil {
+		return ctx
+	}
+	return ctxutil.WithFastValue(ctx, sqlCPUAdmissionHandleContextKey, nil)
+}
+
 var goroutineCPUHandlePool = sync.Pool{
 	New: func() interface{} {
 		return &GoroutineCPUHandle{}
