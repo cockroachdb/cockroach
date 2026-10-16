@@ -438,8 +438,9 @@ func (n *controllerImpl) AdmitKVWork(
 			ah.cpuKVAdmissionQResp = resp
 		}
 	}
-	// Pause CPU measurement for SQL work if it is happening locally on this
-	// goroutine.
+	// Pause SQL CPU measurement if this goroutine is registered. Do not
+	// register it here: the registration would measure nothing and nothing
+	// would close it.
 	//
 	// NB: if we never reach this point in the function, either there is an
 	// error, or some aspect of admission is disabled (which is never the case
@@ -448,10 +449,11 @@ func (n *controllerImpl) AdmitKVWork(
 	//
 	// TODO(sumeer): improve the structure of AdmitKVWork to make the behavior
 	// easier to understand.
-	sqlHandle := admission.SQLCPUHandleFromContext(ctx)
-	if sqlHandle != nil {
-		ah.ghToUnpause = sqlHandle.RegisterGoroutine()
-		ah.ghToUnpause.PauseMeasuring()
+	if sqlHandle := admission.SQLCPUHandleFromContext(ctx); sqlHandle != nil {
+		if gh := sqlHandle.LookupGoroutine(); gh != nil {
+			ah.ghToUnpause = gh
+			gh.PauseMeasuring()
+		}
 	}
 	return ah, nil
 }
