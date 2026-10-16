@@ -5638,3 +5638,74 @@ CREATE TABLE t (
 		})
 	})
 }
+
+// TestImportIntoWritesFamilyZeroSentinel verifies that IMPORT INTO writes the
+// column family 0 KV for every row even when none of family 0's columns are
+// imported. Point lookups, FK checks, UPDATE and DELETE rely on that KV to
+// find the row.
+func TestImportIntoWritesFamilyZeroSentinel(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var data string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			_, _ = w.Write([]byte(data))
+		}
+	}))
+	defer srv.Close()
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(s.ApplicationLayer().SQLConn(t))
+
+	checkRowsReachable := func(t *testing.T, table string) {
+		sqlDB.CheckQueryResults(t, fmt.Sprintf(`SELECT k, a, b FROM %s ORDER BY k`, table),
+			[][]string{{"1", "NULL", "10"}, {"2", "NULL", "20"}, {"3", "NULL", "30"}})
+		sqlDB.CheckQueryResults(t, fmt.Sprintf(`SELECT k FROM %s WHERE k = 1`, table),
+			[][]string{{"1"}})
+		sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE %s_child (p INT REFERENCES %s (k))`, table, table))
+		sqlDB.Exec(t, fmt.Sprintf(`INSERT INTO %s_child VALUES (1)`, table))
+		sqlDB.Exec(t, fmt.Sprintf(`UPDATE %s SET a = 99 WHERE k = 2`, table))
+		sqlDB.CheckQueryResults(t, fmt.Sprintf(`SELECT a FROM %s WHERE k = 2`, table),
+			[][]string{{"99"}})
+		sqlDB.Exec(t, fmt.Sprintf(`DELETE FROM %s WHERE k = 3`, table))
+		sqlDB.CheckQueryResults(t, fmt.Sprintf(`SELECT count(*) FROM %s`, table),
+			[][]string{{"2"}})
+	}
+
+	t.Run("target-list", func(t *testing.T) {
+		sqlDB.Exec(t, `CREATE TABLE t1 (k INT PRIMARY KEY, a INT, b INT, FAMILY f0 (a), FAMILY f1 (k, b))`)
+		data = "1,10\n2,20\n3,30"
+		sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t1 (k, b) CSV DATA ('%s')`, srv.URL))
+		checkRowsReachable(t, "t1")
+	})
+
+	t.Run("not-visible", func(t *testing.T) {
+		sqlDB.Exec(t, `CREATE TABLE t2 (k INT PRIMARY KEY, a INT NOT VISIBLE, b INT, FAMILY f0 (a), FAMILY f1 (k, b))`)
+		data = "1,10\n2,20\n3,30"
+		sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t2 CSV DATA ('%s')`, srv.URL))
+		checkRowsReachable(t, "t2")
+	})
+
+	// A row whose imported non-key columns are all NULL has nothing to write in
+	// its own family, so family 0 is its only KV.
+	t.Run("all-null-imported-columns", func(t *testing.T) {
+		sqlDB.Exec(t, `CREATE TABLE t3 (k INT PRIMARY KEY, a INT, b INT, FAMILY f0 (a), FAMILY f1 (k, b))`)
+		data = "1,\n2,20"
+		sqlDB.Exec(t, fmt.Sprintf(`IMPORT INTO t3 (k, b) CSV DATA ('%s') WITH nullif = ''`, srv.URL))
+		sqlDB.CheckQueryResults(t, `SELECT k, a, b FROM t3 ORDER BY k`,
+			[][]string{{"1", "NULL", "NULL"}, {"2", "NULL", "20"}})
+		sqlDB.CheckQueryResults(t, `SELECT k FROM t3 WHERE k = 1`, [][]string{{"1"}})
+	})
+
+	t.Run("collision-with-family-zero-only-row", func(t *testing.T) {
+		sqlDB.Exec(t, `CREATE TABLE t4 (k INT PRIMARY KEY, a INT, b INT, FAMILY f0 (a), FAMILY f1 (k, b))`)
+		sqlDB.Exec(t, `INSERT INTO t4 (k, a) VALUES (6, 100)`)
+		data = "6,60"
+		sqlDB.ExpectErr(t, `ingested key collides with an existing one`,
+			fmt.Sprintf(`IMPORT INTO t4 (k, b) CSV DATA ('%s')`, srv.URL))
+		sqlDB.CheckQueryResults(t, `SELECT k, a, b FROM t4`, [][]string{{"6", "100", "NULL"}})
+	})
+}

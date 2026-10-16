@@ -195,11 +195,13 @@ func (ri *Inserter) InsertRow(
 		return err
 	}
 
-	// Add the new values to the primary index.
+	// Add the new values to the primary index. Family 0 is always written
+	// because every row needs its sentinel KV, even when InsertCols contains
+	// none of family 0's columns (e.g. IMPORT INTO with a target column list).
 	ri.valueBuf, err = prepareInsertOrUpdateBatch(
 		ctx, b, &ri.Helper, primaryIndexKey, ri.InsertCols, values, ri.InsertColIDtoRowIndex,
 		ri.InsertColIDtoRowIndex, &ri.key, &ri.value, ri.valueBuf, oth, nil, /* oldValues */
-		kvOp, false /* mustValidateOldPKValues */, false /* forceSentinelWrite */, traceKV,
+		kvOp, false /* mustValidateOldPKValues */, true /* forceSentinelWrite */, traceKV,
 	)
 	if err != nil {
 		return err
