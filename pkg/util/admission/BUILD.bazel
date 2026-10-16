@@ -89,6 +89,7 @@ go_test(
         "scheduler_latency_listener_test.go",
         "sequencer_test.go",
         "snapshot_queue_test.go",
+        "sql_cpu_handle_test.go",
         "store_token_estimation_test.go",
         "tokens_linear_model_test.go",
         "work_queue_test.go",

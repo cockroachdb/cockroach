@@ -2978,16 +2978,10 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 			return err
 		}
 		defer func() {
-			// Close the main goroutine's CPU handle at the flow boundary. This must
-			// happen before cpuHandle.Close() which will pool the GoroutineCPUHandle.
+			// Close the main goroutine's CPU handle at the flow boundary.
 			mainGoroutineCPUHandle.Close(ctx)
-			// Close the SQLCPUHandle after all GoroutineCPUHandles are closed.
-			// At this point, all flow goroutines have exited (Wait() was called in
-			// flow.Cleanup), and the main goroutine's handle was just closed above.
-			// NB: there isn't a memory safety issue if some GoroutineCPUHandles are not
-			// yet closed, in that the pooling logic only returns closed GoroutineCPUHandles
-			// to the pool. But it is preferable for performance, and for full accounting
-			// of cpu consumtion.
+			// Close the SQLCPUHandle after all flow goroutines have exited (Wait()
+			// was called in flow.Cleanup) and closed their handles.
 			cpuHandle.Close()
 		}()
 	}

@@ -434,7 +434,6 @@ func (ds *ServerImpl) setupFlow(
 				// Close the main goroutine's CPU handle first. At this point, all other
 				// goroutines have already closed their handles (via their defers).
 				mainGoroutineCPUHandle.Close(ctx)
-				// Close the SQLCPUHandle, which will pool all closed GoroutineCPUHandles.
 				cpuHandle.Close()
 				if origOnFlowCleanupEnd != nil {
 					origOnFlowCleanupEnd(ctx)

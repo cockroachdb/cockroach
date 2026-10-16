@@ -83,7 +83,10 @@ type SQLCPUHandle struct {
 
 	mu struct {
 		syncutil.Mutex
-		closed   bool
+		closed bool
+
+		// gHandles holds the currently registered goroutines. Entries are
+		// added by RegisterGoroutine and removed by GoroutineCPUHandle.Close.
 		gHandles []*GoroutineCPUHandle
 		// Backing for up to 2 goroutine handles, to avoid allocations in
 		// gHandles when there are 2 or fewer goroutines.
@@ -134,6 +137,13 @@ func (h *SQLCPUHandle) IsGoroutineRegistered() bool {
 	return false
 }
 
+// TestingNumRegisteredGoroutines returns the number of registered goroutines.
+func (h *SQLCPUHandle) TestingNumRegisteredGoroutines() int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return len(h.mu.gHandles)
+}
+
 // RegisterGoroutine returns a GoroutineCPUHandle to use for reporting and
 // admission. If the goroutine was already registered, the existing handle
 // will be returned. CPU time is accounted for at this goroutine from the
@@ -158,20 +168,33 @@ func (h *SQLCPUHandle) RegisterGoroutine() *GoroutineCPUHandle {
 	return gh
 }
 
-// Close is called when no more reporting is needed. It pools
-// GoroutineCPUHandles that have been closed. GoroutineCPUHandles that are not
-// yet closed are left for GC.
+// unregisterGoroutine removes gh from gHandles and pools it. If
+// SQLCPUHandle.Close already ran, gh is left for GC so that only one path
+// pools it.
+func (h *SQLCPUHandle) unregisterGoroutine(gh *GoroutineCPUHandle) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	for i, cur := range h.mu.gHandles {
+		if cur != gh {
+			continue
+		}
+		last := len(h.mu.gHandles) - 1
+		h.mu.gHandles[i] = h.mu.gHandles[last]
+		h.mu.gHandles[last] = nil
+		h.mu.gHandles = h.mu.gHandles[:last]
+		gh.reset()
+		goroutineCPUHandlePool.Put(gh)
+		return
+	}
+}
+
+// Close is called when no more reporting is needed. Handles still registered
+// here were never closed by their goroutines; they are left for GC.
 func (h *SQLCPUHandle) Close() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.mu.closed = true
-	for i, gh := range h.mu.gHandles {
-		if gh.closed.Load() {
-			gh.reset()
-			goroutineCPUHandlePool.Put(gh)
-		}
-		h.mu.gHandles[i] = nil
-	}
+	clear(h.mu.gHandles)
 	h.mu.gHandles = nil
 }
 
@@ -180,8 +203,8 @@ func (h *SQLCPUHandle) Close() {
 // done. The Close call must be at the goroutine boundary, to structurally
 // guarantee that MeasureAndAdmit is never called after Close. This structural
 // guarantee is essential for safe pooling - the handle may be reused for a
-// different goroutine after being pooled. It is safe to never Close a
-// GoroutineCPUHandle -- it will be garbage collected.
+// different goroutine after being pooled. A handle that is never closed stays
+// registered until SQLCPUHandle.Close.
 type GoroutineCPUHandle struct {
 	gid int64
 	h   *SQLCPUHandle
@@ -197,9 +220,8 @@ type GoroutineCPUHandle struct {
 	paused     int
 	pauseStart time.Duration
 
-	// closed is set to true when Close() is called. This is primarily for
-	// debugging - the structural guarantee (Close at goroutine boundary)
-	// is the primary safety mechanism, not this field.
+	// closed is set by Close. It is a debugging aid; the structural guarantee
+	// above is the safety mechanism.
 	closed atomic.Bool
 }
 
@@ -218,13 +240,13 @@ func (h *GoroutineCPUHandle) reset() {
 	*h = GoroutineCPUHandle{}
 }
 
-// Close marks this handle as closed. It must be called at the goroutine
-// boundary when the goroutine's SQL work is done. After Close, the handle
-// will be pooled when SQLCPUHandle.Close is called, so MeasureAndAdmit must
-// never be called after Close.
+// Close accounts the goroutine's remaining CPU, unregisters the handle and
+// pools it. It must be called at the goroutine boundary, and the handle must
+// not be used afterwards.
 func (h *GoroutineCPUHandle) Close(ctx context.Context) {
 	_ = h.measureAndAdmit(ctx, true /* noWait */)
 	h.closed.Store(true)
+	h.h.unregisterGoroutine(h)
 }
 
 // MeasureAndAdmit should be called frequently. The callee will measure the
