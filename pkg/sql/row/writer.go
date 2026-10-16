@@ -140,9 +140,10 @@ func prepareInsertOrUpdateBatch(
 		// all is never skipped: empty family.ColumnIDs can only happen to
 		// family 0 (PK in a non-zero family, family 0's only column dropped),
 		// which must still emit the row sentinel KV. And when
-		// forceSentinelWrite is set, family 0 is written even if untouched, to
-		// conflict with a concurrent DELETE (see maybeForceSentinelWrite and
-		// issue #175530).
+		// forceSentinelWrite is set, family 0 is written even if untouched:
+		// inserts always set it so every new row gets its sentinel, and updates
+		// set it to conflict with a concurrent DELETE (see
+		// maybeForceSentinelWrite and issue #175530).
 		if !update && len(family.ColumnIDs) != 0 && !(forceSentinelWrite && family.ID == 0) {
 			continue
 		}
