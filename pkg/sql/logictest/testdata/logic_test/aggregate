@@ -4034,3 +4034,55 @@ query R
 SELECT percentile_cont(ARRAY[.4::FLOAT]) WITHIN GROUP (ORDER BY i::FLOAT4) FROM t90519;
 ----
 {2.2}
+
+# Regression tests for #176141. Commutative DISTINCT aggregates must not be
+# converted to window functions when mixed with ordered aggregates.
+subtest distinct_ordered_aggregates
+
+query IIRRR
+WITH input(amount) AS (
+  VALUES (1::DECIMAL(12,2)), (2::DECIMAL(12,2)), (2::DECIMAL(12,2))
+)
+SELECT count(*), count(DISTINCT amount), sum(DISTINCT amount),
+       avg(DISTINCT amount),
+       percentile_cont(0.5) WITHIN GROUP (ORDER BY amount::FLOAT8)
+FROM input
+----
+3  2  3.00  1.5000000000000000000  2
+
+# Exercise grouping, FILTER, and NULL values alongside both percentile kinds.
+query TIIRRR rowsort
+WITH input(g, amount, keep) AS (
+  VALUES ('a', 1, true), ('a', 2, true), ('a', 2, true),
+         ('a', 3, false), ('a', NULL, true), ('b', NULL, true)
+)
+SELECT g, count(*), count(DISTINCT amount) FILTER (WHERE keep),
+       sum(DISTINCT amount) FILTER (WHERE keep),
+       percentile_cont(0.5) WITHIN GROUP (ORDER BY amount::FLOAT8)
+         FILTER (WHERE keep),
+       percentile_disc(0.5) WITHIN GROUP (ORDER BY amount::FLOAT8)
+         FILTER (WHERE keep)
+FROM input
+GROUP BY g
+HAVING count(DISTINCT amount) FILTER (WHERE keep) < 3
+----
+a  5  2  3     2     2
+b  1  0  NULL  NULL  NULL
+
+# Scalar DISTINCT aggregates still produce their normal results on empty input.
+query IIRR
+WITH input(amount) AS (VALUES (1))
+SELECT count(*), count(DISTINCT amount), sum(DISTINCT amount),
+       percentile_cont(0.5) WITHIN GROUP (ORDER BY amount::FLOAT8)
+FROM input
+WHERE false
+----
+0  0  NULL  NULL
+
+# An ORDER BY on an ordinary aggregate also takes the window-rewrite path.
+query TI
+WITH input(amount) AS (VALUES (1), (2), (2))
+SELECT array_agg(amount ORDER BY amount DESC), count(DISTINCT amount)
+FROM input
+----
+{2,2,1}  2

@@ -291,8 +291,16 @@ func (b *Builder) buildAggregationAsWindow(
 	// frames accumulates the set of distinct window frames we're computing over
 	// so that we can group functions over the same partition and ordering.
 	frames := make([]memo.WindowExpr, 0, len(g.aggs))
+	aggs := make(memo.AggregationsExpr, 0, len(g.aggs))
 	for i, agg := range g.aggs {
 		fn := b.constructAggregate(agg.def.Name, argLists[i])
+		// Window functions do not support DISTINCT. Compute commutative
+		// DISTINCT aggregates in the final grouping instead, where they do not
+		// need to preserve any of the window orderings.
+		distinctAgg := agg.distinct && agg.isCommutative()
+		if distinctAgg {
+			fn = b.factory.ConstructAggDistinct(fn)
+		}
 		if filterCols[i] != 0 {
 			fn = b.factory.ConstructAggFilter(
 				fn,
@@ -300,6 +308,14 @@ func (b *Builder) buildAggregationAsWindow(
 			)
 		}
 
+		if distinctAgg {
+			aggs = append(aggs, b.factory.ConstructAggregationsItem(fn, agg.col.id))
+			continue
+		}
+
+		aggs = append(aggs, b.factory.ConstructAggregationsItem(
+			b.factory.ConstructConstAgg(b.factory.ConstructVariable(agg.col.id)), agg.col.id,
+		))
 		frameIdx := b.findMatchingFrameIndex(&frames, partitions[i], orderings[i])
 
 		frames[frameIdx].Windows = append(frames[frameIdx].Windows,
@@ -321,7 +337,7 @@ func (b *Builder) buildAggregationAsWindow(
 	// aggregations built as window functions emit an aggregated value for each row
 	// instead of each group. To rectify this, we must 'squash' the values down by
 	// wrapping it with a GroupBy or ScalarGroupBy.
-	g.aggOutScope.expr = b.constructWindowGroup(aggregateExpr, groupingColSet, g.aggs, g.aggOutScope)
+	g.aggOutScope.expr = b.constructWindowGroup(aggregateExpr, groupingColSet, g.aggs, aggs, g.aggOutScope)
 
 	// Wrap with having filter if it exists.
 	if having != nil {
@@ -550,28 +566,26 @@ func (b *Builder) findMatchingFrameIndex(
 }
 
 // constructWindowGroup wraps the input window expression with an appropriate
-// grouping so the results of each window column are squashed down.
+// grouping so the results of each window column are squashed down and any
+// commutative DISTINCT aggregates are computed.
 // The expression may be wrapped with a projection so ensure the default NULL
 // values of the aggregates are respected when no rows are returned.
 func (b *Builder) constructWindowGroup(
-	input memo.RelExpr, groupingColSet opt.ColSet, aggInfos []aggregateInfo, outScope *scope,
+	input memo.RelExpr,
+	groupingColSet opt.ColSet,
+	aggInfos []aggregateInfo,
+	aggs memo.AggregationsExpr,
+	outScope *scope,
 ) memo.RelExpr {
 	if groupingColSet.Empty() {
 		// Construct a scalar GroupBy wrapped around the appropriate projections.
-		return b.constructScalarWindowGroup(input, aggInfos, outScope)
+		return b.constructScalarWindowGroup(input, aggInfos, aggs, outScope)
 	}
 
 	// Construct a GroupBy using the groupingColSet. Use the ConstAgg aggregate for
 	// the window columns.
 	private := memo.GroupingPrivate{GroupingCols: groupingColSet}
 	private.Ordering.FromOrderingWithOptCols(nil, groupingColSet)
-	aggs := make(memo.AggregationsExpr, 0, len(aggInfos))
-	for i := range aggInfos {
-		aggs = append(aggs, b.factory.ConstructAggregationsItem(
-			b.factory.ConstructConstAgg(b.factory.ConstructVariable(aggInfos[i].col.id)),
-			aggInfos[i].col.id,
-		))
-	}
 	return b.factory.ConstructGroupBy(input, aggs, &private)
 }
 
@@ -610,10 +624,8 @@ func (b *Builder) overrideDefaultNullValue(agg aggregateInfo) (opt.ScalarExpr, b
 // The expression may be wrapped with a projection so ensure the default NULL
 // values of the aggregates are respected when no rows are returned.
 func (b *Builder) constructScalarWindowGroup(
-	input memo.RelExpr, aggInfos []aggregateInfo, outScope *scope,
+	input memo.RelExpr, aggInfos []aggregateInfo, aggs memo.AggregationsExpr, outScope *scope,
 ) memo.RelExpr {
-	aggs := make(memo.AggregationsExpr, 0, len(aggInfos))
-
 	// Create a projection here to replace the NULL values with pre-defined
 	// default values of aggregates. The projection should be of the form:
 	//
@@ -631,17 +643,20 @@ func (b *Builder) constructScalarWindowGroup(
 	// Create an appropriate passthrough for the projection.
 	var passthrough opt.ColSet
 	for i := range aggInfos {
-		varExpr := b.factory.ConstructConstAgg(b.factory.ConstructVariable(aggInfos[i].col.id))
+		aggExpr := aggs[i].Agg
 
 		// If the aggregate requires a projection to potentially set a default null value
 		// a new column will be needed to be synthesized.
 		defaultNullVal, requiresProjection := b.overrideDefaultNullValue(aggInfos[i])
+		// Aggregates computed directly in this grouping already return their
+		// correct default values on empty input.
+		requiresProjection = requiresProjection && aggExpr.Op() == opt.ConstAggOp
 		aggregateCol := aggInfos[i].col
 		if requiresProjection {
-			aggregateCol = b.synthesizeColumn(outScope, aggregateCol.name, aggregateCol.typ, aggregateCol.expr, varExpr)
+			aggregateCol = b.synthesizeColumn(outScope, aggregateCol.name, aggregateCol.typ, aggregateCol.expr, aggExpr)
 		}
 
-		aggs = append(aggs, b.factory.ConstructAggregationsItem(varExpr, aggregateCol.id))
+		aggs[i] = b.factory.ConstructAggregationsItem(aggExpr, aggregateCol.id)
 
 		if requiresProjection {
 			// Add projection to replace default NULL value.
