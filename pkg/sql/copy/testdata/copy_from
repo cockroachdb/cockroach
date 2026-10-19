@@ -842,3 +842,78 @@ SELECT * FROM rls_table ORDER BY id
 20|twenty
 24|twenty-four
 28|twenty-eight
+
+# A computed column whose expression doesn't vectorize (the assignment cast to
+# DECIMAL(12,2)) is evaluated by a wrapped row processor, which can split one
+# COPY batch into several batches for the vectorized insert. All rows must be
+# written and committed together.
+exec-ddl
+CREATE TABLE computed_decimal (
+  id INT8 PRIMARY KEY,
+  v DECIMAL(12,2) NOT NULL,
+  cs DECIMAL(12,2) AS (abs(v)) STORED,
+  cv DECIMAL(12,2) AS (abs(v)) VIRTUAL
+)
+----
+
+copy-from
+COPY computed_decimal(id,v) FROM STDIN
+1	-10.00
+2	20.00
+3	-30.00
+4	40.00
+----
+4
+
+query
+SELECT * FROM computed_decimal ORDER BY id
+----
+1|-10.00|10.00|10.00
+2|20.00|20.00|20.00
+3|-30.00|30.00|30.00
+4|40.00|40.00|40.00
+
+exec-ddl
+BEGIN
+----
+
+copy-from
+COPY computed_decimal(id,v) FROM STDIN
+5	-50.00
+6	60.00
+7	-70.00
+8	80.00
+----
+4
+
+exec-ddl
+COMMIT
+----
+
+query
+SELECT count(*), sum(cs), sum(cv) FROM computed_decimal
+----
+8|360.00|360.00
+
+# A failure in a later input batch must not leave earlier rows committed.
+exec-ddl
+SET copy_from_atomic_enabled = true
+----
+
+copy-from-error
+COPY computed_decimal(id,v) FROM STDIN
+9	90.00
+10	100.00
+11	110.00
+1	10.00
+----
+ERROR: duplicate key value violates unique constraint "computed_decimal_pkey" (SQLSTATE 23505)
+
+exec-ddl
+RESET copy_from_atomic_enabled
+----
+
+query
+SELECT count(*) FROM computed_decimal
+----
+8

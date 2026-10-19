@@ -41,6 +41,7 @@ go_library(
         "//pkg/col/coldata",
         "//pkg/col/coldataext",  # keep
         "//pkg/col/typeconv",  # keep
+        "//pkg/kv",
         "//pkg/kv/kvserver/kvserverbase",
         "//pkg/obs/ash",
         "//pkg/roachpb",

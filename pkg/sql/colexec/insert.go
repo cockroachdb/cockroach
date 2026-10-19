@@ -11,6 +11,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -43,20 +44,29 @@ type vectorInserter struct {
 	// mutationQuota is the number of bytes we'll allow in the kv.Batch before
 	// finishing it and starting a new one.
 	mutationQuota int
-	// If auto commit is true we'll commit the last batch.
+	// If auto commit is true we'll try to commit the txn along with the last
+	// kv.Batch once the input is exhausted.
 	autoCommit bool
+	// pendingBatch, set only when autoCommit is true, is the most recently
+	// built kv.Batch, not yet sent. It is held back because the input may
+	// deliver the rows in several coldata.Batches (e.g. a Columnarizer
+	// wrapping a row-execution processor grows its batches from one row), so
+	// only once the input is exhausted do we know it is the final kv.Batch and
+	// can commit with it. It is sent without committing just before the next
+	// kv.Batch is built.
+	pendingBatch *kv.Batch
 	// rowsWritten tracks the number of rows written by the vectorInserter so
 	// far.
 	rowsWritten int
-	// statsRefresherNotified is set once we notify the stats refresher.
-	statsRefresherNotified bool
+	// done is set once the input is exhausted and the row count is emitted.
+	done bool
 }
 
 var _ colexecop.Operator = &vectorInserter{}
 
-// NewInsertOp allocates a new vector insert operator. Currently the only input
-// will be a rawBatchOp and only output is row count so this doesn't support
-// the full gamut of insert operations.
+// NewInsertOp allocates a new vector insert operator. It is only used by COPY
+// and its only output is the row count, so it doesn't support the full gamut
+// of insert operations. The input may produce any number of batches.
 func NewInsertOp(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
@@ -124,24 +134,38 @@ func (v *vectorInserter) getPartialIndexMap(b coldata.Batch) map[catid.IndexID][
 	return partialIndexColMap
 }
 
+// Next drains the input, writing every row, and then emits a single batch
+// with the total row count. Consumers of a mutation's row count expect exactly
+// one such row, no matter how many batches the input produced.
 func (v *vectorInserter) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
-	b, meta := v.Input.Next()
-	if meta != nil {
-		return nil, meta
-	}
-	if b.Length() == 0 {
-		if !v.statsRefresherNotified {
-			// We've just exhausted the input, so let's notify the stats
-			// refresher.
-			// TODO(yuzefovich): when auto-commit enabled, the inserted rows
-			// will be visible sooner than at the end. Is it worth notifying the
-			// stats refresher earlier in that case?
-			v.flowCtx.Cfg.StatsRefresher.NotifyMutation(v.Ctx, v.desc, v.rowsWritten)
-			v.statsRefresherNotified = true
-		}
+	if v.done {
 		return coldata.ZeroBatch, nil
 	}
+	for {
+		b, meta := v.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
+		if b.Length() == 0 {
+			break
+		}
+		v.insertBatch(b)
+	}
+	if v.pendingBatch != nil {
+		v.commitPendingBatch()
+	}
+	v.flowCtx.Cfg.StatsRefresher.NotifyMutation(v.Ctx, v.desc, v.rowsWritten)
+	v.done = true
 
+	v.retBatch.ResetInternalBatch()
+	v.retBatch.ColVec(0).Int64()[0] = int64(v.rowsWritten)
+	v.retBatch.SetLength(1)
+	return v.retBatch, nil
+}
+
+// insertBatch writes the rows of b, possibly across several kv.Batches. When
+// autoCommit is true, the last of them is left in pendingBatch.
+func (v *vectorInserter) insertBatch(b coldata.Batch) {
 	if !v.checkOrds.Empty() {
 		if err := v.checkMutationInput(v.Ctx, b); err != nil {
 			colexecerror.ExpectedError(err)
@@ -174,6 +198,10 @@ func (v *vectorInserter) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	end := b.Length()
 	start := 0
 	for start < b.Length() {
+		if v.pendingBatch != nil {
+			v.runBatch(v.pendingBatch, false /* commit */)
+			v.pendingBatch = nil
+		}
 		kvba.Batch = v.flowCtx.Txn.NewBatch()
 		if err := enc.PrepareBatch(v.Ctx, p, start, end); err != nil {
 			if errors.Is(err, colenc.ErrOverMemLimit) {
@@ -192,23 +220,11 @@ func (v *vectorInserter) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 			}
 			colexecerror.ExpectedError(err)
 		}
-		// Similar to tableWriterBase.finalize, we examine whether it's likely
-		// that we'll be able to auto-commit. If it seems unlikely based on the
-		// deadlie, we won't auto-commit which might allow the connExecutor to
-		// get a fresh deadline before committing.
-		autoCommit := v.autoCommit && end == b.Length() &&
-			!v.flowCtx.Txn.DeadlineLikelySufficient()
-		log.VEventf(v.Ctx, 2, "copy running batch, autocommit: %v, numrows: %d", autoCommit, end-start)
-		var err error
-		if autoCommit {
-			err = v.flowCtx.Txn.CommitInBatch(v.Ctx, kvba.Batch)
+		log.VEventf(v.Ctx, 2, "copy built batch, numrows: %d", end-start)
+		if v.autoCommit {
+			v.pendingBatch = kvba.Batch
 		} else {
-			err = v.flowCtx.Txn.Run(v.Ctx, kvba.Batch)
-		}
-		if err != nil {
-			colexecerror.ExpectedError(row.ConvertBatchError(
-				v.Ctx, v.desc, kvba.Batch, false, /* alwaysConvertCondFailed */
-			))
+			v.runBatch(kvba.Batch, false /* commit */)
 		}
 		numRows := end - start
 		start = end
@@ -218,13 +234,35 @@ func (v *vectorInserter) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 		}
 	}
 
-	v.retBatch.ResetInternalBatch()
-	v.retBatch.ColVec(0).Int64()[0] = int64(b.Length())
-	v.retBatch.SetLength(1)
-
 	v.rowsWritten += b.Length()
+}
 
-	return v.retBatch, nil
+// commitPendingBatch sends the final kv.Batch and, deadline permitting, commits
+// the txn with it.
+func (v *vectorInserter) commitPendingBatch() {
+	// Similar to tableWriterBase.finalize, we examine whether it's likely that
+	// we'll be able to auto-commit. If it seems unlikely based on the deadline,
+	// we won't auto-commit which might allow the connExecutor to get a fresh
+	// deadline before committing.
+	commit := !v.flowCtx.Txn.DeadlineLikelySufficient()
+	v.runBatch(v.pendingBatch, commit)
+	v.pendingBatch = nil
+}
+
+// runBatch sends b in the txn, committing the txn with it if commit is true.
+func (v *vectorInserter) runBatch(b *kv.Batch, commit bool) {
+	log.VEventf(v.Ctx, 2, "copy running batch, autocommit: %v", commit)
+	var err error
+	if commit {
+		err = v.flowCtx.Txn.CommitInBatch(v.Ctx, b)
+	} else {
+		err = v.flowCtx.Txn.Run(v.Ctx, b)
+	}
+	if err != nil {
+		colexecerror.ExpectedError(row.ConvertBatchError(
+			v.Ctx, v.desc, b, false, /* alwaysConvertCondFailed */
+		))
+	}
 }
 
 func (v *vectorInserter) checkMutationInput(ctx context.Context, b coldata.Batch) error {
