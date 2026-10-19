@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -68,6 +69,9 @@ type testImpl struct {
 
 	cockroach   string // path to main cockroach binary
 	cockroachEA string // path to cockroach binary compiled with --crdb_test build tag
+	// arch is the CPU architecture of the cluster the test runs on. It is used
+	// to avoid enabling runtime assertions on FIPS clusters (see Cockroach).
+	arch vm.CPUArch
 
 	randomCockroachOnce sync.Once
 	randomizedCockroach string // either `cockroach` or `cockroach-ea`, picked randomly
@@ -190,6 +194,14 @@ func (t *testImpl) Cockroach() string {
 			// as it will slow down performance.
 			if t.spec.Benchmark {
 				t.L().Printf("Benchmark test, running with standard cockroach")
+				t.randomizedCockroach = t.StandardCockroach()
+				return
+			}
+			// FIPS clusters are already significantly slower than non-FIPS ones;
+			// stacking runtime assertions on top regularly pushes long-running
+			// tests past their timeout.
+			if t.arch == vm.ArchFIPS {
+				t.L().Printf("FIPS cluster, running with standard cockroach")
 				t.randomizedCockroach = t.StandardCockroach()
 				return
 			}
