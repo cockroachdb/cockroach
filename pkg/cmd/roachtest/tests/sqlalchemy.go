@@ -24,11 +24,16 @@ import (
 var sqlAlchemyResultRegex = regexp.MustCompile(`^(?P<test>test.*::.*::[^ \[\]]*(?:\[.*])?) (?P<result>\w+)\s+\[.+]$`)
 var sqlAlchemyReleaseTagRegex = regexp.MustCompile(`^rel_(?P<major>\d+)_(?P<minor>\d+)_(?P<point>\d+)$`)
 
-var supportedSQLAlchemyTag = "2.0.43"
+// supportedSQLAlchemyTag pins the SQLAlchemy release installed into the
+// test venv. It must satisfy the SQLAlchemy requirement declared by the
+// dialect at supportedSQLAlchemyCockroachDBTag; otherwise the dialect
+// install fails instead of pulling the newest 2.0.x.
+var supportedSQLAlchemyTag = "2.0.55"
 
 // supportedSQLAlchemyCockroachDBTag pins the sqlalchemy-cockroachdb dialect.
 // Test IDs embed the server version the dialect reports (e.g. "_9_5_0"), so
-// bumping this may require updating the keys in sqlalchemy_blocklist.go.
+// bumping this may require updating the keys in sqlalchemy_blocklist.go,
+// and supportedSQLAlchemyTag if the dialect's SQLAlchemy requirement changed.
 var supportedSQLAlchemyCockroachDBTag = "v2.0.4"
 
 // This test runs the SQLAlchemy dialect test suite against a single Cockroach
@@ -113,9 +118,9 @@ func runSQLAlchemy(ctx context.Context, t test.Test, c cluster.Cluster) {
 	}
 
 	t.Status("installing sqlalchemy-cockroachdb")
-	if err := repeatRunE(ctx, t, c, node, "installing sqlalchemy=cockroachdb", `
-		source venv/bin/activate && cd /mnt/data1/sqlalchemy-cockroachdb && pip3 install .
-	`); err != nil {
+	if err := repeatRunE(ctx, t, c, node, "installing sqlalchemy-cockroachdb", fmt.Sprintf(`
+		source venv/bin/activate && cd /mnt/data1/sqlalchemy-cockroachdb && pip3 install . sqlalchemy==%s
+	`, supportedSQLAlchemyTag)); err != nil {
 		t.Fatal(err)
 	}
 
