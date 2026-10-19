@@ -1531,3 +1531,77 @@ statement ok
 DROP TABLE test_virtual
 
 subtest end
+
+# A stored computed column added in the same statement as a DROP COLUMN gets a
+# transient validation check over the whole primary index. Dropping another
+# column must not treat that check as a user constraint.
+subtest add_computed_drop_column
+
+statement ok
+CREATE TABLE t_add_drop (k INT PRIMARY KEY, a INT, b INT, e INT);
+INSERT INTO t_add_drop VALUES (1, 10, 100, 1000), (2, 20, 200, 2000)
+
+statement ok
+ALTER TABLE t_add_drop ADD COLUMN c INT AS (k + b) STORED, DROP COLUMN a
+
+query IIII rowsort
+SELECT k, b, e, c FROM t_add_drop
+----
+1  100  1000  101
+2  200  2000  202
+
+statement error pgcode 22003 integer out of range for type int2
+ALTER TABLE t_add_drop ADD COLUMN d INT2 AS (k * 100000) STORED, DROP COLUMN e
+
+# The legacy schema changer loses the dropped column's data on rollback.
+skipif config local-legacy-schema-changer
+query IIII rowsort
+SELECT k, b, e, c FROM t_add_drop
+----
+1  100  1000  101
+2  200  2000  202
+
+statement error pgcode 42P10 column "e" is referenced by computed column "d"
+ALTER TABLE t_add_drop ADD COLUMN d INT AS (e + 1) STORED, DROP COLUMN e
+
+# The legacy schema changer cannot drop a column and its dependent computed
+# column in one statement.
+skipif config local-legacy-schema-changer
+statement ok
+ALTER TABLE t_add_drop ADD COLUMN d INT AS (e + 1) STORED, DROP COLUMN e CASCADE
+
+skipif config local-legacy-schema-changer
+query III rowsort
+SELECT k, b, c FROM t_add_drop
+----
+1  100  101
+2  200  202
+
+skipif config local-legacy-schema-changer
+query T rowsort
+SELECT column_name FROM [SHOW COLUMNS FROM t_add_drop]
+----
+k
+b
+c
+
+statement ok
+CREATE TABLE t_alter_drop (k INT PRIMARY KEY, a INT, b INT);
+INSERT INTO t_alter_drop VALUES (1, 10, 100)
+
+# The legacy schema changer cannot combine ALTER COLUMN TYPE with other
+# commands.
+skipif config local-legacy-schema-changer
+statement ok
+ALTER TABLE t_alter_drop ALTER COLUMN a TYPE INT4, DROP COLUMN a
+
+skipif config local-legacy-schema-changer
+query II
+SELECT * FROM t_alter_drop
+----
+1  100
+
+statement ok
+DROP TABLE t_add_drop, t_alter_drop
+
+subtest end

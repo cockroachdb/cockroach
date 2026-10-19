@@ -7,6 +7,7 @@ package scbuildstmt
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -248,6 +249,17 @@ func dropColumn(
 			dropTrigger(b, e.TableID, e.TriggerID)
 		case *scpb.CheckConstraint:
 			constraintElems := b.QueryByID(e.TableID).Filter(hasConstraintIDAttrFilter(e.ConstraintID))
+			// A transient check is an unnamed validation for a column being added
+			// as computed or retyped. Its ColumnIDs can cover columns its
+			// expression doesn't use (ADD COLUMN's check spans the whole primary
+			// index), so drop it only if its expression references the dropped
+			// column.
+			if !constraintElems.Filter(transientTargetFilter).IsEmpty() {
+				if slices.Contains(e.Expression.ReferencedColumnIDs, col.ColumnID) {
+					b.Drop(e)
+				}
+				return
+			}
 			_, _, constraintName := scpb.FindConstraintWithoutIndexName(constraintElems.Filter(publicTargetFilter))
 			alterTableDropConstraint(b, tn, tbl, stmt, &tree.AlterTableDropConstraint{
 				IfExists:     false,
