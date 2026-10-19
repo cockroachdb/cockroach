@@ -27,6 +27,15 @@ var reg = NewRegistry(1 /* numNodes */, MakeClusterConstructor(func(
 	if _, err := db.Exec("SET CLUSTER SETTING server.eventlog.enabled = false"); err != nil {
 		t.Fatal(err)
 	}
+	// Automatic stats collection runs asynchronously and can overwrite the
+	// stats from a benchmark's explicit ANALYZE with stats collected from a
+	// stale snapshot, flipping query plans. Benchmarks that need stats
+	// collect them explicitly.
+	if _, err := db.Exec(
+		"SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false",
+	); err != nil {
+		t.Fatal(err)
+	}
 	// Create a user with admin privileges.
 	if _, err := db.Exec("CREATE USER testuser"); err != nil {
 		t.Fatal(err)
