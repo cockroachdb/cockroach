@@ -312,6 +312,27 @@ func (b *builderState) getExistingElementState(e scpb.Element) *elementState {
 	return es
 }
 
+// UpdateElementInPlace implements the scbuildstmt.BuilderState interface.
+func (b *builderState) UpdateElementInPlace(e scpb.Element, mutate func()) {
+	c := b.descCache[screl.GetDescID(e)]
+	oldKey := screl.ElementString(e)
+	i, ok := c.elementIndexMap[oldKey]
+	if !ok || b.output[i].element != e {
+		panic(errors.AssertionFailedf("element %s expected in builder state but not found", oldKey))
+	}
+	mutate()
+	newKey := screl.ElementString(e)
+	if newKey == oldKey {
+		return
+	}
+	if _, ok := c.elementIndexMap[newKey]; ok {
+		panic(errors.AssertionFailedf("updating element %s collides with existing element %s",
+			oldKey, newKey))
+	}
+	delete(c.elementIndexMap, oldKey)
+	c.elementIndexMap[newKey] = i
+}
+
 func (b *builderState) addNewElementState(es elementState) {
 	if err := b.localMemAcc.Grow(b.ctx, es.byteSize()); err != nil {
 		panic(err)

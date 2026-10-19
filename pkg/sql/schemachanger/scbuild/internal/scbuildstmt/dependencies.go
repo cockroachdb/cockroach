@@ -108,6 +108,15 @@ type BuilderState interface {
 	// the given target status and metadata.
 	Ensure(elem scpb.Element, target scpb.TargetStatus, meta scpb.TargetMetadata)
 
+	// UpdateElementInPlace runs mutate, which modifies element in place, then
+	// re-indexes element so later lookups use its new attribute values,
+	// including identifying ones such as IndexIDForValidation. Its statuses
+	// and target are unchanged. element must be the instance held by the
+	// BuilderState (e.g. from QueryByID), not a copy. mutate must not change
+	// element's descriptor ID or call into the BuilderState. Panics if element
+	// is not found or the updated element collides with an existing one.
+	UpdateElementInPlace(element scpb.Element, mutate func())
+
 	// LogEventForExistingTarget tells the builder to write an entry in the event
 	// log for the existing target corresponding to the provided element.
 	// An error is thrown if no such target exists.

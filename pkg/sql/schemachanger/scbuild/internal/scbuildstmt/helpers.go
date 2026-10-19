@@ -1626,39 +1626,36 @@ func updateElementsToDependOnNewFromOld(
 	newRecreateTargetID catid.IndexID,
 	excludes catid.IndexSet,
 ) {
-	b.QueryByID(tableID).ForEach(func(current scpb.Status, target scpb.TargetStatus, e scpb.Element) {
+	// These index IDs are part of the element's identity, so the rewrite goes
+	// through the builder, which re-indexes the element.
+	retarget := func(e scpb.Element, field *catid.IndexID, to catid.IndexID) {
+		if *field == old {
+			b.UpdateElementInPlace(e, func() { *field = to })
+		}
+	}
+	b.QueryByID(tableID).ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e scpb.Element) {
 		switch e := e.(type) {
 		case *scpb.PrimaryIndex:
-			if e.SourceIndexID == old && !excludes.Contains(e.IndexID) {
-				e.SourceIndexID = new
+			if !excludes.Contains(e.IndexID) {
+				retarget(e, &e.SourceIndexID, new)
 			}
 		case *scpb.TemporaryIndex:
-			if e.SourceIndexID == old && !excludes.Contains(e.IndexID) {
-				e.SourceIndexID = new
+			if !excludes.Contains(e.IndexID) {
+				retarget(e, &e.SourceIndexID, new)
 			}
 		case *scpb.SecondaryIndex:
-			if e.SourceIndexID == old && !excludes.Contains(e.IndexID) {
-				e.SourceIndexID = new
-			}
-			if e.RecreateTargetIndexID == old && !excludes.Contains(e.IndexID) {
-				e.RecreateTargetIndexID = newRecreateTargetID
+			if !excludes.Contains(e.IndexID) {
+				retarget(e, &e.SourceIndexID, new)
+				retarget(e, &e.RecreateTargetIndexID, newRecreateTargetID)
 			}
 		case *scpb.CheckConstraint:
-			if e.IndexIDForValidation == old {
-				e.IndexIDForValidation = new
-			}
+			retarget(e, &e.IndexIDForValidation, new)
 		case *scpb.ForeignKeyConstraint:
-			if e.IndexIDForValidation == old {
-				e.IndexIDForValidation = new
-			}
+			retarget(e, &e.IndexIDForValidation, new)
 		case *scpb.ColumnNotNull:
-			if e.IndexIDForValidation == old {
-				e.IndexIDForValidation = new
-			}
+			retarget(e, &e.IndexIDForValidation, new)
 		case *scpb.UniqueWithoutIndexConstraint:
-			if e.IndexIDForValidation == old {
-				e.IndexIDForValidation = new
-			}
+			retarget(e, &e.IndexIDForValidation, new)
 		}
 	})
 }
@@ -1828,13 +1825,9 @@ func (pic *primaryIndexChain) deflate(b BuildCtx) {
 		redundant.apply(b.Drop)
 	}
 	// Update elements after marking redundant primary indexes as dropping.
-	//
-	// N.B. This cannot be put inside the same for-loop above because
-	// we can potentially update a redundant primary index that will be dropped
-	// in a following iteration and this update can cause `b.Drop` in that following
-	// iteration to fail to recognize the right element (recall an element is
-	// identified by attrs defined in screl and updating SourceIndexID of a
-	// primary index will cause us to fail to retrieve the element to drop).
+	// Keep this separate from the drop loop: every redundant index is
+	// dropped against the chain as it was, before any dependents are
+	// rewritten to point past it.
 	for _, redundant := range redundants {
 		// For new replacement secondary indexes we need to select the index to
 		// publish this index with. The final index ID is an excellent candidate
