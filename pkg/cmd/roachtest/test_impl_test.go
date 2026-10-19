@@ -9,6 +9,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -186,4 +188,50 @@ func Test_failureSpecifyOwnerAndAddFailureCombination(t *testing.T) {
 
 	require.NotNil(t, errWithOwnership)
 	require.Equal(t, registry.OwnerTestEng, errWithOwnership.Owner)
+}
+
+// TestCockroachBinaryPick verifies the metamorphic choice between the standard
+// and runtime-assertions cockroach binaries made by testImpl.Cockroach.
+func TestCockroachBinaryPick(t *testing.T) {
+	defer func(p float64) { roachtestflags.CockroachEAProbability = p }(
+		roachtestflags.CockroachEAProbability)
+	// Always pick the runtime-assertions binary when it is eligible.
+	roachtestflags.CockroachEAProbability = 1
+
+	for _, tc := range []struct {
+		name      string
+		arch      vm.CPUArch
+		benchmark bool
+		binary    registry.ClusterCockroachBinary
+		expected  string
+	}{
+		{name: "amd64", arch: vm.ArchAMD64, expected: "cockroach-ea"},
+		{name: "arm64", arch: vm.ArchARM64, expected: "cockroach-ea"},
+		{name: "fips", arch: vm.ArchFIPS, expected: "cockroach"},
+		{name: "benchmark", arch: vm.ArchAMD64, benchmark: true, expected: "cockroach"},
+		{
+			// An explicit request for runtime assertions is honored on FIPS.
+			name:     "fips explicit assertions",
+			arch:     vm.ArchFIPS,
+			binary:   registry.RuntimeAssertionsCockroach,
+			expected: "cockroach-ea",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			testT := &testImpl{
+				spec: &registry.TestSpec{
+					Name:            "binary-pick",
+					Benchmark:       tc.benchmark,
+					CockroachBinary: tc.binary,
+				},
+				cockroach:   "cockroach",
+				cockroachEA: "cockroach-ea",
+				arch:        tc.arch,
+			}
+			testL := nilLogger()
+			t.Cleanup(testL.Close)
+			testT.ReplaceL(testL)
+			require.Equal(t, tc.expected, testT.Cockroach())
+		})
+	}
 }
