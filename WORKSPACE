@@ -242,13 +242,13 @@ load(
 go_download_sdk(
     name = "go_sdk",
     sdks = {
-        "darwin_arm64": ("go1.25.13.darwin-arm64.tar.gz", "189a19487aa6def01b9782df9726e40e504874d7aa33ce3c28190b0a29499ee9"),
-        "linux_amd64": ("go1.25.13.linux-amd64.tar.gz", "219bfa757c37acce8332e644c01d172a86600776a81e0759ca70478067c83a2d"),
-        "linux_arm64": ("go1.25.13.linux-arm64.tar.gz", "6843193b0707391e79fd519da5517eda761ac26969abfa55f350d69b53e6f8e6"),
-        "linux_s390x": ("go1.25.13.linux-s390x.tar.gz", "fa5ec339d597d251f6aab8d61a6c7c469fd8b0695ae332cb07b7c3080eb20ac5"),
-        "windows_amd64": ("go1.25.13.windows-amd64.tar.gz", "72d7575b7e02964bac068b7a4fada21b24f36e0fe2e9818d927d9b857245cb0f"),
+        "darwin_arm64": ("go1.25.13.darwin-arm64.tar.gz", "d3455d3922477232bc7c01c47851a86a3d8f668d91598c8241d8fca71a955fd9"),
+        "linux_amd64": ("go1.25.13.linux-amd64.tar.gz", "8989cc10d815265ecf14e08f833b06be0155c4180768ef42f66c173d8609a322"),
+        "linux_arm64": ("go1.25.13.linux-arm64.tar.gz", "177ae879427d498bd4908b6f5dec5dc7f66e88af82f40c5655ff1513e12e4066"),
+        "linux_s390x": ("go1.25.13.linux-s390x.tar.gz", "a4c4fea9016436317763077b94e7b2dfaf46ce9afd2ee3b75979de798e3e454b"),
+        "windows_amd64": ("go1.25.13.windows-amd64.tar.gz", "d8a495e740866b384813562d8df77a64dc6a837ed6e729ca339ef55bc9f45084"),
     },
-    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20260814-195948/{}"],
+    urls = ["https://storage.googleapis.com/public-bazel-artifacts/go/20261020-193801/{}"],
     version = "1.25.13",
 )
 
