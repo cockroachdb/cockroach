@@ -20,11 +20,18 @@ if [[ $telemetry_disabled == true && $cockroach_archive_prefix == "cockroach" ]]
 fi
 
 version=$(grep -v "^#" "$dir/../pkg/build/version.txt" | head -n1)
+# Allow callers (e.g. the custom build workflow) to override the version used to
+# locate the per-arch images and tag the multi-arch manifest, instead of
+# version.txt.
+version="${VERSION_OVERRIDE:-$version}"
 if [[ -z "${DRY_RUN}" ]] ; then
   gcr_staged_repository="us-docker.pkg.dev/releases-prod/cockroachdb-staged-releases/${cockroach_archive_prefix}"
 else
   gcr_staged_repository="us-docker.pkg.dev/releases-dev-356314/cockroachdb-staged-releases/${cockroach_archive_prefix}"
 fi
+# Allow callers (e.g. the custom build workflow) to read the per-arch images
+# from, and push the manifest to, an alternate GCR repository.
+gcr_staged_repository="${GCR_REPOSITORY_OVERRIDE:-$gcr_staged_repository}"
 
 # With WIF (GitHub Actions), credentials are handled via mounted credential
 # files rather than JSON key env vars. gcr_credentials may be empty.
