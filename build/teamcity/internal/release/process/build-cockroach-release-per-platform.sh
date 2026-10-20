@@ -21,6 +21,10 @@ if [[ $telemetry_disabled == true && $cockroach_archive_prefix == "cockroach" ]]
   exit 1
 fi
 version=$(grep -v "^#" "$dir/../pkg/build/version.txt" | head -n1)
+# Allow callers (e.g. the custom build workflow) to override the version used
+# to name the uploaded tarballs, instead of version.txt. The docker build
+# locates those same tarballs by this version, so both sides must agree.
+version="${VERSION_OVERRIDE:-$version}"
 
 if ! echo "${version}" | grep -E -o '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[-.0-9A-Za-z]+)?$'; then
   #                                    ^major           ^minor           ^patch         ^preRelease
@@ -37,6 +41,9 @@ if [[ -z "${DRY_RUN}" ]] ; then
 else
   gcs_bucket="cockroach-release-artifacts-staged-dryrun"
 fi
+# Allow callers (e.g. the custom build workflow) to publish to an alternate
+# bucket.
+gcs_bucket="${GCS_BUCKET_OVERRIDE:-$gcs_bucket}"
 
 # With WIF (GitHub Actions), credentials are handled via mounted credential
 # files rather than JSON key env vars. gcs_credentials may be empty.
@@ -50,11 +57,20 @@ else
   export gcs_credentials=""
 fi
 
+# Optional stamping overrides (used by the custom build workflow; empty for
+# normal releases, leaving the publish-artifacts invocation unchanged). Must be
+# exported: it is forwarded into the builder container via the bare `-e
+# publish_extra_args` form below, which reads it from the process environment.
+export publish_extra_args=""
+if [[ -n "${BUILD_TAG_OVERRIDE:-}" ]]; then
+  publish_extra_args="$publish_extra_args --build-tag-override=$BUILD_TAG_OVERRIDE"
+fi
+
 tc_end_block "Variable Setup"
 
 
 tc_start_block "Make and publish release artifacts"
-BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e TC_BUILDTYPE_ID -e TC_BUILD_BRANCH=$version -e gcs_credentials -e gcs_bucket=$gcs_bucket -e platform=$platform -e telemetry_disabled=$telemetry_disabled -e cockroach_archive_prefix=$cockroach_archive_prefix" run_bazel << 'EOF'
+BAZEL_SUPPORT_EXTRA_DOCKER_ARGS="-e TC_BUILDTYPE_ID -e TC_BUILD_BRANCH=$version -e gcs_credentials -e gcs_bucket=$gcs_bucket -e platform=$platform -e telemetry_disabled=$telemetry_disabled -e cockroach_archive_prefix=$cockroach_archive_prefix -e publish_extra_args" run_bazel << 'EOF'
 bazel build //pkg/cmd/publish-artifacts
 BAZEL_BIN=$(bazel info bazel-bin)
 export google_credentials="$gcs_credentials"
@@ -86,7 +102,7 @@ done
 
 tr -d '\r' < /tmp/THIRD-PARTY-NOTICES.txt.tmp > /tmp/THIRD-PARTY-NOTICES.txt
 
-$BAZEL_BIN/pkg/cmd/publish-artifacts/publish-artifacts_/publish-artifacts release --gcs-bucket="$gcs_bucket" --platform=$platform --third-party-notices-file=/tmp/THIRD-PARTY-NOTICES.txt --telemetry-disabled=$telemetry_disabled --cockroach-archive-prefix=$cockroach_archive_prefix
+$BAZEL_BIN/pkg/cmd/publish-artifacts/publish-artifacts_/publish-artifacts release --gcs-bucket="$gcs_bucket" --platform=$platform --third-party-notices-file=/tmp/THIRD-PARTY-NOTICES.txt --telemetry-disabled=$telemetry_disabled --cockroach-archive-prefix=$cockroach_archive_prefix $publish_extra_args
 EOF
 tc_end_block "Make and publish release artifacts"
 

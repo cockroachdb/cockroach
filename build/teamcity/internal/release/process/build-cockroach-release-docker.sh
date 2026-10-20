@@ -14,12 +14,31 @@ source "$dir/release/teamcity-support.sh"
 tc_start_block "Variable Setup"
 telemetry_disabled="${TELEMETRY_DISABLED:-false}"
 cockroach_archive_prefix="${COCKROACH_ARCHIVE_PREFIX:-cockroach}"
+
+# Docker build knobs. The defaults reproduce the historical multi-arch build
+# exactly; callers building a subset (e.g. the custom build workflow) override
+# them:
+#   DOCKER_PLATFORMS  - comma-separated buildx platform list.
+#   DOCKER_BUILD_FIPS - whether to also build the amd64-only FIPS image.
+docker_platforms="${DOCKER_PLATFORMS:-linux/amd64,linux/arm64,linux/s390x}"
+docker_build_fips="${DOCKER_BUILD_FIPS:-true}"
+
+# Derive the per-arch context list (e.g. "linux-amd64") from docker_platforms
+# (e.g. "linux/amd64") so we only download and stage the tarballs we build.
+context_platforms=()
+IFS=',' read -ra _platforms <<< "$docker_platforms"
+for _platform in "${_platforms[@]}"; do
+  context_platforms+=("${_platform/\//-}")
+done
 if [[ $telemetry_disabled == true && $cockroach_archive_prefix == "cockroach" ]]; then
   echo "COCKROACH_ARCHIVE_PREFIX must be set to a non-default value when telemetry is disabled"
   exit 1
 fi
 
 version=$(grep -v "^#" "$dir/../pkg/build/version.txt" | head -n1)
+# Allow callers (e.g. the custom build workflow) to override the version used
+# to locate tarballs and tag the image, instead of version.txt.
+version="${VERSION_OVERRIDE:-$version}"
 version_label=$(echo "${version}" | sed -e 's/^v//' | cut -d- -f 1)
 
 if [[ -z "${DRY_RUN}" ]] ; then
@@ -29,6 +48,11 @@ else
   gcs_bucket="cockroach-release-artifacts-staged-dryrun"
   gcr_staged_repository="us-docker.pkg.dev/releases-dev-356314/cockroachdb-staged-releases/${cockroach_archive_prefix}"
 fi
+
+# Allow callers (e.g. the custom build workflow) to push to an alternate GCR
+# repository and to read the tarballs from an alternate bucket.
+gcr_staged_repository="${GCR_REPOSITORY_OVERRIDE:-$gcr_staged_repository}"
+gcs_bucket="${GCS_BUCKET_OVERRIDE:-$gcs_bucket}"
 
 # With WIF (GitHub Actions), credentials are handled via the environment.
 # With TeamCity, use the JSON key env vars.
@@ -57,7 +81,7 @@ context="$tmpdir/context"
 mkdir -p "$context"
 cp build/deploy/Dockerfile "$context/Dockerfile"
 
-for platform in linux-amd64 linux-arm64 linux-s390x; do
+for platform in "${context_platforms[@]}"; do
   arch="${platform#linux-}"
   # The prefix may include a directory (e.g. "ibm/cockroach"); keep it in the
   # object key, but drop it from the local file name.
@@ -83,25 +107,27 @@ for platform in linux-amd64 linux-arm64 linux-s390x; do
 done
 
 # FIPS is amd64-only; prepare its own build context.
-fips_context="$tmpdir/fips-context"
-mkdir -p "$fips_context/amd64"
-cp build/deploy/Dockerfile "$fips_context/Dockerfile"
-fips_object="${cockroach_archive_prefix}-${version}.linux-amd64-fips.tgz"
-fips_archive=$(basename "$fips_object")
-gcloud storage cp "gs://$gcs_bucket/$fips_object" "$tmpdir/$fips_archive"
-fips_staging="$tmpdir/staging-linux-amd64-fips"
-mkdir -p "$fips_staging"
-tar \
-  --directory="$fips_staging" \
-  --extract \
-  --file="$tmpdir/$fips_archive" \
-  --ungzip \
-  --ignore-zeros \
-  --strip-components=1
-cp build/deploy/cockroach.sh "$fips_context/amd64/"
-cp "$fips_staging/cockroach" "$fips_context/amd64/"
-cp "$fips_staging"/lib/libgeos.so "$fips_staging"/lib/libgeos_c.so "$fips_context/amd64/"
-cp LICENSE licenses/THIRD-PARTY-NOTICES.txt "$fips_context/amd64/"
+if [[ "$docker_build_fips" == true ]]; then
+  fips_context="$tmpdir/fips-context"
+  mkdir -p "$fips_context/amd64"
+  cp build/deploy/Dockerfile "$fips_context/Dockerfile"
+  fips_object="${cockroach_archive_prefix}-${version}.linux-amd64-fips.tgz"
+  fips_archive=$(basename "$fips_object")
+  gcloud storage cp "gs://$gcs_bucket/$fips_object" "$tmpdir/$fips_archive"
+  fips_staging="$tmpdir/staging-linux-amd64-fips"
+  mkdir -p "$fips_staging"
+  tar \
+    --directory="$fips_staging" \
+    --extract \
+    --file="$tmpdir/$fips_archive" \
+    --ungzip \
+    --ignore-zeros \
+    --strip-components=1
+  cp build/deploy/cockroach.sh "$fips_context/amd64/"
+  cp "$fips_staging/cockroach" "$fips_context/amd64/"
+  cp "$fips_staging"/lib/libgeos.so "$fips_staging"/lib/libgeos_c.so "$fips_context/amd64/"
+  cp LICENSE licenses/THIRD-PARTY-NOTICES.txt "$fips_context/amd64/"
+fi
 tc_end_block "Download and extract tarballs"
 
 
@@ -116,22 +142,25 @@ trap "cleanup_buildx; rm -rf $tmpdir; remove_files_on_exit" EXIT
 
 gcr_tag="${gcr_staged_repository}:${version}"
 docker buildx build --label version="$version_label" --pull --push --no-cache \
-  --platform linux/amd64,linux/arm64,linux/s390x \
+  --platform "$docker_platforms" \
   --tag "$gcr_tag" "$context"
 tc_end_block "Build and push multi-arch docker image"
 
 
-tc_start_block "Build and push FIPS docker image"
-gcr_tag_fips="${gcr_staged_repository}:${version}-fips"
-docker buildx build --label version="$version_label" --pull --push --no-cache \
-  --platform linux/amd64 \
-  --tag "$gcr_tag_fips" "$fips_context"
-tc_end_block "Build and push FIPS docker image"
+if [[ "$docker_build_fips" == true ]]; then
+  tc_start_block "Build and push FIPS docker image"
+  gcr_tag_fips="${gcr_staged_repository}:${version}-fips"
+  docker buildx build --label version="$version_label" --pull --push --no-cache \
+    --platform linux/amd64 \
+    --tag "$gcr_tag_fips" "$fips_context"
+  tc_end_block "Build and push FIPS docker image"
+fi
 
 
 tc_start_block "Verify docker images"
 error=0
-for arch in amd64 arm64 s390x; do
+for platform in "${context_platforms[@]}"; do
+    arch="${platform#linux-}"
     tc_start_block "Verify $gcr_tag on $arch"
     if ! verify_docker_image "$gcr_tag" "linux/$arch" "$BUILD_VCS_NUMBER" "$version" false "$telemetry_disabled"; then
       error=1
@@ -139,11 +168,13 @@ for arch in amd64 arm64 s390x; do
     tc_end_block "Verify $gcr_tag on $arch"
 done
 
-tc_start_block "Verify FIPS docker image"
-if ! verify_docker_image "$gcr_tag_fips" "linux/amd64" "$BUILD_VCS_NUMBER" "$version" true "$telemetry_disabled"; then
-  error=1
+if [[ "$docker_build_fips" == true ]]; then
+  tc_start_block "Verify FIPS docker image"
+  if ! verify_docker_image "$gcr_tag_fips" "linux/amd64" "$BUILD_VCS_NUMBER" "$version" true "$telemetry_disabled"; then
+    error=1
+  fi
+  tc_end_block "Verify FIPS docker image"
 fi
-tc_end_block "Verify FIPS docker image"
 
 if [ $error = 1 ]; then
   echo "ERROR: Docker image verification failed, see logs above"
