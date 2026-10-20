@@ -375,6 +375,9 @@ func (u *CommonTestUtils) setMaxRangeSizeAndDependentSettings(
 			return err
 		}
 		newValue := scale(currentValue)
+		if minValue, ok := minScaledSettingValues[setting]; ok && newValue < minValue {
+			newValue = minValue
+		}
 		t.L().Printf("changing cluster setting %s from %s to %s", setting, humanizedCurrentValue, humanizeutil.IBytes(newValue))
 		stmt := fmt.Sprintf("SET CLUSTER SETTING %s = '%d'", setting, newValue)
 		if err := u.Exec(ctx, rng, stmt); err != nil {

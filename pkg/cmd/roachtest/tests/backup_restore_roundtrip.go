@@ -42,6 +42,15 @@ var (
 		"bulkio.backup.file_size",
 		"kv.bulk_sst.target_size",
 	}
+
+	// minScaledSettingValues defines floors for settings in
+	// clusterSettingsScaledOnRangeSize. Scaling an already-lowered
+	// bulkio.backup.file_size (e.g. 8 MiB down to 64 KiB for 4 MiB ranges)
+	// produces tens of thousands of backup files, and verifying them with
+	// check_files can push the test past its timeout.
+	minScaledSettingValues = map[string]int64{
+		"bulkio.backup.file_size": 1 << 20, /* 1 MiB */
+	}
 )
 
 func handleSchemaChangeWorkloadError(ctx context.Context, err error) error {
