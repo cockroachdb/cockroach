@@ -14,6 +14,10 @@ GOCOMMIT=$(grep -v ^# /bootstrap/commit.txt | head -n1)
 
 # Install build dependencies
 yum install git golang golang-bin openssl openssl-devel -y
+# Red Hat's Go defaults GOFIPS140 to "certified", which rejects the purego
+# build tag that make.bash uses to build the bootstrap toolchain. This only
+# affects the bootstrap Go; the FIPS toolchain built here uses OpenSSL.
+export GOFIPS140=off
 cat /etc/os-release
 go version
 openssl version -a
