@@ -24,10 +24,11 @@ import (
 // observed stats.
 func TestForecastColumnStatistics(t *testing.T) {
 	testCases := []struct {
-		observed []*testStat
-		at       uint64
-		err      bool
-		forecast *testStat
+		observed        []*testStat
+		at              uint64
+		independentHist bool
+		err             bool
+		forecast        *testStat
 	}{
 		// Error: Too few observations
 		{
@@ -599,6 +600,112 @@ func TestForecastColumnStatistics(t *testing.T) {
 				hist: testHistogram{{22, 0, 0, 450}, {0, 23, 23, 550}},
 			},
 		},
+		// Independent histogram: fluctuating row counts (poor fit) but a constant
+		// histogram shape. With independent histogram forecasts enabled we forecast
+		// the histogram anyway, using the latest observed scalar values and scaling
+		// the histogram to the latest observed non-null row count.
+		{
+			independentHist: true,
+			observed: []*testStat{
+				{
+					at: 1, row: 9, dist: 4, null: 5, size: 1,
+					hist: testHistogram{{2, 0, 0, 99}, {1, 1, 1, 119}},
+				},
+				{
+					at: 2, row: 18, dist: 4, null: 10, size: 1,
+					hist: testHistogram{{4, 0, 0, 99}, {2, 2, 1, 119}},
+				},
+				{
+					at: 3, row: 9, dist: 4, null: 5, size: 1,
+					hist: testHistogram{{2, 0, 0, 99}, {1, 1, 1, 119}},
+				},
+			},
+			at: 4,
+			forecast: &testStat{
+				at: 4, row: 9, dist: 4, null: 5, size: 1,
+				hist: testHistogram{{2, 0, 0, 99}, {1, 1, 1, 119}},
+			},
+		},
+		// Error: same as above but with independent histogram forecasts disabled,
+		// the poor row count fit means no forecast at all.
+		{
+			independentHist: false,
+			observed: []*testStat{
+				{
+					at: 1, row: 9, dist: 4, null: 5, size: 1,
+					hist: testHistogram{{2, 0, 0, 99}, {1, 1, 1, 119}},
+				},
+				{
+					at: 2, row: 18, dist: 4, null: 10, size: 1,
+					hist: testHistogram{{4, 0, 0, 99}, {2, 2, 1, 119}},
+				},
+				{
+					at: 3, row: 9, dist: 4, null: 5, size: 1,
+					hist: testHistogram{{2, 0, 0, 99}, {1, 1, 1, 119}},
+				},
+			},
+			at:  4,
+			err: true,
+		},
+		// Error: independent histogram forecasts enabled, but the latest observed
+		// table has no non-null rows, so there is no row count to scale the
+		// forecasted histogram by.
+		{
+			independentHist: true,
+			observed: []*testStat{
+				{
+					at: 1, row: 10, dist: 2, null: 0, size: 1,
+					hist: testHistogram{{5, 0, 0, 10}, {5, 0, 0, 20}},
+				},
+				{
+					at: 2, row: 30, dist: 2, null: 0, size: 1,
+					hist: testHistogram{{15, 0, 0, 10}, {15, 0, 0, 20}},
+				},
+				{
+					at: 3, row: 0, dist: 0, null: 0, size: 1,
+					hist: testHistogram{},
+				},
+			},
+			at:  4,
+			err: true,
+		},
+		// Error: independent histogram forecasts enabled, poor scalar fit, but no
+		// histogram to forecast.
+		{
+			independentHist: true,
+			observed: []*testStat{
+				{at: 1, row: 7, dist: 1, null: 1, size: 1},
+				{at: 2, row: 9, dist: 2, null: 2, size: 2},
+				{at: 3, row: 5, dist: 3, null: 3, size: 3},
+			},
+			at:  4,
+			err: true,
+		},
+		// Independent histogram forecasts enabled does not change behavior when the
+		// scalar statistics are a good fit: a poor histogram fit still falls back to
+		// the latest observed histogram, adjusted to the predicted scalar values.
+		{
+			independentHist: true,
+			observed: []*testStat{
+				{
+					at: 1, row: 10, dist: 2, null: 0, size: 1,
+					hist: testHistogram{{5, 0, 0, 50}, {5, 0, 0, 100}},
+				},
+				{
+					at: 2, row: 20, dist: 2, null: 0, size: 1,
+					hist: testHistogram{{10, 0, 0, 50}, {10, 0, 0, 200}},
+				},
+				{
+					at: 3, row: 30, dist: 2, null: 0, size: 1,
+					hist: testHistogram{{15, 0, 0, 50}, {15, 0, 0, 301}},
+				},
+			},
+			at: 4,
+			forecast: &testStat{
+				at: 4, row: 40, dist: 2, null: 0, size: 1,
+				hist: testHistogram{{20, 0, 0, 50}, {20, 0, 0, 301}},
+			},
+		},
 	}
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
@@ -617,6 +724,8 @@ func TestForecastColumnStatistics(t *testing.T) {
 				ctx, jobspb.ForecastStatsName, i, descpb.ColumnIDs{1}, fullStatID, partialStatID, st,
 			)
 			at := testStatTime(tc.at)
+
+			independentHistogramForecasts.Override(ctx, &st.SV, tc.independentHist)
 
 			forecast, err := forecastColumnStatistics(ctx, st, observed, at, 1)
 			if err != nil {
