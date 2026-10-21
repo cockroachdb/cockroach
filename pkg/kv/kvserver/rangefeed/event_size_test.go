@@ -228,10 +228,10 @@ func TestEventSizeCalculation(t *testing.T) {
 		{
 			name:                 "sstEvent event",
 			ev:                   event{sst: &sstEvent{data: sst, span: span, ts: timestamp}},
-			expectedCurrMemUsage: int64(1161),
+			expectedCurrMemUsage: int64(1176),
 			actualCurrMemUsage: eventOverhead + sstEventOverhead +
 				int64(cap(sst)+cap(span.Key)+cap(span.EndKey)),
-			expectedFutureMemUsage: int64(1185),
+			expectedFutureMemUsage: int64(1200),
 			actualFutureMemUsage: futureEventBaseOverhead + rangefeedSSTTableOverhead +
 				int64(cap(sst)+cap(span.Key)+cap(span.EndKey)),
 		},
