@@ -1763,17 +1763,17 @@ func waitForTargetPhase(
 	}
 }
 
+// sleepBeforeResiliencyEvent sleeps for a short, random interval after the
+// replication job enters the given phase and before a resiliency event (e.g. a
+// node shutdown). Phases other than cutover last at least 10 seconds, so a 1-2s
+// sleep lets the cluster settle into the phase first. Cutover can finish in
+// about a second, so it gets only 0-50ms of jitter, letting the event land
+// while cutover is still in progress.
 func sleepBeforeResiliencyEvent(rd *replicationDriver, phase c2cPhase) {
-	// Assuming every C2C phase lasts at least 10 seconds, introduce some waiting
-	// before a resiliency event (e.g. a node shutdown) to ensure the event occurs
-	// once we're fully settled into the target phase (e.g. the stream ingestion
-	// processors have observed the cutover signal).
-	baseSleep := 1
+	randomSleep := time.Duration(1+rd.rng.Intn(2)) * time.Second
 	if phase == phaseCutover {
-		// Cutover can sometimes be fast, so sleep for less time.
-		baseSleep = 0
+		randomSleep = time.Duration(rd.rng.Intn(51)) * time.Millisecond
 	}
-	randomSleep := time.Duration(baseSleep+rd.rng.Intn(2)) * time.Second
 	rd.t.L().Printf("Take a %s power nap", randomSleep)
 	time.Sleep(randomSleep)
 }
@@ -1807,7 +1807,7 @@ func registerClusterReplicationResilience(r registry.Registry) {
 			workload:                             replicateKV{readPercent: 0, initRows: 5000000, maxBlockBytes: 1024, initWithSplitAndScatter: true, tolerateErrors: true},
 			timeout:                              20 * time.Minute,
 			additionalDuration:                   6 * time.Minute,
-			cutover:                              3 * time.Minute,
+			cutover:                              5 * time.Minute,
 			expectedNodeDeaths:                   1,
 			sometimesTestFingerprintMismatchCode: true,
 			// The job system can take up to 2 minutes to reclaim a job if the
