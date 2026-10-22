@@ -1,4 +1,11 @@
 name: GitHub Actions Essential CI
+# Self-hosted jobs run on GCP Spot VMs, except on Trunk merge queue runs (push
+# to trunk-merge/**), which use the on-demand runner groups. A preempted job
+# fails the whole Trunk run, which drops the PR from the queue and reruns every
+# job on resubmit, so on-demand pays for itself there. Pull request runs stay
+# on Spot because Blathers reruns only the preempted job.
+# A new self-hosted job should pick its label the same way, e.g.:
+#   runs-on: [self-hosted, "${{ startsWith(github.ref, 'refs/heads/trunk-merge/') && 'ubuntu_big_ondemand_2004' || 'ubuntu_big_2004' }}"]
 on:
   merge_group:
   pull_request:
@@ -54,7 +61,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   acceptance:
-    runs-on: [self-hosted, ubuntu_big_2004]
+    runs-on: [self-hosted, "${{ startsWith(github.ref, 'refs/heads/trunk-merge/') && 'ubuntu_big_ondemand_2004' || 'ubuntu_big_2004' }}"]
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
@@ -75,7 +82,7 @@ jobs:
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
   check_generated_code:
-    runs-on: [self-hosted, ubuntu_2004]
+    runs-on: [self-hosted, "${{ startsWith(github.ref, 'refs/heads/trunk-merge/') && 'ubuntu_ondemand_2004' || 'ubuntu_2004' }}"]
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
@@ -90,7 +97,7 @@ jobs:
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
   docker_image_amd64:
-    runs-on: [self-hosted, ubuntu_2004]
+    runs-on: [self-hosted, "${{ startsWith(github.ref, 'refs/heads/trunk-merge/') && 'ubuntu_ondemand_2004' || 'ubuntu_2004' }}"]
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
@@ -111,7 +118,7 @@ jobs:
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
   examples_orms:
-    runs-on: [self-hosted, ubuntu_big_2004]
+    runs-on: [self-hosted, "${{ startsWith(github.ref, 'refs/heads/trunk-merge/') && 'ubuntu_big_ondemand_2004' || 'ubuntu_big_2004' }}"]
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
@@ -144,7 +151,7 @@ jobs:
             echo "Label validation passed"
           fi
   lint:
-    runs-on: [self-hosted, ubuntu_huge_2004]
+    runs-on: [self-hosted, "${{ startsWith(github.ref, 'refs/heads/trunk-merge/') && 'ubuntu_huge_ondemand_2004' || 'ubuntu_huge_2004' }}"]
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
@@ -168,7 +175,7 @@ jobs:
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
   local_roachtest:
-    runs-on: [self-hosted, ubuntu_big_2004]
+    runs-on: [self-hosted, "${{ startsWith(github.ref, 'refs/heads/trunk-merge/') && 'ubuntu_big_ondemand_2004' || 'ubuntu_big_2004' }}"]
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
@@ -193,7 +200,7 @@ jobs:
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
   local_roachtest_fips:
-    runs-on: [self-hosted, ubuntu_2004_fips]
+    runs-on: [self-hosted, "${{ startsWith(github.ref, 'refs/heads/trunk-merge/') && 'ubuntu_ondemand_2004_fips' || 'ubuntu_2004_fips' }}"]
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
@@ -218,7 +225,7 @@ jobs:
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
   linux_amd64_build:
-    runs-on: [self-hosted, ubuntu_2004]
+    runs-on: [self-hosted, "${{ startsWith(github.ref, 'refs/heads/trunk-merge/') && 'ubuntu_ondemand_2004' || 'ubuntu_2004' }}"]
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
@@ -239,7 +246,7 @@ jobs:
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
   linux_amd64_fips_build:
-    runs-on: [self-hosted, ubuntu_2004]
+    runs-on: [self-hosted, "${{ startsWith(github.ref, 'refs/heads/trunk-merge/') && 'ubuntu_ondemand_2004' || 'ubuntu_2004' }}"]
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
@@ -260,7 +267,7 @@ jobs:
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
   unit_tests:
-    runs-on: [self-hosted, ubuntu_2004]
+    runs-on: [self-hosted, "${{ startsWith(github.ref, 'refs/heads/trunk-merge/') && 'ubuntu_ondemand_2004' || 'ubuntu_2004' }}"]
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
