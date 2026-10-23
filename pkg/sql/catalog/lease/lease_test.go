@@ -13,6 +13,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -4572,7 +4573,38 @@ func TestLeasedDescriptorTypeHydration(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	// The client only sees the pq error, which doesn't say where on the server
+	// the error was created. Capture the server-side errors with their stacks so
+	// a failure identifies the code path. Several readers can fail, so keep up to
+	// maxServerErrs distinct ones.
+	const maxServerErrs = 5
+	var serverErrs struct {
+		syncutil.Mutex
+		errs []string
+	}
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLExecutor: &sql.ExecutorTestingKnobs{
+				StatementFilter: func(_ context.Context, _ *sessiondata.SessionData, stmt string, err error) {
+					// The filter runs on every attempt; skip 40001s, which the server
+					// retries and the client never sees.
+					if err == nil ||
+						!strings.Contains(stmt, "information_schema.schemata") ||
+						pgerror.GetPGCode(err) == pgcode.SerializationFailure {
+						return
+					}
+					// Formattable keeps the stack that wrappers such as
+					// colexecerror.notInternalError hide from plain %+v.
+					s := fmt.Sprintf("%+v", errors.Formattable(err))
+					serverErrs.Lock()
+					defer serverErrs.Unlock()
+					if len(serverErrs.errs) < maxServerErrs && !slices.Contains(serverErrs.errs, s) {
+						serverErrs.errs = append(serverErrs.errs, s)
+					}
+				},
+			},
+		},
+	})
 	defer srv.Stopper().Stop(ctx)
 
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
@@ -4628,7 +4660,15 @@ func TestLeasedDescriptorTypeHydration(t *testing.T) {
 	// Drop the schema_types schema, while the concurrent selects are running.
 	tdb.Exec(t, `DROP SCHEMA schema_types CASCADE`)
 	close(stopExec)
-	require.NoError(t, grp.Wait())
+	if err := grp.Wait(); err != nil {
+		serverErrs.Lock()
+		detail := "<none captured>"
+		if len(serverErrs.errs) > 0 {
+			detail = strings.Join(serverErrs.errs, "\n\n")
+		}
+		serverErrs.Unlock()
+		t.Fatalf("%v\nserver-side errors:\n%s", err, detail)
+	}
 }
 
 // TestLeaseManagerMemoryCloser validates that if memory is still allocated on the
