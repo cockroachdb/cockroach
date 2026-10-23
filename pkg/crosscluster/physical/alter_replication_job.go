@@ -469,6 +469,9 @@ func alterTenantRestartReplication(
 // such resumption timestamp exists and and error is returned. If both held, the
 // more recent of the two is used. This could arise e.g. if we first reverse
 // replication, then cutover, but then resume the (reversed) replication.
+//
+// A reversal is rejected if dst's most recent replication source was not src,
+// since that stream may have overwritten history src copied.
 func pickReplicationResume(
 	ctx context.Context,
 	srcHistoryID string,
@@ -496,6 +499,20 @@ func pickReplicationResume(
 	// tenant into which we are about to replicate, i.e. we are reversing the
 	// direction, then we can resume from the time the other side was activated.
 	if srcReplicatedFrom == dstHistoryID && !srcActivatedAt.IsEmpty() {
+		// A stream into dst from another source may have replaced history src
+		// copied. E.g. if A replicates to B and C, both cut over, and A fails
+		// back from B, then failing A back from C would keep B's writes that C
+		// never saw. The tenant record can't tell whether that happened, so we
+		// conservatively reject. If the prior stream came from src, whatever it
+		// wrote into dst was src's own history, so the reversal is safe.
+		if dstPreviousReplicatedFrom != nil && wasReplicatingFrom != srcHistoryID {
+			return hlc.Timestamp{}, errors.WithHint(pgerror.Newf(pgcode.ObjectNotInPrerequisiteState,
+				`cannot reverse replication into existing tenant from source %q: the tenant's most recent replication stream was from a different source (%q), which may have overwritten history shared with %q`,
+				srcHistoryID,
+				wasReplicatingFrom,
+				srcHistoryID,
+			), "replicate into a new virtual cluster instead")
+		}
 		reversalTS = srcActivatedAt
 	}
 
