@@ -16,9 +16,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/crosscluster/replicationtestutils"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -27,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -634,4 +639,156 @@ func TestAlterReplicationJobErrors(t *testing.T) {
 		cmd := "ALTER TENANT t1 SET REPLICATION RETENTION ='100ms'"
 		testuser.ExpectErr(t, `does not have an active replication consumer job`, cmd)
 	})
+}
+
+func TestPickReplicationResume(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	type tenant struct {
+		clusterID uuid.UUID
+		tenantID  roachpb.TenantID
+	}
+	historyID := func(tn tenant) string {
+		return fmt.Sprintf("%s:%s", tn.clusterID, tn.tenantID)
+	}
+	prevSource := func(tn tenant, cutover hlc.Timestamp) *mtinfopb.PreviousSourceTenant {
+		return &mtinfopb.PreviousSourceTenant{
+			ClusterID:        tn.clusterID,
+			TenantID:         tn.tenantID,
+			CutoverTimestamp: cutover,
+		}
+	}
+
+	a := tenant{clusterID: uuid.MakeV4(), tenantID: roachpb.MustMakeTenantID(2)}
+	b := tenant{clusterID: uuid.MakeV4(), tenantID: roachpb.MustMakeTenantID(3)}
+	c := tenant{clusterID: uuid.MakeV4(), tenantID: roachpb.MustMakeTenantID(4)}
+	x := tenant{clusterID: uuid.MakeV4(), tenantID: roachpb.MustMakeTenantID(5)}
+	// Tenants that share only a cluster ID or only a tenant ID with b, to check
+	// that sources are compared by both.
+	bSameCluster := tenant{clusterID: b.clusterID, tenantID: roachpb.MustMakeTenantID(6)}
+	bSameTenantID := tenant{clusterID: uuid.MakeV4(), tenantID: b.tenantID}
+	ts := func(wall int64) hlc.Timestamp { return hlc.Timestamp{WallTime: wall} }
+
+	// Each case replicates from src into the existing tenant a.
+	tests := []struct {
+		name              string
+		src               tenant
+		srcReplicatedFrom string
+		srcActivatedAt    hlc.Timestamp
+		dstPrev           *mtinfopb.PreviousSourceTenant
+		expectedTS        hlc.Timestamp
+		expectedErr       string
+		expectedCode      pgcode.Code
+	}{
+		{
+			name:              "fail back to original primary",
+			src:               b,
+			srcReplicatedFrom: historyID(a),
+			srcActivatedAt:    ts(5),
+			expectedTS:        ts(5),
+		},
+		{
+			name:              "fail back to standby of the same source",
+			src:               b,
+			srcReplicatedFrom: historyID(a),
+			srcActivatedAt:    ts(20),
+			dstPrev:           prevSource(b, ts(10)),
+			expectedTS:        ts(20),
+		},
+		{
+			// B cut over from A at 5, and A then failed back from B, cutting over at
+			// 10. Resuming from A's cutover is later than reversing to B's, so it
+			// wins.
+			name:              "resume from previous source after reversing",
+			src:               b,
+			srcReplicatedFrom: historyID(a),
+			srcActivatedAt:    ts(5),
+			dstPrev:           prevSource(b, ts(10)),
+			expectedTS:        ts(10),
+		},
+		{
+			name:       "resume from previous source",
+			src:        b,
+			dstPrev:    prevSource(b, ts(10)),
+			expectedTS: ts(10),
+		},
+		{
+			// A replicated to both B and C, both cut over, and A then failed back
+			// from B, which replaced part of A's history with B's.
+			name:              "fail back after failing back from another standby",
+			src:               c,
+			srcReplicatedFrom: historyID(a),
+			srcActivatedAt:    ts(8),
+			dstPrev:           prevSource(b, ts(10)),
+			expectedErr:       "most recent replication stream was from a different source",
+			expectedCode:      pgcode.ObjectNotInPrerequisiteState,
+		},
+		{
+			name:              "fail back after failing back from another tenant on the same cluster",
+			src:               bSameCluster,
+			srcReplicatedFrom: historyID(a),
+			srcActivatedAt:    ts(8),
+			dstPrev:           prevSource(b, ts(10)),
+			expectedErr:       "most recent replication stream was from a different source",
+			expectedCode:      pgcode.ObjectNotInPrerequisiteState,
+		},
+		{
+			name:              "fail back after failing back from a tenant with the same ID on another cluster",
+			src:               bSameTenantID,
+			srcReplicatedFrom: historyID(a),
+			srcActivatedAt:    ts(8),
+			dstPrev:           prevSource(b, ts(10)),
+			expectedErr:       "most recent replication stream was from a different source",
+			expectedCode:      pgcode.ObjectNotInPrerequisiteState,
+		},
+		{
+			// A was created by replication from X and later replicated to B. This
+			// failback is safe, but the tenant record cannot distinguish it from the
+			// case above, so it is conservatively rejected.
+			name:              "fail back into primary created by replication",
+			src:               b,
+			srcReplicatedFrom: historyID(a),
+			srcActivatedAt:    ts(5),
+			dstPrev:           prevSource(x, ts(1)),
+			expectedErr:       "most recent replication stream was from a different source",
+			expectedCode:      pgcode.ObjectNotInPrerequisiteState,
+		},
+		{
+			// A failed back from B and then replicated to a new standby C. This
+			// failback is safe, since C copied A after B's stream rewrote it, but it
+			// is conservatively rejected for the same reason.
+			name:              "fail back to new standby after failing back from another standby",
+			src:               c,
+			srcReplicatedFrom: historyID(a),
+			srcActivatedAt:    ts(30),
+			dstPrev:           prevSource(b, ts(20)),
+			expectedErr:       "most recent replication stream was from a different source",
+			expectedCode:      pgcode.ObjectNotInPrerequisiteState,
+		},
+		{
+			name:        "unrelated source",
+			src:         c,
+			dstPrev:     prevSource(b, ts(10)),
+			expectedErr: "neither previously replicating from this source",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			resumeTS, err := pickReplicationResume(
+				context.Background(), historyID(tc.src), tc.srcReplicatedFrom,
+				tc.srcActivatedAt, historyID(a), tc.dstPrev,
+			)
+			if tc.expectedErr != "" {
+				require.ErrorContains(t, err, tc.expectedErr)
+				if tc.expectedCode != (pgcode.Code{}) {
+					require.Equal(t, tc.expectedCode, pgerror.GetPGCode(err))
+				}
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.expectedTS, resumeTS)
+		})
+	}
 }
