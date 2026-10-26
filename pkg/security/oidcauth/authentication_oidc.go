@@ -34,7 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/coreos/go-oidc/v3/oidc"
-	"github.com/lestrrat-go/jwx/v2/jwt"
+	"github.com/lestrrat-go/jwx/v3/jwt"
 	"golang.org/x/oauth2"
 )
 
@@ -320,13 +320,10 @@ func (o *oidcManager) ExchangeVerifyGetTokenInfo(
 			continue // Not a JWT, so we can't get claims from it.
 		}
 
-		// Convert the jwt.Token into a map to extract all claims.
-		claimsMap, err := parsedToken.AsMap(ctx)
-		if err != nil {
-			return nil, nil, "", "", errors.Wrapf(err, "OIDC: failed to get claims as map from %s", tokenInfo.name)
-		}
-		// The claims map must be marshaled and unmarshaled to convert it to the desired type.
-		jsonBytes, err := json.Marshal(claimsMap)
+		// Serialize the token to JSON and deserialize its claims into the
+		// desired type. jwt.Token has no AsMap in jwx v3, so marshal it
+		// directly.
+		jsonBytes, err := json.Marshal(parsedToken)
 		if err != nil {
 			return nil, nil, "", "", errors.Wrapf(err, "OIDC: failed to marshal claims from %s", tokenInfo.name)
 		}

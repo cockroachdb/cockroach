@@ -20,8 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/lestrrat-go/jwx/v2/jwa"
-	"github.com/lestrrat-go/jwx/v2/jwt"
+	"github.com/lestrrat-go/jwx/v3/jwa"
+	"github.com/lestrrat-go/jwx/v3/jwt"
 	"github.com/stretchr/testify/require"
 )
 
@@ -90,7 +90,7 @@ func TestAuthorizationJWT_ExtractGroups(t *testing.T) {
 				claims[jwt.SubjectKey] = "alice"
 			}
 			tok := makeTokenWithClaims(t, claims)
-			tokenBytes, err := jwt.Sign(tok, jwt.WithKey(jwa.HS256, []byte("secret")))
+			tokenBytes, err := jwt.Sign(tok, jwt.WithKey(jwa.HS256(), []byte("secret")))
 			require.NoError(t, err)
 
 			// Stub fetchGroupsFromUserinfo as required.
@@ -149,7 +149,7 @@ func TestAuthorizationJWT_UserinfoErrorPaths(t *testing.T) {
 		tok := jwt.New()
 		require.NoError(t, tok.Set(jwt.IssuerKey, issuer))
 		require.NoError(t, tok.Set(jwt.SubjectKey, "alice"))
-		tokenBytes, err := jwt.Sign(tok, jwt.WithKey(jwa.HS256, []byte("secret")))
+		tokenBytes, err := jwt.Sign(tok, jwt.WithKey(jwa.HS256(), []byte("secret")))
 		require.NoError(t, err)
 		return tokenBytes
 	}

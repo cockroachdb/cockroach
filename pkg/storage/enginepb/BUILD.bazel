@@ -53,6 +53,7 @@ go_library(
         "//pkg/util/hlc",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
+        "@com_github_lestrrat_go_jwx_v3//jwa",
     ],
 )
 

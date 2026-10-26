@@ -199,7 +199,8 @@ require (
 	github.com/kr/text v0.2.0
 	github.com/kylelemons/godebug v1.1.0
 	github.com/leanovate/gopter v0.2.5-0.20190402064358-634a59d12406
-	github.com/lestrrat-go/jwx/v2 v2.1.1
+	github.com/lestrrat-go/httprc/v3 v3.0.6
+	github.com/lestrrat-go/jwx/v3 v3.0.12
 	github.com/lib/pq v1.10.9
 	github.com/linkedin/goavro/v2 v2.12.0
 	github.com/lufia/iostat v1.2.1
@@ -238,7 +239,7 @@ require (
 	github.com/spf13/cobra v1.6.1
 	github.com/spf13/pflag v1.0.5
 	github.com/spf13/viper v1.8.1
-	github.com/stretchr/testify v1.11.1
+	github.com/stretchr/testify v1.12.1
 	github.com/twmb/franz-go v1.18.0
 	github.com/twmb/franz-go/pkg/kadm v1.11.0
 	github.com/twpayne/go-geom v1.4.2
@@ -327,7 +328,7 @@ require (
 	github.com/cockroachdb/tools v0.0.0-20211112185054-642e51449b40 // indirect
 	github.com/containerd/log v0.1.0 // indirect
 	github.com/danieljoos/wincred v1.1.2 // indirect
-	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.3.0 // indirect
+	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.1 // indirect
 	github.com/deepmap/oapi-codegen v1.6.0 // indirect
 	github.com/di-wu/parser v0.2.2 // indirect
 	github.com/dimchansky/utfbom v1.1.1 // indirect
@@ -364,7 +365,7 @@ require (
 	github.com/go-pdf/fpdf v0.9.0 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
-	github.com/goccy/go-json v0.10.3 // indirect
+	github.com/goccy/go-json v0.10.6 // indirect
 	github.com/godbus/dbus v0.0.0-20190726142602-4481cbc300e2 // indirect
 	github.com/gofrs/flock v0.12.1 // indirect
 	github.com/gofrs/uuid v4.0.0+incompatible // indirect
@@ -407,11 +408,11 @@ require (
 	github.com/klauspost/asmfmt v1.3.2 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.4 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
-	github.com/lestrrat-go/blackmagic v1.0.2 // indirect
+	github.com/lestrrat-go/blackmagic v1.0.4 // indirect
+	github.com/lestrrat-go/dsig v1.4.0 // indirect
+	github.com/lestrrat-go/dsig-secp256k1 v1.0.0 // indirect
 	github.com/lestrrat-go/httpcc v1.0.1 // indirect
-	github.com/lestrrat-go/httprc v1.0.6 // indirect
-	github.com/lestrrat-go/iter v1.0.2 // indirect
-	github.com/lestrrat-go/option v1.0.1 // indirect
+	github.com/lestrrat-go/option/v2 v2.0.0 // indirect
 	github.com/lufia/plan9stats v0.0.0-20211012122336-39d0f177ccd0 // indirect
 	github.com/magiconair/properties v1.8.5 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
@@ -457,13 +458,13 @@ require (
 	github.com/rs/xid v1.3.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/sahilm/fuzzy v0.1.0 // indirect
-	github.com/segmentio/asm v1.2.0 // indirect
+	github.com/segmentio/asm v1.2.1 // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/slok/go-http-metrics v0.10.0 // indirect
 	github.com/spaolacci/murmur3 v1.1.0 // indirect
 	github.com/spf13/cast v1.3.1 // indirect
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
-	github.com/stretchr/objx v0.5.2 // indirect
+	github.com/stretchr/objx v0.5.3 // indirect
 	github.com/subosito/gotenv v1.2.0 // indirect
 	github.com/swaggo/swag v1.16.6 // indirect
 	github.com/tklauser/go-sysconf v0.3.9 // indirect
@@ -474,6 +475,7 @@ require (
 	github.com/twpayne/go-kml v1.5.2 // indirect
 	github.com/ugorji/go/codec v1.2.11 // indirect
 	github.com/urfave/cli/v2 v2.3.0 // indirect
+	github.com/valyala/fastjson v1.6.10 // indirect
 	github.com/wadey/gocovmerge v0.0.0-20160331181800-b5bfa59ec0ad // indirect
 	github.com/yusufpapurcu/wmi v1.2.2 // indirect
 	github.com/zeebo/errs v1.4.0 // indirect
@@ -491,6 +493,7 @@ require (
 	go.uber.org/atomic v1.10.0 // indirect
 	go.uber.org/multierr v1.7.0 // indirect
 	go.uber.org/zap v1.19.0 // indirect
+	go.yaml.in/yaml/v3 v3.0.5 // indirect
 	golang.org/x/arch v0.3.0 // indirect
 	golang.org/x/image v0.33.0 // indirect
 	golang.org/x/telemetry v0.0.0-20251111182119-bc8e575c7b54 // indirect

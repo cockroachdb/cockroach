@@ -23,9 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	"github.com/lestrrat-go/jwx/v2/jwk"
-	"github.com/lestrrat-go/jwx/v2/jws"
-	"github.com/lestrrat-go/jwx/v2/jwt"
+	"github.com/lestrrat-go/jwx/v3/jwk"
+	"github.com/lestrrat-go/jwx/v3/jws"
+	"github.com/lestrrat-go/jwx/v3/jwt"
 )
 
 const (
@@ -208,7 +208,7 @@ func (authenticator *jwtAuthenticator) ValidateJWTLogin(
 
 	// Validate the token as below:
 	// 1. Check the token format and extract issuer
-	// jwx/v2 library mandates signature verification with Parse,
+	// The jwx/v3 library mandates signature verification with Parse,
 	// so use ParseInsecure instead
 	// 2. Fetch JWKS corresponding to the issuer
 	// 3. Use Parse for signature verification
@@ -220,7 +220,7 @@ func (authenticator *jwtAuthenticator) ValidateJWTLogin(
 	}
 
 	// Check for issuer match against configured issuers.
-	tokenIssuer := unverifiedToken.Issuer()
+	tokenIssuer, _ := unverifiedToken.Issuer()
 	if err = conf.issuersConf.checkIssuerConfigured(tokenIssuer); err != nil {
 		return "", errors.WithDetailf(err, "token issued by %s", tokenIssuer)
 	}
@@ -258,7 +258,8 @@ func (authenticator *jwtAuthenticator) ValidateJWTLogin(
 	}
 
 	audienceMatch := false
-	for _, tokenAudience := range parsedToken.Audience() {
+	tokenAudiences, _ := parsedToken.Audience()
+	for _, tokenAudience := range tokenAudiences {
 		for _, crdbAudience := range conf.audience {
 			if crdbAudience == tokenAudience {
 				audienceMatch = true
@@ -269,7 +270,7 @@ func (authenticator *jwtAuthenticator) ValidateJWTLogin(
 	if !audienceMatch {
 		return "", errors.WithDetailf(
 			errors.Newf("JWT authentication: invalid audience"),
-			"token issued with an audience of %s", parsedToken.Audience())
+			"token issued with an audience of %s", tokenAudiences)
 	}
 
 	telemetry.Inc(loginSuccessUseCounter)
@@ -319,10 +320,16 @@ func (authenticator *jwtAuthenticator) retrieveIdentity(
 	// from the subject unless they specify an alternate claim to pull from.
 	var tokenPrincipals []string
 	if conf.claim == "" || conf.claim == "sub" {
-		tokenPrincipals = []string{unverifiedToken.Subject()}
+		sub, _ := unverifiedToken.Subject()
+		tokenPrincipals = []string{sub}
 	} else {
-		claimValue, ok := unverifiedToken.Get(conf.claim)
-		if !ok {
+		if !unverifiedToken.Has(conf.claim) {
+			return user, errors.WithDetailf(
+				errors.Newf("JWT authentication: missing claim"),
+				"token does not contain a claim for %s", conf.claim)
+		}
+		var claimValue any
+		if err := unverifiedToken.Get(conf.claim, &claimValue); err != nil {
 			return user, errors.WithDetailf(
 				errors.Newf("JWT authentication: missing claim"),
 				"token does not contain a claim for %s", conf.claim)
@@ -348,7 +355,7 @@ func (authenticator *jwtAuthenticator) retrieveIdentity(
 	// Take the principals from the token and send each of them through the
 	// identity map to generate the list of usernames that this token is valid
 	// authentication for.
-	issuer := unverifiedToken.Issuer()
+	issuer, _ := unverifiedToken.Issuer()
 	var acceptedUsernames []username.SQLUsername
 	for _, tokenPrincipal := range tokenPrincipals {
 		mappedUsernames, err := authenticator.mapUsername(tokenPrincipal, issuer, identMap)
@@ -418,7 +425,7 @@ func (a *jwtAuthenticator) VerifyAndExtractIssuer(
 			errors.New("JWT authentication: invalid token")
 	}
 
-	issuer = unverified.Issuer()
+	issuer, _ = unverified.Issuer()
 	if err := conf.issuersConf.checkIssuerConfigured(issuer); err != nil {
 		return "", "", errors.WithDetail(
 			errors.New("JWT authentication: invalid issuer"),

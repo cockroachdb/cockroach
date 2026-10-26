@@ -10,18 +10,20 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/errors"
-	"github.com/lestrrat-go/jwx/v2/jwt"
+	"github.com/lestrrat-go/jwx/v3/jwt"
 )
 
 // ParseGroupsClaim returns a deduplicated, lowercased list of groups
 // taken from tok[claimName]. The claim may be a JSON array or a
 // comma-separated string.
 func ParseGroupsClaim(token jwt.Token, claim string) ([]string, error) {
-	raw, ok := token.Get(claim)
-	if !ok {
+	var raw any
+	if err := token.Get(claim, &raw); err != nil {
+		issuer, _ := token.Issuer()
+		subject, _ := token.Subject()
 		return nil, errors.Newf(
 			"groups claim %q missing in token (issuer=%q subject=%q)",
-			claim, token.Issuer(), token.Subject())
+			claim, issuer, subject)
 	}
 	groups, err := normalize(raw)
 	if err != nil {

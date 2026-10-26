@@ -39,9 +39,9 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 	"github.com/cockroachdb/redact"
-	"github.com/lestrrat-go/jwx/v2/jwa"
-	"github.com/lestrrat-go/jwx/v2/jwk"
-	"github.com/lestrrat-go/jwx/v2/jwt"
+	"github.com/lestrrat-go/jwx/v3/jwa"
+	"github.com/lestrrat-go/jwx/v3/jwk"
+	"github.com/lestrrat-go/jwx/v3/jwt"
 	"github.com/stretchr/testify/require"
 )
 
@@ -78,20 +78,20 @@ func createJWKS(t *testing.T) (jwk.Set, jwk.Key, jwk.Key) {
 func createECDSAKey(t *testing.T, keyID string) jwk.Key {
 	raw, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
 	require.NoError(t, err)
-	key, err := jwk.FromRaw(raw)
+	key, err := jwk.Import(raw)
 	require.NoError(t, err)
 	require.NoError(t, key.Set(jwk.KeyIDKey, keyID))
-	require.NoError(t, key.Set(jwk.AlgorithmKey, jwa.ES384))
+	require.NoError(t, key.Set(jwk.AlgorithmKey, jwa.ES384()))
 	return key
 }
 
 func createRSAKey(t *testing.T, keyID string) jwk.Key {
 	raw, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
-	key, err := jwk.FromRaw(raw)
+	key, err := jwk.Import(raw)
 	require.NoError(t, err)
 	require.NoError(t, key.Set(jwk.KeyIDKey, keyID))
-	require.NoError(t, key.Set(jwk.AlgorithmKey, jwa.RS256))
+	require.NoError(t, key.Set(jwk.AlgorithmKey, jwa.RS256()))
 	return key
 }
 
@@ -144,7 +144,7 @@ func TestJWTEnabledCheck(t *testing.T) {
 	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
 
 	key := createRSAKey(t, keyID1)
-	token := createJWT(t, username1, audience1, issuer1, timeutil.Now().Add(time.Hour), key, jwa.RS256, "", "")
+	token := createJWT(t, username1, audience1, issuer1, timeutil.Now().Add(time.Hour), key, jwa.RS256(), "", "")
 	// JWT auth is not enabled.
 	_, err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username1), token, identMap)
 	require.ErrorContains(t, err, "JWT authentication: not enabled")
@@ -172,7 +172,7 @@ func TestJWTSingleKey(t *testing.T) {
 	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
 
 	_, key, _ := createJWKS(t)
-	token := createJWT(t, username1, audience1, issuer1, timeutil.Now().Add(time.Hour), key, jwa.RS256, "", "")
+	token := createJWT(t, username1, audience1, issuer1, timeutil.Now().Add(time.Hour), key, jwa.RS256(), "", "")
 	publicKey, err := key.PublicKey()
 	require.NoError(t, err)
 	jwkPublicKey := serializePublicKey(t, publicKey)
@@ -210,7 +210,7 @@ func TestJWTSingleKeyWithoutKeyAlgorithm(t *testing.T) {
 	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
 
 	_, key, _ := createJWKS(t)
-	token := createJWT(t, username1, audience1, issuer1, timeutil.Now().Add(time.Hour), key, jwa.RS256, "", "")
+	token := createJWT(t, username1, audience1, issuer1, timeutil.Now().Add(time.Hour), key, jwa.RS256(), "", "")
 	// Clear the algorithm.
 	require.NoError(t, key.Remove(jwk.AlgorithmKey))
 	publicKey, err := key.PublicKey()
@@ -250,7 +250,7 @@ func TestJWTMultiKey(t *testing.T) {
 	// Configure issuer as it gets checked even before the token validity check.
 	JWTAuthIssuersConfig.Override(ctx, &s.ClusterSettings().SV, issuer1)
 	keySet, key, key2 := createJWKS(t)
-	token := createJWT(t, username1, audience1, issuer1, timeutil.Now().Add(time.Hour), key2, jwa.ES384, "", "")
+	token := createJWT(t, username1, audience1, issuer1, timeutil.Now().Add(time.Hour), key2, jwa.ES384(), "", "")
 	publicKey, err := key.PublicKey()
 	require.NoError(t, err)
 	keySetWithOneKey := jwk.NewSet()
@@ -291,7 +291,7 @@ func TestExpiredToken(t *testing.T) {
 	// Configure issuer as it gets checked even before the token validity check.
 	JWTAuthIssuersConfig.Override(ctx, &s.ClusterSettings().SV, issuer1)
 	keySet, key, _ := createJWKS(t)
-	token := createJWT(t, username1, audience1, issuer1, timeutil.Now().Add(-1*time.Second), key, jwa.RS256, "", "")
+	token := createJWT(t, username1, audience1, issuer1, timeutil.Now().Add(-1*time.Second), key, jwa.RS256(), "", "")
 	JWTAuthJWKS.Override(ctx, &s.ClusterSettings().SV, serializePublicKeySet(t, keySet))
 	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
 
@@ -314,7 +314,7 @@ func TestKeyIdMismatch(t *testing.T) {
 	keySet, key, _ := createJWKS(t)
 	// Create a JWT with different key id.
 	require.NoError(t, key.Set(jwk.KeyIDKey, invalidKeyID))
-	token := createJWT(t, username1, audience1, issuer1, timeutil.Now().Add(time.Hour), key, jwa.RS256, "", "")
+	token := createJWT(t, username1, audience1, issuer1, timeutil.Now().Add(time.Hour), key, jwa.RS256(), "", "")
 	// Make sure jwt auth is enabled and accepts valid signing keys.
 	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 	JWTAuthJWKS.Override(ctx, &s.ClusterSettings().SV, serializePublicKeySet(t, keySet))
@@ -328,7 +328,7 @@ func TestKeyIdMismatch(t *testing.T) {
 
 	// Reset the key id and regenerate the token.
 	require.NoError(t, key.Set(jwk.KeyIDKey, keyID1))
-	token = createJWT(t, username1, audience1, issuer1, timeutil.Now().Add(time.Hour), key, jwa.RS256, "", "")
+	token = createJWT(t, username1, audience1, issuer1, timeutil.Now().Add(time.Hour), key, jwa.RS256(), "", "")
 	// Now jwk1 token passes the validity check and fails on the next check (subject matching user)..
 	JWTAuthAudience.Override(ctx, &s.ClusterSettings().SV, audience1)
 	_, err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username1), token, identMap)
@@ -346,8 +346,8 @@ func TestIssuerCheck(t *testing.T) {
 	identMap, err := identmap.From(strings.NewReader(identMapString))
 	require.NoError(t, err)
 	keySet, key, _ := createJWKS(t)
-	token1 := createJWT(t, username1, audience1, issuer1, timeutil.Now().Add(time.Hour), key, jwa.RS256, "", "")
-	token2 := createJWT(t, username1, audience1, issuer2, timeutil.Now().Add(time.Hour), key, jwa.RS256, "", "")
+	token1 := createJWT(t, username1, audience1, issuer1, timeutil.Now().Add(time.Hour), key, jwa.RS256(), "", "")
+	token2 := createJWT(t, username1, audience1, issuer2, timeutil.Now().Add(time.Hour), key, jwa.RS256(), "", "")
 
 	// Make sure jwt auth is enabled, accepts jwk1 or jwk2 as valid signing keys, accepts the audience of "test_cluster"
 	// and the issuer of "issuer2".
@@ -397,7 +397,7 @@ func TestSubjectCheck(t *testing.T) {
 	identMap, err := identmap.From(strings.NewReader(identMapString))
 	require.NoError(t, err)
 	keySet, _, key2 := createJWKS(t)
-	token := createJWT(t, username1, audience1, issuer2, timeutil.Now().Add(time.Hour), key2, jwa.ES384, "", "")
+	token := createJWT(t, username1, audience1, issuer2, timeutil.Now().Add(time.Hour), key2, jwa.ES384(), "", "")
 
 	// Make sure jwt auth is enabled and accepts jwk1 or jwk2 as valid signing keys.
 	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
@@ -429,7 +429,7 @@ func TestClaimMissing(t *testing.T) {
 	identMap, err := identmap.From(strings.NewReader(identMapString))
 	require.NoError(t, err)
 	keySet, _, key2 := createJWKS(t)
-	missingClaimToken := createJWT(t, invalidUsername, audience1, issuer2, timeutil.Now().Add(time.Hour), key2, jwa.ES384, "", "")
+	missingClaimToken := createJWT(t, invalidUsername, audience1, issuer2, timeutil.Now().Add(time.Hour), key2, jwa.ES384(), "", "")
 
 	// Make sure jwt auth is enabled and accepts jwk1 or jwk2 as valid signing keys.
 	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
@@ -456,7 +456,7 @@ func TestIntegerClaimValue(t *testing.T) {
 	identMap, err := identmap.From(strings.NewReader(identMapString))
 	require.NoError(t, err)
 	keySet, _, key2 := createJWKS(t)
-	intClaimToken := createJWT(t, invalidUsername, audience1, issuer2, timeutil.Now().Add(time.Hour), key2, jwa.ES384, customClaimName, 1)
+	intClaimToken := createJWT(t, invalidUsername, audience1, issuer2, timeutil.Now().Add(time.Hour), key2, jwa.ES384(), customClaimName, 1)
 
 	// Make sure jwt auth is enabled and accepts jwk1 or jwk2 as valid signing keys.
 	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
@@ -482,7 +482,7 @@ func TestSingleClaim(t *testing.T) {
 	identMap, err := identmap.From(strings.NewReader(identMapString))
 	require.NoError(t, err)
 	keySet, _, key2 := createJWKS(t)
-	token := createJWT(t, invalidUsername, audience1, issuer2, timeutil.Now().Add(time.Hour), key2, jwa.ES384, customClaimName, username1)
+	token := createJWT(t, invalidUsername, audience1, issuer2, timeutil.Now().Add(time.Hour), key2, jwa.ES384(), customClaimName, username1)
 
 	// Make sure jwt auth is enabled and accepts jwk1 or jwk2 as valid signing keys.
 	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
@@ -523,7 +523,7 @@ func TestMultipleClaim(t *testing.T) {
 	identMap, err := identmap.From(strings.NewReader(identMapString))
 	require.NoError(t, err)
 	keySet, _, key2 := createJWKS(t)
-	token := createJWT(t, invalidUsername, audience1, issuer2, timeutil.Now().Add(time.Hour), key2, jwa.ES384, customClaimName, []string{username2, username1})
+	token := createJWT(t, invalidUsername, audience1, issuer2, timeutil.Now().Add(time.Hour), key2, jwa.ES384(), customClaimName, []string{username2, username1})
 
 	// Make sure jwt auth is enabled and accepts jwk1 or jwk2 as valid signing keys.
 	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
@@ -571,8 +571,8 @@ func TestSubjectMappingCheck(t *testing.T) {
 	identMap, err := identmap.From(strings.NewReader(identMapString))
 	require.NoError(t, err)
 	keySet, _, key2 := createJWKS(t)
-	token := createJWT(t, username1, audience1, issuer2, timeutil.Now().Add(time.Hour), key2, jwa.ES384, "", "")
-	token2 := createJWT(t, username2, audience1, issuer2, timeutil.Now().Add(time.Hour), key2, jwa.ES384, "", "")
+	token := createJWT(t, username1, audience1, issuer2, timeutil.Now().Add(time.Hour), key2, jwa.ES384(), "", "")
+	token2 := createJWT(t, username2, audience1, issuer2, timeutil.Now().Add(time.Hour), key2, jwa.ES384(), "", "")
 
 	// Make sure jwt auth is enabled and accepts jwk1 or jwk2 as valid signing keys.
 	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
@@ -609,8 +609,8 @@ func TestSubjectReservedUser(t *testing.T) {
 	identMap, err := identmap.From(strings.NewReader(identMapString))
 	require.NoError(t, err)
 	keySet, _, key2 := createJWKS(t)
-	token := createJWT(t, username1, audience1, issuer2, timeutil.Now().Add(time.Hour), key2, jwa.ES384, "", "")
-	token2 := createJWT(t, "root", audience1, issuer1, timeutil.Now().Add(time.Hour), key2, jwa.ES384, "", "")
+	token := createJWT(t, username1, audience1, issuer2, timeutil.Now().Add(time.Hour), key2, jwa.ES384(), "", "")
+	token2 := createJWT(t, "root", audience1, issuer1, timeutil.Now().Add(time.Hour), key2, jwa.ES384(), "", "")
 
 	// Make sure jwt auth is enabled and accepts jwk1 or jwk2 as valid signing keys.
 	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
@@ -639,7 +639,7 @@ func TestAudienceCheck(t *testing.T) {
 	identMap, err := identmap.From(strings.NewReader(identMapString))
 	require.NoError(t, err)
 	keySet, key, _ := createJWKS(t)
-	token := createJWT(t, username1, audience1, issuer2, timeutil.Now().Add(time.Hour), key, jwa.RS256, "", "")
+	token := createJWT(t, username1, audience1, issuer2, timeutil.Now().Add(time.Hour), key, jwa.RS256(), "", "")
 
 	// Make sure jwt auth is enabled and accepts jwk1 or jwk2 as valid signing keys.
 	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
@@ -721,7 +721,7 @@ func Test_JWKSFetchWorksWhenEnabled(t *testing.T) {
 	keySet := createJWKSFromFile(t, "testdata/www.idp1apis.com_oauth2_v3_certs_private")
 	key, _ := keySet.Key(0)
 	validIssuer := "https://accounts.idp1.com"
-	token := createJWT(t, username1, audience1, validIssuer, timeutil.Now().Add(time.Hour), key, jwa.RS256, "", "")
+	token := createJWT(t, username1, audience1, validIssuer, timeutil.Now().Add(time.Hour), key, jwa.RS256(), "", "")
 
 	// Make sure jwt auth is enabled and accepts jwk1 or jwk2 as valid signing keys.
 	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
@@ -775,7 +775,7 @@ func Test_JWKSFetchWorksWhenEnabledIgnoresTheStaticJWKS(t *testing.T) {
 	keySetUsedForSigning := createJWKSFromFile(t, "testdata/www.idp1apis.com_oauth2_v3_certs_private")
 	key, _ := keySetUsedForSigning.Key(0)
 	validIssuer := "https://accounts.idp1.com"
-	token := createJWT(t, username1, audience1, validIssuer, timeutil.Now().Add(time.Hour), key, jwa.RS256, "", "")
+	token := createJWT(t, username1, audience1, validIssuer, timeutil.Now().Add(time.Hour), key, jwa.RS256(), "", "")
 
 	// Make sure jwt auth is enabled and accepts jwk1 or jwk2 as valid signing keys.
 	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
@@ -918,7 +918,7 @@ func TestJWTAuthWithCustomCACert(t *testing.T) {
 	key, _ := keySet.Key(0)
 	issuer := testServerURL
 	token := createJWT(
-		t, username1, audience1, issuer, timeutil.Now().Add(time.Hour), key, jwa.RS256, "", "")
+		t, username1, audience1, issuer, timeutil.Now().Add(time.Hour), key, jwa.RS256(), "", "")
 
 	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 	JWTAuthIssuersConfig.Override(ctx, &s.ClusterSettings().SV, issuer)
@@ -1037,7 +1037,7 @@ func TestJWTAuthClientTimeout(t *testing.T) {
 	key, _ := keySet.Key(0)
 	validIssuer := "https://accounts.idp1.com"
 	token := createJWT(
-		t, username1, audience1, validIssuer, timeutil.Now().Add(time.Hour), key, jwa.RS256, "", "")
+		t, username1, audience1, validIssuer, timeutil.Now().Add(time.Hour), key, jwa.RS256(), "", "")
 
 	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 	JWTAuthIssuersConfig.Override(ctx, &s.ClusterSettings().SV, validIssuer)
@@ -1108,7 +1108,7 @@ func TestJWTAuthWithIssuerJWKSConfAutoFetchJWKS(t *testing.T) {
 	key, _ := keySet.Key(0)
 	issuer := testServerURL
 	token := createJWT(
-		t, username1, audience1, issuer, timeutil.Now().Add(time.Hour), key, jwa.RS256, "", "")
+		t, username1, audience1, issuer, timeutil.Now().Add(time.Hour), key, jwa.RS256(), "", "")
 
 	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 	JWKSAutoFetchEnabled.Override(ctx, &s.ClusterSettings().SV, true)
@@ -1181,7 +1181,7 @@ func TestVerifyAndExtractIssuer(t *testing.T) {
 
 	// Create signing material.
 	keySet, key, _ := createJWKS(t)
-	token := createJWT(t, username1, audience1, issuer1, timeutil.Now().Add(time.Hour), key, jwa.RS256, "", "")
+	token := createJWT(t, username1, audience1, issuer1, timeutil.Now().Add(time.Hour), key, jwa.RS256(), "", "")
 	JWTAuthJWKS.Override(ctx, &s.ClusterSettings().SV, serializePublicKeySet(t, keySet))
 
 	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
@@ -1193,7 +1193,7 @@ func TestVerifyAndExtractIssuer(t *testing.T) {
 	require.Equal(t, issuer1, iss)
 
 	// Fails on wrong issuer.
-	badIssuerToken := createJWT(t, username1, audience1, issuer2, timeutil.Now().Add(time.Hour), key, jwa.RS256, "", "")
+	badIssuerToken := createJWT(t, username1, audience1, issuer2, timeutil.Now().Add(time.Hour), key, jwa.RS256(), "", "")
 	_, detail, err = verifier.VerifyAndExtractIssuer(ctx, s.ClusterSettings(), badIssuerToken)
 	require.ErrorContains(t, err, "JWT authentication: invalid issuer")
 	require.Contains(t, errors.FlattenDetails(err), "token issued by issuer2")
@@ -1201,7 +1201,7 @@ func TestVerifyAndExtractIssuer(t *testing.T) {
 
 	// Fails on bad signature (different key).
 	_, _, otherKey := createJWKS(t)
-	badSigToken := createJWT(t, username1, audience1, issuer1, timeutil.Now().Add(time.Hour), otherKey, jwa.ES384, "", "")
+	badSigToken := createJWT(t, username1, audience1, issuer1, timeutil.Now().Add(time.Hour), otherKey, jwa.ES384(), "", "")
 	_, detail, err = verifier.VerifyAndExtractIssuer(ctx, s.ClusterSettings(), badSigToken)
 	require.ErrorContains(t, err, "JWT authentication: invalid token")
 	require.Empty(t, detail)

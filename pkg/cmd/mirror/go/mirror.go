@@ -343,6 +343,23 @@ func dumpBuildNamingConventionArgsForRepo(repoName string) {
 	}
 }
 
+func dumpRepoMappingForRepo(repoName string) {
+	// jwx/v3 ships its own checked-in BUILD.bazel files that load rules from the
+	// bzlmod canonical repo names @rules_go and @gazelle. We build in WORKSPACE
+	// mode, where those repos are named @io_bazel_rules_go and @bazel_gazelle,
+	// so without a remap, loading any jwx package fails with "repository
+	// '@@rules_go' is not defined". go_repository keeps the shipped BUILD files
+	// (build_file_generation defaults to "auto"), so we remap instead of
+	// regenerating.
+	if repoName == "com_github_lestrrat_go_jwx_v3" {
+		fmt.Print(`        repo_mapping = {
+            "@gazelle": "@bazel_gazelle",
+            "@rules_go": "@io_bazel_rules_go",
+        },
+`)
+	}
+}
+
 func dumpNewDepsBzl(
 	listed map[string]listedModule,
 	downloaded map[versionedDependency]downloadedModule,
@@ -418,6 +435,7 @@ def go_deps():
 		if err := dumpPatchArgsForRepo(repoName); err != nil {
 			return err
 		}
+		dumpRepoMappingForRepo(repoName)
 		oldMirror, ok := existingMirrors[repoName]
 		if ok && oldMirror.URL == expectedURL {
 			// The URL matches, so just reuse the old mirror.

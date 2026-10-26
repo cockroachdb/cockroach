@@ -22,8 +22,8 @@ import (
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/cockroachdb/pebble/vfs/atomicfs"
 	"github.com/gogo/protobuf/proto"
-	"github.com/lestrrat-go/jwx/v2/jwa"
-	"github.com/lestrrat-go/jwx/v2/jwk"
+	"github.com/lestrrat-go/jwx/v3/jwa"
+	"github.com/lestrrat-go/jwx/v3/jwk"
 )
 
 const (
@@ -166,19 +166,23 @@ func LoadKeyFromFile(fs vfs.FS, filename string) (*enginepb.SecretKey, error) {
 		if keySet.Len() != 1 {
 			return nil, fmt.Errorf("expected exactly 1 key in JWKS file, found %d", keySet.Len())
 		}
-		if jwKey.KeyType() != jwa.OctetSeq {
+		if jwKey.KeyType() != jwa.OctetSeq() {
 			return nil, fmt.Errorf("expected kty=oct, found %s", jwKey.KeyType())
 		}
-		key.Info.EncryptionType, err = enginepb.EncryptionTypeFromJWKAlgorithm(jwKey.Algorithm().String())
+		alg, ok := jwKey.Algorithm()
+		if !ok {
+			return nil, errors.Newf("JWK is missing the \"alg\" field")
+		}
+		key.Info.EncryptionType, err = enginepb.EncryptionTypeFromJWKAlgorithm(alg.String())
 		if err != nil {
 			return nil, err
 		}
-		key.Info.KeyId = jwKey.KeyID()
+		key.Info.KeyId, _ = jwKey.KeyID()
 		symKey, ok := jwKey.(jwk.SymmetricKey)
 		if !ok {
 			return nil, fmt.Errorf("error converting jwk.Key to SymmetricKey")
 		}
-		key.Key = symKey.Octets()
+		key.Key, _ = symKey.Octets()
 	} else {
 		// keyIDLength bytes for the ID, followed by the key.
 		keyLength := len(b) - keyIDLength

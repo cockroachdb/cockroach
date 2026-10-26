@@ -31,9 +31,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/coreos/go-oidc/v3/oidc"
-	"github.com/lestrrat-go/jwx/v2/jwa"
-	"github.com/lestrrat-go/jwx/v2/jwk"
-	"github.com/lestrrat-go/jwx/v2/jwt"
+	"github.com/lestrrat-go/jwx/v3/jwa"
+	"github.com/lestrrat-go/jwx/v3/jwk"
+	"github.com/lestrrat-go/jwx/v3/jwt"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2"
 )
@@ -51,7 +51,7 @@ func makeJWT(t *testing.T, claims map[string]any, key jwk.Key) string {
 		require.NoError(t, token.Set(k, v))
 	}
 	// Sign with the private key
-	raw, err := jwt.Sign(token, jwt.WithKey(jwa.RS256, key))
+	raw, err := jwt.Sign(token, jwt.WithKey(jwa.RS256(), key))
 	require.NoError(t, err)
 	return string(raw)
 }
@@ -118,10 +118,8 @@ func (m *mockManager) ExchangeVerifyGetTokenInfo(
 	// handling of them. We still need to extract claims if possible for the
 	// `extractUsernameFromClaims` call that happens before `authorize`.
 	if tok, err := jwt.ParseInsecure([]byte(rawIDToken)); err == nil {
-		if claimsMap, err := tok.AsMap(ctx); err == nil {
-			if jsonBytes, err := json.Marshal(claimsMap); err == nil {
-				_ = json.Unmarshal(jsonBytes, &idTokenClaims)
-			}
+		if jsonBytes, err := json.Marshal(tok); err == nil {
+			_ = json.Unmarshal(jsonBytes, &idTokenClaims)
 		}
 	}
 
@@ -137,10 +135,8 @@ func (m *mockManager) ExchangeVerifyGetTokenInfo(
 	var accessTokenClaims map[string]json.RawMessage
 	if accessToken != "" {
 		if tok, err := jwt.ParseInsecure([]byte(accessToken)); err == nil {
-			if claimsMap, err := tok.AsMap(ctx); err == nil {
-				if jsonBytes, err := json.Marshal(claimsMap); err == nil {
-					_ = json.Unmarshal(jsonBytes, &accessTokenClaims)
-				}
+			if jsonBytes, err := json.Marshal(tok); err == nil {
+				_ = json.Unmarshal(jsonBytes, &accessTokenClaims)
 			}
 		}
 	}
@@ -163,7 +159,7 @@ func TestOIDCAuthorization(t *testing.T) {
 	// Create an RSA key pair for signing tokens.
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
 	require.NoError(t, err)
-	jwkKey, err := jwk.FromRaw(privateKey)
+	jwkKey, err := jwk.Import(privateKey)
 	require.NoError(t, err)
 	// makeToken signs a JWT carrying the given groups claim. An empty slice
 	// yields a present-but-empty claim, distinct from noGroupsToken below, which

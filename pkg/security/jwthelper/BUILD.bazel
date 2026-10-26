@@ -7,6 +7,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_lestrrat_go_jwx_v2//jwt",
+        "@com_github_lestrrat_go_jwx_v3//jwt",
     ],
 )

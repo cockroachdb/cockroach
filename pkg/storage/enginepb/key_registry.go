@@ -5,7 +5,34 @@
 
 package enginepb
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/lestrrat-go/jwx/v3/jwa"
+)
+
+// jwkAlgorithmNames are the CockroachDB-specific algorithm strings stored in the
+// "alg" field of encryption-at-rest keys serialized as JWKs. They are not
+// standard JOSE algorithms, so jwx v3 — which rejects unknown "alg" values by
+// default — must be told about them before it can parse or construct these keys.
+var jwkAlgorithmNames = []string{
+	"cockroach-aes-128-ctr-v1",
+	"cockroach-aes-192-ctr-v1",
+	"cockroach-aes-256-ctr-v1",
+	"cockroach-aes-128-ctr-v2",
+	"cockroach-aes-192-ctr-v2",
+	"cockroach-aes-256-ctr-v2",
+}
+
+func init() {
+	// Register the custom algorithm names so jwk.Parse accepts keys carrying
+	// them (and Set stores them). The algorithm kind is irrelevant here: jwx
+	// only needs the name in its registry for a JWK to round-trip through its
+	// "alg" field.
+	for _, name := range jwkAlgorithmNames {
+		jwa.RegisterSignatureAlgorithm(jwa.NewSignatureAlgorithm(name))
+	}
+}
 
 // JWKAlgorithm returns the JWK algorithm name for this EncryptionType.
 func (e EncryptionType) JWKAlgorithm() (string, error) {

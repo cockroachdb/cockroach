@@ -14,7 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/errors"
-	"github.com/lestrrat-go/jwx/v2/jwk"
+	"github.com/lestrrat-go/jwx/v3/jwk"
 	"github.com/spf13/cobra"
 )
 
@@ -58,9 +58,9 @@ func genEncryptionKey(
 			return fmt.Errorf("store key size should be 128, 192, or 256 bits, got %d", aesSize)
 		}
 
-		// FromRaw uses the input type to instantiate particular type of key.
+		// Import uses the input type to instantiate particular type of key.
 		// []byte input type is used to generate a symmetric key here.
-		symKey, err := jwk.FromRaw(key)
+		symKey, err := jwk.Import(key)
 		if err != nil {
 			return errors.Wrap(err, "error setting key bytes")
 		}

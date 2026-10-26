@@ -15,7 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/errors"
-	"github.com/lestrrat-go/jwx/v2/jwt"
+	"github.com/lestrrat-go/jwx/v3/jwt"
 )
 
 const (
@@ -129,8 +129,9 @@ func (a *jwtAuthenticator) ExtractGroups(
 	}
 
 	// Fallback to userinfo
+	issuer, _ := tok.Issuer()
 	groups, err = fetchGroupsFromUserinfo(
-		ctx, st, tok.Issuer(), tokenBytes, conf.httpClient)
+		ctx, st, issuer, tokenBytes, conf.httpClient)
 	if err != nil {
 		telemetry.Inc(authorizationFailureUseCtr)
 		internalErr := errors.Wrap(err, "JWT authorization: userinfo lookup failed")
@@ -141,8 +142,9 @@ func (a *jwtAuthenticator) ExtractGroups(
 	// Userinfo endpoint was explicitly ""
 	if groups == nil {
 		telemetry.Inc(authorizationUserinfoNoGrpUseCtr)
+		subject, _ := tok.Subject()
 		internalErr := errors.Newf("JWT authorization: groups claim missing in token and there is no userinfo endpoint (issuer=%q subject=%q)",
-			tok.Issuer(), tok.Subject())
+			issuer, subject)
 		clientErr := errors.New("JWT authorization: No userinfo endpoint")
 
 		return nil, errors.WithSecondaryError(clientErr, internalErr)
