@@ -6,14 +6,14 @@ load(":coreutils.bzl", "COREUTILS_PLATFORMS", "coreutils_platform_repo", "coreut
 load(":tar.bzl", "BSDTAR_PLATFORMS", "bsdtar_binary_repo", "tar_toolchains_repo")
 load(":yq.bzl", "YQ_PLATFORMS", "yq_host_alias_repo", "yq_platform_repo", "yq_toolchains_repo", _DEFAULT_YQ_VERSION = "DEFAULT_YQ_VERSION")
 
-_NODE_VERSION = "22.11.0"
+_NODE_VERSION = "22.23.4"
 _NODE_VERSIONS = {
-    "darwin_arm64": ("node-v22.11.0-darwin-arm64.tar.gz", "node-v22.11.0-darwin-arm64", "2e89afe6f4e3aa6c7e21c560d8a0453d84807e97850bbb819b998531a22bdfde"),
-    "linux_amd64": ("node-v22.11.0-linux-x64.tar.xz", "node-v22.11.0-linux-x64", "83bf07dd343002a26211cf1fcd46a9d9534219aad42ee02847816940bf610a72"),
-    "linux_arm64": ("node-v22.11.0-linux-arm64.tar.xz", "node-v22.11.0-linux-arm64", "6031d04b98f59ff0f7cb98566f65b115ecd893d3b7870821171708cdbaf7ae6e"),
-    "linux_ppc64le": ("node-v22.11.0-linux-ppc64le.tar.xz", "node-v22.11.0-linux-ppc64le", "d1d49d7d611b104b6d616e18ac439479d8296aa20e3741432de0e85f4735a81e"),
-    "linux_s390x": ("node-v22.11.0-linux-s390x.tar.xz", "node-v22.11.0-linux-s390x", "f474ed77d6b13d66d07589aee1c2b9175be4c1b165483e608ac1674643064a99"),
-    "windows_amd64": ("node-v22.11.0-win-x64.zip", "node-v22.11.0-win-x64", "905373a059aecaf7f48c1ce10ffbd5334457ca00f678747f19db5ea7d256c236"),
+    "darwin_arm64": ("node-v22.23.4-darwin-arm64.tar.gz", "node-v22.23.4-darwin-arm64", "c9e1dbc748b33ed2d14f42445191ecaf14c56259c7a9a26d0042c49ec2b66428"),
+    "linux_amd64": ("node-v22.23.4-linux-x64.tar.xz", "node-v22.23.4-linux-x64", "1805bcd35e6815559bd2eb97db438d3fdb0eb3a5e6a977b7c1badca76337e9ce"),
+    "linux_arm64": ("node-v22.23.4-linux-arm64.tar.xz", "node-v22.23.4-linux-arm64", "6287aa46b6c375d816e63ae66d024fbbfd70404825aabdfdf898a970871d2f4b"),
+    "linux_ppc64le": ("node-v22.23.4-linux-ppc64le.tar.xz", "node-v22.23.4-linux-ppc64le", "e4732f45e0cad787d6ba70c4eb6db45dbdb3f286f67dee429dbc6b4ff36eac43"),
+    "linux_s390x": ("node-v22.23.4-linux-s390x.tar.xz", "node-v22.23.4-linux-s390x", "07ae074fc218fc42e24c939df0dc0209443fb08eb5b2ed6d26b1bf6757781fff"),
+    "windows_amd64": ("node-v22.23.4-win-x64.zip", "node-v22.23.4-win-x64", "cbc74b5e0982c9dbb41525fd8fb5dcd32fbee237863f7829072f4639a1ce5f20"),
 }
 
 # Helper function used in WORKSPACE.

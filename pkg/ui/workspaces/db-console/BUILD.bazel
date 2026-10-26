@@ -200,6 +200,11 @@ jest_test(
         # Populate the global.gc() function during JS execution:
         # https://github.com/v8/v8/blob/5fe0aa3bc79c0a9d3ad546b79211f07105f09585/src/flags/flag-definitions.h#L1484-L1487
         "--node_options=--expose-gc",
+        # Jest 27 only falls back to import() on ERR_REQUIRE_ESM, so it can't
+        # load rules_jest's generated config (an ESM file with top-level await)
+        # once Node 22.12+ lets require() load ESM:
+        # https://nodejs.org/docs/latest-v22.x/api/modules.html#loading-ecmascript-modules-using-require
+        "--node_options=--no-experimental-require-module",
         # Force jest workers to collect garbage after each suite: https://jestjs.io/docs/27.x/cli#--logheapusage
         "--logHeapUsage",
         "--ci",

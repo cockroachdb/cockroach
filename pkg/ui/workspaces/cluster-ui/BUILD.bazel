@@ -131,6 +131,11 @@ jest_test(
     name = "jest",
     size = "enormous",
     args = [
+        # Jest 27 only falls back to import() on ERR_REQUIRE_ESM, so it can't
+        # load rules_jest's generated config (an ESM file with top-level await)
+        # once Node 22.12+ lets require() load ESM:
+        # https://nodejs.org/docs/latest-v22.x/api/modules.html#loading-ecmascript-modules-using-require
+        "--node_options=--no-experimental-require-module",
         "--ci",
     ],
     chdir = package_name(),
