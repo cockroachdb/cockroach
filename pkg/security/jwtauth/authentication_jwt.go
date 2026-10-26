@@ -12,6 +12,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -19,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -98,6 +100,12 @@ type jwtAuthenticator struct {
 	}
 	// clusterUUID is used to check the validity of the enterprise license. It is set once at initialization.
 	clusterUUID uuid.UUID
+	// jwksCache caches auto-fetched JWK sets per issuer for this node so that
+	// steady-state logins do not touch the network. It is nil until
+	// ConfigureJWTAuth installs one via RebuildJWKSCache. It is swapped atomically
+	// so a configuration change can replace it without racing a login that already
+	// loaded the previous cache.
+	jwksCache atomic.Pointer[JWKSCache]
 }
 
 // jwtAuthenticatorConf contains all the values to configure JWT authentication. These values are copied from
@@ -228,7 +236,7 @@ func (authenticator *jwtAuthenticator) ValidateJWTLogin(
 	var jwkSet jwk.Set
 	// If auto-fetch is enabled, fetch the JWKS remotely from the issuer's well known jwks URI.
 	if conf.jwksAutoFetchEnabled {
-		jwkSet, err = authenticator.remoteFetchJWKS(ctx, tokenIssuer, conf)
+		jwkSet, err = authenticator.remoteFetchJWKS(ctx, tokenIssuer, keyIDFromToken(tokenBytes), conf)
 		if err != nil {
 			return redact.Sprintf("unable to fetch jwks: %v", err),
 				errors.Newf("JWT authentication: unable to validate token")
@@ -436,7 +444,7 @@ func (a *jwtAuthenticator) VerifyAndExtractIssuer(
 	// Fetch the JWKS (auto-fetch or static) for that issuer.
 	var set jwk.Set
 	if conf.jwksAutoFetchEnabled {
-		set, err = a.remoteFetchJWKS(ctx, issuer, conf)
+		set, err = a.remoteFetchJWKS(ctx, issuer, keyIDFromToken(tokenBytes), conf)
 		if err != nil {
 			return "", redact.Sprintf("JWT authentication: unable to fetch jwks: %v", err),
 				errors.New("JWT authentication: unable to validate token")
@@ -460,12 +468,19 @@ func (a *jwtAuthenticator) VerifyAndExtractIssuer(
 	return issuer, "", nil
 }
 
-// remoteFetchJWKS fetches the JWKS URI from the provided issuer URL. It reads
-// the issuer configuration and HTTP client from the supplied snapshot so it can
-// run without holding the authenticator lock.
+// remoteFetchJWKS returns the JWKS for the provided issuer. When a per-node
+// JWKS cache is installed, it serves the set from memory (refreshed in the
+// background), passing kid so the cache can force an early refresh if the token
+// presents a rotated key. Otherwise it falls back to fetching the JWKS on every
+// call. kid may be empty. Issuer configuration and the HTTP client are read from
+// the supplied snapshot so the call runs without holding the authenticator lock.
 func (authenticator *jwtAuthenticator) remoteFetchJWKS(
-	ctx context.Context, issuerURL string, conf jwtAuthenticatorConf,
+	ctx context.Context, issuerURL string, kid string, conf jwtAuthenticatorConf,
 ) (jwk.Set, error) {
+	if cache := authenticator.jwksCache.Load(); cache != nil {
+		return cache.KeySet(ctx, &conf.issuersConf, issuerURL, kid)
+	}
+
 	var jwksURI string
 	// if JWKS URI is configured in JWTAuthIssuersConfig use that instead of URL
 	// from issuer's well-known endpoint
@@ -582,6 +597,76 @@ var getHttpResponse = func(
 	return body, nil
 }
 
+// jwtCacheHTTPClient builds the stable HTTP client that the per-node JWKS cache
+// uses for OIDC discovery and JWKS fetches. Unlike the per-login client in
+// reloadConfig, this one lives for the life of the cache and is rebuilt only
+// when the custom CA or client timeout changes. It is a package-level variable
+// so that tests can substitute a client which serves fixtures without real
+// network access.
+var jwtCacheHTTPClient = func(st *cluster.Settings) *httputil.Client {
+	clientTimeout := JWTAuthClientTimeout.Get(&st.SV)
+	return httputil.NewClient(
+		httputil.WithClientTimeout(clientTimeout),
+		httputil.WithDialerTimeout(clientTimeout),
+		httputil.WithCustomCAPEM(JWTAuthIssuerCustomCA.Get(&st.SV)),
+	)
+}
+
+// RebuildJWKSCache installs a fresh per-node JWKS cache that uses httpClient for
+// discovery and JWKS fetches, replacing any previous cache (whose background
+// refresh goroutine is stopped). ConfigureJWTAuth calls this once at
+// construction and again whenever a setting that affects fetching changes
+// (issuer config, custom CA, client timeout), so keys are never served under
+// stale configuration. serverCtx bounds the cache's lifetime.
+func (authenticator *jwtAuthenticator) RebuildJWKSCache(
+	serverCtx context.Context, httpClient *httputil.Client,
+) error {
+	nc, err := NewJWKSCache(serverCtx, httpClient)
+	if err != nil {
+		return err
+	}
+	if old := authenticator.jwksCache.Swap(nc); old != nil {
+		old.Close()
+	}
+	return nil
+}
+
+// getJWKSURIFromWellKnown fetches the issuer's OpenID Connect discovery document
+// using the provided client and returns its jwks_uri. It is the client-explicit
+// form of getJWKSURI used by the per-node JWKS cache, which owns a long-lived
+// HTTP client distinct from the per-login client bound to the authenticator.
+func getJWKSURIFromWellKnown(
+	ctx context.Context, client *httputil.Client, issuerURL string,
+) (string, error) {
+	endpoint := getOpenIdConfigEndpoint(issuerURL)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return "", errors.Newf("JWT authentication: HTTP request failed: GET %s returned %s", endpoint, resp.Status)
+	}
+	var config struct {
+		JWKSUri string `json:"jwks_uri"`
+	}
+	if err := json.Unmarshal(body, &config); err != nil {
+		return "", err
+	}
+	if config.JWKSUri == "" {
+		return "", errors.Newf("no JWKS URI found in OpenID configuration")
+	}
+	return config.JWKSUri, nil
+}
+
 // ConfigureJWTAuth initializes and returns a jwtAuthenticator. It also sets up
 // listeners so that the jwtAuthenticator's config is updated when the cluster
 // settings values change.
@@ -590,10 +675,26 @@ func ConfigureJWTAuth(
 	ambientCtx log.AmbientContext,
 	st *cluster.Settings,
 	clusterUUID uuid.UUID,
+	stopper *stop.Stopper,
 ) JWTVerifier {
 	authenticator := jwtAuthenticator{}
 	authenticator.clusterUUID = clusterUUID
 	authenticator.reloadConfig(serverCtx, st)
+
+	// Build the per-node JWKS cache so steady-state logins are served from memory
+	// instead of fetching on every login. The cache's background refresh goroutine
+	// is bound to the stopper (not serverCtx, which may be a per-connection context
+	// via the pgwire lazy initialization), so it lives for the node's lifetime and
+	// stops on shutdown.
+	cacheCtx, _ := stopper.WithCancelOnQuiesce(context.Background()) // nolint:quiesce
+	rebuildCache := func(ctx context.Context) {
+		if err := authenticator.RebuildJWKSCache(cacheCtx, jwtCacheHTTPClient(st)); err != nil {
+			log.Ops.Warningf(ctx,
+				"failed to build JWKS cache; existing cache, if any, remains active: %v", err)
+		}
+	}
+	rebuildCache(serverCtx)
+
 	JWTAuthAudience.SetOnChange(&st.SV, func(ctx context.Context) {
 		authenticator.reloadConfig(ambientCtx.AnnotateCtx(ctx), st)
 	})
@@ -615,5 +716,14 @@ func ConfigureJWTAuth(
 	JWKSAutoFetchEnabled.SetOnChange(&st.SV, func(ctx context.Context) {
 		authenticator.reloadConfig(ambientCtx.AnnotateCtx(ctx), st)
 	})
+
+	// Rebuild the cache when a setting that affects fetching changes: the custom
+	// CA and client timeout are baked into the cache's HTTP client, and an issuer
+	// config change may point at different JWKS endpoints. SetOnChange appends, so
+	// these run in addition to the reload callbacks above.
+	cacheOnChange := func(ctx context.Context) { rebuildCache(ambientCtx.AnnotateCtx(ctx)) }
+	JWTAuthIssuerCustomCA.SetOnChange(&st.SV, cacheOnChange)
+	JWTAuthClientTimeout.SetOnChange(&st.SV, cacheOnChange)
+	JWTAuthIssuersConfig.SetOnChange(&st.SV, cacheOnChange)
 	return &authenticator
 }

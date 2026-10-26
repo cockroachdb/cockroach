@@ -50,7 +50,7 @@ func TestAuthorizationJWT_ExtractGroups(t *testing.T) {
 	JWTAuthZEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 	JWTAuthGroupClaim.Override(ctx, &s.ClusterSettings().SV, "groups")
 
-	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
+	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID(), s.Stopper())
 
 	type testCase struct {
 		name            string
@@ -142,7 +142,7 @@ func TestAuthorizationJWT_UserinfoErrorPaths(t *testing.T) {
 	JWTAuthZEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 	JWTAuthGroupClaim.Override(ctx, &s.ClusterSettings().SV, "groups")
 
-	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
+	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID(), s.Stopper())
 
 	// Helper: build a JWT with no "groups" claim so ExtractGroups must call user-info.
 	makeToken := func(issuer string) []byte {

@@ -220,6 +220,19 @@ func (conf *issuerURLConf) getJWKSURI(issuer string) (jwksURI string, err error)
 	return jwksURI, nil
 }
 
+// HasExplicitJWKSMap reports whether an explicit issuer-to-JWKS-URI mapping is
+// configured. When true, GetJWKSURI resolves the URI directly without OIDC
+// discovery. Used by the per-node JWKS cache.
+func (conf *issuerURLConf) HasExplicitJWKSMap() bool {
+	return conf.ijMap != nil && len(conf.ijMap.Mappings) > 0
+}
+
+// GetJWKSURI returns the explicitly-configured JWKS URI for issuer. It is the
+// exported form of getJWKSURI used by the per-node JWKS cache.
+func (conf *issuerURLConf) GetJWKSURI(issuer string) (string, error) {
+	return conf.getJWKSURI(issuer)
+}
+
 // issuerJWKSMap is a struct that defines a valid JSON body for the
 // OIDCRedirectURL cluster setting in multi-region environments.
 type issuerJWKSMap struct {

@@ -769,7 +769,7 @@ func authJwtToken(
 ) (*AuthBehaviors, error) {
 	// Initialize the jwt verifier if it hasn't been already.
 	if jwtVerifier == nil {
-		jwtVerifier = jwtauth.ConfigureJWTAuth(sctx, execCfg.AmbientCtx, execCfg.Settings, execCfg.NodeInfo.LogicalClusterID())
+		jwtVerifier = jwtauth.ConfigureJWTAuth(sctx, execCfg.AmbientCtx, execCfg.Settings, execCfg.NodeInfo.LogicalClusterID(), execCfg.Stopper)
 	}
 	b := &AuthBehaviors{}
 	b.SetRoleMapper(UseProvidedIdentity)

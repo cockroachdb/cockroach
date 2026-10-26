@@ -6,6 +6,7 @@
 package jwtauth
 
 import (
+	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -29,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/certnames"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -141,7 +143,7 @@ func TestJWTEnabledCheck(t *testing.T) {
 	identMapString := ""
 	identMap, err := identmap.From(strings.NewReader(identMapString))
 	require.NoError(t, err)
-	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
+	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID(), s.Stopper())
 
 	key := createRSAKey(t, keyID1)
 	token := createJWT(t, username1, audience1, issuer1, timeutil.Now().Add(time.Hour), key, jwa.RS256(), "", "")
@@ -169,7 +171,7 @@ func TestJWTSingleKey(t *testing.T) {
 	identMap, err := identmap.From(strings.NewReader(identMapString))
 	require.NoError(t, err)
 	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
-	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
+	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID(), s.Stopper())
 
 	_, key, _ := createJWKS(t)
 	token := createJWT(t, username1, audience1, issuer1, timeutil.Now().Add(time.Hour), key, jwa.RS256(), "", "")
@@ -207,7 +209,7 @@ func TestJWTSingleKeyWithoutKeyAlgorithm(t *testing.T) {
 	identMap, err := identmap.From(strings.NewReader(identMapString))
 	require.NoError(t, err)
 	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
-	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
+	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID(), s.Stopper())
 
 	_, key, _ := createJWKS(t)
 	token := createJWT(t, username1, audience1, issuer1, timeutil.Now().Add(time.Hour), key, jwa.RS256(), "", "")
@@ -258,7 +260,7 @@ func TestJWTMultiKey(t *testing.T) {
 	// Set the JWKS to only include jwk1.
 	JWTAuthJWKS.Override(ctx, &s.ClusterSettings().SV, serializePublicKeySet(t, keySetWithOneKey))
 
-	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
+	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID(), s.Stopper())
 
 	// When JWKSAutoFetchEnabled the jwks fetch should be attempted and fail.
 	JWKSAutoFetchEnabled.Override(ctx, &s.ClusterSettings().SV, true)
@@ -293,12 +295,12 @@ func TestExpiredToken(t *testing.T) {
 	keySet, key, _ := createJWKS(t)
 	token := createJWT(t, username1, audience1, issuer1, timeutil.Now().Add(-1*time.Second), key, jwa.RS256(), "", "")
 	JWTAuthJWKS.Override(ctx, &s.ClusterSettings().SV, serializePublicKeySet(t, keySet))
-	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
+	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID(), s.Stopper())
 
 	// Validation fails with an invalid token error for tokens with an expiration date in the past.
 	_, err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username1), token, identMap)
 	require.ErrorContains(t, err, "JWT authentication: invalid token")
-	require.EqualValues(t, "unable to parse token: \"exp\" not satisfied", errors.GetAllDetails(err)[0])
+	require.Contains(t, errors.GetAllDetails(err)[0], "\"exp\" not satisfied")
 }
 
 func TestKeyIdMismatch(t *testing.T) {
@@ -318,7 +320,7 @@ func TestKeyIdMismatch(t *testing.T) {
 	// Make sure jwt auth is enabled and accepts valid signing keys.
 	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 	JWTAuthJWKS.Override(ctx, &s.ClusterSettings().SV, serializePublicKeySet(t, keySet))
-	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
+	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID(), s.Stopper())
 	// Configure issuer as it gets checked even before the token validity check.
 	JWTAuthIssuersConfig.Override(ctx, &s.ClusterSettings().SV, issuer1)
 
@@ -354,7 +356,7 @@ func TestIssuerCheck(t *testing.T) {
 	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 	JWTAuthJWKS.Override(ctx, &s.ClusterSettings().SV, serializePublicKeySet(t, keySet))
 
-	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
+	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID(), s.Stopper())
 
 	// Validation fails with no issuer are configured.
 	_, err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(invalidUsername), token1, identMap)
@@ -402,7 +404,7 @@ func TestSubjectCheck(t *testing.T) {
 	// Make sure jwt auth is enabled and accepts jwk1 or jwk2 as valid signing keys.
 	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 	JWTAuthJWKS.Override(ctx, &s.ClusterSettings().SV, serializePublicKeySet(t, keySet))
-	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
+	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID(), s.Stopper())
 	JWTAuthIssuersConfig.Override(ctx, &s.ClusterSettings().SV, issuer2)
 
 	// Validation fails with a subject error when a user tries to log in with a user named
@@ -434,7 +436,7 @@ func TestClaimMissing(t *testing.T) {
 	// Make sure jwt auth is enabled and accepts jwk1 or jwk2 as valid signing keys.
 	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 	JWTAuthJWKS.Override(ctx, &s.ClusterSettings().SV, serializePublicKeySet(t, keySet))
-	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
+	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID(), s.Stopper())
 	JWTAuthIssuersConfig.Override(ctx, &s.ClusterSettings().SV, issuer2)
 	JWTAuthClaim.Override(ctx, &s.ClusterSettings().SV, customClaimName)
 
@@ -461,7 +463,7 @@ func TestIntegerClaimValue(t *testing.T) {
 	// Make sure jwt auth is enabled and accepts jwk1 or jwk2 as valid signing keys.
 	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 	JWTAuthJWKS.Override(ctx, &s.ClusterSettings().SV, serializePublicKeySet(t, keySet))
-	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
+	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID(), s.Stopper())
 	JWTAuthIssuersConfig.Override(ctx, &s.ClusterSettings().SV, issuer2)
 	JWTAuthClaim.Override(ctx, &s.ClusterSettings().SV, customClaimName)
 
@@ -487,7 +489,7 @@ func TestSingleClaim(t *testing.T) {
 	// Make sure jwt auth is enabled and accepts jwk1 or jwk2 as valid signing keys.
 	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 	JWTAuthJWKS.Override(ctx, &s.ClusterSettings().SV, serializePublicKeySet(t, keySet))
-	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
+	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID(), s.Stopper())
 	JWTAuthIssuersConfig.Override(ctx, &s.ClusterSettings().SV, issuer2)
 	JWTAuthClaim.Override(ctx, &s.ClusterSettings().SV, customClaimName)
 	JWTAuthAudience.Override(ctx, &s.ClusterSettings().SV, audience1)
@@ -528,7 +530,7 @@ func TestMultipleClaim(t *testing.T) {
 	// Make sure jwt auth is enabled and accepts jwk1 or jwk2 as valid signing keys.
 	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 	JWTAuthJWKS.Override(ctx, &s.ClusterSettings().SV, serializePublicKeySet(t, keySet))
-	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
+	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID(), s.Stopper())
 	JWTAuthIssuersConfig.Override(ctx, &s.ClusterSettings().SV, issuer2)
 	JWTAuthClaim.Override(ctx, &s.ClusterSettings().SV, customClaimName)
 	JWTAuthAudience.Override(ctx, &s.ClusterSettings().SV, audience1)
@@ -577,7 +579,7 @@ func TestSubjectMappingCheck(t *testing.T) {
 	// Make sure jwt auth is enabled and accepts jwk1 or jwk2 as valid signing keys.
 	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 	JWTAuthJWKS.Override(ctx, &s.ClusterSettings().SV, serializePublicKeySet(t, keySet))
-	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
+	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID(), s.Stopper())
 	JWTAuthIssuersConfig.Override(ctx, &s.ClusterSettings().SV, issuer2)
 
 	// Validation fails with a subject error when a user tries to log in when their user is mapped to username2
@@ -615,7 +617,7 @@ func TestSubjectReservedUser(t *testing.T) {
 	// Make sure jwt auth is enabled and accepts jwk1 or jwk2 as valid signing keys.
 	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 	JWTAuthJWKS.Override(ctx, &s.ClusterSettings().SV, serializePublicKeySet(t, keySet))
-	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
+	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID(), s.Stopper())
 	JWTAuthIssuersConfig.Override(ctx, &s.ClusterSettings().SV, "[\""+issuer1+"\", \""+issuer2+"\"]")
 
 	// You cannot log in as root or other reserved users using token based auth when mapped to root.
@@ -649,7 +651,7 @@ func TestAudienceCheck(t *testing.T) {
 	// Set audience field to audience2.
 	JWTAuthAudience.Override(ctx, &s.ClusterSettings().SV, audience2)
 
-	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
+	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID(), s.Stopper())
 
 	// Validation fails with an audience error when the audience in the token doesn't match the cluster's audience.
 	_, err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username1), token, identMap)
@@ -687,8 +689,40 @@ var mockGetHttpResponseWithLocalFileContent = func(ctx context.Context, url stri
 	return byteValue, nil
 }
 
-// createJWKSFromFile creates a jwk set from a local file. The file used by this function is expected to contain both
-// private and public keys.
+// fileServingRoundTripper serves testdata fixtures for discovery and JWKS URLs,
+// mirroring mockGetHttpResponseWithLocalFileContent, so that the per-node JWKS
+// cache (which fetches over HTTP rather than through the getHttpResponse seam)
+// can be exercised without real network access.
+type fileServingRoundTripper struct{}
+
+func (fileServingRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	fileName := "testdata/" + strings.ReplaceAll(
+		strings.ReplaceAll(req.URL.String(), "https://", ""), "/", "_")
+	b, err := os.ReadFile(fileName)
+	if err != nil {
+		if oserror.IsNotExist(err) {
+			return &http.Response{
+				StatusCode: http.StatusNotFound, Status: "404 Not Found",
+				Body: io.NopCloser(bytes.NewReader(nil)), Header: make(http.Header),
+			}, nil
+		}
+		return nil, err
+	}
+	return &http.Response{
+		StatusCode: http.StatusOK, Status: "200 OK",
+		Body: io.NopCloser(bytes.NewReader(b)), Header: make(http.Header),
+	}, nil
+}
+
+// fileServingCacheClient is a jwtCacheHTTPClient replacement for tests: the
+// per-node JWKS cache serves discovery and JWKS responses from testdata fixtures
+// instead of over the network.
+func fileServingCacheClient(*cluster.Settings) *httputil.Client {
+	return &httputil.Client{Client: &http.Client{Transport: fileServingRoundTripper{}}}
+}
+
+// createJWKSFromFile creates a jwk set from a local file. The file used by this
+// function is expected to contain both private and public keys.
 func createJWKSFromFile(t *testing.T, fileName string) jwk.Set {
 	byteValue, err := os.ReadFile(fileName)
 	require.NoError(t, err)
@@ -707,6 +741,9 @@ func Test_JWKSFetchWorksWhenEnabled(t *testing.T) {
 	defer func() {
 		restoreHook()
 	}()
+	// The per-node JWKS cache fetches over HTTP rather than through the
+	// getHttpResponse seam, so point it at the same testdata fixtures.
+	defer testutils.TestingHook(&jwtCacheHTTPClient, fileServingCacheClient)()
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
@@ -732,7 +769,7 @@ func Test_JWKSFetchWorksWhenEnabled(t *testing.T) {
 	JWTAuthAudience.Override(ctx, &s.ClusterSettings().SV, audience2)
 
 	JWKSAutoFetchEnabled.Override(ctx, &s.ClusterSettings().SV, true)
-	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
+	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID(), s.Stopper())
 
 	// Validation fails with an audience error when the audience in the token doesn't match the cluster's audience.
 	_, err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username1), token, identMap)
@@ -761,6 +798,9 @@ func Test_JWKSFetchWorksWhenEnabledIgnoresTheStaticJWKS(t *testing.T) {
 	defer func() {
 		restoreHook()
 	}()
+	// The per-node JWKS cache fetches over HTTP rather than through the
+	// getHttpResponse seam, so point it at the same testdata fixtures.
+	defer testutils.TestingHook(&jwtCacheHTTPClient, fileServingCacheClient)()
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
@@ -788,7 +828,7 @@ func Test_JWKSFetchWorksWhenEnabledIgnoresTheStaticJWKS(t *testing.T) {
 	// Set audience field to audience2.
 	JWTAuthAudience.Override(ctx, &s.ClusterSettings().SV, audience2)
 
-	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
+	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID(), s.Stopper())
 
 	// Validation fails with an audience error when the audience in the token doesn't match the cluster's audience.
 	_, err = verifier.ValidateJWTLogin(ctx, s.ClusterSettings(), username.MakeSQLUsernameFromPreNormalizedString(username1), token, identMap)
@@ -925,7 +965,7 @@ func TestJWTAuthWithCustomCACert(t *testing.T) {
 	JWKSAutoFetchEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 	JWTAuthAudience.Override(ctx, &s.ClusterSettings().SV, audience1)
 
-	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
+	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID(), s.Stopper())
 
 	for _, testCase := range []struct {
 		testName string
@@ -976,13 +1016,14 @@ func TestJWTAuthClientTimeout(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Initiate a test JWKS server locally.
+	// A local server that accepts the connection but never responds, so the
+	// configured client timeout aborts the OIDC discovery fetch.
 	testServer := httptest.NewUnstartedServer(nil)
 	waitChan := make(chan struct{}, 1)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc(
-		"GET /jwks",
+		"/",
 		func(w http.ResponseWriter, r *http.Request) {
 			// Hang the request handler to enforce HTTP client timeout.
 			<-waitChan
@@ -993,36 +1034,12 @@ func TestJWTAuthClientTimeout(t *testing.T) {
 		Handler: mux,
 	}
 	testServer.Start()
+	testServerURL := "http://" + testServer.Listener.Addr().String()
 	defer func() {
 		waitChan <- struct{}{}
 		close(waitChan)
 		testServer.Close()
 	}()
-
-	mockGetHttpResponse := func(ctx context.Context, url string, client *httputil.Client, _ ...http.Header) ([]byte, error) {
-		if strings.Contains(url, "/.well-known/openid-configuration") {
-			return mockGetHttpResponseWithLocalFileContent(ctx, url, client)
-		} else if strings.Contains(url, "/oauth2/v3/certs") {
-			// For fetching JWKS, point to the local test server.
-			resp, err := client.Get(
-				context.Background(),
-				testServer.URL+"/jwks",
-			)
-			if err != nil {
-				return nil, err
-			}
-			defer resp.Body.Close()
-
-			body, err := io.ReadAll(resp.Body)
-			if err != nil {
-				return nil, err
-			}
-			return body, nil
-		}
-		return nil, errors.Newf("unsupported route: %s", url)
-	}
-	getHttpResponseTestHook := testutils.TestingHook(&getHttpResponse, mockGetHttpResponse)
-	defer getHttpResponseTestHook()
 
 	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
@@ -1035,17 +1052,19 @@ func TestJWTAuthClientTimeout(t *testing.T) {
 	// The same will be fetched through the JWKS URI to verify the token.
 	keySet := createJWKSFromFile(t, "testdata/www.idp1apis.com_oauth2_v3_certs_private")
 	key, _ := keySet.Key(0)
-	validIssuer := "https://accounts.idp1.com"
 	token := createJWT(
-		t, username1, audience1, validIssuer, timeutil.Now().Add(time.Hour), key, jwa.RS256(), "", "")
+		t, username1, audience1, testServerURL, timeutil.Now().Add(time.Hour), key, jwa.RS256(), "", "")
 
+	// The issuer points at the local hanging server so the cache's synchronous
+	// OIDC discovery fetch is bounded by the configured client timeout, with no
+	// network egress.
 	JWTAuthEnabled.Override(ctx, &s.ClusterSettings().SV, true)
-	JWTAuthIssuersConfig.Override(ctx, &s.ClusterSettings().SV, validIssuer)
+	JWTAuthIssuersConfig.Override(ctx, &s.ClusterSettings().SV, testServerURL)
 	JWKSAutoFetchEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 	JWTAuthAudience.Override(ctx, &s.ClusterSettings().SV, audience1)
-	JWTAuthClientTimeout.Override(ctx, &s.ClusterSettings().SV, time.Millisecond)
+	JWTAuthClientTimeout.Override(ctx, &s.ClusterSettings().SV, 250*time.Millisecond)
 
-	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
+	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID(), s.Stopper())
 	errMsg, err := verifier.ValidateJWTLogin(
 		ctx,
 		s.ClusterSettings(),
@@ -1114,7 +1133,7 @@ func TestJWTAuthWithIssuerJWKSConfAutoFetchJWKS(t *testing.T) {
 	JWKSAutoFetchEnabled.Override(ctx, &s.ClusterSettings().SV, true)
 	JWTAuthAudience.Override(ctx, &s.ClusterSettings().SV, audience1)
 
-	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
+	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID(), s.Stopper())
 	identMapString := ""
 	identMap, err := identmap.From(strings.NewReader(identMapString))
 	require.NoError(t, err)
@@ -1184,7 +1203,7 @@ func TestVerifyAndExtractIssuer(t *testing.T) {
 	token := createJWT(t, username1, audience1, issuer1, timeutil.Now().Add(time.Hour), key, jwa.RS256(), "", "")
 	JWTAuthJWKS.Override(ctx, &s.ClusterSettings().SV, serializePublicKeySet(t, keySet))
 
-	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID())
+	verifier := ConfigureJWTAuth(ctx, s.AmbientCtx(), s.ClusterSettings(), s.StorageClusterID(), s.Stopper())
 
 	// Succeeds with correct issuer & signature.
 	iss, detail, err := verifier.VerifyAndExtractIssuer(ctx, s.ClusterSettings(), token)

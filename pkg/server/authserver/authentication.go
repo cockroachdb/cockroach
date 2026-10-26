@@ -693,6 +693,7 @@ func (s *authenticationServer) VerifyJWT(
 				execCfg.AmbientCtx,
 				execCfg.Settings,
 				execCfg.NodeInfo.LogicalClusterID(),
+				execCfg.Stopper,
 			)
 		}
 	})
