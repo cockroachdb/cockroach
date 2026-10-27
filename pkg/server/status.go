@@ -3563,13 +3563,23 @@ type iterateNodesOpts struct {
 	nodeFnTimeout  time.Duration
 	maxConcurrency uint64
 
-	// stopOnError stops the fan-out at the first node error: the error is passed
-	// to errorFn like any other node's, the remaining node work is cancelled, and
+	// stopOnError stops the fan-out at the first node error, once the fan-out
+	// has run for at least stopOnErrorMinFanoutRuntime: the error is passed to
+	// errorFn like any other node's, the remaining node work is cancelled, and
 	// iterateNodesExt returns nil. The caller's collected results then cover
-	// only some nodes. Defaults false, preserving the record-and-continue
-	// contract that all other callers rely on.
+	// only some nodes. A node error that arrives before the minimum runtime is
+	// still passed to errorFn, but the other nodes keep working (and their
+	// results and errors are still collected) until it elapses or every node
+	// finishes. Defaults false, preserving the record-and-continue contract that
+	// all other callers rely on.
 	stopOnError bool
 }
+
+// stopOnErrorMinFanoutRuntime is the minimum time an iterateNodesOpts.stopOnError
+// fan-out runs before a node error cancels the other nodes' work. It ensures
+// each fan-out makes progress on healthy nodes even when one node fails
+// quickly every time, e.g. because it is shutting down.
+var stopOnErrorMinFanoutRuntime = 5 * time.Minute
 
 // iterateNodesExt iterates nodeFn over all non-removed nodes with a max
 // concurrency of iterateNodesOpts.maxConcurreny. It then calls nodeResponse
@@ -3585,6 +3595,7 @@ func iterateNodesExt[Client, Result any](
 	errorFn func(nodeID roachpb.NodeID, nodeFnError error),
 	opts iterateNodesOpts,
 ) error {
+	fanoutStart := timeutil.Now()
 	nodeStatuses, err := iter.getAllNodes(ctx)
 	if err != nil {
 		return err
@@ -3656,21 +3667,38 @@ func iterateNodesExt[Client, Result any](
 		}
 	}
 
+	// stopTimer fires once a stopOnError teardown, deferred until the fan-out
+	// has run for stopOnErrorMinFanoutRuntime, is due. Its channel is nil, and
+	// so never selected, until a node error arms it.
+	var stopTimer timeutil.Timer
+	defer stopTimer.Stop()
+	var stopArmed bool
+
 	var resultErr error
 	for numNodes > 0 {
 		select {
 		case res := <-responseChan:
 			if res.err != nil {
 				errorFn(res.nodeID, res.err)
-				if opts.stopOnError {
-					// errorFn has already recorded the error, so return nil and let
-					// the caller surface it through its results with its type intact.
-					cancel()
-					return nil
+				if opts.stopOnError && !stopArmed {
+					remaining := stopOnErrorMinFanoutRuntime - timeutil.Since(fanoutStart)
+					if remaining <= 0 {
+						// errorFn has already recorded the error, so return nil and let
+						// the caller surface it through its results with its type intact.
+						cancel()
+						return nil
+					}
+					stopTimer.Reset(remaining)
+					stopArmed = true
 				}
 			} else {
 				responseFn(res.nodeID, res.response)
 			}
+		case <-stopTimer.C:
+			// A node error was recorded and the fan-out has now run for
+			// stopOnErrorMinFanoutRuntime.
+			cancel()
+			return nil
 		case <-ctx.Done():
 			resultErr = errors.Wrapf(ctx.Err(), "request of %s canceled before completion", errorCtx)
 		}
