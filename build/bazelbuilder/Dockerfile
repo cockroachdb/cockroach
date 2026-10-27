@@ -122,6 +122,28 @@ RUN case ${TARGETPLATFORM} in \
 # binaries build for platforms others than Linux.
 RUN ln -sf /usr/bin/llvm-nm /usr/bin/nm
 
+# Distrust emSign ECC Root CA - G3 and Comodo AAA Services root, the roots
+# behind the compromised eMudhra intermediates. Ubuntu dropped both in
+# ca-certificates 20260816 (USN-8944-1), but 20.04 only gets that update
+# through Ubuntu Pro, which this image isn't attached to. Deselecting them in
+# /etc/ca-certificates.conf removes them from /etc/ssl/certs, and keeps them
+# out if a later ca-certificates upgrade reruns update-ca-certificates.
+#
+# --fresh only reports additions to its hooks, so ca-certificates-java would
+# leave both roots in the keystore that the openjdk install built. Deleting
+# the keystore first makes the hook rebuild it from the remaining roots. The
+# checks fail the build rather than bake an image that still trusts either
+# root, or whose Java has no keystore at all.
+RUN removed='emSign_ECC_Root_CA_-_G3|Comodo_AAA_Services_root' \
+ && sed -i -E "s#^mozilla/(${removed})\.crt\$#!&#" /etc/ca-certificates.conf \
+ && test "$(grep -c -E "^!mozilla/(${removed})\.crt\$" /etc/ca-certificates.conf)" = 2 \
+ && rm -f /etc/ssl/certs/java/cacerts \
+ && update-ca-certificates --fresh \
+ && ! ls /etc/ssl/certs | grep -i -E "${removed}" \
+ && test -s /etc/ssl/certs/java/cacerts \
+ && aliases="$(keytool -list -keystore /etc/ssl/certs/java/cacerts -storepass changeit)" \
+ && ! printf '%s\n' "${aliases}" | grep -i -E "${removed}"
+
 RUN rm -rf /tmp/* /var/lib/apt/lists/*
 
 RUN case ${TARGETPLATFORM} in \
