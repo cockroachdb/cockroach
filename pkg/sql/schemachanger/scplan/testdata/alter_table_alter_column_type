@@ -617,14 +617,13 @@ PostCommitPhase stage 15 of 15 with 1 ValidationType op
     *scop.ValidateIndex
       IndexID: 4
       TableID: 104
-PostCommitNonRevertiblePhase stage 1 of 4 with 10 MutationType ops
+PostCommitNonRevertiblePhase stage 1 of 4 with 9 MutationType ops
   transitions:
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 1}, ABSENT], PUBLIC] -> ABSENT
     [[PrimaryIndex:{DescID: 104, IndexID: 1, ConstraintID: 1}, ABSENT], VALIDATED] -> DELETE_ONLY
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 3}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
     [[TemporaryIndex:{DescID: 104, IndexID: 5, ConstraintID: 5, SourceIndexID: 2}, TRANSIENT_ABSENT], TRANSIENT_DELETE_ONLY] -> TRANSIENT_ABSENT
     [[IndexColumn:{DescID: 104, ColumnID: 1, IndexID: 5}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
-    [[ColumnComputeExpression:{DescID: 104, ColumnID: 3, ReferencedColumnIDs: [2], Usage: ALTER_TYPE_USING}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
     [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 3}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
     [[IndexColumn:{DescID: 104, ColumnID: 3, IndexID: 5}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
   ops:
@@ -635,9 +634,6 @@ PostCommitNonRevertiblePhase stage 1 of 4 with 10 MutationType ops
     *scop.RemoveColumnFromIndex
       ColumnID: 1
       IndexID: 5
-      TableID: 104
-    *scop.RemoveColumnComputeExpression
-      ColumnID: 3
       TableID: 104
     *scop.RemoveColumnFromIndex
       ColumnID: 3
@@ -665,7 +661,7 @@ PostCommitNonRevertiblePhase stage 1 of 4 with 10 MutationType ops
     *scop.UpdateSchemaChangerJob
       IsNonCancelable: true
       JobID: 1
-PostCommitNonRevertiblePhase stage 2 of 4 with 15 MutationType ops
+PostCommitNonRevertiblePhase stage 2 of 4 with 16 MutationType ops
   transitions:
     [[Column:{DescID: 104, ColumnID: 2}, ABSENT], PUBLIC] -> WRITE_ONLY
     [[ColumnName:{DescID: 104, Name: c1, ColumnID: 2}, ABSENT], PUBLIC] -> ABSENT
@@ -679,6 +675,7 @@ PostCommitNonRevertiblePhase stage 2 of 4 with 15 MutationType ops
     [[IndexName:{DescID: 104, Name: act_pkey, IndexID: 4}, PUBLIC], ABSENT] -> PUBLIC
     [[Column:{DescID: 104, ColumnID: 3}, PUBLIC], WRITE_ONLY] -> PUBLIC
     [[ColumnName:{DescID: 104, Name: c1, ColumnID: 3}, PUBLIC], ABSENT] -> PUBLIC
+    [[ColumnComputeExpression:{DescID: 104, ColumnID: 3, ReferencedColumnIDs: [2], Usage: ALTER_TYPE_USING}, TRANSIENT_ABSENT], PUBLIC] -> TRANSIENT_ABSENT
   ops:
     *scop.MakePublicColumnWriteOnly
       ColumnID: 2
@@ -714,6 +711,9 @@ PostCommitNonRevertiblePhase stage 2 of 4 with 15 MutationType ops
     *scop.SetColumnName
       ColumnID: 3
       Name: c1
+      TableID: 104
+    *scop.RemoveColumnComputeExpression
+      ColumnID: 3
       TableID: 104
     *scop.MakeIndexAbsent
       IndexID: 3

@@ -13,6 +13,22 @@ SELECT count(*)=$successfulStageCount FROM t WHERE i > 3;
 ----
 true
 
+# Writes must preserve converted values until and after the column swap.
+stage-exec phase=PostCommitNonRevertiblePhase stage=:
+INSERT INTO t VALUES (10+$stageKey, '$stageKey');
+UPDATE t SET i = i WHERE i = 2;
+----
+
+stage-query phase=PostCommitNonRevertiblePhase stage=:
+SELECT count(*) = $successfulStageCount FROM t WHERE i > 3 AND j::INT8 = i - 10;
+----
+true
+
+stage-query phase=PostCommitNonRevertiblePhase stage=:
+SELECT j FROM t WHERE i = 2;
+----
+1
+
 test
 ALTER TABLE t ALTER COLUMN j SET DATA TYPE BIGINT USING j::BIGINT;
 ----

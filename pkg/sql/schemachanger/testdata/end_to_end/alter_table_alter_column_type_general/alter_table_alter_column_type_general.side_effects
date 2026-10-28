@@ -682,7 +682,7 @@ begin transaction #17
 validate forward indexes [4] in table #104
 commit transaction #17
 begin transaction #18
-## PostCommitNonRevertiblePhase stage 1 of 5 with 10 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 5 with 9 MutationType ops
 upsert descriptor #104
   ...
            statement: ALTER TABLE t ALTER COLUMN j SET DATA TYPE INT8 USING j::INT8
@@ -690,12 +690,6 @@ upsert descriptor #104
   -    revertible: true
        targetRanks: <redacted>
        targets: <redacted>
-  ...
-     mutations:
-     - column:
-  -      computeExpr: j::INT8
-         id: 3
-         name: crdb_internal_column_3_name_placeholder
   ...
          version: 4
        mutationId: 1
@@ -735,11 +729,11 @@ upsert descriptor #104
   -  version: "11"
   +  version: "12"
 persist all catalog changes to storage
-update progress of schema change job #1: "Pending: Updating schema metadata (13 operations) — PostCommitNonRevertible phase (stage 2 of 5)."
+update progress of schema change job #1: "Pending: Updating schema metadata (14 operations) — PostCommitNonRevertible phase (stage 2 of 5)."
 set schema change job #1 to non-cancellable
 commit transaction #18
 begin transaction #19
-## PostCommitNonRevertiblePhase stage 2 of 5 with 15 MutationType ops
+## PostCommitNonRevertiblePhase stage 2 of 5 with 16 MutationType ops
 upsert descriptor #104
   ...
          oid: 20
@@ -768,6 +762,7 @@ upsert descriptor #104
   ...
      mutations:
      - column:
+  -      computeExpr: j::INT8
   -      id: 3
   -      name: crdb_internal_column_3_name_placeholder
   +      id: 2

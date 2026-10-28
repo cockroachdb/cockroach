@@ -680,7 +680,7 @@ begin transaction #17
 validate forward indexes [4] in table #104
 commit transaction #17
 begin transaction #18
-## PostCommitNonRevertiblePhase stage 1 of 5 with 12 MutationType ops
+## PostCommitNonRevertiblePhase stage 1 of 5 with 9 MutationType ops
 upsert descriptor #104
   ...
            statement: ALTER TABLE t ALTER COLUMN j SET DATA TYPE STRING
@@ -688,17 +688,6 @@ upsert descriptor #104
   -    revertible: true
        targetRanks: <redacted>
        targets: <redacted>
-  ...
-     mutations:
-     - column:
-  -      computeExpr: j::STRING
-  +      defaultExpr: 99:::INT8
-         id: 3
-         name: crdb_internal_column_3_name_placeholder
-         nullable: true
-  +      onUpdateExpr: (-1):::INT8
-         pgAttributeNum: 2
-         type:
   ...
          version: 4
        mutationId: 1
@@ -738,11 +727,11 @@ upsert descriptor #104
   -  version: "11"
   +  version: "12"
 persist all catalog changes to storage
-update progress of schema change job #1: "Pending: Updating schema metadata (13 operations) — PostCommitNonRevertible phase (stage 2 of 5)."
+update progress of schema change job #1: "Pending: Updating schema metadata (16 operations) — PostCommitNonRevertible phase (stage 2 of 5)."
 set schema change job #1 to non-cancellable
 commit transaction #18
 begin transaction #19
-## PostCommitNonRevertiblePhase stage 2 of 5 with 15 MutationType ops
+## PostCommitNonRevertiblePhase stage 2 of 5 with 18 MutationType ops
 upsert descriptor #104
   ...
          width: 64
@@ -770,15 +759,17 @@ upsert descriptor #104
        defaultColumnId: 2
        name: primary
   ...
+     mutations:
      - column:
-         defaultExpr: 99:::INT8
+  -      computeExpr: j::STRING
   -      id: 3
   -      name: crdb_internal_column_3_name_placeholder
+  +      defaultExpr: 99:::INT8
   +      id: 2
   +      name: crdb_internal_column_2_name_placeholder
          nullable: true
-         onUpdateExpr: (-1):::INT8
   -      pgAttributeNum: 2
+  +      onUpdateExpr: (-1):::INT8
          type:
   -        family: StringFamily
   -        oid: 25

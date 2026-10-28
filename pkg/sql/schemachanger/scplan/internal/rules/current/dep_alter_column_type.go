@@ -78,4 +78,31 @@ func init() {
 			}
 		},
 	)
+
+	// The transient expression must keep converting concurrent writes until the
+	// replacement column becomes public. Removing it in an earlier stage would
+	// let writes populate the write-only column with a default instead.
+	registerDepRule(
+		"transient column compute expression is removed when the column becomes public",
+		scgraph.SameStagePrecedence,
+		"transient-column-compute", "column",
+		func(from, to NodeVars) rel.Clauses {
+			publicNode := rel.Var("public-transient-column-compute-node")
+			return rel.Clauses{
+				from.Type((*scpb.ColumnComputeExpression)(nil)),
+				to.Type((*scpb.Column)(nil)),
+				JoinOnColumnID(from, to, "table-id", "col-id"),
+				from.El.AttrEq(screl.Usage, scpb.ColumnComputeExpression_ALTER_TYPE_USING),
+				from.TargetStatus(scpb.TransientAbsent),
+				to.TargetStatus(scpb.ToPublic),
+				from.CurrentStatus(scpb.Status_TRANSIENT_ABSENT),
+				to.CurrentStatus(scpb.Status_PUBLIC),
+				// An older version may already have removed the expression. Do not
+				// require the two transitions to share a stage in that case.
+				publicNode.Type((*screl.Node)(nil)),
+				publicNode.AttrEqVar(screl.Target, from.Target),
+				publicNode.AttrEq(screl.CurrentStatus, scpb.Status_PUBLIC),
+			}
+		},
+	)
 }

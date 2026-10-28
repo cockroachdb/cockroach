@@ -5617,6 +5617,24 @@ deprules
     - $index-Node[CurrentStatus] = BACKFILLED
     - joinTargetNode($temp, $temp-Target, $temp-Node)
     - joinTargetNode($index, $index-Target, $index-Node)
+- name: transient column compute expression is removed when the column becomes public
+  from: transient-column-compute-Node
+  kind: SameStagePrecedence
+  to: column-Node
+  query:
+    - $transient-column-compute[Type] = '*scpb.ColumnComputeExpression'
+    - $column[Type] = '*scpb.Column'
+    - joinOnColumnID($transient-column-compute, $column, $table-id, $col-id)
+    - $transient-column-compute[Usage] = ALTER_TYPE_USING
+    - $transient-column-compute-Target[TargetStatus] = TRANSIENT_ABSENT
+    - $column-Target[TargetStatus] = PUBLIC
+    - $transient-column-compute-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - $column-Node[CurrentStatus] = PUBLIC
+    - $public-transient-column-compute-node[Type] = '*screl.Node'
+    - $public-transient-column-compute-node[Target] = $transient-column-compute-Target
+    - $public-transient-column-compute-node[CurrentStatus] = PUBLIC
+    - joinTargetNode($transient-column-compute, $transient-column-compute-Target, $transient-column-compute-Node)
+    - joinTargetNode($column, $column-Target, $column-Node)
 - name: trigger public before its dependents
   from: trigger-Node
   kind: Precedence
@@ -11474,6 +11492,24 @@ deprules
     - $index-Node[CurrentStatus] = BACKFILLED
     - joinTargetNode($temp, $temp-Target, $temp-Node)
     - joinTargetNode($index, $index-Target, $index-Node)
+- name: transient column compute expression is removed when the column becomes public
+  from: transient-column-compute-Node
+  kind: SameStagePrecedence
+  to: column-Node
+  query:
+    - $transient-column-compute[Type] = '*scpb.ColumnComputeExpression'
+    - $column[Type] = '*scpb.Column'
+    - joinOnColumnID($transient-column-compute, $column, $table-id, $col-id)
+    - $transient-column-compute[Usage] = ALTER_TYPE_USING
+    - $transient-column-compute-Target[TargetStatus] = TRANSIENT_ABSENT
+    - $column-Target[TargetStatus] = PUBLIC
+    - $transient-column-compute-Node[CurrentStatus] = TRANSIENT_ABSENT
+    - $column-Node[CurrentStatus] = PUBLIC
+    - $public-transient-column-compute-node[Type] = '*screl.Node'
+    - $public-transient-column-compute-node[Target] = $transient-column-compute-Target
+    - $public-transient-column-compute-node[CurrentStatus] = PUBLIC
+    - joinTargetNode($transient-column-compute, $transient-column-compute-Target, $transient-column-compute-Node)
+    - joinTargetNode($column, $column-Target, $column-Node)
 - name: trigger public before its dependents
   from: trigger-Node
   kind: Precedence
