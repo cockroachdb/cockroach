@@ -6274,10 +6274,10 @@ def go_deps():
         name = "com_github_minio_minlz",
         build_file_proto_mode = "disable_global",
         importpath = "github.com/minio/minlz",
-        sha256 = "eebf4da3a42da834d650af4e620e879f35b3a4aabb5c41dce417a0bbe6bac859",
-        strip_prefix = "github.com/minio/minlz@v1.0.1-0.20250507153514-87eb42fe8882",
+        sha256 = "10d406ae7bda5474e4149a8f5f2311ab51856bb4b343f42195b7fa7049af9b0b",
+        strip_prefix = "github.com/cockroachdb/minlz@v0.0.0-20261030213301-696fbb42faa7",
         urls = [
-            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/minio/minlz/com_github_minio_minlz-v1.0.1-0.20250507153514-87eb42fe8882.zip",
+            "https://storage.googleapis.com/cockroach-godeps/gomod/github.com/cockroachdb/minlz/com_github_cockroachdb_minlz-v0.0.0-20261030213301-696fbb42faa7.zip",
         ],
     )
     go_repository(

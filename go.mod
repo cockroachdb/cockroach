@@ -517,3 +517,8 @@ replace github.com/prometheus/client_golang => github.com/cockroachdb/client_gol
 replace github.com/snowflakedb/gosnowflake => github.com/cockroachdb/gosnowflake v1.6.25
 
 replace github.com/knz/strtime => github.com/cockroachdb/strtime v0.0.0-20250401230151-b9140bbb29b5
+
+// The fork is v1.0.1 plus the fix for https://github.com/minio/minlz/issues/75
+// (silent corruption in the pure-Go encoder, used on arm64 and s390x). The
+// upstream fix is only released in versions that require a newer Go.
+replace github.com/minio/minlz => github.com/cockroachdb/minlz v0.0.0-20261030213301-696fbb42faa7
