@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -355,6 +356,66 @@ func TestReplicaChecksumSHA512(t *testing.T) {
 	fmt.Fprintf(sb, "stats: %s\n", string(json))
 
 	echotest.Require(t, sb.String(), datapathutils.TestDataPath(t, "replica_consistency_sha512"))
+}
+
+// TestCalcReplicaDigestValueChecksums checks that a full digest counts the
+// values that fail checksum verification, and that verification doesn't change
+// the digest.
+func TestCalcReplicaDigestValueChecksums(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	eng := storage.NewDefaultInMemForTesting()
+	defer eng.Close()
+
+	digest := func(verify bool) *ReplicaDigest {
+		st := cluster.MakeTestingClusterSettings()
+		ConsistencyCheckVerifyValueChecksums.Override(ctx, &st.SV, verify)
+		desc := roachpb.RangeDescriptor{
+			RangeID: 1, StartKey: roachpb.RKey("a"), EndKey: roachpb.RKey("z"),
+		}
+		unlim := quotapool.NewRateLimiter("test", quotapool.Inf(), 0)
+		rd, err := CalcReplicaDigest(ctx, desc, eng, kvpb.ChecksumMode_CHECK_FULL, unlim, st)
+		require.NoError(t, err)
+		return rd
+	}
+
+	// Each value's checksum covers checksumKey, or is unset if checksumKey is
+	// empty. A zero timestamp writes an inline value. After each write, the
+	// digest must count exactly the failing values written so far.
+	var failures int64
+	for _, kv := range []struct {
+		key, checksumKey string
+		ts               int64
+		fails            bool
+	}{
+		{"a", "a", 1, false}, // valid
+		{"b", "", 1, false},  // valid no checksum
+		{"c", "c", 0, false}, // valid inline value
+		{"d", "", 0, false},  // valid inline value no checksum
+		{"e", "x", 1, true},  // mismatch
+		{"f", "x", 0, true},  // mismatch in an inline value
+	} {
+		value := roachpb.MakeValueFromString("value")
+		if kv.checksumKey != "" {
+			value.InitChecksum(roachpb.Key(kv.checksumKey))
+		}
+		_, err := storage.MVCCPut(ctx, eng, roachpb.Key(kv.key), hlc.Timestamp{WallTime: kv.ts}, value,
+			storage.MVCCWriteOptions{})
+		require.NoError(t, err)
+		if kv.fails {
+			failures++
+		}
+
+		on, off := digest(true), digest(false)
+		require.Equal(t, failures, on.ValueChecksumFailures, "after writing %q", kv.key)
+		require.Zero(t, off.ValueChecksumFailures)
+		// reset ValueChecksumFailures because the next run will run for the whole
+		// [a,z) span anyway.
+		on.ValueChecksumFailures = 0
+		require.Equal(t, off, on)
+	}
 }
 
 // TestXORFold checks that the word-wise xorFold.Update matches the naive

@@ -449,6 +449,64 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	require.NotEmpty(t, b)
 }
 
+// TestCheckConsistencyValueChecksums checks that a consistency check counts a
+// value that fails checksum verification on every replica, even though the
+// replicas agree on it, and that it counts nothing with verification disabled.
+func TestCheckConsistencyValueChecksums(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{DisableConsistencyQueue: true}},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	key := tc.ScratchRange(t)
+	tc.AddVotersOrFatal(t, key, tc.Targets(1, 2)...)
+
+	// Write a value whose checksum covers another key. All replicas apply the
+	// same bytes, so only checksum verification can tell that they are wrong.
+	value := roachpb.MakeValueFromString("value")
+	value.InitChecksum(key.Next())
+	db := tc.Server(0).DB()
+	_, pErr := kv.SendWrapped(ctx, db.NonTransactionalSender(), &kvpb.PutRequest{
+		RequestHeader: kvpb.RequestHeader{Key: key},
+		Value:         value,
+	})
+	require.NoError(t, pErr.GoError())
+
+	// checkConsistency runs a consistency check of the range and returns the
+	// failure count of each store.
+	checkConsistency := func() []int64 {
+		resp, pErr := kv.SendWrapped(ctx, db.NonTransactionalSender(), &kvpb.CheckConsistencyRequest{
+			RequestHeader: kvpb.RequestHeader{Key: key, EndKey: key.Next()},
+			Mode:          kvpb.ChecksumMode_CHECK_FULL,
+		})
+		require.NoError(t, pErr.GoError())
+		result := resp.(*kvpb.CheckConsistencyResponse).Result
+		require.Len(t, result, 1)
+		require.NotEqual(t, kvpb.CheckConsistencyResponse_RANGE_INCONSISTENT, result[0].Status)
+		var failures []int64
+		for i := range tc.NumServers() {
+			metrics := tc.GetFirstStoreFromServer(t, i).Metrics()
+			failures = append(failures, metrics.ConsistencyQueueValueChecksumFailures.Count())
+		}
+		return failures
+	}
+	require.Equal(t, []int64{1, 1, 1}, checkConsistency())
+
+	// If the setting is off, the metrics won't be incremented.
+	for i := range tc.NumServers() {
+		sv := &tc.Server(i).ClusterSettings().SV
+		kvserver.ConsistencyCheckVerifyValueChecksums.Override(ctx, sv, false)
+	}
+	require.Equal(t, []int64{1, 1, 1}, checkConsistency())
+}
+
 // TestConsistencyQueueRecomputeStats is an end-to-end test of the mechanism CockroachDB
 // employs to adjust incorrect MVCCStats ("incorrect" meaning not an inconsistency of
 // these stats between replicas, but a delta between persisted stats and those one
