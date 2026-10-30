@@ -36,22 +36,22 @@
   latest: 25.1.10
   predecessor: "24.3"
 "25.2":
-  latest: 25.2.25
+  latest: 25.2.26
   predecessor: "25.1"
 "25.3":
   latest: 25.3.7
   predecessor: "25.2"
 "25.4":
-  latest: 25.4.18
+  latest: 25.4.19
   predecessor: "25.3"
 "26.1":
   latest: 26.1.8
   predecessor: "25.4"
 "26.2":
-  latest: 26.2.9
+  latest: 26.2.10
   predecessor: "26.1"
 "26.3":
-  latest: 26.3.3
+  latest: 26.3.4
   predecessor: "26.2"
 "26.4":
   latest: 26.4.0-rc.1
