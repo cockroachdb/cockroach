@@ -41,12 +41,26 @@ var consistencyCheckRate = settings.RegisterByteSizeSetting(
 	settings.WithPublic)
 
 // skipConsitencyQueueForExternalBytes is a setting that controls whether
-// replicas with external bytes should be processed by the consitency
+// replicas with external bytes should be processed by the consistency
 // queue.
 var skipConsitencyQueueForExternalBytes = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"server.consistency_check.skip_external_bytes.enabled",
 	"skip the consistency queue for external bytes",
+	true,
+)
+
+// ConsistencyCheckVerifyValueChecksums controls whether a consistency check
+// verifies the roachpb.Value checksum of every value it reads. The writer
+// computes the checksum, so a failure means the stored bytes differ from the
+// written ones, even if all replicas agree on them. Values written without a
+// checksum can't be verified. Failures are logged and counted in
+// queue.consistency.value_checksum_failures. They don't affect the outcome
+// of the check.
+var ConsistencyCheckVerifyValueChecksums = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"server.consistency_check.value_checksum_verification.enabled",
+	"verify the checksum of every value read by a consistency check",
 	true,
 )
 

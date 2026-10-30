@@ -1873,6 +1873,7 @@ queue_consistency_pending: queue.consistency.pending
 queue_consistency_process_failure: queue.consistency.process.failure
 queue_consistency_process_success: queue.consistency.process.success
 queue_consistency_processingnanos: queue.consistency.processingnanos
+queue_consistency_value_checksum_failures: queue.consistency.value_checksum_failures
 queue_gc_info_abortspanconsidered: queue.gc.info.abortspanconsidered
 queue_gc_info_abortspangcnum: queue.gc.info.abortspangcnum
 queue_gc_info_abortspanscanned: queue.gc.info.abortspanscanned

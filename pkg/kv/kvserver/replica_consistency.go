@@ -556,6 +556,10 @@ type ReplicaDigest struct {
 	// differing sections indicate structural divergence). See computeChecksumDone
 	// for how it is surfaced, and CollectChecksumResponse.diagnostic.
 	SectionXOR [numDigestSections]xorFold
+	// ValueChecksumFailures is the number of values that failed checksum
+	// verification (see ConsistencyCheckVerifyValueChecksums). It doesn't affect
+	// the consistency decision.
+	ValueChecksumFailures int64
 }
 
 // diagnosticString renders the per-section XOR folds for logging. It is purely
@@ -566,6 +570,10 @@ func (d *ReplicaDigest) diagnosticString() string {
 		d.SectionXOR[sectionRangeIDLocal][:], d.SectionXOR[sectionRangeLocal][:],
 		d.SectionXOR[sectionLockTable][:], d.SectionXOR[sectionUser][:])
 }
+
+// maxLoggedKeyChars caps the length of the pretty-printed key that a value
+// checksum failure logs, since keys can be megabytes long.
+const maxLoggedKeyChars = 4 << 10
 
 // CalcReplicaDigest computes the SHA512 hash and MVCC stats of the replica data
 // at the given snapshot. Depending on the mode, it either considers the full
@@ -643,6 +651,9 @@ func CalcReplicaDigest(
 		return false, nil
 	}
 
+	verifyValueChecksums := settings != nil &&
+		ConsistencyCheckVerifyValueChecksums.Get(&settings.SV)
+	var valueChecksumFailures int64
 	var visitors storage.ComputeStatsVisitors
 
 	visitors.PointKey = func(unsafeKey storage.MVCCKey, unsafeValue []byte) (resumeSoon bool, _ error) {
@@ -679,6 +690,15 @@ func CalcReplicaDigest(
 		write(sec, timestampBuf)
 		// Encode the value.
 		write(sec, unsafeValue)
+		if verifyValueChecksums && storage.VerifyMVCCValueChecksum(unsafeKey, unsafeValue) != nil {
+			valueChecksumFailures++
+			// The error isn't logged because it includes the entire value.
+			log.KvExec.Errorf(ctx,
+				"value at key %s, timestamp %s failed checksum verification "+
+					"(key %d bytes, value %d bytes)",
+				keys.PrettyPrintRange(unsafeKey.Key, nil /* end */, maxLoggedKeyChars),
+				unsafeKey.Timestamp, len(unsafeKey.Key), len(unsafeValue))
+		}
 		return resumeSoon, nil
 	}
 
@@ -782,6 +802,7 @@ func CalcReplicaDigest(
 
 	hasher.Sum(result.SHA512[:0])
 	result.SectionXOR = sectionXOR
+	result.ValueChecksumFailures = valueChecksumFailures
 
 	// We're not required to do so, but it looks nicer if both stats are aged to
 	// the same timestamp.
@@ -880,6 +901,8 @@ func (r *Replica) computeChecksumPostApply(
 			if err != nil {
 				log.KvExec.Errorf(ctx, "checksum computation failed: %v", err)
 				result = nil
+			} else if n := result.ValueChecksumFailures; n > 0 {
+				r.store.metrics.ConsistencyQueueValueChecksumFailures.Inc(n)
 			}
 			r.computeChecksumDone(c, result)
 		}

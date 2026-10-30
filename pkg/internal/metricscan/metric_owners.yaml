@@ -562,6 +562,7 @@ owners:
   queue_consistency_process_failure: cockroachlabs/kv
   queue_consistency_process_success: cockroachlabs/kv
   queue_consistency_processingnanos: cockroachlabs/kv
+  queue_consistency_value_checksum_failures: cockroachlabs/kv
   queue_gc_info_abortspanconsidered: cockroachlabs/kv
   queue_gc_info_abortspangcnum: cockroachlabs/kv
   queue_gc_info_abortspanscanned: cockroachlabs/kv
