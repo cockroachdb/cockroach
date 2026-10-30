@@ -393,6 +393,16 @@ func (key *EngineKey) Verify(value []byte) error {
 	return decodeMVCCMetaAndVerify(key.Key, value)
 }
 
+// VerifyMVCCValueChecksum verifies the roachpb.Value checksum of the value
+// stored under an MVCC key, like EngineKey.Verify. A value without a checksum
+// passes.
+func VerifyMVCCValueChecksum(key MVCCKey, value []byte) error {
+	if key.IsValue() {
+		return decodeMVCCValueAndVerify(key.Key, value)
+	}
+	return decodeMVCCMetaAndVerify(key.Key, value)
+}
+
 // decodeMVCCValueAndVerify will try to decode the value as
 // MVCCValue and then verify the checksum.
 func decodeMVCCValueAndVerify(key roachpb.Key, value []byte) error {

@@ -13607,6 +13607,14 @@ layers:
       unit: NANOSECONDS
       aggregation: AVG
       derivative: NON_NEGATIVE_DERIVATIVE
+    - name: queue.consistency.value_checksum_failures
+      exported_name: queue_consistency_value_checksum_failures
+      description: Number of values that failed checksum verification in consistency checks of replicas on this store. A failure means the stored bytes of a value differ from the bytes that were written, even if all replicas agree on them. Each check counts the value again until it is garbage collected. The affected keys are logged.
+      y_axis_label: Values
+      type: COUNTER
+      unit: COUNT
+      aggregation: AVG
+      derivative: NON_NEGATIVE_DERIVATIVE
     - name: queue.gc.info.abortspanconsidered
       exported_name: queue_gc_info_abortspanconsidered
       description: Number of AbortSpan entries old enough to be considered for removal

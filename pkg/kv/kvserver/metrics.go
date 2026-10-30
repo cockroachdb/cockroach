@@ -2168,6 +2168,16 @@ The messages are dropped to help these replicas to recover from I/O overload.`,
 		Measurement: "Processing Time",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaConsistencyQueueValueChecksumFailures = metric.Metadata{
+		Name: "queue.consistency.value_checksum_failures",
+		Help: "Number of values that failed checksum verification in consistency checks " +
+			"of replicas on this store. A failure means the stored bytes of a value " +
+			"differ from the bytes that were written, even if all replicas agree on " +
+			"them. Each check counts the value again until it is garbage collected. " +
+			"The affected keys are logged.",
+		Measurement: "Values",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaReplicaGCQueueSuccesses = metric.Metadata{
 		Name:        "queue.replicagc.process.success",
 		Help:        "Number of replicas successfully processed by the replica GC queue",
@@ -3266,6 +3276,7 @@ type StoreMetrics struct {
 	ConsistencyQueueFailures                  *metric.Counter
 	ConsistencyQueuePending                   *metric.Gauge
 	ConsistencyQueueProcessingNanos           *metric.Counter
+	ConsistencyQueueValueChecksumFailures     *metric.Counter
 	LeaseQueueSuccesses                       *metric.Counter
 	LeaseQueueFailures                        *metric.Counter
 	LeaseQueuePending                         *metric.Gauge
@@ -4073,6 +4084,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		ConsistencyQueueFailures:                  metric.NewCounter(metaConsistencyQueueFailures),
 		ConsistencyQueuePending:                   metric.NewGauge(metaConsistencyQueuePending),
 		ConsistencyQueueProcessingNanos:           metric.NewCounter(metaConsistencyQueueProcessingNanos),
+		ConsistencyQueueValueChecksumFailures:     metric.NewCounter(metaConsistencyQueueValueChecksumFailures),
 		LeaseQueueSuccesses:                       metric.NewCounter(metaLeaseQueueSuccesses),
 		LeaseQueueFailures:                        metric.NewCounter(metaLeaseQueueFailures),
 		LeaseQueuePending:                         metric.NewGauge(metaLeaseQueuePending),
