@@ -61,7 +61,7 @@ var ConsistencyCheckVerifyValueChecksums = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"server.consistency_check.value_checksum_verification.enabled",
 	"verify the checksum of every value read by a consistency check",
-	true,
+	false,
 )
 
 // consistencyCheckRateBurstFactor we use this to set the burst parameter on the
