@@ -496,13 +496,21 @@ func TestCheckConsistencyValueChecksums(t *testing.T) {
 		}
 		return failures
 	}
+	// setVerify turns value checksum verification on or off on every server.
+	setVerify := func(on bool) {
+		for i := range tc.NumServers() {
+			sv := &tc.Server(i).ClusterSettings().SV
+			kvserver.ConsistencyCheckVerifyValueChecksums.Override(ctx, sv, on)
+		}
+	}
+	// Verification is off by default, so nothing is counted.
+	require.Equal(t, []int64{0, 0, 0}, checkConsistency())
+
+	setVerify(true)
 	require.Equal(t, []int64{1, 1, 1}, checkConsistency())
 
 	// If the setting is off, the metrics won't be incremented.
-	for i := range tc.NumServers() {
-		sv := &tc.Server(i).ClusterSettings().SV
-		kvserver.ConsistencyCheckVerifyValueChecksums.Override(ctx, sv, false)
-	}
+	setVerify(false)
 	require.Equal(t, []int64{1, 1, 1}, checkConsistency())
 }
 
