@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
+	"github.com/cockroachdb/cockroach/pkg/security/jwtauth"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
 	"github.com/cockroachdb/cockroach/pkg/server/license"
@@ -975,12 +976,14 @@ func newSQLServer(ctx context.Context, cfg sqlServerArgs) (*SQLServer, error) {
 		// TODO(yuzefovich): I think cfg.stopper doesn't use the Tracer option.
 		// Investigate whether it's important (it's probably created in
 		// setupAndInitializeLoggingAndProfiling).
-		Stopper:                 cfg.stopper,
-		NodeInfo:                nodeInfo,
-		Codec:                   codec,
-		DefaultZoneConfig:       &cfg.DefaultZoneConfig,
-		Locality:                cfg.Locality,
-		AmbientCtx:              cfg.AmbientCtx,
+		Stopper:           cfg.stopper,
+		NodeInfo:          nodeInfo,
+		Codec:             codec,
+		DefaultZoneConfig: &cfg.DefaultZoneConfig,
+		Locality:          cfg.Locality,
+		AmbientCtx:        cfg.AmbientCtx,
+		JWTVerifier: jwtauth.ConfigureJWTAuth(
+			ctx, cfg.AmbientCtx, cfg.Settings, nodeInfo.LogicalClusterID, cfg.stopper),
 		DB:                      cfg.db,
 		Gossip:                  cfg.gossip,
 		NodeLiveness:            cfg.nodeLiveness,

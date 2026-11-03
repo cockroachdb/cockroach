@@ -15,7 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/distinguishedname"
-	"github.com/cockroachdb/cockroach/pkg/security/jwtauth"
 	"github.com/cockroachdb/cockroach/pkg/security/ldapauth"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/security/provisioning"
@@ -748,8 +747,6 @@ func authSessionRevivalToken(token []byte) AuthMethod {
 	}
 }
 
-var jwtVerifier jwtauth.JWTVerifier
-
 // authJwtToken is the AuthMethod constructor for the CRDB-specific
 // jwt auth token.
 // The method is triggered when the client passes a specific option indicating
@@ -767,9 +764,8 @@ func authJwtToken(
 	_ *hba.Entry,
 	identMap *identmap.Conf,
 ) (*AuthBehaviors, error) {
-	// Initialize the jwt verifier if it hasn't been already.
-	if jwtVerifier == nil {
-		jwtVerifier = jwtauth.ConfigureJWTAuth(sctx, execCfg.AmbientCtx, execCfg.Settings, execCfg.NodeInfo.LogicalClusterID(), execCfg.Stopper)
+	if execCfg.JWTVerifier == nil {
+		return nil, errors.AssertionFailedf("JWT verifier is not configured")
 	}
 	b := &AuthBehaviors{}
 	b.SetRoleMapper(UseProvidedIdentity)
@@ -803,7 +799,7 @@ func authJwtToken(
 			return security.NewErrPasswordUserAuthFailed(user)
 		}
 
-		retrievedUser, err := jwtVerifier.RetrieveIdentity(
+		retrievedUser, err := execCfg.JWTVerifier.RetrieveIdentity(
 			sctx, execCfg.Settings, user, []byte(token), identMap)
 		if err != nil {
 			c.LogAuthFailed(sctx, eventpb.AuthFailReason_CREDENTIALS_INVALID, err)
@@ -832,7 +828,7 @@ func authJwtToken(
 			return err
 		}
 
-		issuer, detail, err := jwtVerifier.VerifyAndExtractIssuer(
+		issuer, detail, err := execCfg.JWTVerifier.VerifyAndExtractIssuer(
 			ctx, execCfg.Settings, []byte(token))
 		if err != nil {
 			errForLog := err
@@ -873,7 +869,7 @@ func authJwtToken(
 		c.LogAuthInfof(ctx, "JWT Provided; attempting to validate token for authentication")
 
 		// Validate the token and, if there's an error, log it with the correct reason.
-		if detailedErrors, authError := jwtVerifier.ValidateJWTLogin(
+		if detailedErrors, authError := execCfg.JWTVerifier.ValidateJWTLogin(
 			sctx, execCfg.Settings, user, []byte(token), identMap); authError != nil {
 			errForLog := authError
 			if detailedErrors != "" {
@@ -890,7 +886,7 @@ func authJwtToken(
 		c.LogAuthInfof(ctx, "JWT authentication succeeded; attempting authorization")
 
 		// Ask the verifier for groups (nil slice means feature disabled).
-		groups, err := jwtVerifier.ExtractGroups(ctx, execCfg.Settings, []byte(token))
+		groups, err := execCfg.JWTVerifier.ExtractGroups(ctx, execCfg.Settings, []byte(token))
 		if err != nil {
 			c.LogAuthFailed(ctx, eventpb.AuthFailReason_AUTHORIZATION_ERROR, err)
 			return err

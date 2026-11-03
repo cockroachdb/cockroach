@@ -98,8 +98,10 @@ type jwtAuthenticator struct {
 		// of conf, it allows us to detect when this feature becomes enabled.
 		enabled bool
 	}
-	// clusterUUID is used to check the validity of the enterprise license. It is set once at initialization.
-	clusterUUID uuid.UUID
+	// logicalClusterID returns this authenticator's cluster/tenant ID. It is a
+	// function because the authenticator is constructed (once per SQL server, at
+	// startup) before the ID is resolved.
+	logicalClusterID func() uuid.UUID
 	// jwksCache caches auto-fetched JWK sets per issuer for this node so that
 	// steady-state logins do not touch the network. It is nil until
 	// ConfigureJWTAuth installs one via RebuildJWKSCache. It is swapped atomically
@@ -674,17 +676,17 @@ func ConfigureJWTAuth(
 	serverCtx context.Context,
 	ambientCtx log.AmbientContext,
 	st *cluster.Settings,
-	clusterUUID uuid.UUID,
+	logicalClusterID func() uuid.UUID,
 	stopper *stop.Stopper,
 ) JWTVerifier {
 	authenticator := jwtAuthenticator{}
-	authenticator.clusterUUID = clusterUUID
+	authenticator.logicalClusterID = logicalClusterID
 	authenticator.reloadConfig(serverCtx, st)
 
 	// Build the per-node JWKS cache so steady-state logins are served from memory
 	// instead of fetching on every login. The cache's background refresh goroutine
-	// is bound to the stopper (not serverCtx, which may be a per-connection context
-	// via the pgwire lazy initialization), so it lives for the node's lifetime and
+	// is bound to the stopper (not serverCtx, which is only the construction-time
+	// context), so it lives for the node's lifetime and
 	// stops on shutdown.
 	cacheCtx, _ := stopper.WithCancelOnQuiesce(context.Background()) // nolint:quiesce
 	rebuildCache := func(ctx context.Context) {

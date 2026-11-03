@@ -48,6 +48,7 @@ import (
 	clustermetricutils "github.com/cockroachdb/cockroach/pkg/obs/clustermetrics/utils"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/security/jwtauth"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/license"
 	"github.com/cockroachdb/cockroach/pkg/server/pgurl"
@@ -1725,6 +1726,7 @@ type ExecutorConfig struct {
 	DefaultZoneConfig *zonepb.ZoneConfig
 	Locality          roachpb.Locality
 	AmbientCtx        log.AmbientContext
+	JWTVerifier       jwtauth.JWTVerifier
 	DB                *kv.DB
 	Gossip            gossip.OptionalGossip
 	NodeLiveness      optionalnodeliveness.Container

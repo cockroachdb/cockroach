@@ -21,7 +21,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/security/jwtauth"
 	"github.com/cockroachdb/cockroach/pkg/security/ldapauth"
 	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/security/provisioning"
@@ -96,13 +95,6 @@ var WebSessionTimeout = settings.RegisterDurationSetting(
 	7*24*time.Hour,
 	settings.WithName("server.web_session.timeout"),
 	settings.WithPublic)
-
-// jwtVerifier is a singleton initialized from VerifyJWT on the first JWT auth
-// attempt for DB console API access.
-var jwtVerifier = struct {
-	sync.Once
-	j jwtauth.JWTVerifier
-}{}
 
 type authenticationServer struct {
 	cfg       *base.Config
@@ -686,22 +678,14 @@ func (s *authenticationServer) VerifyJWT(
 	ctx context.Context, jwtStr, usernameOptional string,
 ) (valid bool, userName string, err error) {
 	execCfg := s.sqlServer.ExecutorConfig()
-	jwtVerifier.Do(func() {
-		if jwtVerifier.j == nil {
-			jwtVerifier.j = jwtauth.ConfigureJWTAuth(
-				ctx,
-				execCfg.AmbientCtx,
-				execCfg.Settings,
-				execCfg.NodeInfo.LogicalClusterID(),
-				execCfg.Stopper,
-			)
-		}
-	})
+	if execCfg.JWTVerifier == nil {
+		return false, "", errors.AssertionFailedf("JWT verifier is not configured")
+	}
 
 	// Retrieve the matching user identity within the JWT.
 	_, identMap := s.sqlServer.PGServer().GetAuthenticationConfiguration()
 	inputUser, _ := secuser.MakeSQLUsernameFromUserInput(usernameOptional, secuser.PurposeValidation)
-	retrievedUser, err := jwtVerifier.j.RetrieveIdentity(
+	retrievedUser, err := execCfg.JWTVerifier.RetrieveIdentity(
 		ctx,
 		execCfg.Settings,
 		inputUser,
@@ -728,7 +712,7 @@ func (s *authenticationServer) VerifyJWT(
 	// not anticipate major performance degradation due to this, we could move
 	// RetrieveIdentity outside of ValidateJWTLogin and expect callers (e.g. cluster SSO flow)
 	// to always call these methods in the order: RetrieveIdentity, ValidateJWTLogin.
-	if _, err = jwtVerifier.j.ValidateJWTLogin(
+	if _, err = execCfg.JWTVerifier.ValidateJWTLogin(
 		ctx,
 		execCfg.Settings,
 		retrievedUser,

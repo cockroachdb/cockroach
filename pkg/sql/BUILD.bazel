@@ -370,6 +370,7 @@ go_library(
         "//pkg/scheduledjobs",
         "//pkg/security",
         "//pkg/security/distinguishedname",
+        "//pkg/security/jwtauth",
         "//pkg/security/password",
         "//pkg/security/provisioning",
         "//pkg/security/sessionrevival",
