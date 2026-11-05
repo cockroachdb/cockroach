@@ -80,9 +80,50 @@ func (r ResultColumns) TypesEqual(other ResultColumns) bool {
 		if other[i].Typ.Family() == types.UnknownFamily {
 			continue
 		}
-		if !c.Typ.Equivalent(other[i].Typ) {
+		if !resultTypesEqual(c.Typ, other[i].Typ) {
 			return false
 		}
+	}
+	return true
+}
+
+// resultTypesEqual returns whether two types are equal for the purpose of
+// the "cached plan must not change result type" check. It is stricter than
+// types.T.Equivalent: Equivalent deliberately ignores width, so INT2 and
+// INT8 compare as equivalent, but they have different OIDs and different
+// binary encodings on the wire. A client that decodes result values using
+// the type described when the statement was prepared would read the wrong
+// value if the type widened (e.g. by ALTER COLUMN TYPE), so such a change
+// must be reported as a type change. The comparison recurses into tuple
+// and array contents, since the OID of a composite type does not always
+// reflect its contents (all tuples share the record OID).
+func resultTypesEqual(a, b *types.T) bool {
+	if !a.Equivalent(b) {
+		return false
+	}
+	// Equivalent returns true when either side is a wildcard (Any) type;
+	// preserve that leniency, as such types carry no wire encoding of
+	// their own.
+	if a.Family() == types.AnyFamily || b.Family() == types.AnyFamily {
+		return true
+	}
+	if a.Oid() != b.Oid() {
+		return false
+	}
+	switch a.Family() {
+	case types.TupleFamily:
+		// Equivalent already established that the contents are equivalent
+		// and of equal length, unless one side is the wildcard tuple.
+		if types.IsWildcardTupleType(a) || types.IsWildcardTupleType(b) {
+			return true
+		}
+		for i := range a.TupleContents() {
+			if !resultTypesEqual(a.TupleContents()[i], b.TupleContents()[i]) {
+				return false
+			}
+		}
+	case types.ArrayFamily:
+		return resultTypesEqual(a.ArrayContents(), b.ArrayContents())
 	}
 	return true
 }
