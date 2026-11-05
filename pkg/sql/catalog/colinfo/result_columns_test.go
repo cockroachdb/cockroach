@@ -52,6 +52,67 @@ func TestResultColumnsTypesEqual(t *testing.T) {
 			o:     ResultColumns{{Typ: types.Unknown}},
 			equal: false,
 		},
+		{
+			// INT2 and INT8 are Equivalent, but they have different OIDs and
+			// different binary encodings, so a widening must be reported as
+			// a type change (see #176224).
+			r:     ResultColumns{{Typ: types.Int2}},
+			o:     ResultColumns{{Typ: types.Int}},
+			equal: false,
+		},
+		{
+			r:     ResultColumns{{Typ: types.Int}},
+			o:     ResultColumns{{Typ: types.Int2}},
+			equal: false,
+		},
+		{
+			r:     ResultColumns{{Typ: types.Int4}},
+			o:     ResultColumns{{Typ: types.Int}},
+			equal: false,
+		},
+		{
+			r:     ResultColumns{{Typ: types.Float4}},
+			o:     ResultColumns{{Typ: types.Float}},
+			equal: false,
+		},
+		{
+			r:     ResultColumns{{Typ: types.Float}},
+			o:     ResultColumns{{Typ: types.Float4}},
+			equal: false,
+		},
+		{
+			// Array element widening changes the array OID as well.
+			r:     ResultColumns{{Typ: types.IntArray}},
+			o:     ResultColumns{{Typ: types.MakeArray(types.Int2)}},
+			equal: false,
+		},
+		{
+			r:     ResultColumns{{Typ: types.MakeArray(types.Int2)}},
+			o:     ResultColumns{{Typ: types.IntArray}},
+			equal: false,
+		},
+		{
+			// Tuples share the record OID, so the contents must be
+			// compared as well.
+			r:     ResultColumns{{Typ: types.MakeTuple([]*types.T{types.Int2})}},
+			o:     ResultColumns{{Typ: types.MakeTuple([]*types.T{types.Int})}},
+			equal: false,
+		},
+		{
+			r:     ResultColumns{{Typ: types.MakeTuple([]*types.T{types.Int})}},
+			o:     ResultColumns{{Typ: types.MakeTuple([]*types.T{types.Int})}},
+			equal: true,
+		},
+		{
+			r:     ResultColumns{{Typ: types.MakeCollatedString(types.String, "en_US")}},
+			o:     ResultColumns{{Typ: types.MakeCollatedString(types.String, "en_US")}},
+			equal: true,
+		},
+		{
+			r:     ResultColumns{{Typ: types.MakeCollatedString(types.String, "en_US")}},
+			o:     ResultColumns{{Typ: types.MakeCollatedString(types.String, "de_DE")}},
+			equal: false,
+		},
 	}
 	for _, tc := range tests {
 		t.Run(fmt.Sprintf("%v-%v", tc.r, tc.o), func(t *testing.T) {
