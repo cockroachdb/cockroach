@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -34,6 +35,16 @@ func TestClose(t *testing.T) {
 		closer := newBufferedSinkCloser()
 		_, _ = closer.RegisterBufferedSink(&bufferedSink{})
 		require.Error(t, closer.Close(time.Nanosecond /* timeout */))
+	})
+
+	t.Run("does not leak waiter after timed out sink shuts down", func(t *testing.T) {
+		defer leaktest.AfterTest(t)()
+
+		closer := newBufferedSinkCloser()
+		bs := &bufferedSink{}
+		_, cleanup := closer.RegisterBufferedSink(bs)
+		require.Error(t, closer.Close(0 /* timeout */))
+		cleanup()
 	})
 }
 

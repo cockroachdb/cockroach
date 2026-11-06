@@ -101,7 +101,7 @@ func (closer *bufferedSinkCloser) Close(timeout time.Duration) error {
 	doneCh := make(chan struct{})
 	go func() {
 		closer.wg.Wait()
-		doneCh <- struct{}{}
+		close(doneCh)
 	}()
 
 	select {
