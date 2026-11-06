@@ -70,6 +70,11 @@ var (
 	zeroVal        = tree.DZero
 	negOneVal      = tree.NewDInt(-1)
 
+	// pgDefaultTablespaceOid is the OID of the pg_default row in
+	// pg_tablespace, matching PostgreSQL. pg_database.dattablespace uses the
+	// same value so that the two tables join.
+	pgDefaultTablespaceOid = tree.NewDOid(1663)
+
 	passwdStarString = tree.NewDString("********")
 )
 
@@ -1820,7 +1825,7 @@ https://www.postgresql.org/docs/18/catalog-pg-database.html`,
 					negOneVal,                   // datconnlimit
 					tree.DNull,                  // datfrozenxid
 					tree.DNull,                  // datminmxid
-					oidZero,                     // dattablespace
+					pgDefaultTablespaceOid,      // dattablespace
 					builtins.DatEncodingEnUTF8,  // datcollate
 					builtins.DatEncodingEnUTF8,  // datctype
 					tree.DNull,                  // datlocale
@@ -4206,7 +4211,7 @@ https://www.postgresql.org/docs/9.5/catalog-pg-tablespace.html`,
 	schema: vtable.PGCatalogTablespace,
 	populate: func(ctx context.Context, p *planner, dbContext catalog.DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return addRow(
-			tree.NewDOid(1663),            // oid - matches PostgreSQL v17
+			pgDefaultTablespaceOid,        // oid - matches PostgreSQL v17
 			tree.NewDString("pg_default"), // spcname
 			nodeOID,                       // spcowner
 			tree.DNull,                    // spclocation
