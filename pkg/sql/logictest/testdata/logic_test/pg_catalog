@@ -507,11 +507,11 @@ FROM pg_catalog.pg_database
 ORDER BY oid
 ----
 oid  datname        datconnlimit  datfrozenxid  datminmxid  dattablespace  datlocprovider  datacl
-1    system         -1            NULL          NULL        0              c               {admin=c*/node,root=c*/node}
-100  defaultdb      -1            NULL          NULL        0              c               NULL
-102  postgres       -1            NULL          NULL        0              c               NULL
-104  test           -1            NULL          NULL        0              c               {admin=C*c*T*/root,=c/root,root=C*c*T*/root}
-108  constraint_db  -1            NULL          NULL        0              c               NULL
+1    system         -1            NULL          NULL        1663           c               {admin=c*/node,root=c*/node}
+100  defaultdb      -1            NULL          NULL        1663           c               NULL
+102  postgres       -1            NULL          NULL        1663           c               NULL
+104  test           -1            NULL          NULL        1663           c               {admin=C*c*T*/root,=c/root,root=C*c*T*/root}
+108  constraint_db  -1            NULL          NULL        1663           c               NULL
 
 user testuser
 
@@ -522,7 +522,7 @@ FROM pg_catalog.pg_database
 ORDER BY oid LIMIT 1
 ----
 oid  datname  datconnlimit  datfrozenxid  datminmxid  dattablespace  datlocprovider  datacl
-1    system   -1            NULL          NULL        0              c               {admin=c*/node,root=c*/node}
+1    system   -1            NULL          NULL        1663           c               {admin=c*/node,root=c*/node}
 
 user root
 
@@ -566,6 +566,21 @@ SELECT oid, spcname, spcowner, spcacl, spcoptions FROM pg_tablespace
 ----
 oid   spcname     spcowner    spcacl  spcoptions
 1663  pg_default  3233629770  NULL    NULL
+
+# Regression test for #176228: pg_database.dattablespace must join with
+# pg_tablespace.oid.
+query TT colnames
+SELECT db.datname, ts.spcname
+FROM pg_catalog.pg_database AS db
+JOIN pg_catalog.pg_tablespace AS ts ON db.dattablespace = ts.oid
+ORDER BY db.oid
+----
+datname        spcname
+system         pg_default
+defaultdb      pg_default
+postgres       pg_default
+test           pg_default
+constraint_db  pg_default
 
 ## pg_catalog.pg_views
 
