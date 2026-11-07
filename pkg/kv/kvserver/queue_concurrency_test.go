@@ -187,3 +187,50 @@ func (fr *fakeReplica) redirectOnOrAcquireLease(
 func (fr *fakeReplica) CurrentLeaseStatus(context.Context) kvserverpb.LeaseStatus {
 	return kvserverpb.LeaseStatus{}
 }
+
+// leaseStatusReplica is a fakeReplica with a configurable lease status.
+type leaseStatusReplica struct {
+	fakeReplica
+	status kvserverpb.LeaseStatus
+}
+
+func (r *leaseStatusReplica) CurrentLeaseStatus(context.Context) kvserverpb.LeaseStatus {
+	return r.status
+}
+
+// TestBaseQueueAddRequiresLease verifies that a queue that needs the lease
+// doesn't admit a replica whose lease is owned elsewhere, including a follower
+// under a leader lease, whose lease status is ERROR.
+func TestBaseQueueAddRequiresLease(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	bq := &baseQueue{queueConfig: queueConfig{needsLease: true}}
+	for _, tc := range []struct {
+		name  string
+		state kvserverpb.LeaseState
+		owner roachpb.StoreID
+		expOK bool
+	}{
+		{name: "valid, local", state: kvserverpb.LeaseState_VALID, owner: 1, expOK: true},
+		{name: "valid, remote", state: kvserverpb.LeaseState_VALID, owner: 2, expOK: false},
+		{name: "error, local", state: kvserverpb.LeaseState_ERROR, owner: 1, expOK: true},
+		{name: "error, remote", state: kvserverpb.LeaseState_ERROR, owner: 2, expOK: false},
+		{name: "expired, remote", state: kvserverpb.LeaseState_EXPIRED, owner: 2, expOK: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repl := &leaseStatusReplica{
+				fakeReplica: fakeReplica{rangeID: 1, replicaID: 1},
+				status: kvserverpb.LeaseStatus{
+					State: tc.state,
+					Lease: roachpb.Lease{Replica: roachpb.ReplicaDescriptor{StoreID: tc.owner}},
+				},
+			}
+			_, err := bq.replicaCanBeProcessed(ctx, repl, false /* acquireLeaseIfNeeded */)
+			if ok := err == nil; ok != tc.expOK {
+				t.Fatalf("expected ok=%t, got err=%v", tc.expOK, err)
+			}
+		})
+	}
+}

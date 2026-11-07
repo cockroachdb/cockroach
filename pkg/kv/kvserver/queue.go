@@ -1347,9 +1347,13 @@ func (bq *baseQueue) replicaCanBeProcessed(
 				return nil, pErr.GoError()
 			}
 		} else {
-			// Don't process if we don't own the lease.
+			// Don't process if another replica owns the lease. A lease in the
+			// ERROR state can't be used or replaced by this replica either. This
+			// is the usual state of a leader lease seen from a follower, so
+			// without this check every follower is admitted to lease-holder-only
+			// queues and crowds out the replicas that can be processed.
 			st := repl.CurrentLeaseStatus(ctx)
-			if st.IsValid() && !st.OwnedBy(repl.StoreID()) {
+			if (st.IsValid() || st.State == kvserverpb.LeaseState_ERROR) && !st.OwnedBy(repl.StoreID()) {
 				log.VEventf(ctx, 1, "needs lease; not adding: %v", st.Lease)
 				// NB: this is an expected error, so make sure it doesn't get
 				// logged loudly.
