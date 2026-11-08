@@ -4083,9 +4083,16 @@ CREATE TABLE crdb_internal.table_indexes (
 					// If the descriptor is not a table, return no match.
 					return false, nil
 				}
-				sc, err := p.byIDGetterBuilder().Get().Schema(ctx, table.GetParentSchemaID())
+				// The parent schema may no longer exist even though the table
+				// descriptor is still around, e.g. right after a DROP SCHEMA
+				// ... CASCADE. Such a table is not shown by the non-indexed
+				// path either, so return no match instead of an error.
+				sc, err := p.byIDGetterBuilder().MaybeGet().Schema(ctx, table.GetParentSchemaID())
 				if err != nil {
 					return false, err
+				}
+				if sc == nil {
+					return false, nil
 				}
 				alloc := &tree.DatumAlloc{}
 				return true, generateTableIndexesRow(ctx, p, alloc, sc, table, addRow)
