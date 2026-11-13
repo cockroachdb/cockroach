@@ -6,8 +6,10 @@
 package trigram
 
 import (
+	"slices"
 	"sort"
 	"strings"
+	"sync"
 	"unicode"
 	"unicode/utf8"
 )
@@ -163,4 +165,166 @@ func Similarity(l string, r string) float64 {
 	}
 	shared := float64(nShared)
 	return shared / (float64(len(lTrigrams)+len(rTrigrams)) - shared)
+}
+
+// Trigram index keys are built from strings.ToLower of the indexed text (see
+// MakeTrigrams). Case-insensitive matching (ILIKE) does not compare lower-cased
+// text, though: it compares unicode.ToUpper of both sides, or uses simple case
+// folding (unicode.SimpleFold) in its regular-expression path. Some runes that
+// ILIKE treats as equal have different lower-case forms. For example, 'ς' and
+// 'σ' both upper-case to 'Σ', but ToLower('Σ') is 'σ', so the row "ΛΟΓΟΣ" is
+// indexed under the trigram "γοσ" while the pattern '%λογος%' produces the
+// trigram "γος". Other examples are 'ı'/'i' (both upper-case to 'I'), 'ſ'/'s',
+// and 'µ' (micro sign)/'μ'.
+//
+// To find every row that may match a case-insensitive pattern, a probe must
+// therefore look up each spelling of a pattern trigram that an ILIKE-equal row
+// could have been indexed under. CaseInsensitiveVariants computes those
+// spellings.
+
+// caseClass describes the set of runes that case-insensitive matching may
+// treat as equal to each other.
+type caseClass struct {
+	// lowers holds the distinct strings.ToLower forms of the runes in the
+	// class, in ascending order. It always has at least two elements.
+	lowers []rune
+	// hasNonWordLower is true if the lower-case form of some rune in the class
+	// is neither a letter nor a number. MakeTrigrams treats such a rune as a
+	// word boundary, so a row containing it has no trigram covering that
+	// position at all.
+	hasNonWordLower bool
+}
+
+var caseClasses struct {
+	once sync.Once
+	// byLower maps each lower-case rune to its class. Only runes whose class
+	// has more than one lower-case form are present; every other rune can
+	// only be indexed under its own lower-case form.
+	byLower map[rune]*caseClass
+}
+
+func isWordRune(r rune) bool {
+	return unicode.IsLetter(r) || unicode.IsNumber(r)
+}
+
+// buildCaseClasses computes the equivalence classes of runes that are
+// connected by unicode.ToUpper, unicode.ToLower, or unicode.SimpleFold, and
+// records the classes that have more than one lower-case form. Using the
+// union of all three relations over-approximates both the ToUpper comparison
+// and the (?i) regular expressions used to evaluate ILIKE, which is what the
+// index probe needs: an over-approximation only costs extra lookups, while an
+// under-approximation loses rows.
+func buildCaseClasses() map[rune]*caseClass {
+	parent := make(map[rune]rune)
+	var find func(r rune) rune
+	find = func(r rune) rune {
+		p, ok := parent[r]
+		if !ok {
+			parent[r] = r
+			return r
+		}
+		if p == r {
+			return r
+		}
+		root := find(p)
+		parent[r] = root
+		return root
+	}
+	union := func(a, b rune) {
+		if a == b {
+			return
+		}
+		if ra, rb := find(a), find(b); ra != rb {
+			parent[ra] = rb
+		}
+	}
+	// Every rune with a non-trivial case mapping is in unicode.CaseRanges. A
+	// few runes outside of it (e.g. 'ß') only fold to other runes, and they are
+	// reached by walking the SimpleFold orbits of runes in unicode.CaseRanges
+	// (here, 'ẞ'). TestCaseClassesCoverAllRunes checks this against every rune.
+	for _, cr := range unicode.CaseRanges {
+		for r := rune(cr.Lo); r <= rune(cr.Hi); r++ {
+			union(r, unicode.ToUpper(r))
+			union(r, unicode.ToLower(r))
+			for f := unicode.SimpleFold(r); f != r; f = unicode.SimpleFold(f) {
+				union(r, f)
+			}
+		}
+	}
+
+	members := make(map[rune][]rune)
+	for r := range parent {
+		root := find(r)
+		members[root] = append(members[root], r)
+	}
+	byLower := make(map[rune]*caseClass)
+	for _, rs := range members {
+		var c caseClass
+		for _, r := range rs {
+			l := unicode.ToLower(r)
+			if !slices.Contains(c.lowers, l) {
+				c.lowers = append(c.lowers, l)
+			}
+			if !isWordRune(l) {
+				c.hasNonWordLower = true
+			}
+		}
+		if len(c.lowers) < 2 {
+			continue
+		}
+		slices.Sort(c.lowers)
+		for _, l := range c.lowers {
+			byLower[l] = &c
+		}
+	}
+	return byLower
+}
+
+func lookupCaseClass(r rune) *caseClass {
+	caseClasses.once.Do(func() {
+		caseClasses.byLower = buildCaseClasses()
+	})
+	return caseClasses.byLower[r]
+}
+
+// CaseInsensitiveVariants returns every trigram under which a row may be
+// indexed if the row's text matches the trigram t case-insensitively. t must be
+// a trigram produced by MakeTrigrams, i.e. already lower-cased. The result
+// always contains t itself and is sorted. For example:
+//
+//	"abc" -> ["abc"]
+//	"γος" -> ["γος", "γοσ"]
+//	"sis" -> ["sis", "siſ", "sıs", "sıſ", "ſis", "ſiſ", "ſıs", "ſıſ"]
+//
+// ok is false if some rune in t is case-insensitively equal to a rune that
+// MakeTrigrams treats as a word boundary (e.g. 'ι' and U+0345 COMBINING GREEK
+// YPOGEGRAMMENI). A matching row then need not contain any trigram at that
+// position, so t must not be required in an index probe.
+func CaseInsensitiveVariants(t string) (variants []string, ok bool) {
+	variants = []string{""}
+	for _, r := range t {
+		c := lookupCaseClass(r)
+		if c == nil {
+			for i := range variants {
+				variants[i] += string(r)
+			}
+			continue
+		}
+		if c.hasNonWordLower {
+			return nil, false
+		}
+		next := make([]string, 0, len(variants)*len(c.lowers))
+		for _, v := range variants {
+			for _, l := range c.lowers {
+				var sb strings.Builder
+				sb.Grow(len(v) + utf8.RuneLen(l))
+				sb.WriteString(v)
+				sb.WriteRune(l)
+				next = append(next, sb.String())
+			}
+		}
+		variants = next
+	}
+	slices.Sort(variants)
+	return variants, true
 }

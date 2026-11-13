@@ -7,8 +7,10 @@ package trigram
 
 import (
 	"testing"
+	"unicode"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMakeTrigrams(t *testing.T) {
@@ -94,5 +96,58 @@ func BenchmarkSimilarity(b *testing.B) {
 				_ = Similarity(t.x, t.y)
 			}
 		})
+	}
+}
+
+func TestCaseInsensitiveVariants(t *testing.T) {
+	for _, tc := range []struct {
+		name             string
+		trigram          string
+		expectedVariants []string
+		expectedOK       bool
+	}{
+		{name: "no case-ambiguous runes", trigram: "abc",
+			expectedVariants: []string{"abc"}, expectedOK: true},
+		{name: "kelvin sign lower-cases to k", trigram: "kkk",
+			expectedVariants: []string{"kkk"}, expectedOK: true},
+		{name: "final sigma", trigram: "γος",
+			expectedVariants: []string{"γος", "γοσ"}, expectedOK: true},
+		{name: "non-final sigma", trigram: "γοσ",
+			expectedVariants: []string{"γος", "γοσ"}, expectedOK: true},
+		{name: "dotted and dotless i", trigram: "pıx",
+			expectedVariants: []string{"pix", "pıx"}, expectedOK: true},
+		{name: "micro sign", trigram: "µgr",
+			expectedVariants: []string{"µgr", "μgr"}, expectedOK: true},
+		{name: "every rune ambiguous", trigram: "sis",
+			expectedVariants: []string{
+				"sis", "siſ", "sıs", "sıſ", "ſis", "ſiſ", "ſıs", "ſıſ",
+			}, expectedOK: true},
+		{name: "iota folds to a combining mark", trigram: "αιβ", expectedOK: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			variants, ok := CaseInsensitiveVariants(tc.trigram)
+			require.Equal(t, tc.expectedOK, ok)
+			require.Equal(t, tc.expectedVariants, variants)
+		})
+	}
+}
+
+// TestCaseClassesCoverAllRunes verifies that buildCaseClasses, which only
+// scans unicode.CaseRanges, accounts for every rune in Unicode: whenever a rune
+// is case-insensitively equal to a rune with a different lower-case form, both
+// lower-case forms must be in the same class.
+func TestCaseClassesCoverAllRunes(t *testing.T) {
+	byLower := buildCaseClasses()
+	for r := rune(0); r <= unicode.MaxRune; r++ {
+		l := unicode.ToLower(r)
+		for _, other := range []rune{unicode.ToUpper(r), unicode.SimpleFold(r)} {
+			otherLower := unicode.ToLower(other)
+			if otherLower == l {
+				continue
+			}
+			c := byLower[l]
+			require.NotNil(t, c, "rune %U", r)
+			require.Contains(t, c.lowers, otherLower, "rune %U", r)
+		}
 	}
 }

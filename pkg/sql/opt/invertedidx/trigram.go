@@ -39,12 +39,17 @@ func (t *trigramFilterPlanner) extractInvertedFilterConditionFromLeaf(
 	var constantVal opt.ScalarExpr
 	var left, right opt.ScalarExpr
 	var allMustMatch bool
+	var caseInsensitive bool
 	var commutative bool
 	switch e := expr.(type) {
 	// Both ILIKE and LIKE are supported because the index entries are always
-	// downcased. We re-check the condition no matter what later.
+	// downcased. ILIKE needs extra care: runes that it considers equal do not
+	// always have the same lower-case form (e.g. 'ς' and 'σ'), so its spans
+	// look up every lower-case spelling of each trigram; see
+	// rowenc.EncodeTrigramSpans. We re-check the condition no matter what later.
 	case *memo.ILikeExpr:
 		left, right = e.Left, e.Right
+		caseInsensitive = true
 		// If we're doing a LIKE (or ILIKE) expression, we need to construct an AND
 		// out of all of the spans: we need to find results that match every single
 		// one of the trigrams in the constant datum.
@@ -109,7 +114,7 @@ func (t *trigramFilterPlanner) extractInvertedFilterConditionFromLeaf(
 	}
 	s := string(*ds)
 	var err error
-	invertedExpr, err = rowenc.EncodeTrigramSpans(s, allMustMatch)
+	invertedExpr, err = rowenc.EncodeTrigramSpans(s, allMustMatch, caseInsensitive)
 	if err != nil {
 		// An inverted expression could not be extracted.
 		return inverted.NonInvertedColExpression{}, expr, nil
