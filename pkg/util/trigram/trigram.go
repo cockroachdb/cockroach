@@ -296,34 +296,55 @@ func lookupCaseClass(r rune) *caseClass {
 //	"γος" -> ["γος", "γοσ"]
 //	"sis" -> ["sis", "siſ", "sıs", "sıſ", "ſis", "ſiſ", "ſıs", "ſıſ"]
 //
-// ok is false if some rune in t is case-insensitively equal to a rune that
-// MakeTrigrams treats as a word boundary (e.g. 'ι' and U+0345 COMBINING GREEK
-// YPOGEGRAMMENI). A matching row then need not contain any trigram at that
-// position, so t must not be required in an index probe.
-func CaseInsensitiveVariants(t string) (variants []string, ok bool) {
-	variants = []string{""}
+// ok is false, and no variants are returned, if a matching row may not be
+// indexed under any of at most limit spellings of t. This is the case if:
+//   - t has more than limit spellings, or
+//   - some rune in t is case-insensitively equal to a rune that MakeTrigrams
+//     treats as a word boundary (e.g. 'ι' and U+0345 COMBINING GREEK
+//     YPOGEGRAMMENI), so a matching row need not contain any trigram at that
+//     position.
+//
+// In both cases, t must not be required in an index probe.
+func CaseInsensitiveVariants(t string, limit int) (variants []string, ok bool) {
+	// Count the spellings before building any of them. Most trigrams (e.g. any
+	// ASCII trigram without 'i' or 's') have only one.
+	n := 1
 	for _, r := range t {
 		c := lookupCaseClass(r)
 		if c == nil {
-			for i := range variants {
-				variants[i] += string(r)
-			}
 			continue
 		}
 		if c.hasNonWordLower {
 			return nil, false
 		}
-		next := make([]string, 0, len(variants)*len(c.lowers))
-		for _, v := range variants {
-			for _, l := range c.lowers {
-				var sb strings.Builder
-				sb.Grow(len(v) + utf8.RuneLen(l))
-				sb.WriteString(v)
-				sb.WriteRune(l)
-				next = append(next, sb.String())
+		n *= len(c.lowers)
+	}
+	if n > limit {
+		return nil, false
+	}
+	if n == 1 {
+		return []string{t}, true
+	}
+
+	// Build the cross product of the spellings of each rune.
+	bufs := make([][]byte, 1, n)
+	for _, r := range t {
+		choices := []rune{r}
+		if c := lookupCaseClass(r); c != nil {
+			choices = c.lowers
+		}
+		next := make([][]byte, 0, n)
+		for _, b := range bufs {
+			for _, l := range choices {
+				// Clip so that each choice appends to its own copy of b.
+				next = append(next, utf8.AppendRune(slices.Clip(b), l))
 			}
 		}
-		variants = next
+		bufs = next
+	}
+	variants = make([]string, len(bufs))
+	for i, b := range bufs {
+		variants[i] = string(b)
 	}
 	slices.Sort(variants)
 	return variants, true

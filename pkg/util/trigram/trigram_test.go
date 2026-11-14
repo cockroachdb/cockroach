@@ -103,29 +103,31 @@ func TestCaseInsensitiveVariants(t *testing.T) {
 	for _, tc := range []struct {
 		name             string
 		trigram          string
+		limit            int
 		expectedVariants []string
 		expectedOK       bool
 	}{
-		{name: "no case-ambiguous runes", trigram: "abc",
+		{name: "no case-ambiguous runes", trigram: "abc", limit: 1,
 			expectedVariants: []string{"abc"}, expectedOK: true},
-		{name: "kelvin sign lower-cases to k", trigram: "kkk",
+		{name: "kelvin sign lower-cases to k", trigram: "kkk", limit: 1,
 			expectedVariants: []string{"kkk"}, expectedOK: true},
-		{name: "final sigma", trigram: "γος",
+		{name: "final sigma", trigram: "γος", limit: 4,
 			expectedVariants: []string{"γος", "γοσ"}, expectedOK: true},
-		{name: "non-final sigma", trigram: "γοσ",
+		{name: "non-final sigma", trigram: "γοσ", limit: 4,
 			expectedVariants: []string{"γος", "γοσ"}, expectedOK: true},
-		{name: "dotted and dotless i", trigram: "pıx",
+		{name: "dotted and dotless i", trigram: "pıx", limit: 4,
 			expectedVariants: []string{"pix", "pıx"}, expectedOK: true},
-		{name: "micro sign", trigram: "µgr",
+		{name: "micro sign", trigram: "µgr", limit: 4,
 			expectedVariants: []string{"µgr", "μgr"}, expectedOK: true},
-		{name: "every rune ambiguous", trigram: "sis",
+		{name: "every rune ambiguous", trigram: "sis", limit: 8,
 			expectedVariants: []string{
 				"sis", "siſ", "sıs", "sıſ", "ſis", "ſiſ", "ſıs", "ſıſ",
 			}, expectedOK: true},
-		{name: "iota folds to a combining mark", trigram: "αιβ", expectedOK: false},
+		{name: "more spellings than the limit", trigram: "sis", limit: 7, expectedOK: false},
+		{name: "iota folds to a combining mark", trigram: "αιβ", limit: 100, expectedOK: false},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			variants, ok := CaseInsensitiveVariants(tc.trigram)
+			variants, ok := CaseInsensitiveVariants(tc.trigram, tc.limit)
 			require.Equal(t, tc.expectedOK, ok)
 			require.Equal(t, tc.expectedVariants, variants)
 		})

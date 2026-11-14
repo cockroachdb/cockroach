@@ -1210,8 +1210,8 @@ func TestEncodeTrigramSpansCaseInsensitive(t *testing.T) {
 	rng, _ := randutil.NewTestRand()
 	// Each group holds runes that ILIKE may treat as equal.
 	groups := [][]rune{
-		[]rune("aA"), []rune("sSſ"), []rune("iIı"), []rune("σςΣ"), []rune("θϑΘϴ"),
-		[]rune("kKK"), []rune("µμΜ"), []rune("ṡṠẛ"),
+		[]rune("aA"), []rune("bB"), []rune("cC"), []rune("sSſ"), []rune("iIı"),
+		[]rune("σςΣ"), []rune("θϑΘϴ"), []rune("kKK"), []rune("µμΜ"), []rune("ṡṠẛ"),
 	}
 	randRune := func(g []rune) rune { return g[rng.Intn(len(g))] }
 	groupOf := func(r rune) []rune {
@@ -1272,6 +1272,34 @@ func TestEncodeTrigramSpansCaseInsensitive(t *testing.T) {
 	}
 	// Make sure the test exercised a meaningful number of matching rows.
 	require.Greater(t, matches, 500)
+}
+
+// TestEncodeTrigramSpansCaseInsensitiveLimit checks which trigrams a
+// case-insensitive probe looks up when some of them have many spellings.
+func TestEncodeTrigramSpansCaseInsensitiveLimit(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		pattern       string
+		expectedSpans int
+		expectedErr   bool
+	}{
+		{name: "no case-ambiguous runes", pattern: "%foobar%", expectedSpans: 4},
+		{name: "two spellings of one trigram", pattern: "%λογος%", expectedSpans: 4},
+		{name: "trigrams over the limit are left out", pattern: "%mississippi%", expectedSpans: 12},
+		{name: "every trigram over the limit", pattern: "%sis%", expectedErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			expr, err := EncodeTrigramSpans(tc.pattern, true /* allMustMatch */, true /* caseInsensitive */)
+			if tc.expectedErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			spanExpr, ok := expr.(*inverted.SpanExpression)
+			require.True(t, ok)
+			require.Len(t, spanExpr.SpansToRead, tc.expectedSpans)
+		})
+	}
 }
 
 func makeTrigramBinOp(

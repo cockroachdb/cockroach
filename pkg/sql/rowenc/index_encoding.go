@@ -987,6 +987,14 @@ func encodeOverlapsArrayInvertedIndexSpans(
 	return invertedExpr, nil
 }
 
+// maxCaseInsensitiveTrigramSpellings limits how many keys a case-insensitive
+// probe looks up for a single trigram. Each 'i' or 's' in a trigram doubles its
+// spellings ("ı", "ſ"), so "sis" has 8, and almost all of them are absent from
+// the index. A trigram with more spellings than this is left out of the probe
+// instead, which keeps a pattern like '%mississippi%' at 12 spans (for "mis",
+// "sip", "ipp" and "ppi") rather than 36.
+const maxCaseInsensitiveTrigramSpellings = 4
+
 // EncodeTrigramSpans returns the spans that must be scanned to look up trigrams
 // present in the input string. If allMustMatch is true, the resultant inverted
 // expression must match every trigram in the input. Otherwise, it will match
@@ -1020,10 +1028,12 @@ func EncodeTrigramSpans(
 		spellings := []string{t}
 		if caseInsensitive {
 			var ok bool
-			if spellings, ok = trigram.CaseInsensitiveVariants(t); !ok {
-				// A matching row need not contain any spelling of this trigram.
-				// Leaving it out of the conjunction only widens the scan, and the
-				// original filter is always re-checked.
+			spellings, ok = trigram.CaseInsensitiveVariants(t, maxCaseInsensitiveTrigramSpellings)
+			if !ok {
+				// Either a matching row need not contain any spelling of this
+				// trigram, or looking all of them up would cost more than the
+				// trigram is worth. Leaving it out of the conjunction only widens
+				// the scan, and the original filter is always re-checked.
 				continue
 			}
 		}
