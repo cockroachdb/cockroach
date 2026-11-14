@@ -47,7 +47,7 @@ See our online documentation: [Quickstart with CockroachCloud](https://www.cockr
 2. [Start a local cluster](https://www.cockroachlabs.com/docs/stable/start-a-local-cluster.html) and connect to it via the built-in SQL client.
 3. [Learn more about CockroachDB SQL](https://www.cockroachlabs.com/docs/stable/learn-cockroachdb-sql.html).
 4. Use a PostgreSQL-compatible driver or ORM to [build an app with CockroachDB](https://www.cockroachlabs.com/docs/stable/hello-world-example-apps.html).
-5. [Explore core features](https://www.cockroachlabs.com/docs/stable/demo-data-replication.html), such as data replication, automatic rebalancing, and fault tolerance and recovery.
+5. Explore core features, such as data replication, automatic rebalancing, and fault tolerance and recovery.
 
 ## Client Drivers
 
