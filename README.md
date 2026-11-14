@@ -44,24 +44,24 @@ See our online documentation: [Quickstart with CockroachCloud](https://www.cockr
 ## Starting with CockroachDB
 
 1. Install CockroachDB:  [using a pre-built executable](https://www.cockroachlabs.com/docs/stable/install-cockroachdb.html) or [build it from source](https://cockroachlabs.atlassian.net/wiki/spaces/CRDB/pages/181338446/Getting+and+building+CockroachDB+from+source).
-2. [Start a local cluster](https://www.cockroachlabs.com/docs/stable/start-a-local-cluster.html) and connect to it via the [built-in SQL client](https://www.cockroachlabs.com/docs/stable/use-the-built-in-sql-client.html).
+2. [Start a local cluster](https://www.cockroachlabs.com/docs/stable/start-a-local-cluster.html) and connect to it via the built-in SQL client.
 3. [Learn more about CockroachDB SQL](https://www.cockroachlabs.com/docs/stable/learn-cockroachdb-sql.html).
 4. Use a PostgreSQL-compatible driver or ORM to [build an app with CockroachDB](https://www.cockroachlabs.com/docs/stable/hello-world-example-apps.html).
-5. [Explore core features](https://www.cockroachlabs.com/docs/stable/demo-data-replication.html), such as data replication, automatic rebalancing, and fault tolerance and recovery.
+5. Explore core features, such as data replication, automatic rebalancing, and fault tolerance and recovery.
 
 ## Client Drivers
 
 CockroachDB supports the PostgreSQL wire protocol, so you can use any available PostgreSQL client drivers to connect from various languages.
 
 - For recommended drivers that we've tested, see [Install Client Drivers](https://www.cockroachlabs.com/docs/stable/install-client-drivers.html).
-- For tutorials using these drivers, as well as supported ORMs, see [Example Apps](https://www.cockroachlabs.com/docs/stable/example-apps.html).
+- For tutorials using these drivers, as well as supported ORMs, see Example Apps.
 
 ## Deployment
 
 - [CockroachCloud](https://www.cockroachlabs.com/docs/cockroachcloud/quickstart) - Steps to create a [free CockroachCloud cluster](https://cockroachlabs.cloud/signup?referralId=githubquickstart) on your preferred Cloud platform.
 - [Manual](https://www.cockroachlabs.com/docs/stable/manual-deployment.html) - Steps to deploy a CockroachDB cluster manually on multiple machines.
-- [Cloud](https://www.cockroachlabs.com/docs/stable/cloud-deployment.html) - Guides for deploying CockroachDB on various cloud platforms.
-- [Orchestration](https://www.cockroachlabs.com/docs/stable/orchestration.html) - Guides for running CockroachDB with popular open-source orchestration systems.
+- Cloud - Guides for deploying CockroachDB on various cloud platforms.
+- Orchestration - Guides for running CockroachDB with popular open-source orchestration systems.
 
 ## Need Help?
 
@@ -97,7 +97,7 @@ All versions released on or after November 18, 2024 (specifically, major version
 ## Comparison with Other Databases
 
 To see how key features of CockroachDB stack up against other databases,
-check out [CockroachDB in Comparison](https://www.cockroachlabs.com/docs/stable/cockroachdb-in-comparison.html).
+check out CockroachDB in Comparison.
 
 ## See Also
 
