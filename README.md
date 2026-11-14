@@ -97,7 +97,7 @@ All versions released on or after November 18, 2024 (specifically, major version
 ## Comparison with Other Databases
 
 To see how key features of CockroachDB stack up against other databases,
-check out [CockroachDB in Comparison](https://www.cockroachlabs.com/docs/stable/cockroachdb-in-comparison.html).
+check out CockroachDB in Comparison.
 
 ## See Also
 
