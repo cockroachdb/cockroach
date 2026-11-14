@@ -987,11 +987,32 @@ func encodeOverlapsArrayInvertedIndexSpans(
 	return invertedExpr, nil
 }
 
+// maxCaseInsensitiveTrigramSpellings limits how many keys a case-insensitive
+// probe looks up for a single trigram. Each 'i' or 's' in a trigram doubles its
+// spellings ("ı", "ſ"), so "sis" has 8, and almost all of them are absent from
+// the index. A trigram with more spellings than this is left out of the probe
+// instead, which keeps a pattern like '%mississippi%' at 12 spans (for "mis",
+// "sip", "ipp" and "ppi") rather than 36.
+const maxCaseInsensitiveTrigramSpellings = 4
+
 // EncodeTrigramSpans returns the spans that must be scanned to look up trigrams
 // present in the input string. If allMustMatch is true, the resultant inverted
 // expression must match every trigram in the input. Otherwise, it will match
 // any trigram in the input.
-func EncodeTrigramSpans(s string, allMustMatch bool) (inverted.Expression, error) {
+//
+// If caseInsensitive is true, the spans find every row whose text contains the
+// input's trigrams case-insensitively, as ILIKE requires. Index keys are built
+// from the lower-cased text, and some runes that ILIKE considers equal have
+// different lower-case forms (e.g. 'ς' and 'σ', 'ı' and 'i'), so each trigram
+// is looked up under all of the spellings that such a row may have been indexed
+// with; see trigram.CaseInsensitiveVariants. caseInsensitive requires
+// allMustMatch.
+func EncodeTrigramSpans(
+	s string, allMustMatch bool, caseInsensitive bool,
+) (inverted.Expression, error) {
+	if caseInsensitive && !allMustMatch {
+		return nil, errors.AssertionFailedf("caseInsensitive requires allMustMatch")
+	}
 	// We do not pad the trigrams when allMustMatch is true. To see why, observe
 	// the keys that we insert for a string "zfooz":
 	//
@@ -1000,20 +1021,39 @@ func EncodeTrigramSpans(s string, allMustMatch bool) (inverted.Expression, error
 	// If we were then searching for the string %foo%, and we padded the output
 	// keys as well, we'd be searching for the key "  f", which doesn't exist
 	// in the index for zfooz, even though zfooz is like %foo%.
-	keys, err := encodeTrigramInvertedIndexTableKeys(s, nil, /* inKey */
-		descpb.LatestIndexDescriptorVersion, !allMustMatch /* pad */)
-	if err != nil {
-		return nil, err
-	}
-	if len(keys) == 0 {
-		return nil, errors.New("no trigrams available to search with")
-	}
+	trigrams := trigram.MakeTrigrams(s, !allMustMatch /* pad */)
 
 	var ret inverted.Expression
-	for _, key := range keys {
-		spanExpr := inverted.ExprForSpan(inverted.MakeSingleValSpan(key), false /* tight */)
+	for _, t := range trigrams {
+		spellings := []string{t}
+		if caseInsensitive {
+			var ok bool
+			spellings, ok = trigram.CaseInsensitiveVariants(t, maxCaseInsensitiveTrigramSpellings)
+			if !ok {
+				// Either a matching row need not contain any spelling of this
+				// trigram, or looking all of them up would cost more than the
+				// trigram is worth. Leaving it out of the conjunction only widens
+				// the scan, and the original filter is always re-checked.
+				continue
+			}
+		}
+		var trigramExpr inverted.Expression
+		for _, spelling := range spellings {
+			key := encoding.EncodeStringAscending(nil /* b */, spelling)
+			spanExpr := inverted.ExprForSpan(inverted.MakeSingleValSpan(key), false /* tight */)
+			if trigramExpr == nil {
+				// A single key never produces duplicate rows, but only the first
+				// trigram is marked unique; see below. inverted.Or clears this
+				// property when it combines several keys, since a row can contain
+				// more than one spelling of a trigram.
+				spanExpr.Unique = ret == nil
+				trigramExpr = spanExpr
+			} else {
+				trigramExpr = inverted.Or(trigramExpr, spanExpr)
+			}
+		}
 		if ret == nil {
-			// The first trigram (and only the first trigram) is unique.
+			// The first trigram (and only the first trigram) may be unique.
 			// TODO(jordan): we *could* make this first expression tight if we knew
 			// for sure that the expression is something like `LIKE '%foo%'`. In this
 			// case, we're sure that the returned row will pass the predicate because
@@ -1021,21 +1061,21 @@ func EncodeTrigramSpans(s string, allMustMatch bool) (inverted.Expression, error
 			// this is such a marginal case that it doesn't seem worth it to plumb
 			// in this special case. For all other single-trigram cases, such as
 			// `LIKE '%foo'` or `= 'foo'`, we don't have a tight span.
-			spanExpr.Unique = true
-			ret = spanExpr
-		} else {
+			ret = trigramExpr
+		} else if allMustMatch {
 			// As soon as we have more than one trigram to search for, we no longer
 			// have a unique expression, since two separate trigrams could both
 			// point at a single row. We also no longer have a tight expression,
 			// because the trigrams that we're checking don't necessarily have to
 			// be in the right order within the string to guarantee that just because
 			// both trigrams match, the strings pass the LIKE or % test.
-			if allMustMatch {
-				ret = inverted.And(ret, spanExpr)
-			} else {
-				ret = inverted.Or(ret, spanExpr)
-			}
+			ret = inverted.And(ret, trigramExpr)
+		} else {
+			ret = inverted.Or(ret, trigramExpr)
 		}
+	}
+	if ret == nil {
+		return nil, errors.New("no trigrams available to search with")
 	}
 	return ret, nil
 }

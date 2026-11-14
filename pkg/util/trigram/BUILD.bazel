@@ -11,5 +11,8 @@ go_test(
     name = "trigram_test",
     srcs = ["trigram_test.go"],
     embed = [":trigram"],
-    deps = ["@com_github_stretchr_testify//assert"],
+    deps = [
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
 )

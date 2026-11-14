@@ -411,3 +411,117 @@ statement error pq: index "c" is inverted and cannot be used for this query
 SELECT * FROM trigram_similarity_zero_threshold_inverted_index_a@c WHERE b % 'foo';
 
 subtest end
+
+# Regression test: ILIKE through a trigram index must return the same rows as
+# through the primary index, even for runes that ILIKE treats as equal but that
+# have different lower-case forms (e.g. 'ς'/'σ', 'ı'/'i', 'µ'/'μ', 'ſ'/'s').
+subtest ilike_case_mapping
+
+statement ok
+CREATE TABLE ilike_notes (
+  id INT PRIMARY KEY,
+  body STRING,
+  INVERTED INDEX ilike_notes_body_idx (body gin_trgm_ops)
+)
+
+statement ok
+INSERT INTO ilike_notes VALUES
+  (1, 'ΟΔΥΣΣΕΥΣ ΚΑΙ ΛΟΓΟΣ'), (2, 'οδυσσευς και λογος'), (3, 'dose 20 µgram daily'),
+  (4, 'dose 20 μgram daily'), (5, 'KAPI KOLU'), (6, 'kapı kolu'), (7, 'ſtraße'), (8, 'STRASSE'),
+  (9, 'qqϐzz'), (10, 'qqϑzz'), (11, 'qqϕzz'), (12, 'qqϖzz'), (13, 'qqϰzz'), (14, 'qqϱzz'),
+  (15, 'qqϵzz'), (16, 'qqẛzz')
+
+query T
+SELECT array_agg(id ORDER BY id) FROM ilike_notes@ilike_notes_body_idx WHERE body ILIKE '%λογος%'
+----
+{1,2}
+
+query T
+SELECT array_agg(id ORDER BY id) FROM ilike_notes@ilike_notes_body_idx WHERE body ILIKE '%ΛΟΓΟΣ%'
+----
+{1,2}
+
+query T
+SELECT array_agg(id ORDER BY id) FROM ilike_notes@ilike_notes_body_idx WHERE body ILIKE 'ΟΔΥΣΣΕΥΣ%'
+----
+{1,2}
+
+query T
+SELECT array_agg(id ORDER BY id) FROM ilike_notes@ilike_notes_body_idx WHERE body ILIKE '%οδυσσευς%'
+----
+{1,2}
+
+query T
+SELECT array_agg(id ORDER BY id) FROM ilike_notes@ilike_notes_body_idx WHERE body ILIKE '%μgram%'
+----
+{3,4}
+
+query T
+SELECT array_agg(id ORDER BY id) FROM ilike_notes@ilike_notes_body_idx WHERE body ILIKE '%µgram%'
+----
+{3,4}
+
+query T
+SELECT array_agg(id ORDER BY id) FROM ilike_notes@ilike_notes_body_idx WHERE body ILIKE '%KAPI%'
+----
+{5,6}
+
+query T
+SELECT array_agg(id ORDER BY id) FROM ilike_notes@ilike_notes_body_idx WHERE body ILIKE '%kapı%'
+----
+{5,6}
+
+query T
+SELECT array_agg(id ORDER BY id) FROM ilike_notes@ilike_notes_body_idx WHERE body ILIKE '%stra%'
+----
+{7,8}
+
+query T
+SELECT array_agg(id ORDER BY id) FROM ilike_notes@ilike_notes_body_idx WHERE body ILIKE '%qβz%'
+----
+{9}
+
+query T
+SELECT array_agg(id ORDER BY id) FROM ilike_notes@ilike_notes_body_idx WHERE body ILIKE '%qθz%'
+----
+{10}
+
+query T
+SELECT array_agg(id ORDER BY id) FROM ilike_notes@ilike_notes_body_idx WHERE body ILIKE '%qφz%'
+----
+{11}
+
+query T
+SELECT array_agg(id ORDER BY id) FROM ilike_notes@ilike_notes_body_idx WHERE body ILIKE '%qπz%'
+----
+{12}
+
+query T
+SELECT array_agg(id ORDER BY id) FROM ilike_notes@ilike_notes_body_idx WHERE body ILIKE '%qκz%'
+----
+{13}
+
+query T
+SELECT array_agg(id ORDER BY id) FROM ilike_notes@ilike_notes_body_idx WHERE body ILIKE '%qρz%'
+----
+{14}
+
+query T
+SELECT array_agg(id ORDER BY id) FROM ilike_notes@ilike_notes_body_idx WHERE body ILIKE '%qεz%'
+----
+{15}
+
+query T
+SELECT array_agg(id ORDER BY id) FROM ilike_notes@ilike_notes_body_idx WHERE body ILIKE '%qṡz%'
+----
+{16}
+
+statement count 2
+DELETE FROM ilike_notes WHERE body ILIKE '%λογος%'
+
+query I
+SELECT count(*) FROM ilike_notes@ilike_notes_pkey WHERE body ILIKE '%λογος%'
+----
+0
+
+subtest end

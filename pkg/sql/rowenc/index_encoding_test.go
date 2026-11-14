@@ -9,7 +9,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"slices"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -1014,6 +1016,7 @@ type trigramSearchType int
 
 const (
 	like trigramSearchType = iota
+	ilike
 	similar
 	eq
 )
@@ -1070,6 +1073,18 @@ func TestEncodeTrigramInvertedIndexSpans(t *testing.T) {
 		{`foo`, `bar`, eq, false, false, true},
 
 		{`eabc`, `eabd`, eq, false, false, false},
+
+		// Case-insensitive (ILIKE) queries. Index keys are lower-cased, but some
+		// runes that ILIKE treats as equal have different lower-case forms, so
+		// the spans must cover every lower-case spelling.
+		{`FooBar`, `%oob%`, ilike, true, true, true},
+		{`ΟΔΥΣΣΕΥΣ ΚΑΙ ΛΟΓΟΣ`, `%λογος%`, ilike, true, true, false},
+		{`οδυσσευς και λογος`, `%ΛΟΓΟΣ%`, ilike, true, true, false},
+		{`kapı kolu`, `%KAPI%`, ilike, true, true, false},
+		{`dose 20 µgram daily`, `%μgram%`, ilike, true, true, false},
+		{`ſtraße`, `%stra%`, ilike, true, true, false},
+		{`qqϑzz`, `%qθz%`, ilike, true, true, false},
+		{`ΛΟΓΟΣ`, `%λογοχ%`, ilike, false, false, false},
 	}
 
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
@@ -1081,7 +1096,9 @@ func TestEncodeTrigramInvertedIndexSpans(t *testing.T) {
 		require.NoError(t, err)
 
 		typedExpr := makeTrigramBinOp(t, indexedValue, value, searchType)
-		invertedExpr, err := EncodeTrigramSpans(value, searchType != similar)
+		invertedExpr, err := EncodeTrigramSpans(
+			value, searchType != similar /* allMustMatch */, searchType == ilike, /* caseInsensitive */
+		)
 		require.NoError(t, err)
 
 		spanExpr, ok := invertedExpr.(*inverted.SpanExpression)
@@ -1173,12 +1190,115 @@ func TestEncodeTrigramInvertedIndexSpans(t *testing.T) {
 			valid := nTrigrams > 0
 			unique := nTrigrams == 1
 			if !valid {
-				_, err := EncodeTrigramSpans(right, searchType != similar /* allMustMatch */)
+				_, err := EncodeTrigramSpans(
+					right, searchType != similar /* allMustMatch */, false, /* caseInsensitive */
+				)
 				require.Error(t, err)
 				continue
 			}
 			runTest(left, right, searchType, expectedContainsKeys, expected, unique)
 		}
+	}
+}
+
+// TestEncodeTrigramSpansCaseInsensitive checks that the spans produced for a
+// case-insensitive pattern contain every row that matches the pattern with
+// ILIKE, for text made of runes whose case mappings and case folding disagree
+// with lower-casing.
+func TestEncodeTrigramSpansCaseInsensitive(t *testing.T) {
+	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
+	rng, _ := randutil.NewTestRand()
+	// Each group holds runes that ILIKE may treat as equal.
+	groups := [][]rune{
+		[]rune("aA"), []rune("bB"), []rune("cC"), []rune("sSſ"), []rune("iIı"),
+		[]rune("σςΣ"), []rune("θϑΘϴ"), []rune("kKK"), []rune("µμΜ"), []rune("ṡṠẛ"),
+	}
+	randRune := func(g []rune) rune { return g[rng.Intn(len(g))] }
+	groupOf := func(r rune) []rune {
+		for _, g := range groups {
+			if slices.Contains(g, r) {
+				return g
+			}
+		}
+		t.Fatalf("rune %q is in no group", r)
+		return nil
+	}
+	matches := 0
+	for range 1000 {
+		row := make([]rune, 10)
+		for i := range row {
+			row[i] = randRune(groups[rng.Intn(len(groups))])
+		}
+		// Build the pattern from a substring of the row, spelling each rune with
+		// a random member of its group so that ILIKE usually matches.
+		start := rng.Intn(5)
+		var sb strings.Builder
+		sb.WriteByte('%')
+		for _, r := range row[start : start+3+rng.Intn(3)] {
+			if rng.Intn(10) == 0 {
+				// '_' makes ILIKE use its regular-expression path, which folds
+				// case differently than its upper-casing fast paths.
+				sb.WriteByte('_')
+			} else {
+				sb.WriteRune(randRune(groupOf(r)))
+			}
+		}
+		sb.WriteByte('%')
+		pattern := sb.String()
+
+		spans, err := EncodeTrigramSpans(pattern, true /* allMustMatch */, true /* caseInsensitive */)
+		if err != nil {
+			// No trigram is long enough to search with.
+			continue
+		}
+		d, err := eval.Expr(
+			context.Background(), &evalCtx, makeTrigramBinOp(t, string(row), pattern, ilike),
+		)
+		require.NoError(t, err)
+		if !bool(*d.(*tree.DBool)) {
+			continue
+		}
+		matches++
+		keys, err := EncodeInvertedIndexTableKeys(
+			tree.NewDString(string(row)), nil /* inKey */, descpb.LatestIndexDescriptorVersion,
+		)
+		require.NoError(t, err)
+		spanExpr, ok := spans.(*inverted.SpanExpression)
+		require.True(t, ok)
+		contains, err := spanExpr.ContainsKeys(keys)
+		require.NoError(t, err)
+		require.True(t, contains,
+			"%q ILIKE %q matches, but the spans miss the row", string(row), pattern)
+	}
+	// Make sure the test exercised a meaningful number of matching rows.
+	require.Greater(t, matches, 500)
+}
+
+// TestEncodeTrigramSpansCaseInsensitiveLimit checks which trigrams a
+// case-insensitive probe looks up when some of them have many spellings.
+func TestEncodeTrigramSpansCaseInsensitiveLimit(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		pattern       string
+		expectedSpans int
+		expectedErr   bool
+	}{
+		{name: "no case-ambiguous runes", pattern: "%foobar%", expectedSpans: 4},
+		{name: "two spellings of one trigram", pattern: "%λογος%", expectedSpans: 4},
+		{name: "trigrams over the limit are left out", pattern: "%mississippi%", expectedSpans: 12},
+		{name: "every trigram over the limit", pattern: "%sis%", expectedErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			expr, err := EncodeTrigramSpans(tc.pattern, true /* allMustMatch */, true /* caseInsensitive */)
+			if tc.expectedErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			spanExpr, ok := expr.(*inverted.SpanExpression)
+			require.True(t, ok)
+			require.Len(t, spanExpr.SpansToRead, tc.expectedSpans)
+		})
 	}
 }
 
@@ -1189,6 +1309,8 @@ func makeTrigramBinOp(
 	switch searchType {
 	case like:
 		opstr = "LIKE"
+	case ilike:
+		opstr = "ILIKE"
 	case eq:
 		opstr = "="
 	case similar:
@@ -1223,13 +1345,13 @@ func TestEncodeTrigramInvertedIndexSpansError(t *testing.T) {
 		{"#$(*)", true, true},
 	}
 	for _, tc := range testCases {
-		_, err := EncodeTrigramSpans(tc.input, true /* allMustMatch */)
+		_, err := EncodeTrigramSpans(tc.input, true /* allMustMatch */, false /* caseInsensitive */)
 		if tc.allMustMatchErr {
 			require.Error(t, err)
 		} else {
 			require.NoError(t, err)
 		}
-		_, err = EncodeTrigramSpans(tc.input, false /* allMustMatch */)
+		_, err = EncodeTrigramSpans(tc.input, false /* allMustMatch */, false /* caseInsensitive */)
 		if tc.anyMustMatchErr {
 			require.Error(t, err)
 		} else {
