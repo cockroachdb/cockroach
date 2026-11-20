@@ -138,6 +138,22 @@ func isNextSeparator(formatNodes []formatNode, idx int) bool {
 	return true
 }
 
+// parseDigitRun accumulates the decimal digits in s[start:end] and reports
+// whether the value overflowed a Go int. Without this check a digit run of
+// 2^64 + k wraps back to k and passes every later range check; PostgreSQL's
+// strtol instead sets ERANGE for such runs.
+func parseDigitRun(s string, start, end int) (int, bool) {
+	v := 0
+	for i := start; i < end; i++ {
+		d := int(s[i] - '0')
+		if v > (math.MaxInt64-d)/10 {
+			return 0, true
+		}
+		v = v*10 + d
+	}
+	return v, false
+}
+
 // fromCharParseIntLen parses an integer from the input string.
 // fixedLen is the expected field width for fixed-width parsing.
 // In "slurp" mode (FM mode or when the next format node is a separator),
@@ -185,9 +201,13 @@ func fromCharParseIntLen(
 				nodeName,
 			)
 		}
-		v := 0
-		for i := pos; i < end; i++ {
-			v = v*10 + int(s[i]-'0')
+		v, overflow := parseDigitRun(s, pos, end)
+		if overflow {
+			return 0, 0, false, pgerror.Newf(
+				pgcode.DatetimeFieldOverflow,
+				"value for \"%s\" in source string is out of range",
+				nodeName,
+			)
 		}
 		v *= sign
 		// PostgreSQL checks for int32 overflow.
@@ -223,9 +243,13 @@ func fromCharParseIntLen(
 			nodeName,
 		)
 	}
-	v := 0
-	for i := pos; i < end; i++ {
-		v = v*10 + int(s[i]-'0')
+	v, overflow := parseDigitRun(s, pos, end)
+	if overflow {
+		return 0, 0, false, pgerror.Newf(
+			pgcode.DatetimeFieldOverflow,
+			"value for \"%s\" in source string is out of range",
+			nodeName,
+		)
 	}
 	v *= sign
 	return v, end - start, false, nil
@@ -626,9 +650,12 @@ nodeLoop:
 					"invalid input string for \"Y,YYY\"",
 				)
 			}
-			millennia := 0
-			for i := start; i < pos; i++ {
-				millennia = millennia*10 + int(s[i]-'0')
+			millennia, overflow := parseDigitRun(s, start, pos)
+			if overflow {
+				return pgerror.New(
+					pgcode.DatetimeFieldOverflow,
+					"value for \"Y,YYY\" in source string is out of range",
+				)
 			}
 			if pos >= len(s) || s[pos] != ',' {
 				return pgerror.New(
@@ -650,6 +677,14 @@ nodeLoop:
 			years := 0
 			for i := yearStart; i < pos; i++ {
 				years = years*10 + int(s[i]-'0')
+			}
+			// The years part is exactly 3 digits, so only the
+			// millennia*1000 + years computation itself can overflow.
+			if millennia > (math.MaxInt64-years)/1000 {
+				return pgerror.New(
+					pgcode.DatetimeFieldOverflow,
+					"value for \"Y,YYY\" in source string is out of range",
+				)
 			}
 			val := millennia*1000 + years
 			if err := fromCharSetInt(&tmfc.year, val, fn.key); err != nil {
