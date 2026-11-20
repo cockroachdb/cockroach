@@ -678,9 +678,11 @@ nodeLoop:
 			for i := yearStart; i < pos; i++ {
 				years = years*10 + int(s[i]-'0')
 			}
-			// The years part is exactly 3 digits, so only the
-			// millennia*1000 + years computation itself can overflow.
-			if millennia > (math.MaxInt64-years)/1000 {
+			// The years part is exactly 3 digits. Reject a combined
+			// value outside the int32 range, matching the check
+			// fromCharParseIntLen applies to every other numeric field;
+			// this also keeps millennia*1000 + years from overflowing.
+			if millennia > (math.MaxInt32-years)/1000 {
 				return pgerror.New(
 					pgcode.DatetimeFieldOverflow,
 					"value for \"Y,YYY\" in source string is out of range",

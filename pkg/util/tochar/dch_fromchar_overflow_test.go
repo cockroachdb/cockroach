@@ -114,7 +114,23 @@ func TestCharToDateYYYYYOverflow(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, pgcode.DatetimeFieldOverflow, pgerror.GetPGCode(err))
 
-	year, month, day, err := CharToDate("2,023-03-15", c, "Y,YYY-MM-DD")
+	// The combined value is also bounded to the int32 range, like every
+	// other numeric field: 2147483,647 is the largest valid Y,YYY year.
+	_, _, _, err = CharToDate("2147483,648", c, "Y,YYY")
+	require.Error(t, err)
+	require.Equal(t, pgcode.DatetimeFieldOverflow, pgerror.GetPGCode(err))
+
+	_, _, _, err = CharToDate("2147484,000", c, "Y,YYY")
+	require.Error(t, err)
+	require.Equal(t, pgcode.DatetimeFieldOverflow, pgerror.GetPGCode(err))
+
+	year, month, day, err := CharToDate("2147483,647-01-01", c, "Y,YYY-MM-DD")
+	require.NoError(t, err)
+	require.Equal(t, 2147483647, year)
+	require.Equal(t, time.January, month)
+	require.Equal(t, 1, day)
+
+	year, month, day, err = CharToDate("2,023-03-15", c, "Y,YYY-MM-DD")
 	require.NoError(t, err)
 	require.Equal(t, 2023, year)
 	require.Equal(t, time.March, month)
