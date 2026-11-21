@@ -10663,6 +10663,18 @@ func txnTSOverloads(preferTZOverload bool) []tree.Overload {
 	}
 }
 
+// txnTimePrecision validates the precision argument of the current_time,
+// current_timestamp, localtime, and localtimestamp builtins. The argument is
+// an INT8, so it is range-checked before being narrowed to int32; otherwise
+// a precision of 2^32 + k would be silently accepted as k.
+func txnTimePrecision(arg tree.Datum) (int32, error) {
+	prec := tree.MustBeDInt(arg)
+	if prec < 0 || prec > 6 {
+		return 0, pgerror.Newf(pgcode.NumericValueOutOfRange, "precision %d out of range", prec)
+	}
+	return int32(prec), nil
+}
+
 func txnTSWithPrecisionOverloads(preferTZOverload bool) []tree.Overload {
 	pref := tree.OverloadPreferencePreferred
 	tzPref := tree.OverloadPreferenceNone
@@ -10677,9 +10689,9 @@ func txnTSWithPrecisionOverloads(preferTZOverload bool) []tree.Overload {
 				ReturnType:         tree.FixedReturnType(types.TimestampTZ),
 				OverloadPreference: tzPref,
 				Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-					prec := int32(tree.MustBeDInt(args[0]))
-					if prec < 0 || prec > 6 {
-						return nil, pgerror.Newf(pgcode.NumericValueOutOfRange, "precision %d out of range", prec)
+					prec, err := txnTimePrecision(args[0])
+					if err != nil {
+						return nil, err
 					}
 					return evalCtx.GetTxnTimestamp(tree.TimeFamilyPrecisionToRoundDuration(prec)), nil
 				},
@@ -10691,9 +10703,9 @@ func txnTSWithPrecisionOverloads(preferTZOverload bool) []tree.Overload {
 				ReturnType:         tree.FixedReturnType(types.Timestamp),
 				OverloadPreference: pref,
 				Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-					prec := int32(tree.MustBeDInt(args[0]))
-					if prec < 0 || prec > 6 {
-						return nil, pgerror.Newf(pgcode.NumericValueOutOfRange, "precision %d out of range", prec)
+					prec, err := txnTimePrecision(args[0])
+					if err != nil {
+						return nil, err
 					}
 					return evalCtx.GetTxnTimestampNoZone(tree.TimeFamilyPrecisionToRoundDuration(prec)), nil
 				},
@@ -10704,9 +10716,8 @@ func txnTSWithPrecisionOverloads(preferTZOverload bool) []tree.Overload {
 				Types:      tree.ParamTypes{{Name: "precision", Typ: types.Int}},
 				ReturnType: tree.FixedReturnType(types.Date),
 				Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-					prec := int32(tree.MustBeDInt(args[0]))
-					if prec < 0 || prec > 6 {
-						return nil, pgerror.Newf(pgcode.NumericValueOutOfRange, "precision %d out of range", prec)
+					if _, err := txnTimePrecision(args[0]); err != nil {
+						return nil, err
 					}
 					return currentDate(ctx, evalCtx, args)
 				},
@@ -10770,9 +10781,9 @@ func txnTimeWithPrecisionBuiltin(preferTZOverload bool) builtinDefinition {
 			ReturnType:         tree.FixedReturnType(types.TimeTZ),
 			OverloadPreference: tzPref,
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				prec := int32(tree.MustBeDInt(args[0]))
-				if prec < 0 || prec > 6 {
-					return nil, pgerror.Newf(pgcode.NumericValueOutOfRange, "precision %d out of range", prec)
+				prec, err := txnTimePrecision(args[0])
+				if err != nil {
+					return nil, err
 				}
 				return evalCtx.GetTxnTime(tree.TimeFamilyPrecisionToRoundDuration(prec)), nil
 			},
@@ -10784,9 +10795,9 @@ func txnTimeWithPrecisionBuiltin(preferTZOverload bool) builtinDefinition {
 			ReturnType:         tree.FixedReturnType(types.Time),
 			OverloadPreference: pref,
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
-				prec := int32(tree.MustBeDInt(args[0]))
-				if prec < 0 || prec > 6 {
-					return nil, pgerror.Newf(pgcode.NumericValueOutOfRange, "precision %d out of range", prec)
+				prec, err := txnTimePrecision(args[0])
+				if err != nil {
+					return nil, err
 				}
 				return evalCtx.GetTxnTimeNoZone(tree.TimeFamilyPrecisionToRoundDuration(prec)), nil
 			},

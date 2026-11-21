@@ -182,6 +182,7 @@ go_test(
         "math_builtins_test.go",
         "parse_ident_builtin_test.go",
         "show_create_all_tables_builtin_test.go",
+        "txn_time_precision_test.go",
         "window_frame_builtins_test.go",
     ],
     data = glob(["testdata/**"]),

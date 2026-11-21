@@ -489,6 +489,27 @@ ORDER BY id ASC
 1
 2
 
+# The precision argument is an INT8; precisions of 2^32 + k must be rejected
+# instead of being silently accepted as k. See #176245.
+subtest regression_176245
+
+statement error precision 4294967297 out of range
+SELECT current_time(4294967297)
+
+statement error precision 4294967303 out of range
+SELECT current_timestamp(4294967303)
+
+statement error precision 7 out of range
+SELECT localtime(7)
+
+statement error precision -1 out of range
+SELECT localtimestamp(-1)
+
+query B
+SELECT current_time(6) IS NOT NULL AND localtimestamp(0) IS NOT NULL
+----
+true
+
 # Check default types and expressions get truncated on insert / update.
 subtest regression_44774
 
