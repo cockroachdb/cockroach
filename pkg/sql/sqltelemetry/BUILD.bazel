@@ -10,7 +10,6 @@ go_library(
         "exec.go",
         "extension.go",
         "feature_flags.go",
-        "follower_reads.go",
         "function.go",
         "iam.go",
         "isolation.go",

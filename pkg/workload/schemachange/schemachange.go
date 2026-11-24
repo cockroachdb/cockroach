@@ -15,7 +15,6 @@ import (
 	"io"
 	"os"
 	"regexp"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -164,6 +163,94 @@ func setupSchemaChangePromCounter(reg prometheus.Registerer) schemaChangeCounter
 	}
 }
 
+func (s *schemaChange) logInspectErrors(
+	ctx context.Context, pool *workload.MultiConnPool, log *atomicLog,
+) error {
+	connPool := pool.Get()
+	conn, err := connPool.Acquire(ctx)
+	if err != nil {
+		log.printLn(fmt.Sprintf("unable to acquire connection for SHOW INSPECT ERRORS: %v", err))
+		return err
+	}
+	defer conn.Release()
+
+	rows, err := conn.Query(ctx, `SELECT job_id FROM [SHOW JOBS] WHERE job_type = 'INSPECT' ORDER BY created DESC`)
+	if err != nil {
+		log.printLn(fmt.Sprintf("fetching INSPECT jobs failed: %v", err))
+		return err
+	}
+	jobIDs, err := pgx.CollectRows(rows, pgx.RowTo[int64])
+	rows.Close()
+	if err != nil {
+		log.printLn(fmt.Sprintf("collecting INSPECT job IDs failed: %v", err))
+		return err
+	}
+	if len(jobIDs) == 0 {
+		return nil
+	}
+
+	type InspectJobResult struct {
+		JobID  int64            `json:"jobId"`
+		Status string           `json:"status"`
+		Errors []map[string]any `json:"errors,omitempty"`
+	}
+
+	type InspectErrorSummary struct {
+		Message string             `json:"message"`
+		Jobs    []InspectJobResult `json:"jobs"`
+	}
+
+	summary := InspectErrorSummary{
+		Message: "Inspect Job Errors",
+		Jobs:    make([]InspectJobResult, 0, len(jobIDs)),
+	}
+
+	var totalErrors int
+	for _, jobID := range jobIDs {
+		query := fmt.Sprintf(`
+			SELECT error_type, database_name, schema_name, table_name, primary_key, job_id, aost, details
+			FROM [SHOW INSPECT ERRORS FOR JOB %d WITH DETAILS]`, jobID)
+		rows, err := conn.Query(ctx, query)
+		if err != nil {
+			log.printLn(fmt.Sprintf("%s failed: %v", query, err))
+			continue
+		}
+		results, err := pgx.CollectRows(rows, pgx.RowToMap)
+		rows.Close()
+		if err != nil {
+			log.printLn(fmt.Sprintf("collecting inspect errors for job %d failed: %v", jobID, err))
+			continue
+		}
+
+		jobResult := InspectJobResult{
+			JobID: jobID,
+		}
+
+		if len(results) == 0 {
+			jobResult.Status = "no errors reported"
+		} else {
+			jobResult.Status = fmt.Sprintf("%d error rows", len(results))
+			jobResult.Errors = results
+			totalErrors += len(results)
+		}
+
+		summary.Jobs = append(summary.Jobs, jobResult)
+	}
+
+	// Output as JSON.
+	jsonBytes, err := json.MarshalIndent(summary, "", " ")
+	if err != nil {
+		log.printLn(fmt.Sprintf("failed to marshal inspect errors to JSON: %v", err))
+		return err
+	}
+	log.printLn(string(jsonBytes))
+
+	if totalErrors > 0 {
+		return errors.Newf("found %d inspect errors across %d jobs", totalErrors, len(jobIDs))
+	}
+	return nil
+}
+
 // Meta implements the workload.Generator interface.
 func (s *schemaChange) Meta() workload.Meta { return schemaChangeMeta }
 
@@ -217,6 +304,9 @@ func (s *schemaChange) Ops(
 	cfg.MaxConnLifetime = time.Hour
 	cfg.MaxConnIdleTime = time.Hour
 	cfg.QueryTracer = &PGXTracer{tracer: tracer}
+	if err := s.setClusterSettings(ctx, urls[0]); err != nil {
+		return workload.QueryLoad{}, err
+	}
 	pool, err := workload.NewMultiConnPool(ctx, cfg, urls...)
 	if err != nil {
 		return workload.QueryLoad{}, err
@@ -225,9 +315,7 @@ func (s *schemaChange) Ops(
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
-	if err := s.setClusterSettings(ctx, pool); err != nil {
-		return workload.QueryLoad{}, err
-	}
+
 	stdoutLog := makeAtomicLog(os.Stdout)
 	// Use NewPseudoRand here because we want to print out the global seed used by
 	// the workload. Using NewTestRand() here would only let us see the per-test
@@ -246,12 +334,14 @@ func (s *schemaChange) Ops(
 
 	ql := workload.QueryLoad{
 		Close: func(_ context.Context) error {
-			// Create a new context for shutting down the tracer provider. The
-			// provided context may be cancelled depending on why the workload is
-			// shutting down and we always want to provide a period of time to flush
-			// traces.
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			// Create a new context for shutting down the tracer provider and logging
+			// inspect errors. The provided context may be cancelled depending on why
+			// the workload is shutting down and we always want to provide a period of
+			// time to flush traces.
+			ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 			defer cancel()
+
+			inspectErr := s.logInspectErrors(ctx, pool, stdoutLog)
 
 			pool.Close()
 			watchDogPool.Close()
@@ -259,7 +349,7 @@ func (s *schemaChange) Ops(
 			closeErr := s.closeJSONLogFile()
 			shutdownErr := tracerProvider.Shutdown(ctx)
 			s.schemaWorkloadResultAnnotator.logWorkloadStats(stdoutLog)
-			return errors.CombineErrors(closeErr, shutdownErr)
+			return errors.Join(inspectErr, closeErr, shutdownErr)
 		},
 	}
 
@@ -338,9 +428,28 @@ func (s *schemaChange) Ops(
 
 // setClusterSettings configures any settings required for the workload ahead
 // of starting workers.
-func (s *schemaChange) setClusterSettings(ctx context.Context, pool *workload.MultiConnPool) error {
-	_, err := pool.Get().Exec(ctx, `SET CLUSTER SETTING sql.defaults.super_regions.enabled = 'on'`)
-	return errors.WithStack(err)
+func (s *schemaChange) setClusterSettings(ctx context.Context, url string) (err error) {
+	conn, err := pgx.Connect(ctx, url)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		closeErr := conn.Close(ctx)
+		err = errors.WithSecondaryError(err, closeErr)
+	}()
+	for _, stmt := range []string{
+		`SET CLUSTER SETTING sql.log.all_statements.enabled = 'on'`,
+
+		// This workload is designed to test multiple statements in a transaction.
+		`SET CLUSTER SETTING sql.defaults.autocommit_before_ddl.enabled = 'false'`,
+	} {
+		_, err := conn.Exec(ctx, stmt)
+		if err != nil {
+			return errors.WithStack(err)
+		}
+	}
+
+	return nil
 }
 
 // initSeqName returns the smallest available sequence number to be
@@ -479,10 +588,16 @@ func (w *schemaChangeWorker) runInTxn(
 		}
 
 		op, err := w.opGen.randOp(ctx, tx, useDeclarativeSchemaChanger, numOps)
-		if pgErr := new(pgconn.PgError); errors.As(err, &pgErr) &&
-			pgcode.MakeCode(pgErr.Code) == pgcode.SerializationFailure {
-			return errors.Mark(err, errRunInTxnRbkSentinel)
-		} else if err != nil && errors.Is(err, errRunInTxnRbkSentinel) {
+		if pgErr := new(pgconn.PgError); errors.As(err, &pgErr) {
+			// OutOfMemory (53200) is rollback-worthy: the workload's
+			// introspection queries can exhaust the server's per-query
+			// memory budget under load, which is not a workload bug.
+			switch pgcode.MakeCode(pgErr.Code) {
+			case pgcode.SerializationFailure, pgcode.OutOfMemory:
+				return errors.Mark(err, errRunInTxnRbkSentinel)
+			}
+		}
+		if err != nil && errors.Is(err, errRunInTxnRbkSentinel) {
 			// Error was already marked for us.
 			return err
 		} else if errors.Is(err, context.DeadlineExceeded) {
@@ -512,15 +627,6 @@ func (w *schemaChangeWorker) runInTxn(
 				// to rollback.
 				if pgcode.MakeCode(pgErr.Code) == pgcode.SerializationFailure {
 					w.recordInHist(timeutil.Since(start), txnRollback)
-					return errors.Mark(
-						err,
-						errRunInTxnRbkSentinel,
-					)
-				}
-				// Command is too large errors are allowed on DML operations since,
-				// some of the tables can be pretty wide in this test.
-				if op.queryType == OpStmtDML && pgcode.MakeCode(pgErr.Code) == pgcode.Uncategorized &&
-					strings.Contains(pgErr.Error(), "command is too large") {
 					return errors.Mark(
 						err,
 						errRunInTxnRbkSentinel,
@@ -591,7 +697,7 @@ func (w *schemaChangeWorker) run(ctx context.Context) error {
 
 	// Run between 1 and maxOpsPerWorker schema change operations.
 	watchDog := newSchemaChangeWatchDog(w.watchDogPool.Get(), w.logger)
-	if err := watchDog.Start(ctx, tx); err != nil {
+	if err := watchDog.Start(ctx, w.id, tx); err != nil {
 		return errors.Wrapf(err, "unable to start watch dog")
 	}
 	defer watchDog.Stop()

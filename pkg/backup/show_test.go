@@ -1,0 +1,1412 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package backup
+
+import (
+	"context"
+	"fmt"
+	"math/rand"
+	"net/url"
+	"os"
+	"path/filepath"
+	"regexp"
+	"slices"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/stretchr/testify/require"
+)
+
+// TODO (msbutler): when refactoring these tests to data driven tests, keep the
+// original go test on 22.1 and only use new backup syntax in data driven test
+
+func TestShowBackup(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 11
+	tc, sqlDB, tempDir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	kvDB := tc.Server(0).ApplicationLayer().DB()
+	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
+	defer cleanupFn()
+	defer cleanupEmptyCluster()
+	sqlDB.ExecMultiple(t, strings.Split(`
+SET CLUSTER SETTING sql.cross_db_fks.enabled = TRUE;
+SET CLUSTER SETTING bulkio.backup.file_size = '1';
+CREATE TYPE data.welcome AS ENUM ('hello', 'hi');
+USE data; CREATE SCHEMA sc;
+CREATE TABLE data.sc.t1 (a INT);
+CREATE TABLE data.sc.t2 (a data.welcome);
+`,
+		`;`)...)
+
+	const full = localFoo + "/full"
+
+	beforeTS := sqlDB.QueryStr(t, `SELECT now()::timestamptz::string`)[0][0]
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data INTO $1 AS OF SYSTEM TIME '%s'`, beforeTS), full)
+
+	res := sqlDB.QueryStr(t, `
+SELECT
+  database_name, parent_schema_name, object_name, object_type, backup_type,
+  start_time::string, end_time::string, rows, is_full_cluster
+FROM
+	[SHOW BACKUP FROM LATEST IN $1]
+ORDER BY object_type, object_name`, full)
+	expectedObjects := [][]string{
+		{"NULL", "NULL", "data", "database", "full", "NULL", beforeTS, "NULL", "false"},
+		{"data", "NULL", "public", "schema", "full", "NULL", beforeTS, "NULL", "false"},
+		{"data", "NULL", "sc", "schema", "full", "NULL", beforeTS, "NULL", "false"},
+		{"data", "public", "bank", "table", "full", "NULL", beforeTS, strconv.Itoa(numAccounts), "false"},
+		{"data", "sc", "t1", "table", "full", "NULL", beforeTS, strconv.Itoa(0), "false"},
+		{"data", "sc", "t2", "table", "full", "NULL", beforeTS, strconv.Itoa(0), "false"},
+		{"data", "public", "_welcome", "type", "full", "NULL", beforeTS, "NULL", "false"},
+		{"data", "public", "welcome", "type", "full", "NULL", beforeTS, "NULL", "false"},
+	}
+	require.Equal(t, expectedObjects, res)
+
+	// Mess with half the rows.
+	affectedRows, err := sqlDB.Exec(t,
+		`UPDATE data.bank SET id = -1 * id WHERE id > $1`, numAccounts/2,
+	).RowsAffected()
+	require.NoError(t, err)
+	require.Equal(t, numAccounts/2, int(affectedRows))
+
+	// Backup the changes by appending to the base and by making a separate
+	// inc backup.
+	incTS := sqlDB.QueryStr(t, `SELECT now()::timestamptz::string`)[0][0]
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data INTO LATEST IN $1 AS OF SYSTEM TIME '%s'`, incTS), full)
+
+	// Check the appended base backup.
+	res = sqlDB.QueryStr(t, `SELECT object_name, backup_type, start_time::string, end_time::string, rows, is_full_cluster FROM [SHOW BACKUP FROM LATEST IN $1]`, full)
+	require.Equal(t, [][]string{
+		// Full.
+		{"data", "full", "NULL", beforeTS, "NULL", "false"},
+		{"public", "full", "NULL", beforeTS, "NULL", "false"},
+		{"bank", "full", "NULL", beforeTS, strconv.Itoa(numAccounts), "false"},
+		{"welcome", "full", "NULL", beforeTS, "NULL", "false"},
+		{"_welcome", "full", "NULL", beforeTS, "NULL", "false"},
+		{"sc", "full", "NULL", beforeTS, "NULL", "false"},
+		{"t1", "full", "NULL", beforeTS, "0", "false"},
+		{"t2", "full", "NULL", beforeTS, "0", "false"},
+		// Incremental.
+		{"data", "incremental", beforeTS, incTS, "NULL", "false"},
+		{"public", "incremental", beforeTS, incTS, "NULL", "false"},
+		{"bank", "incremental", beforeTS, incTS, strconv.Itoa(int(affectedRows * 2)), "false"},
+		{"welcome", "incremental", beforeTS, incTS, "NULL", "false"},
+		{"_welcome", "incremental", beforeTS, incTS, "NULL", "false"},
+		{"sc", "incremental", beforeTS, incTS, "NULL", "false"},
+		{"t1", "incremental", beforeTS, incTS, "0", "false"},
+		{"t2", "incremental", beforeTS, incTS, "0", "false"},
+	}, res)
+
+	// Create two new tables, alphabetically on either side of bank.
+	sqlDB.Exec(t, `CREATE TABLE data.auth (id INT PRIMARY KEY, name STRING)`)
+	sqlDB.Exec(t, `CREATE TABLE data.users (id INT PRIMARY KEY, name STRING)`)
+	sqlDB.Exec(t, `INSERT INTO data.users VALUES (1, 'one'), (2, 'two'), (3, 'three')`)
+
+	// Backup the changes again, by making a new inc backup.
+	inc2TS := sqlDB.QueryStr(t, `SELECT now()::timestamptz::string`)[0][0]
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data INTO LATEST IN $1 AS OF SYSTEM TIME '%s'`, inc2TS), full)
+
+	// Check the backup.
+	res = sqlDB.QueryStr(t, `SELECT object_name, backup_type, start_time::string, end_time::string, rows FROM [SHOW BACKUP FROM LATEST IN $1] WHERE object_type='table'`, full)
+	require.Equal(t, [][]string{
+		{"bank", "full", "NULL", beforeTS, strconv.Itoa(numAccounts)},
+		{"t1", "full", "NULL", beforeTS, "0"},
+		{"t2", "full", "NULL", beforeTS, "0"},
+		{"bank", "incremental", beforeTS, incTS, strconv.Itoa(int(affectedRows * 2))},
+		{"t1", "incremental", beforeTS, incTS, "0"},
+		{"t2", "incremental", beforeTS, incTS, "0"},
+		{"bank", "incremental", incTS, inc2TS, "0"},
+		{"t1", "incremental", incTS, inc2TS, "0"},
+		{"t2", "incremental", incTS, inc2TS, "0"},
+		{"auth", "incremental", incTS, inc2TS, "0"},
+		{"users", "incremental", incTS, inc2TS, "3"},
+	}, res)
+
+	const details = localFoo + "/details"
+	sqlDB.Exec(t, `CREATE TABLE data.details1 (c INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `INSERT INTO data.details1 (SELECT generate_series(1, 100))`)
+	sqlDB.Exec(t, `ALTER TABLE data.details1 SPLIT AT VALUES (1), (42)`)
+	sqlDB.Exec(t, `CREATE TABLE data.details2()`)
+	sqlDB.Exec(t, `BACKUP data.details1, data.details2 INTO $1;`, details)
+
+	codec := tc.ApplicationLayer(0).Codec()
+	details1Desc := desctestutils.TestingGetPublicTableDescriptor(tc.Server(0).DB(), codec, "data", "details1")
+	details2Desc := desctestutils.TestingGetPublicTableDescriptor(tc.Server(0).DB(), codec, "data", "details2")
+	d1ID := details1Desc.GetID()
+	d2ID := details2Desc.GetID()
+	details1Key := roachpb.Key(rowenc.MakeIndexKeyPrefix(codec, d1ID, details1Desc.GetPrimaryIndexID()))
+	details2Key := roachpb.Key(rowenc.MakeIndexKeyPrefix(codec, d2ID, details2Desc.GetPrimaryIndexID()))
+
+	var prefix string
+	if !tc.ApplicationLayer(0).Codec().ForSystemTenant() {
+		prefix = tc.ApplicationLayer(0).Codec().TenantPrefix().String()
+	}
+	sqlDBRestore.CheckQueryResults(t, fmt.Sprintf(`SHOW BACKUP RANGES FROM LATEST IN '%s'`, details), [][]string{
+		{
+			fmt.Sprintf(prefix+"/Table/%d/1", d1ID),
+			fmt.Sprintf(prefix+"/Table/%d/2", d1ID),
+			string(details1Key),
+			string(details1Key.PrefixEnd())},
+		{
+			fmt.Sprintf(prefix+"/Table/%d/1", d2ID),
+			fmt.Sprintf(prefix+"/Table/%d/2", d2ID),
+			string(details2Key),
+			string(details2Key.PrefixEnd()),
+		},
+	})
+
+	fileSize1 := "410"
+	fileSize2 := "590"
+	if !codec.ForSystemTenant() {
+		fileSize1 = "492"
+		fileSize2 = "708"
+	}
+	var showFiles = fmt.Sprintf(`SELECT start_pretty, end_pretty, size_bytes, rows
+		FROM [SHOW BACKUP FILES FROM LATEST IN '%s']`, details)
+	sqlDBRestore.CheckQueryResults(t, showFiles, [][]string{
+		{
+			fmt.Sprintf(prefix+"/Table/%d/1/1", d1ID),
+			fmt.Sprintf(prefix+"/Table/%d/1/42", d1ID),
+			fileSize1, "41",
+		},
+		{
+			fmt.Sprintf(prefix+"/Table/%d/1/42", d1ID),
+			fmt.Sprintf(prefix+"/Table/%d/2", d1ID),
+			fileSize2, "59",
+		},
+	})
+	sstMatcher := regexp.MustCompile(`\d+\.sst`)
+	pathRows := sqlDB.QueryStr(t, `SELECT path FROM [SHOW BACKUP FILES FROM LATEST IN $1]`, details)
+	for _, row := range pathRows {
+		path := row[0]
+		if matched := sstMatcher.MatchString(path); !matched {
+			t.Errorf("malformatted path in SHOW BACKUP FILES: %s", path)
+		}
+	}
+	if len(pathRows) != 2 {
+		t.Fatalf("expected 2 files, but got %d", len(pathRows))
+	}
+
+	// SCHEMAS: Test the creation statement.
+	var showBackupRows [][]string
+	var expected []string
+
+	// Test that tables, views and sequences are all supported.
+	{
+		viewTableSeq := localFoo + "/tableviewseq"
+		sqlDB.Exec(t, `CREATE TABLE data.tableA (a int primary key, b int, INDEX tableA_b_idx (b ASC))`)
+		sqlDB.Exec(t, `CREATE VIEW data.viewA AS SELECT a from data.tableA`)
+		sqlDB.Exec(t, `CREATE SEQUENCE data.seqA START 1 INCREMENT 2 MAXVALUE 20`)
+		sqlDB.Exec(t, `BACKUP data.tableA, data.viewA, data.seqA INTO $1;`, viewTableSeq)
+
+		// Create tables with the same ID as data.tableA to ensure that comments
+		// from different tables in the restoring cluster don't appear.
+		tableA := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "data", "tablea")
+		for i := bootstrap.TestingUserDescID(0); i < uint32(tableA.GetID()); i++ {
+			tableName := fmt.Sprintf("foo%d", i)
+			sqlDBRestore.Exec(t, fmt.Sprintf("CREATE TABLE %s ();", tableName))
+			sqlDBRestore.Exec(t, fmt.Sprintf("COMMENT ON TABLE %s IS 'table comment'", tableName))
+		}
+
+		expectedCreateTable := `CREATE TABLE tablea (
+		a INT8 NOT NULL,
+		b INT8 NULL,
+		CONSTRAINT tablea_pkey PRIMARY KEY (a ASC),
+		INDEX tablea_b_idx (b ASC)
+	) WITH (schema_locked = true)`
+		expectedCreateView := "CREATE VIEW viewa (\n\ta\n) AS SELECT a FROM data.public.tablea"
+		expectedCreateSeq := `CREATE SEQUENCE seqa MINVALUE 1 MAXVALUE 20 INCREMENT 2 START 1`
+
+		showBackupRows = sqlDBRestore.QueryStr(t,
+			fmt.Sprintf(`SELECT create_statement FROM [SHOW BACKUP SCHEMAS FROM LATEST IN '%s'] WHERE object_type='table'`, viewTableSeq))
+		expected = []string{
+			expectedCreateTable,
+			expectedCreateView,
+			expectedCreateSeq,
+		}
+		for i, row := range showBackupRows {
+			createStmt := row[0]
+			if !eqWhitespace(createStmt, expected[i]) {
+				t.Fatalf("mismatched create statement: %s, want %s", createStmt, expected[i])
+			}
+		}
+	}
+
+	// Test that foreign keys that reference tables that are in the backup
+	// are included.
+	{
+		includedFK := localFoo + "/includedFK"
+		sqlDB.Exec(t, `CREATE TABLE data.FKSrc (a INT PRIMARY KEY)`)
+		sqlDB.Exec(t, `CREATE TABLE data.FKRefTable (a INT PRIMARY KEY, B INT REFERENCES data.FKSrc(a))`)
+		sqlDB.Exec(t, `CREATE DATABASE data2`)
+		sqlDB.Exec(t, `CREATE TABLE data2.FKRefTable (a INT PRIMARY KEY, B INT REFERENCES data.FKSrc(a))`)
+		sqlDB.Exec(t, `BACKUP data.FKSrc, data.FKRefTable, data2.FKRefTable INTO $1;`, includedFK)
+
+		wantSameDB := `CREATE TABLE fkreftable (
+				a INT8 NOT NULL,
+				b INT8 NULL,
+				CONSTRAINT fkreftable_pkey PRIMARY KEY (a ASC),
+				CONSTRAINT fkreftable_b_fkey FOREIGN KEY (b) REFERENCES public.fksrc(a)
+			) WITH (schema_locked = true)`
+		wantDiffDB := `CREATE TABLE fkreftable (
+				a INT8 NOT NULL,
+				b INT8 NULL,
+				CONSTRAINT fkreftable_pkey PRIMARY KEY (a ASC),
+				CONSTRAINT fkreftable_b_fkey FOREIGN KEY (b) REFERENCES data.public.fksrc(a)
+			) WITH (schema_locked = true)`
+
+		showBackupRows = sqlDBRestore.QueryStr(t, fmt.Sprintf(`SELECT create_statement FROM [SHOW BACKUP SCHEMAS FROM LATEST IN '%s'] WHERE object_type='table'`, includedFK))
+		createStmtSameDB := showBackupRows[1][0]
+		if !eqWhitespace(createStmtSameDB, wantSameDB) {
+			t.Fatalf("mismatched create statement: %s, want %s", createStmtSameDB, wantSameDB)
+		}
+
+		createStmtDiffDB := showBackupRows[2][0]
+		if !eqWhitespace(createStmtDiffDB, wantDiffDB) {
+			t.Fatalf("mismatched create statement: %s, want %s", createStmtDiffDB, wantDiffDB)
+		}
+	}
+
+	// Foreign keys that were not included in the backup are not mentioned in
+	// the create statement.
+	{
+		missingFK := localFoo + "/missingFK"
+		sqlDB.Exec(t, `BACKUP data2.FKRefTable INTO $1;`, missingFK)
+
+		want := `CREATE TABLE fkreftable (
+				a INT8 NOT NULL,
+				b INT8 NULL,
+				CONSTRAINT fkreftable_pkey PRIMARY KEY (a ASC)
+			) WITH (schema_locked = true)`
+
+		showBackupRows = sqlDBRestore.QueryStr(t, fmt.Sprintf(`SELECT create_statement FROM [SHOW BACKUP SCHEMAS FROM LATEST IN '%s'] WHERE object_type='table'`, missingFK))
+		createStmt := showBackupRows[0][0]
+		if !eqWhitespace(createStmt, want) {
+			t.Fatalf("mismatched create statement: %s, want %s", createStmt, want)
+		}
+	}
+
+	{
+		fullCluster := localFoo + "/full_cluster"
+		sqlDB.Exec(t, `BACKUP INTO $1;`, fullCluster)
+
+		showBackupRows = sqlDBRestore.QueryStr(t, fmt.Sprintf(`SELECT is_full_cluster FROM [SHOW BACKUP FROM LATEST IN '%s']`, fullCluster))
+		isFullCluster := showBackupRows[0][0]
+		if !eqWhitespace(isFullCluster, "true") {
+			t.Fatal("expected show backup to indicate that backup was full cluster")
+		}
+
+		sqlDB.Exec(t, `BACKUP INTO LATEST IN $1;`, fullCluster)
+
+		showBackupRows = sqlDBRestore.QueryStr(t, fmt.Sprintf(`SELECT is_full_cluster FROM [SHOW BACKUP FROM LATEST IN '%s']`, fullCluster))
+		isFullCluster = showBackupRows[0][0]
+		if !eqWhitespace(isFullCluster, "true") {
+			t.Fatal("expected show backup to indicate that backup was full cluster")
+		}
+	}
+
+	// Show privileges of descriptors that are backed up.
+	{
+		showPrivs := localFoo + "/show_privs"
+		sqlDB.Exec(t, `
+CREATE DATABASE mi5; USE mi5;
+CREATE SCHEMA locator;
+CREATE TYPE locator.continent AS ENUM ('amer', 'eu', 'afr', 'asia', 'au', 'ant');
+CREATE TABLE locator.agent_locations (id INT PRIMARY KEY, location locator.continent);
+CREATE TABLE top_secret (id INT PRIMARY KEY, name STRING);
+
+CREATE USER agent_bond;
+CREATE USER agent_thomas;
+CREATE USER m;
+CREATE ROLE agents;
+
+GRANT agents TO agent_bond;
+GRANT agents TO agent_thomas;
+
+GRANT ALL ON DATABASE mi5 TO agents;
+--REVOKE UPDATE ON DATABASE mi5 FROM agents;
+
+GRANT ALL ON SCHEMA locator TO m;
+GRANT ALL ON SCHEMA locator TO agent_bond;
+REVOKE USAGE ON SCHEMA locator FROM agent_bond;
+
+GRANT ALL ON TYPE locator.continent TO m;
+GRANT ALL ON TYPE locator.continent TO agent_bond;
+REVOKE USAGE ON TYPE locator.continent FROM agent_bond;
+
+GRANT ALL ON TABLE locator.agent_locations TO m;
+GRANT UPDATE ON locator.agent_locations TO agents;
+GRANT SELECT ON locator.agent_locations TO agent_bond;
+
+GRANT ALL ON top_secret TO m;
+GRANT INSERT ON top_secret TO agents;
+GRANT SELECT ON top_secret TO agent_bond;
+GRANT UPDATE ON top_secret TO agent_bond;
+`)
+		sqlDB.Exec(t, `BACKUP DATABASE mi5 INTO $1;`, showPrivs)
+
+		want := [][]string{
+			{`mi5`, `database`, `GRANT ALL ON DATABASE mi5 TO admin WITH GRANT OPTION; ` +
+				`GRANT ALL ON DATABASE mi5 TO agents; ` +
+				`GRANT CONNECT, TEMPORARY ON DATABASE mi5 TO public; ` +
+				`GRANT ALL ON DATABASE mi5 TO root WITH GRANT OPTION; `, `root`},
+			{`public`, `schema`, `GRANT ALL ON SCHEMA public TO admin WITH GRANT OPTION; ` +
+				`GRANT CREATE, USAGE ON SCHEMA public TO public; ` +
+				`GRANT ALL ON SCHEMA public TO root WITH GRANT OPTION; `, `root`},
+			{`locator`, `schema`, `GRANT ALL ON SCHEMA locator TO admin WITH GRANT OPTION; ` +
+				`GRANT CHANGEFEED, CREATE ON SCHEMA locator TO agent_bond; ` +
+				`GRANT ALL ON SCHEMA locator TO m; ` +
+				`GRANT ALL ON SCHEMA locator TO root WITH GRANT OPTION; `, `root`},
+			{`continent`, `type`, `GRANT ALL ON TYPE continent TO admin WITH GRANT OPTION; ` +
+				`GRANT ALL ON TYPE continent TO m; ` +
+				`GRANT USAGE ON TYPE continent TO public; ` +
+				`GRANT ALL ON TYPE continent TO root WITH GRANT OPTION; `, `root`},
+			{`_continent`, `type`, `GRANT ALL ON TYPE _continent TO admin WITH GRANT OPTION; ` +
+				`GRANT USAGE ON TYPE _continent TO public; ` +
+				`GRANT ALL ON TYPE _continent TO root WITH GRANT OPTION; `, `root`},
+			{`agent_locations`, `table`, `GRANT ALL ON TABLE agent_locations TO admin WITH GRANT OPTION; ` +
+				`GRANT SELECT ON TABLE agent_locations TO agent_bond; ` +
+				`GRANT UPDATE ON TABLE agent_locations TO agents; ` +
+				`GRANT ALL ON TABLE agent_locations TO m; ` +
+				`GRANT ALL ON TABLE agent_locations TO root WITH GRANT OPTION; `, `root`},
+			{`top_secret`, `table`, `GRANT ALL ON TABLE top_secret TO admin WITH GRANT OPTION; ` +
+				`GRANT SELECT, UPDATE ON TABLE top_secret TO agent_bond; ` +
+				`GRANT INSERT ON TABLE top_secret TO agents; GRANT ALL ON TABLE top_secret TO m; ` +
+				`GRANT ALL ON TABLE top_secret TO root WITH GRANT OPTION; `, `root`},
+		}
+
+		showQuery := fmt.Sprintf(`SELECT object_name, object_type, privileges, owner FROM [SHOW BACKUP FROM LATEST IN '%s' WITH privileges]`, showPrivs)
+		sqlDBRestore.CheckQueryResults(t, showQuery, want)
+
+		// Change the owner and expect the changes to be reflected in a new backup
+		showOwner := localFoo + "/show_owner"
+		sqlDB.Exec(t, `
+ALTER DATABASE mi5 OWNER TO agent_thomas;
+ALTER SCHEMA locator OWNER TO agent_thomas;
+ALTER TYPE locator.continent OWNER TO agent_bond;
+ALTER TABLE locator.agent_locations OWNER TO agent_bond;
+`)
+		sqlDB.Exec(t, `BACKUP DATABASE mi5 INTO $1;`, showOwner)
+
+		want = [][]string{
+			{`mi5`, `agent_thomas`},
+			{`public`, `root`},
+			{`locator`, `agent_thomas`},
+			{`continent`, `agent_bond`},
+			{`_continent`, `agent_bond`},
+			{`agent_locations`, `agent_bond`},
+			{`top_secret`, `root`},
+		}
+
+		showQuery = fmt.Sprintf(`SELECT object_name, owner FROM [SHOW BACKUP FROM LATEST IN '%s' WITH privileges]`, showOwner)
+		sqlDBRestore.CheckQueryResults(t, showQuery, want)
+	}
+}
+
+func eqWhitespace(a, b string) bool {
+	return strings.Replace(a, "\t", "", -1) == strings.Replace(b, "\t", "", -1)
+}
+
+func TestShowBackups(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 11
+	_, sqlDB, tempDir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	_, sqlDBRestore, cleanupEmptyCluster := backupRestoreTestSetupEmpty(t, singleNode, tempDir, InitManualReplication, base.TestClusterArgs{})
+	defer cleanupFn()
+	defer cleanupEmptyCluster()
+
+	const full = localFoo + "/full"
+
+	// Make an initial backup.
+	sqlDB.Exec(t, `BACKUP data.bank INTO $1`, full)
+	// Add Incremental changes to it 3 times.
+	sqlDB.Exec(t, `BACKUP data.bank INTO LATEST IN $1`, full)
+	sqlDB.Exec(t, `BACKUP data.bank INTO LATEST IN $1`, full)
+	sqlDB.Exec(t, `BACKUP data.bank INTO LATEST IN $1`, full)
+	// Make a second full backup, add changes to it twice.
+	sqlDB.Exec(t, `BACKUP data.bank INTO $1`, full)
+	sqlDB.Exec(t, `BACKUP data.bank INTO LATEST IN $1`, full)
+	sqlDB.Exec(t, `BACKUP data.bank INTO LATEST IN $1`, full)
+
+	rows := sqlDBRestore.QueryStr(t, `SHOW BACKUPS IN $1`, full)
+
+	// assert that we see the three, and only the three, full backups.
+	require.Equal(t, 2, len(rows))
+
+	// check that we can show the inc layers in the individual full backups.
+	b1 := sqlDBRestore.QueryStr(t, `SELECT * FROM [SHOW BACKUP FROM $1 IN $2] WHERE object_type='table'`, rows[0][0], full)
+	require.Equal(t, 4, len(b1))
+	b2 := sqlDBRestore.QueryStr(t,
+		`SELECT * FROM [SHOW BACKUP FROM $1 IN $2] WHERE object_type='table'`, rows[1][0], full)
+	require.Equal(t, 3, len(b2))
+}
+
+func TestShowNonDefaultBackups(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 11
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+
+	const full = localFoo + "/full"
+
+	// Make an initial backup.
+	fullNonDefault := full + "NonDefault"
+	sqlDB.Exec(t, `BACKUP DATABASE data INTO $1`, fullNonDefault)
+
+	// Get base number of files, schemas, and ranges in the backup
+	var oldCount [4]int
+	for i, typ := range []string{"FILES", "SCHEMAS", "RANGES", "VALIDATE"} {
+		query := fmt.Sprintf(`SELECT count(*) FROM [SHOW BACKUP %s FROM LATEST IN '%s']`, typ,
+			fullNonDefault)
+		count, err := strconv.Atoi(sqlDB.QueryStr(t, query)[0][0])
+		require.NoError(t, err, "error converting original count to integer")
+		oldCount[i] = count
+	}
+
+	// Increase the number of files,schemas, and ranges that will be in the backup chain
+	sqlDB.Exec(t, `CREATE TABLE data.blob (a INT PRIMARY KEY); INSERT INTO data.blob VALUES (0)`)
+	sqlDB.Exec(t, `BACKUP INTO LATEST IN $1`, fullNonDefault)
+
+	// Show backup should contain more rows as new files/schemas/ranges were
+	// added in the incremental backup
+	for i, typ := range []string{"FILES", "SCHEMAS", "RANGES"} {
+		query := fmt.Sprintf(`SELECT count(*) FROM [SHOW BACKUP %s FROM LATEST IN '%s']`, typ,
+			fullNonDefault)
+		newCount, err := strconv.Atoi(sqlDB.QueryStr(t, query)[0][0])
+		require.NoError(t, err, "error converting new count to integer")
+		require.Greater(t, newCount, oldCount[i])
+	}
+}
+
+// TestShowBackupTenantView ensures that SHOW BACKUP on a tenant backup returns the same results
+// as a SHOW BACKUP on a cluster backup that contains the same data.
+// TODO(msbutler): convert to data driven test, and test cluster and database
+// level backups once tenants support nodelocal or once http external storage supports listing.
+func TestShowBackupTenantView(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 2
+	tc, systemDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+	srv := tc.Server(0)
+
+	_ = securitytest.EmbeddedTenantIDs()
+
+	_, conn3 := serverutils.StartTenant(t, srv, base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(3)})
+	defer conn3.Close()
+
+	tenant3 := sqlutils.MakeSQLRunner(conn3)
+	dataQuery := `CREATE DATABASE foo; CREATE TABLE foo.bar(i int primary key); INSERT INTO foo.bar VALUES (110), (210)`
+	backupQuery := `BACKUP TABLE foo.bar INTO $1`
+	showBackupQuery := "SELECT object_name, object_type, rows FROM [SHOW BACKUP FROM LATEST IN $1]"
+	tenant3.Exec(t, dataQuery)
+
+	const collectionURI = "nodelocal://1/backup"
+	tenant3.Exec(t, backupQuery, collectionURI)
+	systemTenantShowRes := systemDB.QueryStr(t, showBackupQuery, collectionURI)
+	require.Equal(t, systemTenantShowRes, tenant3.QueryStr(t, showBackupQuery, collectionURI))
+
+	// If the system tenant created the same data, and conducted the same backup,
+	// the row counts should look the same.
+	systemDB.Exec(t, dataQuery)
+	systemDB.Exec(t, backupQuery, collectionURI)
+	require.Equal(t, systemTenantShowRes, systemDB.QueryStr(t, showBackupQuery, collectionURI))
+}
+
+func TestShowBackupTenants(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 2
+	tc, systemDB, _, cleanupFn := backupRestoreTestSetupWithParams(t, singleNode, numAccounts, InitManualReplication, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		},
+	})
+	defer cleanupFn()
+	srv := tc.Server(0)
+
+	// NB: tenant certs for 10, 11, 20 are embedded. See:
+	_ = securitytest.EmbeddedTenantIDs()
+
+	_, conn10 := serverutils.StartTenant(t, srv, base.TestTenantArgs{TenantID: roachpb.MustMakeTenantID(10)})
+	defer conn10.Close()
+	tenant10 := sqlutils.MakeSQLRunner(conn10)
+	tenant10.Exec(t, `CREATE DATABASE foo; CREATE TABLE foo.bar(i int primary key); INSERT INTO foo.bar VALUES (110), (210)`)
+	beforeTS := systemDB.QueryStr(t, `SELECT now()::timestamptz::string`)[0][0]
+
+	systemDB.Exec(t, fmt.Sprintf(`BACKUP TENANT 10 INTO 'nodelocal://1/t10' AS OF SYSTEM TIME '%s'`, beforeTS))
+
+	res := systemDB.QueryStr(t, `SELECT object_name, object_type, start_time::string, end_time::string, rows FROM [SHOW BACKUP FROM LATEST IN 'nodelocal://1/t10']`)
+	require.Equal(t, [][]string{
+		{"10", "TENANT", "NULL", beforeTS, "NULL"},
+	}, res)
+
+	res = systemDB.QueryStr(t, `SELECT object_name, object_type, privileges FROM [SHOW BACKUP FROM LATEST IN 'nodelocal://1/t10' WITH privileges]`)
+	require.Equal(t, [][]string{
+		{"10", "TENANT", "NULL"},
+	}, res)
+
+	res = systemDB.QueryStr(t, `SELECT object_name, object_type, create_statement FROM [SHOW BACKUP SCHEMAS FROM LATEST IN 'nodelocal://1/t10']`)
+	require.Equal(t, [][]string{
+		{"10", "TENANT", "NULL"},
+	}, res)
+
+	res = systemDB.QueryStr(t, `SELECT start_pretty FROM [SHOW BACKUP FILES FROM LATEST IN 'nodelocal://1/t10'] ORDER BY start_key LIMIT 1`)
+	require.Equal(t, [][]string{
+		{"/Tenant/10"},
+	}, res)
+
+	res = systemDB.QueryStr(t, `SELECT end_pretty FROM [SHOW BACKUP FILES FROM LATEST IN 'nodelocal://1/t10'] ORDER BY end_key DESC LIMIT 1`)
+	require.Equal(t, [][]string{
+		{"/Tenant/10/Max"},
+	}, res)
+
+	res = systemDB.QueryStr(t, `SELECT database_id, parent_schema_id, object_id FROM [SHOW BACKUP FROM LATEST IN 'nodelocal://1/t10' WITH debug_ids]`)
+	require.Equal(t, [][]string{
+		{"NULL", "NULL", "10"},
+	}, res)
+}
+
+func TestShowBackupPrivileges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	dir, cleanupDir := testutils.TempDir(t)
+	defer cleanupDir()
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{ExternalIODir: dir})
+	defer srv.Stopper().Stop(context.Background())
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `CREATE USER testuser`)
+	sqlDB.Exec(t, `CREATE TABLE privs (a INT)`)
+
+	testuser := srv.ApplicationLayer().SQLConn(t, serverutils.User("testuser"))
+
+	// Make an initial backup.
+	const full = localFoo + "/full"
+	sqlDB.Exec(t, `BACKUP privs INTO $1`, full)
+	// Add an incremental backup to it.
+	sqlDB.Exec(t, `BACKUP privs INTO LATEST IN $1`, full)
+	// Make a second full backup using non into syntax.
+	sqlDB.Exec(t, `BACKUP INTO $1;`, full)
+
+	_, err := testuser.Exec(`SHOW BACKUPS IN $1`, full)
+	require.True(t, testutils.IsError(err,
+		"only users with the admin role or the EXTERNALIOIMPLICITACCESS system privilege are allowed to access the specified nodelocal URI"))
+
+	_, err = testuser.Exec(`SHOW BACKUP FROM LATEST IN $1`, full)
+	require.True(t, testutils.IsError(err,
+		"only users with the admin role or the EXTERNALIOIMPLICITACCESS system privilege are allowed to access the specified nodelocal URI"))
+
+	sqlDB.Exec(t, `GRANT admin TO testuser`)
+	_, err = testuser.Exec(`SHOW BACKUPS IN $1`, full)
+	require.NoError(t, err)
+
+	_, err = testuser.Exec(`SHOW BACKUP FROM LATEST IN $1`, full)
+	require.NoError(t, err)
+}
+
+func TestShowBackupWithDebugIDs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 11
+	// Create test database with bank table
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+
+	// add 1 type, 1 schema, and 2 tables to the database
+	sqlDB.ExecMultiple(t, strings.Split(`
+		SET CLUSTER SETTING sql.cross_db_fks.enabled = TRUE;
+		CREATE TYPE data.welcome AS ENUM ('hello', 'hi');
+		USE data; CREATE SCHEMA sc;
+		CREATE TABLE data.sc.t1 (a INT);
+		CREATE TABLE data.sc.t2 (a data.welcome);`,
+		`;`)...)
+
+	const full = localFoo + "/full"
+
+	beforeTS := sqlDB.QueryStr(t, `SELECT now()::timestamptz::string`)[0][0]
+	sqlDB.Exec(t, fmt.Sprintf(`BACKUP DATABASE data INTO $1 AS OF SYSTEM TIME '%s'`, beforeTS), full)
+
+	// extract the object IDs for the database and public schema
+	databaseRow := sqlDB.QueryStr(t, `
+		SELECT database_name, database_id, parent_schema_name, parent_schema_id, object_name, object_id, object_type
+		FROM [SHOW BACKUP FROM LATEST IN $1 WITH debug_ids]
+		WHERE object_name = 'bank'`, full)
+	require.NotEmpty(t, databaseRow)
+	dbID, err := strconv.Atoi(databaseRow[0][1])
+	require.NoError(t, err)
+	publicID, err := strconv.Atoi(databaseRow[0][3])
+	require.NoError(t, err)
+
+	require.Greater(t, dbID, 0)
+	require.Greater(t, publicID, 0)
+}
+
+func TestShowBackupPathIsCollectionRoot(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	skip.WithIssue(t, 152935)
+
+	const numAccounts = 11
+
+	// Create test database with bank table.
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+
+	// Error output changes depending on whether or not the index is used. This
+	// deterministically enables the index to make the error output consistent.
+	sqlDB.Exec(t, "SET CLUSTER SETTING backup.index.read.enabled = true")
+
+	// Make an initial backup.
+	sqlDB.Exec(t, `BACKUP data.bank INTO $1`, localFoo)
+
+	// Ensure proper error gets returned from back SHOW BACKUP Path
+	sqlDB.ExpectErr(t, "subdir does not match format", "SHOW BACKUP '' IN $1", localFoo)
+}
+
+// TestShowBackupCheckFiles verifies the check_files option catches a corrupt
+// backup file in 2 scenarios: 1. SST from a full backup; 2. SST from a default
+// incremental backup. The two scenarios also get checked with locality aware
+// backups. The test also sanity checks the new file_bytes column in SHOW BACKUP
+// with check_files, which displays the physical size of each table in the backup.
+func TestShowBackupCheckFiles(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	const numAccounts = 11
+	skip.UnderRace(t, "multinode cluster setup times out under race, likely due to resource starvation.")
+
+	_, sqlDB, tempDir, cleanupFn := backupRestoreTestSetup(t, multiNode, numAccounts,
+		InitManualReplication)
+	defer cleanupFn()
+
+	collectionRoot := "full"
+	const c1, c2, c3 = `nodelocal://1/full`, `nodelocal://2/full`, `nodelocal://3/full`
+	localities := []string{"default", "dc=dc1", "dc=dc2"}
+
+	collections := []string{
+		fmt.Sprintf("'%s?COCKROACH_LOCALITY=%s'", c1, url.QueryEscape(localities[0])),
+		fmt.Sprintf("'%s?COCKROACH_LOCALITY=%s'", c2, url.QueryEscape(localities[1])),
+		fmt.Sprintf("'%s?COCKROACH_LOCALITY=%s'", c3, url.QueryEscape(localities[2])),
+	}
+
+	tests := []struct {
+		dest       []string
+		localities []string
+	}{
+		{dest: []string{collections[0]}},
+		{dest: collections, localities: localities},
+	}
+
+	sqlDB.Exec(t, `CREATE DATABASE fkdb`)
+	sqlDB.Exec(t, `CREATE TABLE fkdb.fk (ind INT)`)
+
+	for _, test := range tests {
+		dest := strings.Join(test.dest, ", ")
+
+		if len(test.dest) > 1 {
+			dest = "(" + dest + ")"
+		}
+
+		for i := 0; i < 10; i++ {
+			sqlDB.Exec(t, `INSERT INTO fkdb.fk (ind) VALUES ($1)`, i)
+		}
+		fb := fmt.Sprintf("BACKUP DATABASE fkdb INTO %s", dest)
+		sqlDB.Exec(t, fb)
+
+		sqlDB.Exec(t, `INSERT INTO fkdb.fk (ind) VALUES ($1)`, 200)
+
+		sqlDB.Exec(t, fmt.Sprintf("BACKUP DATABASE fkdb INTO LATEST IN %s", dest))
+
+		// breakCheckFiles validates that moving an SST will cause SHOW BACKUP with check_files to
+		// error.
+		breakCheckFiles := func(
+			// rootDir identifies the root of the collection or incremental backup dir
+			// of the target backup file.
+			rootDir string,
+
+			// backupDest contains the collection or incremental URIs.
+			backupDest []string,
+
+			// file contains the path to the target file staring from the rootDir.
+			file string,
+
+			// fileLocality contains the expected locality of the target file.
+			fileLocality string,
+
+			// checkQuery contains the 'SHOW BACKUP with check_files' query.
+			checkQuery string) {
+
+			// Ensure no errors first
+			sqlDB.Exec(t, checkQuery)
+
+			fullPath := filepath.Join(tempDir, rootDir, file)
+			badPath := fullPath + "t"
+			if err := os.Rename(fullPath, badPath); err != nil {
+				require.NoError(t, err, "failed to corrupt SST")
+			}
+
+			// If the file is from a locality aware backup, check its locality info. Note
+			// that locality aware URIs have the following structure:
+			// `someURI?COCKROACH_LOCALITY ='locality'`.
+			if fileLocality == "NULL" {
+			} else {
+				var locality string
+				fileLocality = url.QueryEscape(fileLocality)
+				for _, destURI := range backupDest {
+					// Using the locality, match for the proper URI.
+					destLocality := strings.Split(destURI, "?")
+					if strings.Contains(destLocality[1], fileLocality) {
+						locality = destLocality[1]
+						break
+					}
+				}
+				require.NotEmpty(t, locality, "could not find file locality")
+			}
+
+			// Note that the expected error message excludes the nodelocal portion of
+			// the file path (nodelocal://1/) to avoid a test flake for locality aware
+			// backups where two different nodelocal URI's read to the same place. In
+			// this scenario, the test expects the backup to be in nodelocal://2/foo
+			// and the actual error message resolves the uri to nodelocal://1/foo.
+			// While both are correct, the test fails.
+			errorMsg := fmt.Sprintf("The following files are missing from the backup:\n\t.*%s",
+				filepath.Join(rootDir, file))
+			sqlDB.ExpectErr(t, errorMsg, checkQuery)
+
+			if err := os.Rename(badPath, fullPath); err != nil {
+				require.NoError(t, err, "failed to de-corrupt SST")
+			}
+		}
+		fileInfo := sqlDB.QueryStr(t,
+			fmt.Sprintf(`SELECT path, locality, file_bytes FROM [SHOW BACKUP FILES FROM LATEST IN %s with check_files]`, dest))
+
+		checkQuery := fmt.Sprintf(`SHOW BACKUP FROM LATEST IN %s WITH check_files`, dest)
+
+		// Break on full backup.
+		breakCheckFiles(collectionRoot, test.dest, fileInfo[0][0], fileInfo[0][1], checkQuery)
+
+		// Break on default inc backup.
+		breakCheckFiles(collectionRoot, test.dest, fileInfo[len(fileInfo)-1][0], fileInfo[len(fileInfo)-1][1], checkQuery)
+
+		// Check that each file size is positive.
+		for _, file := range fileInfo {
+			sz, err := strconv.Atoi(file[2])
+			require.NoError(t, err, "could not get file size")
+			require.Greater(t, sz, 0, "file size is not positive")
+		}
+
+		// Check that the returned file size is consistent across flavors of SHOW BACKUP.
+		fileSum := sqlDB.QueryStr(t,
+			fmt.Sprintf(`SELECT sum(file_bytes) FROM [SHOW BACKUP FILES FROM LATEST IN %s with check_files]`, dest))
+
+		sqlDB.CheckQueryResults(t,
+			fmt.Sprintf(`SELECT sum(file_bytes) FROM [SHOW BACKUP FROM LATEST IN %s with check_files]`, dest),
+			fileSum)
+	}
+}
+
+func TestShowBackupsWithIDs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 11
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+	sqlDB.Exec(t, "SET SESSION use_backups_with_ids = true")
+
+	const collectionURI = "nodelocal://1/backup"
+
+	getSystemTime := func() (ts int64) {
+		sqlDB.QueryRow(t, "SELECT cluster_logical_timestamp()::INT").Scan(&ts)
+		return ts
+	}
+
+	times := []int64{getSystemTime()}
+	sqlDB.Exec(t, fmt.Sprintf("BACKUP INTO $1 AS OF SYSTEM TIME %d", times[0]), collectionURI)
+
+	for i := range 2 {
+		times = append(times, getSystemTime())
+		sqlDB.Exec(
+			t,
+			fmt.Sprintf("BACKUP INTO LATEST IN $1 AS OF SYSTEM TIME %d", times[i+1]),
+			collectionURI,
+		)
+	}
+
+	// We pause the second full backup so that we can take incrementals during its
+	// running to give us overlapped chains to test against.
+	sqlDB.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = 'backup.after.write_first_checkpoint'`)
+	times = append(times, getSystemTime())
+	var pausedJobID jobspb.JobID
+	sqlDB.QueryRow(
+		t,
+		fmt.Sprintf("BACKUP INTO $1 AS OF SYSTEM TIME %d WITH detached", times[len(times)-1]),
+		collectionURI,
+	).Scan(&pausedJobID)
+	jobutils.WaitForJobToPause(t, sqlDB, pausedJobID)
+	sqlDB.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = ''`)
+
+	for range 2 {
+		times = append(times, getSystemTime())
+		sqlDB.Exec(
+			t,
+			fmt.Sprintf("BACKUP INTO LATEST IN $1 AS OF SYSTEM TIME %d", times[len(times)-1]),
+			collectionURI,
+		)
+	}
+
+	sqlDB.Exec(t, "RESUME JOB $1", pausedJobID)
+	jobutils.WaitForJobToSucceed(t, sqlDB, pausedJobID)
+	times = append(times, getSystemTime())
+	sqlDB.Exec(
+		t,
+		fmt.Sprintf("BACKUP INTO LATEST IN $1 AS OF SYSTEM TIME %d", times[len(times)-1]),
+		collectionURI,
+	)
+
+	t.Run("backup times are in descending order", func(t *testing.T) {
+		shownTimes := sqlDB.QueryStr(
+			t, `SELECT backup_time FROM [SHOW BACKUPS IN $1]`, collectionURI,
+		)
+		require.Equal(t, len(times), len(shownTimes))
+		require.True(
+			t, slices.IsSortedFunc(shownTimes, func(a, b []string) int {
+				if a[0] == b[0] {
+					return 0
+				} else if a[0] > b[0] {
+					return -1
+				} else {
+					return 1
+				}
+			}),
+		)
+	})
+
+	t.Run("time filtering", func(t *testing.T) {
+		// SHOW BACKUPS is only second-precise, so we just pick a second
+		// after the first backup. If the backup times overlap a second boundary,
+		// then our filter partitions the backups. Over the course of multiple
+		// tests, this gives us good coverage of filter points.
+		filterTime := int64(time.Duration(times[0]).Truncate(time.Second) + time.Second)
+
+		t.Run("OLDER THAN", func(t *testing.T) {
+			var count int
+			sqlDB.QueryRow(
+				t,
+				fmt.Sprintf(`SELECT count(*) FROM [SHOW BACKUPS IN $1 OLDER THAN %d]`, filterTime),
+				collectionURI,
+			).Scan(&count)
+
+			var expected int
+			for _, ts := range times {
+				// We must truncate times to the same precision as backup collection
+				// blob names since that's what SHOW BACKUPS uses to filter.
+				truncatedTS := int64(time.Duration(ts).Truncate(10 * time.Millisecond))
+				if truncatedTS <= filterTime {
+					expected++
+				}
+			}
+			require.Equal(
+				t, expected, count,
+				"unexpected number of backups before %d", filterTime,
+			)
+		})
+
+		t.Run("NEWER THAN", func(t *testing.T) {
+			var count int
+			sqlDB.QueryRow(
+				t,
+				fmt.Sprintf(`SELECT count(*) FROM [SHOW BACKUPS IN $1 NEWER THAN %d]`, filterTime),
+				collectionURI,
+			).Scan(&count)
+
+			var expected int
+			for _, ts := range times {
+				truncatedTS := int64(time.Duration(ts).Truncate(10 * time.Millisecond))
+				if truncatedTS >= filterTime {
+					expected++
+				}
+			}
+			require.Equal(
+				t, expected, count,
+				"unexpected number of backups after %d", filterTime,
+			)
+		})
+
+		t.Run("OLDER THAN and NEWER THAN", func(t *testing.T) {
+			// Pick a random pair of times for the range. Note that in most cases,
+			// this will end up being the same query as the tests above due to the
+			// short window of time the backups span, over the course of multiple
+			// test runs, this results in good coverage.
+			olderIdx := rand.Intn(len(times) - 1)
+			newerIdx := rand.Intn(len(times)-olderIdx-1) + olderIdx + 1
+
+			// Truncate the times to second precision like SHOW BACKUPS.
+			olderTime := int64(time.Duration(times[olderIdx]).Truncate(time.Second))
+			newerTime := int64(time.Duration(times[newerIdx]).Truncate(time.Second))
+
+			var count int
+			sqlDB.QueryRow(
+				t,
+				fmt.Sprintf(`SELECT count(*) FROM [SHOW BACKUPS IN $1 OLDER THAN %d NEWER THAN %d]`, newerTime, olderTime),
+				collectionURI,
+			).Scan(&count)
+
+			var expected int
+			for _, ts := range times {
+				truncatedTS := int64(time.Duration(ts).Truncate(10 * time.Millisecond))
+				if truncatedTS <= newerTime && truncatedTS >= olderTime {
+					expected++
+				}
+			}
+			require.Equal(
+				t, expected, count,
+				"unexpected number of backups between %d and %d",
+				olderTime, newerTime,
+			)
+		})
+	})
+}
+
+func TestShowBackupsWithIDsAndRevisionHistory(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 11
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+	sqlDB.Exec(t, "SET SESSION use_backups_with_ids = true")
+
+	const collectionURI = "nodelocal://1/backup"
+
+	sqlDB.Exec(t, `BACKUP INTO $1 WITH revision_history`, collectionURI)
+	// We add a short sleep between backups so they show up with different times.
+	time.Sleep(time.Second)
+	sqlDB.Exec(t, `BACKUP INTO LATEST IN $1 WITH revision_history`, collectionURI)
+	time.Sleep(time.Second)
+	sqlDB.Exec(t, `BACKUP INTO LATEST IN $1 WITH revision_history`, collectionURI)
+
+	t.Run("WITH REVISION START TIME", func(t *testing.T) {
+		revStartTimes := sqlDB.QueryStr(
+			t,
+			`SELECT backup_time, revision_start_time FROM [SHOW BACKUPS IN $1 WITH REVISION START TIME]`,
+			collectionURI,
+		)
+		require.Len(t, revStartTimes, 3, "expected 3 backups")
+		for idx, row := range revStartTimes {
+			require.NotEqual(t, "NULL", row[1], "expected non-empty revision start time (row %d)", idx)
+
+			require.Less(
+				t, row[1], row[0], "expected revision start time to be before backup time (row %d)", idx,
+			)
+			if idx < len(revStartTimes)-1 {
+				require.Less(
+					t,
+					revStartTimes[idx+1][1], row[1],
+					"expected revision start times to be in descending order (row %d)", idx,
+				)
+			}
+		}
+	})
+
+	t.Run("WITHOUT REVISION START TIME", func(t *testing.T) {
+		rows := sqlDB.QueryStr(t, `SHOW BACKUPS IN $1`, collectionURI)
+		require.Len(t, rows, 3, "expected 3 backups")
+		for _, row := range rows {
+			require.Len(t, row, 2, "expected 2 columns (id, backup_time)")
+		}
+	})
+}
+
+func TestShowBackupsWithDebug(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 11
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+	sqlDB.Exec(t, "SET SESSION use_backups_with_ids = true")
+
+	const collectionURI = "nodelocal://1/backup-debug"
+
+	sqlDB.Exec(t, `BACKUP INTO $1`, collectionURI)
+	// Sleep between backups so they have different times.
+	time.Sleep(time.Second)
+	sqlDB.Exec(t, `BACKUP INTO LATEST IN $1`, collectionURI)
+	time.Sleep(time.Second)
+	sqlDB.Exec(t, `BACKUP INTO LATEST IN $1`, collectionURI)
+
+	t.Run("WITH DEBUG", func(t *testing.T) {
+		rows := sqlDB.QueryStr(
+			t,
+			`SELECT id, full_subdir, start_time, path FROM [SHOW BACKUPS IN $1 WITH DEBUG]`,
+			collectionURI,
+		)
+		require.Len(t, rows, 3, "expected 3 backups")
+
+		// All backups in this chain should share the same full_subdir.
+		fullSubdir := rows[0][1]
+		for idx, row := range rows {
+			require.Equal(
+				t, fullSubdir, row[1],
+				"expected all backups to share the same full_subdir (row %d)", idx,
+			)
+			// The full subdir should be a date-based path like /YYYY/MM/DD-HHMMSS.SS.
+			require.Regexp(
+				t, `/\d{4}/\d{2}/\d{2}-\d{6}\.\d{2}`, row[1],
+				"expected full_subdir to be a date-based path (row %d)", idx,
+			)
+			// path should be non-empty.
+			require.NotEqual(t, "", row[3], "expected non-empty path (row %d)", idx)
+		}
+
+		// The full backup's path should equal the full_subdir.
+		lastRow := rows[len(rows)-1]
+		require.Equal(
+			t, fullSubdir, lastRow[3],
+			"expected full backup path to equal full_subdir",
+		)
+
+		// The full backup (last row, since results are in descending order)
+		// should have a NULL start_time.
+		require.Equal(
+			t, "NULL", lastRow[2],
+			"expected full backup to have NULL start_time",
+		)
+
+		// Incremental backups should have non-NULL start times and paths
+		// different from the full_subdir.
+		for idx := len(rows) - 2; idx >= 0; idx-- {
+			require.NotEqual(
+				t, "NULL", rows[idx][2],
+				"expected incremental backup to have non-NULL start_time (row %d)", idx,
+			)
+			require.NotEqual(
+				t, fullSubdir, rows[idx][3],
+				"expected incremental backup path to differ from full_subdir (row %d)", idx,
+			)
+		}
+	})
+
+	t.Run("WITH DEBUG, REVISION START TIME", func(t *testing.T) {
+		// DEBUG can be combined with REVISION START TIME.
+		rows := sqlDB.QueryStr(
+			t,
+			`SELECT id, revision_start_time, full_subdir, start_time, path FROM [SHOW BACKUPS IN $1 WITH DEBUG, REVISION START TIME]`,
+			collectionURI,
+		)
+		require.Len(t, rows, 3, "expected 3 backups")
+		for idx, row := range rows {
+			// revision_start_time should be NULL since these backups don't have
+			// revision_history.
+			require.Equal(t, "NULL", row[1], "expected NULL revision_start_time (row %d)", idx)
+			// full_subdir and path should still be populated.
+			require.NotEqual(t, "NULL", row[2], "expected non-NULL full_subdir (row %d)", idx)
+			require.NotEqual(t, "", row[4], "expected non-empty path (row %d)", idx)
+		}
+	})
+}
+
+func TestShowBackupWithIDs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 11
+	_, sqlDB, tempDir, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+
+	var fullSubdir string
+	{
+		// Take a backup chain containing doubly compacted backups.
+		// We compact from t2 to t3 and then from t1 to t3.
+		// The backup chain is as follows:
+		// Full
+		// Inc1
+		// Inc2 @ t1
+		// Inc3 @ t2
+		// Inc4, Inc5, Inc6
+		// Inc7 @ t3
+		// Compaction from t2 to t3
+		// Compaction from t1 to t3
+		// Inc8 (adds new table to schema)
+		// Inc9 (empty)
+		sqlDB.Exec(t, "SET SESSION use_backups_with_ids = false")
+
+		sqlDB.Exec(t, "CREATE DATABASE foo")
+		sqlDB.Exec(t, "CREATE TABLE foo.bar (i INT)")
+		sqlDB.Exec(t, "INSERT INTO foo.bar VALUES (1)")
+
+		sqlDB.Exec(t, "BACKUP DATABASE foo INTO $1", localFoo)
+
+		sqlDB.Exec(t, "INSERT INTO foo.bar VALUES (1)")
+		sqlDB.Exec(t, "BACKUP DATABASE foo INTO LATEST IN $1", localFoo)
+
+		sqlDB.Exec(t, "INSERT INTO foo.bar VALUES (1)")
+		t1 := getTime()
+		sqlDB.Exec(t, "BACKUP DATABASE foo INTO LATEST IN $1 AS OF SYSTEM TIME $2::STRING", localFoo, t1.AsOfSystemTime())
+
+		sqlDB.Exec(t, "INSERT INTO foo.bar VALUES (1)")
+		t2 := getTime()
+		sqlDB.Exec(t, "BACKUP DATABASE foo INTO LATEST IN $1 AS OF SYSTEM TIME $2::STRING", localFoo, t2.AsOfSystemTime())
+
+		for range 3 {
+			sqlDB.Exec(t, "INSERT INTO foo.bar VALUES (1)")
+			sqlDB.Exec(t, "BACKUP DATABASE foo INTO LATEST IN $1", localFoo)
+		}
+
+		sqlDB.Exec(t, "INSERT INTO foo.bar VALUES (1)")
+		t3 := getTime()
+		sqlDB.Exec(t, "BACKUP DATABASE foo INTO LATEST IN $1 AS OF SYSTEM TIME $2::STRING", localFoo, t3.AsOfSystemTime())
+
+		sqlDB.QueryRow(
+			t, `SELECT path FROM [SHOW BACKUPS IN $1]`, localFoo,
+		).Scan(&fullSubdir)
+		require.NotEmpty(t, fullSubdir)
+
+		// Create our double compactions.
+		var compactionJob jobspb.JobID
+		sqlDB.QueryRow(
+			t,
+			`SELECT crdb_internal.backup_compaction(
+				0, $1, $2, $3::DECIMAL, $4::DECIMAL
+			)`,
+			fmt.Sprintf("BACKUP DATABASE foo INTO LATEST IN '%s'", localFoo),
+			fullSubdir,
+			t2.AsOfSystemTime(), t3.AsOfSystemTime(),
+		).Scan(&compactionJob)
+		jobutils.WaitForJobToSucceed(t, sqlDB, compactionJob)
+
+		sqlDB.QueryRow(
+			t,
+			`SELECT crdb_internal.backup_compaction(
+				0, $1, $2, $3::DECIMAL, $4::DECIMAL
+			)`,
+			fmt.Sprintf("BACKUP DATABASE foo INTO LATEST IN '%s'", localFoo),
+			fullSubdir,
+			t1.AsOfSystemTime(), t3.AsOfSystemTime(),
+		).Scan(&compactionJob)
+		jobutils.WaitForJobToSucceed(t, sqlDB, compactionJob)
+
+		// Add one more table to test SHOW BACKUP SCHEMA.
+		sqlDB.Exec(t, "CREATE TABLE foo.baz (j INT)")
+		sqlDB.Exec(t, "INSERT INTO foo.baz VALUES (1)")
+		sqlDB.Exec(t, "BACKUP DATABASE foo INTO LATEST IN $1", localFoo)
+
+		// Create an empty backup to test SHOW BACKUP FILES.
+		sqlDB.Exec(t, "BACKUP DATABASE foo INTO LATEST IN $1", localFoo)
+	}
+
+	sqlDB.Exec(t, "SET SESSION use_backups_with_ids = true")
+	idRows := sqlDB.Query(t, `SHOW BACKUPS IN $1`, localFoo)
+	var ids []string // All ids in sorted chronological order
+	for idRows.Next() {
+		var id string
+		var unused any
+		if err := idRows.Scan(&id, &unused); err != nil {
+			t.Fatal(err)
+		}
+		ids = append([]string{id}, ids...)
+	}
+	require.Equal(t, 10, len(ids), "should only see 9 backup IDs due to only 9 unique end times")
+
+	t.Run("show backup only shows one backup per id", func(t *testing.T) {
+		for idx, id := range ids {
+			var count int
+			sqlDB.QueryRow(
+				t,
+				`SELECT count(DISTINCT end_time) FROM [SHOW BACKUP FROM $1 IN $2]`,
+				id, localFoo,
+			).Scan(&count)
+			require.Equal(t, 1, count, "expected one end time for id '%s' (idx %d)", id, idx)
+		}
+	})
+
+	t.Run("show backup files with id", func(t *testing.T) {
+		// All backups except the last should contain one SST since the backups are
+		// small.
+		for idx, id := range ids {
+			var fileCount int
+			sqlDB.QueryRow(
+				t,
+				`SELECT count(*) FROM [SHOW BACKUP FILES FROM $1 IN $2]`,
+				id, localFoo,
+			).Scan(&fileCount)
+			if idx == 9 {
+				require.Equal(t, 0, fileCount, "expected zero files in the empty incremental")
+			} else {
+				require.Equal(t, 1, fileCount, "expected one file for id '%s' (idx %d)", id, idx)
+			}
+		}
+	})
+
+	t.Run("show backup schemas", func(t *testing.T) {
+		for idx, id := range ids {
+			var schemaCount int
+			sqlDB.QueryRow(
+				t,
+				`SELECT count(*) FROM [SHOW BACKUP SCHEMAS FROM $1 IN $2]`,
+				id, localFoo,
+			).Scan(&schemaCount)
+			if idx < 8 {
+				// Backups prior to the addition of the second table should only have
+				// three schemas: database, public, bar.
+				require.Equal(t, 3, schemaCount, "expected three schemas for id '%s' (idx %d)", id, idx)
+			} else {
+				// The last two backups should have four schemas due to the addition
+				// of the baz table.
+				require.Equal(t, 4, schemaCount, "expected four schemas for id '%s' (idx %d)", id, idx)
+			}
+		}
+	})
+
+	t.Run("show backup ranges", func(t *testing.T) {
+		for idx, id := range ids {
+			var rangeCount int
+			sqlDB.QueryRow(
+				t,
+				`SELECT count(*) FROM [SHOW BACKUP RANGES FROM $1 IN $2]`,
+				id, localFoo,
+			).Scan(&rangeCount)
+			if idx < 8 {
+				// Backups prior to the addition of the second table should only have one
+				// range mapping to the only table.
+				require.Equal(t, 1, rangeCount, "expected one range id '%s' (idx %d)", id, idx)
+			} else {
+				// The last two backups should have two ranges due to the addition
+				// of the baz table.
+				require.Equal(t, 2, rangeCount, "expected two ranges for id '%s' (idx %d)", id, idx)
+			}
+		}
+	})
+
+	t.Run("show latest backup", func(t *testing.T) {
+		// We can test if we fetch the correct latest backup by ensuring that the
+		// backup picked when querying LATEST is the one with no files.
+		var fileCount int
+		sqlDB.QueryRow(
+			t,
+			`SELECT count(*) FROM [SHOW BACKUP FILES FROM LATEST IN $1]`,
+			localFoo,
+		).Scan(&fileCount)
+		require.Equal(t, 0, fileCount, "expected zero files in the latest incremental")
+	})
+
+	t.Run("show backup check_files", func(t *testing.T) {
+		// We delete the SST from the second to last backup and verify that the
+		// `check_files` only fails for that backup ID specifically. Under the old
+		// logic, the entire chain would fail.
+		var sstPath string
+		sqlDB.QueryRow(
+			t,
+			`SELECT path FROM [SHOW BACKUP FILES FROM $1 IN $2]`,
+			ids[8], localFoo,
+		).Scan(&sstPath)
+		require.NotEmpty(t, sstPath, "expected to find SST in penultimate backup")
+
+		backupURI, err := url.Parse(localFoo)
+		require.NoError(t, err, "could not parse backup URI")
+		absoluteSSTPath := filepath.Join(
+			tempDir, backupURI.Path, sstPath,
+		)
+
+		require.NoError(t, os.Remove(absoluteSSTPath), "could not delete SST to simulate corruption")
+
+		// Check that only the penultimate backup ID fails.
+		for idx, id := range ids {
+			checkQuery := `SHOW BACKUP FROM $1 IN $2 WITH check_files`
+			if idx == 8 {
+				sqlDB.ExpectErr(t, "following files are missing from the backup", checkQuery, id, localFoo)
+			} else {
+				sqlDB.Exec(t, checkQuery, id, localFoo)
+			}
+		}
+	})
+
+	t.Run("legacy behavior", func(t *testing.T) {
+		t.Run("passing subdir", func(t *testing.T) {
+			var uniqueTimes int
+			sqlDB.QueryRow(
+				t,
+				`SELECT count(DISTINCT (start_time, end_time)) FROM [SHOW BACKUP FROM $1 IN $2]`,
+				fullSubdir, localFoo,
+			).Scan(&uniqueTimes)
+			require.Equal(t, 12, uniqueTimes, "expected to see all 12 backups in the chain")
+		})
+
+		t.Run("passing latest", func(t *testing.T) {
+			sqlDB.Exec(t, "SET SESSION use_backups_with_ids = false")
+			defer sqlDB.Exec(t, "SET SESSION use_backups_with_ids = true")
+
+			var uniqueTimes int
+			sqlDB.QueryRow(
+				t,
+				`SELECT count(DISTINCT (start_time, end_time)) FROM [SHOW BACKUP FROM LATEST IN $1]`,
+				localFoo,
+			).Scan(&uniqueTimes)
+			require.Equal(t, 12, uniqueTimes, "expected to see all 12 backups in the chain")
+
+		})
+	})
+}
+
+// This tests that if SHOW BACKUPS is used in a subquery and the parent query
+// runs into the error, we properly close the subquery and exit instead of
+// hanging. See issue #166581.
+func TestShowBackupsSubqueryClose(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	const numAccounts = 11
+	_, sqlDB, _, cleanupFn := backupRestoreTestSetup(t, singleNode, numAccounts, InitManualReplication)
+	defer cleanupFn()
+
+	sqlDB.Exec(t, `SET use_backups_with_ids = true`)
+	sqlDB.Exec(t, `BACKUP INTO 'nodelocal://1/backup'`)
+	sqlDB.Exec(t, `BACKUP INTO LATEST IN 'nodelocal://1/backup'`)
+	var ts int64
+	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()::INT`).Scan(&ts)
+	// Casting a nanosecond timestamp to timestamptz will fail due to exceeding
+	// the bounds, which should cause the query to error and not consume from the
+	// SHOW BACKUPS subquery. We test both the old and new SHOW BACKUPS syntax as
+	// both are susceptible to this issue.
+	sqlDB.ExpectErrWithTimeout(
+		t,
+		"exceeds supported timestamp bounds",
+		fmt.Sprintf(`SELECT * FROM [SHOW BACKUPS IN 'nodelocal://1/backup'] WHERE %d::TIMESTAMPTZ < 1000::TIMESTAMPTZ`, ts),
+	)
+
+	sqlDB.Exec(t, `SET use_backups_with_ids = true`)
+	sqlDB.ExpectErrWithTimeout(
+		t,
+		"exceeds supported timestamp bounds",
+		fmt.Sprintf(`SELECT * FROM [SHOW BACKUPS IN 'nodelocal://1/backup'] WHERE %d::TIMESTAMPTZ < backup_time`, ts),
+	)
+}

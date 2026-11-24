@@ -7,9 +7,13 @@ package rpc
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"net"
+	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -18,9 +22,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/grpcutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/circuit"
@@ -35,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/types"
 	gogostatus "github.com/gogo/status"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
@@ -44,6 +51,9 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"storj.io/drpc"
+	"storj.io/drpc/drpcmux"
+	"storj.io/drpc/drpcserver"
 )
 
 // TestingConnHealth returns nil if we have an open connection to the given
@@ -65,7 +75,7 @@ func (rpcCtx *Context) TestingConnHealth(target string, nodeID roachpb.NodeID) e
 		// The local server is always considered healthy.
 		return nil
 	}
-	conn := rpcCtx.GRPCDialNode(target, nodeID, roachpb.Locality{}, DefaultClass)
+	conn := rpcCtx.GRPCDialNode(target, nodeID, roachpb.Locality{}, rpcbase.DefaultClass)
 	return conn.Health()
 }
 
@@ -145,7 +155,7 @@ func TestPingInterceptors(t *testing.T) {
 
 	rpcCtx := NewContext(ctx, opts)
 	{
-		_, err := rpcCtx.GRPCDialNode("unused:1234", 5, roachpb.Locality{}, SystemClass).Connect(ctx)
+		_, err := rpcCtx.GRPCDialNode("unused:1234", 5, roachpb.Locality{}, rpcbase.SystemClass).Connect(ctx)
 		require.Equal(t, errBoomSend, errors.Cause(err))
 	}
 
@@ -158,7 +168,7 @@ func TestPingInterceptors(t *testing.T) {
 	}
 	remoteAddr := ln.Addr().String()
 	{
-		_, err := rpcCtx.GRPCDialNode(remoteAddr, blockedOriginNodeID, roachpb.Locality{}, SystemClass).Connect(ctx)
+		_, err := rpcCtx.GRPCDialNode(remoteAddr, blockedOriginNodeID, roachpb.Locality{}, rpcbase.SystemClass).Connect(ctx)
 		require.True(t, errors.HasType(err, errBoomRecv))
 		st, ok := status.FromError(errors.UnwrapAll(err))
 		require.True(t, ok)
@@ -184,6 +194,7 @@ func TestClockOffsetInClientPingRequest(t *testing.T) {
 }
 
 func testClockOffsetInPingRequestInternal(t *testing.T, clientOnly bool) {
+	skip.UnderDuress(t, "https://github.com/cockroachdb/cockroach/issues/154839")
 	ctx := context.Background()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
@@ -202,7 +213,7 @@ func testClockOffsetInPingRequestInternal(t *testing.T, clientOnly bool) {
 	clientOpts := opts
 	// Experimentally, values below 50ms seem to incur flakiness.
 	clientOpts.RPCHeartbeatInterval = 100 * time.Millisecond
-	clientOpts.RPCHeartbeatTimeout = 100 * time.Millisecond
+	clientOpts.RPCHeartbeatTimeout = 200 * time.Millisecond
 	clientOpts.ClientOnly = clientOnly
 	clientOpts.OnOutgoingPing = func(ctx context.Context, req *PingRequest) error {
 		select {
@@ -232,7 +243,7 @@ func testClockOffsetInPingRequestInternal(t *testing.T, clientOnly bool) {
 	remoteAddr := ln.Addr().String()
 	testutils.SucceedsSoon(t, func() error {
 		_, err = rpcCtxClient.GRPCDialNode(
-			remoteAddr, 1, roachpb.Locality{}, SystemClass,
+			remoteAddr, 1, roachpb.Locality{}, rpcbase.SystemClass,
 		).Connect(ctx)
 		return err
 	})
@@ -304,6 +315,10 @@ func (s *internalServer) MuxRangeFeed(stream kvpb.Internal_MuxRangeFeedServer) e
 
 func (*internalServer) Batch(context.Context, *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
 	return nil, nil
+}
+
+func (*internalServer) BatchStream(stream kvpb.Internal_BatchStreamServer) error {
+	panic("unimplemented")
 }
 
 func (*internalServer) RangeLookup(
@@ -426,7 +441,7 @@ func TestInternalClientAdapterRunsInterceptors(t *testing.T) {
 	serverCtx.AdvertiseAddr = "127.0.0.1:8888"
 	serverCtx.NodeID.Set(context.Background(), 1)
 
-	_ /* server */, serverInterceptors, err := NewServerEx(ctx, serverCtx)
+	_ /* gRPC server */, serverInterceptors, err := NewServerEx(ctx, serverCtx)
 	require.NoError(t, err)
 
 	// Pile on one more interceptor to make sure it's called.
@@ -527,7 +542,7 @@ func TestInternalClientAdapterWithClientStreamInterceptors(t *testing.T) {
 	serverCtx.AdvertiseAddr = "127.0.0.1:8888"
 	serverCtx.NodeID.Set(context.Background(), 1)
 
-	_ /* server */, serverInterceptors, err := NewServerEx(ctx, serverCtx)
+	_ /* gRPC server */, serverInterceptors, err := NewServerEx(ctx, serverCtx)
 	require.NoError(t, err)
 	var clientInterceptors ClientInterceptorInfo
 	var s *testClientStream
@@ -590,7 +605,7 @@ func TestInternalClientAdapterWithServerStreamInterceptors(t *testing.T) {
 	serverCtx.AdvertiseAddr = "127.0.0.1:8888"
 	serverCtx.NodeID.Set(context.Background(), 1)
 
-	_ /* server */, serverInterceptors, err := NewServerEx(ctx, serverCtx)
+	_ /* gRPC server */, serverInterceptors, err := NewServerEx(ctx, serverCtx)
 	require.NoError(t, err)
 
 	const int1Name = "interceptor 1"
@@ -728,7 +743,7 @@ func BenchmarkInternalClientAdapter(b *testing.B) {
 	serverCtx.AdvertiseAddr = "127.0.0.1:8888"
 	serverCtx.NodeID.Set(context.Background(), 1)
 
-	_, interceptors, err := NewServerEx(ctx, serverCtx)
+	_ /* gRPC server */, interceptors, err := NewServerEx(ctx, serverCtx)
 	require.NoError(b, err)
 
 	internal := &internalServer{}
@@ -793,8 +808,88 @@ func TestConnectLoopback(t *testing.T) {
 	clientCtx.AdvertiseAddr = addr
 
 	// Connect and get the error that comes from loopbackLn, proving that we were routed there.
-	_, err = clientCtx.GRPCDialNode(addr, nodeID, roachpb.Locality{}, DefaultClass).Connect(ctx)
+	_, err = clientCtx.GRPCDialNode(addr, nodeID, roachpb.Locality{}, rpcbase.DefaultClass).Connect(ctx)
 	require.Equal(t, codes.DataLoss, gogostatus.Code(errors.UnwrapAll(err)), "%+v", err)
+}
+
+// TestDRPCConnectLoopback verifies that we correctly go through the internal
+// server when dialing the local address.
+func TestDRPCConnectLoopback(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
+
+	clock := timeutil.NewManualTime(timeutil.Unix(0, 1))
+	maxOffset := time.Duration(0)
+
+	clusterID := uuid.MakeV4()
+	const nodeID = 1
+
+	ctx := context.Background()
+	clientCtx := newTestContext(clusterID, clock, maxOffset, stopper)
+	clientCtx.NodeID.Set(context.Background(), nodeID)
+	drpcLoopbackL := netutil.NewLoopbackListener(ctx, stopper)
+	clientCtx.loopbackDRPCDialFn = func(ctx context.Context) (net.Conn, error) {
+		return drpcLoopbackL.Connect(ctx)
+	}
+	// Ensure that there's no error connecting to the local node when an internal
+	// server has been registered.
+	clientCtx.SetLocalInternalServer(
+		&internalServer{},
+		ServerInterceptorInfo{}, ClientInterceptorInfo{})
+
+	// Create a DRPC server to listen on loopback.
+	newTestServer := func() *drpcServer {
+		d := &drpcServer{}
+		mux := drpcmux.New()
+		d.Server = drpcserver.NewWithOptions(mux, drpcserver.Options{})
+		d.Mux = mux
+
+		return d
+	}
+	drpcS := newTestServer()
+
+	// Register a heartbeat service that always returns an error.
+	errLoopback := gogostatus.Newf(codes.Unknown, "loopback!").Err() // TODO(server): replace code with DRPC error codes
+	require.NoError(t, DRPCRegisterHeartbeat(drpcS, &ManualHeartbeatService{readyFn: func() error {
+		return errLoopback
+	}}))
+
+	tlsConfig, err := clientCtx.GetServerTLSConfig()
+	require.NoError(t, err)
+
+	// Start the DRPC server on loopback.
+	require.NoError(t, stopper.RunAsyncTask(ctx, "listen-server-loopback", func(ctx context.Context) {
+		drpcLoopbackTLSL := tls.NewListener(drpcLoopbackL, tlsConfig)
+		netutil.FatalIfUnexpected(drpcS.Serve(ctx, drpcLoopbackTLSL))
+	}))
+
+	serveDRPC := func(stopper *stop.Stopper, drpcS *drpcServer, drpcTLSL net.Listener) error {
+		waitQuiesce := func(context.Context) {
+			<-stopper.ShouldQuiesce()
+			netutil.FatalIfUnexpected(drpcTLSL.Close())
+		}
+		if err := stopper.RunAsyncTask(ctx, "listen-quiesce", waitQuiesce); err != nil {
+			waitQuiesce(ctx)
+			return err
+		}
+
+		return stopper.RunAsyncTask(ctx, "listen-serve", func(context.Context) {
+			netutil.FatalIfUnexpected(drpcS.Serve(ctx, drpcTLSL))
+		})
+	}
+	drpcL, err := net.Listen("tcp", util.TestAddr.String())
+	require.NoError(t, err)
+	drpcTLSL := tls.NewListener(drpcL, tlsConfig)
+	require.NoError(t, serveDRPC(stopper, drpcS, drpcTLSL))
+
+	addr := drpcL.Addr().String()
+	clientCtx.AdvertiseAddr = addr
+
+	// Connect and get the error that comes from loopbackLn, proving that we were routed there.
+	_, err = clientCtx.DRPCDialNode(addr, nodeID, roachpb.Locality{}, rpcbase.DefaultClass).Connect(ctx)
+	require.Equal(t, codes.Unknown, gogostatus.Code(errors.UnwrapAll(err)), "%+v", err)
 }
 
 func TestOffsetMeasurement(t *testing.T) {
@@ -833,7 +928,7 @@ func TestOffsetMeasurement(t *testing.T) {
 	clientMaxOffset := time.Duration(0)
 	clientCtx := newTestContext(clusterID, clientClock, clientMaxOffset, stopper)
 	clientCtx.RemoteClocks.offsetTTL = 1 * time.Nanosecond
-	if _, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, roachpb.Locality{}, DefaultClass).Connect(ctx); err != nil {
+	if _, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, roachpb.Locality{}, rpcbase.DefaultClass).Connect(ctx); err != nil {
 		t.Fatal(err)
 	}
 
@@ -912,7 +1007,7 @@ func TestFailedOffsetMeasurement(t *testing.T) {
 		heartbeat.ready <- nil
 		heartbeat.ready <- nil
 	}()
-	if _, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, roachpb.Locality{}, DefaultClass).Connect(ctx); err != nil {
+	if _, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, roachpb.Locality{}, rpcbase.DefaultClass).Connect(ctx); err != nil {
 		t.Fatal(err)
 	}
 
@@ -986,12 +1081,12 @@ func TestLatencyInfoCleanupOnClosedConnection(t *testing.T) {
 		return nil
 	}
 
-	conn, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, roachpb.Locality{}, DefaultClass).Connect(ctx)
+	conn, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, roachpb.Locality{}, rpcbase.DefaultClass).Connect(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	anotherConn, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, roachpb.Locality{}, SystemClass).Connect(ctx)
+	anotherConn, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, roachpb.Locality{}, rpcbase.SystemClass).Connect(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1131,7 +1226,7 @@ func TestRemoteOffsetUnhealthy(t *testing.T) {
 					serverNodeContext.ctx.AdvertiseAddr,
 					serverNodeContext.ctx.NodeID.Get(),
 					roachpb.Locality{},
-					DefaultClass,
+					rpcbase.DefaultClass,
 				).Connect(ctx); err != nil {
 					return err
 				}
@@ -1223,7 +1318,7 @@ func TestGRPCDeadlinePropagation(t *testing.T) {
 
 	// Construct the client context.
 	clientCtx := newTestContext(clusterID, clock, maxOffset, stopper)
-	defConn, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, roachpb.Locality{}, DefaultClass).Connect(ctx)
+	defConn, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, roachpb.Locality{}, rpcbase.DefaultClass).Connect(ctx)
 	require.Nil(t, err)
 
 	// Issue an RPC with a deadline far in the future.
@@ -1289,7 +1384,7 @@ func TestClusterIDMismatch(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		wg.Add(1)
 		go func() {
-			_, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, roachpb.Locality{}, DefaultClass).Connect(ctx)
+			_, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, roachpb.Locality{}, rpcbase.DefaultClass).Connect(ctx)
 			expected := "doesn't match server cluster ID"
 			if !testutils.IsError(err, expected) {
 				t.Errorf("expected %s error, got %v", expected, err)
@@ -1413,7 +1508,7 @@ func TestNodeIDMismatch(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		wg.Add(1)
 		go func() {
-			_, err := clientCtx.GRPCDialNode(remoteAddr, 2, roachpb.Locality{}, DefaultClass).Connect(ctx)
+			_, err := clientCtx.GRPCDialNode(remoteAddr, 2, roachpb.Locality{}, rpcbase.DefaultClass).Connect(ctx)
 			expected := "doesn't match server node ID"
 			if !testutils.IsError(err, expected) {
 				t.Errorf("expected %s error, got %v", expected, err)
@@ -1487,7 +1582,7 @@ func TestVersionCheckBidirectional(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			_, err = clientCtx.GRPCDialNode(remoteAddr, serverNodeID, roachpb.Locality{}, DefaultClass).Connect(ctx)
+			_, err = clientCtx.GRPCDialNode(remoteAddr, serverNodeID, roachpb.Locality{}, rpcbase.DefaultClass).Connect(ctx)
 
 			if td.expectError {
 				expected := "cluster requires at least version"
@@ -1529,8 +1624,8 @@ func TestGRPCDialClass(t *testing.T) {
 	remoteAddr := ln.Addr().String()
 	clientCtx := newTestContext(serverCtx.StorageClusterID.Get(), clock, maxOffset, stopper)
 
-	def1 := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, roachpb.Locality{}, DefaultClass)
-	sys1 := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, roachpb.Locality{}, SystemClass)
+	def1 := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, roachpb.Locality{}, rpcbase.DefaultClass)
+	sys1 := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, roachpb.Locality{}, rpcbase.SystemClass)
 	require.False(t, sys1 == def1,
 		"expected connections dialed with different classes to the same target to differ")
 	defConn1, err := def1.Connect(context.Background())
@@ -1539,13 +1634,13 @@ func TestGRPCDialClass(t *testing.T) {
 	require.Nil(t, err, "expected successful connection")
 	require.False(t, sysConn1 == defConn1, "expected connections dialed with "+
 		"different classes to the sametarget to have separate underlying gRPC connections")
-	def2 := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, roachpb.Locality{}, DefaultClass)
+	def2 := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, roachpb.Locality{}, rpcbase.DefaultClass)
 	require.True(t, def1 == def2, "expected connections dialed with the same "+
 		"class to the same target to be the same")
-	sys2 := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, roachpb.Locality{}, SystemClass)
+	sys2 := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, roachpb.Locality{}, rpcbase.SystemClass)
 	require.True(t, sys1 == sys2, "expected connections dialed with the same "+
 		"class to the same target to be the same")
-	for _, c := range []*Connection{def2, sys2} {
+	for _, c := range []*GRPCConnection{def2, sys2} {
 		require.Nil(t, c.Health(), "expected connections to be healthy")
 	}
 }
@@ -1592,7 +1687,7 @@ func TestTestingKnobs(t *testing.T) {
 	// are called in the seen map below.
 	type streamCall struct {
 		target string
-		class  ConnectionClass
+		class  rpcbase.ConnectionClass
 		method string
 	}
 	seen := make(map[interface{}]int)
@@ -1605,7 +1700,7 @@ func TestTestingKnobs(t *testing.T) {
 	clientCtx := newTestContextWithKnobs(clock, maxOffset, stopper, ContextTestingKnobs{
 		StorageClusterID: &clusterID,
 		StreamClientInterceptor: func(
-			target string, class ConnectionClass,
+			target string, class rpcbase.ConnectionClass,
 		) grpc.StreamClientInterceptor {
 			return func(
 				ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn,
@@ -1628,7 +1723,7 @@ func TestTestingKnobs(t *testing.T) {
 	ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
 	require.Nil(t, err)
 	remoteAddr := ln.Addr().String()
-	defConn, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, roachpb.Locality{}, DefaultClass).Connect(ctx)
+	defConn, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID, roachpb.Locality{}, rpcbase.DefaultClass).Connect(ctx)
 	require.Nil(t, err)
 	const streamMethod = "/cockroach.rpc.Testing/Bar"
 	const numDefStream = 4
@@ -1648,7 +1743,7 @@ func TestTestingKnobs(t *testing.T) {
 	exp := map[interface{}]int{
 		streamCall{
 			target: remoteAddr,
-			class:  DefaultClass,
+			class:  rpcbase.DefaultClass,
 			method: streamMethod,
 		}: numDefStream,
 	}
@@ -1680,7 +1775,7 @@ func BenchmarkGRPCDial(b *testing.B) {
 
 	b.RunParallel(func(pb *testing.PB) {
 		for pb.Next() {
-			_, err := rpcCtx.grpcDialRaw(ctx, remoteAddr, DefaultClass)
+			_, err := rpcCtx.grpcDialRaw(ctx, remoteAddr, rpcbase.DefaultClass, nil /* onNetworkDial */)
 			if err != nil {
 				b.Fatal(err)
 			}
@@ -1718,7 +1813,7 @@ func TestRejectDialOnQuiesce(t *testing.T) {
 	// Set up one connection before quiesce to exercise the path in which
 	// the connection already exists and is healthy when the node shuts
 	// down.
-	conn, err := rpcCtx.GRPCDialNode(addr, serverNodeID, roachpb.Locality{}, SystemClass).Connect(ctx)
+	conn, err := rpcCtx.GRPCDialNode(addr, serverNodeID, roachpb.Locality{}, rpcbase.SystemClass).Connect(ctx)
 	require.NoError(t, err)
 	// Check that we can reach the server (though we don't bother to also register
 	// an endpoint on it; getting codes.Unimplemented back is proof enough).
@@ -1731,7 +1826,7 @@ func TestRejectDialOnQuiesce(t *testing.T) {
 
 	// First, we shouldn't be able to dial again, even though we already have a
 	// connection.
-	_, err = rpcCtx.GRPCDialNode(addr, serverNodeID, roachpb.Locality{}, SystemClass).Connect(ctx)
+	_, err = rpcCtx.GRPCDialNode(addr, serverNodeID, roachpb.Locality{}, rpcbase.SystemClass).Connect(ctx)
 	require.ErrorIs(t, err, errQuiescing)
 	require.True(t, grpcutil.IsConnectionRejected(err))
 	require.True(t, grpcutil.IsAuthError(err))
@@ -1829,9 +1924,19 @@ func newRegisteredServer(
 	opts.RPCHeartbeatTimeout = 1000 * time.Millisecond
 
 	rpcCtx := NewContext(context.Background(), opts)
-	// This is normally set up inside the server, we want to hold onto all PingRequests that come through.
+
+	verifyDialbackFn := func() func(context.Context, *PingRequest, *PingResponse) error {
+		if !rpcCtx.UseDRPC {
+			return func(ctx context.Context, req *PingRequest, resp *PingResponse) error {
+				return VerifyDialback(ctx, NewGRPCDialbackAdapter(rpcCtx), req, resp, roachpb.Locality{}, &rpcCtx.Settings.SV)
+			}
+		}
+		return func(ctx context.Context, req *PingRequest, resp *PingResponse) error {
+			return VerifyDialback(ctx, NewDRPCDialbackAdapter(rpcCtx), req, resp, roachpb.Locality{}, &rpcCtx.Settings.SV)
+		}
+	}()
 	rpcCtx.OnIncomingPing = func(ctx context.Context, req *PingRequest, resp *PingResponse) error {
-		err := VerifyDialback(ctx, rpcCtx, req, resp, roachpb.Locality{}, &rpcCtx.Settings.SV)
+		err := verifyDialbackFn(ctx, req, resp)
 		if err != nil {
 			t.Logf("dialback error n%d->n%d @ %s: %s", nodeID, req.OriginNodeID, req.OriginAddr, err)
 			return err
@@ -1856,11 +1961,11 @@ func newRegisteredServer(
 
 	_ = stopper.RunAsyncTask(ctx, "serve", func(context.Context) {
 		closeReason := s.Serve(&tracker)
-		log.Infof(ctx, "Closed listener with reason %v", closeReason)
+		log.Dev.Infof(ctx, "Closed listener with reason %v", closeReason)
 	})
 
 	addr := ln.Addr().String()
-	log.Infof(ctx, "Listening on %s", addr)
+	log.Dev.Infof(ctx, "Listening on %s", addr)
 	// This needs to be set once we know our address so that ping requests have
 	// the correct reverse addr in them.
 	rpcCtx.AdvertiseAddr = addr
@@ -1883,7 +1988,7 @@ func TestHeartbeatDialback(t *testing.T) {
 	// This invariant is important to make sure we don't try and connect to the
 	// wrong node.
 	{
-		_, err := ctx1.GRPCDialNode(remoteAddr2, 3, roachpb.Locality{}, DefaultClass).Connect(ctx)
+		_, err := ctx1.GRPCDialNode(remoteAddr2, 3, roachpb.Locality{}, rpcbase.DefaultClass).Connect(ctx)
 		var respErr *netutil.InitialHeartbeatFailedError
 		require.ErrorAs(t, err, &respErr)
 	}
@@ -1892,7 +1997,7 @@ func TestHeartbeatDialback(t *testing.T) {
 	// connection back to 1. This will be a blocking connection since there is no
 	// reverse connection.
 	{
-		conn, err := ctx1.GRPCDialNode(remoteAddr2, 2, roachpb.Locality{}, DefaultClass).Connect(ctx)
+		conn, err := ctx1.GRPCDialNode(remoteAddr2, 2, roachpb.Locality{}, rpcbase.DefaultClass).Connect(ctx)
 		require.NoError(t, err)
 		require.NotNil(t, conn)
 		defer func() {
@@ -1903,7 +2008,7 @@ func TestHeartbeatDialback(t *testing.T) {
 	// Now connect back in the opposite direction. This should not initiate any
 	// dialback since we are already connected.
 	{
-		conn, err := ctx1.GRPCDialNode(remoteAddr2, 2, roachpb.Locality{}, DefaultClass).Connect(ctx)
+		conn, err := ctx1.GRPCDialNode(remoteAddr2, 2, roachpb.Locality{}, rpcbase.DefaultClass).Connect(ctx)
 		defer func() {
 			_ = conn.Close() // nolint:grpcconnclose
 		}()
@@ -1912,14 +2017,14 @@ func TestHeartbeatDialback(t *testing.T) {
 	}
 
 	// The connection we established should be healthy.
-	require.NoError(t, ctx1.ConnHealth(remoteAddr2, 2, DefaultClass))
+	require.NoError(t, ctx1.ConnHealth(remoteAddr2, 2, rpcbase.DefaultClass))
 	// The dialback connection (which uses the system class, in reverse direction)
 	// becomes healthy "very soon". It may not be healthy immediately since the
 	// first blocking heartbeat of the n1->n2 connection used a throwaway connection,
 	// which may have completed sooner than the system-class connection which is
 	// asynchronous.
 	testutils.SucceedsSoon(t, func() error {
-		return ctx2.ConnHealth(remoteAddr1, 1, SystemClass)
+		return ctx2.ConnHealth(remoteAddr1, 1, rpcbase.SystemClass)
 	})
 
 	// Forcibly shut down listener 2 and the connection node1 -> node2.
@@ -1931,7 +2036,7 @@ func TestHeartbeatDialback(t *testing.T) {
 	// closed, and n2 should terminate its connection to n1 within ~100ms
 	// (heartbeat interval in this test) since n1 can't dial-back.
 	testutils.SucceedsSoon(t, func() error {
-		errDef, errSys := ctx1.ConnHealth(remoteAddr2, 2, DefaultClass), ctx2.ConnHealth(remoteAddr1, 1, SystemClass)
+		errDef, errSys := ctx1.ConnHealth(remoteAddr2, 2, rpcbase.DefaultClass), ctx2.ConnHealth(remoteAddr1, 1, rpcbase.SystemClass)
 		if errors.Is(errDef, ErrNotHeartbeated) {
 			errDef = nil
 		}
@@ -1950,18 +2055,26 @@ func TestHeartbeatDialback(t *testing.T) {
 
 func TestVerifyDialback(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Run("grpc", testVerifyDialbackImpl[*grpc.ClientConn])
+	t.Run("drpc", testVerifyDialbackImpl[drpc.Conn])
+}
 
-	run := func(t *testing.T, name string, f func(t *testing.T, mockRPCCtx *MockDialbacker, sv *settings.Values)) {
+func testVerifyDialbackImpl[Conn rpcConn](t *testing.T) {
+	run := func(
+		t *testing.T,
+		name string,
+		f func(t *testing.T, mockRPCCtx *MockDialbacker[Conn], sv *settings.Values),
+	) {
 		t.Helper()
 		t.Run(name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
-			f(t, NewMockDialbacker(ctrl), &cluster.MakeTestingClusterSettings().SV)
+			f(t, NewMockDialbacker[Conn](ctrl), &cluster.MakeTestingClusterSettings().SV)
 		})
 	}
 
-	mkConn := func() *Connection {
-		c := &Connection{
+	mkConn := func() *Connection[Conn] {
+		c := &Connection[Conn]{
 			breakerSignalFn: func() circuit.Signal {
 				return &neverTripSignal{}
 			},
@@ -1978,7 +2091,7 @@ func TestVerifyDialback(t *testing.T) {
 		}
 	}
 
-	run(t, "no-ops", func(t *testing.T, mockRPCCtx *MockDialbacker, sv *settings.Values) {
+	run(t, "no-ops", func(t *testing.T, mockRPCCtx *MockDialbacker[Conn], sv *settings.Values) {
 		// NONE always no-ops, the other modes do if setting is disabled.
 		require.NoError(t, VerifyDialback(context.Background(), mockRPCCtx, ping(PingRequest_NONE),
 			&PingResponse{}, roachpb.Locality{}, sv))
@@ -1993,10 +2106,9 @@ func TestVerifyDialback(t *testing.T) {
 	// hits the fast-path, returning success.
 	for _, typ := range []PingRequest_DialbackType{PingRequest_BLOCKING, PingRequest_NON_BLOCKING} {
 		run(t, fmt.Sprintf("fast-path/healthy/%s", typ),
-			func(t *testing.T, mockRPCCtx *MockDialbacker, sv *settings.Values) {
-
-				mockRPCCtx.EXPECT().GRPCDialNode("1.1.1.1", roachpb.NodeID(2), roachpb.Locality{}, SystemClass).
-					DoAndReturn(func(string, roachpb.NodeID, roachpb.Locality, ConnectionClass) *Connection {
+			func(t *testing.T, mockRPCCtx *MockDialbacker[Conn], sv *settings.Values) {
+				mockRPCCtx.EXPECT().DialNode("1.1.1.1", roachpb.NodeID(2), roachpb.Locality{}, rpcbase.SystemClass).
+					DoAndReturn(func(string, roachpb.NodeID, roachpb.Locality, rpcbase.ConnectionClass) *Connection[Conn] {
 						healthyConn := mkConn()
 						close(healthyConn.connFuture.ready)
 						return healthyConn
@@ -2011,79 +2123,86 @@ func TestVerifyDialback(t *testing.T) {
 			})
 	}
 
-	run(t, "fast-path/pending/NON_BLOCKING", func(t *testing.T, mockRPCCtx *MockDialbacker, sv *settings.Values) {
-		// If reverse system class connection is not healthy, non-blocking dial attempt
-		// interprets this as success.
-		mockRPCCtx.EXPECT().GRPCDialNode("1.1.1.1", roachpb.NodeID(2), roachpb.Locality{}, SystemClass).
-			DoAndReturn(func(string, roachpb.NodeID, roachpb.Locality, ConnectionClass) *Connection {
-				tmpConn := mkConn()
-				assert.Equal(t, ErrNotHeartbeated, tmpConn.Health())
-				return tmpConn
-			})
-		require.NoError(t, VerifyDialback(context.Background(), mockRPCCtx, &PingRequest{
-			OriginAddr:    "1.1.1.1",
-			TargetNodeID:  1,
-			OriginNodeID:  2,
-			NeedsDialback: PingRequest_NON_BLOCKING,
-		}, &PingResponse{}, roachpb.Locality{}, sv))
-	})
-
-	for _, dialbackOK := range []bool{true, false} {
-		run(t, fmt.Sprintf("fast-path/pending/BLOCKING/success=%t", dialbackOK), func(t *testing.T, mockRPCCtx *MockDialbacker, sv *settings.Values) {
-			// If reverse system class connection is not healthy, blocking dial attempt
-			// will do a one-off dialback.
-			mockRPCCtx.EXPECT().GRPCDialNode("1.1.1.1", roachpb.NodeID(2), roachpb.Locality{}, SystemClass).
-				DoAndReturn(func(string, roachpb.NodeID, roachpb.Locality, ConnectionClass) *Connection {
+	run(t, "fast-path/pending/NON_BLOCKING",
+		func(t *testing.T, mockRPCCtx *MockDialbacker[Conn], sv *settings.Values) {
+			// If reverse system class connection is not healthy, non-blocking dial attempt
+			// interprets this as success.
+			mockRPCCtx.EXPECT().DialNode("1.1.1.1", roachpb.NodeID(2), roachpb.Locality{}, rpcbase.SystemClass).
+				DoAndReturn(func(string, roachpb.NodeID, roachpb.Locality, rpcbase.ConnectionClass) *Connection[Conn] {
 					tmpConn := mkConn()
 					assert.Equal(t, ErrNotHeartbeated, tmpConn.Health())
 					return tmpConn
 				})
-			mockRPCCtx.EXPECT().wrapCtx(gomock.Any(), "1.1.1.1", roachpb.NodeID(2), SystemClass).DoAndReturn(func(
-				ctx context.Context, _ string, _ roachpb.NodeID, _ ConnectionClass) context.Context {
-				return ctx
-			})
-			mockRPCCtx.EXPECT().grpcDialRaw(gomock.Any() /* ctx */, "1.1.1.1", SystemClass, gomock.Any()).
-				DoAndReturn(func(context.Context, string, ConnectionClass, ...grpc.DialOption) (*grpc.ClientConn, error) {
-					if dialbackOK {
-						return nil, nil
-					}
-					return nil, errors.New("boom")
-				})
-			err := VerifyDialback(context.Background(), mockRPCCtx, &PingRequest{
+			require.NoError(t, VerifyDialback(context.Background(), mockRPCCtx, &PingRequest{
 				OriginAddr:    "1.1.1.1",
 				TargetNodeID:  1,
 				OriginNodeID:  2,
-				NeedsDialback: PingRequest_BLOCKING,
-			}, &PingResponse{}, roachpb.Locality{}, sv)
-			if dialbackOK {
-				require.NoError(t, err)
-			} else {
-				require.Error(t, err)
-			}
+				NeedsDialback: PingRequest_NON_BLOCKING,
+			}, &PingResponse{}, roachpb.Locality{}, sv))
 		})
+
+	for _, dialbackOK := range []bool{true, false} {
+		run(t, fmt.Sprintf("fast-path/pending/BLOCKING/success=%t", dialbackOK),
+			func(t *testing.T, mockRPCCtx *MockDialbacker[Conn], sv *settings.Values) {
+				// If reverse system class connection is not healthy, blocking dial attempt
+				// will do a one-off dialback.
+				mockRPCCtx.EXPECT().DialNode("1.1.1.1", roachpb.NodeID(2), roachpb.Locality{}, rpcbase.SystemClass).
+					DoAndReturn(func(string, roachpb.NodeID, roachpb.Locality, rpcbase.ConnectionClass) *Connection[Conn] {
+						tmpConn := mkConn()
+						assert.Equal(t, ErrNotHeartbeated, tmpConn.Health())
+						return tmpConn
+					})
+				mockRPCCtx.EXPECT().WrapCtx(gomock.Any(), "1.1.1.1", roachpb.NodeID(2), rpcbase.SystemClass).
+					DoAndReturn(func(
+						ctx context.Context, _ string, _ roachpb.NodeID, _ rpcbase.ConnectionClass,
+					) context.Context {
+						return ctx
+					})
+				mockRPCCtx.EXPECT().DialRaw(gomock.Any(), "1.1.1.1", rpcbase.SystemClass).
+					DoAndReturn(func(context.Context, string, rpcbase.ConnectionClass) error {
+						if dialbackOK {
+							return nil
+						}
+						return errors.New("boom")
+					})
+				err := VerifyDialback(context.Background(), mockRPCCtx, &PingRequest{
+					OriginAddr:    "1.1.1.1",
+					TargetNodeID:  1,
+					OriginNodeID:  2,
+					NeedsDialback: PingRequest_BLOCKING,
+				}, &PingResponse{}, roachpb.Locality{}, sv)
+				if dialbackOK {
+					require.NoError(t, err)
+				} else {
+					require.Error(t, err)
+				}
+			})
 	}
 
-	run(t, "without-nodeid", func(t *testing.T, mockRPCCtx *MockDialbacker, sv *settings.Values) {
-		// If PingRequest has no OriginNodeID, we'll check the system-level connection using GRPCUnvalidatedDial
-		// and still do the one-off dialback (in BLOCKING mode)
-		req := ping(PingRequest_BLOCKING)
-		req.OriginNodeID = 0
-		mockRPCCtx.EXPECT().GRPCUnvalidatedDial("1.1.1.1", roachpb.Locality{}).
-			DoAndReturn(func(string, roachpb.Locality) *Connection {
-				tmpConn := mkConn()
-				assert.Equal(t, ErrNotHeartbeated, tmpConn.Health())
-				return tmpConn
-			})
-		mockRPCCtx.EXPECT().wrapCtx(gomock.Any(), "1.1.1.1", roachpb.NodeID(0), SystemClass).DoAndReturn(func(
-			ctx context.Context, _ string, _ roachpb.NodeID, _ ConnectionClass) context.Context {
-			return ctx
+	run(t, "without-nodeid",
+		func(t *testing.T, mockRPCCtx *MockDialbacker[Conn], sv *settings.Values) {
+			// If PingRequest has no OriginNodeID, we'll check the system-level connection
+			// using UnvalidatedDial and still do the one-off dialback (in BLOCKING mode).
+			req := ping(PingRequest_BLOCKING)
+			req.OriginNodeID = 0
+			mockRPCCtx.EXPECT().UnvalidatedDial("1.1.1.1", roachpb.Locality{}).
+				DoAndReturn(func(string, roachpb.Locality) *Connection[Conn] {
+					tmpConn := mkConn()
+					assert.Equal(t, ErrNotHeartbeated, tmpConn.Health())
+					return tmpConn
+				})
+			mockRPCCtx.EXPECT().WrapCtx(gomock.Any(), "1.1.1.1", roachpb.NodeID(0), rpcbase.SystemClass).
+				DoAndReturn(func(
+					ctx context.Context, _ string, _ roachpb.NodeID, _ rpcbase.ConnectionClass,
+				) context.Context {
+					return ctx
+				})
+			mockRPCCtx.EXPECT().DialRaw(gomock.Any(), "1.1.1.1", rpcbase.SystemClass).
+				DoAndReturn(func(context.Context, string, rpcbase.ConnectionClass) error {
+					return nil
+				})
+			require.NoError(t, VerifyDialback(context.Background(), mockRPCCtx, req, &PingResponse{}, roachpb.Locality{}, sv))
 		})
-		mockRPCCtx.EXPECT().grpcDialRaw(gomock.Any() /* ctx */, "1.1.1.1", SystemClass, gomock.Any()).
-			DoAndReturn(func(context.Context, string, ConnectionClass, ...grpc.DialOption) (*grpc.ClientConn, error) {
-				return nil, nil
-			})
-		require.NoError(t, VerifyDialback(context.Background(), mockRPCCtx, req, &PingResponse{}, roachpb.Locality{}, sv))
-	})
 }
 
 // TODO(baptist): Add a test using TestCluster to verify this works in a full
@@ -2168,7 +2287,7 @@ func TestInitialHeartbeatFailedError(t *testing.T) {
 
 	// Rejected connection errors with InitialHeartbeatFailedError.
 	remoteAddr := "127.0.0.99:64072"
-	_, err := clientCtx.GRPCDialNode(remoteAddr, nodeID, roachpb.Locality{}, SystemClass).Connect(ctx)
+	_, err := clientCtx.GRPCDialNode(remoteAddr, nodeID, roachpb.Locality{}, rpcbase.SystemClass).Connect(ctx)
 	requireHeartbeatError(t, err)
 
 	// Hung listener errors with InitialHeartbeatFailedError.
@@ -2179,7 +2298,7 @@ func TestInitialHeartbeatFailedError(t *testing.T) {
 	}()
 	remoteAddr = hungLn.Addr().String()
 
-	_, err = clientCtx.GRPCDialNode(remoteAddr, nodeID, roachpb.Locality{}, SystemClass).Connect(ctx)
+	_, err = clientCtx.GRPCDialNode(remoteAddr, nodeID, roachpb.Locality{}, rpcbase.SystemClass).Connect(ctx)
 	requireHeartbeatError(t, err)
 
 	// Start server listener. We set the ping handler to fail initially, to make
@@ -2201,14 +2320,14 @@ func TestInitialHeartbeatFailedError(t *testing.T) {
 
 	// Before connecting, health does not return an InitialHeartbeatFailedError,
 	// it returns ErrNotHeartbeated.
-	err = clientCtx.GRPCDialNode(remoteAddr, nodeID, roachpb.Locality{}, SystemClass).Health()
+	err = clientCtx.GRPCDialNode(remoteAddr, nodeID, roachpb.Locality{}, rpcbase.SystemClass).Health()
 	require.Error(t, err)
 	require.True(t, errors.HasType(err, ErrNotHeartbeated))
 	require.False(t, errors.HasType(err, hbErrType))
 
 	// Ping errors result in InitialHeartbeatFailedError.
 	failPing.Store(true)
-	_, err = clientCtx.GRPCDialNode(remoteAddr, nodeID, roachpb.Locality{}, SystemClass).Connect(ctx)
+	_, err = clientCtx.GRPCDialNode(remoteAddr, nodeID, roachpb.Locality{}, rpcbase.SystemClass).Connect(ctx)
 	requireHeartbeatError(t, err)
 
 	// Stalled pings result in InitialHeartbeatFailedError. We're careful to
@@ -2216,17 +2335,156 @@ func TestInitialHeartbeatFailedError(t *testing.T) {
 	// actor establishes a connection in the meanwhile.
 	hangPing.Store(true)
 	failPing.Store(false)
-	_, err = clientCtx.GRPCDialNode(remoteAddr, nodeID, roachpb.Locality{}, SystemClass).Connect(ctx)
+	_, err = clientCtx.GRPCDialNode(remoteAddr, nodeID, roachpb.Locality{}, rpcbase.SystemClass).Connect(ctx)
 	requireHeartbeatError(t, err)
 	hangPing.Store(false)
 
 	// RPC circuit breakers will now be tripped. They should result in
 	// InitialHeartbeatFailedError until we finally recover.
 	testutils.SucceedsSoon(t, func() error {
-		_, err := clientCtx.GRPCDialNode(remoteAddr, nodeID, roachpb.Locality{}, SystemClass).Connect(ctx)
+		_, err := clientCtx.GRPCDialNode(remoteAddr, nodeID, roachpb.Locality{}, rpcbase.SystemClass).Connect(ctx)
 		if err != nil {
 			requireHeartbeatError(t, err)
 		}
 		return err
 	})
+}
+
+func BenchmarkGRPCPing(b *testing.B) {
+	for _, bytes := range []int{1, 1 << 8, 1 << 10, 1 << 11, 1 << 12, 1 << 13, 1 << 14, 1 << 15, 1 << 16, 1 << 18, 1 << 20} {
+		bstr := fmt.Sprintf("%d", bytes)
+		bname := strings.Repeat("_", 7-len(bstr)) + bstr
+		b.Run("bytes="+bname, func(b *testing.B) {
+			stopper := stop.NewStopper()
+			ctx := context.Background()
+			defer stopper.Stop(ctx)
+
+			clock := &timeutil.DefaultTimeSource{}
+			maxOffset := 250 * time.Millisecond
+			srvRPCCtx := newTestContext(uuid.MakeV4(), clock, maxOffset, stopper)
+			const serverNodeID = 1
+			srvRPCCtx.NodeID.Set(ctx, serverNodeID)
+			s := newTestServer(b, srvRPCCtx)
+
+			randBytes := make([]byte, bytes)
+			_, err := rand.Read(randBytes)
+			require.NoError(b, err)
+
+			req := &PingRequest{Ping: string(randBytes)}
+			resp := &PingResponse{Pong: string(randBytes)}
+			anyreq, err := types.MarshalAny(req)
+			require.NoError(b, err)
+			anyresp, err := types.MarshalAny(resp)
+			require.NoError(b, err)
+
+			require.NoError(b, err)
+			b.Logf("marshaled request size: %d bytes (%d bytes of overhead)", req.Size(), req.Size()-bytes)
+
+			tsi := &grpcutils.TestServerImpl{
+				UU: func(ctx context.Context, req *types.Any) (*types.Any, error) {
+					return anyresp, nil
+				},
+				SS: func(srv grpcutils.GRPCTest_StreamStreamServer) error {
+					for {
+						if _, err := srv.Recv(); err != nil {
+							return err
+						}
+						if err := srv.Send(anyresp); err != nil {
+							return err
+						}
+					}
+				},
+			}
+
+			grpcutils.RegisterGRPCTestServer(s, tsi)
+
+			ln, err := netutil.ListenAndServeGRPC(srvRPCCtx.Stopper, s, util.TestAddr)
+			if err != nil {
+				b.Fatal(err)
+			}
+			remoteAddr := ln.Addr().String()
+
+			cliRPCCtx := newTestContext(uuid.MakeV4(), clock, maxOffset, stopper)
+			cliRPCCtx.NodeID.Set(ctx, 2)
+			cc, err := cliRPCCtx.grpcDialRaw(ctx, remoteAddr, rpcbase.DefaultClass, nil /* onNetworkDial */)
+			require.NoError(b, err)
+
+			for _, tc := range []struct {
+				name   string
+				invoke func(c grpcutils.GRPCTestClient, N int) error
+			}{
+				{"UnaryUnary", func(c grpcutils.GRPCTestClient, N int) error {
+					for i := 0; i < N; i++ {
+						_, err := c.UnaryUnary(ctx, anyreq)
+						if err != nil {
+							return err
+						}
+					}
+					return nil
+				}},
+				{
+					"StreamStream", func(c grpcutils.GRPCTestClient, N int) error {
+						sc, err := c.StreamStream(ctx)
+						if err != nil {
+							return err
+						}
+						for i := 0; i < N; i++ {
+							if err := sc.Send(anyreq); err != nil {
+								return err
+							}
+							if _, err := sc.Recv(); err != nil {
+								return err
+							}
+						}
+						return nil
+					}},
+			} {
+
+				b.Run("rpc="+tc.name, func(b *testing.B) {
+
+					c := grpcutils.NewGRPCTestClient(cc)
+
+					b.SetBytes(int64(req.Size() + resp.Size()))
+					b.ResetTimer()
+					if err := tc.invoke(c, b.N); err != nil {
+						b.Fatal(err)
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestMetricsInterceptor(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
+	stopper.SetTracer(tracing.NewTracer())
+
+	clock := timeutil.NewManualTime(timeutil.Unix(0, 1))
+	maxOffset := time.Duration(0)
+
+	serverCtx := newTestContext(uuid.MakeV4(), clock, maxOffset, stopper)
+	serverCtx.AdvertiseAddr = "127.0.0.1:8888"
+	serverCtx.NodeID.Set(context.Background(), 1)
+
+	var interceptor RequestMetricsInterceptor = func(
+		ctx context.Context,
+		req interface{},
+		info *grpc.UnaryServerInfo,
+		handler grpc.UnaryHandler,
+	) (interface{}, error) {
+		return nil, nil
+	}
+
+	_, serverInterceptors, err := NewServerEx(ctx, serverCtx, WithMetricsServerInterceptor(interceptor))
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, len(serverInterceptors.UnaryInterceptors), 2)
+	// make sure that the RequestMetricsInterceptor is the second registered
+	// interceptor.
+	require.Equal(t,
+		reflect.ValueOf(interceptor).Pointer(),
+		reflect.ValueOf(serverInterceptors.UnaryInterceptors[1]).Pointer())
 }

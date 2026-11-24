@@ -3,9 +3,8 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { Spinner, InlineAlert } from "@cockroachlabs/ui-components";
-import { assert } from "chai";
-import { mount } from "enzyme";
+import "@testing-library/jest-dom";
+import { render, screen } from "@testing-library/react";
 import React from "react";
 
 import { Loading } from "./loading";
@@ -17,7 +16,7 @@ describe("<Loading>", () => {
   describe("when error is null", () => {
     describe("when loading=false", () => {
       it("renders content.", () => {
-        const wrapper = mount(
+        render(
           <Loading
             loading={false}
             page={"Test"}
@@ -25,13 +24,13 @@ describe("<Loading>", () => {
             render={() => <SomeComponent />}
           />,
         );
-        assert.isTrue(wrapper.find(SomeComponent).exists());
+        expect(screen.getByText("Hello, world!")).toBeInTheDocument();
       });
     });
 
     describe("when loading=true", () => {
       it("renders loading spinner.", () => {
-        const wrapper = mount(
+        render(
           <Loading
             loading={true}
             page={"Test"}
@@ -39,8 +38,8 @@ describe("<Loading>", () => {
             render={() => <SomeComponent />}
           />,
         );
-        assert.isFalse(wrapper.find(SomeComponent).exists());
-        assert.isTrue(wrapper.find(Spinner).exists());
+        expect(screen.queryByText("Hello, world!")).not.toBeInTheDocument();
+        expect(screen.getByTestId("loading-spinner")).toBeInTheDocument();
       });
     });
   });
@@ -48,7 +47,7 @@ describe("<Loading>", () => {
   describe("when error is a single error", () => {
     describe("when loading=false", () => {
       it("renders error, regardless of loading value.", () => {
-        const wrapper = mount(
+        render(
           <Loading
             loading={false}
             page={"Test"}
@@ -56,15 +55,15 @@ describe("<Loading>", () => {
             render={() => <SomeComponent />}
           />,
         );
-        assert.isFalse(wrapper.find(SomeComponent).exists());
-        assert.isFalse(wrapper.find(Spinner).exists());
-        assert.isTrue(wrapper.find(InlineAlert).exists());
+        expect(screen.queryByText("Hello, world!")).not.toBeInTheDocument();
+        expect(screen.queryByTestId("loading-spinner")).not.toBeInTheDocument();
+        expect(screen.getByText("some error message")).toBeInTheDocument();
       });
     });
 
     describe("when loading=true", () => {
       it("renders error, regardless of loading value.", () => {
-        const wrapper = mount(
+        render(
           <Loading
             loading={true}
             page={"Test"}
@@ -72,14 +71,14 @@ describe("<Loading>", () => {
             render={() => <SomeComponent />}
           />,
         );
-        assert.isFalse(wrapper.find(SomeComponent).exists());
-        assert.isFalse(wrapper.find(Spinner).exists());
-        assert.isFalse(wrapper.find(SomeCustomErrorComponent).exists());
-        assert.isTrue(wrapper.find(InlineAlert).exists());
+        expect(screen.queryByText("Hello, world!")).not.toBeInTheDocument();
+        expect(screen.queryByTestId("loading-spinner")).not.toBeInTheDocument();
+        expect(screen.queryByText("Custom Error")).not.toBeInTheDocument();
+        expect(screen.getByText("some error message")).toBeInTheDocument();
       });
 
       it("render custom error when provided", () => {
-        const wrapper = mount(
+        render(
           <Loading
             loading={true}
             page={"Test"}
@@ -88,9 +87,9 @@ describe("<Loading>", () => {
             renderError={() => <SomeCustomErrorComponent />}
           />,
         );
-        assert.isFalse(wrapper.find(SomeComponent).exists());
-        assert.isFalse(wrapper.find(Spinner).exists());
-        assert.isTrue(wrapper.find(SomeCustomErrorComponent).exists());
+        expect(screen.queryByText("Hello, world!")).not.toBeInTheDocument();
+        expect(screen.queryByTestId("loading-spinner")).not.toBeInTheDocument();
+        expect(screen.getByText("Custom Error")).toBeInTheDocument();
       });
     });
   });
@@ -99,7 +98,7 @@ describe("<Loading>", () => {
     describe("when no errors are null", () => {
       it("renders all errors in list", () => {
         const errors = [Error("error1"), Error("error2"), Error("error3")];
-        const wrapper = mount(
+        const { container } = render(
           <Loading
             loading={false}
             page={"Test"}
@@ -107,12 +106,9 @@ describe("<Loading>", () => {
             render={() => <SomeComponent />}
           />,
         );
-        assert.isFalse(wrapper.find(SomeComponent).exists());
-        assert.isFalse(wrapper.find(Spinner).exists());
-        assert.isTrue(wrapper.find(InlineAlert).exists());
-        errors.forEach(e =>
-          assert.isTrue(wrapper.find(InlineAlert).text().includes(e.message)),
-        );
+        expect(screen.queryByText("Hello, world!")).not.toBeInTheDocument();
+        expect(screen.queryByTestId("loading-spinner")).not.toBeInTheDocument();
+        errors.forEach(e => expect(container.textContent).toContain(e.message));
       });
     });
 
@@ -126,7 +122,7 @@ describe("<Loading>", () => {
           Error("error3"),
           null,
         ];
-        const wrapper = mount(
+        const { container } = render(
           <Loading
             loading={false}
             page={"Test"}
@@ -134,20 +130,17 @@ describe("<Loading>", () => {
             render={() => <SomeComponent />}
           />,
         );
-        assert.isFalse(wrapper.find(SomeComponent).exists());
-        assert.isFalse(wrapper.find(Spinner).exists());
-        assert.isTrue(wrapper.find(InlineAlert).exists());
+        expect(screen.queryByText("Hello, world!")).not.toBeInTheDocument();
+        expect(screen.queryByTestId("loading-spinner")).not.toBeInTheDocument();
         errors
           .filter(e => !!e)
-          .forEach(e =>
-            assert.isTrue(wrapper.find(InlineAlert).text().includes(e.message)),
-          );
+          .forEach(e => expect(container.textContent).toContain(e.message));
       });
     });
 
     describe("when all errors are null", () => {
       it("renders content, since there are no errors.", () => {
-        const wrapper = mount(
+        render(
           <Loading
             loading={false}
             page={"Test"}
@@ -155,9 +148,8 @@ describe("<Loading>", () => {
             render={() => <SomeComponent />}
           />,
         );
-        assert.isTrue(wrapper.find(SomeComponent).exists());
-        assert.isFalse(wrapper.find(Spinner).exists());
-        assert.isFalse(wrapper.find(InlineAlert).exists());
+        expect(screen.getByText("Hello, world!")).toBeInTheDocument();
+        expect(screen.queryByTestId("loading-spinner")).not.toBeInTheDocument();
       });
     });
   });

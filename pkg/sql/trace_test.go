@@ -9,268 +9,188 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"net/url"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtestutils"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/stretchr/testify/require"
 )
 
 func TestTrace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	skip.UnderRace(t, "does too much work under race, see: "+
 		"https://github.com/cockroachdb/cockroach/pull/56343#issuecomment-733577377")
-
-	defer log.Scope(t).Close(t)
 
 	// These are always appended, even without the test specifying it.
 	alwaysOptionalSpans := []string{
 		"drain",
 		"pendingLeaseRequest: requesting lease",
-		"gossip on capacity change",
 		"outbox",
 		"request range lease",
 		"range lookup",
 		"local proposal",
 		"admissionWorkQueueWait",
 		"index recommendation",
+		"/cockroach.roachpb.Internal/Batch",
+		// Internal queries (e.g. statement hints lookups) may produce
+		// spans in the session trace before their cache is initialized.
+		"get-plan-hints",
+		"prepare stmt",
+	}
+	// Depending on whether the data is local or not, we may not see these
+	// spans. Only applicable with distsql=on.
+	distsqlOptionalSpans := []string{
+		"setup-flow-async",
+		"/cockroach.sql.distsqlrun.DistSQL/SetupFlow",
+		"/cockroach.sql.distsqlrun.DistSQL/FlowStream",
+		"noop",
+	}
+	// These are optional if we use a test tenant.
+	tenantOptionalSpans := []string{
+		"/cockroach.roachpb.Internal/RangeLookup",
+		"executeWriteBatch",
+	}
+	// KVBatch spans are optional since they may or may not appear depending
+	// on whether DRPC is enabled and which nodes handle the request.
+	drpcOptionalSpans := []string{
+		"/cockroach.roachpb.KVBatch/Batch",
+		"/cockroach.roachpb.KVBatch/BatchStream",
+		"/cockroach.roachpb.TenantService/RangeLookup",
+	}
+	commonExpSpans := []string{
+		"session recording",
+		"sql txn",
+		"sql query",
+		"optimizer",
+		"flow",
+		"consuming rows",
+		"txn coordinator send",
+		"dist sender send",
+		"commit sql txn",
+	}
+	nonVectorizedExpSpans := append(append([]string(nil), commonExpSpans...), []string{
+		"table reader",
+	}...)
+	vectorizedExpSpans := append(append([]string(nil), commonExpSpans...), []string{
+		"batch flow coordinator",
+		"colbatchscan",
+	}...)
+
+	getRows := func(t *testing.T, sqlDB *gosql.DB, distsql, vectorize string, useShowTraceFor bool) (*gosql.Rows, string, error) {
+		if _, err := sqlDB.Exec(fmt.Sprintf("SET distsql = %s", distsql)); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := sqlDB.Exec(fmt.Sprintf("SET vectorize = %s", vectorize)); err != nil {
+			t.Fatal(err)
+		}
+		if vectorize == "on" {
+			// Disable the direct columnar scans to make the vectorized planning
+			// deterministic.
+			if _, err := sqlDB.Exec(`SET direct_columnar_scans_enabled = false`); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		// Run some query with tracing enabled.
+		if _, err := sqlDB.Exec("SET tracing = on; SELECT * FROM test.foo; SET tracing = off"); err != nil {
+			t.Fatal(err)
+		}
+
+		// Get the full trace to be used if the test fails.
+		rows, err := sqlDB.Query("SELECT message FROM crdb_internal.session_trace")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var trace strings.Builder
+		if err = func() error {
+			for rows.Next() {
+				var msg string
+				if err := rows.Scan(&msg); err != nil {
+					return err
+				}
+				fmt.Fprintln(&trace, msg)
+			}
+			return rows.Close()
+		}(); err != nil {
+			t.Fatal(err)
+		}
+		if trace.Len() == 0 {
+			t.Fatalf("empty trace")
+		}
+		// Check that execution stats collected during the above SELECT
+		// statement are output via the ComponentStats payload.
+		if !strings.Contains(trace.String(), "ComponentStats") {
+			t.Fatalf("no stat messages found")
+		}
+
+		if useShowTraceFor {
+			rows, err = sqlDB.Query(
+				"SELECT DISTINCT operation AS op FROM [SHOW TRACE FOR SESSION] " +
+					"WHERE operation IS NOT NULL ORDER BY op")
+			return rows, trace.String(), err
+		}
+		rows, err = sqlDB.Query(
+			"SELECT DISTINCT operation AS op FROM crdb_internal.session_trace " +
+				"WHERE operation IS NOT NULL ORDER BY op")
+		return rows, trace.String(), err
 	}
 
 	testData := []struct {
-		name          string
-		getRows       func(t *testing.T, sqlDB *gosql.DB) (*gosql.Rows, error)
-		expSpans      []string
-		optionalSpans []string
+		name            string
+		distSQL         string
+		vectorize       string
+		useShowTraceFor bool
 	}{
 		{
-			name: "Session",
-			getRows: func(t *testing.T, sqlDB *gosql.DB) (*gosql.Rows, error) {
-				if _, err := sqlDB.Exec("SET distsql = off"); err != nil {
-					t.Fatal(err)
-				}
-
-				// This test is specific to distsql execution.
-				if _, err := sqlDB.Exec("SET vectorize = off"); err != nil {
-					t.Fatal(err)
-				}
-
-				// Run some query with session tracing enabled.
-				if _, err := sqlDB.Exec("SET tracing = on; SELECT * FROM test.foo; SET tracing = off"); err != nil {
-					t.Fatal(err)
-				}
-
-				return sqlDB.Query(
-					"SELECT DISTINCT operation AS op FROM crdb_internal.session_trace " +
-						"WHERE operation IS NOT NULL ORDER BY op")
-			},
-			expSpans: []string{
-				"sql query",
-				"optimizer",
-				"flow",
-				"session recording",
-				"sql txn",
-				"table reader",
-				"consuming rows",
-				"txn coordinator send",
-				"dist sender send",
-				"/cockroach.roachpb.Internal/Batch",
-				"commit sql txn",
-			},
+			name:            "Session",
+			distSQL:         "off",
+			vectorize:       "off",
+			useShowTraceFor: false,
 		},
 		{
-			name: "SessionDistSQL",
-			getRows: func(t *testing.T, sqlDB *gosql.DB) (*gosql.Rows, error) {
-				if _, err := sqlDB.Exec("SET distsql = on"); err != nil {
-					t.Fatal(err)
-				}
-
-				// This test is specific to distsql execution.
-				if _, err := sqlDB.Exec("SET vectorize = off"); err != nil {
-					t.Fatal(err)
-				}
-
-				// Run some query with tracing enabled.
-				if _, err := sqlDB.Exec("SET tracing = on; SELECT * FROM test.foo; SET tracing = off"); err != nil {
-					t.Fatal(err)
-				}
-
-				// Check that stat collection from the above SELECT statement is output
-				// to trace. We don't insert any rows in this test, thus the expected
-				// num tuples value plus one is 1.
-				rows, err := sqlDB.Query("SELECT message FROM crdb_internal.session_trace")
-				if err != nil {
-					t.Fatal(err)
-				}
-				var trace strings.Builder
-				if err := func() error {
-					for rows.Next() {
-						var msg string
-						if err := rows.Scan(&msg); err != nil {
-							return err
-						}
-						fmt.Fprintln(&trace, msg)
-					}
-					return rows.Close()
-				}(); err != nil {
-					t.Fatal(err)
-				}
-				t.Logf("trace:\n%s", trace.String())
-				if trace.Len() == 0 {
-					t.Fatalf("empty trace")
-				}
-				if !strings.Contains(trace.String(), "ComponentStats") {
-					t.Fatalf("no stat messages found")
-				}
-
-				return sqlDB.Query(
-					"SELECT DISTINCT operation AS op FROM crdb_internal.session_trace " +
-						"WHERE operation IS NOT NULL ORDER BY op")
-			},
-			expSpans: []string{
-				"session recording",
-				"sql txn",
-				"sql query",
-				"optimizer",
-				"flow",
-				"table reader",
-				"consuming rows",
-				"txn coordinator send",
-				"dist sender send",
-				"/cockroach.roachpb.Internal/Batch",
-				"commit sql txn",
-			},
-			// Depending on whether the data is local or not, we may not see these
-			// spans.
-			optionalSpans: []string{
-				"setup-flow-async",
-				"/cockroach.sql.distsqlrun.DistSQL/SetupFlow",
-				"/cockroach.sql.distsqlrun.DistSQL/FlowStream",
-				"noop",
-			},
+			name:            "SessionDistSQL",
+			distSQL:         "on",
+			vectorize:       "off",
+			useShowTraceFor: false,
 		},
 		{
-			name: "ShowTraceFor",
-			getRows: func(_ *testing.T, sqlDB *gosql.DB) (*gosql.Rows, error) {
-				if _, err := sqlDB.Exec("SET DISTSQL = OFF"); err != nil {
-					t.Fatal(err)
-				}
-
-				// This test is specific to distsql execution.
-				if _, err := sqlDB.Exec("SET vectorize = off"); err != nil {
-					t.Fatal(err)
-				}
-
-				if _, err := sqlDB.Exec("SET tracing = on; SELECT * FROM test.foo; SET tracing = off"); err != nil {
-					t.Fatal(err)
-				}
-				return sqlDB.Query(
-					"SELECT DISTINCT operation AS op FROM [SHOW TRACE FOR SESSION] " +
-						"WHERE operation IS NOT NULL ORDER BY op")
-			},
-			expSpans: []string{
-				"sql query",
-				"optimizer",
-				"flow",
-				"session recording",
-				"sql txn",
-				"table reader",
-				"consuming rows",
-				"txn coordinator send",
-				"dist sender send",
-				"/cockroach.roachpb.Internal/Batch",
-				"commit sql txn",
-			},
+			name:            "ShowTraceFor",
+			distSQL:         "off",
+			vectorize:       "off",
+			useShowTraceFor: true,
 		},
 		{
-			name: "ShowTraceForDistSQL",
-			getRows: func(_ *testing.T, sqlDB *gosql.DB) (*gosql.Rows, error) {
-				if _, err := sqlDB.Exec("SET distsql = on"); err != nil {
-					t.Fatal(err)
-				}
-
-				// This test is specific to distsql execution.
-				if _, err := sqlDB.Exec("SET vectorize = off"); err != nil {
-					t.Fatal(err)
-				}
-
-				if _, err := sqlDB.Exec("SET tracing = on; SELECT * FROM test.foo; SET tracing = off"); err != nil {
-					t.Fatal(err)
-				}
-				return sqlDB.Query(
-					"SELECT DISTINCT operation AS op FROM [SHOW TRACE FOR SESSION] " +
-						"WHERE operation IS NOT NULL ORDER BY op")
-			},
-			expSpans: []string{
-				"session recording",
-				"sql txn",
-				"sql query",
-				"optimizer",
-				"flow",
-				"table reader",
-				"consuming rows",
-				"txn coordinator send",
-				"dist sender send",
-				"/cockroach.roachpb.Internal/Batch",
-				"commit sql txn",
-			},
-			// Depending on whether the data is local or not, we may not see these
-			// spans.
-			optionalSpans: []string{
-				"setup-flow-async",
-				"/cockroach.sql.distsqlrun.DistSQL/SetupFlow",
-				"/cockroach.sql.distsqlrun.DistSQL/FlowStream",
-				"noop",
-			},
+			name:            "ShowTraceForDistSQL",
+			distSQL:         "on",
+			vectorize:       "off",
+			useShowTraceFor: true,
 		},
 		{
-			name: "ShowTraceForVectorized",
-			getRows: func(_ *testing.T, sqlDB *gosql.DB) (*gosql.Rows, error) {
-				if _, err := sqlDB.Exec("SET distsql = off"); err != nil {
-					t.Fatal(err)
-				}
-				if _, err := sqlDB.Exec("SET vectorize = on"); err != nil {
-					t.Fatal(err)
-				}
-				// Disable the direct columnar scans to make the vectorized
-				// planning deterministic.
-				if _, err := sqlDB.Exec(`SET direct_columnar_scans_enabled = false`); err != nil {
-					t.Fatal(err)
-				}
-				if _, err := sqlDB.Exec("SET tracing = on; SELECT * FROM test.foo; SET tracing = off"); err != nil {
-					t.Fatal(err)
-				}
-				return sqlDB.Query(
-					"SELECT DISTINCT operation AS op FROM [SHOW TRACE FOR SESSION] " +
-						"WHERE operation IS NOT NULL ORDER BY op")
-			},
-			expSpans: []string{
-				"session recording",
-				"sql txn",
-				"sql query",
-				"optimizer",
-				"flow",
-				"batch flow coordinator",
-				"colbatchscan",
-				"consuming rows",
-				"txn coordinator send",
-				"dist sender send",
-				"/cockroach.roachpb.Internal/Batch",
-				"commit sql txn",
-			},
+			name:            "ShowTraceForVectorized",
+			distSQL:         "off",
+			vectorize:       "on",
+			useShowTraceFor: true,
 		},
 	}
 
@@ -294,9 +214,33 @@ func TestTrace(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Wait for each node's statement_hints rangefeed to complete its initial
+	// scan. Otherwise, the first query on a node will fall through to a DB read
+	// in MaybeGetStatementHints (because hintedHashes is still nil) and pollute
+	// the trace with internal-query spans like colbatchscan / colindexjoin.
+	for i := 0; i < numNodes; i++ {
+		hc := cluster.ApplicationLayer(i).ExecutorConfig().(sql.ExecutorConfig).StatementHintsCache
+		hc.Await(context.Background())
+	}
+
 	for _, test := range testData {
-		test.optionalSpans = append(test.optionalSpans, alwaysOptionalSpans...)
-		sort.Strings(test.expSpans)
+		optionalSpans := append([]string{}, alwaysOptionalSpans...)
+		// Check if DRPC is enabled. When DRPC is enabled, remote KV requests
+		// produce DRPC-style span names (/cockroach.roachpb.KVBatch/Batch).
+		if cluster.IsDRPCEnabled() {
+			optionalSpans = append(optionalSpans, drpcOptionalSpans...)
+		}
+		if test.distSQL == "on" {
+			optionalSpans = append(optionalSpans, distsqlOptionalSpans...)
+		}
+		if cluster.StartedDefaultTestTenant() {
+			optionalSpans = append(optionalSpans, tenantOptionalSpans...)
+		}
+		expSpans := nonVectorizedExpSpans
+		if test.vectorize == "on" {
+			expSpans = vectorizedExpSpans
+		}
+		sort.Strings(expSpans)
 
 		t.Run(test.name, func(t *testing.T) {
 			// Session tracing needs to work regardless of whether tracing is enabled, so
@@ -320,8 +264,9 @@ func TestTrace(t *testing.T) {
 							//
 							// TODO(andrei): Pull the check for an empty session_trace out of
 							// the sub-tests so we can use cluster.ServerConn(i) here.
-							pgURL, cleanup := sqlutils.PGUrl(
-								t, cluster.Server(i).AdvSQLAddr(), "TestTrace", url.User(username.RootUser))
+							pgURL, cleanup := cluster.ApplicationLayer(i).PGUrl(
+								t, serverutils.CertsDirPrefix("TestTrace"), serverutils.User(username.RootUser),
+							)
 							defer cleanup()
 							q := pgURL.Query()
 							// This makes it easier to test with the `tracing` sesssion var.
@@ -359,14 +304,14 @@ func TestTrace(t *testing.T) {
 									"at the beginning of a session, but it wasn't. Count: %d.", count)
 							}
 
-							rows, err := test.getRows(t, sqlDB)
+							rows, trace, err := getRows(t, sqlDB, test.distSQL, test.vectorize, test.useShowTraceFor)
 							if err != nil {
 								t.Fatal(err)
 							}
 							defer rows.Close()
 
 							ignoreSpan := func(op string) bool {
-								for _, s := range test.optionalSpans {
+								for _, s := range optionalSpans {
 									if strings.Contains(op, s) {
 										return true
 									}
@@ -384,30 +329,15 @@ func TestTrace(t *testing.T) {
 									continue
 								}
 
-								remainingErr := false
-								if r >= len(test.expSpans) {
-									t.Errorf("extra span: %s", op)
-									remainingErr = true
-								} else if op != test.expSpans[r] {
-									t.Errorf("expected span: %q, got: %q", test.expSpans[r], op)
-									remainingErr = true
-								}
-								if remainingErr {
-									for rows.Next() {
-										if err := rows.Scan(&op); err != nil {
-											t.Fatal(err)
-										}
-										if ignoreSpan(op) {
-											continue
-										}
-										t.Errorf("remaining span: %q", op)
-									}
-									return
+								if r >= len(expSpans) {
+									t.Fatalf("extra span: %s\n\n%s", op, trace)
+								} else if op != expSpans[r] {
+									t.Fatalf("expected span: %q, got: %q\n\n%s", expSpans[r], op, trace)
 								}
 								r++
 							}
-							if r < len(test.expSpans) {
-								t.Fatalf("missing expected spans: %s", test.expSpans[r:])
+							if r < len(expSpans) {
+								t.Fatalf("missing expected spans: %s\n\n%s", expSpans[r:], trace)
 							}
 						})
 					}
@@ -433,19 +363,28 @@ func TestTraceFieldDecomposition(t *testing.T) {
 						// We need to check a tag containing brackets (e.g. an
 						// IPv6 address).  See #18558.
 						taggedCtx := logtags.AddTag(ctx, "hello", "[::666]")
-						// We use log.Infof here (instead of log.Event) to ensure
+						// We use log.Dev.Infof here (instead of log.Event) to ensure
 						// the trace message contains also a file name prefix. See
 						// #19453/#20085.
-						log.Infof(taggedCtx, "world")
+						log.Dev.Infof(taggedCtx, "world")
 					}
 				},
 			},
 		},
 	}
-	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.Background())
+	srv, sqlDB, _ := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(context.Background())
 
 	sqlDB.SetMaxOpenConns(1)
+
+	if srv.DeploymentMode() == serverutils.ExternalProcess {
+		// Disable RU estimation because it adds a structured payload to the
+		// trace that - when stringified - can have unexpected whitespace (i.e.
+		// it'll be of the form 'r_u:0.625 ').
+		if _, err := sqlDB.Exec("SET CLUSTER SETTING sql.tenant_ru_estimation.enabled = false;"); err != nil {
+			t.Fatal(err)
+		}
+	}
 
 	if _, err := sqlDB.Exec("SET tracing = ON"); err != nil {
 		t.Fatal(err)
@@ -636,6 +575,11 @@ func TestTraceDistSQL(t *testing.T) {
 	})
 	defer cluster.Stopper().Stop(ctx)
 
+	if cluster.DefaultTenantDeploymentMode().IsExternal() {
+		cluster.GrantTenantCapabilities(context.Background(), t, serverutils.TestTenantID(),
+			map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanAdminRelocateRange: "true"})
+	}
+
 	r := sqlutils.MakeSQLRunner(cluster.ServerConn(0))
 	// TODO(yuzefovich): tracing in the vectorized engine is very limited since
 	// only wrapped processors and the materializers use it outside of the
@@ -663,7 +607,11 @@ func TestTraceDistSQL(t *testing.T) {
 	require.NotNil(t, anonTagGroup)
 	val, ok := anonTagGroup.FindTag("node")
 	require.True(t, ok)
-	require.Equal(t, "2", val)
+	expected := "2"
+	if cluster.DefaultTenantDeploymentMode().IsExternal() {
+		expected = "sql2"
+	}
+	require.Equal(t, expected, val)
 }
 
 // Test the sql.trace.stmt.enable_threshold cluster setting.
@@ -683,4 +631,136 @@ func TestStatementThreshold(t *testing.T) {
 	r := sqlutils.MakeSQLRunner(db)
 	r.Exec(t, "select 1")
 	// TODO(andrei): check the logs for traces somehow.
+}
+
+func TestTraceTxnSampleRateAndThreshold(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	appLogsSpy := logtestutils.NewLogSpy(
+		t,
+		// This string match is constructed from the log.SqlExec.Infof format
+		// string found in conn_executor_exec.go:logTraceAboveThreshold
+		logtestutils.MatchesF("exceeding threshold of"),
+	)
+	cleanup := log.InterceptWith(ctx, appLogsSpy)
+	defer cleanup()
+
+	for _, tc := range []struct {
+		name                  string
+		sampleRate            float64
+		threshold             time.Duration
+		exptToTraceEventually bool
+		checkJaegerOutput     bool
+		checkExcludeInternal  bool
+	}{
+		{
+			name:                  "no sample rate and no threshold",
+			sampleRate:            0.0,
+			threshold:             0 * time.Nanosecond,
+			exptToTraceEventually: false,
+		},
+		{
+			name:                  "sample rate 1.0 and threshold 1ns should trace",
+			sampleRate:            1.0,
+			threshold:             1 * time.Nanosecond,
+			exptToTraceEventually: true,
+		},
+		{
+			name:                  "sample rate 0.0 and threshold 1ns should not trace",
+			sampleRate:            0.0,
+			threshold:             1 * time.Nanosecond,
+			exptToTraceEventually: false,
+		},
+		{
+			name:                  "sample rate 1.0 and threshold 0ns should not trace",
+			sampleRate:            1.0,
+			threshold:             0 * time.Nanosecond,
+			exptToTraceEventually: false,
+		},
+		{
+			name:                  "sample rate 0.5 and threshold 1ns should trace eventually",
+			sampleRate:            0.5,
+			threshold:             1 * time.Nanosecond,
+			exptToTraceEventually: true,
+		},
+		{
+			name:                  "jaeger output with sample rate 1.0 and threshold 1ns should trace",
+			sampleRate:            1.0,
+			threshold:             1 * time.Nanosecond,
+			exptToTraceEventually: true,
+			checkJaegerOutput:     true,
+		},
+		{
+			name:                  "internal queries omitted with cluster setting",
+			sampleRate:            1.0,
+			threshold:             1 * time.Nanosecond,
+			exptToTraceEventually: true,
+			checkExcludeInternal:  true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sql.TraceTxnThreshold.Override(ctx, &s.ClusterSettings().SV, tc.threshold)
+			sql.TraceTxnSampleRate.Override(ctx, &s.ClusterSettings().SV, tc.sampleRate)
+			log.FlushAllSync()
+			appLogsSpy.Reset()
+			r := sqlutils.MakeSQLRunner(db)
+
+			if tc.exptToTraceEventually {
+				if tc.checkJaegerOutput {
+					sql.TraceTxnOutputJaegerJSON.Override(ctx, &s.ClusterSettings().SV, true)
+					testutils.SucceedsSoon(t, func() error {
+						r.Exec(t, "SELECT pg_sleep(0.01)")
+						log.FlushAllSync()
+						if !appLogsSpy.Has(logtestutils.MatchesF(regexp.QuoteMeta("ExecStmt: SELECT pg_sleep(0.01)"))) {
+							return errors.New("no sql txn log found (tracing did not happen)")
+						}
+						if !appLogsSpy.Has(logtestutils.MatchesF(regexp.QuoteMeta("{\"refType\":\"CHILD_OF\",\"traceID\":\""))) {
+							return errors.New("no Jaeger JSON found")
+						}
+						return nil
+					})
+				} else if tc.checkExcludeInternal {
+					sql.TraceTxnIncludeInternal.Override(ctx, &s.ClusterSettings().SV, false)
+					log.FlushAllSync()
+					appLogsSpy.Reset() // Clear logs after setting the cluster setting
+
+					// Use the internal executor directly to create actual internal transactions
+					ie := s.InternalExecutor().(*sql.InternalExecutor)
+					_, err := ie.ExecEx(ctx, "test-internal-query", nil, /* txn */
+						sessiondata.NodeUserSessionDataOverride,
+						"SELECT pg_sleep(0.01)")
+					if err != nil {
+						t.Fatal(err)
+					}
+					log.FlushAllSync()
+					if appLogsSpy.Has(logtestutils.MatchesF(regexp.QuoteMeta("ExecStmt: SELECT pg_sleep(0.01)"))) {
+						t.Fatal("internal sql txn log found when internal transactions should be excluded from tracing")
+					}
+				} else {
+					testutils.SucceedsSoon(t, func() error {
+						r.Exec(t, "SELECT pg_sleep(0.01)")
+						log.FlushAllSync()
+						if !appLogsSpy.Has(logtestutils.MatchesF(regexp.QuoteMeta("ExecStmt: SELECT pg_sleep(0.01)"))) {
+							return errors.New("no sql txn log found (tracing did not happen)")
+						}
+						return nil
+					})
+				}
+			} else {
+				r.Exec(t, "SELECT pg_sleep(0.01)")
+				log.FlushAllSync()
+
+				spyLogs := appLogsSpy.ReadAll()
+				if appLogsSpy.Has(logtestutils.MatchesF(regexp.QuoteMeta("ExecStmt: SELECT pg_sleep(0.01)"))) {
+					t.Fatalf("sql txn log found (tracing happened when it should not have): %v", spyLogs)
+				}
+			}
+		})
+	}
 }

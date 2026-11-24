@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
@@ -36,10 +37,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -47,16 +49,26 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
+
+// FilterTracingSpans exposes filterTracingSpans for testing.
+func FilterTracingSpans(rec tracingpb.Recording, opNamesToFilter ...string) tracingpb.Recording {
+	return filterTracingSpans(rec, opNamesToFilter...)
+}
 
 func (s *Store) Transport() *RaftTransport {
 	return s.cfg.Transport
 }
 
 func (s *Store) StoreLivenessTransport() *storeliveness.Transport {
-	return s.cfg.StoreLivenessTransport
+	return s.cfg.StoreLiveness.Transport
+}
+
+func (s *Store) StorePool() *storepool.StorePool {
+	return s.cfg.StorePool
 }
 
 func (s *Store) FindTargetAndTransferLease(
@@ -66,6 +78,29 @@ func (s *Store) FindTargetAndTransferLease(
 		ctx, repl, desc, conf, allocator.TransferLeaseOptions{ExcludeLeaseRepl: true},
 	)
 	return transferStatus == allocator.TransferOK, err
+}
+
+// GetOrCreateReplica exposes getOrCreateReplica for use in tests. On success,
+// the returned Replica's raftMu is unlocked before returning.
+func (s *Store) GetOrCreateReplica(
+	ctx context.Context, rangeID roachpb.RangeID, replicaID roachpb.ReplicaID,
+) (*Replica, bool, error) {
+	repl, created, err := s.getOrCreateReplica(ctx, roachpb.FullReplicaID{
+		RangeID:   rangeID,
+		ReplicaID: replicaID,
+	}, nil /* creatingReplica */)
+	if repl != nil {
+		repl.raftMu.Unlock()
+	}
+	return repl, created, err
+}
+
+// ProcessReplicaGC directly invokes the replica GC queue's processing logic on
+// the given replica, bypassing the shouldQueue checks (lease activity,
+// inactivity threshold, etc.) that can make the full scan non-deterministic.
+func (s *Store) ProcessReplicaGC(ctx context.Context, repl *Replica) error {
+	_, err := s.replicaGCQueue.process(ctx, repl, nil /* confReader */, 0 /* priority */)
+	return err
 }
 
 // AddReplica adds the replica to the store's replica map and to the sorted
@@ -92,7 +127,7 @@ func (s *Store) ComputeMVCCStats(reader storage.Reader) (enginepb.MVCCStats, err
 	now := s.Clock().PhysicalNow()
 	newStoreReplicaVisitor(s).Visit(func(r *Replica) bool {
 		var stats enginepb.MVCCStats
-		stats, err = rditer.ComputeStatsForRange(context.Background(), r.Desc(), reader, now)
+		stats, err = rditer.ComputeStatsForRange(context.Background(), r.Desc(), reader, fs.UnknownReadCategory, now)
 		if err != nil {
 			return false
 		}
@@ -163,6 +198,8 @@ func (s *Store) SplitQueuePurgatoryLength() int {
 // LeaseQueuePurgatory returns a map of RangeIDs representing the purgatory.
 func (s *Store) LeaseQueuePurgatory() map[roachpb.RangeID]struct{} {
 	defer s.leaseQueue.baseQueue.lockProcessing()()
+	s.leaseQueue.baseQueue.mu.Lock()
+	defer s.leaseQueue.baseQueue.mu.Unlock()
 	m := make(map[roachpb.RangeID]struct{}, len(s.leaseQueue.baseQueue.mu.purgatory))
 	for k := range s.leaseQueue.baseQueue.mu.purgatory {
 		m[k] = struct{}{}
@@ -208,7 +245,7 @@ func manualQueue(s *Store, q queueImpl, repl *Replica) error {
 		return fmt.Errorf("%s: system config not yet available", s)
 	}
 	ctx := repl.AnnotateCtx(context.Background())
-	_, err := q.process(ctx, repl, cfg)
+	_, err := q.process(ctx, repl, cfg, -1 /*priorityAtEnqueue*/)
 	return err
 }
 
@@ -221,6 +258,14 @@ func (s *Store) ManualMVCCGC(repl *Replica) error {
 // GC queue.
 func (s *Store) ManualReplicaGC(repl *Replica) error {
 	return manualQueue(s, s.replicaGCQueue, repl)
+}
+
+// IsReplicaGCDelayedDueToLeftNeighborError returns true if the error is a
+// replicaGCDelayedDueToLeftNeighborError, i.e. the replica GC queue could not
+// GC the replica because its left neighbor hasn't caught up with meta yet.
+func IsReplicaGCDelayedDueToLeftNeighborError(err error) bool {
+	var target *replicaGCDelayedDueToLeftNeighborError
+	return errors.As(err, &target)
 }
 
 // ManualRaftSnapshot will manually send a raft snapshot to the target replica.
@@ -299,6 +344,7 @@ func NewTestStorePool(cfg StoreConfig) *storepool.StorePool {
 		func(roachpb.NodeID) livenesspb.NodeLivenessStatus {
 			return livenesspb.NodeLivenessStatus_LIVE
 		},
+		storepool.NewMockStoreLiveness().StoreLivenessFunc,
 		/* deterministic */ false,
 	)
 }
@@ -311,12 +357,14 @@ func (r *Replica) Breaker() *circuit.Breaker {
 	return r.breaker.wrapped
 }
 
-func (r *Replica) AssertState(ctx context.Context, reader storage.Reader) {
+func (r *Replica) AssertState(
+	ctx context.Context, stateRO kvstorage.StateRO, raftRO kvstorage.RaftRO,
+) {
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	r.assertStateRaftMuLockedReplicaMuRLocked(ctx, reader)
+	r.assertStateRaftMuLockedReplicaMuRLocked(ctx, stateRO, raftRO)
 }
 
 func (r *Replica) RaftLock() {
@@ -445,25 +493,25 @@ func (r *Replica) ShouldBackpressureWrites(_ context.Context) bool {
 }
 
 // GetRaftLogSize returns the approximate raft log size and whether it is
-// trustworthy.. See r.mu.raftLogSize for details.
+// trustworthy. See replicaLogStorage.shMu.size for details.
 func (r *Replica) GetRaftLogSize() (int64, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.shMu.raftLogSize, r.shMu.raftLogSizeTrusted
+	ls := r.asLogStorage()
+	return ls.shMu.size, ls.shMu.sizeTrusted
 }
 
-// GetCachedLastTerm returns the cached last term value. May return
-// invalidLastTerm if the cache is not set.
+// GetCachedLastTerm returns the term of the last log entry.
 func (r *Replica) GetCachedLastTerm() kvpb.RaftTerm {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.shMu.lastTermNotDurable
+	return r.asLogStorage().shMu.last.Term
 }
 
 // SideloadedRaftMuLocked returns r.raftMu.sideloaded. Requires a previous call
 // to RaftLock() or some other guarantee that r.raftMu is held.
 func (r *Replica) SideloadedRaftMuLocked() logstore.SideloadStorage {
-	return r.raftMu.sideloaded
+	return r.logStorage.ls.Sideload
 }
 
 // LargestPreviousMaxRangeSizeBytes returns the in-memory value used to mitigate
@@ -524,7 +572,7 @@ func ProposeAddSSTable(ctx context.Context, key, val string, ts hlc.Timestamp, s
 	addReq.EndKey = addReq.Key.Next()
 	ba.Add(&addReq)
 
-	_, pErr := store.Send(ctx, ba)
+	_, pErr := ToSenderForTesting(store).Send(ctx, ba)
 	if pErr != nil {
 		return pErr.GoError()
 	}
@@ -599,7 +647,8 @@ func (r *Replica) ReadCachedProtectedTS() (readAt, earliestProtectionTimestamp h
 func (r *Replica) ClosedTimestampPolicy() roachpb.RangeClosedTimestampPolicy {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.closedTimestampPolicyRLocked()
+	return toClientClosedTsPolicy(closedTimestampPolicy(r.descRLocked(),
+		*r.cachedClosedTimestampPolicy.Load()))
 }
 
 // TripBreaker synchronously trips the breaker.
@@ -610,7 +659,7 @@ func (r *Replica) TripBreaker() {
 // GetCircuitBreaker returns the circuit breaker controlling
 // connection attempts to the specified node.
 func (t *RaftTransport) GetCircuitBreaker(
-	nodeID roachpb.NodeID, class rpc.ConnectionClass,
+	nodeID roachpb.NodeID, class rpcbase.ConnectionClass,
 ) (*circuit.Breaker, bool) {
 	return t.dialer.GetCircuitBreaker(nodeID, class)
 }
@@ -695,4 +744,20 @@ func NewRangefeedTxnPusher(
 		r:    r,
 		span: span,
 	}
+}
+
+// descRLocked exports (*Replica).descRLocked() for testing purposes.
+func (r *Replica) DescRLocked() *roachpb.RangeDescriptor {
+	return r.descRLocked()
+}
+
+// RaftFortificationEnabledForRangeID exports raftFortificationEnabledForRangeID
+// for use in tests.
+func RaftFortificationEnabledForRangeID(fracEnabled float64, rangeID roachpb.RangeID) bool {
+	return raftFortificationEnabledForRangeID(fracEnabled, rangeID)
+}
+
+// ProcessTick exports processTick for use in tests.
+func (s *Store) ProcessTick(ctx context.Context, rangeID roachpb.RangeID) {
+	s.processTick(ctx, rangeID)
 }

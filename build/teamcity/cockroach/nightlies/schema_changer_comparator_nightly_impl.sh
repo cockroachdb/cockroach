@@ -14,8 +14,8 @@ source "$dir/teamcity-support.sh"
 exit_status=0
 
 
-bazel build //pkg/cmd/bazci --config=ci
-BAZEL_BIN=$(bazel info bazel-bin --config=ci)
+bazel build //pkg/cmd/bazci
+BAZEL_BIN=$(bazel info bazel-bin)
 
 # Run schema changer comparator test.
 $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci test -- --config=ci \

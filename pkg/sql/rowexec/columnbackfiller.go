@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -60,7 +61,7 @@ func newColumnBackfiller(
 	spec execinfrapb.BackfillerSpec,
 ) (*columnBackfiller, error) {
 	columnBackfillerMon := execinfra.NewMonitor(
-		ctx, flowCtx.Cfg.BackfillerMonitor, "column-backfill-mon",
+		ctx, flowCtx.Cfg.BackfillerMonitor, mon.MakeName("column-backfill-mon"),
 	)
 	cb := &columnBackfiller{
 		desc:        flowCtx.TableDescriptor(ctx, &spec.Table),
@@ -72,6 +73,7 @@ func newColumnBackfiller(
 	if err := cb.ColumnBackfiller.InitForDistributedUse(
 		ctx, flowCtx, cb.desc, columnBackfillerMon,
 	); err != nil {
+		columnBackfillerMon.Stop(ctx)
 		return nil, err
 	}
 	return cb, nil
@@ -94,10 +96,10 @@ func (cb *columnBackfiller) Run(ctx context.Context, output execinfra.RowReceive
 	ctx = logtags.AddTag(ctx, opName, int(cb.spec.Table.ID))
 	ctx, span := execinfra.ProcessorSpan(ctx, cb.flowCtx, opName, cb.processorID)
 	defer span.Finish()
+	defer output.ProducerDone()
+	defer execinfra.SendTraceData(ctx, cb.flowCtx, output)
 	meta := cb.doRun(ctx)
-	execinfra.SendTraceData(ctx, cb.flowCtx, output)
 	output.Push(nil /* row */, meta)
-	output.ProducerDone()
 }
 
 // Resume is part of the execinfra.Processor interface.
@@ -106,7 +108,9 @@ func (*columnBackfiller) Resume(output execinfra.RowReceiver) {
 }
 
 // Close is part of the execinfra.Processor interface.
-func (*columnBackfiller) Close(context.Context) {}
+func (cb *columnBackfiller) Close(ctx context.Context) {
+	cb.ColumnBackfiller.Close(ctx)
+}
 
 func (cb *columnBackfiller) doRun(ctx context.Context) *execinfrapb.ProducerMetadata {
 	finishedSpans, err := cb.mainLoop(ctx)
@@ -183,8 +187,9 @@ func (cb *columnBackfiller) mainLoop(ctx context.Context) (roachpb.Spans, error)
 	return finishedSpans, nil
 }
 
-// GetResumeSpans returns a ResumeSpanList from a job.
-func GetResumeSpans(
+// GetResumeSpansAndSSTManifests returns a ResumeSpanList and associated SST
+// manifests from a job.
+func GetResumeSpansAndSSTManifests(
 	ctx context.Context,
 	jobsRegistry *jobs.Registry,
 	txn isql.Txn,
@@ -193,10 +198,10 @@ func GetResumeSpans(
 	tableID descpb.ID,
 	mutationID descpb.MutationID,
 	filter backfill.MutationFilter,
-) ([]roachpb.Span, *jobs.Job, int, error) {
+) ([]roachpb.Span, []jobspb.BulkSSTManifest, *jobs.Job, int, error) {
 	tableDesc, err := col.ByIDWithoutLeased(txn.KV()).Get().Table(ctx, tableID)
 	if err != nil {
-		return nil, nil, 0, err
+		return nil, nil, nil, 0, err
 	}
 
 	// Find the index of the first mutation that is being worked on.
@@ -212,7 +217,7 @@ func GetResumeSpans(
 	}
 
 	if mutationIdx == noIndex {
-		return nil, nil, 0, errors.AssertionFailedf(
+		return nil, nil, nil, 0, errors.AssertionFailedf(
 			"mutation %d has completed", errors.Safe(mutationID))
 	}
 
@@ -232,18 +237,18 @@ func GetResumeSpans(
 	}
 
 	if jobID == 0 {
-		log.Errorf(ctx, "mutation with no job: %d, table desc: %+v", mutationID, tableDesc)
-		return nil, nil, 0, errors.AssertionFailedf(
+		log.Dev.Errorf(ctx, "mutation with no job: %d, table desc: %+v", mutationID, tableDesc)
+		return nil, nil, nil, 0, errors.AssertionFailedf(
 			"no job found for mutation %d", errors.Safe(mutationID))
 	}
 
 	job, err := jobsRegistry.LoadJobWithTxn(ctx, jobID, txn)
 	if err != nil {
-		return nil, nil, 0, errors.Wrapf(err, "can't find job %d", errors.Safe(jobID))
+		return nil, nil, nil, 0, errors.Wrapf(err, "can't find job %d", errors.Safe(jobID))
 	}
 	details, ok := job.Details().(jobspb.SchemaChangeDetails)
 	if !ok {
-		return nil, nil, 0, errors.AssertionFailedf(
+		return nil, nil, nil, 0, errors.AssertionFailedf(
 			"expected SchemaChangeDetails job type, got %T", job.Details())
 	}
 
@@ -252,23 +257,58 @@ func GetResumeSpans(
 	for i := range spanList {
 		spanList[i], err = keys.RewriteSpanToTenantPrefix(spanList[i], prefix)
 		if err != nil {
-			return nil, nil, 0, err
+			return nil, nil, nil, 0, err
 		}
 	}
+
 	// Return the resume spans from the job using the mutation idx.
-	return spanList, job, mutationIdx, nil
+	return spanList, nil, job, mutationIdx, nil
 }
 
-// SetResumeSpansInJob adds a list of resume spans into a job details field.
-func SetResumeSpansInJob(
-	ctx context.Context, spans []roachpb.Span, mutationIdx int, txn isql.Txn, job *jobs.Job,
+// GetResumeSpans returns the resume spans for the specified mutation and job.
+// It is a compatibility wrapper for callers that do not yet need SST manifests.
+func GetResumeSpans(
+	ctx context.Context,
+	jobsRegistry *jobs.Registry,
+	txn isql.Txn,
+	codec keys.SQLCodec,
+	col *descs.Collection,
+	tableID descpb.ID,
+	mutationID descpb.MutationID,
+	filter backfill.MutationFilter,
+) ([]roachpb.Span, *jobs.Job, int, error) {
+	spans, _, job, mutationIdx, err := GetResumeSpansAndSSTManifests(
+		ctx, jobsRegistry, txn, codec, col, tableID, mutationID, filter,
+	)
+	return spans, job, mutationIdx, err
+}
+
+// SetResumeSpansAndSSTManifestsInJob persists resume spans into the schema
+// change job details.
+func SetResumeSpansAndSSTManifestsInJob(
+	ctx context.Context,
+	codec *keys.SQLCodec,
+	spans []roachpb.Span,
+	manifests []jobspb.BulkSSTManifest,
+	mutationIdx int,
+	txn isql.Txn,
+	job *jobs.Job,
 ) error {
 	details, ok := job.Details().(jobspb.SchemaChangeDetails)
 	if !ok {
 		return errors.Errorf("expected SchemaChangeDetails job type, got %T", job.Details())
 	}
 	details.ResumeSpanList[mutationIdx].ResumeSpans = spans
-	return job.WithTxn(txn).SetDetails(ctx, details)
+	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+	return job.DeprecatedWithTxn(txn).SetDetails(ctx, details)
+}
+
+// SetResumeSpansInJob is a helper for legacy callers that only need to persist
+// resume spans.
+func SetResumeSpansInJob(
+	ctx context.Context, spans []roachpb.Span, mutationIdx int, txn isql.Txn, job *jobs.Job,
+) error {
+	return SetResumeSpansAndSSTManifestsInJob(ctx, nil, spans, nil, mutationIdx, txn, job)
 }
 
 // maxCommitWaitFns is the maximum number of commit-wait functions that the

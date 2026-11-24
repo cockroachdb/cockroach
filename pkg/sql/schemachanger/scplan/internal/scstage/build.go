@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // BuildStages builds the plan's stages for this and all subsequent phases.
@@ -48,9 +49,10 @@ func BuildStages(
 				return scJobID
 			}
 		}(),
-		targetState: init.TargetState,
-		initial:     init.Initial,
-		current:     init.Current,
+		targetState:          init.TargetState,
+		distributedMergeMode: init.DistributedMergeMode,
+		initial:              init.Initial,
+		current:              init.Current,
 		targetToIdx: func() map[*scpb.Target]int {
 			m := make(map[*scpb.Target]int, len(init.Targets))
 			for i := range init.Targets {
@@ -99,6 +101,7 @@ type buildContext struct {
 	g                      *scgraph.Graph
 	scJobID                func() jobspb.JobID
 	targetState            scpb.TargetState
+	distributedMergeMode   scpb.DistributedMergeMode
 	initial                []scpb.Status
 	current                []scpb.Status
 	targetToIdx            map[*scpb.Target]int
@@ -228,6 +231,7 @@ func buildStages(bc buildContext) (stages []Stage) {
 	default:
 		panic(errors.AssertionFailedf("unknown phase %s", currentPhase))
 	}
+
 	return stages
 }
 
@@ -267,9 +271,10 @@ func buildPostCommitStages(bc buildContext, bs buildState) (stages []Stage) {
 			var trace []string
 			bs.trace = &trace
 			sb = bc.makeStageBuilder(bs)
-			panic(errors.WithDetailf(
-				errors.AssertionFailedf("unable to make progress"),
-				"terminal state:\n%s\nrule trace:\n%s", sb, strings.Join(trace, "\n")))
+			panic(errors.AssertionFailedf(
+				"unable to make progress\nterminal state:\n%v\nrule trace:\n%s",
+				sb, redact.SafeString(strings.Join(trace, "\n")),
+			))
 		}
 		build(sb)
 	}
@@ -726,14 +731,21 @@ func (sb stageBuilder) hasAnyNonRevertibleOps() bool {
 
 // String returns a string representation of the stageBuilder.
 func (sb stageBuilder) String() string {
-	var str strings.Builder
-	for _, t := range sb.current {
-		str.WriteString(" - ")
-		str.WriteString(screl.NodeString(t.n))
-		str.WriteString("\n")
-	}
-	return str.String()
+	return redact.StringWithoutMarkers(sb)
 }
+
+// SafeFormat implements redact.SafeFormatter.
+func (sb stageBuilder) SafeFormat(p redact.SafePrinter, verb rune) {
+	for _, t := range sb.current {
+		p.SafeString(" - ")
+		if err := screl.FormatNode(p, t.n); err != nil {
+			p.UnsafeString(screl.NodeString(t.n))
+		}
+		p.SafeString("\n")
+	}
+}
+
+var _ redact.SafeFormatter = stageBuilder{}
 
 // computeExtraOps generates extra operations to decorate a stage with.
 // These are typically job-related.
@@ -809,12 +821,26 @@ func (bc buildContext) createSchemaChangeJobOp(
 	descIDsPresentAfter catalog.DescriptorIDSet, next *Stage,
 ) scop.Op {
 	return &scop.CreateSchemaChangerJob{
-		JobID:         bc.scJobID(),
-		Statements:    bc.targetState.Statements,
-		Authorization: bc.targetState.Authorization,
-		DescriptorIDs: descIDsPresentAfter.Ordered(),
-		NonCancelable: !isRevertible(next),
-		RunningStatus: runningStatus(next),
+		JobID:                bc.scJobID(),
+		Statements:           bc.targetState.Statements,
+		Authorization:        bc.targetState.Authorization,
+		DescriptorIDs:        descIDsPresentAfter.Ordered(),
+		NonCancelable:        !isRevertible(next),
+		RunningStatus:        runningStatus(next),
+		DistributedMergeMode: stateModeToJobMode(bc.distributedMergeMode),
+	}
+}
+
+func stateModeToJobMode(
+	stateMode scpb.DistributedMergeMode,
+) jobspb.IndexBackfillDistributedMergeMode {
+	switch stateMode {
+	case scpb.DistributedMergeModeEnabled:
+		return jobspb.IndexBackfillDistributedMergeMode_Enabled
+	case scpb.DistributedMergeModeForce:
+		return jobspb.IndexBackfillDistributedMergeMode_Force
+	default:
+		return jobspb.IndexBackfillDistributedMergeMode_Disabled
 	}
 }
 
@@ -825,7 +851,7 @@ func (bc buildContext) updateJobProgressOp(
 	if next != nil {
 		toRemove = descIDsPresentBefore.Difference(descIDsPresentAfter)
 	} else {
-		// If the next stage is nil, simply remove al the descriptors, we are
+		// If the next stage is nil, simply remove all the descriptors, we are
 		// done processing
 		toRemove = descIDsPresentBefore
 	}
@@ -957,9 +983,21 @@ func isRevertible(next *Stage) bool {
 	return next != nil && next.Phase < scop.PostCommitNonRevertiblePhase
 }
 
-func runningStatus(next *Stage) string {
+func runningStatus(next *Stage) redact.RedactableString {
 	if next == nil {
 		return "all stages completed"
 	}
-	return fmt.Sprintf("%s pending", next)
+
+	var buf redact.StringBuilder
+	buf.SafeString("Pending: ")
+
+	if opsDesc := next.OpsDescription(); len(opsDesc) > 0 {
+		buf.Print(opsDesc)
+		buf.SafeString(" — ")
+	}
+
+	phaseName, _ := strings.CutSuffix(next.Phase.String(), "Phase")
+	buf.Printf("%s phase (stage %d of %d).", redact.RedactableString(phaseName), next.Ordinal, next.StagesInPhase)
+
+	return buf.RedactableString()
 }

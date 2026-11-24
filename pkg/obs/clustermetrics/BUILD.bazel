@@ -1,0 +1,16 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "clustermetrics",
+    srcs = [
+        "doc.go",
+        "metrics.go",
+    ],
+    importpath = "github.com/cockroachdb/cockroach/pkg/obs/clustermetrics",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/obs/clustermetrics/cmmetrics",
+        "//pkg/obs/clustermetrics/cmreader",
+        "//pkg/obs/clustermetrics/cmwriter",
+    ],
+)

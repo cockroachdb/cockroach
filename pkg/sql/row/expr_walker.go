@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -135,12 +136,10 @@ func (r *importRand) Int63(c *CellInfoAnnotation) int64 {
 // For some functions (specifically the volatile ones), we do
 // not want to use the provided builtin. Instead, we opt for
 // our own function definition, which produces deterministic results.
-func makeBuiltinOverride(
-	builtin *tree.FunctionDefinition, overloads ...tree.Overload,
-) *tree.ResolvedFunctionDefinition {
-	props := builtin.FunctionProperties
+func makeBuiltinOverride(name string, overloads ...tree.Overload) *tree.ResolvedFunctionDefinition {
+	props := builtins.GetBuiltinFunctionProperties(name)
 	override := tree.NewFunctionDefinition(
-		"import."+builtin.Name, &props, overloads)
+		"import."+name, props, overloads)
 	// Schema name is not really important here since it's already a resolved
 	// function definition, so it won't be actually resolved again.
 	return tree.QualifyBuiltinFunctionDefinition(override, "import")
@@ -297,7 +296,7 @@ func (j *SeqChunkProvider) RequestChunk(
 	var hasAllocatedChunk bool
 	return j.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		var foundFromPreviouslyAllocatedChunk bool
-		resolveChunkFunc := func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		resolveChunkFunc := func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 			progress := md.Progress
 
 			// Check if we have already reserved a chunk corresponding to this row in a
@@ -356,7 +355,8 @@ func (j *SeqChunkProvider) RequestChunk(
 		if err != nil {
 			return err
 		}
-		if err := job.WithTxn(txn).Update(ctx, resolveChunkFunc); err != nil {
+		//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+		if err := job.DeprecatedWithTxn(txn).Update(ctx, resolveChunkFunc); err != nil {
 			return err
 		}
 
@@ -599,7 +599,7 @@ var supportedImportFuncOverrides = map[string]*customFunc{
 			return nil
 		},
 		override: makeBuiltinOverride(
-			tree.FunDefs["unique_rowid"],
+			"unique_rowid",
 			tree.Overload{
 				Types:      tree.ParamTypes{},
 				ReturnType: tree.FixedReturnType(types.Int),
@@ -615,7 +615,7 @@ var supportedImportFuncOverrides = map[string]*customFunc{
 			return nil
 		},
 		override: makeBuiltinOverride(
-			tree.FunDefs["random"],
+			"random",
 			tree.Overload{
 				Types:      tree.ParamTypes{},
 				ReturnType: tree.FixedReturnType(types.Float),
@@ -631,7 +631,7 @@ var supportedImportFuncOverrides = map[string]*customFunc{
 			return nil
 		},
 		override: makeBuiltinOverride(
-			tree.FunDefs["gen_random_uuid"],
+			"gen_random_uuid",
 			tree.Overload{
 				Types:      tree.ParamTypes{},
 				ReturnType: tree.FixedReturnType(types.Uuid),
@@ -666,7 +666,7 @@ var supportedImportFuncOverrides = map[string]*customFunc{
 			return nil
 		},
 		override: makeBuiltinOverride(
-			tree.FunDefs["nextval"],
+			"nextval",
 			tree.Overload{
 				Types:      tree.ParamTypes{{Name: builtinconstants.SequenceNameArg, Typ: types.String}},
 				ReturnType: tree.FixedReturnType(types.Int),
@@ -683,7 +683,7 @@ var supportedImportFuncOverrides = map[string]*customFunc{
 	},
 	"default_to_database_primary_region": {
 		override: makeBuiltinOverride(
-			tree.FunDefs["default_to_database_primary_region"],
+			"default_to_database_primary_region",
 			tree.Overload{
 				Types:      tree.ParamTypes{{Name: "val", Typ: types.String}},
 				ReturnType: tree.FixedReturnType(types.String),
@@ -694,7 +694,7 @@ var supportedImportFuncOverrides = map[string]*customFunc{
 	},
 	"gateway_region": {
 		override: makeBuiltinOverride(
-			tree.FunDefs["gateway_region"],
+			"gateway_region",
 			tree.Overload{
 				Types:      tree.ParamTypes{},
 				ReturnType: tree.FixedReturnType(types.String),

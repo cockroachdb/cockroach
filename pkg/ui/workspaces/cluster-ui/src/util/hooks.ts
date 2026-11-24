@@ -4,7 +4,19 @@
 // included in the /LICENSE file.
 
 import moment from "moment/moment";
-import { useEffect, useCallback, useRef } from "react";
+import { useEffect, useCallback, useRef, useContext, useState } from "react";
+import useSWR, { SWRConfiguration, SWRResponse } from "swr";
+import { Arguments, Fetcher } from "swr/_internal";
+import useSWRImmutable from "swr/immutable";
+import useSWRMutation, { SWRMutationConfiguration } from "swr/mutation";
+
+import { ClusterDetailsContext } from "../contexts";
+import { ISortedTablePagination } from "../sortedtable";
+
+// Cap error retries. SWR defaults to infinite exponential backoff,
+// which hammers a down server, especially with polling hooks.
+// See also: db-console/src/app.tsx SWRConfig provider.
+const DEFAULT_ERROR_RETRY_COUNT = 3;
 
 export const usePrevious = <T>(value: T): T | undefined => {
   const ref = useRef<T>();
@@ -93,4 +105,133 @@ export const useScheduleFunction = (
   }, [schedule, clearSchedule]);
 
   return [scheduleNow, clearSchedule];
+};
+
+export const useSwrKeyWithClusterId = (key: Arguments): Arguments => {
+  const { clusterId } = useContext(ClusterDetailsContext);
+  let keyWithClusterId: Arguments;
+  if (key) {
+    if (Array.isArray(key)) {
+      keyWithClusterId = [clusterId, ...key] as Arguments;
+    } else if (typeof key === "object") {
+      keyWithClusterId = {
+        clusterId,
+        ...key,
+      };
+    } else {
+      keyWithClusterId = [clusterId, key] as Arguments;
+    }
+    return keyWithClusterId;
+  }
+
+  return key;
+};
+
+/**
+ * useSwrWithClusterId is a wrapper around useSWR that adds the cluster id to the key.
+ *
+ * @param key The key, in combination with the clusterId, that will be used for useSWR.
+ * @param fetcher The fetcher to be called by useSWR.
+ * @param config the config to be provided to useSWR.
+ */
+export const useSwrWithClusterId = <
+  Data = any,
+  Error = any,
+  SWRKey = Arguments,
+  SWROptions extends
+    | SWRConfiguration<Data, Error, Fetcher<Data, SWRKey>>
+    | undefined =
+    | SWRConfiguration<Data, Error, Fetcher<Data, SWRKey>>
+    | undefined,
+>(
+  key: SWRKey,
+  fetcher: Fetcher<Data, SWRKey> | null,
+  config?: SWROptions,
+): SWRResponse<Data, Error, SWROptions> => {
+  const keyWithClusterId = useSwrKeyWithClusterId(key) as SWRKey;
+  return useSWR(keyWithClusterId, fetcher, {
+    errorRetryCount: DEFAULT_ERROR_RETRY_COUNT,
+    ...config,
+  } as SWROptions);
+};
+
+/**
+ * useSwrImmutableWithClusterId is a wrapper around useSWRImmutable that adds the cluster id to the key.
+ *
+ * @param key The key, in combination with the clusterId, that will be used for useSWRImmutable.
+ * @param fetcher The fetcher to be called by useSWRImmutable.
+ * @param config the config to be provided to useSWRImmutable.
+ */
+export const useSwrImmutableWithClusterId = <
+  Data = any,
+  Error = any,
+  SWRKey = Arguments,
+  SWROptions extends
+    | SWRConfiguration<Data, Error, Fetcher<Data, SWRKey>>
+    | undefined =
+    | SWRConfiguration<Data, Error, Fetcher<Data, SWRKey>>
+    | undefined,
+>(
+  key: SWRKey,
+  fetcher: Fetcher<Data, SWRKey> | null,
+  config?: SWROptions,
+): SWRResponse<Data, Error, SWROptions> => {
+  const keyWithClusterId = useSwrKeyWithClusterId(key) as SWRKey;
+  return useSWRImmutable(keyWithClusterId, fetcher, {
+    errorRetryCount: DEFAULT_ERROR_RETRY_COUNT,
+    ...config,
+  } as SWROptions);
+};
+
+/**
+ * useSwrMutationWithClusterId is a wrapper around useSWRMutation that adds the cluster id to the key.
+ *
+ * @param key The key, in combination with the clusterId, that will be used for useSWRMutation.
+ * @param fetcher The fetcher to be called by useSWRMutation.
+ * @param config the config to be provided to useSWRMutation.
+ */
+export const useSwrMutationWithClusterId = <
+  Data = any,
+  Error = any,
+  SWRKey = Arguments,
+  SWROptions extends
+    | SWRMutationConfiguration<Data, Error, SWRKey>
+    | undefined = SWRMutationConfiguration<Data, Error, SWRKey> | undefined,
+>(
+  key: SWRKey,
+  fetcher: Fetcher<Data, SWRKey> | null,
+  config?: SWROptions,
+) => {
+  const keyWithClusterId = useSwrKeyWithClusterId(key) as SWRKey;
+  return useSWRMutation(keyWithClusterId, fetcher, config);
+};
+
+/**
+ * usePagination creates a pagination state and provides functions to update and reset it. The update function
+ * is compatible with the Ant Design Table component.
+ * @param defaultPage the default page to be used for pagination
+ * @param defaultPageSize the default page size to be used for pagination
+ */
+export const usePagination = (
+  defaultPage: number,
+  defaultPageSize: number,
+): [
+  ISortedTablePagination,
+  (current: number, pageSize: number) => void,
+  () => void,
+] => {
+  const [pagination, setPagination] = useState<ISortedTablePagination>({
+    current: defaultPage,
+    pageSize: defaultPageSize,
+  });
+  const updatePagination = (current: number, pageSize: number) => {
+    setPagination({
+      current,
+      pageSize,
+    });
+  };
+  const resetPagination = () => {
+    updatePagination(defaultPage, defaultPageSize);
+  };
+  return [pagination, updatePagination, resetPagination];
 };

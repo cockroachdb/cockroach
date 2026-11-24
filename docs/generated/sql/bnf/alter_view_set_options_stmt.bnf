@@ -1,0 +1,9 @@
+alter_view_set_options_stmt ::=
+	'ALTER' 'VIEW' relation_expr 'SET' '(' 'SECURITY_INVOKER' '=' 'TRUE' ')'
+	| 'ALTER' 'VIEW' relation_expr 'SET' '(' 'SECURITY_INVOKER' '=' 'FALSE' ')'
+	| 'ALTER' 'VIEW' relation_expr 'SET' '(' 'SECURITY_INVOKER' '=' 'ICONST' ')'
+	| 'ALTER' 'VIEW' relation_expr 'SET' '(' 'SECURITY_INVOKER' ')'
+	| 'ALTER' 'VIEW' 'IF' 'EXISTS' relation_expr 'SET' '(' 'SECURITY_INVOKER' '=' 'TRUE' ')'
+	| 'ALTER' 'VIEW' 'IF' 'EXISTS' relation_expr 'SET' '(' 'SECURITY_INVOKER' '=' 'FALSE' ')'
+	| 'ALTER' 'VIEW' 'IF' 'EXISTS' relation_expr 'SET' '(' 'SECURITY_INVOKER' '=' 'ICONST' ')'
+	| 'ALTER' 'VIEW' 'IF' 'EXISTS' relation_expr 'SET' '(' 'SECURITY_INVOKER' ')'

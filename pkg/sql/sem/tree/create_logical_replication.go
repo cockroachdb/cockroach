@@ -12,10 +12,11 @@ import (
 )
 
 type CreateLogicalReplicationStream struct {
-	PGURL   Expr
-	From    LogicalReplicationResources
-	Into    LogicalReplicationResources
-	Options LogicalReplicationOptions
+	PGURL       Expr
+	From        LogicalReplicationResources
+	Into        LogicalReplicationResources
+	CreateTable bool
+	Options     LogicalReplicationOptions
 }
 
 type LogicalReplicationResources struct {
@@ -25,13 +26,17 @@ type LogicalReplicationResources struct {
 
 type LogicalReplicationOptions struct {
 	// Mapping of table name to UDF name
-	UserFunctions   map[UnresolvedName]RoutineName
-	Cursor          Expr
-	MetricsLabel    Expr
-	Mode            Expr
-	DefaultFunction Expr
-	Discard         Expr
-	SkipSchemaCheck *DBool
+	UserFunctions    map[UnresolvedName]RoutineName
+	Cursor           Expr
+	MetricsLabel     Expr
+	Mode             Expr
+	DefaultFunction  Expr
+	Discard          Expr
+	SkipSchemaCheck  *DBool
+	SkipForeignKeys  *DBool
+	Unidirectional   *DBool
+	BidirectionalURI Expr
+	ParentID         Expr
 }
 
 var _ Statement = &CreateLogicalReplicationStream{}
@@ -39,12 +44,21 @@ var _ NodeFormatter = &LogicalReplicationOptions{}
 
 // Format implements the NodeFormatter interface.
 func (node *CreateLogicalReplicationStream) Format(ctx *FmtCtx) {
-	ctx.WriteString("CREATE LOGICAL REPLICATION STREAM FROM ")
-	ctx.FormatNode(&node.From)
-	ctx.WriteString(" ON ")
-	ctx.FormatNode(node.PGURL)
-	ctx.WriteString(" INTO ")
-	ctx.FormatNode(&node.Into)
+	if node.CreateTable {
+		ctx.WriteString("CREATE LOGICALLY REPLICATED ")
+		ctx.FormatNode(&node.Into)
+		ctx.WriteString(" FROM ")
+		ctx.FormatNode(&node.From)
+		ctx.WriteString(" ON ")
+		ctx.FormatNode(node.PGURL)
+	} else {
+		ctx.WriteString("CREATE LOGICAL REPLICATION STREAM FROM ")
+		ctx.FormatNode(&node.From)
+		ctx.WriteString(" ON ")
+		ctx.FormatNode(node.PGURL)
+		ctx.WriteString(" INTO ")
+		ctx.FormatNode(&node.Into)
+	}
 
 	if !node.Options.IsDefault() {
 		ctx.WriteString(" WITH OPTIONS (")
@@ -133,10 +147,30 @@ func (lro *LogicalReplicationOptions) Format(ctx *FmtCtx) {
 		ctx.WriteString("SKIP SCHEMA CHECK")
 	}
 
+	if lro.SkipForeignKeys != nil && *lro.SkipForeignKeys {
+		maybeAddSep()
+		ctx.WriteString("SKIP FOREIGN KEYS")
+	}
+
 	if lro.MetricsLabel != nil {
 		maybeAddSep()
 		ctx.WriteString("LABEL = ")
 		ctx.FormatNode(lro.MetricsLabel)
+	}
+
+	if lro.Unidirectional != nil {
+		maybeAddSep()
+		ctx.WriteString("UNIDIRECTIONAL")
+	}
+	if lro.BidirectionalURI != nil {
+		maybeAddSep()
+		ctx.WriteString("BIDIRECTIONAL ON ")
+		ctx.FormatNode(lro.BidirectionalURI)
+	}
+	if lro.ParentID != nil {
+		maybeAddSep()
+		ctx.WriteString("PARENT = ")
+		ctx.FormatNode(lro.ParentID)
 	}
 
 }
@@ -192,6 +226,13 @@ func (o *LogicalReplicationOptions) CombineWith(other *LogicalReplicationOptions
 	} else {
 		o.SkipSchemaCheck = other.SkipSchemaCheck
 	}
+	if o.SkipForeignKeys != nil {
+		if other.SkipForeignKeys != nil {
+			return errors.New("SKIP FOREIGN KEYS option specified multiple times")
+		}
+	} else {
+		o.SkipForeignKeys = other.SkipForeignKeys
+	}
 
 	if o.MetricsLabel != nil {
 		if other.MetricsLabel != nil {
@@ -199,6 +240,28 @@ func (o *LogicalReplicationOptions) CombineWith(other *LogicalReplicationOptions
 		}
 	} else {
 		o.MetricsLabel = other.MetricsLabel
+	}
+
+	if o.Unidirectional != nil {
+		if other.Unidirectional != nil {
+			return errors.New("UNIDIRECTIONAL option specified multiple times")
+		}
+	} else {
+		o.Unidirectional = other.Unidirectional
+	}
+	if o.BidirectionalURI != nil {
+		if other.BidirectionalURI != nil {
+			return errors.New("BIDIRECTIONAL option specified multiple times")
+		}
+	} else {
+		o.BidirectionalURI = other.BidirectionalURI
+	}
+	if o.ParentID != nil {
+		if other.ParentID != nil {
+			return errors.New("PARENT option specified multiple times")
+		}
+	} else {
+		o.ParentID = other.ParentID
 	}
 
 	return nil
@@ -213,5 +276,9 @@ func (o LogicalReplicationOptions) IsDefault() bool {
 		o.UserFunctions == nil &&
 		o.Discard == options.Discard &&
 		o.SkipSchemaCheck == options.SkipSchemaCheck &&
-		o.MetricsLabel == options.MetricsLabel
+		o.SkipForeignKeys == options.SkipForeignKeys &&
+		o.MetricsLabel == options.MetricsLabel &&
+		o.Unidirectional == options.Unidirectional &&
+		o.BidirectionalURI == options.BidirectionalURI &&
+		o.ParentID == options.ParentID
 }

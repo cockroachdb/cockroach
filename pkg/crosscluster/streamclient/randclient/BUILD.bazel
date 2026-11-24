@@ -1,0 +1,52 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "randclient",
+    srcs = ["random_stream_client.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/crosscluster/streamclient/randclient",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/crosscluster",
+        "//pkg/crosscluster/streamclient",
+        "//pkg/jobs/jobspb",
+        "//pkg/keys",
+        "//pkg/kv/kvpb",
+        "//pkg/repstream/streampb",
+        "//pkg/roachpb",
+        "//pkg/security/username",
+        "//pkg/sql",
+        "//pkg/sql/catalog",
+        "//pkg/sql/catalog/catalogkeys",
+        "//pkg/sql/catalog/catpb",
+        "//pkg/sql/catalog/descpb",
+        "//pkg/sql/catalog/descs",
+        "//pkg/sql/catalog/externalcatalog/externalpb",
+        "//pkg/sql/catalog/tabledesc",
+        "//pkg/sql/randgen",
+        "//pkg/sql/rowenc",
+        "//pkg/sql/sem/catid",
+        "//pkg/sql/sem/tree",
+        "//pkg/util/bufalloc",
+        "//pkg/util/hlc",
+        "//pkg/util/log",
+        "//pkg/util/protoutil",
+        "//pkg/util/randutil",
+        "//pkg/util/span",
+        "//pkg/util/syncutil",
+        "//pkg/util/timeutil",
+        "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "randclient_test",
+    srcs = ["random_stream_client_test.go"],
+    embed = [":randclient"],
+    deps = [
+        "//pkg/crosscluster/streamclient",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)

@@ -86,6 +86,21 @@ func (s *Builder) InitWithFetchSpec(
 	}
 }
 
+// IsPreEncoded tests that the encoded values for the provided row can be used
+// to build a span without decoding and re-encoding.
+func (s *Builder) IsPreEncoded(values rowenc.EncDatumRow) bool {
+	for i, col := range s.keyAndPrefixCols {
+		encoding := catenumpb.DatumEncoding_ASCENDING_KEY
+		if col.Direction == catenumpb.IndexColumn_DESC {
+			encoding = catenumpb.DatumEncoding_DESCENDING_KEY
+		}
+		if !values[i].IsEncodedAs(encoding) {
+			return false
+		}
+	}
+	return true
+}
+
 // SpanFromEncDatums encodes a span with len(values) constraint columns from the
 // index prefixed with the index key prefix that includes the table and index
 // ID. SpanFromEncDatums assumes that the EncDatums in values are in the order
@@ -94,7 +109,11 @@ func (s *Builder) InitWithFetchSpec(
 func (s *Builder) SpanFromEncDatums(
 	values rowenc.EncDatumRow,
 ) (_ roachpb.Span, containsNull bool, _ error) {
-	return rowenc.MakeSpanFromEncDatums(values, s.keyAndPrefixCols, &s.alloc, s.KeyPrefix)
+	startKey, containsNull, err := rowenc.MakeKeyFromEncDatums(values, s.keyAndPrefixCols, &s.alloc, s.KeyPrefix)
+	if err != nil {
+		return roachpb.Span{}, false, err
+	}
+	return roachpb.Span{Key: startKey, EndKey: startKey.PrefixEnd()}, containsNull, nil
 }
 
 // SpanFromEncDatumsWithRange encodes a range span. The inequality is assumed to
@@ -299,7 +318,7 @@ func (s *Builder) appendSpansFromConstraintSpan(
 	var err error
 	var containsNull bool
 	// Encode each logical part of the start key.
-	span.Key, containsNull, err = s.encodeConstraintKey(cs.StartKey())
+	span.Key, containsNull, err = s.encodeConstraintKey(cs.StartKey(), true /* includePrefix */)
 	if err != nil {
 		return nil, err
 	}
@@ -312,7 +331,7 @@ func (s *Builder) appendSpansFromConstraintSpan(
 		span.Key = span.Key.PrefixEnd()
 	}
 	// Encode each logical part of the end key.
-	span.EndKey, _, err = s.encodeConstraintKey(cs.EndKey())
+	span.EndKey, _, err = s.encodeConstraintKey(cs.EndKey(), true /* includePrefix */)
 	if err != nil {
 		return nil, err
 	}
@@ -337,13 +356,18 @@ func (s *Builder) appendSpansFromConstraintSpan(
 
 // encodeConstraintKey encodes each logical part of a constraint.Key into a
 // roachpb.Key.
+//
+// includePrefix is true if the KeyPrefix bytes should be included in the
+// returned key.
 func (s *Builder) encodeConstraintKey(
-	ck constraint.Key,
+	ck constraint.Key, includePrefix bool,
 ) (key roachpb.Key, containsNull bool, _ error) {
 	if ck.IsEmpty() {
 		return key, containsNull, nil
 	}
-	key = append(key, s.KeyPrefix...)
+	if includePrefix {
+		key = append(key, s.KeyPrefix...)
+	}
 	for i := 0; i < ck.Length(); i++ {
 		val := ck.Value(i)
 		if val == tree.DNull {
@@ -388,15 +412,30 @@ var _ InvertedSpans = inverted.SpanExpressionProtoSpans{}
 // If the index is a multi-column inverted index, c should constrain the
 // non-inverted prefix columns of the index. Each span in c must have a single
 // key. The resulting roachpb.Spans are created by performing a cross product of
-// keys in c and the invertedSpan keys.
+// keys in c and the invertedSpan keys. Cannot be used in combination with
+// prefixIncludedInKeys.
+//
+// prefixIncludedInKeys, if set, indicates that we have a multi-column inverted
+// index AND the non-inverted prefix columns have already been prepended into
+// the inverted spans. Cannot be used in combination with non-nil constraint.
+// TODO(yuzefovich): consider splitting this method into two: one which accepts
+// the constraint and constructs a cross-product of spans, and another which
+// already has the inverted spans fully encoded.
 //
 // scratch can be an optional roachpb.Spans slice that will be reused to
 // populate the result.
 func (s *Builder) SpansFromInvertedSpans(
-	ctx context.Context, invertedSpans InvertedSpans, c *constraint.Constraint, scratch roachpb.Spans,
+	ctx context.Context,
+	invertedSpans InvertedSpans,
+	c *constraint.Constraint,
+	prefixIncludedInKeys bool,
+	scratch roachpb.Spans,
 ) (roachpb.Spans, error) {
 	if invertedSpans == nil {
 		return nil, errors.AssertionFailedf("invertedSpans cannot be nil")
+	}
+	if c != nil && prefixIncludedInKeys {
+		return nil, errors.AssertionFailedf("constraint and prefixIncludedInKeys cannot be used at the same time")
 	}
 
 	var scratchRows []rowenc.EncDatumRow
@@ -417,7 +456,11 @@ func (s *Builder) SpansFromInvertedSpans(
 			scratchRows[i] = make(rowenc.EncDatumRow, keyLength+1)
 			for j := 0; j < keyLength; j++ {
 				val := span.StartKey().Value(j)
-				scratchRows[i][j] = rowenc.DatumToEncDatum(val.ResolvedType(), val)
+				var err error
+				scratchRows[i][j], err = rowenc.DatumToEncDatum(val.ResolvedType(), val)
+				if err != nil {
+					return nil, err
+				}
 			}
 		}
 	} else {
@@ -433,10 +476,10 @@ func (s *Builder) SpansFromInvertedSpans(
 		for j, n := 0, invertedSpans.Len(); j < n; j++ {
 			var indexSpan roachpb.Span
 			var err error
-			if indexSpan.Key, err = s.generateInvertedSpanKey(invertedSpans.Start(j), scratchRows[i]); err != nil {
+			if indexSpan.Key, err = s.generateInvertedSpanKey(invertedSpans.Start(j), scratchRows[i], prefixIncludedInKeys); err != nil {
 				return nil, err
 			}
-			if indexSpan.EndKey, err = s.generateInvertedSpanKey(invertedSpans.End(j), scratchRows[i]); err != nil {
+			if indexSpan.EndKey, err = s.generateInvertedSpanKey(invertedSpans.End(j), scratchRows[i], prefixIncludedInKeys); err != nil {
 				return nil, err
 			}
 			scratch = append(scratch, indexSpan)
@@ -451,7 +494,7 @@ func (s *Builder) SpansFromInvertedSpans(
 // of scratchRow is greater than one, the EncDatums that precede the last slot
 // are encoded as prefix keys of enc.
 func (s *Builder) generateInvertedSpanKey(
-	enc []byte, scratchRow rowenc.EncDatumRow,
+	enc []byte, scratchRow rowenc.EncDatumRow, prefixIncludedInKeys bool,
 ) (roachpb.Key, error) {
 	keyLen := len(scratchRow) - 1
 	scratchRow = scratchRow[:keyLen]
@@ -469,6 +512,44 @@ func (s *Builder) generateInvertedSpanKey(
 	// generate a span, of which we will only use Span.Key. Span.EndKey is
 	// generated by the caller in the second call, with RKeyMax.
 
-	span, _, err := s.SpanFromEncDatums(scratchRow[:keyLen])
-	return span.Key, err
+	keyCols := s.keyAndPrefixCols
+	if prefixIncludedInKeys {
+		// When prefix is already included in keys, then we only have a single
+		// "value" which is prefix + encoded inverted value.
+		keyCols = keyCols[len(keyCols)-1:]
+	}
+	startKey, _, err := rowenc.MakeKeyFromEncDatums(scratchRow[:keyLen], keyCols, &s.alloc, s.KeyPrefix)
+	return startKey, err
+}
+
+// KeysFromVectorPrefixConstraint extracts the encoded prefix keys from a
+// vector search operator's prefix constraint. It validates that each span in
+// the constraint has a single key.
+func (s *Builder) KeysFromVectorPrefixConstraint(
+	ctx context.Context, prefixConstraint *constraint.Constraint,
+) ([]roachpb.Key, error) {
+	if prefixConstraint == nil || prefixConstraint.Spans.Count() == 0 {
+		// No prefix.
+		return nil, nil
+	}
+	prefixKeys := make([]roachpb.Key, prefixConstraint.Spans.Count())
+	for i, n := 0, prefixConstraint.Spans.Count(); i < n; i++ {
+		span := prefixConstraint.Spans.Get(i)
+
+		// A vector index with prefix columns is organized as a forest of index
+		// trees, one for each unique prefix. This structure does not support
+		// scanning across multiple trees at once, so the prefix spans must have the
+		// same start and end key.
+		if !span.HasSingleKey(ctx, s.evalCtx) {
+			return nil, errors.AssertionFailedf("constraint span %s does not have a single key", span)
+		}
+		// Do not include the /Table/Index prefix bytes - we only want the portion
+		// of the prefix that corresponds to the prefix columns.
+		var err error
+		prefixKeys[i], _, err = s.encodeConstraintKey(span.StartKey(), false /* includePrefix */)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return prefixKeys, nil
 }

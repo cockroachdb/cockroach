@@ -52,6 +52,24 @@ func GetDescriptorMetadata(
 	return id, version, name, state, err
 }
 
+// GetDescriptorModificationTime returns the modification time of a descriptor.
+func GetDescriptorModificationTime(desc *Descriptor) (hlc.Timestamp, error) {
+	switch t := desc.Union.(type) {
+	case *Descriptor_Table:
+		return t.Table.ModificationTime, nil
+	case *Descriptor_Database:
+		return t.Database.ModificationTime, nil
+	case *Descriptor_Type:
+		return t.Type.ModificationTime, nil
+	case *Descriptor_Schema:
+		return t.Schema.ModificationTime, nil
+	case *Descriptor_Function:
+		return t.Function.ModificationTime, nil
+	default:
+		return hlc.Timestamp{}, errors.AssertionFailedf("Unknown descpb.Descriptor type %T", t)
+	}
+}
+
 // GetDescriptors is a replacement for Get* methods on descpb.Descriptor.
 //
 // A linter check ensures that GetTable() et al. are not called elsewhere unless

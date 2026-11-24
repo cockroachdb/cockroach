@@ -1,0 +1,222 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/dbsize.out --label=/mnt/data1/postgres/src/test/regress/results/dbsize.out /mnt/data1/postgres/src/test/regress/expected/dbsize.out /mnt/data1/postgres/src/test/regress/results/dbsize.out
+--- /mnt/data1/postgres/src/test/regress/expected/dbsize.out
++++ /mnt/data1/postgres/src/test/regress/results/dbsize.out
+@@ -2,16 +2,7 @@
+     (VALUES (10::bigint), (1000::bigint), (1000000::bigint),
+             (1000000000::bigint), (1000000000000::bigint),
+             (1000000000000000::bigint)) x(size);
+-       size       | pg_size_pretty | pg_size_pretty 
+-------------------+----------------+----------------
+-               10 | 10 bytes       | -10 bytes
+-             1000 | 1000 bytes     | -1000 bytes
+-          1000000 | 977 kB         | -977 kB
+-       1000000000 | 954 MB         | -954 MB
+-    1000000000000 | 931 GB         | -931 GB
+- 1000000000000000 | 909 TB         | -909 TB
+-(6 rows)
+-
++ERROR:  unknown function: pg_size_pretty()
+ SELECT size, pg_size_pretty(size), pg_size_pretty(-1 * size) FROM
+     (VALUES (10::numeric), (1000::numeric), (1000000::numeric),
+             (1000000000::numeric), (1000000000000::numeric),
+@@ -19,22 +10,7 @@
+             (10.5::numeric), (1000.5::numeric), (1000000.5::numeric),
+             (1000000000.5::numeric), (1000000000000.5::numeric),
+             (1000000000000000.5::numeric)) x(size);
+-        size        | pg_size_pretty | pg_size_pretty 
+---------------------+----------------+----------------
+-                 10 | 10 bytes       | -10 bytes
+-               1000 | 1000 bytes     | -1000 bytes
+-            1000000 | 977 kB         | -977 kB
+-         1000000000 | 954 MB         | -954 MB
+-      1000000000000 | 931 GB         | -931 GB
+-   1000000000000000 | 909 TB         | -909 TB
+-               10.5 | 10.5 bytes     | -10.5 bytes
+-             1000.5 | 1000.5 bytes   | -1000.5 bytes
+-          1000000.5 | 977 kB         | -977 kB
+-       1000000000.5 | 954 MB         | -954 MB
+-    1000000000000.5 | 931 GB         | -931 GB
+- 1000000000000000.5 | 909 TB         | -909 TB
+-(12 rows)
+-
++ERROR:  unknown function: pg_size_pretty()
+ -- test where units change up
+ SELECT size, pg_size_pretty(size), pg_size_pretty(-1 * size) FROM
+     (VALUES (10239::bigint), (10240::bigint),
+@@ -42,20 +18,7 @@
+             (10736893951::bigint), (10736893952::bigint),
+             (10994579406847::bigint), (10994579406848::bigint),
+             (11258449312612351::bigint), (11258449312612352::bigint)) x(size);
+-       size        | pg_size_pretty | pg_size_pretty 
+--------------------+----------------+----------------
+-             10239 | 10239 bytes    | -10239 bytes
+-             10240 | 10 kB          | -10 kB
+-          10485247 | 10239 kB       | -10239 kB
+-          10485248 | 10 MB          | -10 MB
+-       10736893951 | 10239 MB       | -10239 MB
+-       10736893952 | 10 GB          | -10 GB
+-    10994579406847 | 10239 GB       | -10239 GB
+-    10994579406848 | 10 TB          | -10 TB
+- 11258449312612351 | 10239 TB       | -10239 TB
+- 11258449312612352 | 10 PB          | -10 PB
+-(10 rows)
+-
++ERROR:  unknown function: pg_size_pretty()
+ SELECT size, pg_size_pretty(size), pg_size_pretty(-1 * size) FROM
+     (VALUES (10239::numeric), (10240::numeric),
+             (10485247::numeric), (10485248::numeric),
+@@ -63,133 +26,57 @@
+             (10994579406847::numeric), (10994579406848::numeric),
+             (11258449312612351::numeric), (11258449312612352::numeric),
+             (11528652096115048447::numeric), (11528652096115048448::numeric)) x(size);
+-         size         | pg_size_pretty | pg_size_pretty 
+-----------------------+----------------+----------------
+-                10239 | 10239 bytes    | -10239 bytes
+-                10240 | 10 kB          | -10 kB
+-             10485247 | 10239 kB       | -10239 kB
+-             10485248 | 10 MB          | -10 MB
+-          10736893951 | 10239 MB       | -10239 MB
+-          10736893952 | 10 GB          | -10 GB
+-       10994579406847 | 10239 GB       | -10239 GB
+-       10994579406848 | 10 TB          | -10 TB
+-    11258449312612351 | 10239 TB       | -10239 TB
+-    11258449312612352 | 10 PB          | -10 PB
+- 11528652096115048447 | 10239 PB       | -10239 PB
+- 11528652096115048448 | 10240 PB       | -10240 PB
+-(12 rows)
+-
++ERROR:  unknown function: pg_size_pretty()
+ -- pg_size_bytes() tests
+ SELECT size, pg_size_bytes(size) FROM
+     (VALUES ('1'), ('123bytes'), ('256 B'), ('1kB'), ('1MB'), (' 1 GB'), ('1.5 GB '),
+             ('1TB'), ('3000 TB'), ('1e6 MB'), ('99 PB')) x(size);
+-   size   |   pg_size_bytes    
+-----------+--------------------
+- 1        |                  1
+- 123bytes |                123
+- 256 B    |                256
+- 1kB      |               1024
+- 1MB      |            1048576
+-  1 GB    |         1073741824
+- 1.5 GB   |         1610612736
+- 1TB      |      1099511627776
+- 3000 TB  |   3298534883328000
+- 1e6 MB   |      1048576000000
+- 99 PB    | 111464090777419776
+-(11 rows)
+-
++ERROR:  unknown function: pg_size_bytes()
+ -- case-insensitive units are supported
+ SELECT size, pg_size_bytes(size) FROM
+     (VALUES ('1'), ('123bYteS'), ('1kb'), ('1mb'), (' 1 Gb'), ('1.5 gB '),
+             ('1tb'), ('3000 tb'), ('1e6 mb'), ('99 pb')) x(size);
+-   size   |   pg_size_bytes    
+-----------+--------------------
+- 1        |                  1
+- 123bYteS |                123
+- 1kb      |               1024
+- 1mb      |            1048576
+-  1 Gb    |         1073741824
+- 1.5 gB   |         1610612736
+- 1tb      |      1099511627776
+- 3000 tb  |   3298534883328000
+- 1e6 mb   |      1048576000000
+- 99 pb    | 111464090777419776
+-(10 rows)
+-
++ERROR:  unknown function: pg_size_bytes()
+ -- negative numbers are supported
+ SELECT size, pg_size_bytes(size) FROM
+     (VALUES ('-1'), ('-123bytes'), ('-1kb'), ('-1mb'), (' -1 Gb'), ('-1.5 gB '),
+             ('-1tb'), ('-3000 TB'), ('-10e-1 MB'), ('-99 PB')) x(size);
+-   size    |    pg_size_bytes    
+------------+---------------------
+- -1        |                  -1
+- -123bytes |                -123
+- -1kb      |               -1024
+- -1mb      |            -1048576
+-  -1 Gb    |         -1073741824
+- -1.5 gB   |         -1610612736
+- -1tb      |      -1099511627776
+- -3000 TB  |   -3298534883328000
+- -10e-1 MB |            -1048576
+- -99 PB    | -111464090777419776
+-(10 rows)
+-
++ERROR:  unknown function: pg_size_bytes()
+ -- different cases with allowed points
+ SELECT size, pg_size_bytes(size) FROM
+      (VALUES ('-1.'), ('-1.kb'), ('-1. kb'), ('-0. gb'),
+              ('-.1'), ('-.1kb'), ('-.1 kb'), ('-.0 gb')) x(size);
+-  size  | pg_size_bytes 
+---------+---------------
+- -1.    |            -1
+- -1.kb  |         -1024
+- -1. kb |         -1024
+- -0. gb |             0
+- -.1    |             0
+- -.1kb  |          -102
+- -.1 kb |          -102
+- -.0 gb |             0
+-(8 rows)
+-
++ERROR:  unknown function: pg_size_bytes()
+ -- invalid inputs
+ SELECT pg_size_bytes('1 AB');
+-ERROR:  invalid size: "1 AB"
+-DETAIL:  Invalid size unit: "AB".
+-HINT:  Valid units are "bytes", "B", "kB", "MB", "GB", "TB", and "PB".
++ERROR:  unknown function: pg_size_bytes()
+ SELECT pg_size_bytes('1 AB A');
+-ERROR:  invalid size: "1 AB A"
+-DETAIL:  Invalid size unit: "AB A".
+-HINT:  Valid units are "bytes", "B", "kB", "MB", "GB", "TB", and "PB".
++ERROR:  unknown function: pg_size_bytes()
+ SELECT pg_size_bytes('1 AB A    ');
+-ERROR:  invalid size: "1 AB A    "
+-DETAIL:  Invalid size unit: "AB A".
+-HINT:  Valid units are "bytes", "B", "kB", "MB", "GB", "TB", and "PB".
++ERROR:  unknown function: pg_size_bytes()
+ SELECT pg_size_bytes('9223372036854775807.9');
+-ERROR:  bigint out of range
++ERROR:  unknown function: pg_size_bytes()
+ SELECT pg_size_bytes('1e100');
+-ERROR:  bigint out of range
++ERROR:  unknown function: pg_size_bytes()
+ SELECT pg_size_bytes('1e1000000000000000000');
+-ERROR:  value overflows numeric format
++ERROR:  unknown function: pg_size_bytes()
+ SELECT pg_size_bytes('1 byte');  -- the singular "byte" is not supported
+-ERROR:  invalid size: "1 byte"
+-DETAIL:  Invalid size unit: "byte".
+-HINT:  Valid units are "bytes", "B", "kB", "MB", "GB", "TB", and "PB".
++ERROR:  unknown function: pg_size_bytes()
+ SELECT pg_size_bytes('');
+-ERROR:  invalid size: ""
++ERROR:  unknown function: pg_size_bytes()
+ SELECT pg_size_bytes('kb');
+-ERROR:  invalid size: "kb"
++ERROR:  unknown function: pg_size_bytes()
+ SELECT pg_size_bytes('..');
+-ERROR:  invalid size: ".."
++ERROR:  unknown function: pg_size_bytes()
+ SELECT pg_size_bytes('-.');
+-ERROR:  invalid size: "-."
++ERROR:  unknown function: pg_size_bytes()
+ SELECT pg_size_bytes('-.kb');
+-ERROR:  invalid size: "-.kb"
++ERROR:  unknown function: pg_size_bytes()
+ SELECT pg_size_bytes('-. kb');
+-ERROR:  invalid size: "-. kb"
++ERROR:  unknown function: pg_size_bytes()
+ SELECT pg_size_bytes('.+912');
+-ERROR:  invalid size: ".+912"
++ERROR:  unknown function: pg_size_bytes()
+ SELECT pg_size_bytes('+912+ kB');
+-ERROR:  invalid size: "+912+ kB"
+-DETAIL:  Invalid size unit: "+ kB".
+-HINT:  Valid units are "bytes", "B", "kB", "MB", "GB", "TB", and "PB".
++ERROR:  unknown function: pg_size_bytes()
+ SELECT pg_size_bytes('++123 kB');
+-ERROR:  invalid size: "++123 kB"
++ERROR:  unknown function: pg_size_bytes()

@@ -243,7 +243,9 @@ func (d *dropCascadeState) dropAllCollectedObjects(ctx context.Context, p *plann
 		if err := p.canDropFunction(ctx, fn); err != nil {
 			return err
 		}
-		if err := p.dropFunctionImpl(ctx, fn); err != nil {
+		// We use DropRestrict here since we've already collected all the functions
+		// in the schema so they will be dropped explicitly.
+		if err := p.dropFunctionImpl(ctx, fn, tree.DropRestrict); err != nil {
 			return err
 		}
 	}
@@ -288,6 +290,20 @@ func (d *dropCascadeState) canDropType(
 	var referencedButNotDropping []descpb.ID
 	for _, id := range typ.ReferencingDescriptorIDs {
 		if _, exists := d.toDeleteByID[id]; exists {
+			continue
+		}
+		// Also skip types being dropped (e.g., a domain type that added a
+		// back-reference to its companion array type during creation).
+		// Note: toDeleteByID only contains tables/views/sequences, not types,
+		// so we must check typesToDelete separately here.
+		droppingType := false
+		for _, t := range d.typesToDelete {
+			if t.ID == id {
+				droppingType = true
+				break
+			}
+		}
+		if droppingType {
 			continue
 		}
 		referencedButNotDropping = append(referencedButNotDropping, id)

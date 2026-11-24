@@ -26,6 +26,8 @@ const (
 	AWS
 	// Azure is Microsoft's cloud.
 	Azure
+	// IBM is IBM Z's cloud for s390x architecture.
+	IBM
 )
 
 // IsSet returns true if the value is set. The meaning of an unset value depends
@@ -42,6 +44,8 @@ func (c Cloud) String() string {
 		return "gce"
 	case Azure:
 		return "azure"
+	case IBM:
+		return "ibm"
 	case Local:
 		return "local"
 	default:
@@ -69,6 +73,8 @@ func TryCloudFromString(s string) (_ Cloud, ok bool) {
 		return GCE, true
 	case "azure":
 		return Azure, true
+	case "ibm":
+		return IBM, true
 	case "local":
 		return Local, true
 	default:

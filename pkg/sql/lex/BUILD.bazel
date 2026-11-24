@@ -12,6 +12,7 @@ go_library(
     deps = [
         "//pkg/sql/pgwire/pgcode",
         "//pkg/sql/pgwire/pgerror",
+        "//pkg/util/collatedstring",
         "@com_github_cockroachdb_errors//:errors",
         "@org_golang_x_text//language",
     ],

@@ -287,3 +287,36 @@ index-join t83390
       ├── constraint: /5/1: [/true - /true]
       ├── flags: force-index=idx
       └── key: (1)
+
+# Regression test for #162504. JSON fetch operators should be inlined through
+# projections (e.g., views), allowing filters to use indexes on computed columns.
+exec-ddl
+CREATE TABLE json_data (
+  id INT PRIMARY KEY,
+  data JSONB,
+  seg_code STRING AS (data->'seg'->>'code') STORED,
+  INDEX (seg_code)
+)
+----
+
+# Query with a projection of JSON fetch expression should allow index usage
+# when the projection is inlined by PushSelectIntoInlinableProject.
+opt
+SELECT * FROM (SELECT id, data->'seg'->>'code' AS code FROM json_data) WHERE code = 'ABC'
+----
+project
+ ├── columns: id:1!null code:6
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(6)
+ ├── index-join json_data
+ │    ├── columns: id:1!null data:2
+ │    ├── immutable
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── scan json_data@json_data_seg_code_idx
+ │         ├── columns: id:1!null
+ │         ├── constraint: /3/1: [/'ABC' - /'ABC']
+ │         └── key: (1)
+ └── projections
+      └── (data:2->'seg')->>'code' [as=code:6, outer=(2), immutable]

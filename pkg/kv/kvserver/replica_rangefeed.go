@@ -14,10 +14,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/multiqueue"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -26,15 +26,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
-	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 )
 
@@ -57,7 +57,6 @@ var RangeFeedRefreshInterval = settings.RegisterDurationSetting(
 	"the interval at which closed-timestamp updates"+
 		"are delivered to rangefeeds; set to 0 to use kv.closed_timestamp.side_transport_interval",
 	3*time.Second,
-	settings.NonNegativeDuration,
 	settings.WithPublic,
 )
 
@@ -71,7 +70,6 @@ var RangeFeedSmearInterval = settings.RegisterDurationSetting(
 		"set to 0 to use kv.rangefeed.closed_timestamp_refresh_interval"+
 		"capped at kv.rangefeed.closed_timestamp_refresh_interval",
 	1*time.Millisecond,
-	settings.NonNegativeDuration,
 )
 
 // RangeFeedUseScheduler controls type of rangefeed processor is used to process
@@ -86,44 +84,21 @@ var RangeFeedUseScheduler = settings.RegisterBoolSetting(
 	settings.Retired,
 )
 
-var ErrBufferedSenderNotSupported = unimplemented.NewWithIssue(
-	126560, "buffered stream sender not supported for production use")
-
 // RangefeedUseBufferedSender controls whether rangefeed uses a node level
 // buffered sender to buffer events instead of buffering events separately in a
-// channel at a per client per registration level. It is currently left
-// unimplemented and disabled everywhere (#126560).
+// channel at a per client per registration level.
 var RangefeedUseBufferedSender = settings.RegisterBoolSetting(
 	settings.SystemOnly,
-	"kv.rangefeed.buffered_stream_sender.enabled",
+	"kv.rangefeed.buffered_sender.enabled",
 	"use buffered sender for all range feeds instead of buffering events "+
 		"separately per client per range",
-	false,
-	settings.WithValidateBool(func(_ *settings.Values, b bool) error {
-		if buildutil.CrdbTestBuild || !b {
-			return nil
-		}
-		return ErrBufferedSenderNotSupported
-	}),
+	metamorphic.ConstantWithTestBool("kv.rangefeed.buffered_sender.enabled", true),
 )
 
 func init() {
 	// Inject into kvserverbase to allow usage from kvcoord.
 	kvserverbase.RangeFeedRefreshInterval = RangeFeedRefreshInterval
 }
-
-// defaultEventChanCap is the channel capacity of the rangefeed processor and
-// each registration.
-//
-// The size of an event is 72 bytes, so this will result in an allocation on the
-// order of ~300KB per RangeFeed. That's probably ok given the number of ranges
-// on a node that we'd like to support with active rangefeeds, but it's
-// certainly on the upper end of the range.
-//
-// TODO(dan): Everyone seems to agree that this memory limit would be better set
-// at a store-wide level, but there doesn't seem to be an easy way to accomplish
-// that.
-const defaultEventChanCap = 4096
 
 // defaultEventChanTimeout is the send timeout for events published to a
 // rangefeed processor or rangefeed client channels. When exceeded, the
@@ -235,10 +210,29 @@ func (tp *rangefeedTxnPusher) Barrier(ctx context.Context) error {
 	return nil
 }
 
-// RangeFeed registers a rangefeed over the specified span. It sends updates to
-// the provided stream and returns with a future error when the rangefeed is
-// complete. The surrounding store's ConcurrentRequestLimiter is used to limit
-// the number of rangefeeds using catch-up iterators at the same time.
+var rangeFeedBulkDeliverySize = settings.RegisterIntSetting(
+	settings.SystemOnly,
+	"kv.rangefeed.bulk_delivery.size",
+	"approx size up to which rangefeeds may buffer events to be delivered in bulk during scans (0=disabled)",
+	int64(metamorphic.ConstantWithTestRange("rangefeed-bulk_delivery", 2<<20, 0, 4<<20)),
+)
+
+// catchupQueueTypeFor maps a rangefeed admission priority to a catchup-scan
+// queue type. Requests at >= admissionpb.NormalPri (e.g. system-table
+// rangefeeds via rangefeed.WithSystemTablePriority) go to catchupQueueHigh;
+// the rest (typically BulkNormalPri) go to catchupQueueLow.
+func catchupQueueTypeFor(priority int32) int {
+	if admissionpb.WorkPriority(priority) >= admissionpb.NormalPri {
+		return catchupQueueHigh
+	}
+	return catchupQueueLow
+}
+
+// RangeFeed registers a rangefeed over the specified span. It sends updates
+// to the stream and returns with a future error when the rangefeed is
+// complete. The surrounding store's catchupScanQueue limits and prioritizes
+// concurrent catch-up scans; the queue type is derived from
+// args.AdmissionHeader.Priority via catchupQueueTypeFor.
 func (r *Replica) RangeFeed(
 	streamCtx context.Context,
 	args *kvpb.RangeFeedRequest,
@@ -279,12 +273,12 @@ func (r *Replica) RangeFeed(
 		checkTS = r.Clock().Now()
 	}
 
-	// If we will be using a catch-up iterator, wait for the limiter here before
+	// If we will be using a catch-up snapshot, wait for the limiter here before
 	// locking raftMu.
-	usingCatchUpIter := false
+	usingCatchUpSnap := false
 	iterSemRelease := func() {}
 	if !args.Timestamp.IsEmpty() {
-		usingCatchUpIter = true
+		usingCatchUpSnap = true
 		perConsumerRelease := func() {}
 		if perConsumerCatchupLimiter != nil {
 			perConsumerAlloc, err := perConsumerCatchupLimiter.Begin(streamCtx)
@@ -294,27 +288,47 @@ func (r *Replica) RangeFeed(
 			perConsumerRelease = perConsumerAlloc.Release
 		}
 
-		alloc, err := r.store.limiters.ConcurrentRangefeedIters.Begin(streamCtx)
-		if err != nil {
-			perConsumerRelease()
-			return nil, err
+		var release func()
+		if catchupScanPrioritizationEnabled.Get(
+			&r.store.ClusterSettings().SV,
+		) {
+			queueType := catchupQueueTypeFor(args.AdmissionHeader.Priority)
+			task, err := r.store.catchupScanQueue.Add(
+				queueType, 0 /* priority */, -1, /* maxQueueLen */
+			)
+			if err != nil {
+				perConsumerRelease()
+				return nil, errors.Wrap(err, "rangefeed catchup scan")
+			}
+			var permit *multiqueue.WeightedPermit
+			select {
+			case permit = <-task.GetWaitChan():
+			case <-streamCtx.Done():
+				r.store.catchupScanQueue.Cancel(task)
+				perConsumerRelease()
+				return nil, streamCtx.Err()
+			}
+			release = func() { r.store.catchupScanQueue.Release(permit) }
+		} else {
+			alloc, err := r.store.limiters.ConcurrentRangefeedIters.Begin(streamCtx)
+			if err != nil {
+				perConsumerRelease()
+				return nil, err
+			}
+			release = alloc.Release
 		}
 
-		// Finish the iterator limit if we exit before the iterator finishes.
-		// The release function will be hooked into the Close method on the
-		// iterator below. The sync.Once prevents any races between exiting early
-		// from this call and finishing the catch-up scan underneath the
-		// rangefeed.Processor. We need to release here in case we fail to
-		// register the processor, or, more perniciously, in the case where the
-		// processor gets registered by shut down before starting the catch-up
-		// scan.
+		// iterSemRelease must be idempotent. The catch-up scan inside
+		// rangefeed.Processor releases when it finishes, but we also need to
+		// release on the early-exit paths below (failed registration, or ctx
+		// cancellation after the processor was registered but before the
+		// scan started). The sync.Once collapses both paths.
 		var iterSemReleaseOnce sync.Once
 		iterSemRelease = func() {
 			iterSemReleaseOnce.Do(func() {
-				alloc.Release()
+				release()
 				perConsumerRelease()
 			})
-
 		}
 	}
 
@@ -329,26 +343,24 @@ func (r *Replica) RangeFeed(
 		return nil, err
 	}
 
-	// Register the stream with a catch-up iterator.
-	var catchUpIter *rangefeed.CatchUpIterator
-	if usingCatchUpIter {
-		// Pass context.Background() since the context where the iter will be used
-		// is different.
-		catchUpIter, err = rangefeed.NewCatchUpIterator(
-			context.Background(), r.store.TODOEngine(), rSpan.AsRawSpanWithNoLocals(),
-			args.Timestamp, iterSemRelease, pacer)
-		if err != nil {
-			r.raftMu.Unlock()
-			iterSemRelease()
-			return nil, err
-		}
+	// Register the stream with a catch-up snapshot.
+	var catchUpSnap *rangefeed.CatchUpSnapshot
+	if usingCatchUpSnap {
+		catchUpSnap = rangefeed.NewCatchUpSnapshot(
+			r.store.StateEngine(), rSpan.AsRawSpanWithNoLocals(),
+			args.Timestamp, iterSemRelease, pacer,
+			storage.SnapshotRecreateIterDuration.Get(&r.store.ClusterSettings().SV))
 		if f := r.store.TestingKnobs().RangefeedValueHeaderFilter; f != nil {
-			catchUpIter.OnEmit = f
+			catchUpSnap.OnEmit = f
 		}
 	}
 
+	bulkDeliverySize := 0
+	if args.WithBulkDelivery {
+		bulkDeliverySize = int(rangeFeedBulkDeliverySize.Get(&r.store.ClusterSettings().SV))
+	}
 	p, disconnector, err := r.registerWithRangefeedRaftMuLocked(
-		streamCtx, rSpan, args.Timestamp, catchUpIter, args.WithDiff, args.WithFiltering, omitRemote, stream,
+		streamCtx, rSpan, args.Timestamp, catchUpSnap, args.WithDiff, args.WithFiltering, omitRemote, bulkDeliverySize, stream,
 	)
 	r.raftMu.Unlock()
 
@@ -362,7 +374,18 @@ func (r *Replica) RangeFeed(
 func (r *Replica) getRangefeedProcessorAndFilter() (rangefeed.Processor, *rangefeed.Filter) {
 	r.rangefeedMu.RLock()
 	defer r.rangefeedMu.RUnlock()
-	return r.rangefeedMu.proc, r.rangefeedMu.opFilter
+	p := r.rangefeedMu.proc
+	if p != nil && p.Stopping() {
+		// This is here only to try to preserve existing behaviour when fixing
+		// #144828. Nearly all call paths that stop the processor immediately remove
+		// the processor from the replica. The only call path where this isn't true
+		// is when the processor stops itself after find all of its registrations
+		// have been removed. Thus, we check stopping here to avoid doing work on
+		// this stop-but-not-yet-removed processor.
+		return nil, r.rangefeedMu.opFilter
+	} else {
+		return p, r.rangefeedMu.opFilter
+	}
 }
 
 func (r *Replica) getRangefeedProcessor() rangefeed.Processor {
@@ -419,11 +442,11 @@ func (r *Replica) updateRangefeedFilterLocked() bool {
 // to believe that is blocks the raftMu in practice.
 func logSlowRangefeedRegistration(ctx context.Context) func() {
 	const slowRaftMuWarnThreshold = 20 * time.Millisecond
-	start := timeutil.Now()
+	start := crtime.NowMono()
 	return func() {
-		elapsed := timeutil.Since(start)
+		elapsed := start.Elapsed()
 		if elapsed >= slowRaftMuWarnThreshold {
-			log.Warningf(ctx, "rangefeed registration took %s", elapsed)
+			log.KvExec.Warningf(ctx, "rangefeed registration took %s", elapsed)
 		}
 	}
 }
@@ -433,28 +456,29 @@ func logSlowRangefeedRegistration(ctx context.Context) func() {
 // already running. Requires raftMu be locked.
 // Returns Future[*roachpb.Error] which will return an error once rangefeed
 // completes.
-// Note that caller delegates lifecycle of catchUpIter to this method in both
-// success and failure cases. So it is important that this method closes
-// iterator in case registration fails. Successful registration takes iterator
+// Note that caller delegates lifecycle of catchUpSnap to this method in both
+// success and failure cases. So it is important that this method closes the
+// snap in case registration fails. Successful registration takes snap
 // ownership and ensures it is closed when catch up is complete or aborted.
 func (r *Replica) registerWithRangefeedRaftMuLocked(
 	streamCtx context.Context,
 	span roachpb.RSpan,
 	startTS hlc.Timestamp, // exclusive
-	catchUpIter *rangefeed.CatchUpIterator,
+	catchUpSnap *rangefeed.CatchUpSnapshot,
 	withDiff bool,
 	withFiltering bool,
 	withOmitRemote bool,
+	bulkDeliverySize int,
 	stream rangefeed.Stream,
 ) (rangefeed.Processor, rangefeed.Disconnector, error) {
 	defer logSlowRangefeedRegistration(streamCtx)()
 
-	// Always defer closing iterator to cover old and new failure cases.
-	// On successful path where registration succeeds reset catchUpIter to prevent
+	// Always defer closing snapshot to cover old and new failure cases.
+	// On successful path where registration succeeds reset catchUpSnap to prevent
 	// closing it.
 	defer func() {
-		if catchUpIter != nil {
-			catchUpIter.Close()
+		if catchUpSnap != nil {
+			catchUpSnap.Close()
 		}
 	}()
 
@@ -465,15 +489,15 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	p := r.rangefeedMu.proc
 
 	if p != nil {
-		reg, disconnector, filter := p.Register(streamCtx, span, startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
-			stream, func() { r.maybeDisconnectEmptyRangefeed(p) })
+		reg, disconnector, filter := p.Register(streamCtx, span, startTS, catchUpSnap, withDiff, withFiltering, withOmitRemote, bulkDeliverySize,
+			stream)
 		if reg {
 			// Registered successfully with an existing processor.
 			// Update the rangefeed filter to avoid filtering ops
 			// that this new registration might be interested in.
 			r.setRangefeedFilterLocked(filter)
 			r.rangefeedMu.Unlock()
-			catchUpIter = nil
+			catchUpSnap = nil
 			return p, disconnector, nil
 		}
 		// If the registration failed, the processor was already being shut
@@ -507,7 +531,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 		Span:             desc.RSpan(),
 		TxnPusher:        &tp,
 		PushTxnsAge:      r.store.TestingKnobs().RangeFeedPushTxnsAge,
-		EventChanCap:     defaultEventChanCap,
+		EventChanCap:     kvserverbase.DefaultRangefeedEventCap,
 		EventChanTimeout: defaultEventChanTimeout,
 		Metrics:          r.store.metrics.RangeFeedMetrics,
 		MemBudget:        feedBudget,
@@ -517,19 +541,13 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	p = rangefeed.NewProcessor(cfg)
 
 	// Start it with an iterator to initialize the resolved timestamp.
-	rtsIter := func() rangefeed.IntentScanner {
+	rtsIter := func() (rangefeed.IntentScanner, error) {
 		// Assert that we still hold the raftMu when this is called to ensure
 		// that the rtsIter reads from the current snapshot. The replica
 		// synchronizes with the rangefeed Processor calling this function by
 		// waiting for the Register call below to return.
 		r.raftMu.AssertHeld()
-
-		scanner, err := rangefeed.NewSeparatedIntentScanner(streamCtx, r.store.TODOEngine(), desc.RSpan())
-		if err != nil {
-			stream.SendError(kvpb.NewError(err))
-			return nil
-		}
-		return scanner
+		return rangefeed.NewSeparatedIntentScanner(streamCtx, r.store.StateEngine(), desc.RSpan())
 	}
 
 	// NB: This only errors if the stopper is stopping, and we have to return here
@@ -546,8 +564,8 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 	// any other goroutines are able to stop the processor. In other words,
 	// this ensures that the only time the registration fails is during
 	// server shutdown.
-	reg, disconnector, filter := p.Register(streamCtx, span, startTS, catchUpIter, withDiff,
-		withFiltering, withOmitRemote, stream, func() { r.maybeDisconnectEmptyRangefeed(p) })
+	reg, disconnector, filter := p.Register(streamCtx, span, startTS, catchUpSnap, withDiff,
+		withFiltering, withOmitRemote, bulkDeliverySize, stream)
 	if !reg {
 		select {
 		case <-r.store.Stopper().ShouldQuiesce():
@@ -556,7 +574,7 @@ func (r *Replica) registerWithRangefeedRaftMuLocked(
 			panic("unexpected Stopped processor")
 		}
 	}
-	catchUpIter = nil
+	catchUpSnap = nil
 
 	// Set the rangefeed processor and filter reference.
 	r.setRangefeedProcessor(p)
@@ -674,8 +692,8 @@ func populatePrevValsInLogicalOpLog(
 		if err != nil {
 			return errors.Wrapf(err, "consuming %T for key %v @ ts %v", op, key, ts)
 		}
-		if prevValRes.Value != nil {
-			*prevValPtr = prevValRes.Value.RawBytes
+		if prevValRes.Value.Exists() {
+			*prevValPtr = prevValRes.Value.Value.RawBytes
 		} else {
 			*prevValPtr = nil
 		}
@@ -867,17 +885,23 @@ func (r *Replica) handleClosedTimestampUpdateRaftMuLocked(
 
 	// If the closed timestamp is sufficiently stale, signal that we want an
 	// update to the leaseholder so that it will eventually begin to progress
-	// again.
-	behind := r.Clock().PhysicalTime().Sub(closedTS.GoTime())
-	slowClosedTSThresh := 5 * closedts.TargetDuration.Get(&r.store.cfg.Settings.SV)
-	exceedsSlowLagThresh = behind > slowClosedTSThresh
+	// again. Or, if the closed timestamp has been lagging by more than the
+	// cancel threshold for a while, cancel the rangefeed.
+	signal := r.raftMu.rangefeedCTLagObserver.observeClosedTimestampUpdate(ctx,
+		closedTS.GoTime(),
+		r.Clock().PhysicalTime(),
+		&r.store.cfg.Settings.SV,
+	)
+	exceedsSlowLagThresh = signal.exceedsNudgeLagThreshold
 	if exceedsSlowLagThresh {
 		m := r.store.metrics.RangeFeedMetrics
-		if m.RangeFeedSlowClosedTimestampLogN.ShouldLog() {
+		expensiveLog := m.RangeFeedSlowClosedTimestampLogN.ShouldLog()
+		if expensiveLog {
 			if closedTS.IsEmpty() {
-				log.Infof(ctx, "RangeFeed closed timestamp is empty")
+				log.KvExec.Infof(ctx, "RangeFeed closed timestamp is empty")
 			} else {
-				log.Infof(ctx, "RangeFeed closed timestamp %s is behind by %s", closedTS, behind)
+				log.KvExec.Infof(ctx, "RangeFeed closed timestamp %s is behind by %s (%v)",
+					closedTS, signal.lag, signal)
 			}
 		}
 
@@ -904,7 +928,25 @@ func (r *Replica) handleClosedTimestampUpdateRaftMuLocked(
 				}
 				defer func() { <-m.RangeFeedSlowClosedTimestampNudgeSem }()
 				if err := r.ensureClosedTimestampStarted(ctx); err != nil {
-					log.Infof(ctx, `RangeFeed failed to nudge: %s`, err)
+					log.KvExec.Infof(ctx, `RangeFeed failed to nudge: %s`, err)
+				} else if signal.exceedsCancelLagThreshold {
+					// We have successfully nudged the leaseholder to make progress on
+					// the closed timestamp. If the lag was already persistently too
+					// high, we cancel the rangefeed, so that it can be replanned on
+					// another replica. The hazard this avoids with replanning earlier,
+					// is that we know the range at least has a leaseholder so we won't
+					// fail open, thrashing the rangefeed around the cluster.
+					//
+					// Note that we use the REASON_RANGEFEED_CLOSED, as adding a new
+					// reason would require a new version of the proto, which would
+					// prohibit us from cancelling the rangefeed in the current version,
+					// due to mixed version compatibility.
+					if expensiveLog {
+						log.KvExec.Infof(ctx,
+							`RangeFeed is too far behind, cancelling for replanning [%v]`, signal)
+					}
+					r.disconnectRangefeedWithReason(kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED)
+					r.store.metrics.RangeFeedMetrics.RangeFeedSlowClosedTimestampCancelledRanges.Inc(1)
 				}
 				return nil, nil
 			})

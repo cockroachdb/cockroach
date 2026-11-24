@@ -1,0 +1,33 @@
+// Copyright 2026 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+@import 'src/components/core/index.scss';
+
+.select {
+  &--type-link {
+    padding: 0;
+    border: none;
+    @extend %text--body;
+    color: $colors--link;
+    font-weight: $font-weight--bold;
+    letter-spacing: $letter-spacing--compact;
+    & > .crdb-ant-select-selection {
+      border: none;
+      & > .crdb-ant-select-arrow {
+        font-size: $spacing-base;
+        color: $colors--link;
+        top: 18px;
+      }
+      & > .crdb-ant-select-selection__rendered {
+        margin-right: $spacing-large;
+      }
+    }
+    & > .crdb-ant-select-selection:focus {
+      outline-style: none;
+      box-shadow: none;
+      border-color: transparent;
+    }
+  }
+}

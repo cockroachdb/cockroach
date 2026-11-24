@@ -55,6 +55,7 @@ replicas  lease_holder
 {1}       1
 {1}       1
 
+retry
 statement ok
 ALTER INDEX geo_table@geom_index EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1152921574000000000)
 
@@ -63,7 +64,7 @@ SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX g
 ORDER BY 1
 ----
 start_key              end_key                replicas  lease_holder
-<before:/Table/71>     …/1152921574000000000  {1}       1
+<before:/Table/XX>     …/1152921574000000000  {1}       1
 …/1152921574000000000  <after:/Max>           {2}       2
 
 # Distributed.
@@ -84,6 +85,7 @@ SELECT k FROM geo_table@geom_index WHERE ST_CoveredBy('MULTIPOINT((2.2 2.2), (3.
 # Move all the index data that will be read to node 2 while the query executes
 # at node 1. The filtering moves to node 2 when it is distributable.
 
+retry
 statement ok
 ALTER INDEX geo_table@geom_index EXPERIMENTAL_RELOCATE VALUES (ARRAY[2], 1)
 
@@ -92,7 +94,7 @@ SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX g
 ORDER BY 1
 ----
 start_key              end_key                replicas  lease_holder
-<before:/Table/71>     …/1152921574000000000  {2}       2
+<before:/Table/XX>     …/1152921574000000000  {2}       2
 …/1152921574000000000  <after:/Max>           {2}       2
 
 query I
@@ -144,15 +146,16 @@ replicas  lease_holder
 {2}       2
 {2}       2
 
+retry
 statement ok
 ALTER INDEX geo_table@geom_index2 EXPERIMENTAL_RELOCATE VALUES (ARRAY[1], 'foo', 1152921574000000000)
 
 query TTTI colnames,rowsort
 SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM INDEX geo_table@geom_index2 WITH DETAILS]
 ----
-start_key                    end_key                      replicas  lease_holder
-…/<IndexMin>                 …/"foo"/1152921574000000000  {2}       2
-…/"foo"/1152921574000000000  …/<IndexMax>                 {1}       1
+start_key                                  end_key                      replicas  lease_holder
+<before:/Table/106/2/1152921574000000000>  …/"foo"/1152921574000000000  {2}       2
+…/"foo"/1152921574000000000                <after:/Max>                 {1}       1
 
 # Distributed.
 query I

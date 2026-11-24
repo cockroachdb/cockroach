@@ -71,7 +71,7 @@ func startTestWriter(
 					key := randutil.RandBytes(src, 10)
 					val := randutil.RandBytes(src, int(src.Int31n(valBytes)))
 					if err := txn.Put(ctx, key, val); err != nil {
-						log.Infof(ctx, "experienced an error in routine %d: %s", i, err)
+						log.Dev.Infof(ctx, "experienced an error in routine %d: %s", i, err)
 						return err
 					}
 				}
@@ -103,7 +103,7 @@ func TestRangeSplitMeta(t *testing.T) {
 	// Execute the consecutive splits.
 	for _, splitRKey := range splitKeys {
 		splitKey := roachpb.Key(splitRKey)
-		log.Infof(ctx, "starting split at key %q...", splitKey)
+		log.Dev.Infof(ctx, "starting split at key %q...", splitKey)
 		if err := s.DB.AdminSplit(
 			ctx,
 			splitKey,
@@ -111,11 +111,11 @@ func TestRangeSplitMeta(t *testing.T) {
 		); err != nil {
 			t.Fatal(err)
 		}
-		log.Infof(ctx, "split at key %q complete", splitKey)
+		log.Dev.Infof(ctx, "split at key %q complete", splitKey)
 	}
 
 	testutils.SucceedsSoon(t, func() error {
-		if _, err := storage.MVCCScan(ctx, s.Eng, keys.LocalMax, roachpb.KeyMax, hlc.MaxTimestamp, storage.MVCCScanOptions{}); err != nil {
+		if _, err := storage.MVCCScan(ctx, s.Eng.StateEngine(), keys.LocalMax, roachpb.KeyMax, hlc.MaxTimestamp, storage.MVCCScanOptions{}); err != nil {
 			return errors.Wrap(err, "failed to verify no dangling intents")
 		}
 		return nil
@@ -154,7 +154,7 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 		for i := 0; i < concurrency; i++ {
 			<-txnChannel
 		}
-		log.Infof(ctx, "starting split at key %q...", splitKey)
+		log.Dev.Infof(ctx, "starting split at key %q...", splitKey)
 		if pErr := s.DB.AdminSplit(
 			context.Background(),
 			splitKey,
@@ -162,7 +162,7 @@ func TestRangeSplitsWithConcurrentTxns(t *testing.T) {
 		); pErr != nil {
 			t.Error(pErr)
 		}
-		log.Infof(ctx, "split at key %q complete", splitKey)
+		log.Dev.Infof(ctx, "split at key %q complete", splitKey)
 	}
 
 	close(done)
@@ -231,7 +231,7 @@ func TestRangeSplitsWithWritePressure(t *testing.T) {
 	// for timing of finishing the test writer and a possibly-ongoing
 	// asynchronous split.
 	testutils.SucceedsSoon(t, func() error {
-		if _, err := storage.MVCCScan(ctx, s.Eng, keys.LocalMax, roachpb.KeyMax, hlc.MaxTimestamp, storage.MVCCScanOptions{}); err != nil {
+		if _, err := storage.MVCCScan(ctx, s.Eng.StateEngine(), keys.LocalMax, roachpb.KeyMax, hlc.MaxTimestamp, storage.MVCCScanOptions{}); err != nil {
 			return errors.Wrap(err, "failed to verify no dangling intents")
 		}
 		return nil
@@ -253,7 +253,7 @@ func TestRangeSplitsWithSameKeyTwice(t *testing.T) {
 	ctx := context.Background()
 
 	splitKey := roachpb.Key("aa")
-	log.Infof(ctx, "starting split at key %q...", splitKey)
+	log.Dev.Infof(ctx, "starting split at key %q...", splitKey)
 	if err := s.DB.AdminSplit(
 		ctx,
 		splitKey,
@@ -261,7 +261,7 @@ func TestRangeSplitsWithSameKeyTwice(t *testing.T) {
 	); err != nil {
 		t.Fatal(err)
 	}
-	log.Infof(ctx, "split at key %q first time complete", splitKey)
+	log.Dev.Infof(ctx, "split at key %q first time complete", splitKey)
 	if err := s.DB.AdminSplit(
 		ctx,
 		splitKey,

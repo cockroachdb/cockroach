@@ -287,7 +287,7 @@ func testMigrationWithFailures(
 			defer scope.Close(t)
 
 			type updateEvent struct {
-				orig, updated jobs.JobMetadata
+				orig, updated jobs.DeprecatedJobMetadata
 				errChan       chan error
 			}
 
@@ -296,7 +296,7 @@ func testMigrationWithFailures(
 			// To intercept the schema-change and the migration job.
 			updateEventChan := make(chan updateEvent)
 			var enableUpdateEventCh atomic.Bool
-			beforeUpdate := func(orig, updated jobs.JobMetadata) error {
+			beforeUpdate := func(orig, updated jobs.DeprecatedJobMetadata) error {
 				if !enableUpdateEventCh.Load() {
 					return nil
 				}
@@ -351,9 +351,7 @@ func testMigrationWithFailures(
 						},
 						UpgradeManager: &upgradebase.TestingKnobs{
 							ListBetweenOverride: func(from, to roachpb.Version) []roachpb.Version {
-								return []roachpb.Version{
-									endCV,
-								}
+								return []roachpb.Version{to}
 							},
 							RegistryOverride: func(cv roachpb.Version) (upgradebase.Upgrade, bool) {
 								if cv.Equal(endCV) {
@@ -364,7 +362,7 @@ func testMigrationWithFailures(
 										upgrade.RestoreActionNotRequired("test"),
 									), true
 								}
-								panic("unexpected version")
+								return nil, false
 							}},
 					},
 				},
@@ -481,7 +479,7 @@ func testMigrationWithFailures(
 			// If canceled the job, wait for the job to finish.
 			if test.cancelSchemaJob {
 				t.Log("waiting for the schema job to reach the cancel status")
-				waitUntilState(t, tdb, schemaEvent.orig.ID, jobs.StatusCanceled)
+				waitUntilState(t, tdb, schemaEvent.orig.ID, jobs.StateCanceled)
 			}
 			// Ensure all migrations complete.
 			go func() {
@@ -527,11 +525,13 @@ func cancelJob(
 	err := s.InternalDB().(isql.DB).Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		// Using this way of canceling because the migration job us non-cancelable.
 		// Canceling in this way skips the check.
-		return s.JobRegistry().(*jobs.Registry).UpdateJobWithTxn(
+		//
+		//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+		return s.JobRegistry().(*jobs.Registry).DeprecatedUpdateJobWithTxn(
 			ctx, jobID, txn, func(
-				txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+				txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater,
 			) error {
-				ju.UpdateStatus(jobs.StatusCancelRequested)
+				ju.UpdateState(jobs.StateCancelRequested)
 				return nil
 			})
 	})
@@ -540,10 +540,10 @@ func cancelJob(
 
 // waitUntilState waits until the specified job reaches to given state.
 func waitUntilState(
-	t *testing.T, tdb *sqlutils.SQLRunner, jobID jobspb.JobID, expectedStatus jobs.Status,
+	t *testing.T, tdb *sqlutils.SQLRunner, jobID jobspb.JobID, expectedStatus jobs.State,
 ) {
 	testutils.SucceedsSoon(t, func() error {
-		var status jobs.Status
+		var status jobs.State
 		tdb.QueryRow(t,
 			"SELECT status FROM system.jobs WHERE id = $1", jobID,
 		).Scan(&status)

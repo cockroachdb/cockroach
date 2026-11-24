@@ -7,6 +7,7 @@ package optbuilder
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -54,13 +55,13 @@ func (b *Builder) buildCreateTrigger(ct *tree.CreateTrigger, inScope *scope) (ou
 
 	// Resolve the trigger function and check its privileges.
 	funcExpr := tree.FuncExpr{Func: tree.ResolvableFunctionReference{FunctionReference: ct.FuncName}}
-	typedExpr := inScope.resolveType(&funcExpr, types.Any)
+	typedExpr := inScope.resolveType(&funcExpr, types.AnyElement)
 	f, ok := typedExpr.(*tree.FuncExpr)
 	if !ok {
 		panic(errors.AssertionFailedf("%s is not a function", funcExpr.Func.String()))
 	}
 	o := f.ResolvedOverload()
-	if err := b.catalog.CheckExecutionPrivilege(b.ctx, o.Oid, b.checkPrivilegeUser); err != nil {
+	if err := b.catalog.CheckExecutionPrivilege(b.ctx, o.Oid, b.checkExecutePrivilegeUser()); err != nil {
 		panic(err)
 	}
 
@@ -69,13 +70,15 @@ func (b *Builder) buildCreateTrigger(ct *tree.CreateTrigger, inScope *scope) (ou
 		allEventTypes.Add(ct.Events[i].EventType)
 	}
 
-	// Validate the CREATE TRIGGER statement.
-	if err := cat.ValidateCreateTrigger(ct, ds, allEventTypes); err != nil {
-		panic(err)
+	// Validate the CREATE TRIGGER statement. Skip validation when
+	// FuncBodyOverride is set, since we're analyzing an existing trigger's new
+	// function body, not creating a new trigger.
+	if ct.FuncBodyOverride == "" {
+		if err := cat.ValidateCreateTrigger(ct, ds, allEventTypes); err != nil {
+			panic(err)
+		}
+		checkUnsupportedCreateTrigger(ct, ds)
 	}
-
-	// Check for unsupported CREATE TRIGGER statements.
-	checkUnsupportedCreateTrigger(ct, ds)
 
 	// Lookup the implicit table type. This must happen after the above checks,
 	// since virtual/system tables do not have an implicit type.
@@ -175,10 +178,19 @@ func (b *Builder) buildFunctionForTrigger(
 		panic(errors.AssertionFailedf("SQL language not supported for triggers"))
 	}
 	// The trigger always references the trigger function.
-	b.schemaFunctionDeps.Add(int(o.Oid))
+	b.schemaFunctionDeps.Add(int(funcdesc.UserDefinedFunctionOIDToID(o.Oid)))
 
 	// The trigger function can reference the NEW and OLD transition relations,
 	// aliased in the trigger definition.
+	if len(ct.Transitions) > 0 {
+		// Save the existing CTEs in the builder and restore them after the function
+		// body is built.
+		prevCTEs := b.ctes
+		b.ctes = nil
+		defer func() {
+			b.ctes = prevCTEs
+		}()
+	}
 	for _, transition := range ct.Transitions {
 		// Build a fake relational expression with a column corresponding to each
 		// column from the table.
@@ -203,21 +215,14 @@ func (b *Builder) buildFunctionForTrigger(
 		funcScope.ctes[string(transition.Name)] = cte
 		b.addCTE(cte)
 	}
-	if len(ct.Transitions) > 0 {
-		defer func() {
-			// Reset the CTEs in the builder after the function body is built.
-			b.ctes = nil
-		}()
-	}
 
 	// The trigger function takes a set of implicitly-defined parameters, two of
 	// which are determined by the table's record type. Add them to the trigger
 	// function scope.
-	numStaticParams := len(triggerFuncStaticParams)
-	triggerFuncParams := make([]routineParam, numStaticParams, numStaticParams+2)
-	copy(triggerFuncParams, triggerFuncStaticParams)
+	triggerFuncParams := make([]routineParam, 0, len(triggerFuncStaticParams)+2)
 	triggerFuncParams = append(triggerFuncParams, routineParam{name: triggerColNew, typ: tableTyp})
 	triggerFuncParams = append(triggerFuncParams, routineParam{name: triggerColOld, typ: tableTyp})
+	triggerFuncParams = append(triggerFuncParams, triggerFuncStaticParams...)
 	for i, param := range triggerFuncParams {
 		paramColName := funcParamColName(param.name, i)
 		col := b.synthesizeColumn(funcScope, paramColName, param.typ, nil /* expr */, nil /* scalar */)
@@ -230,14 +235,20 @@ func (b *Builder) buildFunctionForTrigger(
 	// We need to disable stable function folding because we want to catch the
 	// volatility of stable functions. If folded, we only get a scalar and lose
 	// the volatility.
-	stmt, err := parser.Parse(o.Body)
+	// Use FuncBodyOverride if set; this is provided during CREATE OR REPLACE
+	// FUNCTION to analyze the new function body in the trigger's table context.
+	body := o.Body
+	if ct.FuncBodyOverride != "" {
+		body = ct.FuncBodyOverride
+	}
+	stmt, err := parser.Parse(body)
 	if err != nil {
 		panic(err)
 	}
 	b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
 		plBuilder := newPLpgSQLBuilder(
-			b, ct.FuncName.String(), stmt.AST.Label, nil /* colRefs */, triggerFuncParams, tableTyp,
-			false /* isProcedure */, true /* buildSQL */, nil, /* outScope */
+			b, basePLOptions().WithIsTriggerFn(), ct.FuncName.String(), stmt.AST.Label,
+			nil /* colRefs */, triggerFuncParams, tableTyp, nil /* outScope */, 0, /* resultBufferID */
 		)
 		funcScope = plBuilder.buildRootBlock(stmt.AST, funcScope, triggerFuncParams)
 	})

@@ -11,9 +11,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -31,42 +32,42 @@ var uniqueRowIDExpr = &tree.FuncExpr{Func: tree.WrapFunction("unique_rowid")}
 // SerialUsesUnorderedRowID.
 var unorderedUniqueRowIDExpr = &tree.FuncExpr{Func: tree.WrapFunction("unordered_unique_rowid")}
 
-// realSequenceOpts (nil) is used when SessionNormalizationMode is
-// SerialUsesSQLSequences.
-var realSequenceOpts tree.SequenceOptions
-
-// virtualSequenceOpts is used when SessionNormalizationMode is
-// SerialUsesVirtualSequences.
-var virtualSequenceOpts = tree.SequenceOptions{
-	tree.SequenceOption{Name: tree.SeqOptVirtual},
-}
-
-// cachedSequencesCacheSize is the default cache size used when
-// SessionNormalizationMode is SerialUsesCachedSQLSequences or
-// SerialUsesCachedNodeSQLSequences.
-var cachedSequencesCacheSizeSetting = settings.RegisterIntSetting(
-	settings.ApplicationLevel,
-	"sql.defaults.serial_sequences_cache_size",
-	"the default cache size when the session's serial normalization mode is set to cached sequences"+
-		"A cache size of 1 means no caching. Any cache size less than 1 is invalid.",
-	256,
-	settings.PositiveInt,
-)
-
-// generateSequenceForSerial generates a new sequence
-// which will be used when creating a SERIAL column.
+// generateSequenceForSerial generates a new sequence which will be used when
+// creating a SERIAL column. When explicitSeqName is non-nil (PG18 SEQUENCE
+// NAME clause on a GENERATED AS IDENTITY column), that name is used verbatim
+// after qualifying against the table's schema/db, and a name collision is a
+// hard error rather than triggering numeric-suffix disambiguation.
 // This is a helper method for generateSerialInColumnDef.
 func (p *planner) generateSequenceForSerial(
-	ctx context.Context, d *tree.ColumnTableDef, tableName *tree.TableName,
+	ctx context.Context,
+	d *tree.ColumnTableDef,
+	tableName *tree.TableName,
+	explicitSeqName *tree.TableName,
 ) (*tree.TableName, *tree.FuncExpr, catalog.DatabaseDescriptor, catalog.SchemaDescriptor, error) {
 	log.VEventf(ctx, 2, "creating sequence for new column %q of %q", d, tableName)
 
 	// We want a sequence; for this we need to generate a new sequence name.
 	// The constraint on the name is that an object of this name must not exist already.
-	seqName := tree.NewTableNameWithSchema(
-		tableName.CatalogName,
-		tableName.SchemaName,
-		tree.Name(tableName.Table()+"_"+string(d.Name)+"_seq"))
+	var seqName *tree.TableName
+	if explicitSeqName != nil {
+		// Inherit any unspecified parts of the explicit name from the owning
+		// table's qualification, mirroring PG behavior.
+		catalog := explicitSeqName.CatalogName
+		if !explicitSeqName.ExplicitCatalog || catalog == "" {
+			catalog = tableName.CatalogName
+		}
+		schema := explicitSeqName.SchemaName
+		if !explicitSeqName.ExplicitSchema || schema == "" {
+			schema = tableName.SchemaName
+		}
+		seqName = tree.NewTableNameWithSchema(catalog, schema, explicitSeqName.ObjectName)
+	} else {
+		seqName = tree.NewTableNameWithSchema(
+			tableName.CatalogName,
+			tableName.SchemaName,
+			tree.Name(tableName.Table()+"_"+string(d.Name)+"_seq"),
+		)
+	}
 
 	// The first step in the search is to prepare the seqName to fill in
 	// the catalog/schema parent. This is what ResolveTargetObject does.
@@ -81,24 +82,37 @@ func (p *planner) generateSequenceForSerial(
 	}
 	seqName.ObjectNamePrefix = prefix
 
-	// Now skip over all names that are already taken.
-	nameBase := seqName.ObjectName
 	flags := tree.ObjectLookupFlags{
 		Required:          false,
 		RequireMutable:    false,
 		IncludeOffline:    true,
 		DesiredObjectKind: tree.AnyObject,
 	}
-	for i := 0; ; i++ {
-		if i > 0 {
-			seqName.ObjectName = tree.Name(fmt.Sprintf("%s%d", nameBase, i))
-		}
+	if explicitSeqName != nil {
+		// PG semantics: an explicitly named sequence must not collide with an
+		// existing object.
 		res, _, err := resolver.ResolveExistingObject(ctx, p, seqName.ToUnresolvedObjectName(), flags)
 		if err != nil {
 			return nil, nil, nil, nil, err
 		}
-		if res == nil {
-			break
+		if res != nil {
+			return nil, nil, nil, nil, pgerror.Newf(pgcode.DuplicateRelation,
+				"relation %q already exists", seqName.Object())
+		}
+	} else {
+		// Auto-generated names get a numeric suffix on collision.
+		nameBase := seqName.ObjectName
+		for i := 0; ; i++ {
+			if i > 0 {
+				seqName.ObjectName = tree.Name(fmt.Sprintf("%s%d", nameBase, i))
+			}
+			res, _, err := resolver.ResolveExistingObject(ctx, p, seqName.ToUnresolvedObjectName(), flags)
+			if err != nil {
+				return nil, nil, nil, nil, err
+			}
+			if res == nil {
+				break
+			}
 		}
 	}
 
@@ -110,13 +124,16 @@ func (p *planner) generateSequenceForSerial(
 	return seqName, defaultExpr, dbDesc, schemaDesc, nil
 }
 
-// generateSerialInColumnDef create a sequence for a new column.
+// generateSerialInColumnDef create a sequence for a new column. When
+// explicitSeqName is non-nil, the sequence is created with that name (PG18
+// SEQUENCE NAME clause); otherwise an auto-generated name is used.
 // This is a helper method for processGeneratedAsIdentityColumnDef and processSerialInColumnDef.
 func (p *planner) generateSerialInColumnDef(
 	ctx context.Context,
 	d *tree.ColumnTableDef,
 	tableName *tree.TableName,
 	serialNormalizationMode sessiondatapb.SerialNormalizationMode,
+	explicitSeqName *tree.TableName,
 ) (
 	*tree.ColumnTableDef,
 	*catalog.ResolvedObjectPrefix,
@@ -195,46 +212,15 @@ func (p *planner) generateSerialInColumnDef(
 
 	log.VEventf(ctx, 2, "creating sequence for new column %q of %q", d, tableName)
 
-	seqName, defaultExpr, dbDesc, schemaDesc, err := p.generateSequenceForSerial(ctx, d, tableName)
+	seqName, defaultExpr, dbDesc, schemaDesc, err := p.generateSequenceForSerial(ctx, d, tableName, explicitSeqName)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
 
 	seqType := ""
-	seqOpts := realSequenceOpts
-	if serialNormalizationMode == sessiondatapb.SerialUsesVirtualSequences {
-		seqType = "virtual "
-		seqOpts = virtualSequenceOpts
-	} else if serialNormalizationMode == sessiondatapb.SerialUsesCachedSQLSequences {
-		seqType = "cached "
-
-		value := cachedSequencesCacheSizeSetting.Get(&p.ExecCfg().Settings.SV)
-		seqOpts = tree.SequenceOptions{
-			tree.SequenceOption{Name: tree.SeqOptCache, IntVal: &value},
-		}
-	} else if serialNormalizationMode == sessiondatapb.SerialUsesCachedNodeSQLSequences {
-		seqType = "cached node "
-
-		value := cachedSequencesCacheSizeSetting.Get(&p.ExecCfg().Settings.SV)
-		seqOpts = tree.SequenceOptions{
-			tree.SequenceOption{Name: tree.SeqOptCacheNode, IntVal: &value},
-		}
-	}
-
-	// Setup the type of the sequence based on the type observed within
-	// the column.
-	switch asIntType {
-	case types.Int2, types.Int4:
-		// Valid types, nothing to do.
-	case types.Int:
-		// Int is the default, so no cast necessary.
-		fallthrough
-	default:
-		// Types is not an integer so nothing to set.
-		asIntType = nil
-	}
-	if asIntType != nil {
-		seqOpts = append(seqOpts, tree.SequenceOption{Name: tree.SeqOptAs, AsIntegerType: asIntType})
+	seqOpts, err := catalog.SequenceOptionsFromNormalizationMode(serialNormalizationMode, p.ExecCfg().Settings, d, asIntType)
+	if err != nil {
+		return nil, nil, nil, nil, err
 	}
 
 	log.VEventf(ctx, 2, "new column %q of %q will have %s sequence name %q and default %q",
@@ -263,7 +249,11 @@ func (p *planner) processGeneratedAsIdentityColumnDef(
 	// To generate a general sequence is the same as generate a serial
 	// with serial_normalization being 'sql_sequence'.
 	curSerialNormalizationMode := sessiondatapb.SerialUsesSQLSequences
-	newSpecPtr, catalogPrefixPtr, seqName, seqOpts, err := p.generateSerialInColumnDef(ctx, d, tableName, curSerialNormalizationMode)
+	// Honor the PG18 SEQUENCE NAME clause if present, and strip it from the
+	// option list so it does not flow through to the sequence's stored options.
+	explicitSeqName, remaining := d.GeneratedIdentity.SeqOptions.ExtractIdentitySeqName()
+	d.GeneratedIdentity.SeqOptions = remaining
+	newSpecPtr, catalogPrefixPtr, seqName, seqOpts, err := p.generateSerialInColumnDef(ctx, d, tableName, curSerialNormalizationMode, explicitSeqName)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
@@ -288,7 +278,7 @@ func (p *planner) processSerialInColumnDef(
 	error,
 ) {
 	serialNormalizationMode := p.SessionData().SerialNormalizationMode
-	newSpecPtr, catalogPrefixPtr, seqName, seqOpts, err := p.generateSerialInColumnDef(ctx, d, tableName, serialNormalizationMode)
+	newSpecPtr, catalogPrefixPtr, seqName, seqOpts, err := p.generateSerialInColumnDef(ctx, d, tableName, serialNormalizationMode, nil /* explicitSeqName */)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}

@@ -60,6 +60,10 @@ func TestCommand(t *testing.T) {
 	c.Option("x")
 	require.True(t, c.HasFlag("c"))
 	require.Equal(t, "./cockroach workload run bank {pgurl:1} -c 10 -n 8 -x", c.String())
+
+	c = clone(baseCommand)
+	c.EnvVar("COCKROACH_RANDOM_SEED", 12345)
+	require.Equal(t, "COCKROACH_RANDOM_SEED=12345 ./cockroach workload run bank {pgurl:1}", c.String())
 }
 
 func clone(cmd *Command) *Command {
@@ -67,11 +71,16 @@ func clone(cmd *Command) *Command {
 	for k, v := range cmd.Flags {
 		flags[k] = v
 	}
+	envVars := make(map[string]*string)
+	for k, v := range cmd.EnvVars {
+		envVars[k] = v
+	}
 
 	return &Command{
 		Binary:    cmd.Binary,
 		Arguments: append([]string{}, cmd.Arguments...),
 		Flags:     flags,
 		UseEquals: cmd.UseEquals,
+		EnvVars:   envVars,
 	}
 }

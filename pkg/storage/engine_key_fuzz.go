@@ -54,8 +54,8 @@ func FuzzEngineKeysInvariants(f *testing.F) {
 	}
 
 	compareEngineKeys := func(t *testing.T, a, b []byte) int {
-		cmp := EngineKeyCompare(a, b)
-		eq := EngineKeyEqual(a, b)
+		cmp := EngineComparer.Compare(a, b)
+		eq := EngineComparer.Equal(a, b)
 		// Invariant: Iff EngineKeyCompare(a, b) == 0, EngineKeyEqual(a, b)
 		if eq != (cmp == 0) {
 			t.Errorf("EngineKeyEqual(0x%x, 0x%x) = %t; EngineKeyCompare(0x%x, 0x%x) = %d",

@@ -174,7 +174,7 @@ func TestGCTenantJobWaitsForProtectedTimestamps(t *testing.T) {
 	ptp := execCfg.ProtectedTimestampProvider
 	mkRecordAndProtect := func(ts hlc.Timestamp, target *ptpb.Target) *ptpb.Record {
 		recordID := uuid.MakeV4()
-		rec := jobsprotectedts.MakeRecord(recordID, int64(1), ts, nil, /* deprecatedSpans */
+		rec := jobsprotectedts.MakeRecord(recordID, int64(1), ts,
 			jobsprotectedts.Jobs, target)
 		require.NoError(t, insqlDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			return ptp.WithTxn(txn).Protect(ctx, rec)
@@ -200,8 +200,8 @@ func TestGCTenantJobWaitsForProtectedTimestamps(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			if job.Status() != jobs.StatusRunning {
-				return errors.Newf("expected job to have StatusRunning but found %+v", job.Status())
+			if job.State() != jobs.StateRunning {
+				return errors.Newf("expected job to have StatusRunning but found %+v", job.State())
 			}
 			return nil
 		})
@@ -213,7 +213,7 @@ func TestGCTenantJobWaitsForProtectedTimestamps(t *testing.T) {
 		require.NoError(t, sj.AwaitCompletion(ctx))
 		job, err := jobRegistry.LoadJob(ctx, sj.ID())
 		require.NoError(t, err)
-		require.Equal(t, jobs.StatusSucceeded, job.Status())
+		require.Equal(t, jobs.StateSucceeded, job.State())
 		err = insqlDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			_, err = sql.GetTenantRecordByID(ctx, txn, tenID, srv.ClusterSettings())
 			return err
@@ -306,7 +306,7 @@ func TestGCTenantJobWaitsForProtectedTimestamps(t *testing.T) {
 		clusterTarget := ptpb.MakeClusterTarget()
 		recordID := uuid.MakeV4()
 		rec := jobsprotectedts.MakeRecord(recordID, int64(1),
-			hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}, nil, /* deprecatedSpans */
+			hlc.Timestamp{WallTime: timeutil.Now().UnixNano()},
 			jobsprotectedts.Jobs, clusterTarget)
 		tenInsqlDB := ten.ExecutorConfig().(sql.ExecutorConfig).InternalDB
 		require.NoError(t, tenInsqlDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {

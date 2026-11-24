@@ -38,3 +38,37 @@ SELECT btrim()
 SELECT (btrim()) -- fully parenthesized
 SELECT btrim() -- literals removed
 SELECT _() -- identifiers removed
+
+parse
+SELECT * FROM f() AS foo(x INT, y INT);
+----
+SELECT * FROM ROWS FROM (f()) AS foo (x INT8, y INT8) -- normalized!
+SELECT (*) FROM ROWS FROM ((f())) AS foo (x INT8, y INT8) -- fully parenthesized
+SELECT * FROM ROWS FROM (f()) AS foo (x INT8, y INT8) -- literals removed
+SELECT * FROM ROWS FROM (_()) AS _ (_ INT8, _ INT8) -- identifiers removed
+
+parse
+SELECT * FROM f() AS foo(x, y);
+----
+SELECT * FROM ROWS FROM (f()) AS foo (x, y) -- normalized!
+SELECT (*) FROM ROWS FROM ((f())) AS foo (x, y) -- fully parenthesized
+SELECT * FROM ROWS FROM (f()) AS foo (x, y) -- literals removed
+SELECT * FROM ROWS FROM (_()) AS _ (_, _) -- identifiers removed
+
+error
+SELECT * FROM f() AS foo(x, y INT);
+----
+at or near "int": syntax error
+DETAIL: source SQL:
+SELECT * FROM f() AS foo(x, y INT)
+                              ^
+HINT: try \h <SOURCE>
+
+error
+SELECT * FROM f() AS foo(x INT, y);
+----
+at or near ")": syntax error
+DETAIL: source SQL:
+SELECT * FROM f() AS foo(x INT, y)
+                                 ^
+HINT: try \h <SOURCE>

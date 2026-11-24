@@ -5,7 +5,6 @@
 
 // {{/*
 //go:build execgen_template
-// +build execgen_template
 
 //
 // This file is the execgen template for selection_ops.eg.go. It's formatted in
@@ -25,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexeccmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
@@ -41,6 +41,7 @@ var (
 	_ duration.Duration
 	_ = coldataext.CompareDatum
 	_ json.JSON
+	_ *execinfrapb.ProducerMetadata
 )
 
 // {{/*
@@ -194,7 +195,7 @@ type _OP_CONST_NAME struct {
 	// {{end}}
 }
 
-func (p *_OP_CONST_NAME) Next() coldata.Batch {
+func (p *_OP_CONST_NAME) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	// {{if .Negatable}}
 	// {{/*
 	//     In order to inline the templated code of the LIKE overloads, we need
@@ -212,9 +213,12 @@ func (p *_OP_CONST_NAME) Next() coldata.Batch {
 	_caseInsensitive := p.caseInsensitive
 	// {{end}}
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec := batch.ColVec(p.colIdx)
@@ -229,7 +233,7 @@ func (p *_OP_CONST_NAME) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -241,11 +245,14 @@ type _OP_NAME struct {
 	selOpBase
 }
 
-func (p *_OP_NAME) Next() coldata.Batch {
+func (p *_OP_NAME) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		if batch.Length() == 0 {
-			return batch
+			return batch, nil
 		}
 
 		vec1 := batch.ColVec(p.col1Idx)
@@ -263,7 +270,7 @@ func (p *_OP_NAME) Next() coldata.Batch {
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }

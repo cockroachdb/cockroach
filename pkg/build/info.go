@@ -7,6 +7,7 @@ package build
 
 import (
 	"bytes"
+	"crypto/fips140"
 	_ "embed"
 	"fmt"
 	"runtime"
@@ -16,7 +17,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
+	"github.com/cockroachdb/redact"
+	"github.com/cockroachdb/version"
 )
 
 // TimeFormat is the reference format for build.Time. Make sure it stays in sync
@@ -34,8 +36,9 @@ var (
 	channel          string
 )
 
-// Distribution is changed by the CCL init-time hook in non-APL builds.
-var Distribution = "OSS"
+// Distribution is a historical artifact from when we had OSS and non-OSS (CCL)
+// builds.
+const Distribution = "CCL"
 
 var (
 	cgoCompiler       = cgoVersion()
@@ -75,7 +78,7 @@ func parseCockroachVersion(versionTxt string) *version.Version {
 	if err != nil {
 		panic(fmt.Errorf("could not parse version.txt: %w", err))
 	}
-	return v
+	return &v
 }
 
 func computeBinaryVersion(
@@ -106,24 +109,26 @@ func BinaryVersion() string {
 // It returns "vX.Y" for all release versions, and all prerelease versions >= "alpha.1".
 // X and Y are the major and minor, respectively, of the version specified in version.txt.
 // For all other prerelease versions, it returns "dev".
-// N.B. new public-facing doc URLs are expected to be up beginning with the "alpha.1" prerelease. Otherwise, "dev" will
+// N.B. new public-facing doc URLs are expected to be up once the "alpha.1" prerelease is shipped. Otherwise, "dev" will
 // cause the url mapper to redirect to the latest stable release.
 func VersionForURLs() string {
-	// Prerelease versions >= "alpha.1"
-	if parsedVersionTxt.PreRelease() >= "alpha.1" {
-		return fmt.Sprintf("v%d.%d", parsedVersionTxt.Major(), parsedVersionTxt.Minor())
+	if parsedVersionTxt.IsPrerelease() {
+		phaseAndOrdinal := parsedVersionTxt.Format("%P.%o")
+		// builds use 'dev' in their URLs until "alpha.1" is shipped
+		if phaseAndOrdinal <= "alpha.1" {
+			return "dev"
+		}
+	} else if parsedVersionTxt.IsCustomOrAdhocBuild() {
+		return "dev"
 	}
-	// Production release versions
-	if parsedVersionTxt.PreRelease() == "" {
-		return fmt.Sprintf("v%d.%d", parsedVersionTxt.Major(), parsedVersionTxt.Minor())
-	}
-	return "dev"
+	return parsedVersionTxt.Major().String()
 }
 
 // BranchReleaseSeries returns tha major and minor in version.txt, without
 // allowing for any overrides.
-func BranchReleaseSeries() (major, minor int) {
-	return parsedVersionTxt.Major(), parsedVersionTxt.Minor()
+func BranchReleaseSeries() (year, ordinal int) {
+	major := parsedVersionTxt.Major()
+	return major.Year, major.Ordinal
 }
 
 func init() {
@@ -135,13 +140,18 @@ func init() {
 }
 
 // Short returns a pretty printed build and version summary.
-func (b Info) Short() string {
+func (b Info) Short() redact.RedactableString {
 	plat := b.Platform
 	if b.CgoTargetTriple != "" {
 		plat = b.CgoTargetTriple
 	}
-	return fmt.Sprintf("CockroachDB %s %s (%s, built %s, %s)",
-		b.Distribution, b.Tag, plat, b.Time, b.GoVersion)
+	return redact.Sprintf("CockroachDB %s %s (%s, built %s, %s)",
+		redact.SafeString(b.Distribution),
+		redact.SafeString(b.Tag),
+		redact.SafeString(plat),
+		redact.SafeString(b.Time),
+		redact.SafeString(b.GoVersion),
+	)
 }
 
 // Long returns a pretty printed build summary
@@ -160,6 +170,10 @@ func (b Info) Long() string {
 	fmt.Fprintf(tw, "C Compiler:       %s\n", b.CgoCompiler)
 	fmt.Fprintf(tw, "Build Commit ID:  %s\n", b.Revision)
 	fmt.Fprintf(tw, "Build Type:       %s\n", b.Type)
+	if fips140.Enabled() {
+		fmt.Fprintf(tw, "FIPS enabled:     true\n")
+	}
+
 	fmt.Fprintf(tw, "Enabled Assertions: %t", b.EnabledAssertions) // No final newline: cobra prints one for us.
 	_ = tw.Flush()
 	return buf.String()
@@ -216,4 +230,9 @@ func TestingOverrideVersion(v string) func() {
 // MakeIssueURL produces a URL to a CockroachDB issue.
 func MakeIssueURL(issue int) string {
 	return fmt.Sprintf("https://go.crdb.dev/issue-v/%d/%s", issue, VersionForURLs())
+}
+
+// ParsedVersion returns the parsed version.txt.
+func ParsedVersion() *version.Version {
+	return parsedVersionTxt
 }

@@ -23,10 +23,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessionmutator"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
@@ -37,13 +39,11 @@ import (
 //
 // To intercept a statement the function should return a non-nil function for
 // `fn` as well as the appropriate sqlbase.ResultColumns describing the results
-// it will return (if any). If the hook plan requires sub-plans to be planned
-// and started by the usual machinery (e.g. to run a subquery), it must return
-// then as well. `fn` will be called in a goroutine during the `Start` phase of
-// plan execution.
+// it will return (if any). `fn` will be called in a goroutine during the
+// `Start` phase of plan execution.
 type planHookFn func(
 	context.Context, tree.Statement, PlanHookState,
-) (fn PlanHookRowFn, header colinfo.ResultColumns, subplans []planNode, avoidBuffering bool, err error)
+) (fn PlanHookRowFn, header colinfo.ResultColumns, avoidBuffering bool, err error)
 
 // PlanHookTypeCheckFn is a function that can intercept a statement being
 // prepared and type check its arguments. It exists in parallel to PlanHookFn.
@@ -64,11 +64,10 @@ type PlanHookTypeCheckFn func(
 // PlanHookRowFn describes the row-production for hook-created plans. The
 // channel argument is used to return results to the plan's runner. It's
 // a blocking channel, so implementors should be careful to only use blocking
-// sends on it when necessary. Any subplans returned by the hook when initially
-// called are passed back, planned and started, for the RowFn's use.
+// sends on it when necessary.
 //
 // TODO(dt): should this take runParams like a normal planNode.Next?
-type PlanHookRowFn func(context.Context, []planNode, chan<- tree.Datums) error
+type PlanHookRowFn func(context.Context, chan<- tree.Datums) error
 
 type planHook struct {
 	name      string
@@ -93,7 +92,7 @@ type PlanHookState interface {
 	SemaCtx() *tree.SemaContext
 	ExtendedEvalContext() *extendedEvalContext
 	SessionData() *sessiondata.SessionData
-	SessionDataMutatorIterator() *sessionDataMutatorIterator
+	SessionDataMutatorIterator() *sessionmutator.SessionDataMutatorIterator
 	ExecCfg() *ExecutorConfig
 	DistSQLPlanner() *DistSQLPlanner
 	LeaseMgr() *lease.Manager
@@ -110,6 +109,9 @@ type PlanHookState interface {
 		opts ...asof.EvalOption,
 	) (eval.AsOfSystemTime, error)
 	ResolveMutableTableDescriptor(ctx context.Context, tn *tree.TableName, required bool, requiredType tree.RequiredTableKind) (prefix catalog.ResolvedObjectPrefix, table *tabledesc.Mutable, err error)
+	ResolveExistingObjectEx(ctx context.Context, name *tree.UnresolvedObjectName, required bool, requiredType tree.RequiredTableKind) (res catalog.TableDescriptor, err error)
+	Descriptors() *descs.Collection
+	GetTableAndIndex(ctx context.Context, tableWithIndex *tree.TableIndexName, privilege privilege.Kind, skipCache bool) (prefix catalog.ResolvedObjectPrefix, mut *tabledesc.Mutable, idx catalog.Index, err error)
 	ShowCreate(
 		ctx context.Context, dbPrefix string, allHydratedDescs []catalog.Descriptor, desc catalog.TableDescriptor, displayOptions ShowCreateDisplayOptions,
 	) (string, error)
@@ -117,7 +119,7 @@ type PlanHookState interface {
 	SpanConfigReconciler() spanconfig.Reconciler
 	SpanStatsConsumer() keyvisualizer.SpanStatsConsumer
 	BufferClientNotice(ctx context.Context, notice pgnotice.Notice)
-	SendClientNotice(ctx context.Context, notice pgnotice.Notice) error
+	SendClientNotice(ctx context.Context, notice pgnotice.Notice, immediateFlush bool) error
 	Txn() *kv.Txn
 	LookupTenantInfo(ctx context.Context, tenantSpec *tree.TenantSpec, op string) (*mtinfopb.TenantInfo, error)
 	GetAvailableTenantID(ctx context.Context, name roachpb.TenantName) (roachpb.TenantID, error)
@@ -147,13 +149,13 @@ func ClearPlanHooks() {
 // provided function during Start and serves the results it returns over the
 // channel.
 type hookFnNode struct {
+	zeroInputPlanNode
 	optColumnsSlot
 
-	name     string
-	f        PlanHookRowFn
-	header   colinfo.ResultColumns
-	subplans []planNode
-	stopper  *stop.Stopper
+	name    string
+	f       PlanHookRowFn
+	header  colinfo.ResultColumns
+	stopper *stop.Stopper
 
 	run hookFnRun
 }
@@ -162,44 +164,46 @@ var _ planNode = &hookFnNode{}
 
 // hookFnRun contains the run-time state of hookFnNode during local execution.
 type hookFnRun struct {
+	// resultsCh is used to communicate both the progress of the function and
+	// its final result (this depends on the implementation). This channel is
+	// never closed.
 	resultsCh chan tree.Datums
-	errCh     chan error
+	// errCh will be closed when the worker goroutine exits.
+	errCh chan error
 
 	row tree.Datums
 }
 
 func newHookFnNode(
-	name string,
-	fn PlanHookRowFn,
-	header colinfo.ResultColumns,
-	subplans []planNode,
-	stopper *stop.Stopper,
+	name string, fn PlanHookRowFn, header colinfo.ResultColumns, stopper *stop.Stopper,
 ) *hookFnNode {
-	return &hookFnNode{name: name, f: fn, header: header, subplans: subplans, stopper: stopper}
+	return &hookFnNode{name: name, f: fn, header: header, stopper: stopper}
 }
 
 func (f *hookFnNode) startExec(params runParams) error {
 	f.run.resultsCh = make(chan tree.Datums)
 	f.run.errCh = make(chan error)
-	// Note that it's ok if the async task is not started due to server shutdown
-	// because the context should be canceled then too, which would unblock
-	// calls to Next if they happen.
-	return f.stopper.RunAsyncTaskEx(
+	if err := f.stopper.RunAsyncTaskEx(
 		params.ctx,
 		stop.TaskOpts{
 			TaskName: f.name,
 			SpanOpt:  stop.ChildSpan,
 		},
 		func(ctx context.Context) {
-			err := f.f(ctx, f.subplans, f.run.resultsCh)
+			defer close(f.run.errCh)
+			err := f.f(ctx, f.run.resultsCh)
 			select {
 			case <-ctx.Done():
 			case f.run.errCh <- err:
 			}
-			close(f.run.errCh)
-			close(f.run.resultsCh)
 		},
-	)
+	); err != nil {
+		// The async task is not started due to server shutdown, so we need to
+		// explicitly close the channel ourselves.
+		close(f.run.errCh)
+		return err
+	}
+	return nil
 }
 
 func (f *hookFnNode) Next(params runParams) (bool, error) {
@@ -216,7 +220,8 @@ func (f *hookFnNode) Next(params runParams) (bool, error) {
 func (f *hookFnNode) Values() tree.Datums { return f.run.row }
 
 func (f *hookFnNode) Close(ctx context.Context) {
-	for _, sub := range f.subplans {
-		sub.Close(ctx)
+	if f.run.errCh != nil {
+		// Block until the worker goroutine exits.
+		<-f.run.errCh
 	}
 }

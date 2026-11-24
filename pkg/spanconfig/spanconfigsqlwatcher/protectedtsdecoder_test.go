@@ -53,7 +53,7 @@ func TestProtectedTimestampDecoder(t *testing.T) {
 		{
 			name: "tenant",
 			target: ptpb.MakeTenantsTarget([]roachpb.TenantID{roachpb.MustMakeTenantID(1),
-				roachpb.MustMakeTenantID(2)}),
+				roachpb.MustMakeTenantID(3)}),
 		},
 		{
 			name:   "schema-object",
@@ -67,7 +67,6 @@ func TestProtectedTimestampDecoder(t *testing.T) {
 
 			rec := jobsprotectedts.MakeRecord(
 				uuid.MakeV4(), int64(jobID), ts,
-				nil, /* deprecatedSpans */
 				jobsprotectedts.Jobs, testCase.target,
 			)
 			require.NoError(t, pts.Protect(ctx, rec))

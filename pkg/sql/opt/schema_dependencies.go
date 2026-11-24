@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 )
 
+// SchemaFunctionDeps contains a set of depended-on routine desc IDs.
 type SchemaFunctionDeps = intsets.Fast
 
 type SchemaFunctionDep struct {

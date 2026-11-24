@@ -14,9 +14,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/errors"
 	"github.com/spf13/cobra"
 )
+
+const stmtDiagAppName = catconstants.InternalAppNamePrefix + " cockroach statement-diag"
 
 var stmtDiagCmd = &cobra.Command{
 	Use:   "statement-diag [command] [options]",
@@ -39,7 +42,7 @@ diagnostics activation requests.`,
 func runStmtDiagList(cmd *cobra.Command, args []string) (resErr error) {
 	const timeFmt = "2006-01-02 15:04:05 MST"
 	ctx := context.Background()
-	conn, err := makeSQLClient(ctx, "cockroach statement-diag", useSystemDb)
+	conn, err := makeSQLClient(ctx, stmtDiagAppName, useSystemDb)
 	if err != nil {
 		return err
 	}
@@ -128,7 +131,7 @@ func runStmtDiagDownload(cmd *cobra.Command, args []string) (resErr error) {
 		filename = fmt.Sprintf("stmt-bundle-%d.zip", id)
 	}
 	ctx := context.Background()
-	conn, err := makeSQLClient(ctx, "cockroach statement-diag", useSystemDb)
+	conn, err := makeSQLClient(ctx, stmtDiagAppName, useSystemDb)
 	if err != nil {
 		return err
 	}
@@ -153,7 +156,7 @@ command, or delete all bundles.`,
 
 func runStmtDiagDelete(cmd *cobra.Command, args []string) (resErr error) {
 	ctx := context.Background()
-	conn, err := makeSQLClient(ctx, "cockroach statement-diag", useSystemDb)
+	conn, err := makeSQLClient(ctx, stmtDiagAppName, useSystemDb)
 	if err != nil {
 		return err
 	}
@@ -188,7 +191,7 @@ list command, or cancel all outstanding requests.`,
 
 func runStmtDiagCancel(cmd *cobra.Command, args []string) (resErr error) {
 	ctx := context.Background()
-	conn, err := makeSQLClient(ctx, "cockroach statement-diag", useSystemDb)
+	conn, err := makeSQLClient(ctx, stmtDiagAppName, useSystemDb)
 	if err != nil {
 		return err
 	}

@@ -10,18 +10,21 @@ import {
   DatabasesPageV2,
   DatabaseDetailsPageV2,
   TableDetailsPageV2,
+  ScheduleDetails,
+  util,
 } from "@cockroachlabs/cluster-ui";
 import { ConfigProvider } from "antd";
 import { ConnectedRouter } from "connected-react-router";
 import { History } from "history";
-import "nvd3/build/nv.d3.min.css";
 import React from "react";
 import { Provider, ReactReduxContext } from "react-redux";
 import { Redirect, Route, Switch } from "react-router-dom";
 import "react-select/dist/react-select.css";
 import { Action, Store } from "redux";
+import { SWRConfig } from "swr";
 
-import { TimezoneProvider } from "src/contexts/timezoneProvider";
+import { clearTenantCookie } from "src/redux/cookies";
+import { getLoginPage } from "src/redux/login";
 import { AdminUIState } from "src/redux/state";
 import { createLoginRoute, createLogoutRoute } from "src/routes/login";
 import { RedirectToStatementDetails } from "src/routes/RedirectToStatementDetails";
@@ -30,7 +33,6 @@ import {
   aggregatedTsAttr,
   appAttr,
   dashboardNameAttr,
-  databaseAttr,
   databaseNameAttr,
   databaseIDAttr,
   executionIdAttr,
@@ -49,6 +51,7 @@ import {
   tableIdAttr,
 } from "src/util/constants";
 import NotFound from "src/views/app/components/errorMessage/notFound";
+import { AlertDataProvider } from "src/views/app/containers/alertDataProvider";
 import Layout from "src/views/app/containers/layout";
 import DataDistributionPage from "src/views/cluster/containers/dataDistribution";
 import { EventPage } from "src/views/cluster/containers/events";
@@ -59,6 +62,7 @@ import { IndexDetailsPage } from "src/views/databases/indexDetailsPage";
 import Raft from "src/views/devtools/containers/raft";
 import RaftMessages from "src/views/devtools/containers/raftMessages";
 import RaftRanges from "src/views/devtools/containers/raftRanges";
+import ClusterExplorerPage from "src/views/explorer/explorer";
 import HotRangesPage from "src/views/hotRanges/index";
 import JobDetails from "src/views/jobs/jobDetails";
 import JobsPage from "src/views/jobs/jobsPage";
@@ -67,6 +71,7 @@ import { ConnectedDecommissionedNodeHistory } from "src/views/reports";
 import Certificates from "src/views/reports/containers/certificates";
 import CustomChart from "src/views/reports/containers/customChart";
 import Debug from "src/views/reports/containers/debug";
+import DiagnosticsHistoryPage from "src/views/reports/containers/diagnosticsHistoryPage";
 import EnqueueRange from "src/views/reports/containers/enqueueRange";
 import HotRanges from "src/views/reports/containers/hotranges";
 import Localities from "src/views/reports/containers/localities";
@@ -76,21 +81,20 @@ import ProblemRanges from "src/views/reports/containers/problemRanges";
 import Range from "src/views/reports/containers/range";
 import ReduxDebug from "src/views/reports/containers/redux";
 import Settings from "src/views/reports/containers/settings";
-import StatementsDiagnosticsHistoryView from "src/views/reports/containers/statementDiagnosticsHistory";
 import Stores from "src/views/reports/containers/stores";
-import ScheduleDetails from "src/views/schedules/scheduleDetails";
 import SchedulesPage from "src/views/schedules/schedulesPage";
 import SessionDetails from "src/views/sessions/sessionDetails";
 import SQLActivityPage from "src/views/sqlActivity/sqlActivityPage";
 import StatementDetails from "src/views/statements/statementDetails";
 import { SnapshotRouter } from "src/views/tracez_v2/snapshotRoutes";
 import TransactionDetails from "src/views/transactions/transactionDetails";
-import "styl/app.styl";
+import "styl/app.scss";
 
 import InsightsOverviewPage from "./views/insights/insightsOverview";
 import StatementInsightDetailsPage from "./views/insights/statementInsightDetailsPage";
 import TransactionInsightDetailsPage from "./views/insights/transactionInsightDetailsPage";
 import { JwtAuthTokenPage } from "./views/jwt/jwtAuthToken";
+import MetricsWorkspace from "./views/reports/containers/metricsWorkspace/metricsWorkspace";
 import ActiveStatementDetails from "./views/statements/activeStatementDetailsConnected";
 import ActiveTransactionDetails from "./views/transactions/activeTransactionDetailsConnected";
 
@@ -112,15 +116,43 @@ export interface AppProps {
 export const App: React.FC<AppProps> = (props: AppProps) => {
   const { store, history } = props;
 
+  const swrConfig = {
+    errorRetryCount: 3,
+    onError: (error: Error) => {
+      if (util.isRequestError(error) && error.status === 401) {
+        // Avoid a redirect loop if a request from the login or JWT auth
+        // page itself returns 401.
+        const { pathname } = history.location;
+        if (pathname.startsWith("/login") || pathname.startsWith("/jwt")) {
+          return;
+        }
+        clearTenantCookie();
+        history.push(getLoginPage(history.location));
+      }
+    },
+    onErrorRetry: (
+      error: Error,
+      _key: string,
+      _config: unknown,
+      revalidate: (opts: { retryCount: number }) => void,
+      { retryCount }: { retryCount: number },
+    ) => {
+      if (util.isRequestError(error) && error.status === 403) return;
+      if (retryCount >= 3) return;
+      setTimeout(() => revalidate({ retryCount }), 5000 * (retryCount + 1));
+    },
+  };
+
   return (
     <Provider store={store} context={ReactReduxContext}>
-      <ConnectedRouter history={history} context={ReactReduxContext}>
-        <CockroachCloudContext.Provider value={false}>
-          <TimezoneProvider>
+      <SWRConfig value={swrConfig}>
+        <AlertDataProvider />
+        <ConnectedRouter history={history} context={ReactReduxContext}>
+          <CockroachCloudContext.Provider value={false}>
             {/* Apply CRL theme twice, with ConfigProvider instance from Db Console and
              imported instance from Cluster UI as it applies theme imported components only. */}
-            <ClusterUIConfigProvider theme={crlTheme} prefixCls={"crl-ant"}>
-              <ConfigProvider theme={crlTheme} prefixCls={"crl-ant"}>
+            <ClusterUIConfigProvider theme={crlTheme} prefixCls={"crdb-ant"}>
+              <ConfigProvider theme={crlTheme} prefixCls={"crdb-ant"}>
                 <Switch>
                   {/* login */}
                   {createLoginRoute()}
@@ -279,32 +311,12 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                         />
                         <Route
                           exact
-                          path={`/statement/:${implicitTxnAttr}/:${statementAttr}`}
+                          path={`/statement/:${statementAttr}`}
                           component={StatementDetails}
                         />
                         <Route
                           exact
-                          path={`/statements/:${appAttr}/:${statementAttr}`}
-                          render={RedirectToStatementDetails}
-                        />
-                        <Route
-                          exact
-                          path={`/statements/:${appAttr}/:${implicitTxnAttr}/:${statementAttr}`}
-                          render={RedirectToStatementDetails}
-                        />
-                        <Route
-                          exact
-                          path={`/statements/:${appAttr}/:${databaseAttr}/:${implicitTxnAttr}/:${statementAttr}`}
-                          render={RedirectToStatementDetails}
-                        />
-                        <Route
-                          exact
                           path={`/statement/:${implicitTxnAttr}/:${statementAttr}`}
-                          render={RedirectToStatementDetails}
-                        />
-                        <Route
-                          exact
-                          path={`/statement/:${databaseAttr}/:${implicitTxnAttr}/:${statementAttr}`}
                           render={RedirectToStatementDetails}
                         />
                         <Redirect
@@ -357,6 +369,13 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                           component={StatementInsightDetailsPage}
                         />
 
+                        {/* cluster explorer */}
+                        <Route
+                          exact
+                          path="/cluster-explorer"
+                          component={ClusterExplorerPage}
+                        />
+
                         {/* debug pages */}
                         <Route exact path="/debug" component={Debug} />
                         <Route
@@ -372,6 +391,11 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                           exact
                           path="/debug/chart"
                           component={CustomChart}
+                        />
+                        <Route
+                          exact
+                          path="/debug/metrics_workspace"
+                          component={MetricsWorkspace}
                         />
                         <Route
                           exact
@@ -468,16 +492,27 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                         />
                         <Route
                           exact
-                          path={`/reports/statements/diagnosticshistory`}
-                          component={StatementsDiagnosticsHistoryView}
+                          path={`/reports/diagnosticshistory`}
+                          component={DiagnosticsHistoryPage}
+                        />
+                        {/* Redirect old statement diagnostics route to new tabbed page */}
+                        <Redirect
+                          exact
+                          from={`/reports/statements/diagnosticshistory`}
+                          to={`/reports/diagnosticshistory?tab=Statements`}
                         />
                         {/* hot ranges */}
+                        <Route
+                          exact
+                          path={`/topranges`}
+                          component={HotRangesPage}
+                        />
+                        {/* old route redirects */}
                         <Route
                           exact
                           path={`/hotranges`}
                           component={HotRangesPage}
                         />
-                        {/* old route redirects */}
                         <Redirect
                           exact
                           from="/cluster"
@@ -517,9 +552,9 @@ export const App: React.FC<AppProps> = (props: AppProps) => {
                 </Switch>
               </ConfigProvider>
             </ClusterUIConfigProvider>
-          </TimezoneProvider>
-        </CockroachCloudContext.Provider>
-      </ConnectedRouter>
+          </CockroachCloudContext.Provider>
+        </ConnectedRouter>
+      </SWRConfig>
     </Provider>
   );
 };

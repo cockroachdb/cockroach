@@ -9,10 +9,12 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -25,30 +27,53 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 	"go.opentelemetry.io/otel/attribute"
 )
 
 const (
-	claimableStatusList = `'` + string(StatusRunning) + `', ` +
-		`'` + string(StatusPending) + `', ` +
-		`'` + string(StatusCancelRequested) + `', ` +
-		`'` + string(StatusPauseRequested) + `', ` +
-		`'` + string(StatusReverting) + `'`
+	claimableStateList = `'` + string(StateRunning) + `', ` +
+		`'` + string(StatePending) + `', ` +
+		`'` + string(StateCancelRequested) + `', ` +
+		`'` + string(StatePauseRequested) + `', ` +
+		`'` + string(StateReverting) + `'`
 
-	claimableStatusTupleString = `(` + claimableStatusList + `)`
+	terminalStateList = `'` + string(StateFailed) + `', ` +
+		`'` + string(StateCanceled) + `', ` +
+		`'` + string(StateSucceeded) + `'`
 
-	nonTerminalStatusList = claimableStatusList + `, ` +
-		`'` + string(StatusPaused) + `'`
+	claimableStateTupleString = `(` + claimableStateList + `)`
 
-	// NonTerminalStatusTupleString is a sql tuple corresponding to statuses of
+	nonTerminalStateList = claimableStateList + `, ` +
+		`'` + string(StatePaused) + `'`
+
+	// NonTerminalStateTupleString is a sql tuple corresponding to states of
 	// non-terminal jobs.
-	NonTerminalStatusTupleString = `(` + nonTerminalStatusList + `)`
+	NonTerminalStateTupleString = `(` + nonTerminalStateList + `)`
 
-	claimQuery = `
+	// GetClaimableJobsQuery is the first part of the new two-query claim approach
+	// that uses SELECT FOR UPDATE to prevent deadlock.
+	GetClaimableJobsQuery = `
+ SELECT id FROM system.jobs
+    WHERE ((claim_session_id IS NULL)
+      AND (status IN ` + claimableStateTupleString + `))
+ ORDER BY created DESC
+    LIMIT $1 FOR UPDATE`
+
+	// claimJobsQuery is the second part of the new two-query claim approach.
+	claimJobsQuery = `
+   UPDATE system.jobs
+      SET claim_session_id = $1, claim_instance_id = $2
+    WHERE id = ANY($3)`
+
+	// legacyClaimQuery is the old single-query approach that can deadlock
+	// when multiple nodes acquire locks across ranges in parallel.
+	legacyClaimQuery = `
    UPDATE system.jobs
       SET claim_session_id = $1, claim_instance_id = $2
     WHERE ((claim_session_id IS NULL)
-      AND (status IN ` + claimableStatusTupleString + `))
+      AND (status IN ` + claimableStateTupleString + `))
  ORDER BY created DESC
     LIMIT $3
 RETURNING id;`
@@ -63,29 +88,90 @@ func (r *Registry) maybeDumpTrace(resumerCtx context.Context, resumer Resumer, j
 		return
 	}
 
-	// Make a new ctx to use in the trace dumper. This is because the resumerCtx
-	// could have been canceled at this point.
-	dumpCtx, _ := r.makeCtx()
 	sp := tracing.SpanFromContext(resumerCtx)
-	if sp == nil || sp.IsNoop() {
+	if sp == nil {
 		// Should never be true since TraceableJobs force real tracing spans to be
 		// attached to the context.
 		return
 	}
 
 	resumerTraceFilename := fmt.Sprintf("%s/resumer-trace/%s",
-		r.ID().String(), timeutil.Now().Format("20060102_150405.00"))
+		timeutil.Now().Format("20060102_150405.00"), r.ID().String())
 	td := jobspb.TraceData{CollectedSpans: sp.GetConfiguredRecording()}
+
+	// Make a new ctx to use in the trace dumper. This is because the resumerCtx
+	// could have been canceled at this point.
+	dumpCtx, cancel := r.makeCtx()
+	r.stopper.OnQuiesce(cancel)
 	if err := r.db.Txn(dumpCtx, func(ctx context.Context, txn isql.Txn) error {
-		return WriteProtobinExecutionDetailFile(dumpCtx, resumerTraceFilename, &td, txn, jobID)
+		return WriteProtobinExecutionDetailFile(ctx, resumerTraceFilename, &td, txn, jobID)
 	}); err != nil {
-		log.Warningf(dumpCtx, "failed to write trace on resumer trace file: %v", err)
+		log.Dev.Warningf(dumpCtx, "failed to write trace on resumer trace file: %v", err)
 	}
 }
 
 // claimJobs places a claim with the given SessionID to job rows that are
 // available.
 func (r *Registry) claimJobs(ctx context.Context, s sqlliveness.Session) error {
+
+	timeout := claimQueryTimeout.Get(&r.settings.SV)
+	ctx, cancel := context.WithDeadlineCause(ctx, timeutil.Now().Add(timeout), errors.New("claim jobs transaction took too long"))
+	defer cancel()
+
+	useSelectForUpdate := UseSelectForUpdate.Get(&r.settings.SV)
+	if !useSelectForUpdate {
+		return r.claimJobsLegacy(ctx, s)
+	}
+
+	return r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) (retErr error) {
+		// Run the claim transaction at low priority to ensure that it does not
+		// contend with foreground reads.
+		if err := txn.KV().SetUserPriority(roachpb.MinUserPriority); err != nil {
+			return errors.WithAssertionFailure(err)
+		}
+
+		it, err := r.db.Executor().QueryIteratorEx(ctx, "get-claimable-jobs", txn.KV(), sessiondata.NodeUserSessionDataOverride, GetClaimableJobsQuery, maxAdoptionsPerLoop.Get(&r.settings.SV))
+
+		if err != nil {
+			return errors.Wrap(err, "could not query jobs table")
+		}
+
+		defer func() { retErr = errors.CombineErrors(retErr, it.Close()) }()
+
+		var jobIDs []int
+		for {
+			ok, err := it.Next(ctx)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				break
+			}
+			row := it.Cur()
+			id := int(*row[0].(*tree.DInt))
+			jobIDs = append(jobIDs, id)
+		}
+
+		if len(jobIDs) == 0 {
+			if log.ExpensiveLogEnabled(ctx, 1) {
+				log.Dev.Infof(ctx, "claimed no jobs")
+			}
+			return nil
+		}
+		totalClaimed, err := txn.Exec(
+			ctx, "claim-jobs", txn.KV(), claimJobsQuery,
+			s.ID().UnsafeBytes(), r.ID(), jobIDs,
+		)
+		if err != nil {
+			return errors.Wrap(err, "could not claim jobs")
+		}
+		r.metrics.ClaimedJobs.Inc(int64(totalClaimed))
+		log.Dev.Infof(ctx, "claimed %d jobs", totalClaimed)
+		return nil
+	})
+}
+
+func (r *Registry) claimJobsLegacy(ctx context.Context, s sqlliveness.Session) error {
 	return r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		// Run the claim transaction at low priority to ensure that it does not
 		// contend with foreground reads.
@@ -93,30 +179,31 @@ func (r *Registry) claimJobs(ctx context.Context, s sqlliveness.Session) error {
 			return errors.WithAssertionFailure(err)
 		}
 		numRows, err := txn.Exec(
-			ctx, "claim-jobs", txn.KV(), claimQuery,
-			s.ID().UnsafeBytes(), r.ID(), maxAdoptionsPerLoop)
+			ctx, "claim-jobs", txn.KV(), legacyClaimQuery,
+			s.ID().UnsafeBytes(), r.ID(), maxAdoptionsPerLoop.Get(&r.settings.SV),
+		)
 		if err != nil {
 			return errors.Wrap(err, "could not query jobs table")
 		}
 		r.metrics.ClaimedJobs.Inc(int64(numRows))
 		if log.ExpensiveLogEnabled(ctx, 1) || numRows > 0 {
-			log.Infof(ctx, "claimed %d jobs", numRows)
+			log.Dev.Infof(ctx, "claimed %d jobs", numRows)
 		}
 		return nil
 	})
 }
 
 const (
-	// processQueryStatusTupleString includes the states of a job in which a
+	// processQueryStateTupleString includes the states of a job in which a
 	// job can be claimed and resumed.
-	processQueryStatusTupleString = `(` +
-		`'` + string(StatusRunning) + `', ` +
-		`'` + string(StatusReverting) + `'` +
+	processQueryStateTupleString = `(` +
+		`'` + string(StateRunning) + `', ` +
+		`'` + string(StateReverting) + `'` +
 		`)`
 
 	// processQuery select IDs of the jobs that can be processed among the claimed jobs.
 	processQuery = `SELECT id FROM system.jobs ` +
-		` WHERE status IN ` + processQueryStatusTupleString +
+		` WHERE status IN ` + processQueryStateTupleString +
 		` AND (claim_session_id = $1 AND claim_instance_id = $2)`
 
 	// resumeQuery retrieves the job record for a job we intend to resume.
@@ -126,7 +213,7 @@ const (
 )
 
 // processClaimedJobs processes all jobs currently claimed by the registry.
-func (r *Registry) processClaimedJobs(ctx context.Context, s sqlliveness.Session) error {
+func (r *Registry) processClaimedJobs(ctx context.Context, s sqlliveness.Session) (retErr error) {
 	it, err := r.db.Executor().QueryIteratorEx(
 		ctx, "select-running/get-claimed-jobs", nil,
 		sessiondata.NodeUserSessionDataOverride, processQuery, s.ID().UnsafeBytes(), r.ID(),
@@ -134,6 +221,8 @@ func (r *Registry) processClaimedJobs(ctx context.Context, s sqlliveness.Session
 	if err != nil {
 		return errors.Wrapf(err, "could not query for claimed jobs")
 	}
+
+	defer func() { retErr = errors.CombineErrors(retErr, it.Close()) }()
 
 	// This map will eventually contain the job ids that must be resumed.
 	claimedToResume := make(map[jobspb.JobID]struct{})
@@ -143,6 +232,10 @@ func (r *Registry) processClaimedJobs(ctx context.Context, s sqlliveness.Session
 	for ok, err = it.Next(ctx); ok; ok, err = it.Next(ctx) {
 		row := it.Cur()
 		id := jobspb.JobID(*row[0].(*tree.DInt))
+		if _, skip := testingIgnoreIDs[id]; skip {
+			log.Dev.Warningf(ctx, "skipping execution of job %d as it is ignored by testing knob", id)
+			continue
+		}
 		claimedToResume[id] = struct{}{}
 	}
 	if err != nil {
@@ -151,6 +244,16 @@ func (r *Registry) processClaimedJobs(ctx context.Context, s sqlliveness.Session
 	r.filterAlreadyRunningAndCancelFromPreviousSessions(ctx, s, claimedToResume)
 	r.resumeClaimedJobs(ctx, s, claimedToResume)
 	return nil
+}
+
+var testingIgnoreIDs map[jobspb.JobID]struct{}
+
+// TestingSetIDsToIgnore is a test-only knob to set a list of job IDs that will
+// not be executed even after being claimed.
+func TestingSetIDsToIgnore(ignore map[jobspb.JobID]struct{}) func() {
+	orig := testingIgnoreIDs
+	testingIgnoreIDs = ignore
+	return func() { testingIgnoreIDs = orig }
 }
 
 // resumeClaimedJobs invokes r.resumeJob for each job in claimedToResume. It
@@ -168,7 +271,7 @@ func (r *Registry) resumeClaimedJobs(
 		go func(id jobspb.JobID) {
 			defer done()
 			if err := r.resumeJob(ctx, id, s); err != nil && ctx.Err() == nil {
-				log.Errorf(ctx, "could not run claimed job %d: %v", id, err)
+				log.Dev.Errorf(ctx, "could not run claimed job %d: %v", id, err)
 			}
 		}(id)
 	}
@@ -187,7 +290,7 @@ func (r *Registry) filterAlreadyRunningAndCancelFromPreviousSessions(
 	// Process all current adopted jobs in our in-memory jobs map.
 	for id, aj := range r.mu.adoptedJobs {
 		if aj.session.ID() != s.ID() {
-			log.Warningf(ctx, "job %d: running without having a live claim; canceling", id)
+			log.Dev.Warningf(ctx, "job %d: running without having a live claim; canceling", id)
 			aj.cancel()
 			delete(r.mu.adoptedJobs, id)
 		} else {
@@ -204,7 +307,8 @@ func (r *Registry) filterAlreadyRunningAndCancelFromPreviousSessions(
 func (r *Registry) resumeJob(
 	ctx context.Context, jobID jobspb.JobID, s sqlliveness.Session,
 ) (retErr error) {
-	log.Infof(ctx, "job %d: resuming execution", jobID)
+	ctx = logtags.AddTag(ctx, "job", jobID)
+	log.Dev.Infof(ctx, "job %d: resuming execution", jobID)
 
 	job, err := r.loadJobForResume(ctx, jobID, s)
 	if err != nil {
@@ -222,6 +326,7 @@ func (r *Registry) resumeJob(
 		return err
 	}
 	resumeCtx, cancel := r.makeCtx()
+	resumeCtx = logtags.AddTag(resumeCtx, "job", jobID)
 
 	// If the job's type was registered to disable tenant cost control, then
 	// exclude the job's costs from tenant accounting.
@@ -236,13 +341,13 @@ func (r *Registry) resumeJob(
 	}
 
 	r.metrics.ResumedJobs.Inc(1)
-	if err := r.stopper.RunAsyncTask(resumeCtx, job.taskName(), func(ctx context.Context) {
+	if err := r.stopper.RunAsyncTask(resumeCtx, string(job.taskName()), func(ctx context.Context) {
 		// Wait for the job to finish. No need to print the error because if there
-		// was one it's been set in the job status already.
+		// was one it's been set in the job state already.
 		var cleanup func()
 		ctx, cleanup = r.stopper.WithCancelOnQuiesce(ctx)
 		defer cleanup()
-		_ = r.runJob(ctx, resumer, job, job.Status(), job.taskName())
+		_ = r.runJob(ctx, resumer, job, job.State(), job.taskName())
 	}); err != nil {
 		r.unregister(jobID)
 		// Also avoid leaking a goroutine in this case.
@@ -270,14 +375,14 @@ func (r *Registry) loadJobForResume(
 		return nil, errors.Errorf("job %d: claim with session id %s does not exist", jobID, s.ID())
 	}
 
-	status := Status(*row[0].(*tree.DString))
-	if status == StatusSucceeded {
+	state := State(*row[0].(*tree.DString))
+	if state == StateSucceeded {
 		// A concurrent registry could have already executed the job.
 		return nil, nil
 	}
-	if status != StatusRunning && status != StatusReverting {
+	if state != StateRunning && state != StateReverting {
 		// A concurrent registry could have requested the job to be paused or canceled.
-		return nil, errors.Errorf("job %d: status changed to %s which is not resumable", jobID, status)
+		return nil, errors.Errorf("job %d: state changed to %s which is not resumable", jobID, state)
 	}
 
 	if isAlive := *row[1].(*tree.DBool); !isAlive {
@@ -294,7 +399,7 @@ func (r *Registry) loadJobForResume(
 	progress := &jobspb.Progress{}
 	if err := r.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		infoStorage := job.InfoStorage(txn)
-		payloadBytes, exists, err := infoStorage.GetLegacyPayload(ctx)
+		payloadBytes, exists, err := infoStorage.GetLegacyPayload(ctx, "loadForResume")
 		if err != nil {
 			return err
 		}
@@ -305,7 +410,7 @@ func (r *Registry) loadJobForResume(
 			return err
 		}
 
-		progressBytes, exists, err := infoStorage.GetLegacyProgress(ctx)
+		progressBytes, exists, err := infoStorage.GetLegacyProgress(ctx, "loadForResume")
 		if err != nil {
 			return err
 		}
@@ -319,7 +424,7 @@ func (r *Registry) loadJobForResume(
 
 	job.mu.payload = *payload
 	job.mu.progress = *progress
-	job.mu.status = status
+	job.mu.state = state
 	job.session = s
 	return job, nil
 }
@@ -350,7 +455,7 @@ func (r *Registry) addAdoptedJob(
 }
 
 func (r *Registry) runJob(
-	ctx context.Context, resumer Resumer, job *Job, status Status, taskName string,
+	ctx context.Context, resumer Resumer, job *Job, state State, taskName redact.SafeString,
 ) error {
 	if r.IsDraining() {
 		return errors.Newf("refusing to start %q; job registry is draining", taskName)
@@ -368,6 +473,12 @@ func (r *Registry) runJob(
 
 	// Make sure that we remove the job from the running set when this returns.
 	defer r.unregister(job.ID())
+
+	// Inject the job's ID into the context so that any kv.DB or
+	// InternalDB transaction created within the job automatically
+	// carries the workload ID in KV BatchRequest headers for ASH
+	// attribution.
+	ctx = kv.ContextWithWorkloadInfo(ctx, uint64(job.ID()), workloadid.WorkloadTypeJob)
 
 	// Bookkeeping.
 	execCtx, cleanup := r.execCtx(ctx, "resume-"+taskName, username)
@@ -389,22 +500,36 @@ func (r *Registry) runJob(
 	defer span.Finish()
 
 	// Run the actual job.
-	err := r.stepThroughStateMachine(ctx, execCtx, resumer, job, status, finalResumeError)
+	err := r.stepThroughStateMachine(ctx, execCtx, resumer, job, state, finalResumeError)
 	// If the context has been canceled, disregard errors for the sake of logging
 	// as presumably they are due to the context cancellation which commonly
 	// happens during shutdown.
 	if err != nil && ctx.Err() == nil {
-		log.Errorf(ctx, "job %d: adoption completed with error %v", job.ID(), err)
+		log.Dev.Errorf(ctx, "job %d: adoption completed with error %v", job.ID(), err)
 	}
 
 	r.maybeRecordExecutionFailure(ctx, err, job)
-	// NB: After this point, the job may no longer have the claim
-	// and further updates to the job record from this node may
-	// fail.
-	r.maybeClearLease(job, err)
 	r.maybeDumpTrace(ctx, resumer, job.ID())
+
 	if r.knobs.AfterJobStateMachine != nil {
 		r.knobs.AfterJobStateMachine(job.ID())
+	}
+
+	// NB: After this point, the job may no longer have the claim and further
+	// updates to the job record from this node may fail.
+	if err != nil {
+		// We delay clearing the lease to avoid situations where a job fast-fails
+		// and is immediately re-adopted by another node, causing a hot loop of job
+		// status changes. See #158597 for more info.
+		//
+		// NB: The node that holds this claim also will not rerun the job until
+		// this interval elapses and the job is removed from the list of currently
+		// running jobs.
+		select {
+		case <-ctx.Done():
+		case <-time.After(r.GetLoopInterval(adoptIntervalSetting, r.knobs.IntervalOverrides.ClaimTTLOnFailure)):
+		}
+		r.maybeClearLease(job, err)
 	}
 	return err
 }
@@ -428,12 +553,14 @@ func (r *Registry) maybeClearLease(job *Job, jobErr error) {
 func (r *Registry) clearLeaseForJobID(jobID jobspb.JobID, ex isql.Executor, txn *kv.Txn) {
 	// We use the serverCtx here rather than the context from the
 	// caller since the caller's context may have been canceled.
-	r.withSession(r.serverCtx, func(ctx context.Context, s sqlliveness.Session) {
+	ctx, cancel := r.stopper.WithCancelOnQuiesce(r.serverCtx)
+	defer cancel()
+	r.withSession(ctx, func(ctx context.Context, s sqlliveness.Session) {
 		n, err := ex.ExecEx(ctx, "clear-job-claim", txn,
 			sessiondata.NodeUserSessionDataOverride,
 			clearClaimQuery, jobID, s.ID().UnsafeBytes(), r.ID())
 		if err != nil {
-			log.Warningf(ctx, "could not clear job claim: %s", err.Error())
+			log.Dev.Warningf(ctx, "could not clear job claim: %s", err.Error())
 			return
 		}
 		log.VEventf(ctx, 2, "cleared leases for %d jobs", n)
@@ -444,13 +571,13 @@ const pauseAndCancelUpdate = `
    UPDATE system.jobs
       SET status =
           CASE
-						 WHEN status = '` + string(StatusPauseRequested) + `' THEN '` + string(StatusPaused) + `'
-						 WHEN status = '` + string(StatusCancelRequested) + `' THEN '` + string(StatusReverting) + `'
+						 WHEN status = '` + string(StatePauseRequested) + `' THEN '` + string(StatePaused) + `'
+						 WHEN status = '` + string(StateCancelRequested) + `' THEN '` + string(StateReverting) + `'
 						 ELSE status
           END,
 					num_runs = 0,
 					last_run = NULL
-    WHERE (status IN ('` + string(StatusPauseRequested) + `', '` + string(StatusCancelRequested) + `'))
+    WHERE (status IN ('` + string(StatePauseRequested) + `', '` + string(StateCancelRequested) + `'))
       AND ((claim_session_id = $1) AND (claim_instance_id = $2))
 RETURNING id, status, job_type
 `
@@ -476,10 +603,15 @@ func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqllivenes
 		for _, row := range rows {
 			id := jobspb.JobID(*row[0].(*tree.DInt))
 			job := &Job{id: id, registry: r}
-			statusString := *row[1].(*tree.DString)
+			stateString := *row[1].(*tree.DString)
 			jobTypeString := *row[2].(*tree.DString)
-			switch Status(statusString) {
-			case StatusPaused:
+
+			if err := job.Messages().Record(ctx, txn, "state", string(stateString)); err != nil {
+				return err
+			}
+
+			switch State(stateString) {
+			case StatePaused:
 				if !r.cancelRegisteredJobContext(id) {
 					// If we didn't already have a running job for this lease,
 					// clear out the lease here since it won't be cleared be
@@ -487,17 +619,17 @@ func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqllivenes
 					r.clearLeaseForJobID(id, txn, txn.KV())
 				}
 				txn.KV().AddCommitTrigger(func(ctx context.Context) {
-					LogStatusChangeStructured(ctx,
+					LogStateChangeStructured(ctx,
 						id,
 						string(jobTypeString),
 						nil,
-						StatusPauseRequested,
-						StatusPaused)
+						StatePauseRequested,
+						StatePaused)
 				})
-				log.Infof(ctx, "job %d, session %s: paused", id, s.ID())
-			case StatusReverting:
-				if err := job.WithTxn(txn).Update(ctx, func(
-					txn isql.Txn, md JobMetadata, ju *JobUpdater,
+				log.Dev.Infof(ctx, "job %d, session %s: paused", id, s.ID())
+			case StateReverting:
+				if err := job.DeprecatedWithTxn(txn).Update(ctx, func(
+					txn isql.Txn, md DeprecatedJobMetadata, ju *DeprecatedJobUpdater,
 				) error {
 					if !r.cancelRegisteredJobContext(id) {
 						// If we didn't already have a running job for this
@@ -518,21 +650,21 @@ func (r *Registry) servePauseAndCancelRequests(ctx context.Context, s sqllivenes
 					md.Payload.FinalResumeError = &encodedErr
 					ju.UpdatePayload(md.Payload)
 					txn.KV().AddCommitTrigger(func(ctx context.Context) {
-						LogStatusChangeStructured(ctx,
+						LogStateChangeStructured(ctx,
 							id,
 							md.Payload.Type().String(),
 							md.Payload,
-							StatusCancelRequested,
-							StatusReverting)
+							StateCancelRequested,
+							StateReverting)
 					})
 					return nil
 				}); err != nil {
 					return errors.Wrapf(err, "job %d: tried to cancel but could not mark as reverting", id)
 				}
-				log.Infof(ctx, "job %d, session id: %s canceled: the job is now reverting",
+				log.Dev.Infof(ctx, "job %d, session id: %s canceled: the job is now reverting",
 					id, s.ID())
 			default:
-				return errors.AssertionFailedf("unexpected job status %s: %v", statusString, job)
+				return errors.AssertionFailedf("unexpected job state %s: %v", stateString, job)
 			}
 		}
 		return nil

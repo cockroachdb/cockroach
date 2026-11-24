@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/export"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
@@ -69,7 +70,7 @@ func emitHelper(
 		output.Push(nil /* row */, &execinfrapb.ProducerMetadata{
 			Err: errors.AssertionFailedf("not allowed to pause and switch to another portal"),
 		})
-		log.Fatalf(ctx, "not allowed to pause and switch to another portal")
+		log.Dev.Fatalf(ctx, "not allowed to pause and switch to another portal")
 		return false
 	case execinfra.DrainRequested:
 		log.VEventf(ctx, 1, "no more rows required. drain requested.")
@@ -81,7 +82,7 @@ func emitHelper(
 		output.ProducerDone()
 		return false
 	default:
-		log.Fatalf(ctx, "unexpected consumerStatus: %d", consumerStatus)
+		log.Dev.Fatalf(ctx, "unexpected consumerStatus: %d", consumerStatus)
 		return false
 	}
 }
@@ -99,6 +100,7 @@ func NewProcessor(
 	ctx context.Context,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
+	stageID int32,
 	core *execinfrapb.ProcessorCoreUnion,
 	post *execinfrapb.PostProcessSpec,
 	inputs []execinfra.RowSource,
@@ -120,7 +122,7 @@ func NewProcessor(
 		if err := checkNumIn(inputs, 0); err != nil {
 			return nil, err
 		}
-		return newTableReader(ctx, flowCtx, processorID, core.TableReader, post)
+		return newTableReader(ctx, flowCtx, processorID, stageID, core.TableReader, post)
 	}
 	if core.Filterer != nil {
 		if err := checkNumIn(inputs, 1); err != nil {
@@ -245,6 +247,15 @@ func NewProcessor(
 		}
 		return NewIngestStoppedProcessor(ctx, flowCtx, processorID, *core.IngestStopped, post)
 	}
+	if core.Revlog != nil {
+		if err := checkNumIn(inputs, 0); err != nil {
+			return nil, err
+		}
+		if NewRevlogProcessor == nil {
+			return nil, errors.New("Revlog processor unimplemented")
+		}
+		return NewRevlogProcessor(ctx, flowCtx, processorID, *core.Revlog, post)
+	}
 	if core.BackupData != nil {
 		if err := checkNumIn(inputs, 0); err != nil {
 			return nil, err
@@ -278,9 +289,9 @@ func NewProcessor(
 		}
 
 		if core.Exporter.Format.Format == roachpb.IOFileFormat_Parquet {
-			return NewParquetWriterProcessor(ctx, flowCtx, processorID, *core.Exporter, post, inputs[0])
+			return export.NewParquetWriterProcessor(ctx, flowCtx, processorID, *core.Exporter, post, inputs[0])
 		}
-		return NewCSVWriterProcessor(ctx, flowCtx, processorID, *core.Exporter, post, inputs[0])
+		return export.NewCSVWriterProcessor(ctx, flowCtx, processorID, *core.Exporter, post, inputs[0])
 	}
 
 	if core.BulkRowWriter != nil {
@@ -300,6 +311,20 @@ func NewProcessor(
 			return nil, err
 		}
 		return newWindower(ctx, flowCtx, processorID, core.Windower, inputs[0], post)
+	}
+	if core.VectorSearch != nil {
+		if err := checkNumIn(inputs, 0); err != nil {
+			return nil, err
+		}
+		return newVectorSearchProcessor(ctx, flowCtx, processorID, core.VectorSearch, post)
+	}
+	if core.VectorMutationSearch != nil {
+		if err := checkNumIn(inputs, 1); err != nil {
+			return nil, err
+		}
+		return newVectorMutationSearchProcessor(
+			ctx, flowCtx, processorID, core.VectorMutationSearch, inputs[0], post,
+		)
 	}
 	if core.LocalPlanNode != nil {
 		numInputs := int(core.LocalPlanNode.NumInputs)
@@ -364,11 +389,23 @@ func NewProcessor(
 		}
 		return NewTTLProcessor(ctx, flowCtx, processorID, *core.Ttl)
 	}
+	if core.Inspect != nil {
+		if err := checkNumIn(inputs, 0); err != nil {
+			return nil, err
+		}
+		return NewInspectProcessor(ctx, flowCtx, processorID, *core.Inspect)
+	}
 	if core.LogicalReplicationWriter != nil {
 		if err := checkNumIn(inputs, 0); err != nil {
 			return nil, err
 		}
 		return NewLogicalReplicationWriterProcessor(ctx, flowCtx, processorID, *core.LogicalReplicationWriter, post)
+	}
+	if core.LogicalReplicationOfflineScan != nil {
+		if err := checkNumIn(inputs, 0); err != nil {
+			return nil, err
+		}
+		return NewLogicalReplicationOfflineScanProcessor(ctx, flowCtx, processorID, *core.LogicalReplicationOfflineScan, post)
 	}
 	if core.HashGroupJoiner != nil {
 		if err := checkNumIn(inputs, 2); err != nil {
@@ -385,6 +422,90 @@ func NewProcessor(
 		}
 		return NewGenerativeSplitAndScatterProcessor(ctx, flowCtx, processorID, *core.GenerativeSplitAndScatter, post)
 	}
+	if core.CompactBackups != nil {
+		if err := checkNumIn(inputs, 0); err != nil {
+			return nil, err
+		}
+		if NewCompactBackupsProcessor == nil {
+			return nil, errors.New("CompactBackups processor unimplemented")
+		}
+		return NewCompactBackupsProcessor(ctx, flowCtx, processorID, *core.CompactBackups, post)
+	}
+	if core.BulkMerge != nil {
+		if err := checkNumIn(inputs, 1); err != nil {
+			return nil, err
+		}
+		if NewBulkMergeProcessor == nil {
+			return nil, errors.New("BulkMerge processor unimplemented")
+		}
+		return NewBulkMergeProcessor(ctx, flowCtx, processorID, *core.BulkMerge, post, inputs[0])
+	}
+	if core.MergeCoordinator != nil {
+		if err := checkNumIn(inputs, 1); err != nil {
+			return nil, err
+		}
+		if NewMergeCoordinatorProcessor == nil {
+			return nil, errors.New("MergeCoordinator processor unimplemented")
+		}
+		return NewMergeCoordinatorProcessor(
+			ctx, flowCtx, processorID, *core.MergeCoordinator, post, inputs[0],
+		)
+	}
+	if core.MergeLoopback != nil {
+		if err := checkNumIn(inputs, 0); err != nil {
+			return nil, err
+		}
+		if NewMergeLoopbackProcessor == nil {
+			return nil, errors.New("MergeLoopback processor unimplemented")
+		}
+		return NewMergeLoopbackProcessor(ctx, flowCtx, processorID, *core.MergeLoopback, post)
+	}
+	if core.IngestFile != nil {
+		if err := checkNumIn(inputs, 0); err != nil {
+			return nil, err
+		}
+		if NewIngestFileProcessor == nil {
+			return nil, errors.New("IngestFile processor unimplemented")
+		}
+		return NewIngestFileProcessor(ctx, flowCtx, processorID, *core.IngestFile)
+	}
+	if core.RevlogLocalMerge != nil {
+		if err := checkNumIn(inputs, 0); err != nil {
+			return nil, err
+		}
+		if NewRevlogLocalMergeProcessor == nil {
+			return nil, errors.New("RevlogLocalMerge processor unimplemented")
+		}
+		return NewRevlogLocalMergeProcessor(ctx, flowCtx, processorID, *core.RevlogLocalMerge, post)
+	}
+	if core.TxnLdrCoordinator != nil {
+		if err := checkNumIn(inputs, 0); err != nil {
+			return nil, err
+		}
+		if NewTxnLDRCoordinatorProcessor == nil {
+			return nil, errors.New("TxnLDRCoordinator processor unimplemented")
+		}
+		return NewTxnLDRCoordinatorProcessor(ctx, flowCtx, processorID, *core.TxnLdrCoordinator, post)
+	}
+	if core.TxnLdrApplier != nil {
+		if err := checkNumIn(inputs, 1); err != nil {
+			return nil, err
+		}
+		if NewTxnLDRApplierProcessor == nil {
+			return nil, errors.New("TxnLDRApplier processor unimplemented")
+		}
+		return NewTxnLDRApplierProcessor(ctx, flowCtx, processorID, *core.TxnLdrApplier, post, inputs[0])
+	}
+	if core.TxnLdrDepResolver != nil {
+		if err := checkNumIn(inputs, 1); err != nil {
+			return nil, err
+		}
+		if NewTxnLDRDepResolverProcessor == nil {
+			return nil, errors.New("TxnLDRDepResolver processor unimplemented")
+		}
+		return NewTxnLDRDepResolverProcessor(ctx, flowCtx, processorID, *core.TxnLdrDepResolver, post, inputs[0])
+	}
+
 	return nil, errors.Errorf("unsupported processor core %q", core)
 }
 
@@ -397,6 +518,36 @@ var NewCloudStorageTestProcessor func(context.Context, *execinfra.FlowCtx, int32
 // NewIngestStoppedProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
 var NewIngestStoppedProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.IngestStoppedSpec, *execinfrapb.PostProcessSpec) (execinfra.Processor, error)
 
+// NewRevlogProcessor is implemented in pkg/revlog/revlogjob and injected
+// here via runtime initialization.
+var NewRevlogProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.RevlogSpec, *execinfrapb.PostProcessSpec) (execinfra.Processor, error)
+
+var NewBulkMergeProcessor func(
+	context.Context,
+	*execinfra.FlowCtx,
+	int32,
+	execinfrapb.BulkMergeSpec,
+	*execinfrapb.PostProcessSpec,
+	execinfra.RowSource,
+) (execinfra.Processor, error)
+
+var NewMergeCoordinatorProcessor func(
+	context.Context,
+	*execinfra.FlowCtx,
+	int32,
+	execinfrapb.MergeCoordinatorSpec,
+	*execinfrapb.PostProcessSpec,
+	execinfra.RowSource,
+) (execinfra.Processor, error)
+
+var NewMergeLoopbackProcessor func(
+	context.Context,
+	*execinfra.FlowCtx,
+	int32,
+	execinfrapb.MergeLoopbackSpec,
+	*execinfrapb.PostProcessSpec,
+) (execinfra.Processor, error)
+
 // NewBackupDataProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
 var NewBackupDataProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.BackupDataSpec, *execinfrapb.PostProcessSpec) (execinfra.Processor, error)
 
@@ -405,12 +556,6 @@ var NewRestoreDataProcessor func(context.Context, *execinfra.FlowCtx, int32, exe
 
 // NewStreamIngestionDataProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
 var NewStreamIngestionDataProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.StreamIngestionDataSpec, *execinfrapb.PostProcessSpec) (execinfra.Processor, error)
-
-// NewCSVWriterProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
-var NewCSVWriterProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.ExportSpec, *execinfrapb.PostProcessSpec, execinfra.RowSource) (execinfra.Processor, error)
-
-// NewParquetWriterProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
-var NewParquetWriterProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.ExportSpec, *execinfrapb.PostProcessSpec, execinfra.RowSource) (execinfra.Processor, error)
 
 // NewChangeAggregatorProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
 var NewChangeAggregatorProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.ChangeAggregatorSpec, *execinfrapb.PostProcessSpec) (execinfra.Processor, error)
@@ -424,7 +569,46 @@ var NewStreamIngestionFrontierProcessor func(context.Context, *execinfra.FlowCtx
 // NewTTLProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
 var NewTTLProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.TTLSpec) (execinfra.Processor, error)
 
+var NewInspectProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.InspectSpec) (execinfra.Processor, error)
+
 // NewGenerativeSplitAndScatterProcessor is implemented in the non-free (CCL) codebase and then injected here via runtime initialization.
 var NewGenerativeSplitAndScatterProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.GenerativeSplitAndScatterSpec, *execinfrapb.PostProcessSpec) (execinfra.Processor, error)
 
 var NewLogicalReplicationWriterProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.LogicalReplicationWriterSpec, *execinfrapb.PostProcessSpec) (execinfra.Processor, error)
+
+var NewLogicalReplicationOfflineScanProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.LogicalReplicationOfflineScanSpec, *execinfrapb.PostProcessSpec) (execinfra.Processor, error)
+
+var NewCompactBackupsProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.CompactBackupsSpec, *execinfrapb.PostProcessSpec) (execinfra.Processor, error)
+
+var NewIngestFileProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.IngestFileSpec) (execinfra.Processor, error)
+
+var NewRevlogLocalMergeProcessor func(context.Context, *execinfra.FlowCtx, int32, execinfrapb.RevlogLocalMergeSpec, *execinfrapb.PostProcessSpec) (execinfra.Processor, error)
+
+// NewTxnLDRCoordinatorProcessor is injected at runtime by the crosscluster/logical package.
+var NewTxnLDRCoordinatorProcessor func(
+	context.Context,
+	*execinfra.FlowCtx,
+	int32,
+	execinfrapb.TxnLDRCoordinatorSpec,
+	*execinfrapb.PostProcessSpec,
+) (execinfra.Processor, error)
+
+// NewTxnLDRApplierProcessor is injected at runtime by the crosscluster/logical package.
+var NewTxnLDRApplierProcessor func(
+	context.Context,
+	*execinfra.FlowCtx,
+	int32,
+	execinfrapb.TxnLDRApplierSpec,
+	*execinfrapb.PostProcessSpec,
+	execinfra.RowSource,
+) (execinfra.Processor, error)
+
+// NewTxnLDRDepResolverProcessor is injected at runtime by the crosscluster/logical package.
+var NewTxnLDRDepResolverProcessor func(
+	context.Context,
+	*execinfra.FlowCtx,
+	int32,
+	execinfrapb.TxnLDRDepResolverSpec,
+	*execinfrapb.PostProcessSpec,
+	execinfra.RowSource,
+) (execinfra.Processor, error)

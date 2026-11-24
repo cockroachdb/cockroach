@@ -8,8 +8,22 @@ package opt
 import (
 	"reflect"
 	"runtime"
+	"strings"
 	"testing"
 )
+
+// TestOperatorCamelCase verifies that CamelCase names for all operators contain
+// no whitespace and none of the punctuation characters forbidden in plangram
+// production names.
+func TestOperatorCamelCase(t *testing.T) {
+	const forbidden = "\"'\\:=()|; \t\n\r"
+	for op := Operator(1); op < NumOperators; op++ {
+		name := op.CamelCase()
+		if strings.ContainsAny(name, forbidden) {
+			t.Errorf("CamelCase(%d) = %q contains forbidden character", op, name)
+		}
+	}
+}
 
 // TestAggregateProperties verifies that the various helper functions for
 // various properties of aggregations handle all aggregation operators.

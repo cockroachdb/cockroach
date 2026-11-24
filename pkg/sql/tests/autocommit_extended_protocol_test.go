@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 )
 
@@ -50,7 +50,7 @@ func TestInsertFastPathExtendedProtocol(t *testing.T) {
 		var msg, operation string
 		err = rows.Scan(&msg, &operation)
 		require.NoError(t, err)
-		if msg == "autocommit enabled" && operation == "count" {
+		if msg == "autocommit enabled" && operation == "insert fast path" {
 			fastPathEnabled = true
 		}
 	}
@@ -124,7 +124,7 @@ func TestInsertFastPathDisableDDLExtendedProtocol(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, c, "expected 1 row, got %d", c)
 	// Verify that a job was created for the create index.
-	err = db.QueryRow("SELECT count(*) FROM  [SHOW JOBS] WHERE job_type ='SCHEMA CHANGE' AND description LIKE 'CREATE INDEX idx%' LIMIT 1").Scan(&c)
+	err = db.QueryRow("SELECT count(*) FROM  [SHOW JOBS] WHERE job_type ='NEW SCHEMA CHANGE' AND description LIKE 'CREATE INDEX idx%' LIMIT 1").Scan(&c)
 	require.NoError(t, err)
 	require.Equal(t, 1, c, "expected 1 row, got %d", c)
 }

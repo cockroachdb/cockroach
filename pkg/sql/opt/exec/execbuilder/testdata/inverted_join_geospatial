@@ -15,7 +15,8 @@ CREATE TABLE rtable(
   geom geometry,
   rk2 string,
   PRIMARY KEY (rk1, rk2),
-  INVERTED INDEX geom_index(geom)
+  INVERTED INDEX geom_index(geom),
+  FAMILY (rk1, rk2, geom)
 )
 
 query T
@@ -23,7 +24,6 @@ EXPLAIN (DISTSQL)
 SELECT lk, rk1 FROM ltable JOIN rtable@geom_index ON ST_Intersects(ltable.geom1, rtable.geom)
 ----
 distribution: local
-vectorized: true
 ·
 • lookup join
 │ table: rtable@rtable_pkey
@@ -46,7 +46,6 @@ EXPLAIN SELECT lk, rk1, rk2, rtable.geom
 FROM ltable JOIN rtable@geom_index ON ST_Intersects(ltable.geom1, rtable.geom)
 ----
 distribution: local
-vectorized: true
 ·
 • lookup join
 │ table: rtable@rtable_pkey
@@ -67,7 +66,6 @@ EXPLAIN SELECT lk, rk1, rk2, rtable.geom
 FROM ltable JOIN rtable@geom_index ON ST_DWithin(ltable.geom1, rtable.geom, 5)
 ----
 distribution: local
-vectorized: true
 ·
 • lookup join
 │ table: rtable@rtable_pkey
@@ -113,6 +111,7 @@ vectorized: true
             │ equality: (rk1, rk2) = (rk1, rk2)
             │ equality cols are key
             │ pred: st_intersects(geom, geom1) OR st_dwithin(geom1, geom, 2.0)
+            │ parallel
             │
             └── • project
                 │ columns: (lk, geom1, rk1, rk2)
@@ -162,6 +161,7 @@ vectorized: true
             │ equality: (rk1, rk2) = (rk1, rk2)
             │ equality cols are key
             │ pred: st_intersects(geom1, geom) AND st_dwithin(geom, geom1, 2.0)
+            │ parallel
             │
             └── • project
                 │ columns: (lk, geom1, rk1, rk2)
@@ -203,6 +203,7 @@ vectorized: true
         │ equality: (rk1, rk2) = (rk1, rk2)
         │ equality cols are key
         │ pred: (st_intersects(geom1, geom) AND st_covers(geom2, geom)) AND (st_dfullywithin(geom, geom1, 100.0) OR st_intersects('0101000000000000000000F03F000000000000F03F', geom))
+        │ parallel
         │
         └── • project
             │ columns: (lk, geom1, geom2, rk1, rk2)
@@ -241,6 +242,7 @@ vectorized: true
         │ equality: (rk1, rk2) = (rk1, rk2)
         │ equality cols are key
         │ pred: st_intersects(geom2, geom)
+        │ parallel
         │
         └── • project
             │ columns: (lk, geom2, rk1, rk2, cont)
@@ -278,6 +280,7 @@ vectorized: true
         │ equality: (rk1, rk2) = (rk1, rk2)
         │ equality cols are key
         │ pred: st_intersects(geom1, geom)
+        │ parallel
         │
         └── • project
             │ columns: (lk, geom1, rk1, rk2, cont)
@@ -295,7 +298,7 @@ vectorized: true
                       spans: FULL SCAN
 
 query T
-EXPLAIN (VERBOSE)
+EXPLAIN ANALYZE
 WITH q AS (
   SELECT * FROM ltable WHERE lk > 2
 )
@@ -305,68 +308,75 @@ SELECT count(*), (SELECT count(*) FROM q) FROM (
   LEFT JOIN rtable ON ST_Intersects(q.geom1, rtable.geom)
 ) GROUP BY lk
 ----
-distribution: local
-vectorized: true
+planning time: 10µs
+execution time: 100µs
+distribution: <hidden>
+plan type: custom
+regions: <hidden>
 ·
 • root
-│ columns: (count, count)
 │
 ├── • render
-│   │ columns: (count, count)
-│   │ render count: @S2
-│   │ render count_rows: count_rows
+│   │ execution time: 0µs
+│   │ actual row count: 0
 │   │
 │   └── • group (hash)
-│       │ columns: (lk, count_rows)
-│       │ estimated row count: 333 (missing stats)
-│       │ aggregate 0: count_rows()
+│       │ sql nodes: <hidden>
+│       │ regions: <hidden>
+│       │ execution time: 0µs
+│       │ actual row count: 0
 │       │ group by: lk
 │       │
-│       └── • project
-│           │ columns: (lk)
+│       └── • lookup join (left outer) (streamer)
+│           │ sql nodes: <hidden>
+│           │ regions: <hidden>
+│           │ KV time: 0µs
+│           │ KV rows decoded: 0
+│           │ execution time: 0µs
+│           │ actual row count: 0
+│           │ table: rtable@rtable_pkey
+│           │ equality: (rk1, rk2) = (rk1, rk2)
+│           │ equality cols are key
+│           │ pred: st_intersects(geom1, geom)
 │           │
-│           └── • project
-│               │ columns: (lk, geom1, geom)
+│           └── • inverted join (left outer)
+│               │ sql nodes: <hidden>
+│               │ regions: <hidden>
+│               │ KV time: 0µs
+│               │ KV rows decoded: 0
+│               │ execution time: 0µs
+│               │ actual row count: 0
+│               │ table: rtable@geom_index
 │               │
-│               └── • lookup join (left outer)
-│                   │ columns: (lk, geom1, rk1, rk2, cont, geom)
-│                   │ estimated row count: 3,333 (missing stats)
-│                   │ table: rtable@rtable_pkey
-│                   │ equality: (rk1, rk2) = (rk1, rk2)
-│                   │ equality cols are key
-│                   │ pred: st_intersects(geom1, geom)
-│                   │
-│                   └── • project
-│                       │ columns: (lk, geom1, rk1, rk2, cont)
-│                       │
-│                       └── • inverted join (left outer)
-│                           │ columns: (lk, geom1, rk1, rk2, geom_inverted_key, cont)
-│                           │ estimated row count: 3,333 (missing stats)
-│                           │ table: rtable@geom_index
-│                           │ inverted expr: st_intersects(geom1, geom_inverted_key)
-│                           │
-│                           └── • project
-│                               │ columns: (lk, geom1)
-│                               │
-│                               └── • scan buffer
-│                                     columns: (lk, geom1, geom2)
-│                                     estimated row count: 333 (missing stats)
-│                                     label: buffer 1 (q)
+│               └── • scan buffer
+│                     sql nodes: <hidden>
+│                     regions: <hidden>
+│                     execution time: 0µs
+│                     actual row count: 0
+│                     label: buffer 1 (q)
 │
 ├── • subquery
 │   │ id: @S1
 │   │ original sql: SELECT * FROM ltable WHERE lk > 2
-│   │ exec mode: all rows
+│   │ exec mode: discard all rows
 │   │
 │   └── • buffer
-│       │ columns: (lk, geom1, geom2)
+│       │ sql nodes: <hidden>
+│       │ regions: <hidden>
+│       │ execution time: 0µs
+│       │ actual row count: 0
 │       │ label: buffer 1 (q)
 │       │
 │       └── • scan
-│             columns: (lk, geom1, geom2)
-│             estimated row count: 333 (missing stats)
+│             sql nodes: <hidden>
+│             kv nodes: <hidden>
+│             regions: <hidden>
+│             KV time: 0µs
+│             KV rows decoded: 0
+│             actual row count: 0
+│             missing stats
 │             table: ltable@ltable_pkey
-│             spans: /3-
+│             spans: [/3 - ]
 │
 └── • subquery
     │ id: @S2
@@ -374,17 +384,17 @@ vectorized: true
     │ exec mode: one row
     │
     └── • group (scalar)
-        │ columns: (count_rows)
-        │ estimated row count: 1 (missing stats)
-        │ aggregate 0: count_rows()
+        │ sql nodes: <hidden>
+        │ regions: <hidden>
+        │ execution time: 0µs
+        │ actual row count: 1
         │
-        └── • project
-            │ columns: ()
-            │
-            └── • scan buffer
-                  columns: (lk, geom1, geom2)
-                  estimated row count: 333 (missing stats)
-                  label: buffer 1 (q)
+        └── • scan buffer
+              sql nodes: <hidden>
+              regions: <hidden>
+              execution time: 0µs
+              actual row count: 0
+              label: buffer 1 (q)
 
 # Anti joins are also converted to paired joins by the optimizer.
 query T
@@ -407,6 +417,7 @@ vectorized: true
         │ equality: (rk1, rk2) = (rk1, rk2)
         │ equality cols are key
         │ pred: st_intersects(geom2, geom)
+        │ parallel
         │
         └── • project
             │ columns: (lk, geom2, rk1, rk2, cont)
@@ -446,6 +457,7 @@ vectorized: true
         │ equality: (rk1, rk2) = (rk1, rk2)
         │ equality cols are key
         │ pred: st_covers(geom1, geom)
+        │ parallel
         │
         └── • project
             │ columns: (lk, geom1, rk1, rk2, cont)
@@ -487,6 +499,7 @@ vectorized: true
         │ equality: (rk1, rk2) = (rk1, rk2)
         │ equality cols are key
         │ pred: geom1 ~ geom
+        │ parallel
         │
         └── • project
             │ columns: (lk, geom1, rk1, rk2)
@@ -523,6 +536,7 @@ vectorized: true
         │ equality: (rk1, rk2) = (rk1, rk2)
         │ equality cols are key
         │ pred: geom ~ geom1
+        │ parallel
         │
         └── • project
             │ columns: (lk, geom1, rk1, rk2)
@@ -559,6 +573,7 @@ vectorized: true
         │ equality: (rk1, rk2) = (rk1, rk2)
         │ equality cols are key
         │ pred: geom && geom1
+        │ parallel
         │
         └── • project
             │ columns: (lk, geom1, rk1, rk2)
@@ -589,7 +604,6 @@ query T
 EXPLAIN SELECT g1.k, g2.k FROM g@foo_inv AS g1, g@g_pkey AS g2 WHERE ST_Contains(g1.geom, g2.geom) ORDER BY g1.k, g2.k
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ order: +k,+k
@@ -613,7 +627,6 @@ query T
 EXPLAIN SELECT g1.k, g2.k FROM g@g_pkey AS g1, g@g_pkey AS g2 WHERE ST_Contains(g1.geom, g2.geom) ORDER BY g1.k, g2.k
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ order: +k,+k
@@ -640,7 +653,6 @@ WHERE ST_Contains(g1.geom, g2.geom)
 ORDER BY g1.k, g2.k
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ order: +k,+k
@@ -668,7 +680,6 @@ WHERE ST_Contains(g1.geom, g2.geom)
 ORDER BY g1.k, g2.k
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ order: +k,+k

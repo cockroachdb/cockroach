@@ -15,17 +15,20 @@ union
  ├── right columns: x:7 z:8
  ├── stats: [rows=2000, distinct(12,13)=2000, null(12,13)=0]
  ├── cost: 2207.76501
+ ├── cost-flags: unbounded-cardinality
  ├── key: (12,13)
  ├── scan a
  │    ├── columns: a.k:1!null a.i:2
  │    ├── stats: [rows=1000, distinct(1,2)=1000, null(1,2)=0]
  │    ├── cost: 1088.62
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── scan b
       ├── columns: x:7 z:8!null
       ├── stats: [rows=1000, distinct(7,8)=1000, null(7,8)=0]
-      └── cost: 1078.52
+      ├── cost: 1078.52
+      └── cost-flags: unbounded-cardinality
 
 opt
 SELECT k, i FROM a UNION ALL SELECT * FROM b
@@ -36,16 +39,19 @@ union-all
  ├── right columns: x:7 z:8
  ├── stats: [rows=2000]
  ├── cost: 2187.16
+ ├── cost-flags: unbounded-cardinality
  ├── scan a
  │    ├── columns: a.k:1!null a.i:2
  │    ├── stats: [rows=1000]
  │    ├── cost: 1088.62
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── scan b
       ├── columns: x:7 z:8!null
       ├── stats: [rows=1000]
-      └── cost: 1078.52
+      ├── cost: 1078.52
+      └── cost-flags: unbounded-cardinality
 
 opt
 SELECT k, i FROM a INTERSECT SELECT * FROM b
@@ -56,18 +62,21 @@ intersect-all
  ├── right columns: x:7 z:8
  ├── stats: [rows=1000]
  ├── cost: 2197.30625
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── scan a
  │    ├── columns: k:1!null i:2
  │    ├── stats: [rows=1000]
  │    ├── cost: 1088.62
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── scan b
       ├── columns: x:7 z:8!null
       ├── stats: [rows=1000]
-      └── cost: 1078.52
+      ├── cost: 1078.52
+      └── cost-flags: unbounded-cardinality
 
 opt
 SELECT k, i FROM a INTERSECT ALL SELECT * FROM b
@@ -78,18 +87,21 @@ intersect-all
  ├── right columns: x:7 z:8
  ├── stats: [rows=1000]
  ├── cost: 2197.30625
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── scan a
  │    ├── columns: k:1!null i:2
  │    ├── stats: [rows=1000]
  │    ├── cost: 1088.62
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── scan b
       ├── columns: x:7 z:8!null
       ├── stats: [rows=1000]
-      └── cost: 1078.52
+      ├── cost: 1078.52
+      └── cost-flags: unbounded-cardinality
 
 opt
 SELECT k, i FROM a EXCEPT SELECT * FROM b
@@ -100,18 +112,21 @@ except-all
  ├── right columns: x:7 z:8
  ├── stats: [rows=1000]
  ├── cost: 2197.30625
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── scan a
  │    ├── columns: k:1!null i:2
  │    ├── stats: [rows=1000]
  │    ├── cost: 1088.62
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── scan b
       ├── columns: x:7 z:8!null
       ├── stats: [rows=1000]
-      └── cost: 1078.52
+      ├── cost: 1078.52
+      └── cost-flags: unbounded-cardinality
 
 opt
 SELECT k, i FROM a EXCEPT ALL SELECT * FROM b
@@ -122,15 +137,18 @@ except-all
  ├── right columns: x:7 z:8
  ├── stats: [rows=1000]
  ├── cost: 2197.30625
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── scan a
  │    ├── columns: k:1!null i:2
  │    ├── stats: [rows=1000]
  │    ├── cost: 1088.62
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (1)
  │    └── fd: (1)-->(2)
  └── scan b
       ├── columns: x:7 z:8!null
       ├── stats: [rows=1000]
-      └── cost: 1078.52
+      ├── cost: 1078.52
+      └── cost-flags: unbounded-cardinality

@@ -22,6 +22,11 @@ func TestSupportedStatements(t *testing.T) {
 	var multiTagStmts = map[reflect.Type][]tree.Statement{
 		reflect.TypeOf((*tree.DropRoutine)(nil)):   {&tree.DropRoutine{}, &tree.DropRoutine{Procedure: true}},
 		reflect.TypeOf((*tree.CreateRoutine)(nil)): {&tree.CreateRoutine{}, &tree.CreateRoutine{IsProcedure: true}},
+		reflect.TypeOf((*tree.CommentOnRoutine)(nil)): {
+			&tree.CommentOnRoutine{},
+			&tree.CommentOnRoutine{RoutineType: tree.ProcedureRoutine},
+			&tree.CommentOnRoutine{RoutineType: tree.UDFRoutine | tree.ProcedureRoutine},
+		},
 	}
 
 	sv := &settings.Values{}

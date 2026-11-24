@@ -364,7 +364,7 @@ func RunTestsWithOrderedCols(
 		ctx := context.Background()
 		evalCtx := eval.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 		defer evalCtx.Stop(ctx)
-		log.Info(ctx, "allNullsInjection")
+		log.Dev.Info(ctx, "allNullsInjection")
 		// This test replaces all values in the input tuples with nulls and ensures
 		// that the output is different from the "original" output (i.e. from the
 		// one that is returned without nulls injection).
@@ -402,8 +402,8 @@ func RunTestsWithOrderedCols(
 		opWithNulls := opConstructor(true /* injectAllNulls */)
 		foundDifference := false
 		for {
-			originalBatch := originalOp.Next()
-			batchWithNulls := opWithNulls.Next()
+			originalBatch := colexecop.NextNoMeta(originalOp)
+			batchWithNulls := colexecop.NextNoMeta(opWithNulls)
 			if originalBatch.Length() != batchWithNulls.Length() {
 				foundDifference = true
 				break
@@ -431,21 +431,6 @@ func RunTestsWithOrderedCols(
 			require.True(t, foundDifference, "since there were "+
 				"non-nulls in the input tuples, we expect for all nulls injection to "+
 				"change the output")
-		}
-		closeIfCloser(t, originalOp)
-		closeIfCloser(t, opWithNulls)
-	}
-}
-
-// closeIfCloser is a testing utility function that checks whether op is a
-// colexecop.Closer and closes it if so.
-//
-// RunTests harness needs to do that once it is done with op. In non-test
-// setting, the closing happens at the end of the query execution.
-func closeIfCloser(t *testing.T, op colexecop.Operator) {
-	if c, ok := op.(colexecop.Closer); ok {
-		if err := c.Close(context.Background()); err != nil {
-			t.Fatal(err)
 		}
 	}
 }
@@ -537,17 +522,16 @@ func RunTestsWithoutAllNullsInjectionWithErrorHandler(
 			errorHandler(err)
 		}
 		if isOperatorChainResettable(op) {
-			log.Info(ctx, "reusing after reset")
+			log.Dev.Info(ctx, "reusing after reset")
 			out.Reset(ctx)
 			if err := verifyFn(out); err != nil {
 				errorHandler(err)
 			}
 		}
-		closeIfCloser(t, op)
 	})
 
 	if !skipVerifySelAndNullsResets {
-		log.Info(ctx, "verifySelAndNullResets")
+		log.Dev.Info(ctx, "verifySelAndNullResets")
 		// This test ensures that operators that "own their own batches", such as
 		// any operator that has to reshape its output, are not affected by
 		// downstream modification of batches.
@@ -571,8 +555,6 @@ func RunTestsWithoutAllNullsInjectionWithErrorHandler(
 			if err != nil {
 				t.Fatal(err)
 			}
-			// We might short-circuit, so defer the closing of the operator.
-			defer closeIfCloser(t, op)
 			op.Init(ctx)
 			// NOTE: this test makes sense only if the operator returns two
 			// non-zero length batches (if not, we short-circuit the test since
@@ -580,7 +562,7 @@ func RunTestsWithoutAllNullsInjectionWithErrorHandler(
 			// batch).
 			lessThanTwoBatches := true
 			if err = colexecerror.CatchVectorizedRuntimeError(func() {
-				b := op.Next()
+				b := colexecop.NextNoMeta(op)
 				if b.Length() == 0 {
 					return
 				}
@@ -599,7 +581,7 @@ func RunTestsWithoutAllNullsInjectionWithErrorHandler(
 						}
 					}
 				}
-				b = op.Next()
+				b = colexecop.NextNoMeta(op)
 				if b.Length() == 0 {
 					return
 				}
@@ -630,7 +612,7 @@ func RunTestsWithoutAllNullsInjectionWithErrorHandler(
 	}
 
 	if !skipRandomNullsInjection {
-		log.Info(ctx, "randomNullsInjection")
+		log.Dev.Info(ctx, "randomNullsInjection")
 		// This test randomly injects nulls in the input tuples and ensures that
 		// the operator doesn't panic.
 		inputSources := make([]colexecop.Operator, len(tups))
@@ -649,12 +631,11 @@ func RunTestsWithoutAllNullsInjectionWithErrorHandler(
 		}
 		if err = colexecerror.CatchVectorizedRuntimeError(func() {
 			op.Init(ctx)
-			for b := op.Next(); b.Length() > 0; b = op.Next() {
+			for b := colexecop.NextNoMeta(op); b.Length() > 0; b = colexecop.NextNoMeta(op) {
 			}
 		}); err != nil {
 			errorHandler(err)
 		}
-		closeIfCloser(t, op)
 	}
 }
 
@@ -691,7 +672,7 @@ func RunTestsWithFn(
 
 	for _, batchSize := range batchSizes {
 		for _, useSel := range []bool{false, true} {
-			log.Infof(context.Background(), "batchSize=%d/sel=%t", batchSize, useSel)
+			log.Dev.Infof(context.Background(), "batchSize=%d/sel=%t", batchSize, useSel)
 			inputSources := make([]colexecop.Operator, len(tups))
 			var inputTypes []*types.T
 			if useSel {
@@ -729,7 +710,7 @@ func RunTestsWithFixedSel(
 	test func(t *testing.T, inputs []colexecop.Operator),
 ) {
 	for _, batchSize := range []int{1, 2, 3, 16, 1024} {
-		log.Infof(context.Background(), "batchSize=%d/fixedSel", batchSize)
+		log.Dev.Infof(context.Background(), "batchSize=%d/fixedSel", batchSize)
 		inputSources := make([]colexecop.Operator, len(tups))
 		for i, tup := range tups {
 			inputSources[i] = NewOpFixedSelTestInput(allocator, sel, batchSize, tup, typs)
@@ -910,6 +891,16 @@ func newOpTestSelInput(
 	return ret
 }
 
+type AllocatorHolder interface {
+	SetAllocator(allocator *colmem.Allocator)
+}
+
+var _ AllocatorHolder = &opTestInput{}
+
+func (s *opTestInput) SetAllocator(allocator *colmem.Allocator) {
+	s.allocator = allocator
+}
+
 func (s *opTestInput) Init(context.Context) {
 	if s.typs == nil {
 		if len(s.tuples) == 0 {
@@ -925,9 +916,9 @@ func (s *opTestInput) Init(context.Context) {
 	}
 }
 
-func (s *opTestInput) Next() coldata.Batch {
+func (s *opTestInput) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	if len(s.tuples) == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	batchSize := s.batchSize
 	if len(s.tuples) < batchSize {
@@ -1079,7 +1070,7 @@ func (s *opTestInput) Next() coldata.Batch {
 	}
 
 	s.batch.SetLength(batchSize)
-	return s.batch
+	return s.batch, nil
 }
 
 func (s *opTestInput) Reset(context.Context) {
@@ -1161,7 +1152,7 @@ func (s *opFixedSelTestInput) Init(context.Context) {
 
 }
 
-func (s *opFixedSelTestInput) Next() coldata.Batch {
+func (s *opFixedSelTestInput) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	var batchSize int
 	if s.sel == nil {
 		batchSize = s.batchSize
@@ -1185,7 +1176,7 @@ func (s *opFixedSelTestInput) Next() coldata.Batch {
 		}
 	} else {
 		if s.idx == len(s.sel) {
-			return coldata.ZeroBatch
+			return coldata.ZeroBatch, nil
 		}
 		batchSize = s.batchSize
 		if len(s.sel)-s.idx < batchSize {
@@ -1197,7 +1188,7 @@ func (s *opFixedSelTestInput) Next() coldata.Batch {
 	}
 	s.batch.SetLength(batchSize)
 	s.idx += batchSize
-	return s.batch
+	return s.batch, nil
 }
 
 func (s *opFixedSelTestInput) Reset(context.Context) {
@@ -1245,7 +1236,10 @@ func GetTupleFromBatch(batch coldata.Batch, tupleIdx int) Tuple {
 			var val reflect.Value
 			family := vec.CanonicalTypeFamily()
 			if colBytes, ok := vec.Col().(*coldata.Bytes); ok {
-				val = reflect.ValueOf(append([]byte(nil), colBytes.Get(tupleIdx)...))
+				origVal := colBytes.Get(tupleIdx)
+				valBytes := make([]byte, len(origVal))
+				copy(valBytes, origVal)
+				val = reflect.ValueOf(valBytes)
 			} else if family == types.DecimalFamily {
 				colDec := vec.Decimal()
 				var newDec apd.Decimal
@@ -1277,7 +1271,7 @@ func GetTupleFromBatch(batch coldata.Batch, tupleIdx int) Tuple {
 func (r *OpTestOutput) next() Tuple {
 	if r.batch == nil || r.curIdx >= r.batch.Length() {
 		// Get a fresh batch.
-		r.batch = r.Input.Next()
+		r.batch = colexecop.NextNoMeta(r.Input)
 		if r.batch.Length() == 0 {
 			return nil
 		}
@@ -1359,12 +1353,12 @@ func (r *OpTestOutput) VerifyPartialOrder() error {
 				// Get actual batch.
 				if r.batch == nil || r.curIdx >= r.batch.Length() {
 					// Get a fresh batch.
-					r.batch = r.Input.Next()
+					r.batch = colexecop.NextNoMeta(r.Input)
 					if r.batch.Length() == 0 {
 						break
 					}
 					distincterInput.SetBatch(r.batch)
-					distincter.Next()
+					colexecop.NextNoMeta(distincter)
 					r.curIdx = 0
 				}
 				if distinctOutput[r.curIdx] && len(actual) > 0 {
@@ -1476,6 +1470,18 @@ func tupleEquals(ctx context.Context, expected Tuple, actual Tuple, evalCtx *eva
 				}
 				return false
 			}
+			// Special case for empty strings. types.Bytes is represented as
+			// []uint8.
+			if b1, ok := expected[i].([]uint8); ok {
+				if b2, ok2 := actual[i].([]uint8); ok2 {
+					if len(b1) == 0 && len(b2) == 0 {
+						// We might have a DeepEqual mismatch when one argument
+						// is nil and another is zero-length slice, yet they
+						// should be considered equal.
+						continue
+					}
+				}
+			}
 			// Default case.
 			if !reflect.DeepEqual(
 				reflect.ValueOf(actual[i]).Convert(reflect.TypeOf(expected[i])).Interface(),
@@ -1576,12 +1582,12 @@ func (f *FiniteBatchSource) Init(ctx context.Context) {
 }
 
 // Next implements the Operator interface.
-func (f *FiniteBatchSource) Next() coldata.Batch {
+func (f *FiniteBatchSource) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	if f.usableCount > 0 {
 		f.usableCount--
 		return f.repeatableBatch.Next()
 	}
-	return coldata.ZeroBatch
+	return coldata.ZeroBatch, nil
 }
 
 // Reset resets FiniteBatchSource to return the same batch usableCount number of
@@ -1621,10 +1627,10 @@ func (f *finiteChunksSource) Init(ctx context.Context) {
 	f.adjustment = make([]int64, f.matchLen)
 }
 
-func (f *finiteChunksSource) Next() coldata.Batch {
+func (f *finiteChunksSource) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	if f.usableCount > 0 {
 		f.usableCount--
-		batch := f.repeatableBatch.Next()
+		batch := colexecop.NextNoMeta(f.repeatableBatch)
 		if f.matchLen > 0 && f.adjustment[0] == 0 {
 			// We need to calculate the difference between the first and the last
 			// tuples in batch in first matchLen columns so that in the following
@@ -1649,9 +1655,9 @@ func (f *finiteChunksSource) Next() coldata.Batch {
 				f.adjustment[i] += lastValue - firstValue + 1
 			}
 		}
-		return batch
+		return batch, nil
 	}
-	return coldata.ZeroBatch
+	return coldata.ZeroBatch, nil
 }
 
 // chunkingBatchSource is a batch source that takes unlimited-size columns and
@@ -1690,9 +1696,9 @@ func (c *chunkingBatchSource) Init(context.Context) {
 	}
 }
 
-func (c *chunkingBatchSource) Next() coldata.Batch {
+func (c *chunkingBatchSource) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	if c.curIdx >= c.len {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	// Explicitly set to false since this could be modified by the downstream
 	// operators. This is sufficient because both the vectors and the nulls are
@@ -1712,7 +1718,7 @@ func (c *chunkingBatchSource) Next() coldata.Batch {
 	}
 	c.batch.SetLength(lastIdx - c.curIdx)
 	c.curIdx = lastIdx
-	return c.batch
+	return c.batch, nil
 }
 
 func (c *chunkingBatchSource) Reset(context.Context) {

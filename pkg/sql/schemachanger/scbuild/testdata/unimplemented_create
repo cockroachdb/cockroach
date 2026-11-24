@@ -29,3 +29,19 @@ CREATE TABLE t (i INT PRIMARY KEY) WITH (schema_locked = t);
 unimplemented
 CREATE TABLE t (i INT PRIMARY KEY, j INT, k INT, FAMILY "primary" (i, j), FAMILY "secondary" (k));
 ----
+
+unimplemented
+CREATE TABLE IF NOT EXISTS t (i INT PRIMARY KEY);
+----
+
+unimplemented
+CREATE TEMPORARY TABLE t (i INT PRIMARY KEY);
+----
+
+unimplemented
+CREATE UNLOGGED TABLE t (i INT PRIMARY KEY);
+----
+
+unimplemented
+CREATE TABLE t AS SELECT 1 AS i;
+----

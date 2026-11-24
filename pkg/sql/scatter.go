@@ -22,6 +22,7 @@ import (
 )
 
 type scatterNode struct {
+	zeroInputPlanNode
 	optColumnsSlot
 
 	run scatterRun
@@ -36,7 +37,7 @@ func (p *planner) Scatter(ctx context.Context, n *tree.Scatter) (planNode, error
 		return nil, err
 	}
 
-	_, tableDesc, index, err := p.getTableAndIndex(ctx, &n.TableOrIndex, privilege.INSERT, true /* skipCache */)
+	_, tableDesc, index, err := p.GetTableAndIndex(ctx, &n.TableOrIndex, privilege.INSERT, true /* skipCache */)
 	if err != nil {
 		return nil, err
 	}

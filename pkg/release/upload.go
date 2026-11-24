@@ -18,6 +18,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/cockroachdb/errors"
 )
 
 // PutReleaseOptions are options to for the PutRelease function.
@@ -114,13 +116,7 @@ func PutRelease(svc ObjectPutGetter, o PutReleaseOptions, body bytes.Buffer) {
 func createZip(files []ArchiveFile, body *bytes.Buffer, prefix string) error {
 	zw := zip.NewWriter(body)
 	for _, f := range files {
-		file, err := os.Open(f.LocalAbsolutePath)
-		if err != nil {
-			return fmt.Errorf("failed to open file: %s", f.LocalAbsolutePath)
-		}
-		defer func() { _ = file.Close() }()
-
-		stat, err := file.Stat()
+		stat, err := os.Stat(f.LocalAbsolutePath)
 		if err != nil {
 			return fmt.Errorf("failed to stat: %s", f.LocalAbsolutePath)
 		}
@@ -136,7 +132,8 @@ func createZip(files []ArchiveFile, body *bytes.Buffer, prefix string) error {
 		if err != nil {
 			return err
 		}
-		if _, err := io.Copy(zfw, file); err != nil {
+
+		if err := readFile(f.LocalAbsolutePath, zfw); err != nil {
 			return err
 		}
 	}
@@ -150,13 +147,7 @@ func createTarball(files []ArchiveFile, body *bytes.Buffer, prefix string) error
 	gzw := gzip.NewWriter(body)
 	tw := tar.NewWriter(gzw)
 	for _, f := range files {
-		file, err := os.Open(f.LocalAbsolutePath)
-		if err != nil {
-			return fmt.Errorf("failed to open file: %s", f.LocalAbsolutePath)
-		}
-		defer func() { _ = file.Close() }()
-
-		stat, err := file.Stat()
+		stat, err := os.Stat(f.LocalAbsolutePath)
 		if err != nil {
 			return fmt.Errorf("failed to stat: %s", f.LocalAbsolutePath)
 		}
@@ -170,8 +161,7 @@ func createTarball(files []ArchiveFile, body *bytes.Buffer, prefix string) error
 		if err := tw.WriteHeader(tarHeader); err != nil {
 			return err
 		}
-
-		if _, err := io.Copy(tw, file); err != nil {
+		if err := readFile(f.LocalAbsolutePath, tw); err != nil {
 			return err
 		}
 	}
@@ -182,6 +172,15 @@ func createTarball(files []ArchiveFile, body *bytes.Buffer, prefix string) error
 		return err
 	}
 	return nil
+}
+
+func readFile(path string, dst io.Writer) error {
+	file, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("failed to open file: %s", path)
+	}
+	_, err = io.Copy(dst, file)
+	return errors.CombineErrors(err, file.Close())
 }
 
 // PutNonRelease uploads non-release related files.
@@ -199,9 +198,6 @@ func PutNonRelease(svc ObjectPutGetter, o PutNonReleaseOptions) {
 		if err != nil {
 			log.Fatalf("failed to open %s: %s", f.LocalAbsolutePath, err)
 		}
-		defer func() {
-			_ = fileToUpload.Close()
-		}()
 
 		versionKey := fmt.Sprintf("%s/%s", nonReleasePrefix, f.FilePath)
 		log.Printf("Uploading to %s", svc.URL(versionKey))
@@ -212,6 +208,7 @@ func PutNonRelease(svc ObjectPutGetter, o PutNonReleaseOptions) {
 		}); err != nil {
 			log.Fatalf("failed uploading %s: %s", versionKey, err)
 		}
+		_ = fileToUpload.Close()
 
 		latestSuffix := o.Branch
 		if latestSuffix == "master" {
@@ -241,7 +238,7 @@ type archiveKeys struct {
 func makeArchiveKeys(platform Platform, versionStr string, archivePrefix string) archiveKeys {
 	suffix := SuffixFromPlatform(platform)
 	targetSuffix, hasExe := TrimDotExe(suffix)
-	if platform == PlatformLinux || platform == PlatformLinuxArm || platform == PlatformLinuxFIPS {
+	if platform == PlatformLinux || platform == PlatformLinuxArm || platform == PlatformLinuxFIPS || platform == PlatformLinuxS390x {
 		targetSuffix = strings.Replace(targetSuffix, "gnu-", "", -1)
 		targetSuffix = osVersionRe.ReplaceAllLiteralString(targetSuffix, "")
 	}
@@ -256,32 +253,6 @@ func makeArchiveKeys(platform Platform, versionStr string, archivePrefix string)
 		keys.archive = targetArchiveBase + ".tgz"
 	}
 	return keys
-}
-
-const latestStr = "latest"
-
-// LatestOpts are parameters passed to MarkLatestReleaseWithSuffix
-type LatestOpts struct {
-	Platform   Platform
-	VersionStr string
-}
-
-// MarkLatestReleaseWithSuffix adds redirects to release files using "latest" instead of the version
-func MarkLatestReleaseWithSuffix(svc ObjectPutGetter, o LatestOpts, suffix string) {
-	keys := makeArchiveKeys(o.Platform, o.VersionStr, "cockroach")
-	versionedKey := "/" + keys.archive + suffix
-	oLatest := o
-	oLatest.VersionStr = latestStr
-	latestKeys := makeArchiveKeys(oLatest.Platform, oLatest.VersionStr, "cockroach")
-	latestKey := latestKeys.archive + suffix
-	log.Printf("Adding redirect to %s", svc.URL(latestKey))
-	if err := svc.PutObject(&PutObjectInput{
-		CacheControl:            &NoCache,
-		Key:                     &latestKey,
-		WebsiteRedirectLocation: &versionedKey,
-	}); err != nil {
-		log.Fatalf("failed adding a redirect to %s: %s", versionedKey, err)
-	}
 }
 
 // GetObjectInput specifies input parameters for GetOject

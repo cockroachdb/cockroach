@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"google.golang.org/grpc"
+	"storj.io/drpc"
 )
 
 // tenantAuthorizer authorizes RPCs sent by tenants to a node's tenant RPC
@@ -55,21 +56,29 @@ func (a tenantAuthorizer) authorize(
 	req interface{},
 ) error {
 	switch fullMethod {
-	case "/cockroach.roachpb.Internal/Batch":
+	case "/cockroach.roachpb.Internal/Batch", "/cockroach.roachpb.Internal/BatchStream",
+		"/cockroach.roachpb.KVBatch/Batch", "/cockroach.roachpb.KVBatch/BatchStream":
 		return a.authBatch(ctx, sv, tenID, req.(*kvpb.BatchRequest))
 
-	case "/cockroach.roachpb.Internal/RangeLookup":
+	case "/cockroach.roachpb.Internal/RangeLookup",
+		"/cockroach.roachpb.TenantService/RangeLookup":
 		return a.authRangeLookup(ctx, tenID, req.(*kvpb.RangeLookupRequest))
 
-	case "/cockroach.roachpb.Internal/RangeFeed", "/cockroach.roachpb.Internal/MuxRangeFeed":
+	case "/cockroach.roachpb.Internal/RangeFeed",
+		"/cockroach.roachpb.Internal/MuxRangeFeed",
+		"/cockroach.roachpb.RangeFeed/MuxRangeFeed":
 		return a.authRangeFeed(tenID, req.(*kvpb.RangeFeedRequest))
-	case "/cockroach.roachpb.Internal/GossipSubscription":
+
+	case "/cockroach.roachpb.Internal/GossipSubscription",
+		"/cockroach.roachpb.TenantService/GossipSubscription":
 		return a.authGossipSubscription(tenID, req.(*kvpb.GossipSubscriptionRequest))
 
-	case "/cockroach.roachpb.Internal/TokenBucket":
+	case "/cockroach.roachpb.Internal/TokenBucket",
+		"/cockroach.roachpb.TenantUsage/TokenBucket":
 		return a.authTokenBucket(tenID, req.(*kvpb.TokenBucketRequest))
 
-	case "/cockroach.roachpb.Internal/TenantSettings":
+	case "/cockroach.roachpb.Internal/TenantSettings",
+		"/cockroach.roachpb.TenantService/TenantSettings":
 		return a.authTenantSettings(tenID, req.(*kvpb.TenantSettingsRequest))
 
 	case "/cockroach.rpc.Heartbeat/Ping":
@@ -117,25 +126,36 @@ func (a tenantAuthorizer) authorize(
 	case "/cockroach.server.serverpb.Status/Ranges":
 		return a.authRanges(tenID)
 
+	case "/cockroach.server.serverpb.Status/NetworkConnectivity":
+		return a.capabilitiesAuthorizer.HasProcessDebugCapability(ctx, tenID)
+
+	case "/cockroach.server.serverpb.Status/Gossip", "/cockroach.server.serverpb.Status/EngineStats":
+		return a.capabilitiesAuthorizer.HasNodeStatusCapability(ctx, tenID)
+
 	case "/cockroach.server.serverpb.Status/TransactionContentionEvents":
 		return a.authTenant(tenID)
 
 	case "/cockroach.server.serverpb.Status/SpanStats":
 		return a.authSpanStats(ctx, tenID, req.(*roachpb.SpanStatsRequest))
 
-	case "/cockroach.roachpb.Internal/GetSpanConfigs":
+	case "/cockroach.roachpb.Internal/GetSpanConfigs",
+		"/cockroach.roachpb.TenantSpanConfig/GetSpanConfigs":
 		return a.authGetSpanConfigs(ctx, tenID, req.(*roachpb.GetSpanConfigsRequest))
 
-	case "/cockroach.roachpb.Internal/SpanConfigConformance":
+	case "/cockroach.roachpb.Internal/SpanConfigConformance",
+		"/cockroach.roachpb.TenantSpanConfig/SpanConfigConformance":
 		return a.authSpanConfigConformance(ctx, tenID, req.(*roachpb.SpanConfigConformanceRequest))
 
-	case "/cockroach.roachpb.Internal/GetAllSystemSpanConfigsThatApply":
+	case "/cockroach.roachpb.Internal/GetAllSystemSpanConfigsThatApply",
+		"/cockroach.roachpb.TenantSpanConfig/GetAllSystemSpanConfigsThatApply":
 		return a.authGetAllSystemSpanConfigsThatApply(tenID, req.(*roachpb.GetAllSystemSpanConfigsThatApplyRequest))
 
-	case "/cockroach.roachpb.Internal/UpdateSpanConfigs":
+	case "/cockroach.roachpb.Internal/UpdateSpanConfigs",
+		"/cockroach.roachpb.TenantSpanConfig/UpdateSpanConfigs":
 		return a.authUpdateSpanConfigs(ctx, tenID, req.(*roachpb.UpdateSpanConfigsRequest))
 
-	case "/cockroach.roachpb.Internal/GetRangeDescriptors":
+	case "/cockroach.roachpb.Internal/GetRangeDescriptors",
+		"/cockroach.roachpb.TenantService/GetRangeDescriptors":
 		return a.authGetRangeDescriptors(ctx, tenID, req.(*kvpb.GetRangeDescriptorsRequest))
 
 	case "/cockroach.server.serverpb.Status/HotRangesV2":
@@ -154,6 +174,7 @@ func (a tenantAuthorizer) authorize(
 		"/cockroach.blobs.Blob/Delete",
 		"/cockroach.blobs.Blob/Stat",
 		"/cockroach.blobs.Blob/GetStream",
+		"/cockroach.blobs.Blob/GetStreamFlowControlled",
 		"/cockroach.blobs.Blob/PutStream":
 		return a.capabilitiesAuthorizer.HasNodelocalStorageCapability(ctx, tenID)
 
@@ -293,6 +314,8 @@ var gossipSubscriptionPatternAllowlist = []string{
 	"cluster-id",
 	"node:.*",
 	"store:.*",
+	// This "system-db" exception can be removed once we fully remove
+	// gossip.KeyDeprecatedSystemConfig from the gossip network.
 	"system-db",
 }
 
@@ -551,4 +574,20 @@ func (ss *wrappedServerStream) Context() context.Context {
 // RecvMsg overrides the nested grpc.ServerStream.RecvMsg().
 func (ss *wrappedServerStream) RecvMsg(m interface{}) error {
 	return ss.recv(m)
+}
+
+type wrappedDRPCServerStream struct {
+	drpc.Stream
+	ctx  context.Context
+	recv func(m drpc.Message, enc drpc.Encoding) error
+}
+
+// Context overrides the nested stream.Context().
+func (s *wrappedDRPCServerStream) Context() context.Context {
+	return s.ctx
+}
+
+// MsgRecv overrides the nested stream.MsgRecv().
+func (s *wrappedDRPCServerStream) MsgRecv(m drpc.Message, enc drpc.Encoding) error {
+	return s.recv(m, enc)
 }

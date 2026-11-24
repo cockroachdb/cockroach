@@ -1,3 +1,4 @@
+
 statement ok
 CREATE TABLE tbl (
   ttz TIMESTAMPTZ,

@@ -82,7 +82,6 @@ stmt_call: 3
 stmt_case: 1
 stmt_when: 2
 
-
 feature-count
 DECLARE
   order_cnt integer := 10;

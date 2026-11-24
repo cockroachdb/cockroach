@@ -8,13 +8,27 @@ package storeliveness
 import (
 	"sync/atomic"
 	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+)
+
+var (
+	// defaultSupportExpiryInterval is the default value for SupportExpiryInterval.
+	defaultSupportExpiryInterval = envutil.EnvOrDefaultDuration(
+		"COCKROACH_STORE_LIVENESS_SUPPORT_EXPIRY_INTERVAL", 100*time.Millisecond,
+	)
+
+	// defaultIdleSupportFromInterval is the default value for
+	// IdleSupportFromInterval.
+	defaultIdleSupportFromInterval = envutil.EnvOrDefaultDuration(
+		"COCKROACH_STORE_LIVENESS_IDLE_SUPPORT_FROM_INTERVAL", time.Minute,
+	)
 )
 
 // Options includes all Store Liveness durations needed by the SupportManager.
-// TODO(mira): make sure these are initialized correctly as part of #125066.
 type Options struct {
-	// LivenessInterval determines the Store Liveness support expiration time.
-	LivenessInterval time.Duration
+	// SupportDuration determines the Store Liveness support expiration time.
+	SupportDuration time.Duration
 	// HeartbeatInterval determines how often Store Liveness sends heartbeats.
 	HeartbeatInterval time.Duration
 	// SupportExpiryInterval determines how often Store Liveness checks if support
@@ -31,15 +45,15 @@ type Options struct {
 
 // NewOptions instantiates the Store Liveness Options.
 func NewOptions(
-	livenessInterval time.Duration,
+	supportDuration time.Duration,
 	heartbeatInterval time.Duration,
 	supportWithdrawalGracePeriod time.Duration,
 ) Options {
 	return Options{
-		LivenessInterval:             livenessInterval,
+		SupportDuration:              supportDuration,
 		HeartbeatInterval:            heartbeatInterval,
-		SupportExpiryInterval:        100 * time.Millisecond,
-		IdleSupportFromInterval:      1 * time.Minute,
+		SupportExpiryInterval:        defaultSupportExpiryInterval,
+		IdleSupportFromInterval:      defaultIdleSupportFromInterval,
 		SupportWithdrawalGracePeriod: supportWithdrawalGracePeriod,
 	}
 }
@@ -62,6 +76,9 @@ type SupportManagerKnobs struct {
 	// DisableHeartbeats denotes the ID of a store whose heartbeats should be
 	// stopped. Setting DisableHeartbeats to nil will re-enable heartbeats.
 	DisableHeartbeats *atomic.Value // slpb.StoreIdent
+	// DisableAllHeartbeats disables all store liveness heartbeats regardless of
+	// the store ID.
+	DisableAllHeartbeats *atomic.Bool
 }
 
 // TestingKnobs is a wrapper around TransportKnobs and SupportManagerKnobs.

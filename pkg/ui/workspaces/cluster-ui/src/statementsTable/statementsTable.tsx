@@ -13,6 +13,8 @@ import {
   latencyBarChart,
   contentionBarChart,
   cpuBarChart,
+  admissionWaitTimeBarChart,
+  kvCPUTimeBarChart,
   maxMemUsageBarChart,
   networkBytesBarChart,
   retryBarChart,
@@ -34,7 +36,6 @@ import {
   TimestampToNumber,
   TimestampToMoment,
   unset,
-  DurationCheckSample,
 } from "src/util";
 import { DATE_FORMAT, Duration } from "src/util/format";
 
@@ -62,7 +63,6 @@ export interface AggregateStatistics {
   // replaced with shortStatement otherwise.
   summary: string;
   aggregatedTs: number;
-  implicitTxn: boolean;
   fullScan: boolean;
   database: string;
   applicationName: string;
@@ -75,7 +75,7 @@ export interface AggregateStatistics {
   regionNodes?: string[];
 }
 
-export class StatementsSortedTable extends SortedTable<AggregateStatistics> {}
+export const StatementsSortedTable = SortedTable<AggregateStatistics>;
 
 export function shortStatement(
   summary: StatementSummary,
@@ -153,6 +153,14 @@ export function makeStatementsColumns(
     sampledExecStatsBarChartOptions,
   );
   const cpuBar = cpuBarChart(statements, sampledExecStatsBarChartOptions);
+  const admissionWaitTimeBar = admissionWaitTimeBarChart(
+    statements,
+    sampledExecStatsBarChartOptions,
+  );
+  const kvCPUTimeBar = kvCPUTimeBarChart(
+    statements,
+    defaultBarChartOptions, // kvCPUTime is always collected, it is not part of the sampled exec stats.
+  );
   const maxMemUsageBar = maxMemUsageBarChart(
     statements,
     sampledExecStatsBarChartOptions,
@@ -233,30 +241,19 @@ export function makeStatementsColumns(
         FixLong(Number(stmt.stats.exec_stats.cpu_sql_nanos?.mean)),
     },
     {
-      name: "latencyP50",
-      title: statisticsTableTitles.latencyP50(statType),
-      cell: (stmt: AggregateStatistics) =>
-        DurationCheckSample(stmt.stats.latency_info?.p50 * 1e9),
+      name: "kvCPUTime",
+      title: statisticsTableTitles.kvCPUTime(statType),
+      cell: kvCPUTimeBar,
       sort: (stmt: AggregateStatistics) =>
-        FixLong(Number(stmt.stats.latency_info?.p50)),
-      showByDefault: false,
+        FixLong(Number(stmt.stats.kv_cpu_time_nanos?.mean)),
     },
     {
-      name: "latencyP90",
-      title: statisticsTableTitles.latencyP90(statType),
-      cell: (stmt: AggregateStatistics) =>
-        DurationCheckSample(stmt.stats.latency_info?.p90 * 1e9),
+      name: "admissionWaitTime",
+      title: statisticsTableTitles.admissionWaitTime(statType),
+      cell: admissionWaitTimeBar,
+      className: cx("statements-table__col-admission-wait-time"),
       sort: (stmt: AggregateStatistics) =>
-        FixLong(Number(stmt.stats.latency_info?.p90)),
-      showByDefault: false,
-    },
-    {
-      name: "latencyP99",
-      title: statisticsTableTitles.latencyP99(statType),
-      cell: (stmt: AggregateStatistics) =>
-        DurationCheckSample(stmt.stats.latency_info?.p99 * 1e9),
-      sort: (stmt: AggregateStatistics) =>
-        FixLong(Number(stmt.stats.latency_info?.p99)),
+        FixLong(Number(stmt.stats.exec_stats.admission_wait_time?.mean)),
     },
     {
       name: "latencyMin",

@@ -1,3 +1,4 @@
+
 # The following tests have results equivalent to Postgres (differences
 # in string representation and number of decimals returned, but otherwise
 # the same). These do not pass using the inf package. The inf package
@@ -564,13 +565,15 @@ SELECT 'NaN'::numeric::int2
 statement error integer out of range
 SELECT '-Infinity'::numeric::int8
 
-statement error operand, lower bound, and upper bound cannot be infinity
+query I
 SELECT width_bucket('inf', 3.0, 4.0, 888)
+----
+889
 
-statement error operand, lower bound, and upper bound cannot be infinity
+statement error pgcode 2201G pq: lower and upper bounds must be finite
 SELECT width_bucket(2.0, 3.0, '-inf', 888)
 
-statement error operand, lower bound, and upper bound cannot be infinity
+statement error pgcode 2201G pq: lower and upper bounds must be finite
 SELECT width_bucket(0, '-inf', 4.0, 888)
 
 query RRR
@@ -645,3 +648,8 @@ query R
 SELECT 0::DECIMAL / 'infinity'::DECIMAL;
 ----
 0
+
+# Regression test for the apd library not handling an invalid input gracefully
+# (#165529).
+statement error could not parse ".-400000000000000000000000000000000000000" as type decimal: parse mantissa: -400000000000000000000000000000000000000
+SELECT '.-400000000000000000000000000000000000000'::DECIMAL;

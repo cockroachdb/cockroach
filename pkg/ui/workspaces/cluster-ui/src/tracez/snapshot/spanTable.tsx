@@ -23,7 +23,7 @@ import RecordingMode = cockroach.util.tracing.tracingpb.RecordingMode;
 import ISpanTag = cockroach.server.serverpb.ISpanTag;
 const cx = classNames.bind(styles);
 
-class SpanSortedTable extends SortedTable<Span> {}
+const SpanSortedTable = SortedTable<Span>;
 
 interface TagRowProps {
   t: ISpanTag;

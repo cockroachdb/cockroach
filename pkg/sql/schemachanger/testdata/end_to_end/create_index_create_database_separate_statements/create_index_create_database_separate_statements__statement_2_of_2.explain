@@ -11,14 +11,14 @@ Schema change plan for CREATE DATABASE ‹db›; following CREATE UNIQUE INDEX �
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 14 elements transitioning toward PUBLIC
  │         │    ├── ABSENT → PUBLIC Database:{DescID: 105 (db+)}
- │         │    ├── ABSENT → PUBLIC Namespace:{DescID: 105 (db+), Name: "db"}
+ │         │    ├── ABSENT → PUBLIC Namespace:{DescID: 105 (db+), Name: "db", IntValue: 0}
  │         │    ├── ABSENT → PUBLIC DatabaseData:{DescID: 105 (db+)}
  │         │    ├── ABSENT → PUBLIC Owner:{DescID: 105 (db+)}
  │         │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 105 (db+), Name: "admin"}
  │         │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 105 (db+), Name: "public"}
  │         │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 105 (db+), Name: "root"}
  │         │    ├── ABSENT → PUBLIC Schema:{DescID: 106 (public+)}
- │         │    ├── ABSENT → PUBLIC Namespace:{DescID: 106 (public+), Name: "public", ReferencedDescID: 105 (db+)}
+ │         │    ├── ABSENT → PUBLIC Namespace:{DescID: 106 (public+), Name: "public", ReferencedDescID: 105 (db+), IntValue: 0}
  │         │    ├── ABSENT → PUBLIC SchemaParent:{DescID: 106 (public+), ReferencedDescID: 105 (db+)}
  │         │    ├── ABSENT → PUBLIC Owner:{DescID: 106 (public+)}
  │         │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 106 (public+), Name: "admin"}
@@ -30,7 +30,7 @@ Schema change plan for CREATE DATABASE ‹db›; following CREATE UNIQUE INDEX �
  │              ├── AddDescriptorName {"Namespace":{"DescriptorID":105,"Name":"db"}}
  │              ├── UpdateOwner {"Owner":{"DescriptorID":105,"Owner":"root"}}
  │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":105,"Privileges":2,"UserName":"admin","WithGrantOption":2}}
- │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":105,"Privileges":2048,"UserName":"public"}}
+ │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":105,"Privileges":17592186046464,"UserName":"public"}}
  │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":105,"Privileges":2,"UserName":"root","WithGrantOption":2}}
  │              ├── CreateSchemaDescriptor {"SchemaID":106}
  │              ├── SetNameInDescriptor {"DescriptorID":106,"Name":"public"}
@@ -49,16 +49,16 @@ Schema change plan for CREATE DATABASE ‹db›; following CREATE UNIQUE INDEX �
  │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 2 (idx+)}
  │    │    │    ├── PUBLIC        → ABSENT IndexName:{DescID: 104 (t), Name: "idx", IndexID: 2 (idx+)}
  │    │    │    ├── PUBLIC        → ABSENT IndexData:{DescID: 104 (t), IndexID: 2 (idx+)}
- │    │    │    ├── BACKFILL_ONLY → ABSENT SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx+), ConstraintID: 2, TemporaryIndexID: 3 (crdb_internal_index_3_name_placeholder), SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0}
+ │    │    │    ├── BACKFILL_ONLY → ABSENT SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx+), ConstraintID: 2, TemporaryIndexID: 3 (crdb_internal_index_3_name_placeholder), SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
  │    │    │    ├── PUBLIC        → ABSENT Database:{DescID: 105 (db+)}
- │    │    │    ├── PUBLIC        → ABSENT Namespace:{DescID: 105 (db+), Name: "db"}
+ │    │    │    ├── PUBLIC        → ABSENT Namespace:{DescID: 105 (db+), Name: "db", IntValue: 0}
  │    │    │    ├── PUBLIC        → ABSENT DatabaseData:{DescID: 105 (db+)}
  │    │    │    ├── PUBLIC        → ABSENT Owner:{DescID: 105 (db+)}
  │    │    │    ├── PUBLIC        → ABSENT UserPrivileges:{DescID: 105 (db+), Name: "admin"}
  │    │    │    ├── PUBLIC        → ABSENT UserPrivileges:{DescID: 105 (db+), Name: "public"}
  │    │    │    ├── PUBLIC        → ABSENT UserPrivileges:{DescID: 105 (db+), Name: "root"}
  │    │    │    ├── PUBLIC        → ABSENT Schema:{DescID: 106 (public+)}
- │    │    │    ├── PUBLIC        → ABSENT Namespace:{DescID: 106 (public+), Name: "public", ReferencedDescID: 105 (db+)}
+ │    │    │    ├── PUBLIC        → ABSENT Namespace:{DescID: 106 (public+), Name: "public", ReferencedDescID: 105 (db+), IntValue: 0}
  │    │    │    ├── PUBLIC        → ABSENT SchemaParent:{DescID: 106 (public+), ReferencedDescID: 105 (db+)}
  │    │    │    ├── PUBLIC        → ABSENT Owner:{DescID: 106 (public+)}
  │    │    │    ├── PUBLIC        → ABSENT UserPrivileges:{DescID: 106 (public+), Name: "admin"}
@@ -68,6 +68,8 @@ Schema change plan for CREATE DATABASE ‹db›; following CREATE UNIQUE INDEX �
  │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 3 (crdb_internal_index_3_name_placeholder)}
  │    │    │    ├── PUBLIC        → ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 3 (crdb_internal_index_3_name_placeholder)}
  │    │    │    └── DELETE_ONLY   → ABSENT TemporaryIndex:{DescID: 104 (t), IndexID: 3 (crdb_internal_index_3_name_placeholder), ConstraintID: 3, SourceIndexID: 1 (t_pkey)}
+ │    │    ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │    │    │    └── ABSENT        → PUBLIC TableSchemaLocked:{DescID: 104 (t)}
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
@@ -76,15 +78,15 @@ Schema change plan for CREATE DATABASE ‹db›; following CREATE UNIQUE INDEX �
  │         │    ├── ABSENT → PUBLIC           IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 2 (idx+)}
  │         │    ├── ABSENT → PUBLIC           IndexName:{DescID: 104 (t), Name: "idx", IndexID: 2 (idx+)}
  │         │    ├── ABSENT → PUBLIC           IndexData:{DescID: 104 (t), IndexID: 2 (idx+)}
- │         │    ├── ABSENT → BACKFILL_ONLY    SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx+), ConstraintID: 2, TemporaryIndexID: 3 (crdb_internal_index_3_name_placeholder), SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0}
+ │         │    ├── ABSENT → BACKFILL_ONLY    SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx+), ConstraintID: 2, TemporaryIndexID: 3 (crdb_internal_index_3_name_placeholder), SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
  │         │    ├── ABSENT → DESCRIPTOR_ADDED Database:{DescID: 105 (db+)}
- │         │    ├── ABSENT → PUBLIC           Namespace:{DescID: 105 (db+), Name: "db"}
+ │         │    ├── ABSENT → PUBLIC           Namespace:{DescID: 105 (db+), Name: "db", IntValue: 0}
  │         │    ├── ABSENT → PUBLIC           Owner:{DescID: 105 (db+)}
  │         │    ├── ABSENT → PUBLIC           UserPrivileges:{DescID: 105 (db+), Name: "admin"}
  │         │    ├── ABSENT → PUBLIC           UserPrivileges:{DescID: 105 (db+), Name: "public"}
  │         │    ├── ABSENT → PUBLIC           UserPrivileges:{DescID: 105 (db+), Name: "root"}
  │         │    ├── ABSENT → DESCRIPTOR_ADDED Schema:{DescID: 106 (public+)}
- │         │    ├── ABSENT → PUBLIC           Namespace:{DescID: 106 (public+), Name: "public", ReferencedDescID: 105 (db+)}
+ │         │    ├── ABSENT → PUBLIC           Namespace:{DescID: 106 (public+), Name: "public", ReferencedDescID: 105 (db+), IntValue: 0}
  │         │    ├── ABSENT → PUBLIC           SchemaParent:{DescID: 106 (public+), ReferencedDescID: 105 (db+)}
  │         │    ├── ABSENT → PUBLIC           Owner:{DescID: 106 (public+)}
  │         │    ├── ABSENT → PUBLIC           UserPrivileges:{DescID: 106 (public+), Name: "admin"}
@@ -94,7 +96,10 @@ Schema change plan for CREATE DATABASE ‹db›; following CREATE UNIQUE INDEX �
  │         │    ├── ABSENT → PUBLIC           IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 3 (crdb_internal_index_3_name_placeholder)}
  │         │    ├── ABSENT → PUBLIC           IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 3 (crdb_internal_index_3_name_placeholder)}
  │         │    └── ABSENT → DELETE_ONLY      TemporaryIndex:{DescID: 104 (t), IndexID: 3 (crdb_internal_index_3_name_placeholder), ConstraintID: 3, SourceIndexID: 1 (t_pkey)}
- │         └── 30 Mutation operations
+ │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │         │    └── PUBLIC → ABSENT           TableSchemaLocked:{DescID: 104 (t)}
+ │         └── 31 Mutation operations
+ │              ├── SetTableSchemaLocked {"TableID":104}
  │              ├── MakeAbsentIndexBackfilling {"IsSecondaryIndex":true}
  │              ├── MaybeAddSplitForIndex {"IndexID":2,"TableID":104}
  │              ├── SetAddedIndexPartialPredicate {"Expr":"i \u003e 0:::INT8","IndexID":2,"TableID":104}
@@ -106,7 +111,7 @@ Schema change plan for CREATE DATABASE ‹db›; following CREATE UNIQUE INDEX �
  │              ├── AddDescriptorName {"Namespace":{"DescriptorID":105,"Name":"db"}}
  │              ├── UpdateOwner {"Owner":{"DescriptorID":105,"Owner":"root"}}
  │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":105,"Privileges":2,"UserName":"admin","WithGrantOption":2}}
- │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":105,"Privileges":2048,"UserName":"public"}}
+ │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":105,"Privileges":17592186046464,"UserName":"public"}}
  │              ├── UpdateUserPrivileges {"Privileges":{"DescriptorID":105,"Privileges":2,"UserName":"root","WithGrantOption":2}}
  │              ├── CreateSchemaDescriptor {"SchemaID":106}
  │              ├── SetNameInDescriptor {"DescriptorID":106,"Name":"public"}
@@ -124,7 +129,7 @@ Schema change plan for CREATE DATABASE ‹db›; following CREATE UNIQUE INDEX �
  │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":105,"Initialize":true}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":106,"Initialize":true}
- │              └── CreateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │              └── CreateSchemaChangerJob {"RunningStatus":"Pending: Updatin..."}
  ├── PostCommitPhase
  │    ├── Stage 1 of 7 in PostCommitPhase
  │    │    ├── 2 elements transitioning toward TRANSIENT_ABSENT
@@ -135,38 +140,38 @@ Schema change plan for CREATE DATABASE ‹db›; following CREATE UNIQUE INDEX �
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":105}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
- │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │    │         └── UpdateSchemaChangerJob {"RunningStatus":"Pending: Backfil..."}
  │    ├── Stage 2 of 7 in PostCommitPhase
  │    │    ├── 1 element transitioning toward PUBLIC
- │    │    │    └── BACKFILL_ONLY → BACKFILLED SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx+), ConstraintID: 2, TemporaryIndexID: 3 (crdb_internal_index_3_name_placeholder), SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0}
+ │    │    │    └── BACKFILL_ONLY → BACKFILLED SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx+), ConstraintID: 2, TemporaryIndexID: 3 (crdb_internal_index_3_name_placeholder), SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
  │    │    └── 1 Backfill operation
  │    │         └── BackfillIndex {"IndexID":2,"SourceIndexID":1,"TableID":104}
  │    ├── Stage 3 of 7 in PostCommitPhase
  │    │    ├── 1 element transitioning toward PUBLIC
- │    │    │    └── BACKFILLED → DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx+), ConstraintID: 2, TemporaryIndexID: 3 (crdb_internal_index_3_name_placeholder), SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0}
+ │    │    │    └── BACKFILLED → DELETE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx+), ConstraintID: 2, TemporaryIndexID: 3 (crdb_internal_index_3_name_placeholder), SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
  │    │    └── 5 Mutation operations
  │    │         ├── MakeBackfillingIndexDeleteOnly {"IndexID":2,"TableID":104}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":105}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
- │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │    │         └── UpdateSchemaChangerJob {"RunningStatus":"Pending: Updatin..."}
  │    ├── Stage 4 of 7 in PostCommitPhase
  │    │    ├── 1 element transitioning toward PUBLIC
- │    │    │    └── DELETE_ONLY → MERGE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx+), ConstraintID: 2, TemporaryIndexID: 3 (crdb_internal_index_3_name_placeholder), SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0}
+ │    │    │    └── DELETE_ONLY → MERGE_ONLY SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx+), ConstraintID: 2, TemporaryIndexID: 3 (crdb_internal_index_3_name_placeholder), SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
  │    │    └── 5 Mutation operations
  │    │         ├── MakeBackfilledIndexMerging {"IndexID":2,"TableID":104}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":105}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
- │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │    │         └── UpdateSchemaChangerJob {"RunningStatus":"Pending: Merging..."}
  │    ├── Stage 5 of 7 in PostCommitPhase
  │    │    ├── 1 element transitioning toward PUBLIC
- │    │    │    └── MERGE_ONLY → MERGED SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx+), ConstraintID: 2, TemporaryIndexID: 3 (crdb_internal_index_3_name_placeholder), SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0}
+ │    │    │    └── MERGE_ONLY → MERGED SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx+), ConstraintID: 2, TemporaryIndexID: 3 (crdb_internal_index_3_name_placeholder), SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
  │    │    └── 1 Backfill operation
  │    │         └── MergeIndex {"BackfilledIndexID":2,"TableID":104,"TemporaryIndexID":3}
  │    ├── Stage 6 of 7 in PostCommitPhase
  │    │    ├── 1 element transitioning toward PUBLIC
- │    │    │    └── MERGED     → WRITE_ONLY            SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx+), ConstraintID: 2, TemporaryIndexID: 3 (crdb_internal_index_3_name_placeholder), SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0}
+ │    │    │    └── MERGED     → WRITE_ONLY            SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx+), ConstraintID: 2, TemporaryIndexID: 3 (crdb_internal_index_3_name_placeholder), SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
  │    │    ├── 1 element transitioning toward TRANSIENT_ABSENT
  │    │    │    └── WRITE_ONLY → TRANSIENT_DELETE_ONLY TemporaryIndex:{DescID: 104 (t), IndexID: 3 (crdb_internal_index_3_name_placeholder), ConstraintID: 3, SourceIndexID: 1 (t_pkey)}
  │    │    └── 6 Mutation operations
@@ -175,33 +180,42 @@ Schema change plan for CREATE DATABASE ‹db›; following CREATE UNIQUE INDEX �
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":105}
  │    │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
- │    │         └── UpdateSchemaChangerJob {"RunningStatus":"PostCommitPhase ..."}
+ │    │         └── UpdateSchemaChangerJob {"RunningStatus":"Pending: Validat..."}
  │    └── Stage 7 of 7 in PostCommitPhase
  │         ├── 1 element transitioning toward PUBLIC
- │         │    └── WRITE_ONLY → VALIDATED SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx+), ConstraintID: 2, TemporaryIndexID: 3 (crdb_internal_index_3_name_placeholder), SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0}
+ │         │    └── WRITE_ONLY → VALIDATED SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx+), ConstraintID: 2, TemporaryIndexID: 3 (crdb_internal_index_3_name_placeholder), SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
  │         └── 1 Validation operation
  │              └── ValidateIndex {"IndexID":2,"TableID":104}
  └── PostCommitNonRevertiblePhase
-      └── Stage 1 of 1 in PostCommitNonRevertiblePhase
-           ├── 4 elements transitioning toward PUBLIC
-           │    ├── VALIDATED             → PUBLIC           SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx+), ConstraintID: 2, TemporaryIndexID: 3 (crdb_internal_index_3_name_placeholder), SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0}
-           │    ├── DESCRIPTOR_ADDED      → PUBLIC           Database:{DescID: 105 (db+)}
-           │    ├── ABSENT                → PUBLIC           DatabaseData:{DescID: 105 (db+)}
-           │    └── DESCRIPTOR_ADDED      → PUBLIC           Schema:{DescID: 106 (public+)}
-           ├── 4 elements transitioning toward TRANSIENT_ABSENT
-           │    ├── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 3 (crdb_internal_index_3_name_placeholder)}
-           │    ├── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 3 (crdb_internal_index_3_name_placeholder)}
-           │    ├── PUBLIC                → TRANSIENT_ABSENT IndexData:{DescID: 104 (t), IndexID: 3 (crdb_internal_index_3_name_placeholder)}
-           │    └── TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT TemporaryIndex:{DescID: 104 (t), IndexID: 3 (crdb_internal_index_3_name_placeholder), ConstraintID: 3, SourceIndexID: 1 (t_pkey)}
-           └── 12 Mutation operations
-                ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":3,"TableID":104}
-                ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":3,"Kind":1,"TableID":104}
-                ├── MakeValidatedSecondaryIndexPublic {"IndexID":2,"TableID":104}
-                ├── RefreshStats {"TableID":104}
-                ├── MakeIndexAbsent {"IndexID":3,"TableID":104}
-                ├── MarkDescriptorAsPublic {"DescriptorID":105}
-                ├── MarkDescriptorAsPublic {"DescriptorID":106}
-                ├── CreateGCJobForIndex {"IndexID":3,"TableID":104}
+      ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
+      │    ├── 4 elements transitioning toward PUBLIC
+      │    │    ├── VALIDATED             → PUBLIC           SecondaryIndex:{DescID: 104 (t), IndexID: 2 (idx+), ConstraintID: 2, TemporaryIndexID: 3 (crdb_internal_index_3_name_placeholder), SourceIndexID: 1 (t_pkey), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
+      │    │    ├── DESCRIPTOR_ADDED      → PUBLIC           Database:{DescID: 105 (db+)}
+      │    │    ├── ABSENT                → PUBLIC           DatabaseData:{DescID: 105 (db+)}
+      │    │    └── DESCRIPTOR_ADDED      → PUBLIC           Schema:{DescID: 106 (public+)}
+      │    ├── 4 elements transitioning toward TRANSIENT_ABSENT
+      │    │    ├── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 2 (j), IndexID: 3 (crdb_internal_index_3_name_placeholder)}
+      │    │    ├── PUBLIC                → TRANSIENT_ABSENT IndexColumn:{DescID: 104 (t), ColumnID: 1 (i), IndexID: 3 (crdb_internal_index_3_name_placeholder)}
+      │    │    ├── PUBLIC                → TRANSIENT_ABSENT IndexData:{DescID: 104 (t), IndexID: 3 (crdb_internal_index_3_name_placeholder)}
+      │    │    └── TRANSIENT_DELETE_ONLY → TRANSIENT_ABSENT TemporaryIndex:{DescID: 104 (t), IndexID: 3 (crdb_internal_index_3_name_placeholder), ConstraintID: 3, SourceIndexID: 1 (t_pkey)}
+      │    └── 12 Mutation operations
+      │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":3,"TableID":104}
+      │         ├── RemoveColumnFromIndex {"ColumnID":1,"IndexID":3,"Kind":1,"TableID":104}
+      │         ├── MakeValidatedSecondaryIndexPublic {"IndexID":2,"TableID":104}
+      │         ├── RefreshStats {"TableID":104}
+      │         ├── MakeIndexAbsent {"IndexID":3,"TableID":104}
+      │         ├── MarkDescriptorAsPublic {"DescriptorID":105}
+      │         ├── MarkDescriptorAsPublic {"DescriptorID":106}
+      │         ├── CreateGCJobForIndex {"IndexID":3,"TableID":104}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":104}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":105}
+      │         ├── SetJobStateOnDescriptor {"DescriptorID":106}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
+      └── Stage 2 of 2 in PostCommitNonRevertiblePhase
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 104 (t)}
+           └── 5 Mutation operations
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":105}
                 ├── RemoveJobStateFromDescriptor {"DescriptorID":106}

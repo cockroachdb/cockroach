@@ -15,12 +15,15 @@ import (
 // topKNode represents a node that returns only the top K rows according to the
 // ordering, in the order specified.
 type topKNode struct {
-	plan     planNode
+	singleInputPlanNode
 	k        int64
 	ordering colinfo.ColumnOrdering
 	// When alreadyOrderedPrefix is non-zero, the input is already ordered on
 	// the prefix ordering[:alreadyOrderedPrefix].
 	alreadyOrderedPrefix int
+	// estimatedInputRowCount, when set, is the estimated number of rows that
+	// this topKNode will read from its input.
+	estimatedInputRowCount uint64
 }
 
 func (n *topKNode) startExec(params runParams) error {
@@ -36,5 +39,5 @@ func (n *topKNode) Values() tree.Datums {
 }
 
 func (n *topKNode) Close(ctx context.Context) {
-	n.plan.Close(ctx)
+	n.input.Close(ctx)
 }

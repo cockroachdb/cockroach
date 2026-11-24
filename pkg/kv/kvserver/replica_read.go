@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
-	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -39,20 +39,21 @@ import (
 // iterator to evaluate the batch and then updates the timestamp cache to
 // reflect the key spans that it read.
 func (r *Replica) executeReadOnlyBatch(
-	ctx context.Context, ba *kvpb.BatchRequest, g *concurrency.Guard,
-) (
-	br *kvpb.BatchResponse,
-	_ *concurrency.Guard,
-	_ *kvadmission.StoreWriteBytes,
-	pErr *kvpb.Error,
-) {
+	ctx context.Context,
+	ba *kvpb.BatchRequest,
+	g concurrency.Guard,
+	stats *StoreWorkStats,
+	_ kvadmission.AdmissionInfo,
+) (br *kvpb.BatchResponse, _ concurrency.Guard, pErr *kvpb.Error) {
 	r.readOnlyCmdMu.RLock()
 	defer r.readOnlyCmdMu.RUnlock()
+
+	ss := stats.ScanStats()
 
 	// Verify that the batch can be executed.
 	st, err := r.checkExecutionCanProceedBeforeStorageSnapshot(ctx, ba, g)
 	if err != nil {
-		return nil, g, nil, kvpb.NewError(err)
+		return nil, g, kvpb.NewError(err)
 	}
 
 	if fn := r.store.TestingKnobs().PreStorageSnapshotButChecksCompleteInterceptor; fn != nil {
@@ -68,15 +69,110 @@ func (r *Replica) executeReadOnlyBatch(
 		ctx, r, g.LatchSpans(), ba.RequiresClosedTSOlderThanStorageSnapshot(), ba.AdmissionHeader)
 	defer rec.Release()
 
-	// TODO(irfansharif): It's unfortunate that in this read-only code path,
-	// we're stuck with a ReadWriter because of the way evaluateBatch is
-	// designed.
-	rw := r.store.TODOEngine().NewReadOnly(storage.StandardDurability)
+	var rw storage.ReadWriter
+	intentsToResolveVirtually := g.IntentsToResolveVirtually()
+	// If there are intents to be resolved virtually, use a storage batch in which
+	// the intent resolution will be evaluated before the read-only batch request.
+	if len(intentsToResolveVirtually) > 0 {
+		rw, _ = r.newBatchedEngine(g)
+	} else {
+		// TODO(irfansharif): It's unfortunate that in this read-only code path,
+		// we're stuck with a ReadWriter because of the way evaluateBatch is
+		// designed.
+		rw = r.store.StateEngine().NewReadOnly(storage.StandardDurability)
+		if spanset.EnableAssertions {
+			rw = spanset.NewReadWriterAt(rw, g.LatchSpans(), ba.Timestamp)
+		}
+	}
 	if !rw.ConsistentIterators() {
-		// This is not currently needed for correctness, but future optimizations
-		// may start relying on this, so we assert here.
+		// This is needed for correctness, as we will call
+		// PinEngineStateForIterators, and potentially drop latches before
+		// evaluation.
 		panic("expected consistent iterators")
 	}
+	defer rw.Close()
+
+	if len(intentsToResolveVirtually) > 0 {
+		r.store.metrics.VirtualResolveBatches.Inc(1)
+		log.Eventf(
+			ctx, "resolving %d intents virtually before executing read",
+			len(intentsToResolveVirtually),
+		)
+		// Latch assertions will fail here because latches are not acquired for the
+		// intent resolution in this batch. This is safe because this batch is used
+		// only for evaluating the read-only batch request, and the underlying
+		// intent resolutions will not be committed.
+		rwNoAssert := spanset.DisableUndeclaredSpanAssertions(rw)
+
+		// For each intent to be resolved virtually, evaluate the intent resolution
+		// directly on the storage batch before evaluating the read-only batch request
+		// below. Depending on the result of the intent resolution, the read-only
+		// batch request may not conflict with the intents anymore.
+		//
+		// When intents have been condensed into range resolves, widen the
+		// resolve span to cover the full request span so that all of a txn's
+		// intents are resolved in one pass.
+		var reqSpan roachpb.Span
+		if g.HasCondensedIntents() {
+			reqSpan = ba.Requests[0].GetInner().Header().Span()
+			for _, ru := range ba.Requests[1:] {
+				reqSpan = reqSpan.Combine(ru.GetInner().Header().Span())
+			}
+			// Point requests (e.g. Get) have no EndKey. Ensure the span
+			// is a valid range for ResolveIntentRangeRequest.
+			if reqSpan.EndKey == nil {
+				reqSpan.EndKey = reqSpan.Key.Next()
+			}
+		}
+		for _, intent := range intentsToResolveVirtually {
+			var (
+				// It's ok to pass an empty header since during intent resolution it's only
+				// used to ensure that this is not a transactional request, and to apply
+				// MaxTargetBytes (which we don't need because the batch is not committed).
+				h kvpb.Header
+				// The reply coming from evaluation is discarded below.
+				reply kvpb.Response
+				req   kvpb.Request
+			)
+			if len(intent.EndKey) > 0 {
+				// Range LockUpdate: resolve all intents for this txn in the span.
+				// Use the widened request span if available, otherwise fall back to
+				// the intent's own span.
+				span := reqSpan
+				if span.Key == nil {
+					span = intent.Span
+				}
+				req = &kvpb.ResolveIntentRangeRequest{
+					RequestHeader:     kvpb.RequestHeaderFromSpan(span),
+					IntentTxn:         intent.Txn,
+					Status:            intent.Status,
+					IgnoredSeqNums:    intent.IgnoredSeqNums,
+					ClockWhilePending: intent.ClockWhilePending,
+				}
+				reply = &kvpb.ResolveIntentRangeResponse{}
+				r.store.metrics.VirtualResolveIntentRangeCount.Inc(1)
+			} else {
+				req = &kvpb.ResolveIntentRequest{
+					RequestHeader:     kvpb.RequestHeaderFromSpan(intent.Span),
+					IntentTxn:         intent.Txn,
+					Status:            intent.Status,
+					IgnoredSeqNums:    intent.IgnoredSeqNums,
+					ClockWhilePending: intent.ClockWhilePending,
+				}
+				reply = &kvpb.ResolveIntentResponse{}
+				r.store.metrics.VirtualResolveIntentCount.Inc(1)
+			}
+			_, err = evaluateCommand(
+				ctx, rwNoAssert, rec, nil /* ms */, ss, h, req,
+				reply, g, &st, ui, readWrite, false, /* omitInRangefeeds */
+			)
+			if err != nil {
+				r.store.metrics.VirtualResolveBatchErrors.Inc(1)
+				return nil, g, kvpb.NewError(err)
+			}
+		}
+	}
+
 	// Pin engine state eagerly so that all iterators created over this Reader are
 	// based off the state of the engine as of this point and are mutually
 	// consistent.
@@ -90,19 +186,15 @@ func (r *Replica) executeReadOnlyBatch(
 		break
 	}
 	if err := rw.PinEngineStateForIterators(readCategory); err != nil {
-		return nil, g, nil, kvpb.NewError(err)
+		return nil, g, kvpb.NewError(err)
 	}
-	if util.RaceEnabled {
-		rw = spanset.NewReadWriterAt(rw, g.LatchSpans(), ba.Timestamp)
-	}
-	defer rw.Close()
 
 	if err := r.checkExecutionCanProceedAfterStorageSnapshot(ctx, ba, st); err != nil {
-		return nil, g, nil, kvpb.NewError(err)
+		return nil, g, kvpb.NewError(err)
 	}
 	ok, stillNeedsInterleavedIntents, pErr := r.canDropLatchesBeforeEval(ctx, rw, ba, g, st)
 	if pErr != nil {
-		return nil, g, nil, pErr
+		return nil, g, pErr
 	}
 	evalPath := readOnlyDefault
 	if ok {
@@ -128,12 +220,12 @@ func (r *Replica) executeReadOnlyBatch(
 	}
 
 	var result result.Result
-	ba, br, result, pErr = r.executeReadOnlyBatchWithServersideRefreshes(ctx, rw, rec, ba, g, &st, ui, evalPath)
+	ba, br, result, pErr = r.executeReadOnlyBatchWithServersideRefreshes(ctx, rw, rec, ss, ba, g, &st, ui, evalPath)
 
 	// If the request hit a server-side concurrency retry error, immediately
 	// propagate the error. Don't assume ownership of the concurrency guard.
 	if isConcurrencyRetryError(pErr) {
-		if g != nil && g.EvalKind == concurrency.OptimisticEval {
+		if g != nil && g.EvalKind() == concurrency.OptimisticEval {
 			// Since this request was not holding latches, it could have raced with
 			// intent resolution. So we can't trust it to add discovered locks, if
 			// there is a latch conflict. This means that a discovered lock plus a
@@ -147,33 +239,34 @@ func (r *Replica) executeReadOnlyBatch(
 			// conflicts for by using collectSpansRead as done below in the
 			// non-error path.
 			if !g.CheckOptimisticNoLatchConflicts() {
-				return nil, g, nil, kvpb.NewError(kvpb.NewOptimisticEvalConflictsError())
+				log.Eventf(ctx, "optimistic evaluation failed with %s", pErr)
+				return nil, g, kvpb.NewError(kvpb.NewOptimisticEvalConflictsError())
 			}
 		}
 		pErr = maybeAttachLease(pErr, &st.Lease)
-		return nil, g, nil, pErr
+		return nil, g, pErr
 	}
 
-	if g != nil && g.EvalKind == concurrency.OptimisticEval {
+	if g != nil && g.EvalKind() == concurrency.OptimisticEval {
 		if pErr == nil {
 			// Gather the spans that were read -- we distinguish the spans in the
 			// request from the spans that were actually read, using resume spans in
 			// the response.
 			latchSpansRead, lockSpansRead, err := r.collectSpansRead(ba, br)
 			if err != nil {
-				return nil, g, nil, kvpb.NewError(err)
+				return nil, g, kvpb.NewError(err)
 			}
 			defer latchSpansRead.Release()
 			defer lockSpansRead.Release()
 			if ok := g.CheckOptimisticNoConflicts(latchSpansRead, lockSpansRead); !ok {
-				return nil, g, nil, kvpb.NewError(kvpb.NewOptimisticEvalConflictsError())
+				return nil, g, kvpb.NewError(kvpb.NewOptimisticEvalConflictsError())
 			}
 		} else {
 			// There was an error, that was not classified as a concurrency retry
 			// error, and this request was not holding latches. This should be rare,
 			// and in the interest of not having subtle correctness bugs, we retry
 			// pessimistically.
-			return nil, g, nil, kvpb.NewError(kvpb.NewOptimisticEvalConflictsError())
+			return nil, g, kvpb.NewError(kvpb.NewOptimisticEvalConflictsError())
 		}
 	}
 
@@ -183,6 +276,14 @@ func (r *Replica) executeReadOnlyBatch(
 	// conflicting intents so intent resolution could have been racing with this
 	// request even if latches were held.
 	intents := result.Local.DetachEncounteredIntents()
+
+	// If QueryIntent reports a lock as missing, we must report it to the lock
+	// manager.
+	missingLocks := result.Local.DetachMissingLocks()
+	for i := range missingLocks {
+		r.concMgr.OnLockMissing(ctx, &missingLocks[i])
+	}
+
 	if pErr == nil {
 		pErr = r.handleReadOnlyLocalEvalResult(ctx, ba, result.Local)
 	}
@@ -220,7 +321,7 @@ func (r *Replica) executeReadOnlyBatch(
 			intents,
 			allowSyncProcessing,
 		); err != nil {
-			log.Warningf(ctx, "%v", err)
+			log.KvExec.Warningf(ctx, "%v", err)
 		}
 	}
 
@@ -232,7 +333,7 @@ func (r *Replica) executeReadOnlyBatch(
 		r.loadStats.RecordReadBytes(bytesRead)
 		log.Event(ctx, "read completed")
 	}
-	return br, nil, nil, pErr
+	return br, nil, pErr
 }
 
 // updateTimestampCacheAndDropLatches updates the timestamp cache and releases
@@ -249,7 +350,7 @@ func (r *Replica) executeReadOnlyBatch(
 // ResumeSpans.
 func (r *Replica) updateTimestampCacheAndDropLatches(
 	ctx context.Context,
-	g *concurrency.Guard,
+	g concurrency.Guard,
 	ba *kvpb.BatchRequest,
 	br *kvpb.BatchResponse,
 	pErr *kvpb.Error,
@@ -295,7 +396,7 @@ func (r *Replica) canDropLatchesBeforeEval(
 	ctx context.Context,
 	rw storage.ReadWriter,
 	ba *kvpb.BatchRequest,
-	g *concurrency.Guard,
+	g concurrency.Guard,
 	st kvserverpb.LeaseStatus,
 ) (ok, stillNeedsIntentInterleaving bool, pErr *kvpb.Error) {
 	if !allowDroppingLatchesBeforeEval.Get(&r.store.cfg.Settings.SV) ||
@@ -311,6 +412,11 @@ func (r *Replica) canDropLatchesBeforeEval(
 
 	maxLockConflicts := storage.MaxConflictsPerLockConflictError.Get(&r.store.cfg.Settings.SV)
 	targetLockConflictBytes := storage.TargetBytesPerLockConflictError.Get(&r.store.cfg.Settings.SV)
+	// After condensing, range resolves are widened to cover the full request
+	// span. In this regime, prefer discovering distinct conflicting transactions
+	// over accumulating many intents from the same transaction, since each
+	// distinct txn's range resolve will cover all its intents.
+	preferDistinctTxns := g.HasCondensedIntents()
 	var intents []roachpb.Intent
 	// Check if any of the requests within the batch need to resolve any intents
 	// or if any of them need to use an intent interleaving iterator.
@@ -323,6 +429,7 @@ func (r *Replica) canDropLatchesBeforeEval(
 		}
 		needsIntentInterleavingForThisRequest, err := storage.ScanConflictingIntentsForDroppingLatchesEarly(
 			ctx, rw, txnID, ba.Header.Timestamp, start, end, &intents, maxLockConflicts, targetLockConflictBytes,
+			preferDistinctTxns,
 		)
 		if err != nil {
 			return false /* ok */, true /* stillNeedsIntentInterleaving */, kvpb.NewError(
@@ -412,8 +519,9 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 	ctx context.Context,
 	rw storage.ReadWriter,
 	rec batcheval.EvalContext,
+	ss *kvpb.ScanStats,
 	ba *kvpb.BatchRequest,
-	g *concurrency.Guard,
+	g concurrency.Guard,
 	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
 	evalPath batchEvalPath,
@@ -460,6 +568,36 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 		rec = evalCtx
 	}
 
+	latchesHeld := g != nil
+	// Decide on yielding for the ElasticCPUWorkHandle, if any. The
+	// ElasticCPUWorkHandle when created is configured to not yield since that
+	// is the safe choice when it was made (see kvadmission.go). However, batch
+	// execution can be retried after the creation of the ElasticCPUWorkHandle
+	// (e.g. the loop in executeBatchWithConcurrencyRetries), so this point in
+	// the code can be reached multiple times, with different decisions made
+	// regarding yielding. Therefore, we always override with what should be the
+	// correct yield behavior.
+	elasticCPUHandle := admission.ElasticCPUWorkHandleFromContext(ctx)
+	if elasticCPUHandle != nil {
+		// If latches are not held, it is safe to yield (which can slow down
+		// individual request evaluation), without any risk of latch priority
+		// inversion.
+		//
+		// Even though an individual elastic request can take longer, the
+		// goroutine scheduling of foreground work improves, which results in a
+		// higher amount of elastic work to be permitted, so overall throughput of
+		// elastic work is expected to improve.
+		//
+		// NB: This only has an effect if the request evaluation calls
+		// elasticCPUHandle.IsOverLimitAndPossiblyYield. Currently only
+		// ExportRequest evaluation does that. ExportRequest should often be
+		// evaluating without holding latches, since it should fit all the
+		// criteria in canReadOnlyRequestDropLatchesBeforeEval, i.e., consistent
+		// read, pessimistic-eval, wait-policy is block or error, and should often
+		// not find intents in canDropLatchesBeforeEval.
+		yield := !latchesHeld && admission.YieldForElasticCPU.Get(&r.store.cfg.Settings.SV)
+		elasticCPUHandle.SetYield(yield)
+	}
 	for retries := 0; ; retries++ {
 		if retries > 0 {
 			if boundAccount != nil {
@@ -469,7 +607,7 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 		}
 		now := timeutil.Now()
 		br, res, pErr = evaluateBatch(
-			ctx, kvserverbase.CmdIDKey(""), rw, rec, nil /* ms */, ba, g,
+			ctx, kvserverbase.CmdIDKey(""), rw, rec, nil /* ms */, ss, ba, g,
 			st, ui, evalPath, false, /* omitInRangefeeds */
 		)
 		r.store.metrics.ReplicaReadBatchEvaluationLatency.RecordValue(timeutil.Since(now).Nanoseconds())
@@ -483,7 +621,6 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 		// indicated by the latch guard being nil) before this point, then it cannot
 		// retry at a higher timestamp because it is not isolated at higher
 		// timestamps.
-		latchesHeld := g != nil
 		var ok bool
 		if latchesHeld {
 			ba, ok = canDoServersideRetry(ctx, pErr, ba, g, hlc.Timestamp{})
@@ -503,8 +640,9 @@ func (r *Replica) executeReadOnlyBatchWithServersideRefreshes(
 		// Failed read-only batches can't have any Result except for what's
 		// allowlisted here.
 		res.Local = result.LocalResult{
-			EncounteredIntents: res.Local.DetachEncounteredIntents(),
-			Metrics:            res.Local.Metrics,
+			ReportedMissingLocks: res.Local.ReportedMissingLocks,
+			EncounteredIntents:   res.Local.DetachEncounteredIntents(),
+			Metrics:              res.Local.Metrics,
 		}
 		return ba, nil, res, pErr
 	}
@@ -531,7 +669,7 @@ func (r *Replica) handleReadOnlyLocalEvalResult(
 	}
 
 	if !lResult.IsZero() {
-		log.Fatalf(ctx, "unhandled field in LocalEvalResult: %s", pretty.Diff(lResult, result.LocalResult{}))
+		log.KvExec.Fatalf(ctx, "unhandled field in LocalEvalResult: %s", pretty.Diff(lResult, result.LocalResult{}))
 	}
 	return nil
 }
@@ -583,7 +721,7 @@ func (r *Replica) collectSpansRead(
 				getAlloc.union.Get = &getAlloc.get
 				ru := kvpb.RequestUnion{Value: &getAlloc.union}
 				baCopy.Requests = append(baCopy.Requests, ru)
-			}); err != nil {
+			}, false /* includeLockedNonExisting */); err != nil {
 				return nil, nil, err
 			}
 			continue

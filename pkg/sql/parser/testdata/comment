@@ -103,3 +103,59 @@ COMMENT ON TYPE foo IS NULL
 COMMENT ON TYPE foo IS NULL -- fully parenthesized
 COMMENT ON TYPE foo IS NULL -- literals removed
 COMMENT ON TYPE _ IS NULL -- identifiers removed
+
+parse
+COMMENT ON CONSTRAINT foo ON bar IS 'a'
+----
+COMMENT ON CONSTRAINT foo ON bar IS 'a'
+COMMENT ON CONSTRAINT foo ON bar IS 'a' -- fully parenthesized
+COMMENT ON CONSTRAINT foo ON bar IS '_' -- literals removed
+COMMENT ON CONSTRAINT _ ON _ IS 'a' -- identifiers removed
+
+parse
+COMMENT ON SCHEMA foo IS 'a'
+----
+COMMENT ON SCHEMA foo IS 'a'
+COMMENT ON SCHEMA foo IS 'a' -- fully parenthesized
+COMMENT ON SCHEMA foo IS '_' -- literals removed
+COMMENT ON SCHEMA _ IS 'a' -- identifiers removed
+
+parse
+COMMENT ON SEQUENCE foo IS 'a'
+----
+COMMENT ON SEQUENCE foo IS 'a'
+COMMENT ON SEQUENCE foo IS 'a' -- fully parenthesized
+COMMENT ON SEQUENCE foo IS '_' -- literals removed
+COMMENT ON SEQUENCE _ IS 'a' -- identifiers removed
+
+parse
+COMMENT ON VIEW foo IS 'a'
+----
+COMMENT ON VIEW foo IS 'a'
+COMMENT ON VIEW foo IS 'a' -- fully parenthesized
+COMMENT ON VIEW foo IS '_' -- literals removed
+COMMENT ON VIEW _ IS 'a' -- identifiers removed
+
+parse
+COMMENT ON FUNCTION foo() IS 'a'
+----
+COMMENT ON FUNCTION foo() IS 'a'
+COMMENT ON FUNCTION foo() IS 'a' -- fully parenthesized
+COMMENT ON FUNCTION foo() IS '_' -- literals removed
+COMMENT ON FUNCTION _() IS 'a' -- identifiers removed
+
+parse
+COMMENT ON PROCEDURE foo() IS 'a'
+----
+COMMENT ON PROCEDURE foo() IS 'a'
+COMMENT ON PROCEDURE foo() IS 'a' -- fully parenthesized
+COMMENT ON PROCEDURE foo() IS '_' -- literals removed
+COMMENT ON PROCEDURE _() IS 'a' -- identifiers removed
+
+parse
+COMMENT ON ROUTINE foo() IS 'a'
+----
+COMMENT ON ROUTINE foo() IS 'a'
+COMMENT ON ROUTINE foo() IS 'a' -- fully parenthesized
+COMMENT ON ROUTINE foo() IS '_' -- literals removed
+COMMENT ON ROUTINE _() IS 'a' -- identifiers removed

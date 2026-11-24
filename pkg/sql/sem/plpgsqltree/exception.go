@@ -22,16 +22,11 @@ func (s *Exception) CopyNode() *Exception {
 
 func (s *Exception) Format(ctx *tree.FmtCtx) {
 	ctx.WriteString("WHEN ")
-	for i, cond := range s.Conditions {
+	for i := range s.Conditions {
 		if i > 0 {
 			ctx.WriteString(" OR ")
 		}
-		if cond.SqlErrState != "" {
-			ctx.WriteString("SQLSTATE ")
-			formatStringQuotes(ctx, cond.SqlErrState)
-		} else {
-			formatString(ctx, cond.SqlErrName)
-		}
+		ctx.FormatNode(&s.Conditions[i])
 	}
 	ctx.WriteString(" THEN\n")
 	for _, stmt := range s.Action {
@@ -62,4 +57,13 @@ func (s *Exception) WalkStmt(visitor StatementVisitor) Statement {
 type Condition struct {
 	SqlErrState string
 	SqlErrName  string
+}
+
+func (c *Condition) Format(ctx *tree.FmtCtx) {
+	if c.SqlErrState != "" {
+		ctx.WriteString("SQLSTATE ")
+		ctx.WriteString(formatStringQuotes(ctx, c.SqlErrState))
+	} else {
+		ctx.WriteString(formatString(ctx, c.SqlErrName))
+	}
 }

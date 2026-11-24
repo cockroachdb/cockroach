@@ -27,71 +27,162 @@ func CheckDependencies(
 			if len(c.All()) == 0 {
 				return false, nil
 			}
+
 		case registry.OperationRequiresPopulatedDatabase:
-			conn := c.Conn(ctx, l, 1, option.VirtualClusterName(roachtestflags.VirtualCluster))
-			defer conn.Close()
+			ok, err := checkPopulatedDatabase(ctx, c, l)
+			if err != nil || !ok {
+				return ok, err
+			}
 
-			dbsCount, err := conn.QueryContext(ctx, "SELECT count(database_name) FROM [SHOW DATABASES] WHERE database_name NOT IN ('postgres', 'system')")
-			if err != nil {
-				return false, err
-			}
-			dbsCount.Next()
-			var count int
-			if err := dbsCount.Scan(&count); err != nil {
-				return false, err
-			}
-			if count == 0 {
-				return false, nil
-			}
 		case registry.OperationRequiresZeroUnavailableRanges:
-			conn := c.Conn(ctx, l, 1, option.VirtualClusterName("system"))
-			defer conn.Close()
+			ok, err := checkZeroUnavailableRanges(ctx, c, l)
+			if err != nil || !ok {
+				return ok, err
+			}
 
-			rangesCur, err := conn.QueryContext(ctx, "SELECT sum(unavailable_ranges) FROM system.replication_stats")
-			if err != nil {
-				return false, err
-			}
-			rangesCur.Next()
-			var count int
-			if err := rangesCur.Scan(&count); err != nil {
-				return false, err
-			}
-			if count != 0 {
-				return false, nil
-			}
 		case registry.OperationRequiresZeroUnderreplicatedRanges:
-			conn := c.Conn(ctx, l, 1, option.VirtualClusterName("system"))
-			defer conn.Close()
+			ok, err := checkZeroUnderreplicatedRanges(ctx, c, l)
+			if err != nil || !ok {
+				return ok, err
+			}
 
-			rangesCur, err := conn.QueryContext(ctx, "SELECT sum(under_replicated_ranges) FROM system.replication_stats")
-			if err != nil {
-				return false, err
-			}
-			rangesCur.Next()
-			var count int
-			if err := rangesCur.Scan(&count); err != nil {
-				return false, err
-			}
-			if count != 0 {
-				return false, nil
-			}
 		case registry.OperationRequiresLDRJobRunning:
-			conn := c.Conn(ctx, l, 1, option.VirtualClusterName("system"))
-			defer conn.Close()
+			ok, err := checkLDRJobRunning(ctx, c, l)
+			if err != nil || !ok {
+				return ok, err
+			}
 
-			jobsCur, err := conn.QueryContext(ctx, "(WITH x AS (SHOW JOBS) SELECT job_id FROM x WHERE job_type = 'LOGICAL REPLICATION' AND status = 'running' limit 1)")
-			if err != nil {
-				return false, err
+		case registry.OperationRequiresRunningBackupJob:
+			ok, err := checkBackupJobRunning(ctx, c, l)
+			if err != nil || !ok {
+				return ok, err
 			}
-			jobsCur.Next()
-			var jobId string
-			_ = jobsCur.Scan(&jobId)
-			if jobId == "" {
-				return false, nil
+
+		case registry.OperationRequiresRunningRestoreJob:
+			ok, err := checkRestoreJobRunning(ctx, c, l)
+			if err != nil || !ok {
+				return ok, err
 			}
+
 		default:
 			panic(fmt.Sprintf("unknown operation dependency %d", dep))
 		}
 	}
 	return true, nil
+}
+
+func checkPopulatedDatabase(
+	ctx context.Context, c cluster.Cluster, l *logger.Logger,
+) (ok bool, _ error) {
+	conn := c.Conn(ctx, l, 1, option.VirtualClusterName(roachtestflags.VirtualCluster))
+	defer conn.Close()
+
+	dbsCount, err := conn.QueryContext(ctx, "SELECT count(database_name) FROM [SHOW DATABASES] WHERE database_name NOT IN ('postgres', 'system')")
+	if err != nil {
+		return false, err
+	}
+	defer dbsCount.Close()
+
+	dbsCount.Next()
+	var count int
+	if err := dbsCount.Scan(&count); err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
+
+func checkZeroUnavailableRanges(
+	ctx context.Context, c cluster.Cluster, l *logger.Logger,
+) (ok bool, _ error) {
+	conn := c.Conn(ctx, l, 1, option.VirtualClusterName("system"))
+	defer conn.Close()
+
+	rangesCur, err := conn.QueryContext(ctx, "SELECT COALESCE(sum(unavailable_ranges), 0) FROM system.replication_stats")
+	if err != nil {
+		return false, err
+	}
+	defer rangesCur.Close()
+
+	rangesCur.Next()
+	var count int
+	if err := rangesCur.Scan(&count); err != nil {
+		return false, err
+	}
+	return count == 0, nil
+}
+
+func checkZeroUnderreplicatedRanges(
+	ctx context.Context, c cluster.Cluster, l *logger.Logger,
+) (ok bool, _ error) {
+	conn := c.Conn(ctx, l, 1, option.VirtualClusterName("system"))
+	defer conn.Close()
+
+	rangesCur, err := conn.QueryContext(ctx, "SELECT COALESCE(sum(under_replicated_ranges), 0) FROM system.replication_stats")
+	if err != nil {
+		return false, err
+	}
+	defer rangesCur.Close()
+
+	rangesCur.Next()
+	var count int
+	if err := rangesCur.Scan(&count); err != nil {
+		return false, err
+	}
+	return count == 0, nil
+}
+
+func checkLDRJobRunning(
+	ctx context.Context, c cluster.Cluster, l *logger.Logger,
+) (ok bool, _ error) {
+	conn := c.Conn(ctx, l, 1, option.VirtualClusterName("system"))
+	defer conn.Close()
+
+	jobsCur, err := conn.QueryContext(ctx, "(WITH x AS (SHOW JOBS) SELECT job_id FROM x WHERE job_type = 'LOGICAL REPLICATION' AND status = 'running' limit 1)")
+	if err != nil {
+		return false, err
+	}
+	defer jobsCur.Close()
+
+	jobsCur.Next()
+	var jobId string
+	_ = jobsCur.Scan(&jobId)
+	return jobId != "", nil
+}
+
+func checkBackupJobRunning(
+	ctx context.Context, c cluster.Cluster, l *logger.Logger,
+) (ok bool, _ error) {
+	conn := c.Conn(ctx, l, 1, option.VirtualClusterName("system"))
+	defer conn.Close()
+
+	jobsCur, err := conn.QueryContext(ctx,
+		"(WITH x AS (SHOW JOBS) SELECT job_id FROM x WHERE job_type = 'BACKUP' AND status = 'running' LIMIT 1)")
+	if err != nil {
+		return false, err
+	}
+	defer jobsCur.Close()
+
+	jobsCur.Next()
+	var jobId string
+	_ = jobsCur.Scan(&jobId)
+	return jobId != "", nil
+}
+
+func checkRestoreJobRunning(
+	ctx context.Context, c cluster.Cluster, l *logger.Logger,
+) (ok bool, _ error) {
+	conn := c.Conn(ctx, l, 1, option.VirtualClusterName("system"))
+	defer conn.Close()
+
+	jobsCur, err := conn.QueryContext(ctx,
+		"(WITH x AS (SHOW JOBS) SELECT job_id FROM x WHERE job_type = 'RESTORE' AND status = 'running' LIMIT 1)")
+	if err != nil {
+		return false, err
+	}
+	defer jobsCur.Close()
+
+	jobsCur.Next()
+	var jobId string
+	_ = jobsCur.Scan(&jobId)
+	return jobId != "", nil
 }

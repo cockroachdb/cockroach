@@ -7,85 +7,207 @@ package kvstorage
 
 import (
 	"context"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
+	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
 )
 
-const (
-	// ClearRangeThresholdPointKeys is the threshold (as number of point keys)
-	// beyond which we'll clear range data using a Pebble range tombstone rather
-	// than individual Pebble point tombstones.
-	//
-	// It is expensive for there to be many Pebble range tombstones in the same
-	// sstable because all of the tombstones in an sstable are loaded whenever the
-	// sstable is accessed. So we avoid using range deletion unless there is some
-	// minimum number of keys. The value here was pulled out of thin air. It might
-	// be better to make this dependent on the size of the data being deleted. Or
-	// perhaps we should fix Pebble to handle large numbers of range tombstones in
-	// an sstable better.
-	ClearRangeThresholdPointKeys = 64
+// MergedTombstoneReplicaID is the replica ID written into the RangeTombstone
+// for replicas of a range which is known to have been merged. This value
+// should prevent any messages from stale replicas of that range from ever
+// resurrecting merged replicas. Whenever merging or subsuming a replica we
+// know new replicas can never be created so this value is used even if we
+// don't know the current replica ID.
+const MergedTombstoneReplicaID roachpb.ReplicaID = math.MaxInt32
 
-	// ClearRangeThresholdRangeKeys is the threshold (as number of range keys)
-	// beyond which we'll clear range data using a single RANGEKEYDEL across the
-	// span rather than clearing individual range keys.
-	ClearRangeThresholdRangeKeys = 8
-)
+// clearRangeThresholdPointKeys is the value of ClearRangeThresholdPointKeys().
+// Can be overridden only in tests, in order to deterministically force using
+// ClearRawRange instead of point clears, when destroying replicas.
+var clearRangeThresholdPointKeys = 64
 
-// ClearRangeDataOptions specify which parts of a Replica are to be destroyed.
-type ClearRangeDataOptions struct {
-	// ClearReplicatedByRangeID indicates that replicated RangeID-based keys
-	// (abort span, etc) should be removed.
-	ClearReplicatedByRangeID bool
-	// ClearUnreplicatedByRangeID indicates that unreplicated RangeID-based keys
-	// (logstore state incl. HardState, etc) should be removed.
-	ClearUnreplicatedByRangeID bool
-	// ClearReplicatedBySpan causes the state machine data (i.e. the replicated state
-	// for the given RSpan) that is key-addressable (i.e. range descriptor, user keys,
-	// locks) to be removed. No data is removed if this is the zero span.
-	ClearReplicatedBySpan roachpb.RSpan
-
-	// If MustUseClearRange is true, a Pebble range tombstone will always be used
-	// to clear the key spans (unless empty). This is typically used when we need
-	// to write additional keys to an SST after this clear, e.g. a replica
-	// tombstone, since keys must be written in order. When this is false, a
-	// heuristic will be used instead.
-	MustUseClearRange bool
+// ClearRangeThresholdPointKeys returns the threshold (as number of point keys)
+// beyond which we'll clear range data using a Pebble range tombstone rather
+// than individual Pebble point tombstones.
+//
+// It is expensive for there to be many Pebble range tombstones in the same
+// sstable because all of the tombstones in an sstable are loaded whenever the
+// sstable is accessed. So we avoid using range deletion unless there is some
+// minimum number of keys. The value here was pulled out of thin air. It might
+// be better to make this dependent on the size of the data being deleted. Or
+// perhaps we should fix Pebble to handle large numbers of range tombstones in
+// an sstable better.
+func ClearRangeThresholdPointKeys() int {
+	return clearRangeThresholdPointKeys
 }
 
-// ClearRangeData clears the data associated with a range descriptor selected
-// by the provided options.
+// DestroyReplicaTODO is the plan for splitting DestroyReplica into cross-engine
+// writes.
 //
-// TODO(tbg): could rename this to XReplica. The use of "Range" in both the
-// "CRDB Range" and "storage.ClearRange" context in the setting of this method could
-// be confusing.
-func ClearRangeData(
-	ctx context.Context,
-	rangeID roachpb.RangeID,
-	reader storage.Reader,
-	writer storage.Writer,
-	opts ClearRangeDataOptions,
-) error {
-	keySpans := rditer.Select(rangeID, rditer.SelectOpts{
-		ReplicatedBySpan:      opts.ClearReplicatedBySpan,
-		ReplicatedByRangeID:   opts.ClearReplicatedByRangeID,
-		UnreplicatedByRangeID: opts.ClearUnreplicatedByRangeID,
-	})
+//  1. Log storage write (durable):
+//     1.1. WAG: apply to RaftAppliedIndex.
+//     1.2. WAG: apply mutation (2).
+//  2. State machine mutation:
+//     2.1. Clear RangeID-local un-/replicated state.
+//     2.2. (optional) Clear replicated MVCC span.
+//     2.3. Write RangeTombstone with next ReplicaID.
+//  3. Log engine GC (after state machine mutation 2 is durably applied):
+//     3.1. Remove raft state.
+//
+// TODO(sep-raft-log): support the status quo in which 2+3 is written
+// atomically, and 1 is not written.
+const DestroyReplicaTODO = 0
 
-	pointKeyThreshold, rangeKeyThreshold := ClearRangeThresholdPointKeys, ClearRangeThresholdRangeKeys
-	if opts.MustUseClearRange {
-		pointKeyThreshold, rangeKeyThreshold = 1, 1
+// DestroyReplicaInfo contains the replica's metadata needed for its removal
+// from storage.
+type DestroyReplicaInfo struct {
+	// FullReplicaID identifies the replica on its store.
+	roachpb.FullReplicaID
+	// RaftAppliedIndex is the replica's last applied raft log index before
+	// destruction. Used for constructing WAG dependency nodes. Zero for
+	// uninitialized replicas that never applied any log entries.
+	RaftAppliedIndex kvpb.RaftIndex
+	// Keys is the user key span of this replica, taken from its RangeDescriptor.
+	// Non-empty iff the replica is initialized.
+	Keys roachpb.RSpan
+	// Separated indicates that the raft and state machine engines are separated.
+	// When true, only the unapplied suffix of the raft log is cleared (entries
+	// after RaftAppliedIndex), leaving the applied prefix for later log engine
+	// GC. When false, the entire raft log is cleared.
+	Separated bool
+}
+
+// DestroyReplica destroys the entirety of the replica's state in storage, and
+// installs a RangeTombstone in its place. It handles both uninitialized and
+// initialized replicas uniformly.
+//
+// This call issues all writes ordered by key. This is to support a large
+// variety of uses, including SSTable generation for snapshot application.
+func DestroyReplica(
+	ctx context.Context,
+	rw ReadWriter,
+	w *wag.Writer,
+	info DestroyReplicaInfo,
+	next roachpb.ReplicaID,
+) error {
+	w.AddEvent(wagpb.MakeAddr(info.FullReplicaID, info.RaftAppliedIndex), wagpb.EventDestroy, info.Keys.Key)
+	return destroyReplicaImpl(ctx, rw, info, next)
+}
+
+func destroyReplicaImpl(
+	ctx context.Context, rw ReadWriter, info DestroyReplicaInfo, next roachpb.ReplicaID,
+) error {
+	sl := MakeStateLoader(info.RangeID)
+	// Assert that the ReplicaID in storage matches the one being removed, and the
+	// replica is not already destroyed. Also assert that the next ReplicaID
+	// correctly marks our replica as destroyed.
+	mark, err := sl.LoadReplicaMark(ctx, rw.State.RO)
+	if err != nil {
+		return err
+	} else if !mark.Is(info.ReplicaID) {
+		return errors.AssertionFailedf("%v has a mismatching mark %+v", info.FullReplicaID, mark)
+	} else if mark, err = mark.Destroy(next); err != nil {
+		return err
 	}
 
-	for _, keySpan := range keySpans {
+	_ = DestroyReplicaTODO
+	// Clear all range data in sorted order of engine keys. This call can be used
+	// for generating SSTables when ingesting a snapshot, which requires Clears
+	// and Puts to be written in key order.
+	//
+	// All the code below is equivalent to clearing all the spans that the
+	// following SelectOpts represents, and leaving only the RangeTombstoneKey
+	// populated with the specified NextReplicaID. With separated engines, the
+	// applied prefix of the raft log is excluded and left for log engine GC.
+	if buildutil.CrdbTestBuild {
+		_ = rditer.SelectOpts{
+			ReplicatedByRangeID:   true,
+			UnreplicatedByRangeID: true,
+			Ranged:                rditer.SelectAllRanged(info.Keys),
+		}
+	}
+
+	buf := keys.MakeRangeIDPrefixBuf(info.RangeID)
+	// First, clear all RangeID-local replicated keys. Also, include all
+	// RangeID-local unreplicated keys < RangeTombstoneKey as a drive-by, since we
+	// decided that these (currently none) belong to the state machine engine.
+	if err := storage.ClearRangeWithHeuristic(
+		ctx, rw.State.RO, rw.State.WO,
+		buf.ReplicatedPrefix(), sl.RangeTombstoneKey(),
+		ClearRangeThresholdPointKeys(),
+	); err != nil {
+		return err
+	}
+	// Save a tombstone to ensure that replica IDs never get reused. Note that we
+	// also clear the RaftReplicaID key below.
+	if err := sl.SetRangeTombstone(ctx, rw.State.WO, mark.RangeTombstone); err != nil {
+		return err
+	}
+
+	// Clear the rest of the RangeID-local unreplicated keys. These are all raft
+	// engine keys, except for RaftReplicaIDKey. Make a stop at the latter, and
+	// clear it manually (note that it always exists for an existing replica, and
+	// we have asserted that above).
+	//
+	// TODO(pav-kv): make a helper for piece-wise clearing, instead of using a
+	// series of ClearRangeWithHeuristic.
+	if err := storage.ClearRangeWithHeuristic(
+		ctx, rw.Raft.RO, rw.Raft.WO,
+		buf.RangeTombstoneKey().Next(), sl.RaftLogPrefix(),
+		ClearRangeThresholdPointKeys(),
+	); err != nil {
+		return err
+	}
+	clearAfter := kvpb.RaftIndex(0) // index 0 never has an entry
+	if info.Separated {
+		// With separated engines, only clear the unapplied suffix of the raft log.
+		// The applied entries are cleared during WAG garbage collection.
+		clearAfter = info.RaftAppliedIndex
+	}
+	// Note: We could just clear the whole raft log in the
+	// ClearRangeWithHeuristic() above. However, we want to funnel all raft log
+	// deletions through the logstore package to make it easier to reason about
+	// them.
+	// TODO(ibrahim): We could know `hi` if DestroyReplicaInfo passes down the
+	// log's last index.
+	if err := logstore.ClearRange(
+		ctx, rw.Raft.RO, rw.Raft.WO, buf,
+		clearAfter /* lo */, math.MaxUint64 /* hi */, ClearRangeThresholdPointKeys(),
+	); err != nil {
+		return err
+	}
+	// We're technically skipping the keys between the raft log and
+	// RaftReplicaID. This is ok because there are no keys there.
+	if err := sl.ClearRaftReplicaID(rw.State.WO); err != nil {
+		return err
+	}
+
+	if err := storage.ClearRangeWithHeuristic(
+		ctx, rw.Raft.RO, rw.Raft.WO,
+		buf.RaftReplicaIDKey().Next(), sl.UnreplicatedPrefix().PrefixEnd(),
+		ClearRangeThresholdPointKeys(),
+	); err != nil {
+		return err
+	}
+
+	// Finally, clear all the user keys (MVCC keyspace and the corresponding
+	// system and lock table keys), if info.Keys is not empty.
+	for _, span := range rditer.Select(info.RangeID, rditer.SelectOpts{
+		Ranged: rditer.SelectAllRanged(info.Keys),
+	}) {
 		if err := storage.ClearRangeWithHeuristic(
-			ctx, reader, writer, keySpan.Key, keySpan.EndKey, pointKeyThreshold, rangeKeyThreshold,
+			ctx, rw.State.RO, rw.State.WO,
+			span.Key, span.EndKey, ClearRangeThresholdPointKeys(),
 		); err != nil {
 			return err
 		}
@@ -93,60 +215,97 @@ func ClearRangeData(
 	return nil
 }
 
-// DestroyReplica destroys all or a part of the Replica's state, installing a
-// RangeTombstone in its place. Due to merges, splits, etc, there is a need
-// to control which part of the state this method actually gets to remove,
-// which is done via the provided options[^1]; the caller is always responsible
-// for managing the remaining disk state accordingly.
-//
-// [^1] e.g., on a merge, the user data moves to the subsuming replica and must
-// not be cleared.
-func DestroyReplica(
-	ctx context.Context,
-	rangeID roachpb.RangeID,
-	reader storage.Reader,
-	writer storage.Writer,
-	nextReplicaID roachpb.ReplicaID,
-	opts ClearRangeDataOptions,
+// SubsumeReplica is like DestroyReplica, but it does not delete the user keys
+// (and the corresponding system and lock table keys). The latter are inherited
+// by the subsuming range.
+func SubsumeReplica(
+	ctx context.Context, rw ReadWriter, w *wag.Writer, info DestroyReplicaInfo,
 ) error {
-	diskReplicaID, err := logstore.NewStateLoader(rangeID).LoadRaftReplicaID(ctx, reader)
-	if err != nil {
-		return err
-	}
-	if diskReplicaID.ReplicaID >= nextReplicaID {
-		return errors.AssertionFailedf("replica r%d/%d must not survive its own tombstone", rangeID, diskReplicaID)
-	}
-	if err := ClearRangeData(ctx, rangeID, reader, writer, opts); err != nil {
-		return err
-	}
+	w.AddEvent(wagpb.MakeAddr(info.FullReplicaID, info.RaftAppliedIndex), wagpb.EventSubsume, info.Keys.Key)
+	info.Keys = roachpb.RSpan{} // forget about the user keys
+	return destroyReplicaImpl(ctx, rw, info, MergedTombstoneReplicaID)
+}
 
-	// Save a tombstone to ensure that replica IDs never get reused.
-	//
-	// TODO(tbg): put this on `stateloader.StateLoader` and consolidate the
-	// other read of the range tombstone key (in uninited replica creation
-	// as well).
-
-	tombstoneKey := keys.RangeTombstoneKey(rangeID)
-
-	// Assert that the provided tombstone moves the existing one strictly forward.
-	// Failure to do so indicates that something is going wrong in the replica
-	// lifecycle.
-	{
-		var tombstone kvserverpb.RangeTombstone
-		if _, err := storage.MVCCGetProto(
-			ctx, reader, tombstoneKey, hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
+// RemoveStaleRHSFromSplit removes all replicated data for the RHS replica of a
+// split. This is used in a situation when the RHS replica is already known to
+// have been removed from our store, so any pending writes that were supposed to
+// initialize the RHS replica should be dropped from the write batch.
+func RemoveStaleRHSFromSplit(
+	ctx context.Context, stateRW State, rangeID roachpb.RangeID, keys roachpb.RSpan,
+) error {
+	for _, span := range rditer.Select(rangeID, rditer.SelectOpts{
+		// Since the RHS replica is uninitalized, we know there isn't anything in
+		// the replicated spans below, before the current batch. Setting these
+		// options will in effect only clear the writes to the RHS replicated state
+		// staged in the batch.
+		ReplicatedByRangeID: true,
+		Ranged:              rditer.SelectAllRanged(keys),
+		// Leave the unreplicated keys intact. The unreplicated space either belongs
+		// to a newer (uninitialized) replica, or is empty and only contains a
+		// RangeTombstone with a higher ReplicaID than the RHS in the split trigger.
+		UnreplicatedByRangeID: false,
+	}) {
+		if err := storage.ClearRangeWithHeuristic(
+			ctx, stateRW.RO, stateRW.WO, span.Key, span.EndKey, ClearRangeThresholdPointKeys(),
 		); err != nil {
 			return err
 		}
-		if tombstone.NextReplicaID >= nextReplicaID {
-			return errors.AssertionFailedf(
-				"cannot rewind tombstone from %d to %d", tombstone.NextReplicaID, nextReplicaID,
-			)
-		}
 	}
+	return nil
+}
 
-	tombstone := kvserverpb.RangeTombstone{NextReplicaID: nextReplicaID}
-	// "Blind" because ms == nil and timestamp.IsEmpty().
-	return storage.MVCCBlindPutProto(ctx, writer, tombstoneKey,
-		hlc.Timestamp{}, &tombstone, storage.MVCCWriteOptions{})
+// RewriteRaftState rewrites the raft state of the given replica with the
+// provided state. Specifically, it rewrites HardState and RaftTruncatedState,
+// and clears raft log entries in (clearAfter, MaxUint64]. When clearAfter is 0,
+// the entire log is cleared. All writes are generated in the engine keys order.
+//
+// With separated engines, clearAfter should be set to the applied index so that
+// only the unapplied suffix of the log is cleared. The applied prefix is left
+// for WAG garbage collection.
+func RewriteRaftState(
+	ctx context.Context,
+	raftWO RaftWO,
+	sl logstore.StateLoader,
+	hs raftpb.HardState,
+	ts kvserverpb.RaftTruncatedState,
+	clearAfter kvpb.RaftIndex,
+) error {
+	// Update HardState.
+	if err := sl.SetHardState(ctx, raftWO, hs); err != nil {
+		return errors.Wrapf(err, "unable to write HardState")
+	}
+	// Clear the raft log via the logstore. Note that there are no Pebble range
+	// keys in this span. We use ClearRangeSizeKnown with pointKeyThreshold=0 to
+	// force a single range tombstone over the whole log span, without scanning.
+	// TODO(ibrahim): We can actually know the log bounds using truncIndex and lastIndex.
+	if err := logstore.ClearRangeSizeKnown(
+		raftWO, sl.RangeIDPrefixBuf,
+		clearAfter /* lo */, math.MaxUint64 /* hi */, 0, /* pointKeyThreshold */
+		false, /* maybeUseSingleDel */
+	); err != nil {
+		return errors.Wrapf(err, "unable to clear the raft log")
+	}
+	// Update the log truncation state.
+	if err := sl.SetRaftTruncatedState(ctx, raftWO, &ts); err != nil {
+		return errors.Wrapf(err, "unable to write RaftTruncatedState")
+	}
+	return nil
+}
+
+// TestingForceClearRange changes the value of ClearRangeThresholdPointKeys to
+// 1, which effectively forces ClearRawRange in the replica destruction path,
+// instead of point deletions. This can be used for making the storage
+// operations in tests deterministic.
+//
+// The caller must call the returned function at the end of the test, to restore
+// the default value.
+func TestingForceClearRange() func() {
+	if !buildutil.CrdbTestBuild {
+		panic("test-only function")
+	}
+	old := clearRangeThresholdPointKeys
+	clearRangeThresholdPointKeys = 1 // forces ClearRawRange
+	return func() {
+		clearRangeThresholdPointKeys = old
+	}
 }

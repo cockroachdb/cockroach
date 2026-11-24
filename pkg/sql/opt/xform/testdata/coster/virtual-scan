@@ -5,10 +5,12 @@ select
  ├── columns: catalog_name:2!null schema_name:3!null default_character_set_name:4 sql_path:5 crdb_is_user_defined:6
  ├── stats: [rows=10, distinct(3)=1, null(3)=0]
  ├── cost: 1249.15
+ ├── cost-flags: unbounded-cardinality
  ├── fd: ()-->(3)
  ├── scan schemata
  │    ├── columns: catalog_name:2!null schema_name:3!null default_character_set_name:4 sql_path:5 crdb_is_user_defined:6
  │    ├── stats: [rows=1000, distinct(2)=100, null(2)=0, distinct(3)=100, null(3)=0]
- │    └── cost: 1239.12
+ │    ├── cost: 1239.12
+ │    └── cost-flags: unbounded-cardinality
  └── filters
       └── schema_name:3 = 'public' [outer=(3), constraints=(/3: [/'public' - /'public']; tight), fd=()-->(3)]

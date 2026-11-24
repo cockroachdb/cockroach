@@ -42,6 +42,8 @@ type rowFetcher interface {
 	) (ok bool, err error)
 
 	Reset()
+	GetKVCPUTime() int64
+	GetLocalKVCPUTime() int64
 	GetBytesRead() int64
 	GetKVPairsRead() int64
 	GetBatchRequestsIssued() int64

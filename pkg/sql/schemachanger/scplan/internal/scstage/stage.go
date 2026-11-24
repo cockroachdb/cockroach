@@ -7,12 +7,14 @@ package scstage
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 // A Stage is a sequence of ops to be executed "together" as part of a schema
@@ -43,12 +45,54 @@ type Stage struct {
 	Ordinal, StagesInPhase int
 }
 
+var _ redact.SafeFormatter = Stage{}
+
+func (s Stage) SafeFormat(p redact.SafePrinter, _ rune) {
+	p.Printf("%s stage %d of %d with ",
+		s.Phase, s.Ordinal, s.StagesInPhase)
+	if n := len(s.Ops()); n > 1 {
+		p.Printf("%d %s ops", n, s.Type())
+	} else if n == 1 {
+		p.Printf("1 %s op", s.Type())
+	} else {
+		p.Printf("no ops")
+	}
+}
+
 // Type returns the type of the operations in this stage.
 func (s Stage) Type() scop.Type {
 	if len(s.EdgeOps) == 0 {
 		return scop.MutationType
 	}
 	return s.EdgeOps[0].Type()
+}
+
+func (s Stage) OpsDescription() redact.RedactableString {
+	counts := make(map[redact.RedactableString]int)
+	for _, op := range s.Ops() {
+		counts[op.Description()]++
+	}
+
+	keys := make([]redact.RedactableString, 0, len(counts))
+	for key := range counts {
+		keys = append(keys, key)
+	}
+	slices.Sort(keys)
+
+	var buf redact.StringBuilder
+	for _, op := range keys {
+		if buf.Len() > 0 {
+			buf.SafeString("; ")
+		}
+
+		if count := counts[op]; count == 1 {
+			buf.Printf("%s (%d operation)", op, count)
+		} else {
+			buf.Printf("%s (%d operations)", op, count)
+		}
+	}
+
+	return buf.RedactableString()
 }
 
 // Ops returns the operations in this stage.

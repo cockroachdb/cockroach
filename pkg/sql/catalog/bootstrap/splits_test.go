@@ -51,6 +51,9 @@ func TestInitialSplitPoints(t *testing.T) {
 
 		ctx := context.Background()
 		tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+			ServerArgs: base.TestServerArgs{
+				DefaultTestTenant: base.TestControlsTenantsExplicitly,
+			},
 			ReplicationMode: base.ReplicationManual,
 		})
 		defer tc.Stopper().Stop(ctx)

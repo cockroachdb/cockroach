@@ -13,8 +13,11 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/coldatatestutils"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
@@ -136,7 +139,10 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				flowCtx := &execinfra.FlowCtx{
 					EvalCtx: &evalCtx,
 					Mon:     evalCtx.TestingMon,
-					Cfg:     &execinfra.ServerConfig{Settings: st},
+					Cfg: &execinfra.ServerConfig{
+						Settings:   st,
+						RPCContext: &rpc.Context{ContextOptions: rpc.ContextOptions{}},
+					},
 				}
 				rng, _ := randutil.NewTestRand()
 				var (
@@ -194,7 +200,13 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					toDrain[i] = createMetadataSourceForID(i)
 				}
 				hashRouter, hashRouterOutputs := colflow.NewHashRouter(
-					&execinfra.FlowCtx{Gateway: false},
+					&execinfra.FlowCtx{
+						Gateway: false,
+						Cfg: &execinfra.ServerConfig{
+							Settings:   st,
+							RPCContext: &rpc.Context{ContextOptions: rpc.ContextOptions{}},
+						},
+					},
 					0, /* processorID */
 					allocators,
 					colexecargs.OpWithMetaInfo{
@@ -224,7 +236,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					)
 				}
 				syncFlowCtx := &execinfra.FlowCtx{Local: false, Gateway: !addAnotherRemote}
-				synchronizer := colexec.NewParallelUnorderedSynchronizer(syncFlowCtx, 0 /* processorID */, testMemAcc, synchronizerInputs, &wg)
+				synchronizer := colexec.NewParallelUnorderedSynchronizer(syncFlowCtx, 0 /* processorID */, testAllocator, typs, synchronizerInputs, &wg)
 				inputMetadataSource := colexecop.MetadataSource(synchronizer)
 
 				runOutboxInbox := func(
@@ -237,8 +249,17 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					id int,
 					outboxMetadataSources []colexecop.MetadataSource,
 				) {
+					var nodeid base.NodeIDContainer
+					nodeid.Set(context.Background(), roachpb.NodeID(7))
 					outbox, err := colrpc.NewOutbox(
-						&execinfra.FlowCtx{Gateway: false},
+						&execinfra.FlowCtx{
+							NodeID:  base.NewSQLIDContainerForNode(&nodeid),
+							Gateway: false,
+							Cfg: &execinfra.ServerConfig{
+								Settings:   st,
+								RPCContext: &rpc.Context{ContextOptions: rpc.ContextOptions{}},
+							},
+						},
 						0, /* processorID */
 						colmem.NewAllocator(outboxCtx, outboxMemAcc, testColumnFactory),
 						outboxConverterMemAcc,
@@ -271,7 +292,7 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 					doneFn := func() { close(serverStreamNotification.Donec) }
 					wg.Add(1)
 					go func(id int, stream execinfrapb.DistSQL_FlowStreamServer, doneFn func()) {
-						handleStreamErrCh[id] <- inbox.RunWithStream(stream.Context(), stream)
+						handleStreamErrCh[id] <- inbox.RunWithStream(stream.Context(), stream, nil /* header */)
 						doneFn()
 						wg.Done()
 					}(id, serverStream, doneFn)
@@ -387,6 +408,11 @@ func TestVectorizedFlowShutdown(t *testing.T) {
 				checkMetadata := func(receivedMeta []execinfrapb.ProducerMetadata) {
 					receivedMetaFromID := make([]bool, streamID)
 					for _, meta := range receivedMeta {
+						// Each outbox also emits an always-on Metrics record
+						// carrying RawSQLCPUTime; skip those.
+						if meta.Metrics != nil {
+							continue
+						}
 						require.NotNil(t, meta.Err)
 						id, err := strconv.Atoi(meta.Err.Error())
 						require.NoError(t, err)

@@ -34,41 +34,41 @@ SET enable_zigzag_join = true
 query T kvtrace
 INSERT INTO d VALUES(0, '{"a": "b"}')
 ----
-CPut /Table/106/1/0/0 -> /TUPLE/
-InitPut /Table/106/2/"a"/"b"/0/0 -> /BYTES/
+CPut /Table/106/1/0/0 -> /TUPLE/2:2:SentinelType/{"a": "b"}
+Put /Table/106/2/"a"/"b"/0/0 -> /BYTES/
 
 # Make sure duplicate values don't get inserted.
 query T kvtrace
 INSERT INTO d VALUES(1, '[7,0,7]')
 ----
-CPut /Table/106/1/1/0 -> /TUPLE/
-InitPut /Table/106/2/Arr/0/1/0 -> /BYTES/
-InitPut /Table/106/2/Arr/7/1/0 -> /BYTES/
+CPut /Table/106/1/1/0 -> /TUPLE/2:2:SentinelType/[7, 0, 7]
+Put /Table/106/2/Arr/0/1/0 -> /BYTES/
+Put /Table/106/2/Arr/7/1/0 -> /BYTES/
 
 # Make sure duplicate values don't get deleted either.
 query T kvtrace
 DELETE FROM d WHERE a=1
 ----
-Scan /Table/106/1/1/0
+Scan /Table/106/1/1/0 lock Exclusive (Block, Unreplicated)
+Del /Table/106/1/1/0
 Del /Table/106/2/Arr/0/1/0
 Del /Table/106/2/Arr/7/1/0
-Del /Table/106/1/1/0
 
 query T kvtrace
 INSERT INTO d VALUES(2, '[{"a": "b"}, 3, {"a": "b"}]')
 ----
-CPut /Table/106/1/2/0 -> /TUPLE/
-InitPut /Table/106/2/Arr/3/2/0 -> /BYTES/
-InitPut /Table/106/2/Arr/"a"/"b"/2/0 -> /BYTES/
+CPut /Table/106/1/2/0 -> /TUPLE/2:2:SentinelType/[{"a": "b"}, 3, {"a": "b"}]
+Put /Table/106/2/Arr/3/2/0 -> /BYTES/
+Put /Table/106/2/Arr/"a"/"b"/2/0 -> /BYTES/
 
 query T kvtrace
 INSERT INTO d VALUES(3, '[{"a": [0,1,0]}, 3, {"a": "b"}]')
 ----
-CPut /Table/106/1/3/0 -> /TUPLE/
-InitPut /Table/106/2/Arr/3/3/0 -> /BYTES/
-InitPut /Table/106/2/Arr/"a"/"b"/3/0 -> /BYTES/
-InitPut /Table/106/2/Arr/"a"/Arr/0/3/0 -> /BYTES/
-InitPut /Table/106/2/Arr/"a"/Arr/1/3/0 -> /BYTES/
+CPut /Table/106/1/3/0 -> /TUPLE/2:2:SentinelType/[{"a": [0, 1, 0]}, 3, {"a": "b"}]
+Put /Table/106/2/Arr/3/3/0 -> /BYTES/
+Put /Table/106/2/Arr/"a"/"b"/3/0 -> /BYTES/
+Put /Table/106/2/Arr/"a"/Arr/0/3/0 -> /BYTES/
+Put /Table/106/2/Arr/"a"/Arr/1/3/0 -> /BYTES/
 
 # Make sure that inserting NULL doesn't make an index entry.
 query T kvtrace
@@ -81,8 +81,8 @@ query T kvtrace
 UPDATE d SET b='[1]' WHERE a=4
 ----
 Scan /Table/106/1/4/0 lock Exclusive (Block, Unreplicated)
-Put /Table/106/1/4/0 -> /TUPLE/
-InitPut /Table/106/2/Arr/1/4/0 -> /BYTES/
+Put /Table/106/1/4/0 -> /TUPLE/2:2:SentinelType/[1]
+Put /Table/106/2/Arr/1/4/0 -> /BYTES/
 
 # Update back to null.
 query T kvtrace
@@ -96,7 +96,7 @@ Del /Table/106/2/Arr/1/4/0
 query T kvtrace
 DELETE FROM d WHERE a=4
 ----
-Scan /Table/106/1/4/0
+Scan /Table/106/1/4/0 lock Exclusive (Block, Unreplicated)
 Del /Table/106/1/4/0
 
 # Tests for array inverted indexes.
@@ -107,19 +107,19 @@ query T kvtrace
 INSERT INTO e VALUES(0, ARRAY[7,0,0,1,NULL,10,0,1,7,NULL])
 ----
 Scan /Table/20/1/10{7-8}
-CPut /Table/107/1/0/0 -> /TUPLE/
-InitPut /Table/107/2/NULL/0/0 -> /BYTES/
-InitPut /Table/107/2/0/0/0 -> /BYTES/
-InitPut /Table/107/2/1/0/0 -> /BYTES/
-InitPut /Table/107/2/7/0/0 -> /BYTES/
-InitPut /Table/107/2/10/0/0 -> /BYTES/
+CPut /Table/107/1/0/0 -> /TUPLE/2:2:Array/ARRAY[7,0,0,1,NULL,10,0,1,7,NULL]
+Put /Table/107/2/NULL/0/0 -> /BYTES/
+Put /Table/107/2/0/0/0 -> /BYTES/
+Put /Table/107/2/1/0/0 -> /BYTES/
+Put /Table/107/2/7/0/0 -> /BYTES/
+Put /Table/107/2/10/0/0 -> /BYTES/
 
 # Make sure that empty arrays emit a key.
 query T kvtrace
 INSERT INTO e VALUES(1, ARRAY[])
 ----
-CPut /Table/107/1/1/0 -> /TUPLE/
-InitPut /Table/107/2/[]/1/0 -> /BYTES/
+CPut /Table/107/1/1/0 -> /TUPLE/2:2:Array/ARRAY[]
+Put /Table/107/2/[]/1/0 -> /BYTES/
 
 # Make sure that NULL arrays do not emit any keys at all.
 query T kvtrace
@@ -131,8 +131,8 @@ CPut /Table/107/1/2/0 -> /TUPLE/
 query T kvtrace
 INSERT INTO e VALUES(3, ARRAY[NULL])
 ----
-CPut /Table/107/1/3/0 -> /TUPLE/
-InitPut /Table/107/2/NULL/3/0 -> /BYTES/
+CPut /Table/107/1/3/0 -> /TUPLE/2:2:Array/ARRAY[NULL]
+Put /Table/107/2/NULL/3/0 -> /BYTES/
 
 # Make sure that we're emitting the right plan for array index scans even if
 # a column is both forward and inverted indexed.
@@ -141,7 +141,6 @@ query T
 EXPLAIN SELECT * FROM e WHERE b @> ARRAY[8]
 ----
 distribution: local
-vectorized: true
 ·
 • index join
 │ table: e@e_pkey
@@ -155,7 +154,6 @@ query T
 EXPLAIN SELECT * FROM e WHERE b = ARRAY[8]
 ----
 distribution: local
-vectorized: true
 ·
 • filter
 │ filter: b = ARRAY[8]
@@ -172,7 +170,6 @@ query T
 EXPLAIN SELECT * FROM e WHERE b @> ARRAY[8]
 ----
 distribution: local
-vectorized: true
 ·
 • index join
 │ table: e@e_pkey
@@ -186,7 +183,6 @@ query T
 EXPLAIN SELECT * FROM e WHERE b = ARRAY[8]
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   missing stats
@@ -201,17 +197,17 @@ query T kvtrace
 INSERT INTO f VALUES(0, ARRAY[7,0,0,1.000,10,0,1,7,1.0,1.00])
 ----
 Scan /Table/20/1/10{8-9}
-CPut /Table/108/1/0/0 -> /TUPLE/
-InitPut /Table/108/2/0/0/0 -> /BYTES/
-InitPut /Table/108/2/1/0/0 -> /BYTES/
-InitPut /Table/108/2/7/0/0 -> /BYTES/
-InitPut /Table/108/2/1E+1/0/0 -> /BYTES/
+CPut /Table/108/1/0/0 -> /TUPLE/2:2:Array/ARRAY[7,0,0,1.000,10,0,1,7,1.0,1.00]
+Put /Table/108/2/0/0/0 -> /BYTES/
+Put /Table/108/2/1/0/0 -> /BYTES/
+Put /Table/108/2/7/0/0 -> /BYTES/
+Put /Table/108/2/1E+1/0/0 -> /BYTES/
 
 query T kvtrace
 INSERT INTO f VALUES(1, ARRAY[])
 ----
-CPut /Table/108/1/1/0 -> /TUPLE/
-InitPut /Table/108/2/[]/1/0 -> /BYTES/
+CPut /Table/108/1/1/0 -> /TUPLE/2:2:Array/ARRAY[]
+Put /Table/108/2/[]/1/0 -> /BYTES/
 
 query T kvtrace
 INSERT INTO f VALUES(2, NULL)
@@ -225,9 +221,9 @@ query T kvtrace
 UPDATE f SET b = ARRAY[0,15,7,10] WHERE a = 0
 ----
 Scan /Table/108/1/0/0 lock Exclusive (Block, Unreplicated)
-Put /Table/108/1/0/0 -> /TUPLE/
+Put /Table/108/1/0/0 -> /TUPLE/2:2:Array/ARRAY[0,15,7,10]
 Del /Table/108/2/1/0/0
-InitPut /Table/108/2/15/0/0 -> /BYTES/
+Put /Table/108/2/15/0/0 -> /BYTES/
 
 statement error pgcode XXUUU could not produce a query plan conforming to the FORCE_INVERTED_INDEX hint
 SELECT * from d@{FORCE_INVERTED_INDEX}
@@ -243,6 +239,7 @@ vectorized: true
 │ estimated row count: 110 (missing stats)
 │ table: d@d_pkey
 │ key columns: a
+│ parallel
 │
 └── • scan
       columns: (a)
@@ -261,6 +258,7 @@ vectorized: true
 │ estimated row count: 110 (missing stats)
 │ table: d@d_pkey
 │ key columns: a
+│ parallel
 │
 └── • scan
       columns: (a)
@@ -279,6 +277,7 @@ vectorized: true
 │ estimated row count: 110 (missing stats)
 │ table: d@d_pkey
 │ key columns: a
+│ parallel
 │
 └── • scan
       columns: (a)
@@ -297,6 +296,7 @@ vectorized: true
 │ estimated row count: 110 (missing stats)
 │ table: d@d_pkey
 │ key columns: a
+│ parallel
 │
 └── • scan
       columns: (a)
@@ -315,6 +315,7 @@ vectorized: true
 │ estimated row count: 110 (missing stats)
 │ table: d@d_pkey
 │ key columns: a
+│ parallel
 │
 └── • scan
       columns: (a)
@@ -333,6 +334,7 @@ vectorized: true
 │ estimated row count: 110 (missing stats)
 │ table: d@d_pkey
 │ key columns: a
+│ parallel
 │
 └── • scan
       columns: (a)
@@ -353,6 +355,7 @@ vectorized: true
 │ estimated row count: 110 (missing stats)
 │ table: d@d_pkey
 │ key columns: a
+│ parallel
 │
 └── • project
     │ columns: (a)
@@ -383,6 +386,7 @@ vectorized: true
 │ estimated row count: 110 (missing stats)
 │ table: d@d_pkey
 │ key columns: a
+│ parallel
 │
 └── • project
     │ columns: (a)
@@ -410,6 +414,7 @@ vectorized: true
 │ estimated row count: 111 (missing stats)
 │ table: d@d_pkey
 │ key columns: a
+│ parallel
 │
 └── • scan
       columns: (a)
@@ -428,6 +433,7 @@ vectorized: true
 │ estimated row count: 111 (missing stats)
 │ table: d@d_pkey
 │ key columns: a
+│ parallel
 │
 └── • scan
       columns: (a)
@@ -455,6 +461,7 @@ vectorized: true
 │ estimated row count: 111 (missing stats)
 │ table: d@d_pkey
 │ key columns: a
+│ parallel
 │
 └── • project
     │ columns: (a)
@@ -482,6 +489,7 @@ vectorized: true
 │ estimated row count: 111 (missing stats)
 │ table: d@d_pkey
 │ key columns: a
+│ parallel
 │
 └── • project
     │ columns: (a)
@@ -516,6 +524,7 @@ vectorized: true
     │ estimated row count: 111 (missing stats)
     │ table: d@d_pkey
     │ key columns: a
+    │ parallel
     │
     └── • project
         │ columns: (a)
@@ -548,6 +557,7 @@ vectorized: true
     │ estimated row count: 111 (missing stats)
     │ table: d@d_pkey
     │ key columns: a
+    │ parallel
     │
     └── • project
         │ columns: (a)
@@ -577,6 +587,7 @@ vectorized: true
 │ equality: (a) = (a)
 │ equality cols are key
 │ pred: (b->'a') @> '[1, 2]'
+│ parallel
 │
 └── • project
     │ columns: (a)
@@ -607,6 +618,7 @@ vectorized: true
     │ estimated row count: 111 (missing stats)
     │ table: d@d_pkey
     │ key columns: a
+    │ parallel
     │
     └── • project
         │ columns: (a)
@@ -634,6 +646,7 @@ vectorized: true
 │ estimated row count: 111 (missing stats)
 │ table: d@d_pkey
 │ key columns: a
+│ parallel
 │
 └── • scan
       columns: (a)
@@ -657,6 +670,7 @@ vectorized: true
     │ estimated row count: 111 (missing stats)
     │ table: d@d_pkey
     │ key columns: a
+    │ parallel
     │
     └── • project
         │ columns: (a)
@@ -706,6 +720,7 @@ vectorized: true
     │ estimated row count: 111 (missing stats)
     │ table: d@d_pkey
     │ key columns: a
+    │ parallel
     │
     └── • project
         │ columns: (a)
@@ -733,6 +748,7 @@ vectorized: true
 │ estimated row count: 111 (missing stats)
 │ table: d@d_pkey
 │ key columns: a
+│ parallel
 │
 └── • scan
       columns: (a)
@@ -762,7 +778,6 @@ query T
 EXPLAIN SELECT * from d where b @> '{"a": []}' ORDER BY a;
 ----
 distribution: local
-vectorized: true
 ·
 • index join
 │ table: d@d_pkey
@@ -783,7 +798,6 @@ query T
 EXPLAIN SELECT * from d where b @> '{"a": {}}' ORDER BY a;
 ----
 distribution: local
-vectorized: true
 ·
 • index join
 │ table: d@d_pkey
@@ -813,6 +827,7 @@ vectorized: true
 │ estimated row count: 111 (missing stats)
 │ table: d@d_pkey
 │ key columns: a
+│ parallel
 │
 └── • project
     │ columns: (a)
@@ -842,6 +857,7 @@ vectorized: true
 │ estimated row count: 333 (missing stats)
 │ table: d@d_pkey
 │ key columns: a
+│ parallel
 │
 └── • project
     │ columns: (a)
@@ -869,6 +885,7 @@ vectorized: true
 │ estimated row count: 12 (missing stats)
 │ table: d@d_pkey
 │ key columns: a
+│ parallel
 │
 └── • project
     │ columns: (a)
@@ -896,6 +913,7 @@ vectorized: true
 │ estimated row count: 12 (missing stats)
 │ table: d@d_pkey
 │ key columns: a
+│ parallel
 │
 └── • project
     │ columns: (a)
@@ -923,6 +941,7 @@ vectorized: true
 │ estimated row count: 12 (missing stats)
 │ table: d@d_pkey
 │ key columns: a
+│ parallel
 │
 └── • project
     │ columns: (a)
@@ -953,6 +972,7 @@ vectorized: true
 │ table: d@d_pkey
 │ equality: (a) = (a)
 │ equality cols are key
+│ parallel
 │
 └── • project
     │ columns: (a)
@@ -980,6 +1000,7 @@ vectorized: true
 │ equality: (a) = (a)
 │ equality cols are key
 │ pred: b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
+│ parallel
 │
 └── • project
     │ columns: (a)
@@ -1006,6 +1027,7 @@ vectorized: true
 │ table: d@d_pkey
 │ equality: (a) = (a)
 │ equality cols are key
+│ parallel
 │
 └── • project
     │ columns: (a)
@@ -1035,6 +1057,7 @@ vectorized: true
 │ table: d@d_pkey
 │ equality: (a) = (a)
 │ equality cols are key
+│ parallel
 │
 └── • project
     │ columns: (a)
@@ -1062,6 +1085,7 @@ vectorized: true
 │ equality: (a) = (a)
 │ equality cols are key
 │ pred: b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
+│ parallel
 │
 └── • project
     │ columns: (a)
@@ -1088,6 +1112,7 @@ vectorized: true
 │ table: d@d_pkey
 │ equality: (a) = (a)
 │ equality cols are key
+│ parallel
 │
 └── • project
     │ columns: (a)
@@ -1116,6 +1141,7 @@ vectorized: true
 │ estimated row count: 12 (missing stats)
 │ table: d@d_pkey
 │ key columns: a
+│ parallel
 │
 └── • project
     │ columns: (a)
@@ -1143,6 +1169,7 @@ vectorized: true
 │ estimated row count: 12 (missing stats)
 │ table: d@d_pkey
 │ key columns: a
+│ parallel
 │
 └── • project
     │ columns: (a)
@@ -1179,6 +1206,7 @@ vectorized: true
     │ estimated row count: 111 (missing stats)
     │ table: d@d_pkey
     │ key columns: a
+    │ parallel
     │
     └── • sort
         │ columns: (a)
@@ -1216,6 +1244,7 @@ vectorized: true
     │ estimated row count: 111 (missing stats)
     │ table: d@d_pkey
     │ key columns: a
+    │ parallel
     │
     └── • scan
           columns: (a)
@@ -1239,6 +1268,7 @@ vectorized: true
     │ estimated row count: 111 (missing stats)
     │ table: d@d_pkey
     │ key columns: a
+    │ parallel
     │
     └── • scan
           columns: (a)
@@ -1262,6 +1292,7 @@ vectorized: true
     │ equality: (a) = (a)
     │ equality cols are key
     │ pred: (b->1) = '[1, 2]'
+    │ parallel
     │
     └── • project
         │ columns: (a)
@@ -1292,6 +1323,7 @@ vectorized: true
     │ estimated row count: 111 (missing stats)
     │ table: d@d_pkey
     │ key columns: a
+    │ parallel
     │
     └── • scan
           columns: (a)
@@ -1315,6 +1347,7 @@ vectorized: true
     │ estimated row count: 111 (missing stats)
     │ table: d@d_pkey
     │ key columns: a
+    │ parallel
     │
     └── • scan
           columns: (a)
@@ -1343,6 +1376,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: d@d_pkey
         │ key columns: a
+        │ parallel
         │
         └── • sort
             │ columns: (a)
@@ -1376,6 +1410,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: d@d_pkey
         │ key columns: a
+        │ parallel
         │
         └── • sort
             │ columns: (a)
@@ -1409,6 +1444,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: d@d_pkey
         │ key columns: a
+        │ parallel
         │
         └── • sort
             │ columns: (a)
@@ -1438,6 +1474,7 @@ vectorized: true
     │ equality: (a) = (a)
     │ equality cols are key
     │ pred: ((b->0)->1) = '[1, 2]'
+    │ parallel
     │
     └── • sort
         │ columns: (a)
@@ -1473,6 +1510,7 @@ vectorized: true
     │ equality: (a) = (a)
     │ equality cols are key
     │ pred: ((b->0) = '[1, 2]') AND ((b->1) = '[1]')
+    │ parallel
     │
     └── • project
         │ columns: (a)
@@ -1505,6 +1543,7 @@ vectorized: true
     │ estimated row count: 111 (missing stats)
     │ table: d@d_pkey
     │ key columns: a
+    │ parallel
     │
     └── • scan
           columns: (a)
@@ -1530,6 +1569,7 @@ vectorized: true
     │ estimated row count: 111 (missing stats)
     │ table: d@d_pkey
     │ key columns: a
+    │ parallel
     │
     └── • project
         │ columns: (a)
@@ -1562,6 +1602,7 @@ vectorized: true
     │ estimated row count: 111 (missing stats)
     │ table: d@d_pkey
     │ key columns: a
+    │ parallel
     │
     └── • project
         │ columns: (a)
@@ -1594,6 +1635,7 @@ vectorized: true
     │ estimated row count: 111 (missing stats)
     │ table: d@d_pkey
     │ key columns: a
+    │ parallel
     │
     └── • project
         │ columns: (a)
@@ -1626,6 +1668,7 @@ vectorized: true
     │ equality: (a) = (a)
     │ equality cols are key
     │ pred: (b->0) @> '[1, 2]'
+    │ parallel
     │
     └── • project
         │ columns: (a)
@@ -1656,6 +1699,7 @@ vectorized: true
     │ estimated row count: 111 (missing stats)
     │ table: d@d_pkey
     │ key columns: a
+    │ parallel
     │
     └── • project
         │ columns: (a)
@@ -1688,6 +1732,7 @@ vectorized: true
     │ equality: (a) = (a)
     │ equality cols are key
     │ pred: ((b->0) @> '[1, 2]') AND ((b->1) <@ '[1]')
+    │ parallel
     │
     └── • project
         │ columns: (a)
@@ -1786,6 +1831,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: d@d_pkey
         │ key columns: a
+        │ parallel
         │
         └── • project
             │ columns: (a)
@@ -1821,6 +1867,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: d@d_pkey
         │ key columns: a
+        │ parallel
         │
         └── • project
             │ columns: (a)
@@ -1858,6 +1905,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: d@d_pkey
         │ key columns: a
+        │ parallel
         │
         └── • project
             │ columns: (a)
@@ -1893,6 +1941,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: d@d_pkey
         │ key columns: a
+        │ parallel
         │
         └── • project
             │ columns: (a)
@@ -1928,6 +1977,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: d@d_pkey
         │ key columns: a
+        │ parallel
         │
         └── • project
             │ columns: (a)
@@ -1963,6 +2013,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: d@d_pkey
         │ key columns: a
+        │ parallel
         │
         └── • project
             │ columns: (a)
@@ -2001,6 +2052,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: d@d_pkey
         │ key columns: a
+        │ parallel
         │
         └── • project
             │ columns: (a)
@@ -2036,6 +2088,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: d@d_pkey
         │ key columns: a
+        │ parallel
         │
         └── • project
             │ columns: (a)
@@ -2071,6 +2124,7 @@ vectorized: true
     │ equality: (a) = (a)
     │ equality cols are key
     │ pred: b = '[[0, 1, 2]]'
+    │ parallel
     │
     └── • project
         │ columns: (a)
@@ -2104,6 +2158,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: d@d_pkey
         │ key columns: a
+        │ parallel
         │
         └── • scan
               columns: (a)
@@ -2130,6 +2185,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: d@d_pkey
         │ key columns: a
+        │ parallel
         │
         └── • scan
               columns: (a)
@@ -2153,6 +2209,7 @@ vectorized: true
     │ equality: (a) = (a)
     │ equality cols are key
     │ pred: b = '[1, 2]'
+    │ parallel
     │
     └── • project
         │ columns: (a)
@@ -2186,6 +2243,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: d@d_pkey
         │ key columns: a
+        │ parallel
         │
         └── • scan
               columns: (a)
@@ -2212,6 +2270,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: d@d_pkey
         │ key columns: a
+        │ parallel
         │
         └── • project
             │ columns: (a)
@@ -2247,6 +2306,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: d@d_pkey
         │ key columns: a
+        │ parallel
         │
         └── • project
             │ columns: (a)
@@ -2279,6 +2339,7 @@ vectorized: true
     │ equality: (a) = (a)
     │ equality cols are key
     │ pred: b = '{"a": 1, "b": 2}'
+    │ parallel
     │
     └── • project
         │ columns: (a)
@@ -2309,6 +2370,7 @@ vectorized: true
     │ equality: (a) = (a)
     │ equality cols are key
     │ pred: b = '{"a": {"b": "c"}, "d": "e"}'
+    │ parallel
     │
     └── • project
         │ columns: (a)
@@ -2342,6 +2404,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: d@d_pkey
         │ key columns: a
+        │ parallel
         │
         └── • scan
               columns: (a)
@@ -2368,6 +2431,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: d@d_pkey
         │ key columns: a
+        │ parallel
         │
         └── • scan
               columns: (a)
@@ -2392,6 +2456,7 @@ vectorized: true
     │ equality: (a) = (a)
     │ equality cols are key
     │ pred: b = '[[0, 1, 2], [0, 1, 2], "s"]'
+    │ parallel
     │
     └── • project
         │ columns: (a)
@@ -2429,6 +2494,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: d@d_pkey
         │ key columns: a
+        │ parallel
         │
         └── • project
             │ columns: (a)
@@ -2464,6 +2530,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: d@d_pkey
         │ key columns: a
+        │ parallel
         │
         └── • project
             │ columns: (a)
@@ -2500,6 +2567,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: d@d_pkey
         │ key columns: a
+        │ parallel
         │
         └── • project
             │ columns: (a)
@@ -2535,6 +2603,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: d@d_pkey
         │ key columns: a
+        │ parallel
         │
         └── • project
             │ columns: (a)
@@ -2570,6 +2639,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: d@d_pkey
         │ key columns: a
+        │ parallel
         │
         └── • project
             │ columns: (a)
@@ -2603,6 +2673,7 @@ vectorized: true
     │ equality: (a) = (a)
     │ equality cols are key
     │ pred: b = '[[0, 1, 2], [0, 1, 2], "s"]'
+    │ parallel
     │
     └── • project
         │ columns: (a)
@@ -2687,7 +2758,6 @@ query T
 EXPLAIN SELECT a FROM d WHERE b @> '[1, 2]' ORDER BY a
 ----
 distribution: local
-vectorized: true
 ·
 • filter
 │ estimated row count: 1,247
@@ -2712,7 +2782,6 @@ query T
 EXPLAIN SELECT a FROM d WHERE b @> '[1]' AND b @> '[2]' ORDER BY a
 ----
 distribution: local
-vectorized: true
 ·
 • filter
 │ estimated row count: 1,247
@@ -2737,7 +2806,6 @@ query T
 EXPLAIN SELECT a FROM d WHERE b @> '[[1, 2]]' ORDER BY a
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ estimated row count: 1,247
@@ -2773,6 +2841,7 @@ vectorized: true
 │ estimated row count: 110 (missing stats)
 │ table: e@e_pkey
 │ key columns: a
+│ parallel
 │
 └── • scan
       columns: (a)
@@ -2849,6 +2918,7 @@ vectorized: true
 │ table: e@e_pkey
 │ equality: (a) = (a)
 │ equality cols are key
+│ parallel
 │
 └── • project
     │ columns: (a)
@@ -2875,6 +2945,7 @@ vectorized: true
 │ table: e@e_pkey
 │ equality: (a) = (a)
 │ equality cols are key
+│ parallel
 │
 └── • project
     │ columns: (a)
@@ -2906,6 +2977,7 @@ vectorized: true
     │ estimated row count: 111 (missing stats)
     │ table: e@e_pkey
     │ key columns: a
+    │ parallel
     │
     └── • scan
           columns: (a)
@@ -2929,6 +3001,7 @@ vectorized: true
     │ estimated row count: 111 (missing stats)
     │ table: e@e_pkey
     │ key columns: a
+    │ parallel
     │
     └── • project
         │ columns: (a)
@@ -2961,6 +3034,7 @@ vectorized: true
     │ estimated row count: 111 (missing stats)
     │ table: e@e_pkey
     │ key columns: a
+    │ parallel
     │
     └── • scan
           columns: (a)
@@ -2984,6 +3058,7 @@ vectorized: true
     │ estimated row count: 111 (missing stats)
     │ table: e@e_pkey
     │ key columns: a
+    │ parallel
     │
     └── • project
         │ columns: (a)
@@ -3013,13 +3088,14 @@ vectorized: true
 │
 └── • index join
     │ columns: (a, b)
-    │ estimated row count: 0
+    │ estimated row count: 10
     │ table: d@d_pkey
     │ key columns: a
+    │ parallel
     │
     └── • scan
           columns: (a)
-          estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+          estimated row count: 10 (0.01% of the table; stats collected <hidden> ago)
           table: d@foo_inv
           spans: /[]-/{}
 
@@ -3055,13 +3131,14 @@ vectorized: true
 │
 └── • index join
     │ columns: (a, b)
-    │ estimated row count: 0
+    │ estimated row count: 10
     │ table: d@d_pkey
     │ key columns: a
+    │ parallel
     │
     └── • scan
           columns: (a)
-          estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+          estimated row count: 10 (0.01% of the table; stats collected <hidden> ago)
           table: d@foo_inv
           spans: /{}-/{}/PrefixEnd
 
@@ -3078,22 +3155,23 @@ vectorized: true
 │
 └── • index join
     │ columns: (a, b)
-    │ estimated row count: 0
+    │ estimated row count: 3
     │ table: d@d_pkey
     │ key columns: a
+    │ parallel
     │
     └── • project
         │ columns: (a)
         │
         └── • inverted filter
             │ columns: (a, b_inverted_key)
-            │ estimated row count: 0
+            │ estimated row count: 3
             │ inverted column: b_inverted_key
             │ num spans: 2
             │
             └── • scan
                   columns: (a, b_inverted_key)
-                  estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+                  estimated row count: 10 (0.01% of the table; stats collected <hidden> ago)
                   table: d@foo_inv
                   spans: /{}-/{}/PrefixEnd /"a"/"b"-/"a"/"b"/PrefixEnd
 
@@ -3110,22 +3188,23 @@ vectorized: true
 │
 └── • index join
     │ columns: (a, b)
-    │ estimated row count: 0
+    │ estimated row count: 3
     │ table: d@d_pkey
     │ key columns: a
+    │ parallel
     │
     └── • project
         │ columns: (a)
         │
         └── • inverted filter
             │ columns: (a, b_inverted_key)
-            │ estimated row count: 0
+            │ estimated row count: 3
             │ inverted column: b_inverted_key
             │ num spans: 8
             │
             └── • scan
                   columns: (a, b_inverted_key)
-                  estimated row count: 0 (<0.01% of the table; stats collected <hidden> ago)
+                  estimated row count: 10 (0.01% of the table; stats collected <hidden> ago)
                   table: d@foo_inv
                   spans: /"f"-/"f"/PrefixEnd /[]-/{} /Arr/"f"-/Arr/"f"/PrefixEnd /Arr/{}-/Arr/{}/PrefixEnd /Arr/"a"/"b"-/Arr/"a"/"b"/PrefixEnd /Arr/"c"/{}-/Arr/"c"/{}/PrefixEnd /Arr/"c"/"d"/[]-/Arr/"c"/"d"/{} /Arr/"c"/"d"/Arr/"e"-/Arr/"c"/"d"/Arr/"e"/PrefixEnd
 
@@ -3161,6 +3240,7 @@ vectorized: true
 │ estimated row count: 333 (missing stats)
 │ table: e@e_pkey
 │ key columns: a
+│ parallel
 │
 └── • project
     │ columns: (a)
@@ -3207,6 +3287,7 @@ vectorized: true
 │ estimated row count: 333 (missing stats)
 │ table: e@e_pkey
 │ key columns: a
+│ parallel
 │
 └── • project
     │ columns: (a)
@@ -3223,6 +3304,9 @@ vectorized: true
               table: e@bidx
               spans: /0-/2
 
+statement ok
+SET autocommit_before_ddl = false
+
 # Ensure that an inverted index with a composite primary key still encodes
 # the primary key data in the composite value.
 statement ok
@@ -3234,9 +3318,9 @@ query T kvtrace
 INSERT INTO t VALUES (1.00, ARRAY[1,2])
 ----
 Scan /Table/20/1/109{-/PrefixEnd}
-CPut /Table/109/1/1/0 -> /TUPLE/1:1:Decimal/1.00/
-InitPut /Table/109/2/1/1/0 -> /BYTES/0x1503348964
-InitPut /Table/109/2/2/1/0 -> /BYTES/0x1503348964
+CPut /Table/109/1/1/0 -> /TUPLE/1:1:Decimal/1.00/1:2:Array/ARRAY[1,2]
+Put /Table/109/2/1/1/0 -> /BYTES/0x1503348964
+Put /Table/109/2/2/1/0 -> /BYTES/0x1503348964
 
 statement ok
 CREATE TABLE geo_table(
@@ -3264,6 +3348,7 @@ vectorized: true
         │ estimated row count: 111 (missing stats)
         │ table: geo_table@geo_table_pkey
         │ key columns: k
+        │ parallel
         │
         └── • project
             │ columns: (k)
@@ -3278,7 +3363,7 @@ vectorized: true
                       columns: (k, geom_inverted_key)
                       estimated row count: 111 (missing stats)
                       table: geo_table@geom_index
-                      spans: /"B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"-/"B\xfd\x10\x00\x00\x00\x00\x00\x00\x01" /"B\xfd\x10\x00\x00\x00\x00\x00\x00\x01"-/"B\xfd\x10\x00\x00\x00\x00\x00\x00\x02" /"B\xfd\x10\x00\x00\x00\x00\x00\x00\x04"-/"B\xfd\x10\x00\x00\x00\x00\x00\x00\x05" /"B\xfd\x10\x00\x00\x00\x00\x00\x00\x10"-/"B\xfd\x10\x00\x00\x00\x00\x00\x00\x11" /"B\xfd\x10\x00\x00\x00\x00\x00\x00@"-/"B\xfd\x10\x00\x00\x00\x00\x00\x00A" /"B\xfd\x10\x00\x00\x00\x00\x00\x01\x00"-/"B\xfd\x10\x00\x00\x00\x00\x00\x01\x01" /"B\xfd\x10\x00\x00\x00\x00\x00\x04\x00"-/"B\xfd\x10\x00\x00\x00\x00\x00\x04\x01" /"B\xfd\x10\x00\x00\x00\x00\x00\x10\x00"-/"B\xfd\x10\x00\x00\x00\x00\x00\x10\x01" /"B\xfd\x10\x00\x00\x00\x00\x00@\x00"-/"B\xfd\x10\x00\x00\x00\x00\x00@\x01" /"B\xfd\x10\x00\x00\x00\x00\x01\x00\x00"-/"B\xfd\x10\x00\x00\x00\x00\x01\x00\x01" /"B\xfd\x10\x00\x00\x00\x00\x04\x00\x00"-/"B\xfd\x10\x00\x00\x00\x00\x04\x00\x01" /"B\xfd\x10\x00\x00\x00\x00\x10\x00\x00"-/"B\xfd\x10\x00\x00\x00\x00\x10\x00\x01" /"B\xfd\x10\x00\x00\x00\x00@\x00\x00"-/"B\xfd\x10\x00\x00\x00\x00@\x00\x01" /"B\xfd\x10\x00\x00\x00\x01\x00\x00\x00"-/"B\xfd\x10\x00\x00\x00\x01\x00\x00\x01" /"B\xfd\x10\x00\x00\x00\x04\x00\x00\x00"-/"B\xfd\x10\x00\x00\x00\x04\x00\x00\x01" /"B\xfd\x10\x00\x00\x00\x10\x00\x00\x00"-/"B\xfd\x10\x00\x00\x00\x10\x00\x00\x01" /"B\xfd\x10\x00\x00\x00@\x00\x00\x00"-/"B\xfd\x10\x00\x00\x00@\x00\x00\x01" /"B\xfd\x10\x00\x00\x01\x00\x00\x00\x00"-/"B\xfd\x10\x00\x00\x01\x00\x00\x00\x01" /"B\xfd\x10\x00\x00\x04\x00\x00\x00\x00"-/"B\xfd\x10\x00\x00\x04\x00\x00\x00\x01" /"B\xfd\x10\x00\x00\x10\x00\x00\x00\x00"-/"B\xfd\x10\x00\x00\x10\x00\x00\x00\x01" /"B\xfd\x10\x00\x00@\x00\x00\x00\x00"-/"B\xfd\x10\x00\x00@\x00\x00\x00\x01" /"B\xfd\x10\x00\x01\x00\x00\x00\x00\x00"-/"B\xfd\x10\x00\x01\x00\x00\x00\x00\x01" /"B\xfd\x10\x00\x04\x00\x00\x00\x00\x00"-/"B\xfd\x10\x00\x04\x00\x00\x00\x00\x01" /"B\xfd\x10\x00\x10\x00\x00\x00\x00\x00"-/"B\xfd\x10\x00\x10\x00\x00\x00\x00\x01" /"B\xfd\x10\x00@\x00\x00\x00\x00\x00"-/"B\xfd\x10\x00@\x00\x00\x00\x00\x01" /"B\xfd\x10\x01\x00\x00\x00\x00\x00\x00"-/"B\xfd\x10\x01\x00\x00\x00\x00\x00\x01" /"B\xfd\x10\x04\x00\x00\x00\x00\x00\x00"-/"B\xfd\x10\x04\x00\x00\x00\x00\x00\x01" /"B\xfd\x10\x10\x00\x00\x00\x00\x00\x00"-/"B\xfd\x10\x10\x00\x00\x00\x00\x00\x01" /"B\xfd\x10@\x00\x00\x00\x00\x00\x00"-/"B\xfd\x10@\x00\x00\x00\x00\x00\x01" /"B\xfd\x11\x00\x00\x00\x00\x00\x00\x00"-/"B\xfd\x11\x00\x00\x00\x00\x00\x00\x01" /"B\xfd\x14\x00\x00\x00\x00\x00\x00\x00"-/"B\xfd\x14\x00\x00\x00\x00\x00\x00\x01"
+                      spans: /"B\xfd\x10\x00\x00\x00\x00\x00\x00\x00"-/"B\xfd\x10\x00\x00\x00\x00\x00\x00\x01" /"B\xfd\x10\x00\x00\x00\x00\x00\x00\x01"-/"B\xfd\x10\x00\x00\x00\x00\x00\x00\x02" /"B\xfd\x10\x00\x00\x00\x00\x00\x00\x04"-/"B\xfd\x10\x00\x00\x00\x00\x00\x00\x05" /"B\xfd\x10\x00\x00\x00\x00\x00\x00\x10"-/"B\xfd\x10\x00\x00\x00\x00\x00\x00\x11" /"B\xfd\x10\x00\x00\x00\x00\x00\x00@"-/"B\xfd\x10\x00\x00\x00\x00\x00\x00A" /"B\xfd\x10\x00\x00\x00\x00\x00\x01\x00"-/"B\xfd\x10\x00\x00\x00\x00\x00\x01\x01" /"B\xfd\x10\x00\x00\x00\x00\x00\x04\x00"-/"B\xfd\x10\x00\x00\x00\x00\x00\x04\x01" /"B\xfd\x10\x00\x00\x00\x00\x00\x10\x00"-/"B\xfd\x10\x00\x00\x00\x00\x00\x10\x01" /"B\xfd\x10\x00\x00\x00\x00\x00@\x00"-/"B\xfd\x10\x00\x00\x00\x00\x00@\x01" /"B\xfd\x10\x00\x00\x00\x00\x01\x00\x00"-/"B\xfd\x10\x00\x00\x00\x00\x01\x00\x01" /"B\xfd\x10\x00\x00\x00\x00\x04\x00\x00"-/"B\xfd\x10\x00\x00\x00\x00\x04\x00\x01" /"B\xfd\x10\x00\x00\x00\x00\x10\x00\x00"-/"B\xfd\x10\x00\x00\x00\x00\x10\x00\x01" /"B\xfd\x10\x00\x00\x00\x00@\x00\x00"-/"B\xfd\x10\x00\x00\x00\x00@\x00\x01" /"B\xfd\x10\x00\x00\x00\x01\x00\x00\x00"-/"B\xfd\x10\x00\x00\x00\x01\x00\x00\x01" /"B\xfd\x10\x00\x00\x00\x04\x00\x00\x00"-/"B\xfd\x10\x00\x00\x00\x04\x00\x00\x01" /"B\xfd\x10\x00\x00\x00\x10\x00\x00\x00"-/"B\xfd\x10\x00\x00\x00\x10\x00\x00\x01" /"B\xfd\x10\x00\x00\x00@\x00\x00\x00"-/"B\xfd\x10\x00\x00\x00@\x00\x00\x01" /"B\xfd\x10\x00\x00\x01\x00\x00\x00\x00"-/"B\xfd\x10\x00\x00\x01\x00\x00\x00\x01" /"B\xfd\x10\x00\x00\x04\x00\x00\x00\x00"-/"B\xfd\x10\x00\x00\x04\x00\x00\x00\x01" /"B\xfd\x10\x00\x00\x10\x00\x00\x00\x00"-/"B\xfd\x10\x00\x00\x10\x00\x00\x00\x01" … (11 more)
 
 statement ok
 CREATE TABLE geo_table2(
@@ -3297,6 +3382,7 @@ inner-join (lookup geo_table)
  ├── immutable
  ├── stats: [rows=9801]
  ├── cost: 112716.87
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1,7)
  ├── fd: (1)-->(2), (7)-->(8)
  ├── distribution: test
@@ -3307,6 +3393,7 @@ inner-join (lookup geo_table)
  │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:16)
  │    ├── stats: [rows=10000, distinct(15)=999.957, null(15)=0]
  │    ├── cost: 41812.84
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (1,15)
  │    ├── fd: (1)-->(2)
  │    ├── distribution: test
@@ -3314,6 +3401,7 @@ inner-join (lookup geo_table)
  │    │    ├── columns: geo_table2.k:1 geo_table2.geom:2
  │    │    ├── stats: [rows=1000, distinct(2)=100, null(2)=10]
  │    │    ├── cost: 1108.82
+ │    │    ├── cost-flags: unbounded-cardinality
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2)
  │    │    ├── distribution: test
@@ -3340,6 +3428,7 @@ vectorized: true
     │ equality: (k) = (k)
     │ equality cols are key
     │ pred: st_intersects(geom, geom)
+    │ parallel
     │
     └── • project
         │ columns: (k, geom, k)
@@ -3389,6 +3478,7 @@ left-join (lookup geo_table)
  ├── immutable
  ├── stats: [rows=10000]
  ├── cost: 112716.87
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1,7)
  ├── fd: (1)-->(2), (7)-->(8)
  ├── distribution: test
@@ -3400,6 +3490,7 @@ left-join (lookup geo_table)
  │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:16)
  │    ├── stats: [rows=10000, distinct(15)=999.957, null(15)=0]
  │    ├── cost: 41812.84
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (1,15)
  │    ├── fd: (1)-->(2), (15)-->(22)
  │    ├── distribution: test
@@ -3407,6 +3498,7 @@ left-join (lookup geo_table)
  │    │    ├── columns: geo_table2.k:1 geo_table2.geom:2
  │    │    ├── stats: [rows=1000]
  │    │    ├── cost: 1108.82
+ │    │    ├── cost-flags: unbounded-cardinality
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2)
  │    │    ├── distribution: test
@@ -3428,6 +3520,7 @@ semi-join (lookup geo_table)
  ├── immutable
  ├── stats: [rows=10]
  ├── cost: 112516.87
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── distribution: test
@@ -3439,6 +3532,7 @@ semi-join (lookup geo_table)
  │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:17)
  │    ├── stats: [rows=10000, distinct(16)=999.957, null(16)=0]
  │    ├── cost: 41812.84
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (1,16)
  │    ├── fd: (1)-->(2), (16)-->(23)
  │    ├── distribution: test
@@ -3446,6 +3540,7 @@ semi-join (lookup geo_table)
  │    │    ├── columns: geo_table2.k:1 geo_table2.geom:2
  │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(2)=100, null(2)=10]
  │    │    ├── cost: 1108.82
+ │    │    ├── cost-flags: unbounded-cardinality
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2)
  │    │    ├── distribution: test
@@ -3468,6 +3563,7 @@ anti-join (lookup geo_table)
  ├── immutable
  ├── stats: [rows=990]
  ├── cost: 112516.87
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── distribution: test
@@ -3479,6 +3575,7 @@ anti-join (lookup geo_table)
  │    │    └── st_intersects(geo_table2.geom:2, geo_table.geom:17)
  │    ├── stats: [rows=10000, distinct(16)=999.957, null(16)=0]
  │    ├── cost: 41812.84
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (1,16)
  │    ├── fd: (1)-->(2), (16)-->(23)
  │    ├── distribution: test
@@ -3486,6 +3583,7 @@ anti-join (lookup geo_table)
  │    │    ├── columns: geo_table2.k:1 geo_table2.geom:2
  │    │    ├── stats: [rows=1000]
  │    │    ├── cost: 1108.82
+ │    │    ├── cost-flags: unbounded-cardinality
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2)
  │    │    ├── distribution: test
@@ -3553,8 +3651,9 @@ WHERE
 index-join t117979
  ├── columns: id:1 links:2
  ├── immutable
- ├── stats: [rows=111.1111]
+ ├── stats: [rows=111.111]
  ├── cost: 810.262222
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── distribution: test
@@ -3564,7 +3663,8 @@ index-join t117979
       ├── inverted constraint: /7/1
       │    └── spans: ["str1", "str1"]
       ├── flags: force-index=idx_links
-      ├── stats: [rows=111.1111, distinct(7)=100, null(7)=0]
+      ├── stats: [rows=111.111, distinct(7)=100, null(7)=0]
       ├── cost: 135.797778
+      ├── cost-flags: unbounded-cardinality
       ├── key: (1)
       └── distribution: test

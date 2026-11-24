@@ -5,7 +5,6 @@
 
 // {{/*
 //go:build execgen_template
-// +build execgen_template
 
 //
 // This file is the execgen template for distinct.eg.go. It's formatted in a
@@ -24,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/execgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -166,10 +166,13 @@ func (p *distinct_TYPEOp) Reset(ctx context.Context) {
 	}
 }
 
-func (p *distinct_TYPEOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p *distinct_TYPEOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	if batch.Length() == 0 {
-		return batch
+		return batch, nil
 	}
 	outputCol := p.outputCol
 	vec := batch.ColVec(p.distinctColIdx)
@@ -234,7 +237,7 @@ func (p *distinct_TYPEOp) Next() coldata.Batch {
 	}
 	p.lastValNull = lastValNull
 
-	return batch
+	return batch, nil
 }
 
 // {{end}}

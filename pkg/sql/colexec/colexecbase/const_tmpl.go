@@ -5,7 +5,6 @@
 
 // {{/*
 //go:build execgen_template
-// +build execgen_template
 
 //
 // This file is the execgen template for const.eg.go. It's formatted in a
@@ -23,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -92,11 +92,14 @@ type const_TYPEOp struct {
 	constVal  _GOTYPE
 }
 
-func (c const_TYPEOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c const_TYPEOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(c.outputIdx)
 	col := vec.TemplateType()
@@ -122,18 +125,18 @@ func (c const_TYPEOp) Next() coldata.Batch {
 			}
 		},
 	)
-	return batch
+	return batch, nil
 }
 
 // {{end}}
 // {{end}}
 
-// NewConstNullOp creates a new operator that produces a constant (untyped) NULL
-// value at index outputIdx.
+// NewConstNullOp creates a new operator that produces a constant NULL value at
+// index outputIdx. The column will be typed according to the passed in 't'.
 func NewConstNullOp(
-	allocator *colmem.Allocator, input colexecop.Operator, outputIdx int,
+	allocator *colmem.Allocator, t *types.T, input colexecop.Operator, outputIdx int,
 ) colexecop.Operator {
-	input = colexecutils.NewVectorTypeEnforcer(allocator, input, types.Unknown, outputIdx)
+	input = colexecutils.NewVectorTypeEnforcer(allocator, input, t, outputIdx)
 	return &constNullOp{
 		OneInputHelper: colexecop.MakeOneInputHelper(input),
 		outputIdx:      outputIdx,
@@ -147,13 +150,16 @@ type constNullOp struct {
 
 var _ colexecop.Operator = &constNullOp{}
 
-func (c constNullOp) Next() coldata.Batch {
-	batch := c.Input.Next()
+func (c constNullOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 
 	batch.ColVec(c.outputIdx).Nulls().SetNulls()
-	return batch
+	return batch, nil
 }

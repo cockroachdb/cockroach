@@ -74,7 +74,7 @@ func Structured(ctx context.Context, meta StructuredLogMeta, payload any) {
 	// and code generation, similar to what we do for TELEMETRY events.
 	payloadBytes, err := json.Marshal(m)
 	if err != nil {
-		Warningf(ctx, "failed to marshal structured event to JSON with meta: %v", meta)
+		Dev.Warningf(ctx, "failed to marshal structured event to JSON with meta: %v", meta)
 		return
 	}
 	// TODO(abarganier): the log formatting code today already wraps JSON payloads in `{...}`, since originally,

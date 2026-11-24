@@ -10,7 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colcontainer"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -62,7 +62,7 @@ func (p *partitionerToOperator) Init(ctx context.Context) {
 	p.batch = p.allocator.NewMemBatchWithFixedCapacity(p.types, coldata.BatchSize())
 }
 
-func (p *partitionerToOperator) Next() coldata.Batch {
+func (p *partitionerToOperator) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	var err error
 	// We need to perform the memory accounting on the dequeued batch. Note that
 	// such setup allows us to release the memory under the old p.batch (which
@@ -71,9 +71,9 @@ func (p *partitionerToOperator) Next() coldata.Batch {
 		err = p.partitioner.Dequeue(p.Ctx, p.partitionIdx, p.batch)
 	})
 	if err != nil {
-		colexecerror.InternalError(err)
+		colexecutils.HandleErrorFromDiskQueue(err)
 	}
-	return p.batch
+	return p.batch, nil
 }
 
 func makeOrdering(cols []uint32) []execinfrapb.Ordering_Column {

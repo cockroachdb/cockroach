@@ -1,0 +1,49 @@
+# LogicTest: cockroach-go-testserver-configs
+
+# This is a regression test for #137386 which verifies the hyperloglog library
+# upgrade for the table stats. We want such a distributed table stats collection
+# plan that older node is the coordinator while the newer node has a sampler
+# processor.
+
+upgrade 1
+
+statement ok
+CREATE TABLE t (k INT PRIMARY KEY);
+
+statement ok
+ALTER TABLE t SPLIT AT VALUES (50000);
+
+# This command fails until the up-replication is complete, so we need to retry
+# it.
+retry
+statement ok
+ALTER TABLE t EXPERIMENTAL_RELOCATE VALUES (array[1], 0), (array[2], 50000)
+
+statement ok
+INSERT INTO t SELECT generate_series(1, 100000);
+
+# Ensure that we will have a distributed plan (n1 and n2 should participate).
+query T
+SELECT * FROM [EXPLAIN (DISTSQL) CREATE STATISTICS s FROM t] WHERE info LIKE 'distribution%'
+----
+distribution: full
+
+statement ok
+CREATE STATISTICS s FROM t;
+
+# Now do the same but with the upgraded node as a coordinator.
+
+# Populate the range cache on n2.
+query I nodeidx=1
+SELECT count(*) FROM t;
+----
+100000
+
+query T nodeidx=1
+SELECT * FROM [EXPLAIN (DISTSQL) CREATE STATISTICS s FROM t] WHERE info LIKE 'distribution%'
+----
+distribution: full
+
+query empty nodeidx=1
+CREATE STATISTICS s FROM t;
+----

@@ -2,6 +2,7 @@
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
+
 package exporter
 
 import (
@@ -57,6 +58,16 @@ func (o *OpenMetricsExporter) SnapshotAndWrite(
 
 	// emit elapsed metric for this run
 	if err := o.emitGaugeMetric(*name+"_elapsed", float64(elapsed.Milliseconds()), now); err != nil {
+		return err
+	}
+
+	// emit max metric for this run
+	if err := o.emitGaugeMetric(*name+"_max", float64(hist.Max()), now); err != nil {
+		return err
+	}
+
+	// emit mean metric for this run
+	if err := o.emitGaugeMetric(*name+"_mean", hist.Mean(), now); err != nil {
 		return err
 	}
 
@@ -144,7 +155,7 @@ func (o *OpenMetricsExporter) SetLabels(labels *map[string]string) {
 		labelName := util.SanitizeKey(label)
 
 		// In case the label value already has surrounding quotes, we should trim them
-		labelValue := util.SanitizeValue(strings.Trim(value, "\""))
+		labelValue := util.SanitizeValue(strings.Trim(value, `"`))
 		labelPair := &prom.LabelPair{
 			Name:  &labelName,
 			Value: &labelValue,

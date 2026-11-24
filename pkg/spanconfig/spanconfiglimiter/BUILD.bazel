@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "spanconfiglimiter",
@@ -17,5 +17,40 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondata",
         "@com_github_cockroachdb_errors//:errors",
+    ],
+)
+
+go_test(
+    name = "spanconfiglimiter_test",
+    srcs = [
+        "datadriven_test.go",
+        "drop_table_test.go",
+        "main_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    deps = [
+        "//pkg/base",
+        "//pkg/config",
+        "//pkg/config/zonepb",
+        "//pkg/roachpb",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/spanconfig",
+        "//pkg/spanconfig/spanconfigtestutils/spanconfigtestcluster",
+        "//pkg/sql",
+        "//pkg/sql/gcjob",
+        "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/skip",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
     ],
 )

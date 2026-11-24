@@ -105,7 +105,7 @@ func executeNodeShutdown(
 		return err
 	}
 
-	m := c.NewMonitor(ctx, cfg.crdbNodes)
+	m := c.NewDeprecatedMonitor(ctx, cfg.crdbNodes)
 	m.ExpectDeath()
 	m.Go(func(ctx context.Context) error {
 		ticker := time.NewTicker(1 * time.Second)
@@ -118,12 +118,12 @@ func executeNodeShutdown(
 				if err != nil {
 					return errors.Wrap(err, "getting the job status")
 				}
-				jobStatus := jobs.Status(status)
+				jobStatus := jobs.State(status)
 				switch jobStatus {
-				case jobs.StatusSucceeded:
+				case jobs.StateSucceeded:
 					t.Status("job completed")
 					return nil
-				case jobs.StatusRunning:
+				case jobs.StateRunning:
 					t.L().Printf("job %d still running, waiting to succeed", jobID)
 				default:
 					// Waiting for job to complete.
@@ -170,9 +170,14 @@ func executeNodeShutdown(
 	return nil
 }
 
-type checkStatusFunc func(status jobs.Status) (success bool, unexpected bool)
+type checkStatusFunc func(status jobs.State) (success bool, unexpected bool)
 
-func WaitForStatus(
+// WaitForState waits for a job to reach a state that satisfies the provided
+// check function. The check function returns two booleans: the first indicates
+// whether the job is in a successful state, and the second indicates whether
+// the job is in an unexpected state that should fail fast. The two booleans
+// should never both be true.
+func WaitForState(
 	ctx context.Context,
 	db *gosql.DB,
 	jobID jobspb.JobID,
@@ -180,41 +185,60 @@ func WaitForStatus(
 	maxWait time.Duration,
 ) error {
 	startTime := timeutil.Now()
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(time.Microsecond)
 	defer ticker.Stop()
-	var status string
+	var state string
 	for {
 		select {
 		case <-ticker.C:
-			err := db.QueryRowContext(ctx, `SELECT status FROM [SHOW JOB $1]`, jobID).Scan(&status)
+			err := db.QueryRowContext(ctx, `SELECT status FROM [SHOW JOB $1]`, jobID).Scan(&state)
 			if err != nil {
-				return errors.Wrapf(err, "getting the job status %s", status)
+				return errors.Wrapf(err, "getting the job state %s", state)
 			}
-			success, unexpected := check(jobs.Status(status))
+			success, unexpected := check(jobs.State(state))
 			if unexpected {
-				return errors.Newf("unexpectedly found job %d in state %s", jobID, status)
+				return errors.Newf("unexpectedly found job %d in state %s", jobID, state)
 			}
 			if success {
 				return nil
 			}
 			if timeutil.Since(startTime) > maxWait {
-				return errors.Newf("job %d did not reach status %s after %s", jobID, status, maxWait)
+				return errors.Newf("job %d still in state %s after %s", jobID, state, maxWait)
 			}
+			ticker.Reset(5 * time.Second)
 		case <-ctx.Done():
-			return errors.Wrapf(ctx.Err(), "context canceled while waiting for job to reach status %s", status)
+			return errors.Wrapf(ctx.Err(), "context canceled while waiting for job to reach state %s", state)
 		}
 	}
+}
+
+func WaitForTerminal(
+	ctx context.Context, db *gosql.DB, jobID jobspb.JobID, maxWait time.Duration,
+) error {
+	return WaitForState(ctx, db, jobID,
+		func(status jobs.State) (success bool, unexpected bool) {
+			switch status {
+			case jobs.StateSucceeded,
+				jobs.StateFailed,
+				jobs.StateCanceled,
+				jobs.StatePaused,
+				jobs.StateRevertFailed:
+				return true, false
+			default:
+				return false, false
+			}
+		}, maxWait)
 }
 
 func WaitForRunning(
 	ctx context.Context, db *gosql.DB, jobID jobspb.JobID, maxWait time.Duration,
 ) error {
-	return WaitForStatus(ctx, db, jobID,
-		func(status jobs.Status) (success bool, unexpected bool) {
+	return WaitForState(ctx, db, jobID,
+		func(status jobs.State) (success bool, unexpected bool) {
 			switch status {
-			case jobs.StatusRunning:
+			case jobs.StateRunning:
 				return true, false
-			case jobs.StatusPending:
+			case jobs.StatePending:
 				return false, false
 			default:
 				return false, true
@@ -222,15 +246,93 @@ func WaitForRunning(
 		}, maxWait)
 }
 
+// WaitForSucceeded waits for a job to reach the succeeded state from a running
+// state.
 func WaitForSucceeded(
 	ctx context.Context, db *gosql.DB, jobID jobspb.JobID, maxWait time.Duration,
 ) error {
-	return WaitForStatus(ctx, db, jobID,
-		func(status jobs.Status) (success bool, unexpected bool) {
+	return WaitForState(ctx, db, jobID,
+		func(status jobs.State) (success bool, unexpected bool) {
 			switch status {
-			case jobs.StatusSucceeded:
+			case jobs.StateSucceeded:
 				return true, false
-			case jobs.StatusRunning:
+			case jobs.StateRunning:
+				return false, false
+			default:
+				return false, true
+			}
+		}, maxWait)
+}
+
+// WaitForPaused waits for a job to reach the paused state from a running state.
+func WaitForPaused(
+	ctx context.Context, db *gosql.DB, jobID jobspb.JobID, maxWait time.Duration,
+) error {
+	return WaitForState(ctx, db, jobID,
+		func(status jobs.State) (success bool, unexpected bool) {
+			switch status {
+			case jobs.StatePaused:
+				return true, false
+			case jobs.StateRunning:
+				return false, false
+			case jobs.StatePauseRequested:
+				return false, false
+			default:
+				return false, true
+			}
+		}, maxWait)
+}
+
+// WaitForResume waits for a job to reach the resumed state from a paused state.
+func WaitForResume(
+	ctx context.Context, db *gosql.DB, jobID jobspb.JobID, maxWait time.Duration,
+) error {
+	return WaitForState(ctx, db, jobID,
+		func(status jobs.State) (success bool, unexpected bool) {
+			switch status {
+			case jobs.StateRunning:
+				return true, false
+			case jobs.StatePaused:
+				return false, false
+			default:
+				return false, true
+			}
+		}, maxWait)
+}
+
+// WaitForFailed waits for a job to reach the failed state from a running state.
+func WaitForFailed(
+	ctx context.Context, db *gosql.DB, jobID jobspb.JobID, maxWait time.Duration,
+) error {
+	return WaitForState(ctx, db, jobID,
+		func(state jobs.State) (success bool, unexpected bool) {
+			switch state {
+			case jobs.StateFailed:
+				return true, false
+			case jobs.StateRunning:
+				return false, false
+			case jobs.StateReverting:
+				return false, false
+			default:
+				return false, true
+			}
+		}, maxWait)
+}
+
+// WaitForCanceled waits for a job to reach the canceled state.
+func WaitForCanceled(
+	ctx context.Context, db *gosql.DB, jobID jobspb.JobID, maxWait time.Duration,
+) error {
+	return WaitForState(ctx, db, jobID,
+		func(state jobs.State) (success bool, unexpected bool) {
+			switch state {
+			case jobs.StateCanceled:
+				return true, false
+			case jobs.StateCancelRequested:
+				return false, false
+			case jobs.StateReverting:
+				return false, false
+			case jobs.StateRunning:
 				return false, false
 			default:
 				return false, true
@@ -327,14 +429,14 @@ func getFractionProgressed(
 	if err != nil {
 		return 0, errors.Wrap(err, "getting the job status and fraction completed")
 	}
-	jobStatus := jobs.Status(status)
+	jobStatus := jobs.State(status)
 	switch jobStatus {
-	case jobs.StatusSucceeded:
+	case jobs.StateSucceeded:
 		if fractionCompleted != 1 {
 			return 0, errors.Newf("job completed but fraction completed is %.2f", fractionCompleted)
 		}
 		return fractionCompleted, nil
-	case jobs.StatusRunning:
+	case jobs.StateRunning:
 		l.Printf("job %d still running, %.2f completed, waiting to succeed", jobID, fractionCompleted)
 		return fractionCompleted, nil
 	default:

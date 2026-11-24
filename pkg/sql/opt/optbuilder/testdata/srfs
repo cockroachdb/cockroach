@@ -12,11 +12,18 @@ project-set
  └── zip
       └── generate_series(1, 3)
 
+# Duplicate SRF names in FROM without aliases now correctly errors,
+# matching Postgres behavior (#150532).
 build
 SELECT * FROM generate_series(1, 2), generate_series(1, 2)
 ----
+error (42712): source name "generate_series" specified more than once (missing AS clause)
+
+build
+SELECT * FROM generate_series(1, 2) AS a, generate_series(1, 2) AS b
+----
 inner-join-apply
- ├── columns: generate_series:1 generate_series:2
+ ├── columns: a:1 b:2
  ├── project-set
  │    ├── columns: generate_series:1
  │    ├── values
@@ -1179,3 +1186,217 @@ project-set
  │    └── ()
  └── zip
       └── unnest(ARRAY[(),(),()])
+
+# Regression test for #150532. Columns produced by set-returning functions
+# should have data source names matching the function name, like Postgres.
+
+# Single-column SRF: qualified reference using the function name.
+build
+SELECT generate_series.generate_series FROM generate_series(1, 3)
+----
+project-set
+ ├── columns: generate_series:1
+ ├── values
+ │    └── ()
+ └── zip
+      └── generate_series(1, 3)
+
+# Multi-column SRF: qualified reference using the function name.
+build
+SELECT pg_get_keywords.word FROM pg_get_keywords() LIMIT 1
+----
+limit
+ ├── columns: word:1
+ ├── project
+ │    ├── columns: word:1
+ │    ├── limit hint: 1.00
+ │    └── project-set
+ │         ├── columns: word:1 catcode:2 catdesc:3
+ │         ├── limit hint: 1.00
+ │         ├── values
+ │         │    ├── limit hint: 1.00
+ │         │    └── ()
+ │         └── zip
+ │              └── pg_get_keywords()
+ └── 1
+
+# Multi-column SRF with star: qualified star using the function name.
+build
+SELECT pg_get_keywords.* FROM pg_get_keywords() LIMIT 1
+----
+limit
+ ├── columns: word:1 catcode:2 catdesc:3
+ ├── project-set
+ │    ├── columns: word:1 catcode:2 catdesc:3
+ │    ├── limit hint: 1.00
+ │    ├── values
+ │    │    ├── limit hint: 1.00
+ │    │    └── ()
+ │    └── zip
+ │         └── pg_get_keywords()
+ └── 1
+
+# Schema-qualified invocation: the data source is the unqualified function name.
+build
+SELECT generate_series.generate_series FROM pg_catalog.generate_series(1, 3)
+----
+project-set
+ ├── columns: generate_series:1
+ ├── values
+ │    └── ()
+ └── zip
+      └── generate_series(1, 3)
+
+# Same for a function whose def.Name is schema-qualified (non-pg_catalog builtin).
+build
+SELECT _pg_expandarray.x FROM information_schema._pg_expandarray(ARRAY['a','b'])
+----
+project
+ ├── columns: x:1
+ └── project-set
+      ├── columns: x:1 n:2
+      ├── values
+      │    └── ()
+      └── zip
+           └── information_schema._pg_expandarray(ARRAY['a','b'])
+
+# Explicit alias overrides function name as the data source.
+build
+SELECT t.word FROM pg_get_keywords() AS t LIMIT 1
+----
+limit
+ ├── columns: word:1
+ ├── project
+ │    ├── columns: word:1
+ │    ├── limit hint: 1.00
+ │    └── project-set
+ │         ├── columns: word:1 catcode:2 catdesc:3
+ │         ├── limit hint: 1.00
+ │         ├── values
+ │         │    ├── limit hint: 1.00
+ │         │    └── ()
+ │         └── zip
+ │              └── pg_get_keywords()
+ └── 1
+
+# Duplicate function names without aliases should error, matching Postgres.
+build
+SELECT * FROM unnest(ARRAY[1]), unnest(ARRAY[2])
+----
+error (42712): source name "unnest" specified more than once (missing AS clause)
+
+# Different SRFs in FROM can be referenced by their function names.
+build
+SELECT generate_series.generate_series, unnest.unnest
+FROM generate_series(1, 2), unnest(ARRAY[10, 20])
+----
+inner-join-apply
+ ├── columns: generate_series:1 unnest:2
+ ├── project-set
+ │    ├── columns: generate_series:1
+ │    ├── values
+ │    │    └── ()
+ │    └── zip
+ │         └── generate_series(1, 2)
+ ├── project-set
+ │    ├── columns: unnest:2
+ │    ├── values
+ │    │    └── ()
+ │    └── zip
+ │         └── unnest(ARRAY[10,20])
+ └── filters (true)
+
+# Single-column SRF with AS alias: alias overrides function name for both
+# column and table name.
+build
+SELECT gs FROM generate_series(1, 3) AS gs ORDER BY 1
+----
+sort
+ ├── columns: gs:1
+ ├── ordering: +1
+ └── project-set
+      ├── columns: generate_series:1
+      ├── values
+      │    └── ()
+      └── zip
+           └── generate_series(1, 3)
+
+# ROWS FROM with qualified reference using the function name.
+build
+SELECT generate_series.generate_series FROM ROWS FROM(generate_series(1, 2))
+----
+project-set
+ ├── columns: generate_series:1
+ ├── values
+ │    └── ()
+ └── zip
+      └── generate_series(1, 2)
+
+# Table and SRF with the same name don't conflict in the join (the table's
+# columns carry schema qualification), but qualified references are ambiguous.
+exec-ddl
+CREATE TABLE unnest (x INT)
+----
+
+build
+SELECT unnest.x, unnest.unnest FROM unnest, unnest(ARRAY[1])
+----
+error (42P09): ambiguous source name: "unnest"
+
+# Aliasing the table resolves the ambiguity.
+build
+SELECT u.x, unnest.unnest FROM unnest AS u, unnest(ARRAY[1])
+----
+project
+ ├── columns: x:1 unnest:5
+ └── inner-join-apply
+      ├── columns: x:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4 unnest:5
+      ├── scan unnest [as=u]
+      │    └── columns: x:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+      ├── project-set
+      │    ├── columns: unnest:5
+      │    ├── values
+      │    │    └── ()
+      │    └── zip
+      │         └── unnest(ARRAY[1])
+      └── filters (true)
+
+exec-ddl
+DROP TABLE unnest
+----
+
+# Subquery referencing SRF columns by function name.
+exec-ddl
+CREATE TABLE jt (j JSONB)
+----
+
+build
+SELECT (SELECT jt.j) FROM jt, jsonb_each_text(jt.j) WHERE jsonb_each_text.key = 'foo'
+----
+project
+ ├── columns: j:8
+ ├── select
+ │    ├── columns: jt.j:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4 key:5!null value:6
+ │    ├── inner-join-apply
+ │    │    ├── columns: jt.j:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4 key:5 value:6
+ │    │    ├── scan jt
+ │    │    │    └── columns: jt.j:1 rowid:2!null crdb_internal_mvcc_timestamp:3 tableoid:4
+ │    │    ├── project-set
+ │    │    │    ├── columns: key:5 value:6
+ │    │    │    ├── values
+ │    │    │    │    └── ()
+ │    │    │    └── zip
+ │    │    │         └── jsonb_each_text(jt.j:1)
+ │    │    └── filters (true)
+ │    └── filters
+ │         └── key:5 = 'foo'
+ └── projections
+      └── subquery [as=j:8]
+           └── max1-row
+                ├── columns: j:7
+                └── project
+                     ├── columns: j:7
+                     ├── values
+                     │    └── ()
+                     └── projections
+                          └── jt.j:1 [as=j:7]

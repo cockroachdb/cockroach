@@ -1,3 +1,5 @@
+# LogicTest: !local-prepared
+
 query OO
 SELECT 3::OID, '3'::OID
 ----
@@ -599,6 +601,8 @@ SELECT relname, oid::regclass::string from pg_class where oid='my_b_index'::regc
 my_b_index  my_b_index
 
 # Test that we can cast table and index names from different schemas.
+# Postgres qualifies the name when the relation is not visible via the
+# current search_path; we match that behavior.
 
 statement ok
 CREATE SCHEMA other_schema
@@ -614,21 +618,21 @@ SELECT c.relname, c.oid::regclass::string, n.nspname from pg_class c
 JOIN pg_namespace n ON c.relnamespace = n.oid
 WHERE c.oid='other_schema.table_with_indexes'::regclass
 ----
-table_with_indexes  table_with_indexes  other_schema
+table_with_indexes  other_schema.table_with_indexes  other_schema
 
 query TTT
 SELECT c.relname, c.oid::regclass::string, n.nspname from pg_class c
 JOIN pg_namespace n ON c.relnamespace = n.oid
 WHERE c.oid='other_schema.table_with_indexes_pkey'::regclass
 ----
-table_with_indexes_pkey  table_with_indexes_pkey  other_schema
+table_with_indexes_pkey  other_schema.table_with_indexes_pkey  other_schema
 
 query TTT
 SELECT c.relname, c.oid::regclass::string, n.nspname from pg_class c
 JOIN pg_namespace n ON c.relnamespace = n.oid
 WHERE c.oid='other_schema.my_b_index'::regclass
 ----
-my_b_index  my_b_index  other_schema
+my_b_index  other_schema.my_b_index  other_schema
 
 # Changing the search_path should influence what gets resolved while casting.
 
@@ -750,3 +754,252 @@ SELECT col1 FROM t123548_1 JOIN t123548_2 ON col1 = col2;
 statement ok
 RESET testing_optimizer_random_seed;
 RESET testing_optimizer_disable_rule_probability;
+
+# Regression test: string constants should be implicitly castable to oid[] in
+# comparisons, matching PostgreSQL behavior. This is needed for pg_dump
+# compatibility which compares oid[] columns against string literals like '{0}'.
+subtest oid_array_string_comparison
+
+statement ok
+CREATE TABLE t_oidarr (a OID[])
+
+statement ok
+INSERT INTO t_oidarr VALUES (ARRAY[0::oid])
+
+query B
+SELECT a = '{0}' FROM t_oidarr
+----
+true
+
+query B
+SELECT a = '{0}'::oid[] FROM t_oidarr
+----
+true
+
+statement ok
+DROP TABLE t_oidarr
+
+subtest end
+
+# Regression test: string constants should be resolvable as oid type, matching
+# PostgreSQL behavior. This is needed for pg_dump which uses EXECUTE with
+# string-literal OID arguments like: EXECUTE dumpEnumType('100108')
+subtest oid_string_constant
+
+# String constants should resolve to oid in EXECUTE parameter context.
+statement ok
+PREPARE test_oid_param(oid) AS SELECT $1
+
+query O
+EXECUTE test_oid_param('1234')
+----
+1234
+
+statement ok
+DEALLOCATE test_oid_param
+
+# String constants should be comparable to oid columns.
+statement ok
+CREATE TABLE t_oid_cmp (a OID)
+
+statement ok
+INSERT INTO t_oid_cmp VALUES (1234)
+
+query B
+SELECT a = '1234' FROM t_oid_cmp
+----
+true
+
+statement ok
+DROP TABLE t_oid_cmp
+
+subtest end
+
+# Regression tests for #170049: regclass / regproc / regprocedure / regtype
+# text output must be schema-qualified when the bare name does not resolve
+# back to the same OID through the current search_path. This matches
+# Postgres's regclassout / regtypeout / etc. behavior.
+subtest qualified_reg_text
+
+statement ok
+CREATE SCHEMA reg_qual_sc;
+CREATE TABLE reg_qual_sc.t (id INT PRIMARY KEY);
+CREATE FUNCTION reg_qual_sc.f() RETURNS INT LANGUAGE SQL AS 'SELECT 1';
+CREATE TYPE reg_qual_sc.color AS ENUM ('r', 'g', 'b');
+
+# search_path = "$user", public — none of the above are visible.
+query T
+SELECT (SELECT 'reg_qual_sc.t'::regclass::oid)::regclass::text
+----
+reg_qual_sc.t
+
+query T
+SELECT (SELECT 'reg_qual_sc.f'::regproc::oid)::regproc::text
+----
+reg_qual_sc.f
+
+query T
+SELECT (SELECT 'reg_qual_sc.f()'::regprocedure::oid)::regprocedure::text
+----
+reg_qual_sc.f
+
+query T
+SELECT (SELECT 'reg_qual_sc.color'::regtype::oid)::regtype::text
+----
+reg_qual_sc.color
+
+# pg_catalog is always implicitly in search_path → entities there stay bare.
+query T
+SELECT 'pg_constraint'::regclass::text
+----
+pg_constraint
+
+query T
+SELECT 'pg_catalog.upper(string)'::regprocedure::text
+----
+upper
+
+# Once the schema is on search_path, the bare name suffices.
+statement ok
+SET search_path = reg_qual_sc, public
+
+query T
+SELECT (SELECT 'reg_qual_sc.t'::regclass::oid)::regclass::text
+----
+t
+
+query T
+SELECT (SELECT 'reg_qual_sc.f'::regproc::oid)::regproc::text
+----
+f
+
+query T
+SELECT (SELECT 'reg_qual_sc.color'::regtype::oid)::regtype::text
+----
+color
+
+statement ok
+RESET search_path
+
+# Shadowing: with public earlier than reg_qual_sc on search_path, a relation
+# in reg_qual_sc whose name is also defined in public must be qualified.
+statement ok
+CREATE TABLE public.shadow (id INT);
+CREATE TABLE reg_qual_sc.shadow (id INT)
+
+statement ok
+SET search_path = public, reg_qual_sc
+
+query T
+SELECT (SELECT c.oid FROM pg_class c JOIN pg_namespace n ON c.relnamespace = n.oid
+        WHERE c.relname = 'shadow' AND n.nspname = 'reg_qual_sc')::regclass::text
+----
+reg_qual_sc.shadow
+
+query T
+SELECT (SELECT c.oid FROM pg_class c JOIN pg_namespace n ON c.relnamespace = n.oid
+        WHERE c.relname = 'shadow' AND n.nspname = 'public')::regclass::text
+----
+shadow
+
+# pg_table_is_visible / pg_function_is_visible / pg_type_is_visible must
+# account for shadowing too.
+query BB
+SELECT pg_table_is_visible(
+         (SELECT c.oid FROM pg_class c JOIN pg_namespace n ON c.relnamespace = n.oid
+          WHERE c.relname = 'shadow' AND n.nspname = 'public')),
+       pg_table_is_visible(
+         (SELECT c.oid FROM pg_class c JOIN pg_namespace n ON c.relnamespace = n.oid
+          WHERE c.relname = 'shadow' AND n.nspname = 'reg_qual_sc'))
+----
+true  false
+
+statement ok
+RESET search_path
+
+# Identifiers needing quoting are quoted only as needed.
+statement ok
+CREATE SCHEMA "Mixed Case";
+CREATE TABLE "Mixed Case"."Weird Name" (id INT)
+
+query T
+SELECT (SELECT c.oid FROM pg_class c JOIN pg_namespace n ON c.relnamespace = n.oid
+        WHERE c.relname = 'Weird Name')::regclass::text
+----
+"Mixed Case"."Weird Name"
+
+statement ok
+DROP TABLE "Mixed Case"."Weird Name";
+DROP SCHEMA "Mixed Case";
+DROP TABLE public.shadow;
+DROP TYPE reg_qual_sc.color;
+DROP FUNCTION reg_qual_sc.f;
+DROP TABLE reg_qual_sc.t;
+DROP TABLE reg_qual_sc.shadow;
+DROP SCHEMA reg_qual_sc
+
+subtest end
+
+# pg_function_is_visible matches Postgres's signature-aware FunctionIsVisible:
+# two functions with the same name in different schemas do not shadow each
+# other when their signatures differ.
+subtest pg_function_is_visible_overload
+
+statement ok
+CREATE SCHEMA visfn;
+CREATE FUNCTION public.vfoo(int) RETURNS int LANGUAGE SQL AS 'SELECT $1';
+CREATE FUNCTION visfn.vfoo(text) RETURNS text LANGUAGE SQL AS 'SELECT $1';
+CREATE FUNCTION public.vbar(int) RETURNS int LANGUAGE SQL AS 'SELECT $1';
+CREATE FUNCTION visfn.vbar(int) RETURNS int LANGUAGE SQL AS 'SELECT $1'
+
+# Default search_path: visfn not on path → visfn.* are not visible.
+query TB rowsort
+SELECT n.nspname || '.' || p.proname, pg_function_is_visible(p.oid)
+FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON p.pronamespace = n.oid
+WHERE p.proname IN ('vfoo','vbar')
+----
+public.vbar  true
+public.vfoo  true
+visfn.vbar   false
+visfn.vfoo   false
+
+# visfn ahead of public → public.* shadowed where signatures match.
+statement ok
+SET search_path = visfn, public
+
+query TB rowsort
+SELECT n.nspname || '.' || p.proname, pg_function_is_visible(p.oid)
+FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON p.pronamespace = n.oid
+WHERE p.proname IN ('vfoo','vbar')
+----
+public.vbar  false
+public.vfoo  true
+visfn.vbar   true
+visfn.vfoo   true
+
+# public ahead of visfn → critical case: visfn.vfoo(text) is still visible
+# because public has no vfoo with a (text) signature; visfn.vbar(int) is
+# shadowed by public.vbar(int) (same signature).
+statement ok
+SET search_path = public, visfn
+
+query TB rowsort
+SELECT n.nspname || '.' || p.proname, pg_function_is_visible(p.oid)
+FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON p.pronamespace = n.oid
+WHERE p.proname IN ('vfoo','vbar')
+----
+public.vbar  true
+public.vfoo  true
+visfn.vbar   false
+visfn.vfoo   true
+
+statement ok
+RESET search_path;
+DROP FUNCTION public.vfoo(int);
+DROP FUNCTION visfn.vfoo(text);
+DROP FUNCTION public.vbar(int);
+DROP FUNCTION visfn.vbar(int);
+DROP SCHEMA visfn
+
+subtest end
+

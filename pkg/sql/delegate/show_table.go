@@ -53,6 +53,8 @@ func (d *delegator) delegateShowCreateTable(n *tree.ShowCreate) (tree.Statement,
 	switch n.FmtOpt {
 	case tree.ShowCreateFormatOptionRedactedValues:
 		createField = "crdb_internal.redact(create_redactable)"
+	case tree.ShowCreateFormatOptionIgnoreFKs:
+		createField = "create_nofks"
 	}
 
 	showCreateQuery := `
@@ -90,7 +92,13 @@ SELECT
           THEN NULL
 				ELSE
 					e'\n-- Warning: Partitioned table with no zone configurations.\n'
-        END
+        END,
+        CASE
+            WHEN array_length(rls_statements, 1) > 0 THEN
+                concat(e';\n', array_to_string(rls_statements, e';\n'))
+            ELSE NULL
+        END,
+        e';'
     ) AS create_statement
 FROM
     %[4]s.crdb_internal.create_statements
@@ -160,7 +168,9 @@ SELECT
 	getIndexesQuery += `
 FROM
     %[4]s.information_schema.statistics AS s
-    JOIN %[4]s.pg_catalog.pg_class c ON c.relname = s.index_name
+    -- Use an index hint to avoid an incomplete virtual index lookup join that
+    -- degrades to a full scan.
+    JOIN %[4]s.pg_catalog.pg_class@primary AS c ON c.relname = s.index_name
     JOIN %[4]s.pg_catalog.pg_class c_table ON c_table.relname = s.table_name
     JOIN %[4]s.pg_catalog.pg_namespace n ON c.relnamespace = n.oid AND c_table.relnamespace = n.oid AND n.nspname = s.index_schema
     JOIN %[4]s.pg_catalog.pg_index i ON i.indexrelid = c.oid AND i.indrelid = c_table.oid
@@ -241,6 +251,7 @@ func (d *delegator) delegateShowConstraints(n *tree.ShowConstraints) (tree.State
            WHEN 'u' THEN 'UNIQUE'
            WHEN 'c' THEN 'CHECK'
            WHEN 'f' THEN 'FOREIGN KEY'
+           WHEN 'n' THEN 'NOT NULL'
            ELSE c.contype::TEXT
         END AS constraint_type,
         c.condef AS details,
@@ -251,7 +262,7 @@ func (d *delegator) delegateShowConstraints(n *tree.ShowConstraints) (tree.State
 	obj_description(c.oid) AS comment`
 	}
 	getConstraintsQuery += `
-FROM
+	FROM
        %[4]s.pg_catalog.pg_class t,
        %[4]s.pg_catalog.pg_namespace n,
        %[4]s.pg_catalog.pg_constraint c

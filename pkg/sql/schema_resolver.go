@@ -23,13 +23,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scbuild"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
@@ -127,6 +125,9 @@ func (sr *schemaResolver) LookupObject(
 	if flags.DesiredObjectKind == tree.TypeObject && scName == catconstants.PublicSchemaName {
 		if alias, ok := types.PublicSchemaAliases[obName]; ok {
 			if flags.RequireMutable {
+				if !flags.Required {
+					return false, catalog.ResolvedObjectPrefix{}, nil, nil
+				}
 				return true, catalog.ResolvedObjectPrefix{}, nil, pgerror.Newf(pgcode.WrongObjectType, "type %q is a built-in type", obName)
 			}
 
@@ -162,17 +163,20 @@ func (sr *schemaResolver) LookupObject(
 		b = b.WithOffline()
 	}
 	g := b.MaybeGet()
-	tn := tree.MakeQualifiedTypeName(dbName, scName, obName)
 	switch flags.DesiredObjectKind {
 	case tree.TableObject:
-		prefix, desc, err = descs.PrefixAndTable(ctx, g, &tn)
+		tn := tree.NewTableNameWithSchema(tree.Name(dbName), tree.Name(scName), tree.Name(obName))
+		prefix, desc, err = descs.PrefixAndTable(ctx, g, tn)
 	case tree.TypeObject:
-		prefix, desc, err = descs.PrefixAndType(ctx, g, &tn)
+		tn := tree.NewQualifiedTypeName(dbName, scName, obName)
+		prefix, desc, err = descs.PrefixAndType(ctx, g, tn)
 	case tree.AnyObject:
-		prefix, desc, err = descs.PrefixAndTable(ctx, g, &tn)
+		tn := tree.NewTableNameWithSchema(tree.Name(dbName), tree.Name(scName), tree.Name(obName))
+		prefix, desc, err = descs.PrefixAndTable(ctx, g, tn)
 		if err != nil {
 			if sqlerrors.IsUndefinedRelationError(err) || errors.Is(err, catalog.ErrDescriptorWrongType) {
-				prefix, desc, err = descs.PrefixAndType(ctx, g, &tn)
+				tn := tree.NewQualifiedTypeName(dbName, scName, obName)
+				prefix, desc, err = descs.PrefixAndType(ctx, g, tn)
 			}
 		}
 	default:
@@ -265,7 +269,7 @@ func (sr *schemaResolver) getQualifiedTableName(
 	switch {
 	case scDesc != nil:
 		schemaName = tree.Name(scDesc.GetName())
-	case desc.IsTemporary() && scDesc == nil:
+	case desc.IsTemporary():
 		// We've lost track of the session which owned this schema, but we
 		// can come up with a name that is also going to be unique and
 		// informative and looks like a pg_temp_<session_id> name.
@@ -456,10 +460,7 @@ func (sr *schemaResolver) ResolveFunction(
 	}
 
 	// Get builtin and udf functions if there is any match.
-	builtinDef, err := tree.GetBuiltinFuncDefinition(fn, path)
-	if err != nil {
-		return nil, err
-	}
+	builtinDef := tree.GetBuiltinFuncDefinition(fn, path)
 	routine, err := maybeLookupRoutine(ctx, sr, path, fn)
 	if err != nil {
 		return nil, err
@@ -469,18 +470,8 @@ func (sr *schemaResolver) ResolveFunction(
 	case builtinDef != nil && routine != nil:
 		return builtinDef.MergeWith(routine, path)
 	case builtinDef != nil:
-		props, _ := builtinsregistry.GetBuiltinProperties(builtinDef.Name)
-		if props.UnsupportedWithIssue != 0 {
-			// Note: no need to embed the function name in the message; the
-			// caller will add the function name as prefix.
-			const msg = "this function is not yet supported"
-			var unImplErr error
-			if props.UnsupportedWithIssue < 0 {
-				unImplErr = unimplemented.New(builtinDef.Name+"()", msg)
-			} else {
-				unImplErr = unimplemented.NewWithIssueDetail(props.UnsupportedWithIssue, builtinDef.Name, msg)
-			}
-			return nil, pgerror.Wrapf(unImplErr, pgcode.InvalidParameterValue, "%s()", builtinDef.Name)
+		if builtinDef.UnsupportedWithIssue != 0 {
+			return nil, builtinDef.MakeUnsupportedError()
 		}
 		return builtinDef, nil
 	case routine != nil:

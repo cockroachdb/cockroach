@@ -10,7 +10,7 @@ support-from node-id=2 store-id=2
 ----
 epoch: 0, expiration: 0,0
 
-send-heartbeats now=100 liveness-interval=10s
+send-heartbeats now=100 support-duration=10s
 ----
 heartbeats:
 {Type:MsgHeartbeat From:{NodeID:1 StoreID:1} To:{NodeID:2 StoreID:2} Epoch:1 Expiration:110.000000000,0}
@@ -49,7 +49,7 @@ debug-supporter-state
 meta:
 {MaxWithdrawn:201.000000000,0}
 support for:
-{Target:{NodeID:2 StoreID:2} Epoch:3 Expiration:0,0}
+{Target:{NodeID:2 StoreID:2} Epoch:3 Expiration:0,0} lastSupportWithdrawnTime:201.000000000,0
 
 debug-metrics
 ----

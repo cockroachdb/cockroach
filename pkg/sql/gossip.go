@@ -14,7 +14,7 @@ import (
 
 // TryClearGossipInfo implements the tree.GossipOperator interface.
 func (p *planner) TryClearGossipInfo(ctx context.Context, key string) (bool, error) {
-	g, err := p.ExecCfg().Gossip.OptionalErr(0 /* issue */)
+	g, err := p.ExecCfg().Gossip.OptionalErr()
 	if err != nil {
 		return false, err
 	}

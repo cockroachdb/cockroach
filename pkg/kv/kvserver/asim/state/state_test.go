@@ -6,7 +6,9 @@
 package state
 
 import (
+	"fmt"
 	"math/rand"
+	"strings"
 	"testing"
 	"time"
 
@@ -15,12 +17,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
 
 func TestStateUpdates(t *testing.T) {
 	s := NewState(config.DefaultSimulationSettings())
-	node := s.AddNode()
+	node := s.AddNode(-1, roachpb.Locality{})
 	s.AddStore(node.NodeID())
 	require.Equal(t, 1, len(s.Nodes()))
 	require.Equal(t, 1, len(s.Stores()))
@@ -34,7 +39,7 @@ func TestRangeSplit(t *testing.T) {
 	k1 := MinKey
 	r1 := s.rangeFor(k1)
 
-	n1 := s.AddNode()
+	n1 := s.AddNode(-1, roachpb.Locality{})
 	s1, _ := s.AddStore(n1.NodeID())
 
 	repl1, _ := s.AddReplica(r1.RangeID(), s1.StoreID(), roachpb.VOTER_FULL)
@@ -84,7 +89,9 @@ func TestRangeMap(t *testing.T) {
 	// Assert that the first range is correctly initialized upon creation of a
 	// new state.
 	require.Len(t, s.ranges.rangeMap, 1)
-	require.Equal(t, s.ranges.rangeTree.Max(), s.ranges.rangeTree.Min())
+	maxRes, _ := s.ranges.rangeTree.Max()
+	minRes, _ := s.ranges.rangeTree.Min()
+	require.Equal(t, maxRes, minRes)
 	firstRange := s.ranges.rangeMap[1]
 	require.Equal(t, s.rangeFor(MinKey), firstRange)
 	require.Equal(t, firstRange.startKey, MinKey)
@@ -119,7 +126,7 @@ func TestValidTransfer(t *testing.T) {
 
 	_, r1, _ := s.SplitRange(1)
 
-	n1 := s.AddNode()
+	n1 := s.AddNode(-1, roachpb.Locality{})
 	s1, _ := s.AddStore(n1.NodeID())
 	s2, _ := s.AddStore(n1.NodeID())
 
@@ -152,7 +159,7 @@ func TestTransferLease(t *testing.T) {
 
 	_, r1, _ := s.SplitRange(1)
 
-	n1 := s.AddNode()
+	n1 := s.AddNode(-1, roachpb.Locality{})
 	s1, _ := s.AddStore(n1.NodeID())
 	s2, _ := s.AddStore(n1.NodeID())
 
@@ -180,7 +187,7 @@ func TestValidReplicaTarget(t *testing.T) {
 
 	_, r1, _ := s.SplitRange(1)
 
-	n1 := s.AddNode()
+	n1 := s.AddNode(-1, roachpb.Locality{})
 	s1, _ := s.AddStore(n1.NodeID())
 	s2, _ := s.AddStore(n1.NodeID())
 
@@ -220,7 +227,7 @@ func TestAddReplica(t *testing.T) {
 	_, r1, _ := s.SplitRange(1)
 	_, r2, _ := s.SplitRange(2)
 
-	n1 := s.AddNode()
+	n1 := s.AddNode(-1, roachpb.Locality{})
 	s1, _ := s.AddStore(n1.NodeID())
 	s2, _ := s.AddStore(n1.NodeID())
 
@@ -242,7 +249,7 @@ func TestAddReplica(t *testing.T) {
 func TestWorkloadApply(t *testing.T) {
 	s := NewState(config.DefaultSimulationSettings())
 
-	n1 := s.AddNode()
+	n1 := s.AddNode(-1, roachpb.Locality{})
 	s1, _ := s.AddStore(n1.NodeID())
 	s2, _ := s.AddStore(n1.NodeID())
 	s3, _ := s.AddStore(n1.NodeID())
@@ -285,23 +292,30 @@ func TestWorkloadApply(t *testing.T) {
 	require.Equal(t, expectedLoad, sc3)
 }
 
-// TestReplicaLoadQPS asserts that the rated replica load accounting maintains
-// the average per second corresponding to the tick clock.
-func TestReplicaLoadQPS(t *testing.T) {
+// TestReplicaLoadRangeUsageInfo asserts that the rated replica load accounting
+// maintains the average per second corresponding to the tick clock.
+func TestReplicaLoadRangeUsageInfo(t *testing.T) {
 	settings := config.DefaultSimulationSettings()
 	s := NewState(settings)
 	start := settings.StartTime
 
-	n1 := s.AddNode()
+	n1 := s.AddNode(-1, roachpb.Locality{})
+	n2 := s.AddNode(-1, roachpb.Locality{})
+	n3 := s.AddNode(-1, roachpb.Locality{})
 	k1 := Key(100)
 	qps := 1000
 	s1, _ := s.AddStore(n1.NodeID())
+	s2, _ := s.AddStore(n2.NodeID())
+	s3, _ := s.AddStore(n3.NodeID())
 	_, r1, _ := s.SplitRange(k1)
 	s.AddReplica(r1.RangeID(), s1.StoreID(), roachpb.VOTER_FULL)
+	s.AddReplica(r1.RangeID(), s2.StoreID(), roachpb.VOTER_FULL)
+	s.AddReplica(r1.RangeID(), s3.StoreID(), roachpb.VOTER_FULL)
 
 	applyLoadToStats := func(key int64, count int) {
 		for i := 0; i < count; i++ {
-			s.ApplyLoad(workload.LoadBatch{workload.LoadEvent{Key: key, Writes: 1}})
+			s.ApplyLoad(workload.LoadBatch{workload.LoadEvent{
+				Key: key, Writes: 1, WriteSize: 1, RequestCPU: 1, RaftCPU: 1}})
 		}
 	}
 
@@ -315,6 +329,24 @@ func TestReplicaLoadQPS(t *testing.T) {
 	// Assert that the rated avg comes out to rate of queries applied per
 	// second.
 	require.Equal(t, float64(qps), s.RangeUsageInfo(r1.RangeID(), s1.StoreID()).QueriesPerSecond)
+	// The non-leaseholder replicas should have no QPS.
+	require.Equal(t, float64(0), s.RangeUsageInfo(r1.RangeID(), s2.StoreID()).QueriesPerSecond)
+	require.Equal(t, float64(0), s.RangeUsageInfo(r1.RangeID(), s2.StoreID()).QueriesPerSecond)
+	// Similarly, only the leaseholder should have request CPU recorded.
+	require.Equal(t, float64(qps),
+		s.RangeUsageInfo(r1.RangeID(), s1.StoreID()).RequestCPUNanosPerSecond)
+	require.Equal(t, float64(0),
+		s.RangeUsageInfo(r1.RangeID(), s2.StoreID()).RequestCPUNanosPerSecond)
+	require.Equal(t, float64(0),
+		s.RangeUsageInfo(r1.RangeID(), s3.StoreID()).RequestCPUNanosPerSecond)
+	// All the replicas should have identical write bytes/s, which is equal to
+	// the QPS. The replicas should also have identical raft CPU usage.
+	require.Equal(t, float64(qps),
+		s.RangeUsageInfo(r1.RangeID(), s1.StoreID()).RaftCPUNanosPerSecond)
+	require.Equal(t, float64(qps),
+		s.RangeUsageInfo(r1.RangeID(), s2.StoreID()).RaftCPUNanosPerSecond)
+	require.Equal(t, float64(qps),
+		s.RangeUsageInfo(r1.RangeID(), s3.StoreID()).RaftCPUNanosPerSecond)
 }
 
 // TestKeyTranslation asserts that key encoding between roachpb keys and
@@ -500,7 +532,7 @@ func TestSetSpanConfig(t *testing.T) {
 
 	setupState := func() State {
 		s := newState(settings)
-		node := s.AddNode()
+		node := s.AddNode(-1, roachpb.Locality{})
 		_, ok := s.AddStore(node.NodeID())
 		require.True(t, ok)
 
@@ -632,7 +664,11 @@ func TestSetSpanConfig(t *testing.T) {
 	}
 }
 
-func TestSetNodeLiveness(t *testing.T) {
+// TestNodeAndStoreStatus verifies the status tracking APIs: NodeLivenessFn
+// (combining store liveness with node membership), NodeCountFn (counting only
+// ACTIVE members), and store-level liveness aggregation (node takes the worst
+// liveness of its stores).
+func TestNodeAndStoreStatus(t *testing.T) {
 	t.Run("liveness func", func(t *testing.T) {
 		s := LoadClusterInfo(
 			ClusterInfoWithStoreCount(3, 1),
@@ -641,12 +677,14 @@ func TestSetNodeLiveness(t *testing.T) {
 
 		liveFn := s.NodeLivenessFn()
 
-		s.SetNodeLiveness(1, livenesspb.NodeLivenessStatus_LIVE)
-		s.SetNodeLiveness(2, livenesspb.NodeLivenessStatus_DEAD)
-		s.SetNodeLiveness(3, livenesspb.NodeLivenessStatus_DECOMMISSIONED)
+		// Set node liveness via SetAllStoresLiveness (sets all stores on the node).
+		// Node 1: live, Node 2: dead, Node 3: dead + decommissioned.
+		s.SetAllStoresLiveness(1, LivenessLive)
+		s.SetAllStoresLiveness(2, LivenessDead)
+		s.SetAllStoresLiveness(3, LivenessDead)
+		s.SetNodeStatus(3, NodeStatus{Membership: livenesspb.MembershipStatus_DECOMMISSIONED})
 
-		// Liveness status returend should ignore time till store dead or the
-		// timestamp given.
+		// Liveness status returned should combine store liveness and node membership.
 		require.Equal(t, livenesspb.NodeLivenessStatus_LIVE, liveFn(1))
 		require.Equal(t, livenesspb.NodeLivenessStatus_DEAD, liveFn(2))
 		require.Equal(t, livenesspb.NodeLivenessStatus_DECOMMISSIONED, liveFn(3))
@@ -661,14 +699,31 @@ func TestSetNodeLiveness(t *testing.T) {
 		countFn := s.NodeCountFn()
 
 		// Set node 1-5 as decommissioned and nodes 6-10 as dead. There should be a
-		// node count of 5.
+		// node count of 5 (dead nodes with ACTIVE membership are still counted).
 		for i := 1; i <= 5; i++ {
-			s.SetNodeLiveness(NodeID(i), livenesspb.NodeLivenessStatus_DECOMMISSIONED)
+			s.SetNodeStatus(NodeID(i), NodeStatus{Membership: livenesspb.MembershipStatus_DECOMMISSIONED})
 		}
-		for i := 6; i <= 10; i++ {
-			s.SetNodeLiveness(NodeID(i), livenesspb.NodeLivenessStatus_DEAD)
-		}
+		// Nodes 6-10 are already dead by default if not set, but we can set them
+		// explicitly. Their membership remains ACTIVE by default.
 		require.Equal(t, 5, countFn())
+	})
+
+	t.Run("store-level liveness", func(t *testing.T) {
+		s := LoadClusterInfo(
+			ClusterInfoWithStoreCount(1, 3), // 1 node with 3 stores
+			config.DefaultSimulationSettings(),
+		).(*state)
+
+		// All stores start live.
+		require.Equal(t, LivenessLive, s.NodeLiveness(1))
+
+		// Set one store to unavailable - node becomes unavailable.
+		s.SetStoreStatus(2, StoreStatus{Liveness: LivenessUnavailable})
+		require.Equal(t, LivenessUnavailable, s.NodeLiveness(1))
+
+		// Set another store to dead - node becomes dead.
+		s.SetStoreStatus(3, StoreStatus{Liveness: LivenessDead})
+		require.Equal(t, LivenessDead, s.NodeLiveness(1))
 	})
 }
 
@@ -723,7 +778,9 @@ US_East
   US_East_2
   │ └── [2 3]
   US_East_3
-  │ └── [4 5 6 7 8 9 10 11 12 13 14 15 16]
+  │ └── [4 5 6]
+  US_East_4
+  │ └── [7 8 9 10 11 12 13 14 15 16]
 US_West
   US_West_1
     └── [17 18]
@@ -759,4 +816,74 @@ func TestCapacityOverride(t *testing.T) {
 	// writes to the store - we expect it to be 500 instead of 100 for that
 	// reason.
 	require.Equal(t, 500.0, capacity.WritesPerSecond)
+}
+
+// TestDistribution tests the distribution helper functions. The invariants
+// are that the distributions sum to 1.0 and that the distribution is
+// expected.
+func TestDistribution(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	sum := func(values []float64) float64 {
+		total := 0.0
+		for _, v := range values {
+			total += v
+		}
+		return total
+	}
+
+	const seed = 42
+	randSource := rand.New(rand.NewSource(seed))
+
+	testCases := []struct {
+		numStores int
+		fns       []struct {
+			name string
+			fn   func() []float64
+		}
+	}{
+		{
+			numStores: 3,
+			fns: []struct {
+				name string
+				fn   func() []float64
+			}{
+				{name: "even", fn: func() []float64 { return evenDistribution(3) }},
+				{name: "skewed", fn: func() []float64 { return skewedDistribution(3) }},
+				{name: "exact", fn: func() []float64 { return exactDistribution([]int{1, 1, 1}) }},
+				{name: "weighted_rand", fn: func() []float64 {
+					return weightedRandDistribution(randSource, []float64{0.6, 0.2, 0.2})
+				}},
+				{name: "rand", fn: func() []float64 { return randDistribution(randSource, 3) }},
+			},
+		},
+		{
+			numStores: 10,
+			fns: []struct {
+				name string
+				fn   func() []float64
+			}{
+				{name: "even", fn: func() []float64 { return evenDistribution(10) }},
+				{name: "skewed", fn: func() []float64 { return skewedDistribution(10) }},
+				{name: "exact", fn: func() []float64 { return exactDistribution([]int{2, 2, 2, 2, 2, 1, 1, 1, 1, 1}) }},
+				{name: "weighted_rand", fn: func() []float64 {
+					return weightedRandDistribution(randSource, []float64{0.5, 0.1, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05, 0.05})
+				}},
+				{name: "rand", fn: func() []float64 { return randDistribution(randSource, 10) }},
+			},
+		},
+	}
+	w := echotest.NewWalker(t, datapathutils.TestDataPath(t, "echotest"))
+	for _, testCase := range testCases {
+		t.Run(fmt.Sprintf("%d_stores", testCase.numStores), func(t *testing.T) {
+			t.Run("distribution", w.Run(t, fmt.Sprintf("%d_stores", testCase.numStores), func(t *testing.T) string {
+				var str strings.Builder
+				for _, fn := range testCase.fns {
+					dist := fn.fn()
+					str.WriteString(fmt.Sprintf("[%s: %.2f, sum: %.2f]\n", fn.name, dist, sum(dist)))
+				}
+				return str.String()
+			}))
+		})
+	}
 }

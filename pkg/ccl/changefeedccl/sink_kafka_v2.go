@@ -6,40 +6,34 @@
 package changefeedccl
 
 import (
+	"compress/gzip"
 	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"hash/fnv"
 	"io"
 	"net"
-	"net/url"
 	"strings"
 	"time"
 
 	"github.com/IBM/sarama"
-	"github.com/aws/aws-msk-iam-sasl-signer-go/signer"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/cidr"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	"github.com/klauspost/compress/gzip"
 	"github.com/klauspost/compress/zstd"
 	"github.com/rcrowley/go-metrics"
 	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/franz-go/pkg/kerr"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/pkg/kversion"
-	"github.com/twmb/franz-go/pkg/sasl"
-	sasloauth "github.com/twmb/franz-go/pkg/sasl/oauth"
-	saslplain "github.com/twmb/franz-go/pkg/sasl/plain"
-	saslscram "github.com/twmb/franz-go/pkg/sasl/scram"
-	"golang.org/x/oauth2/clientcredentials"
 )
 
 type kafkaSinkClientV2 struct {
@@ -47,11 +41,13 @@ type kafkaSinkClientV2 struct {
 	client      KafkaClientV2
 	adminClient KafkaAdminClientV2
 
-	knobs          kafkaSinkV2Knobs
-	canTryResizing bool
-	recordResize   func(numRecords int64)
+	knobs               kafkaSinkV2Knobs
+	canTryResizing      bool
+	includeErrorDetails bool
+	recordResize        func(numRecords int64)
 
 	topicsForConnectionCheck []string
+	constHeaders             []kgo.RecordHeader
 
 	// we need to fetch and keep track of this ourselves since kgo doesnt expose metadata to us
 	metadataMu struct {
@@ -68,23 +64,29 @@ func newKafkaSinkClientV2(
 	ctx context.Context,
 	clientOpts []kgo.Opt,
 	batchCfg sinkBatchConfig,
-	bootstrapAddrs string,
+	bootstrapAddrsStr string,
 	settings *cluster.Settings,
 	knobs kafkaSinkV2Knobs,
 	mb metricsRecorderBuilder,
 	topicsForConnectionCheck []string,
+	constHeaders map[string][]byte,
+	partitionAlg string,
 ) (*kafkaSinkClientV2, error) {
+	bootstrapBrokers := strings.Split(bootstrapAddrsStr, `,`)
 
 	baseOpts := []kgo.Opt{
 		// Disable idempotency to maintain parity with the v1 sink and not add surface area for unknowns.
 		kgo.DisableIdempotentWrite(),
+		// Allow up to 5 concurrent produce requests per broker, matching the
+		// Sarama client's default. This is safe because ParallelIO handles
+		// ordering independently of franz-go.
+		kgo.MaxProduceRequestsInflightPerBroker(5),
 
-		kgo.SeedBrokers(bootstrapAddrs),
+		kgo.SeedBrokers(bootstrapBrokers...),
 		kgo.WithLogger(kgoLogAdapter{ctx: ctx}),
-		kgo.RecordPartitioner(newKgoChangefeedPartitioner()),
-		// 256MiB. This is the max this library allows. Note that v1 sets the sarama equivalent to math.MaxInt32.
-		kgo.ProducerBatchMaxBytes(256 << 20), // 256MiB
-		kgo.BrokerMaxWriteBytes(1 << 30),     // 1GiB
+		kgo.RecordPartitioner(newKgoChangefeedPartitioner(partitionAlg)),
+		kgo.ProducerBatchMaxBytes(int32(changefeedbase.KafkaMaxRequestSize.Get(&settings.SV))),
+		kgo.BrokerMaxWriteBytes(1 << 30), // 1GiB
 
 		kgo.AllowAutoTopicCreation(),
 
@@ -95,7 +97,7 @@ func newKafkaSinkClientV2(
 		// This detects unavoidable data loss due to kafka cluster issues, and we may as well log it if it happens.
 		// See #127246 for further work we can do here.
 		kgo.ProducerOnDataLossDetected(func(topic string, part int32) {
-			log.Errorf(ctx, `kafka sink detected data loss for topic %s partition %d`, redact.SafeString(topic), redact.SafeInt(part))
+			log.Changefeed.Errorf(ctx, `kafka sink detected data loss for topic %s partition %d`, redact.SafeString(topic), redact.SafeInt(part))
 		}),
 	}
 
@@ -123,14 +125,21 @@ func newKafkaSinkClientV2(
 		adminClient = kadm.NewClient(client.(*kgo.Client))
 	}
 
+	constHeadersKgo := make([]kgo.RecordHeader, 0, len(constHeaders))
+	for k, v := range constHeaders {
+		constHeadersKgo = append(constHeadersKgo, kgo.RecordHeader{Key: k, Value: v})
+	}
+
 	c := &kafkaSinkClientV2{
 		client:                   client,
 		adminClient:              adminClient,
 		knobs:                    knobs,
 		batchCfg:                 batchCfg,
 		canTryResizing:           changefeedbase.BatchReductionRetryEnabled.Get(&settings.SV),
+		includeErrorDetails:      changefeedbase.KafkaV2ErrorDetailsEnabled.Get(&settings.SV),
 		recordResize:             recordResize,
 		topicsForConnectionCheck: topicsForConnectionCheck,
+		constHeaders:             constHeadersKgo,
 	}
 	c.metadataMu.allTopicPartitions = make(map[string][]int32)
 
@@ -152,6 +161,12 @@ func (k *kafkaSinkClientV2) Flush(ctx context.Context, payload SinkPayload) (ret
 		if err := k.client.ProduceSync(ctx, msgs...).FirstErr(); err != nil {
 			if k.shouldTryResizing(err, msgs) {
 				a, b := msgs[0:len(msgs)/2], msgs[len(msgs)/2:]
+				log.Changefeed.Infof(ctx,
+					"resizing kafka batch from %d messages to halves of %d and %d due to error: %v",
+					redact.SafeInt(int64(len(msgs))),
+					redact.SafeInt(int64(len(a))),
+					redact.SafeInt(int64(len(b))),
+					err)
 				// Recurse. This is a little odd because the client's batch
 				// state doesn't consist only of this payload, but the inflight
 				// payloads of all ParallelIO workers. Therefore reducing the
@@ -170,6 +185,18 @@ func (k *kafkaSinkClientV2) Flush(ctx context.Context, payload SinkPayload) (ret
 				}
 				return nil
 			} else {
+				if len(msgs) == 1 && errors.Is(err, kerr.MessageTooLarge) && k.includeErrorDetails {
+					msg := msgs[0]
+					mvccVal := msg.Context.Value(mvccTSKey{})
+					var ts hlc.Timestamp
+					if mvccVal != nil {
+						ts = mvccVal.(hlc.Timestamp)
+					}
+					err = errors.Wrapf(err,
+						"Kafka message too large: key=%s size=%d mvcc=%s",
+						string(msg.Key), len(msg.Key)+len(msg.Value), ts,
+					)
+				}
 				return err
 			}
 		}
@@ -197,7 +224,7 @@ func (k *kafkaSinkClientV2) FlushResolvedPayload(
 			msgs = make([]*kgo.Record, 0, len(k.metadataMu.allTopicPartitions))
 			return forEachTopic(func(topic string) error {
 				if _, ok := k.metadataMu.allTopicPartitions[topic]; !ok {
-					log.Warningf(ctx, `cannot flush resolved timestamp for unknown topic %s`, topic)
+					log.Changefeed.Warningf(ctx, `cannot flush resolved timestamp for unknown topic %s`, topic)
 				}
 				for _, partition := range k.metadataMu.allTopicPartitions[topic] {
 					msgs = append(msgs, &kgo.Record{
@@ -249,7 +276,7 @@ func (k *kafkaSinkClientV2) maybeUpdateTopicPartitions(
 		return nil
 	}
 
-	log.Infof(ctx, `updating kafka metadata for topics: %+v`, topics)
+	log.Changefeed.Infof(ctx, `updating kafka metadata for topics: %+v`, topics)
 
 	topicDetails, err := k.adminClient.ListTopics(ctx, topics...)
 	if err != nil {
@@ -266,7 +293,7 @@ func (k *kafkaSinkClientV2) maybeUpdateTopicPartitions(
 
 // MakeBatchBuffer implements SinkClient.
 func (k *kafkaSinkClientV2) MakeBatchBuffer(topic string) BatchBuffer {
-	return &kafkaBuffer{topic: topic, batchCfg: k.batchCfg}
+	return &kafkaBuffer{topic: topic, batchCfg: k.batchCfg, constHeaders: k.constHeaders, includeErrorDetails: k.includeErrorDetails}
 }
 
 func (k *kafkaSinkClientV2) shouldTryResizing(err error, msgs []*kgo.Record) bool {
@@ -304,17 +331,33 @@ type kafkaBuffer struct {
 	messages  []*kgo.Record
 	byteCount int
 
-	batchCfg sinkBatchConfig
+	batchCfg            sinkBatchConfig
+	constHeaders        []kgo.RecordHeader
+	includeErrorDetails bool
 }
 
-func (b *kafkaBuffer) Append(key []byte, value []byte, _ attributes) {
+type mvccTSKey struct{}
+
+func (b *kafkaBuffer) Append(ctx context.Context, key []byte, value []byte, attrs attributes) {
 	// HACK: kafka sink v1 encodes nil keys as sarama.ByteEncoder(key) which is != nil, and unit tests rely on this.
 	// So do something equivalent.
 	if key == nil {
 		key = []byte{}
 	}
 
-	b.messages = append(b.messages, &kgo.Record{Key: key, Value: value, Topic: b.topic})
+	headers := make([]kgo.RecordHeader, 0, len(b.constHeaders)+len(attrs.headers))
+	headers = append(headers, b.constHeaders...)
+
+	for k, v := range attrs.headers {
+		headers = append(headers, kgo.RecordHeader{Key: k, Value: v})
+	}
+
+	var rctx context.Context
+	if b.includeErrorDetails {
+		rctx = context.WithValue(ctx, mvccTSKey{}, attrs.mvcc)
+	}
+
+	b.messages = append(b.messages, &kgo.Record{Key: key, Value: value, Topic: b.topic, Headers: headers, Context: rctx})
 	b.byteCount += len(value)
 }
 
@@ -330,9 +373,9 @@ var _ BatchBuffer = (*kafkaBuffer)(nil)
 
 func makeKafkaSinkV2(
 	ctx context.Context,
-	u sinkURL,
+	u *changefeedbase.SinkURL,
 	targets changefeedbase.Targets,
-	jsonConfig changefeedbase.SinkSpecificJSONConfig,
+	sinkOpts changefeedbase.KafkaSinkOptions,
 	parallelism int,
 	pacerFactory func() *admission.Pacer,
 	timeSource timeutil.TimeSource,
@@ -340,6 +383,7 @@ func makeKafkaSinkV2(
 	mb metricsRecorderBuilder,
 	knobs kafkaSinkV2Knobs,
 ) (Sink, error) {
+	jsonConfig := sinkOpts.JSONConfig
 	batchCfg, retryOpts, err := getSinkConfigFromJson(jsonConfig, sinkJSONConfig{
 		// Defaults from the v1 sink - flush immediately.
 		Flush: sinkBatchConfig{},
@@ -353,9 +397,9 @@ func makeKafkaSinkV2(
 		return nil, err
 	}
 
-	kafkaTopicPrefix := u.consumeParam(changefeedbase.SinkParamTopicPrefix)
-	kafkaTopicName := u.consumeParam(changefeedbase.SinkParamTopicName)
-	if schemaTopic := u.consumeParam(changefeedbase.SinkParamSchemaTopic); schemaTopic != `` {
+	kafkaTopicPrefix := u.ConsumeParam(changefeedbase.SinkParamTopicPrefix)
+	kafkaTopicName := u.ConsumeParam(changefeedbase.SinkParamTopicName)
+	if schemaTopic := u.ConsumeParam(changefeedbase.SinkParamSchemaTopic); schemaTopic != `` {
 		return nil, errors.Errorf(`%s is not yet supported`, changefeedbase.SinkParamSchemaTopic)
 	}
 
@@ -366,19 +410,19 @@ func makeKafkaSinkV2(
 
 	topicNamer, err := MakeTopicNamer(
 		targets,
-		WithPrefix(kafkaTopicPrefix), WithSingleName(kafkaTopicName), WithSanitizeFn(SQLNameToKafkaName))
+		WithPrefix(kafkaTopicPrefix), WithSingleName(kafkaTopicName), WithSanitizeFn(changefeedbase.SQLNameToKafkaName))
 
 	if err != nil {
 		return nil, err
 	}
 
-	if unknownParams := u.remainingQueryParams(); len(unknownParams) > 0 {
+	if unknownParams := u.RemainingQueryParams(); len(unknownParams) > 0 {
 		return nil, errors.Errorf(
 			`unknown kafka sink query parameters: %s`, strings.Join(unknownParams, ", "))
 	}
 
 	topicsForConnectionCheck := topicNamer.DisplayNamesSlice()
-	client, err := newKafkaSinkClientV2(ctx, clientOpts, batchCfg, u.Host, settings, knobs, mb, topicsForConnectionCheck)
+	client, err := newKafkaSinkClientV2(ctx, clientOpts, batchCfg, u.Host, settings, knobs, mb, topicsForConnectionCheck, sinkOpts.Headers, sinkOpts.PartitionAlg)
 	if err != nil {
 		return nil, err
 	}
@@ -389,7 +433,7 @@ func makeKafkaSinkV2(
 
 func buildKgoConfig(
 	ctx context.Context,
-	u sinkURL,
+	u *changefeedbase.SinkURL,
 	jsonStr changefeedbase.SinkSpecificJSONConfig,
 	netMetrics *cidr.NetMetrics,
 ) ([]kgo.Opt, error) {
@@ -441,49 +485,13 @@ func buildKgoConfig(
 		opts = append(opts, kgo.Dialer(netMetrics.Wrap(dialer.DialContext, "kafka")))
 	}
 
-	if dialConfig.saslEnabled {
-		var s sasl.Mechanism
-		switch dialConfig.saslMechanism {
-		// This is a "fake" mechanism we use to signify that we're using AWS MSK
-		// IAM, which is really OAUTHBEARER with a custom token provider.
-		case changefeedbase.SASLTypeAWSMSKIAM:
-			tp, err := newKgoAWSIAMRoleOauthTokenProvider(dialConfig)
-			if err != nil {
-				return nil, err
-			}
-			s = sasloauth.Oauth(tp)
-		// TODO(#126991): Remove this sarama dependency.
-		case sarama.SASLTypeOAuth:
-			tp, err := newKgoOauthTokenProvider(ctx, dialConfig)
-			if err != nil {
-				return nil, err
-			}
-			s = sasloauth.Oauth(tp)
-		case sarama.SASLTypePlaintext, "":
-			s = saslplain.Plain(func(ctc context.Context) (saslplain.Auth, error) {
-				return saslplain.Auth{
-					User: dialConfig.saslUser,
-					Pass: dialConfig.saslPassword,
-				}, nil
-			})
-		case sarama.SASLTypeSCRAMSHA256:
-			s = saslscram.Sha256(func(ctx context.Context) (saslscram.Auth, error) {
-				return saslscram.Auth{
-					User: dialConfig.saslUser,
-					Pass: dialConfig.saslPassword,
-				}, nil
-			})
-		case sarama.SASLTypeSCRAMSHA512:
-			s = saslscram.Sha512(func(ctx context.Context) (saslscram.Auth, error) {
-				return saslscram.Auth{
-					User: dialConfig.saslUser,
-					Pass: dialConfig.saslPassword,
-				}, nil
-			})
-		default:
-			return nil, errors.Errorf(`unsupported SASL mechanism: %s`, dialConfig.saslMechanism)
+	if dialConfig.authMechanism != nil {
+		authOpts, err := dialConfig.authMechanism.KgoOpts(ctx)
+		if err != nil {
+			return nil, err
 		}
-		opts = append(opts, kgo.SASL(s))
+		opts = append(opts, authOpts...)
+		log.Changefeed.VInfof(ctx, 2, "applied kafka auth mechanism: %+#v\n", dialConfig.authMechanism)
 	}
 
 	// Apply some statement level overrides. The flush related ones (Messages, MaxMessages, Bytes) are not applied here, but on the sinkBatchConfig instead.
@@ -492,6 +500,20 @@ func buildKgoConfig(
 	if err != nil {
 		return nil, errors.Wrapf(err,
 			"failed to parse sink config; check %s option", changefeedbase.OptKafkaSinkConfig)
+	}
+	if sinkCfg.Flush.MaxBytes != 0 {
+		if sinkCfg.Flush.MaxBytes < changefeedbase.KafkaMaxRequestSizeMin {
+			return nil, errors.Errorf(
+				"MaxBytes must be at least %d bytes, got %d",
+				changefeedbase.KafkaMaxRequestSizeMin, sinkCfg.Flush.MaxBytes)
+		}
+		if sinkCfg.Flush.MaxBytes > changefeedbase.KafkaMaxRequestSizeLimit {
+			return nil, errors.Errorf(
+				"MaxBytes must be at most %d bytes, got %d",
+				changefeedbase.KafkaMaxRequestSizeLimit, sinkCfg.Flush.MaxBytes)
+		}
+		// Override the cluster setting default set in baseOpts; kgo uses last-writer-wins.
+		opts = append(opts, kgo.ProducerBatchMaxBytes(sinkCfg.Flush.MaxBytes))
 	}
 
 	// If the user sets MaxMessages, use that as kgo's overall max batch size.
@@ -568,7 +590,7 @@ func validateCompressionLevel(compressionType compressionCodec, level int) error
 	case sarama.CompressionNone:
 		return nil
 	case sarama.CompressionGZIP:
-		if level < gzip.NoCompression || level > gzip.BestCompression {
+		if level < gzip.HuffmanOnly || level > gzip.BestCompression {
 			return errors.Errorf(`invalid gzip compression level: %d`, level)
 		}
 	case sarama.CompressionSnappy:
@@ -606,7 +628,7 @@ func (k kgoLogAdapter) Log(level kgo.LogLevel, msg string, keyvals ...any) {
 	for i := 0; i < len(keyvals); i += 2 {
 		format += ` %s=%v`
 	}
-	log.InfofDepth(k.ctx, 1, format, append([]any{redact.SafeString(level.String()), redact.SafeString(msg)}, keyvals...)...) //nolint:fmtsafe
+	log.Changefeed.InfofDepth(k.ctx, 1, format, append([]any{redact.SafeString(level.String()), redact.SafeString(msg)}, keyvals...)...) //nolint:fmtsafe
 }
 
 var _ kgo.Logger = kgoLogAdapter{}
@@ -614,15 +636,25 @@ var _ kgo.Logger = kgoLogAdapter{}
 // newKgoChangefeedPartitioner returns a new kgo.Partitioner that wraps the
 // recommended sarama compat approach to pass thru record partitions when key is
 // nil, like the v1 implementation.
-func newKgoChangefeedPartitioner() kgo.Partitioner {
-	return &kgoChangefeedPartitioner{
-		inner: kgo.StickyKeyPartitioner(kgo.SaramaCompatHasher(func(bs []byte) uint32 {
-			// Make a new hasher each time, as the partitioner may be called concurrently.
-			hasher := fnv.New32a()
-			_, _ = hasher.Write(bs)
-			return hasher.Sum32()
-		})),
+// hashMethod specifies the hash function to use: "fnv-1a" (default) or "murmur2".
+func newKgoChangefeedPartitioner(hashMethod string) kgo.Partitioner {
+	if strings.ToLower(hashMethod) == "murmur2" {
+		// murmur2 is the franz-go default. StickyKeyPartitioner creates a
+		// new murmur2 hasher every call. If the default were to change,
+		// TestPartitionAlg should fail.
+		inner := kgo.StickyKeyPartitioner(nil /* hasher */)
+		return &kgoChangefeedPartitioner{inner: inner}
 	}
+	// Use fnv-1a by default. fnv-1a is the sarama default hashing
+	// algorithm and is compatible with the v1 kafka sink.
+	inner := kgo.StickyKeyPartitioner(kgo.SaramaCompatHasher(func(
+		bs []byte) uint32 {
+		hasher := fnv.New32a()
+		_, _ = hasher.Write(bs)
+		return hasher.Sum32()
+	}))
+
+	return &kgoChangefeedPartitioner{inner: inner}
 }
 
 type kgoChangefeedPartitioner struct {
@@ -647,61 +679,6 @@ func (p *kgoChangefeedTopicPartitioner) Partition(r *kgo.Record, n int) int {
 		return int(r.Partition)
 	}
 	return p.inner.Partition(r, n)
-}
-
-func newKgoOauthTokenProvider(
-	ctx context.Context, dialConfig kafkaDialConfig,
-) (func(ctx context.Context) (sasloauth.Auth, error), error) {
-
-	// grant_type is by default going to be set to 'client_credentials' by the
-	// clientcredentials library as defined by the spec, however non-compliant
-	// auth server implementations may want a custom type
-	var endpointParams url.Values
-	if dialConfig.saslGrantType != `` {
-		endpointParams = url.Values{"grant_type": {dialConfig.saslGrantType}}
-	}
-
-	tokenURL, err := url.Parse(dialConfig.saslTokenURL)
-	if err != nil {
-		return nil, errors.Wrap(err, "malformed token url")
-	}
-
-	// the clientcredentials.Config's TokenSource method creates an
-	// oauth2.TokenSource implementation which returns tokens for the given
-	// endpoint, returning the same cached result until its expiration has been
-	// reached, and then once expired re-requesting a new token from the endpoint.
-	cfg := clientcredentials.Config{
-		ClientID:       dialConfig.saslClientID,
-		ClientSecret:   dialConfig.saslClientSecret,
-		TokenURL:       tokenURL.String(),
-		Scopes:         dialConfig.saslScopes,
-		EndpointParams: endpointParams,
-	}
-	ts := cfg.TokenSource(ctx)
-
-	return func(ctx context.Context) (sasloauth.Auth, error) {
-		tok, err := ts.Token()
-		if err != nil {
-			return sasloauth.Auth{}, err
-		}
-		return sasloauth.Auth{Token: tok.AccessToken}, nil
-	}, nil
-}
-
-// newKgoAWSIAMRoleOauthTokenProvider returns a new token provider that uses the
-// AWS MSK IAM signer to generate a SASL Oauth token. Currently only implicit
-// auth & role assumption is supported.
-func newKgoAWSIAMRoleOauthTokenProvider(
-	dialConfig kafkaDialConfig,
-) (func(ctx context.Context) (sasloauth.Auth, error), error) {
-	return func(ctx context.Context) (sasloauth.Auth, error) {
-		token, _, err := signer.GenerateAuthTokenFromRole(
-			ctx, dialConfig.saslAwsRegion, dialConfig.saslAwsIAMRoleArn, dialConfig.saslAwsIAMSessionName)
-		if err != nil {
-			return sasloauth.Auth{}, err
-		}
-		return sasloauth.Auth{Token: token}, nil
-	}, nil
 }
 
 type kgoMetricsAdapter struct {

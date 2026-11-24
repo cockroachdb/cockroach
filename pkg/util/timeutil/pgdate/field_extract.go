@@ -867,7 +867,7 @@ func (fe *fieldExtract) SetDayOfYear(chunk numberChunk) error {
 	if !ok {
 		return errors.AssertionFailedf("year must be set before day of year")
 	}
-	y, m, d := julianDayToDate(DateToJulianDay(y, 1, 1) + chunk.v - 1)
+	y, m, d := JulianDayToDate(DateToJulianDay(y, 1, 1) + chunk.v - 1)
 	if err := fe.Reset(fieldYear, y); err != nil {
 		return err
 	}
@@ -950,7 +950,7 @@ func (fe *fieldExtract) validate() error {
 
 			if day, ok := fe.Get(fieldDay); ok {
 				var maxDay int
-				if isLeap(year) {
+				if IsLeap(year) {
 					maxDay = daysInMonth[1][month]
 				} else {
 					maxDay = daysInMonth[0][month]

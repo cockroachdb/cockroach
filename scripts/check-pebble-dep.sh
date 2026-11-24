@@ -9,16 +9,32 @@
 set -euo pipefail
 #set -x
 
-RELEASES="23.1 23.2 24.1 24.2 24.3 master"
+# Find all release-xx.y branches where xx >= 24.
+BRANCHES=$(git branch -r --format='%(refname)' \
+    | grep '^refs\/remotes/\origin\/release-2[4-9]\.[0-9]$' \
+    | sed 's/^refs\/remotes\/origin\///' \
+    | sort -V)
 
-for REL in $RELEASES; do
-  if [ "$REL" == "master" ]; then
-    BRANCH=master
-    PEBBLE_BRANCH=master
-  else
-    BRANCH="release-$REL"
-    PEBBLE_BRANCH="crl-release-$REL"
+# Retired branches that are frozen and should be skipped.
+RETIRED_BRANCHES=(
+  release-24.2
+  release-25.1
+  release-25.3
+)
+
+EXIT_CODE=0
+for BRANCH in $BRANCHES; do
+  skip=false
+  for RETIRED in "${RETIRED_BRANCHES[@]}"; do
+    if [ "$BRANCH" = "$RETIRED" ]; then
+      skip=true
+      break
+    fi
+  done
+  if $skip; then
+    continue
   fi
+  PEBBLE_BRANCH="crl-$BRANCH"
   DEP_SHA=$(git show "origin/$BRANCH:go.mod" |
     grep 'github.com/cockroachdb/pebble' |
     grep -o -E '[a-f0-9]{12}$')
@@ -26,25 +42,22 @@ for REL in $RELEASES; do
     grep "refs/heads/$PEBBLE_BRANCH" |
     grep -o -E '^[a-f0-9]{12}')
   
-  if [ "$DEP_SHA" == "$TIP_SHA" ]; then
-    echo Branch $BRANCH pebble dependency up to date.
+  if [ "$DEP_SHA" = "$TIP_SHA" ]; then
     continue
   fi
 
-  echo Branch $BRANCH pebble dependency not up to date: $DEP_SHA vs current $TIP_SHA
-  if [ "$BRANCH" == "master" ]; then
-    # Do nothing on master.
-    # TODO(radu): run scripts/bump-pebble.sh and open PR?
-    :
-  else
-    # File an issue, unless one is filed already.
-    TITLE="release-$REL: update pebble dependency"
-    if [ $(gh issue list -R github.com/cockroachdb/cockroach --search "$TITLE" --json id) == "[]" ]; then
-      echo "Filing issue for release-$REL."
-      BODY="Branch dependency is cockroachdb/pebble@$DEP_SHA. Tip of $PEBBLE_BRANCH is cockroachdb/pebble@$TIP_SHA"
-      gh issue create -R github.com/cockroachdb/cockroach --title "$TITLE" --body "$BODY" --label T-storage --label A-storage
-    else
-      echo "Issue for release-$REL already exists."
-    fi
+  if [ $EXIT_CODE -eq 0 ]; then
+    echo "Some release branches have out-of-date Pebble dependencies:"
   fi
+  echo "  - $BRANCH: dependency set at $DEP_SHA, but $PEBBLE_BRANCH tip is $TIP_SHA"
+  EXIT_CODE=1
+done
+
+if [ $EXIT_CODE -ne 0 ]; then
+  exit $EXIT_CODE
+fi
+
+echo "All release branches have up-to-date Pebble dependencies:"
+for BRANCH in $BRANCHES; do
+  echo " - $BRANCH"
 done

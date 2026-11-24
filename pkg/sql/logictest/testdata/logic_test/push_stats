@@ -1,0 +1,764 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY);
+
+query TTTI rowsort
+SELECT statistics_name, column_names, created, row_count FROM [SHOW STATISTICS FOR TABLE t] ORDER BY created DESC, statistics_name, column_names;
+----
+
+statement ok
+ALTER TABLE t INJECT STATISTICS '[
+    {
+        "avg_size": 4,
+        "columns": ["a"],
+        "created_at": "2018-01-01 1:00:00.00000+00:00",
+        "distinct_count": 1000,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 1000
+    },
+    {
+        "avg_size": 4,
+        "columns": ["a"],
+        "created_at": "2018-01-01 2:00:00.00000+00:00",
+        "distinct_count": 2000,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 2000
+    },
+    {
+        "avg_size": 4,
+        "columns": ["a"],
+        "created_at": "2018-01-01 3:00:00.00000+00:00",
+        "distinct_count": 3000,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 3000
+    }
+]';
+
+query TTTI colnames
+SELECT statistics_name, column_names, created, row_count FROM [SHOW STATISTICS FOR TABLE t] ORDER BY created DESC, statistics_name, column_names;
+----
+statistics_name  column_names  created                        row_count
+__auto__         {a}           2018-01-01 03:00:00 +0000 UTC  3000
+__auto__         {a}           2018-01-01 02:00:00 +0000 UTC  2000
+__auto__         {a}           2018-01-01 01:00:00 +0000 UTC  1000
+
+statement ok
+ALTER TABLE t PUSH STATISTICS '[
+    {
+        "avg_size": 4,
+        "columns": ["a"],
+        "created_at": "2018-01-01 4:00:00.00000+00:00",
+        "distinct_count": 400,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 4000
+    }
+]'
+
+query TTTI colnames
+SELECT statistics_name, column_names, created, row_count FROM [SHOW STATISTICS FOR TABLE t] ORDER BY created DESC, statistics_name, column_names;
+----
+statistics_name  column_names  created                        row_count
+__auto__         {a}           2018-01-01 04:00:00 +0000 UTC  4000
+__auto__         {a}           2018-01-01 03:00:00 +0000 UTC  3000
+__auto__         {a}           2018-01-01 02:00:00 +0000 UTC  2000
+__auto__         {a}           2018-01-01 01:00:00 +0000 UTC  1000
+
+statement ok
+ALTER TABLE t PUSH STATISTICS '[
+    {
+        "avg_size": 4,
+        "columns": ["a"],
+        "created_at": "2018-01-01 5:00:00.00000+00:00",
+        "distinct_count": 5000,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 5000
+    }
+]'
+
+query TTTI colnames
+SELECT statistics_name, column_names, created, row_count FROM [SHOW STATISTICS FOR TABLE t] ORDER BY created DESC, statistics_name, column_names;
+----
+statistics_name  column_names  created                        row_count
+__auto__         {a}           2018-01-01 05:00:00 +0000 UTC  5000
+__auto__         {a}           2018-01-01 04:00:00 +0000 UTC  4000
+__auto__         {a}           2018-01-01 03:00:00 +0000 UTC  3000
+__auto__         {a}           2018-01-01 02:00:00 +0000 UTC  2000
+__auto__         {a}           2018-01-01 01:00:00 +0000 UTC  1000
+
+# Simulate collecting a manual stats.
+statement ok
+ALTER TABLE t PUSH STATISTICS '[
+    {
+        "avg_size": 4,
+        "columns": ["a"],
+        "created_at": "2018-01-01 6:00:00.00000+00:00",
+        "distinct_count": 6000,
+        "name": "",
+        "null_count": 0,
+        "row_count": 6000
+    }
+]'
+
+# The oldest auto stats (rowCount=1000) should have been deleted.
+query TTTI colnames
+SELECT statistics_name, column_names, created, row_count FROM [SHOW STATISTICS FOR TABLE t] ORDER BY created DESC, statistics_name, column_names;
+----
+statistics_name  column_names  created                        row_count
+NULL             {a}           2018-01-01 06:00:00 +0000 UTC  6000
+__auto__         {a}           2018-01-01 05:00:00 +0000 UTC  5000
+__auto__         {a}           2018-01-01 04:00:00 +0000 UTC  4000
+__auto__         {a}           2018-01-01 03:00:00 +0000 UTC  3000
+__auto__         {a}           2018-01-01 02:00:00 +0000 UTC  2000
+
+statement ok
+ALTER TABLE t PUSH STATISTICS '[
+    {
+        "avg_size": 4,
+        "columns": ["a"],
+        "created_at": "2018-01-01 7:00:00.00000+00:00",
+        "distinct_count": 7000,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 7000
+    }
+]'
+
+# The most recent manual stats (rowCount=6000) should have been deleted.
+query TTTI colnames
+SELECT statistics_name, column_names, created, row_count FROM [SHOW STATISTICS FOR TABLE t] ORDER BY created DESC, statistics_name, column_names;
+----
+statistics_name  column_names  created                        row_count
+__auto__         {a}           2018-01-01 07:00:00 +0000 UTC  7000
+__auto__         {a}           2018-01-01 05:00:00 +0000 UTC  5000
+__auto__         {a}           2018-01-01 04:00:00 +0000 UTC  4000
+__auto__         {a}           2018-01-01 03:00:00 +0000 UTC  3000
+__auto__         {a}           2018-01-01 02:00:00 +0000 UTC  2000
+
+subtest partial_stats
+
+# Inject initial full stats with histograms, so that the partial stats
+# that will be appended later can be merged with the latest one.
+statement ok
+ALTER TABLE t INJECT STATISTICS '[
+  {
+    "avg_size": 1,
+    "columns": [
+      "a"
+    ],
+    "created_at": "1988-08-05 00:00:00.000000",
+    "distinct_count": 3,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 1,
+        "num_range": 0,
+        "upper_bound": "0"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 1,
+        "num_range": 0,
+        "upper_bound": "1"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 1,
+        "num_range": 0,
+        "upper_bound": "2"
+      }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 3
+  },
+  {
+    "avg_size": 1,
+    "columns": [
+      "a"
+    ],
+    "created_at": "1988-08-06 00:00:00.000000",
+    "distinct_count": 3,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 2,
+        "num_range": 0,
+        "upper_bound": "0"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 2,
+        "num_range": 0,
+        "upper_bound": "1"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 2,
+        "num_range": 0,
+        "upper_bound": "2"
+      }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 6
+  },
+  {
+    "avg_size": 1,
+    "columns": [
+      "a"
+    ],
+    "created_at": "1988-08-07 00:00:00.000000",
+    "distinct_count": 3,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 3,
+        "num_range": 0,
+        "upper_bound": "0"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 3,
+        "num_range": 0,
+        "upper_bound": "1"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 3,
+        "num_range": 0,
+        "upper_bound": "2"
+      }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 9
+  },
+  {
+    "avg_size": 1,
+    "columns": [
+      "a"
+    ],
+    "created_at": "1988-08-08 00:00:00.000000",
+    "distinct_count": 3,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 4,
+        "num_range": 0,
+        "upper_bound": "0"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 4,
+        "num_range": 0,
+        "upper_bound": "1"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 4,
+        "num_range": 0,
+        "upper_bound": "2"
+      }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 12
+  }
+]'
+
+statement ok
+ALTER TABLE t PUSH STATISTICS '[
+  {
+    "avg_size": 1,
+    "columns": [
+      "a"
+    ],
+    "created_at": "1988-08-08 00:01:00.000000",
+    "distinct_count": 3,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 5,
+        "num_range": 0,
+        "upper_bound": "1"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 5,
+        "num_range": 0,
+        "upper_bound": "2"
+      }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "name": "partial",
+    "null_count": 0,
+    "row_count": 10,
+    "partial_predicate": "a >= 1::INT8"
+  }
+]'
+
+query TTTI colnames
+SELECT statistics_name, column_names, created, row_count FROM [SHOW STATISTICS FOR TABLE t WITH MERGE] ORDER BY created DESC, statistics_name, column_names;
+----
+statistics_name  column_names  created                        row_count
+__merged__       {a}           1988-08-08 00:01:00 +0000 UTC  14
+partial          {a}           1988-08-08 00:01:00 +0000 UTC  10
+__auto__         {a}           1988-08-08 00:00:00 +0000 UTC  12
+__auto__         {a}           1988-08-07 00:00:00 +0000 UTC  9
+__auto__         {a}           1988-08-06 00:00:00 +0000 UTC  6
+__auto__         {a}           1988-08-05 00:00:00 +0000 UTC  3
+
+statement ok
+ALTER TABLE t PUSH STATISTICS '[
+  {
+    "avg_size": 1,
+    "columns": [
+      "a"
+    ],
+    "created_at": "1988-08-08 00:02:00.000000",
+    "distinct_count": 3,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 6,
+        "num_range": 0,
+        "upper_bound": "1"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 6,
+        "num_range": 0,
+        "upper_bound": "2"
+      }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 2,
+    "name": "partial",
+    "null_count": 0,
+    "row_count": 12,
+    "partial_predicate": "a >= 1::INT8"
+  }
+]'
+
+query TTTI colnames
+SELECT statistics_name, column_names, created, row_count FROM [SHOW STATISTICS FOR TABLE t WITH MERGE] ORDER BY created DESC, statistics_name, column_names;
+----
+statistics_name  column_names  created                        row_count
+__merged__       {a}           1988-08-08 00:02:00 +0000 UTC  16
+partial          {a}           1988-08-08 00:02:00 +0000 UTC  12
+partial          {a}           1988-08-08 00:01:00 +0000 UTC  10
+__auto__         {a}           1988-08-08 00:00:00 +0000 UTC  12
+__auto__         {a}           1988-08-07 00:00:00 +0000 UTC  9
+__auto__         {a}           1988-08-06 00:00:00 +0000 UTC  6
+__auto__         {a}           1988-08-05 00:00:00 +0000 UTC  3
+
+statement ok
+ALTER TABLE t PUSH STATISTICS '[
+  {
+    "avg_size": 1,
+    "columns": [
+      "a"
+    ],
+    "created_at": "1988-08-09 00:00:00.000000",
+    "distinct_count": 3,
+    "histo_buckets": [
+      {
+        "distinct_range": 0,
+        "num_eq": 6,
+        "num_range": 0,
+        "upper_bound": "0"
+      },
+      {
+        "distinct_range": 0,
+        "num_eq": 6,
+        "num_range": 0,
+        "upper_bound": "1"
+      },
+     {
+        "distinct_range": 0,
+        "num_eq": 6,
+        "num_range": 0,
+        "upper_bound": "2"
+    }
+    ],
+    "histo_col_type": "INT8",
+    "histo_version": 3,
+    "name": "__auto__",
+    "null_count": 0,
+    "row_count": 18
+  }
+]'
+
+query TTTI colnames
+SELECT statistics_name, column_names, created, row_count FROM [SHOW STATISTICS FOR TABLE t WITH MERGE] ORDER BY created DESC, statistics_name, column_names;
+----
+statistics_name  column_names  created                        row_count
+__auto__         {a}           1988-08-09 00:00:00 +0000 UTC  18
+__auto__         {a}           1988-08-08 00:00:00 +0000 UTC  12
+__auto__         {a}           1988-08-07 00:00:00 +0000 UTC  9
+__auto__         {a}           1988-08-06 00:00:00 +0000 UTC  6
+__auto__         {a}           1988-08-05 00:00:00 +0000 UTC  3
+
+subtest end
+
+subtest multi_col
+
+statement ok
+DROP TABLE IF EXISTS t;
+
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY, b INT);
+
+# Initialize 4 sets of auto stats for the table.
+statement ok
+ALTER TABLE t INJECT STATISTICS '[
+    {
+        "id": 1,
+        "avg_size": 4,
+        "columns": ["a"],
+        "created_at": "2018-01-01 1:00:00.00000+00:00",
+        "distinct_count": 1000,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 1000
+    },
+    {
+        "id": 2,
+        "avg_size": 4,
+        "columns": ["b"],
+        "created_at": "2018-01-01 1:00:00.00000+00:00",
+        "distinct_count": 100,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 1000
+    },
+    {
+        "id": 3,
+        "avg_size": 4,
+        "columns": ["a"],
+        "created_at": "2018-01-01 2:00:00.00000+00:00",
+        "distinct_count": 2000,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 2000
+    },
+    {
+        "id": 4,
+        "avg_size": 4,
+        "columns": ["b"],
+        "created_at": "2018-01-01 2:00:00.00000+00:00",
+        "distinct_count": 200,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 2000
+    },
+    {
+        "id": 5,
+        "avg_size": 4,
+        "columns": ["a"],
+        "created_at": "2018-01-01 3:00:00.00000+00:00",
+        "distinct_count": 3000,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 3000
+    },
+    {
+        "id": 6,
+        "avg_size": 4,
+        "columns": ["b"],
+        "created_at": "2018-01-01 3:00:00.00000+00:00",
+        "distinct_count": 300,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 3000
+    },
+    {
+        "id": 7,
+        "avg_size": 4,
+        "columns": ["a"],
+        "created_at": "2018-01-01 4:00:00.00000+00:00",
+        "distinct_count": 4000,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 4000
+    },
+    {
+        "id": 8,
+        "avg_size": 4,
+        "columns": ["b"],
+        "created_at": "2018-01-01 4:00:00.00000+00:00",
+        "distinct_count": 400,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 4000
+    },
+    {
+        "id": 9,
+        "avg_size": 4,
+        "columns": ["a"],
+        "created_at": "2018-01-01 5:00:00.00000+00:00",
+        "distinct_count": 5000,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 5000
+    },
+    {
+        "id": 10,
+        "avg_size": 4,
+        "columns": ["b"],
+        "created_at": "2018-01-01 5:00:00.00000+00:00",
+        "distinct_count": 500,
+        "name": "__auto__",
+        "null_count": 0,
+        "row_count": 5000
+    }
+]';
+
+# Simulate full table auto stats collection.
+statement ok
+ALTER TABLE t PUSH STATISTICS '[
+    {
+        "id": 11,
+        "avg_size": 4,
+        "columns": ["a"],
+        "created_at": "2018-01-01 6:00:00.00000+00:00",
+        "distinct_count": 6000,
+        "name": "__auto__",
+        "null_count": 0,
+        "histo_col_type": "INT8",
+        "histo_version": 2,
+        "row_count": 6000,
+        "histo_buckets": [
+          {
+            "distinct_range": 0,
+            "num_eq": 1,
+            "num_range": 0,
+            "upper_bound": "1"
+          },
+          {
+            "distinct_range": 5998,
+            "num_eq": 1,
+            "num_range": 5998,
+            "upper_bound": "6000"
+          }
+        ]
+    },
+    {
+        "id": 12,
+        "avg_size": 4,
+        "columns": ["b"],
+        "created_at": "2018-01-01 6:00:00.00000+00:00",
+        "distinct_count": 600,
+        "name": "__auto__",
+        "null_count": 0,
+        "histo_col_type": "INT8",
+        "histo_version": 2,
+        "row_count": 6000,
+        "histo_buckets": [
+          {
+            "distinct_range": 0,
+            "num_eq": 10,
+            "num_range": 0,
+            "upper_bound": "1"
+          },
+          {
+            "distinct_range": 598,
+            "num_eq": 10,
+            "num_range": 5998,
+            "upper_bound": "6000"
+          }
+        ]
+    }
+]'
+
+# Should see the oldest auto stats (row count = 1000) has been deleted.
+query TTTI colnames
+SELECT statistics_name, column_names, created, row_count FROM [SHOW STATISTICS FOR TABLE t] ORDER BY created DESC, statistics_name, column_names;
+----
+statistics_name  column_names  created                        row_count
+__auto__         {a}           2018-01-01 06:00:00 +0000 UTC  6000
+__auto__         {b}           2018-01-01 06:00:00 +0000 UTC  6000
+__auto__         {a}           2018-01-01 05:00:00 +0000 UTC  5000
+__auto__         {b}           2018-01-01 05:00:00 +0000 UTC  5000
+__auto__         {a}           2018-01-01 04:00:00 +0000 UTC  4000
+__auto__         {b}           2018-01-01 04:00:00 +0000 UTC  4000
+__auto__         {a}           2018-01-01 03:00:00 +0000 UTC  3000
+__auto__         {b}           2018-01-01 03:00:00 +0000 UTC  3000
+__auto__         {a}           2018-01-01 02:00:00 +0000 UTC  2000
+__auto__         {b}           2018-01-01 02:00:00 +0000 UTC  2000
+
+# Simulate an auto partial stats collection with USING EXTREME.
+statement ok
+ALTER TABLE t PUSH STATISTICS '[
+    {
+        "id": 13,
+        "avg_size": 4,
+        "columns": ["a"],
+        "created_at": "2018-01-01 6:30:00.00000+00:00",
+        "distinct_count": 50,
+        "name": "__auto_partial__",
+        "null_count": 0,
+        "row_count": 500,
+        "histo_col_type": "INT8",
+        "histo_version": 3,
+        "full_statistic_id": 11,
+        "partial_predicate": "(a < 0:::INT8) OR ((a > 6000:::INT8) OR (a IS NULL))",
+        "histo_buckets": [
+          {
+            "distinct_range": 0,
+            "num_eq": 1,
+            "num_range": 0,
+            "upper_bound": "6001"
+          },
+          {
+            "distinct_range": 498,
+            "num_eq": 1,
+            "num_range": 498,
+            "upper_bound": "6500"
+          }
+        ]
+    }
+]'
+
+# Since this is a partial stats, no existing stats will be deleted.
+query TTTI colnames
+SELECT statistics_name, column_names, created, row_count FROM [SHOW STATISTICS FOR TABLE t WITH MERGE] ORDER BY created DESC, statistics_name DESC, column_names;
+----
+statistics_name   column_names  created                        row_count
+__merged__        {a}           2018-01-01 06:30:00 +0000 UTC  6500
+__auto_partial__  {a}           2018-01-01 06:30:00 +0000 UTC  500
+__auto__          {a}           2018-01-01 06:00:00 +0000 UTC  6000
+__auto__          {b}           2018-01-01 06:00:00 +0000 UTC  6000
+__auto__          {a}           2018-01-01 05:00:00 +0000 UTC  5000
+__auto__          {b}           2018-01-01 05:00:00 +0000 UTC  5000
+__auto__          {a}           2018-01-01 04:00:00 +0000 UTC  4000
+__auto__          {b}           2018-01-01 04:00:00 +0000 UTC  4000
+__auto__          {a}           2018-01-01 03:00:00 +0000 UTC  3000
+__auto__          {b}           2018-01-01 03:00:00 +0000 UTC  3000
+__auto__          {a}           2018-01-01 02:00:00 +0000 UTC  2000
+__auto__          {b}           2018-01-01 02:00:00 +0000 UTC  2000
+
+# Simulate the manual stats collection without explicit columns specified, e.g. ANALYZE t.
+statement ok
+ALTER TABLE t PUSH STATISTICS '[
+    {
+        "id": 14,
+        "avg_size": 4,
+        "columns": ["a"],
+        "created_at": "2018-01-01 7:00:00.00000+00:00",
+        "distinct_count": 7000,
+        "name": "",
+        "null_count": 0,
+        "row_count": 7000
+    },
+    {
+        "id": 15,
+        "avg_size": 4,
+        "columns": ["b"],
+        "created_at": "2018-01-01 7:00:00.00000+00:00",
+        "distinct_count": 700,
+        "name": "",
+        "null_count": 0,
+        "row_count": 7000
+    }
+]'
+
+# We should see the partial stats (with the corresponding merge stats) and the oldest stats (row count = 2000) be deleted.
+query TTTI colnames
+SELECT statistics_name, column_names, created, row_count FROM [SHOW STATISTICS FOR TABLE t WITH MERGE] ORDER BY created DESC, statistics_name DESC, column_names;
+----
+statistics_name  column_names  created                        row_count
+NULL             {a}           2018-01-01 07:00:00 +0000 UTC  7000
+NULL             {b}           2018-01-01 07:00:00 +0000 UTC  7000
+__auto__         {a}           2018-01-01 06:00:00 +0000 UTC  6000
+__auto__         {b}           2018-01-01 06:00:00 +0000 UTC  6000
+__auto__         {a}           2018-01-01 05:00:00 +0000 UTC  5000
+__auto__         {b}           2018-01-01 05:00:00 +0000 UTC  5000
+__auto__         {a}           2018-01-01 04:00:00 +0000 UTC  4000
+__auto__         {b}           2018-01-01 04:00:00 +0000 UTC  4000
+__auto__         {a}           2018-01-01 03:00:00 +0000 UTC  3000
+__auto__         {b}           2018-01-01 03:00:00 +0000 UTC  3000
+
+# Simulate the manual stats collection with explicit column specification,
+# such as `CREATE STATISTICS manual_stats ON a FROM t`.
+statement ok
+ALTER TABLE t PUSH STATISTICS WITH EXPLICIT COLUMNS '[
+    {
+        "id": 16,
+        "avg_size": 4,
+        "columns": ["a"],
+        "created_at": "2018-01-01 8:00:00.00000+00:00",
+        "distinct_count": 8000,
+        "name": "manual_stats",
+        "null_count": 0,
+        "row_count": 8000
+    }
+]'
+
+# In this case, we should see the manual stats for a (rowcount = 7000) is deleted,
+# but for column b, the stats are intact.
+query TTTI colnames
+SELECT statistics_name, column_names, created, row_count FROM [SHOW STATISTICS FOR TABLE t] ORDER BY created DESC, statistics_name DESC, column_names;
+----
+statistics_name  column_names  created                        row_count
+manual_stats     {a}           2018-01-01 08:00:00 +0000 UTC  8000
+NULL             {b}           2018-01-01 07:00:00 +0000 UTC  7000
+__auto__         {a}           2018-01-01 06:00:00 +0000 UTC  6000
+__auto__         {b}           2018-01-01 06:00:00 +0000 UTC  6000
+__auto__         {a}           2018-01-01 05:00:00 +0000 UTC  5000
+__auto__         {b}           2018-01-01 05:00:00 +0000 UTC  5000
+__auto__         {a}           2018-01-01 04:00:00 +0000 UTC  4000
+__auto__         {b}           2018-01-01 04:00:00 +0000 UTC  4000
+__auto__         {a}           2018-01-01 03:00:00 +0000 UTC  3000
+__auto__         {b}           2018-01-01 03:00:00 +0000 UTC  3000
+
+# Simulate manual partial stats collection,
+# such as `CREATE STATISTICS mypartial ON a FROM t WHERE a < 1000;`
+statement ok
+ALTER TABLE t PUSH STATISTICS WITH EXPLICIT COLUMNS '[
+    {
+        "id": 17,
+        "avg_size": 4,
+        "columns": ["a"],
+        "created_at": "2018-01-01 9:00:00.00000+00:00",
+        "distinct_count": 2000,
+        "name": "manual_partial_stats",
+        "null_count": 0,
+        "row_count": 2000,
+        "partial_predicate": "(a < 1000)"
+    }
+]'
+
+# Since this is a partial stats, no existing stats will be deleted.
+query TTTI colnames
+SELECT statistics_name, column_names, created, row_count FROM [SHOW STATISTICS FOR TABLE t] ORDER BY created DESC, statistics_name DESC, column_names;
+----
+statistics_name       column_names  created                        row_count
+manual_partial_stats  {a}           2018-01-01 09:00:00 +0000 UTC  2000
+manual_stats          {a}           2018-01-01 08:00:00 +0000 UTC  8000
+NULL                  {b}           2018-01-01 07:00:00 +0000 UTC  7000
+__auto__              {a}           2018-01-01 06:00:00 +0000 UTC  6000
+__auto__              {b}           2018-01-01 06:00:00 +0000 UTC  6000
+__auto__              {a}           2018-01-01 05:00:00 +0000 UTC  5000
+__auto__              {b}           2018-01-01 05:00:00 +0000 UTC  5000
+__auto__              {a}           2018-01-01 04:00:00 +0000 UTC  4000
+__auto__              {b}           2018-01-01 04:00:00 +0000 UTC  4000
+__auto__              {a}           2018-01-01 03:00:00 +0000 UTC  3000
+__auto__              {b}           2018-01-01 03:00:00 +0000 UTC  3000
+
+subtest end

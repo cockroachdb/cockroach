@@ -119,11 +119,20 @@ type Smither struct {
 	// It follows that if we haven't created any UDFs, we have no UDFs to invoke
 	// too.
 	disableUDFCreation bool
+	// disableDoBlock indicates whether we're not allowed to create DO blocks,
+	// both as top level statements and inside plpgsql function body
+	// definition.
+	disableDoBlock         bool
+	disableIsolationChange bool
 
 	bulkSrv     *httptest.Server
 	bulkFiles   map[string][]byte
 	bulkBackups map[string]tree.BackupTargetList
 	bulkExports []string
+
+	// logFn, if set, is called to emit progress messages during schema loading
+	// and other potentially slow operations.
+	logFn func(format string, args ...interface{})
 }
 
 type (
@@ -187,6 +196,7 @@ var prettyCfg = func() tree.PrettyCfg {
 	cfg := tree.DefaultPrettyCfg()
 	cfg.LineWidth = 120
 	cfg.Simplify = false
+	cfg.FmtFlags = tree.FmtPLpgSQLParen
 	return cfg
 }()
 
@@ -195,6 +205,14 @@ var TestingPrettyCfg = prettyCfg
 
 // Generate returns a random SQL string.
 func (s *Smither) Generate() string {
+	stmt, _ := s.GenerateWithTag()
+	return stmt
+}
+
+// GenerateWithTag returns a random SQL string along with the statement's
+// StatementType (e.g. TypeDDL, TypeDML). Callers can use the type to
+// adjust behavior, for example increasing the statement timeout for DDL.
+func (s *Smither) GenerateWithTag() (string, tree.StatementType) {
 	i := 0
 	for {
 		stmt, ok := s.makeStmt()
@@ -208,17 +226,17 @@ func (s *Smither) Generate() string {
 		i = 0
 
 		printCfg := prettyCfg
-		fl := tree.FmtParsable
+		fl := plpgsqlFlags
 		if s.postgres {
-			printCfg.FmtFlags = tree.FmtPGCatalog
-			fl = tree.FmtPGCatalog
+			printCfg.FmtFlags = tree.FmtPGCatalog | tree.FmtPLpgSQLParen
+			fl = tree.FmtPGCatalog | tree.FmtPLpgSQLParen
 		}
 		p, err := printCfg.Pretty(stmt)
 		if err != nil {
 			// Use simple printing if pretty-printing fails.
 			p = tree.AsStringWithFlags(stmt, fl)
 		}
-		return p
+		return p, stmt.StatementType()
 	}
 }
 
@@ -226,6 +244,16 @@ func (s *Smither) Generate() string {
 // tables or columns.
 func (s *Smither) GenerateExpr() tree.TypedExpr {
 	return makeScalar(s, s.randScalarType(), nil)
+}
+
+// GenerateUDF returns a random CREATE FUNCTION statement.
+func (s *Smither) GenerateUDF() tree.Statement {
+	for {
+		routine, ok := s.makeCreateFunc()
+		if ok {
+			return routine
+		}
+	}
 }
 
 type nameGenInfo struct {
@@ -351,6 +379,7 @@ var DisableDDLs = simpleOption("disable DDLs", func(s *Smither) {
 		{5, makeUpdate},
 		{1, makeDelete},
 		{1, makeCreateStats},
+		{1, makeSetSessionCharacteristics},
 		// If we don't have any DDL's, allow for use of savepoints and transactions.
 		{2, makeBegin},
 		{2, makeSavepoint},
@@ -358,11 +387,13 @@ var DisableDDLs = simpleOption("disable DDLs", func(s *Smither) {
 		{2, makeRollbackToSavepoint},
 		{2, makeCommit},
 		{2, makeRollback},
+		// TODO(nvanbenschoten): add two-phase commit statements.
 	}
 })
 
 // OnlySingleDMLs causes the Smither to only emit single-statement DML (SELECT,
-// INSERT, UPDATE, DELETE) and CREATE STATISTICS statements.
+// INSERT, UPDATE, DELETE), CREATE STATISTICS, and SET SESSION CHARACTERISTICS
+// statements.
 var OnlySingleDMLs = simpleOption("only single DMLs", func(s *Smither) {
 	s.stmtWeights = []statementWeight{
 		{20, makeSelect},
@@ -370,6 +401,7 @@ var OnlySingleDMLs = simpleOption("only single DMLs", func(s *Smither) {
 		{5, makeUpdate},
 		{1, makeDelete},
 		{1, makeCreateStats},
+		{1, makeSetSessionCharacteristics},
 	}
 })
 
@@ -432,26 +464,39 @@ var SimpleNames = simpleOption("simple names", func(s *Smither) {
 	s.simpleNames = true
 })
 
-// MutationsOnly causes the Smither to emit 70% INSERT, 10% UPDATE, 10% DELETE,
-// and 10% CREATE STATISTICS statements.
+// MutationsOnly causes the Smither to emit 60% INSERT, 10% UPDATE, 10% DELETE,
+// 10% CREATE STATISTICS, and 10% SET SESSION CHARACTERISTICS statements.
 var MutationsOnly = simpleOption("mutations only", func(s *Smither) {
 	s.stmtWeights = []statementWeight{
-		{7, makeInsert},
+		{6, makeInsert},
 		{1, makeUpdate},
 		{1, makeDelete},
 		{1, makeCreateStats},
+		{1, makeSetSessionCharacteristics},
 	}
 })
 
-// InsUpdOnly causes the Smither to emit 80% INSERT, 10% UPDATE, and 10% CREATE
-// STATISTICS statements.
+// InsUpdOnly causes the Smither to emit 70% INSERT, 10% UPDATE, 10% CREATE
+// STATISTICS, and 10% SET SESSION CHARACTERISTICS statements.
 var InsUpdOnly = simpleOption("inserts and updates only", func(s *Smither) {
 	s.stmtWeights = []statementWeight{
-		{8, makeInsert},
+		{7, makeInsert},
 		{1, makeUpdate},
 		{1, makeCreateStats},
+		{1, makeSetSessionCharacteristics},
 	}
 })
+
+// InsUpdDelOnly causes the Smither to emit 80% INSERT, 10% UPDATE,
+// 10% DELETE statements.
+var InsUpdDelOnly = simpleOption("inserts updates and deletes only",
+	func(s *Smither) {
+		s.stmtWeights = []statementWeight{
+			{8, makeInsert},
+			{1, makeUpdate},
+			{1, makeDelete},
+		}
+	})
 
 // IgnoreFNs causes the Smither to ignore functions that match the regex.
 func IgnoreFNs(regex string) SmitherOption {
@@ -583,6 +628,29 @@ var DisableOIDs = simpleOption("disable OIDs", func(s *Smither) {
 var DisableUDFs = simpleOption("disable udfs", func(s *Smither) {
 	s.disableUDFCreation = true
 })
+
+// DisableDoBlocks causes the Smither to disable DO blocks.
+var DisableDoBlocks = simpleOption("disable do block", func(s *Smither) {
+	s.disableDoBlock = true
+})
+
+// DisableIsolationChange causes the Smither to disable stmts that modify the
+// txn isolation level.
+var DisableIsolationChange = simpleOption("disable isolation change", func(s *Smither) {
+	s.disableIsolationChange = true
+})
+
+// SetLogger configures a logging function for the Smither. The function is
+// called to emit progress messages during schema loading and other potentially
+// slow operations.
+func SetLogger(logFn func(format string, args ...interface{})) SmitherOption {
+	return option{
+		name: "set logger",
+		apply: func(s *Smither) {
+			s.logFn = logFn
+		},
+	}
+}
 
 // CompareMode causes the Smither to generate statements that have
 // deterministic output.

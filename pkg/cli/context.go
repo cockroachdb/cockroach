@@ -9,6 +9,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"slices"
 	"strconv"
 	"time"
 
@@ -27,10 +28,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	isatty "github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -58,7 +61,7 @@ func initCLIDefaults() {
 	setDemoContextDefaults()
 	setStmtDiagContextDefaults()
 	setAuthContextDefaults()
-	setImportContextDefaults()
+	setLicenseContextDefaults()
 	setUserfileContextDefaults()
 	setCertContextDefaults()
 	setDebugRecoverContextDefaults()
@@ -359,10 +362,9 @@ type zipContext struct {
 	includeRangeInfo bool
 
 	// includeStacks fetches all goroutines running on each targeted node in
-	// nodes/*/stacks.txt and nodes/*/stacks_with_labels.txt files. Note that
-	// fetching stack traces for all goroutines is a temporary "stop the world"
-	// operation, which can momentarily have negative impacts on SQL service
-	// latency.
+	// nodes/*/stacks.txt. Note that fetching debug=2 stack traces for all
+	// goroutines incurs a temporary "stop the world" operation, which can
+	// momentarily have negative impacts on SQL service latency.
 	includeStacks bool
 
 	// includeRunningJobTraces includes the active traces of each running
@@ -371,6 +373,14 @@ type zipContext struct {
 
 	// The log/heap/etc files to include.
 	files fileSelection
+
+	// excludeLogSeverities lists log severity names (e.g. "INFO") to
+	// exclude from log file collection.
+	excludeLogSeverities []string
+
+	// validateZipFile indicates whether the generated zip file should be validated
+	// post debug zip file generation.
+	validateZipFile bool
 }
 
 // setZipContextDefaults set the default values in zipCtx.  This
@@ -393,6 +403,7 @@ func setZipContextDefaults() {
 	zipCtx.includeRunningJobTraces = true
 	zipCtx.cpuProfDuration = 5 * time.Second
 	zipCtx.concurrency = 15
+	zipCtx.validateZipFile = true
 
 	// File selection covers the last 48 hours by default.
 	// We add 24 hours to now for the end timestamp to ensure
@@ -448,8 +459,7 @@ var debugCtx struct {
 	sizes             bool
 	replicated        bool
 	inputFile         string
-	ballastSize       base.SizeSpec
-	printSystemConfig bool
+	ballastSize       storageconfig.Size
 	maxResults        int
 	decodeAsTableDesc string
 	verbose           bool
@@ -466,9 +476,8 @@ func setDebugContextDefaults() {
 	debugCtx.sizes = false
 	debugCtx.replicated = false
 	debugCtx.inputFile = ""
-	debugCtx.ballastSize = base.SizeSpec{InBytes: 1000000000}
+	debugCtx.ballastSize = storageconfig.BytesSize(1000000000)
 	debugCtx.maxResults = 0
-	debugCtx.printSystemConfig = false
 	debugCtx.decodeAsTableDesc = ""
 	debugCtx.verbose = false
 	debugCtx.keyTypes = showAll
@@ -484,6 +493,11 @@ var startCtx struct {
 	serverListenAddr       string
 	serverRootCertDN       string
 	serverNodeCertDN       string
+	serverTLSCipherSuites  []string
+	disallowRootLogin      bool
+	allowDebugUser         bool
+	serverRootCertSAN      string
+	serverNodeCertSAN      string
 
 	// The TLS auto-handshake parameters.
 	initToken             string
@@ -539,6 +553,10 @@ func setStartContextDefaults() {
 	startCtx.serverCertPrincipalMap = nil
 	startCtx.serverRootCertDN = ""
 	startCtx.serverNodeCertDN = ""
+	startCtx.disallowRootLogin = false
+	startCtx.allowDebugUser = false
+	startCtx.serverRootCertSAN = ""
+	startCtx.serverNodeCertSAN = ""
 	startCtx.serverListenAddr = ""
 	startCtx.unencryptedLocalhostHTTP = false
 	startCtx.tempDir = ""
@@ -629,8 +647,55 @@ func setSqlfmtContextDefaults() {
 	sqlfmtCtx.execStmts = nil
 }
 
+// convertURLFormat enumerates the supported output formats for the `convert-url`
+// command.
+type convertURLFormat string
+
+const (
+	convertURLFormatAll  convertURLFormat = ""
+	convertURLFormatPQ   convertURLFormat = "pq"
+	convertURLFormatDSN  convertURLFormat = "dsn"
+	convertURLFormatJDBC convertURLFormat = "jdbc"
+	convertURLFormatCRDB convertURLFormat = "crdb"
+)
+
+var convertURLFormats = []convertURLFormat{
+	convertURLFormatPQ,
+	convertURLFormatDSN,
+	convertURLFormatJDBC,
+	convertURLFormatCRDB,
+}
+
+func (f *convertURLFormat) String() string {
+	return string(*f)
+}
+
+func (f *convertURLFormat) Set(s string) error {
+	if slices.Contains(convertURLFormats, convertURLFormat(s)) {
+		*f = convertURLFormat(s)
+		return nil
+	}
+	return errors.Newf("must be one of %s", convertURLFormats)
+}
+
+func (f *convertURLFormat) Type() string {
+	return "string"
+}
+
+// convertCtx captures the command-line parameters of the `convert-url` command.
+// See below for defaults.
 var convertCtx struct {
-	url string
+	url        string
+	sslInline  bool
+	database   string
+	username   string
+	password   string
+	cluster    string
+	certsDir   string
+	caCertPath string
+	certPath   string
+	keyPath    string
+	format     convertURLFormat
 }
 
 // setConvContextDefaults set the default values in convertCtx.  This
@@ -638,6 +703,16 @@ var convertCtx struct {
 // test that exercises command-line parsing.
 func setConvContextDefaults() {
 	convertCtx.url = ""
+	convertCtx.sslInline = false
+	convertCtx.database = ""
+	convertCtx.username = ""
+	convertCtx.password = ""
+	convertCtx.cluster = ""
+	convertCtx.certsDir = ""
+	convertCtx.caCertPath = ""
+	convertCtx.certPath = ""
+	convertCtx.keyPath = ""
+	convertCtx.format = ""
 }
 
 // demoCtx captures the command-line parameters of the `demo` command.
@@ -646,6 +721,7 @@ var demoCtx = struct {
 	democluster.Context
 	disableEnterpriseFeatures bool
 	pidFile                   string
+	background                bool
 
 	demoNodeCacheSizeValue  bytesOrPercentageValue
 	demoNodeSQLMemSizeValue bytesOrPercentageValue
@@ -679,6 +755,7 @@ func setDemoContextDefaults() {
 	demoCtx.DefaultEnableRangefeeds = true
 
 	demoCtx.pidFile = ""
+	demoCtx.background = false
 	demoCtx.disableEnterpriseFeatures = false
 
 	demoCtx.demoNodeCacheSizeValue = makeBytesOrPercentageValue(
@@ -701,21 +778,43 @@ func setStmtDiagContextDefaults() {
 	stmtDiagCtx.all = false
 }
 
-// importCtx captures the command-line parameters of the 'import' command.
-var importCtx struct {
-	maxRowSize           int
-	skipForeignKeys      bool
-	ignoreUnsupported    bool
-	ignoreUnsupportedLog string
-	rowLimit             int
+// auditFormat enumerates the supported output formats for the `license audit`
+// command.
+type auditFormat string
+
+const (
+	auditFormatYAML auditFormat = "yaml"
+	auditFormatJSON auditFormat = "json"
+)
+
+var auditFormats = []auditFormat{
+	auditFormatYAML,
+	auditFormatJSON,
 }
 
-func setImportContextDefaults() {
-	importCtx.maxRowSize = 512 * (1 << 10) // 512 KiB
-	importCtx.skipForeignKeys = false
-	importCtx.ignoreUnsupported = false
-	importCtx.ignoreUnsupportedLog = ""
-	importCtx.rowLimit = 0
+func (f *auditFormat) String() string {
+	return string(*f)
+}
+
+func (f *auditFormat) Set(s string) error {
+	if slices.Contains(auditFormats, auditFormat(s)) {
+		*f = auditFormat(s)
+		return nil
+	}
+	return errors.Newf("must be one of %s", auditFormats)
+}
+
+func (f *auditFormat) Type() string {
+	return "string"
+}
+
+// licenseCtx captures the command-line parameters of the 'license' command.
+var licenseCtx struct {
+	auditFormat auditFormat
+}
+
+func setLicenseContextDefaults() {
+	licenseCtx.auditFormat = auditFormatYAML
 }
 
 // userfileCtx captures the command-line parameters of the
@@ -732,24 +831,4 @@ var userfileCtx struct {
 // every test that exercises command-line parsing.
 func setUserfileContextDefaults() {
 	userfileCtx.recursive = false
-}
-
-// GetServerCfgStores provides direct public access to the StoreSpecList inside
-// serverCfg. This is used by CCL code to populate some fields.
-//
-// WARNING: consider very carefully whether you should be using this.
-// If you are not writing CCL code that performs command-line flag
-// parsing, you probably should not be using this.
-func GetServerCfgStores() base.StoreSpecList {
-	return serverCfg.Stores
-}
-
-// GetWALFailoverConfig provides direct public access to the WALFailoverConfig
-// inside serverCfg. This is used by CCL code to populate some fields.
-//
-// WARNING: consider very carefully whether you should be using this.
-// If you are not writing CCL code that performs command-line flag
-// parsing, you probably should not be using this.
-func GetWALFailoverConfig() *base.WALFailoverConfig {
-	return &serverCfg.WALFailover
 }

@@ -9,12 +9,16 @@ import (
 	"bytes"
 	"context"
 	gosql "database/sql"
+	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"math"
 	"math/rand"
 	"os"
+	"path/filepath"
 	"reflect"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -24,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/artifactsutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -76,38 +81,72 @@ type variations struct {
 	// These fields are set up during construction.
 	seed                 int64
 	fillDuration         time.Duration
-	maxBlockBytes        int
+	blockSize            int
 	perturbationDuration time.Duration
 	validationDuration   time.Duration
 	ratioOfMax           float64
 	splits               int
-	numNodes             int
-	numWorkloadNodes     int
-	vcpu                 int
-	disks                int
-	mem                  spec.MemPerCPU
-	leaseType            registry.LeaseType
-	perturbation         perturbation
-	workload             workloadType
-	acceptableChange     float64
-	cloud                registry.CloudSet
-	acMode               admissionControlMode
-	profileOptions       []roachtestutil.ProfileOptionFunc
-	specOptions          []spec.Option
-	clusterSettings      map[string]string
+	scatter              bool // pass --scatter when initializing the workload table
+	timeout              time.Duration
+	// tokenReturnTime is the budget the post-test ValidateTokensReturned
+	// check is given to observe all kvadmission flow-control tokens
+	// returned. Zero means use the framework default (10m, 1h if a disk
+	// bandwidth limit is set). Tests that drive large send queues or hold
+	// many tokens at the end of the perturbation should bump this so the
+	// check doesn't trip while drain finishes.
+	tokenReturnTime  time.Duration
+	numNodes         int
+	numWorkloadNodes int
+	vcpu             int
+	disks            int
+	mem              spec.MemPerCPU
+	leaseType        registry.LeaseType
+	perturbation     perturbation
+	workload         workloadType
+	impact           acceptableImpact
+	// recoveryImpact is the threshold applied to the recovery interval
+	// (after the perturbation completes). The zero value means "use the
+	// same threshold as the perturbation interval (impact)". Reading at
+	// the runTest use site (rather than eager-copying at setup time)
+	// keeps the fallback automatic — perturbations that override impact
+	// after setup() don't have to remember to update recoveryImpact too.
+	//
+	// Separate from impact because some perturbations (e.g. mass splits)
+	// put the cluster under heavy short-term stress that the cluster is
+	// expected to absorb; the meaningful signal is whether the cluster
+	// returns to baseline afterwards.
+	recoveryImpact     acceptableImpact
+	cloud              registry.CloudSet
+	acMode             admissionControlMode
+	diskBandwidthLimit string
+	histogramArgs      string // set at test start for workload histogram export
+	profileOptions     []roachtestutil.ProfileOptionFunc
+	specOptions        []spec.Option
+	clusterSettings    map[string]string
+	// skipPostValidations is forwarded to TestSpec.SkipPostValidations. The
+	// zero value runs all post-test validations. Perturbations that
+	// inflate the cluster (large range counts, heavy fills) can set this
+	// to skip checks that exceed the framework's per-check budget.
+	skipPostValidations registry.PostValidation
 }
 
 const NUM_REGIONS = 3
 
 var durationOptions = []time.Duration{10 * time.Second, 10 * time.Minute, 30 * time.Minute}
 var splitOptions = []int{1, 100, 10000}
-var maxBlockBytes = []int{1, 1024, 4096}
+var blockSize = []int{1, 1024, 4096}
 var numNodes = []int{5, 12, 30}
 var numVCPUs = []int{4, 8, 16, 32}
 var numDisks = []int{1, 2}
 var memOptions = []spec.MemPerCPU{spec.Low, spec.Standard, spec.High}
-var cloudSets = []registry.CloudSet{registry.OnlyAWS, registry.OnlyGCE, registry.OnlyAzure}
+var cloudSets = []registry.CloudSet{
+	registry.OnlyAWS,
+	registry.OnlyGCE,
+	registry.OnlyAzure,
+	registry.OnlyIBM,
+}
 var admissionControlOptions = []admissionControlMode{elasticOnlyBoth, fullNormalElasticRepl, fullBoth}
+var diskBandwidthLimitOptions = []string{"0", "350MiB"}
 
 var leases = []registry.LeaseType{
 	registry.EpochLeases,
@@ -184,13 +223,130 @@ func (a admissionControlMode) getSettings() map[string]string {
 	}
 }
 
-func (v variations) String() string {
-	return fmt.Sprintf("seed: %d, fillDuration: %s, maxBlockBytes: %d, perturbationDuration: %s, "+
-		"validationDuration: %s, ratioOfMax: %f, splits: %d, numNodes: %d, numWorkloadNodes: %d, "+
-		"vcpu: %d, disks: %d, memory: %s, leaseType: %s, cloud: %v, acMode: %s, perturbation: %+v",
-		v.seed, v.fillDuration, v.maxBlockBytes,
-		v.perturbationDuration, v.validationDuration, v.ratioOfMax, v.splits, v.numNodes, v.numWorkloadNodes,
-		v.vcpu, v.disks, v.mem, v.leaseType, v.cloud, v.acMode, v.perturbation)
+// acceptableImpact defines max-impact-ratio pass/fail criteria. Each ratio
+// mirrors the roachperf top-line metric so the threshold is directly
+// comparable to the number shown on the dashboard.
+//
+// All ratios are derived from per-second workload measurements ("ticks").
+// Each tick records the p50 and p99 latency and throughput (ops/s) observed
+// during that one-second window. We drop the worst 5% of ticks for each
+// series before comparing the worst measurements (i.e. we compare their
+// p95s). This filters out brief outlier seconds while still catching
+// sustained degradation, striking a balance between spurious test failures
+// caused e.g. by infrastructure hiccups and learning about significant
+// slowdowns proactively with a full set of artifacts in place.
+//
+// A ratio of ~1.0 means no measurable latency change. The test fails if
+// any of the computed ratios exceeds the corresponding value in the fields
+// below.
+//
+// Regardless of whether a particular run fails due to the impact thresholds
+// below, it will show up on roachperf.
+type acceptableImpact struct {
+	// maxP99Impact is the maximum allowed p99 latency impact ratio between
+	// the current interval (perturbation active or the recovery interval
+	// following the perturbation) and the pre-perturbation baseline interval.
+	//
+	// Numerator: collect the p99 latency from every one-second tick during
+	// the measured interval, sort them, and drop the worst 5% of seconds.
+	// The value at the boundary is the numerator.
+	// Denominator: same computation over the baseline interval.
+	//
+	// Example: baseline ticks have p99s [2ms 3ms 2ms 4ms ...]; after
+	// dropping the worst 5% of seconds, the boundary value is 5ms.
+	// Perturbation ticks have p99s [10ms 20ms 8ms ...]; after dropping the
+	// worst 5%, the boundary is 25ms. Ratio = 25/5 = 5.0.
+	maxP99Impact float64
+
+	// maxP50Impact is the maximum allowed p50 (median) latency impact ratio.
+	// Computed identically to maxP99Impact but using per-second p50 latencies
+	// instead. Less noisy than p99, useful for catching sustained latency
+	// shifts that affect all operations rather than just outliers.
+	maxP50Impact float64
+
+	// maxThroughputImpact is the maximum allowed throughput impact ratio
+	// between the current interval (perturbation active or the recovery
+	// interval following the perturbation) and the pre-perturbation baseline
+	// interval.
+	//
+	// Numerator: collect the throughput (ops/s) from every one-second tick
+	// during the baseline interval, sort them, and drop the worst 5% of
+	// seconds. The value at the boundary is the numerator.
+	// Denominator: same computation over the measured interval.
+	//
+	// The ratio is inverted (baseline / measured) so that the direction
+	// matches latency: higher = worse.
+	//
+	// Example: baseline ticks have throughputs [900 950 920 ...] ops/s;
+	// after dropping the worst 5% of seconds, the boundary is 850.
+	// Perturbation ticks have [400 500 450 ...]; after dropping the worst
+	// 5%, the boundary is 380. Ratio = 850/380 ≈ 2.2, meaning throughput
+	// dropped to ~45% of baseline.
+	maxThroughputImpact float64
+}
+
+// noImpactThresholds returns thresholds that never fail.
+func noImpactThresholds() acceptableImpact {
+	return acceptableImpact{
+		maxP99Impact:        math.Inf(1),
+		maxP50Impact:        math.Inf(1),
+		maxThroughputImpact: math.Inf(1),
+	}
+}
+
+// defaultThresholds returns the conservative pass/fail criteria applied to
+// production perturbation tests. Latency gates are disabled (p99 in particular
+// is too noisy with current sample sizes), but a throughput floor is enforced:
+// the test fails if measured throughput drops below 80% of baseline (i.e. the
+// throughput impact ratio exceeds 1.25).
+func defaultThresholds() acceptableImpact {
+	return acceptableImpact{
+		maxP99Impact:        math.Inf(1),
+		maxP50Impact:        math.Inf(1),
+		maxThroughputImpact: 1.25,
+	}
+}
+
+// aggregatedStat holds summary statistics for per-tick metrics over a
+// measurement interval. Used for display/logging and pass/fail validation.
+type aggregatedStat struct {
+	medianP99  time.Duration // median of per-second p99 latencies
+	medianTput float64       // median of per-second throughput
+	p99        time.Duration // p95 of per-second p99 latencies
+	p50        time.Duration // p95 of per-second p50 latencies
+	throughput float64       // p5 of per-second throughput
+	ticks      int           // number of 1s ticks
+}
+
+func (s aggregatedStat) String() string {
+	return fmt.Sprintf(
+		"median(p99/s): %v, median(tput/s): %.0f ops/s, "+
+			"p95(p99/s): %v, p95(p50/s): %v, p5(tput/s): %.0f ops/s (%d ticks)",
+		s.medianP99, s.medianTput, s.p99, s.p50, s.throughput, s.ticks)
+}
+
+// getParameterMap returns a map of the parameters used for the test in
+// stringified format. They can be used in logging to more easily identify the
+// test reproduction.
+func (v variations) getParameterMap() map[string]string {
+	params := map[string]string{}
+	params["seed"] = strconv.FormatInt(v.seed, 10)
+	params["fillDuration"] = v.fillDuration.String()
+	params["blockSize"] = strconv.Itoa(v.blockSize)
+	params["perturbationDuration"] = v.perturbationDuration.String()
+	params["validationDuration"] = v.validationDuration.String()
+	params["ratioOfMax"] = strconv.FormatFloat(v.ratioOfMax, 'f', -1, 64)
+	params["splits"] = strconv.Itoa(v.splits)
+	params["numNodes"] = strconv.Itoa(v.numNodes)
+	params["numWorkloadNodes"] = strconv.Itoa(v.numWorkloadNodes)
+	params["vcpu"] = strconv.Itoa(v.vcpu)
+	params["disks"] = strconv.Itoa(v.disks)
+	params["mem"] = v.mem.String()
+	params["leaseType"] = v.leaseType.String()
+	params["cloud"] = v.cloud.String()
+	params["acMode"] = v.acMode.String()
+	params["diskBandwidthLimit"] = v.diskBandwidthLimit
+	return params
 }
 
 // Normally a single worker can handle 20-40 nodes. If we find this is
@@ -200,7 +356,7 @@ const numNodesPerWorker = 20
 // randomize will randomize the test parameters for a metamorphic run.
 func (v variations) randomize(rng *rand.Rand) variations {
 	v.splits = splitOptions[rng.Intn(len(splitOptions))]
-	v.maxBlockBytes = maxBlockBytes[rng.Intn(len(maxBlockBytes))]
+	v.blockSize = blockSize[rng.Intn(len(blockSize))]
 	v.perturbationDuration = durationOptions[rng.Intn(len(durationOptions))]
 	v.leaseType = leases[rng.Intn(len(leases))]
 	v.numNodes = numNodes[rng.Intn(len(numNodes))]
@@ -213,15 +369,16 @@ func (v variations) randomize(rng *rand.Rand) variations {
 	v.cloud = registry.OnlyGCE
 	v.mem = memOptions[rng.Intn(len(memOptions))]
 	v.acMode = admissionControlOptions[rng.Intn(len(admissionControlOptions))]
+	v.diskBandwidthLimit = diskBandwidthLimitOptions[rng.Intn(len(diskBandwidthLimitOptions))]
 	return v
 }
 
 // setup sets up the full test with a fixed set of parameters.
-func setup(p perturbation, acceptableChange float64) variations {
+func setup(p perturbation, impact acceptableImpact) variations {
 	v := variations{}
 	v.workload = kvWorkload{}
-	v.leaseType = registry.EpochLeases
-	v.maxBlockBytes = 4096
+	v.leaseType = registry.LeaderLeases
+	v.blockSize = 4096
 	v.splits = 10000
 	v.numNodes = 12
 	v.numWorkloadNodes = v.numNodes/numNodesPerWorker + 1
@@ -233,6 +390,7 @@ func setup(p perturbation, acceptableChange float64) variations {
 	v.ratioOfMax = 0.5
 	v.cloud = registry.OnlyGCE
 	v.mem = spec.Standard
+	v.diskBandwidthLimit = "0"
 	v.perturbation = p
 	v.profileOptions = []roachtestutil.ProfileOptionFunc{
 		roachtestutil.ProfDbName("target"),
@@ -241,32 +399,54 @@ func setup(p perturbation, acceptableChange float64) variations {
 		roachtestutil.ProfProbabilityToInclude(0.001),
 		roachtestutil.ProfMultipleFromP99(10),
 	}
-	v.acceptableChange = acceptableChange
+	v.impact = impact
+	// recoveryImpact left at zero value — falls back to impact at the
+	// runTest use site. Tests that want a different threshold for the
+	// recovery interval set it explicitly.
 	v.clusterSettings = make(map[string]string)
+	// Having the io_load_listener logs makes it easier to debug failures.
+	v.clusterSettings["server.debug.default_vmodule"] = "io_load_listener=1"
 	return v
 }
 
-func register(r registry.Registry, p perturbation) {
-	addMetamorphic(r, p)
-	addFull(r, p)
+func register(r registry.Registry, p perturbation, skipReason string) {
+	// All metamorphic perturbation tests are currently disabled. See
+	// https://github.com/cockroachdb/cockroach/issues/142148.
+	addMetamorphic(r, p, "#142148")
+	addFull(r, p, skipReason)
 	addDev(r, p)
 }
 
 func RegisterTests(r registry.Registry) {
-	// NB: If these tests fail because they are flaky, increase the numbers
-	// until they pass. Additionally add the seed (from the log) that caused
-	// them to fail as a comment in the test.
-	register(r, restart{})
-	register(r, partition{})
-	register(r, addNode{})
-	register(r, decommission{})
-	register(r, backfill{})
-	register(r, &slowDisk{})
-	register(r, elasticWorkload{})
+	const notSkipped = ""
+
+	register(r, restart{}, notSkipped)
+	addLong(r, restart{})
+	register(r, backup{}, notSkipped)
+	// splits runs in two flavors: asleep=true exercises total replica
+	// capacity (followers park via store liveness quiescence), asleep=false
+	// exercises active-replica capacity (every replica costs full per-tick
+	// CPU). See splits.go for the long-form rationale.
+	for _, asleep := range []bool{true, false} {
+		register(r, splits{asleep: asleep}, notSkipped)
+	}
+	register(r, intents{}, notSkipped)
+	register(r, decommission{}, notSkipped)
+	register(r, elasticWorkload{}, notSkipped)
+	register(r, partition{}, notSkipped)
+	register(r, backfill{}, notSkipped)
+	register(r, &slowDisk{}, notSkipped)
+	register(r, addNode{}, notSkipped)
 }
 
 func (v variations) makeClusterSpec() spec.ClusterSpec {
-	opts := append(v.specOptions, spec.CPU(v.vcpu), spec.SSD(v.disks), spec.Mem(v.mem))
+	opts := append(v.specOptions, spec.CPU(v.vcpu), spec.Disks(v.disks), spec.Mem(v.mem), spec.TerminateOnMigration())
+	// Disable cluster reuse to avoid potential cgroup side effects.
+	if v.perturbationName() == "slowDisk" {
+		opts = append(opts, spec.ReuseNone())
+		// TODO(darryl): Enable FIPS once we can upgrade to Ubuntu 22 and use cgroups v2 for disk stalls.
+		opts = append(opts, spec.Arch(spec.AllExceptFIPS))
+	}
 	return spec.MakeClusterSpec(v.numNodes+v.numWorkloadNodes, opts...)
 }
 
@@ -275,7 +455,14 @@ func (v variations) perturbationName() string {
 	if t.Kind() == reflect.Ptr {
 		t = t.Elem()
 	}
-	return t.Name()
+	name := t.Name()
+	// Allow a perturbation to append a variation suffix (e.g. "/asleep=true")
+	// so the same struct type can register multiple test entries that differ
+	// in configuration. See perturbationNamer.
+	if namer, ok := v.perturbation.(perturbationNamer); ok {
+		name += namer.nameSuffix()
+	}
+	return name
 }
 
 // finishSetup completes initialization of the variations.
@@ -295,6 +482,7 @@ func (v variations) finishSetup() variations {
 	}
 	// Enable raft tracing. Remove this once raft tracing is the default.
 	v.clusterSettings["kv.raft.max_concurrent_traces"] = "10"
+	v.clusterSettings["kvadmission.store.provisioned_bandwidth"] = v.diskBandwidthLimit
 	return v
 }
 
@@ -304,7 +492,7 @@ func (v *variations) applyEnvOverride(key string, val string) (err error) {
 	case "fillDuration":
 		v.fillDuration, err = time.ParseDuration(val)
 	case "blockSize":
-		v.maxBlockBytes, err = strconv.Atoi(val)
+		v.blockSize, err = strconv.Atoi(val)
 	case "perturbationDuration":
 		v.perturbationDuration, err = time.ParseDuration(val)
 	case "validationDuration":
@@ -326,6 +514,8 @@ func (v *variations) applyEnvOverride(key string, val string) (err error) {
 		if v.mem == -1 {
 			err = errors.Errorf("unknown memory setting: %s", val)
 		}
+	case "diskBandwidthLimit":
+		v.diskBandwidthLimit = val
 	case "leaseType":
 		for _, l := range leases {
 			if l.String() == val {
@@ -356,42 +546,168 @@ func (v *variations) applyEnvOverride(key string, val string) (err error) {
 	return err
 }
 
-func addMetamorphic(r registry.Registry, p perturbation) {
+var perturbationDefaultProcessFunction = func(test string, histograms *roachtestutil.HistogramMetric) (roachtestutil.AggregatedPerfMetrics, error) {
+	meanMetrics := make(map[string]roachtestutil.MetricPoint)
+
+	for _, summary := range histograms.Summaries {
+		meanMetrics[summary.Name] = summary.Values[0].Mean
+	}
+
+	var aggregatedMeanMetrics roachtestutil.AggregatedPerfMetrics
+	for key, value := range meanMetrics {
+		aggregatedMeanMetrics = append(aggregatedMeanMetrics, &roachtestutil.AggregatedMetric{
+			Name:             fmt.Sprintf("%s_%s_mean", test, key),
+			Value:            value / 1e6,
+			Unit:             "x baseline",
+			IsHigherBetter:   false,
+			AdditionalLabels: nil,
+		})
+	}
+
+	return aggregatedMeanMetrics, nil
+}
+
+// applyTimeout copies v.timeout into spec.Timeout when non-zero so tests
+// that need to override the registry default can do so by setting one
+// variations field, without each add* function repeating the check.
+func (v variations) applyTimeout(spec *registry.TestSpec) {
+	if v.timeout > 0 {
+		spec.Timeout = v.timeout
+	}
+}
+
+//lint:ignore U1000 unused
+func addMetamorphic(r registry.Registry, p perturbation, skipReason string) {
 	rng, seed := randutil.NewPseudoRand()
 	v := p.setupMetamorphic(rng)
 	v.seed = seed
+	// Some perturbations need to scale down for the metamorphic variant
+	// (the randomized clusters this suite picks are smaller than the
+	// dedicated nightly cluster). They implement metamorphicSizer to
+	// return a shrunk version of themselves.
+	if ms, ok := v.perturbation.(metamorphicSizer); ok {
+		v.perturbation = ms.sizeForMetamorphic()
+	}
 	v = v.finishSetup()
-	r.Add(registry.TestSpec{
-		Name:             fmt.Sprintf("perturbation/metamorphic/%s", v.perturbationName()),
-		CompatibleClouds: v.cloud,
-		Suites:           registry.Suites(registry.Perturbation),
-		Owner:            registry.OwnerKV,
-		Cluster:          v.makeClusterSpec(),
-		Leases:           v.leaseType,
-		Randomized:       true,
-		Run:              v.runTest,
-	})
+	spec := registry.TestSpec{
+		Name:                   fmt.Sprintf("perturbation/metamorphic/%s", v.perturbationName()),
+		Skip:                   skipReason,
+		CompatibleClouds:       v.cloud,
+		Suites:                 registry.Suites(registry.Perturbation),
+		Owner:                  registry.OwnerKV,
+		Cluster:                v.makeClusterSpec(),
+		Leases:                 v.leaseType,
+		Randomized:             true,
+		SkipPostValidations:    v.skipPostValidations,
+		PostProcessPerfMetrics: perturbationDefaultProcessFunction,
+		Run:                    v.runTest,
+	}
+	v.applyTimeout(&spec)
+	r.Add(spec)
 }
 
-func addFull(r registry.Registry, p perturbation) {
+func addFull(r registry.Registry, p perturbation, skipReason string) {
 	v := p.setup()
 	v = v.finishSetup()
-	r.Add(registry.TestSpec{
-		Name:             fmt.Sprintf("perturbation/full/%s", v.perturbationName()),
+	spec := registry.TestSpec{
+		Name:                   fmt.Sprintf("perturbation/full/%s", v.perturbationName()),
+		Skip:                   skipReason,
+		CompatibleClouds:       v.cloud,
+		Suites:                 registry.Suites(registry.Nightly),
+		Owner:                  registry.OwnerKV,
+		Cluster:                v.makeClusterSpec(),
+		Leases:                 v.leaseType,
+		Benchmark:              true,
+		SkipPostValidations:    v.skipPostValidations,
+		PostProcessPerfMetrics: perturbationDefaultProcessFunction,
+		Run:                    v.runTest,
+	}
+	v.applyTimeout(&spec)
+	r.Add(spec)
+}
+
+// addLong registers a heavyweight variant of a perturbation test that runs
+// significantly longer than addFull. It is intended for cases where the
+// perturbation only becomes interesting at scale (e.g. a restart that needs a
+// non-trivial backlog to surface IO-overload behavior on recovery), and
+// belongs to the Weekly suite to keep the nightly footprint small. Individual
+// callers can override variations fields after p.setup() to tune what "long"
+// means for their perturbation; the timeout below is sized for the longest
+// expected fill-plus-perturbation we currently configure.
+//
+// What the long fill buys, and what it does not:
+//
+// The 2h fill duration grows the LSM and range count on the surviving nodes
+// so that ongoing compactions, snapshot generation, and lease bookkeeping at
+// the time of the perturbation reflect a non-trivial steady-state cluster,
+// rather than a freshly-initialized one. It does NOT enlarge the raft gap
+// the perturbed node has to close on recovery -- that gap is set by
+// perturbationDuration (default 10 minutes) and the cluster's write rate
+// during the measurement phase.
+//
+// Napkin math for the restart variant on the default 12-node, 16 vcpu,
+// localSSD spec with 50/50 r/w (50% follower-reads), 4 KiB blocks, and
+// splits=10000: cluster max throughput measures around 80k ops/s, so at
+// ratioOfMax=0.5 the measurement workload sustains ~20k writes/s. A 10
+// minute downtime therefore produces ~12 GiB of cluster-wide raft data
+// destined for the down node's ranges. With ~25% of replicas on a
+// 12-node RF=3 cluster across 10000 splits, the down node owns ~2500
+// ranges, so the average per-range raft log accumulated against it is
+// ~5 MiB. That sits below RaftLogTruncationThreshold (16 MiB; see
+// pkg/base/config.go), so most ranges should recover via log replay
+// rather than raft snapshots; if the per-range write skew, the cluster
+// throughput, or perturbationDuration grow, the average will cross that
+// threshold and the cost mix shifts toward snapshot ingest.
+func addLong(r registry.Registry, p perturbation) {
+	v := p.setup()
+	v.fillDuration = 2 * time.Hour
+	v = v.finishSetup()
+	spec := registry.TestSpec{
+		Name:             fmt.Sprintf("perturbation/long/%s", v.perturbationName()),
 		CompatibleClouds: v.cloud,
-		Suites:           registry.Suites(registry.Nightly),
+		Suites:           registry.Suites(registry.Weekly),
 		Owner:            registry.OwnerKV,
 		Cluster:          v.makeClusterSpec(),
 		Leases:           v.leaseType,
 		Benchmark:        true,
-		Run:              v.runTest,
-	})
+		// The expected runtime is around 2h45m (2h fill + 10m perturbation +
+		// validation/recovery windows + teardown). The timeout is set well
+		// above that — it is a backstop for pathological cases (everything
+		// seizing up in a way that does not surface as a test failure) and
+		// not a target. Perturbations that need longer (e.g. heavier fill)
+		// can override via v.timeout, applied via applyTimeout below.
+		Timeout: 6 * time.Hour,
+		// The 2h fill produces enough data that the post-test replica
+		// divergence check exceeds its 20m budget, mirroring the carve-out
+		// for large block sizes in pkg/cmd/roachtest/tests/kv.go (see
+		// #141007). The divergence-check timeout is logged but does not
+		// fail the test; we skip it explicitly to keep the artifact clean.
+		SkipPostValidations:    registry.PostValidationReplicaDivergence,
+		PostProcessPerfMetrics: perturbationDefaultProcessFunction,
+		Run:                    v.runTest,
+	}
+	v.applyTimeout(&spec)
+	r.Add(spec)
 }
 
 func addDev(r registry.Registry, p perturbation) {
 	v := p.setup()
-	// Dev tests never fail on latency increases.
-	v.acceptableChange = math.Inf(1)
+	// Dev tests never fail on latency or throughput changes — local
+	// processes on a developer machine are too noisy for either to be
+	// meaningful. Zero out both intervals' thresholds. recoveryImpact
+	// must be zeroed explicitly even though impact is also zero: a
+	// perturbation setup that set recoveryImpact to a non-zero value
+	// would otherwise survive and gate the dev run.
+	v.impact = noImpactThresholds()
+	v.recoveryImpact = acceptableImpact{}
+	// Clear any per-test timeout override; the registry default is fine
+	// for a 30-second perturbation on a 5-node local cluster, and an
+	// override sized for the nightly variant (e.g. several hours) would
+	// hide hangs in the dev run. Same reasoning for tokenReturnTime:
+	// the nightly override (e.g. 1h) wildly overshoots what's
+	// meaningful on a 5-node local cluster.
+	v.timeout = 0
+	v.tokenReturnTime = 0
 	// Make the tests faster for development.
 	v.splits = 1
 	v.numNodes = 5
@@ -413,16 +729,26 @@ func addDev(r registry.Registry, p perturbation) {
 
 	// Allow the test to run on dev machines.
 	v.cloud = registry.AllClouds
+	// Some perturbations need to scale down for the dev variant (smaller
+	// cluster, faster wall time). They implement devSizer to return a
+	// shrunk version of themselves.
+	if ds, ok := v.perturbation.(devSizer); ok {
+		v.perturbation = ds.sizeForDev()
+	}
 	v = v.finishSetup()
-	r.Add(registry.TestSpec{
-		Name:             fmt.Sprintf("perturbation/dev/%s", v.perturbationName()),
-		CompatibleClouds: v.cloud,
-		Suites:           registry.ManualOnly,
-		Owner:            registry.OwnerKV,
-		Cluster:          v.makeClusterSpec(),
-		Leases:           v.leaseType,
-		Run:              v.runTest,
-	})
+	spec := registry.TestSpec{
+		Name:                   fmt.Sprintf("perturbation/dev/%s", v.perturbationName()),
+		CompatibleClouds:       v.cloud,
+		Suites:                 registry.ManualOnly,
+		Owner:                  registry.OwnerKV,
+		Cluster:                v.makeClusterSpec(),
+		Leases:                 v.leaseType,
+		Benchmark:              true,
+		PostProcessPerfMetrics: perturbationDefaultProcessFunction,
+		Run:                    v.runTest,
+	}
+	v.applyTimeout(&spec)
+	r.Add(spec)
 }
 
 type perturbation interface {
@@ -447,11 +773,35 @@ type perturbation interface {
 	endPerturbation(ctx context.Context, t test.Test, v variations) time.Duration
 }
 
-func prettyPrint(title string, stats map[string]trackedStat) string {
+// perturbationNamer is an optional interface a perturbation may implement to
+// append a variation suffix to its test name. For example, a perturbation
+// that registers two flavors of the same struct can return "/asleep=true"
+// and "/asleep=false" to produce distinct test names like
+// "perturbation/full/splits/asleep=true".
+//
+// Implementations should return either an empty string (no suffix) or a
+// string starting with "/" so the test name reads naturally when composed
+// with the parent path.
+type perturbationNamer interface {
+	nameSuffix() string
+}
+
+// devSizer is an optional interface for perturbations that need to shrink
+// themselves for the dev variant (small cluster, fast wall time). addDev
+// invokes sizeForDev() if the perturbation implements it.
+type devSizer interface {
+	sizeForDev() perturbation
+}
+
+// metamorphicSizer is the same idea as devSizer for the metamorphic variant.
+type metamorphicSizer interface {
+	sizeForMetamorphic() perturbation
+}
+
+func prettyPrint(title string, stats map[string]aggregatedStat) string {
 	var outputStr strings.Builder
 	outputStr.WriteString(title + "\n")
-	keys := sortedStringKeys(stats)
-	for _, name := range keys {
+	for _, name := range slices.Sorted(maps.Keys(stats)) {
 		outputStr.WriteString(fmt.Sprintf("%-15s: %s\n", name, stats[name]))
 	}
 	return outputStr.String()
@@ -473,8 +823,7 @@ func intervalSince(d time.Duration) interval {
 }
 
 type workloadData struct {
-	score scoreCalculator
-	data  map[string]map[time.Time]trackedStat
+	data map[string]map[time.Time]trackedStat
 }
 
 func (w workloadData) String() string {
@@ -507,57 +856,82 @@ func (w workloadData) addTicks(ticks []cli.Tick) {
 		}
 		stat := w.convert(tick)
 		if _, ok := w.data[tick.Type][tick.Time]; ok {
-			w.data[tick.Type][tick.Time] = w.data[tick.Type][tick.Time].merge(stat, w.score)
+			w.data[tick.Type][tick.Time] = w.data[tick.Type][tick.Time].merge(stat)
 		} else {
 			w.data[tick.Type][tick.Time] = stat
 		}
 	}
 }
 
-// calculateScore calculates the score for a given tick. It can be interpreted
-// as the single core operation latency.
-func (v variations) calculateScore(t cli.Tick) time.Duration {
-	if t.Throughput == 0 {
-		// Use a non-infinite score that is still very high if there was a period of no throughput.
-		return time.Hour
-	}
-	return time.Duration(math.Sqrt((float64(v.numNodes*v.vcpu) * float64((t.P50+t.P99)/2)) / t.Throughput * float64(time.Second)))
-}
-
 func (w workloadData) convert(t cli.Tick) trackedStat {
 	// Align to the second boundary to make the stats from different nodes overlap.
 	t.Time = t.Time.Truncate(time.Second)
-	return trackedStat{Tick: t, score: w.score(t)}
+	return trackedStat{Tick: t}
 }
 
-// worstStats returns the worst stats for a given interval for each of the
-// tracked data types.
-func (w workloadData) worstStats(i interval) map[string]trackedStat {
-	m := make(map[string]trackedStat)
+// ticksInInterval returns per-second ticks grouped by operation type for the
+// given time interval.
+func (w workloadData) ticksInInterval(i interval) map[string][]trackedStat {
+	result := make(map[string][]trackedStat)
 	for name, stats := range w.data {
-		for time, stat := range stats {
-			if time.After(i.start) && time.Before(i.end) {
-				if cur, ok := m[name]; ok {
-					if stat.score > cur.score {
-						m[name] = stat
-					}
-				} else {
-					m[name] = stat
-				}
+		for t, stat := range stats {
+			if t.After(i.start) && t.Before(i.end) {
+				result[name] = append(result[name], stat)
 			}
 		}
 	}
-	return m
+	return result
+}
+
+// aggregateStats computes summary statistics for each operation type within
+// the given interval. Used for display/logging only.
+func (w workloadData) aggregateStats(i interval) map[string]aggregatedStat {
+	ticksByType := w.ticksInInterval(i)
+
+	result := make(map[string]aggregatedStat)
+	for name, ticks := range ticksByType {
+		p50s := make([]time.Duration, len(ticks))
+		p99s := make([]time.Duration, len(ticks))
+		tputs := make([]float64, len(ticks))
+		for i, t := range ticks {
+			p50s[i] = t.P50
+			p99s[i] = t.P99
+			tputs[i] = t.Throughput
+		}
+		slices.Sort(p50s)
+		slices.Sort(p99s)
+		slices.Sort(tputs)
+
+		result[name] = aggregatedStat{
+			medianP99:  p99s[percentileIdx(len(p99s), 0.50)],
+			medianTput: tputs[percentileIdx(len(tputs), 0.50)],
+			p99:        p99s[percentileIdx(len(p99s), 0.95)],
+			p50:        p50s[percentileIdx(len(p50s), 0.95)],
+			throughput: tputs[percentileIdx(len(tputs), 0.05)],
+			ticks:      len(ticks),
+		}
+	}
+	return result
+}
+
+// percentileIdx returns the index corresponding to the given percentile in a
+// sorted slice of length n.
+func percentileIdx(n int, pct float64) int {
+	return min(int(float64(n)*pct), n-1)
 }
 
 // runTest is the main entry point for all the tests. Its ste
 func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster) {
 	v.Cluster = c
-	t.L().Printf("test variations are: %+v", v)
+	params := v.getParameterMap()
+	for k, val := range params {
+		t.AddParam(k, val)
+		t.L().Printf("%s: %s", k, val)
+	}
 	t.Status("T0: starting nodes")
 
 	// Track the three operations that we are sending in this test.
-	m := c.NewMonitor(ctx, v.stableNodes())
+	m := c.NewDeprecatedMonitor(ctx, v.stableNodes())
 
 	// Start the stable nodes and let the perturbation start the target node(s).
 	v.startNoBackup(ctx, t, v.stableNodes())
@@ -583,7 +957,12 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 	_, err := v.workload.runWorkload(ctx, v, v.fillDuration, 0)
 	require.NoError(t, err)
 
-	// Start the consistent workload and begin collecting profiles.
+	// Start the consistent workload and begin collecting profiles. Enable
+	// histogram export for this workload (not the fill) and disable the
+	// temp file so that data is written directly — the measurement workload
+	// is cancelled via context, and the temp-file-then-rename pattern would
+	// lose all data on cancellation.
+	v.histogramArgs = " " + roachtestutil.GetWorkloadHistogramString(t, c, nil, true /* disableTempFile */)
 	var stableRatePerNode int
 	select {
 	case rate := <-clusterMaxRate:
@@ -608,6 +987,14 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 
 	// Collect the baseline after the workload has stabilized.
 	baselineInterval := intervalSince(v.validationDuration / 2)
+
+	// Let any in-flight rebalancing settle before perturbing. The fill phase
+	// can leave per-store range counts noticeably skewed: when the perturbed
+	// node returns and the cluster tries to re-balance to its underfull
+	// stores, the snapshot storm concentrates on one store and can push it
+	// into a Pebble write stall.
+	v.waitForRebalanceToStop(ctx, t)
+
 	// Now start the perturbation.
 	t.Status("T3: inducing perturbation")
 	perturbationDuration := v.perturbation.startPerturbation(ctx, t, v)
@@ -621,12 +1008,15 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 	t.L().Printf("Perturbation interval : %s", perturbationInterval)
 	t.L().Printf("Recovery interval     : %s", afterInterval)
 
+	// Write phase boundaries so roachperf can annotate workload charts.
+	writePhases(ctx, t, v, baselineInterval, perturbationInterval, afterInterval)
+
 	cancelWorkload()
 	require.NoError(t, m.WaitE())
 
-	baselineStats := data.worstStats(baselineInterval)
-	perturbationStats := data.worstStats(perturbationInterval)
-	afterStats := data.worstStats(afterInterval)
+	baselineStats := data.aggregateStats(baselineInterval)
+	perturbationStats := data.aggregateStats(perturbationInterval)
+	afterStats := data.aggregateStats(afterInterval)
 
 	t.L().Printf("%s\n", prettyPrint("Baseline stats", baselineStats))
 	t.L().Printf("%s\n", prettyPrint("Perturbation stats", perturbationStats))
@@ -634,16 +1024,37 @@ func (v variations) runTest(ctx context.Context, t test.Test, c cluster.Cluster)
 
 	t.Status("T5: validating results")
 	require.NoError(t, roachtestutil.DownloadProfiles(ctx, c, t.L(), t.ArtifactsDir()))
-
-	require.NoError(t, v.writePerfArtifacts(ctx, t, c, baselineStats, perturbationStats,
-		afterStats))
+	require.NoError(t, v.writePerfArtifacts(ctx, t, baselineStats, perturbationStats, afterStats))
 
 	t.L().Printf("validating stats during the perturbation")
-	failures := isAcceptableChange(t.L(), baselineStats, perturbationStats, v.acceptableChange)
+	failures := isAcceptableChange(t.L(), baselineStats, perturbationStats, v.impact)
 	t.L().Printf("validating stats after the perturbation")
-	failures = append(failures, isAcceptableChange(t.L(), baselineStats, afterStats, v.acceptableChange)...)
-	require.True(t, len(failures) == 0, strings.Join(failures, "\n"))
-	roachtestutil.ValidateTokensReturned(ctx, t, v, v.stableNodes())
+	// recoveryImpact is the zero value by default; fall back to impact so
+	// callers that don't care about separate thresholds get the obvious
+	// behavior automatically.
+	recovery := v.recoveryImpact
+	if recovery == (acceptableImpact{}) {
+		recovery = v.impact
+	}
+	failures = append(failures, isAcceptableChange(t.L(), baselineStats, afterStats, recovery)...)
+	if len(failures) > 0 {
+		// Collect perf artifacts before failing so that roachperf still gets
+		// the data for this run.
+		artifactsutil.CollectPerfArtifacts(ctx, t, c)
+		require.Fail(t, strings.Join(failures, "\n"))
+	}
+	// Per-test override wins; otherwise fall back to the previous default
+	// (10m, lifted to 1h when a disk bandwidth limit is set per #137017).
+	// TODO(baptist): Look at the time for token return in actual tests to
+	// determine if the default can be lowered further.
+	tokenReturnTime := v.tokenReturnTime
+	if tokenReturnTime == 0 {
+		tokenReturnTime = 10 * time.Minute
+		if v.diskBandwidthLimit != "0" {
+			tokenReturnTime = 1 * time.Hour
+		}
+	}
+	roachtestutil.ValidateTokensReturned(ctx, t, v, v.stableNodes(), tokenReturnTime)
 }
 
 func (v variations) applyClusterSettings(ctx context.Context, t test.Test) {
@@ -658,62 +1069,72 @@ func (v variations) applyClusterSettings(ctx context.Context, t test.Test) {
 	}
 }
 
-// trackedStat is a collection of the relevant values from the histogram. The
-// score is computed based on the time per operation per core and blended
-// latency of P50 and P99. Lower scores are better.
+// trackedStat wraps a cli.Tick to support merging stats from multiple nodes at
+// the same timestamp.
 type trackedStat struct {
 	cli.Tick
-	score time.Duration
 }
-
-type scoreCalculator func(cli.Tick) time.Duration
 
 func (t trackedStat) String() string {
-	return fmt.Sprintf("%s: score: %s, qps: %d, p50: %s, p99: %s, pMax: %s",
-		t.Time, t.score, int(t.Throughput), t.P50, t.P99, t.PMax)
+	return fmt.Sprintf("%s: qps: %d, p50: %s, p99: %s, pMax: %s",
+		t.Time, int(t.Throughput), t.P50, t.P99, t.PMax)
 }
 
-// merge two stats together. Note that this isn't really a merge of the P99, but
-// the other merges are fairly accurate.
-func (t trackedStat) merge(o trackedStat, c scoreCalculator) trackedStat {
-	tick := cli.Tick{
+// merge combines stats from two nodes at the same timestamp. Throughput is
+// summed, latency percentiles are averaged (an approximation, but workable
+// given similar node profiles), and pMax takes the worst case.
+func (t trackedStat) merge(o trackedStat) trackedStat {
+	return trackedStat{Tick: cli.Tick{
 		Time:       t.Time,
 		Throughput: t.Throughput + o.Throughput,
 		P50:        (t.P50 + o.P50) / 2,
 		P99:        (t.P99 + o.P99) / 2,
 		PMax:       max(t.PMax, o.PMax),
-	}
-	return trackedStat{
-		Tick:  tick,
-		score: max(t.score, o.score),
-	}
+	}}
 }
 
-// isAcceptableChange determines if a change from the baseline is acceptable.
-// It compares all the metrics rather than failing fast. Normally multiple
-// metrics will fail at once if a test is going to fail and it is helpful to see
-// all the differences.
-// This returns an array of strings with the reason(s) the change was too large.
+// isAcceptableChange checks whether the impact ratios (same values shown on
+// roachperf) stay within the configured limits. For each operation type it
+// compares the p95(p99/s), p95(p50/s), and p5(tput/s) of the measured
+// interval against the baseline.
 func isAcceptableChange(
-	logger *logger.Logger, baseline, other map[string]trackedStat, acceptableChange float64,
+	logger *logger.Logger, baseline, other map[string]aggregatedStat, limits acceptableImpact,
 ) []string {
-	// This can happen if we aren't measuring one of the phases.
 	var failures []string
-	if len(other) == 0 {
-		return failures
-	}
-	keys := sortedStringKeys(baseline)
+	for _, name := range slices.Sorted(maps.Keys(baseline)) {
+		stats, ok := other[name]
+		if !ok {
+			continue
+		}
+		base := baseline[name]
 
-	for _, name := range keys {
-		baseStat := baseline[name]
-		otherStat := other[name]
-		increase := float64(otherStat.score) / float64(baseStat.score)
-		if increase > acceptableChange {
-			failure := fmt.Sprintf("FAILURE: %-15s: Increase %.4f > %.4f BASE: %v SCORE: %v\n", name, increase, acceptableChange, baseStat.score, otherStat.score)
-			logger.Printf(failure)
-			failures = append(failures, failure)
-		} else {
-			logger.Printf("PASSED : %-15s: Increase %.4f <= %.4f BASE: %v SCORE: %v\n", name, increase, acceptableChange, baseStat.score, otherStat.score)
+		check := func(label, baseStr, gotStr string, ratio, limit float64) {
+			if ratio > limit {
+				f := fmt.Sprintf(
+					"FAILURE: %-15s: %s ratio %.2fx exceeds limit %.1fx (baseline: %s, measured: %s)",
+					name, label, ratio, limit, baseStr, gotStr)
+				logger.Printf(f)
+				failures = append(failures, f)
+				return
+			}
+			logger.Printf("PASSED : %-15s: %s ratio %.2fx within limit %.1fx", name, label, ratio, limit)
+		}
+
+		// Latency impact uses the p95(p99/s) and p95(p50/s) ratios; throughput
+		// uses p5(tput/s) inverted so higher = worse.
+		if base.p99 > 0 {
+			check("p99", base.p99.String(), stats.p99.String(),
+				float64(stats.p99)/float64(base.p99), limits.maxP99Impact)
+		}
+		if base.p50 > 0 {
+			check("p50", base.p50.String(), stats.p50.String(),
+				float64(stats.p50)/float64(base.p50), limits.maxP50Impact)
+		}
+		if base.throughput > 0 {
+			check("throughput",
+				fmt.Sprintf("%.0f ops/s", base.throughput),
+				fmt.Sprintf("%.0f ops/s", stats.throughput),
+				base.throughput/nonZero(stats.throughput), limits.maxThroughputImpact)
 		}
 	}
 	return failures
@@ -827,26 +1248,50 @@ func waitDuration(ctx context.Context, duration time.Duration) {
 	}
 }
 
-func sortedStringKeys(m map[string]trackedStat) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
+// writePhases writes a phases.json file alongside the workload's stats.json so
+// that roachperf can annotate charts with phase boundaries. The timestamps use
+// RFC3339Nano, matching the "Now" field in the workload's stats.json output.
+func writePhases(
+	ctx context.Context, t test.Test, v variations, baseline, perturbation, after interval,
+) {
+	type phaseInterval struct {
+		Start string `json:"start"`
+		End   string `json:"end"`
 	}
-	sort.Strings(keys)
-	return keys
+	phases := map[string]phaseInterval{
+		"baseline":     {baseline.start.Format(time.RFC3339Nano), baseline.end.Format(time.RFC3339Nano)},
+		"perturbation": {perturbation.start.Format(time.RFC3339Nano), perturbation.end.Format(time.RFC3339Nano)},
+		"recovery":     {after.start.Format(time.RFC3339Nano), after.end.Format(time.RFC3339Nano)},
+	}
+	buf, err := json.Marshal(phases)
+	if err != nil {
+		t.L().Printf("failed to marshal phases: %v", err)
+		return
+	}
+	dest := filepath.Join(t.PerfArtifactsDir(), "phases.json")
+	if err := v.PutString(ctx, string(buf), dest, 0644, v.workloadNodes()); err != nil {
+		t.L().Printf("failed to write phases.json: %v", err)
+	}
 }
 
-// writePerfArtifacts writes the stats file in the right format to node 1 so it
-// can be picked up by roachperf. Currently it only writes the write stats since
-// there would be too many lines on the graph otherwise.
+// writePerfArtifacts writes the stats file in the right format to node 1 so
+// it can be picked up by roachperf. For each operation type and phase, it
+// records threshold-independent impact ratios:
+//
+//   - p95(p99/s) ratio: p95 of per-second p99 latencies / baseline median p99.
+//     ~1.0 when healthy, higher = worse. The p95 filters single-second spikes
+//     while catching sustained degradation.
+//   - p5(tput/s) ratio: baseline median throughput / p5 of per-second throughput.
+//     ~1.0 when healthy, higher = worse (inverted so direction matches latency).
+//
+// To pass ratios through the HDR histogram pipeline (which expects
+// time.Duration nanoseconds) and roachperf's perturbationValues (which
+// divides by 1e6), we record time.Duration(ratio * float64(time.Millisecond)).
+// The 1e6 cancels out, yielding the raw ratio value.
 func (v variations) writePerfArtifacts(
-	ctx context.Context,
-	t test.Test,
-	c cluster.Cluster,
-	baseline, perturbation, recovery map[string]trackedStat,
+	ctx context.Context, t test.Test, baseline, perturbation, recovery map[string]aggregatedStat,
 ) error {
-
-	exporter := roachtestutil.CreateWorkloadHistogramExporter(t, c)
+	exporter := roachtestutil.CreateWorkloadHistogramExporter(t, v)
 
 	reg := histogram.NewRegistryWithExporter(
 		time.Second,
@@ -857,18 +1302,61 @@ func (v variations) writePerfArtifacts(
 	bytesBuf := bytes.NewBuffer([]byte{})
 	writer := io.Writer(bytesBuf)
 	exporter.Init(&writer)
-	defer roachtestutil.CloseExporter(ctx, exporter, t, c, bytesBuf, v.Node(1), "")
+	defer roachtestutil.CloseExporter(ctx, exporter, t, v, bytesBuf, v.Node(1), "")
 
-	reg.GetHandle().Get("baseline").Record(baseline["write"].score)
-	reg.GetHandle().Get("perturbation").Record(perturbation["write"].score)
-	reg.GetHandle().Get("recovery").Record(recovery["write"].score)
+	for _, op := range slices.Sorted(maps.Keys(baseline)) {
+		base := baseline[op]
+
+		// p95(p99/s) ratio relative to baseline p95(p99/s). ~1.0 = no change.
+		if base.p99 > 0 {
+			for phase, stats := range map[string]aggregatedStat{
+				"perturbation": perturbation[op],
+				"recovery":     recovery[op],
+			} {
+				ratio := float64(stats.p99) / float64(base.p99)
+				reg.GetHandle().Get(op + "/p99_ratio/" + phase).Record(
+					time.Duration(ratio * float64(time.Millisecond)))
+			}
+		}
+
+		// p95(p50/s) ratio relative to baseline p95(p50/s). Less noisy than
+		// the p99 ratio, useful for detecting sustained latency shifts.
+		if base.p50 > 0 {
+			for phase, stats := range map[string]aggregatedStat{
+				"perturbation": perturbation[op],
+				"recovery":     recovery[op],
+			} {
+				ratio := float64(stats.p50) / float64(base.p50)
+				reg.GetHandle().Get(op + "/p50_ratio/" + phase).Record(
+					time.Duration(ratio * float64(time.Millisecond)))
+			}
+		}
+
+		// p5(tput/s) ratio relative to baseline p5(tput/s). ~1.0 = no change,
+		// >1 = throughput dropped.
+		if base.throughput > 0 {
+			for phase, stats := range map[string]aggregatedStat{
+				"perturbation": perturbation[op],
+				"recovery":     recovery[op],
+			} {
+				ratio := base.throughput / nonZero(stats.throughput)
+				reg.GetHandle().Get(op + "/tput_ratio/" + phase).Record(
+					time.Duration(ratio * float64(time.Millisecond)))
+			}
+		}
+	}
 
 	var err error
 	reg.Tick(func(tick histogram.Tick) {
 		err = tick.Exporter.SnapshotAndWrite(tick.Hist, tick.Now, tick.Elapsed, &tick.Name)
 	})
-	if err != nil {
-		return err
+	return err
+}
+
+// nonZero returns v if positive, or 1e-9 to avoid division by zero.
+func nonZero(v float64) float64 {
+	if v > 0 {
+		return v
 	}
-	return nil
+	return 1e-9
 }

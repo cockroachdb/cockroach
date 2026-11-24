@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -16,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base/serverident"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/errors"
@@ -41,9 +43,9 @@ func TestRedactedLogOutput(t *testing.T) {
 
 	ctx := context.Background()
 	sysIDPayload := testIDPayload{tenantID: "1"}
-	ctx = context.WithValue(ctx, serverident.ServerIdentificationContextKey{}, sysIDPayload)
+	ctx = serverident.ContextWithServerIdentification(ctx, sysIDPayload)
 
-	Errorf(ctx, "test1 %v end", "hello")
+	Dev.Errorf(ctx, "test1 %v end", "hello")
 	if contains(redactableIndicator, t) {
 		t.Errorf("expected no marker indicator, got %q", contents())
 	}
@@ -54,14 +56,14 @@ func TestRedactedLogOutput(t *testing.T) {
 	// markers are disabled.
 	resetCaptured()
 
-	Errorf(ctx, "test2 %v end", startRedactable+"hello"+endRedactable)
+	Dev.Errorf(ctx, "test2 %v end", startRedactable+"hello"+endRedactable)
 	if !contains("test2 ?hello? end", t) {
 		t.Errorf("expected escaped markers, got %q", contents())
 	}
 
 	resetCaptured()
 	_ = TestingSetRedactable(true)
-	Errorf(ctx, "test3 %v end", "hello")
+	Dev.Errorf(ctx, "test3 %v end", "hello")
 	if !contains(redactableIndicator+" [T1] 3  test3", t) {
 		t.Errorf("expected marker indicator, got %q", contents())
 	}
@@ -71,7 +73,7 @@ func TestRedactedLogOutput(t *testing.T) {
 
 	// Verify that safe parts of errors don't get enclosed in redaction markers
 	resetCaptured()
-	Errorf(ctx, "test3e %v end",
+	Dev.Errorf(ctx, "test3e %v end",
 		errors.AssertionFailedf("hello %v",
 			errors.Newf("error-in-error %s", "world"))) // nolint:errwrap
 	if !contains(redactableIndicator+" [T1] 4  test3e", t) {
@@ -85,7 +87,7 @@ func TestRedactedLogOutput(t *testing.T) {
 	resetCaptured()
 
 	const specialString = "x" + startRedactable + "hello" + endRedactable + "y"
-	Errorf(ctx, "test4 %v end", specialString)
+	Dev.Errorf(ctx, "test4 %v end", specialString)
 	if contains(specialString, t) {
 		t.Errorf("expected markers to be removed, got %q", contents())
 	}
@@ -127,12 +129,11 @@ func TestSafeManaged(t *testing.T) {
 				RedactionPolicyManaged = initRedactionPolicyManaged
 			}()
 
-			TestingResetActive()
 			cfg := logconfig.DefaultConfig()
 			if err := cfg.Validate(&s.logDir); err != nil {
 				t.Fatal(err)
 			}
-			cleanupFn, err := ApplyConfig(cfg, nil /* fileSinkMetricsForDir */, nil /* fatalOnLogStall */)
+			cleanupFn, err := ApplyConfigForReconfig(cfg, nil /* fileSinkMetricsForDir */, nil /* fatalOnLogStall */)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -170,7 +171,7 @@ func TestRedactedDecodeFile(t *testing.T) {
 			s.Rotate(t)
 
 			// Emit the message of interest for this test.
-			Infof(context.Background(), "marker: this is safe, stray marks ‹›, %s", "this is not safe")
+			Dev.Infof(context.Background(), "marker: this is safe, stray marks ‹›, %s", "this is not safe")
 
 			// Retrieve the log writer and log location for this test.
 			debugSink := debugLog.getFileSink()
@@ -223,7 +224,7 @@ func TestDefaultRedactable(t *testing.T) {
 
 	// Check redaction markers in the output.
 	defer capture()()
-	Infof(context.Background(), "safe %s", "unsafe")
+	Dev.Infof(context.Background(), "safe %s", "unsafe")
 
 	if !contains("safe "+startRedactable+"unsafe"+endRedactable, t) {
 		t.Errorf("expected marked data, got %q", contents())
@@ -235,7 +236,7 @@ func TestDefaultRedactable(t *testing.T) {
 
 		// when "default safe" redaction is enabled, we need to explicitly
 		// mark the unsafe arg as unsafe.
-		Infof(context.Background(), "safe %s", encoding.Unsafe("unsafe"))
+		Dev.Infof(context.Background(), "safe %s", encoding.Unsafe("unsafe"))
 		if !contains("safe "+startRedactable+"unsafe"+endRedactable, t) {
 			t.Errorf("expected marked data, got %q", contents())
 		}
@@ -328,7 +329,7 @@ func TestDefaultSafeRedaction(t *testing.T) {
 	for _, tc := range tt {
 		t.Run(tc.name, func(t *testing.T) {
 			defer capture()()
-			Infof(context.Background(), "%v", tc.args)
+			Dev.Infof(context.Background(), "%v", tc.args)
 
 			messages := []string{} // there might be more than one log line. Collect all the messages
 			for _, line := range strings.Split(strings.TrimSpace(contents()), "\n") {
@@ -352,16 +353,133 @@ func parseLogEntry(t *testing.T, line string) logpb.Entry {
 	return entry
 }
 
+// TestHashRedaction verifies that hash-based redaction works through the
+// redact pipeline: HashString values produce a deterministic hash when
+// hashing is enabled, regular unsafe values still produce ×, and
+// disabling hashing reverts to full redaction.
+func TestHashRedaction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	redact.DisableHashing()
+	t.Cleanup(redact.DisableHashing)
+
+	hashAlice := func() string {
+		return string(redact.Sprintf("user=%s", redact.HashString("alice")).Redact())
+	}
+
+	t.Run("hash-string produces expected hash when enabled", func(t *testing.T) {
+		redact.EnableHashing(nil)
+		defer redact.DisableHashing()
+
+		require.Equal(t, "user=‹2bd806c9›", hashAlice())
+	})
+
+	t.Run("regular unsafe still fully redacted", func(t *testing.T) {
+		redact.EnableHashing(nil)
+		defer redact.DisableHashing()
+
+		got := string(redact.Sprintf("val=%s", "secret").Redact())
+		require.Equal(t, "val=‹×›", got)
+	})
+
+	t.Run("disabling hashing reverts to full redaction", func(t *testing.T) {
+		redact.EnableHashing(nil)
+		redact.DisableHashing()
+
+		require.Equal(t, "user=‹×›", hashAlice())
+	})
+}
+
+// TestHashRedactionPerSink verifies that hash-based redaction respects
+// per-sink redaction settings: a sink with redact=true should hash
+// HashString values while a sink with redact=false should show cleartext.
+func TestHashRedactionPerSink(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	redact.DisableHashing()
+	t.Cleanup(redact.DisableHashing)
+
+	s := ScopeWithoutShowLogs(t)
+	defer s.Close(t)
+
+	// Configure two file sinks:
+	//   "redacted" on SESSIONS channel with redact=true
+	//   "unredacted" on OPS channel with redact=false
+	cfg := logconfig.DefaultConfig()
+	bt, bf := true, false
+	cfg.Sinks.FileGroups = map[string]*logconfig.FileSinkConfig{
+		"redacted": {
+			FileDefaults: logconfig.FileDefaults{
+				CommonSinkConfig: logconfig.CommonSinkConfig{
+					Redact:     &bt,
+					Redactable: &bt,
+				},
+			},
+			Channels: logconfig.SelectChannels(channel.SESSIONS),
+		},
+		"unredacted": {
+			FileDefaults: logconfig.FileDefaults{
+				CommonSinkConfig: logconfig.CommonSinkConfig{
+					Redact:     &bf,
+					Redactable: &bt,
+				},
+			},
+			Channels: logconfig.SelectChannels(channel.OPS),
+		},
+	}
+	cfg.Redaction.Hashing.Enabled = true
+	cfg.Redaction.Hashing.Salt = "test-salt"
+	if err := cfg.Validate(&s.logDir); err != nil {
+		t.Fatal(err)
+	}
+
+	cleanup, err := ApplyConfigForReconfig(cfg, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+
+	// Log the same HashString value to both channels.
+	Sessions.Infof(context.Background(), "user=%s", redact.HashString("alice"))
+	Ops.Infof(context.Background(), "user=%s", redact.HashString("alice"))
+
+	FlushFiles()
+
+	// Read back the redacted sink — should contain a hash, not cleartext.
+	redactedLogger := logging.getLogger(channel.SESSIONS)
+	redactedFile := redactedLogger.getFileSink().getFileName(t)
+	redactedContents, err := os.ReadFile(redactedFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	require.NotContains(t, string(redactedContents), "alice",
+		"redacted sink should not contain cleartext")
+	require.NotContains(t, string(redactedContents), "‹×›",
+		"redacted sink should contain hash, not full redaction marker")
+	require.Contains(t, string(redactedContents), "user=‹",
+		"redacted sink should contain hashed value in markers")
+
+	// Read back the unredacted sink — should contain cleartext.
+	unredactedLogger := logging.getLogger(channel.OPS)
+	unredactedFile := unredactedLogger.getFileSink().getFileName(t)
+	unredactedContents, err := os.ReadFile(unredactedFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	require.Contains(t, string(unredactedContents), "alice",
+		"unredacted sink should contain cleartext")
+}
+
 func BenchmarkDefaultSafeRedaction(b *testing.B) {
 	defer leaktest.AfterTest(b)()
 	defer ScopeWithoutShowLogs(b).Close(b)
 	defer capture()()
 
 	printLogLines := func() {
-		Info(context.Background(), "safe")
-		Infof(context.Background(), "%s", sampleWithUnsafe{a: "safe", b: "unsafe"})
-		Infof(context.Background(), "%s", sampleSafe{a: "safe"})
-		Infof(
+		Dev.Info(context.Background(), "safe")
+		Dev.Infof(context.Background(), "%s", sampleWithUnsafe{a: "safe", b: "unsafe"})
+		Dev.Infof(context.Background(), "%s", sampleSafe{a: "safe"})
+		Dev.Infof(
 			context.Background(), "%s %s",
 			sampleWithUnsafe{a: "safe", b: "unsafe"}, sampleSafe{a: "safe"},
 		)

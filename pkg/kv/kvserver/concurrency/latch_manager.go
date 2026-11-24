@@ -8,12 +8,17 @@ package concurrency
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
-	"github.com/cockroachdb/redact"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
+
+// Node liveness heartbeats time out at 3s, so log slow latch acquisitions
+// sooner than 3s to help diagnose potential heartbeat failures.
+const slowLatchRequestThresholdSecondsOverride = 2
 
 // latchManagerImpl implements the latchManager interface.
 type latchManagerImpl struct {
@@ -21,7 +26,7 @@ type latchManagerImpl struct {
 }
 
 func (m *latchManagerImpl) Acquire(ctx context.Context, req Request) (latchGuard, *Error) {
-	lg, err := m.m.Acquire(ctx, req.LatchSpans, req.PoisonPolicy, req.BaFmt)
+	lg, err := m.m.Acquire(ctx, req.LatchSpans, req.PoisonPolicy, req.Batch)
 	if err != nil {
 		return nil, kvpb.NewError(err)
 	}
@@ -29,7 +34,7 @@ func (m *latchManagerImpl) Acquire(ctx context.Context, req Request) (latchGuard
 }
 
 func (m *latchManagerImpl) AcquireOptimistic(req Request) latchGuard {
-	lg := m.m.AcquireOptimistic(req.LatchSpans, req.PoisonPolicy, req.BaFmt)
+	lg := m.m.AcquireOptimistic(req.LatchSpans, req.PoisonPolicy, req.Batch)
 	return lg
 }
 
@@ -48,9 +53,9 @@ func (m *latchManagerImpl) WaitUntilAcquired(
 }
 
 func (m *latchManagerImpl) WaitFor(
-	ctx context.Context, ss *spanset.SpanSet, pp poison.Policy, baFmt redact.SafeFormatter,
+	ctx context.Context, ss *spanset.SpanSet, pp poison.Policy, ba *kvpb.BatchRequest,
 ) *Error {
-	err := m.m.WaitFor(ctx, ss, pp, baFmt)
+	err := m.m.WaitFor(ctx, ss, pp, ba)
 	if err != nil {
 		return kvpb.NewError(err)
 	}
@@ -67,4 +72,12 @@ func (m *latchManagerImpl) Release(ctx context.Context, lg latchGuard) {
 
 func (m *latchManagerImpl) Metrics() LatchMetrics {
 	return m.m.Metrics()
+}
+
+func (m *latchManagerImpl) OnRangeDescUpdated(desc *roachpb.RangeDescriptor) {
+	if keys.NodeLivenessSpan.Overlaps(desc.KeySpan().AsRawSpanWithNoLocals()) {
+		m.m.SetSlowLatchRequestThresholdOverride(slowLatchRequestThresholdSecondsOverride)
+	} else {
+		m.m.SetSlowLatchRequestThresholdOverride(0)
+	}
 }

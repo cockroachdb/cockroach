@@ -188,7 +188,7 @@ func repeatGitCloneE(
 func repeatGetLatestTag(
 	ctx context.Context, t test.Test, user string, repo string, releaseRegex *regexp.Regexp,
 ) (string, error) {
-	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/tags", user, repo)
+	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/tags?per_page=100", user, repo)
 	httpClient := &http.Client{Timeout: 10 * time.Second}
 	type Tag struct {
 		Name string
@@ -229,10 +229,10 @@ func repeatGetLatestTag(
 			t.L().Printf("error fetching - retrying: %s", lastError)
 			continue
 		}
-		defer resp.Body.Close()
 
 		var tags Tags
 		lastError = json.NewDecoder(resp.Body).Decode(&tags)
+		resp.Body.Close()
 		if lastError != nil {
 			t.L().Printf("error decoding - retrying: %s", lastError)
 			continue

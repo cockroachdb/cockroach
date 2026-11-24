@@ -84,7 +84,7 @@ func TestUpdateTableMetadataCacheAutomaticUpdates(t *testing.T) {
 	// Since this test explicitly calls DataValidDurationSetting.Override instead of using `SET CLUSTER SETTING`,
 	// there are no logs emitted when the setting  changes. This callback will do that logging.
 	DataValidDurationSetting.SetOnChange(&s.ClusterSettings().SV, func(ctx context.Context) {
-		log.Infof(ctx, "Updating data valid duration setting to %s",
+		log.Dev.Infof(ctx, "Updating data valid duration setting to %s",
 			DataValidDurationSetting.Get(&s.ClusterSettings().SV))
 
 	})
@@ -127,10 +127,10 @@ type mockUpdaterWithSignal struct {
 }
 
 func (m *mockUpdaterWithSignal) RunUpdater(ctx context.Context) error {
-	log.Info(ctx, "mockUpdater.RunUpdater started")
+	log.Dev.Info(ctx, "mockUpdater.RunUpdater started")
 	m.mockCalls = append(m.mockCalls, time.Now())
 	m.jobRunCh <- struct{}{}
-	log.Info(ctx, "mockUpdater.RunUpdater completed")
+	log.Dev.Info(ctx, "mockUpdater.RunUpdater completed")
 	return nil
 }
 

@@ -45,7 +45,7 @@ if ! (./build/bazelutil/check.sh &> artifacts/check-out.log || (cat_output artif
 fi
 rm artifacts/check-out.log
 
-ENGFLOW_ARGS="--config crosslinux --jobs 100 $(./build/github/engflow-args.sh) --remote_download_minimal"
+ENGFLOW_ARGS="--config crosslinux --jobs 50 $(./build/github/engflow-args.sh) --remote_download_minimal"
 
 EXTRA_BAZEL_ARGS="$ENGFLOW_ARGS" \
     COCKROACH_BAZEL_FORCE_GENERATE=1 \
@@ -61,10 +61,17 @@ if grep TODO DEPS.bzl; then
 fi
 check_workspace_clean "Run \`./dev generate bazel\` to fix this error."
 
+# Run gen-metric-owners to ensure metric_owners.yaml is up to date
+# before //pkg/gen regenerates metrics.yaml from it.
+bazel run //pkg/cmd/gen-metric-owners $ENGFLOW_ARGS -- -out="$(pwd)/pkg/internal/metricscan/metric_owners.yaml"
+
 # Run `bazel run //pkg/gen` and ensure nothing changes. This ensures
 # generated documentation and checked-in go code are up to date.
 bazel run //pkg/gen $ENGFLOW_ARGS
 check_workspace_clean "Run \`./dev generate\` to fix this error."
+# Run ASH inventory generation and ensure nothing changes.
+bazel run //pkg/cmd/generate-ash-inventory $ENGFLOW_ARGS -- -out-dir="$(pwd)"
+check_workspace_clean "Run \`./dev generate ash-inventory\` to fix this error."
 # Run go mod tidy and ensure nothing changes.
 # NB: If files are missing from any packages then `go mod tidy` will
 # fail. So we need to make sure that `.pb.go` sources are populated.
@@ -72,6 +79,36 @@ check_workspace_clean "Run \`./dev generate\` to fix this error."
 # docs.
 bazel run @go_sdk//:bin/go --ui_event_filters=-DEBUG,-info,-stdout,-stderr --noshow_progress mod tidy
 check_workspace_clean "Run \`go mod tidy\` to fix this error."
+
+# Run http-schema generation and ensure nothing changes. This ensures
+# the swagger.json, openapi.json, and api-types.ts files are up to date.
+OUTPUT_DIR="$(pwd)/pkg/ui/workspaces/db-console/src/api"
+
+# Step 1: Generate swagger.json via swag
+# swag with --parseDependency needs `go list`, so we add the Bazel Go SDK to PATH.
+GO_BIN_DIR="$(bazel info output_base)/external/go_sdk/bin"
+bazel run @com_github_swaggo_swag//cmd/swag $ENGFLOW_ARGS "--run_under=cd $(pwd) && PATH=$GO_BIN_DIR:\$PATH " -- \
+    init \
+    --dir pkg/server/dbconsole \
+    --generalInfo dbconsole.go \
+    --output "$OUTPUT_DIR" \
+    --parseDependency \
+    --parseInternal \
+    --outputTypes json \
+    &> artifacts/http-schema.log || (cat_output artifacts/http-schema.log && false)
+
+# Step 2: Convert Swagger 2.0 -> OpenAPI 3.0
+bazel run //pkg/ui/workspaces/db-console:swagger2openapi $ENGFLOW_ARGS -- \
+    "$OUTPUT_DIR/swagger.json" -o "$OUTPUT_DIR/openapi.json" \
+    &>> artifacts/http-schema.log || (cat_output artifacts/http-schema.log && false)
+
+# Step 3: Generate TypeScript types
+bazel run //pkg/ui/workspaces/db-console:openapi-typescript $ENGFLOW_ARGS -- \
+    "$OUTPUT_DIR/openapi.json" -o "$OUTPUT_DIR/api-types.ts" \
+    &>> artifacts/http-schema.log || (cat_output artifacts/http-schema.log && false)
+
+rm artifacts/http-schema.log
+check_workspace_clean "Run \`./dev generate http-schema\` to fix this error."
 
 # NB: If this step fails, then some checksum in the code is probably not
 # matching up to the "real" checksum for that artifact.

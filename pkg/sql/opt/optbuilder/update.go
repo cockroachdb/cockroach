@@ -9,6 +9,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -92,6 +93,12 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope
 	var mb mutationBuilder
 	mb.init(b, "update", tab, alias)
 
+	// exprColRefs tracks the columns referenced by expressions in the
+	// SET and WHERE clauses.
+	// TODO(144951): Extend to also track columns referenced by expressions
+	// in the RETURNING clause.
+	var exprColRefs opt.ColSet
+
 	// Build the input expression that selects the rows that will be updated:
 	//
 	//   WITH <with>
@@ -99,23 +106,25 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope
 	//   ORDER BY <order-by> LIMIT <limit>
 	//
 	// All columns from the update table will be projected.
-	mb.buildInputForUpdate(inScope, upd.Table, upd.From, upd.Where, upd.Limit, upd.OrderBy)
+	mb.buildInputForUpdate(inScope, upd.Table, upd.From, upd.Where, &exprColRefs, upd.Limit, upd.OrderBy)
 
 	// Derive the columns that will be updated from the SET expressions.
 	mb.addTargetColsForUpdate(upd.Exprs)
 
 	// Build each of the SET expressions.
-	mb.addUpdateCols(upd.Exprs)
+	mb.addUpdateCols(upd.Exprs, &exprColRefs)
 
 	// Project row-level BEFORE triggers for UPDATE.
 	mb.buildRowLevelBeforeTriggers(tree.TriggerEventUpdate, false /* cascade */)
 
 	// Build the final update statement, including any returned expressions.
+	var returningExpr *tree.ReturningExprs
 	if resultsNeeded(upd.Returning) {
-		mb.buildUpdate(upd.Returning.(*tree.ReturningExprs))
-	} else {
-		mb.buildUpdate(nil /* returning */)
+		returningExpr = upd.Returning.(*tree.ReturningExprs)
 	}
+	mb.buildUpdate(returningExpr, cat.PolicyScopeUpdate, &exprColRefs)
+
+	mb.trackTargetColDeps()
 
 	return mb.outScope
 }
@@ -184,7 +193,11 @@ func (mb *mutationBuilder) addTargetColsForUpdate(exprs tree.UpdateExprs) {
 // Multiple subqueries result in multiple left joins successively wrapping the
 // input. A final Project operator is built if any single-column or tuple SET
 // expressions are present.
-func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
+//
+// colRefs is an optional output parameter that, if provided, is populated
+// with the columns referenced in the SET expressions. Pass nil if the
+// referenced columns are not needed.
+func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs, colRefs *opt.ColSet) {
 	// SET expressions should reject aggregates, generators, etc.
 	scalarProps := &mb.b.semaCtx.Properties
 	defer scalarProps.Restore(*scalarProps)
@@ -223,7 +236,7 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 		targetColName := targetCol.ColName()
 		colName := scopeColName(targetColName).WithMetadataName(string(targetColName) + "_new")
 		scopeCol := projectionsScope.addColumn(colName, texpr)
-		mb.b.buildScalar(texpr, inScope, projectionsScope, scopeCol, nil)
+		mb.b.buildScalar(texpr, inScope, projectionsScope, scopeCol, colRefs)
 
 		// Add the column ID to the list of columns to update.
 		mb.updateColIDs[ord] = scopeCol.id
@@ -284,6 +297,10 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 	mb.b.constructProjectForScope(mb.outScope, projectionsScope)
 	mb.outScope = projectionsScope
 
+	// Track whether the region column is being explicitly updated. This is a
+	// no-op if the table isn't regional-by-row.
+	mb.setRegionColExplicitlyMutated(mb.updateColIDs)
+
 	// Add assignment casts for update columns.
 	mb.addAssignmentCasts(mb.updateColIDs)
 
@@ -322,21 +339,64 @@ func (mb *mutationBuilder) addSynthesizedColsForUpdate() {
 	mb.disambiguateColumns()
 
 	// Add all computed columns in case their values have changed.
-	mb.addSynthesizedComputedCols(mb.updateColIDs, true /* restrict */)
+	mb.addSynthesizedComputedCols(mb.updateColIDs,
+		&mb.targetColList, &mb.targetColSet, true /* restrict */)
 
 	// Add assignment casts for computed column values.
 	mb.addAssignmentCasts(mb.updateColIDs)
 }
 
 // buildUpdate constructs an Update operator, possibly wrapped by a Project
-// operator that corresponds to the given RETURNING clause.
-func (mb *mutationBuilder) buildUpdate(returning *tree.ReturningExprs) {
+// operator that corresponds to the given RETURNING clause. The colRefs
+// is an optional parameter that indicates all of the column references in the
+// expressions of the SET and WHERE clauses. It is required if applying RLS
+// policies as it controls whether SELECT policies will be applied with the
+// UPDATE check constraint.
+func (mb *mutationBuilder) buildUpdate(
+	returning *tree.ReturningExprs, policyScopeCmd cat.PolicyCommandScope, colRefs *opt.ColSet,
+) {
+	mb.maybeAddRegionColLookup(opt.UpdateOp)
+
 	// Disambiguate names so that references in any expressions, such as a
 	// check constraint, refer to the correct columns.
 	mb.disambiguateColumns()
 
+	// Build the scopes for the RETURNING clause early (if present). The
+	// returning expression is built later on, but for RLS we need to build the
+	// scopes and collect column references in order to determine whether SELECT
+	// policies should be applied as check constraints, which are built prior to
+	// the returning expression. RLS SELECT policies are applied as check
+	// constraints if the RETURNING clause references columns in the target
+	// table.
+	returningInScope, returningOutScope := mb.buildReturningScopes(returning, colRefs)
+
+	// Apply SELECT policies if any referenced columns are read during row fetches.
+	// This includes:
+	// - Columns needed for the initial fetch (SET/WHERE).
+	// - Columns read post-mutation (e.g., for RETURNING).
+	//
+	// These checks only matter if the target table has RLS enabled, so we gate
+	// the logic behind that for performance reasons.
+	includeSelectPolicies := false
+	if mb.tab.IsRowLevelSecurityEnabled() && colRefs != nil {
+		for _, colID := range mb.fetchColIDs {
+			if colID != 0 && colRefs.Contains(colID) {
+				includeSelectPolicies = true
+				break
+			}
+		}
+		if !includeSelectPolicies && returningInScope != nil {
+			for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
+				if colRefs.Contains(mb.tabID.ColumnID(i)) {
+					includeSelectPolicies = true
+					break
+				}
+			}
+		}
+	}
+
 	// Add any check constraint boolean columns to the input.
-	mb.addCheckConstraintCols(true /* isUpdate */)
+	mb.addCheckConstraintCols(true /* isUpdate */, policyScopeCmd, includeSelectPolicies)
 
 	// Add the partial index predicate expressions to the table metadata.
 	// These expressions are used to prune fetch columns during
@@ -346,13 +406,16 @@ func (mb *mutationBuilder) buildUpdate(returning *tree.ReturningExprs) {
 	// Project partial index PUT and DEL boolean columns.
 	mb.projectPartialIndexPutAndDelCols()
 
+	// Project vector index PUT and DEL columns.
+	mb.projectVectorIndexColsForUpdate()
+
 	mb.buildUniqueChecksForUpdate()
 
 	mb.buildFKChecksForUpdate()
 
 	mb.buildRowLevelAfterTriggers(opt.UpdateOp)
 
-	private := mb.makeMutationPrivate(returning != nil)
+	private := mb.makeMutationPrivate(returning != nil, false /* vectorInsert */)
 	for _, col := range mb.extraAccessibleCols {
 		if col.id != 0 {
 			private.PassthroughCols = append(private.PassthroughCols, col.id)
@@ -361,5 +424,5 @@ func (mb *mutationBuilder) buildUpdate(returning *tree.ReturningExprs) {
 	mb.outScope.expr = mb.b.factory.ConstructUpdate(
 		mb.outScope.expr, mb.uniqueChecks, mb.fkChecks, private,
 	)
-	mb.buildReturning(returning)
+	mb.buildReturning(returning, returningInScope, returningOutScope)
 }

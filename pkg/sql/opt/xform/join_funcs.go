@@ -56,7 +56,7 @@ func (c *CustomFuncs) GenerateMergeJoins(
 	leftCols := leftEq.ToSet()
 	// NOTE: leftCols cannot be mutated after this point because it is used as a
 	// key to cache the restricted orderings in left's logical properties.
-	orders := ordering.DeriveRestrictedInterestingOrderings(left, leftCols).Copy()
+	orders := ordering.DeriveRestrictedInterestingOrderings(c.e.mem, left, leftCols).Copy()
 
 	var mustGenerateMergeJoin bool
 	leftFDs := &left.Relational().FuncDeps
@@ -69,7 +69,7 @@ func (c *CustomFuncs) GenerateMergeJoins(
 	if !c.NoJoinHints(joinPrivate) || c.e.evalCtx.SessionData().ReorderJoinsLimit == 0 {
 		// If we are using a hint, or the join limit is set to zero, the join won't
 		// be commuted. Add the orderings from the right side.
-		rightOrders := ordering.DeriveInterestingOrderings(right).Copy()
+		rightOrders := ordering.DeriveInterestingOrderings(c.e.mem, right).Copy()
 		rightOrders.RestrictToCols(rightEq.ToSet(), &right.Relational().FuncDeps)
 		orders = append(orders, rightOrders...)
 
@@ -368,7 +368,7 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 	c.cb.Init(
 		c.e.ctx,
 		c.e.f,
-		c.e.mem.Metadata(),
+		md,
 		c.e.evalCtx,
 		scanPrivate.Table,
 		inputProps.OutputCols,
@@ -392,12 +392,12 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 	// deriving a `t1.crdb_region = t2.crdb_region` term based on foreign key
 	// constraints.
 	if !lookupIsKey {
-		if scanExpr, _, ok := c.getfilteredCanonicalScan(input); ok {
+		if scanExpr, _, ok := c.GetFilteredCanonicalScan(input); ok {
 			scanPrivate2 = &scanExpr.ScanPrivate
 			// The scan should already exist in the memo. We need to look it up so we
 			// have a `ScanExpr` with properties fully populated.
-			input2 = scanExpr.Memo().MemoizeScan(scanPrivate)
-			tabMeta := c.e.mem.Metadata().TableMeta(scanPrivate2.Table)
+			input2 = c.e.mem.MemoizeScan(scanPrivate)
+			tabMeta := md.TableMeta(scanPrivate2.Table)
 			indexCols2 = tabMeta.IndexColumns(scanPrivate2.Index)
 			onClauseLookupRelStrictKeyCols, lookupRelEquijoinCols, inputRelJoinCols, lookupIsKey2 =
 				c.GetEquijoinStrictKeyCols(on, scanPrivate2, input2)
@@ -407,7 +407,8 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 	var pkCols opt.ColList
 	var newScanPrivate *memo.ScanPrivate
 	var iter scanIndexIter
-	iter.Init(c.e.evalCtx, c.e, c.e.mem, &c.im, scanPrivate, on, rejectInvertedIndexes)
+	reject := rejectInvertedIndexes | rejectVectorIndexes
+	iter.Init(c.e.evalCtx, c.e, c.e.mem, &c.im, scanPrivate, on, reject)
 	iter.ForEach(func(index cat.Index, onFilters memo.FiltersExpr, indexCols opt.ColSet, _ bool, _ memo.ProjectionsExpr) {
 		// Skip indexes that do not cover all virtual projection columns, if
 		// there are any. This can happen when there are multiple virtual
@@ -428,13 +429,13 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 			derivedfkOnFilters = c.ForeignKeyConstraintFilters(
 				input2, scanPrivate2, indexCols2, onClauseLookupRelStrictKeyCols, lookupRelEquijoinCols, inputRelJoinCols)
 		}
-		lookupConstraint, foundEqualityCols := c.cb.Build(index, onFilters, optionalFilters, derivedfkOnFilters)
+		lookupConstraint, equalityLookupCols := c.cb.Build(index, onFilters, optionalFilters, derivedfkOnFilters)
 		if lookupConstraint.IsUnconstrained() {
 			// We couldn't find equality columns or a lookup expression to
 			// perform a lookup join on this index.
 			return
 		}
-		if !foundEqualityCols && !inputProps.Cardinality.IsZeroOrOne() &&
+		if equalityLookupCols.Len() == 0 && !inputProps.Cardinality.IsZeroOrOne() &&
 			!joinPrivate.Flags.Has(memo.AllowOnlyLookupJoinIntoRight) {
 			// Avoid planning an inequality-only lookup when the input has more than
 			// one row unless the lookup join is forced (see canGenerateLookupJoins
@@ -451,6 +452,9 @@ func (c *CustomFuncs) generateLookupJoinsImpl(
 		lookupJoin.KeyCols = lookupConstraint.KeyCols
 		lookupJoin.DerivedEquivCols = lookupConstraint.DerivedEquivCols
 		lookupJoin.LookupExpr = lookupConstraint.LookupExpr
+		if lookupJoin.LookupExpr != nil {
+			lookupJoin.EqualityLookupCols = equalityLookupCols
+		}
 		lookupJoin.On = lookupConstraint.RemainingFilters
 		lookupJoin.AllLookupFilters = lookupConstraint.AllLookupFilters
 
@@ -806,7 +810,7 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 	iter.Init(c.e.evalCtx, c.e, c.e.mem, &c.im, scanPrivate, on, rejectNonInvertedIndexes)
 	iter.ForEach(func(index cat.Index, onFilters memo.FiltersExpr, indexCols opt.ColSet, _ bool, _ memo.ProjectionsExpr) {
 		invertedJoin := memo.InvertedJoinExpr{Input: input}
-		numPrefixCols := index.NonInvertedPrefixColumnCount()
+		numPrefixCols := index.PrefixColumnCount()
 
 		var allFilters memo.FiltersExpr
 		if numPrefixCols > 0 {
@@ -926,7 +930,7 @@ func (c *CustomFuncs) GenerateInvertedJoins(
 		// doesn't actually, and it is only valid to extract the primary key
 		// columns and non-inverted prefix columns from it.
 		indexCols = pkCols.ToSet()
-		for i, n := 0, index.NonInvertedPrefixColumnCount(); i < n; i++ {
+		for i, n := 0, index.PrefixColumnCount(); i < n; i++ {
 			prefixCol := scanPrivate.Table.IndexColumnID(index, i)
 			indexCols.Add(prefixCol)
 		}
@@ -1049,7 +1053,7 @@ func (c *CustomFuncs) mapInvertedJoin(
 	// columns and non-inverted prefix columns from it.
 	newPkCols := c.getPkCols(newTabID)
 	newIndexCols := newPkCols.ToSet()
-	for i, n := 0, index.NonInvertedPrefixColumnCount(); i < n; i++ {
+	for i, n := 0, index.PrefixColumnCount(); i < n; i++ {
 		prefixCol := newTabID.IndexColumnID(index, i)
 		newIndexCols.Add(prefixCol)
 	}
@@ -1199,17 +1203,6 @@ func (c *CustomFuncs) ConvertIndexToLookupJoinPrivate(
 	}
 }
 
-// HasVolatileProjection returns true if any of the projection items of the
-// ProjectionsExpr contains a volatile expression.
-func (c *CustomFuncs) HasVolatileProjection(projections memo.ProjectionsExpr) bool {
-	for i := range projections {
-		if projections[i].ScalarProps().VolatilitySet.HasVolatile() {
-			return true
-		}
-	}
-	return false
-}
-
 // FindLeftJoinCanaryColumn tries to find a "canary" column from the right input
 // of a left join. This is a column that is NULL in the join output iff the row
 // is an "outer left" row that had no match in the join.
@@ -1228,7 +1221,8 @@ func (c *CustomFuncs) FindLeftJoinCanaryColumn(
 	// Find any column from the right which is null-rejected by the ON condition.
 	// right rows where such a column is NULL will never contribute to the join
 	// result.
-	nullRejectedCols := memo.NullColsRejectedByFilter(c.e.ctx, c.e.evalCtx, on)
+	var nullRejectedCols opt.ColSet
+	memo.ExtractNullColsRejectedByFilter(c.e.ctx, c.e.evalCtx, on, &nullRejectedCols)
 	nullRejectedCols.IntersectionWith(right.Relational().OutputCols)
 
 	canaryCol, ok = nullRejectedCols.Next(0)
@@ -1546,12 +1540,12 @@ func (c *CustomFuncs) CanSplitJoinWithDisjuncts(
 		panic(errors.AssertionFailedf("expected joinRel to be inner, semi, or anti-join"))
 	}
 
-	origLeftScan, _, ok := c.getfilteredCanonicalScan(leftInput)
+	origLeftScan, _, ok := c.GetFilteredCanonicalScan(leftInput)
 	if !ok {
 		return nil, nil, nil, false
 	}
 
-	origRightScan, _, ok := c.getfilteredCanonicalScan(rightInput)
+	origRightScan, _, ok := c.GetFilteredCanonicalScan(rightInput)
 	if !ok {
 		return nil, nil, nil, false
 	}
@@ -1601,12 +1595,12 @@ func (c *CustomFuncs) SplitJoinWithDisjuncts(
 		panic(errors.AssertionFailedf("expected joinRel to be inner, semi, or anti-join"))
 	}
 
-	origLeftScan, leftFilters, ok := c.getfilteredCanonicalScan(leftInput)
+	origLeftScan, leftFilters, ok := c.GetFilteredCanonicalScan(leftInput)
 	if !ok {
 		panic(errors.AssertionFailedf("expected join left input to have canonical scan"))
 	}
 	origLeftScanPrivate := &origLeftScan.ScanPrivate
-	origRightScan, rightFilters, ok := c.getfilteredCanonicalScan(rightInput)
+	origRightScan, rightFilters, ok := c.GetFilteredCanonicalScan(rightInput)
 	if !ok {
 		panic(errors.AssertionFailedf("expected join right input to have canonical scan"))
 	}
@@ -1749,30 +1743,6 @@ func (c *CustomFuncs) SplitJoinWithDisjuncts(
 	return firstJoin, secondJoin, newRelationCols, aggCols, groupingCols
 }
 
-// getfilteredCanonicalScan looks at a *ScanExpr or *SelectExpr "relation" and
-// returns the input *ScanExpr and FiltersExpr, along with ok=true, if the Scan
-// is a canonical scan. If "relation" is a different type, or if it's a
-// *SelectExpr with an Input other than a *ScanExpr, ok=false is returned. Scans
-// or Selects with no filters may return filters as nil.
-func (c *CustomFuncs) getfilteredCanonicalScan(
-	relation memo.RelExpr,
-) (scanExpr *memo.ScanExpr, filters memo.FiltersExpr, ok bool) {
-	var selectExpr *memo.SelectExpr
-	if selectExpr, ok = relation.(*memo.SelectExpr); ok {
-		if scanExpr, ok = selectExpr.Input.(*memo.ScanExpr); !ok {
-			return nil, nil, false
-		}
-		filters = selectExpr.Filters
-	} else if scanExpr, ok = relation.(*memo.ScanExpr); !ok {
-		return nil, nil, false
-	}
-	scanPrivate := &scanExpr.ScanPrivate
-	if !c.IsCanonicalScan(scanPrivate) {
-		return nil, nil, false
-	}
-	return scanExpr, filters, true
-}
-
 // CanHoistProjectInput returns true if a projection of an expression on
 // `relation` is allowed to be hoisted above a parent Join. The preconditions
 // for this are if `relation` is a canonical scan or a select from a canonical
@@ -1782,7 +1752,7 @@ func (c *CustomFuncs) CanHoistProjectInput(relation memo.RelExpr) (ok bool) {
 	if c.e.evalCtx.SessionData().DisableHoistProjectionInJoinLimitation {
 		return true
 	}
-	_, _, ok = c.getfilteredCanonicalScan(relation)
+	_, _, ok = c.GetFilteredCanonicalScan(relation)
 	return ok
 }
 
@@ -1895,7 +1865,7 @@ func (c *CustomFuncs) CanMaybeGenerateLocalityOptimizedSearchOfLookupJoins(
 	}
 	// Only rewrite canonical scans or selects from canonical scans, which also
 	// means they are not locality-optimized.
-	inputScan, inputFilters, ok = c.getfilteredCanonicalScan(lookupJoinExpr.Input)
+	inputScan, inputFilters, ok = c.GetFilteredCanonicalScan(lookupJoinExpr.Input)
 	if !ok {
 		return nil, memo.FiltersExpr{}, false
 	}
@@ -1907,7 +1877,9 @@ func (c *CustomFuncs) CanMaybeGenerateLocalityOptimizedSearchOfLookupJoins(
 func (c *CustomFuncs) LookupsAreLocal(
 	lookupJoinExpr *memo.LookupJoinExpr, required *physical.Required,
 ) bool {
-	_, provided := distribution.BuildLookupJoinLookupTableDistribution(c.e.ctx, c.e.f.EvalContext(), lookupJoinExpr, required, c.e.o.MaybeGetBestCostRelation)
+	_, provided := distribution.BuildLookupJoinLookupTableDistribution(
+		c.e.ctx, c.e.f.EvalContext(), c.e.mem, lookupJoinExpr, required, c.e.o.MaybeGetBestCostRelation,
+	)
 	if provided.Any() || len(provided.Regions) != 1 {
 		return false
 	}

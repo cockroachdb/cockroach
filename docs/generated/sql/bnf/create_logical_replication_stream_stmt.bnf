@@ -1,0 +1,2 @@
+create_logical_replication_stream_stmt ::=
+	'CREATE' 'LOGICALLY' 'REPLICATED' logical_replication_resources 'FROM' logical_replication_resources 'ON' string_or_placeholder opt_logical_replication_create_table_options

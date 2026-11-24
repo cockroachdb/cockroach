@@ -1,0 +1,37 @@
+/* setup */
+CREATE DOMAIN salmon AS INT DEFAULT 0;
+CREATE TABLE t (c salmon);
+
+/* test */
+EXPLAIN (DDL) ALTER DOMAIN salmon SET NOT NULL;
+----
+Schema change plan for ALTER DOMAIN ‹defaultdb›.‹public›.‹salmon› SET NOT NULL;
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 1 element transitioning toward PUBLIC
+ │         │    └── ABSENT → WRITE_ONLY DomainNotNull:{DescID: 104 (salmon), ConstraintID: 1}
+ │         └── 1 Mutation operation
+ │              └── AddDomainNotNull {"ConstraintID":1,"TypeID":104}
+ ├── PreCommitPhase
+ │    ├── Stage 1 of 2 in PreCommitPhase
+ │    │    ├── 1 element transitioning toward PUBLIC
+ │    │    │    └── WRITE_ONLY → ABSENT DomainNotNull:{DescID: 104 (salmon), ConstraintID: 1}
+ │    │    └── 1 Mutation operation
+ │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
+ │    └── Stage 2 of 2 in PreCommitPhase
+ │         ├── 1 element transitioning toward PUBLIC
+ │         │    └── ABSENT → WRITE_ONLY DomainNotNull:{DescID: 104 (salmon), ConstraintID: 1}
+ │         └── 3 Mutation operations
+ │              ├── AddDomainNotNull {"ConstraintID":1,"TypeID":104}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
+ │              └── CreateSchemaChangerJob {"RunningStatus":"Pending: Updatin..."}
+ └── PostCommitPhase
+      └── Stage 1 of 1 in PostCommitPhase
+           ├── 2 elements transitioning toward PUBLIC
+           │    ├── WRITE_ONLY → PUBLIC DomainNotNull:{DescID: 104 (salmon), ConstraintID: 1}
+           │    └── ABSENT     → PUBLIC DomainConstraintName:{DescID: 104 (salmon), Name: "salmon_not_null", ConstraintID: 1}
+           └── 4 Mutation operations
+                ├── MakeValidatedDomainNotNullPublic {"ConstraintID":1,"TypeID":104}
+                ├── SetDomainConstraintName {"ConstraintID":1,"Name":"salmon_not_null","TypeID":104}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

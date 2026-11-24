@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
@@ -152,6 +153,26 @@ func ensureTypeMetadataIsHydrated(
 				tm.EnumData.PhysicalRepresentations[i] = e.GetMemberPhysicalRepresentation(i)
 				tm.EnumData.IsMemberReadOnly[i] = e.IsMemberReadOnly(i)
 			}
+		}
+	}
+	if d := maybeDesc.AsDomainTypeDescriptor(); d != nil {
+		n := d.NumCheckConstraints()
+		checks := make([]types.DomainCheckConstraint, n)
+		for i := 0; i < n; i++ {
+			checks[i] = types.DomainCheckConstraint{
+				Name:         d.GetCheckConstraintName(i),
+				Expr:         d.GetCheckConstraintExpr(i),
+				ConstraintID: d.GetCheckConstraintID(i),
+				Validated:    d.GetCheckConstraintValidity(i) == descpb.ConstraintValidity_Validated,
+			}
+		}
+		tm.DomainData = &types.DomainMetadata{
+			BaseType:              d.GetBaseType(),
+			NotNull:               d.IsNotNull(),
+			NotNullConstraintName: d.GetNotNullConstraintName(),
+			NotNullConstraintID:   d.GetNotNullConstraintID(),
+			DefaultExpr:           d.GetDefaultExpr(),
+			CheckConstraints:      checks,
 		}
 	}
 }

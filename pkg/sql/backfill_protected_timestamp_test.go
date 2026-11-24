@@ -8,6 +8,7 @@ package sql_test
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"regexp"
 	"strings"
 	"sync"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigptsreader"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -34,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
 )
 
@@ -96,14 +99,9 @@ func TestValidationWithProtectedTS(t *testing.T) {
 		ptsReader := store.GetStoreConfig().ProtectedTimestampReader
 		require.NoError(
 			t,
-			spanconfigptsreader.TestingRefreshPTSState(ctx, t, ptsReader, asOf),
+			spanconfigptsreader.TestingRefreshPTSState(ctx, ptsReader, asOf),
 		)
-		require.NoError(t, repl.ReadProtectedTimestampsForTesting(ctx))
-	}
-	// Refresh forces the PTS cache to update to at least asOf.
-	refreshPTSCacheTo := func(t *testing.T, asOf hlc.Timestamp) {
-		ptp := ts.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
-		require.NoError(t, ptp.Refresh(ctx, asOf))
+		require.NoError(t, repl.TestingReadProtectedTimestamps(ctx))
 	}
 
 	for _, sql := range []string{
@@ -115,7 +113,7 @@ func TestValidationWithProtectedTS(t *testing.T) {
 	}
 	for _, sql := range []string{
 		"SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false",
-		"ALTER DATABASE defaultdb CONFIGURE ZONE USING gc.ttlseconds = 1",
+		"ALTER DATABASE defaultdb CONFIGURE ZONE USING gc.ttlseconds = 3",
 		"CREATE TABLE t(n int)",
 		"ALTER TABLE t CONFIGURE ZONE USING range_min_bytes = 0, range_max_bytes = 67108864, gc.ttlseconds = 1",
 		"INSERT INTO t(n) SELECT * FROM generate_series(1, 250000)",
@@ -189,7 +187,6 @@ func TestValidationWithProtectedTS(t *testing.T) {
 			break
 		}
 		refreshTo(t, tableKey, ts.Clock().Now())
-		refreshPTSCacheTo(t, ts.Clock().Now())
 		for _, id := range ranges {
 			if _, err := systemSqlDb.ExecContext(ctx, `SELECT crdb_internal.kv_enqueue_replica($1, 'mvccGC', true)`, id); err != nil {
 				return err
@@ -220,9 +217,9 @@ func TestValidationWithProtectedTS(t *testing.T) {
 	}
 }
 
-// TestBackfillQueryWithProtectedTS backfills a query into a table and confirms
-// that a protected timestamp is setup. It also confirms that if the protected
-// timestamp is not ready in time we do not infinitely retry.
+// TestBackfillWithProtectedTS runs a query backfill into a table and
+// confirms that a protected timestamp is setup. It also confirms that if the
+// protected timestamp is not ready in time we do not infinitely retry.
 func TestBackfillQueryWithProtectedTS(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -244,26 +241,33 @@ func TestBackfillQueryWithProtectedTS(t *testing.T) {
 			SQLEvalContext: &eval.TestingKnobs{
 				ForceProductionValues: true,
 			},
-			Store: &kvserver.StoreTestingKnobs{
-				TestingRequestFilter: func(ctx2 context.Context, request *kvpb.BatchRequest) *kvpb.Error {
-					// Detect the first operation on the backfill operation, this is before
-					// the PTS is setup, so the query will fail.
-					if blockBackFillsForPTSFailure.Load() &&
-						request.Txn != nil &&
-						request.Txn.Name == "schemaChangerBackfill" {
+			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+				RunBeforeQueryBackfill: func() error {
+					// Cause the backfill to pause before adding the protected
+					// timestamp. This knob is for testing CREATE MATERIALIZED VIEW.
+					if blockBackFillsForPTSFailure.Load() {
 						if !blockBackFillsForPTSFailure.Swap(false) {
 							return nil
 						}
 						backfillQueryWait <- struct{}{}
 						<-backfillQueryResume
 					}
-					// Detect the first scan on table from the backfill, this is after the
-					// PTS has been set-up.
+					return nil
+				},
+			},
+			Store: &kvserver.StoreTestingKnobs{
+				TestingRequestFilter: func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error {
+					// Detect the first scan on table from the backfill, which is
+					// after the PTS has been set up. This knob is for testing CREATE
+					// MATERIALIZED VIEW.
 					if blockBackFillsForPTSCheck.Load() &&
+						request.Txn != nil &&
+						request.Txn.Name == "schemaChangerBackfill" &&
 						request.Requests[0].GetInner().Method() == kvpb.Scan {
 						scan := request.Requests[0].GetScan()
 						_, prefix, err := s.Codec().DecodeTablePrefix(scan.Key)
 						if err != nil || prefix != tableID {
+							//nolint:returnerrcheck
 							return nil
 						}
 						if !blockBackFillsForPTSCheck.Swap(false) {
@@ -287,7 +291,7 @@ func TestBackfillQueryWithProtectedTS(t *testing.T) {
 	rSys := sqlutils.MakeSQLRunner(systemSqlDb)
 
 	// Refreshes the in-memory protected timestamp state to asOf.
-	refreshTo := func(t *testing.T, tableKey roachpb.Key, asOf hlc.Timestamp) error {
+	refreshTo := func(ctx context.Context, tableKey roachpb.Key, asOf hlc.Timestamp) error {
 		store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
 		if err != nil {
 			return err
@@ -304,18 +308,14 @@ func TestBackfillQueryWithProtectedTS(t *testing.T) {
 			return errors.New(`could not find replica`)
 		}
 		ptsReader := store.GetStoreConfig().ProtectedTimestampReader
-		if err := spanconfigptsreader.TestingRefreshPTSState(ctx, t, ptsReader, asOf); err != nil {
+		if err := spanconfigptsreader.TestingRefreshPTSState(ctx, ptsReader, asOf); err != nil {
 			return err
 		}
-		return repl.ReadProtectedTimestampsForTesting(ctx)
-	}
-	// Refresh forces the PTS cache to update to at least asOf.
-	refreshPTSCacheTo := func(t *testing.T, asOf hlc.Timestamp) error {
-		ptp := ts.ExecutorConfig().(sql.ExecutorConfig).ProtectedTimestampProvider
-		return ptp.Refresh(ctx, asOf)
+		return repl.TestingReadProtectedTimestamps(ctx)
 	}
 
 	for _, sql := range []string{
+		"SET create_table_with_schema_locked=false",
 		"SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms'",
 		"SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval ='10ms'",
 		"SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval ='10ms'",
@@ -323,86 +323,236 @@ func TestBackfillQueryWithProtectedTS(t *testing.T) {
 		rSys.Exec(t, sql)
 	}
 	for _, sql := range []string{
+		"SET create_table_with_schema_locked=false",
 		"SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false",
-		"ALTER DATABASE defaultdb CONFIGURE ZONE USING gc.ttlseconds = 1",
-		"CREATE TABLE t(n int)",
-		"ALTER TABLE t CONFIGURE ZONE USING range_min_bytes = 0, range_max_bytes = 67108864, gc.ttlseconds = 1",
-		"INSERT INTO t(n) SELECT * FROM generate_series(1, 500000)",
+		"ALTER DATABASE defaultdb CONFIGURE ZONE USING gc.ttlseconds = 5",
 	} {
 		r.Exec(t, sql)
 	}
 
-	getTableID := func() (tableID uint32) {
-		r.QueryRow(t, `SELECT table_id FROM crdb_internal.tables`+
-			` WHERE name = 't' AND database_name = current_database()`).Scan(&tableID)
-		return tableID
-	}
-	tableID = getTableID()
-	tableKey := ts.Codec().TablePrefix(tableID)
+	const initialRowCount = 500000
+	const rowsDeletedPerIteration = 200000
+	const rowsAddedPerIteration = 1
 
-	grp := ctxgroup.WithContext(ctx)
-	grp.Go(func() error {
-		// We are going to do this twice, first to cause a PTS related failure,
-		// and a second time for the successful case. The first time we will cause
-		// the GC to happen before the PTS is setup. The second time we will allow
-		// the PTS to be installed and then cause the GC.
-		for i := 0; i < 2; i++ {
-			<-backfillQueryWait
-			if _, err := db.ExecContext(ctx, "SET sql_safe_updates=off"); err != nil {
-				return err
+	for _, tc := range []struct {
+		name                 string
+		tableName            string
+		backfillSchemaChange string
+		jobDescriptionPrefix string
+		postTestQuery        string
+		expectedCount        int
+	}{
+		{
+			name:                 "create materialized view",
+			tableName:            "t_mat_view",
+			backfillSchemaChange: "CREATE MATERIALIZED VIEW test AS (SELECT n from t_mat_view)",
+			jobDescriptionPrefix: "CREATE MATERIALIZED VIEW",
+			postTestQuery:        "SELECT count(*) FROM test",
+			expectedCount:        initialRowCount - rowsDeletedPerIteration + rowsAddedPerIteration,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, sql := range []string{
+				fmt.Sprintf("CREATE TABLE %s(n int primary key)", tc.tableName),
+				fmt.Sprintf("ALTER TABLE %s CONFIGURE ZONE USING range_min_bytes = 0, range_max_bytes = 67108864, gc.ttlseconds = 5", tc.tableName),
+			} {
+				r.Exec(t, sql)
 			}
-			if _, err := db.ExecContext(ctx, "BEGIN; DELETE FROM t LIMIT 250000; INSERT INTO t VALUES('9999999'); COMMIT"); err != nil {
-				return err
+			// Insert initial rows in batches to avoid long-running transactions
+			// that could be affected by the aggressive gc.ttlseconds setting.
+			const insertBatchSize = 10000
+			for i := 1; i <= initialRowCount; i += insertBatchSize {
+				end := i + insertBatchSize - 1
+				if end > initialRowCount {
+					end = initialRowCount
+				}
+				r.Exec(t, fmt.Sprintf("INSERT INTO %s(n) SELECT * FROM generate_series(%d, %d)", tc.tableName, i, end))
 			}
-			if err := refreshTo(t, tableKey, ts.Clock().Now()); err != nil {
-				return err
-			}
-			if err := refreshPTSCacheTo(t, ts.Clock().Now()); err != nil {
-				return err
-			}
-			if _, err := db.ExecContext(ctx, `SELECT crdb_internal.kv_enqueue_replica(range_id, 'mvccGC', true)
-FROM (SELECT range_id FROM [SHOW RANGES FROM TABLE t] ORDER BY start_key);`); err != nil {
-				return err
-			}
-			row := db.QueryRow("SELECT count(*) FROM system.protected_ts_records WHERE meta_type='jobs'")
-			var count int
-			if err := row.Scan(&count); err != nil {
-				return err
-			}
-			// First iteration is before the PTS is setup, so it will be 0. Second
-			// iteration the PTS should be setup.
-			expectedCount := i
-			if count != expectedCount {
-				return errors.AssertionFailedf("no protected timestamp was set up by the schema change job (expected %d, got : %d)", expectedCount, count)
-			}
-			backfillQueryResume <- struct{}{}
-		}
-		return nil
-	})
-	grp.Go(func() error {
-		// Backfill with the PTS being not setup early enough, which will
-		// lead to failure.
-		blockBackFillsForPTSFailure.Swap(true)
-		_, err := db.ExecContext(ctx, `CREATE MATERIALIZED VIEW test AS (SELECT n from t)`)
-		if err == nil || !testutils.IsError(err, "unable to retry backfill since fixed timestamp is before the GC timestamp") {
-			return errors.AssertionFailedf("expected error was not hit")
-		}
-		// Next backfill with the PTS being setup on time, which should always
-		// succeed.
-		blockBackFillsForPTSCheck.Swap(true)
-		_, err = db.ExecContext(ctx, `CREATE MATERIALIZED VIEW test AS (SELECT n from t)`)
-		return err
-	})
 
-	require.NoError(t, grp.Wait())
-	var rowCount int
-	res := r.QueryRow(t, `SELECT count(*) FROM test`)
-	res.Scan(&rowCount)
-	// Half the row count plus the one row inserted above.
-	const expectedCount = 250000 + 1
-	if rowCount != expectedCount {
-		t.Errorf("expected %d entries, got %d", expectedCount, rowCount)
+			getTableID := func() (tableID uint32) {
+				r.QueryRow(t, fmt.Sprintf(`SELECT '%s'::regclass::oid`, tc.tableName)).Scan(&tableID)
+				return tableID
+			}
+			tableID = getTableID()
+			tableKey := ts.Codec().TablePrefix(tableID)
+
+			grp := ctxgroup.WithContext(ctx)
+			grp.GoCtx(func(ctx context.Context) error {
+				// We are going to do this twice, first to cause a PTS related failure,
+				// and a second time for the successful case. The first time we will cause
+				// the GC to happen before the PTS is setup. The second time we will allow
+				// the PTS to be installed and then cause the GC.
+				for i := 0; i < 2; i++ {
+					i := i
+					if err := func() (retErr error) {
+						<-backfillQueryWait
+						t.Logf(
+							"%s i=%d begin running operations in the middle of backfill",
+							timeutil.Now().Format(time.RFC3339), i,
+						)
+						defer func() {
+							t.Logf(
+								"%s i=%d finished running operations in the middle of backfill. retErr: %v",
+								timeutil.Now().Format(time.RFC3339), i, retErr)
+							backfillQueryResume <- struct{}{}
+						}()
+						if _, err := db.ExecContext(ctx, "SET sql_safe_updates=off"); err != nil {
+							return errors.Wrap(err, "failed to set sql_safe_updates")
+						}
+						deletedSoFar := 0
+						for deletedSoFar < rowsDeletedPerIteration {
+							const deleteBatchSize = 1000
+							if _, err := db.ExecContext(ctx, fmt.Sprintf(
+								"DELETE FROM %s LIMIT %d",
+								tc.tableName, deleteBatchSize,
+							)); err != nil {
+								return errors.Wrapf(err, "failed to DELETE; deleted %d so far", deletedSoFar)
+							}
+							deletedSoFar += deleteBatchSize
+						}
+						if _, err := db.ExecContext(ctx, fmt.Sprintf(
+							"INSERT INTO %s VALUES(9999999 + %d)",
+							tc.tableName, i,
+						)); err != nil {
+							return errors.Wrap(err, "failed to INSERT")
+						}
+						if err := refreshTo(ctx, tableKey, ts.Clock().Now()); err != nil {
+							return errors.Wrap(err, "failed to refresh in-memory PTS")
+						}
+						// Get range IDs from the tenant connection since the table is in the tenant.
+						rows, err := db.QueryContext(ctx, fmt.Sprintf(
+							`SELECT range_id FROM [SHOW RANGES FROM TABLE %s] ORDER BY start_key`, tc.tableName))
+						if err != nil {
+							return errors.Wrap(err, "failed to query ranges")
+						}
+						var rangeIDs []int64
+						for rows.Next() {
+							var rangeID int64
+							if err := rows.Scan(&rangeID); err != nil {
+								return errors.Wrap(err, "failed to scan range ID")
+							}
+							rangeIDs = append(rangeIDs, rangeID)
+						}
+						if err := rows.Close(); err != nil {
+							return errors.Wrap(err, "failed to close rows")
+						}
+						// Execute kv_enqueue_replica through the system layer since it's
+						// not supported in virtual clusters.
+						for _, rangeID := range rangeIDs {
+							if _, err := systemSqlDb.ExecContext(ctx, `SELECT crdb_internal.kv_enqueue_replica($1, 'mvccGC', true)`, rangeID); err != nil {
+								return errors.Wrap(err, "failed to enqueue replica for GC")
+							}
+						}
+						row := db.QueryRowContext(ctx, "SELECT count(*) FROM system.protected_ts_records WHERE meta_type='jobs'")
+						var count int
+						if err := row.Scan(&count); err != nil {
+							return errors.Wrap(err, "failed to query protected_ts_records")
+						}
+						// First iteration is before the PTS is setup, so it will be 0. Second
+						// iteration the PTS should be setup.
+						expectedCount := i
+						if count != expectedCount {
+							return errors.AssertionFailedf("no protected timestamp was set up by the schema change job (expected %d, got : %d)", expectedCount, count)
+						}
+						return nil
+					}(); err != nil {
+						return err
+					}
+				}
+				return nil
+			})
+			grp.GoCtx(func(ctx context.Context) (retErr error) {
+				// Backfill with the PTS being not setup early enough, which will
+				// lead to failure.
+				defer func() {
+					t.Logf("%s backfill goroutine finished. retErr: %v", timeutil.Now().Format(time.RFC3339), retErr)
+				}()
+				t.Logf("%s running backfill with PTS not setup early enough", timeutil.Now().Format(time.RFC3339))
+				blockBackFillsForPTSFailure.Swap(true)
+				_, err := db.ExecContext(ctx, tc.backfillSchemaChange)
+				if err == nil {
+					return errors.AssertionFailedf("expected error was not hit; got nil")
+				}
+				if !testutils.IsError(err, "unable to backfill since fixed timestamp is before the GC timestamp") {
+					return errors.NewAssertionErrorWithWrappedErrf(err, "expected error was not hit")
+				}
+				if pgErr := (*pq.Error)(nil); !errors.As(err, &pgErr) ||
+					pgcode.MakeCode(string(pgErr.Code)) != pgcode.InvalidParameterValue {
+					return errors.NewAssertionErrorWithWrappedErrf(err, "expected error code was not found")
+				}
+				err = testutils.SucceedsSoonError(func() error {
+					// Wait until schema change is fully rolled back.
+					var status string
+					err = db.QueryRowContext(ctx, fmt.Sprintf(
+						"SELECT status FROM crdb_internal.jobs WHERE description LIKE '%s%%'",
+						tc.jobDescriptionPrefix,
+					)).Scan(&status)
+					if err != nil {
+						return errors.Wrap(err, "could not read jobs table")
+					}
+					if status != "failed" {
+						return errors.Newf("schema change not rolled back yet; status=%s", status)
+					}
+					return nil
+				})
+				if err != nil {
+					return err
+				}
+				// Next backfill with the PTS being setup on time, which should always
+				// succeed.
+				t.Logf("%s running backfill with PTS setup on time", timeutil.Now().Format(time.RFC3339))
+				blockBackFillsForPTSCheck.Swap(true)
+				_, err = db.ExecContext(ctx, tc.backfillSchemaChange)
+				if err != nil {
+					return errors.Wrap(err, "failed to run backfill")
+				}
+				return nil
+			})
+
+			require.NoError(t, grp.Wait())
+			var rowCount int
+			res := r.QueryRow(t, tc.postTestQuery)
+			res.Scan(&rowCount)
+			if rowCount != tc.expectedCount {
+				t.Errorf("expected %d entries, got %d", tc.expectedCount, rowCount)
+			}
+			require.Falsef(t, blockBackFillsForPTSFailure.Load(), "no backfill txn was detected in testing knob.")
+			require.Falsef(t, blockBackFillsForPTSCheck.Load(), "no backfill txn was detected in testing knob.")
+		})
 	}
-	require.NoError(t, db.Close())
-	require.Equalf(t, false, blockBackFillsForPTSFailure.Load(), "no backfill txn was dected in testing knob.")
+}
+
+// TestBackfillQueryPTSInstallErrorPropagation verifies that errors during PTS
+// installation in backfillQueryIntoTable are properly propagated. This is a
+// regression test for a bug where a variable shadowing issue inside a
+// sync.Once closure caused PTS installation errors to be silently swallowed.
+func TestBackfillQueryPTSInstallErrorPropagation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	injectedErr := errors.New("injected PTS installation error")
+	ptsInstallCalled := atomic.Int32{}
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+				RunBeforeQueryBackfillPTSInstall: func() error {
+					ptsInstallCalled.Add(1)
+					return injectedErr
+				},
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+	r := sqlutils.MakeSQLRunner(db)
+	r.Exec(t, "SET create_table_with_schema_locked=false")
+	r.Exec(t, "CREATE TABLE src(n int)")
+	r.Exec(t, "INSERT INTO src VALUES (1), (2), (3)")
+
+	_, err := db.ExecContext(ctx, "CREATE MATERIALIZED VIEW mv AS SELECT n FROM src")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "injected PTS installation error")
+	require.Greater(t, ptsInstallCalled.Load(), int32(0),
+		"PTS installation knob should have been called")
 }

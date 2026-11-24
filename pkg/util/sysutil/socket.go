@@ -14,28 +14,21 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// SetKeepAliveCount sets the keep alive probe count on a TCP
-// connection.
-func SetKeepAliveCount(conn *net.TCPConn, probeCount int) (err error) {
-	syscallConn, err := conn.SyscallConn()
-	if err != nil {
-		return err
-	}
-	outerErr := syscallConn.Control(func(fd uintptr) {
-		err = syscall.SetsockoptInt(SocketFd(fd), syscall.IPPROTO_TCP, syscall.TCP_KEEPCNT, probeCount)
-	})
-	if err != nil || outerErr != nil {
-		return errors.WithSecondaryError(err, outerErr)
-	}
-	return nil
-}
-
 // GetKeepAliveSettings gets the keep alive socket connections
 // set on a TCP connection.
 func GetKeepAliveSettings(
 	conn *net.TCPConn,
-) (idleTime time.Duration, probeInterval time.Duration, probeCount int, err error) {
+) (
+	idleTime time.Duration,
+	probeInterval time.Duration,
+	probeCount int,
+	userTimeout time.Duration,
+	err error,
+) {
 	syscallConn, err := conn.SyscallConn()
+	if err != nil {
+		return idleTime, probeInterval, probeCount, userTimeout, err
+	}
 	var probeIntervalSec, idleTimeSec int
 	innerErr := syscallConn.Control(func(fd uintptr) {
 		probeIntervalSec, err = syscall.GetsockoptInt(SocketFd(fd), syscall.IPPROTO_TCP, syscall.TCP_KEEPINTVL)
@@ -50,13 +43,16 @@ func GetKeepAliveSettings(
 		if err != nil {
 			return
 		}
+		userTimeout, err = GetTcpUserTimeout(SocketFd(fd))
+		if err != nil {
+			return
+		}
 	})
 	if err != nil || innerErr != nil {
-		return idleTime, probeInterval, probeCount, errors.WithSecondaryError(err, innerErr)
+		return idleTime, probeInterval, probeCount, userTimeout, errors.WithSecondaryError(err, innerErr)
 	}
 	// Convert to durations
 	idleTime = time.Second * time.Duration(idleTimeSec)
 	probeInterval = time.Second * time.Duration(probeIntervalSec)
-
-	return idleTime, probeInterval, probeCount, nil
+	return idleTime, probeInterval, probeCount, userTimeout, nil
 }

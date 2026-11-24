@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 )
 
 // NB: These settings are SystemVisible because they need to be read by e.g.
@@ -22,7 +23,6 @@ var TargetDuration = settings.RegisterDurationSetting(
 	"kv.closed_timestamp.target_duration",
 	"if nonzero, attempt to provide closed timestamp notifications for timestamps trailing cluster time by approximately this duration",
 	3*time.Second,
-	settings.NonNegativeDuration,
 	settings.WithPublic,
 )
 
@@ -33,7 +33,6 @@ var SideTransportCloseInterval = settings.RegisterDurationSetting(
 	"the interval at which the closed timestamp side-transport attempts to "+
 		"advance each range's closed timestamp; set to 0 to disable the side-transport",
 	200*time.Millisecond,
-	settings.NonNegativeDuration,
 	settings.WithPublic,
 )
 
@@ -46,6 +45,105 @@ var LeadForGlobalReadsOverride = settings.RegisterDurationSetting(
 	"kv.closed_timestamp.lead_for_global_reads_override",
 	"if nonzero, overrides the lead time that global_read ranges use to publish closed timestamps",
 	0,
-	settings.NonNegativeDuration,
 	settings.WithPublic,
+)
+
+// RangeClosedTimestampPolicyRefreshInterval controls how frequently the system
+// refreshes policies on leaseholders of nodes. These policies are refreshed
+// regardless of whether auto-tuning is enabled.
+var RangeClosedTimestampPolicyRefreshInterval = settings.RegisterDurationSetting(
+	settings.SystemVisible,
+	"kv.closed_timestamp.policy_refresh_interval",
+	"interval at which the system refreshes closed timestamp policies for leaseholders",
+	5*time.Minute,
+)
+
+// RangeClosedTimestampPolicyLatencyRefreshInterval determines how often the
+// system updates the latency cache based on observed latencies between nodes.
+// This cache is then used by ranges to select an appropriate closed timestamp
+// policy when auto-tuning is enabled.
+var RangeClosedTimestampPolicyLatencyRefreshInterval = settings.RegisterDurationSetting(
+	settings.SystemVisible,
+	"kv.closed_timestamp.policy_latency_refresh_interval",
+	"interval at which the system refreshes the latency cache based on observed latencies between nodes",
+	4*time.Minute,
+)
+
+// LeadForGlobalReadsAutoTuneEnabled determines whether ranges configured to
+// serve global reads would be assigned policies based on observed latency
+// between their leaseholder and furthest follower. This dynamic adjustment
+// helps optimize closed timestamp lead times. If no latency data is available,
+// falls back to default lead times. Note that the LeadForGlobalReadsOverride
+// setting takes precedence if set.
+var LeadForGlobalReadsAutoTuneEnabled = settings.RegisterBoolSetting(
+	settings.SystemVisible,
+	"kv.closed_timestamp.lead_for_global_reads_auto_tune.enabled",
+	"if enabled, observed network latency between leaseholders and their "+
+		"furthest follower will be used to adjust closed timestamp policies for ranges"+
+		"ranges configured to serve global reads. "+
+		"kv.closed_timestamp.lead_for_global_reads_override takes precedence if set.",
+	metamorphic.ConstantWithTestBool("kv.closed_timestamp.lead_for_global_reads_auto_tune.enabled", false),
+	settings.WithPublic,
+)
+
+// PolicySwitchWhenLatencyExceedsBucketFraction determines the threshold for
+// changing the closed timestamp policy based on observed latency between
+// leaseholders and their furthest follower. This is used to prevent
+// frequent changes in the closed timestamp policy when the latency is close
+// to the boundary of the policy bucket. By default, this is disabled (0).
+var PolicySwitchWhenLatencyExceedsBucketFraction = settings.RegisterFloatSetting(
+	settings.SystemOnly,
+	"kv.closed_timestamp.policy_switch_latency_bucket_exceed_threshold",
+	"the fraction of the closed timestamp policy bucket width which need be "+
+		"exceeded before the closed timestamp policy will be changed",
+	0.2,
+)
+
+// SideTransportPacingRefreshInterval controls the task pacer refresh interval
+// for pacing broadcast updates in the side transport. This determines how long
+// the pacer takes to complete signaling all waiting connections.
+var SideTransportPacingRefreshInterval = settings.RegisterDurationSetting(
+	settings.SystemVisible,
+	"kv.closed_timestamp.side_transport_pacing_refresh_interval",
+	"the refresh interval for the task pacer that controls pacing of sending "+
+		"sidetransport updates to avoid overloading the system when many connections are waiting",
+	10*time.Millisecond,
+	settings.WithPublic,
+)
+
+// SideTransportPacingSmearInterval controls the time interval between batches
+// when broadcasting side transport updates. The pacer uses this to spread out
+// work over time, sleeping between batches to avoid creating spikes in runnable
+// goroutines when many connections are waiting for updates.
+var SideTransportPacingSmearInterval = settings.RegisterDurationSetting(
+	settings.SystemVisible,
+	"kv.closed_timestamp.side_transport_pacing_smear_interval",
+	"the smear interval for the task pacer that controls the amount of time "+
+		"each paced batch is going to take when broadcasting sidetransport updates",
+	1*time.Millisecond,
+	settings.WithPublic,
+)
+
+// FollowerReadsEnabled controls whether replicas attempt to serve follower
+// reads. The closed timestamp machinery is unaffected by this, i.e. the same
+// information is collected and passed around, regardless of the value of this
+// setting.
+var FollowerReadsEnabled = settings.RegisterBoolSetting(
+	settings.SystemVisible, // needed for planning in SQL
+	"kv.closed_timestamp.follower_reads_enabled",
+	"allow (all) replicas to serve consistent historical reads based on closed timestamp information",
+	true,
+	settings.WithName("kv.closed_timestamp.follower_reads.enabled"),
+	settings.WithPublic)
+
+// ClosedTimestampPropagationSlack is used by follower_read_timestamp() as a
+// measure of how long closed timestamp updates are supposed to take from the
+// leaseholder to the followers.
+var ClosedTimestampPropagationSlack = settings.RegisterDurationSetting(
+	settings.SystemVisible,
+	"kv.closed_timestamp.propagation_slack",
+	"a conservative estimate of the amount of time expect for closed timestamps to "+
+		"propagate from a leaseholder to followers. This is taken into account by "+
+		"follower_read_timestamp().",
+	time.Second,
 )

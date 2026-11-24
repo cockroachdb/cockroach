@@ -8,6 +8,7 @@ package xform
 import (
 	"context"
 	"math/rand"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -133,6 +134,16 @@ func (o *Optimizer) Init(ctx context.Context, evalCtx *eval.Context, catalog cat
 	o.mem = o.f.Memo()
 	o.explorer.init(o)
 
+	var disabledRules RuleSet
+	// If the DisableOptimizerRules session variable is set, then disable
+	// the specified rules.
+	if ruleNames := evalCtx.SessionData().DisableOptimizerRules; len(ruleNames) > 0 {
+		for _, ruleName := range ruleNames {
+			if rule, ok := opt.RuleNameMap[strings.ToLower(ruleName)]; ok {
+				disabledRules.Add(int(rule))
+			}
+		}
+	}
 	if seed := evalCtx.SessionData().TestingOptimizerRandomSeed; seed != 0 {
 		o.rng = rand.New(rand.NewSource(seed))
 	}
@@ -153,7 +164,10 @@ func (o *Optimizer) Init(ctx context.Context, evalCtx *eval.Context, catalog cat
 	o.defaultCoster.Init(ctx, evalCtx, o.mem, costPerturbation, o.rng, o)
 	o.coster = &o.defaultCoster
 	if disableRuleProbability > 0 {
-		o.disableRulesRandom(disableRuleProbability)
+		o.disableRulesRandom(disableRuleProbability, &disabledRules)
+	}
+	if disabledRules.Len() > 0 {
+		o.disableRules(disabledRules)
 	}
 }
 
@@ -233,25 +247,12 @@ func (o *Optimizer) Memo() *memo.Memo {
 // properties at the lowest possible execution cost, but is still logically
 // equivalent to the given expression. If there is a cost "tie", then any one
 // of the qualifying lowest cost expressions may be selected by the optimizer.
-func (o *Optimizer) Optimize() (_ opt.Expr, err error) {
+func (o *Optimizer) Optimize() (_ opt.Expr, retErr error) {
 	log.VEventf(o.ctx, 1, "optimize start")
 	defer log.VEventf(o.ctx, 1, "optimize finish")
-	defer func() {
-		if r := recover(); r != nil {
-			// This code allows us to propagate internal errors without having to add
-			// error checks everywhere throughout the code. This is only possible
-			// because the code does not update shared state and does not manipulate
-			// locks.
-			if ok, e := errorutil.ShouldCatch(r); ok {
-				err = e
-				log.VEventf(o.ctx, 1, "%v", err)
-			} else {
-				// Other panic objects can't be considered "safe" and thus are
-				// propagated as crashes that terminate the session.
-				panic(r)
-			}
-		}
-	}()
+	defer errorutil.MaybeCatchPanic(&retErr, func(caughtErr error) {
+		log.VEventf(o.ctx, 1, "%v", caughtErr)
+	})
 
 	if o.mem.IsOptimized() {
 		return nil, errors.AssertionFailedf("cannot optimize a memo multiple times")
@@ -261,7 +262,7 @@ func (o *Optimizer) Optimize() (_ opt.Expr, err error) {
 	o.optimizeRootWithProps()
 
 	// Now optimize the entire expression tree.
-	root := o.mem.RootExpr().(memo.RelExpr)
+	root := o.mem.RootExpr()
 	rootProps := o.mem.RootProps()
 	o.optimizeGroup(root, rootProps)
 
@@ -300,7 +301,7 @@ func (o *Optimizer) optimizeExpr(
 		// Short-circuit traversal of scalar expressions with no nested subquery,
 		// since there's only one possible tree.
 		if !t.ScalarProps().HasSubquery {
-			return 0, true
+			return memo.Cost{C: 0}, true
 		}
 		return o.optimizeScalarExpr(t)
 
@@ -525,7 +526,7 @@ func (o *Optimizer) optimizeGroup(grp memo.RelExpr, required *physical.Required)
 		if cachedLCP.exists {
 			return cachedLCP.lcp, cachedLCP.ok
 		}
-		interestingOrderings := ordering.DeriveInterestingOrderings(grp)
+		interestingOrderings := ordering.DeriveInterestingOrderings(o.mem, grp)
 		cachedLCP.lcp, cachedLCP.ok = interestingOrderings.LongestCommonPrefix(&required.Ordering)
 		cachedLCP.exists = true
 		return cachedLCP.lcp, cachedLCP.ok
@@ -593,7 +594,7 @@ func (o *Optimizer) optimizeGroupMember(
 	// properties? That case is taken care of by enforceProps, which will
 	// recursively optimize the group with property subsets and then add
 	// enforcers to provide the remainder.
-	if CanProvidePhysicalProps(o.ctx, o.evalCtx, member, required) {
+	if CanProvidePhysicalProps(o.ctx, o.evalCtx, o.mem, member, required) {
 		var cost memo.Cost
 		for i, n := 0, member.ChildCount(); i < n; i++ {
 			// Given required parent properties, get the properties required from
@@ -604,20 +605,7 @@ func (o *Optimizer) optimizeGroupMember(
 			childCost, childOptimized := o.optimizeExpr(member.Child(i), childRequired)
 
 			// Accumulate cost of children.
-			if member.Op() == opt.LocalityOptimizedSearchOp && i > 0 {
-				// If the child ops are locality optimized, distribution costs are added
-				// to the remote branch, but not the local branch. Scale the remote
-				// branch costs by a factor reflecting the likelihood of executing that
-				// branch. Right now this probability is not estimated, so just use a
-				// default probability of 1/10.
-				// TODO(msirek): Add an estimation of the probability of executing the
-				//               remote branch, e.g., compare the size of the limit hint
-				//               with the expected row count of the local branch.
-				//               Is there a better approach?
-				cost += childCost / 10
-			} else {
-				cost += childCost
-			}
+			cost.Add(childCost)
 
 			// If any child expression is not fully optimized, then the parent
 			// expression is also not fully optimized.
@@ -627,7 +615,7 @@ func (o *Optimizer) optimizeGroupMember(
 		}
 
 		// Check whether this is the new lowest cost expression.
-		cost += o.coster.ComputeCost(member, required)
+		cost.Add(o.coster.ComputeCost(member, required))
 		o.ratchetCost(state, member, cost)
 	}
 
@@ -647,7 +635,7 @@ func (o *Optimizer) optimizeScalarExpr(
 		childCost, childOptimized := o.optimizeExpr(scalar.Child(i), childProps)
 
 		// Accumulate cost of children.
-		cost += childCost
+		cost.Add(childCost)
 
 		// If any child expression is not fully optimized, then the parent
 		// expression is also not fully optimized.
@@ -689,6 +677,38 @@ func (o *Optimizer) enforceProps(
 	// stripped by recursively optimizing the group with successively fewer
 	// properties. The properties are stripped off in a heuristic order, from
 	// least likely to be expensive to enforce to most likely.
+
+	// We must consider PlanGrams first, before all other physical properties, so
+	// that the coster can properly match PlanGram terms against the enforcers of
+	// other physical properties.
+	//
+	// If the PlanGram has alternates (i.e. the current PlanGram term is a
+	// production with multiple rules), the coster cannot use the current PlanGram
+	// term to cost expressions. Instead of stripping off the PlanGram property
+	// altogether, we expand the current PlanGram term by optimizing the group
+	// once with each alternate term.
+	if required.PlanGram.HasAlternates() {
+		fullyOptimized = true
+		required.PlanGram.VisitAlternates(func(alternate physical.PlanGram) {
+			// We optimize here rather than using optimizerEnforcer because we're not
+			// adding an enforcer expression.
+			newProps := *required
+			newProps.PlanGram = alternate
+			innerRequired := o.mem.InternPhysicalProps(&newProps)
+			innerState := o.optimizeGroup(member, innerRequired)
+			if o.ratchetCost(state, innerState.best, innerState.cost) {
+				// Because we don't add an enforcer, we need to track which alternate
+				// term won in the groupState so setLowestCostTree can reconstruct the
+				// correct expression and term.
+				state.bestAlternatePlanGram = alternate
+			}
+			if !innerState.fullyOptimized {
+				fullyOptimized = false
+			}
+		})
+		return fullyOptimized
+	}
+
 	if !required.Distribution.Any() && member.Op() != opt.ExplainOp {
 		enforcer := &memo.DistributeExpr{Input: member}
 		getEnforcer := func() memo.RelExpr {
@@ -748,7 +768,8 @@ func (o *Optimizer) optimizeEnforcer(
 
 	// Check whether this is the new lowest cost expression with the enforcer
 	// added.
-	cost := innerState.cost + o.coster.ComputeCost(enforcer, enforcerProps)
+	cost := innerState.cost
+	cost.Add(o.coster.ComputeCost(enforcer, enforcerProps))
 	if o.ratchetCost(state, enforcer, cost) {
 		if _, ok := enforcer.(*memo.SortExpr); ok {
 			// The expression was added to the memo, so lose the reference.
@@ -764,7 +785,8 @@ func (o *Optimizer) optimizeEnforcer(
 // shouldExplore ensures that exploration is only triggered for optimizeGroup
 // calls that will not recurse via a call from enforceProps.
 func (o *Optimizer) shouldExplore(required *physical.Required) bool {
-	return required.Ordering.Any() && required.Distribution.Any()
+	return required.Ordering.Any() && required.Distribution.Any() &&
+		!required.PlanGram.HasAlternates()
 }
 
 // setLowestCostTree traverses the memo and recursively updates child pointers
@@ -807,6 +829,18 @@ func (o *Optimizer) setLowestCostTree(parent opt.Expr, parentProps *physical.Req
 		relParent, relCost = state.best, state.cost
 		parent = relParent
 
+		// If the PlanGram still has unexpanded alternates (the state was
+		// optimized via enforceProps), re-enter with the winning alternate
+		// so the rest of the tree is built with a concrete PlanGram. This
+		// recurses at most once because bestAlternatePlanGram is guaranteed
+		// to have HasAlternates() == false.
+		if parentProps.PlanGram.HasAlternates() {
+			newProps := *parentProps
+			newProps.PlanGram = state.bestAlternatePlanGram
+			innerRequired := o.mem.InternPhysicalProps(&newProps)
+			return o.setLowestCostTree(parent, innerRequired)
+		}
+
 	case memo.ScalarPropsExpr:
 		// Short-circuit traversal of scalar expressions with no nested subquery,
 		// since there's only one possible tree.
@@ -841,8 +875,10 @@ func (o *Optimizer) setLowestCostTree(parent opt.Expr, parentProps *physical.Req
 		var provided physical.Provided
 		// BuildProvided relies on ProvidedPhysical() being set in the children, so
 		// it must run after the recursive calls on the children.
-		provided.Ordering = ordering.BuildProvided(o.evalCtx, relParent, &parentProps.Ordering)
-		provided.Distribution = distribution.BuildProvided(o.ctx, o.evalCtx, relParent, &parentProps.Distribution)
+		provided.Ordering = ordering.BuildProvided(o.evalCtx, o.mem, relParent, &parentProps.Ordering)
+		provided.Distribution = distribution.BuildProvided(
+			o.ctx, o.evalCtx, o.mem, relParent, &parentProps.Distribution,
+		)
 		o.mem.SetBestProps(relParent, parentProps, &provided, relCost)
 	}
 
@@ -918,10 +954,7 @@ func (o *Optimizer) ensureOptState(grp memo.RelExpr, required *physical.Required
 // properties required of it. This may trigger the creation of a new root and
 // new properties.
 func (o *Optimizer) optimizeRootWithProps() {
-	root, ok := o.mem.RootExpr().(memo.RelExpr)
-	if !ok {
-		panic(errors.AssertionFailedf("Optimize can only be called on relational root expressions"))
-	}
+	root := o.mem.RootExpr()
 	rootProps := o.mem.RootProps()
 
 	// [SimplifyRootOrdering]
@@ -1006,6 +1039,11 @@ type groupState struct {
 	// optimization passes are made.
 	fullyOptimized bool
 
+	// bestAlternatePlanGram records which PlanGram alternate was chosen when
+	// enforceProps expanded a PlanGram production with multiple rules. Used by
+	// setLowestCostTree to reconstruct the correct path.
+	bestAlternatePlanGram physical.PlanGram
+
 	// fullyOptimizedExprs contains the set of ordinal positions of each member
 	// expression in the group that has been fully optimized for the required
 	// properties. These never need to be recosted, no matter how many additional
@@ -1063,7 +1101,7 @@ func (a *groupStateAlloc) allocate() *groupState {
 }
 
 // disableRulesRandom disables rules with the given probability for testing.
-func (o *Optimizer) disableRulesRandom(probability float64) {
+func (o *Optimizer) disableRulesRandom(probability float64, disabledRules *RuleSet) {
 	essentialRules := intsets.MakeFast(
 		// Needed to prevent constraint building from failing.
 		int(opt.NormalizeInConst),
@@ -1111,7 +1149,6 @@ func (o *Optimizer) disableRulesRandom(probability float64) {
 		int(opt.ConvertUncorrelatedExistsToCoalesceSubquery),
 	)
 
-	var disabledRules RuleSet
 	for i := opt.RuleName(1); i < opt.NumRuleNames; i++ {
 		var r float64
 		if o.rng == nil {
@@ -1123,12 +1160,14 @@ func (o *Optimizer) disableRulesRandom(probability float64) {
 			disabledRules.Add(int(i))
 		}
 	}
+}
 
+func (o *Optimizer) disableRules(disabledRules RuleSet) {
 	o.f.SetDisabledRules(disabledRules)
 
 	o.NotifyOnMatchedRule(func(ruleName opt.RuleName) bool {
 		if disabledRules.Contains(int(ruleName)) {
-			log.Infof(o.ctx, "disabled rule matched: %s", ruleName.String())
+			log.VEventf(o.ctx, 2, "disabled rule matched: %s", ruleName.String())
 			return false
 		}
 		return true
@@ -1162,7 +1201,7 @@ func (o *Optimizer) RecomputeCost() {
 func (o *Optimizer) recomputeCostImpl(
 	parent opt.Expr, parentProps *physical.Required, c Coster,
 ) memo.Cost {
-	cost := memo.Cost(0)
+	cost := memo.Cost{C: 0}
 	for i, n := 0, parent.ChildCount(); i < n; i++ {
 		child := parent.Child(i)
 		childProps := physical.MinRequired
@@ -1170,12 +1209,12 @@ func (o *Optimizer) recomputeCostImpl(
 		case memo.RelExpr:
 			childProps = t.RequiredPhysical()
 		}
-		cost += o.recomputeCostImpl(child, childProps, c)
+		cost.Add(o.recomputeCostImpl(child, childProps, c))
 	}
 
 	switch t := parent.(type) {
 	case memo.RelExpr:
-		cost += c.ComputeCost(t, parentProps)
+		cost.Add(c.ComputeCost(t, parentProps))
 		o.mem.ResetCost(t, cost)
 	}
 

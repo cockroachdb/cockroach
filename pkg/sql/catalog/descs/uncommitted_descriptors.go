@@ -42,6 +42,12 @@ type uncommittedDescriptors struct {
 	uncommitted       nstree.NameMap
 	original, mutable nstree.IDMap
 
+	// versionBumpOnly stores descriptors that have been modified only by
+	// changing their version counter, without any other mutations. These bumps
+	// are used to trigger cache invalidation and are tracked to avoid the
+	// typical block on version convergence behavior.
+	versionBumpOnly map[descpb.ID]bool
+
 	// memAcc is the actual account of an injected, upstream monitor
 	// to track memory usage of uncommittedDescriptors.
 	memAcc mon.BoundAccount
@@ -49,7 +55,8 @@ type uncommittedDescriptors struct {
 
 func makeUncommittedDescriptors(monitor *mon.BytesMonitor) uncommittedDescriptors {
 	return uncommittedDescriptors{
-		memAcc: monitor.MakeBoundAccount(),
+		versionBumpOnly: map[descpb.ID]bool{},
+		memAcc:          monitor.MakeBoundAccount(),
 	}
 }
 
@@ -61,10 +68,11 @@ func (ud *uncommittedDescriptors) reset(ctx context.Context) {
 	ud.memAcc.Clear(ctx)
 	old := *ud
 	*ud = uncommittedDescriptors{
-		original:    old.original,
-		uncommitted: old.uncommitted,
-		mutable:     old.mutable,
-		memAcc:      old.memAcc,
+		original:        old.original,
+		uncommitted:     old.uncommitted,
+		mutable:         old.mutable,
+		versionBumpOnly: map[descpb.ID]bool{},
+		memAcc:          old.memAcc,
 	}
 }
 
@@ -148,17 +156,17 @@ func (ud *uncommittedDescriptors) upsert(
 	// Perform some sanity checks to ensure the version counters are correct.
 	if original == nil {
 		if !mut.IsNew() {
-			return errors.New("non-new descriptor does not exist in storage yet")
+			return errors.AssertionFailedf("non-new descriptor does not exist in storage yet")
 		}
 		if mut.GetVersion() != 1 {
 			return errors.New("new descriptor version should be 1")
 		}
 	} else {
 		if mut.IsNew() {
-			return errors.New("new descriptor already exists in storage")
+			return errors.AssertionFailedf("new descriptor already exists in storage")
 		}
 		if mut.GetVersion() != original.GetVersion()+1 {
-			return errors.Newf("expected uncommitted version %d, instead got %d",
+			return errors.AssertionFailedf("expected uncommitted version %d, instead got %d",
 				original.GetVersion()+1, mut.GetVersion())
 		}
 	}

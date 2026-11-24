@@ -1,0 +1,103 @@
+get-state
+----
+unhealthy: false, unhealthy-duration: 0s
+
+# Slow event that does not exceed the unhealthy threshold.
+slow-event dur=3
+----
+
+get-state
+----
+unhealthy: false, unhealthy-duration: 0s
+
+# Slow event that exceeds the unhealthy threshold. A goroutine is started to
+# return to healthy state.
+slow-event dur=6
+----
+asyncRunner.async
+
+# Goroutine start notification.
+receive-runner-tick
+----
+tickTime: 0s
+
+get-state
+----
+unhealthy: true, unhealthy-duration: 0s
+
+advance-time sec=2
+----
+
+# Still unhealthy.
+get-state
+----
+unhealthy: true, unhealthy-duration: 0s
+
+# Advanced by 6s since unhealthy, so should become healthy again.
+advance-time sec=4
+----
+
+# Wait for goroutine to notice.
+receive-runner-tick
+----
+asyncRunner.Closed(): false
+tickTime: 5s
+
+get-state
+----
+unhealthy: false, unhealthy-duration: 5s
+
+# Slow event that exceeds the unhealthy threshold. Goroutine is started.
+slow-event dur=6
+----
+asyncRunner.async
+
+# Goroutine start notification.
+receive-runner-tick
+----
+tickTime: 6s
+
+advance-time sec=2
+----
+
+# Another slow event that exceeds the unhealthy threshold while already unhealthy.
+slow-event dur=6
+----
+
+advance-time sec=4
+----
+
+# Goroutine notices that still unhealthy.
+receive-runner-tick
+----
+asyncRunner.Closed(): false
+tickTime: 11s
+
+get-state
+----
+unhealthy: true, unhealthy-duration: 10s
+
+# Set closed.
+close
+----
+
+advance-time sec=2
+----
+
+# Another slow event that exceeds the unhealthy threshold while already unhealthy.
+slow-event dur=6
+----
+
+advance-time sec=4
+----
+
+# Goroutine notices that closed, so sets unhealthy to false and exits. Without
+# this the test fails with a goroutine leak.
+receive-runner-tick
+----
+asyncRunner.Closed(): true
+tickTime: 16s
+
+get-state
+----
+unhealthy: false, unhealthy-duration: 15s

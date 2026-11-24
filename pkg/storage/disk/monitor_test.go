@@ -6,6 +6,8 @@
 package disk
 
 import (
+	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -17,12 +19,20 @@ import (
 )
 
 type spyCollector struct {
-	collectCount int
+	collectCallCount atomic.Int32
 }
 
-func (s *spyCollector) collect(disks []*monitoredDisk) error {
-	s.collectCount++
-	return nil
+func (s *spyCollector) collect(
+	disks []*monitoredDisk, now time.Time,
+) (countCollected int, err error) {
+	s.collectCallCount.Add(1)
+	return len(disks), nil
+}
+
+func (s *spyCollector) collectInstantaneous(
+	disks []*monitoredDisk, now time.Time, recorder func(traceEvent), buf []byte,
+) (countCollected int, _ []byte, err error) {
+	return len(disks), buf, nil
 }
 
 func TestMonitorManager_monitorDisks(t *testing.T) {
@@ -33,19 +43,20 @@ func TestMonitorManager_monitorDisks(t *testing.T) {
 	testDisk := &monitoredDisk{
 		manager: manager,
 		deviceID: DeviceID{
-			major: 0,
-			minor: 0,
+			Major: 0,
+			Minor: 0,
 		},
 	}
 	manager.mu.disks = []*monitoredDisk{testDisk}
 
 	testCollector := &spyCollector{}
-	stop := make(chan struct{})
-	go manager.monitorDisks(testCollector, stop)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go manager.monitorDisks(ctx, testCollector)
 
-	time.Sleep(2 * DefaultDiskStatsPollingInterval)
-	stop <- struct{}{}
-	require.Greater(t, testCollector.collectCount, 0)
+	require.Eventually(t, func() bool {
+		return testCollector.collectCallCount.Load() > 0
+	}, 100*DefaultDiskStatsPollingInterval, DefaultDiskStatsPollingInterval)
 }
 
 func TestMonitor_StatsWindow(t *testing.T) {
@@ -119,6 +130,90 @@ func TestMonitor_IncrementalStats(t *testing.T) {
 	require.Equal(t, expectedWindow, rollingWindow)
 }
 
+func TestMonitorManager_CollectInstantaneous(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	t.Run("no collector does not return error", func(t *testing.T) {
+		manager := NewMonitorManager(vfs.NewMem())
+		// No statsCollector set, should not return error.
+		stats, buf, err := manager.CollectInstantaneous(nil, nil)
+		require.NoError(t, err)
+		require.Empty(t, stats)
+		require.Nil(t, buf)
+	})
+
+	t.Run("returns stats from collector", func(t *testing.T) {
+		manager := NewMonitorManager(vfs.NewMem())
+		testDisk := &monitoredDisk{
+			manager:  manager,
+			deviceID: DeviceID{Major: 8, Minor: 0},
+		}
+		manager.mu.disks = []*monitoredDisk{testDisk}
+
+		// Use a collector that returns actual stats.
+		collector := &statsReturningCollector{
+			stats: []Stats{
+				{DeviceID: DeviceID{Major: 8, Minor: 0}, ReadsCount: 100, WritesCount: 200},
+			},
+		}
+		manager.mu.statsCollector = collector
+
+		stats, _, err := manager.CollectInstantaneous(nil, nil)
+		require.NoError(t, err)
+		require.Len(t, stats, 1)
+		require.EqualValues(t, 100, stats[0].ReadsCount)
+		require.EqualValues(t, 200, stats[0].WritesCount)
+	})
+
+	t.Run("reuses provided buffers", func(t *testing.T) {
+		manager := NewMonitorManager(vfs.NewMem())
+		testDisk := &monitoredDisk{
+			manager:  manager,
+			deviceID: DeviceID{Major: 8, Minor: 0},
+		}
+		manager.mu.disks = []*monitoredDisk{testDisk}
+
+		collector := &statsReturningCollector{
+			stats: []Stats{
+				{DeviceID: DeviceID{Major: 8, Minor: 0}, ReadsCount: 50},
+			},
+		}
+		manager.mu.statsCollector = collector
+
+		// Provide pre-allocated buffers.
+		statsBuf := make([]Stats, 1, 10)
+		byteBuf := make([]byte, 64)
+
+		stats, returnedByteBuf, err := manager.CollectInstantaneous(statsBuf, byteBuf)
+		require.NoError(t, err)
+		require.Len(t, stats, 1)
+		require.Equal(t, &statsBuf[0], &stats[0])
+		require.Equal(t, &byteBuf, &returnedByteBuf)
+		require.Equal(t, &byteBuf[0], &returnedByteBuf[0])
+	})
+}
+
+// statsReturningCollector is a test collector that returns configured stats.
+type statsReturningCollector struct {
+	stats []Stats
+}
+
+func (s *statsReturningCollector) collect(
+	disks []*monitoredDisk, now time.Time,
+) (countCollected int, err error) {
+	return len(disks), nil
+}
+
+func (s *statsReturningCollector) collectInstantaneous(
+	disks []*monitoredDisk, now time.Time, recorder func(traceEvent), buf []byte,
+) (countCollected int, _ []byte, err error) {
+	for _, stat := range s.stats {
+		recorder(traceEvent{time: now, stats: stat})
+	}
+	return len(s.stats), buf, nil
+}
+
 func TestMonitor_Close(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -127,13 +222,13 @@ func TestMonitor_Close(t *testing.T) {
 	testDisk := &monitoredDisk{
 		manager: manager,
 		deviceID: DeviceID{
-			major: 0,
-			minor: 0,
+			Major: 0,
+			Minor: 0,
 		},
 		refCount: 2,
 	}
-	stop := make(chan struct{})
-	manager.mu.stop = stop
+	ctx, cancel := context.WithCancel(context.Background())
+	manager.mu.cancel = cancel
 	manager.mu.disks = []*monitoredDisk{testDisk}
 	monitor1 := Monitor{monitoredDisk: testDisk}
 	monitor2 := Monitor{monitoredDisk: testDisk}
@@ -148,7 +243,7 @@ func TestMonitor_Close(t *testing.T) {
 	go monitor2.Close()
 	// If there are no monitors, stop the stat polling loop.
 	select {
-	case <-stop:
+	case <-ctx.Done():
 	case <-time.After(time.Second):
 		t.Fatal("Failed to receive stop signal")
 	}

@@ -13,10 +13,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -28,7 +32,7 @@ import (
 // more replicas, depending on error conditions and how many successful
 // responses are required.
 type SendOptions struct {
-	class   rpc.ConnectionClass
+	class   rpcbase.ConnectionClass
 	metrics *DistSenderMetrics
 	// dontConsiderConnHealth, if set, makes the transport not take into
 	// consideration the connection health when deciding the ordering for
@@ -146,7 +150,7 @@ func grpcTransportFactoryImpl(
 type grpcTransport struct {
 	opts       SendOptions
 	nodeDialer *nodedialer.Dialer
-	class      rpc.ConnectionClass
+	class      rpcbase.ConnectionClass
 
 	replicas []roachpb.ReplicaDescriptor
 	// replicaHealth maps replica index within the replicas slice to healthHealthy
@@ -202,20 +206,45 @@ func (gt *grpcTransport) sendBatch(
 	}
 
 	gt.opts.metrics.SentCount.Inc(1)
+	tenantID, _ := roachpb.ClientTenantFromContext(ctx)
+	info := ash.WorkloadInfo{
+		WorkloadID:    ba.WorkloadID,
+		AppNameID:     ba.AppNameID,
+		GatewayNodeID: ba.GatewayNodeID,
+		WorkloadType:  workloadid.WorkloadType(ba.WorkloadType),
+	}
+	var cleanup func()
 	if rpc.IsLocal(iface) {
 		gt.opts.metrics.LocalSentCount.Inc(1)
+		cleanup = ash.SetWorkState(
+			tenantID, info,
+			ash.WorkCPU, "DistSenderLocal")
+	} else {
+		cleanup = ash.SetWorkState(
+			tenantID, info,
+			ash.WorkNetwork, "DistSenderRemote")
 	}
 	log.VEvent(ctx, 2, "sending batch request")
 	reply, err := iface.Batch(ctx, ba)
+	cleanup()
 	log.VEvent(ctx, 2, "received batch response")
-	// If we queried a remote node, perform extra validation.
-	if reply != nil && !rpc.IsLocal(iface) {
-		if err == nil {
-			for i := range reply.Responses {
-				err = reply.Responses[i].GetInner().Verify(ba.Requests[i].GetInner())
-				if err != nil {
-					log.Errorf(ctx, "verification of response for %s failed: %v", ba.Requests[i].GetInner(), err)
-					break
+
+	// We don't have any strong reason to keep verifying the checksum of the
+	// response. However, since this check has historically caught some bugs, we
+	// are keeping it in Test builds for not.
+	// TODO(ibrahim): There is a path to remove Value checksum computations and
+	// verifications. More details are available in:
+	// https://github.com/cockroachdb/cockroach/issues/145541#issuecomment-2917225539
+	if buildutil.CrdbTestBuild {
+		// If we queried a remote node, perform extra validation.
+		if reply != nil && !rpc.IsLocal(iface) {
+			if err == nil {
+				for i := range reply.Responses {
+					err = reply.Responses[i].GetInner().Verify(ba.Requests[i].GetInner())
+					if err != nil {
+						log.Dev.Errorf(ctx, "verification of response for %s failed: %v", ba.Requests[i].GetInner(), err)
+						break
+					}
 				}
 			}
 		}

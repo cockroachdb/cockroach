@@ -58,7 +58,7 @@ func (im *IndexBackfillerMergePlanner) MergeIndexes(
 		g.Add(sourceIndexSpan)
 		g.Sub(progress.CompletedSpans[i]...)
 		spansToDo[i] = g.Slice()
-		if len(spansToDo) > 0 {
+		if len(spansToDo[i]) > 0 {
 			hasToDo = true
 		}
 	}
@@ -92,8 +92,8 @@ func (im *IndexBackfillerMergePlanner) MergeIndexes(
 		)
 		return tracker.SetMergeProgress(ctx, progress)
 	}
-	mergeTimeStamp := getMergeTimestamp(im.execCfg.Clock)
-	protectedTimestampCleaner := im.execCfg.ProtectedTimestampManager.TryToProtectBeforeGC(ctx, job, descriptor, mergeTimeStamp)
+	mergeTimeStamp := getMergeTimestamp(ctx, im.execCfg.Clock)
+	protectedTimestampCleaner := im.execCfg.ProtectedTimestampManager.TryToProtectBeforeGC(ctx, job, descriptor.GetID(), mergeTimeStamp)
 	defer func() {
 		cleanupError := protectedTimestampCleaner(ctx)
 		if cleanupError != nil {
@@ -125,22 +125,20 @@ func (im *IndexBackfillerMergePlanner) plan(
 	mergeTimestamp hlc.Timestamp,
 ) (func(context.Context) error, error) {
 	var p *PhysicalPlan
-	var evalCtx extendedEvalContext
+	var extEvalCtx extendedEvalContext
 	var planCtx *PlanningCtx
 
 	if err := DescsTxn(ctx, im.execCfg, func(
 		ctx context.Context, txn isql.Txn, descriptors *descs.Collection,
 	) error {
 		sd := NewInternalSessionData(ctx, im.execCfg.Settings, "plan-index-backfill-merge")
-		evalCtx = createSchemaChangeEvalCtx(ctx, im.execCfg, sd, txn.KV().ReadTimestamp(), descriptors)
+		extEvalCtx = createSchemaChangeEvalCtx(ctx, im.execCfg, sd, txn.KV().ReadTimestamp(), descriptors)
 		planCtx = im.execCfg.DistSQLPlanner.NewPlanningCtx(
-			ctx, &evalCtx, nil /* planner */, txn.KV(), FullDistribution,
+			ctx, &extEvalCtx, nil /* planner */, txn.KV(), FullDistribution,
 		)
 
-		spec, err := initIndexBackfillMergerSpec(*tableDesc.TableDesc(), addedIndexes, temporaryIndexes, mergeTimestamp)
-		if err != nil {
-			return err
-		}
+		spec := initIndexBackfillMergerSpec(*tableDesc.TableDesc(), addedIndexes, temporaryIndexes, mergeTimestamp)
+		var err error
 		p, err = im.execCfg.DistSQLPlanner.createIndexBackfillerMergePhysicalPlan(ctx, planCtx, spec, todoSpanList)
 		return err
 	}); err != nil {
@@ -156,15 +154,18 @@ func (im *IndexBackfillerMergePlanner) plan(
 			im.execCfg.RangeDescriptorCache,
 			nil, /* txn - the flow does not run wholly in a txn */
 			im.execCfg.Clock,
-			evalCtx.Tracing,
+			extEvalCtx.Tracing,
 		)
 		defer recv.Release()
-		evalCtxCopy := evalCtx
+		// Copy the eval.Context, as dsp.Run() might change it.
+		evalCtxCopy := extEvalCtx.Context.Copy()
 		im.execCfg.DistSQLPlanner.Run(
 			ctx,
 			planCtx,
 			nil, /* txn - the processors manage their own transactions */
-			p, recv, &evalCtxCopy,
+			p,
+			recv,
+			evalCtxCopy,
 			nil, /* finishedSetupFn */
 		)
 		return cbw.Err()
@@ -233,6 +234,7 @@ type IndexMergeTracker struct {
 		job *jobs.Job
 	}
 
+	db             isql.DB
 	rangeCounter   rangeCounter
 	fractionScaler *multiStageFractionScaler
 }
@@ -245,10 +247,12 @@ type rangeCounter func(ctx context.Context, spans []roachpb.Span) (int, error)
 func NewIndexMergeTracker(
 	progress *MergeProgress,
 	job *jobs.Job,
+	db isql.DB,
 	rangeCounter rangeCounter,
 	scaler *multiStageFractionScaler,
 ) *IndexMergeTracker {
 	imt := IndexMergeTracker{
+		db:             db,
 		rangeCounter:   rangeCounter,
 		fractionScaler: scaler,
 	}
@@ -285,7 +289,8 @@ func (imt *IndexMergeTracker) FlushCheckpoint(ctx context.Context) error {
 		details.ResumeSpanList[progress.MutationIdx[idx]].ResumeSpans = progress.TodoSpans[idx]
 	}
 
-	return imt.jobMu.job.NoTxn().SetDetails(ctx, details)
+	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+	return imt.jobMu.job.DeprecatedNoTxn().SetDetails(ctx, details)
 }
 
 // FlushFractionCompleted writes out the fraction completed based on the number of total
@@ -310,12 +315,16 @@ func (imt *IndexMergeTracker) FlushFractionCompleted(ctx context.Context) error 
 			return err
 		}
 
-		imt.jobMu.Lock()
-		defer imt.jobMu.Unlock()
-		if err := imt.jobMu.job.NoTxn().FractionProgressed(
-			ctx, jobs.FractionUpdater(frac),
-		); err != nil {
-			return jobs.SimplifyInvalidStatusError(err)
+		jobID := func() jobspb.JobID {
+			imt.jobMu.Lock()
+			defer imt.jobMu.Unlock()
+			return imt.jobMu.job.ID()
+		}()
+
+		if err := imt.db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+			return jobs.ProgressStorage(jobID).SetFraction(ctx, txn, float64(frac))
+		}); err != nil {
+			return jobs.SimplifyInvalidStateError(err)
 		}
 	}
 	return nil
@@ -348,9 +357,7 @@ func newPeriodicProgressFlusher(settings *cluster.Settings) scexec.PeriodicProgr
 			return backfill.IndexBackfillCheckpointInterval.Get(&settings.SV)
 		},
 		func() time.Duration {
-			// fractionInterval is copied from the logic in existing backfill code.
-			const fractionInterval = 10 * time.Second
-			return fractionInterval
+			return backfill.IndexBackfillProgressInterval.Get(&settings.SV)
 		},
 	)
 }

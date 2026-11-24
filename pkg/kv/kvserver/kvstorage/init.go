@@ -9,12 +9,12 @@ import (
 	"bytes"
 	"cmp"
 	"context"
+	"maps"
 	"slices"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -41,10 +41,11 @@ const FirstStoreID = roachpb.StoreID(1)
 // should be completely empty save for a cluster version, which must
 // already have been persisted to it. Returns an error if this is not
 // the case.
-func InitEngine(ctx context.Context, eng storage.Engine, ident roachpb.StoreIdent) error {
-	exIdent, err := ReadStoreIdent(ctx, eng)
+func InitEngine(ctx context.Context, eng Engines, ident roachpb.StoreIdent) error {
+	exIdent, err := ReadStoreIdent(ctx, eng.LogEngine())
 	if err == nil {
-		return errors.Errorf("engine %s is already initialized with ident %s", eng, exIdent.String())
+		return errors.Errorf("engine %s is already initialized with ident %s",
+			eng.LogEngine(), exIdent.String())
 	}
 	if !errors.HasType(err, (*NotBootstrappedError)(nil)) {
 		return err
@@ -54,48 +55,60 @@ func InitEngine(ctx context.Context, eng storage.Engine, ident roachpb.StoreIden
 		return errors.Wrap(err, "while trying to initialize engine")
 	}
 
-	batch := eng.NewBatch()
-	if err := storage.MVCCPutProto(
-		ctx,
-		batch,
-		keys.StoreIdentKey(),
-		hlc.Timestamp{},
-		&ident,
-		storage.MVCCWriteOptions{},
-	); err != nil {
-		batch.Close()
-		return err
-	}
-	if err := batch.Commit(true /* sync */); err != nil {
+	batch := eng.LogEngine().NewBatch()
+	defer batch.Close()
+	if err := WriteStoreIdent(ctx, batch, ident); err != nil {
+		return errors.Wrap(err, "writing StoreIdent")
+	} else if err := batch.Commit(true /* sync */); err != nil {
 		return errors.Wrap(err, "persisting engine initialization data")
 	}
 	// We will set the store ID during start, but we want to set it as quickly as
 	// possible after creating a store (to initialize the shared object creator
 	// ID).
-	if err := eng.SetStoreID(ctx, int32(ident.StoreID)); err != nil {
+	if err := eng.SetStoreID(ctx, ident.StoreID); err != nil {
 		return errors.Wrap(err, "setting store ID")
 	}
-
 	return nil
 }
 
 // checkCanInitializeEngine ensures that the engine is empty except possibly for
 // cluster version or cached cluster settings.
-func checkCanInitializeEngine(ctx context.Context, eng storage.Engine) error {
+func checkCanInitializeEngine(ctx context.Context, eng Engines) error {
 	// See if this is an already-bootstrapped store.
-	ident, err := ReadStoreIdent(ctx, eng)
+	ident, err := ReadStoreIdent(ctx, eng.LogEngine())
 	if err == nil {
 		return errors.Errorf("engine already initialized as %s", ident.String())
 	} else if !errors.HasType(err, (*NotBootstrappedError)(nil)) {
 		return errors.Wrap(err, "unable to read store ident")
 	}
-	// Engine is not bootstrapped yet (i.e. no StoreIdent). Does it contain a
-	// cluster version, cached settings and nothing else? Note that there is one
-	// cluster version key and many cached settings key, and the cluster version
-	// key precedes the cached settings.
-	//
-	// We use an EngineIterator to ensure that there are no keys that cannot be
-	// parsed as MVCCKeys (e.g. lock table keys) in the engine.
+	// Engine is not bootstrapped yet (i.e. no StoreIdent). It may contain cached
+	// settings, but nothing else. Use EngineIterator to ensure that there are no
+	// keys that cannot be parsed as MVCCKeys (e.g. lock table keys) in the
+	// engine.
+	// TODO(pav-kv): verify this is actually true, attempt removing this quirk.
+	check := func(k storage.MVCCKey) error {
+		if _, err := keys.DecodeStoreCachedSettingsKey(k.Key); err != nil {
+			return errors.Errorf("engine cannot be bootstrapped, contains key:\n%s", k.String())
+		}
+		return nil
+	}
+	if eng.Separated() {
+		return CheckEngineKeys(ctx, eng.StateEngine(), check)
+	}
+	return CheckEngineKeys(ctx, eng.LogEngine(), check)
+}
+
+// CheckEngineKeys iterates the Engine that is expected to be mostly empty. Some
+// callers allow certain keys to be present in partially initialized engines, so
+// this information is given to the caller via a callback for validation.
+func CheckEngineKeys(
+	ctx context.Context, eng storage.Engine, allowed func(key storage.MVCCKey) error,
+) error {
+	// Disable engine access assertions since we are iterating the entirety of the
+	// engine without trying to target specific key subsets. The caller knows what
+	// they are doing.
+	eng = disableAccessAssertions(eng)
+
 	iter, err := eng.NewEngineIterator(ctx, storage.IterOptions{
 		KeyTypes:   storage.IterKeyTypePointsAndRanges,
 		UpperBound: roachpb.KeyMax,
@@ -109,6 +122,7 @@ func checkCanInitializeEngine(ctx context.Context, eng storage.Engine) error {
 		return err
 	}
 
+	// NB: only MVCC point keys are possibly allowed in an empty engine.
 	getMVCCKey := func() (storage.MVCCKey, error) {
 		if _, hasRange := iter.HasPointAndRange(); hasRange {
 			bounds, err := iter.EngineRangeBounds()
@@ -117,49 +131,46 @@ func checkCanInitializeEngine(ctx context.Context, eng storage.Engine) error {
 			}
 			return storage.MVCCKey{}, errors.Errorf("found mvcc range key: %s", bounds)
 		}
-		var k storage.EngineKey
-		k, err = iter.EngineKey()
+		k, err := iter.EngineKey()
 		if err != nil {
 			return storage.MVCCKey{}, err
-		}
-		if !k.IsMVCCKey() {
+		} else if !k.IsMVCCKey() {
 			return storage.MVCCKey{}, errors.Errorf("found non-mvcc key: %s", k)
 		}
 		return k.ToMVCCKey()
 	}
 
-	for valid {
-		var k storage.MVCCKey
-		if k, err = getMVCCKey(); err != nil {
+	for ; valid; valid, err = iter.NextEngineKey() {
+		if k, err := getMVCCKey(); err != nil {
+			return err
+		} else if err := allowed(k); err != nil {
 			return err
 		}
-		// Only allowed to find cluster version and cached cluster settings on an
-		// uninitialized engine.
-		if !k.Key.Equal(keys.DeprecatedStoreClusterVersionKey()) {
-			if _, err := keys.DecodeStoreCachedSettingsKey(k.Key); err != nil {
-				return errors.Errorf("engine cannot be bootstrapped, contains key:\n%s", k.String())
-			}
-		}
-		valid, err = iter.NextEngineKey()
 	}
 	return err
 }
 
-// IterateIDPrefixKeys helps visit system keys that use RangeID prefixing (such
+// readKeyFn reads the given key, and unmarshals the value into the given proto.
+// Returns false if the key does not exist, or is requested out of order.
+type readKeyFn func(roachpb.Key, protoutil.Message) (bool, error)
+
+// scanRangeIDFn reports the existence of a RangeID, and allows reading
+// RangeID-local keys via the readKeyFn callback.
+type scanRangeIDFn func(roachpb.RangeID, readKeyFn) error
+
+// iterateRangeIDKeys helps visit storage keys that use RangeID prefixing (such
 // as RaftHardStateKey, RangeTombstoneKey, and many others). Such keys could in
-// principle exist at any RangeID, and this helper efficiently discovers all the
-// keys of the desired type (as specified by the supplied `keyFn`) and, for each
-// key-value pair discovered, unmarshals it into `msg` and then invokes `f`.
+// principle exist for any RangeID.
+//
+// The helper visits all RangeIDs that have any keys, and for each range calls
+// the scanRangeID function. The implementation of this function can request any
+// subset of RangeID-local keys via the readKeyFn callback. All keys must be
+// requested in sorted order.
 //
 // Iteration stops on the first error (and will pass through that error).
-func IterateIDPrefixKeys(
-	ctx context.Context,
-	reader storage.Reader,
-	keyFn func(roachpb.RangeID) roachpb.Key,
-	msg protoutil.Message,
-	f func(_ roachpb.RangeID) error,
+func iterateRangeIDKeys(
+	ctx context.Context, reader storage.Reader, scanRangeID scanRangeIDFn,
 ) error {
-	rangeID := roachpb.RangeID(1)
 	// NB: Range-ID local keys have no versions and no intents.
 	iter, err := reader.NewMVCCIterator(ctx, storage.MVCCKeyIterKind, storage.IterOptions{
 		UpperBound: keys.LocalRangeIDPrefix.PrefixEnd().AsRawKey(),
@@ -169,75 +180,84 @@ func IterateIDPrefixKeys(
 	}
 	defer iter.Close()
 
-	for {
-		bumped := false
-		mvccKey := storage.MakeMVCCMetadataKey(keyFn(rangeID))
-		iter.SeekGE(mvccKey)
-
-		if ok, err := iter.Valid(); !ok {
-			return err
-		}
-
-		unsafeKey := iter.UnsafeKey()
-
-		if !bytes.HasPrefix(unsafeKey.Key, keys.LocalRangeIDPrefix) {
-			// Left the local keyspace, so we're done.
-			return nil
-		}
-
-		curRangeID, _, _, _, err := keys.DecodeRangeIDKey(unsafeKey.Key)
-		if err != nil {
-			return err
-		}
-
-		if curRangeID > rangeID {
-			// `bumped` is always `false` here, but let's be explicit.
-			if !bumped {
-				rangeID = curRangeID
-				bumped = true
-			}
-			mvccKey = storage.MakeMVCCMetadataKey(keyFn(rangeID))
-		}
-
-		if !unsafeKey.Key.Equal(mvccKey.Key) {
-			if !bumped {
-				// Don't increment the rangeID if it has already been incremented
-				// above, or we could skip past a value we ought to see.
-				rangeID++
-				bumped = true // for completeness' sake; continuing below anyway
-			}
-			continue
-		}
-
-		ok, err := storage.MVCCGetProto(
-			ctx, reader, unsafeKey.Key, hlc.Timestamp{}, msg, storage.MVCCGetOptions{})
-		if err != nil {
-			return err
-		}
-		if !ok {
-			return errors.Errorf("unable to unmarshal %s into %T", unsafeKey.Key, msg)
-		}
-
-		if err := f(rangeID); err != nil {
-			return iterutil.Map(err)
-		}
-		rangeID++
+	iter.SeekGE(storage.MakeMVCCMetadataKey(keys.LocalRangeIDPrefix.AsRawKey()))
+	iterOK, iterErr := iter.Valid()
+	if !iterOK || iterErr != nil {
+		return iterErr
 	}
+
+	getKeyFn := func(key roachpb.Key, msg protoutil.Message) (bool, error) {
+		if !iterOK || iterErr != nil {
+			return iterOK, iterErr
+		}
+		unsafeKey := iter.UnsafeKey().Key
+		comp := unsafeKey.Compare(key)
+		if comp < 0 {
+			iter.SeekGE(storage.MakeMVCCMetadataKey(key))
+			if iterOK, iterErr = iter.Valid(); !iterOK || iterErr != nil {
+				return iterOK, iterErr
+			}
+			unsafeKey = iter.UnsafeKey().Key
+			comp = unsafeKey.Compare(key)
+			if comp < 0 {
+				return false, errors.AssertionFailedf("SeekGE undershot key %s", key)
+			}
+		}
+		if comp > 0 {
+			return false, nil
+		}
+		// Found the key (comp == 0). Parse and report the value.
+		var meta enginepb.MVCCMetadata
+		if err := iter.ValueProto(&meta); err != nil {
+			return false, errors.Errorf("unable to unmarshal %s into MVCCMetadata", unsafeKey)
+		}
+		val := roachpb.Value{RawBytes: meta.RawBytes}
+		if err := val.GetProto(msg); err != nil {
+			return false, errors.Errorf("unable to unmarshal %s into %T", unsafeKey, msg)
+		}
+		return true, nil
+	}
+
+	for iterOK && iterErr == nil {
+		rangeID, _, _, _, err := keys.DecodeRangeIDKey(iter.UnsafeKey().Key)
+		if err != nil {
+			return err
+		} else if err := scanRangeID(rangeID, getKeyFn); err != nil {
+			return iterutil.Map(err)
+		} else if !iterOK || iterErr != nil {
+			return iterErr
+		}
+		newRangeID, _, _, _, err := keys.DecodeRangeIDKey(iter.UnsafeKey().Key)
+		if err != nil {
+			return err
+		} else if newRangeID <= rangeID {
+			iter.SeekGE(storage.MakeMVCCMetadataKey(keys.MakeRangeIDPrefix(rangeID + 1)))
+			iterOK, iterErr = iter.Valid()
+		}
+	}
+	return iterErr
 }
 
-// ReadStoreIdent reads the StoreIdent from the store.
-// It returns *NotBootstrappedError if the ident is missing (meaning that the
-// store needs to be bootstrapped).
-func ReadStoreIdent(ctx context.Context, eng storage.Engine) (roachpb.StoreIdent, error) {
+// ReadStoreIdent reads the StoreIdent. Returns *NotBootstrappedError if the
+// ident is missing, meaning that the store still needs to be bootstrapped.
+func ReadStoreIdent(ctx context.Context, r storage.Reader) (roachpb.StoreIdent, error) {
 	var ident roachpb.StoreIdent
 	ok, err := storage.MVCCGetProto(
-		ctx, eng, keys.StoreIdentKey(), hlc.Timestamp{}, &ident, storage.MVCCGetOptions{})
+		ctx, r, keys.StoreIdentKey(), hlc.Timestamp{}, &ident, storage.MVCCGetOptions{})
 	if err != nil {
 		return roachpb.StoreIdent{}, err
 	} else if !ok {
 		return roachpb.StoreIdent{}, &NotBootstrappedError{}
 	}
 	return ident, err
+}
+
+// WriteStoreIdent writes the StoreIdent to storage.
+func WriteStoreIdent(ctx context.Context, rw storage.ReadWriter, ident roachpb.StoreIdent) error {
+	return storage.MVCCPutProto(
+		ctx, rw, keys.StoreIdentKey(),
+		hlc.Timestamp{}, &ident, storage.MVCCWriteOptions{},
+	)
 }
 
 // IterateRangeDescriptorsFromDisk discovers the initialized replicas and calls
@@ -247,7 +267,29 @@ func ReadStoreIdent(ctx context.Context, eng storage.Engine) (roachpb.StoreIdent
 func IterateRangeDescriptorsFromDisk(
 	ctx context.Context, reader storage.Reader, fn func(desc roachpb.RangeDescriptor) error,
 ) error {
-	log.Info(ctx, "beginning range descriptor iteration")
+	return iterateRangeDescriptorsFromDiskHelper(ctx, reader, fn, buildutil.CrdbTestBuild)
+}
+
+// IterateRangeDescriptorsFromCheckpoint is like IterateRangeDescriptorsFromDisk
+// except it is intended to be used when reading from checkpoints. Checkpoints
+// do not correspond to full stores, and as such, certain invariant checks do
+// not hold for them.
+func IterateRangeDescriptorsFromCheckpoint(
+	ctx context.Context, reader storage.Reader, fn func(desc roachpb.RangeDescriptor) error,
+) error {
+	return iterateRangeDescriptorsFromDiskHelper(ctx, reader, fn, false /* performInvariantChecks */)
+}
+
+// iterateRangeDescriptorsFromDisk performs the actual heavy lifting of reading
+// range descriptors from the supplied storage.Reader. The caller may specify
+// whether or not invariant checks should be performed.
+func iterateRangeDescriptorsFromDiskHelper(
+	ctx context.Context,
+	reader storage.Reader,
+	fn func(desc roachpb.RangeDescriptor) error,
+	performInvariantChecks bool,
+) error {
+	log.KvExec.Info(ctx, "beginning range descriptor iteration")
 
 	// We are going to find all range descriptor keys. This code is equivalent to
 	// using MVCCIterate on all range-local keys in Inconsistent mode and with
@@ -277,7 +319,7 @@ func IterateRangeDescriptorsFromDisk(
 		const reportPeriod = 10 * time.Second
 		if timeutil.Since(lastReportTime) >= reportPeriod {
 			stats := iter.Stats().Stats
-			log.Infof(ctx, "range descriptor iteration in progress: %d range descriptors, %d intents, %d tombstones; stats: %s",
+			log.KvExec.Infof(ctx, "range descriptor iteration in progress: %d range descriptors, %d intents, %d tombstones; stats: %s",
 				descriptorCount, intentCount, tombstoneCount, stats.String())
 		}
 
@@ -297,9 +339,12 @@ func IterateRangeDescriptorsFromDisk(
 				iter.SeekGE(storage.MVCCKey{Key: keys.RangeDescriptorKey(keys.MustAddr(startKey))})
 			} else {
 				// This case shouldn't happen in practice: we have a key that isn't
-				// associated with any range descriptor.
-				if buildutil.CrdbTestBuild {
-					panic(errors.AssertionFailedf("range local key %s outside of a known range", key.Key))
+				// associated with any range descriptor. However, when reading from
+				// checkpoints (incomplete stores), this can happen because checkpoints
+				// only guarantee to include specific key spans and may have arbitrary
+				// keys outside those spans.
+				if performInvariantChecks {
+					return errors.AssertionFailedf("range local key %s outside of a known range", key.Key)
 				}
 				iter.NextKey()
 			}
@@ -371,7 +416,7 @@ func IterateRangeDescriptorsFromDisk(
 	}
 
 	stats := iter.Stats().Stats
-	log.Infof(ctx, "range descriptor iteration done: %d range descriptors, %d intents, %d tombstones; stats: %s",
+	log.KvExec.Infof(ctx, "range descriptor iteration done: %d range descriptors, %d intents, %d tombstones; stats: %s",
 		descriptorCount, intentCount, tombstoneCount, stats.String())
 	return nil
 }
@@ -384,12 +429,13 @@ type Replica struct {
 	ReplicaID roachpb.ReplicaID
 	Desc      *roachpb.RangeDescriptor // nil for uninitialized Replica
 
+	tombstone kvserverpb.RangeTombstone
 	hardState raftpb.HardState // internal to kvstorage, see migration in LoadAndReconcileReplicas
 }
 
 // ID returns the FullReplicaID.
-func (r Replica) ID() storage.FullReplicaID {
-	return storage.FullReplicaID{
+func (r Replica) ID() roachpb.FullReplicaID {
+	return roachpb.FullReplicaID{
 		RangeID:   r.RangeID,
 		ReplicaID: r.ReplicaID,
 	}
@@ -397,18 +443,21 @@ func (r Replica) ID() storage.FullReplicaID {
 
 // Load loads the state necessary to instantiate a replica in memory.
 func (r Replica) Load(
-	ctx context.Context, eng storage.Reader, storeID roachpb.StoreID,
+	ctx context.Context, stateRO StateRO, raftRO RaftRO, storeID roachpb.StoreID,
 ) (LoadedReplicaState, error) {
 	ls := LoadedReplicaState{
 		ReplicaID: r.ReplicaID,
 		hardState: r.hardState,
 	}
-	sl := stateloader.Make(r.Desc.RangeID)
+	sl := MakeStateLoader(r.Desc.RangeID)
 	var err error
-	if ls.LastIndex, err = sl.LoadLastIndex(ctx, eng); err != nil {
+	if ls.TruncState, err = sl.LoadRaftTruncatedState(ctx, raftRO); err != nil {
 		return LoadedReplicaState{}, err
 	}
-	if ls.ReplState, err = sl.Load(ctx, eng, r.Desc); err != nil {
+	if ls.LastEntryID, err = sl.LoadLastEntryID(ctx, raftRO, ls.TruncState); err != nil {
+		return LoadedReplicaState{}, err
+	}
+	if ls.ReplState, err = sl.Load(ctx, stateRO, r.Desc); err != nil {
 		return LoadedReplicaState{}, err
 	}
 
@@ -427,9 +476,12 @@ func (m replicaMap) getOrMake(rangeID roachpb.RangeID) Replica {
 	return ent
 }
 
-func (m replicaMap) setReplicaID(rangeID roachpb.RangeID, replicaID roachpb.ReplicaID) {
+func (m replicaMap) setReplicaIDAndTombstone(
+	rangeID roachpb.RangeID, replicaID roachpb.ReplicaID, ts kvserverpb.RangeTombstone,
+) {
 	ent := m.getOrMake(rangeID)
 	ent.ReplicaID = replicaID
+	ent.tombstone = ts
 	m[rangeID] = ent
 }
 
@@ -449,7 +501,7 @@ func (m replicaMap) setDesc(rangeID roachpb.RangeID, desc roachpb.RangeDescripto
 	return nil
 }
 
-func loadReplicas(ctx context.Context, eng storage.Engine) ([]Replica, error) {
+func loadReplicas(ctx context.Context, eng Engines) ([]Replica, error) {
 	s := replicaMap{}
 
 	// INVARIANT: the latest visible committed version of the RangeDescriptor
@@ -460,7 +512,7 @@ func loadReplicas(ctx context.Context, eng storage.Engine) ([]Replica, error) {
 	{
 		var lastDesc roachpb.RangeDescriptor
 		if err := IterateRangeDescriptorsFromDisk(
-			ctx, eng, func(desc roachpb.RangeDescriptor) error {
+			ctx, eng.StateEngine(), func(desc roachpb.RangeDescriptor) error {
 				if lastDesc.RangeID != 0 && desc.StartKey.Less(lastDesc.EndKey) {
 					return errors.AssertionFailedf("overlapping descriptors %s and %s", lastDesc, desc)
 				}
@@ -472,65 +524,100 @@ func loadReplicas(ctx context.Context, eng storage.Engine) ([]Replica, error) {
 		}
 	}
 
-	// Load replicas from disk based on their RaftReplicaID and HardState.
+	// Scan all RangeIDs present on the store, and load ReplicaID and HardState of
+	// those that correspond to an existing replica (uninitialized or initialized).
 	//
-	// INVARIANT: all replicas have a persisted full ReplicaID (i.e. a "ReplicaID from disk").
+	// INVARIANT: a RangeID with no replica can only have a RangeTombstone key.
+	// INVARIANT: all replicas have a persisted ReplicaID.
+	// INVARIANT: ReplicaID >= RangeTombstone.NextReplicaID.
+	//
+	// NB: RangeIDs that only have a RangeTombstone are effectively skipped here
+	// as uninteresting. If a non-RangeTombstone key is found for a RangeID, there
+	// must be a replica of this range, so we load it and check invariants later.
 	//
 	// TODO(tbg): tighten up the case where we see a RaftReplicaID but no HardState.
 	// This leads to the general desire to validate the internal consistency of the
 	// entire raft state (i.e. HardState, TruncatedState, Log).
-	{
-		logEvery := log.Every(10 * time.Second)
-		var i int
-		var msg kvserverpb.RaftReplicaID
-		if err := IterateIDPrefixKeys(ctx, eng, func(rangeID roachpb.RangeID) roachpb.Key {
-			return keys.RaftReplicaIDKey(rangeID)
-		}, &msg, func(rangeID roachpb.RangeID) error {
-			if logEvery.ShouldLog() && i > 0 { // only log if slow
-				log.Infof(ctx, "loaded replica ID for %d/%d replicas", i, len(s))
-			}
-			i++
-			s.setReplicaID(rangeID, msg.ReplicaID)
-			return nil
-		}); err != nil {
-			return nil, err
-		}
-		log.Infof(ctx, "loaded replica ID for %d/%d replicas", len(s), len(s))
+	logEvery := log.Every(10 * time.Second)
+	var i int
 
-		logEvery = log.Every(10 * time.Second)
-		i = 0
-		var hs raftpb.HardState
-		if err := IterateIDPrefixKeys(ctx, eng, func(rangeID roachpb.RangeID) roachpb.Key {
-			return keys.RaftHardStateKey(rangeID)
-		}, &hs, func(rangeID roachpb.RangeID) error {
+	// If engines are separated, scan the LogEngine to learn the HardState of each
+	// replica. Otherwise, it will be loaded as part of the other loop below.
+	if eng.Separated() {
+		logEng := disableAccessAssertions(eng.LogEngine())
+		if err := iterateRangeIDKeys(ctx, logEng, func(id roachpb.RangeID, get readKeyFn) error {
 			if logEvery.ShouldLog() && i > 0 { // only log if slow
-				log.Infof(ctx, "loaded Raft state for %d/%d replicas", i, len(s))
+				log.KvExec.Infof(ctx, "loaded raft state for %d/%d replicas", i, len(s))
 			}
 			i++
-			s.setHardState(rangeID, hs)
+			var hs raftpb.HardState
+			if ok, err := get(keys.RaftHardStateKey(id), &hs); err != nil {
+				return err
+			} else if ok {
+				s.setHardState(id, hs)
+			}
 			return nil
 		}); err != nil {
 			return nil, err
 		}
-		log.Infof(ctx, "loaded Raft state for %d/%d replicas", len(s), len(s))
+		log.KvExec.Infof(ctx, "loaded raft state for %d/%d replicas", len(s), len(s))
+		i = 0 // reset counter for the second scan
 	}
-	sl := make([]Replica, 0, len(s))
-	for _, repl := range s {
-		sl = append(sl, repl)
+
+	// Scan the StateEngine to learn RangeTombstone and RaftReplicaID keys. If
+	// engines are not separated, also read the HardState keys.
+	stateEng := disableAccessAssertions(eng.StateEngine())
+	if err := iterateRangeIDKeys(ctx, stateEng, func(id roachpb.RangeID, get readKeyFn) error {
+		if logEvery.ShouldLog() && i > 0 { // only log if slow
+			log.KvExec.Infof(ctx, "loaded state for %d/%d replicas", i, len(s))
+		}
+		i++
+		// NB: the keys must be requested in sorted order here.
+		buf := keys.MakeRangeIDPrefixBuf(id)
+		var ts kvserverpb.RangeTombstone
+		if ok, err := get(buf.RangeTombstoneKey(), &ts); err != nil {
+			return err
+		} else if !ok {
+			ts = kvserverpb.RangeTombstone{} // just in case it was mutated
+		}
+		// NB: the keys must be requested in sorted order here.
+		if !eng.Separated() {
+			var hs raftpb.HardState
+			if ok, err := get(buf.RaftHardStateKey(), &hs); err != nil {
+				return err
+			} else if ok {
+				s.setHardState(id, hs)
+			}
+		}
+		// NB: the keys must be requested in sorted order here.
+		var rID kvserverpb.RaftReplicaID
+		if ok, err := get(buf.RaftReplicaIDKey(), &rID); err != nil {
+			return err
+		} else if ok {
+			// NB: the tombstone can be empty.
+			s.setReplicaIDAndTombstone(id, rID.ReplicaID, ts)
+		}
+		return nil
+	}); err != nil {
+		return nil, err
 	}
+	log.KvExec.Infof(ctx, "loaded state for %d/%d replicas", len(s), len(s))
+
+	sl := slices.AppendSeq(make([]Replica, 0, len(s)), maps.Values(s))
 	slices.SortFunc(sl, func(a, b Replica) int {
 		return cmp.Compare(a.RangeID, b.RangeID)
 	})
 	return sl, nil
 }
 
-// LoadAndReconcileReplicas loads the Replicas present on this
-// store. It reconciles inconsistent state and runs validation checks.
-// The returned slice is sorted by ReplicaID.
+// LoadAndReconcileReplicas loads the Replicas present on this store from the
+// engine(s). It reconciles inconsistent state and runs validation checks. The
+// returned slice is sorted by ReplicaID.
 //
 // TODO(sep-raft-log): consider a callback-visitor pattern here.
-func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) ([]Replica, error) {
-	ident, err := ReadStoreIdent(ctx, eng)
+// TODO(sep-raft-log): implement WAG replay.
+func LoadAndReconcileReplicas(ctx context.Context, eng Engines) ([]Replica, error) {
+	ident, err := ReadStoreIdent(ctx, eng.LogEngine())
 	if err != nil {
 		return nil, err
 	}
@@ -539,7 +626,7 @@ func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) ([]Replic
 	if err != nil {
 		return nil, err
 	}
-	log.Infof(ctx, "loaded %d replicas", len(sl))
+	log.KvExec.Infof(ctx, "loaded %d replicas", len(sl))
 
 	// Check invariants.
 	//
@@ -549,12 +636,18 @@ func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) ([]Replic
 		// Log progress regularly, but not for the first replica (we only want to
 		// log when this is slow). The last replica is logged after iteration.
 		if logEvery.ShouldLog() && i > 0 {
-			log.Infof(ctx, "verified %d/%d replicas", i, len(sl))
+			log.KvExec.Infof(ctx, "verified %d/%d replicas", i, len(sl))
 		}
 
 		// INVARIANT: a Replica always has a replica ID.
 		if repl.ReplicaID == 0 {
 			return nil, errors.AssertionFailedf("no RaftReplicaID for %s", repl.Desc)
+		}
+		// INVARIANT: ReplicaID >= RangeTombstone.NextReplicaID.
+		if repl.ReplicaID < repl.tombstone.NextReplicaID {
+			return nil, errors.AssertionFailedf(
+				"r%d: RaftReplicaID %d survived RangeTombstone %+v",
+				repl.RangeID, repl.ReplicaID, repl.tombstone)
 		}
 
 		if repl.Desc != nil {
@@ -570,7 +663,7 @@ func LoadAndReconcileReplicas(ctx context.Context, eng storage.Engine) ([]Replic
 			}
 		}
 	}
-	log.Infof(ctx, "verified %d/%d replicas", len(sl), len(sl))
+	log.KvExec.Infof(ctx, "verified %d/%d replicas", len(sl), len(sl))
 
 	return sl, nil
 }

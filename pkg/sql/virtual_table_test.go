@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -124,6 +125,18 @@ func TestVirtualTableGenerators(t *testing.T) {
 		require.NoError(t, err)
 		cancel()
 		cleanup(ctx)
+	})
+
+	t.Run("test worker panic", func(t *testing.T) {
+		worker := func(ctx context.Context, pusher rowPusher) error {
+			panic(errors.New("worker panic"))
+		}
+		next, cleanup, setupError := setupGenerator(ctx, worker, stopper)
+		require.NoError(t, setupError)
+		defer cleanup(ctx)
+		_, err := next()
+		require.Error(t, err)
+		require.True(t, testutils.IsError(err, "worker panic"))
 	})
 }
 

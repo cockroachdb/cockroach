@@ -10,7 +10,6 @@ import { ExecStats, StatementStatistics } from "./appStats";
 
 interface AggregateStatistics {
   label: string;
-  implicitTxn: boolean;
   fullScan: boolean;
   stats: StatementStatistics;
 }
@@ -116,7 +115,6 @@ const statementStats: cockroach.sql.IStatementStatistics = {
 
 export const aggStatFix: AggregateStatistics = {
   label: "foo",
-  implicitTxn: false,
   fullScan: false,
   stats: statementStats,
 };

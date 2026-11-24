@@ -82,13 +82,23 @@ func registerClusterSettings(r registry.Registry) {
 			Generator: timeBasedValues(timeutil.Now, []string{"true", "false"}, 24*7*time.Hour),
 			Owner:     registry.OwnerKV,
 		},
+		{
+			// Change the fraction of replicas that run leader leases.
+			Name: "kv.raft.leader_fortification.fraction_enabled",
+			Generator: timeBasedRandomValue(timeutil.Now, 6*time.Hour, func(rng *rand.Rand) string {
+				// Random value in the following set: {0, 0.25, 0.5, 0.75, 1.0}
+				fraction := float32(rng.Intn(5)) / 4.0
+				return fmt.Sprintf("%g", fraction)
+			}),
+			Owner: registry.OwnerKV,
+		},
 		// When running multi-store with `--wal-failover=among-stores`, this configures
 		// the threshold to trigger a fail-over to a secondary store’s WAL.
 		// 20-minute cycle.
 		{
 			Name: "storage.wal_failover.unhealthy_op_threshold",
 			Generator: timeBasedRandomValue(timeutil.Now, 20*time.Minute, func(rng *rand.Rand) string {
-				return fmt.Sprintf("%d", rng.Intn(246)+5)
+				return fmt.Sprintf("%dms", rng.Intn(151)+100)
 			}),
 			Owner: registry.OwnerStorage,
 		},
@@ -97,6 +107,12 @@ func registerClusterSettings(r registry.Registry) {
 			Name:      "obs.tablemetadata.automatic_updates.enabled",
 			Generator: timeBasedValues(timeutil.Now, []string{"true", "false"}, 12*time.Hour),
 			Owner:     registry.OwnerObservability,
+		},
+		{
+			// Periodically switch between two transaction protocol variants.
+			Name:      "kv.transaction.write_buffering.enabled",
+			Generator: timeBasedValues(timeutil.Now, []string{"true", "false"}, 6*time.Hour),
+			Owner:     registry.OwnerKV,
 		},
 	}
 	sanitizeOpName := func(name string) string {

@@ -17,12 +17,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/gogo/protobuf/proto"
 )
 
@@ -91,6 +93,24 @@ var MultiRegionZoneConfigFields = []tree.Name{
 	"lease_preferences",
 }
 
+var MaxReplicasPerRegion = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"sql.zone_configs.max_replicas_per_region",
+	"the maximum number of replicas that can be "+
+		"configured per region (0 for unlimited); this is only enforced on "+
+		"new zone config modifications",
+	0,
+	settings.WithVisibility(settings.Reserved),
+	settings.NonNegativeInt)
+
+var DefaultRangeModifiableByNonRoot = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.zone_configs.default_range_modifiable_by_non_root.enabled",
+	"if true, allows non-root users to modify zone config for the "+
+		"default range",
+	true,
+	settings.WithVisibility(settings.Reserved))
+
 // MultiRegionZoneConfigFieldsSet contain the items in
 // MultiRegionZoneConfigFields but in a set form for fast lookup.
 var MultiRegionZoneConfigFieldsSet = func() map[tree.Name]struct{} {
@@ -150,7 +170,8 @@ func ResolveZoneSpecifier(
 		if id, ok := NamedZones[NamedZone(zs.NamedZone)]; ok {
 			return id, nil
 		}
-		return 0, fmt.Errorf("%q is not a built-in zone", string(zs.NamedZone))
+		return 0, pgerror.Newf(pgcode.InvalidName, "%q is not a built-in zone",
+			string(zs.NamedZone))
 	}
 
 	if zs.Database != "" {
@@ -824,6 +845,38 @@ func (z *ZoneConfig) DiffWithZone(
 					}
 				}
 			}
+			if len(z.Constraints) != len(other.Constraints) {
+				expected, err := json.Marshal(other.Constraints)
+				if err != nil {
+					return false, DiffWithZoneMismatch{}, err
+				}
+				actual, err := json.Marshal(z.Constraints)
+				if err != nil {
+					return false, DiffWithZoneMismatch{}, err
+				}
+				return false, DiffWithZoneMismatch{
+					Field:    "constraints",
+					Expected: string(expected),
+					Actual:   string(actual),
+				}, nil
+			}
+			for i := range z.Constraints {
+				if len(z.Constraints[i].Constraints) != len(other.Constraints[i].Constraints) {
+					expected, err := json.Marshal(other.Constraints)
+					if err != nil {
+						return false, DiffWithZoneMismatch{}, err
+					}
+					actual, err := json.Marshal(z.Constraints)
+					if err != nil {
+						return false, DiffWithZoneMismatch{}, err
+					}
+					return false, DiffWithZoneMismatch{
+						Field:    "constraints",
+						Expected: string(expected),
+						Actual:   string(actual),
+					}, nil
+				}
+			}
 		case "voter_constraints":
 			if other.VoterConstraints == nil && z.VoterConstraints == nil {
 				continue
@@ -866,6 +919,38 @@ func (z *ZoneConfig) DiffWithZone(
 					}
 				}
 			}
+			if len(z.VoterConstraints) != len(other.VoterConstraints) {
+				expected, err := json.Marshal(other.VoterConstraints)
+				if err != nil {
+					return false, DiffWithZoneMismatch{}, err
+				}
+				actual, err := json.Marshal(z.VoterConstraints)
+				if err != nil {
+					return false, DiffWithZoneMismatch{}, err
+				}
+				return false, DiffWithZoneMismatch{
+					Field:    "voter_constraints",
+					Expected: string(expected),
+					Actual:   string(actual),
+				}, nil
+			}
+			for i := range z.VoterConstraints {
+				if len(z.VoterConstraints[i].Constraints) != len(other.VoterConstraints[i].Constraints) {
+					expected, err := json.Marshal(other.VoterConstraints)
+					if err != nil {
+						return false, DiffWithZoneMismatch{}, err
+					}
+					actual, err := json.Marshal(z.VoterConstraints)
+					if err != nil {
+						return false, DiffWithZoneMismatch{}, err
+					}
+					return false, DiffWithZoneMismatch{
+						Field:    "voter_constraints",
+						Expected: string(expected),
+						Actual:   string(actual),
+					}, nil
+				}
+			}
 		case "lease_preferences":
 			if other.LeasePreferences == nil && z.LeasePreferences == nil {
 				continue
@@ -906,6 +991,38 @@ func (z *ZoneConfig) DiffWithZone(
 							Actual:   string(actual),
 						}, nil
 					}
+				}
+			}
+			if len(z.LeasePreferences) != len(other.LeasePreferences) {
+				expected, err := json.Marshal(other.LeasePreferences)
+				if err != nil {
+					return false, DiffWithZoneMismatch{}, err
+				}
+				actual, err := json.Marshal(z.LeasePreferences)
+				if err != nil {
+					return false, DiffWithZoneMismatch{}, err
+				}
+				return false, DiffWithZoneMismatch{
+					Field:    "lease_preferences",
+					Expected: string(expected),
+					Actual:   string(actual),
+				}, nil
+			}
+			for i := range z.LeasePreferences {
+				if len(z.LeasePreferences[i].Constraints) != len(other.LeasePreferences[i].Constraints) {
+					expected, err := json.Marshal(other.LeasePreferences)
+					if err != nil {
+						return false, DiffWithZoneMismatch{}, err
+					}
+					actual, err := json.Marshal(z.LeasePreferences)
+					if err != nil {
+						return false, DiffWithZoneMismatch{}, err
+					}
+					return false, DiffWithZoneMismatch{
+						Field:    "lease_preferences",
+						Expected: string(expected),
+						Actual:   string(actual),
+					}, nil
 				}
 			}
 		default:
@@ -1169,6 +1286,12 @@ func (z *ZoneConfig) DeleteSubzone(indexID uint32, partition string) bool {
 	return false
 }
 
+// DeleteAllSubzones removes all subzones from the ZoneConfig.
+func (z *ZoneConfig) DeleteAllSubzones() {
+	z.Subzones = z.Subzones[:0]
+	z.SubzoneSpans = z.SubzoneSpans[:0]
+}
+
 // DeleteSubzoneSpansForSubzoneIndex removes all subzoneSpans with the given
 // subzoneIndex from z, if any exist.
 func (z *ZoneConfig) DeleteSubzoneSpansForSubzoneIndex(subzoneIndex int32) {
@@ -1210,11 +1333,11 @@ func (z *ZoneConfig) MergeSubzoneSpans(subzoneSpans []SubzoneSpan) {
 }
 
 // FilterSubzoneSpansByIdx retrieves all subzone spans with the given
-// SubzoneIndex.
-func (z *ZoneConfig) FilterSubzoneSpansByIdx(subzoneIdx int32) []SubzoneSpan {
+// subzoneIndex.
+func (z *ZoneConfig) FilterSubzoneSpansByIdx(subzoneIndex int32) []SubzoneSpan {
 	filteredSpans := make([]SubzoneSpan, 0, len(z.SubzoneSpans))
 	for _, s := range z.SubzoneSpans {
-		if s.SubzoneIndex == subzoneIdx {
+		if s.SubzoneIndex == subzoneIndex {
 			filteredSpans = append(filteredSpans, s)
 		}
 	}
@@ -1299,7 +1422,7 @@ func (z *ZoneConfig) EnsureFullyHydrated() error {
 func (z ZoneConfig) AsSpanConfig() roachpb.SpanConfig {
 	spanConfig, err := z.toSpanConfig()
 	if err != nil {
-		log.Fatalf(context.Background(), "%v", err)
+		log.Dev.Fatalf(context.Background(), "%v", err)
 	}
 	return spanConfig
 }
@@ -1445,6 +1568,105 @@ func validateNoRepeatKeysInConstraints(constraints []Constraint) error {
 					}
 				}
 			}
+		}
+	}
+	return nil
+}
+
+// ReplaceMinMaxValVisitor replaces occurrences of the unqualified
+// identifiers "minvalue" and "maxvalue" in the partitioning
+// (sub-)exprs by the symbolic values tree.PartitionMinVal and
+// tree.PartitionMaxVal.
+type ReplaceMinMaxValVisitor struct{}
+
+var _ tree.Visitor = &ReplaceMinMaxValVisitor{}
+
+// VisitPre satisfies the tree.Visitor interface.
+func (v ReplaceMinMaxValVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
+	if t, ok := expr.(*tree.UnresolvedName); ok && t.NumParts == 1 {
+		switch t.Parts[0] {
+		case "minvalue":
+			return false, tree.PartitionMinVal{}
+		case "maxvalue":
+			return false, tree.PartitionMaxVal{}
+		}
+	}
+	return true, expr
+}
+
+// VisitPost satisfies the Visitor interface.
+func (ReplaceMinMaxValVisitor) VisitPost(expr tree.Expr) tree.Expr { return expr }
+
+// ValidateNewUniqueConstraintsForSecondaryTenants validates that none of our
+// zonepb.ConstraintsConjunction violate the given max replicas per region
+// set by sql.zone_configs.max_replicas_per_region.
+func ValidateNewUniqueConstraintsForSecondaryTenants(
+	sv *settings.Values, currentZone, newZone *ZoneConfig,
+) error {
+	maxReplicas := MaxReplicasPerRegion.Get(sv)
+	if maxReplicas == 0 {
+		return nil
+	}
+
+	getRequiredConstraintMap := func(
+		constraintsConj []ConstraintsConjunction,
+	) map[Constraint]int32 {
+		constraintsMap := make(map[Constraint]int32)
+		for _, constraints := range constraintsConj {
+			for _, constraint := range constraints.Constraints {
+				if constraint.Type == Constraint_REQUIRED {
+					constraintsMap[constraint] = constraints.NumReplicas
+				}
+			}
+		}
+		return constraintsMap
+	}
+
+	validateConstraints := func(
+		constraintType redact.SafeString,
+		currentConstraints map[Constraint]int32,
+		newConstraints ConstraintsConjunction,
+	) error {
+		for _, constraint := range newConstraints.Constraints {
+			if constraint.Type != Constraint_REQUIRED {
+				continue
+			}
+			newReplicasConstrained := newConstraints.NumReplicas
+			// If the user has not explicitly changed what replicas are
+			// constrained to a region, bypass this validation.
+			if currentReplicasConstrained, ok := currentConstraints[constraint]; ok {
+				if currentReplicasConstrained == newReplicasConstrained {
+					continue
+				}
+			}
+			// If the amount of replicas we have constrained for this region
+			// surpasses the limit we have set, error out early.
+			if int64(newReplicasConstrained) > maxReplicas {
+				return pgerror.Newf(
+					pgcode.CheckViolation,
+					"%sconstraint for %q exceeds the configured "+
+						"maximum of %d replicas",
+					constraintType,
+					constraint.Value,
+					maxReplicas,
+				)
+			}
+		}
+		return nil
+	}
+
+	for _, newConstraints := range newZone.Constraints {
+		err := validateConstraints("",
+			getRequiredConstraintMap(currentZone.Constraints), newConstraints)
+		if err != nil {
+			return err
+		}
+	}
+	for _, newVoterConstraints := range newZone.VoterConstraints {
+		err := validateConstraints("voter ",
+			getRequiredConstraintMap(currentZone.VoterConstraints), newVoterConstraints)
+		if err != nil {
+			return err
 		}
 	}
 	return nil

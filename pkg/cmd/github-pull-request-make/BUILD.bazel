@@ -21,9 +21,12 @@ go_test(
     name = "github-pull-request-make_test",
     size = "small",
     srcs = ["main_test.go"],
-    data = glob(["testdata/**"]),
+    data = glob(["testdata/**"]) + [
+        "//pkg/cmd/ci-stress:testdata",
+    ],  # keep
     embed = [":github-pull-request-make_lib"],
     deps = [
+        "//pkg/build/bazel",
         "//pkg/testutils/datapathutils",
     ],
 )

@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
@@ -35,35 +36,15 @@ func registerSQLSmith(r registry.Registry) {
 		sqlsmith.RandTableSetupName: sqlsmith.Setups[sqlsmith.RandTableSetupName],
 		"tpch-sf1": func(r *rand.Rand) []string {
 			return []string{`
-RESTORE TABLE tpch.* FROM '/' IN 'gs://cockroach-fixtures-us-east1/workload/tpch/scalefactor=1/backup?AUTH=implicit'
+RESTORE TABLE tpch.* FROM LATEST IN 'gs://cockroach-fixtures-us-east1/workload/tpch/scalefactor=1/backup_25_3?AUTH=implicit'
 WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 `}
 		},
 		"tpcc": func(r *rand.Rand) []string {
-			const version = "version=2.1.0,fks=true,interleaved=false,seed=1,warehouses=1"
-			var stmts []string
-			for _, t := range []string{
-				"customer",
-				"district",
-				"history",
-				"item",
-				"new_order",
-				"order",
-				"order_line",
-				"stock",
-				"warehouse",
-			} {
-				stmts = append(
-					stmts,
-					fmt.Sprintf(`
-RESTORE TABLE tpcc.%s FROM '/' IN 'gs://cockroach-fixtures-us-east1/workload/tpcc/%[2]s/%[1]s?AUTH=implicit'
+			return []string{`
+RESTORE TABLE tpcc.* FROM LATEST IN 'gs://cockroach-fixtures-us-east1/workload/tpcc/version=25.3,fks=true,seed=1,warehouses=1?AUTH=implicit'
 WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
-`,
-						t, version,
-					),
-				)
-			}
-			return stmts
+`}
 		},
 	}
 	settings := map[string]sqlsmith.SettingFunc{
@@ -121,19 +102,6 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 		for _, stmt := range setup {
 			logStmt(stmt)
 			if _, err := conn.Exec(stmt); err != nil {
-				if strings.Contains(err.Error(), "does not exist") {
-					// This is likely to be an elusive 'pq: column
-					// "crdb_internal_idx_expr" does not exist' error that we
-					// cannot reproduce. The current hypothesis is that the
-					// CREATE TABLE statement contains some non-visible
-					// characters that get lost when printing as a string, so we
-					// will log this statement as a sequence of integers so that
-					// later we can reconstruct the stmt precisely.
-					for _, char := range stmt {
-						fmt.Fprintf(smithLog, "%d ", char)
-					}
-					fmt.Fprint(smithLog, "\n\n")
-				}
 				t.Fatalf("error: %s\nstatement: %s", err.Error(), stmt)
 			}
 		}
@@ -204,7 +172,7 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 			stmt := ""
 			err := func() error {
 				done := make(chan error, 1)
-				m := c.NewMonitor(ctx, c.Node(1))
+				m := c.NewDeprecatedMonitor(ctx, c.Node(1))
 				m.Go(func(context.Context) error {
 					// Generate can potentially panic in bad cases, so
 					// to avoid Go routines from dying we are going
@@ -217,11 +185,23 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 						}
 					}()
 
-					stmt = smither.Generate()
-					if stmt == "" {
-						// If an empty statement is generated, then ignore it.
-						done <- errors.Newf("Empty statement returned by generate")
-						return nil
+					var stmtType tree.StatementType
+					for {
+						stmt, stmtType = smither.GenerateWithTag()
+						if stmt == "" {
+							// If an empty statement is generated, then ignore it.
+							done <- errors.Newf("Empty statement returned by generate")
+							return nil
+						}
+						if !expectedToTimeout(t, stmt) {
+							break
+						}
+					}
+
+					// DDL statements can take longer than the normal
+					// statement timeout, so temporarily increase it.
+					if stmtType == tree.TypeDDL {
+						defer withIncreasedStmtTimeout(t, conn, logStmt, 3)()
 					}
 
 					// TODO(yuzefovich): investigate why using the context with
@@ -229,10 +209,10 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 					_, err := conn.Exec(stmt)
 					if err == nil {
 						logStmt(stmt)
-						stmt = "EXPLAIN " + stmt
-						_, err = conn.Exec(stmt)
+						explainStmt := "EXPLAIN " + stmt
+						_, err = conn.Exec(explainStmt)
 						if err == nil {
-							logStmt(stmt)
+							logStmt(explainStmt)
 						}
 					}
 					done <- err
@@ -240,7 +220,9 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 				})
 				defer m.Wait()
 				select {
-				case <-time.After(timeout * 2):
+				case <-time.After(timeout * 6):
+					// Use 6x the statement timeout to account for DDL statements
+					// which have their session statement_timeout increased by 3x.
 					// SQLSmith generates queries that either perform full table scans of
 					// large tables or backup/restore operations that timeout. These
 					// should not cause an issue to be raised, as they most likely are
@@ -341,7 +323,6 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 			Leases:           registry.MetamorphicLeases,
 			NativeLibs:       registry.LibGEOS,
 			Timeout:          time.Minute * 20,
-			RequiresLicense:  true,
 			// NB: sqlsmith failures should never block a release.
 			NonReleaseBlocker: true,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -363,6 +344,57 @@ WITH into_db = 'defaultdb', unsafe_restore_incompatible_version;
 	register("seed-multi-region", "multi-region")
 }
 
+// expectedToTimeout returns whether the given stmt is likely to timeout due to
+// expected edge case behavior.
+func expectedToTimeout(t test.Test, stmt string) bool {
+	// The only known scenario right now (see #157971) is when we have runtime
+	// assertions enabled AND the query uses a system column that requires MVCC
+	// decoding.
+	if !roachtestutil.UsingRuntimeAssertions(t) {
+		return false
+	}
+	for _, sysCol := range []string{
+		"crdb_internal_mvcc_timestamp",
+		"crdb_internal_origin_id",
+		"crdb_internal_origin_timestamp",
+	} {
+		if strings.Contains(stmt, sysCol) {
+			return true
+		}
+	}
+	return false
+}
+
+// withIncreasedStmtTimeout multiplies the session's statement_timeout by
+// factor and returns a cleanup that restores the original value. It is a
+// no-op (returns a no-op cleanup) when no statement_timeout is set on the
+// session. Intended to be used with defer so the restore fires even if the
+// caller reaches t.Fatal:
+//
+//	defer withIncreasedStmtTimeout(t, conn, logStmt, 3)()
+func withIncreasedStmtTimeout(
+	t test.Test, conn *gosql.DB, logStmt func(string), factor int,
+) func() {
+	t.Helper()
+	var stmtTimeout int
+	if err := conn.QueryRow("SHOW statement_timeout").Scan(&stmtTimeout); err != nil {
+		return func() {}
+	}
+	if stmtTimeout == 0 {
+		return func() {}
+	}
+	setTimeout := func(v int) {
+		stmt := fmt.Sprintf("SET statement_timeout = %d", v)
+		if _, err := conn.Exec(stmt); err != nil {
+			t.L().Printf("failed to set statement_timeout to %d: %v", v, err)
+			return
+		}
+		logStmt(stmt)
+	}
+	setTimeout(factor * stmtTimeout)
+	return func() { setTimeout(stmtTimeout) }
+}
+
 // setupMultiRegionDatabase is used to set up a multi-region database.
 func setupMultiRegionDatabase(t test.Test, conn *gosql.DB, rnd *rand.Rand, logStmt func(string)) {
 	t.Helper()
@@ -374,17 +406,9 @@ func setupMultiRegionDatabase(t test.Test, conn *gosql.DB, rnd *rand.Rand, logSt
 		}
 	}
 
-	// If we have a stmt timeout set on the session, then increase it 3x given
-	// that schema changes below can take non-trivial amount of time.
-	row := conn.QueryRow("SHOW statement_timeout")
-	var stmtTimeout int
-	if err := row.Scan(&stmtTimeout); err != nil {
-		t.Fatal(err)
-	} else if stmtTimeout != 0 {
-		t.L().Printf("temporarily increasing the statement timeout")
-		execStmt(fmt.Sprintf("SET statement_timeout = %d", 3*stmtTimeout))
-		defer execStmt(fmt.Sprintf("SET statement_timeout = %d", stmtTimeout))
-	}
+	// Schema changes below can take a non-trivial amount of time, so bump the
+	// session statement_timeout 3x for the duration of this function.
+	defer withIncreasedStmtTimeout(t, conn, logStmt, 3)()
 
 	regionsSet := make(map[string]struct{})
 	var region, zone string
@@ -434,12 +458,15 @@ func setupMultiRegionDatabase(t test.Test, conn *gosql.DB, rnd *rand.Rand, logSt
 	}
 
 	for _, table := range tables {
+		// Locality changes can only be made if schema_locked is toggled.
+		execStmt(fmt.Sprintf(`ALTER TABLE %s SET (schema_locked=false);`, table.String()))
 		// Maybe change the locality of the table.
 		if val := rnd.Intn(3); val == 0 {
 			execStmt(fmt.Sprintf(`ALTER TABLE %s SET LOCALITY REGIONAL BY ROW;`, table.String()))
 		} else if val == 1 {
 			execStmt(fmt.Sprintf(`ALTER TABLE %s SET LOCALITY GLOBAL;`, table.String()))
 		}
+		execStmt(fmt.Sprintf(`ALTER TABLE %s SET (schema_locked=true);`, table.String()))
 		// Else keep the locality as REGIONAL BY TABLE.
 	}
 }

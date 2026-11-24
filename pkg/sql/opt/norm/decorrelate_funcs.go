@@ -518,81 +518,6 @@ func (c *CustomFuncs) ConstructApplyJoin(
 	panic(errors.AssertionFailedf("unexpected join operator: %v", redact.Safe(joinOp)))
 }
 
-// EnsureKey finds the shortest strong key for the input expression. If no
-// strong key exists and the input expression is a Scan or a Scan wrapped in a
-// Select, EnsureKey returns a new Scan (possibly wrapped in a Select) with the
-// preexisting primary key for the table. If the input is not a Scan or
-// Select(Scan), EnsureKey wraps the input in an Ordinality operator, which
-// provides a key column by uniquely numbering the rows. EnsureKey returns the
-// input expression (perhaps augmented with a key column(s) or wrapped by
-// Ordinality).
-func (c *CustomFuncs) EnsureKey(in memo.RelExpr) memo.RelExpr {
-	// Try to add the preexisting primary key if the input is a Scan or Scan
-	// wrapped in a Select.
-	if res, ok := c.tryFindExistingKey(in); ok {
-		return res
-	}
-
-	// Otherwise, wrap the input in an Ordinality operator.
-	colID := c.f.Metadata().AddColumn("rownum", types.Int)
-	private := memo.OrdinalityPrivate{ColID: colID, ForDuplicateRemoval: true}
-	return c.f.ConstructOrdinality(in, &private)
-}
-
-// tryFindExistingKey attempts to find an existing key for the input expression.
-// It may modify the expression in order to project the key column.
-func (c *CustomFuncs) tryFindExistingKey(in memo.RelExpr) (_ memo.RelExpr, ok bool) {
-	_, hasKey := c.CandidateKey(in)
-	if hasKey {
-		return in, true
-	}
-	switch t := in.(type) {
-	case *memo.ProjectExpr:
-		input, foundKey := c.tryFindExistingKey(t.Input)
-		if foundKey {
-			return c.f.ConstructProject(input, t.Projections, input.Relational().OutputCols), true
-		}
-
-	case *memo.ScanExpr:
-		private := t.ScanPrivate
-		tableID := private.Table
-		table := c.f.Metadata().Table(tableID)
-		if !table.IsVirtualTable() {
-			keyCols := c.PrimaryKeyCols(tableID)
-			private.Cols = private.Cols.Union(keyCols)
-			return c.f.ConstructScan(&private), true
-		}
-
-	case *memo.SelectExpr:
-		input, foundKey := c.tryFindExistingKey(t.Input)
-		if foundKey {
-			return c.f.ConstructSelect(input, t.Filters), true
-		}
-	}
-
-	return nil, false
-}
-
-// KeyCols returns a column set consisting of the columns that make up the
-// candidate key for the input expression (a key must be present).
-func (c *CustomFuncs) KeyCols(in memo.RelExpr) opt.ColSet {
-	keyCols, ok := c.CandidateKey(in)
-	if !ok {
-		panic(errors.AssertionFailedf("expected expression to have key"))
-	}
-	return keyCols
-}
-
-// NonKeyCols returns a column set consisting of the output columns of the given
-// input, minus the columns that make up its candidate key (which it must have).
-func (c *CustomFuncs) NonKeyCols(in memo.RelExpr) opt.ColSet {
-	keyCols, ok := c.CandidateKey(in)
-	if !ok {
-		panic(errors.AssertionFailedf("expected expression to have key"))
-	}
-	return c.OutputCols(in).Difference(keyCols)
-}
-
 // MakeAggCols2 is similar to MakeAggCols, except that it allows two different
 // sets of aggregate functions to be added to the resulting Aggregations
 // operator, with one set appended to the other, like this:
@@ -1565,4 +1490,62 @@ func (c *CustomFuncs) MakeAnyNotNullScalarGroupBy(input memo.RelExpr) memo.RelEx
 		c.MakeAggCols(opt.AnyNotNullAggOp, input.Relational().OutputCols),
 		memo.EmptyGroupingPrivate,
 	)
+}
+
+// CanHoistCorrelatedFiltersAbove returns true if there is at least one
+// correlated filter in the list (i.e. one that references columns outside of
+// inputCols). Columns outside inputCols are assumed to be outer (correlated)
+// references available at any scope level.
+func (c *CustomFuncs) CanHoistCorrelatedFiltersAbove(
+	filters memo.FiltersExpr, inputCols opt.ColSet,
+) bool {
+	for i := range filters {
+		filterCols := filters[i].ScalarProps().OuterCols
+		if !filterCols.SubsetOf(inputCols) {
+			return true
+		}
+	}
+	return false
+}
+
+// AddFirstAggsForHoistedFilters returns the aggregations augmented with
+// FirstAgg columns for any input columns that are referenced by correlated
+// filters but are not already in the DistinctOn's output (outputCols). This
+// makes those columns available above the DistinctOn so that the hoisted
+// filters can reference them. This is valid for an unordered DistinctOn because
+// the choice of row per group is nondeterministic.
+func (c *CustomFuncs) AddFirstAggsForHoistedFilters(
+	aggregations memo.AggregationsExpr, filters memo.FiltersExpr, inputCols, outputCols opt.ColSet,
+) memo.AggregationsExpr {
+	// Collect the set of columns needed by correlated filters that aren't
+	// already in the output.
+	var missing opt.ColSet
+	for i := range filters {
+		filterCols := filters[i].ScalarProps().OuterCols
+		if filterCols.SubsetOf(inputCols) {
+			// Not correlated; will remain inside the DistinctOn.
+			continue
+		}
+		// Add local columns that are missing from the output.
+		missing.UnionWith(filterCols.Intersection(inputCols).Difference(outputCols))
+	}
+	if missing.Empty() {
+		return aggregations
+	}
+	// Add a FirstAgg for each missing column.
+	newAggs := make(memo.AggregationsExpr, len(aggregations), len(aggregations)+missing.Len())
+	copy(newAggs, aggregations)
+	missing.ForEach(func(col opt.ColumnID) {
+		newAggs = append(newAggs, c.f.ConstructAggregationsItem(
+			c.f.ConstructFirstAgg(c.f.ConstructVariable(col)),
+			col,
+		))
+	})
+	return newAggs
+}
+
+// CanHoistUnboundFilterFromExistsSubquery returns true if the
+// HoistUnboundFilterFromExistsSubquery rule is enabled by session-setting.
+func (c *CustomFuncs) CanHoistUnboundFilterFromExistsSubquery() bool {
+	return c.f.evalCtx.SessionData().OptimizerUseExistsFilterHoistRule
 }

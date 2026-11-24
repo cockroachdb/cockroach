@@ -13,11 +13,18 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/growstack"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -85,6 +92,11 @@ type Outbox struct {
 
 	// isGatewayNode specifies whether this outbox is running on the gateway node.
 	isGatewayNode bool
+
+	// cpuStopWatch measures goroutine CPU time for the outbox goroutine.
+	// The zero value is valid; Stop() returns 0 if grunning is not
+	// supported or Start was not called.
+	cpuStopWatch timeutil.CPUStopWatch
 }
 
 var _ execinfra.RowReceiver = &Outbox{}
@@ -100,7 +112,7 @@ func NewOutbox(
 	isGatewayNode bool,
 ) *Outbox {
 	m := &Outbox{flowCtx: flowCtx, processorID: processorID, sqlInstanceID: sqlInstanceID}
-	m.encoder.SetHeaderFields(flowCtx.ID, streamID)
+	m.encoder.SetHeaderFields(flowCtx.ID, streamID, flowCtx.NodeID.SQLInstanceID())
 	m.streamID = streamID
 	m.numOutboxes = numOutboxes
 	m.isGatewayNode = isGatewayNode
@@ -170,7 +182,22 @@ func (m *Outbox) flush(ctx context.Context) error {
 	msg := m.encoder.FormMessage(ctx)
 
 	log.VEvent(ctx, 2, "Outbox flushing")
+	var sendCleanup func()
+	if m.flowCtx.EvalCtx != nil {
+		sendCleanup = ash.SetWorkState(
+			m.flowCtx.Codec().TenantID,
+			ash.WorkloadInfo{
+				WorkloadID:    m.flowCtx.EvalCtx.WorkloadID,
+				AppNameID:     m.flowCtx.EvalCtx.AppNameID,
+				GatewayNodeID: roachpb.NodeID(m.flowCtx.NodeID.SQLInstanceID()),
+				WorkloadType:  m.flowCtx.EvalCtx.WorkloadType,
+			},
+			ash.WorkNetwork, "OutboxSend")
+	}
 	sendErr := m.stream.Send(msg)
+	if sendCleanup != nil {
+		sendCleanup()
+	}
 	if m.statsCollectionEnabled {
 		m.streamStats.NetTx.BytesSent.Add(int64(msg.Size()))
 		m.streamStats.NetTx.MessagesSent.Add(1)
@@ -181,10 +208,13 @@ func (m *Outbox) flush(ctx context.Context) error {
 		}
 	}
 	if sendErr != nil {
-		HandleStreamErr(ctx, "flushing", sendErr, m.flowCtxCancel, m.outboxCtxCancel)
+		HandleStreamErr(ctx, "flushing", sendErr, m.flowCtxCancel, m.outboxCtxCancel, m.flowCtx.Cfg.Stopper)
+		// This error probably won't reach the client, but we wrap it with an
+		// internal connection failure error code anyway for consistency with
+		// other DistSQL connection failures.
+		sendErr = pgerror.Wrap(sendErr, pgcode.InternalConnectionFailure, "outbox communication error")
 		// Make sure the stream is not used any more.
 		m.stream = nil
-		log.VWarningf(ctx, 1, "Outbox flush error: %s", sendErr)
 	} else {
 		log.VEvent(ctx, 2, "Outbox flushed")
 	}
@@ -231,20 +261,19 @@ func (m *Outbox) mainLoop(ctx context.Context, wg *sync.WaitGroup) (retErr error
 	}
 
 	if err := func() error {
-		conn, err := execinfra.GetConnForOutbox(
-			ctx, m.flowCtx.Cfg.SQLInstanceDialer, m.sqlInstanceID, SettingFlowStreamTimeout.Get(&m.flowCtx.Cfg.Settings.SV),
+		client, err := execinfra.GetDistSQLClientForOutbox(
+			ctx, m.flowCtx.Cfg.SQLInstanceDialer, m.sqlInstanceID, SettingFlowStreamTimeout.Get(&m.flowCtx.Cfg.Settings.SV), m.flowCtx.Cfg.RPCContext.UseDRPC,
 		)
 		if err != nil {
-			log.VWarningf(ctx, 1, "Outbox Dial connection error, distributed query will fail: %+v", err)
+			log.Dev.VWarningf(ctx, 1, "Outbox Dial connection error, distributed query will fail: %+v", err)
 			return err
 		}
-		client := execinfrapb.NewDistSQLClient(conn)
 		if log.V(2) {
-			log.Infof(ctx, "outbox: calling FlowStream")
+			log.Dev.Infof(ctx, "outbox: calling FlowStream")
 		}
 		m.stream, err = client.FlowStream(ctx)
 		if err != nil {
-			log.VWarningf(ctx, 1, "Outbox FlowStream connection error, distributed query will fail: %+v", err)
+			log.Dev.VWarningf(ctx, 1, "Outbox FlowStream connection error, distributed query will fail: %+v", err)
 			return err
 		}
 		return nil
@@ -255,13 +284,13 @@ func (m *Outbox) mainLoop(ctx context.Context, wg *sync.WaitGroup) (retErr error
 		return err
 	}
 	if log.V(2) {
-		log.Infof(ctx, "outbox: FlowStream returned")
+		log.Dev.Infof(ctx, "outbox: FlowStream returned")
 	}
 
 	// Make sure to always close the stream if it is still usable (if not, then
 	// the field is set to nil).
 	defer func() {
-		if stream, ok := m.stream.(execinfrapb.DistSQL_FlowStreamClient); ok {
+		if stream, ok := m.stream.(execinfrapb.RPCDistSQL_FlowStreamClient); ok {
 			closeErr := stream.CloseSend()
 			if retErr == nil {
 				retErr = closeErr
@@ -291,6 +320,20 @@ func (m *Outbox) mainLoop(ctx context.Context, wg *sync.WaitGroup) (retErr error
 		case msg, ok := <-m.RowChannel.C:
 			if !ok {
 				// No more data.
+
+				// Always-on: each outbox emits its goroutine's raw CPU
+				// time via Metrics metadata. The gateway sums all
+				// RawSQLCPUTime entries and subtracts total
+				// LocalKVCPUTime to derive SQL CPU.
+				if delta := m.cpuStopWatch.Stop(); delta > 0 {
+					meta := &execinfrapb.ProducerMetadata{}
+					meta.Metrics = execinfrapb.GetMetricsMeta()
+					meta.Metrics.RawSQLCPUTime = int64(delta)
+					if err := m.AddRow(ctx, nil, meta); err != nil {
+						return err
+					}
+				}
+
 				if m.statsCollectionEnabled {
 					err := m.flush(ctx)
 					if err != nil {
@@ -332,7 +375,6 @@ func (m *Outbox) mainLoop(ctx context.Context, wg *sync.WaitGroup) (retErr error
 				}
 			}
 		case <-flushTimer.C:
-			flushTimer.Read = true
 			err := m.flush(ctx)
 			if err != nil {
 				return err
@@ -385,9 +427,13 @@ func (m *Outbox) startWatchdogGoroutine(
 				if err != io.EOF {
 					// io.EOF is considered a graceful termination of the gRPC
 					// stream, so it is ignored.
+					// This error probably won't reach the client, but we wrap it with an
+					// internal connection failure error code anyway for consistency with
+					// other DistSQL connection failures.
+					err = pgerror.Wrap(err, pgcode.InternalConnectionFailure, "outbox communication error")
 					m.setErr(err)
 				}
-				HandleStreamErr(ctx, "watchdog Recv", err, m.flowCtxCancel, m.outboxCtxCancel)
+				HandleStreamErr(ctx, "watchdog Recv", err, m.flowCtxCancel, m.outboxCtxCancel, m.flowCtx.Cfg.Stopper)
 				break
 			}
 			switch {
@@ -414,6 +460,12 @@ func (m *Outbox) Start(ctx context.Context, wg *sync.WaitGroup, flowCtxCancel co
 	m.flowCtxCancel = flowCtxCancel
 	wg.Add(1)
 	go func() {
+		if cpuHandle := admission.SQLCPUHandleFromContext(ctx); cpuHandle != nil {
+			gh := cpuHandle.RegisterGoroutine()
+			defer gh.Close(ctx)
+		}
+		m.cpuStopWatch.Start()
+		growstack.Grow()
 		defer wg.Done()
 		m.setErr(m.mainLoop(ctx, wg))
 	}()
@@ -437,19 +489,32 @@ func (m *Outbox) Err() error {
 
 // HandleStreamErr is a utility method used to handle an error when calling
 // a method on a flowStreamClient. If err is an io.EOF, outboxCtxCancel is
-// called, for all other errors flowCtxCancel is. The given error is logged with
-// the associated opName.
+// called, for all other errors flowCtxCancel is called and the error is
+// logged at WARNING level (since it cannot be sent back via the broken
+// stream). The warning is suppressed when the stopper is quiescing, since
+// connection errors are expected during server shutdown.
 func HandleStreamErr(
 	ctx context.Context,
 	opName redact.SafeString,
 	err error,
 	flowCtxCancel, outboxCtxCancel context.CancelFunc,
+	stopper *stop.Stopper,
 ) {
 	if err == io.EOF {
 		log.VEventf(ctx, 2, "Outbox calling outboxCtxCancel after %s EOF", opName)
 		outboxCtxCancel()
 	} else {
-		log.VEventf(ctx, 1, "Outbox calling flowCtxCancel after %s connection error: %+v", opName, err)
+		quiescing := false
+		if stopper != nil {
+			select {
+			case <-stopper.ShouldQuiesce():
+				quiescing = true
+			default:
+			}
+		}
+		if !quiescing {
+			log.Dev.Warningf(ctx, "Outbox calling flowCtxCancel after %s connection error: %+v", opName, err)
+		}
 		flowCtxCancel()
 	}
 }

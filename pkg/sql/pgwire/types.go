@@ -101,8 +101,17 @@ func writeTextUUID(b *writeBuffer, v uuid.UUID) {
 	b.write(s)
 }
 
-func writeTextString(b *writeBuffer, v string, t *types.T) {
-	b.writeLengthPrefixedString(tree.ResolveBlankPaddedChar(v, t))
+func writeTextString(b *writeBuffer, s string, t *types.T) {
+	pad := bpcharPadding(len(s), t)
+	b.putInt32(int32(len(s) + pad))
+	b.writeString(s)
+
+	// apply padding (in the form of blanks spaces) to the right of the write buffer
+	for pad > 0 {
+		n := min(pad, len(spaces))
+		b.write(spaces[:n])
+		pad -= n
+	}
 }
 
 func writeTextTimestamp(b *writeBuffer, v time.Time) {
@@ -130,7 +139,7 @@ func (b *writeBuffer) writeTextDatum(
 	t *types.T,
 ) {
 	if log.V(2) {
-		log.Infof(ctx, "pgwire writing TEXT datum of type: %T, %#v", d, d)
+		log.Dev.Infof(ctx, "pgwire writing TEXT datum of type: %T, %#v", d, d)
 	}
 	if d == tree.DNull {
 		// NULL is encoded as -1; all other values have a length prefix.
@@ -189,7 +198,7 @@ func writeTextDatumNotNull(
 		writeTextString(b, string(*v), t)
 
 	case *tree.DCollatedString:
-		b.writeLengthPrefixedString(tree.ResolveBlankPaddedChar(v.Contents, t))
+		writeTextString(b, v.Contents, t)
 
 	case *tree.DDate:
 		b.textFormatter.FormatNode(v)
@@ -243,6 +252,10 @@ func writeTextDatumNotNull(
 	case *tree.DJSON:
 		b.writeLengthPrefixedString(v.JSON.String())
 
+	case *tree.DJsonpath:
+		b.textFormatter.FormatNode(v)
+		b.writeFromFmtCtx(b.textFormatter)
+
 	case *tree.DTSQuery:
 		b.textFormatter.FormatNode(v)
 		b.writeFromFmtCtx(b.textFormatter)
@@ -272,6 +285,10 @@ func writeTextDatumNotNull(
 	case *tree.DEnum:
 		// Enums are serialized with their logical representation.
 		b.writeLengthPrefixedString(v.LogicalRep)
+
+	case *tree.DLTree:
+		b.textFormatter.FormatNode(v)
+		b.writeFromFmtCtx(b.textFormatter)
 
 	default:
 		b.setError(errors.Errorf("unsupported type %T", d))
@@ -310,7 +327,7 @@ func (b *writeBuffer) writeTextColumnarElement(
 	}()
 	typ := vecs.Vecs[vecIdx].Type()
 	if log.V(2) {
-		log.Infof(ctx, "pgwire writing TEXT columnar element of type: %s", typ)
+		log.Dev.Infof(ctx, "pgwire writing TEXT columnar element of type: %s", typ)
 	}
 	if vecs.Nulls[vecIdx].MaybeHasNulls() && vecs.Nulls[vecIdx].NullAt(rowIdx) {
 		// NULL is encoded as -1; all other values have a length prefix.
@@ -526,14 +543,12 @@ func writeBinaryBytes(b *writeBuffer, v []byte, t *types.T) {
 		// an empty string for the "char" type in the binary format.
 		v = []byte{0}
 	}
-	pad := 0
-	if t.Oid() == oid.T_bpchar && len(v) < int(t.Width()) {
-		// Pad spaces on the right of the byte slice to make it of length
-		// specified in the type t.
-		pad = int(t.Width()) - len(v)
-	}
+
+	pad := bpcharPadding(len(v), t)
 	b.putInt32(int32(len(v) + pad))
 	b.write(v)
+
+	// apply padding (in the form of blanks spaces) to the right of the write buffer
 	for pad > 0 {
 		n := min(pad, len(spaces))
 		b.write(spaces[:n])
@@ -541,14 +556,22 @@ func writeBinaryBytes(b *writeBuffer, v []byte, t *types.T) {
 	}
 }
 
-func writeBinaryString(b *writeBuffer, v string, t *types.T) {
-	s := tree.ResolveBlankPaddedChar(v, t)
+// bpcharPadding returns the number of spaces to pad when writing a BPCHAR datum of length n.
+func bpcharPadding(n int, t *types.T) int {
+	if t.Oid() == oid.T_bpchar && n < int(t.Width()) {
+		return int(t.Width()) - n
+	}
+	return 0
+}
+
+func writeBinaryString(b *writeBuffer, s string, t *types.T) {
 	if t.Oid() == oid.T_char && s == "" {
 		// Match Postgres and always explicitly include a null byte if we have
 		// an empty string for the "char" type in the binary format.
 		s = string([]byte{0})
 	}
-	b.writeLengthPrefixedString(s)
+
+	writeTextString(b, s, t)
 }
 
 func writeBinaryTimestamp(b *writeBuffer, v time.Time) {
@@ -592,7 +615,7 @@ func (b *writeBuffer) writeBinaryDatum(
 	ctx context.Context, d tree.Datum, sessionLoc *time.Location, t *types.T,
 ) {
 	if log.V(2) {
-		log.Infof(ctx, "pgwire writing BINARY datum of type: %T, %#v", d, d)
+		log.Dev.Infof(ctx, "pgwire writing BINARY datum of type: %T, %#v", d, d)
 	}
 	if d == tree.DNull {
 		// NULL is encoded as -1; all other values have a length prefix.
@@ -701,7 +724,7 @@ func writeBinaryDatumNotNull(
 		writeBinaryString(b, string(*v), t)
 
 	case *tree.DCollatedString:
-		b.writeLengthPrefixedString(tree.ResolveBlankPaddedChar(v.Contents, t))
+		writeTextString(b, v.Contents, t)
 
 	case *tree.DTimestamp:
 		writeBinaryTimestamp(b, v.Time)
@@ -820,7 +843,7 @@ func writeBinaryDatumNotNull(
 		}
 		b.putInt32(ndims)
 		hasNulls := 0
-		if v.HasNulls {
+		if v.HasNulls() {
 			hasNulls = 1
 		}
 		oid := v.ParamTyp.Oid()
@@ -841,9 +864,29 @@ func writeBinaryDatumNotNull(
 	case *tree.DJSON:
 		writeBinaryJSON(b, v.JSON, t)
 
+	case *tree.DJsonpath:
+		// Version number prefix, as of writing, `1` is the only valid value.
+		s := v.String()
+		b.putInt32(int32(len(s) + 1))
+		b.writeByte(1)
+		b.writeString(s)
+
 	case *tree.DOid:
 		b.putInt32(4)
 		b.putInt32(int32(v.Oid))
+
+	case *tree.DLTree:
+		// Postgres version number, as of writing, `1` is the only valid value.
+		// The first byte is always used for the version number
+		size := int32(1)
+		size += int32(v.LTree.ByteSize())
+
+		b.putInt32(size)
+		b.writeByte(1)
+
+		b.textFormatter.FormatNode(v)
+		b.writeFromFmtCtxWithoutLength(b.textFormatter)
+
 	default:
 		b.setError(errors.AssertionFailedf("unsupported type %T", d))
 	}
@@ -857,7 +900,7 @@ func (b *writeBuffer) writeBinaryColumnarElement(
 ) {
 	typ := vecs.Vecs[vecIdx].Type()
 	if log.V(2) {
-		log.Infof(ctx, "pgwire writing BINARY columnar element of type: %s", typ)
+		log.Dev.Infof(ctx, "pgwire writing BINARY columnar element of type: %s", typ)
 	}
 	if vecs.Nulls[vecIdx].MaybeHasNulls() && vecs.Nulls[vecIdx].NullAt(rowIdx) {
 		// NULL is encoded as -1; all other values have a length prefix.

@@ -1,0 +1,47 @@
+# Per-engine limit: log at allowed=2, even though global has room.
+
+init max-concurrency=3 deprioritization=0.5 log-allowed=2 state-allowed=2
+----
+
+try-schedule engine=log
+----
+granted: handle=0
+
+try-schedule engine=log
+----
+granted: handle=1
+
+try-schedule engine=log
+----
+not granted
+
+print-state
+----
+totalRunning: 2
+log: running=2 waiting=true registered=true
+state: running=0 waiting=false registered=true
+
+# Since the log engine has waiting=true, when a compaction completes,
+# GetWaitingCompaction is called on the log engine. Since it returns no waiting
+# compaction, the waiting state becomes false.
+compaction-done engine=log handle=0
+----
+log: GetWaitingCompaction
+
+print-state
+----
+totalRunning: 1
+log: running=1 waiting=false registered=true
+state: running=0 waiting=false registered=true
+
+compaction-done engine=log handle=1
+----
+
+print-state
+----
+totalRunning: 0
+log: running=0 waiting=false registered=true
+state: running=0 waiting=false registered=true
+
+close
+----

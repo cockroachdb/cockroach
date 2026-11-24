@@ -17,12 +17,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/zone"
 	"github.com/cockroachdb/cockroach/pkg/sql/covering"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/regions"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
@@ -35,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	"google.golang.org/protobuf/proto"
 )
 
 type zoneConfigAuthorizer interface {
@@ -59,12 +63,14 @@ type zoneConfigObjBuilder interface {
 	// elements around.
 	getZoneConfigElemForAdd(b BuildCtx) (scpb.Element, []scpb.Element)
 
-	// getZoneConfigElemForDrop retrieves (scpb.Element, []scpb.Element) needed
-	// for dropping the zone config object. The slice of multiple elements
+	// getZoneConfigElemForDrop retrieves ([]scpb.Element, []scpb.Element) needed
+	// for dropping the zone config object. The second slice of multiple elements
 	// to be modified becomes more relevant for subzone configs -- as configuring
 	// the zone on indexes and partitions can shift the subzone spans for other
-	// elements around.
-	getZoneConfigElemForDrop(b BuildCtx) (scpb.Element, []scpb.Element)
+	// elements around. The first slice is used to ensure all references with
+	// varying `seqNum`s for the element are dropped (relevant only in explicit
+	// transactions).
+	getZoneConfigElemForDrop(b BuildCtx) ([]scpb.Element, []scpb.Element)
 
 	// getTargetID returns the target ID of the zone config object. This is either
 	// a database or a table ID.
@@ -168,7 +174,9 @@ func resolvePhysicalTableName(b BuildCtx, n *tree.SetZoneConfig) {
 
 // maybeMultiregionErrorWithHint returns an error if the user is trying to
 // update a zone config value that's protected for multi-region databases.
-func maybeMultiregionErrorWithHint(b BuildCtx, zco zoneConfigObject, options tree.KVOptions) error {
+func maybeMultiregionErrorWithHint(
+	b BuildCtx, zco zoneConfigObject, zs tree.ZoneSpecifier, options tree.KVOptions,
+) error {
 	hint := "to override this error, SET override_multi_region_zone_config = true and reissue the command"
 	// The request is to discard the zone configuration. Error in cases where
 	// the zone configuration being discarded was created by the multi-region
@@ -182,7 +190,7 @@ func maybeMultiregionErrorWithHint(b BuildCtx, zco zoneConfigObject, options tre
 			needToError = true
 		} else {
 			var err error
-			needToError, err = blockDiscardOfZoneConfigForMultiRegionObject(b, zco.getTargetID())
+			needToError, err = blockDiscardOfZoneConfigForMultiRegionObject(b, zs, zco.getTargetID())
 			if err != nil {
 				return err
 			}
@@ -226,8 +234,23 @@ func maybeMultiregionErrorWithHint(b BuildCtx, zco zoneConfigObject, options tre
 // do a more explicit comparison (with a generated zone configuration). If, down
 // the road, the rules around writing zone configurations change, the tests in
 // multi_region_zone_configs will fail and this function will need updating.
-func blockDiscardOfZoneConfigForMultiRegionObject(b BuildCtx, tblID catid.DescID) (bool, error) {
+func blockDiscardOfZoneConfigForMultiRegionObject(
+	b BuildCtx, zs tree.ZoneSpecifier, tblID catid.DescID,
+) (bool, error) {
+	isIndex := zs.TableOrIndex.Index != ""
+	isPartition := zs.Partition != ""
 	tableElems := b.QueryByID(tblID)
+
+	RBRElem := tableElems.FilterTableLocalityRegionalByRow().MustGetZeroOrOneElement()
+	if isPartition {
+		// Multi-region abstractions only set partition-level zone configs for
+		// REGIONAL BY ROW tables.
+		return RBRElem != nil, nil
+	} else if isIndex {
+		// Multi-region will never set a zone config on an index, so no need to
+		// error if the user wants to drop the index zone config.
+		return false, nil
+	}
 
 	// It's a table zone config that the user is trying to discard. This
 	// should only be present on GLOBAL and REGIONAL BY TABLE tables in a
@@ -235,7 +258,6 @@ func blockDiscardOfZoneConfigForMultiRegionObject(b BuildCtx, tblID catid.DescID
 	globalElem := tableElems.FilterTableLocalityGlobal().MustGetZeroOrOneElement()
 	primaryRegionElem := tableElems.FilterTableLocalityPrimaryRegion().MustGetZeroOrOneElement()
 	secondaryRegionElem := tableElems.FilterTableLocalitySecondaryRegion().MustGetZeroOrOneElement()
-	RBRElem := tableElems.FilterTableLocalityRegionalByRow().MustGetZeroOrOneElement()
 
 	if globalElem != nil {
 		return true, nil
@@ -360,13 +382,7 @@ func evaluateZoneOptions(
 					pgerror.Newf(pgcode.InvalidParameterValue, "unsupported NULL value for %q",
 						tree.ErrString(name))
 			}
-			opt := zone.SupportedZoneConfigOptions[*name] // Portions Copyright (c) 1996-2015, PostgreSQL Global Development Group
-			if opt.CheckAllowed != nil {
-				if err := opt.CheckAllowed(b, b.ClusterSettings(), datum); err != nil {
-					return nil, nil, nil, err
-				}
-			}
-			setter := opt.Setter
+			setter := zone.SupportedZoneConfigOptions[*name].Setter
 			setters = append(setters, func(c *zonepb.ZoneConfig) { setter(c, datum) })
 			optionsStr = append(optionsStr, fmt.Sprintf("%s = %s", name, datum))
 		}
@@ -580,6 +596,9 @@ func validateZoneLocalitiesForSecondaryTenants(
 	settings *cluster.Settings,
 ) error {
 	toValidate := accumulateNewUniqueConstraints(currentZone, newZone)
+	if err := zonepb.ValidateNewUniqueConstraintsForSecondaryTenants(&settings.SV, currentZone, newZone); err != nil {
+		return err
+	}
 
 	// rs and zs will be lazily populated with regions and zones, respectively.
 	// These should not be accessed directly - use getRegionsAndZones helper
@@ -692,6 +711,13 @@ func accumulateNewUniqueConstraints(currentZone, newZone *zonepb.ZoneConfig) []z
 	return retConstraints
 }
 
+// partitionKey is used to group a partition's name and its index ID for
+// indexing into a map.
+type partitionKey struct {
+	indexID descpb.IndexID
+	name    string
+}
+
 // generateSubzoneSpans constructs from a TableID the entries mapping
 // zone config spans to subzones for use in the SubzoneSpans field of
 // zonepb.ZoneConfig. SubzoneSpans controls which splits are created, so only
@@ -746,10 +772,11 @@ func generateSubzoneSpans(
 	}
 
 	subzoneIndexByIndexID := make(map[descpb.IndexID]int32)
-	subzoneIndexByPartition := make(map[string]int32)
+	subzoneIndexByPartition := make(map[partitionKey]int32)
 	for i, subzone := range subzones {
 		if len(subzone.PartitionName) > 0 {
-			subzoneIndexByPartition[subzone.PartitionName] = int32(i)
+			partKey := partitionKey{indexID: descpb.IndexID(subzone.IndexID), name: subzone.PartitionName}
+			subzoneIndexByPartition[partKey] = int32(i)
 		} else {
 			subzoneIndexByIndexID[descpb.IndexID(subzone.IndexID)] = int32(i)
 		}
@@ -758,33 +785,35 @@ func generateSubzoneSpans(
 	a := &tree.DatumAlloc{}
 	var indexCovering covering.Covering
 	var partitionCoverings []covering.Covering
-	var err error
-	b.QueryByID(tableID).FilterIndexName().NotToAbsent().ForEach(
-		func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexName) {
-			_, indexSubzoneExists := subzoneIndexByIndexID[e.IndexID]
-			if indexSubzoneExists {
-				prefix := roachpb.Key(rowenc.MakeIndexKeyPrefix(b.Codec(), tableID, e.IndexID))
-				idxSpan := roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
-				// Each index starts with a unique prefix, so (from a precedence
-				// perspective) it's safe to append them all together.
-				indexCovering = append(indexCovering, covering.Range{
-					Start: idxSpan.Key, End: idxSpan.EndKey,
-					Payload: zonepb.Subzone{IndexID: uint32(e.IndexID)},
-				})
-			}
-			var emptyPrefix []tree.Datum
-			index := mustRetrieveIndexColumnElements(b, tableID, e.IndexID)
-			partitioning := mustRetrievePartitioningFromIndexPartitioning(b, tableID, e.IndexID)
-			var indexPartitionCoverings []covering.Covering
-			indexPartitionCoverings, err = indexCoveringsForPartitioning(
-				b, a, tableID, e.IndexID, index, partitioning, subzoneIndexByPartition, emptyPrefix)
-			if err != nil {
-				return
-			}
-			partitionCoverings = append(partitionCoverings, indexPartitionCoverings...)
+	var indexes []catid.IndexID
+	b.QueryByID(tableID).FilterIndexName().
+		ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexName) {
+			indexes = append(indexes, e.IndexID)
 		})
-	if err != nil {
-		return nil, err
+	b.QueryByID(tableID).FilterTemporaryIndex().Transient().
+		ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.TemporaryIndex) {
+			indexes = append(indexes, e.IndexID)
+		})
+	for _, idxID := range indexes {
+		_, indexSubzoneExists := subzoneIndexByIndexID[idxID]
+		if indexSubzoneExists {
+			prefix := roachpb.Key(rowenc.MakeIndexKeyPrefix(b.Codec(), tableID, idxID))
+			idxSpan := roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}
+			// Each index starts with a unique prefix, so (from a precedence
+			// perspective) it's safe to append them all together.
+			indexCovering = append(indexCovering, covering.Range{
+				Start: idxSpan.Key, End: idxSpan.EndKey,
+				Payload: zonepb.Subzone{IndexID: uint32(idxID)},
+			})
+		}
+		var emptyPrefix []tree.Datum
+		partitioning := mustRetrievePartitioningFromIndexPartitioning(b, tableID, idxID)
+		indexPartitionCoverings, err := indexCoveringsForPartitioning(
+			b, a, tableID, idxID, partitioning, subzoneIndexByPartition, emptyPrefix)
+		if err != nil {
+			return nil, err
+		}
+		partitionCoverings = append(partitionCoverings, indexPartitionCoverings...)
 	}
 
 	// OverlapCoveringMerge returns the payloads for any coverings that overlap
@@ -809,7 +838,8 @@ func generateSubzoneSpans(
 		}
 		var ok bool
 		if subzone := payloads[0].(zonepb.Subzone); len(subzone.PartitionName) > 0 {
-			subzoneSpan.SubzoneIndex, ok = subzoneIndexByPartition[subzone.PartitionName]
+			partKey := partitionKey{indexID: descpb.IndexID(subzone.IndexID), name: subzone.PartitionName}
+			subzoneSpan.SubzoneIndex, ok = subzoneIndexByPartition[partKey]
 		} else {
 			subzoneSpan.SubzoneIndex, ok = subzoneIndexByIndexID[descpb.IndexID(subzone.IndexID)]
 		}
@@ -833,9 +863,8 @@ func indexCoveringsForPartitioning(
 	a *tree.DatumAlloc,
 	tableID catid.DescID,
 	indexID catid.IndexID,
-	index []*scpb.IndexColumn,
 	part catalog.Partitioning,
-	relevantPartitions map[string]int32,
+	relevantPartitions map[partitionKey]int32,
 	prefixDatums []tree.Datum,
 ) ([]covering.Covering, error) {
 	if part.NumColumns() == 0 {
@@ -856,20 +885,20 @@ func indexCoveringsForPartitioning(
 		listCoverings := make([]covering.Covering, part.NumColumns()+1)
 		err := part.ForEachList(func(name string, values [][]byte, subPartitioning catalog.Partitioning) error {
 			for _, valueEncBuf := range values {
-				t, keyPrefix, err := decodePartitionTuple(
-					b, a, tableID, indexID, index, part, valueEncBuf, prefixDatums)
+				t, keyPrefix, err := decodePartitionTuple(b, a, tableID, indexID, part, valueEncBuf, prefixDatums)
 				if err != nil {
 					return err
 				}
-				if _, ok := relevantPartitions[name]; ok {
+				partKey := partitionKey{indexID: indexID, name: name}
+				if _, ok := relevantPartitions[partKey]; ok {
 					listCoverings[len(t.Datums)] = append(listCoverings[len(t.Datums)], covering.Range{
 						Start: keyPrefix, End: roachpb.Key(keyPrefix).PrefixEnd(),
-						Payload: zonepb.Subzone{PartitionName: name},
+						Payload: zonepb.Subzone{IndexID: uint32(indexID), PartitionName: name},
 					})
 				}
 				newPrefixDatums := append(prefixDatums, t.Datums...)
 				subpartitionCoverings, err := indexCoveringsForPartitioning(
-					b, a, tableID, indexID, index, subPartitioning, relevantPartitions, newPrefixDatums)
+					b, a, tableID, indexID, subPartitioning, relevantPartitions, newPrefixDatums)
 				if err != nil {
 					return err
 				}
@@ -889,23 +918,22 @@ func indexCoveringsForPartitioning(
 
 	if part.NumRanges() > 0 {
 		err := part.ForEachRange(func(name string, from, to []byte) error {
-			if _, ok := relevantPartitions[name]; !ok {
+			partKey := partitionKey{indexID: indexID, name: name}
+			if _, ok := relevantPartitions[partKey]; !ok {
 				return nil
 			}
-			_, fromKey, err := decodePartitionTuple(
-				b, a, tableID, indexID, index, part, from, prefixDatums)
+			_, fromKey, err := decodePartitionTuple(b, a, tableID, indexID, part, from, prefixDatums)
 			if err != nil {
 				return err
 			}
-			_, toKey, err := decodePartitionTuple(
-				b, a, tableID, indexID, index, part, to, prefixDatums)
+			_, toKey, err := decodePartitionTuple(b, a, tableID, indexID, part, to, prefixDatums)
 			if err != nil {
 				return err
 			}
-			if _, ok := relevantPartitions[name]; ok {
+			if _, ok := relevantPartitions[partKey]; ok {
 				coverings = append(coverings, covering.Covering{{
 					Start: fromKey, End: toKey,
-					Payload: zonepb.Subzone{PartitionName: name},
+					Payload: zonepb.Subzone{IndexID: uint32(indexID), PartitionName: name},
 				}})
 			}
 			return nil
@@ -953,7 +981,6 @@ func decodePartitionTuple(
 	a *tree.DatumAlloc,
 	tableID catid.DescID,
 	indexID catid.IndexID,
-	index []*scpb.IndexColumn,
 	part catalog.Partitioning,
 	valueEncBuf []byte,
 	prefixDatums tree.Datums,
@@ -962,6 +989,14 @@ func decodePartitionTuple(
 		Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexColumn) bool {
 			return e.IndexID == indexID && e.Kind == scpb.IndexColumn_KEY
 		})
+	// Sort by ordinal position to ensure correct order
+	sortedKeyColumns := make([]*scpb.IndexColumn, keyColumns.Size())
+	keyColumns.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.IndexColumn) {
+		if e.OrdinalInKind >= uint32(keyColumns.Size()) {
+			panic(errors.AssertionFailedf("OrdinalInKind index out of bound"))
+		}
+		sortedKeyColumns[e.OrdinalInKind] = e
+	})
 	if len(prefixDatums)+part.NumColumns() > keyColumns.Size() {
 		return nil, nil, fmt.Errorf("not enough columns in index for this partitioning")
 	}
@@ -971,8 +1006,7 @@ func decodePartitionTuple(
 	}
 
 	for i := len(prefixDatums); i < keyColumns.Size() && i < len(prefixDatums)+part.NumColumns(); i++ {
-		_, _, keyCol := keyColumns.Get(i)
-		col := keyCol.(*scpb.IndexColumn)
+		col := sortedKeyColumns[i]
 		colType := b.QueryByID(tableID).FilterColumnType().Filter(
 			func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.ColumnType) bool {
 				return e.ColumnID == col.ColumnID
@@ -1018,6 +1052,7 @@ func decodePartitionTuple(
 		colMap.Set(col.ColumnID, i)
 	}
 
+	index := mustRetrieveIndexColumnElements(b, tableID, indexID)
 	indexKeyPrefix := rowenc.MakeIndexKeyPrefix(b.Codec(), tableID, index[0].IndexID)
 	var keyAndSuffixCols []fetchpb.IndexFetchSpec_KeyColumn
 	for _, i := range index {
@@ -1132,7 +1167,6 @@ func prepareZoneConfig(
 	}
 
 	if n.Discard {
-		partialZone.DeleteTableConfig()
 		return nil, partialZone, nil
 	}
 
@@ -1214,14 +1248,58 @@ func prepareZoneConfig(
 func isCorrespondingTemporaryIndex(
 	b BuildCtx, tableID catid.DescID, idx catid.IndexID, otherIdx catid.IndexID,
 ) bool {
-	maybeCorresponding := b.QueryByID(tableID).FilterTemporaryIndex().
-		Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.TemporaryIndex) bool {
-			return idx == e.TemporaryIndexID && e.TemporaryIndexID == otherIdx+1
-		}).MustGetZeroOrOneElement()
-	return maybeCorresponding != nil
+	tmpIndexes := b.QueryByID(tableID).FilterTemporaryIndex().
+		Filter(func(_ scpb.Status, _ scpb.TargetStatus, tmpIndex *scpb.TemporaryIndex) bool {
+			return tmpIndex.IndexID == idx
+		}).Elements()
+	for _, tmpIndex := range tmpIndexes {
+		foundPrimary := b.QueryByID(tableID).FilterPrimaryIndex().
+			Filter(func(_ scpb.Status, _ scpb.TargetStatus, primaryIndex *scpb.PrimaryIndex) bool {
+				return primaryIndex.TemporaryIndexID == tmpIndex.IndexID && primaryIndex.IndexID == otherIdx
+			}).Size() > 0
+		foundSecondary := b.QueryByID(tableID).FilterSecondaryIndex().
+			Filter(func(_ scpb.Status, _ scpb.TargetStatus, secondaryIndex *scpb.SecondaryIndex) bool {
+				return secondaryIndex.TemporaryIndexID == tmpIndex.IndexID && secondaryIndex.IndexID == otherIdx
+			}).Size() > 0
+		if foundPrimary || foundSecondary {
+			return true
+		}
+	}
+	return false
 }
 
-// getSubzoneSpansWithIdx groups each subzone span by their subzoneIndexs
+// findCorrespondingTemporaryIndexByID finds the temporary index that
+// corresponds to the currently mutated index identified by ID.
+//
+// Callers should take care that AllocateIDs() has been called before
+// using this function.
+func findCorrespondingTemporaryIndexByID(
+	b BuildCtx, tableID catid.DescID, indexID catid.IndexID,
+) *scpb.TemporaryIndex {
+	primaryIdx := b.QueryByID(tableID).FilterPrimaryIndex().
+		Filter(func(_ scpb.Status, _ scpb.TargetStatus, primaryIndex *scpb.PrimaryIndex) bool {
+			return primaryIndex.IndexID == indexID
+		}).MustGetZeroOrOneElement()
+	if primaryIdx != nil {
+		return b.QueryByID(tableID).FilterTemporaryIndex().
+			Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.TemporaryIndex) bool {
+				return e.IndexID == primaryIdx.TemporaryIndexID
+			}).MustGetZeroOrOneElement()
+	}
+	secondaryIdx := b.QueryByID(tableID).FilterSecondaryIndex().
+		Filter(func(_ scpb.Status, _ scpb.TargetStatus, secondaryIndex *scpb.SecondaryIndex) bool {
+			return secondaryIndex.IndexID == indexID
+		}).MustGetZeroOrOneElement()
+	if secondaryIdx != nil {
+		return b.QueryByID(tableID).FilterTemporaryIndex().
+			Filter(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.TemporaryIndex) bool {
+				return e.IndexID == secondaryIdx.TemporaryIndexID
+			}).MustGetZeroOrOneElement()
+	}
+	return nil
+}
+
+// getSubzoneSpansWithIdx groups each subzone span by their subzoneIndexes
 // for a lookup of which subzone spans a particular subzone is referred to by.
 func getSubzoneSpansWithIdx(
 	numSubzones int, newSubzoneSpans []zonepb.SubzoneSpan,
@@ -1243,7 +1321,11 @@ func getSubzoneSpansWithIdx(
 // for existing subzone configs -- with the intent of updating its associated
 // subzone configs due to some other zone config change.
 func constructSideEffectIndexElem(
-	b BuildCtx, zco zoneConfigObject, subzone zonepb.Subzone, subzoneSpans []zonepb.SubzoneSpan,
+	b BuildCtx,
+	zco zoneConfigObject,
+	oldSubzoneIdx int32,
+	subzoneSpans []zonepb.SubzoneSpan,
+	subzone zonepb.Subzone,
 ) *scpb.IndexZoneConfig {
 	// Get the most recent seqNum so we can properly update the side
 	// effects.
@@ -1264,6 +1346,7 @@ func constructSideEffectIndexElem(
 		Subzone:      subzone,
 		SubzoneSpans: subzoneSpans,
 		SeqNum:       mostRecentElem.SeqNum + 1,
+		OldIdxRef:    oldSubzoneIdx,
 	}
 	return elem
 }
@@ -1274,7 +1357,11 @@ func constructSideEffectIndexElem(
 // configs -- with the intent of updating its associated subzone configs due to
 // some other zone config change.
 func constructSideEffectPartitionElem(
-	b BuildCtx, zco zoneConfigObject, subzone zonepb.Subzone, subzoneSpans []zonepb.SubzoneSpan,
+	b BuildCtx,
+	zco zoneConfigObject,
+	oldSubzoneIdx int32,
+	subzone zonepb.Subzone,
+	subzoneSpans []zonepb.SubzoneSpan,
 ) *scpb.PartitionZoneConfig {
 	// Get the most recent seqNum so we can properly update the side
 	// effects.
@@ -1297,6 +1384,740 @@ func constructSideEffectPartitionElem(
 		Subzone:       subzone,
 		SubzoneSpans:  subzoneSpans,
 		SeqNum:        mostRecentElem.SeqNum + 1,
+		OldIdxRef:     oldSubzoneIdx,
 	}
 	return elem
+}
+
+// getMostRecentTableZoneConfig returns the most recent table (denoted by
+// highest seqNum) zone config for the given tableID (if any exist).
+//
+// N.B. Adding a new zone config element entails adding a new element where the
+// seqNum is 1 greater than the most recent zone config element. This helps
+// ensure zone config changes are applied in the correct order during explicit
+// transactions.
+func getMostRecentTableZoneConfig(b BuildCtx, tableID catid.DescID) *scpb.TableZoneConfig {
+	maxSeq := uint32(0)
+	var tzo *scpb.TableZoneConfig
+	b.QueryByID(tableID).FilterTableZoneConfig().
+		ForEach(func(status scpb.Status, targetStatus scpb.TargetStatus, elem *scpb.TableZoneConfig) {
+			if targetStatus == scpb.ToPublic && elem.SeqNum >= maxSeq {
+				maxSeq = elem.SeqNum
+				tzo = elem
+			}
+		})
+	return tzo
+}
+
+// configureZoneConfigForNewIndexBackfill will ensure that current subzone
+// configs for the given index on tableID are updated to the newIndexID.
+func configureZoneConfigForNewIndexBackfill(
+	b BuildCtx, tableID catid.DescID, oldIndexID catid.IndexID,
+) error {
+	// Short-circuit if there are no subzones for the old index.
+	if !hasSubzonesForIndex(b, tableID, oldIndexID) {
+		return nil
+	}
+	mostRecentTableZoneConfig := getMostRecentTableZoneConfig(b, tableID)
+	if mostRecentTableZoneConfig == nil {
+		return nil
+	}
+	// Extract all the new indexes that exist in the primary index chain,
+	// which will all have the zone config applied.
+	chain := getPrimaryIndexChain(b, tableID)
+	var newIndexesForBackfill []catid.IndexID
+	for _, idxSpec := range chain.allPrimaryIndexSpecs(nonNilPrimaryIndexSpecSelector) {
+		// Skip the old primary index spec.
+		if idxSpec == &chain.oldSpec {
+			continue
+		}
+		newIndexesForBackfill = append(newIndexesForBackfill, idxSpec.primary.IndexID)
+		newIndexesForBackfill = append(newIndexesForBackfill, idxSpec.primary.TemporaryIndexID)
+	}
+
+	newZoneConfig := *mostRecentTableZoneConfig.ZoneConfig
+	newSubzones := make([]zonepb.Subzone, 0)
+	newSubzones = append(newSubzones, newZoneConfig.Subzones...)
+	// Track which subzones are already referenced.
+	indexesAlreadyMapped := make(map[uint32]struct{})
+	for _, subZone := range newZoneConfig.Subzones {
+		indexesAlreadyMapped[subZone.IndexID] = struct{}{}
+	}
+	// For the indexes we will use as a part of the backfill, ensure we copy
+	// over each subzone config from the old index to the backfill-related ones.
+	// NOTE: The subzones for the old index and temporary index will eventually
+	// be removed by the schema change GC job, but we need them to be present
+	// for the duration of this schema change.
+	for _, idxToAdd := range newIndexesForBackfill {
+		// Only update new subzone references.
+		if _, found := indexesAlreadyMapped[uint32(idxToAdd)]; found {
+			continue
+		}
+		for _, subzone := range newZoneConfig.Subzones {
+			if subzone.IndexID == uint32(oldIndexID) {
+				subzone.IndexID = uint32(idxToAdd)
+				newSubzones = append(newSubzones, subzone)
+			}
+		}
+	}
+	newZoneConfig.Subzones = newSubzones
+	var err error
+	if len(newZoneConfig.Subzones) > 0 {
+		newZoneConfig.SubzoneSpans, err = generateSubzoneSpans(b, tableID, newZoneConfig.Subzones)
+		if err != nil {
+			return err
+		}
+	}
+	tzc := &scpb.TableZoneConfig{
+		TableID:    tableID,
+		ZoneConfig: &newZoneConfig,
+		SeqNum:     mostRecentTableZoneConfig.SeqNum + 1,
+	}
+	b.Add(tzc)
+	return nil
+}
+
+// configureZoneConfigForReplacementIndexPartitioning configures the zone config
+// for replacement indexes that are recreated as a part of ALTER PRIMARY KEY. The
+// subzone config for these indexes will be constructed using the index that
+// is being replaced.
+func configureZoneConfigForReplacementIndexPartitioning(
+	b BuildCtx, tableID catid.DescID, origIndexID descpb.IndexID, indexID descpb.IndexID,
+) error {
+	indexIDs := []descpb.IndexID{indexID}
+	if idx := findCorrespondingTemporaryIndexByID(b, tableID, indexID); idx != nil {
+		indexIDs = append(indexIDs, idx.IndexID)
+	}
+	// For REGIONAL BY ROW tables, correctly configure relevant zone configurations.
+	localityRBR := b.QueryByID(tableID).Filter(publicTargetFilter).FilterTableLocalityRegionalByRow().MustGetZeroOrOneElement()
+	if localityRBR != nil {
+		dbID := b.QueryByID(tableID).FilterNamespace().MustGetOneElement().DatabaseID
+		regionConfig, err := b.SynthesizeRegionConfig(b, dbID)
+		if err != nil {
+			return err
+		}
+		if err := applyZoneConfigForMultiRegionTable(
+			b,
+			regionConfig,
+			tableID,
+			applyZoneConfigForMultiRegionTableOptionReplacementIndexes(origIndexID, indexIDs...),
+		); err != nil {
+			return err
+		}
+	}
+	// Otherwise, duplicate the original zone config only if it exists.
+	mostRecentTableZoneConfig := getMostRecentTableZoneConfig(b, tableID)
+	if mostRecentTableZoneConfig == nil {
+		return nil
+	}
+	newZoneConfig := protoutil.Clone(mostRecentTableZoneConfig.ZoneConfig).(*zonepb.ZoneConfig)
+	zoneConfigModified := false
+	partitioning := mustRetrievePartitioningFromIndexPartitioning(b, tableID, indexID)
+	for _, currIndexID := range indexIDs {
+		err := partitioning.ForEachPartitionName(func(name string) error {
+			prevSubZone := mostRecentTableZoneConfig.ZoneConfig.GetSubzone(uint32(origIndexID), name)
+			if prevSubZone == nil {
+				return nil
+			}
+			zoneConfigModified = true
+			newSubZone := protoutil.Clone(&prevSubZone.Config).(*zonepb.ZoneConfig)
+			newZoneConfig.SetSubzone(zonepb.Subzone{
+				IndexID:       uint32(currIndexID),
+				Config:        *newSubZone,
+				PartitionName: name,
+			})
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+		if indexSubzone := mostRecentTableZoneConfig.ZoneConfig.GetSubzoneExact(uint32(origIndexID), ""); indexSubzone != nil {
+			zoneConfigModified = true
+			newSubZone := protoutil.Clone(&indexSubzone.Config).(*zonepb.ZoneConfig)
+			newZoneConfig.SetSubzone(zonepb.Subzone{
+				IndexID:       uint32(currIndexID),
+				Config:        *newSubZone,
+				PartitionName: "",
+			})
+		}
+	}
+	if zoneConfigModified {
+		var err error
+		newZoneConfig.SubzoneSpans, err = generateSubzoneSpans(b, tableID, newZoneConfig.Subzones)
+		if err != nil {
+			return err
+		}
+		b.Add(&scpb.TableZoneConfig{
+			TableID:    tableID,
+			ZoneConfig: newZoneConfig,
+			SeqNum:     mostRecentTableZoneConfig.SeqNum + 1,
+		})
+	}
+	return nil
+}
+
+// configureZoneConfigForNewTableLocality configures the zoneconfig after running
+// ALTER TABLE LOCALITY
+func configureZoneConfigForNewTableLocality(
+	b BuildCtx, tableID catid.DescID, localityConfig catpb.LocalityConfig,
+) error {
+	// Synthesize the region config for the database
+	dbID := b.QueryByID(tableID).FilterNamespace().MustGetOneElement().DatabaseID
+	regionConfig, err := b.SynthesizeRegionConfig(b, dbID)
+	if err != nil {
+		return err
+	}
+
+	if err := applyZoneConfigForMultiRegionTable(
+		b,
+		regionConfig,
+		tableID,
+		dropZoneConfigsForMultiRegionIndexes(),
+		applyZoneConfigForMultiRegionTableOptionTableAndIndexes(
+			b, tableID,
+			localityConfig),
+	); err != nil {
+		return err
+	}
+	return nil
+}
+
+// configureZoneConfigForNewIndexPartitioning configures the zone config for any
+// new index in a REGIONAL BY ROW table.
+// This *must* be done after the index ID has been allocated.
+func configureZoneConfigForNewIndexPartitioning(
+	b BuildCtx, tableID catid.DescID, indexID descpb.IndexID,
+) error {
+	// For REGIONAL BY ROW tables, correctly configure relevant zone configurations.
+	localityRBR := b.QueryByID(tableID).FilterTableLocalityRegionalByRow().MustGetZeroOrOneElement()
+	if localityRBR != nil {
+		dbID := b.QueryByID(tableID).FilterNamespace().MustGetOneElement().DatabaseID
+		regionConfig, err := b.SynthesizeRegionConfig(b, dbID)
+		if err != nil {
+			return err
+		}
+
+		indexIDs := []descpb.IndexID{indexID}
+		if idx := findCorrespondingTemporaryIndexByID(b, tableID, indexID); idx != nil {
+			indexIDs = append(indexIDs, idx.IndexID)
+		}
+
+		if err := applyZoneConfigForMultiRegionTable(
+			b,
+			regionConfig,
+			tableID,
+			applyZoneConfigForMultiRegionTableOptionNewIndexes(indexIDs...),
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// applyZoneConfigForMultiRegionTable applies zone config settings based
+// on the options provided and adds the scpb.TableZoneConfig to our builder.
+func applyZoneConfigForMultiRegionTable(
+	b BuildCtx,
+	regionConfig multiregion.RegionConfig,
+	tableID catid.DescID,
+	opts ...applyZoneConfigForMultiRegionTableOption,
+) error {
+	// Base the zone config on the most recent copy of the table
+	// zone config.
+	mostRecentSeqNum := uint32(0)
+	mostRecentTableZoneConfig := getMostRecentTableZoneConfig(b, tableID)
+	if mostRecentTableZoneConfig != nil {
+		mostRecentSeqNum = mostRecentTableZoneConfig.SeqNum
+	}
+	var currentZoneConfigWithRaw *zone.ZoneConfigWithRawBytes
+	var err error
+	if mostRecentTableZoneConfig != nil {
+		zc := protoutil.Clone(mostRecentTableZoneConfig.ZoneConfig).(*zonepb.ZoneConfig)
+		currentZoneConfigWithRaw = zone.NewZoneConfigWithRawBytes(zc, nil)
+	} else {
+		currentZoneConfigWithRaw = zone.NewZoneConfigWithRawBytes(zonepb.NewZoneConfig(), nil)
+	}
+	newZoneConfig := *currentZoneConfigWithRaw.ZoneConfigProto()
+
+	for _, opt := range opts {
+		modifiedNewZoneConfig, err := opt(
+			newZoneConfig,
+			regionConfig,
+			tableID,
+		)
+		if err != nil {
+			return err
+		}
+		newZoneConfig = modifiedNewZoneConfig
+	}
+
+	if regionConfig.HasSecondaryRegion() {
+		var newLeasePreferences []zonepb.LeasePreference
+		localityRBR := b.QueryByID(tableID).Filter(publicTargetFilter).FilterTableLocalityRegionalByRow().MustGetZeroOrOneElement()
+		switch {
+		case localityRBR != nil:
+			region := b.QueryByID(tableID).FilterTableLocalitySecondaryRegion().MustGetZeroOrOneElement()
+			if region != nil {
+				newLeasePreferences = regions.SynthesizeLeasePreferences(region.RegionName, regionConfig.SecondaryRegion())
+			} else {
+				newLeasePreferences = regions.SynthesizeLeasePreferences(regionConfig.PrimaryRegion(), regionConfig.SecondaryRegion())
+			}
+		default:
+			newLeasePreferences = regions.SynthesizeLeasePreferences(regionConfig.PrimaryRegion(), regionConfig.SecondaryRegion())
+		}
+		newZoneConfig.LeasePreferences = newLeasePreferences
+	}
+
+	// Mark the NumReplicas as 0 if we have subzones but no other features
+	// in the zone config. This signifies a placeholder.
+	// Note we do not use hasNewSubzones here as there may be existing subzones
+	// on the zone config which may still be a placeholder.
+	if regions.IsPlaceholderZoneConfigForMultiRegion(newZoneConfig) {
+		newZoneConfig.NumReplicas = proto.Int32(0)
+	}
+
+	// Determine if we're rewriting or deleting the zone configuration.
+	newZoneConfigIsEmpty := newZoneConfig.Equal(zonepb.NewZoneConfig())
+	currentZoneConfigIsEmpty := currentZoneConfigWithRaw.ZoneConfigProto().Equal(zonepb.NewZoneConfig())
+	rewriteZoneConfig := !newZoneConfigIsEmpty
+	deleteZoneConfig := newZoneConfigIsEmpty && !currentZoneConfigIsEmpty
+
+	if deleteZoneConfig {
+		// Since current zoneconfig is not empty, we should have at least one element present.
+		// There might be more if an index change is happening.
+		currentZoneConfigElems := b.QueryByID(tableID).FilterTableZoneConfig()
+		if currentZoneConfigElems == nil {
+			return errors.AssertionFailedf(
+				"Current zone config for tableID %d is not empty but no elements were found", tableID)
+		}
+		currentZoneConfigElems.ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.TableZoneConfig) {
+			// This scenario only happens during an ALTER TABLE LOCALTIY.
+			// We must reset the table zoneconfig and remove all of its
+			// subzones to make sure it will be dropped.
+			// No need to drop subzone elements. They will be cleaned up if an index
+			// change is happening.
+			e.ZoneConfig.DeleteTableConfig()
+			e.ZoneConfig.DeleteAllSubzones()
+			b.Drop(e)
+		})
+	}
+	if !rewriteZoneConfig {
+		return nil
+	}
+
+	if err := newZoneConfig.Validate(); err != nil {
+		return pgerror.Wrap(
+			err,
+			pgcode.CheckViolation,
+			"could not validate zone config",
+		)
+	}
+	if err := newZoneConfig.ValidateTandemFields(); err != nil {
+		return pgerror.Wrap(
+			err,
+			pgcode.CheckViolation,
+			"could not validate zone config",
+		)
+	}
+	if len(newZoneConfig.Subzones) > 0 {
+		newZoneConfig.SubzoneSpans, err = generateSubzoneSpans(b, tableID, newZoneConfig.Subzones)
+		if err != nil {
+			return err
+		}
+	} else {
+		// To keep the Subzone and SubzoneSpan arrays consistent
+		newZoneConfig.SubzoneSpans = nil
+	}
+	if newZoneConfig.IsSubzonePlaceholder() && len(newZoneConfig.Subzones) == 0 {
+		return nil
+	}
+	tzc := &scpb.TableZoneConfig{
+		TableID:    tableID,
+		ZoneConfig: &newZoneConfig,
+		SeqNum:     mostRecentSeqNum + 1,
+	}
+	b.Add(tzc)
+	return nil
+}
+
+// applyZoneConfigForMultiRegionTableOptionReplacementIndexes uses the sub zone
+// config from origIndexID to make the subzone configs for new index IDs.
+func applyZoneConfigForMultiRegionTableOptionReplacementIndexes(
+	origIndexID descpb.IndexID, newIndexIDs ...descpb.IndexID,
+) applyZoneConfigForMultiRegionTableOption {
+	return func(zoneConfig zonepb.ZoneConfig, regionConfig multiregion.RegionConfig, tableID catid.DescID) (newZoneConfig zonepb.ZoneConfig, err error) {
+		for _, newIndexID := range newIndexIDs {
+			for _, region := range regionConfig.Regions() {
+				base := zoneConfig.GetSubzoneExact(uint32(origIndexID), string(region))
+				var baseZoneConfig zonepb.ZoneConfig
+				if base != nil {
+					baseZoneConfig = *protoutil.Clone(&base.Config).(*zonepb.ZoneConfig)
+				} else {
+					var err error
+					baseZoneConfig, err = regions.ZoneConfigForMultiRegionPartition(region, regionConfig)
+					if err != nil {
+						return zoneConfig, err
+					}
+				}
+				zoneConfig.SetSubzone(zonepb.Subzone{
+					IndexID:       uint32(newIndexID),
+					PartitionName: string(region),
+					Config:        baseZoneConfig,
+				})
+			}
+		}
+		return zoneConfig, nil
+	}
+}
+
+// applyZoneConfigForMultiRegionTableOptionNewIndexes applies table zone configs
+// for a newly added index which requires partitioning of individual indexes.
+func applyZoneConfigForMultiRegionTableOptionNewIndexes(
+	indexIDs ...descpb.IndexID,
+) applyZoneConfigForMultiRegionTableOption {
+	return func(
+		zoneConfig zonepb.ZoneConfig,
+		regionConfig multiregion.RegionConfig,
+		tableID catid.DescID,
+	) (newZoneConfig zonepb.ZoneConfig, err error) {
+		for _, indexID := range indexIDs {
+			for _, region := range regionConfig.Regions() {
+				zc, err := regions.ZoneConfigForMultiRegionPartition(region, regionConfig)
+				if err != nil {
+					return zoneConfig, err
+				}
+				zoneConfig.SetSubzone(zonepb.Subzone{
+					IndexID:       uint32(indexID),
+					PartitionName: string(region),
+					Config:        zc,
+				})
+			}
+		}
+		return zoneConfig, nil
+	}
+}
+
+// applyZoneConfigForMultiRegionTableOptionTableAndIndexes applies table zone configs
+// on the entire table as well as its indexes, replacing multi-region related zone
+// configuration fields.
+func applyZoneConfigForMultiRegionTableOptionTableAndIndexes(
+	b BuildCtx, tableID catid.DescID, localityConfig catpb.LocalityConfig,
+) applyZoneConfigForMultiRegionTableOption {
+
+	return func(
+		zc zonepb.ZoneConfig,
+		regionConfig multiregion.RegionConfig,
+		tableID catid.DescID,
+	) (zonepb.ZoneConfig, error) {
+		localityZoneConfig, err := regions.ZoneConfigForMultiRegionTable(
+			localityConfig,
+			regionConfig,
+		)
+		if err != nil {
+			return zonepb.ZoneConfig{}, err
+		}
+
+		// Wipe out the subzone multi-region fields before we copy over the
+		// multi-region fields to the zone config down below. We have to do this to
+		// handle the case where users have set a zone config on an index and we're
+		// ALTERing to a table locality that doesn't lay down index zone
+		// configurations (e.g. GLOBAL or REGIONAL BY TABLE). Since the user will
+		// have to override to perform the ALTER, we want to wipe out the index
+		// zone config so that the user won't have to override again the next time
+		// the want to ALTER the table locality.
+		zc.ClearFieldsOfAllSubzones(zonepb.MultiRegionZoneConfigFields)
+
+		zc.CopyFromZone(localityZoneConfig, zonepb.MultiRegionZoneConfigFields)
+
+		// For REGIONAL BY ROW tables, correctly configure relevant subzone configurations.
+		if localityConfig.GetRegionalByRow() != nil {
+			dbID := b.QueryByID(tableID).FilterNamespace().MustGetOneElement().DatabaseID
+			regionConfig, err := b.SynthesizeRegionConfig(b, dbID)
+			if err != nil {
+				return zonepb.ZoneConfig{}, err
+			}
+
+			var indexIDs []descpb.IndexID
+			b.QueryByID(tableID).FilterIndexName().
+				ForEach(func(_ scpb.Status, target scpb.TargetStatus, e *scpb.IndexName) {
+					if isNonDropIndex(target) {
+						indexIDs = append(indexIDs, e.IndexID)
+					}
+				})
+
+			for _, indexID := range indexIDs {
+				for _, region := range regionConfig.Regions() {
+					subzoneConfig, err := regions.ZoneConfigForMultiRegionPartition(region, regionConfig)
+					if err != nil {
+						return zonepb.ZoneConfig{}, err
+					}
+					zc.SetSubzone(zonepb.Subzone{
+						IndexID:       uint32(indexID),
+						PartitionName: string(region),
+						Config:        subzoneConfig,
+					})
+				}
+			}
+		}
+		return zc, nil
+	}
+}
+
+// dropZoneConfigsForMultiRegionIndexes drops the zone configs for all
+// the indexes defined on a multi-region table. This function is used to clean
+// up zone configs when transitioning from REGIONAL BY ROW.
+func dropZoneConfigsForMultiRegionIndexes() applyZoneConfigForMultiRegionTableOption {
+	return func(
+		zc zonepb.ZoneConfig,
+		regionConfig multiregion.RegionConfig,
+		tableID catid.DescID,
+	) (newZoneConfig zonepb.ZoneConfig, err error) {
+		// Clear all multi-region fields of the subzones. If this leaves them
+		// empty, they will automatically be removed.
+		zc.ClearFieldsOfAllSubzones(zonepb.MultiRegionZoneConfigFields)
+
+		// Strip placeholder status and spans if there are no more subzones.
+		if len(zc.Subzones) == 0 && zc.IsSubzonePlaceholder() {
+			zc.NumReplicas = nil
+			zc.SubzoneSpans = nil
+		}
+		return zc, nil
+	}
+}
+
+// applyZoneConfigForMultiRegionTableOption is an option that can be passed into
+// applyZoneConfigForMultiRegionTable.
+type applyZoneConfigForMultiRegionTableOption func(
+	zoneConfig zonepb.ZoneConfig,
+	regionConfig multiregion.RegionConfig,
+	tableID catid.DescID,
+) (newZoneConfig zonepb.ZoneConfig, err error)
+
+// zoneConfigForMultiRegionValidator is an interface representing
+// actions to take when validating a zone config for multi-region
+// purposes in the declarative schema changer. This extends the shared
+// regions.ZoneConfigForMultiRegionValidator with declarative-schema-changer-specific methods.
+type zoneConfigForMultiRegionValidator interface {
+	regions.ZoneConfigForMultiRegionValidator
+	getExpectedTableZoneConfig(
+		b BuildCtx,
+		tableID catid.DescID,
+		localityConfig catpb.LocalityConfig,
+	) (zonepb.ZoneConfig, error)
+}
+
+// zoneConfigForMultiRegionValidatorModifiedByUser implements
+// interface zoneConfigForMultiRegionValidator for the declarative schema changer.
+type zoneConfigForMultiRegionValidatorModifiedByUser struct {
+	regionConfig multiregion.RegionConfig
+}
+
+var _ zoneConfigForMultiRegionValidator = (*zoneConfigForMultiRegionValidatorModifiedByUser)(nil)
+
+func (v *zoneConfigForMultiRegionValidatorModifiedByUser) getExpectedTableZoneConfig(
+	b BuildCtx, tableID catid.DescID, localityConfig catpb.LocalityConfig,
+) (zonepb.ZoneConfig, error) {
+	expectedZoneConfig, err := applyZoneConfigForMultiRegionTableOptionTableAndIndexes(
+		b, tableID, localityConfig,
+	)(
+		*zonepb.NewZoneConfig(),
+		v.regionConfig,
+		tableID,
+	)
+	if err != nil {
+		return zonepb.ZoneConfig{}, err
+	}
+	return expectedZoneConfig, nil
+}
+
+func (v *zoneConfigForMultiRegionValidatorModifiedByUser) TransitioningRegions() catpb.RegionNames {
+	return v.regionConfig.TransitioningRegions()
+}
+
+func (v *zoneConfigForMultiRegionValidatorModifiedByUser) wrapErr(err error) error {
+	err = errors.WithDetail(
+		err,
+		"the attempted operation will overwrite a user modified field",
+	)
+	return errors.WithHint(
+		err,
+		"to proceed with the overwrite, SET override_multi_region_zone_config = true, "+
+			"and reissue the statement",
+	)
+}
+
+func (v *zoneConfigForMultiRegionValidatorModifiedByUser) NewMismatchFieldError(
+	descType string, descName string, mismatch zonepb.DiffWithZoneMismatch,
+) error {
+	return v.wrapErr(
+		pgerror.Newf(
+			pgcode.InvalidObjectDefinition,
+			"attempting to update zone configuration for %s %s which contains modified field %q (expected=%s actual=%s)",
+			descType,
+			descName,
+			mismatch.Field,
+			mismatch.Expected,
+			mismatch.Actual,
+		),
+	)
+}
+
+func (v *zoneConfigForMultiRegionValidatorModifiedByUser) NewMissingSubzoneError(
+	descType string, descName string, _ zonepb.DiffWithZoneMismatch,
+) error {
+	return v.wrapErr(
+		pgerror.Newf(
+			pgcode.InvalidObjectDefinition,
+			"attempting to update zone config which is missing an expected zone configuration for %s %s",
+			descType,
+			descName,
+		),
+	)
+}
+
+func (v *zoneConfigForMultiRegionValidatorModifiedByUser) NewExtraSubzoneError(
+	descType string, descName string, mismatch zonepb.DiffWithZoneMismatch,
+) error {
+	return v.wrapErr(
+		pgerror.Newf(
+			pgcode.InvalidObjectDefinition,
+			"attempting to update zone config which contains an extra zone configuration for %s %s with field %s populated (expected=%s actual=%s)",
+			descType,
+			descName,
+			mismatch.Field,
+			mismatch.Expected,
+			mismatch.Actual,
+		),
+	)
+}
+
+// multiRegionTableValidatorData implements zoneconfig.MultiRegionTableValidatorData
+// for the declarative schema changer.
+type multiRegionTableValidatorData struct {
+	b            BuildCtx
+	tableID      catid.DescID
+	regionConfig multiregion.RegionConfig
+}
+
+var _ regions.MultiRegionTableValidatorData = (*multiRegionTableValidatorData)(nil)
+
+func (v *multiRegionTableValidatorData) GetNonDropIndexes() map[uint32]tree.Name {
+	result := make(map[uint32]tree.Name)
+	v.b.QueryByID(v.tableID).FilterIndexName().
+		ForEach(func(_ scpb.Status, target scpb.TargetStatus, e *scpb.IndexName) {
+			if isNonDropIndex(target) {
+				result[uint32(e.IndexID)] = tree.Name(e.Name)
+			}
+		})
+	return result
+}
+
+func (v *multiRegionTableValidatorData) GetTransitioningRBRIndexes() map[uint32]struct{} {
+	// todo(shadi): need to find transitioning indexes if an alter locality is running
+	return make(map[uint32]struct{})
+}
+
+func (v *multiRegionTableValidatorData) GetTableLocalitySecondaryRegion() *catpb.RegionName {
+	secondaryRegionElt := v.b.QueryByID(v.tableID).FilterTableLocalitySecondaryRegion().MustGetZeroOrOneElement()
+	if secondaryRegionElt != nil {
+		return &secondaryRegionElt.RegionName
+	}
+	return nil
+}
+
+func (v *multiRegionTableValidatorData) GetDatabasePrimaryRegion() catpb.RegionName {
+	return v.regionConfig.PrimaryRegion()
+}
+
+func (v *multiRegionTableValidatorData) GetDatabaseSecondaryRegion() catpb.RegionName {
+	return v.regionConfig.SecondaryRegion()
+}
+
+// IsSecondaryRegionOutsideSuperRegion implements regions.MultiRegionTableValidatorData.
+func (v *multiRegionTableValidatorData) IsSecondaryRegionOutsideSuperRegion(
+	region catpb.RegionName,
+) bool {
+	return regions.SecondaryRegionOutsideSuperRegion(region, v.regionConfig)
+}
+
+// validateZoneConfigForMultiRegionTable validates that the multi-region
+// fields of the table's zone configuration match what is expected for
+// the given table.
+func validateZoneConfigForMultiRegionTable(
+	b BuildCtx,
+	tableID catid.DescID,
+	tableName string,
+	currentZoneConfig *zonepb.ZoneConfig,
+	localityConfig catpb.LocalityConfig,
+	regionConfig multiregion.RegionConfig,
+	validator zoneConfigForMultiRegionValidator,
+) error {
+	expectedZoneConfig, err := validator.getExpectedTableZoneConfig(b, tableID, localityConfig)
+	if err != nil {
+		return err
+	}
+
+	validatorData := multiRegionTableValidatorData{
+		b:            b,
+		tableID:      tableID,
+		regionConfig: regionConfig,
+	}
+
+	return regions.ValidateZoneConfigForMultiRegionTable(
+		tree.Name(tableName),
+		currentZoneConfig,
+		expectedZoneConfig,
+		&validatorData,
+		validator,
+	)
+}
+
+// validateZoneConfigForMultiRegionTableWasNotModifiedByUser validates that
+// the table's zone configuration was not modified by the user. This function is
+// intended to be called when a multi-region operation will overwrite
+// the table's (or index's/partition's) zone configuration and we wish to warn
+// the user about that before it occurs (and require the
+// override_multi_region_zone_config session variable to be set).
+// This version is adapted for use in the declarative schema changer.
+func validateZoneConfigForMultiRegionTableWasNotModifiedByUser(
+	b BuildCtx, tableID catid.DescID, tableName string, currentLocalityConfig catpb.LocalityConfig,
+) error {
+	// If the user is overriding, or this is not a multi-region table, we're done
+	if b.SessionData().OverrideMultiRegionZoneConfigEnabled {
+		telemetry.Inc(sqltelemetry.OverrideMultiRegionTableZoneConfigurationSystem)
+		return nil
+	}
+
+	// Get the current zone config for the table
+	currentZoneConfig, err := b.ZoneConfigGetter().GetZoneConfig(b, tableID)
+	if err != nil {
+		return err
+	}
+	var currentZoneConfigProto *zonepb.ZoneConfig
+	if currentZoneConfig != nil {
+		currentZoneConfigProto = currentZoneConfig.ZoneConfigProto()
+	} else {
+		currentZoneConfigProto = zonepb.NewZoneConfig()
+	}
+
+	// Synthesize the region config for the database
+	dbID := b.QueryByID(tableID).FilterNamespace().MustGetOneElement().DatabaseID
+	regionConfig, err := b.SynthesizeRegionConfig(b, dbID, multiregion.SynthesizeRegionConfigOptionForValidation)
+	if err != nil {
+		return err
+	}
+
+	validator := &zoneConfigForMultiRegionValidatorModifiedByUser{
+		regionConfig: regionConfig,
+	}
+
+	return validateZoneConfigForMultiRegionTable(
+		b,
+		tableID,
+		tableName,
+		currentZoneConfigProto,
+		currentLocalityConfig,
+		regionConfig,
+		validator,
+	)
 }

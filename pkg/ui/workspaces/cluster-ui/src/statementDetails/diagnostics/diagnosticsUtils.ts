@@ -10,9 +10,9 @@ import { TimeScale, toDateRange } from "src/timeScaleDropdown";
 
 import { StatementDiagnosticsReport } from "../../api";
 
-export function getDiagnosticsStatus(
-  diagnosticsRequest: StatementDiagnosticsReport,
-): DiagnosticStatuses {
+export function getDiagnosticsStatus(diagnosticsRequest: {
+  completed: boolean;
+}): DiagnosticStatuses {
   if (diagnosticsRequest.completed) {
     return "READY";
   }

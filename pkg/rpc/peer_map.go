@@ -7,6 +7,7 @@ package rpc
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/redact"
@@ -27,7 +28,7 @@ type peerKey struct {
 	// NodeID of remote node, 0 when unknown, non-zero to check with remote node.
 	// Never mutated.
 	NodeID roachpb.NodeID
-	Class  ConnectionClass
+	Class  rpcbase.ConnectionClass
 }
 
 var _ redact.SafeFormatter = peerKey{}
@@ -37,35 +38,37 @@ func (c peerKey) SafeFormat(p redact.SafePrinter, _ rune) {
 	p.Printf("{n%d: %s (%v)}", c.NodeID, c.TargetAddr, c.Class)
 }
 
-type peerMap struct {
+type peerMap[Conn rpcConn] struct {
 	mu struct {
 		syncutil.RWMutex
-		m map[peerKey]*peer
+		m map[peerKey]*peer[Conn]
 	}
 }
 
-func (peers *peerMap) getWithBreaker(k peerKey) (PeerSnap, peerMetrics, *circuit.Breaker, bool) {
+func (peers *peerMap[Conn]) getWithBreaker(
+	k peerKey,
+) (PeerSnap[Conn], peerMetrics, *circuit.Breaker, bool) {
 	peers.mu.RLock()
 	defer peers.mu.RUnlock()
 	p := peers.mu.m[k]
 	if p == nil {
-		return PeerSnap{}, peerMetrics{}, nil, false
+		return PeerSnap[Conn]{}, peerMetrics{}, nil, false
 	}
 	return p.snap(), p.peerMetrics, p.b, true
 }
 
 // Conn returns a read-only version of the peer and a boolean indicating
 // whether the peer exists.
-func (peers *peerMap) get(k peerKey) (PeerSnap, bool) {
+func (peers *peerMap[Conn]) get(k peerKey) (PeerSnap[Conn], bool) {
 	peers.mu.RLock()
 	defer peers.mu.RUnlock()
 	return peers.getRLocked(k)
 }
 
-func (peers *peerMap) getRLocked(k peerKey) (PeerSnap, bool) {
+func (peers *peerMap[Conn]) getRLocked(k peerKey) (PeerSnap[Conn], bool) {
 	p, ok := peers.mu.m[k]
 	if !ok {
-		return PeerSnap{}, false
+		return PeerSnap[Conn]{}, false
 	}
 	return p.snap(), true
 }

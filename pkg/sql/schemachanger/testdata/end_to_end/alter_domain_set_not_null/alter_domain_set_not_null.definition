@@ -1,0 +1,8 @@
+setup
+CREATE DOMAIN salmon AS INT DEFAULT 0;
+CREATE TABLE t (c salmon);
+----
+
+test
+ALTER DOMAIN salmon SET NOT NULL;
+----

@@ -1,0 +1,86 @@
+# Verify that restoring a database backup containing default privileges that
+# reference non-existent users does not leave dangling user references in the
+# restored database or schema descriptors. This is a regression test for
+# #164961.
+
+new-cluster name=s1 allow-implicit-access
+----
+
+exec-sql
+CREATE USER max;
+----
+
+exec-sql
+CREATE DATABASE mydb;
+USE mydb;
+----
+
+# Set database-level default privileges where "max" appears as both a role
+# (FOR ROLE max) and a grantee (TO max).
+exec-sql
+ALTER DEFAULT PRIVILEGES FOR ROLE root GRANT SELECT ON TABLES TO max;
+ALTER DEFAULT PRIVILEGES FOR ROLE max GRANT INSERT ON TABLES TO root;
+----
+
+# Verify that the default privileges referencing "max" as a grantee are set.
+query-sql
+SELECT role, grantee, privilege_type FROM [SHOW DEFAULT PRIVILEGES FOR ROLE root] WHERE grantee = 'max' ORDER BY role, grantee, privilege_type;
+----
+root max SELECT
+
+# Verify that "max" has default privileges as a role.
+query-sql
+SELECT role, grantee, privilege_type FROM [SHOW DEFAULT PRIVILEGES FOR ROLE max] WHERE grantee = 'root' ORDER BY role, grantee, privilege_type;
+----
+max root INSERT
+
+# Also set schema-level default privileges referencing "max".
+exec-sql
+CREATE SCHEMA sc;
+ALTER DEFAULT PRIVILEGES FOR ROLE root IN SCHEMA sc GRANT SELECT ON TABLES TO max;
+----
+
+query-sql
+SELECT role, grantee, privilege_type FROM [SHOW DEFAULT PRIVILEGES IN SCHEMA sc] WHERE grantee = 'max' ORDER BY role, grantee, privilege_type;
+----
+root max SELECT
+
+exec-sql
+BACKUP DATABASE mydb INTO 'nodelocal://1/test/';
+----
+
+# Restore into a new cluster where user "max" does not exist.
+new-cluster name=s2 share-io-dir=s1 allow-implicit-access
+----
+
+exec-sql
+RESTORE DATABASE mydb FROM LATEST IN 'nodelocal://1/test/' WITH new_db_name='restored_db';
+----
+
+exec-sql
+USE restored_db;
+----
+
+# The restored database should not have any invalid descriptors. Regression
+# test for #164961, which reported dangling references to "max" in the default
+# privileges.
+query-sql
+SELECT count(*) FROM "".crdb_internal.invalid_objects WHERE id = (
+  SELECT id FROM system.namespace WHERE name = 'restored_db' AND "parentID" = 0
+);
+----
+0
+
+# Default privileges referencing "max" as a grantee should have been cleaned
+# up during restore.
+query-sql
+SELECT count(*) FROM [SHOW DEFAULT PRIVILEGES FOR ROLE root] WHERE grantee = 'max';
+----
+0
+
+# Schema-level default privileges referencing "max" should also have been
+# cleaned up during restore.
+query-sql
+SELECT count(*) FROM [SHOW DEFAULT PRIVILEGES IN SCHEMA sc] WHERE grantee = 'max';
+----
+0

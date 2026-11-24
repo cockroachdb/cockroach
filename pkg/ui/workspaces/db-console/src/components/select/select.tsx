@@ -10,7 +10,7 @@ import {
 import cn from "classnames";
 import * as React from "react";
 
-import "./select.styl";
+import "./select.scss";
 
 interface SelectProps extends AntSelectProps {
   children: React.ReactNode;

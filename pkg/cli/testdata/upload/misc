@@ -1,0 +1,18 @@
+upload-misc
+{
+  "nodes": {
+    "1": {}
+  }
+}
+----
+=== uploading misc
+Logs API Hook: https://http-intake.logs.us5.datadoghq.com/api/v2/logs
+Logs API Hook: https://http-intake.logs.us5.datadoghq.com/api/v2/logs
+Logs API Hook: https://http-intake.logs.us5.datadoghq.com/api/v2/logs
+Logs API Hook: https://http-intake.logs.us5.datadoghq.com/api/v2/logs
+Upload ID: abc-20241114000000
+body: {"message":{"events":[{"event":{"timestamp":"2025-01-20T11:52:24.424851Z","range_id":51,"store_id":1,"event_type":3,"other_range_id":57,"info":{"UpdatedDesc":{"range_id":51,"start_key":"uA==","end_key":"wg==","internal_replicas":[{"node_id":1,"store_id":1,"replica_id":1,"type":0}],"next_replica_id":2,"generation":5,"sticky_bit":{}},"RemovedDesc":{"range_id":57,"start_key":"vw==","end_key":"wg==","internal_replicas":[{"node_id":1,"store_id":1,"replica_id":1,"type":0}],"next_replica_id":2,"generation":2,"sticky_bit":{}}}},"pretty_info":{"updated_desc":"r51:/Table/{48-58} [(n1,s1):1, next=2, gen=5]"}}]},"ddtags":"cluster:ABC,file_name:rangelog.json,upload_id:abc-20241114000000"}
+body: {"message":{"events":[{"timestamp":"2025-01-21T05:17:42.857695Z","event_type":"node_restart","reporting_id":1,"info":"{\"EventType\":\"node_restart\",\"LastUp\":1737426359068817000,\"NodeID\":1,\"StartedAt\":1737436662756679000,\"Timestamp\":1737436662857695000}","unique_id":"Kmuncp6KTf+KWiuO3I4aww=="}]},"ddtags":"cluster:ABC,file_name:events.json,upload_id:abc-20241114000000"}
+body: {"message":{"key_values":{"admission.disk_bandwidth_tokens.elastic.enabled":{"value":"true","type":"b","description":"when true, and provisioned bandwidth for the disk corresponding to a store is configured, tokens for elastic work will be limited if disk bandwidth becomes a bottleneck","public":true,"name":"admission.disk_bandwidth_tokens.elastic.enabled"}}},"ddtags":"cluster:ABC,file_name:settings.json,upload_id:abc-20241114000000"}
+body: {"message":{"node_id":1,"problems_by_node_id":{"1":{}}},"ddtags":"cluster:ABC,file_name:reports/problemranges.json,upload_id:abc-20241114000000"}
+debug zip upload debugDir --dd-api-key=dd-api-key --dd-app-key=dd-app-key --cluster=ABC --include=misc

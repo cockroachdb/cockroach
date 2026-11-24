@@ -30,6 +30,7 @@ go_library(
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/row",
         "//pkg/sql/rowenc",
+        "//pkg/sql/sem/catid",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sessiondatapb",
@@ -42,6 +43,7 @@ go_library(
         "//pkg/util/json",
         "//pkg/util/log",
         "//pkg/util/protoutil",
+        "@com_github_cockroachdb_crlib//crtime",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
     ],
@@ -50,6 +52,7 @@ go_library(
 go_test(
     name = "cdcevent_test",
     srcs = [
+        "event_bench_test.go",
         "event_test.go",
         "main_test.go",
         "projection_test.go",
@@ -78,6 +81,7 @@ go_test(
         "//pkg/sql/schemachanger/scplan",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
+        "//pkg/sql/sqltestutils",
         "//pkg/sql/types",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",

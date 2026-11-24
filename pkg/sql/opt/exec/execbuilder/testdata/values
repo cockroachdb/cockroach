@@ -72,3 +72,131 @@ vectorized: true
       row 1, expr 1: 4
       row 2, expr 0: 5
       row 2, expr 1: 6
+
+# Test for collapsing the tuples to be under 30 lines.
+
+# 30 rows, so at the limit and all rows are shown.
+query I
+SELECT count(*) FROM
+ [EXPLAIN (VERBOSE) VALUES (1), (2), (3), (4), (5), (6), (7), (8), (9), (10), (11), (12), (13), (14), (15), (16), (17), (18), (19), (20), (21), (22), (23), (24), (25), (26), (27), (28), (29), (30)]
+WHERE info LIKE '%row%, expr%'
+----
+30
+
+# 35 rows, so over the limit and some middle rows are omitted.
+query I
+SELECT count(*) FROM
+ [EXPLAIN (VERBOSE) VALUES (1), (2), (3), (4), (5), (6), (7), (8), (9), (10), (11), (12), (13), (14), (15), (16), (17), (18), (19), (20), (21), (22), (23), (24), (25), (26), (27), (28), (29), (30), (31), (32), (33), (34), (35)]
+WHERE info LIKE '%row%, expr%'
+----
+30
+
+query T
+EXPLAIN (VERBOSE) VALUES (1), (2), (3), (4), (5), (6), (7), (8), (9), (10), (11), (12), (13), (14), (15), (16), (17), (18), (19), (20), (21), (22), (23), (24), (25), (26), (27), (28), (29), (30), (31), (32), (33), (34), (35)
+----
+distribution: local
+vectorized: true
+·
+• values
+  columns: (column1)
+  size: 1 column, 35 rows
+  row 0, expr 0: 1
+  row 1, expr 0: 2
+  row 2, expr 0: 3
+  row 3, expr 0: 4
+  row 4, expr 0: 5
+  row 5, expr 0: 6
+  row 6, expr 0: 7
+  row 7, expr 0: 8
+  row 8, expr 0: 9
+  row 9, expr 0: 10
+  row 10, expr 0: 11
+  row 11, expr 0: 12
+  row 12, expr 0: 13
+  row 13, expr 0: 14
+  row 14, expr 0: 15
+  ...
+  row 20, expr 0: 21
+  row 21, expr 0: 22
+  row 22, expr 0: 23
+  row 23, expr 0: 24
+  row 24, expr 0: 25
+  row 25, expr 0: 26
+  row 26, expr 0: 27
+  row 27, expr 0: 28
+  row 28, expr 0: 29
+  row 29, expr 0: 30
+  row 30, expr 0: 31
+  row 31, expr 0: 32
+  row 32, expr 0: 33
+  row 33, expr 0: 34
+  row 34, expr 0: 35
+
+# First and last rows are always included.
+query I
+SELECT count(*) FROM
+ [EXPLAIN (VERBOSE) VALUES ((1), (2), (3), (4), (5), (6), (7), (8), (9), (10), (11), (12), (13), (14), (15), (16), (17), (18), (19), (20), (21), (22), (23), (24), (25), (26), (27), (28), (29), (30), (31))]
+WHERE info LIKE '%row%, expr%'
+----
+31
+
+query I
+SELECT count(*) FROM
+ [EXPLAIN (VERBOSE) VALUES ((1), (2), (3), (4), (5), (6), (7), (8), (9), (10), (11), (12), (13), (14), (15), (16)),
+                           ((17), (18), (19), (20), (21), (22), (23), (24), (25), (26), (27), (28), (29), (30), (31), (32))]
+WHERE info LIKE '%row%, expr%'
+----
+32
+
+# 4 rows with 9 columns, so 36 lines total - over the limit and the third row is
+# skipped.
+query I
+SELECT count(*) FROM
+ [EXPLAIN (VERBOSE) VALUES ((1), (2), (3), (4), (5), (6), (7), (8), (9)),
+                           ((10), (11), (12), (13), (14), (15), (16), (17), (18)),
+                           ((19), (20), (21), (22), (23), (24), (25), (26), (27)),
+                           ((28), (29), (30), (31), (32), (33), (34), (35), (36))]
+WHERE info LIKE '%row%, expr%'
+----
+27
+
+query T
+EXPLAIN (VERBOSE) VALUES ((1), (2), (3), (4), (5), (6), (7), (8), (9)),
+                         ((10), (11), (12), (13), (14), (15), (16), (17), (18)),
+                         ((19), (20), (21), (22), (23), (24), (25), (26), (27)),
+                         ((28), (29), (30), (31), (32), (33), (34), (35), (36))
+----
+distribution: local
+vectorized: true
+·
+• values
+  columns: (column1, column2, column3, column4, column5, column6, column7, column8, column9)
+  size: 9 columns, 4 rows
+  row 0, expr 0: 1
+  row 0, expr 1: 2
+  row 0, expr 2: 3
+  row 0, expr 3: 4
+  row 0, expr 4: 5
+  row 0, expr 5: 6
+  row 0, expr 6: 7
+  row 0, expr 7: 8
+  row 0, expr 8: 9
+  row 1, expr 0: 10
+  row 1, expr 1: 11
+  row 1, expr 2: 12
+  row 1, expr 3: 13
+  row 1, expr 4: 14
+  row 1, expr 5: 15
+  row 1, expr 6: 16
+  row 1, expr 7: 17
+  row 1, expr 8: 18
+  ...
+  row 3, expr 0: 28
+  row 3, expr 1: 29
+  row 3, expr 2: 30
+  row 3, expr 3: 31
+  row 3, expr 4: 32
+  row 3, expr 5: 33
+  row 3, expr 6: 34
+  row 3, expr 7: 35
+  row 3, expr 8: 36

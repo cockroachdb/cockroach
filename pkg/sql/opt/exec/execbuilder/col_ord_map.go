@@ -21,7 +21,10 @@ import (
 // WARNING: Do not mix-and-match maps allocated by separate allocators.
 type colOrdMapAllocator struct {
 	maxCol opt.ColumnID
-	freed  []colOrdMap
+	free   struct {
+		maps [4]colOrdMap
+		len  int
+	}
 }
 
 // Init initialized the allocator that can allocate maps that support column IDs
@@ -33,12 +36,13 @@ func (a *colOrdMapAllocator) Init(maxCol opt.ColumnID) {
 // Alloc returns an empty colOrdMap. It will return a previously freed
 // colOrdMap, if one is available.
 func (a *colOrdMapAllocator) Alloc() colOrdMap {
-	if len(a.freed) == 0 {
-		// There are no freed maps, so allocate a new one.
+	if a.free.len == 0 {
+		// There are no previously-freed maps, so allocate a new one.
 		return newColOrdMap(a.maxCol)
 	}
-	m := a.freed[len(a.freed)-1]
-	a.freed = a.freed[:len(a.freed)-1]
+	m := a.free.maps[a.free.len-1]
+	a.free.maps[a.free.len-1] = colOrdMap{}
+	a.free.len--
 	return m
 }
 
@@ -55,9 +59,13 @@ func (a *colOrdMapAllocator) Copy(from colOrdMap) colOrdMap {
 // WARNING: Do not free a map more than once.
 // WARNING: Do not free a map that was allocated by a different allocator.
 func (a *colOrdMapAllocator) Free(m colOrdMap) {
-	// Check that the map has not already been freed.
+	if a.free.len == 4 {
+		// The free list is full.
+		return
+	}
 	m.Clear()
-	a.freed = append(a.freed, m)
+	a.free.maps[a.free.len] = m
+	a.free.len++
 }
 
 // colOrdMap is a map from column IDs to ordinals.

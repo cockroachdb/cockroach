@@ -61,3 +61,44 @@ CONTINUE _;
 CONTINUE _ WHEN _;
 END;
  -- identifiers removed
+
+pretty
+DECLARE
+BEGIN
+EXIT some_label;
+EXIT some_label WHEN some_condition;
+END
+----
+DECLARE
+BEGIN
+	EXIT some_label;
+	EXIT some_label WHEN some_condition;
+END;
+
+pretty
+DECLARE
+BEGIN
+EXIT some_label WHEN some_long_variable > some_function(first_argument, second_argument) AND another_condition;
+END
+----
+DECLARE
+BEGIN
+	EXIT some_label
+		WHEN some_long_variable
+		> some_function(first_argument, second_argument)
+		AND another_condition;
+END;
+
+pretty
+DECLARE
+BEGIN
+CONTINUE some_label WHEN some_long_variable > some_function(first_argument, second_argument) AND another_condition;
+END
+----
+DECLARE
+BEGIN
+	CONTINUE some_label
+		WHEN some_long_variable
+		> some_function(first_argument, second_argument)
+		AND another_condition;
+END;

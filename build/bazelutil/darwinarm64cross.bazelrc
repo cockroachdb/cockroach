@@ -1,0 +1,7 @@
+# As of late 2024/early 2025, current versions of java crash when run in a guest
+# VM on a MacOS 15.2 host running on an M4 chip. Disbaling SVE avoids this
+# crash until patched versions of Java become available.
+
+# NB: We mount this into the Docker container when building on macOS ARM64 host
+# machines specifically. Other machines get empty.bazelrc.
+startup --host_jvm_args="-XX:UseSVE=0"

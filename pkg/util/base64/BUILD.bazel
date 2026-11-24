@@ -1,0 +1,15 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "base64",
+    srcs = ["base64.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/base64",
+    visibility = ["//visibility:public"],
+)
+
+go_test(
+    name = "base64_test",
+    srcs = ["base64_test.go"],
+    embed = [":base64"],
+    deps = ["//pkg/util/randutil"],
+)

@@ -15,7 +15,7 @@ if [ "$#" -eq 0 ]; then
   echo ""
   echo "Usage: $(basename $0) [--with-coverage] <os/arch/component>"
   echo "  where os is one of: linux"
-  echo "        arch is one of: amd64, arm64, amd64-fips"
+  echo "        arch is one of: amd64, arm64, amd64-fips, s390x"
   echo "        component is one of: cockroach, cockroach-ea, workload, libgeos, roachtest"
   echo "  --with-coverage enables go code coverage instrumentation (only applies to cockroach binaries)"
   exit 1
@@ -66,17 +66,17 @@ artifacts=()
 case "$component" in
   cockroach)
     # Cockroach binary.
-    bazel_args=(--config force_build_cdeps //pkg/cmd/cockroach $crdb_extra_flags)
+    bazel_args=(--config force_build_cdeps --config pgo --norun_validations //pkg/cmd/cockroach $crdb_extra_flags)
     artifacts=("pkg/cmd/cockroach/cockroach_/cockroach:bin/cockroach.$os-$arch")
     ;;
   cockroach-ea)
     # Cockroach binary with enabled assertions (EA).
-    bazel_args=(--config force_build_cdeps //pkg/cmd/cockroach --crdb_test $crdb_extra_flags)
+    bazel_args=(--config force_build_cdeps --config pgo --norun_validations //pkg/cmd/cockroach --crdb_test $crdb_extra_flags)
     artifacts=("pkg/cmd/cockroach/cockroach_/cockroach:bin/cockroach-ea.$os-$arch")
     ;;
   workload)
     # Workload binary.
-    bazel_args=(--config force_build_cdeps //pkg/cmd/workload)
+    bazel_args=(--config force_build_cdeps --norun_validations //pkg/cmd/workload)
     artifacts=("pkg/cmd/workload/workload_/workload:bin/workload.$os-$arch")
     ;;
   libgeos)
@@ -100,7 +100,12 @@ case "$component" in
     ;;
   roachprod)
       # Roachprod binary.
-      bazel_args=(//pkg/cmd/roachprod --crdb_test)
+      # This binary is built to support the logic behind `roachprod update`.
+      # Hence, we do not need to add `--crdb_test` to the build args as we do
+      # for `roachtest`. Adding the build flag causes the binary to log
+      # metamorphic vars on each command invocation, which is not ideal from a
+      # user experience perspective.
+      bazel_args=(//pkg/cmd/roachprod)
       artifacts=("pkg/cmd/roachprod/roachprod_/roachprod:bin/roachprod.$os-$arch")
       ;;
   *)
@@ -111,8 +116,56 @@ esac
 
 echo "Building $os/$arch/$component..."
 
-bazel build --config $config --config ci -c opt "${bazel_args[@]}"
-BAZEL_BIN=$(bazel info bazel-bin --config $config --config ci -c opt)
+# Skip everything if all artifacts already exist locally. Host-arch components
+# (roachtest, roachprod, libgeos) are requested by every roachtest_compile_bits.sh
+# invocation; without this check, the second invocation would download from the
+# cache the file the first invocation just built and uploaded.
+all_local=true
+for artifact in "${artifacts[@]}"; do
+  dst=${artifact#*:}
+  if [[ ! -e "$dst" ]]; then
+    all_local=false
+    break
+  fi
+done
+if $all_local; then
+  echo "All artifacts for $os/$arch/$component already exist locally; skipping."
+  exit 0
+fi
+
+cache_bucket="cockroach-nightly"
+cache_sha="${BUILD_VCS_NUMBER:-$(git rev-parse HEAD)}"
+
+# Try to download cached artifacts from GCS before building.
+if [[ "${ROACHTEST_BUILD_CACHE:-}" == "true" ]]; then
+  cache_base="gs://$cache_bucket/build-cache/$cache_sha/$os/$arch"
+  all_cached=true
+  for artifact in "${artifacts[@]}"; do
+    dst=${artifact#*:}
+    if ! gsutil -q cp "$cache_base/$(basename "$dst")" "$dst" 2>/dev/null; then
+      all_cached=false
+      break
+    fi
+  done
+  if $all_cached; then
+    # gsutil cp does not preserve the executable bit; restore it. The +x on
+    # libgeos*.so is harmless.
+    for artifact in "${artifacts[@]}"; do
+      dst=${artifact#*:}
+      chmod a+wx "$dst"
+    done
+    echo "Cache hit for $os/$arch/$component (SHA $cache_sha)."
+    exit 0
+  fi
+  # Clean up any partially downloaded artifacts.
+  for artifact in "${artifacts[@]}"; do
+    dst=${artifact#*:}
+    rm -f "$dst"
+  done
+fi
+
+bazel build --config $config -c opt "${bazel_args[@]}"
+BAZEL_BIN=$(bazel info bazel-bin --config $config -c opt)
 for artifact in "${artifacts[@]}"; do
   src=${artifact%%:*}
   dst=${artifact#*:}
@@ -120,3 +173,12 @@ for artifact in "${artifacts[@]}"; do
   # Make files writable to simplify cleanup and copying (e.g., scp retry).
   chmod a+w "$dst"
 done
+
+# Upload built artifacts to the cache.
+if [[ "${ROACHTEST_BUILD_CACHE:-}" == "true" ]]; then
+  cache_base="gs://$cache_bucket/build-cache/$cache_sha/$os/$arch"
+  for artifact in "${artifacts[@]}"; do
+    dst=${artifact#*:}
+    gsutil -q cp "$dst" "$cache_base/$(basename "$dst")" 2>/dev/null || true
+  done
+fi

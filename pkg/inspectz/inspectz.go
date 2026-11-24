@@ -31,10 +31,10 @@ const URLPrefix = "/inspectz/"
 type Server struct {
 	log.AmbientContext
 
-	mux                                    *http.ServeMux
-	handlesV1, handlesV2                   kvflowcontrol.InspectHandles
-	kvflowControllerV1, kvflowControllerV2 kvflowcontrol.InspectController
-	storeLiveness                          kvserver.InspectAllStoreLiveness
+	mux                *http.ServeMux
+	handlesV2          kvflowcontrol.InspectHandles
+	kvflowControllerV2 kvflowcontrol.InspectController
+	storeLiveness      kvserver.InspectAllStoreLiveness
 }
 
 var _ inspectzpb.InspectzServer = &Server{}
@@ -42,8 +42,8 @@ var _ inspectzpb.InspectzServer = &Server{}
 // NewServer sets up an inspectz server.
 func NewServer(
 	ambient log.AmbientContext,
-	handlesV1, handlesV2 kvflowcontrol.InspectHandles,
-	kvflowControllerV1, kvflowControllerV2 kvflowcontrol.InspectController,
+	handlesV2 kvflowcontrol.InspectHandles,
+	kvflowControllerV2 kvflowcontrol.InspectController,
 	storeLiveness kvserver.InspectAllStoreLiveness,
 ) *Server {
 	mux := http.NewServeMux()
@@ -51,23 +51,19 @@ func NewServer(
 		AmbientContext: ambient,
 
 		mux:                mux,
-		handlesV1:          handlesV1,
 		handlesV2:          handlesV2,
-		kvflowControllerV1: kvflowControllerV1,
 		kvflowControllerV2: kvflowControllerV2,
 		storeLiveness:      storeLiveness,
 	}
-	mux.Handle("/inspectz/v1/kvflowhandles", server.makeKVFlowHandlesHandler(server.KVFlowHandles))
-	mux.Handle("/inspectz/v1/kvflowcontroller", server.makeKVFlowControllerHandler(server.KVFlowController))
 	mux.Handle("/inspectz/v2/kvflowhandles", server.makeKVFlowHandlesHandler(server.KVFlowHandlesV2))
 	mux.Handle("/inspectz/v2/kvflowcontroller", server.makeKVFlowControllerHandler(server.KVFlowControllerV2))
 	mux.Handle(
 		"/inspectz/storeliveness/supportFrom",
-		server.makeStoreLivenessHandler(server.StoreLivenessSupportFrom),
+		server.makeStoreLivenessSupportFromHandler(server.StoreLivenessSupportFrom),
 	)
 	mux.Handle(
 		"/inspectz/storeliveness/supportFor",
-		server.makeStoreLivenessHandler(server.StoreLivenessSupportFor),
+		server.makeStoreLivenessSupportForHandler(server.StoreLivenessSupportFor),
 	)
 
 	return server
@@ -88,7 +84,7 @@ func (s *Server) makeKVFlowHandlesHandler(
 		}
 		resp, err := impl(ctx, req)
 		if err != nil {
-			log.ErrorfDepth(ctx, 1, "%s", err)
+			log.Dev.ErrorfDepth(ctx, 1, "%s", err)
 			http.Error(w, "internal error: check logs for details", http.StatusInternalServerError)
 			return
 		}
@@ -108,7 +104,7 @@ func (s *Server) makeKVFlowControllerHandler(
 		req := &kvflowinspectpb.ControllerRequest{}
 		resp, err := impl(ctx, req)
 		if err != nil {
-			log.ErrorfDepth(ctx, 1, "%s", err)
+			log.Dev.ErrorfDepth(ctx, 1, "%s", err)
 			http.Error(w, "internal error: check logs for details", http.StatusInternalServerError)
 			return
 		}
@@ -116,9 +112,9 @@ func (s *Server) makeKVFlowControllerHandler(
 	}
 }
 
-func (s *Server) makeStoreLivenessHandler(
+func (s *Server) makeStoreLivenessSupportFromHandler(
 	impl func(ctx context.Context, request *slpb.InspectStoreLivenessRequest) (
-		*slpb.InspectStoreLivenessResponse, error,
+		*slpb.InspectSupportFromResponse, error,
 	),
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -126,7 +122,7 @@ func (s *Server) makeStoreLivenessHandler(
 		req := &slpb.InspectStoreLivenessRequest{}
 		resp, err := impl(ctx, req)
 		if err != nil {
-			log.ErrorfDepth(ctx, 1, "%s", err)
+			log.Dev.ErrorfDepth(ctx, 1, "%s", err)
 			http.Error(w, "internal error: check logs for details", http.StatusInternalServerError)
 			return
 		}
@@ -134,18 +130,22 @@ func (s *Server) makeStoreLivenessHandler(
 	}
 }
 
-// KVFlowController implements the InspectzServer interface.
-func (s *Server) KVFlowController(
-	ctx context.Context, request *kvflowinspectpb.ControllerRequest,
-) (*kvflowinspectpb.ControllerResponse, error) {
-	return kvFlowController(ctx, request, s.kvflowControllerV1)
-}
-
-// KVFlowHandles implements the InspectzServer interface.
-func (s *Server) KVFlowHandles(
-	ctx context.Context, request *kvflowinspectpb.HandlesRequest,
-) (*kvflowinspectpb.HandlesResponse, error) {
-	return kvFlowHandles(ctx, request, s.handlesV1)
+func (s *Server) makeStoreLivenessSupportForHandler(
+	impl func(ctx context.Context, request *slpb.InspectStoreLivenessRequest) (
+		*slpb.InspectSupportForResponse, error,
+	),
+) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := s.AnnotateCtx(context.Background())
+		req := &slpb.InspectStoreLivenessRequest{}
+		resp, err := impl(ctx, req)
+		if err != nil {
+			log.Dev.ErrorfDepth(ctx, 1, "%s", err)
+			http.Error(w, "internal error: check logs for details", http.StatusInternalServerError)
+			return
+		}
+		respond(ctx, w, http.StatusOK, resp)
+	}
 }
 
 // KVFlowControllerV2 implements the InspectzServer interface.
@@ -165,20 +165,20 @@ func (s *Server) KVFlowHandlesV2(
 // StoreLivenessSupportFrom implements the InspectzServer interface.
 func (s *Server) StoreLivenessSupportFrom(
 	_ context.Context, _ *slpb.InspectStoreLivenessRequest,
-) (*slpb.InspectStoreLivenessResponse, error) {
-	resp := &slpb.InspectStoreLivenessResponse{}
+) (*slpb.InspectSupportFromResponse, error) {
+	resp := &slpb.InspectSupportFromResponse{}
 	support, err := s.storeLiveness.InspectAllSupportFrom()
-	resp.SupportStatesPerStore = support
+	resp.SupportFromStatesPerStore = support
 	return resp, err
 }
 
 // StoreLivenessSupportFor implements the InspectzServer interface.
 func (s *Server) StoreLivenessSupportFor(
 	_ context.Context, _ *slpb.InspectStoreLivenessRequest,
-) (*slpb.InspectStoreLivenessResponse, error) {
-	resp := &slpb.InspectStoreLivenessResponse{}
+) (*slpb.InspectSupportForResponse, error) {
+	resp := &slpb.InspectSupportForResponse{}
 	support, err := s.storeLiveness.InspectAllSupportFor()
-	resp.SupportStatesPerStore = support
+	resp.SupportForStatesPerStore = support
 	return resp, err
 }
 
@@ -219,7 +219,7 @@ func kvFlowController(
 func respond(ctx context.Context, w http.ResponseWriter, code int, payload interface{}) {
 	res, err := json.Marshal(payload)
 	if err != nil {
-		log.ErrorfDepth(ctx, 1, "%s", err)
+		log.Dev.ErrorfDepth(ctx, 1, "%s", err)
 		http.Error(w, "internal error: check logs for details", http.StatusInternalServerError)
 		return
 	}

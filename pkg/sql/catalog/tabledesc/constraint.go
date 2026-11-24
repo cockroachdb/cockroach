@@ -9,9 +9,11 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/errors"
 )
 
 type constraintBase struct {
@@ -50,8 +52,8 @@ func (c checkConstraint) CheckDesc() *descpb.TableDescriptor_CheckConstraint {
 	return c.desc
 }
 
-// Expr implements the catalog.CheckConstraint interface.
-func (c checkConstraint) GetExpr() string {
+// GetExpr implements the catalog.CheckConstraint interface.
+func (c checkConstraint) GetExpr() catpb.Expression {
 	return c.desc.Expr
 }
 
@@ -75,6 +77,17 @@ func (c checkConstraint) CollectReferencedColumnIDs() catalog.TableColSet {
 // IsNotNullColumnConstraint implements the catalog.CheckConstraint interface.
 func (c checkConstraint) IsNotNullColumnConstraint() bool {
 	return c.desc.IsNonNullConstraint
+}
+
+// IsRLSConstraint implements the catalog.CheckConstraintValidator interface.
+func (c checkConstraint) IsRLSConstraint() bool { return false }
+
+// IsCheckFailed implements the catalog.CheckConstraintValidator interface.
+func (c checkConstraint) IsCheckFailed(boolVal, isNull bool) bool {
+	// This is a standard CHECK constraint.
+	// The constraint fails only if the check explicitly evaluates to FALSE.
+	// If the result is NULL (UNKNOWN), the constraint does not fail.
+	return !boolVal && !isNull
 }
 
 // IsHashShardingConstraint implements the catalog.CheckConstraint interface.
@@ -122,6 +135,42 @@ func (c checkConstraint) IsEnforced() bool {
 	return !c.IsMutation() || c.WriteAndDeleteOnly()
 }
 
+// rlsSyntheticCheckConstraint is an implementation of CheckConstraintValidator
+// for use with tables that have row-level security enabled.
+type rlsSyntheticCheckConstraint struct {
+}
+
+var _ catalog.CheckConstraintValidator = (*rlsSyntheticCheckConstraint)(nil)
+
+// GetExpr implements the catalog.CheckConstraintValidator interface.
+func (r rlsSyntheticCheckConstraint) GetExpr() catpb.Expression {
+	panic(errors.AssertionFailedf("not implemented"))
+}
+
+// IsRLSConstraint implements the catalog.CheckConstraintValidator interface.
+func (r rlsSyntheticCheckConstraint) IsRLSConstraint() bool { return true }
+
+// IsCheckFailed implements the catalog.CheckConstraintValidator interface.
+func (r rlsSyntheticCheckConstraint) IsCheckFailed(boolVal, isNull bool) bool {
+	// The WITH CHECK expression for RLS differs from a standard CHECK constraint.
+	//
+	// A standard CHECK constraint fails only if the result is explicitly FALSE.
+	// If the result is NULL (i.e., unknown), the constraint does not fail.
+	//
+	// However, WITH CHECK expressions for RLS enforce stricter validation:
+	// - The check fails if the result is FALSE or NULL.
+	// - The check passes only if the result is explicitly TRUE.
+	//
+	// This behaviour ensures that unknown (NULL) values do not bypass row-level
+	// security policies, aligning with postgres' implementation.
+	return !boolVal || isNull
+}
+
+// GetName implements the catalog.CheckConstraintValidator interface.
+func (r rlsSyntheticCheckConstraint) GetName() string {
+	return "rlsSyntheticCheckConstraint"
+}
+
 type uniqueWithoutIndexConstraint struct {
 	constraintBase
 	desc *descpb.UniqueWithoutIndexConstraint
@@ -144,9 +193,16 @@ func (c uniqueWithoutIndexConstraint) ParentTableID() descpb.ID {
 // IsValidReferencedUniqueConstraint implements the catalog.UniqueConstraint
 // interface.
 func (c uniqueWithoutIndexConstraint) IsValidReferencedUniqueConstraint(
-	fk catalog.ForeignKeyConstraint,
+	fk catalog.ForeignKeyConstraint, asSubset bool,
 ) bool {
-	return !c.IsPartial() && descpb.ColumnIDs(c.desc.ColumnIDs).PermutationOf(fk.ForeignKeyDesc().ReferencedColumnIDs)
+	if c.IsPartial() {
+		return false
+	}
+	cols := descpb.ColumnIDs(c.desc.ColumnIDs)
+	if asSubset {
+		return cols.IsNonEmptySubsetOf(fk.ForeignKeyDesc().ReferencedColumnIDs)
+	}
+	return cols.PermutationOf(fk.ForeignKeyDesc().ReferencedColumnIDs)
 }
 
 // NumKeyColumns implements the catalog.UniqueConstraint interface.
@@ -171,7 +227,7 @@ func (c uniqueWithoutIndexConstraint) IsPartial() bool {
 }
 
 // GetPredicate implements the catalog.UniqueConstraint interface.
-func (c uniqueWithoutIndexConstraint) GetPredicate() string {
+func (c uniqueWithoutIndexConstraint) GetPredicate() catpb.Expression {
 	return c.desc.Predicate
 }
 
@@ -339,6 +395,7 @@ type constraintCache struct {
 	uwis, uwisEnforced     []catalog.UniqueWithIndexConstraint
 	uwois, uwoisEnforced   []catalog.UniqueWithoutIndexConstraint
 	fkBackRefs             []catalog.ForeignKeyConstraint
+	checkValidators        []catalog.CheckConstraintValidator
 }
 
 // newConstraintCache returns a fresh fully-populated constraintCache struct for the
@@ -389,6 +446,7 @@ func newConstraintCache(
 				c.allEnforced = append(c.allEnforced, ck)
 				c.checks = append(c.checks, ck)
 				c.checksEnforced = append(c.checksEnforced, ck)
+				c.checkValidators = append(c.checkValidators, ck)
 			}
 		}
 		for _, m := range mutations.checks {
@@ -478,6 +536,11 @@ func newConstraintCache(
 			fkBackRefBackingStructs[i].desc = &desc.InboundFKs[i]
 			c.fkBackRefs[i] = &fkBackRefBackingStructs[i]
 		}
+	}
+	// Populate the check constraint for row-level security to enforce RLS policies.
+	if desc.RowLevelSecurityEnabled {
+		ck := rlsSyntheticCheckConstraint{}
+		c.checkValidators = append(c.checkValidators, ck)
 	}
 	return &c
 }

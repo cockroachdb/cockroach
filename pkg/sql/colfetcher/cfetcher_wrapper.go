@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldataext"
 	"github.com/cockroachdb/cockroach/pkg/col/colserde"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -25,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
-	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
 )
@@ -36,11 +36,6 @@ var DirectScansEnabled = settings.RegisterBoolSetting(
 	settings.ApplicationLevel,
 	"sql.distsql.direct_columnar_scans.enabled",
 	"set to true to enable the 'direct' columnar scans in the KV layer",
-	directScansEnabledDefault,
-)
-
-var directScansEnabledDefault = metamorphic.ConstantWithTestBool(
-	"direct-scans-enabled",
 	false,
 )
 
@@ -183,6 +178,8 @@ func newCFetcherWrapper(
 	nextKVer storage.NextKVer,
 	startKey roachpb.Key,
 	mustSerialize bool,
+	workloadID uint64,
+	workloadType workloadid.WorkloadType,
 ) (_ storage.CFetcherWrapper, retErr error) {
 	// At the moment, we always serialize the columnar batches if they contain
 	// enums, so it is safe to handle enum types without proper hydration - we
@@ -229,6 +226,11 @@ func newCFetcherWrapper(
 	const collectStats = false
 	// We cannot reuse batches if we're not serializing the response.
 	alwaysReallocate := !mustSerialize
+
+	tenantID, ok := roachpb.ClientTenantFromContext(ctx)
+	if !ok {
+		tenantID = roachpb.SystemTenantID
+	}
 	// TODO(yuzefovich, 23.1): think through estimatedRowCount (#94850) and
 	// traceKV arguments.
 	fetcher.cFetcherArgs = cFetcherArgs{
@@ -238,6 +240,10 @@ func newCFetcherWrapper(
 		true,  /* singleUse */
 		collectStats,
 		alwaysReallocate,
+		nil, /* txn; TODO(dt): this means no AC priority info is passed. */
+		tenantID,
+		workloadID,
+		workloadType,
 	}
 
 	// This memory monitor is not connected to the memory accounting system
@@ -245,7 +251,7 @@ func newCFetcherWrapper(
 	// the cFetcherWrapper is responsible for performing the correct accounting
 	// against the memory account provided by the caller.
 	detachedFetcherMon := mon.NewMonitor(mon.Options{
-		Name:     "cfetcher-wrapper-detached-monitor",
+		Name:     mon.MakeName("cfetcher-wrapper-detached-monitor"),
 		Settings: st,
 	})
 	detachedFetcherMon.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(math.MaxInt64))

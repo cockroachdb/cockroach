@@ -11,6 +11,8 @@ import (
 	"testing"
 )
 
+// BenchmarkORMQueries is a benchmark for various ORM-generated introspection queries.
+// benchmark-ci: benchtime=20x
 func BenchmarkORMQueries(b *testing.B) { reg.Run(b) }
 func init() {
 	liquibaseSetup, liquibaseReset := buildNDatabasesWithMTables(15, 40)
@@ -944,10 +946,129 @@ ORDER BY
 		},
 
 		{
+			Name:    "sqlalchemy_indexes",
+			SetupEx: buildNTablesWithIndexes(50, 3),
+			Stmt: `
+  -- Subquery 1: idx_sq - expand index columns
+  WITH idx AS (
+      SELECT
+          pg_index.indexrelid,
+          pg_index.indrelid,
+          unnest(pg_index.indkey) AS attnum,
+          unnest(pg_index.indclass) AS att_opclass,
+          generate_subscripts(pg_index.indkey, 1) AS ord
+      FROM pg_index
+      WHERE
+          NOT pg_index.indisprimary
+          AND pg_index.indrelid IN (104, 105, 106)
+  ),
+
+  -- Subquery 2: attr_sq - get column names or expressions
+  idx_attr AS (
+      SELECT
+          idx.indexrelid,
+          idx.indrelid,
+          idx.ord,
+          CASE
+              WHEN idx.attnum = 0 THEN pg_get_indexdef(idx.indexrelid, idx.ord + 1, true)
+              ELSE pg_attribute.attname::text
+          END AS element,
+          (idx.attnum = 0) AS is_expr,
+          idx.att_opclass::bigint
+      FROM idx
+      LEFT OUTER JOIN pg_attribute ON
+          pg_attribute.attnum = idx.attnum
+          AND pg_attribute.attrelid = idx.indrelid
+      WHERE idx.indrelid IN (104, 105, 106)
+  ),
+
+  -- Subquery 3: cols_sq - aggregate columns back into arrays
+  idx_cols AS (
+      SELECT
+          idx_attr.indexrelid,
+          min(idx_attr.indrelid),
+          array_agg(idx_attr.element ORDER BY idx_attr.ord) AS elements,
+          array_agg(idx_attr.is_expr ORDER BY idx_attr.ord) AS elements_is_expr,
+          array_agg(idx_attr.att_opclass ORDER BY idx_attr.ord) AS elements_opclass
+      FROM idx_attr
+      GROUP BY idx_attr.indexrelid
+  )
+
+  -- Main query
+  SELECT
+      pg_index.indrelid,
+      pg_class.relname,
+      pg_index.indisunique,
+      (pg_constraint.conrelid IS NOT NULL) AS has_constraint,
+      pg_index.indoption,
+      pg_class.reloptions,
+      pg_class.relam,
+      CASE
+          WHEN pg_index.indpred IS NOT NULL
+          THEN pg_get_expr(pg_index.indpred, pg_index.indrelid)
+          ELSE NULL
+      END AS filter_definition,
+      pg_index.indnkeyatts,           -- PG 11+, else use indnatts
+      pg_index.indnullsnotdistinct,   -- PG 15+, else use false
+      idx_cols.elements,
+      idx_cols.elements_is_expr,
+      idx_cols.elements_opclass
+  FROM pg_index
+  JOIN pg_class ON pg_index.indexrelid = pg_class.oid
+  LEFT OUTER JOIN idx_cols ON pg_index.indexrelid = idx_cols.indexrelid
+  LEFT OUTER JOIN pg_constraint ON
+      pg_index.indrelid = pg_constraint.conrelid
+      AND pg_index.indexrelid = pg_constraint.conindid
+      AND pg_constraint.contype = ANY(ARRAY['p', 'u', 'x'])
+  WHERE
+      pg_index.indrelid IN (110, 111, 112)
+      AND NOT pg_index.indisprimary
+  ORDER BY pg_index.indrelid, pg_class.relname`,
+		},
+
+		{
+			Name:    `django_indexes`,
+			SetupEx: buildNTablesWithIndexes(50, 3),
+			Stmt: `SELECT
+                indexname,
+                array_agg(attname ORDER BY arridx),
+                indisunique,
+                indisprimary,
+                array_agg(ordering ORDER BY arridx),
+                amname,
+                exprdef,
+                s2.attoptions
+            FROM (
+                SELECT
+                    c2.relname as indexname, idx.*, attr.attname, am.amname,
+                    CASE
+                        WHEN idx.indexprs IS NOT NULL THEN
+                            pg_get_indexdef(idx.indexrelid)
+                    END AS exprdef,
+                    'ASC' as ordering,
+                    c2.reloptions as attoptions
+                FROM (
+                    SELECT *
+                    FROM
+                        pg_index i,
+                        unnest(i.indkey, i.indoption)
+                            WITH ORDINALITY koi(key, option, arridx)
+                ) idx
+                LEFT JOIN pg_class c ON idx.indrelid = c.oid
+                LEFT JOIN pg_class c2 ON idx.indexrelid = c2.oid
+                LEFT JOIN pg_am am ON c2.relam = am.oid
+                LEFT JOIN
+                    pg_attribute attr ON attr.attrelid = c.oid AND attr.attnum = idx.key
+                WHERE c.relname = 't0' AND pg_catalog.pg_table_is_visible(c.oid)
+            ) s2
+            GROUP BY indexname, indisunique, indisprimary, amname, exprdef, attoptions;`,
+		},
+
+		{
 			Name: `liquibase migrations on multiple dbs`,
 			// 15 databases, each with 40 tables.
-			Setup: liquibaseSetup,
-			Reset: liquibaseReset,
+			SetupEx: liquibaseSetup,
+			ResetEx: liquibaseReset,
 			Stmt: `SELECT
   NULL AS table_cat,
   n.nspname AS table_schem,
@@ -1027,6 +1148,55 @@ func buildNTables(n int) string {
 	return b.String()
 }
 
+func buildNFunctions(n int) string {
+	b := strings.Builder{}
+	for i := 0; i < n; i++ {
+		b.WriteString(fmt.Sprintf("CREATE FUNCTION fn%d() RETURNS int AS 'SELECT 1' LANGUAGE SQL;\n", i))
+	}
+	return b.String()
+}
+
+// buildNTablesWithTriggers returns a SetupEx slice for creating n tables
+// with triggers.
+func buildNTablesWithTriggers(n int) []string {
+	var stmts []string
+	stmts = append(stmts, "SET autocommit_before_ddl = false;")
+	stmts = append(stmts, "BEGIN;")
+	stmts = append(stmts, `
+CREATE OR REPLACE FUNCTION trigger_func()
+RETURNS TRIGGER AS $$
+BEGIN
+  RAISE NOTICE 'Trigger fired for NEW row: %', NEW;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+`)
+	for i := 0; i < n; i++ {
+		stmts = append(stmts, fmt.Sprintf(`
+CREATE TABLE t%d (a INT, b INT);
+`, i))
+	}
+	stmts = append(stmts, "COMMIT;")
+
+	// Second Exec: SET first so session has unsafe_always, then BEGIN; COMMIT; so
+	// resetExtraTxnState runs and schemaChangerState is recreated with that mode,
+	// then BEGIN; CREATE TRIGGER... COMMIT; so triggers use the declarative schema changer.
+	stmts = append(stmts, "SET use_declarative_schema_changer = 'unsafe_always';")
+	stmts = append(stmts, "BEGIN;")
+	for i := 0; i < n; i++ {
+		stmts = append(stmts, fmt.Sprintf(`
+CREATE TRIGGER trigger_%d
+AFTER INSERT ON t%d
+FOR EACH ROW
+EXECUTE FUNCTION trigger_func();
+`, i, i))
+	}
+	stmts = append(stmts, "COMMIT;")
+	stmts = append(stmts, "RESET use_declarative_schema_changer;")
+	stmts = append(stmts, "RESET autocommit_before_ddl;")
+	return stmts
+}
+
 func buildNTypes(n int) string {
 	b := strings.Builder{}
 	for i := 0; i < n; i++ {
@@ -1035,16 +1205,42 @@ func buildNTypes(n int) string {
 	return b.String()
 }
 
-func buildNDatabasesWithMTables(amtDbs int, amtTbls int) (string, string) {
-	b := strings.Builder{}
-	reset := strings.Builder{}
+func buildNTablesWithIndexes(numTables, numIndexesPerTable int) []string {
+	// Estimate capacity: BEGIN + SET LOCAL + (1 table + numIndexesPerTable indexes) * numTables + COMMIT.
+	stmts := make([]string, 0, 2+numTables*(1+numIndexesPerTable)+1)
+	stmts = append(stmts, "BEGIN")
+	stmts = append(stmts, "SET LOCAL autocommit_before_ddl = false")
+	for i := 0; i < numTables; i++ {
+		// Build column list: a INT PRIMARY KEY, plus one column per index.
+		var cols strings.Builder
+		cols.WriteString(fmt.Sprintf("CREATE TABLE t%d (a INT PRIMARY KEY", i))
+		for j := 0; j < numIndexesPerTable; j++ {
+			col := string(rune('b' + j))
+			cols.WriteString(fmt.Sprintf(", %s INT", col))
+		}
+		cols.WriteString(")")
+		stmts = append(stmts, cols.String())
+		for j := 0; j < numIndexesPerTable; j++ {
+			col := string(rune('b' + j))
+			stmts = append(stmts, fmt.Sprintf("CREATE INDEX idx%d_%d ON t%d (%s)", i, j, i, col))
+		}
+	}
+	stmts = append(stmts, "COMMIT")
+	return stmts
+}
+
+func buildNDatabasesWithMTables(amtDbs int, amtTbls int) ([]string, []string) {
+	setupEx := make([]string, amtDbs)
+	resetEx := make([]string, amtDbs)
 	tbls := buildNTables(amtTbls)
 	for i := 0; i < amtDbs; i++ {
 		db := fmt.Sprintf("d%d", i)
+		b := strings.Builder{}
 		b.WriteString(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s;\n", db))
-		reset.WriteString(fmt.Sprintf("DROP DATABASE %s;\n", db))
 		b.WriteString(fmt.Sprintf("USE %s;\n", db))
 		b.WriteString(tbls)
+		setupEx[i] = b.String()
+		resetEx[i] = fmt.Sprintf("DROP DATABASE %s", db)
 	}
-	return b.String(), reset.String()
+	return setupEx, resetEx
 }

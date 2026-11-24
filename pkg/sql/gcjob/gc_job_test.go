@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -123,14 +123,10 @@ func TestDropRemovesManualSplits(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	if s.TenantController().StartedDefaultTestTenant() {
-		tenID := serverutils.TestTenantID()
-		_, err := s.SystemLayer().SQLConn(t).Exec(
-			"ALTER TENANT [$1] GRANT CAPABILITY can_admin_unsplit", tenID.ToUint64())
-		require.NoError(t, err)
-
-		expCaps := map[tenantcapabilities.ID]string{tenantcapabilities.CanAdminUnsplit: "true"}
-		serverutils.WaitForTenantCapabilities(t, s, tenID, expCaps, "admin_unsplit")
+	if s.DeploymentMode().IsExternal() {
+		require.NoError(t, s.GrantTenantCapabilities(
+			ctx, serverutils.TestTenantID(),
+			map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanAdminUnsplit: "true"}))
 	}
 
 	sqlDB := sqlutils.MakeSQLRunner(db)

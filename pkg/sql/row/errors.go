@@ -31,7 +31,14 @@ import (
 // ConvertBatchError attempts to map a key-value error generated during a
 // key-value batch operating over the specified table to a user friendly SQL
 // error.
-func ConvertBatchError(ctx context.Context, tableDesc catalog.TableDescriptor, b *kv.Batch) error {
+//
+// If alwaysConvertCondFailed is set to true, ConditionFailedError (from CPut
+// failures) will always be converted to a duplicate key error even if the
+// expValue of the CPut was not empty. This is necessary when backfilling a
+// unique index.
+func ConvertBatchError(
+	ctx context.Context, tableDesc catalog.TableDescriptor, b *kv.Batch, alwaysConvertCondFailed bool,
+) error {
 	origPErr := b.MustPErr()
 	switch v := origPErr.GetDetail().(type) {
 	case *kvpb.MinTimestampBoundUnsatisfiableError:
@@ -41,15 +48,23 @@ func ConvertBatchError(ctx context.Context, tableDesc catalog.TableDescriptor, b
 		)
 
 	case *kvpb.ConditionFailedError:
+		if !v.OriginTimestampOlderThan.IsEmpty() || v.HadNewerOriginTimestamp {
+			// NOTE: we return the go error here because this error should never be
+			// communicated to pgwire. It's exposed for the LDR writer.
+			return origPErr.GoError()
+		}
 		if origPErr.Index == nil {
 			break
 		}
 		j := origPErr.Index.Index
-		_, kv, err := b.GetResult(int(j))
+		_, expBytes, kv, err := b.GetResult(int(j))
 		if err != nil {
 			return err
 		}
-		return NewUniquenessConstraintViolationError(ctx, tableDesc, kv.Key, v.ActualValue)
+		if alwaysConvertCondFailed || len(expBytes) == 0 {
+			// If we didn't expect the row to exist, this is a uniqueness violation.
+			return NewUniquenessConstraintViolationError(ctx, tableDesc, kv.Key, v.ActualValue)
+		}
 
 	case *kvpb.WriteIntentError:
 		key := v.Locks[0].Key
@@ -109,7 +124,7 @@ func NewUniquenessConstraintViolationError(
 	// Resolve the table index descriptor name.
 	indexName, err := catalog.FindTargetIndexNameByID(tableDesc, index.GetID())
 	if err != nil {
-		log.Warningf(ctx,
+		log.Dev.Warningf(ctx,
 			"unable to find index by ID for NewUniquenessConstraintViolationError: %d",
 			index.GetID())
 		indexName = index.GetName()
@@ -272,7 +287,7 @@ func DecodeRowInfo(
 	if err := rf.ConsumeKVProvider(ctx, &f); err != nil {
 		return nil, nil, nil, err
 	}
-	datums, err := rf.NextRowDecoded(ctx)
+	datums, _, err := rf.NextRowDecoded(ctx)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -281,7 +296,7 @@ func DecodeRowInfo(
 	values := make([]string, len(cols))
 	for i := range cols {
 		if cols[i].IsExpressionIndexColumn() {
-			names[i] = cols[i].GetComputeExpr()
+			names[i] = string(cols[i].GetComputeExpr())
 		} else {
 			names[i] = cols[i].GetName()
 		}
@@ -300,8 +315,15 @@ func CheckFailed(
 	semaCtx *tree.SemaContext,
 	sessionData *sessiondata.SessionData,
 	tabDesc catalog.TableDescriptor,
-	check catalog.CheckConstraint,
+	check catalog.CheckConstraintValidator,
 ) error {
+	// If this is the synthetic check added for row-level security, we should
+	// return a different error.
+	if check.IsRLSConstraint() {
+		return pgerror.Newf(pgcode.InsufficientPrivilege,
+			"new row violates row-level security policy for table %q",
+			tabDesc.GetName())
+	}
 	// Failed to satisfy CHECK constraint, so unwrap the serialized
 	// check expression to display to the user.
 	expr, err := schemaexpr.FormatExprForDisplay(

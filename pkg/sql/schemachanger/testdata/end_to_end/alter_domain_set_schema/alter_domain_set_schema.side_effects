@@ -1,0 +1,111 @@
+/* setup */
+CREATE DOMAIN salmon AS INT DEFAULT 0;
+CREATE SCHEMA fish;
+CREATE TABLE t (c salmon);
+CREATE VIEW v AS SELECT c FROM t;
+----
+...
++object {100 101 salmon} -> 104
++object {100 101 _salmon} -> 105
++schema {100 0 fish} -> 106
++object {100 101 t} -> 107
++object {100 101 v} -> 108
+
+/* test */
+ALTER DOMAIN salmon SET SCHEMA fish;
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: ALTER DOMAIN
+increment telemetry for sql.schema.alter_domain.set_schema
+write *eventpb.SetSchema to event log:
+  descriptorName: defaultdb.public.salmon
+  descriptorType: domain
+  newDescriptorName: defaultdb.fish.salmon
+  sql:
+    descriptorId: 104
+    statement: ALTER DOMAIN ‹defaultdb›.‹public›.‹salmon› SET SCHEMA ‹fish›
+    tag: ALTER DOMAIN
+    user: root
+## StatementPhase stage 1 of 1 with 10 MutationType ops
+delete object namespace entry {100 101 salmon} -> 104
+delete object namespace entry {100 101 _salmon} -> 105
+add object namespace entry {100 106 salmon} -> 104
+add object namespace entry {100 106 _salmon} -> 105
+upsert descriptor #104
+  ...
+     name: salmon
+     parentId: 100
+  -  parentSchemaId: 101
+  +  parentSchemaId: 106
+     privileges:
+       ownerProto: root
+  ...
+     - 107
+     - 108
+  -  version: "3"
+  +  version: "4"
+upsert descriptor #105
+  ...
+     name: _salmon
+     parentId: 100
+  -  parentSchemaId: 101
+  +  parentSchemaId: 106
+     privileges:
+       ownerProto: root
+  ...
+     - 104
+     - 107
+  -  version: "2"
+  +  version: "3"
+upsert descriptor #106
+  ...
+         withGrantOption: "2"
+       version: 3
+  -  version: "1"
+  +  version: "2"
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 12 MutationType ops
+delete object namespace entry {100 101 salmon} -> 104
+delete object namespace entry {100 101 _salmon} -> 105
+add object namespace entry {100 106 salmon} -> 104
+add object namespace entry {100 106 _salmon} -> 105
+upsert descriptor #104
+  ...
+     name: salmon
+     parentId: 100
+  -  parentSchemaId: 101
+  +  parentSchemaId: 106
+     privileges:
+       ownerProto: root
+  ...
+     - 107
+     - 108
+  -  version: "3"
+  +  version: "4"
+upsert descriptor #105
+  ...
+     name: _salmon
+     parentId: 100
+  -  parentSchemaId: 101
+  +  parentSchemaId: 106
+     privileges:
+       ownerProto: root
+  ...
+     - 104
+     - 107
+  -  version: "2"
+  +  version: "3"
+upsert descriptor #106
+  ...
+         withGrantOption: "2"
+       version: 3
+  -  version: "1"
+  +  version: "2"
+persist all catalog changes to storage
+# end PreCommitPhase
+commit transaction #1

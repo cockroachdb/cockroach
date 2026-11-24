@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierror"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
+	"github.com/cockroachdb/cockroach/pkg/cloud/nodelocal"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
@@ -39,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils/regionlatency"
@@ -65,7 +65,7 @@ import (
 
 type serverEntry struct {
 	serverutils.TestServerInterface
-	adminClient    serverpb.AdminClient
+	adminClient    serverpb.RPCAdminClient
 	nodeID         roachpb.NodeID
 	decommissioned bool
 }
@@ -87,7 +87,7 @@ type transientCluster struct {
 
 	stickyVFSRegistry fs.StickyRegistry
 
-	drainAndShutdown func(ctx context.Context, adminClient serverpb.AdminClient) error
+	drainAndShutdown func(ctx context.Context, adminClient serverpb.RPCAdminClient) error
 
 	infoLog  LoggerFn
 	warnLog  LoggerFn
@@ -96,6 +96,9 @@ type transientCluster struct {
 	// latencyEnabled controls whether simulated latency is currently enabled.
 	// It is only relevant when using SimulateLatency.
 	latencyEnabled atomic.Bool
+
+	// cleanupFns holds cleanup functions to call on Close.
+	cleanupFns []func()
 }
 
 // maxNodeInitTime is the maximum amount of time to wait for nodes to
@@ -146,7 +149,7 @@ func NewDemoCluster(
 	warnLog LoggerFn,
 	shoutLog ShoutLoggerFn,
 	startStopper func(ctx context.Context) (*stop.Stopper, error),
-	drainAndShutdown func(ctx context.Context, s serverpb.AdminClient) error,
+	drainAndShutdown func(ctx context.Context, s serverpb.RPCAdminClient) error,
 ) (DemoCluster, error) {
 	c := &transientCluster{
 		demoCtx:          demoCtx,
@@ -209,6 +212,16 @@ func NewDemoCluster(
 	}
 
 	c.stickyVFSRegistry = fs.NewStickyRegistry()
+
+	// Enable nodelocal early boot access for features like online restore's
+	// LinkExternalSSTable. The root is the demo's nodelocal directory so that
+	// files written via nodelocal:// URIs can be accessed by Pebble.
+	nodelocalDir := filepath.Join(c.demoDir, "nodelocal")
+	if err := os.MkdirAll(nodelocalDir, 0755); err != nil {
+		return c, err
+	}
+	c.cleanupFns = append(c.cleanupFns, nodelocal.EnableEarlyBootForDemo(nodelocalDir))
+
 	return c, nil
 }
 
@@ -457,15 +470,6 @@ func (c *transientCluster) Start(ctx context.Context) (err error) {
 					return err
 				}
 			}
-
-			for _, s := range []string{
-				string(sqlclustersettings.RestrictAccessToSystemInterface.Name()),
-				string(sql.TipUserAboutSystemInterface.Name()),
-			} {
-				if _, err := ie.Exec(ctx, "restrict-system-interface", nil, fmt.Sprintf(`SET CLUSTER SETTING %s = true`, s)); err != nil {
-					return err
-				}
-			}
 		}
 
 		// Prepare the URL for use by the SQL shell.
@@ -545,6 +549,15 @@ func (c *transientCluster) startTenantService(
 						InjectedLatencyEnabled: c.latencyEnabled.Load,
 					},
 				},
+				JobsTestingKnobs: &jobs.TestingKnobs{
+					// Allow the scheduler daemon to start earlier in demo.
+					SchedulerDaemonInitialScanDelay: func() time.Duration {
+						return time.Second * 2
+					},
+					SchedulerDaemonScanDelay: func() time.Duration {
+						return time.Second * 5
+					},
+				},
 			},
 		}
 
@@ -571,6 +584,15 @@ func (c *transientCluster) startTenantService(
 						ContextTestingKnobs: rpc.ContextTestingKnobs{
 							InjectedLatencyOracle:  latencyMap,
 							InjectedLatencyEnabled: c.latencyEnabled.Load,
+						},
+					},
+					JobsTestingKnobs: &jobs.TestingKnobs{
+						// Allow the scheduler daemon to start earlier in demo.
+						SchedulerDaemonInitialScanDelay: func() time.Duration {
+							return time.Second * 2
+						},
+						SchedulerDaemonScanDelay: func() time.Duration {
+							return time.Second * 5
 						},
 					},
 				},
@@ -795,7 +817,7 @@ func (c *transientCluster) waitForNodeIDReadiness(
 			if err != nil {
 				return err
 			}
-			c.servers[idx].adminClient = serverpb.NewAdminClient(conn)
+			c.servers[idx].adminClient = conn.NewAdminClient()
 
 		}
 		break
@@ -922,9 +944,11 @@ func (demoCtx *Context) testServerArgsForTransientCluster(
 		CacheSize:               demoCtx.CacheSize,
 		NoAutoInitializeCluster: true,
 		EnableDemoLoginEndpoint: true,
+		DefaultDRPCOption:       demoCtx.defaultDRPCOption(),
 		// Demo clusters by default will create their own tenants, so we
 		// don't need to create them here.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
+		DefaultTestTenant: base.TestControlsTenantsExplicitly,
+		DefaultTenantName: roachpb.TenantName(demoTenantName),
 
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
@@ -933,7 +957,10 @@ func (demoCtx *Context) testServerArgsForTransientCluster(
 			JobsTestingKnobs: &jobs.TestingKnobs{
 				// Allow the scheduler daemon to start earlier in demo.
 				SchedulerDaemonInitialScanDelay: func() time.Duration {
-					return time.Second * 15
+					return time.Second * 2
+				},
+				SchedulerDaemonScanDelay: func() time.Duration {
+					return time.Second * 5
 				},
 			},
 		},
@@ -1014,6 +1041,10 @@ func (c *transientCluster) Close(ctx context.Context) {
 			_ = err
 		}
 	}
+	// Run any cleanup functions registered during setup.
+	for _, fn := range c.cleanupFns {
+		fn()
+	}
 }
 
 // findServer looks for the index of the server with the given node
@@ -1082,9 +1113,9 @@ func (c *transientCluster) DrainAndShutdown(ctx context.Context, nodeID int32) e
 // server than the one referred to by the node ID.
 func (c *transientCluster) findOtherServer(
 	ctx context.Context, nodeID int32, op string,
-) (serverpb.AdminClient, error) {
+) (serverpb.RPCAdminClient, error) {
 	// Find a node to use as the sender.
-	var adminClient serverpb.AdminClient
+	var adminClient serverpb.RPCAdminClient
 	for _, s := range c.servers {
 		if s.adminClient != nil && s.nodeID != roachpb.NodeID(nodeID) {
 			adminClient = s.adminClient
@@ -1218,7 +1249,7 @@ func (c *transientCluster) startServerInternal(
 
 	c.servers[serverIdx] = serverEntry{
 		TestServerInterface: s,
-		adminClient:         serverpb.NewAdminClient(conn),
+		adminClient:         conn.NewAdminClient(),
 		nodeID:              nodeID,
 	}
 
@@ -1612,16 +1643,30 @@ func (c *transientCluster) GetSQLCredentials() (
 	return c.adminUser, c.adminPassword, c.demoDir
 }
 
+// internalDBConn opens a SQL connection to the given server using an internal
+// application name. This allows the connection to access system tables and
+// crdb_internal without setting the allow_unsafe_internals session variable.
+func (c *transientCluster) internalDBConn(
+	ctx context.Context, target serverSelection,
+) (*gosql.DB, error) {
+	u, err := c.getNetworkURLForServer(ctx, 0, false /* includeAppName */, target)
+	if err != nil {
+		return nil, err
+	}
+	if err := u.SetOption(
+		"application_name", catconstants.InternalAppNamePrefix+" cockroach demo",
+	); err != nil {
+		return nil, err
+	}
+	return gosql.Open("postgres", u.ToPQ().String())
+}
+
 func (c *transientCluster) maybeEnableMultiTenantMultiRegion(ctx context.Context) error {
 	if !c.demoCtx.Multitenant {
 		return nil
 	}
 
-	storageURL, err := c.getNetworkURLForServer(ctx, 0, false /* includeAppName */, forSystemTenant)
-	if err != nil {
-		return err
-	}
-	db, err := gosql.Open("postgres", storageURL.ToPQ().String())
+	db, err := c.internalDBConn(ctx, forSystemTenant)
 	if err != nil {
 		return err
 	}
@@ -1638,11 +1683,7 @@ func (c *transientCluster) maybeEnableMultiTenantMultiRegion(ctx context.Context
 func (c *transientCluster) SetClusterSetting(
 	ctx context.Context, setting string, value interface{},
 ) error {
-	storageURL, err := c.getNetworkURLForServer(ctx, 0, false /* includeAppName */, forSystemTenant)
-	if err != nil {
-		return err
-	}
-	db, err := gosql.Open("postgres", storageURL.ToPQ().String())
+	db, err := c.internalDBConn(ctx, forSystemTenant)
 	if err != nil {
 		return err
 	}
@@ -1652,7 +1693,9 @@ func (c *transientCluster) SetClusterSetting(
 		return err
 	}
 	if c.demoCtx.Multitenant {
-		_, err = db.Exec(fmt.Sprintf("ALTER TENANT ALL SET CLUSTER SETTING %s = '%v'", setting, value))
+		_, err = db.Exec(fmt.Sprintf(
+			"ALTER TENANT ALL SET CLUSTER SETTING %s = '%v'", setting, value,
+		))
 	}
 	return err
 }
@@ -1666,7 +1709,13 @@ func (c *transientCluster) SetupWorkload(ctx context.Context) error {
 	// fixture.
 	gen := c.demoCtx.WorkloadGenerator
 	if gen != nil {
-		db, err := gosql.Open("postgres", c.connURL)
+		// Use an internal connection for workload setup because the
+		// workload initialization code may access crdb_internal tables.
+		targetServer := forSystemTenant
+		if c.demoCtx.Multitenant {
+			targetServer = forSecondaryTenant
+		}
+		db, err := c.internalDBConn(ctx, targetServer)
 		if err != nil {
 			return err
 		}
@@ -1690,13 +1739,13 @@ func (c *transientCluster) SetupWorkload(ctx context.Context) error {
 				fmt.Println("#\n# Partitioning the demo database, please wait...")
 			}
 
-			db, err := gosql.Open("postgres", c.connURL)
+			pdb, err := c.internalDBConn(ctx, targetServer)
 			if err != nil {
 				return err
 			}
-			defer db.Close()
+			defer pdb.Close()
 			// Based on validation done in setup, we know that this workload has a partitioning step.
-			if err := gen.(workload.Hookser).Hooks().Partition(db); err != nil {
+			if err := gen.(workload.Hookser).Hooks().Partition(pdb); err != nil {
 				return errors.Wrapf(err, "partitioning the demo database")
 			}
 		}
@@ -1851,19 +1900,15 @@ func (c *transientCluster) runWorkload(
 	return nil
 }
 
-// EnableEnterprise enables enterprise features if available in this build.
-func (c *transientCluster) EnableEnterprise(ctx context.Context) (func(), error) {
-	purl, err := c.getNetworkURLForServer(ctx, 0, true /* includeAppName */, forSystemTenant)
+// EnableEnterprise enables enterprise features for this demo.
+func (c *transientCluster) EnableEnterprise(ctx context.Context) error {
+	db, err := c.internalDBConn(ctx, forSystemTenant)
 	if err != nil {
-		return nil, err
-	}
-	connURL := purl.ToPQ().String()
-	db, err := gosql.Open("postgres", connURL)
-	if err != nil {
-		return nil, err
+		return err
 	}
 	defer db.Close()
-	return EnableEnterprise(db, demoOrg)
+	_, err = db.Exec(`SET CLUSTER SETTING cluster.organization = $1`, demoOrg)
+	return err
 }
 
 // sockForServer generates the metadata for a unix socket for the given node.

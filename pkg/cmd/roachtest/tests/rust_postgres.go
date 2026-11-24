@@ -34,7 +34,7 @@ func registerRustPostgres(r registry.Registry) {
 		// the environment, which means we can't pass it ssl connection details
 		// and must run the cluster in insecure mode.
 		// See: https://github.com/sfackler/rust-postgres/issues/654
-		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(install.SecureOption(false)), c.All())
+		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(install.SimpleSecureOption(false)), c.All())
 		db := c.Conn(ctx, t.L(), 1)
 		_, err := db.Exec("create user postgres with createdb createlogin createrole cancelquery")
 		if err != nil {
@@ -78,9 +78,8 @@ func registerRustPostgres(r registry.Registry) {
 			t,
 			c,
 			node,
-			"install rust and cargo",
-			`curl https://sh.rustup.rs -sSf | sh -s -- -y
-`,
+			"install and verify rust and cargo",
+			`bash -o pipefail -c 'curl https://sh.rustup.rs -sSf | sh -s -- -y && $HOME/.cargo/bin/cargo --version'`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -130,7 +129,7 @@ func registerRustPostgres(r registry.Registry) {
 			ctx,
 			t.L(),
 			option.WithNodes(node),
-			`cd /mnt/data1/rust-postgres && /home/ubuntu/.cargo/bin/cargo test 2>&1 > rustpostgres.stdout --no-fail-fast`)
+			`cd /mnt/data1/rust-postgres && $HOME/.cargo/bin/cargo test 2>&1 > rustpostgres.stdout --no-fail-fast`)
 		if err != nil {
 			t.L().Printf("error during rust postgres run (may be ok): %v\n", err)
 		}

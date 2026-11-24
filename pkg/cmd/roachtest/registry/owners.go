@@ -25,7 +25,7 @@ const (
 	OwnerAdmissionControl   Owner = `admission-control`
 	OwnerObservability      Owner = `obs-prs`
 	OwnerObservabilityIndia Owner = `obs-india-prs`
-	OwnerServer             Owner = `server` // not currently staffed
+	OwnerServer             Owner = `server`
 	OwnerSQLFoundations     Owner = `sql-foundations`
 	OwnerMigrations         Owner = `migrations`
 	OwnerProductSecurity    Owner = `product-security`
@@ -34,6 +34,7 @@ const (
 	OwnerStorage            Owner = `storage`
 	OwnerTestEng            Owner = `test-eng`
 	OwnerDevInf             Owner = `dev-inf`
+	OwnerFieldEng           Owner = `field-engineering`
 )
 
 // IsValid returns true if the owner is valid, i.e. it has a corresponding team

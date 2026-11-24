@@ -5,8 +5,16 @@
 
 package rttanalysis
 
-import "testing"
+import (
+	"strconv"
+	"strings"
+	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+)
+
+// BenchmarkCreateRole is a benchmark for the CREATE ROLE statement.
+// benchmark-ci: benchtime=20x
 func BenchmarkCreateRole(b *testing.B) { reg.Run(b) }
 func init() {
 	reg.Register("CreateRole", []RoundTripBenchTestCase{
@@ -33,6 +41,8 @@ func init() {
 	})
 }
 
+// BenchmarkAlterRole is a benchmark for the ALTER ROLE statement.
+// benchmark-ci: benchtime=20x
 func BenchmarkAlterRole(b *testing.B) { reg.Run(b) }
 func init() {
 	reg.Register("AlterRole", []RoundTripBenchTestCase{
@@ -55,4 +65,90 @@ func init() {
 			Reset: "DROP ROLE rolea",
 		},
 	})
+}
+
+// BenchmarkUseManyRoles is useful for testing the performance of the
+// role membership cache.
+func BenchmarkUseManyRoles(b *testing.B) {
+	skip.UnderShort(b, "skipping long benchmark")
+	reg.Run(b)
+}
+func init() {
+
+	createFunc := `
+CREATE OR REPLACE FUNCTION query_table_with_roles(num_roles INT)
+RETURNS VOID AS $$
+DECLARE
+    counter INT := 0;
+BEGIN
+    WHILE counter < num_roles LOOP
+        SELECT set_config('role', 'role' || counter::TEXT, false);
+        SELECT a FROM tab;
+        counter := counter + 1;
+    END LOOP;
+    SELECT set_config('role', 'testuser', false);
+END;
+$$ LANGUAGE plpgsql;`
+
+	reg.Register("UseManyRoles", []RoundTripBenchTestCase{
+		{
+			Name: "use 2 roles",
+			SetupEx: []string{
+				"CREATE ROLE parent_role",
+				createNRoles(2),
+				grantRoleToNRoles("parent_role", 2),
+				"CREATE TABLE tab (a INT)",
+				"GRANT SELECT ON tab TO parent_role",
+				"INSERT INTO tab VALUES (1)",
+				createFunc,
+			},
+			Stmt: "SELECT query_table_with_roles(2)",
+			ResetEx: []string{
+				"RESET ROLE",
+				dropNRoles(2),
+				"DROP ROLE parent_role",
+			},
+		},
+		{
+			Name: "use 25 roles",
+			SetupEx: []string{
+				"CREATE ROLE parent_role",
+				createNRoles(25),
+				grantRoleToNRoles("parent_role", 25),
+				"CREATE TABLE tab (a INT)",
+				"GRANT SELECT ON tab TO parent_role",
+				"INSERT INTO tab VALUES (1)",
+				createFunc,
+			},
+			Stmt: "SELECT query_table_with_roles(25)",
+			ResetEx: []string{
+				dropNRoles(25),
+				"DROP ROLE parent_role",
+			},
+		},
+	})
+}
+
+func createNRoles(n int) string {
+	roles := make([]string, n)
+	for i := 0; i < n; i++ {
+		roles[i] = "CREATE ROLE role" + strconv.Itoa(i)
+	}
+	return strings.Join(roles, "; ")
+}
+
+func dropNRoles(n int) string {
+	roles := make([]string, n)
+	for i := 0; i < n; i++ {
+		roles[i] = "DROP ROLE role" + strconv.Itoa(i)
+	}
+	return strings.Join(roles, "; ")
+}
+
+func grantRoleToNRoles(role string, n int) string {
+	roles := make([]string, n)
+	for i := 0; i < n; i++ {
+		roles[i] = "role" + strconv.Itoa(i)
+	}
+	return "GRANT " + role + " TO " + strings.Join(roles, ", ")
 }

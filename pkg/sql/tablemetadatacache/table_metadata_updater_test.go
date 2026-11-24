@@ -96,7 +96,7 @@ func TestDataDrivenTableMetadataCacheUpdater(t *testing.T) {
 						},
 					}
 				}
-				updater := newTableMetadataUpdater(mockUpdateProgress, &metrics, spanStatsSrv, s.InternalExecutor().(isql.Executor), mockTimeSrc, batchSize, knobs)
+				updater := newTableMetadataUpdater(mockUpdateProgress, &metrics, spanStatsSrv, s.InternalExecutor().(isql.Executor), s.Codec(), mockTimeSrc, batchSize, knobs)
 				prevUpdatedTables := metrics.UpdatedTables.Count()
 				prevErrs := metrics.Errors.Count()
 				err := updater.RunUpdater(ctx)
@@ -109,7 +109,7 @@ func TestDataDrivenTableMetadataCacheUpdater(t *testing.T) {
 					metrics.NumRuns.Count(),
 					metrics.Duration.CumulativeSnapshot().Mean() > 0)
 			case "prune-cache":
-				updater := newTableMetadataUpdater(mockUpdateProgress, &metrics, spanStatsServer, s.InternalExecutor().(isql.Executor), mockTimeSrc, batchSize, knobs)
+				updater := newTableMetadataUpdater(mockUpdateProgress, &metrics, spanStatsServer, s.InternalExecutor().(isql.Executor), s.Codec(), mockTimeSrc, batchSize, knobs)
 				pruned, err := updater.pruneCache(ctx)
 				if err != nil {
 					return err.Error()
@@ -119,12 +119,26 @@ func TestDataDrivenTableMetadataCacheUpdater(t *testing.T) {
 				// Flush store so that bytes return non-zero from span stats.
 				s := s.StorageLayer()
 				err := s.GetStores().(*kvserver.Stores).VisitStores(func(store *kvserver.Store) error {
-					return store.TODOEngine().Flush()
+					return store.StateEngine().Flush()
 				})
 				if err != nil {
 					return err.Error()
 				}
 				return "success"
+			case "explain-select-query":
+				q := newBatchQueryStatement("AS OF SYSTEM TIME '-1us'")
+				explainQuery := "EXPLAIN (REDACT) " + q
+				res := ""
+				// Query expects 4 arguments - parentID, parentSchemaID, name, limit.
+				rows, err := queryConn.Query(explainQuery, 1, 1, "", 20)
+				if err != nil {
+					return err.Error()
+				}
+				res, err = sqlutils.RowsToDataDrivenOutput(rows)
+				if err != nil {
+					return err.Error()
+				}
+				return explainQuery + "\n---\n" + res
 			default:
 				return "unknown command"
 			}
@@ -159,6 +173,7 @@ func TestTableMetadataUpdateJobProgressAndMetrics(t *testing.T) {
 		&metrics,
 		s.TenantStatusServer().(serverpb.TenantStatusServer),
 		s.ExecutorConfig().(sql.ExecutorConfig).InternalDB.Executor(),
+		s.Codec(),
 		timeutil.DefaultTimeSource{},
 		defaultTableBatchSize,
 		knobs,

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
 )
@@ -67,7 +68,7 @@ func (imr *intentInterleavingReader) NewMVCCIterator(
 ) (MVCCIterator, error) {
 	if (!opts.MinTimestamp.IsEmpty() || !opts.MaxTimestamp.IsEmpty()) &&
 		iterKind == MVCCKeyAndIntentsIterKind {
-		panic("cannot ask for interleaved intents when specifying timestamp hints")
+		return nil, errors.AssertionFailedf("cannot ask for interleaved intents when specifying timestamp hints")
 	}
 	if iterKind == MVCCKeyIterKind || opts.KeyTypes == IterKeyTypeRangesOnly {
 		return imr.wrappableReader.NewMVCCIterator(ctx, MVCCKeyIterKind, opts)
@@ -232,7 +233,7 @@ func newIntentInterleavingIterator(
 	ctx context.Context, reader Reader, opts IterOptions,
 ) (MVCCIterator, error) {
 	if !opts.MinTimestamp.IsEmpty() || !opts.MaxTimestamp.IsEmpty() {
-		panic("intentInterleavingIter must not be used with timestamp hints")
+		return nil, errors.AssertionFailedf("intentInterleavingIter must not be used with timestamp hints")
 	}
 	var lowerIsLocal, upperIsLocal bool
 	var constraint intentInterleavingIterConstraint
@@ -260,7 +261,7 @@ func newIntentInterleavingIterator(
 	if !opts.Prefix {
 		if opts.LowerBound == nil && opts.UpperBound == nil {
 			// This is the same requirement as pebbleIterator.
-			panic("iterator must set prefix or upper bound or lower bound")
+			return nil, errors.AssertionFailedf("iterator must set prefix or upper bound or lower bound")
 		}
 		// At least one bound is specified, so constraint != notConstrained. But
 		// may need to manufacture a bound for the currently unbounded side.
@@ -1477,6 +1478,7 @@ func (i *intentInterleavingIter) assertInvariants() error {
 // changes to unsafe keys retrieved from MVCCIterators.
 type unsafeMVCCIterator struct {
 	MVCCIterator
+	rng           *rand.Rand
 	keyBuf        []byte
 	rawKeyBuf     []byte
 	rawMVCCKeyBuf []byte
@@ -1485,7 +1487,8 @@ type unsafeMVCCIterator struct {
 // gcassert:inline
 func maybeWrapInUnsafeIter(iter MVCCIterator) MVCCIterator {
 	if util.RaceEnabled {
-		return &unsafeMVCCIterator{MVCCIterator: iter}
+		rng, _ := randutil.NewPseudoRand()
+		return &unsafeMVCCIterator{MVCCIterator: iter, rng: rng}
 	}
 	return iter
 }
@@ -1547,7 +1550,7 @@ func (i *unsafeMVCCIterator) UnsafeRawMVCCKey() []byte {
 }
 
 func (i *unsafeMVCCIterator) mangleBufs() {
-	if rand.Intn(2) == 0 {
+	if i.rng.Intn(2) == 0 {
 		for _, b := range [3][]byte{i.keyBuf, i.rawKeyBuf, i.rawMVCCKeyBuf} {
 			for i := range b {
 				b[i] = 0

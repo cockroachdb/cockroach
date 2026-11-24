@@ -7,7 +7,7 @@ DROP SEQUENCE defaultdb.SQ1
 ----
 StatementPhase stage 1 of 1 with 6 MutationType ops
   transitions:
-    [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 104, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], PUBLIC] -> ABSENT
@@ -25,9 +25,8 @@ StatementPhase stage 1 of 1 with 6 MutationType ops
         DescriptorID: 104
         Name: sq1
         SchemaID: 101
-    *scop.NotImplementedForPublicObjects
-      DescID: 104
-      ElementType: scpb.Owner
+    *scop.RemoveOwner
+      DescriptorID: 104
     *scop.RemoveUserPrivileges
       DescriptorID: 104
       User: admin
@@ -36,7 +35,7 @@ StatementPhase stage 1 of 1 with 6 MutationType ops
       User: root
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
-    [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100, IntValue: 101}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 104}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 104, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], ABSENT] -> PUBLIC
@@ -47,7 +46,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
       {}
 PreCommitPhase stage 2 of 2 with 8 MutationType ops
   transitions:
-    [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 104, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], PUBLIC] -> ABSENT
@@ -65,9 +64,8 @@ PreCommitPhase stage 2 of 2 with 8 MutationType ops
         DescriptorID: 104
         Name: sq1
         SchemaID: 101
-    *scop.NotImplementedForPublicObjects
-      DescID: 104
-      ElementType: scpb.Owner
+    *scop.RemoveOwner
+      DescriptorID: 104
     *scop.RemoveUserPrivileges
       DescriptorID: 104
       User: admin
@@ -85,10 +83,10 @@ PreCommitPhase stage 2 of 2 with 8 MutationType ops
       - 104
       JobID: 1
       NonCancelable: true
-      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 1 MutationType op pending
+      RunningStatus: 'Pending: Updating schema metadata (1 operation) — PostCommitNonRevertible phase (stage 1 of 1).'
       Statements:
       - statement: DROP SEQUENCE defaultdb.sq1
-        redactedstatement: DROP SEQUENCE ‹defaultdb›.public.‹sq1›
+        redactedstatement: DROP SEQUENCE defaultdb.public.sq1
         statementtag: DROP SEQUENCE
 PostCommitNonRevertiblePhase stage 1 of 1 with 3 MutationType ops
   transitions:
@@ -119,7 +117,7 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
 StatementPhase stage 1 of 1 with 10 MutationType ops
   transitions:
-    [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 104, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], PUBLIC] -> ABSENT
@@ -155,9 +153,8 @@ StatementPhase stage 1 of 1 with 10 MutationType ops
         DescriptorID: 104
         Name: sq1
         SchemaID: 101
-    *scop.NotImplementedForPublicObjects
-      DescID: 104
-      ElementType: scpb.Owner
+    *scop.RemoveOwner
+      DescriptorID: 104
     *scop.RemoveUserPrivileges
       DescriptorID: 104
       User: admin
@@ -166,7 +163,7 @@ StatementPhase stage 1 of 1 with 10 MutationType ops
       User: root
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
-    [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100, IntValue: 101}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 104}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 104, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], ABSENT] -> PUBLIC
@@ -179,7 +176,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
       {}
 PreCommitPhase stage 2 of 2 with 14 MutationType ops
   transitions:
-    [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 104, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 104, Name: root}, ABSENT], PUBLIC] -> ABSENT
@@ -215,9 +212,8 @@ PreCommitPhase stage 2 of 2 with 14 MutationType ops
         DescriptorID: 104
         Name: sq1
         SchemaID: 101
-    *scop.NotImplementedForPublicObjects
-      DescID: 104
-      ElementType: scpb.Owner
+    *scop.RemoveOwner
+      DescriptorID: 104
     *scop.RemoveUserPrivileges
       DescriptorID: 104
       User: admin
@@ -243,10 +239,10 @@ PreCommitPhase stage 2 of 2 with 14 MutationType ops
       - 106
       JobID: 1
       NonCancelable: true
-      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 1 MutationType op pending
+      RunningStatus: 'Pending: Updating schema metadata (1 operation) — PostCommitNonRevertible phase (stage 1 of 1).'
       Statements:
       - statement: DROP SEQUENCE defaultdb.sq1 CASCADE
-        redactedstatement: DROP SEQUENCE ‹defaultdb›.public.‹sq1› CASCADE
+        redactedstatement: DROP SEQUENCE defaultdb.public.sq1 CASCADE
         statementtag: DROP SEQUENCE
 PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops
   transitions:
@@ -279,7 +275,7 @@ PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops
 deps
 DROP SEQUENCE defaultdb.SQ1 CASCADE
 ----
-- from: [Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100}, ABSENT]
+- from: [Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100, IntValue: 101}, ABSENT]
   to:   [Sequence:{DescID: 104}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
@@ -304,7 +300,7 @@ DROP SEQUENCE defaultdb.SQ1 CASCADE
   kind: SameStagePrecedence
   rule: descriptor drop right before removing dependent with expr ref to sequence
 - from: [Sequence:{DescID: 104}, DROPPED]
-  to:   [Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100}, ABSENT]
+  to:   [Namespace:{DescID: 104, Name: sq1, ReferencedDescID: 100, IntValue: 101}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [Sequence:{DescID: 104}, DROPPED]

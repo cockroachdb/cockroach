@@ -8,6 +8,7 @@ statement ok
 ALTER TABLE data SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
 
 # Relocate the ten parts to the five nodes.
+retry
 statement ok
 ALTER TABLE data EXPERIMENTAL_RELOCATE
   SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
@@ -18,7 +19,7 @@ SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE d
 ORDER BY 1
 ----
 start_key           end_key       replicas  lease_holder
-<before:/Table/71>  …/1/1         {1}       1
+<before:/Table/XX>  …/1/1         {1}       1
 …/1/1               …/1/2         {2}       2
 …/1/2               …/1/3         {3}       3
 …/1/3               …/1/4         {4}       4
@@ -68,7 +69,6 @@ EXPLAIN (DISTSQL) SELECT
 FROM data GROUP BY b
 ----
 distribution: full
-vectorized: true
 ·
 • group (hash)
 │ group by: b
@@ -80,17 +80,24 @@ vectorized: true
 ·
 Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzsWV9vqs4Wfb-fYjJP9maMzoBWfYJftYZEwQO0t81NQ1CmlhwFD2BPm5N-918GFfmjcxzbt2pSmL2ZvWaxZ8_apv6B8a8F7MHBw2Skajqo9TXLtn6MroA1GA1ubDBFwH2d19wrBKZhuHDcwKs5bLRzhFFmz8J1kKRTl-7b5u4H6T1OPI--5oZO7C5XeXsVbs31cnd3_C3aqxv5bjCjO2MfzIxd5FsYOe58XnOm7wmNMzr_ZUT9ZEvcT7ZmSju1ZmGGgsD0CoGIziMnfnsr2e9F-71ou6_zt7KjOMMPEhrN6CopeCNShF2EK1rwbJO68Wy4bl5_54mi3Tj-FXn-83PNvQK3pjEGnpu4YGgadxPwzyOYQgSD0KO6u6Qx7P0fYogggQhKEEEZItiCTwiuonBG4ziM2JQ_aYDmvcFeE0E_WK0T5n5CcBZGFPb-wMRPFhT2oO1OF9SkrkejRhMi6NHE9RfpMoyFwi7O6id9hwjehIv1Moh7gNFGIK0edmPbxu5-AhG0Vi6bUm9g4AYewCBMXmgEnz4QDNfJnkicuHMKezjHXOvDXvMDnU5enc8jOneTMGq0itwVlh9Vf3R0w3b0u9GoppArxu5uXFMwG90Yd7q9Hf9jGCNH1fs1RcpMw9xa6UTHNP5n1Zg5Vh-2UWNN346sH2Zfu73dWXdjR8uwHwzTUYfDmiKn0Jq9Wai1s9g6qWGbqm5ptmbojjkYmgPLYkN1ODQHQ9Ue1BSM2DsUE7nPxfQdvLjxSykNGD597JNNSsluHU32HncdhJFHI-oVkFNUznbgZoVIeT9wth-kkDWpuCNyYUdahantbEOusw3psNGtpqsjx7L7_cF9TekihaANbv6BMzEmhYf7jWvu596rpqbqN4MDMPeqWcHIthvjwn5jkt9wnEO5MTIcLO_drAYc6-HhoPfxkPfxkFe9Hx6CUO-Hh2Zruj0wbwYT-8AzkxxadGRMBkX_5n0sdTwp-02z6MmOTS5_Jg08GvWAghFQSEOREFBkBJQWAkobAeUaAaWDgNLd_uEmm8cGLACT7MICsbyNwiwcpyMGgBkCZuEkDU_XYlGERREWRXYLkvTCokjnqIpJpYOFj8vYWSdLD-vhqoFbpZmHychlMsVjjk9vCPgLG0ID1xvkrJaARejnNKh9aQniLaF9NNmfbgn40hIuLeH7toSijJHTVZh8pQqTekM6S4WJCP3csb--qLC4Cl8fTfanVZhcVPiiwt9XhYsyJp2uwtJXqrBUb8hnqbAkQj937DsXFRZX4c7RZH9ahaWLCl9U-PuqcFHG5NNVWP5KFZbrjdZZKiyL0M8d--5FhcVVuHs02Z9WYfmiwhcV_r4qLIv81mbSeBUGMT3pX9DN0lJ1zI4i9eZ0c27jcB3N6CQKZ-ncjWmkQKnDo3GyeYo3hhbsHsVJRN1l9lNhHgmXkXAeiRSQcB6pJYbUPo6EBUl1OVCCrDDnBYkgLdziYFV4Ee4OSsehpAotiV8MbYFqkLlQreNIuIzUOreu2mJIvLoSJMWrK0FW3LoSpMWtqwqv9tl1VaF1zYXqHC8GUkbqnFsM12JIvGIQJMUrBkFW3GIQpMUthgqv7tnFUKGF_9JyOD1HqmCd3XQ6glC8ghClxasIUV7ckhAlxq2JKrPzO0-V2F9aj3y8KOQKVqX3nFoUXUEoXlGI0uIVhSgvblGIEuMWRZVZpQWdXBQy-5b6vAh_O74He7C5_dQPXHYfyALcecy-Klsv4e8U135fsS-6z-4ipgiO3Z-0TxMaLf3AjxN_BntJtKYfH__5NwAA__8RGA5z
 
+statement ok
+SET autocommit_before_ddl = false
+
+statement ok
+ALTER TABLE data SET (schema_locked = false)
 
 statement ok
 ALTER TABLE data DROP COLUMN _bool;
 ALTER TABLE data DROP COLUMN _bytes;
 ALTER TABLE data DROP COLUMN _bit;
 
+statement ok
+ALTER TABLE data SET (schema_locked = true)
+
 query T
 EXPLAIN (DISTSQL) SELECT sum(a) FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • group (scalar)
 │
@@ -105,7 +112,6 @@ query T
 EXPLAIN (DISTSQL) SELECT sum((a-1)*1000 + (b-1)*100 + (c::INT-1)*10 + (d-1)) FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • group (scalar)
 │
@@ -122,7 +128,6 @@ query T
 EXPLAIN (DISTSQL) SELECT sum(a), count(a), max(a) FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • group (scalar)
 │
@@ -137,7 +142,6 @@ query T
 EXPLAIN (DISTSQL) SELECT sum(a+b), count(a+b), max(a+b) FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • group (scalar)
 │
@@ -154,7 +158,6 @@ query T
 EXPLAIN (DISTSQL) SELECT sum((a-1)*1000) + sum((b-1)*100) + sum((c::INT-1)*10) + sum(d-1) FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • render
 │
@@ -173,7 +176,6 @@ query T
 EXPLAIN (DISTSQL) SELECT sum(a), min(b), max(c), count(d) FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • group (scalar)
 │
@@ -190,7 +192,6 @@ query T
 EXPLAIN (DISTSQL) SELECT avg(a+b+c::INT+d) FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • group (scalar)
 │
@@ -209,7 +210,6 @@ query T
 EXPLAIN (DISTSQL) SELECT sum(a), round(stddev(b), 1) FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • render
 │
@@ -226,7 +226,6 @@ query T
 EXPLAIN (DISTSQL) SELECT sum(a), round(variance(b), 1) FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • render
 │
@@ -243,7 +242,6 @@ query T
 EXPLAIN (DISTSQL) SELECT stddev(a+b+c::INT+d) FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • group (scalar)
 │
@@ -260,7 +258,6 @@ query T
 EXPLAIN (DISTSQL) SELECT variance(a+b+c::INT+d) FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • group (scalar)
 │
@@ -279,7 +276,6 @@ query T
 EXPLAIN (DISTSQL) SELECT covar_pop(a, c), regr_sxx(a, c), regr_sxy(a, c), regr_syy(a, c), regr_avgx(a, c), regr_avgy(a, c), regr_intercept(a, c), regr_r2(a, c), regr_slope(a, c), regr_count(a, c), covar_samp(a, c), corr(a, c), sqrdiff(a) FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • group (scalar)
 │
@@ -297,7 +293,6 @@ query T
 EXPLAIN (DISTSQL) SELECT sum(a), avg(b), sum(c), avg(d), stddev(a), stddev_samp(a), stddev_pop(a), variance(b), var_samp(b), var_pop(b), sum(a+b+c::INT+d), covar_pop(a, c), regr_sxx(a, c), regr_sxy(a, c), regr_syy(a, c), regr_avgx(a, c), regr_avgy(a, c), regr_intercept(a, c), regr_r2(a, c), regr_slope(a, c), regr_count(a, c), covar_samp(a, c), corr(a, c), sqrdiff(a)  FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • group (scalar)
 │
@@ -315,7 +310,6 @@ query T
 EXPLAIN (DISTSQL) SELECT sum(a), min(b), max(c), count(d), avg(a+b+c::INT+d), stddev(a+b), variance(c::INT+d), covar_pop(b, d), regr_sxx(a, c), regr_sxy(a, c), regr_syy(a, c), regr_avgx(a, c), regr_avgy(b, c), regr_intercept(a, b), regr_r2(b, c), regr_slope(a, c), sqrdiff(a), regr_count(a, b), covar_samp(b, c), corr(a, c) FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • group (scalar)
 │
@@ -334,7 +328,6 @@ query T
 EXPLAIN (DISTSQL) SELECT sum(a), stddev(a), avg(a) FILTER (WHERE a > 5), count(b), avg(b), variance(b) FILTER (WHERE b < 8), sum(b) FILTER (WHERE b < 8), stddev(b) FILTER (WHERE b > 2) FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • group (scalar)
 │
@@ -351,7 +344,6 @@ query T
 EXPLAIN (DISTSQL) SELECT sum(a), avg(DISTINCT a), variance(a) FILTER (WHERE a > 0) FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • group (scalar)
 │
@@ -368,7 +360,6 @@ query T
 EXPLAIN (DISTSQL) SELECT sum(a), avg(a), count(a), stddev(a), variance(a) FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • group (scalar)
 │
@@ -383,7 +374,6 @@ query T
 EXPLAIN (DISTSQL) SELECT sum(a), avg(b), sum(a), sum(a), avg(b) FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • group (scalar)
 │
@@ -398,7 +388,6 @@ query T
 EXPLAIN (DISTSQL) SELECT avg(c), sum(c), avg(d), sum(d) FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • group (scalar)
 │
@@ -413,7 +402,6 @@ query T
 EXPLAIN (DISTSQL) SELECT max(a), min(b) FROM data HAVING min(b) > 2
 ----
 distribution: local
-vectorized: true
 ·
 • root
 │
@@ -448,13 +436,12 @@ vectorized: true
               table: data@data_pkey
               spans: FULL SCAN
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkFGL2kAQx9_7KZZ5SmDFbPpS9qm2ahvQaE2QQhvKNhl1Mcmmuxu0SL77keT0zuNOvHlYmP_M_uY_cwLzLwcOk5_L2SgIiTMOojj6MXNJNJlNvsakEEdHuJQUsnT-umS6WsxJJqwg30frIPx21n_XnvcRiQ8USpVhKAo0wH8Bg4RCpVWKxijdSqeuIciOwD0Ksqxq28oJhVRpBH4CK22OwGEt8hrN0AMKGVoh847oky_EYSTd1eXeuJA0FFRtnyjGii127MvYYAzca-j9k6cyt6hRD9n17F7n5LN_WZhzHoTxpzd9sBc-2Ht8rNBUqjR45eLejQesSShgtsX-7EbVOsWlVmnX26eLDtQJGRrbV1mfBOW5ZKxGUVzO-JzEbpL8W6SEwiZXhz8yAw7eYwxeec4B7QexNe2Jop06dNj4f9UuuBG5QQpzsccxWtSFLKWxMgVudY1N8-EhAAD__2S-63o=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkEHvmkAQxe_9FJs5QbJGll6aPdVWbUkUrRDTpCXNFkbdCCzdXaKN4bs3QLVqqvn_90Ayb4bfezMnML9y4DD5upyNgpA44yCKoy8zl0ST2eRjTApxdIRLSSFL56dLpqvFnGTCCvJ5tA7CT2f9e-15b5H4QKFUGYaiQAP8GzBIKFRapWiM0q106gaC7AjcoyDLqratnFBIlUbgJ7DS5ggc1iKv0Qw9oJChFTLviD75QBxG0l1d7o0LSUNB1fYfxVixReDsyjYYA_ca-nLnqcwtatRDduvd65y89y8Lc86DMH73MId_l4O9JscKTaVKgzcpHjl5d04D1iQUMNtif3ajap3iUqu0m-3LRQfqhAyN7busL4Ly3DJWoyguZ7wmsack_xkpobDJ1eGHzICD9_cN_vM5P2h_EFvTnijaqUOHjX9X7YIbkRukMBd7HKNFXchSGitT4FbX2DRv_gQAAP__aFjrfA==
 
 query T
 EXPLAIN (DISTSQL) SELECT DISTINCT (a) FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • distinct
 │ distinct on: a
@@ -471,7 +458,6 @@ query T
 EXPLAIN (DISTSQL) SELECT SUM (DISTINCT A) FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • group (scalar)
 │
@@ -490,7 +476,6 @@ query T
 EXPLAIN (DISTSQL) SELECT SUM (DISTINCT A), SUM (DISTINCT B) FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • group (scalar)
 │
@@ -505,7 +490,6 @@ query T
 EXPLAIN (DISTSQL) SELECT DISTINCT a, b FROM data WHERE (a + b + c::INT) = 27 ORDER BY a,b
 ----
 distribution: full
-vectorized: true
 ·
 • distinct
 │ distinct on: a, b
@@ -525,7 +509,6 @@ query T
 EXPLAIN (DISTSQL) SELECT DISTINCT a, b FROM data WHERE (a + b + c::INT) = 27 ORDER BY b,a
 ----
 distribution: full
-vectorized: true
 ·
 • sort
 │ order: +b,+a
@@ -548,7 +531,6 @@ query T
 EXPLAIN (DISTSQL) SELECT c, d, sum(a+c::INT) + avg(b+d) FROM data GROUP BY c, d
 ----
 distribution: full
-vectorized: true
 ·
 • render
 │
@@ -568,7 +550,6 @@ query T
 EXPLAIN (DISTSQL) SELECT c, d, sum(a+c::INT) + avg(b+d) FROM data GROUP BY c, d ORDER BY c, d
 ----
 distribution: full
-vectorized: true
 ·
 • render
 │
@@ -593,7 +574,6 @@ query T
 EXPLAIN (DISTSQL) SELECT c, d, sum(a+c::INT) + avg(b+d) FROM data WHERE a > 9 GROUP BY c, d
 ----
 distribution: full
-vectorized: true
 ·
 • render
 │
@@ -613,7 +593,6 @@ query T
 EXPLAIN (DISTSQL) SELECT sum(a), sum(b), sum(c) FROM data GROUP BY d HAVING sum(a+b) > 10
 ----
 distribution: full
-vectorized: true
 ·
 • filter
 │ filter: sum > 10
@@ -634,7 +613,6 @@ query T
 EXPLAIN (DISTSQL) SELECT avg(a+b), c FROM data GROUP BY c, d HAVING c = d
 ----
 distribution: full
-vectorized: true
 ·
 • group (hash)
 │ group by: d
@@ -655,7 +633,6 @@ query T
 EXPLAIN (DISTSQL) SELECT sum(a+b), sum(a+b) FILTER (WHERE a < d), sum(a+b) FILTER (WHERE a = c) FROM data GROUP BY d
 ----
 distribution: full
-vectorized: true
 ·
 • group (hash)
 │ group by: d
@@ -674,7 +651,6 @@ query T
 EXPLAIN (DISTSQL) SELECT sum(a+b), sum(a+b) FILTER (WHERE a < d), sum(a+b) FILTER (WHERE a = c) FROM data WHERE a = 1 GROUP BY d
 ----
 distribution: full
-vectorized: true
 ·
 • group (hash)
 │ group by: d
@@ -693,7 +669,6 @@ query T
 EXPLAIN (DISTSQL) SELECT xor_agg(to_hex(a)::bytes) FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • group (scalar)
 │
@@ -711,7 +686,6 @@ query T
 EXPLAIN (DISTSQL) SELECT xor_agg(a) FROM data
 ----
 distribution: full
-vectorized: true
 ·
 • group (scalar)
 │
@@ -726,7 +700,6 @@ query T
 EXPLAIN (DISTSQL) SELECT max(t.a), min(t.b), avg(t.c)  FROM (VALUES (1, 2, 3), (4, 5, 6), (7, 8, 0)) AS t(a, b, c) WHERE b > 3
 ----
 distribution: local
-vectorized: true
 ·
 • group (scalar)
 │ estimated row count: 1
@@ -738,13 +711,12 @@ vectorized: true
     └── • values
           size: 3 columns, 3 rows
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkl9v2jwUh-_fT3F0rhzJhfx5tyFfkY10iwS0I4xV2tBkktM0aoiZ7aydEN99SrKygQZqfRHZx85znvziLZrvJQqMbq7HYTwFNoqTefJx7EASjaN3c1jLR2Z70uGwLipmeyuHg_yRM9tLHbicXU2ALcLxpygB5nHwOQQOB_Y_h1ccXjfTNxwGHFzHgTABC0xyWHFIHfj8IZpFsIKvtesGBAFyrFRGU7kmg-ILerjkuNEqJWOUbkrb9kCcPaJwORbVprZNeckxVZpQbNEWtiQUuJBlTabvIseMrCzKjjiAt8ACSO_q6t44uNxxVLX9gzFW5tTC933jEQp3x5_f-rIoLWnSfe-weVcXMPT3XyyEiKfzwUkP78jDe4lHmOeacmmV7vuHJpPwhg09BzlO4ikb-s0sXLxnw-B0JP6Riv8SlRmZjaoMHWg8N_wLb7fkSFlO3RUwqtYpXWuVtme75VULagsZGdvtet0irp62jNUk1_s_-jfJO0vyT5O8Y5J_lhScc1pyvC3Vw7ciQ4Hu73Hxj8fTwOYFmZsm7OROPbTY-c9NE9WtLA1xnMh7GpElvS6qwtgiRWF1Tbvdf78CAAD__7kQOks=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUkl9v0zwUh-_fT3F0rhzpbM2fF6h81UAziNR2oyllElTITc6yaGlSbIcNVf3uKA0ba0Ur5ovIPnae35MTb9B8L1FidH01CuMJiGGczJKPIweSaBS9m8FKPQh7rhyCVVEJe750CNSPXNjz1IGL6eUYxDwcfYoSEB6BTxA4BOJ_glcEr9vpG4I-ges4ECZgQSiCJUHqwOcP0TSCJXxtXDdgCJCwqjOeqBUblF_QwwXhWtcpG1PrtrTZHYizB5QuYVGtG9uWF4RprRnlBm1hS0aJc1U2bHouEmZsVVF2xD68BRFAettUd8bBxZawbuwfjLEqZ5Tes9x4iNLd0r9HXxSlZc265-2Hd3UJA__pi6WU8WTWP-rhH3h4L_EI81xzrmyte_6-yTi8FgPPQcJxPBEDv52F8_diEBxvSXCg4r9EZcpmXVeG9zSOJbkHSWfedkHIWc7dFTB1o1O-0nW6O9stL3egXSFjY7tdr1vE1eOWsZrV6umPPid5J0n-cZJ3SPJPkoJTTgvCm7K-_1ZkKNH9Pc7-8ngc2L6gctM2O7mt73fY2c9126obVRomHKs7HrJlvSqqwtgiRWl1w9vtf78CAAD__8AnOk4=
 
 query T
 EXPLAIN (DISTSQL) SELECT * FROM (VALUES (1, '222'), (2, '444')) t1(a,b) JOIN (VALUES (1, 100.0), (3, 32.0)) t2(a,b) ON t1.a = t2.a
 ----
 distribution: local
-vectorized: true
 ·
 • hash join
 │ estimated row count: 2
@@ -756,7 +728,7 @@ vectorized: true
 └── • values
       size: 2 columns, 2 rows
 ·
-Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyckl9r2zwUxu_fT3E4N7Ff1NRSwi4MBWdLxlzSuKuzMhhmaPZJYupYmSTTjZDvPmT3TxLabZkujHV0nt-j86Atmu8Vhjj5fD0dxTPwxnE6Tz9OfUgn08m7OfwP72-SK_BuR9NPkxQ8zqAnhOj5DDzBoDccDnu-D6MULAdPMvjmw2XiSHsKHgT9wCkGDAaiHzwIxKMgmYHlfQkXYEVfIsNaFTSTazIYfkGOGcONVjkZo7QrbduGuPiBYcCwrDeNdeWMYa40YbhFW9qKMMRbWTVkzgNkWJCVZdURh_AWPAH5qqnvjI_ZjqFq7DPGWLmkFv7kG48xDHbsZGt-ZP3m36z5q9bPjk2tdEGaigPLzCn_1PLC_T9Is7pUZU36XBzOUNHCehH3L3S5XLV_yDBpbAgRZ5Fg0YBFw1cn40eTiVNCvSGzUbWh4wn_KsMz7uakYkldbkY1OqdrrfK2t9smLagtFGRsdyq6TVy3R9w5aJLrpzexT-InkMQ-iR-TxG9JgwNScHinjOGiUvdfywJDDB7W2Qufx4VOIJfGhZ2u1H2Lnf_cuKgWsjLE8Ere0Zgs6XVZl8aWOYZWN7Tb_fcrAAD__-UnUdc=
+Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJyUklFv2jwUhu-_X3F0bkg-udQ2aBeWKsEG06godA2rJk1o8pIDRA0xsx11E-K_Tw7tChHdhi8Qts_7PD5H2aL7XqDC4efbcX80gWgwSmbJx3EMyXA8fDeD_-H93fQGovv--NMwgUgwaEkpWzGDSDJodbvdVhxDPwEvINIMvsVwPQ2kg4TgvM1DosOgI9v8KSCfA9MJeNHWcAVetjUyLE1GE70mh-oLCpwz3FiTknPGhqNtXTDKfqDiDPNyU_lwPGeYGkuotuhzXxAqvNdFRe6SI8OMvM6LPbELbyGSkK6q8sHFON8xNJV_wTivl4RKHHhHA1R8x85Wi4b6zb-pZUMtXlW_GKvS2IwsZUfKeUj-reTE-z9ot7o2eUn2Uh73UNDCRz0RX9l8uar_IcNp5RX0BOtJ1uuwXvfVzjqNzuQ5Q70jtzGlo2aHJ028YboQoU_KlrSfmzOVTenWmrSu3W-nNag-yMj5_a3cb0ZlfSWCwZJe__4mDkniDJI8JIkmSf6R1Dki8eM3zRkuCvP4Nc9QIX9aFyd-nheGgF66MOxkZR5r7OznJoxqoQtHDG_0Aw3Ik13nZe58nqLytqLd7r9fAQAA___xT1Hc
 
 statement ok
 CREATE TABLE nullables (a INT, b INT, c INT, PRIMARY KEY (a))
@@ -765,7 +737,6 @@ query T
 EXPLAIN (DISTSQL) SELECT array_agg(a) FROM (SELECT a FROM data WHERE b = 1 AND c = 1.0 AND d = 1.0 ORDER BY a)
 ----
 distribution: full
-vectorized: true
 ·
 • group (scalar)
 │
@@ -783,7 +754,6 @@ query T
 EXPLAIN (DISTSQL) SELECT json_agg(a) FROM (SELECT a FROM data WHERE b = 1 AND c = 1.0 AND d = 1.0 ORDER BY a)
 ----
 distribution: full
-vectorized: true
 ·
 • group (scalar)
 │
@@ -806,6 +776,7 @@ statement ok
 ALTER TABLE sorted_data SPLIT AT SELECT i FROM generate_series(1, 9) AS g(i)
 
 # Relocate the ten parts to the five nodes.
+retry
 statement ok
 ALTER TABLE sorted_data EXPERIMENTAL_RELOCATE
   SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i)
@@ -830,7 +801,6 @@ query T
 EXPLAIN (DISTSQL) SELECT a, max(b) FROM sorted_data GROUP BY a
 ----
 distribution: full
-vectorized: true
 ·
 • group (hash)
 │ group by: a
@@ -846,7 +816,6 @@ query T
 EXPLAIN (DISTSQL) SELECT a, max(b) FROM sorted_data GROUP BY a ORDER BY a
 ----
 distribution: full
-vectorized: true
 ·
 • group (streaming)
 │ group by: a
@@ -863,7 +832,6 @@ query T
 EXPLAIN (DISTSQL) SELECT c, min(b), a FROM sorted_data GROUP BY a, c
 ----
 distribution: full
-vectorized: true
 ·
 • group (streaming)
 │ group by: a
@@ -880,7 +848,6 @@ query T
 EXPLAIN (DISTSQL) SELECT c, min(b), a FROM sorted_data GROUP BY a, c ORDER BY a
 ----
 distribution: full
-vectorized: true
 ·
 • group (streaming)
 │ group by: a
@@ -897,7 +864,6 @@ query T
 EXPLAIN (DISTSQL) SELECT b, max(c) FROM sorted_data@foo GROUP BY b
 ----
 distribution: full
-vectorized: true
 ·
 • group (streaming)
 │ group by: b
@@ -917,7 +883,6 @@ query T
 EXPLAIN (DISTSQL) SELECT * FROM (SELECT a, max(c) FROM sorted_data GROUP BY a) JOIN (SELECT b, min(c) FROM sorted_data@foo GROUP BY b) ON a = b
 ----
 distribution: full
-vectorized: true
 ·
 • merge join
 │ equality: (a) = (b)
@@ -952,7 +917,6 @@ query T
 EXPLAIN (DISTSQL) SELECT sum(x) FROM (SELECT a, b::float + c AS x FROM data) GROUP BY a ORDER BY a
 ----
 distribution: full
-vectorized: true
 ·
 • group (streaming)
 │ group by: a
@@ -971,7 +935,6 @@ query T
 EXPLAIN (DISTSQL) SELECT sum(x) FROM (SELECT a, b::float + c AS x FROM data) WHERE a > x GROUP BY a ORDER BY a
 ----
 distribution: full
-vectorized: true
 ·
 • group (streaming)
 │ group by: a
@@ -997,6 +960,9 @@ Diagram: https://cockroachdb.github.io/distsqlplan/decode.html#eJzMl99v6jYUx9_3V
 statement ok
 CREATE TABLE data2 (a INT, b INT, PRIMARY KEY (a, b), INDEX(b));
 ALTER TABLE data2 SPLIT AT SELECT 1,i FROM generate_series(1, 9) AS g(i);
+
+retry
+statement ok
 ALTER TABLE data2 EXPERIMENTAL_RELOCATE
   SELECT ARRAY[i%5+1], i FROM generate_series(0, 9) AS g(i);
 
@@ -1024,8 +990,9 @@ group-by (streaming)
  ├── columns: b:2 count:7
  ├── grouping columns: b:2
  ├── internal-ordering: +2 opt(1)
- ├── stats: [rows=9.561793, distinct(2)=9.56179, null(2)=0]
+ ├── stats: [rows=9.56179, distinct(2)=9.56179, null(2)=0]
  ├── cost: 29.145618
+ ├── cost-flags: unbounded-cardinality
  ├── key: (2)
  ├── fd: (2)-->(7)
  ├── distribution: test
@@ -1035,6 +1002,7 @@ group-by (streaming)
  │    ├── constraint: /1/2: [/1 - /1]
  │    ├── stats: [rows=10, distinct(1)=1, null(1)=0, distinct(2)=9.56179, null(2)=0]
  │    ├── cost: 28.8200001
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (2)
  │    ├── fd: ()-->(1)
  │    ├── ordering: +2 opt(1) [actual: +2]
@@ -1069,7 +1037,6 @@ query T
 EXPLAIN (DISTSQL) SELECT b, count(*) FROM data2 WHERE a=1 GROUP BY b;
 ----
 distribution: full
-vectorized: true
 ·
 • group (streaming)
 │ group by: b
@@ -1091,7 +1058,6 @@ query T
 EXPLAIN (DISTSQL) SELECT sum(v) FROM data INNER LOOKUP JOIN uv ON (a=u) GROUP BY u ORDER BY u
 ----
 distribution: full
-vectorized: true
 ·
 • group (streaming)
 │ group by: u
@@ -1114,7 +1080,6 @@ query T
 EXPLAIN (DISTSQL) SELECT array_agg((a, a)) FROM data
 ----
 distribution: local
-vectorized: true
 ·
 • group (scalar)
 │

@@ -1,0 +1,13 @@
+echo
+----
+foo_counter 15
+foo_counter{database="1",application_name="5"} 1
+foo_counter{database="1",application_name="6"} 1
+foo_counter{database="1",application_name="7"} 1
+foo_counter{database="1",application_name="8"} 1
+foo_counter{database="1",application_name="9"} 1
+foo_counter{database="2",application_name="10"} 1
+foo_counter{database="2",application_name="11"} 1
+foo_counter{database="2",application_name="12"} 1
+foo_counter{database="2",application_name="13"} 1
+foo_counter{database="2",application_name="14"} 1

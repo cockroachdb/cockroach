@@ -3,10 +3,11 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { assert } from "chai";
+import Long from "long";
 
 import {
   aggregateNumericStats,
+  addExperimentStatsInfo,
   NumericStat,
   flattenStatementStats,
 } from "./appStats";
@@ -63,19 +64,99 @@ describe("addNumericStats", () => {
       record(ab, countAB, v);
     });
 
-    assert.approximately(a.mean, 2.2, 0.0000001);
-    assert.approximately(a.mean, sumA / countA, 0.0000001);
-    assert.approximately(b.mean, sumB / countB, 0.0000001);
-    assert.approximately(ab.mean, sumAB / countAB, 0.0000001);
+    expect(a.mean).toBeCloseTo(2.2, 6);
+    expect(a.mean).toBeCloseTo(sumA / countA, 6);
+    expect(b.mean).toBeCloseTo(sumB / countB, 6);
+    expect(ab.mean).toBeCloseTo(sumAB / countAB, 6);
 
     const combined = aggregateNumericStats(a, b, countA, countB);
 
-    assert.approximately(combined.mean, ab.mean, 0.0000001);
-    assert.approximately(combined.squared_diffs, ab.squared_diffs, 0.0000001);
+    expect(combined.mean).toBeCloseTo(ab.mean, 6);
+    expect(combined.squared_diffs).toBeCloseTo(ab.squared_diffs, 6);
 
     const reversed = aggregateNumericStats(b, a, countB, countA);
 
-    assert.deepEqual(reversed, combined);
+    expect(reversed).toEqual(combined);
+  });
+});
+
+describe("addExperimentStatsInfo", () => {
+  it("returns empty object when both inputs are null/undefined", () => {
+    expect(addExperimentStatsInfo(null, null)).toEqual({});
+    expect(addExperimentStatsInfo(undefined, undefined)).toEqual({});
+  });
+
+  it("returns b when a is null", () => {
+    const b = {
+      count: Long.fromInt(3),
+      run_lat: { mean: 1.5, squared_diffs: 0.5 },
+      plan_lat: { mean: 0.8, squared_diffs: 0.2 },
+    };
+    expect(addExperimentStatsInfo(null, b)).toBe(b);
+  });
+
+  it("returns a when b is null", () => {
+    const a = {
+      count: Long.fromInt(2),
+      run_lat: { mean: 1.0, squared_diffs: 0.3 },
+      plan_lat: { mean: 0.5, squared_diffs: 0.1 },
+    };
+    expect(addExperimentStatsInfo(a, null)).toBe(a);
+  });
+
+  it("aggregates two non-null inputs", () => {
+    const a = {
+      count: Long.fromInt(3),
+      run_lat: { mean: 2.0, squared_diffs: 1.0 },
+      plan_lat: { mean: 1.0, squared_diffs: 0.5 },
+    };
+    const b = {
+      count: Long.fromInt(2),
+      run_lat: { mean: 3.0, squared_diffs: 0.5 },
+      plan_lat: { mean: 1.5, squared_diffs: 0.2 },
+    };
+
+    const result = addExperimentStatsInfo(a, b);
+
+    // count should be summed.
+    expect(result.count.toInt()).toBe(5);
+
+    // run_lat and plan_lat should produce finite, non-NaN values.
+    expect(Number.isFinite(result.run_lat.mean)).toBe(true);
+    expect(Number.isNaN(result.run_lat.mean)).toBe(false);
+    expect(Number.isFinite(result.run_lat.squared_diffs)).toBe(true);
+    expect(Number.isNaN(result.run_lat.squared_diffs)).toBe(false);
+
+    expect(Number.isFinite(result.plan_lat.mean)).toBe(true);
+    expect(Number.isNaN(result.plan_lat.mean)).toBe(false);
+    expect(Number.isFinite(result.plan_lat.squared_diffs)).toBe(true);
+    expect(Number.isNaN(result.plan_lat.squared_diffs)).toBe(false);
+
+    // Weighted mean: (2.0*3 + 3.0*2) / 5 = 2.4
+    expect(result.run_lat.mean).toBeCloseTo(2.4, 6);
+    // Weighted mean: (1.0*3 + 1.5*2) / 5 = 1.2
+    expect(result.plan_lat.mean).toBeCloseTo(1.2, 6);
+  });
+
+  it("handles zero counts without producing NaN", () => {
+    const a = {
+      count: Long.fromInt(0),
+      run_lat: { mean: 0, squared_diffs: 0 },
+      plan_lat: { mean: 0, squared_diffs: 0 },
+    };
+    const b = {
+      count: Long.fromInt(0),
+      run_lat: { mean: 0, squared_diffs: 0 },
+      plan_lat: { mean: 0, squared_diffs: 0 },
+    };
+
+    const result = addExperimentStatsInfo(a, b);
+
+    expect(result.count.toInt()).toBe(0);
+    // With zero counts the function uses countA || 1 / countB || 1
+    // to avoid division by zero — verify no NaN.
+    expect(Number.isNaN(result.run_lat.mean)).toBe(false);
+    expect(Number.isNaN(result.plan_lat.mean)).toBe(false);
   });
 });
 
@@ -172,21 +253,20 @@ describe("flattenStatementStats", () => {
 
     const flattened = flattenStatementStats(stats);
 
-    assert.equal(flattened.length, stats.length);
+    expect(flattened).toHaveLength(stats.length);
 
     for (let i = 0; i < flattened.length; i++) {
-      assert.equal(flattened[i].statement, stats[i].key.key_data.query);
-      assert.equal(
-        flattened[i].statement_summary,
+      expect(flattened[i].statement).toBe(stats[i].key.key_data.query);
+      expect(flattened[i].statement_summary).toBe(
         stats[i].key.key_data.query_summary,
       );
-      assert.equal(flattened[i].app, stats[i].key.key_data.app);
-      assert.equal(flattened[i].distSQL, stats[i].key.key_data.distSQL);
-      assert.equal(flattened[i].vec, stats[i].key.key_data.vec);
-      assert.equal(flattened[i].full_scan, stats[i].key.key_data.full_scan);
-      assert.equal(flattened[i].node_id, stats[i].key.node_id);
+      expect(flattened[i].app).toBe(stats[i].key.key_data.app);
+      expect(flattened[i].distSQL).toBe(stats[i].key.key_data.distSQL);
+      expect(flattened[i].vec).toBe(stats[i].key.key_data.vec);
+      expect(flattened[i].full_scan).toBe(stats[i].key.key_data.full_scan);
+      expect(flattened[i].node_id).toBe(stats[i].key.node_id);
 
-      assert.equal(flattened[i].stats, stats[i].stats);
+      expect(flattened[i].stats).toBe(stats[i].stats);
     }
   });
 });

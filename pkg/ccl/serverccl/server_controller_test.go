@@ -18,7 +18,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
@@ -89,8 +89,8 @@ ALTER TENANT application GRANT CAPABILITY can_use_nodelocal_storage`)
 
 	var tenantID uint64
 	db.QueryRow(t, "SELECT id FROM [SHOW TENANT application]").Scan(&tenantID)
-	tc.WaitForTenantCapabilities(t, roachpb.MustMakeTenantID(tenantID), map[tenantcapabilities.ID]string{
-		tenantcapabilities.CanUseNodelocalStorage: "true",
+	tc.WaitForTenantCapabilities(t, roachpb.MustMakeTenantID(tenantID), map[tenantcapabilitiespb.ID]string{
+		tenantcapabilitiespb.CanUseNodelocalStorage: "true",
 	})
 
 	// Wait for tenant to start up on all nodes.
@@ -500,7 +500,7 @@ func TestServerStartStop(t *testing.T) {
 		return errors.New("server still alive")
 	})
 
-	log.Infof(ctx, "end of test - test server will now shut down ungracefully")
+	log.Dev.Infof(ctx, "end of test - test server will now shut down ungracefully")
 
 	// Monitor the state of the test server stopper. We use this logging
 	// to troubleshoot slow drains.
@@ -513,9 +513,9 @@ func TestServerStartStop(t *testing.T) {
 			case <-time.After(200 * time.Millisecond):
 				select {
 				case <-s.Stopper().ShouldQuiesce():
-					log.Infof(ctx, "test server is quiescing")
+					log.Dev.Infof(ctx, "test server is quiescing")
 				case <-s.Stopper().IsStopped():
-					log.Infof(ctx, "test server is stopped")
+					log.Dev.Infof(ctx, "test server is stopped")
 					return
 				default:
 				}
@@ -526,7 +526,7 @@ func TestServerStartStop(t *testing.T) {
 
 	defer time.AfterFunc(10*time.Second, func() {
 		log.DumpStacks(ctx, "slow quiesce")
-		log.Fatalf(ctx, "test took too long to shut down")
+		log.Dev.Fatalf(ctx, "test took too long to shut down")
 	}).Stop()
 	s.Stopper().Stop(ctx)
 }
@@ -563,16 +563,18 @@ func TestServerControllerLoginLogout(t *testing.T) {
 
 	ctx := context.Background()
 
-	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(110002),
-	})
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
+	isExternal := srv.DeploymentMode().IsExternal()
 
-	client, err := s.GetAuthenticatedHTTPClient(false, serverutils.SingleTenantSession)
+	sessionType := serverutils.SingleTenantSession
+	client, err := s.GetAuthenticatedHTTPClient(false, sessionType)
 	require.NoError(t, err)
 
-	resp, err := client.Post(s.AdminURL().WithPath("/logout").String(), "", nil)
+	// Using `Get` here instead of `Post` because in external process mode, the
+	// server returns a `StatusMethodNotAllowed` error when using `Post`.
+	resp, err := client.Get(s.AdminURL().WithPath("/logout").String())
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -582,18 +584,33 @@ func TestServerControllerLoginLogout(t *testing.T) {
 	for i, c := range resp.Cookies() {
 		cookieNames[i] = c.Name
 		cookieValues[i] = c.Value
-		require.True(t, c.Secure)
+		// Secure isn't set in external-mode but it is set in other modes.
+		// See https://github.com/cockroachdb/cockroach/pull/143354#pullrequestreview-2751413632.
+		if !isExternal {
+			require.True(t, c.Secure)
+		}
 		if c.Name == "session" {
 			require.True(t, c.HttpOnly)
 		}
 	}
-	require.ElementsMatch(t, []string{"session", "tenant"}, cookieNames)
-	require.ElementsMatch(t, []string{"", ""}, cookieValues)
+	expectedCookies := []string{"session"}
+	expectedValues := []string{""}
+	if !isExternal {
+		expectedCookies = append(expectedCookies, "tenant")
+		expectedValues = append(expectedValues, "")
+	}
+	require.ElementsMatch(t, expectedCookies, cookieNames)
+	require.ElementsMatch(t, expectedValues, cookieValues)
 
+	// This part of the test doesn't run in external-process mode since we can't
+	// set a session cookie with name `tenant`—that's only supported by HTTP
+	// servers in the system tenant, which also handle routing for secondary
+	// tenants.
+	if isExternal {
+		return
+	}
 	// Need a new server because the HTTP Client is memoized.
-	srv2 := serverutils.StartServerOnly(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(110002),
-	})
+	srv2 := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer srv2.Stopper().Stop(ctx)
 	s2 := srv2.ApplicationLayer()
 
@@ -623,7 +640,7 @@ func TestServerControllerLoginLogout(t *testing.T) {
 	require.NoError(t, err)
 	cookieJar.SetCookies(s2.AdminURL().URL, []*http.Cookie{
 		{
-			Name:  "multitenant-session",
+			Name:  "tenant",
 			Value: "abc-123",
 		},
 	})

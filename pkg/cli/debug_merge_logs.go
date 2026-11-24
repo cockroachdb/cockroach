@@ -11,6 +11,7 @@ import (
 	"container/heap"
 	"context"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -349,12 +350,11 @@ func findLogFiles(
 	}
 	var files []fileInfo
 	for _, p := range paths {
-		// NB: come go1.16, we should use WalkDir here as it is more efficient.
-		if err := filepath.Walk(p, func(p string, info os.FileInfo, err error) error {
+		if err := filepath.WalkDir(p, func(p string, d fs.DirEntry, err error) error {
 			if err != nil {
 				return err
 			}
-			if info.IsDir() {
+			if d.IsDir() {
 				// Don't act on the directory itself, Walk will visit it for us.
 				return nil
 			}

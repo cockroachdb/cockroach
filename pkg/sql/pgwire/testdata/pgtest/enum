@@ -7,10 +7,12 @@
 
 # TODO(richardjcai): Support let command similar to logic tests to
 # programmatically get the table id.
-# The first table created has id 58.
+# The OID below must reference a descriptor ID that is not yet
+# allocated (user tables start at 100, this test runs before any user
+# table is created). Bump if/when more system tables are added.
 
 send crdb_only
-Parse {"Name": "s1", "Query": "SELECT $1", "ParameterOIDs": [100080]}
+Parse {"Name": "s1", "Query": "SELECT $1", "ParameterOIDs": [100200]}
 Sync
 ----
 

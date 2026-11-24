@@ -6,13 +6,11 @@
 package tests
 
 var libPQBlocklist = blocklist{
-	"pq.ExampleConnectorWithNoticeHandler":           "unknown",
 	"pq.TestBinaryByteSliceToInt":                    "41547",
 	"pq.TestBinaryByteSlicetoUUID":                   "41547",
 	"pq.TestConnListen":                              "41522",
 	"pq.TestConnUnlisten":                            "41522",
 	"pq.TestConnUnlistenAll":                         "41522",
-	"pq.TestConnectorWithNoticeHandler_Simple":       "unknown",
 	"pq.TestConnectorWithNotificationHandler_Simple": "unknown",
 	"pq.TestCopyInRaiseStmtTrigger":                  "5807",
 	"pq.TestCopyInTypes":                             "5807",
@@ -32,6 +30,11 @@ var libPQBlocklist = blocklist{
 	"pq.TestRowsColumnTypes":                         "41688",
 	"pq.TestRuntimeParameters":                       "12137",
 	"pq.TestStringWithNul":                           "26366",
+	// The following tests fail because they weren't designed for the
+	// autocommit_before_ddl behaviour in CRDB.
+	"pq.TestCopyInWrongType":      "142038",
+	"pq.TestCopyInMultipleValues": "142038",
+	"pq.TestCopyFromError":        "142038",
 }
 
 // The test names here do not include "pq." since `go test -list` returns

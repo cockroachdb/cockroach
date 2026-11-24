@@ -44,6 +44,7 @@ const (
 	StExtent                    = AggregatorSpec_ST_EXTENT
 	StUnion                     = AggregatorSpec_ST_UNION
 	StCollect                   = AggregatorSpec_ST_COLLECT
+	StAsMVT                     = AggregatorSpec_ST_ASMVT
 	CovarPop                    = AggregatorSpec_COVAR_POP
 	CovarSamp                   = AggregatorSpec_COVAR_SAMP
 	RegrIntercept               = AggregatorSpec_REGR_INTERCEPT

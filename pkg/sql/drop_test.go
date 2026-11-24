@@ -10,6 +10,8 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -23,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
@@ -31,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -100,7 +102,8 @@ func descExists(sqlDB *gosql.DB, exists bool, id descpb.ID) error {
 func TestDropDatabase(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := createTestServerParamsAllowTenants()
+
+	var params base.TestServerArgs
 	ctx, cancel := context.WithCancel(context.Background())
 	params.Knobs.GCJob = &sql.GCJobTestingKnobs{
 		RunBeforeResume: func(jobID jobspb.JobID) error {
@@ -125,7 +128,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 
 	tbDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "t", "kv")
 	var dbDesc catalog.DatabaseDescriptor
-	require.NoError(t, sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
+	require.NoError(t, sqltestutils.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
 		dbDesc, err = col.ByIDWithoutLeased(txn.KV()).Get().Database(ctx, tbDesc.GetParentID())
 		return err
 	}))
@@ -203,7 +206,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	// Job still running, waiting for GC.
 	// TODO (lucy): Maybe this test API should use an offset starting
 	// from the most recent job instead.
-	if err := jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeNewSchemaChange, jobs.StatusSucceeded, jobs.Record{
+	if err := jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeNewSchemaChange, jobs.StateSucceeded, jobs.Record{
 		Username:      username.RootUserName(),
 		Description:   "DROP DATABASE t CASCADE",
 		DescriptorIDs: nil,
@@ -261,9 +264,39 @@ CREATE DATABASE t;
 func TestDropDatabaseDeleteData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := createTestServerParamsAllowTenants()
+
+	var params base.TestServerArgs
 	// Speed up mvcc queue scan.
 	params.ScanMaxIdleTime = time.Millisecond
+
+	// fullReconcilierStarted is used to block the full reconciliation from
+	// starting before we drop the database. This is used to avoid a race
+	// condition where the full reconciliation starts after we drop the database,
+	// it will ignore the dropped database. Then, there is a race between the
+	// SQLWatcher and the GC job where the SQLWatcher might write a zone config
+	// of table1 before table2, while the GC queue might not know that this range
+	// needs to be split because it has different span config.
+	//
+	// zoneCfgRangeFeedStarted is used to signal that the zone config range feed
+	// started and that the full reconciliation has finished. This is used to
+	// avoid a race where we update `system.zones` before the full reconciliation
+	// of zone configs has finished. If we write to `system.zones` before that,
+	// our write will not be reconciled.
+	var fullReconcilierStarted, zoneCfgRangeFeedStarted sync.WaitGroup
+	fullReconcilierStarted.Add(1)
+	zoneCfgRangeFeedStarted.Add(1)
+	// Use sync.Once to ensure Done() is only called once, since
+	// OnWatchForZoneConfigUpdatesEstablished may be called multiple times when
+	// running with external test tenants.
+	var zoneCfgRangeFeedStartedOnce sync.Once
+	params.Knobs.SpanConfig = &spanconfig.TestingKnobs{
+		OnFullReconcilerStart: func() {
+			fullReconcilierStarted.Wait()
+		},
+		OnWatchForZoneConfigUpdatesEstablished: func() {
+			zoneCfgRangeFeedStartedOnce.Do(zoneCfgRangeFeedStarted.Done)
+		},
+	}
 
 	srv, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(context.Background())
@@ -273,10 +306,19 @@ func TestDropDatabaseDeleteData(t *testing.T) {
 	systemDB := srv.SystemLayer().SQLConn(t)
 	_, err := systemDB.Exec(`SET CLUSTER SETTING sql.gc_job.wait_for_gc.interval = '1s';`)
 	require.NoError(t, err)
-
 	// Refresh protected timestamp cache immediately to make MVCC GC queue to
 	// process GC immediately.
 	_, err = systemDB.Exec(`SET CLUSTER SETTING kv.protectedts.poll_interval = '1s';`)
+	require.NoError(t, err)
+
+	// Turn off storage_coalesce_adjacent to avoid a race between the GC and the
+	// split queues where a range might get GCed before splitting. This is
+	// more likely to happen in this test since increase the GC queue scan rate.
+	// If we don't turn the setting off, setting the TTL to table 1 might cause
+	// table 2 to also get purged.
+	_, err = systemDB.Exec(`SET CLUSTER SETTING spanconfig.storage_coalesce_adjacent.enabled = 'false';`)
+	require.NoError(t, err)
+	_, err = systemDB.Exec(`SET CLUSTER SETTING spanconfig.tenant_coalesce_adjacent.enabled = 'false';`)
 	require.NoError(t, err)
 
 	// Disable strict GC TTL enforcement because we're going to shove a zero-value
@@ -298,7 +340,7 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 	tbDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "t", "kv")
 	tb2Desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "t", "kv2")
 	var dbDesc catalog.DatabaseDescriptor
-	require.NoError(t, sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
+	require.NoError(t, sqltestutils.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
 		dbDesc, err = col.ByIDWithoutLeased(txn.KV()).Get().Database(ctx, tbDesc.GetParentID())
 		return err
 	}))
@@ -317,6 +359,12 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 		t.Fatal(err)
 	}
 
+	// Unblock the full reconciliation.
+	fullReconcilierStarted.Done()
+
+	// Wait for the zone config range feed to start.
+	zoneCfgRangeFeedStarted.Wait()
+
 	if _, err := sqlDB.Exec(`DROP DATABASE t CASCADE`); err != nil {
 		t.Fatal(err)
 	}
@@ -326,7 +374,7 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
 	if err := jobutils.VerifySystemJob(t, sqlRun, 0,
-		jobspb.TypeNewSchemaChange, jobs.StatusSucceeded, jobs.Record{
+		jobspb.TypeNewSchemaChange, jobs.StateSucceeded, jobs.Record{
 			Username:    username.RootUserName(),
 			Description: "DROP DATABASE t CASCADE",
 		}); err != nil {
@@ -356,7 +404,7 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 	}
 
 	testutils.SucceedsSoon(t, func() error {
-		return jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChangeGC, jobs.StatusRunning, jobs.Record{
+		return jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChangeGC, jobs.StateRunning, jobs.Record{
 			Username:    username.NodeUserName(),
 			Description: "GC for DROP DATABASE t CASCADE",
 			DescriptorIDs: descpb.IDs{
@@ -384,7 +432,7 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 	tests.CheckKeyCountIncludingTombstoned(t, srv.StorageLayer(), table2Span, 0)
 
 	testutils.SucceedsSoon(t, func() error {
-		return jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChangeGC, jobs.StatusSucceeded, jobs.Record{
+		return jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChangeGC, jobs.StateSucceeded, jobs.Record{
 			Username:    username.NodeUserName(),
 			Description: "GC for DROP DATABASE t CASCADE",
 			DescriptorIDs: descpb.IDs{
@@ -404,7 +452,7 @@ func TestDropIndex(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	const chunkSize = 200
-	params, _ := createTestServerParamsAllowTenants()
+	var params base.TestServerArgs
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			BackfillChunkSize: chunkSize,
@@ -453,7 +501,7 @@ func TestDropIndex(t *testing.T) {
 		t.Fatalf("table descriptor still contains index after index is dropped")
 	}
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
-	if err := jobutils.VerifySystemJob(t, sqlRun, 1, jobspb.TypeNewSchemaChange, jobs.StatusSucceeded, jobs.Record{
+	if err := jobutils.VerifySystemJob(t, sqlRun, 1, jobspb.TypeNewSchemaChange, jobs.StateSucceeded, jobs.Record{
 		Username:    username.RootUserName(),
 		Description: `DROP INDEX t.public.kv@foo`,
 	}); err != nil {
@@ -461,7 +509,7 @@ func TestDropIndex(t *testing.T) {
 	}
 
 	testutils.SucceedsSoon(t, func() error {
-		if err := jobutils.VerifyRunningSystemJob(t, sqlRun, 1, jobspb.TypeSchemaChangeGC, sql.RunningStatusWaitingForMVCCGC, jobs.Record{
+		if err := jobutils.VerifyRunningSystemJob(t, sqlRun, 1, jobspb.TypeSchemaChangeGC, sql.StatusWaitingForMVCCGC, jobs.Record{
 			Username:    username.NodeUserName(),
 			Description: `GC for DROP INDEX t.public.kv@foo`,
 			DescriptorIDs: descpb.IDs{
@@ -485,7 +533,7 @@ func TestDropIndex(t *testing.T) {
 	newIdxSpan := tableDesc.IndexSpan(codec, newIdx.GetID())
 
 	testutils.SucceedsSoon(t, func() error {
-		if err := jobutils.VerifyRunningSystemJob(t, sqlRun, 2, jobspb.TypeSchemaChangeGC, sql.RunningStatusWaitingForMVCCGC, jobs.Record{
+		if err := jobutils.VerifyRunningSystemJob(t, sqlRun, 2, jobspb.TypeSchemaChangeGC, sql.StatusWaitingForMVCCGC, jobs.Record{
 			Username:    username.NodeUserName(),
 			Description: `GC for CREATE INDEX foo ON t.public.kv (v)`,
 			DescriptorIDs: descpb.IDs{
@@ -493,7 +541,7 @@ func TestDropIndex(t *testing.T) {
 			},
 		}); err != nil {
 			// If the job is not running, check if it already succeeded.
-			if secondErr := jobutils.VerifySystemJob(t, sqlRun, 2, jobspb.TypeSchemaChangeGC, jobs.StatusSucceeded, jobs.Record{
+			if secondErr := jobutils.VerifySystemJob(t, sqlRun, 2, jobspb.TypeSchemaChangeGC, jobs.StateSucceeded, jobs.Record{
 				Username:    username.NodeUserName(),
 				Description: `GC for CREATE INDEX foo ON t.public.kv (v)`,
 				DescriptorIDs: descpb.IDs{
@@ -519,7 +567,7 @@ func TestDropIndexWithZoneConfigOSS(t *testing.T) {
 	const chunkSize = 200
 	const numRows = 2*chunkSize + 1
 
-	params, _ := createTestServerParamsAllowTenants()
+	var params base.TestServerArgs
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{BackfillChunkSize: chunkSize},
 	}
@@ -584,7 +632,7 @@ func TestDropTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParamsAllowTenants()
+	var params base.TestServerArgs
 	ctx, cancel := context.WithCancel(context.Background())
 	params.Knobs.GCJob = &sql.GCJobTestingKnobs{
 		RunBeforeResume: func(jobID jobspb.JobID) error {
@@ -598,7 +646,8 @@ func TestDropTable(t *testing.T) {
 	s := srv.ApplicationLayer()
 	codec := s.Codec()
 
-	numRows := 2*row.TableTruncateChunkSize + 1
+	const deprecatedTableTruncateChunkSize = 600
+	numRows := 2*deprecatedTableTruncateChunkSize + 1
 	if err := tests.CreateKVTable(sqlDB, "kv", numRows); err != nil {
 		t.Fatal(err)
 	}
@@ -656,7 +705,7 @@ func TestDropTable(t *testing.T) {
 	// Job still running, waiting for GC.
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
 	if err := jobutils.VerifySystemJob(t, sqlRun, 1,
-		jobspb.TypeNewSchemaChange, jobs.StatusSucceeded, jobs.Record{
+		jobspb.TypeNewSchemaChange, jobs.StateSucceeded, jobs.Record{
 			Username:      username.RootUserName(),
 			Description:   `DROP TABLE t.public.kv`,
 			DescriptorIDs: nil,
@@ -686,7 +735,8 @@ func TestDropTable(t *testing.T) {
 func TestDropTableDeleteData(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := createTestServerParamsAllowTenants()
+
+	var params base.TestServerArgs
 	// Speed up mvcc queue scan.
 	params.ScanMaxIdleTime = time.Millisecond
 
@@ -712,7 +762,8 @@ func TestDropTableDeleteData(t *testing.T) {
 	// TTL into the system with AddImmediateGCZoneConfig.
 	defer sqltestutils.DisableGCTTLStrictEnforcement(t, systemDB)()
 
-	const numRows = 2*row.TableTruncateChunkSize + 1
+	const deprecatedTableTruncateChunkSize = 600
+	const numRows = 2*deprecatedTableTruncateChunkSize + 1
 	const numKeys = 3 * numRows
 	const numTables = 5
 	var descs []catalog.TableDescriptor
@@ -771,7 +822,7 @@ func TestDropTableDeleteData(t *testing.T) {
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
 	for i := 0; i < numTables; i++ {
 		if err := jobutils.VerifySystemJob(t, sqlRun, numTables+i,
-			jobspb.TypeNewSchemaChange, jobs.StatusSucceeded, jobs.Record{
+			jobspb.TypeNewSchemaChange, jobs.StateSucceeded, jobs.Record{
 				Username:    username.RootUserName(),
 				Description: fmt.Sprintf(`DROP TABLE t.public.%s`, descs[i].GetName()),
 			}); err != nil {
@@ -797,7 +848,7 @@ func TestDropTableDeleteData(t *testing.T) {
 
 		// Ensure that the job is marked as succeeded.
 		if err := jobutils.VerifySystemJob(t, sqlRun, numTables+i,
-			jobspb.TypeNewSchemaChange, jobs.StatusSucceeded, jobs.Record{
+			jobspb.TypeNewSchemaChange, jobs.StateSucceeded, jobs.Record{
 				Username:    username.RootUserName(),
 				Description: fmt.Sprintf(`DROP TABLE t.public.%s`, descs[i].GetName()),
 			}); err != nil {
@@ -807,7 +858,7 @@ func TestDropTableDeleteData(t *testing.T) {
 		// Ensure that the gc job is marked as succeeded.
 		testutils.SucceedsSoon(t, func() error {
 			return jobutils.VerifySystemJob(t, sqlRun, numTables+i,
-				jobspb.TypeSchemaChangeGC, jobs.StatusSucceeded, jobs.Record{
+				jobspb.TypeSchemaChangeGC, jobs.StateSucceeded, jobs.Record{
 					Username:    username.NodeUserName(),
 					Description: fmt.Sprintf(`GC for DROP TABLE t.public.%s`, descs[i].GetName()),
 					DescriptorIDs: descpb.IDs{
@@ -846,8 +897,7 @@ func TestDropTableWhileUpgradingFormat(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-
-	params, _ := createTestServerParamsAllowTenants()
+	var params base.TestServerArgs
 	params.ScanMaxIdleTime = time.Millisecond
 	srv, sqlDBRaw, kvDB := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(ctx)
@@ -891,7 +941,7 @@ func TestDropTableWhileUpgradingFormat(t *testing.T) {
 
 	// Simulate a migration upgrading the table descriptor's format version after
 	// the table has been dropped but before the truncation has occurred.
-	if err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
+	if err := sqltestutils.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
 		tbl, err := col.ByIDWithoutLeased(txn.KV()).Get().Table(ctx, tableDesc.ID)
 		if err != nil {
 			return err
@@ -926,8 +976,8 @@ func TestDropTableWhileUpgradingFormat(t *testing.T) {
 func TestDropTableInTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := createTestServerParamsAllowTenants()
-	s, sqlDB, _ := serverutils.StartServer(t, params)
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
@@ -939,6 +989,9 @@ CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
 
 	tx, err := sqlDB.Begin()
 	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(`SET LOCAL autocommit_before_ddl = false`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -963,7 +1016,8 @@ CREATE TABLE t.kv (k CHAR PRIMARY KEY, v CHAR);
 func TestDropAndCreateTable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := createTestServerParamsAllowTenants()
+
+	var params base.TestServerArgs
 	params.UseDatabase = "test"
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
@@ -1007,7 +1061,7 @@ func TestCommandsWhileTableBeingDropped(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParamsAllowTenants()
+	var params base.TestServerArgs
 	// Block schema changers so that the table we're about to DROP is not
 	// actually dropped; it will be left in the "deleted" state.
 	params.Knobs = base.TestingKnobs{
@@ -1050,10 +1104,10 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	}
 }
 
-// TestDropIndexHandlesRetriableErrors is a regression test against #48474.
-// The bug was that retriable errors, which are generally possible, were being
+// TestDropIndexHandlesRetryableErrors is a regression test against #48474.
+// The bug was that retryable errors, which are generally possible, were being
 // treated as assertion failures.
-func TestDropIndexHandlesRetriableErrors(t *testing.T) {
+func TestDropIndexHandlesRetryableErrors(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
@@ -1089,6 +1143,7 @@ func TestDropIndexHandlesRetriableErrors(t *testing.T) {
 	// after planning has concluded.
 
 	tdb := sqlutils.MakeSQLRunner(conn)
+	tdb.Exec(t, "SET create_table_with_schema_locked=false")
 	tdb.Exec(t, "CREATE TABLE foo (i INT PRIMARY KEY, j INT, INDEX j_idx (j))")
 
 	var tableID uint32
@@ -1103,6 +1158,8 @@ WHERE
 
 	codec := s.Codec()
 	txn, err := conn.Begin()
+	require.NoError(t, err)
+	_, err = txn.Exec("SET LOCAL autocommit_before_ddl = false")
 	require.NoError(t, err)
 	// Let's find out our transaction ID for our transaction by running a query.
 	// We'll also use this query to install a refresh span over the table data.
@@ -1157,7 +1214,7 @@ WHERE
 
 	// Now set up a filter to detect when the DROP INDEX execution will begin and
 	// inject an error forcing a refresh above the conflicting write which will
-	// fail. We'll want to ensure that we get a retriable error. Use the below
+	// fail. We'll want to ensure that we get a retryable error. Use the below
 	// pattern to detect when the user transaction has finished planning and is
 	// now executing: we don't want to inject the error during planning.
 	rf.setFilter(func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error {
@@ -1199,8 +1256,7 @@ func TestDropIndexOnHashShardedIndexWithStoredShardColumn(t *testing.T) {
 
 	// Start a test server and connect to it with notice handler (so we can get and check notices from running queries).
 	ctx := context.Background()
-	params, _ := createTestServerParamsAllowTenants()
-	srv := serverutils.StartServerOnly(t, params)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
 
 	s := srv.ApplicationLayer()
@@ -1235,7 +1291,7 @@ func TestDropIndexOnHashShardedIndexWithStoredShardColumn(t *testing.T) {
 	var tableDesc catalog.TableDescriptor
 	query = `SELECT id FROM system.namespace WHERE name = 'tbl'`
 	tdb.QueryRow(t, query).Scan(&tableID)
-	require.NoError(t, sql.TestingDescsTxn(ctx, s,
+	require.NoError(t, sqltestutils.TestingDescsTxn(ctx, s,
 		func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
 			tableDesc, err = col.ByIDWithoutLeased(txn.KV()).Get().Table(ctx, tableID)
 			return err
@@ -1253,7 +1309,7 @@ func TestDropIndexOnHashShardedIndexWithStoredShardColumn(t *testing.T) {
 	tdb.Exec(t, query)
 
 	// Assert that the index is dropped but the shard column remains after dropping the index.
-	require.NoError(t, sql.TestingDescsTxn(ctx, s,
+	require.NoError(t, sqltestutils.TestingDescsTxn(ctx, s,
 		func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
 			tableDesc, err = col.ByIDWithoutLeased(txn.KV()).Get().Table(ctx, tableID)
 			return err
@@ -1283,8 +1339,8 @@ func TestDropIndexOnHashShardedIndexWithStoredShardColumn(t *testing.T) {
 func TestDropDatabaseWithForeignKeys(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := createTestServerParamsAllowTenants()
-	srv, sqlDB, kvDB := serverutils.StartServer(t, params)
+
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(context.Background())
 
 	s := srv.ApplicationLayer()
@@ -1338,14 +1394,217 @@ ORDER BY
 	tests.CheckKeyCountIncludingTombstoned(t, srv.StorageLayer(), childDesc.TableSpan(codec), 0)
 }
 
+// TestCreateTableRollbackCleansBackrefs verifies that when a CREATE TABLE
+// with an inline FOREIGN KEY constraint, a user-defined type column, a
+// sequence default, and a UDF default is rolled back (because the schema change
+// job fails), the InboundFK back-reference on the referenced table, the type
+// descriptor's back-reference, the sequence's DependedOnBy, and the function
+// descriptor's DependedOnBy are all properly cleaned up.
+//
+// This is a regression test for bugs where rollbackSchemaChange() would mark
+// the new table as Dropped and GC it, but never remove the InboundFK entry
+// from the referenced table, the table's ID from the type descriptor's
+// ReferencingDescriptorIDs, the sequence's DependedOnBy entry, or the function
+// descriptor's DependedOnBy entry, leaving orphaned back-references to a
+// non-existent descriptor.
+func TestCreateTableRollbackCleansBackrefs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	// injectedJobError is a permanent error that will cause the schema change
+	// job for the new table to fail permanently and trigger rollback.
+	injectedJobError := jobs.MarkAsPermanentJobError(
+		errors.New("injected error to force rollback"),
+	)
+
+	// Track the ID of the child table so we can target its schema change job.
+	var childTableID uint32
+	var srv serverutils.TestServerInterface
+
+	params := base.TestServerArgs{}
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunBeforeResume: func(jobID jobspb.JobID) error {
+				id := atomic.LoadUint32(&childTableID)
+				if id == 0 {
+					return nil
+				}
+				// Only fail schema change jobs that target our child table.
+				scJob, err := srv.ApplicationLayer().JobRegistry().(*jobs.Registry).LoadJob(ctx, jobID)
+				if err != nil {
+					return err
+				}
+				for _, descID := range scJob.Payload().DescriptorIDs {
+					if uint32(descID) == id {
+						return injectedJobError
+					}
+				}
+				return nil
+			},
+		},
+		// Decrease the adopt loop interval so that retries happen quickly.
+		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+	}
+
+	var sqlDB *gosql.DB
+	var kvDB *kv.DB
+	srv, sqlDB, kvDB = serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(ctx)
+	codec := srv.ApplicationLayer().Codec()
+	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
+	systemDB := srv.SystemLayer().SQLConn(t)
+
+	// Disable the declarative schema changer so we exercise the legacy path.
+	sqlRun.Exec(t, `SET use_declarative_schema_changer = 'off'`)
+	sqlRun.Exec(t, `SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off'`)
+
+	// Configure fast GC so the child descriptor is fully deleted (not just
+	// DROPPED) before we check invalid_objects. This reproduces the exact
+	// production error: "referenced descriptor not found" vs "is dropped".
+	defer sqltestutils.DisableGCTTLStrictEnforcement(t, systemDB)()
+	_, err := systemDB.Exec(`SET CLUSTER SETTING sql.gc_job.wait_for_gc.interval = '1s'`)
+	require.NoError(t, err)
+	_, err = systemDB.Exec(`SET CLUSTER SETTING kv.protectedts.poll_interval = '1s'`)
+	require.NoError(t, err)
+
+	// Create the referenced (parent) table, a user-defined type, a sequence,
+	// and a user-defined function.
+	sqlRun.Exec(t, `CREATE DATABASE t`)
+	sqlRun.Exec(t, `USE t`)
+	sqlRun.Exec(t, `CREATE TABLE t.parent (id INT PRIMARY KEY)`)
+	sqlRun.Exec(t, `CREATE TYPE t.my_enum AS ENUM ('a', 'b', 'c')`)
+	sqlRun.Exec(t, `CREATE SEQUENCE t.my_seq`)
+	sqlRun.Exec(t, `CREATE FUNCTION t.my_func() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$`)
+
+	parentDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "t", "parent")
+	require.Empty(t, parentDesc.InboundForeignKeys(),
+		"parent should have no InboundFKs before child creation")
+
+	typDesc := desctestutils.TestingGetPublicTypeDescriptor(kvDB, codec, "t", "my_enum")
+	require.Zero(t, typDesc.NumReferencingDescriptors(),
+		"type should have no back-references before child creation")
+
+	seqDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "t", "my_seq")
+	require.Empty(t, seqDesc.GetDependedOnBy(),
+		"sequence should have no DependedOnBy before child creation")
+
+	fnDesc := desctestutils.TestingGetFunctionDescriptor(kvDB, codec, "t", "public", "my_func")
+	require.Empty(t, fnDesc.GetDependedOnBy(),
+		"function should have no DependedOnBy before child creation")
+
+	// Now create the child table with an inline FK. The CREATE TABLE will
+	// succeed (the SQL transaction commits), but the async schema change job
+	// will be failed by our injected error, triggering rollback.
+	//
+	// We need to set childTableID BEFORE executing the CREATE TABLE so that
+	// the RunBeforeResume knob can target the right job.
+	//
+	// First, figure out what the next descriptor ID will be by querying.
+	var nextID uint32
+	sqlRun.QueryRow(t, `SELECT max(id) + 1 FROM system.descriptor`).Scan(&nextID)
+	atomic.StoreUint32(&childTableID, nextID)
+
+	// CREATE TABLE with inline FK, a UDT column, a sequence default, and a UDF
+	// default. This will fail because the schema change job is injected with a
+	// permanent error.
+	_, err = sqlDB.Exec(`CREATE TABLE t.child (
+		id INT PRIMARY KEY,
+		val t.my_enum,
+		seq_val INT DEFAULT nextval('t.my_seq'),
+		fn_val INT DEFAULT my_func(),
+		parent_id INT,
+		CONSTRAINT fk_child_parent FOREIGN KEY (parent_id) REFERENCES t.parent (id)
+	)`)
+	require.Error(t, err)
+
+	// Wait for the schema change job to reach a terminal state (failed).
+	sqlRun.CheckQueryResultsRetry(t,
+		`SELECT count(*) FROM [SHOW JOBS]
+			 WHERE job_type = 'SCHEMA CHANGE'
+			   AND description LIKE '%CREATE TABLE t.public.child%'
+			   AND status = 'failed'`,
+		[][]string{{"1"}},
+	)
+
+	// The child table should not exist anymore (it was in ADD state and
+	// got rolled back).
+	var tableCount int
+	sqlRun.QueryRow(t, `
+		SELECT count(*) FROM crdb_internal.tables
+		WHERE database_name = 't' AND name = 'child' AND state != 'DROP'
+	`).Scan(&tableCount)
+	require.Equal(t, 0, tableCount, "child table should not exist after rollback")
+
+	// Set an immediate GC zone config on the database so the child
+	// descriptor is fully deleted (not just marked DROPPED).
+	parentDesc = desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "t", "parent")
+	_, err = sqltestutils.AddImmediateGCZoneConfig(sqlDB, parentDesc.GetParentID())
+	require.NoError(t, err)
+
+	// Wait for the GC job to complete, fully removing the child descriptor.
+	sqlRun.CheckQueryResultsRetry(t, `
+		SELECT count(*) FROM [SHOW JOBS]
+		WHERE job_type = 'SCHEMA CHANGE GC'
+		  AND description LIKE '%ROLLBACK OF CREATE TABLE%child%'
+		  AND status = 'succeeded'`,
+		[][]string{{"1"}},
+	)
+
+	// Verify via crdb_internal.invalid_objects that neither the parent table,
+	// the type, the sequence, nor the function have orphaned references.
+	rows, err := sqlDB.Query(`
+		SELECT id, database_name, schema_name, obj_name, error
+		FROM "".crdb_internal.invalid_objects
+		WHERE database_name = 't'
+		  AND obj_name IN ('parent', 'my_enum', 'my_seq', 'my_func')
+	`)
+	require.NoError(t, err)
+	defer rows.Close()
+	var invalidCount int
+	for rows.Next() {
+		var id int
+		var dbName, schemaName, objName, errMsg string
+		require.NoError(t, rows.Scan(&id, &dbName, &schemaName, &objName, &errMsg))
+		t.Logf("invalid_objects row: id=%d db=%s schema=%s obj=%s error=%s",
+			id, dbName, schemaName, objName, errMsg)
+		invalidCount++
+	}
+	require.NoError(t, rows.Err())
+	require.Equal(t, 0, invalidCount,
+		"parent table, type, sequence, and function should not appear in invalid_objects")
+
+	// Verify the parent table has no orphaned InboundFKs (reads directly
+	// from KV, bypassing descriptor leases).
+	parentDesc = desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "t", "parent")
+	require.Empty(t, parentDesc.InboundForeignKeys(),
+		"parent should have no InboundFKs after child rollback, but has %d",
+		len(parentDesc.InboundForeignKeys()))
+
+	// Verify the type has no orphaned back-references.
+	typDesc = desctestutils.TestingGetPublicTypeDescriptor(kvDB, codec, "t", "my_enum")
+	require.Zero(t, typDesc.NumReferencingDescriptors(),
+		"type should have no back-references after child rollback")
+
+	// Verify the sequence has no orphaned DependedOnBy entries.
+	seqDesc = desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, "t", "my_seq")
+	require.Empty(t, seqDesc.GetDependedOnBy(),
+		"sequence should have no DependedOnBy after child rollback")
+
+	// Verify the function has no orphaned DependedOnBy entries.
+	fnDesc = desctestutils.TestingGetFunctionDescriptor(kvDB, codec, "t", "public", "my_func")
+	require.Empty(t, fnDesc.GetDependedOnBy(),
+		"function should have no DependedOnBy after child rollback")
+}
+
 // Test that non-physical table deletions like DROP VIEW are immediate instead
 // of via a GC job.
 func TestDropPhysicalTableGC(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := createTestServerParamsAllowTenants()
 
-	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 	_, err := sqlDB.Exec(`CREATE DATABASE test;`)
 	require.NoError(t, err)
@@ -1501,6 +1760,58 @@ func TestDropLargeDatabaseWithDeclarativeSchemaChanger(t *testing.T) {
 			GraphDepth:         2,
 		},
 		true)
+}
+
+// TestTruncateLarge truncates a large number of tables in a single transaction.
+func TestTruncateLarge(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	testTruncateLarge(t, true /* batchLimitSet */)
+}
+
+// TestTruncateLargeErr verifies that an error is returned if the batch limit is
+// effectively not set.
+func TestTruncateLargeErr(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	testTruncateLarge(t, false /* batchLimitSet */)
+}
+
+func testTruncateLarge(t *testing.T, batchLimitSet bool) {
+	skip.UnderDuress(t, "truncating a large number of tables")
+
+	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{
+		SQLMemoryPoolSize: 1 << 30, /* 1 GiB */
+	})
+	defer srv.Stopper().Stop(context.Background())
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+	createCommand := strings.Builder{}
+	truncateCommand := strings.Builder{}
+	systemDB := sqlutils.MakeSQLRunner(srv.SystemLayer().SQLConn(t))
+	systemDB.Exec(t, "SET CLUSTER SETTING kv.raft.command.max_size='4.1MiB'")
+	if batchLimitSet {
+		sqlDB.Exec(t, "SET CLUSTER SETTING sql.schema_changer.batch_flush_threshold_size='1.8MiB'")
+	}
+	// Generate the truncate and create table commands.
+	const numTables = 340
+	truncateCommand.WriteString("TRUNCATE TABLE ")
+	for i := range numTables {
+		createCommand.WriteString(fmt.Sprintf("CREATE TABLE t%d (a INT PRIMARY KEY, j INT, k INT, INDEX (j), INDEX (k), UNIQUE (j, k));\n", i))
+		truncateCommand.WriteString(fmt.Sprintf("t%d", i))
+		if i != numTables-1 {
+			truncateCommand.WriteString(", ")
+		}
+	}
+	// Execute the create commands first.
+	sqlDB.Exec(t, createCommand.String())
+
+	// The default limit is larger than our reduced raft command size, so if the
+	// limit is not modified, the truncate command will fail.
+	if batchLimitSet {
+		sqlDB.Exec(t, truncateCommand.String())
+	} else {
+		sqlDB.ExpectErr(t, "command is too large", truncateCommand.String())
+	}
 }
 
 func BenchmarkDropLargeDatabaseWithGenerateTestObjects(b *testing.B) {

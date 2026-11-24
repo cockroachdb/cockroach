@@ -42,8 +42,8 @@ func TestStorePerWorkTokenEstimator(t *testing.T) {
 				var intFlushed, intIngested uint64
 				d.ScanArgs(t, "flushed", &intFlushed)
 				d.ScanArgs(t, "ingested", &intIngested)
-				l0Metrics.BytesFlushed += intFlushed
-				l0Metrics.BytesIngested += intIngested
+				l0Metrics.TablesFlushed.Bytes += intFlushed
+				l0Metrics.TablesIngested.Bytes += intIngested
 				cumLSMIngestedBytes += intIngested
 				if d.HasArg("other-levels-ingested") {
 					var otherLevelsIngested uint64
@@ -95,7 +95,12 @@ func TestStorePerWorkTokenEstimator(t *testing.T) {
 					d.ScanArgs(t, "disk-writes", &diskWrites)
 					cumDiskWrites += uint64(diskWrites)
 				}
-				estimator.updateEstimates(l0Metrics, cumLSMIngestedBytes, cumDiskWrites, admissionStats)
+				unflushedTooLarge := false
+				if d.HasArg("unflushed-too-large") {
+					unflushedTooLarge = true
+				}
+				estimator.updateEstimates(
+					l0Metrics, cumLSMIngestedBytes, cumDiskWrites, admissionStats, unflushedTooLarge)
 				wL0lm, iL0lm, ilm, wamplm := estimator.getModelsAtDone()
 				require.Equal(t, wL0lm, estimator.atDoneL0WriteTokensLinearModel.smoothedLinearModel)
 				require.Equal(t, iL0lm, estimator.atDoneL0IngestTokensLinearModel.smoothedLinearModel)

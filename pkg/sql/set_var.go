@@ -7,6 +7,7 @@ package sql
 
 import (
 	"context"
+	"math"
 	"strings"
 	"time"
 
@@ -20,16 +21,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessionmutator"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/dustin/go-humanize"
 )
 
 // setVarNode represents a SET {SESSION | LOCAL} statement.
 type setVarNode struct {
+	zeroInputPlanNode
 	name  string
 	local bool
 	v     sessionVar
@@ -38,7 +42,9 @@ type setVarNode struct {
 }
 
 // resetAllNode represents a RESET ALL statement.
-type resetAllNode struct{}
+type resetAllNode struct {
+	zeroInputPlanNode
+}
 
 // SetVar sets session variables.
 // Privileges: None.
@@ -106,7 +112,7 @@ func (p *planner) SetVar(ctx context.Context, n *tree.SetVar) (planNode, error) 
 		// Statement is RESET. Do we have a default available?
 		// We do not use getDefaultString here because we need to delay
 		// the computation of the default to the execute phase.
-		if _, ok := p.sessionDataMutatorIterator.defaults[name]; !ok && v.GlobalDefault == nil {
+		if _, ok := p.sessionDataMutatorIterator.Defaults[name]; !ok && v.GlobalDefault == nil {
 			return nil, newCannotChangeParameterError(name)
 		}
 	}
@@ -147,7 +153,7 @@ func (n *setVarNode) startExec(params runParams) error {
 		_, strVal = getSessionVarDefaultString(
 			n.name,
 			n.v,
-			params.p.sessionDataMutatorIterator.sessionDataMutatorBase,
+			params.p.sessionDataMutatorIterator.SessionDataMutatorBase,
 		)
 	}
 
@@ -155,11 +161,12 @@ func (n *setVarNode) startExec(params runParams) error {
 }
 
 // applyOnSessionDataMutators applies the given function on the relevant
-// sessionDataMutators.
+// sessionmutator.SessionDataMutators based on the scope.
 func (p *planner) applyOnSessionDataMutators(
-	ctx context.Context, local bool, applyFunc func(m sessionDataMutator) error,
+	ctx context.Context, scope setScope, applyFunc func(m sessionmutator.SessionDataMutator) error,
 ) error {
-	if local {
+	switch scope {
+	case setScopeLocal:
 		// We don't allocate a new SessionData object on implicit transactions.
 		// This no-ops in postgres with a warning, so copy accordingly.
 		if p.extendedEvalCtx.TxnImplicit {
@@ -172,22 +179,25 @@ func (p *planner) applyOnSessionDataMutators(
 			)
 			return nil
 		}
-		return p.sessionDataMutatorIterator.applyOnTopMutator(applyFunc)
+		return p.sessionDataMutatorIterator.ApplyOnTopMutator(applyFunc)
+	case setScopeStmt:
+		return p.sessionDataMutatorIterator.ApplyOnStmtScopedMutator(applyFunc)
+	default:
+		return p.sessionDataMutatorIterator.ApplyOnEachMutatorError(applyFunc)
 	}
-	return p.sessionDataMutatorIterator.applyOnEachMutatorError(applyFunc)
 }
 
 // getSessionVarDefaultString retrieves a string suitable to pass to a
 // session var's Set() method. First return value is false if there is
 // no default.
 func getSessionVarDefaultString(
-	varName string, v sessionVar, m sessionDataMutatorBase,
+	varName string, v sessionVar, m sessionmutator.SessionDataMutatorBase,
 ) (bool, string) {
-	if defVal, ok := m.defaults[varName]; ok {
+	if defVal, ok := m.Defaults[varName]; ok {
 		return true, defVal
 	}
 	if v.GlobalDefault != nil {
-		return true, v.GlobalDefault(&m.settings.SV)
+		return true, v.GlobalDefault(&m.Settings.SV)
 	}
 	return false, ""
 }
@@ -201,14 +211,14 @@ func (p *planner) resetAllSessionVars(ctx context.Context) error {
 		if v.Set == nil && v.RuntimeSet == nil && v.SetWithPlanner == nil {
 			continue
 		}
-		// For Postgres compatibility, Don't reset `role` here.
-		if varName == "role" {
+		// For Postgres compatibility, don't reset some settings here.
+		if v.NoResetAll {
 			continue
 		}
 		hasDefault, defVal := getSessionVarDefaultString(
 			varName,
 			v,
-			p.sessionDataMutatorIterator.sessionDataMutatorBase,
+			p.sessionDataMutatorIterator.SessionDataMutatorBase,
 		)
 		if !hasDefault {
 			continue
@@ -225,7 +235,7 @@ func (p *planner) resetAllSessionVars(ctx context.Context) error {
 		_, defVal := getSessionVarDefaultString(
 			varName,
 			v,
-			p.sessionDataMutatorIterator.sessionDataMutatorBase,
+			p.sessionDataMutatorIterator.SessionDataMutatorBase,
 		)
 		if err := p.SetSessionVar(ctx, varName, defVal, false /* isLocal */); err != nil {
 			return err
@@ -326,7 +336,7 @@ func timeZoneVarGetStringVal(
 	return loc.String(), nil
 }
 
-func timeZoneVarSet(_ context.Context, m sessionDataMutator, s string) error {
+func timeZoneVarSet(_ context.Context, m sessionmutator.SessionDataMutator, s string) error {
 	loc, err := timeutil.TimeZoneStringToLocation(
 		s,
 		timeutil.TimeZoneStringToLocationISO8601Standard,
@@ -365,6 +375,8 @@ func makeTimeoutVarGetter(
 			}
 		case *tree.DInt:
 			timeout = time.Duration(*v) * time.Millisecond
+		default:
+			return "", newVarValueError(varName, values[0].String())
 		}
 		return timeout.String(), nil
 	}
@@ -397,9 +409,89 @@ func validateTimeoutVar(
 	return timeout, nil
 }
 
-func stmtTimeoutVarSet(ctx context.Context, m sessionDataMutator, s string) error {
+// makeTCPKeepAliveVarGetter returns a getStringValFn for TCP keepalive
+// session variables. When the user provides a plain integer via SET, it
+// is treated as seconds (for keepalive vars) or milliseconds (for
+// tcp_user_timeout). String and interval values are passed through for
+// parsing in the Set function.
+func makeTCPKeepAliveVarGetter(varName string, defaultUnit time.Duration) getStringValFn {
+	return func(
+		ctx context.Context,
+		evalCtx *extendedEvalContext,
+		values []tree.TypedExpr,
+		txn *kv.Txn,
+	) (string, error) {
+		if len(values) != 1 {
+			return "", newSingleArgVarError(varName)
+		}
+		d, err := eval.Expr(ctx, &evalCtx.Context, values[0])
+		if err != nil {
+			return "", err
+		}
+		switch v := eval.UnwrapDatum(ctx, &evalCtx.Context, d).(type) {
+		case *tree.DString:
+			return string(*v), nil
+		case *tree.DInterval:
+			dur, err := durationToTotalNanos(v.Duration)
+			if err != nil {
+				return "", wrapSetVarError(err, varName, values[0].String())
+			}
+			return dur.String(), nil
+		case *tree.DInt:
+			dur := time.Duration(*v) * defaultUnit
+			return dur.String(), nil
+		default:
+			return "", newVarValueError(varName, values[0].String())
+		}
+	}
+}
+
+// parseTCPKeepAliveVar parses a string value for a TCP keepalive session
+// variable. It accepts plain integers (interpreted according to
+// defaultDurationType — seconds or milliseconds) and duration strings
+// (e.g., "1m30s"). The result is truncated to the given unit (seconds
+// or milliseconds) and must be non-negative.
+func parseTCPKeepAliveVar(
+	style duration.IntervalStyle,
+	s string,
+	varName string,
+	defaultDurationType types.IntervalDurationType,
+	truncateUnit time.Duration,
+) (int32, error) {
+	interval, err := tree.ParseIntervalWithTypeMetadata(
+		style,
+		s,
+		types.IntervalTypeMetadata{
+			DurationField: types.IntervalDurationField{
+				DurationType: defaultDurationType,
+			},
+		},
+	)
+	if err != nil {
+		return 0, pgerror.Newf(pgcode.InvalidParameterValue,
+			"invalid value for parameter %q: %q", redact.SafeString(varName), s)
+	}
+	dur, err := durationToTotalNanos(interval)
+	if err != nil {
+		return 0, pgerror.Newf(pgcode.InvalidParameterValue,
+			"invalid value for parameter %q: %q", redact.SafeString(varName), s)
+	}
+	if dur < 0 {
+		return 0, pgerror.Newf(pgcode.InvalidParameterValue,
+			"%v cannot be negative", redact.SafeString(varName))
+	}
+	// Truncate to the storage unit.
+	result := int64(dur / truncateUnit)
+	if result > math.MaxInt32 {
+		return 0, pgerror.Newf(pgcode.InvalidParameterValue,
+			"value out of range for parameter %q: %q", redact.SafeString(varName), s)
+	}
+	return int32(result), nil
+}
+
+func stmtTimeoutVarSet(ctx context.Context, m sessionmutator.SessionDataMutator, s string) error {
 	timeout, err := validateTimeoutVar(
-		m.data.GetIntervalStyle(),
+		m.Data.GetIntervalStyle(),
 		s,
 		"statement_timeout",
 	)
@@ -411,9 +503,9 @@ func stmtTimeoutVarSet(ctx context.Context, m sessionDataMutator, s string) erro
 	return nil
 }
 
-func lockTimeoutVarSet(ctx context.Context, m sessionDataMutator, s string) error {
+func lockTimeoutVarSet(ctx context.Context, m sessionmutator.SessionDataMutator, s string) error {
 	timeout, err := validateTimeoutVar(
-		m.data.GetIntervalStyle(),
+		m.Data.GetIntervalStyle(),
 		s,
 		"lock_timeout",
 	)
@@ -425,9 +517,11 @@ func lockTimeoutVarSet(ctx context.Context, m sessionDataMutator, s string) erro
 	return nil
 }
 
-func deadlockTimeoutVarSet(ctx context.Context, m sessionDataMutator, s string) error {
+func deadlockTimeoutVarSet(
+	ctx context.Context, m sessionmutator.SessionDataMutator, s string,
+) error {
 	timeout, err := validateTimeoutVar(
-		m.data.GetIntervalStyle(),
+		m.Data.GetIntervalStyle(),
 		s,
 		"deadlock_timeout",
 	)
@@ -439,9 +533,11 @@ func deadlockTimeoutVarSet(ctx context.Context, m sessionDataMutator, s string) 
 	return nil
 }
 
-func idleInSessionTimeoutVarSet(ctx context.Context, m sessionDataMutator, s string) error {
+func idleInSessionTimeoutVarSet(
+	ctx context.Context, m sessionmutator.SessionDataMutator, s string,
+) error {
 	timeout, err := validateTimeoutVar(
-		m.data.GetIntervalStyle(),
+		m.Data.GetIntervalStyle(),
 		s,
 		"idle_in_session_timeout",
 	)
@@ -453,9 +549,11 @@ func idleInSessionTimeoutVarSet(ctx context.Context, m sessionDataMutator, s str
 	return nil
 }
 
-func transactionTimeoutVarSet(ctx context.Context, m sessionDataMutator, s string) error {
+func transactionTimeoutVarSet(
+	ctx context.Context, m sessionmutator.SessionDataMutator, s string,
+) error {
 	timeout, err := validateTimeoutVar(
-		m.data.GetIntervalStyle(),
+		m.Data.GetIntervalStyle(),
 		s,
 		"transaction_timeout",
 	)
@@ -468,10 +566,10 @@ func transactionTimeoutVarSet(ctx context.Context, m sessionDataMutator, s strin
 }
 
 func idleInTransactionSessionTimeoutVarSet(
-	ctx context.Context, m sessionDataMutator, s string,
+	ctx context.Context, m sessionmutator.SessionDataMutator, s string,
 ) error {
 	timeout, err := validateTimeoutVar(
-		m.data.GetIntervalStyle(),
+		m.Data.GetIntervalStyle(),
 		s,
 		"idle_in_transaction_session_timeout",
 	)
@@ -518,4 +616,34 @@ func newVarValueError(varName, actualVal string, allowedVals ...string) (err err
 func newCannotChangeParameterError(varName string) error {
 	return pgerror.Newf(pgcode.CantChangeRuntimeParam,
 		"parameter %q cannot be changed", varName)
+}
+
+func makeByteSizeVarGetter(
+	varName string,
+) func(
+	ctx context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr, txn *kv.Txn) (string, error) {
+	return func(
+		ctx context.Context, evalCtx *extendedEvalContext, values []tree.TypedExpr, txn *kv.Txn,
+	) (string, error) {
+		if len(values) != 1 {
+			return "", newSingleArgVarError(varName)
+		}
+		d, err := eval.Expr(ctx, &evalCtx.Context, values[0])
+		if err != nil {
+			return "", err
+		}
+
+		switch v := eval.UnwrapDatum(ctx, &evalCtx.Context, d).(type) {
+		case *tree.DString:
+			return string(*v), nil
+		case *tree.DInt:
+			size := int64(*v)
+			if size < 0 {
+				return "", errors.Newf("%s cannot be set to a negative value", varName)
+			}
+			return humanize.IBytes(uint64(size)), nil
+		default:
+			return "", newVarValueError(varName, values[0].String())
+		}
+	}
 }

@@ -11,10 +11,7 @@ import { SQLActivityRootControls } from "src/sqlActivityRootControls/sqlActivity
 
 import { statementsSql } from "../util/docs";
 
-import {
-  ActiveTransactionsView,
-  ActiveTransactionsViewProps,
-} from "./activeTransactionsView";
+import { ActiveTransactionsView } from "./activeTransactionsView";
 import { TransactionsPageProps } from "./transactionsPage";
 import { TransactionViewType } from "./transactionsPageTypes";
 
@@ -22,12 +19,10 @@ import { TransactionsPage } from ".";
 
 export type TransactionsPageRootProps = {
   fingerprintsPageProps: TransactionsPageProps;
-  activePageProps: ActiveTransactionsViewProps;
 };
 
 export const TransactionsPageRoot = ({
   fingerprintsPageProps,
-  activePageProps,
 }: TransactionsPageRootProps): React.ReactElement => {
   const transactionOptions: Option[] = [
     {
@@ -57,7 +52,7 @@ export const TransactionsPageRoot = ({
           {/* TODO (xinhaoz) #78379 add 'Learn More' link to documentation page*/}
         </span>
       ),
-      component: <ActiveTransactionsView {...activePageProps} />,
+      component: <ActiveTransactionsView />,
     },
   ];
 

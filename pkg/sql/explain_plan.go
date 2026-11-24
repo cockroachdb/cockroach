@@ -9,12 +9,15 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/colflow"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/hintpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/hints"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec/explain"
@@ -24,12 +27,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 	"github.com/cockroachdb/errors"
 )
 
 // explainPlanNode implements EXPLAIN (PLAN) and EXPLAIN (DISTSQL); it produces
 // the output of EXPLAIN given an explain.Plan.
 type explainPlanNode struct {
+	zeroInputPlanNode
 	optColumnsSlot
 
 	options *tree.ExplainOptions
@@ -57,10 +63,7 @@ func (e *explainPlanNode) startExec(params runParams) error {
 		// Note that we delay adding the annotation about the distribution until
 		// after the plan is finalized (when the physical plan is successfully
 		// created).
-		distribution, _ := getPlanDistribution(
-			params.ctx, params.p.Descriptors().HasUncommittedTypes(),
-			params.extendedEvalCtx.SessionData().DistSQLMode, plan.main, &params.p.distSQLVisitor,
-		)
+		distribution, _ := params.p.getPlanDistribution(params.ctx, plan.main, notPostquery)
 
 		outerSubqueries := params.p.curPlan.subqueryPlans
 		distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
@@ -87,7 +90,8 @@ func (e *explainPlanNode) startExec(params runParams) error {
 			// cause an error or panic, so swallow the error. See #40677 for example.
 			finalizePlanWithRowCount(params.ctx, planCtx, physicalPlan, plan.mainRowCount)
 			ob.AddDistribution(physicalPlan.Distribution.String())
-			flows := physicalPlan.GenerateFlowSpecs()
+			flows, flowsCleanup := physicalPlan.GenerateFlowSpecs()
+			defer flowsCleanup(flows)
 
 			ctxSessionData := planCtx.EvalContext().SessionData()
 			var willVectorize bool
@@ -121,14 +125,34 @@ func (e *explainPlanNode) startExec(params runParams) error {
 			}
 		}
 
+		ob.AddTableStatsMode(params.EvalContext().StatsRollout.String())
+		ob.AddStmtHintCount(params.p.stmt.Hints, params.p.instrumentation.runtimeHintErrors)
+
 		if e.options.Flags[tree.ExplainFlagJSON] {
 			// For the JSON flag, we only want to emit the diagram JSON.
 			rows = []string{diagramJSON}
 		} else {
-			if err := emitExplain(params.ctx, ob, params.EvalContext(), params.p.ExecCfg().Codec, e.plan); err != nil {
+			// We want to fully expand all post-queries in vanilla EXPLAIN. This
+			// should be safe because:
+			// 1. we created all separate exec.Factory objects (in
+			// execFactory.ConstructExplain and execbuilder.Builder.buildExplain),
+			// so there is no concern about factories being reset after the
+			// "main" optimizer plan was created.
+			// 2. the txn in which the EXPLAIN statement runs is still open
+			// since we're in the middle of the execution of the
+			// explainPlanNode.
+			const createPostQueryPlanIfMissing = true
+			if err := emitExplain(params.ctx, ob, params.EvalContext(), params.p.ExecCfg().Codec, e.plan, createPostQueryPlanIfMissing); err != nil {
 				return err
 			}
 			rows = ob.BuildStringRows()
+			if e.options.Flags[tree.ExplainFlagVerbose] && len(params.p.stmt.Hints) > 0 {
+				hideIDs := params.p.execCfg.TestingKnobs.DeterministicExplain
+				rows = append(rows, buildStmtHintTreeRows(
+					params.p.stmt.Hints, params.p.stmt.HintIDs, hideIDs,
+					params.p.instrumentation.runtimeHintErrors,
+				)...)
+			}
 			if e.options.Mode == tree.ExplainDistSQL {
 				rows = append(rows, "", fmt.Sprintf("Diagram: %s", diagramURL.String()))
 			}
@@ -176,25 +200,16 @@ func emitExplain(
 	evalCtx *eval.Context,
 	codec keys.SQLCodec,
 	explainPlan *explain.Plan,
-) (err error) {
+	createPostQueryPlanIfMissing bool,
+) (retErr error) {
 	// Guard against bugs in the explain code.
-	defer func() {
-		if r := recover(); r != nil {
-			// This code allows us to propagate internal and runtime errors without
-			// having to add error checks everywhere throughout the code. This is only
-			// possible because the code does not update shared state and does not
-			// manipulate locks.
-			// Note that we don't catch anything in debug builds, so that failures are
-			// more visible.
-			if ok, e := errorutil.ShouldCatch(r); ok && !buildutil.CrdbTestBuild {
-				err = e
-			} else {
-				// Other panic objects can't be considered "safe" and thus are
-				// propagated as crashes that terminate the session.
-				panic(r)
-			}
+	defer errorutil.MaybeCatchPanic(&retErr, func(caughtErr error) {
+		if buildutil.CrdbTestBuild && caughtErr != nil {
+			// Don't catch anything in debug builds, so that failures are more
+			// visible.
+			panic(caughtErr)
 		}
-	}()
+	})
 
 	if explainPlan == nil {
 		return errors.AssertionFailedf("no plan")
@@ -210,6 +225,12 @@ func emitExplain(
 		if err != nil {
 			return err.Error()
 		}
+		// Show up to 20 physical spans.
+		var more string
+		if maxSpans := 20; len(spans) > maxSpans {
+			more = fmt.Sprintf(" … (%d more)", len(spans)-maxSpans)
+			spans = spans[:maxSpans]
+		}
 		// skip is how many fields to skip when pretty-printing spans.
 		// Usually 2, but can be 4 when running EXPLAIN from a tenant since there
 		// will be an extra tenant prefix and ID. For example:
@@ -222,10 +243,10 @@ func emitExplain(
 		if !codec.ForSystemTenant() {
 			skip = 4
 		}
-		return catalogkeys.PrettySpans(idx, spans, skip)
+		return catalogkeys.PrettySpans(idx, spans, skip) + more
 	}
 
-	return explain.Emit(ctx, evalCtx, explainPlan, ob, spanFormatFn)
+	return explain.Emit(ctx, evalCtx, explainPlan, ob, spanFormatFn, createPostQueryPlanIfMissing)
 }
 
 func (e *explainPlanNode) Next(params runParams) (bool, error) { return e.run.results.Next(params) }
@@ -269,6 +290,98 @@ func closeExplainPlan(ctx context.Context, ep *explain.Plan) {
 			closeExplainPlan(ctx, tp.(*explain.Plan))
 		}
 	}
+}
+
+// buildStmtHintTreeRows builds the verbose EXPLAIN output for statement hints,
+// returning rows for applied and skipped hint trees. If hideIDs is true, hint
+// IDs are omitted for deterministic test output. runtimeErrors contains
+// per-hint runtime errors keyed by hint index, tracked separately from
+// hint.Err to avoid mutating shared hint state.
+func buildStmtHintTreeRows(
+	allHints []hints.Hint, hintIDs []int64, hideIDs bool, runtimeErrors map[int]error,
+) []string {
+	var applied, skipped []int
+	for i := range allHints {
+		if !allHints[i].Enabled() || runtimeErrors[i] != nil {
+			skipped = append(skipped, i)
+		} else {
+			applied = append(applied, i)
+		}
+	}
+
+	var rows []string
+	if len(applied) > 0 {
+		rows = append(rows, "") // blank separator
+		rows = append(rows, buildHintTree(
+			fmt.Sprintf("applied statement hints: %s",
+				humanizeutil.Count(uint64(len(applied)))),
+			allHints, hintIDs, applied, hideIDs, runtimeErrors,
+		)...)
+	}
+	if len(skipped) > 0 {
+		rows = append(rows, "") // blank separator
+		rows = append(rows, buildHintTree(
+			fmt.Sprintf("skipped statement hints: %s",
+				humanizeutil.Count(uint64(len(skipped)))),
+			allHints, hintIDs, skipped, hideIDs, runtimeErrors,
+		)...)
+	}
+	return rows
+}
+
+// buildHintTree builds a treeprinter tree for a group of hints and returns the
+// formatted rows.
+func buildHintTree(
+	rootLabel string,
+	allHints []hints.Hint,
+	hintIDs []int64,
+	indices []int,
+	hideIDs bool,
+	runtimeErrors map[int]error,
+) []string {
+	tp := treeprinter.New()
+	root := tp.Child(rootLabel)
+	for _, idx := range indices {
+		hint := &allHints[idx]
+		var label string
+		if hideIDs {
+			label = hint.HintType()
+		} else if idx < len(hintIDs) {
+			label = fmt.Sprintf("%s (id: %d)", hint.HintType(), hintIDs[idx])
+		} else {
+			if buildutil.CrdbTestBuild {
+				panic(errors.AssertionFailedf(
+					"hint index %d out of range for hintIDs (len %d)", idx, len(hintIDs),
+				))
+			}
+			label = hint.HintType()
+		}
+		node := root.Child(label)
+
+		switch t := hint.GetValue().(type) {
+		case *hintpb.InjectHints:
+			node.AddLine(fmt.Sprintf("donor: %s", t.DonorSQL))
+		case *hintpb.SessionVariableHint:
+			node.AddLine(fmt.Sprintf("variable: %s", t.VariableName))
+			node.AddLine(fmt.Sprintf("value: %s", t.VariableValue))
+		}
+
+		var skipErr error
+		if idx < len(allHints) && allHints[idx].Err != nil {
+			skipErr = allHints[idx].Err
+		} else {
+			skipErr = runtimeErrors[idx]
+		}
+		if skipErr != nil {
+			errMsg := skipErr.Error()
+			// Ensure the error message is single-line for clean tree output.
+			if i := strings.IndexByte(errMsg, '\n'); i >= 0 {
+				errMsg = errMsg[:i]
+			}
+			node.AddLine(fmt.Sprintf("skip reason: %s", errMsg))
+		}
+	}
+	return tp.FormattedRows()
 }
 
 func (e *explainPlanNode) Close(ctx context.Context) {

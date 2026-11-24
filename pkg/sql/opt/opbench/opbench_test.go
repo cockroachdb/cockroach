@@ -269,7 +269,7 @@ func runBench(t *testing.T, spec *opbench.Spec, path string, mode runMode) {
 			t.Fatal(err)
 		}
 
-		cost := fmt.Sprintf("%f", e.(memo.RelExpr).Cost())
+		cost := fmt.Sprintf("%f", e.(memo.RelExpr).Cost().C)
 
 		if mode.rewriteEstimated {
 			newRecord[estimatedIdx] = cost

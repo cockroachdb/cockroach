@@ -40,6 +40,8 @@ $$;
   {descriptorId: 110, privileges: "2", userName: root, withGrantOption: "2"}
 - [[FunctionBody:{DescID: 110}, PUBLIC], ABSENT]
   {body: "SELECT a FROM t;\nSELECT b FROM t@t_idx_b;\nSELECT c FROM t@t_idx_c;\nSELECT a FROM v;\nSELECT b'@':::@100108;\nSELECT nextval(105:::REGCLASS);", functionId: 110, lang: {lang: SQL}, usesSequenceIds: [105], usesTables: [{columnIds: [1], tableId: 104}, {columnIds: [2], indexId: 2, tableId: 104}, {columnIds: [3], indexId: 3, tableId: 104}], usesTypeIds: [108, 109], usesViews: [{columnIds: [1], viewId: 107}]}
+- [[FunctionParams:{DescID: 110}, PUBLIC], ABSENT]
+  {functionId: 110, params: [{class: {}, name: a, type: {closedTypeIds: [108, 109], type: {family: EnumFamily, oid: 100108, udtMetadata: {arrayTypeOid: 100109}}, typeName: public.notmyworkday}}]}
 
 build
 CREATE FUNCTION f(a notmyworkday) RETURNS INT VOLATILE LANGUAGE PLpgSQL AS $$
@@ -71,3 +73,5 @@ $$;
   {descriptorId: 111, privileges: "2", userName: root, withGrantOption: "2"}
 - [[FunctionBody:{DescID: 111}, PUBLIC], ABSENT]
   {body: "BEGIN\nSELECT a FROM t;\nSELECT b FROM t@t_idx_b;\nSELECT c FROM t@t_idx_c;\nSELECT a FROM v;\nSELECT b'@':::@100108;\nRETURN nextval(105:::REGCLASS);\nEND;\n", functionId: 111, lang: {lang: PLPGSQL}, usesSequenceIds: [105], usesTables: [{columnIds: [1], tableId: 104}, {columnIds: [2], indexId: 2, tableId: 104}, {columnIds: [3], indexId: 3, tableId: 104}], usesTypeIds: [108, 109], usesViews: [{columnIds: [1], viewId: 107}]}
+- [[FunctionParams:{DescID: 111}, PUBLIC], ABSENT]
+  {functionId: 111, params: [{class: {}, name: a, type: {closedTypeIds: [108, 109], type: {family: EnumFamily, oid: 100108, udtMetadata: {arrayTypeOid: 100109}}, typeName: public.notmyworkday}}]}

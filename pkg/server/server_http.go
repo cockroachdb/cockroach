@@ -9,13 +9,17 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"net"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/NYTimes/gziphandler"
 	"github.com/cockroachdb/cmux"
 	"github.com/cockroachdb/cockroach/pkg/inspectz"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/oidcauth"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
@@ -24,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ui"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -111,7 +116,7 @@ var virtualClustersHandler = http.HandlerFunc(func(w http.ResponseWriter, req *h
 		if errors.Is(err, http.ErrNoCookie) {
 			w.Header().Add("Content-Type", "application/json")
 			if _, err := w.Write([]byte(`{"virtual_clusters":[]}`)); err != nil {
-				log.Errorf(req.Context(), "unable to write virtual clusters response: %s", err.Error())
+				log.Dev.Errorf(req.Context(), "unable to write virtual clusters response: %s", err.Error())
 			}
 			return
 		}
@@ -135,27 +140,31 @@ var virtualClustersHandler = http.HandlerFunc(func(w http.ResponseWriter, req *h
 	}
 	w.Header().Add("Content-Type", "application/json")
 	if _, err := w.Write(respBytes); err != nil {
-		log.Errorf(req.Context(), "unable to write virtual clusters response: %s", err.Error())
+		log.Dev.Errorf(req.Context(), "unable to write virtual clusters response: %s", err.Error())
 	}
 })
 
+// setupRoutes configures HTTP routes for the server.
 func (s *httpServer) setupRoutes(
 	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
 	authnServer authserver.Server,
+	adminServer *adminServer,
 	adminAuthzCheck privchecker.CheckerForRPCHandlers,
 	metricSource metricMarshaler,
 	runtimeStatSampler *status.RuntimeStatSampler,
-	handleRequestsUnauthenticated http.Handler,
+	unauthenticatedAPIInternalServer http.Handler,
 	handleDebugUnauthenticated http.Handler,
 	handleInspectzUnauthenticated http.Handler,
 	apiServer http.Handler,
 	flags serverpb.FeatureFlags,
+	drpcEnabled bool,
 ) error {
 	// OIDC Configuration must happen prior to the UI Handler being defined below so that we have
 	// the system settings initialized for it to pick up from the oidcAuthenticationServer.
-	oidc, err := authserver.ConfigureOIDC(
+	oidc, err := oidcauth.ConfigureOIDC(
 		ctx, s.cfg.Settings, s.cfg.Locality,
-		s.mux.Handle, authnServer.UserLoginFromSSO, s.cfg.AmbientCtx, s.cfg.ClusterIDContainer.Get(),
+		s.mux.Handle, authnServer.UserLoginFromSSO, s.cfg.AmbientCtx, s.cfg.ClusterIDContainer.Get(), execCfg,
 	)
 	if err != nil {
 		return err
@@ -185,17 +194,41 @@ func (s *httpServer) setupRoutes(
 		authnServer, assetHandler, true /* allowAnonymous */)
 	s.mux.Handle("/", authenticatedUIHandler)
 
+	authenticatedAPIInternalServer := unauthenticatedAPIInternalServer
+	if !s.cfg.InsecureWebAccess() {
+		authenticatedAPIInternalServer = authserver.NewMux(
+			authnServer, authenticatedAPIInternalServer, false /* allowAnonymous */)
+	}
+	s.mux.Handle(apiconstants.StatusPrefix, authenticatedAPIInternalServer)
+
 	// Add HTTP authentication to the gRPC-gateway endpoints used by the UI,
 	// if not disabled by configuration.
-	var authenticatedHandler = handleRequestsUnauthenticated
+	var stmtBundleHandlerFunc = http.HandlerFunc(adminServer.StmtBundleHandler)
+	var txnBundleHandlerFunc = http.HandlerFunc(adminServer.TxnBundleHandler)
 	if !s.cfg.InsecureWebAccess() {
-		authenticatedHandler = authserver.NewMux(authnServer, authenticatedHandler, false /* allowAnonymous */)
+		stmtBundleHandlerFunc = authserver.NewMux(authnServer, stmtBundleHandlerFunc, false).ServeHTTP
+		txnBundleHandlerFunc = authserver.NewMux(authnServer, txnBundleHandlerFunc, false).ServeHTTP
 	}
 
 	// Login and logout paths.
-	// The /login endpoint is, by definition, available pre-authentication.
-	s.mux.Handle(authserver.LoginPath, handleRequestsUnauthenticated)
-	s.mux.Handle(authserver.LogoutPath, authenticatedHandler)
+	// Registration of login and logout is present here since they don't actually
+	// rely on RPC but deal with HTTP cookies, which require different handling
+	// mechanisms. When DRPC is enabled, we use direct HTTP handlers that can set
+	// cookies via http.ResponseWriter. When DRPC is disabled, we use the old
+	// grpc-gateway path which sets cookies via gRPC metadata headers for backward
+	// compatibility.
+	if drpcEnabled {
+		s.mux.Handle(authserver.LoginPath, http.HandlerFunc(authnServer.LoginHandler))
+		logoutHandlerfunc := http.HandlerFunc(authnServer.LogoutHandler)
+		if !s.cfg.InsecureWebAccess() {
+			logoutHandlerfunc = authserver.NewMux(authnServer, logoutHandlerfunc, false /* allowAnonymous */).ServeHTTP
+		}
+		s.mux.Handle(authserver.LogoutPath, logoutHandlerfunc)
+	} else {
+		s.mux.Handle(authserver.LoginPath, unauthenticatedAPIInternalServer)
+		s.mux.Handle(authserver.LogoutPath, authenticatedAPIInternalServer)
+	}
+
 	s.mux.Handle(virtualClustersPath, virtualClustersHandler)
 	// The login path for 'cockroach demo', if we're currently running
 	// that.
@@ -203,18 +236,22 @@ func (s *httpServer) setupRoutes(
 		s.mux.Handle(authserver.DemoLoginPath, http.HandlerFunc(authnServer.DemoLogin))
 	}
 
-	// Admin/Status servers. These are used by the UI via RPC-over-HTTP.
-	s.mux.Handle(apiconstants.StatusPrefix, authenticatedHandler)
-	s.mux.Handle(apiconstants.AdminPrefix, authenticatedHandler)
+	s.mux.Handle(apiconstants.AdminPrefix, authenticatedAPIInternalServer)
+
+	// Handlers for statement diagnostic bundle download. These are special
+	// because they return zip files, not protobufs or JSON.
+	s.mux.Handle(apiconstants.AdminStmtBundle, stmtBundleHandlerFunc)
+	s.mux.Handle(apiconstants.AdminTxnBundle, txnBundleHandlerFunc)
 
 	// The timeseries endpoint, used to produce graphs.
-	s.mux.Handle(ts.URLPrefix, authenticatedHandler)
+	s.mux.Handle(ts.URLPrefix, authenticatedAPIInternalServer)
 
 	// Exempt the 2nd health check endpoint from authentication.
 	// (This simply mirrors /health and exists for backward compatibility.)
-	s.mux.Handle(apiconstants.AdminHealth, handleRequestsUnauthenticated)
-	// The /_status/vars endpoint is not authenticated either. Useful for monitoring.
-	s.mux.Handle(apiconstants.StatusVars, http.HandlerFunc(varsHandler{metricSource, s.cfg.Settings}.handleVars))
+	s.mux.Handle(apiconstants.AdminHealth, unauthenticatedAPIInternalServer)
+	// The /_status/vars and /metrics endpoint is not authenticated either. Useful for monitoring.
+	s.mux.Handle(apiconstants.StatusVars, http.HandlerFunc(varsHandler{metricSource, s.cfg.Settings, false /* useStaticLabels */}.handleVars))
+	s.mux.Handle(apiconstants.MetricsPath, http.HandlerFunc(varsHandler{metricSource, s.cfg.Settings, true /* useStaticLabels */}.handleVars))
 	// Same for /_status/load.
 	le, err := newLoadEndpoint(runtimeStatSampler, metricSource)
 	if err != nil {
@@ -298,7 +335,7 @@ func startHTTPService(
 	}
 
 	if uiTLSConfig != nil {
-		httpMux := cmux.New(httpLn)
+		httpMux := cmux.NewWithTimeout(httpLn, time.Minute)
 		clearL := httpMux.Match(cmux.HTTP1())
 		tlsL := httpMux.Match(cmux.Any())
 
@@ -330,7 +367,7 @@ func startHTTPService(
 			return err
 		}
 
-		httpLn = tls.NewListener(tlsL, uiTLSConfig)
+		httpLn = newTLSRestrictLn(tlsL, uiTLSConfig)
 	}
 
 	// The connManager is responsible for tearing down the net.Conn
@@ -346,6 +383,28 @@ func startHTTPService(
 	})
 }
 
+type tlsRestrictLn struct {
+	net.Listener
+}
+
+// Accept wraps the net.Listener Accept method to apply http based tls
+// constraints on the incoming connection.
+func (l tlsRestrictLn) Accept() (c net.Conn, err error) {
+	if c, err = l.Listener.Accept(); err == nil {
+		if err = security.TLSCipherRestrict(c); err != nil {
+			_ = c.Close()
+			return
+		}
+	}
+	return
+}
+
+func newTLSRestrictLn(ln net.Listener, config *tls.Config) tlsRestrictLn {
+	return tlsRestrictLn{
+		Listener: tls.NewListener(ln, config),
+	}
+}
+
 // baseHandler is the top-level HTTP handler for all HTTP traffic, before
 // authentication and authorization.
 //
@@ -353,7 +412,7 @@ func startHTTPService(
 // gzip middleware, then delegates to the mux for handling the request.
 func (s *httpServer) baseHandler(w http.ResponseWriter, r *http.Request) {
 	// Disable caching of responses.
-	w.Header().Set("Cache-control", "no-cache")
+	w.Header().Set("Cache-control", "no-store")
 
 	if HSTSEnabled.Get(&s.cfg.Settings.SV) {
 		w.Header().Set("Strict-Transport-Security", hstsHeaderValue)

@@ -25,6 +25,5 @@ publish() {
     gsutil cp $archive gs://public-bazel-artifacts/go/$loc/$archive
     mv $archive artifacts
 }
-publish amd64
 publish arm64
 

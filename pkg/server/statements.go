@@ -70,7 +70,7 @@ func (s *statusServer) Statements(
 		return status.Statements(ctx, localReq)
 	}
 
-	nodeStatement := func(ctx context.Context, status serverpb.StatusClient, _ roachpb.NodeID) (interface{}, error) {
+	nodeStatement := func(ctx context.Context, status serverpb.RPCStatusClient, _ roachpb.NodeID) (interface{}, error) {
 		return status.Statements(ctx, localReq)
 	}
 
@@ -139,8 +139,10 @@ func statementsLocal(
 	for i, stmt := range stmtStats {
 		resp.Statements[i] = serverpb.StatementsResponse_CollectedStatementStatistics{
 			Key: serverpb.StatementsResponse_ExtendedStatementStatisticsKey{
-				KeyData: stmt.Key,
-				NodeID:  nodeID,
+				KeyData:             stmt.Key,
+				NodeID:              nodeID,
+				AggregatedTs:        stmt.AggregatedTs,
+				AggregationInterval: stmt.AggregationInterval,
 			},
 			ID:    stmt.ID,
 			Stats: stmt.Stats,

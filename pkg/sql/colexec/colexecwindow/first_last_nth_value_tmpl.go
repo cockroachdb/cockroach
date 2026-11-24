@@ -5,7 +5,6 @@
 
 // {{/*
 //go:build execgen_template
-// +build execgen_template
 
 //
 // This file is the execgen template for first_value.eg.go, last_value.eg.go,

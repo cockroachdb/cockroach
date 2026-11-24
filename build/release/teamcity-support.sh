@@ -16,11 +16,19 @@ remove_files_on_exit() {
 trap remove_files_on_exit EXIT
 
 tc_start_block() {
-  echo "##teamcity[blockOpened name='$1']"
+  if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
+    echo "::group::$1"
+  else
+    echo "##teamcity[blockOpened name='$1']"
+  fi
 }
 
 tc_end_block() {
-  echo "##teamcity[blockClosed name='$1']"
+  if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
+    echo "::endgroup::"
+  else
+    echo "##teamcity[blockClosed name='$1']"
+  fi
 }
 
 docker_login_with_google() {
@@ -30,10 +38,15 @@ docker_login_with_google() {
 
 docker_login_gcr() {
   local repo=$1
-  local credentials=$2
+  local credentials=${2:-}
   local hostname="${repo%%/*}"
-  # https://cloud.google.com/container-registry/docs/advanced-authentication#json-key
-  echo "${credentials}" | docker login -u _json_key --password-stdin "https://${hostname}"
+  if [[ -n "${CLOUDSDK_AUTH_CREDENTIAL_FILE_OVERRIDE:-}" ]]; then
+    # WIF: use gcloud credential helper for Docker.
+    gcloud auth configure-docker "${hostname}" --quiet
+  else
+    # https://cloud.google.com/container-registry/docs/advanced-authentication#json-key
+    echo "${credentials}" | docker login -u _json_key --password-stdin "https://${hostname}"
+  fi
 }
 
 docker_login() {
@@ -66,6 +79,7 @@ verify_docker_image(){
   local expected_sha=$3
   local expected_build_tag=$4
   local fips_build=$5
+  local telemetry_disabled=$6
   local error=0
 
   docker rmi "$img" || true
@@ -75,7 +89,7 @@ verify_docker_image(){
   build_type=$(grep "^Build Type:" <<< "$output" | cut -d: -f2 | sed 's/ //g')
   sha=$(grep "^Build Commit ID:" <<< "$output" | cut -d: -f2 | sed 's/ //g')
   build_tag=$(grep "^Build Tag:" <<< "$output" | cut -d: -f2 | sed 's/ //g')
-  go_version=$(grep "^Go Version:" <<< "$output" | cut -d: -f2 | sed 's/ //g')
+  fips_enabled=$(grep '^FIPS enabled:\s*true' <<< "$output" || true)
 
   # Build Type should always be "release"
   if [ "$build_type" != "release" ]; then
@@ -96,14 +110,19 @@ verify_docker_image(){
     echo "ERROR: Build tag from 'cockroach version --build-tag' mismatch, expected '$expected_build_tag', got '$build_tag_output'"
     error=1
   fi
-  if [[ $fips_build == true ]]; then
-    if [[ "$go_version" != *"fips"* ]]; then
-      echo "ERROR: Go version '$go_version' does not contain 'fips'"
+  if [[ $fips_build == true  && -z $fips_enabled ]]; then
+    echo "ERROR: FIPS is not enabled"
+    error=1
+  fi
+  if [[ $docker_platform == "linux/amd64" ]]; then
+    # Running arm64 `cockroach demo` on amd64 times out.
+    telemetry_setting="$(docker run -t --platform="$docker_platform" "$img" demo --no-example-database -e 'SHOW CLUSTER SETTING diagnostics.reporting.enabled;' --format json | grep "diagnostics.reporting.enabled" | cut -d: -f2 | cut -d'"' -f2)"
+    if [[ $telemetry_disabled == true && $telemetry_setting != "f" ]]; then
+      echo "ERROR: expected telemetry to be disabled, but it is enabled"
       error=1
     fi
-    openssl_version_output=$(docker run --platform="$docker_platform" "$img" shell -c "openssl version -f")
-    if [[ $openssl_version_output != *"FIPS_VERSION"* ]]; then
-      echo "ERROR: openssl version '$openssl_version_output' does not contain 'FIPS_VERSION'"
+    if [[ $telemetry_disabled == false && $telemetry_setting != "t" ]]; then
+      echo "ERROR: expected telemetry to be enabled, but it is disabled"
       error=1
     fi
   fi
@@ -120,6 +139,28 @@ function is_release_or_master_build(){
   #                                             ^ "v" is optional to match main release branches, e.g. release-23.2
   #                                                ^ calver prefix, e.g. 25.1
   # We don't strictly match the suffix to allow different ones, e.g. "rc" or have none.
+}
+
+# create_and_push_multi_arch_manifest creates a multi-architecture manifest
+# (image index) and pushes it to the registry. Uses `docker buildx imagetools
+# create` which handles both plain manifests and OCI image indexes as sources
+# (newer Docker versions produce the latter even for single-arch builds).
+# Falls back to `docker manifest create` for environments without buildx.
+#
+# Usage: create_and_push_multi_arch_manifest TARGET SOURCE1 SOURCE2 ...
+create_and_push_multi_arch_manifest() {
+  local target=$1
+  shift
+  local sources=("$@")
+
+  if docker buildx imagetools create -t "$target" "${sources[@]}"; then
+    return
+  fi
+
+  echo "Falling back to docker manifest create..."
+  docker manifest rm "$target" || :
+  docker manifest create "$target" "${sources[@]}"
+  docker manifest push "$target"
 }
 
 # Compare the passed version to the latest published version. Returns 0 if the

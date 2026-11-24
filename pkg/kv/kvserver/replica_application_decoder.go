@@ -145,7 +145,7 @@ func (d *replicaDecoder) createTracingSpans(ctx context.Context) {
 			propCtx := ctx // raft scheduler's ctx
 			var propSp *tracing.Span
 			// If the client has a trace, put a child into propCtx.
-			if sp := tracing.SpanFromContext(cmd.proposal.Context()); sp != nil && !sp.IsNoop() {
+			if sp := tracing.SpanFromContext(cmd.proposal.Context()); sp != nil {
 				propCtx, propSp = sp.Tracer().StartSpanCtx(
 					propCtx, "local proposal", tracing.WithParent(sp),
 				)
@@ -158,7 +158,7 @@ func (d *replicaDecoder) createTracingSpans(ctx context.Context) {
 				Map: cmd.Cmd.TraceData,
 			})
 			if err != nil {
-				log.Errorf(ctx, "unable to extract trace data from raft command: %s", err)
+				log.KvExec.Errorf(ctx, "unable to extract trace data from raft command: %s", err)
 			} else {
 				cmd.ctx, cmd.sp = d.r.AmbientContext.Tracer.StartSpanCtx(
 					ctx,

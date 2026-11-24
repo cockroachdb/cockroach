@@ -1,0 +1,115 @@
+setup
+CREATE TABLE defaultdb.foo (i INT PRIMARY KEY);
+CREATE USER fred;
+CREATE FUNCTION is_valid(n INT) returns bool as $$ begin return n < 10; end; $$ language plpgsql;
+----
+
+build
+CREATE POLICY "first policy" on defaultdb.foo AS PERMISSIVE FOR UPDATE TO fred USING (i > 0) WITH CHECK (i % 2 = 0);
+----
+- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 104}
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
+- [[Policy:{DescID: 104, PolicyID: 1}, PUBLIC], ABSENT]
+  {command: 4, policyId: 1, tableId: 104, type: 1}
+- [[PolicyName:{DescID: 104, Name: first policy, PolicyID: 1}, PUBLIC], ABSENT]
+  {name: first policy, policyId: 1, tableId: 104}
+- [[PolicyRole:{DescID: 104, Name: fred, PolicyID: 1}, PUBLIC], ABSENT]
+  {policyId: 1, roleName: fred, tableId: 104}
+- [[PolicyUsingExpr:{DescID: 104, Expr: i > 0:::INT8, PolicyID: 1}, PUBLIC], ABSENT]
+  {expr: 'i > 0:::INT8', policyId: 1, referencedColumnIds: [1], tableId: 104}
+- [[PolicyWithCheckExpr:{DescID: 104, Expr: (i % 2:::INT8) = 0:::INT8, PolicyID: 1}, PUBLIC], ABSENT]
+  {expr: '(i % 2:::INT8) = 0:::INT8', policyId: 1, referencedColumnIds: [1], tableId: 104}
+- [[PolicyDeps:{DescID: 104, PolicyID: 1}, PUBLIC], ABSENT]
+  {policyId: 1, tableId: 104}
+
+build
+CREATE POLICY "second policy" on defaultdb.foo AS RESTRICTIVE FOR INSERT WITH CHECK (false);
+----
+- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 104}
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
+- [[Policy:{DescID: 104, PolicyID: 1}, PUBLIC], ABSENT]
+  {command: 3, policyId: 1, tableId: 104, type: 2}
+- [[PolicyName:{DescID: 104, Name: second policy, PolicyID: 1}, PUBLIC], ABSENT]
+  {name: second policy, policyId: 1, tableId: 104}
+- [[PolicyRole:{DescID: 104, Name: public, PolicyID: 1}, PUBLIC], ABSENT]
+  {policyId: 1, roleName: public, tableId: 104}
+- [[PolicyWithCheckExpr:{DescID: 104, Expr: false, PolicyID: 1}, PUBLIC], ABSENT]
+  {expr: "false", policyId: 1, tableId: 104}
+- [[PolicyDeps:{DescID: 104, PolicyID: 1}, PUBLIC], ABSENT]
+  {policyId: 1, tableId: 104}
+
+build
+CREATE POLICY "third policy" on defaultdb.foo FOR DELETE TO CURRENT_USER,fred USING (i < 0);
+----
+- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 104}
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
+- [[Policy:{DescID: 104, PolicyID: 1}, PUBLIC], ABSENT]
+  {command: 5, policyId: 1, tableId: 104, type: 1}
+- [[PolicyName:{DescID: 104, Name: third policy, PolicyID: 1}, PUBLIC], ABSENT]
+  {name: third policy, policyId: 1, tableId: 104}
+- [[PolicyRole:{DescID: 104, Name: root, PolicyID: 1}, PUBLIC], ABSENT]
+  {policyId: 1, roleName: root, tableId: 104}
+- [[PolicyRole:{DescID: 104, Name: fred, PolicyID: 1}, PUBLIC], ABSENT]
+  {policyId: 1, roleName: fred, tableId: 104}
+- [[PolicyUsingExpr:{DescID: 104, Expr: i < 0:::INT8, PolicyID: 1}, PUBLIC], ABSENT]
+  {expr: 'i < 0:::INT8', policyId: 1, referencedColumnIds: [1], tableId: 104}
+- [[PolicyDeps:{DescID: 104, PolicyID: 1}, PUBLIC], ABSENT]
+  {policyId: 1, tableId: 104}
+
+build
+CREATE POLICY "fourth policy" on defaultdb.foo AS PERMISSIVE TO PUBLIC,SESSION_USER;
+----
+- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 104}
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
+- [[Policy:{DescID: 104, PolicyID: 1}, PUBLIC], ABSENT]
+  {command: 1, policyId: 1, tableId: 104, type: 1}
+- [[PolicyName:{DescID: 104, Name: fourth policy, PolicyID: 1}, PUBLIC], ABSENT]
+  {name: fourth policy, policyId: 1, tableId: 104}
+- [[PolicyRole:{DescID: 104, Name: public, PolicyID: 1}, PUBLIC], ABSENT]
+  {policyId: 1, roleName: public, tableId: 104}
+- [[PolicyRole:{DescID: 104, Name: root, PolicyID: 1}, PUBLIC], ABSENT]
+  {policyId: 1, roleName: root, tableId: 104}
+
+build
+CREATE POLICY "fifth policy" on defaultdb.foo USING (is_valid(i));
+----
+- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 104}
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
+- [[Policy:{DescID: 104, PolicyID: 1}, PUBLIC], ABSENT]
+  {command: 1, policyId: 1, tableId: 104, type: 1}
+- [[PolicyName:{DescID: 104, Name: fifth policy, PolicyID: 1}, PUBLIC], ABSENT]
+  {name: fifth policy, policyId: 1, tableId: 104}
+- [[PolicyRole:{DescID: 104, Name: public, PolicyID: 1}, PUBLIC], ABSENT]
+  {policyId: 1, roleName: public, tableId: 104}
+- [[PolicyUsingExpr:{DescID: 104, Expr: [FUNCTION 100105](i), PolicyID: 1}, PUBLIC], ABSENT]
+  {expr: '[FUNCTION 100105](i)', policyId: 1, referencedColumnIds: [1], tableId: 104, usesFunctionIds: [105]}
+- [[PolicyDeps:{DescID: 104, ReferencedFunctionIDs: [105], PolicyID: 1}, PUBLIC], ABSENT]
+  {policyId: 1, tableId: 104, usesFunctionIds: [105]}
+
+build
+CREATE POLICY "sixth policy" on defaultdb.foo WITH CHECK (is_valid(i));
+----
+- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 104}
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
+- [[Policy:{DescID: 104, PolicyID: 1}, PUBLIC], ABSENT]
+  {command: 1, policyId: 1, tableId: 104, type: 1}
+- [[PolicyName:{DescID: 104, Name: sixth policy, PolicyID: 1}, PUBLIC], ABSENT]
+  {name: sixth policy, policyId: 1, tableId: 104}
+- [[PolicyRole:{DescID: 104, Name: public, PolicyID: 1}, PUBLIC], ABSENT]
+  {policyId: 1, roleName: public, tableId: 104}
+- [[PolicyWithCheckExpr:{DescID: 104, Expr: [FUNCTION 100105](i), PolicyID: 1}, PUBLIC], ABSENT]
+  {expr: '[FUNCTION 100105](i)', policyId: 1, referencedColumnIds: [1], tableId: 104, usesFunctionIds: [105]}
+- [[PolicyDeps:{DescID: 104, ReferencedFunctionIDs: [105], PolicyID: 1}, PUBLIC], ABSENT]
+  {policyId: 1, tableId: 104, usesFunctionIds: [105]}

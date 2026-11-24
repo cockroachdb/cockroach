@@ -23,6 +23,13 @@ type CreateTrigger struct {
 	// TODO(#128536): Pass this information through `memo.CreateTriggerExpr`
 	// instead.
 	FuncBody string
+
+	// FuncBodyOverride, if set, is used by the optbuilder instead of reading the
+	// function body from the catalog. This is set by the declarative schema
+	// changer during CREATE OR REPLACE FUNCTION on a trigger function, so that
+	// the new function body can be analyzed in each dependent trigger's table
+	// context to capture the correct dependencies.
+	FuncBodyOverride string
 }
 
 var _ Statement = &CreateTrigger{}

@@ -18,7 +18,7 @@ type indexSpanSplitter struct{}
 
 // MaybeSplitIndexSpans implements the scexec.IndexSpanSplitter interface.
 func (s *indexSpanSplitter) MaybeSplitIndexSpans(
-	_ context.Context, _ catalog.TableDescriptor, _ catalog.Index,
+	_ context.Context, _ catalog.TableDescriptor, _ catalog.Index, _ catalog.Index,
 ) error {
 	return nil
 }
@@ -27,4 +27,11 @@ func (s *indexSpanSplitter) MaybeSplitIndexSpansForPartitioning(
 	_ context.Context, _ catalog.TableDescriptor, _ catalog.Index,
 ) error {
 	return nil
+}
+
+// ShouldSkipSplitForSmallTable implements the scexec.IndexSpanSplitter interface.
+func (s *indexSpanSplitter) ShouldSkipSplitForSmallTable(
+	_ context.Context, _ catalog.TableDescriptor,
+) bool {
+	return false
 }

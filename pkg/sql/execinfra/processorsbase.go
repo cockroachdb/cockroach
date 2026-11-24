@@ -10,6 +10,9 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -25,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/cockroachdb/redact/interfaces"
 	"go.opentelemetry.io/otel/attribute"
 )
 
@@ -75,7 +79,7 @@ type DoesNotUseTxn interface {
 type ProcOutputHelper struct {
 	// eh only contains expressions if we have at least one rendering. It will
 	// not be used if outputCols is set.
-	eh execinfrapb.MultiExprHelper
+	eh execexpr.MultiHelper
 	// outputCols is non-nil if we have a projection. Only one of renderExprs and
 	// outputCols can be set. Note that 0-length projections are possible, in
 	// which case outputCols will be 0-length but non-nil.
@@ -164,7 +168,8 @@ func (h *ProcOutputHelper) Init(
 		if evalCtx == flowCtx.EvalCtx {
 			// We haven't created a copy of the eval context, and we have some
 			// renders, then we'll need to create a copy ourselves since we're
-			// going to use the ExprHelper which might mutate the eval context.
+			// going to use the execexpr.Helper which might mutate the eval
+			// context.
 			evalCtx = flowCtx.NewEvalCtx()
 		}
 		if cap(h.OutputTypes) >= nRenders {
@@ -244,7 +249,7 @@ func (h *ProcOutputHelper) EmitRow(
 	// TODO(yuzefovich): consider removing this logging since the verbosity
 	// check is not exactly free.
 	if log.V(3) {
-		log.InfofDepth(ctx, 1, "pushing row %s", outRow.String(h.OutputTypes))
+		log.Dev.InfofDepth(ctx, 1, "pushing row %s", outRow.String(h.OutputTypes))
 	}
 	if r := output.Push(outRow, nil); r != NeedMoreRows {
 		log.VEventf(ctx, 1, "no more rows required. drain requested: %t",
@@ -292,7 +297,10 @@ func (h *ProcOutputHelper) ProcessRow(
 			if err != nil {
 				return nil, false, err
 			}
-			h.outputRow[i] = rowenc.DatumToEncDatum(h.OutputTypes[i], datum)
+			h.outputRow[i], err = rowenc.DatumToEncDatum(h.OutputTypes[i], datum)
+			if err != nil {
+				return nil, false, err
+			}
 		}
 	} else if h.outputCols != nil {
 		// Projection.
@@ -323,6 +331,7 @@ type ProcessorConstructor func(
 	ctx context.Context,
 	flowCtx *FlowCtx,
 	processorID int32,
+	stageID int32,
 	core *execinfrapb.ProcessorCoreUnion,
 	post *execinfrapb.PostProcessSpec,
 	inputs []RowSource,
@@ -407,6 +416,9 @@ type ProcessorBaseNoHelper struct {
 	// curInputToDrain is the index into inputsToDrain that needs to be drained
 	// next.
 	curInputToDrain int
+
+	// ashCleanup clears the ASH work state set during StartInternal.
+	ashCleanup func()
 }
 
 // MustBeStreaming implements the Processor interface.
@@ -444,6 +456,21 @@ func (pb *ProcessorBase) Reset() {
 // states are relevant when the processor is using the draining utilities in
 // ProcessorBase.
 type procState int
+
+func (i procState) SafeFormat(s interfaces.SafePrinter, verb rune) {
+	switch i {
+	case StateRunning:
+		s.SafeString("StateRunning")
+	case StateDraining:
+		s.SafeString("StateDraining")
+	case StateTrailingMeta:
+		s.SafeString("StateTrailingMeta")
+	case StateExhausted:
+		s.SafeString("StateExhausted")
+	}
+}
+
+var _ redact.SafeFormatter = procState(0)
 
 //go:generate stringer -type=procState
 const (
@@ -504,7 +531,12 @@ const (
 // at init() time), then we move straight to the StateTrailingMeta.
 //
 // An error can be optionally passed. It will be the first piece of metadata
-// returned by DrainHelper().
+// returned by DrainHelper(), unless the processor's context has already been
+// canceled, in which case the context's error is returned instead (as often an
+// error passed to MoveToDraining() is a consequence of context cancellation).
+//
+// MoveToDraining should only be called from the main goroutine of the
+// processor.
 func (pb *ProcessorBaseNoHelper) MoveToDraining(err error) {
 	if pb.State != StateRunning {
 		// Calling MoveToDraining in any state is allowed in order to facilitate the
@@ -522,6 +554,18 @@ func (pb *ProcessorBaseNoHelper) MoveToDraining(err error) {
 	}
 
 	if err != nil {
+		// If processor ctx was canceled, reply with that err rather than whatever
+		// error was passed to MoveToDraining by a processor running on top of a
+		// canceled context, which is expected to error. Generally the error passed
+		// in this case will be context.Canceled anyway, but doing this ensures that
+		// distsql can promise that if it cancels a context, the emitted error will
+		// reflect that, making cancellation detectable by callers.
+		if pb.Ctx().Err() != nil {
+			if !errors.Is(err, pb.Ctx().Err()) {
+				log.Dev.Warningf(pb.Ctx(), "overriding non-cancellation emitted after context cancellation: %+v", err)
+			}
+			err = pb.Ctx().Err()
+		}
 		pb.trailingMeta = append(pb.trailingMeta, execinfrapb.ProducerMetadata{Err: err})
 	}
 	if pb.curInputToDrain < len(pb.inputsToDrain) {
@@ -840,7 +884,7 @@ func ProcessorSpan(
 	eventListeners ...tracing.EventListener,
 ) (context.Context, *tracing.Span) {
 	sp := tracing.SpanFromContext(ctx)
-	if sp == nil || sp.IsNoop() {
+	if sp == nil {
 		return ctx, nil
 	}
 	var listenersOpt tracing.SpanOption
@@ -891,6 +935,21 @@ func (pb *ProcessorBaseNoHelper) StartInternal(
 	if !noSpan {
 		pb.ctx, pb.span = ProcessorSpan(ctx, pb.FlowCtx, name, pb.ProcessorID, eventListeners...)
 	}
+	if pb.FlowCtx != nil && pb.FlowCtx.EvalCtx != nil {
+		var gatewayNodeID roachpb.NodeID
+		if pb.FlowCtx.NodeID != nil {
+			gatewayNodeID = roachpb.NodeID(pb.FlowCtx.NodeID.SQLInstanceID())
+		}
+		pb.ashCleanup = ash.SetWorkState(
+			pb.FlowCtx.Codec().TenantID,
+			ash.WorkloadInfo{
+				WorkloadID:    pb.FlowCtx.EvalCtx.WorkloadID,
+				AppNameID:     pb.FlowCtx.EvalCtx.AppNameID,
+				GatewayNodeID: gatewayNodeID,
+				WorkloadType:  pb.FlowCtx.EvalCtx.WorkloadType,
+			},
+			ash.WorkCPU, name)
+	}
 	return pb.ctx
 }
 
@@ -924,6 +983,10 @@ func (pb *ProcessorBaseNoHelper) InternalClose() bool {
 		input.ConsumerClosed()
 	}
 
+	if pb.ashCleanup != nil {
+		pb.ashCleanup()
+		pb.ashCleanup = nil
+	}
 	pb.Closed = true
 	pb.span.Finish()
 	pb.span = nil
@@ -947,9 +1010,7 @@ func (pb *ProcessorBaseNoHelper) ConsumerClosed() {
 // NewMonitor is a utility function used by processors to create a new
 // memory monitor with the given name and start it. The returned monitor must
 // be closed.
-func NewMonitor(
-	ctx context.Context, parent *mon.BytesMonitor, name redact.RedactableString,
-) *mon.BytesMonitor {
+func NewMonitor(ctx context.Context, parent *mon.BytesMonitor, name mon.Name) *mon.BytesMonitor {
 	monitor := mon.NewMonitorInheritWithLimit(name, 0 /* limit */, parent, false /* longLiving */)
 	monitor.StartNoReserved(ctx, parent)
 	return monitor
@@ -962,7 +1023,7 @@ func NewMonitor(
 // ServerConfig.TestingKnobs.ForceDiskSpill is set or
 // ServerConfig.TestingKnobs.MemoryLimitBytes if not.
 func NewLimitedMonitor(
-	ctx context.Context, parent *mon.BytesMonitor, flowCtx *FlowCtx, name redact.RedactableString,
+	ctx context.Context, parent *mon.BytesMonitor, flowCtx *FlowCtx, name mon.Name,
 ) *mon.BytesMonitor {
 	limitedMon := mon.NewMonitorInheritWithLimit(name, GetWorkMemLimit(flowCtx), parent, false /* longLiving */)
 	limitedMon.StartNoReserved(ctx, parent)
@@ -973,13 +1034,14 @@ func NewLimitedMonitor(
 // guarantees that the monitor's limit is at least minMemoryLimit bytes.
 // flowCtx.Mon is used as the parent for the new monitor.
 func NewLimitedMonitorWithLowerBound(
-	ctx context.Context, flowCtx *FlowCtx, name redact.RedactableString, minMemoryLimit int64,
+	ctx context.Context, flowCtx *FlowCtx, name redact.SafeString, minMemoryLimit int64,
 ) *mon.BytesMonitor {
 	memoryLimit := GetWorkMemLimit(flowCtx)
 	if memoryLimit < minMemoryLimit {
 		memoryLimit = minMemoryLimit
 	}
-	limitedMon := mon.NewMonitorInheritWithLimit(name, memoryLimit, flowCtx.Mon, false /* longLiving */)
+	limitedMon := mon.NewMonitorInheritWithLimit(mon.MakeName(name), memoryLimit, flowCtx.Mon,
+		false /* longLiving */)
 	limitedMon.StartNoReserved(ctx, flowCtx.Mon)
 	return limitedMon
 }
@@ -991,7 +1053,7 @@ func NewLimitedMonitorNoFlowCtx(
 	parent *mon.BytesMonitor,
 	config *ServerConfig,
 	sd *sessiondata.SessionData,
-	name redact.RedactableString,
+	name mon.Name,
 ) *mon.BytesMonitor {
 	// Create a fake FlowCtx populating only the required fields.
 	flowCtx := &FlowCtx{

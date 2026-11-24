@@ -182,8 +182,9 @@ type mockShell struct {
 
 var _ sqlShell = mockShell{}
 
-func (mockShell) inCopy() bool      { return false }
-func (mockShell) enableDebug() bool { return false }
+func (mockShell) inCopy() bool                { return false }
+func (mockShell) enableDebug() bool           { return false }
+func (mockShell) externalEditorAllowed() bool { return true }
 func (mockShell) serverSideParse(sql string) (string, error) {
 	panic("not implemented")
 }

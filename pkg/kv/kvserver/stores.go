@@ -11,9 +11,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -43,17 +44,20 @@ type Stores struct {
 		biLatestTS hlc.Timestamp         // Timestamp of gossip bootstrap info
 		latestBI   *gossip.BootstrapInfo // Latest cached bootstrap info
 	}
+	sendQueueLogger *rac2.SendQueueLogger
 }
 
-var _ kv.Sender = &Stores{}      // Stores implements the client.Sender interface
+var _ SenderWithWorkStats = &Stores{}
 var _ gossip.Storage = &Stores{} // Stores implements the gossip.Storage interface
 
 // NewStores returns a local-only sender which directly accesses
 // a collection of stores.
 func NewStores(ambient log.AmbientContext, clock *hlc.Clock) *Stores {
+	const numStreamsToLog = 20
 	return &Stores{
-		AmbientContext: ambient,
-		clock:          clock,
+		AmbientContext:  ambient,
+		clock:           clock,
+		sendQueueLogger: rac2.NewSendQueueLogger(numStreamsToLog),
 	}
 }
 
@@ -107,7 +111,7 @@ func (ls *Stores) AddStore(s *Store) {
 	if !ls.mu.biLatestTS.IsEmpty() {
 		if err := ls.updateBootstrapInfoLocked(ls.mu.latestBI); err != nil {
 			ctx := ls.AnnotateCtx(context.TODO())
-			log.Errorf(ctx, "failed to update bootstrap info on newly added store: %+v", err)
+			log.KvDistribution.Errorf(ctx, "failed to update bootstrap info on newly added store: %+v", err)
 		}
 	}
 }
@@ -129,7 +133,7 @@ func (ls *Stores) ForwardSideTransportClosedTimestampForRange(
 		}
 		return nil
 	}); err != nil {
-		log.Fatalf(ctx, "unexpected error: %s", err)
+		log.KvDistribution.Fatalf(ctx, "unexpected error: %s", err)
 	}
 }
 
@@ -163,7 +167,7 @@ func (ls *Stores) GetReplicaForRangeID(
 		}
 		return nil
 	}); err != nil {
-		log.Fatalf(ctx, "unexpected error: %s", err)
+		log.KvExec.Fatalf(ctx, "unexpected error: %s", err)
 	}
 	if replica == nil {
 		return nil, nil, kvpb.NewRangeNotFoundError(rangeID, 0)
@@ -171,35 +175,28 @@ func (ls *Stores) GetReplicaForRangeID(
 	return replica, store, nil
 }
 
-// Send implements the client.Sender interface. The store is looked up from the
+// SendWithWorkStats sends a batch request. The store is looked up from the
 // store map using the ID specified in the request.
-func (ls *Stores) Send(
-	ctx context.Context, ba *kvpb.BatchRequest,
+func (ls *Stores) SendWithWorkStats(
+	ctx context.Context,
+	ba *kvpb.BatchRequest,
+	stats *StoreWorkStats,
+	admissionInfo kvadmission.AdmissionInfo,
 ) (*kvpb.BatchResponse, *kvpb.Error) {
-	br, writeBytes, pErr := ls.SendWithWriteBytes(ctx, ba)
-	writeBytes.Release()
-	return br, pErr
-}
-
-// SendWithWriteBytes is the implementation of Send with an additional
-// *StoreWriteBytes return value.
-func (ls *Stores) SendWithWriteBytes(
-	ctx context.Context, ba *kvpb.BatchRequest,
-) (*kvpb.BatchResponse, *kvadmission.StoreWriteBytes, *kvpb.Error) {
 	if err := ba.ValidateForEvaluation(); err != nil {
-		return nil, nil, kvpb.NewError(errors.Wrapf(err, "invalid batch (%s)", ba))
+		return nil, kvpb.NewError(errors.Wrapf(err, "invalid batch (%s)", ba))
 	}
 
 	store, err := ls.GetStore(ba.Replica.StoreID)
 	if err != nil {
-		return nil, nil, kvpb.NewError(err)
+		return nil, kvpb.NewError(err)
 	}
 
-	br, writeBytes, pErr := store.SendWithWriteBytes(ctx, ba)
+	br, pErr := store.SendWithWorkStats(ctx, ba, stats, admissionInfo)
 	if br != nil && br.Error != nil {
 		panic(kvpb.ErrorUnexpectedlySet(store, br))
 	}
-	return br, writeBytes, pErr
+	return br, pErr
 }
 
 // RangeFeed registers a rangefeed over the specified span. It sends
@@ -212,9 +209,9 @@ func (ls *Stores) RangeFeed(
 	perConsumerCatchupLimiter *limit.ConcurrentRequestLimiter,
 ) (rangefeed.Disconnector, error) {
 	if args.RangeID == 0 {
-		log.Fatal(streamCtx, "rangefeed request missing range ID")
+		log.KvDistribution.Fatal(streamCtx, "rangefeed request missing range ID")
 	} else if args.Replica.StoreID == 0 {
-		log.Fatal(streamCtx, "rangefeed request missing store ID")
+		log.KvDistribution.Fatal(streamCtx, "rangefeed request missing store ID")
 	}
 
 	store, err := ls.GetStore(args.Replica.StoreID)
@@ -241,9 +238,7 @@ func (ls *Stores) ReadBootstrapInfo(bi *gossip.BootstrapInfo) error {
 	ls.storeMap.Range(func(_ roachpb.StoreID, s *Store) bool {
 		var storeBI gossip.BootstrapInfo
 		var ok bool
-		// TODO(sep-raft-log): probably state engine since it's random data
-		// with no durability guarantees.
-		ok, err = storage.MVCCGetProto(ctx, s.TODOEngine(), keys.StoreGossipKey(), hlc.Timestamp{}, &storeBI,
+		ok, err = storage.MVCCGetProto(ctx, s.LogEngine(), keys.StoreGossipKey(), hlc.Timestamp{}, &storeBI,
 			storage.MVCCGetOptions{})
 		if err != nil {
 			return false
@@ -257,7 +252,7 @@ func (ls *Stores) ReadBootstrapInfo(bi *gossip.BootstrapInfo) error {
 	if err != nil {
 		return err
 	}
-	log.Infof(ctx, "read %d node addresses from persistent storage", len(bi.Addresses))
+	log.KvDistribution.Infof(ctx, "read %d node addresses from persistent storage", len(bi.Addresses))
 
 	ls.mu.Lock()
 	defer ls.mu.Unlock()
@@ -276,7 +271,7 @@ func (ls *Stores) WriteBootstrapInfo(bi *gossip.BootstrapInfo) error {
 		return err
 	}
 	ctx := ls.AnnotateCtx(context.TODO())
-	log.Infof(ctx, "wrote %d node addresses to persistent storage", len(bi.Addresses))
+	log.KvDistribution.Infof(ctx, "wrote %d node addresses to persistent storage", len(bi.Addresses))
 	return nil
 }
 
@@ -292,7 +287,7 @@ func (ls *Stores) updateBootstrapInfoLocked(bi *gossip.BootstrapInfo) error {
 	var err error
 	ls.storeMap.Range(func(_ roachpb.StoreID, s *Store) bool {
 		// TODO(sep-raft-log): see ReadBootstrapInfo.
-		err = storage.MVCCPutProto(ctx, s.TODOEngine(), keys.StoreGossipKey(), hlc.Timestamp{}, bi, storage.MVCCWriteOptions{})
+		err = storage.MVCCPutProto(ctx, s.LogEngine(), keys.StoreGossipKey(), hlc.Timestamp{}, bi, storage.MVCCWriteOptions{})
 		return err == nil
 	})
 	return err
@@ -300,6 +295,7 @@ func (ls *Stores) updateBootstrapInfoLocked(bi *gossip.BootstrapInfo) error {
 
 // DiskStatsMonitor abstracts disk.Monitor for testing purposes.
 type DiskStatsMonitor interface {
+	DeviceID() disk.DeviceID
 	CumulativeStats() (disk.Stats, error)
 	Clone() *disk.Monitor
 	Close()
@@ -325,4 +321,49 @@ func (ls *Stores) CloseDiskMonitors() {
 		}
 		return nil
 	})
+}
+
+// GetStoreMetricRegistry returns the metric registry of the provided store ID.
+func (ls *Stores) GetStoreMetricRegistry(storeID roachpb.StoreID) *metric.Registry {
+	if s, ok := ls.storeMap.Load(storeID); ok {
+		return s.Registry()
+	}
+	return nil
+}
+
+// GetAggregatedStoreStats returns the aggregated cpu usage across all stores and
+// the count of stores.
+func (ls *Stores) GetAggregatedStoreStats(
+	useCached bool,
+) (storesCPURate int64, numStores int32, _ error) {
+	if err := ls.VisitStores(func(s *Store) error {
+		c, err := s.Capacity(context.Background(), useCached)
+		if err != nil {
+			return err
+		}
+		storesCPURate += int64(c.CPUPerSecond)
+		numStores++
+		return nil
+	}); err != nil {
+		return 0, 0, err
+	}
+	return storesCPURate, numStores, nil
+}
+
+func (ls *Stores) TryLogFlowControlSendQueues(ctx context.Context) {
+	coll, ok := ls.sendQueueLogger.TryStartLog()
+	if !ok {
+		return
+	}
+	rangeSendStats := rac2.RangeSendStreamStats{}
+	_ = ls.VisitStores(func(s *Store) error {
+		newStoreReplicaVisitor(s).Visit(func(rep *Replica) bool {
+			rangeSendStats.Clear()
+			rep.SendStreamStats(&rangeSendStats)
+			coll.ObserveRangeStats(&rangeSendStats)
+			return true
+		})
+		return nil
+	})
+	ls.sendQueueLogger.FinishLog(ctx, coll)
 }

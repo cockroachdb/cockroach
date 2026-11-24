@@ -9,23 +9,15 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
-	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -37,13 +29,6 @@ func TestProtectedTimestampsPreventGC(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
-		Knobs: base.TestingKnobs{
-			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
-		},
-	})
-	defer srv.Stopper().Stop(ctx)
-	execCfg := srv.ExecutorConfig().(sql.ExecutorConfig)
 
 	ts := func(nanos int) hlc.Timestamp {
 		return hlc.Timestamp{
@@ -64,36 +49,37 @@ func TestProtectedTimestampsPreventGC(t *testing.T) {
 	}
 
 	for _, tc := range []struct {
-		name                string
-		setup               func(t *testing.T, kvAccessor *manualKVAccessor, cache *manualCache)
-		droppedAtTime       int64
-		expectedIsProtected bool
-
-		failsWithSecondaryTenant bool
+		name                          string
+		setup                         func(t *testing.T, kvAccessor *manualKVAccessor)
+		droppedAtTime                 int64
+		expectedProtectedForDataGC    bool
+		expectedProtectedForDescClean bool
 	}{
 		{
 			name: "span-config-pts-applies",
-			setup: func(t *testing.T, kvAccessor *manualKVAccessor, cache *manualCache) {
+			setup: func(t *testing.T, kvAccessor *manualKVAccessor) {
 				kvAccessor.spanConfigs = []roachpb.SpanConfig{
 					makeSpanConfig(10, false /* excludeFromBackup */, false /* ignoreIfExcludedFromBackup */),
 				}
 			},
-			droppedAtTime:       13, // The table/index was dropped after the PTS was laid
-			expectedIsProtected: true,
+			droppedAtTime:                 13, // The table/index was dropped after the PTS was laid
+			expectedProtectedForDataGC:    true,
+			expectedProtectedForDescClean: true,
 		},
 		{
 			name: "span-config-pts-exists-but-does-not-apply",
-			setup: func(t *testing.T, kvAccessor *manualKVAccessor, cache *manualCache) {
+			setup: func(t *testing.T, kvAccessor *manualKVAccessor) {
 				kvAccessor.spanConfigs = []roachpb.SpanConfig{
 					makeSpanConfig(10, false /* excludeFromBackup */, false /* ignoreIfExcludedFromBackup */),
 				}
 			},
-			droppedAtTime:       8, // The table/index was dropped before the PTS was laid
-			expectedIsProtected: false,
+			droppedAtTime:                 8, // The table/index was dropped before the PTS was laid
+			expectedProtectedForDataGC:    false,
+			expectedProtectedForDescClean: false,
 		},
 		{
 			name: "system-span-config-pts-applies",
-			setup: func(t *testing.T, kvAccessor *manualKVAccessor, cache *manualCache) {
+			setup: func(t *testing.T, kvAccessor *manualKVAccessor) {
 				// PTS records on span configs exist, but they were laid after the drop
 				// time, so they don't apply.
 				kvAccessor.spanConfigs = []roachpb.SpanConfig{
@@ -106,12 +92,19 @@ func TestProtectedTimestampsPreventGC(t *testing.T) {
 					makeSpanConfig(7, false /* excludeFromBackup */, false /* ignoreIfExcludedFromBackup */),
 				}
 			},
-			droppedAtTime:       8,
-			expectedIsProtected: true,
+			droppedAtTime:                 8,
+			expectedProtectedForDataGC:    true,
+			expectedProtectedForDescClean: true,
 		},
 		{
+			// In the data-GC scope, the backup PTS is filtered out (the
+			// existing exclude_data_from_backup contract). In the
+			// descriptor-cleanup scope, the same PTS is honored: tearing
+			// down the descriptor would remove the span config record
+			// carrying ExcludeDataFromBackup, breaking the backup
+			// processor's ability to recover from the resulting GC error.
 			name: "system-span-config-pts-is-active-but-excluded-because-of-backup",
-			setup: func(t *testing.T, kvAccessor *manualKVAccessor, cache *manualCache) {
+			setup: func(t *testing.T, kvAccessor *manualKVAccessor) {
 				// PTS records on span configs exist, but they were laid after the drop
 				// time, so they don't apply.
 				kvAccessor.spanConfigs = []roachpb.SpanConfig{
@@ -126,12 +119,13 @@ func TestProtectedTimestampsPreventGC(t *testing.T) {
 					makeSpanConfig(7, true /* excludeFromBackup */, true /* ignoreIfExcludedFromBackup */),
 				}
 			},
-			droppedAtTime:       8,
-			expectedIsProtected: false,
+			droppedAtTime:                 8,
+			expectedProtectedForDataGC:    false,
+			expectedProtectedForDescClean: true,
 		},
 		{
 			name: "system-span-config-pts-is-active-excluded-from-backup-but-not-ignored",
-			setup: func(t *testing.T, kvAccessor *manualKVAccessor, cache *manualCache) {
+			setup: func(t *testing.T, kvAccessor *manualKVAccessor) {
 				// PTS records on span configs exist, but they were laid after the drop
 				// time, so they don't apply.
 				kvAccessor.spanConfigs = []roachpb.SpanConfig{
@@ -146,38 +140,13 @@ func TestProtectedTimestampsPreventGC(t *testing.T) {
 					makeSpanConfig(7, true /* excludeFromBackup */, false /* ignoreIfExcludedFromBackup */),
 				}
 			},
-			droppedAtTime:       8,
-			expectedIsProtected: true,
-		},
-		{
-			name: "deprecated-pts-applies",
-			setup: func(t *testing.T, kvAccessor *manualKVAccessor, cache *manualCache) {
-				// PTS records on span configs exist, but they were laid after the drop
-				// time, so they don't apply.
-				kvAccessor.spanConfigs = []roachpb.SpanConfig{
-					makeSpanConfig(10, false /* excludeFromBackup */, false /* ignoreIfExcludedFromBackup */),
-					makeSpanConfig(12, false /* excludeFromBackup */, false /* ignoreIfExcludedFromBackup */),
-				}
-				// PTS record on system span configs exist, but they were laid after the
-				// drop time, so they don't apply.
-				kvAccessor.systemSpanConfigs = []roachpb.SpanConfig{
-					makeSpanConfig(7, false /* excludeFromBackup */, false /* ignoreIfExcludedFromBackup */),
-					makeSpanConfig(8, false /* excludeFromBackup */, false /* ignoreIfExcludedFromBackup */),
-				}
-				cache.protectedTimestamps = []hlc.Timestamp{
-					ts(5),
-					ts(3), // applies as it's before the drop time
-				}
-			},
-			droppedAtTime:       4,
-			expectedIsProtected: true,
-
-			// TODO(sql-foundations): investigate this.
-			failsWithSecondaryTenant: true,
+			droppedAtTime:                 8,
+			expectedProtectedForDataGC:    true,
+			expectedProtectedForDescClean: true,
 		},
 		{
 			name: "pts-records-exist-but-none-apply",
-			setup: func(t *testing.T, kvAccessor *manualKVAccessor, cache *manualCache) {
+			setup: func(t *testing.T, kvAccessor *manualKVAccessor) {
 				// PTS records on span configs exist, but they were laid after the drop
 				// time, so they don't apply.
 				kvAccessor.spanConfigs = []roachpb.SpanConfig{
@@ -190,34 +159,36 @@ func TestProtectedTimestampsPreventGC(t *testing.T) {
 					makeSpanConfig(7, false /* excludeFromBackup */, false /* ignoreIfExcludedFromBackup */),
 					makeSpanConfig(8, false /* excludeFromBackup */, false /* ignoreIfExcludedFromBackup */),
 				}
-				// PTS records in the old PTS subsystem exist, but they were laid after
-				// the drop time, so they don't apply.
-				cache.protectedTimestamps = []hlc.Timestamp{
-					ts(5),
-					ts(3),
-				}
 			},
-			droppedAtTime:       2,
-			expectedIsProtected: false,
+			droppedAtTime:                 2,
+			expectedProtectedForDataGC:    false,
+			expectedProtectedForDescClean: false,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if tc.failsWithSecondaryTenant && srv.TenantController().StartedDefaultTestTenant() {
-				skip.WithIssue(t, 110014)
-			}
-
-			kvAccessor := &manualKVAccessor{}
-			cache := &manualCache{}
-			tc.setup(t, kvAccessor, cache)
 			scratchRange := roachpb.Span{
 				Key:    keys.ScratchRangeMin,
 				EndKey: keys.SystemSpanConfigKeyMax,
 			}
-			isProtected, err := isProtected(
-				ctx, jobspb.InvalidJobID, tc.droppedAtTime, &execCfg, kvAccessor, cache, scratchRange,
-			)
-			require.NoError(t, err)
-			require.Equal(t, tc.expectedIsProtected, isProtected)
+			for _, sc := range []struct {
+				name     string
+				scope    protectionScope
+				expected bool
+			}{
+				{name: "data-GC", scope: protectionScopeForDataGC, expected: tc.expectedProtectedForDataGC},
+				{name: "descriptor-cleanup", scope: protectionScopeForDescriptorCleanup, expected: tc.expectedProtectedForDescClean},
+			} {
+				t.Run(sc.name, func(t *testing.T) {
+					kvAccessor := &manualKVAccessor{}
+					tc.setup(t, kvAccessor)
+					isProtected, err := isProtected(
+						ctx, jobspb.InvalidJobID, tc.droppedAtTime,
+						keys.SystemSQLCodec, nil /* knobs */, kvAccessor, scratchRange, sc.scope,
+					)
+					require.NoError(t, err)
+					require.Equal(t, sc.expected, isProtected)
+				})
+			}
 		})
 	}
 }
@@ -266,36 +237,5 @@ func (m *manualKVAccessor) WithTxn(context.Context, *kv.Txn) spanconfig.KVAccess
 
 // WithISQLTxn is part of the KVAccessor interface.
 func (k *manualKVAccessor) WithISQLTxn(context.Context, isql.Txn) spanconfig.KVAccessor {
-	panic("unimplemented")
-}
-
-type manualCache struct {
-	protectedTimestamps []hlc.Timestamp
-}
-
-var _ protectedts.Cache = &manualCache{}
-
-func (c *manualCache) Iterate(
-	_ context.Context, _, _ roachpb.Key, it protectedts.Iterator,
-) hlc.Timestamp {
-	for _, protectedTimestamp := range c.protectedTimestamps {
-		it(&ptpb.Record{
-			Timestamp: protectedTimestamp,
-		})
-	}
-	return hlc.Timestamp{} // asOf
-}
-
-func (c *manualCache) GetProtectionTimestamps(
-	context.Context, roachpb.Span,
-) (protectionTimestamps []hlc.Timestamp, asOf hlc.Timestamp, err error) {
-	panic("unimplemented")
-}
-
-func (c *manualCache) Refresh(ctx context.Context, asOf hlc.Timestamp) error {
-	panic("unimplemented")
-}
-
-func (c *manualCache) QueryRecord(context.Context, uuid.UUID) (exists bool, asOf hlc.Timestamp) {
 	panic("unimplemented")
 }

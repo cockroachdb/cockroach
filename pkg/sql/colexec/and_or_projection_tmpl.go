@@ -5,7 +5,6 @@
 
 // {{/*
 //go:build execgen_template
-// +build execgen_template
 
 //
 // This file is the execgen template for and_or_projection.eg.go. It's
@@ -25,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -170,11 +170,14 @@ func (o *_OP_LOWERProjOp) Init(ctx context.Context) {
 // side projection only on the remaining tuples (i.e. those that were not
 // "subtracted"). Next, it restores the original selection vector and
 // populates the result of the logical operation.
-func (o *_OP_LOWERProjOp) Next() coldata.Batch {
-	batch := o.input.Next()
+func (o *_OP_LOWERProjOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := o.input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	origLen := batch.Length()
 	if origLen == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	usesSel := false
 	if sel := batch.Selection(); sel != nil {
@@ -187,7 +190,7 @@ func (o *_OP_LOWERProjOp) Next() coldata.Batch {
 	// here. First, we set the input batch for the left projection to run and
 	// actually run the projection.
 	o.leftFeedOp.SetBatch(batch)
-	batch = o.leftProjOpChain.Next()
+	batch = colexecop.NextNoMeta(o.leftProjOpChain)
 
 	// Now we need to populate a selection vector on the batch in such a way that
 	// those tuples that we already know the result of logical operation for do
@@ -260,7 +263,7 @@ func (o *_OP_LOWERProjOp) Next() coldata.Batch {
 		// remaining tuples.
 		batch.SetLength(curIdx)
 		o.rightFeedOp.SetBatch(batch)
-		batch = o.rightProjOpChain.Next()
+		batch = colexecop.NextNoMeta(o.rightProjOpChain)
 		rightVec = batch.ColVec(o.rightIdx)
 		rightVals = rightVec.Bool()
 	}
@@ -297,7 +300,7 @@ func (o *_OP_LOWERProjOp) Next() coldata.Batch {
 		}
 	}
 
-	return batch
+	return batch, nil
 }
 
 // {{end}}

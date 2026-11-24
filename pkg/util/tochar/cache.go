@@ -34,12 +34,58 @@ func NewFormatCache(size int) *FormatCache {
 	return ret
 }
 
-func (pc *FormatCache) lookup(fmtString string) []formatNode {
-	if pc != nil && len(fmtString) <= maxCacheKeySize {
+// Cache key prefixes to avoid collisions between datetime (DCH) and
+// numeric (NUM) format strings in the shared cache.
+const (
+	dchCacheKeyPrefix = "dch:"
+	numCacheKeyPrefix = "num:"
+)
+
+// numCacheEntry stores the parsed result of a numeric format string.
+type numCacheEntry struct {
+	nodes []numFormatNode
+	desc  numDesc
+}
+
+// lookupNum retrieves or parses a numeric format string. It uses a "num:"
+// prefix for cache keys to avoid collisions with datetime formats.
+func (pc *FormatCache) lookupNum(fmtString string) ([]numFormatNode, numDesc, error) {
+	cacheKey := numCacheKeyPrefix + fmtString
+	if pc != nil && len(cacheKey) <= maxCacheKeySize {
+		if entry, ok := func() (numCacheEntry, bool) {
+			pc.mu.Lock()
+			defer pc.mu.Unlock()
+			ret, ok := pc.mu.cache.Get(cacheKey)
+			if ok {
+				return ret.(numCacheEntry), true
+			}
+			return numCacheEntry{}, false
+		}(); ok {
+			return entry.nodes, entry.desc, nil
+		}
+
+		nodes, desc, err := parseNumFormat(fmtString)
+		if err != nil {
+			return nil, numDesc{}, err
+		}
+		entry := numCacheEntry{nodes: nodes, desc: desc}
+		pc.mu.Lock()
+		defer pc.mu.Unlock()
+		pc.mu.cache.Add(cacheKey, entry)
+		return entry.nodes, entry.desc, nil
+	}
+	return parseNumFormat(fmtString)
+}
+
+// lookupDCH retrieves or parses a datetime (DCH) format string. It uses
+// a "dch:" prefix for cache keys to avoid collisions with numeric formats.
+func (pc *FormatCache) lookupDCH(fmtString string) []formatNode {
+	cacheKey := dchCacheKeyPrefix + fmtString
+	if pc != nil && len(cacheKey) <= maxCacheKeySize {
 		if ret, ok := func() ([]formatNode, bool) {
 			pc.mu.Lock()
 			defer pc.mu.Unlock()
-			ret, ok := pc.mu.cache.Get(fmtString)
+			ret, ok := pc.mu.cache.Get(cacheKey)
 			if ok {
 				return ret.([]formatNode), true
 			}
@@ -51,7 +97,7 @@ func (pc *FormatCache) lookup(fmtString string) []formatNode {
 		r := parseFormat(fmtString)
 		pc.mu.Lock()
 		defer pc.mu.Unlock()
-		pc.mu.cache.Add(fmtString, r)
+		pc.mu.cache.Add(cacheKey, r)
 		return r
 	}
 	return parseFormat(fmtString)

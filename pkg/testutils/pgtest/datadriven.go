@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -199,6 +200,8 @@ func hasKeepErrMsg(d *datadriven.TestData) bool {
 	return false
 }
 
+var issueRE = regexp.MustCompile(`(https://go.crdb.dev/issue-v/\d+/)[^/]+`)
+
 // MsgsToJSONWithIgnore converts the pgproto3 messages to JSON format. The
 // second argument can specify how to adjust the messages (e.g. to make them
 // more deterministic) if needed, see testdata for examples.
@@ -261,6 +264,9 @@ func MsgsToJSONWithIgnore(msgs []pgproto3.BackendMessage, args *datadriven.TestD
 			if v, ok := errs[code]; ok {
 				code = v
 			}
+			// Sanitize the error hint to remove the binary version from the
+			// issue link.
+			errHintSanitized := issueRE.ReplaceAllString(errmsg.Hint, "$1...")
 			if err := enc.Encode(struct {
 				Type           string
 				Code           string
@@ -274,7 +280,7 @@ func MsgsToJSONWithIgnore(msgs []pgproto3.BackendMessage, args *datadriven.TestD
 				Message:        errmsg.Message,
 				ConstraintName: errmsg.ConstraintName,
 				Detail:         errmsg.Detail,
-				Hint:           errmsg.Hint,
+				Hint:           errHintSanitized,
 			}); err != nil {
 				panic(err)
 			}

@@ -3,6 +3,7 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 go_library(
     name = "task",
     srcs = [
+        "group.go",
         "manager.go",
         "options.go",
         "tasker.go",
@@ -14,6 +15,7 @@ go_library(
         "//pkg/roachprod/logger",
         "//pkg/util/ctxgroup",
         "//pkg/util/syncutil",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 

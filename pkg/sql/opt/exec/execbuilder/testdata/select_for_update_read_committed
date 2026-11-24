@@ -54,7 +54,8 @@ UPDATE supermarket
 update supermarket
  └── project
       ├── scan supermarket
-      │    └── constraint: /9: [/'michael' - /'michael']
+      │    ├── constraint: /9: [/'michael' - /'michael']
+      │    └── flags: avoid-full-scan
       └── projections
            └── subquery
                 └── project
@@ -82,6 +83,7 @@ vectorized: true
 │   │ estimated row count: 0 (missing stats)
 │   │ table: supermarket
 │   │ set: aisle
+│   │ auto commit
 │   │
 │   └── • render
 │       │ columns: (person, aisle, starts_with, ends_with, aisle_new)
@@ -157,7 +159,7 @@ vectorized: true
 └── • subquery
     │ id: @S1
     │ original sql: SELECT aisle FROM supermarket WHERE person = 'matilda' FOR UPDATE
-    │ exec mode: all rows
+    │ exec mode: discard all rows
     │
     └── • buffer
         │ columns: (aisle)
@@ -224,6 +226,7 @@ vectorized: true
 │       │ equality cols are key
 │       │ locking strength: for update
 │       │ locking durability: guaranteed
+│       │ parallel
 │       │
 │       └── • project
 │           │ columns: (person, aisle)
@@ -234,6 +237,7 @@ vectorized: true
 │               │ table: supermarket@supermarket_pkey
 │               │ equality: (person) = (person)
 │               │ equality cols are key
+│               │ parallel
 │               │
 │               └── • scan buffer
 │                     columns: (person)
@@ -243,7 +247,7 @@ vectorized: true
 └── • subquery
     │ id: @S1
     │ original sql: SELECT 'matilda' AS person
-    │ exec mode: all rows
+    │ exec mode: discard all rows
     │
     └── • buffer
         │ columns: (person)
@@ -292,6 +296,7 @@ vectorized: true
     │ equality cols are key
     │ locking strength: for update
     │ locking durability: guaranteed
+    │ parallel
     │
     └── • project
         │ columns: (person, aisle)
@@ -301,6 +306,7 @@ vectorized: true
             │ estimated row count: 10 (missing stats)
             │ table: supermarket@supermarket_pkey
             │ key columns: person
+            │ parallel
             │
             └── • scan
                   columns: (person, starts_with)
@@ -352,6 +358,7 @@ vectorized: true
     │ equality cols are key
     │ locking strength: for update
     │ locking durability: guaranteed
+    │ parallel
     │
     └── • project
         │ columns: (person, aisle)
@@ -362,6 +369,7 @@ vectorized: true
             │ table: supermarket@supermarket_pkey
             │ equality: (person) = (person)
             │ equality cols are key
+            │ parallel
             │
             └── • project
                 │ columns: (person, starts_with, ends_with)

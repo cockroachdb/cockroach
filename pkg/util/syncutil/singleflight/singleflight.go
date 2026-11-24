@@ -380,7 +380,7 @@ func (g *Group) doCall(
 		ctx, cancel = opts.Stop.WithCancelOnQuiesce(ctx)
 		defer cancel()
 
-		if err := opts.Stop.RunTask(ctx, g.opName+":"+key, func(ctx context.Context) {
+		if err := opts.Stop.RunTask(ctx, g.opName, func(ctx context.Context) {
 			c.val, c.err = fn(ctx)
 		}); err != nil {
 			c.err = err

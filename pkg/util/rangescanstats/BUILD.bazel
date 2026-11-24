@@ -1,0 +1,34 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "rangescanstats",
+    srcs = ["poller.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/util/rangescanstats",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/util/ctxgroup",
+        "//pkg/util/log",
+        "//pkg/util/rangedesc",
+        "//pkg/util/rangescanstats/rangescanstatspb",
+        "//pkg/util/span",
+        "//pkg/util/timeutil",
+    ],
+)
+
+go_test(
+    name = "rangescanstats_test",
+    srcs = ["poller_test.go"],
+    embed = [":rangescanstats"],
+    deps = [
+        "//pkg/roachpb",
+        "//pkg/testutils",
+        "//pkg/util/hlc",
+        "//pkg/util/leaktest",
+        "//pkg/util/rangedesc",
+        "//pkg/util/rangescanstats/rangescanstatspb",
+        "//pkg/util/span",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//require",
+    ],
+)

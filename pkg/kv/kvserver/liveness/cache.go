@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -107,11 +106,11 @@ func (c *Cache) selfID() roachpb.NodeID {
 
 // livenessGossipUpdate is the gossip callback used to keep the
 // in-memory liveness info up to date.
-func (c *Cache) livenessGossipUpdate(_ string, content roachpb.Value) {
+func (c *Cache) livenessGossipUpdate(_ string, content roachpb.Value, _ int64) {
 	ctx := context.TODO()
 	var liveness livenesspb.Liveness
 	if err := content.GetProto(&liveness); err != nil {
-		log.Errorf(ctx, "%v", err)
+		log.KvExec.Errorf(ctx, "%v", err)
 		return
 	}
 
@@ -119,16 +118,16 @@ func (c *Cache) livenessGossipUpdate(_ string, content roachpb.Value) {
 }
 
 // storeGossipUpdate is the Gossip callback used to keep the nodeDescMap up to date.
-func (c *Cache) storeGossipUpdate(_ string, content roachpb.Value) {
+func (c *Cache) storeGossipUpdate(_ string, content roachpb.Value, _ int64) {
 	ctx := context.TODO()
 	var storeDesc roachpb.StoreDescriptor
 	if err := content.GetProto(&storeDesc); err != nil {
-		log.Errorf(ctx, "%v", err)
+		log.KvExec.Errorf(ctx, "%v", err)
 		return
 	}
 	nodeID := storeDesc.Node.NodeID
 	if nodeID == 0 {
-		log.Errorf(ctx, "unexpected update for node 0, %v", storeDesc)
+		log.KvExec.Errorf(ctx, "unexpected update for node 0, %v", storeDesc)
 		return
 	}
 	c.mu.Lock()
@@ -145,11 +144,11 @@ func (c *Cache) storeGossipUpdate(_ string, content roachpb.Value) {
 // registered callbacks if the node became live in the process.
 func (c *Cache) maybeUpdate(ctx context.Context, newLivenessRec Record) {
 	if newLivenessRec.Liveness == (livenesspb.Liveness{}) {
-		log.Fatal(ctx, "invalid new liveness record; found to be empty")
+		log.KvExec.Fatal(ctx, "invalid new liveness record; found to be empty")
 	}
 
 	if newLivenessRec.NodeID == 0 {
-		log.Fatal(ctx, "attempt to cache liveness record with nid 0")
+		log.KvExec.Fatal(ctx, "attempt to cache liveness record with nid 0")
 	}
 
 	shouldReplace := true
@@ -244,14 +243,13 @@ func (c *Cache) convertToNodeVitality(l livenesspb.Liveness) livenesspb.NodeVita
 	// even before the first gossip arrives for a store.
 
 	// NB: nodeDialer is nil in some tests.
-	connected := c.nodeDialer == nil || c.nodeDialer.ConnHealth(l.NodeID, rpc.SystemClass) == nil
 	lastDescUpdate := c.lastDescriptorUpdate(l.NodeID)
 
 	return l.CreateNodeVitality(
 		c.clock.Now(),
 		lastDescUpdate.lastUpdateTime,
 		lastDescUpdate.lastUnavailableTime,
-		connected,
+		livenesspb.NewNodeConnectionStatus(l.NodeID, c.nodeDialer),
 		TimeUntilNodeDead.Get(&c.st.SV),
 		TimeAfterNodeSuspect.Get(&c.st.SV),
 	)
@@ -296,8 +294,8 @@ func (c *Cache) getAllLivenessEntries() []livenesspb.Liveness {
 // ScanNodeVitalityFromCache returns a map of nodeID to boolean liveness status
 // of each node from the cache. This excludes nodes that were decommissioned.
 // Decommissioned nodes are kept in the KV store and the cache forever, but are
-// typically not referenced in normal usage. The method ScanNodeVitalityFromKV
-// does return decommissioned nodes.
+// typically not referenced in normal usage. Use ScanAllNodeVitalityFromCache to
+// include decommissioned nodes.
 func (c *Cache) ScanNodeVitalityFromCache() livenesspb.NodeVitalityMap {
 	entries := c.getAllLivenessEntries()
 	statusMap := make(map[roachpb.NodeID]livenesspb.NodeVitality, len(entries))
@@ -306,6 +304,17 @@ func (c *Cache) ScanNodeVitalityFromCache() livenesspb.NodeVitalityMap {
 			// This is a node that was completely removed. Skip over it.
 			continue
 		}
+		statusMap[l.NodeID] = c.convertToNodeVitality(l)
+	}
+	return statusMap
+}
+
+// ScanAllNodeVitalityFromCache is like ScanNodeVitalityFromCache but includes
+// decommissioned nodes.
+func (c *Cache) ScanAllNodeVitalityFromCache() livenesspb.NodeVitalityMap {
+	entries := c.getAllLivenessEntries()
+	statusMap := make(map[roachpb.NodeID]livenesspb.NodeVitality, len(entries))
+	for _, l := range entries {
 		statusMap[l.NodeID] = c.convertToNodeVitality(l)
 	}
 	return statusMap

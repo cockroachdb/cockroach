@@ -10,6 +10,8 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecargs"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
@@ -191,9 +193,10 @@ type BatchFlowCoordinator struct {
 	input  colexecargs.OpWithMetaInfo
 	output execinfra.BatchReceiver
 
-	// batch is the result produced by calling input.Next stored here in order
-	// for that call to be wrapped in the panic-catcher.
+	// batch and meta is the result produced by calling input.Next stored here
+	// in order for that call to be wrapped in the panic-catcher.
 	batch coldata.Batch
+	meta  *execinfrapb.ProducerMetadata
 
 	// cancelFlow cancels the context of the flow.
 	cancelFlow context.CancelFunc
@@ -238,7 +241,7 @@ func (f *BatchFlowCoordinator) init(ctx context.Context) error {
 }
 
 func (f *BatchFlowCoordinator) nextAdapter() {
-	f.batch = f.input.Root.Next()
+	f.batch, f.meta = f.input.Root.Next()
 }
 
 func (f *BatchFlowCoordinator) next() error {
@@ -258,9 +261,31 @@ func (f *BatchFlowCoordinator) Run(ctx context.Context) {
 
 	ctx, span := execinfra.ProcessorSpan(ctx, f.flowCtx, "batch flow coordinator", f.processorID)
 
+	// Set the ASH work state for this goroutine so that active sampling
+	// can attribute CPU work to the correct workload identity.
+	var ashCleanup func()
+	if f.flowCtx != nil && f.flowCtx.EvalCtx != nil {
+		var gatewayNodeID roachpb.NodeID
+		if f.flowCtx.NodeID != nil {
+			gatewayNodeID = roachpb.NodeID(f.flowCtx.NodeID.SQLInstanceID())
+		}
+		ashCleanup = ash.SetWorkState(
+			f.flowCtx.Codec().TenantID,
+			ash.WorkloadInfo{
+				WorkloadID:    f.flowCtx.EvalCtx.WorkloadID,
+				AppNameID:     f.flowCtx.EvalCtx.AppNameID,
+				GatewayNodeID: gatewayNodeID,
+				WorkloadType:  f.flowCtx.EvalCtx.WorkloadType,
+			},
+			ash.WorkCPU, "BatchFlowCoordinator")
+	}
+
 	// Make sure that we close the coordinator and notify the batch receiver in
 	// all cases.
 	defer func() {
+		if ashCleanup != nil {
+			ashCleanup()
+		}
 		f.cancelFlow()
 		f.output.ProducerDone()
 		span.Finish()
@@ -282,11 +307,11 @@ func (f *BatchFlowCoordinator) Run(ctx context.Context) {
 			}
 			continue
 		}
-		if f.batch.Length() == 0 {
+		if f.meta == nil && f.batch.Length() == 0 {
 			// All rows have been exhausted, so we transition to draining.
 			break
 		}
-		switch status = f.output.PushBatch(f.batch, nil /* meta */); status {
+		switch status = f.output.PushBatch(f.batch, f.meta); status {
 		case execinfra.ConsumerClosed:
 			return
 		}

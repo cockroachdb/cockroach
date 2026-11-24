@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -78,14 +79,14 @@ type Result struct {
 	//
 	// GetResp is guaranteed to have nil IntentValue.
 	GetResp *kvpb.GetResponse
-	// ScanResp can contain a partial response to a ScanRequest (when
-	// scanComplete is false). In that case, there will be a further result with
-	// the continuation; that result will use the same Key. Notably, SQL rows
-	// will never be split across multiple results.
+	// ScanResp can contain a partial response to a ScanRequest or
+	// ReverseScanRequest (when scanComplete is false). In that case, there will
+	// be a further result with the continuation; that result will use the same
+	// Key. Notably, SQL rows will never be split across multiple results.
 	//
 	// The response is always using BATCH_RESPONSE format (meaning that Rows
 	// field is always nil). IntentRows field is also nil.
-	ScanResp *kvpb.ScanResponse
+	ScanResp kvpb.Response
 	// Position tracks the ordinal among all originally enqueued requests that
 	// this result satisfies. See singleRangeBatch.positions for more details.
 	// TODO(yuzefovich): this might need to be []int when non-unique requests
@@ -217,6 +218,7 @@ func (r Result) Release(ctx context.Context) {
 // TODO(yuzefovich): support pipelining of Enqueue and GetResults calls.
 type Streamer struct {
 	distSender *kvcoord.DistSender
+	metrics    *Metrics
 	stopper    *stop.Stopper
 	// sd can be nil in tests.
 	sd *sessiondata.SessionData
@@ -236,6 +238,10 @@ type Streamer struct {
 	budget                 *budget
 	lockStrength           lock.Strength
 	lockDurability         lock.Durability
+
+	// reverse, if true, indicates that ReverseScan should be used instead of
+	// Scan.
+	reverse bool
 
 	streamerStatistics
 
@@ -302,6 +308,9 @@ type Streamer struct {
 type streamerStatistics struct {
 	atomics struct {
 		kvPairsRead *int64
+		// kvCPUTime tracks the cumulative CPU time (in nanoseconds) that KV
+		// reports in the BatchResponse headers.
+		kvCPUTime *int64
 		// batchRequestsIssued tracks the number of BatchRequests issued by the
 		// Streamer. Note that this number is only used for the logging done by
 		// the Streamer itself and is separate from any possible bookkeeping
@@ -347,7 +356,8 @@ const (
 var streamerConcurrencyLimit = settings.RegisterIntSetting(
 	settings.ApplicationLevel,
 	"kv.streamer.concurrency_limit",
-	"maximum number of asynchronous requests by a single streamer",
+	"maximum number of asynchronous requests by a single streamer. "+
+		"The default value is computed as the number of vCPUs in a node times 96.",
 	defaultStreamerStreamsPerVCPU*max(kvcoord.MinViableProcs, int64(runtime.GOMAXPROCS(0))),
 	settings.PositiveInt,
 )
@@ -376,8 +386,11 @@ type sendFn func(context.Context, *kvpb.BatchRequest) (*kvpb.BatchResponse, erro
 //
 // kvPairsRead should be incremented atomically with the sum of NumKeys
 // parameters of all received responses.
+// kvCPUTime should be incremented atomically with the CPUTime from BatchResponse
+// headers.
 func NewStreamer(
 	distSender *kvcoord.DistSender,
+	metrics *Metrics,
 	stopper *stop.Stopper,
 	txn *kv.Txn,
 	sendFn func(context.Context, *kvpb.BatchRequest) (*kvpb.BatchResponse, error),
@@ -387,8 +400,12 @@ func NewStreamer(
 	limitBytes int64,
 	acc *mon.BoundAccount,
 	kvPairsRead *int64,
+	kvCPUTime *int64,
 	lockStrength lock.Strength,
 	lockDurability lock.Durability,
+	reverse bool,
+	workloadID uint64,
+	workloadType workloadid.WorkloadType,
 ) *Streamer {
 	if txn.Type() != kv.LeafTxn {
 		panic(errors.AssertionFailedf("RootTxn is given to the Streamer"))
@@ -408,24 +425,33 @@ func NewStreamer(
 	}
 	s := &Streamer{
 		distSender:             distSender,
+		metrics:                metrics,
 		stopper:                stopper,
 		sd:                     sd,
 		headOfLineOnlyFraction: headOfLineOnlyFraction,
 		budget:                 newBudget(acc, limitBytes),
 		lockStrength:           lockStrength,
 		lockDurability:         lockDurability,
+		reverse:                reverse,
 	}
+	s.metrics.OperatorsCount.Inc(1)
 
 	if kvPairsRead == nil {
 		kvPairsRead = new(int64)
 	}
 	s.atomics.kvPairsRead = kvPairsRead
+	if kvCPUTime == nil {
+		kvCPUTime = new(int64)
+	}
+	s.atomics.kvCPUTime = kvCPUTime
 	s.coordinator = workerCoordinator{
 		s:                      s,
 		sendFn:                 sendFn,
 		lockWaitPolicy:         lockWaitPolicy,
 		requestAdmissionHeader: txn.AdmissionHeader(),
 		responseAdmissionQ:     txn.DB().SQLKVResponseAdmissionQ,
+		workloadID:             workloadID,
+		workloadType:           workloadType,
 	}
 	s.coordinator.asyncSem = quotapool.NewIntPool(
 		"single Streamer async concurrency",
@@ -522,6 +548,9 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []kvpb.RequestUnion) (retEr
 			},
 			s.coordinator.mainLoop,
 		); err != nil {
+			// The server is shutting down. It's ok to not call
+			// s.coordinatorCtxCancel in this case.
+			//
 			// The new goroutine wasn't spun up, so mainLoop won't get executed
 			// and we have to decrement the wait group ourselves.
 			s.waitGroup.Done()
@@ -551,6 +580,16 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []kvpb.RequestUnion) (retEr
 	if err != nil {
 		return err
 	}
+	// Get initial seek key depending on direction of iteration.
+	var scanDir kvcoord.ScanDirection
+	var seekKey roachpb.RKey
+	if !s.reverse {
+		scanDir = kvcoord.Ascending
+		seekKey = rs.Key
+	} else {
+		scanDir = kvcoord.Descending
+		seekKey = rs.EndKey
+	}
 
 	// Divide the given requests into single-range batches that are added to
 	// requestsToServe, and the worker coordinator will then pick those batches
@@ -564,9 +603,9 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []kvpb.RequestUnion) (retEr
 	// of singleRangeBatch objects in flight is limited by the number of ranges
 	// of a single table, so it doesn't seem urgent to fix the accounting here.
 	var requestsToServe []singleRangeBatch
-	const scanDir = kvcoord.Ascending
+
 	ri := kvcoord.MakeRangeIterator(s.distSender)
-	ri.Seek(ctx, rs.Key, scanDir)
+	ri.Seek(ctx, seekKey, scanDir)
 	if !ri.Valid() {
 		return ri.Error()
 	}
@@ -601,7 +640,7 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []kvpb.RequestUnion) (retEr
 	}
 	var reqsKeysScratch []roachpb.Key
 	var newNumRangesPerScanRequestMemoryUsage int64
-	for ; ; ri.Seek(ctx, rs.Key, scanDir) {
+	for ; ; ri.Seek(ctx, seekKey, scanDir) {
 		if !ri.Valid() {
 			return ri.Error()
 		}
@@ -616,23 +655,29 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []kvpb.RequestUnion) (retEr
 			for i := range positions {
 				positions[i] = i
 			}
-			rs.Key = roachpb.RKeyMax
+			rs.Key, rs.EndKey = roachpb.RKeyMax, roachpb.RKeyMin
 		} else {
 			// Truncate the request span to the current range.
 			singleRangeSpan, err := rs.Intersect(ri.Token().Desc().RSpan())
 			if err != nil {
 				return err
 			}
-			singleRangeReqs, positions, rs.Key, err = s.truncationHelper.Truncate(singleRangeSpan)
+			singleRangeReqs, positions, seekKey, err = s.truncationHelper.Truncate(singleRangeSpan)
 			if err != nil {
 				return err
+			}
+			if !s.reverse {
+				rs.Key = seekKey
+			} else {
+				rs.EndKey = seekKey
 			}
 		}
 		var subRequestIdx []int32
 		var subRequestIdxOverhead int64
 		var numScansInReqs int64
 		for i, pos := range positions {
-			if _, isScan := reqs[pos].GetInner().(*kvpb.ScanRequest); isScan {
+			switch reqs[pos].GetInner().(type) {
+			case *kvpb.ScanRequest, *kvpb.ReverseScanRequest:
 				numScansInReqs++
 				// TODO(yuzefovich): we could avoid using / allocating
 				// numRangesPerScanRequest if allRequestsAreWithinSingleRange is
@@ -689,7 +734,7 @@ func (s *Streamer) Enqueue(ctx context.Context, reqs []kvpb.RequestUnion) (retEr
 		}
 		totalReqsMemUsage += r.reqsReservedBytes + r.overheadAccountedFor
 
-		if s.mode == OutOfOrder {
+		if s.mode == OutOfOrder && len(r.reqs) > 1 {
 			// Sort all single-range requests to be in the key order.
 			// TODO(yuzefovich): we should be able to sort not head-of-the-line
 			// request in the InOrder mode too; however, there would be
@@ -827,6 +872,10 @@ func (s *Streamer) Close(ctx context.Context) {
 		// exited.
 		s.results.close(ctx)
 	}
+	if s.truncationHelper != nil {
+		s.truncationHelper.Release()
+	}
+	s.metrics.OperatorsCount.Dec(1)
 	*s = Streamer{}
 }
 
@@ -874,6 +923,11 @@ type workerCoordinator struct {
 	// For request and response admission control.
 	requestAdmissionHeader kvpb.AdmissionHeader
 	responseAdmissionQ     *admission.WorkQueue
+	// workloadID is the identifier for the workload that triggered this
+	// request (e.g. statement fingerprint ID) for ASH sampling.
+	workloadID uint64
+	// workloadType distinguishes the kind of workload for ASH sampling.
+	workloadType workloadid.WorkloadType
 }
 
 // mainLoop runs throughout the lifetime of the Streamer (from the first Enqueue
@@ -891,7 +945,6 @@ func (w *workerCoordinator) mainLoop(ctx context.Context) {
 			return
 		}
 
-		w.s.requestsToServe.Lock()
 		// The coordinator goroutine is the only one that removes requests from
 		// w.s.requestsToServe, so we can keep the reference to next request
 		// without holding the lock.
@@ -900,8 +953,11 @@ func (w *workerCoordinator) mainLoop(ctx context.Context) {
 		// issueRequestsForAsyncProcessing() another request with higher urgency
 		// is added; however, this is not a problem - we wait for available
 		// budget here on a best-effort basis.
-		nextReq := w.s.requestsToServe.nextLocked()
-		w.s.requestsToServe.Unlock()
+		nextReq := func() singleRangeBatch {
+			w.s.requestsToServe.Lock()
+			defer w.s.requestsToServe.Unlock()
+			return w.s.requestsToServe.nextLocked()
+		}()
 		// If we already have minTargetBytes set on the first request to be
 		// issued, then use that.
 		atLeastBytes := nextReq.minTargetBytes
@@ -1069,6 +1125,13 @@ func (w *workerCoordinator) getMaxNumRequestsToIssue(ctx context.Context) (_ int
 	}
 	// The whole quota is currently used up, so we blockingly acquire a quota of
 	// 1.
+	numBatches := func() int64 {
+		w.s.requestsToServe.Lock()
+		defer w.s.requestsToServe.Unlock()
+		return int64(w.s.requestsToServe.lengthLocked())
+	}()
+	w.s.metrics.BatchesThrottled.Inc(numBatches)
+	defer w.s.metrics.BatchesThrottled.Dec(numBatches)
 	alloc, err := w.asyncSem.Acquire(ctx, 1)
 	if err != nil {
 		w.s.results.setError(err)
@@ -1148,6 +1211,8 @@ func (w *workerCoordinator) issueRequestsForAsyncProcessing(
 		// ScanResponse struct for each of the requests. Furthermore, the
 		// BatchResponse will get an extra ResponseUnion struct for each
 		// response.
+		//
+		// Note: ScanResponse and ReverseScanResponse have the same overhead.
 		responsesOverhead := getResponseOverhead*singleRangeReqs.numGetsInReqs +
 			scanResponseOverhead*(int64(len(singleRangeReqs.reqs))-singleRangeReqs.numGetsInReqs) +
 			int64(len(singleRangeReqs.reqs))*responseUnionOverhead
@@ -1346,187 +1411,204 @@ func (w *workerCoordinator) performRequestAsync(
 	responsesOverhead int64,
 	headOfLine bool,
 ) {
-	w.s.waitGroup.Add(1)
-	w.s.adjustNumRequestsInFlight(1 /* delta */)
-	if err := w.s.stopper.RunAsyncTaskEx(
-		ctx,
-		stop.TaskOpts{
-			TaskName: AsyncRequestOp,
-			SpanOpt:  stop.ChildSpan,
-			// Note that we don't wait for the semaphore since it's the caller's
-			// responsibility to ensure that a new goroutine can be spun up.
-			Sem: w.asyncSem,
-		},
-		func(ctx context.Context) {
-			defer w.asyncRequestCleanup(false /* budgetMuAlreadyLocked */)
-			ba := &kvpb.BatchRequest{}
-			ba.Header.WaitPolicy = w.lockWaitPolicy
-			ba.Header.TargetBytes = targetBytes
-			ba.Header.AllowEmpty = !headOfLine
-			ba.Header.WholeRowsOfSize = w.s.maxKeysPerRow
-			// TODO(yuzefovich): consider setting MaxSpanRequestKeys whenever
-			// applicable (#67885).
-			ba.AdmissionHeader = w.requestAdmissionHeader
-			// We always have some memory reserved against the memory account,
-			// regardless of the value of headOfLine.
-			ba.AdmissionHeader.NoMemoryReservedAtSource = false
-			ba.Requests = req.reqs
+	work := func(ctx context.Context) {
+		defer w.asyncRequestCleanup(false /* budgetMuAlreadyLocked */)
+		w.s.metrics.BatchesSent.Inc(1)
+		w.s.metrics.BatchesInProgress.Inc(1)
+		defer w.s.metrics.BatchesInProgress.Dec(1)
 
-			if buildutil.CrdbTestBuild {
-				if w.s.mode == InOrder {
-					for i := range req.positions[:len(req.positions)-1] {
-						if req.positions[i] >= req.positions[i+1] {
-							w.s.results.setError(errors.AssertionFailedf(
-								"positions aren't ascending: %d before %d at index %d",
-								req.positions[i], req.positions[i+1], i,
-							))
-							return
-						}
-					}
-				}
-			}
+		ba := &kvpb.BatchRequest{}
+		ba.Header.WaitPolicy = w.lockWaitPolicy
+		ba.Header.TargetBytes = targetBytes
+		ba.Header.AllowEmpty = !headOfLine
+		ba.Header.WholeRowsOfSize = w.s.maxKeysPerRow
+		ba.Header.IsReverse = w.s.reverse
+		// TODO(yuzefovich): consider setting MaxSpanRequestKeys whenever
+		// applicable (#67885).
+		ba.AdmissionHeader = w.requestAdmissionHeader
+		// We always have some memory reserved against the memory account,
+		// regardless of the value of headOfLine.
+		ba.AdmissionHeader.NoMemoryReservedAtSource = false
+		ba.Requests = req.reqs
 
-			// TODO(yuzefovich): in Enqueue we split all requests into
-			// single-range batches, so ideally ba touches a single range in
-			// which case we hit the fast path in the DistSender. However, if
-			// the range boundaries have changed after we performed the split
-			// (or we had stale range cache at the time of the split), the
-			// DistSender will transparently re-split ba into several
-			// sub-batches that will be executed sequentially because of the
-			// presence of limits. We could, instead, ask the DistSender to not
-			// perform that re-splitting and return an error, then we'll rely on
-			// the updated range cache to perform re-splitting ourselves. This
-			// should offer some performance improvements since we'd eliminate
-			// unnecessary blocking (due to sequential evaluation of sub-batches
-			// by the DistSender). For the initial implementation it doesn't
-			// seem important though.
-
-			// Note that we don't add a separate log.VEventf here before calling
-			// Send since we create a separate tracing span for each async
-			// request which is sufficient to highlight where the handoff from
-			// SQL occurred.
-			br, err := w.sendFn(ctx, ba)
-			if err != nil {
-				// TODO(yuzefovich): if err is
-				// ReadWithinUncertaintyIntervalError and there is only a single
-				// Streamer in a single local flow, attempt to transparently
-				// refresh.
-				log.VEventf(ctx, 2, "dropping response: error from kv: %v", err)
-				w.s.results.setError(err)
-				return
-			}
-			atomic.AddInt64(&w.s.atomics.batchRequestsIssued, 1)
-
-			// First, we have to reconcile the memory budget. We do it
-			// separately from processing the results because we want to know
-			// how many Gets and Scans need to be allocated for the ResumeSpans,
-			// if any are present. At the moment, due to limitations of the KV
-			// layer (#75452) we cannot reuse original requests because the KV
-			// doesn't allow mutability.
-			fp, err := calculateFootprint(req, br)
-			if err != nil {
-				log.VEventf(ctx, 2, "dropping response: error calculating footprint: %v", err)
-				w.s.results.setError(err)
-				return
-			}
-			atomic.AddInt64(w.s.atomics.kvPairsRead, fp.kvPairsRead)
-
-			// Now adjust the budget based on the actual memory footprint of
-			// non-empty responses as well as resume spans, if any.
-			respOverestimate := targetBytes + responsesOverhead - fp.memoryFootprintBytes - fp.responsesOverhead
-			reqOveraccounted := req.reqsReservedBytes - fp.resumeReqsMemUsage
-			if fp.resumeReqsMemUsage == 0 {
-				// There will be no resume request, so we will lose the
-				// reference to the slices in req and can release its memory
-				// reservation.
-				reqOveraccounted += req.overheadAccountedFor
-			}
-			overaccountedTotal := respOverestimate + reqOveraccounted
-			if overaccountedTotal >= 0 {
-				w.s.budget.release(ctx, overaccountedTotal)
-			} else {
-				// There is an under-accounting at the moment, so we have to
-				// increase the memory reservation.
-				//
-				// This under-accounting can occur in a couple of edge cases:
-				// 1) the estimate of the response sizes is pretty good (i.e.
-				// respOverestimate is around 0), but we received many partial
-				// responses with ResumeSpans that take up much more space than
-				// the original requests;
-				// 2) we have a single large row in the response. In this case
-				// headOfLine must be true (targetBytes might be 1 or higher,
-				// but not enough for that large row).
-				toConsume := -overaccountedTotal
-				if err = w.s.budget.consume(ctx, toConsume, headOfLine /* allowDebt */); err != nil {
-					log.VEventf(ctx, 2,
-						"dropping response: root memory pool exhausted (head:%v): %v", headOfLine, err,
-					)
-					// TODO(yuzefovich): rather than dropping the response
-					// altogether, consider blocking to wait for the budget to
-					// open up, up to some limit.
-					atomic.AddInt64(&w.s.atomics.droppedBatchResponses, 1)
-					w.s.budget.release(ctx, targetBytes)
-					if !headOfLine {
-						// Since this is not the head of the line, we'll just
-						// discard the result and add the request back to be
-						// served.
-						//
-						// This is opportunistic behavior where we're hoping
-						// that once other requests are fully processed (i.e.
-						// the corresponding results are Release()'d), we'll be
-						// able to make progress on this request too.
-						// TODO(yuzefovich): consider updating the
-						// avgResponseSize and/or storing the information about
-						// the returned bytes size in req.
-
-						// The KV layer doesn't allow evaluation of the same
-						// Gets and Scans multiple times, so we need to make
-						// fresh copies of them.
-						req.deepCopyRequests(w.s)
-						w.s.requestsToServe.add(req)
+		if buildutil.CrdbTestBuild {
+			if w.s.mode == InOrder {
+				for i := range req.positions[:len(req.positions)-1] {
+					if req.positions[i] >= req.positions[i+1] {
+						w.s.results.setError(errors.AssertionFailedf(
+							"positions aren't ascending: %d before %d at index %d",
+							req.positions[i], req.positions[i+1], i,
+						))
 						return
 					}
-					// The error indicates that the root memory pool has been
-					// exhausted, so we'll exit to be safe (in order not to OOM
-					// the node).
-					// TODO(yuzefovich): if the response contains multiple rows,
-					// consider adding the request back to be served with a note
-					// to issue it with smaller targetBytes.
-					w.s.results.setError(err)
-					return
 				}
 			}
+		}
 
-			// Do admission control after we've finalized the memory accounting.
-			if br != nil && w.responseAdmissionQ != nil {
-				responseAdmission := admission.WorkInfo{
-					TenantID:   roachpb.SystemTenantID,
-					Priority:   admissionpb.WorkPriority(w.requestAdmissionHeader.Priority),
-					CreateTime: w.requestAdmissionHeader.CreateTime,
-				}
-				if _, err = w.responseAdmissionQ.Admit(ctx, responseAdmission); err != nil {
-					log.VEventf(ctx, 2, "dropping response: admission control: %v", err)
-					w.s.results.setError(err)
+		// TODO(yuzefovich): in Enqueue we split all requests into
+		// single-range batches, so ideally ba touches a single range in
+		// which case we hit the fast path in the DistSender. However, if
+		// the range boundaries have changed after we performed the split
+		// (or we had stale range cache at the time of the split), the
+		// DistSender will transparently re-split ba into several
+		// sub-batches that will be executed sequentially because of the
+		// presence of limits. We could, instead, ask the DistSender to not
+		// perform that re-splitting and return an error, then we'll rely on
+		// the updated range cache to perform re-splitting ourselves. This
+		// should offer some performance improvements since we'd eliminate
+		// unnecessary blocking (due to sequential evaluation of sub-batches
+		// by the DistSender). For the initial implementation it doesn't
+		// seem important though.
+
+		// Note that we don't add a separate log.VEventf here before calling
+		// Send since we create a separate tracing span for each async
+		// request which is sufficient to highlight where the handoff from
+		// SQL occurred.
+		br, err := w.sendFn(ctx, ba)
+		if err != nil {
+			// TODO(yuzefovich): if err is
+			// ReadWithinUncertaintyIntervalError and there is only a single
+			// Streamer in a single local flow, attempt to transparently
+			// refresh.
+			log.VEventf(ctx, 2, "dropping response: error from kv: %v", err)
+			w.s.results.setError(err)
+			return
+		}
+		atomic.AddInt64(&w.s.atomics.batchRequestsIssued, 1)
+
+		// Accumulate CPU time from the BatchResponse header.
+		if br.CPUTime > 0 {
+			atomic.AddInt64(w.s.atomics.kvCPUTime, br.CPUTime)
+		}
+
+		// First, we have to reconcile the memory budget. We do it
+		// separately from processing the results because we want to know
+		// how many Gets and Scans need to be allocated for the ResumeSpans,
+		// if any are present. At the moment, due to limitations of the KV
+		// layer (#75452) we cannot reuse original requests because the KV
+		// doesn't allow mutability.
+		fp, err := calculateFootprint(req, br)
+		if err != nil {
+			log.VEventf(ctx, 2, "dropping response: error calculating footprint: %v", err)
+			w.s.results.setError(err)
+			return
+		}
+		atomic.AddInt64(w.s.atomics.kvPairsRead, fp.kvPairsRead)
+
+		// Now adjust the budget based on the actual memory footprint of
+		// non-empty responses as well as resume spans, if any.
+		respOverestimate := targetBytes + responsesOverhead - fp.memoryFootprintBytes - fp.responsesOverhead
+		reqOveraccounted := req.reqsReservedBytes - fp.resumeReqsMemUsage
+		if fp.resumeReqsMemUsage == 0 {
+			// There will be no resume request, so we will lose the
+			// reference to the slices in req and can release its memory
+			// reservation.
+			reqOveraccounted += req.overheadAccountedFor
+		}
+		overaccountedTotal := respOverestimate + reqOveraccounted
+		if overaccountedTotal >= 0 {
+			w.s.budget.release(ctx, overaccountedTotal)
+		} else {
+			// There is an under-accounting at the moment, so we have to
+			// increase the memory reservation.
+			//
+			// This under-accounting can occur in a couple of edge cases:
+			// 1) the estimate of the response sizes is pretty good (i.e.
+			// respOverestimate is around 0), but we received many partial
+			// responses with ResumeSpans that take up much more space than
+			// the original requests;
+			// 2) we have a single large row in the response. In this case
+			// headOfLine must be true (targetBytes might be 1 or higher,
+			// but not enough for that large row).
+			toConsume := -overaccountedTotal
+			if err = w.s.budget.consume(ctx, toConsume, headOfLine /* allowDebt */); err != nil {
+				log.VEventf(ctx, 2,
+					"dropping response: root memory pool exhausted (head:%v): %v", headOfLine, err,
+				)
+				// TODO(yuzefovich): rather than dropping the response
+				// altogether, consider blocking to wait for the budget to
+				// open up, up to some limit.
+				atomic.AddInt64(&w.s.atomics.droppedBatchResponses, 1)
+				w.s.budget.release(ctx, targetBytes)
+				if !headOfLine {
+					// Since this is not the head of the line, we'll just
+					// discard the result and add the request back to be
+					// served.
+					//
+					// This is opportunistic behavior where we're hoping
+					// that once other requests are fully processed (i.e.
+					// the corresponding results are Release()'d), we'll be
+					// able to make progress on this request too.
+					// TODO(yuzefovich): consider updating the
+					// avgResponseSize and/or storing the information about
+					// the returned bytes size in req.
+
+					// The KV layer doesn't allow evaluation of the same
+					// Gets and Scans multiple times, so we need to make
+					// fresh copies of them.
+					req.deepCopyRequests(w.s)
+					w.s.requestsToServe.add(req)
 					return
 				}
+				// The error indicates that the root memory pool has been
+				// exhausted, so we'll exit to be safe (in order not to OOM
+				// the node).
+				// TODO(yuzefovich): if the response contains multiple rows,
+				// consider adding the request back to be served with a note
+				// to issue it with smaller targetBytes.
+				w.s.results.setError(err)
+				return
 			}
+		}
 
-			// Finally, process the results and add the ResumeSpans to be
-			// processed as well.
-			log.VEventf(ctx, 2,
-				"responses:%d targetBytes:%d {footprint:%v overhead:%v resumeMem:%v gets:%v scans:%v incpGets:%v "+
-					"incpScans:%v startedScans:%v kvs:%v}",
-				len(br.Responses), targetBytes, fp.memoryFootprintBytes, fp.responsesOverhead,
-				fp.resumeReqsMemUsage, fp.numGetResults, fp.numScanResults, fp.numIncompleteGets,
-				fp.numIncompleteScans, fp.numStartedScans, fp.kvPairsRead,
-			)
-			processSingleRangeResponse(ctx, w.s, req, br, fp)
-		}); err != nil {
+		// Do admission control after we've finalized the memory accounting.
+		if br != nil && w.responseAdmissionQ != nil {
+			responseAdmission := admission.WorkInfo{
+				TenantID:     roachpb.SystemTenantID,
+				Priority:     admissionpb.WorkPriority(w.requestAdmissionHeader.Priority),
+				CreateTime:   w.requestAdmissionHeader.CreateTime,
+				WorkloadID:   w.workloadID,
+				WorkloadType: w.workloadType,
+			}
+			if _, err = w.responseAdmissionQ.Admit(ctx, responseAdmission); err != nil {
+				log.VEventf(ctx, 2, "dropping response: admission control: %v", err)
+				w.s.results.setError(err)
+				return
+			}
+		}
+
+		// Finally, process the results and add the ResumeSpans to be
+		// processed as well.
+		log.VEventf(ctx, 2,
+			"responses:%d targetBytes:%d {footprint:%v overhead:%v resumeMem:%v gets:%v scans:%v incpGets:%v "+
+				"incpScans:%v startedScans:%v kvs:%v}",
+			len(br.Responses), targetBytes, fp.memoryFootprintBytes, fp.responsesOverhead,
+			fp.resumeReqsMemUsage, fp.numGetResults, fp.numScanResults, fp.numIncompleteGets,
+			fp.numIncompleteScans, fp.numStartedScans, fp.kvPairsRead,
+		)
+		processSingleRangeResponse(ctx, w.s, req, br, fp)
+	}
+
+	w.s.waitGroup.Add(1)
+	w.s.adjustNumRequestsInFlight(1 /* delta */)
+	ctx, hdl, err := w.s.stopper.GetHandle(ctx, stop.TaskOpts{
+		TaskName: AsyncRequestOp,
+		SpanOpt:  stop.ChildSpan,
+		// Note that we don't wait for the semaphore since it's the caller's
+		// responsibility to ensure that a new goroutine can be spun up.
+		Sem: w.asyncSem,
+	})
+	if err != nil {
 		// The new goroutine for the request wasn't spun up, so we have to
 		// perform the cleanup of this request ourselves.
 		w.asyncRequestCleanup(true /* budgetMuAlreadyLocked */)
 		w.s.results.setError(err)
+		return
 	}
+	go func(ctx context.Context) {
+		defer hdl.Activate(ctx).Release(ctx)
+		work(ctx)
+	}(ctx)
 }
 
 // singleRangeBatchResponseFootprint is the footprint of the shape of the
@@ -1578,7 +1660,7 @@ func calculateFootprint(
 	for i, resp := range br.Responses {
 		reply := resp.GetInner()
 		fp.kvPairsRead += reply.Header().NumKeys
-		switch req.reqs[i].GetInner().(type) {
+		switch t := req.reqs[i].GetInner().(type) {
 		case *kvpb.GetRequest:
 			get := reply.(*kvpb.GetResponse)
 			if get.IntentValue != nil {
@@ -1596,22 +1678,23 @@ func calculateFootprint(
 				fp.responsesOverhead += getResponseOverhead
 				fp.numGetResults++
 			}
-		case *kvpb.ScanRequest:
-			scan := reply.(*kvpb.ScanResponse)
-			if len(scan.Rows) > 0 {
+		case *kvpb.ScanRequest, *kvpb.ReverseScanRequest:
+			if len(getScanRows(reply)) > 0 {
 				return fp, errors.AssertionFailedf(
-					"unexpectedly got a ScanResponse using KEY_VALUES response format",
+					"unexpectedly got a %T using KEY_VALUES response format", t,
 				)
 			}
-			if len(scan.IntentRows) > 0 {
+			if len(getScanIntentRows(reply)) > 0 {
 				return fp, errors.AssertionFailedf(
-					"unexpectedly got a ScanResponse with non-nil IntentRows",
+					"unexpectedly got a %T with non-nil IntentRows", t,
 				)
 			}
-			if len(scan.BatchResponses) > 0 {
-				fp.memoryFootprintBytes += scanResponseSize(scan)
+			batchResponses := GetScanBatchResponses(reply)
+			if len(batchResponses) > 0 {
+				fp.memoryFootprintBytes += scanResponseSize(reply)
 			}
-			if len(scan.BatchResponses) > 0 || scan.ResumeSpan == nil {
+			resumeSpan := getScanResumeSpan(reply)
+			if len(batchResponses) > 0 || resumeSpan == nil {
 				fp.responsesOverhead += scanResponseOverhead
 				fp.numScanResults++
 				if pos := req.positions[i]; !req.isScanStarted.IsSet(pos) {
@@ -1621,9 +1704,9 @@ func calculateFootprint(
 					req.isScanStarted.Set(pos)
 				}
 			}
-			if scan.ResumeSpan != nil {
+			if resumeSpan != nil {
 				// This Scan wasn't completed.
-				fp.resumeReqsMemUsage += scanRequestSize(scan.ResumeSpan.Key, scan.ResumeSpan.EndKey)
+				fp.resumeReqsMemUsage += scanRequestSize(resumeSpan.Key, resumeSpan.EndKey)
 				fp.numIncompleteScans++
 			}
 		}
@@ -1744,9 +1827,10 @@ func processSingleRangeResults(
 			}
 			s.results.addLocked(result)
 
-		case *kvpb.ScanResponse:
-			scan := response
-			if len(scan.BatchResponses) == 0 && scan.ResumeSpan != nil {
+		case *kvpb.ScanResponse, *kvpb.ReverseScanResponse:
+			batchResponses := GetScanBatchResponses(response)
+			resumeSpan := getScanResumeSpan(response)
+			if len(batchResponses) == 0 && resumeSpan != nil {
 				// Only the first part of the conditional is true whenever we
 				// received an empty response for the Scan request (i.e. there
 				// was no data in the span to scan). In such a scenario we still
@@ -1758,15 +1842,15 @@ func processSingleRangeResults(
 				continue
 			}
 			result := Result{
-				ScanResp:       scan,
+				ScanResp:       response,
 				Position:       position,
 				subRequestIdx:  subRequestIdx,
-				subRequestDone: scan.ResumeSpan == nil,
+				subRequestDone: resumeSpan == nil,
 			}
 			result.memoryTok.streamer = s
-			result.memoryTok.toRelease = scanResponseSize(scan) + scanResponseOverhead
+			result.memoryTok.toRelease = scanResponseSize(response) + scanResponseOverhead
 			memoryTokensBytes += result.memoryTok.toRelease
-			if scan.ResumeSpan == nil {
+			if resumeSpan == nil {
 				// The scan within the range is complete.
 				if s.mode == OutOfOrder {
 					s.mu.numRangesPerScanRequest[position]--
@@ -1834,6 +1918,10 @@ func buildResumeSingleRangeBatch(
 	// original requests because the KV doesn't allow mutability (and all
 	// requests are modified by txnSeqNumAllocator, even if they are not
 	// evaluated due to TargetBytes limit).
+	numScans, numReverseScans := fp.numIncompleteScans, 0
+	if s.reverse {
+		numScans, numReverseScans = 0, fp.numIncompleteScans
+	}
 	gets := make([]struct {
 		req   kvpb.GetRequest
 		union kvpb.RequestUnion_Get
@@ -1841,7 +1929,11 @@ func buildResumeSingleRangeBatch(
 	scans := make([]struct {
 		req   kvpb.ScanRequest
 		union kvpb.RequestUnion_Scan
-	}, fp.numIncompleteScans)
+	}, numScans)
+	reverseScans := make([]struct {
+		req   kvpb.ReverseScanRequest
+		union kvpb.RequestUnion_ReverseScan
+	}, numReverseScans)
 	var resumeReqIdx int
 	for i, resp := range br.Responses {
 		position := req.positions[i]
@@ -1875,34 +1967,49 @@ func buildResumeSingleRangeBatch(
 			// was already included into resumeReq above.
 			get.ResumeSpan = nil
 
-		case *kvpb.ScanResponse:
-			scan := response
-			if scan.ResumeSpan == nil {
+		case *kvpb.ScanResponse, *kvpb.ReverseScanResponse:
+			resumeSpan := getScanResumeSpan(response)
+			if resumeSpan == nil {
 				continue
 			}
 			// This Scan wasn't completed - create a new request according to
 			// the ResumeSpan and include it into the batch.
-			newScan := scans[0]
-			scans = scans[1:]
-			newScan.req.SetSpan(*scan.ResumeSpan)
-			newScan.req.ScanFormat = kvpb.BATCH_RESPONSE
-			newScan.req.KeyLockingStrength = s.lockStrength
-			newScan.req.KeyLockingDurability = s.lockDurability
-			newScan.union.Scan = &newScan.req
-			resumeReq.reqs[resumeReqIdx].Value = &newScan.union
+			if s.reverse {
+				newScan := reverseScans[0]
+				reverseScans = reverseScans[1:]
+				newScan.req.SetSpan(*resumeSpan)
+				newScan.req.ScanFormat = kvpb.BATCH_RESPONSE
+				newScan.req.KeyLockingStrength = s.lockStrength
+				newScan.req.KeyLockingDurability = s.lockDurability
+				newScan.union.ReverseScan = &newScan.req
+				resumeReq.reqs[resumeReqIdx].Value = &newScan.union
+			} else {
+				newScan := scans[0]
+				scans = scans[1:]
+				newScan.req.SetSpan(*resumeSpan)
+				newScan.req.ScanFormat = kvpb.BATCH_RESPONSE
+				newScan.req.KeyLockingStrength = s.lockStrength
+				newScan.req.KeyLockingDurability = s.lockDurability
+				newScan.union.Scan = &newScan.req
+				resumeReq.reqs[resumeReqIdx].Value = &newScan.union
+			}
 			resumeReq.positions = append(resumeReq.positions, position)
 			if req.subRequestIdx != nil {
 				resumeReq.subRequestIdx = append(resumeReq.subRequestIdx, req.subRequestIdx[i])
 			}
 			if resumeReq.minTargetBytes == 0 {
-				resumeReq.minTargetBytes = scan.ResumeNextBytes
+				resumeReq.minTargetBytes = getScanResumeNextBytes(response)
 			}
 			resumeReqIdx++
 			// Unset the ResumeSpan on the response in order to not confuse the
 			// user of the Streamer (in case it were to inspect result.ScanResp)
 			// as well as to allow for GC of the ResumeSpan. Non-nil resume span
 			// was already included into resumeReq above.
-			scan.ResumeSpan = nil
+			if s.reverse {
+				response.(*kvpb.ReverseScanResponse).ResumeSpan = nil
+			} else {
+				response.(*kvpb.ScanResponse).ResumeSpan = nil
+			}
 		}
 	}
 

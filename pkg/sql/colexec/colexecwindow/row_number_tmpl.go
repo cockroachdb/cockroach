@@ -5,7 +5,6 @@
 
 // {{/*
 //go:build execgen_template
-// +build execgen_template
 
 //
 // This file is the execgen template for row_number.eg.go. It's formatted in a
@@ -21,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -88,11 +88,14 @@ type _ROW_NUMBER_STRINGOp struct {
 
 var _ colexecop.Operator = &_ROW_NUMBER_STRINGOp{}
 
-func (r *_ROW_NUMBER_STRINGOp) Next() coldata.Batch {
-	batch := r.Input.Next()
+func (r *_ROW_NUMBER_STRINGOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := r.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 
 	// {{if .HasPartition}}
@@ -114,7 +117,7 @@ func (r *_ROW_NUMBER_STRINGOp) Next() coldata.Batch {
 			_COMPUTE_ROW_NUMBER(false)
 		}
 	}
-	return batch
+	return batch, nil
 }
 
 // {{end}}

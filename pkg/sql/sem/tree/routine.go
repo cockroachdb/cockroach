@@ -9,6 +9,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -22,7 +23,11 @@ import (
 // A RoutinePlanGenerator must return an error if the RoutinePlanGeneratedFunc
 // returns an error.
 type RoutinePlanGenerator func(
-	_ context.Context, _ RoutineExecFactory, args Datums, fn RoutinePlanGeneratedFunc,
+	_ context.Context,
+	_ RoutineExecFactory,
+	_ RoutineResultWriter,
+	args Datums,
+	fn RoutinePlanGeneratedFunc,
 ) error
 
 // RoutinePlanGeneratedFunc is the function type that is called for each plan
@@ -31,7 +36,7 @@ type RoutinePlanGenerator func(
 // to specify the SQL stmt corresponding to the plan.
 // - isFinalPlan is true if no more plans will be generated after the current
 // plan.
-type RoutinePlanGeneratedFunc func(plan RoutinePlan, stmtForDistSQLDiagram string, isFinalPlan bool) error
+type RoutinePlanGeneratedFunc func(plan RoutinePlan, routineStatsBuilder RoutineStatsBuilder, stmtForDistSQLDiagram string, isFinalPlan bool) error
 
 // RoutinePlan represents a plan for a statement in a routine. It currently maps
 // to exec.Plan. We use the empty interface here rather than exec.Plan to avoid
@@ -43,6 +48,18 @@ type RoutinePlan interface{}
 // exec.Factory. We use the empty interface here rather than exec.Factory to
 // avoid import cycles.
 type RoutineExecFactory interface{}
+
+// RoutineResultWriter maps to *sql.RowResultWriter. It is used for planning
+// PL/pgSQL set-generating functions, which need to be able to write to the
+// result set at arbitrary points during execution. We use the empty interface
+// here rather than *sql.RowResultWriter to avoid import cycles.
+type RoutineResultWriter interface{}
+
+// RoutineStatsBuilder maps to *sqlstats.RecordedStatementStatsBuilder. It is
+// used for collecting per-statement statistics during routine execution. We
+// use the empty interface here rather than
+// *sqlstats.RecordedStatementStatsBuilder to avoid import cycles.
+type RoutineStatsBuilder interface{}
 
 // RoutineExpr represents sequential execution of multiple statements. For
 // example, it is used to represent execution of statements in the body of a
@@ -114,6 +131,12 @@ type RoutineExpr struct {
 	// Generator is true if the function may output a set of rows.
 	Generator bool
 
+	// DiscardLastStmtResult is true if the routine should not add the output of
+	// the last body statement into the result set. This is used for set-returning
+	// PL/pgSQL functions, for which sub-routines will add to the result set
+	// during execution (implementing RETURN NEXT and RETURN QUERY).
+	DiscardLastStmtResult bool
+
 	// TailCall is true if the routine is in a tail-call position in a parent
 	// routine. This means that once execution reaches this routine, the parent
 	// routine will return the result of evaluating this routine with no further
@@ -141,9 +164,32 @@ type RoutineExpr struct {
 	// CursorDeclaration contains the information needed to open a SQL cursor with
 	// the result of the *first* body statement. It may be unset.
 	CursorDeclaration *RoutineOpenCursor
+
+	// FirstStmtResultWriter is the optional result writer that will store the
+	// result of the *first* body statement. It may be unset. Only one of this or
+	// CursorDeclaration may be set.
+	FirstStmtResultWriter RoutineResultWriter
+
+	// SecurityMode is RoutineDefiner when the body should execute with the
+	// owner's effective user (SECURITY DEFINER). When set, RoutineOwner is
+	// pushed onto the effective-user stack for the duration of the call.
+	// SECURITY INVOKER leaves the effective user unchanged. Only meaningful
+	// on the top-level routine; sub-routines synthesized by execbuilder
+	// (exception handlers, lazy subqueries, etc.) leave it zero.
+	SecurityMode RoutineSecurity
+
+	// RoutineOwner is the user to push as the effective user while the body
+	// executes. Only consulted when SecurityMode == RoutineDefiner.
+	RoutineOwner username.SQLUsername
 }
 
 // NewTypedRoutineExpr returns a new RoutineExpr that is well-typed.
+//
+// securityMode and routineOwner must be RoutineInvoker / undefined for
+// sub-routines synthesized by execbuilder (exception handler actions, lazy
+// subqueries, EXISTS wrappers, etc.). Forwarding them is only meaningful for
+// the top-level routine of a UDF or procedure invocation. They are positional
+// to force every call site to make the choice explicitly.
 func NewTypedRoutineExpr(
 	name string,
 	args TypedExprs,
@@ -153,28 +199,36 @@ func NewTypedRoutineExpr(
 	calledOnNullInput bool,
 	multiColOutput bool,
 	generator bool,
+	discardLastStmtResult bool,
 	tailCall bool,
 	procedure bool,
 	triggerFunc bool,
 	blockStart bool,
 	blockState *BlockState,
 	cursorDeclaration *RoutineOpenCursor,
+	firstStmtResultWriter RoutineResultWriter,
+	securityMode RoutineSecurity,
+	routineOwner username.SQLUsername,
 ) *RoutineExpr {
 	return &RoutineExpr{
-		Args:              args,
-		ForEachPlan:       gen,
-		Typ:               typ,
-		EnableStepping:    enableStepping,
-		Name:              name,
-		CalledOnNullInput: calledOnNullInput,
-		MultiColOutput:    multiColOutput,
-		Generator:         generator,
-		TailCall:          tailCall,
-		Procedure:         procedure,
-		TriggerFunc:       triggerFunc,
-		BlockStart:        blockStart,
-		BlockState:        blockState,
-		CursorDeclaration: cursorDeclaration,
+		Args:                  args,
+		ForEachPlan:           gen,
+		Typ:                   typ,
+		EnableStepping:        enableStepping,
+		Name:                  name,
+		CalledOnNullInput:     calledOnNullInput,
+		MultiColOutput:        multiColOutput,
+		Generator:             generator,
+		DiscardLastStmtResult: discardLastStmtResult,
+		TailCall:              tailCall,
+		Procedure:             procedure,
+		TriggerFunc:           triggerFunc,
+		BlockStart:            blockStart,
+		BlockState:            blockState,
+		CursorDeclaration:     cursorDeclaration,
+		FirstStmtResultWriter: firstStmtResultWriter,
+		SecurityMode:          securityMode,
+		RoutineOwner:          routineOwner,
 	}
 }
 

@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/dd"
 	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -57,8 +58,9 @@ import (
 //
 // The input files use the following DSL:
 //
-// new-txn      name=<txn-name> ts=<int>[,<int>] [epoch=<int>] [iso=<level>] [priority=<priority>] [uncertainty-limit=<int>[,<int>]]
-// new-request  name=<req-name> txn=<txn-name>|none ts=<int>[,<int>] [priority=<priority>] [inconsistent] [wait-policy=<policy>] [lock-timeout] [deadlock-timeout] [max-lock-wait-queue-length=<int>] [poison-policy=[err|wait]]
+// new-txn      name=<txn-name> ts=<int>[,<int>] [epoch=<int>] [iso=<level>] [priority=<priority>] [uncertainty-limit=<int>[,<int>]] [observed-ts=<nodeID>@<ts>]
+// new-request name=<req-name> txn=<txn-name>|none ts=<int>[,<int>] [priority=<priority>] [inconsistent] [wait-policy=<policy>] [lock-timeout]
+// [deadlock-timeout] [max-lock-wait-queue-length=<int>] [poison-policy=[err|wait]]
 //
 //	<proto-name> [<field-name>=<field-value>...] (hint: see scanSingleRequest)
 //
@@ -88,7 +90,9 @@ import (
 // debug-advance-clock       ts=<secs>
 // debug-set-discovered-locks-threshold-to-consult-txn-status-cache n=<count>
 // debug-set-batch-pushed-lock-resolution-enabled ok=<enabled>
+// debug-set-push-using-cached-clock-observation-enabled ok=<enabled>
 // debug-set-max-locks n=<count>
+// debug-set-virtual-intent-resolution-enabled ok=<enabled>
 // reset [namespace|force]
 func TestConcurrencyManagerBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -97,6 +101,10 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "concurrency_manager"), func(t *testing.T, path string) {
 		c := newCluster()
 		c.enableTxnPushes()
+		// Keep virtualized intent resolution off, unless tests enable it
+		// explicitly. When it becomes on by default, there will be some test churn
+		// in these data-driven tests.
+		c.setVirtualIntentResolutionEnabled(false)
 		m := concurrency.NewManager(c.makeConfig())
 		m.OnRangeLeaseUpdated(1, true /* isLeaseholder */) // enable
 		c.m = m
@@ -104,15 +112,9 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "new-txn":
-				var txnName string
-				d.ScanArgs(t, "name", &txnName)
+				txnName := dd.ScanArg[string](t, d, "name")
 				ts := scanTimestamp(t, d)
-
-				epoch := 0
-				if d.HasArg("epoch") {
-					d.ScanArgs(t, "epoch", &epoch)
-				}
-
+				epoch := dd.ScanArgOr[enginepb.TxnEpoch](t, d, "epoch", 0)
 				iso := concurrency.ScanIsoLevel(t, d)
 				priority := scanTxnPriority(t, d)
 
@@ -132,7 +134,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					TxnMeta: enginepb.TxnMeta{
 						ID:             id,
 						IsoLevel:       iso,
-						Epoch:          enginepb.TxnEpoch(epoch),
+						Epoch:          epoch,
 						WriteTimestamp: ts,
 						MinTimestamp:   ts,
 						Priority:       priority,
@@ -140,18 +142,33 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					ReadTimestamp:          ts,
 					GlobalUncertaintyLimit: uncertaintyLimit,
 				}
+				// Add observed timestamp if specified. Format: "nodeID@ts"
+				if d.HasArg("observed-ts") {
+					obsStr := dd.ScanArg[string](t, d, "observed-ts")
+					parts := strings.Split(obsStr, "@")
+					nodeID, err := strconv.Atoi(parts[0])
+					if err != nil {
+						d.Fatalf(t, "invalid node ID in observed-ts: %s", obsStr)
+					}
+					obsTs, err := hlc.ParseTimestamp(parts[1])
+					if err != nil {
+						d.Fatalf(t, "invalid timestamp in observed-ts: %s", obsStr)
+					}
+					txn.UpdateObservedTimestamp(
+						roachpb.NodeID(nodeID),
+						obsTs.UnsafeToClockTimestamp(),
+					)
+				}
 				c.registerTxn(txnName, txn)
 				return ""
 
 			case "new-request":
-				var reqName string
-				d.ScanArgs(t, "name", &reqName)
+				reqName := dd.ScanArg[string](t, d, "name")
 				if _, ok := c.requestsByName[reqName]; ok {
 					d.Fatalf(t, "duplicate request: %s", reqName)
 				}
 
-				var txnName string
-				d.ScanArgs(t, "txn", &txnName)
+				txnName := dd.ScanArg[string](t, d, "txn")
 				txn, ok := c.txnsByName[txnName]
 				if !ok && txnName != "none" {
 					d.Fatalf(t, "unknown txn %s", txnName)
@@ -181,15 +198,8 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					lockTimeout = 1 * time.Nanosecond
 				}
 
-				var maxLockWaitQueueLength int
-				if d.HasArg("max-lock-wait-queue-length") {
-					d.ScanArgs(t, "max-lock-wait-queue-length", &maxLockWaitQueueLength)
-				}
-
-				var deadlockTimeout time.Duration
-				if d.HasArg("deadlock-timeout") {
-					d.ScanArgs(t, "deadlock-timeout", &deadlockTimeout)
-				}
+				maxLockWaitQueueLength := dd.ScanArgOr(t, d, "max-lock-wait-queue-length", 0)
+				deadlockTimeout := dd.ScanArgOr[time.Duration](t, d, "deadlock-timeout", 0)
 
 				ba := &kvpb.BatchRequest{}
 				pp := scanPoisonPolicy(t, d)
@@ -219,21 +229,18 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					LatchSpans:             latchSpans,
 					LockSpans:              lockSpans,
 					PoisonPolicy:           pp,
-					BaFmt:                  ba,
+					Batch:                  ba,
 				}
 				return ""
 
 			case "sequence":
-				var reqName string
-				d.ScanArgs(t, "req", &reqName)
+				reqName := dd.ScanArg[string](t, d, "req")
 				req, ok := c.requestsByName[reqName]
 				if !ok {
 					d.Fatalf(t, "unknown request: %s", reqName)
 				}
 				evalKind := concurrency.PessimisticEval
-				if d.HasArg("eval-kind") {
-					var kind string
-					d.ScanArgs(t, "eval-kind", &kind)
+				if kind, ok := dd.ScanArgOpt[string](t, d, "eval-kind"); ok {
 					switch kind {
 					case "pess":
 						evalKind = concurrency.PessimisticEval
@@ -276,8 +283,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				return c.waitAndCollect(t, mon)
 
 			case "finish":
-				var reqName string
-				d.ScanArgs(t, "req", &reqName)
+				reqName := dd.ScanArg[string](t, d, "req")
 				guard, ok := c.guardsByReqName[reqName]
 				if !ok {
 					d.Fatalf(t, "unknown request: %s", reqName)
@@ -294,8 +300,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				return c.waitAndCollect(t, mon)
 
 			case "poison":
-				var reqName string
-				d.ScanArgs(t, "req", &reqName)
+				reqName := dd.ScanArg[string](t, d, "req")
 				guard, ok := c.guardsByReqName[reqName]
 				if !ok {
 					d.Fatalf(t, "unknown request: %s", reqName)
@@ -309,15 +314,13 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				return c.waitAndCollect(t, mon)
 
 			case "handle-lock-conflict-error":
-				var reqName string
-				d.ScanArgs(t, "req", &reqName)
+				reqName := dd.ScanArg[string](t, d, "req")
 				prev, ok := c.guardsByReqName[reqName]
 				if !ok {
 					d.Fatalf(t, "unknown request: %s", reqName)
 				}
 
-				var leaseSeq int
-				d.ScanArgs(t, "lease-seq", &leaseSeq)
+				leaseSeq := dd.ScanArg[roachpb.LeaseSequence](t, d, "lease-seq")
 
 				// Each roachpb.Lock is provided on an indented line.
 				var locks []roachpb.Lock
@@ -332,15 +335,12 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 						d.Fatalf(t, "expected \"lock\", found %s", d.Cmd)
 					}
 
-					var txnName string
-					d.ScanArgs(t, "txn", &txnName)
+					txnName := dd.ScanArg[string](t, d, "txn")
 					txn, ok := c.txnsByName[txnName]
 					if !ok {
 						d.Fatalf(t, "unknown txn %s", txnName)
 					}
-
-					var key string
-					d.ScanArgs(t, "key", &key)
+					key := dd.ScanArg[string](t, d, "key")
 
 					str := lock.Intent
 					if d.HasArg("str") {
@@ -351,16 +351,14 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 
 				opName := fmt.Sprintf("handle lock conflict error %s", reqName)
 				mon.runAsync(opName, func(ctx context.Context) {
-					seq := roachpb.LeaseSequence(leaseSeq)
 					lcErr := &kvpb.LockConflictError{Locks: locks}
-					guard, err := m.HandleLockConflictError(ctx, prev, seq, lcErr)
+					guard, err := m.HandleLockConflictError(ctx, prev, leaseSeq, lcErr)
 					if err != nil {
-						log.Eventf(ctx, "handled %v, returned error: %v", lcErr, err)
+						log.Eventf(ctx, "returned error: %v", err)
 						c.mu.Lock()
 						delete(c.guardsByReqName, reqName)
 						c.mu.Unlock()
 					} else {
-						log.Eventf(ctx, "handled %v, released latches", lcErr)
 						c.mu.Lock()
 						c.guardsByReqName[reqName] = guard
 						c.mu.Unlock()
@@ -369,25 +367,22 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				return c.waitAndCollect(t, mon)
 
 			case "check-opt-no-conflicts":
-				var reqName string
-				d.ScanArgs(t, "req", &reqName)
+				reqName := dd.ScanArg[string](t, d, "req")
 				g, ok := c.guardsByReqName[reqName]
 				if !ok {
 					d.Fatalf(t, "unknown request: %s", reqName)
 				}
 				reqs, _ := scanRequests(t, d, c)
-				latchSpans, lockSpans := c.collectSpans(t, g.Req.Txn, g.Req.Timestamp, g.Req.WaitPolicy, reqs)
+				latchSpans, lockSpans := c.collectSpans(t, g.Req().Txn, g.Req().Timestamp, g.Req().WaitPolicy, reqs)
 				return fmt.Sprintf("no-conflicts: %t", g.CheckOptimisticNoConflicts(latchSpans, lockSpans))
 
 			case "is-key-locked-by-conflicting-txn":
-				var reqName string
-				d.ScanArgs(t, "req", &reqName)
+				reqName := dd.ScanArg[string](t, d, "req")
 				g, ok := c.guardsByReqName[reqName]
 				if !ok {
 					d.Fatalf(t, "unknown request: %s", reqName)
 				}
-				var key string
-				d.ScanArgs(t, "key", &key)
+				key := dd.ScanArg[string](t, d, "key")
 				// TODO(nvanbenschoten): replace with scanLockStrength.
 				strength := concurrency.ScanLockStrength(t, d)
 				ok, txn, err := g.IsKeyLockedByConflictingTxn(context.Background(), roachpb.Key(key), strength)
@@ -404,22 +399,15 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				return "locked: false"
 
 			case "on-lock-acquired":
-				var reqName string
-				d.ScanArgs(t, "req", &reqName)
+				reqName := dd.ScanArg[string](t, d, "req")
 				guard, ok := c.guardsByReqName[reqName]
 				if !ok {
 					d.Fatalf(t, "unknown request: %s", reqName)
 				}
-				txn := guard.Req.Txn
+				txn := guard.Req().Txn
 
-				var key string
-				d.ScanArgs(t, "key", &key)
-
-				var seq int
-				if d.HasArg("seq") {
-					d.ScanArgs(t, "seq", &seq)
-				}
-				seqNum := enginepb.TxnSeq(seq)
+				key := dd.ScanArg[string](t, d, "key")
+				seqNum := dd.ScanArgOr[enginepb.TxnSeq](t, d, "seq", 0)
 
 				// Consider locks to be unreplicated if unspecified.
 				dur := lock.Unreplicated
@@ -443,7 +431,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				}
 				// Confirm that the request has a corresponding write request.
 				found := false
-				for _, ru := range guard.Req.Requests {
+				for _, ru := range guard.Req().Requests {
 					req := ru.GetInner()
 					keySpan := roachpb.Span{Key: roachpb.Key(key)}
 					if kvpb.IsLocking(req) &&
@@ -461,40 +449,35 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				txnAcquire.Sequence = seqNum
 
 				mon.runSync("acquire lock", func(ctx context.Context) {
-					log.Eventf(ctx, "txn %s @ %s", txn.Short(), key)
 					acq := roachpb.MakeLockAcquisition(txnAcquire.TxnMeta, roachpb.Key(key), dur, str, nil)
 					m.OnLockAcquired(ctx, &acq)
 				})
 				return c.waitAndCollect(t, mon)
 
 			case "on-lock-updated":
-				var reqName string
-				d.ScanArgs(t, "req", &reqName)
+				reqName := dd.ScanArg[string](t, d, "req")
 				guard, ok := c.guardsByReqName[reqName]
 				if !ok {
 					d.Fatalf(t, "unknown request: %s", reqName)
 				}
 
-				var txnName string
-				d.ScanArgs(t, "txn", &txnName)
+				txnName := dd.ScanArg[string](t, d, "txn")
 				txn, ok := c.txnsByName[txnName]
 				if !ok {
 					d.Fatalf(t, "unknown txn %s", txnName)
 				}
-
-				var key string
-				d.ScanArgs(t, "key", &key)
+				key := dd.ScanArg[string](t, d, "key")
 
 				status, verb := scanTxnStatus(t, d)
 				var ts hlc.Timestamp
 				if d.HasArg("ts") {
 					ts = scanTimestamp(t, d)
 				}
-				ignoredSeqNums := scanIgnoredSeqNumbers(t, d)
+				ignoredSeqNums := concurrency.ScanIgnoredSeqNumbers(t, d)
 
 				// Confirm that the request has a corresponding ResolveIntent.
 				found := false
-				for _, ru := range guard.Req.Requests {
+				for _, ru := range guard.Req().Requests {
 					if riReq := ru.GetResolveIntent(); riReq != nil &&
 						riReq.IntentTxn.ID == txn.ID &&
 						riReq.Key.Equal(roachpb.Key(key)) &&
@@ -521,8 +504,7 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				return c.waitAndCollect(t, mon)
 
 			case "on-txn-updated":
-				var txnName string
-				d.ScanArgs(t, "txn", &txnName)
+				txnName := dd.ScanArg[string](t, d, "txn")
 				txn, ok := c.txnsByName[txnName]
 				if !ok {
 					d.Fatalf(t, "unknown txn %s", txnName)
@@ -542,12 +524,18 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				})
 				return c.waitAndCollect(t, mon)
 
-			case "on-lease-updated":
-				var isLeaseholder bool
-				d.ScanArgs(t, "leaseholder", &isLeaseholder)
+			case "on-lease-transfer-eval":
+				mon.runSync("eval transfer lease", func(ctx context.Context) {
+					locksToWrite, _ := m.OnRangeLeaseTransferEval()
+					if len(locksToWrite) > 0 {
+						log.Eventf(ctx, "locks to propose as replicated: %d", len(locksToWrite))
+					}
+				})
+				return c.waitAndCollect(t, mon)
 
-				var leaseSeq int
-				d.ScanArgs(t, "lease-seq", &leaseSeq)
+			case "on-lease-updated":
+				isLeaseholder := dd.ScanArgOr(t, d, "leaseholder", false)
+				leaseSeq := dd.ScanArgOr[roachpb.LeaseSequence](t, d, "lease-seq", 0)
 
 				mon.runSync("transfer lease", func(ctx context.Context) {
 					if isLeaseholder {
@@ -555,14 +543,18 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 					} else {
 						log.Event(ctx, "released")
 					}
-					m.OnRangeLeaseUpdated(roachpb.LeaseSequence(leaseSeq), isLeaseholder)
+					m.OnRangeLeaseUpdated(leaseSeq, isLeaseholder)
 				})
 				return c.waitAndCollect(t, mon)
 
 			case "on-split":
 				mon.runSync("split range", func(ctx context.Context) {
 					log.Event(ctx, "complete")
-					m.OnRangeSplit()
+					endKeyStr := dd.ScanArg[string](t, d, "key")
+					locks := m.OnRangeSplit(roachpb.Key(endKeyStr))
+					if len(locks) > 0 {
+						log.Eventf(ctx, "range split returned %d locks for re-acquistion", len(locks))
+					}
 				})
 				return c.waitAndCollect(t, mon)
 
@@ -577,6 +569,13 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				mon.runSync("snapshot replica", func(ctx context.Context) {
 					log.Event(ctx, "applied")
 					m.OnReplicaSnapshotApplied()
+				})
+				return c.waitAndCollect(t, mon)
+
+			case "on-replica-removal":
+				mon.runSync("remove replica", func(ctx context.Context) {
+					log.Event(ctx, "complete")
+					m.OnReplicaRemoval()
 				})
 				return c.waitAndCollect(t, mon)
 
@@ -596,37 +595,41 @@ func TestConcurrencyManagerBasic(t *testing.T) {
 				return ""
 
 			case "debug-set-clock":
-				var secs int
-				d.ScanArgs(t, "ts", &secs)
-
-				if int64(secs) < c.manual.Now().Unix() {
+				secs := dd.ScanArg[int64](t, d, "ts")
+				if secs < c.manual.Now().Unix() {
 					d.Fatalf(t, "manual clock must advance")
 				}
-				c.manual.MustAdvanceTo(timeutil.Unix(int64(secs), 0))
+				c.manual.MustAdvanceTo(timeutil.Unix(secs, 0))
 				return ""
 
 			case "debug-advance-clock":
-				var secs int
-				d.ScanArgs(t, "ts", &secs)
+				secs := dd.ScanArg[int64](t, d, "ts")
 				c.manual.Advance(time.Duration(secs) * time.Second)
 				return ""
 
 			case "debug-set-discovered-locks-threshold-to-consult-txn-status-cache":
-				var n int
-				d.ScanArgs(t, "n", &n)
+				n := dd.ScanArg[int](t, d, "n")
 				c.setDiscoveredLocksThresholdToConsultTxnStatusCache(n)
 				return ""
 
 			case "debug-set-batch-pushed-lock-resolution-enabled":
-				var ok bool
-				d.ScanArgs(t, "ok", &ok)
+				ok := dd.ScanArg[bool](t, d, "ok")
 				c.setBatchPushedLockResolutionEnabled(ok)
 				return ""
 
+			case "debug-set-push-using-cached-clock-observation-enabled":
+				ok := dd.ScanArg[bool](t, d, "ok")
+				c.setPushUsingCachedClockObservationEnabled(ok)
+				return ""
+
+			case "debug-set-virtual-intent-resolution-enabled":
+				ok := dd.ScanArg[bool](t, d, "ok")
+				c.setVirtualIntentResolutionEnabled(ok)
+				return ""
+
 			case "debug-set-max-locks":
-				var n int
-				d.ScanArgs(t, "n", &n)
-				m.TestingSetMaxLocks(int64(n))
+				n := dd.ScanArg[int64](t, d, "n")
+				m.SetMaxLockTableSize(n)
 				return ""
 
 			case "reset":
@@ -693,7 +696,7 @@ type cluster struct {
 
 	// Request state. Cleared on reset.
 	mu              syncutil.Mutex
-	guardsByReqName map[string]*concurrency.Guard
+	guardsByReqName map[string]concurrency.Guard
 	txnRecords      map[uuid.UUID]*txnRecord
 	txnPushes       map[uuid.UUID]*txnPush
 }
@@ -717,9 +720,14 @@ func newCluster() *cluster {
 }
 
 func newClusterWithSettings(st *clustersettings.Settings) *cluster {
-	// Set the latch manager's long latch threshold to infinity to disable
-	// logging, which could cause a test to erroneously fail.
+	// Set the latch manager's long latch hold and slow latch request thresholds
+	// to infinity to disable logging, which could cause a test to erroneously
+	// fail when wall-clock time exceeds the threshold.
 	spanlatch.LongLatchHoldThreshold.Override(context.Background(), &st.SV, math.MaxInt64)
+	spanlatch.SlowLatchRequestThreshold.Override(context.Background(), &st.SV, math.MaxInt64)
+	concurrency.UnreplicatedLockReliabilitySplit.Override(context.Background(), &st.SV, true)
+	concurrency.UnreplicatedLockReliabilityMerge.Override(context.Background(), &st.SV, true)
+	concurrency.UnreplicatedLockReliabilityLeaseTransfer.Override(context.Background(), &st.SV, true)
 	manual := timeutil.NewManualTime(timeutil.Unix(123, 0))
 	return &cluster{
 		nodeDesc:  &roachpb.NodeDescriptor{NodeID: 1},
@@ -730,20 +738,25 @@ func newClusterWithSettings(st *clustersettings.Settings) *cluster {
 
 		txnsByName:      make(map[string]*roachpb.Transaction),
 		requestsByName:  make(map[string]concurrency.Request),
-		guardsByReqName: make(map[string]*concurrency.Guard),
+		guardsByReqName: make(map[string]concurrency.Guard),
 		txnRecords:      make(map[uuid.UUID]*txnRecord),
 		txnPushes:       make(map[uuid.UUID]*txnPush),
 	}
 }
 
 func (c *cluster) makeConfig() concurrency.Config {
+	m := concurrency.TestingMakeLockTableMetricsCfg()
 	return concurrency.Config{
-		NodeDesc:       c.nodeDesc,
-		RangeDesc:      c.rangeDesc,
-		Settings:       c.st,
-		Clock:          c.clock,
-		IntentResolver: c,
-		TxnWaitMetrics: txnwait.NewMetrics(time.Minute),
+		NodeDesc:                          c.nodeDesc,
+		RangeDesc:                         c.rangeDesc,
+		Settings:                          c.st,
+		Clock:                             c.clock,
+		IntentResolver:                    c,
+		TxnWaitMetrics:                    txnwait.NewMetrics(time.Minute),
+		LocksShedDueToMemoryLimit:         m.LocksShedDueToMemoryLimit,
+		NumLockShedDueToMemoryLimitEvents: m.NumLockShedDueToMemoryLimitEvents,
+		VirtualResolveCondenseCount:       m.VirtualResolveCondenseCount,
+		VirtualResolveDisabledCount:       m.VirtualResolveDisabledCount,
 	}
 }
 
@@ -993,7 +1006,7 @@ func (c *cluster) detectDeadlocks() {
 						if i > 0 {
 							chainBuf.WriteString("->")
 						}
-						chainBuf.WriteString(id.Short())
+						chainBuf.WriteString(id.Short().String())
 					}
 					log.Eventf(origPush.ctx, "dependency cycle detected %s", redact.Safe(chainBuf.String()))
 				}
@@ -1018,6 +1031,14 @@ func (c *cluster) setDiscoveredLocksThresholdToConsultTxnStatusCache(n int) {
 
 func (c *cluster) setBatchPushedLockResolutionEnabled(ok bool) {
 	concurrency.BatchPushedLockResolution.Override(context.Background(), &c.st.SV, ok)
+}
+
+func (c *cluster) setPushUsingCachedClockObservationEnabled(ok bool) {
+	concurrency.PushUsingCachedClockObservation.Override(context.Background(), &c.st.SV, ok)
+}
+
+func (c *cluster) setVirtualIntentResolutionEnabled(ok bool) {
+	concurrency.VirtualIntentResolution.Override(context.Background(), &c.st.SV, ok)
 }
 
 // reset clears all request state in the cluster. This avoids portions of tests

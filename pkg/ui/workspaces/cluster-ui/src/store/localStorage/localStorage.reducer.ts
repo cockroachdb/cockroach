@@ -11,6 +11,7 @@ import {
 } from "src/api/statementsApi";
 import { WorkloadInsightEventFilters } from "src/insights";
 import { defaultFilters, Filters } from "src/queryFilter/";
+import { defaultFiltersForSessionsPage } from "src/sessions/sessionsPage";
 
 import { TimeScale, defaultTimeScaleSelected } from "../../timeScaleDropdown";
 import { DOMAIN_NAME } from "../utils";
@@ -39,7 +40,6 @@ export enum LocalStorageKeys {
 
 export type LocalStorageState = {
   "adminUi/showDiagnosticsModal": boolean;
-  "showColumns/ActiveStatementsPage": string;
   "showColumns/ActiveTransactionsPage": string;
   "showColumns/StatementsPage": string;
   "showColumns/TransactionPage": string;
@@ -51,7 +51,6 @@ export type LocalStorageState = {
   [LocalStorageKeys.STMT_FINGERPRINTS_SORT]: SqlStatsSortType;
   [LocalStorageKeys.TXN_FINGERPRINTS_LIMIT]: number;
   [LocalStorageKeys.TXN_FINGERPRINTS_SORT]: SqlStatsSortType;
-  "sortSetting/ActiveStatementsPage": SortSetting;
   "sortSetting/ActiveTransactionsPage": SortSetting;
   "sortSetting/StatementsPage": SortSetting;
   "sortSetting/TransactionsPage": SortSetting;
@@ -62,7 +61,6 @@ export type LocalStorageState = {
   [LocalStorageKeys.DB_SORT]: SortSetting;
   [LocalStorageKeys.DB_DETAILS_TABLES_PAGE_SORT]: SortSetting;
   [LocalStorageKeys.DB_DETAILS_GRANTS_PAGE_SORT]: SortSetting;
-  "filters/ActiveStatementsPage": Filters;
   "filters/ActiveTransactionsPage": Filters;
   "filters/StatementsPage": Filters;
   "filters/TransactionsPage": Filters;
@@ -150,131 +148,46 @@ const defaultJobTypeSetting = 0;
 
 const defaultIsAutoRefreshEnabledSetting = true;
 
-// TODO (koorosh): initial state should be restored from preserved keys in LocalStorage
 const initialState: LocalStorageState = {
-  "adminUi/showDiagnosticsModal":
-    Boolean(JSON.parse(localStorage.getItem("adminUi/showDiagnosticsModal"))) ||
-    false,
-  "showColumns/ActiveStatementsPage":
-    JSON.parse(localStorage.getItem("showColumns/ActiveStatementsPage")) ??
-    null,
-  [LocalStorageKeys.STMT_FINGERPRINTS_LIMIT]:
-    JSON.parse(
-      localStorage.getItem(LocalStorageKeys.STMT_FINGERPRINTS_LIMIT),
-    ) || DEFAULT_STATS_REQ_OPTIONS.limit,
-  [LocalStorageKeys.STMT_FINGERPRINTS_SORT]:
-    JSON.parse(localStorage.getItem(LocalStorageKeys.STMT_FINGERPRINTS_SORT)) ||
-    DEFAULT_STATS_REQ_OPTIONS.sortStmt,
-  "showColumns/ActiveTransactionsPage":
-    JSON.parse(localStorage.getItem("showColumns/ActiveTransactionsPage")) ??
-    null,
-  "showColumns/StatementsPage":
-    JSON.parse(localStorage.getItem("showColumns/StatementsPage")) || null,
-  "showColumns/TransactionPage":
-    JSON.parse(localStorage.getItem("showColumns/TransactionPage")) || null,
-  [LocalStorageKeys.TXN_FINGERPRINTS_LIMIT]:
-    JSON.parse(localStorage.getItem(LocalStorageKeys.TXN_FINGERPRINTS_LIMIT)) ||
-    DEFAULT_STATS_REQ_OPTIONS.limit,
-  [LocalStorageKeys.TXN_FINGERPRINTS_SORT]:
-    JSON.parse(localStorage.getItem(LocalStorageKeys.TXN_FINGERPRINTS_SORT)) ||
-    DEFAULT_STATS_REQ_OPTIONS.sortTxn,
-  "showColumns/SessionsPage":
-    JSON.parse(localStorage.getItem("showColumns/SessionsPage")) || null,
-  "showColumns/StatementInsightsPage":
-    JSON.parse(localStorage.getItem("showColumns/StatementInsightsPage")) ||
-    null,
-  "showColumns/JobsPage":
-    JSON.parse(localStorage.getItem("showColumns/JobsPage")) || null,
-  "showSetting/JobsPage":
-    JSON.parse(localStorage.getItem("showSetting/JobsPage")) ||
-    defaultJobShowSetting,
-  [LocalStorageKeys.GLOBAL_TIME_SCALE]:
-    JSON.parse(localStorage.getItem(LocalStorageKeys.GLOBAL_TIME_SCALE)) ||
-    defaultTimeScaleSelected,
-  "sortSetting/ActiveStatementsPage":
-    JSON.parse(localStorage.getItem("sortSetting/ActiveStatementsPage")) ||
-    defaultSortSettingActiveExecutions,
-  "sortSetting/ActiveTransactionsPage":
-    JSON.parse(localStorage.getItem("sortSetting/ActiveTransactionsPage")) ||
-    defaultSortSettingActiveExecutions,
-  "sortSetting/JobsPage":
-    JSON.parse(localStorage.getItem("sortSetting/JobsPage")) ||
-    defaultJobsSortSetting,
-  "sortSetting/StatementsPage":
-    JSON.parse(localStorage.getItem("sortSetting/StatementsPage")) ||
-    defaultSortSetting,
-  "sortSetting/TransactionsPage":
-    JSON.parse(localStorage.getItem("sortSetting/TransactionsPage")) ||
-    defaultSortSetting,
-  "sortSetting/SessionsPage":
-    JSON.parse(localStorage.getItem("sortSetting/SessionsPage")) ||
-    defaultSessionsSortSetting,
-  "sortSetting/InsightsPage":
-    JSON.parse(localStorage.getItem("sortSetting/InsightsPage")) ||
-    defaultSortSettingInsights,
-  "sortSetting/SchemaInsightsPage":
-    JSON.parse(localStorage.getItem("sortSetting/SchemaInsightsPage")) ||
-    defaultSortSettingSchemaInsights,
-  [LocalStorageKeys.DB_SORT]:
-    JSON.parse(localStorage.getItem(LocalStorageKeys.DB_SORT)) ||
-    defaultNameSortSetting,
-  [LocalStorageKeys.DB_DETAILS_TABLES_PAGE_SORT]:
-    JSON.parse(
-      localStorage.getItem(LocalStorageKeys.DB_DETAILS_TABLES_PAGE_SORT),
-    ) || defaultNameSortSetting,
-  [LocalStorageKeys.DB_DETAILS_GRANTS_PAGE_SORT]:
-    JSON.parse(
-      localStorage.getItem(LocalStorageKeys.DB_DETAILS_GRANTS_PAGE_SORT),
-    ) || defaultNameSortSetting,
-  "filters/ActiveStatementsPage":
-    JSON.parse(localStorage.getItem("filters/ActiveStatementsPage")) ||
-    defaultFiltersActiveExecutions,
-  "filters/ActiveTransactionsPage":
-    JSON.parse(localStorage.getItem("filters/ActiveTransactionsPage")) ||
-    defaultFiltersActiveExecutions,
-  "filters/StatementsPage":
-    JSON.parse(localStorage.getItem("filters/StatementsPage")) ||
-    defaultFilters,
-  "filters/TransactionsPage":
-    JSON.parse(localStorage.getItem("filters/TransactionsPage")) ||
-    defaultFilters,
-  [LocalStorageKeys.DB_FILTERS]:
-    JSON.parse(localStorage.getItem(LocalStorageKeys.DB_FILTERS)) ||
-    defaultFilters,
-  "filters/SessionsPage":
-    JSON.parse(localStorage.getItem("filters/SessionsPage")) || defaultFilters,
-  "filters/InsightsPage":
-    JSON.parse(localStorage.getItem("filters/InsightsPage")) ||
-    defaultFiltersInsights,
-  "filters/SchemaInsightsPage":
-    JSON.parse(localStorage.getItem("filters/SchemaInsightsPage")) ||
-    defaultFiltersSchemaInsights,
-  [LocalStorageKeys.DB_DETAILS_TABLES_PAGE_FILTERS]:
-    JSON.parse(
-      localStorage.getItem(LocalStorageKeys.DB_DETAILS_TABLES_PAGE_FILTERS),
-    ) || defaultFilters,
-  "search/StatementsPage":
-    JSON.parse(localStorage.getItem("search/StatementsPage")) || null,
-  "search/TransactionsPage":
-    JSON.parse(localStorage.getItem("search/TransactionsPage")) || null,
-  [LocalStorageKeys.DB_SEARCH]:
-    JSON.parse(localStorage.getItem(LocalStorageKeys.DB_SEARCH)) || null,
-  "typeSetting/JobsPage":
-    JSON.parse(localStorage.getItem("typeSetting/JobsPage")) ||
-    defaultJobTypeSetting,
-  [LocalStorageKeys.DB_DETAILS_TABLES_PAGE_SEARCH]:
-    JSON.parse(
-      localStorage.getItem(LocalStorageKeys.DB_DETAILS_TABLES_PAGE_SEARCH),
-    ) || null,
-  "statusSetting/JobsPage":
-    JSON.parse(localStorage.getItem("statusSetting/JobsPage")) ||
-    defaultJobStatusSetting,
+  "adminUi/showDiagnosticsModal": false,
+  [LocalStorageKeys.STMT_FINGERPRINTS_LIMIT]: DEFAULT_STATS_REQ_OPTIONS.limit,
+  [LocalStorageKeys.STMT_FINGERPRINTS_SORT]: DEFAULT_STATS_REQ_OPTIONS.sortStmt,
+  "showColumns/ActiveTransactionsPage": null,
+  "showColumns/StatementsPage": null,
+  "showColumns/TransactionPage": null,
+  [LocalStorageKeys.TXN_FINGERPRINTS_LIMIT]: DEFAULT_STATS_REQ_OPTIONS.limit,
+  [LocalStorageKeys.TXN_FINGERPRINTS_SORT]: DEFAULT_STATS_REQ_OPTIONS.sortTxn,
+  "showColumns/SessionsPage": null,
+  "showColumns/StatementInsightsPage": null,
+  "showColumns/JobsPage": null,
+  "showSetting/JobsPage": defaultJobShowSetting,
+  [LocalStorageKeys.GLOBAL_TIME_SCALE]: defaultTimeScaleSelected,
+  "sortSetting/ActiveTransactionsPage": defaultSortSettingActiveExecutions,
+  "sortSetting/JobsPage": defaultJobsSortSetting,
+  "sortSetting/StatementsPage": defaultSortSetting,
+  "sortSetting/TransactionsPage": defaultSortSetting,
+  "sortSetting/SessionsPage": defaultSessionsSortSetting,
+  "sortSetting/InsightsPage": defaultSortSettingInsights,
+  "sortSetting/SchemaInsightsPage": defaultSortSettingSchemaInsights,
+  [LocalStorageKeys.DB_SORT]: defaultNameSortSetting,
+  [LocalStorageKeys.DB_DETAILS_TABLES_PAGE_SORT]: defaultNameSortSetting,
+  [LocalStorageKeys.DB_DETAILS_GRANTS_PAGE_SORT]: defaultNameSortSetting,
+  "filters/ActiveTransactionsPage": defaultFiltersActiveExecutions,
+  "filters/StatementsPage": defaultFilters,
+  "filters/TransactionsPage": defaultFilters,
+  [LocalStorageKeys.DB_FILTERS]: defaultFilters,
+  "filters/SessionsPage": defaultFiltersForSessionsPage,
+  "filters/InsightsPage": defaultFiltersInsights,
+  "filters/SchemaInsightsPage": defaultFiltersSchemaInsights,
+  [LocalStorageKeys.DB_DETAILS_TABLES_PAGE_FILTERS]: defaultFilters,
+  "search/StatementsPage": null,
+  "search/TransactionsPage": null,
+  [LocalStorageKeys.DB_SEARCH]: null,
+  "typeSetting/JobsPage": defaultJobTypeSetting,
+  [LocalStorageKeys.DB_DETAILS_TABLES_PAGE_SEARCH]: null,
+  "statusSetting/JobsPage": defaultJobStatusSetting,
   [LocalStorageKeys.ACTIVE_EXECUTIONS_IS_AUTOREFRESH_ENABLED]:
-    JSON.parse(
-      localStorage.getItem(
-        LocalStorageKeys.ACTIVE_EXECUTIONS_IS_AUTOREFRESH_ENABLED,
-      ),
-    ) || defaultIsAutoRefreshEnabledSetting,
+    defaultIsAutoRefreshEnabledSetting,
   "requestTime/StatementsPage": null,
   "requestTime/TransactionsPage": null,
 };

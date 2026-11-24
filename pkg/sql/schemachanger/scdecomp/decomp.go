@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -154,7 +156,6 @@ func (w *walkCtx) walkDatabase(db catalog.DatabaseDescriptor) {
 		w.ev(scpb.Status_PUBLIC, &scpb.DatabaseZoneConfig{
 			DatabaseID: db.GetID(),
 			ZoneConfig: zoneConfig.ZoneConfigProto(),
-			SeqNum:     0,
 		})
 	}
 }
@@ -214,6 +215,65 @@ func (w *walkCtx) walkType(typ catalog.TypeDescriptor) {
 				Name:            comp.GetElementLabel(i),
 			})
 		}
+	} else if domain := typ.AsDomainTypeDescriptor(); domain != nil {
+		baseType := newTypeT(domain.GetBaseType())
+		w.ev(descriptorStatus(typ), &scpb.DomainType{
+			TypeID:      domain.GetID(),
+			ArrayTypeID: domain.GetArrayTypeID(),
+			BaseTypeT:   *baseType,
+		})
+		if domain.IsNotNull() {
+			constraintID := domain.GetNotNullConstraintID()
+			w.ev(descriptorStatus(typ), &scpb.DomainNotNull{
+				TypeID:       domain.GetID(),
+				ConstraintID: constraintID,
+			})
+			w.ev(descriptorStatus(typ), &scpb.DomainConstraintName{
+				TypeID:       domain.GetID(),
+				ConstraintID: constraintID,
+				Name:         domain.GetNotNullConstraintName(),
+			})
+		}
+		if defaultExpr := domain.GetDefaultExpr(); defaultExpr != "" {
+			expr, err := w.newExpression(catpb.Expression(defaultExpr))
+			if err != nil {
+				panic(errors.NewAssertionErrorWithWrappedErrf(err, "domain %q (%d) default expr",
+					typ.GetName(), typ.GetID()))
+			}
+			w.ev(descriptorStatus(typ), &scpb.DomainDefault{
+				TypeID:     domain.GetID(),
+				Expression: *expr,
+			})
+		}
+		for i := 0; i < domain.NumCheckConstraints(); i++ {
+			expr, err := w.newExpression(catpb.Expression(domain.GetCheckConstraintExpr(i)))
+			if err != nil {
+				panic(errors.NewAssertionErrorWithWrappedErrf(err, "domain %q (%d) check constraint %q",
+					typ.GetName(), typ.GetID(), domain.GetCheckConstraintName(i)))
+			}
+			constraintID := domain.GetCheckConstraintID(i)
+			validity := domain.GetCheckConstraintValidity(i)
+
+			if validity == descpb.ConstraintValidity_Unvalidated {
+				w.ev(descriptorStatus(typ), &scpb.DomainCheckConstraintUnvalidated{
+					TypeID:       domain.GetID(),
+					ConstraintID: constraintID,
+					Expression:   *expr,
+				})
+			} else {
+				w.ev(descriptorStatus(typ), &scpb.DomainCheckConstraint{
+					TypeID:       domain.GetID(),
+					ConstraintID: constraintID,
+					Expression:   *expr,
+				})
+			}
+
+			w.ev(descriptorStatus(typ), &scpb.DomainConstraintName{
+				TypeID:       domain.GetID(),
+				ConstraintID: constraintID,
+				Name:         domain.GetCheckConstraintName(i),
+			})
+		}
 	} else {
 		panic(errors.AssertionFailedf("unsupported type kind %q", typ.GetKind()))
 	}
@@ -234,22 +294,13 @@ func (w *walkCtx) walkType(typ catalog.TypeDescriptor) {
 	}
 }
 
+// GetSequenceOptions returns the non-default sequence options from descriptor
+// sequence options.
 func GetSequenceOptions(
 	sequenceID descpb.ID, opts *descpb.TableDescriptor_SequenceOpts,
 ) []*scpb.SequenceOption {
 	// Compute the default sequence options.
-	defaultOpts := descpb.TableDescriptor_SequenceOpts{
-		Increment: 1,
-	}
-	err := schemaexpr.AssignSequenceOptions(&defaultOpts,
-		nil,
-		64,
-		true,
-		nil,
-	)
-	if err != nil {
-		panic(err)
-	}
+	defaultOpts := schemaexpr.DefaultSequenceOptions()
 	var sequenceOptions []*scpb.SequenceOption
 	addSequenceOption := func(key string, defaultValue, value interface{}) {
 		// Nil or empty values can be skipped. Or values which
@@ -275,7 +326,7 @@ func GetSequenceOptions(
 	addSequenceOption(tree.SeqOptMaxValue, defaultOpts.MaxValue, opts.MaxValue)
 	addSequenceOption(tree.SeqOptStart, defaultOpts.Start, opts.Start)
 	addSequenceOption(tree.SeqOptVirtual, defaultOpts.Virtual, opts.Virtual)
-	addSequenceOption(tree.SeqOptCache, defaultOpts.CacheSize, opts.CacheSize)
+	addSequenceOption(tree.SeqOptCacheSession, defaultOpts.SessionCacheSize, opts.SessionCacheSize)
 	addSequenceOption(tree.SeqOptCacheNode, defaultOpts.NodeCacheSize, opts.NodeCacheSize)
 	addSequenceOption(tree.SeqOptAs, defaultOpts.AsIntegerType, opts.AsIntegerType)
 	return sequenceOptions
@@ -302,6 +353,7 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 			ViewID:          tbl.GetID(),
 			UsesTypeIDs:     catalog.MakeDescriptorIDSet(tbl.GetDependsOnTypes()...).Ordered(),
 			UsesRelationIDs: catalog.MakeDescriptorIDSet(tbl.GetDependsOn()...).Ordered(),
+			UsesRoutineIDs:  catalog.MakeDescriptorIDSet(tbl.GetDependsOnFunctions()...).Ordered(),
 			IsTemporary:     tbl.IsTemporary(),
 			IsMaterialized:  tbl.MaterializedView(),
 			ForwardReferences: func(tbl catalog.TableDescriptor) []*scpb.View_Reference {
@@ -315,7 +367,7 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 						panic(err)
 					}
 
-					_ = toDesc.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
+					err = toDesc.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
 						if dep.ID != tbl.GetID() {
 							return nil
 						}
@@ -336,6 +388,9 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 						result = append(result, ref)
 						return nil
 					})
+					if err != nil {
+						panic(err)
+					}
 				}
 
 				return result
@@ -388,7 +443,7 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 		if ttl := tbl.GetRowLevelTTL(); ttl != nil {
 			// We pull out the TTL expression so that we can build proper column
 			// dependencies with whatever column is used.
-			ttlExpr, err := w.newExpression(string(ttl.GetTTLExpr()))
+			ttlExpr, err := w.newExpression(ttl.GetTTLExpr())
 			if err != nil {
 				panic(err)
 			}
@@ -412,18 +467,24 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 	for i := range triggers {
 		w.walkTrigger(tbl, &triggers[i])
 	}
+	policies := tbl.GetPolicies()
+	for i := range policies {
+		w.walkPolicy(tbl, &policies[i])
+	}
 
-	_ = tbl.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
+	if err := tbl.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
 		w.backRefs.Add(dep.ID)
 		return nil
-	})
+	}); err != nil {
+		panic(err)
+	}
 	for _, fk := range tbl.InboundForeignKeys() {
 		w.backRefs.Add(fk.GetOriginTableID())
 	}
 	// Add a zone config element which is a stop gap to allow us to block
 	// operations on tables. To minimize RTT impact limit
 	// this to only tables and materialized views.
-	if (tbl.IsTable() && !tbl.IsVirtualTable()) || tbl.MaterializedView() {
+	if (tbl.IsTable() && !tbl.IsVirtualTable()) || tbl.MaterializedView() || tbl.IsSequence() {
 		zoneConfig, err := w.zoneConfigReader.GetZoneConfig(w.ctx, tbl.GetID())
 		if err != nil {
 			panic(err)
@@ -434,7 +495,6 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 				&scpb.TableZoneConfig{
 					TableID:    tbl.GetID(),
 					ZoneConfig: zc,
-					SeqNum:     0,
 				})
 			for i, subZoneCfg := range zc.Subzones {
 				if len(subZoneCfg.PartitionName) > 0 {
@@ -445,7 +505,7 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 							PartitionName: subZoneCfg.PartitionName,
 							Subzone:       subZoneCfg,
 							SubzoneSpans:  zc.FilterSubzoneSpansByIdx(int32(i)),
-							SeqNum:        0,
+							OldIdxRef:     -1,
 						})
 				} else {
 					w.ev(scpb.Status_PUBLIC,
@@ -454,7 +514,7 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 							IndexID:      catid.IndexID(subZoneCfg.IndexID),
 							Subzone:      subZoneCfg,
 							SubzoneSpans: zc.FilterSubzoneSpansByIdx(int32(i)),
-							SeqNum:       0,
+							OldIdxRef:    -1,
 						})
 				}
 			}
@@ -466,10 +526,46 @@ func (w *walkCtx) walkRelation(tbl catalog.TableDescriptor) {
 	if tbl.IsSchemaLocked() {
 		w.ev(scpb.Status_PUBLIC, &scpb.TableSchemaLocked{TableID: tbl.GetID()})
 	}
+	if tbl.IsRowLevelSecurityEnabled() {
+		w.ev(scpb.Status_PUBLIC, &scpb.RowLevelSecurityEnabled{TableID: tbl.GetID()})
+	}
+	if tbl.IsRowLevelSecurityForced() {
+		w.ev(scpb.Status_PUBLIC, &scpb.RowLevelSecurityForced{TableID: tbl.GetID()})
+	}
 	if tbl.TableDesc().LDRJobIDs != nil {
 		w.ev(scpb.Status_PUBLIC, &scpb.LDRJobIDs{
 			TableID: tbl.GetID(),
 			JobIDs:  tbl.TableDesc().LDRJobIDs,
+		})
+	}
+	w.walkStorageParams(tbl)
+}
+
+// walkStorageParams walks through table storage parameters and creates
+// TableStorageParam elements for each non-null parameter.
+func (w *walkCtx) walkStorageParams(tbl catalog.TableDescriptor) {
+	tableID := tbl.GetID()
+	storageParams, err := tbl.GetStorageParams(false /* spaceBetweenEqual */)
+	if err != nil {
+		panic(err)
+	}
+	for _, param := range storageParams {
+		key, value, found := strings.Cut(param, "=")
+		if !found {
+			continue
+		}
+		if key == "schema_locked" {
+			// schema_locked is handled separately via the TableSchemaLocked element.
+			continue
+		}
+		if strings.HasPrefix(key, "ttl") {
+			// ttl parameters are handled separately via the RowLevelTTL element.
+			continue
+		}
+		w.ev(scpb.Status_PUBLIC, &scpb.TableStorageParam{
+			TableID: tableID,
+			Name:    key,
+			Value:   value,
 		})
 	}
 }
@@ -489,6 +585,12 @@ func (w *walkCtx) walkLocality(tbl catalog.TableDescriptor, l *catpb.LocalityCon
 			TableID: tbl.GetID(),
 			As:      as,
 		})
+		if fkID := tbl.GetRegionalByRowUsingConstraint(); fkID != descpb.ConstraintID(0) {
+			w.ev(scpb.Status_PUBLIC, &scpb.TableLocalityRegionalByRowUsingConstraint{
+				TableID:      tbl.GetID(),
+				ConstraintID: fkID,
+			})
+		}
 	} else if rbt := l.GetRegionalByTable(); rbt != nil {
 		if rgn := rbt.Region; rgn != nil {
 			parent := w.lookupFn(tbl.GetParentID())
@@ -522,7 +624,6 @@ func (w *walkCtx) walkColumn(tbl catalog.TableDescriptor, col catalog.Column) {
 	column := &scpb.Column{
 		TableID:                           tbl.GetID(),
 		ColumnID:                          col.GetID(),
-		IsHidden:                          col.IsHidden(),
 		IsInaccessible:                    col.IsInaccessible(),
 		GeneratedAsIdentityType:           col.GetGeneratedAsIdentityType(),
 		GeneratedAsIdentitySequenceOption: col.GetGeneratedAsIdentitySequenceOptionStr(),
@@ -542,7 +643,6 @@ func (w *walkCtx) walkColumn(tbl catalog.TableDescriptor, col catalog.Column) {
 		columnType := &scpb.ColumnType{
 			TableID:                 tbl.GetID(),
 			ColumnID:                col.GetID(),
-			IsNullable:              col.IsNullable(),
 			IsVirtual:               col.IsVirtual(),
 			ElementCreationMetadata: NewElementCreationMetadata(w.clusterVersion),
 		}
@@ -560,17 +660,43 @@ func (w *walkCtx) walkColumn(tbl catalog.TableDescriptor, col catalog.Column) {
 			expr, err := w.newExpression(col.GetComputeExpr())
 			onErrPanic(err)
 
-			if columnType.ElementCreationMetadata.In_24_3OrLater {
-				w.ev(scpb.Status_PUBLIC, &scpb.ColumnComputeExpression{
-					TableID:    tbl.GetID(),
-					ColumnID:   col.GetID(),
-					Expression: *expr,
-				})
-			} else {
-				columnType.ComputeExpr = expr
+			w.ev(scpb.Status_PUBLIC, &scpb.ColumnComputeExpression{
+				TableID:    tbl.GetID(),
+				ColumnID:   col.GetID(),
+				Expression: *expr,
+			})
+		}
+
+		if columnType.ElementCreationMetadata.In_26_1OrLater {
+			if col.IsGeneratedAsIdentity() {
+				w.ev(scpb.Status_PUBLIC,
+					&scpb.ColumnGeneratedAsIdentity{
+						TableID:        tbl.GetID(),
+						ColumnID:       col.GetID(),
+						Type:           col.GetGeneratedAsIdentityType(),
+						SequenceOption: col.GetGeneratedAsIdentitySequenceOptionStr(),
+					})
+				column.GeneratedAsIdentityType = catpb.GeneratedAsIdentityType_NOT_IDENTITY_COLUMN
+				column.GeneratedAsIdentitySequenceOption = ""
 			}
+		} else {
+			column.GeneratedAsIdentityType = col.GetGeneratedAsIdentityType()
+			column.GeneratedAsIdentitySequenceOption = col.GetGeneratedAsIdentitySequenceOptionStr()
 		}
 		w.ev(scpb.Status_PUBLIC, columnType)
+
+		if col.IsHidden() {
+			if columnType.ElementCreationMetadata.In_26_1OrLater {
+				columnHidden := scpb.ColumnHidden{
+					TableID:  tbl.GetID(),
+					ColumnID: col.GetID(),
+				}
+				w.ev(scpb.Status_PUBLIC, &columnHidden)
+			} else {
+				column.IsHidden = true
+			}
+		}
+
 	}
 	if !col.IsNullable() {
 		w.ev(scpb.Status_PUBLIC, &scpb.ColumnNotNull{
@@ -630,18 +756,24 @@ func (w *walkCtx) walkIndex(tbl catalog.TableDescriptor, idx catalog.Index) {
 			TableID:             tbl.GetID(),
 			IndexID:             idx.GetID(),
 			IsUnique:            idx.IsUnique(),
-			IsInverted:          idx.GetType() == descpb.IndexDescriptor_INVERTED,
+			IsInverted:          idx.GetType() == idxtype.INVERTED,
+			Type:                idx.GetType(),
 			IsCreatedExplicitly: idx.IsCreatedExplicitly(),
 			ConstraintID:        idx.GetConstraintID(),
 			IsNotVisible:        idx.GetInvisibility() != 0.0,
 			Invisibility:        idx.GetInvisibility(),
+			SkipUniqueChecks:    idx.SkipUniqueChecks(),
 		}
 		if geoConfig := idx.GetGeoConfig(); !geoConfig.IsEmpty() {
 			index.GeoConfig = protoutil.Clone(&geoConfig).(*geopb.Config)
 		}
+		if index.Type == idxtype.VECTOR {
+			vecConfig := idx.GetVecConfig()
+			index.VecConfig = &vecConfig
+		}
 		for i, c := range cpy.KeyColumnIDs {
 			invertedKind := catpb.InvertedIndexColumnKind_DEFAULT
-			if index.IsInverted && c == idx.InvertedColumnID() {
+			if index.Type == idxtype.INVERTED && c == idx.InvertedColumnID() {
 				invertedKind = idx.InvertedColumnKind()
 			}
 			w.ev(scpb.Status_PUBLIC, &scpb.IndexColumn{
@@ -818,11 +950,12 @@ func (w *walkCtx) walkTrigger(tbl catalog.TableDescriptor, t *descpb.TriggerDesc
 		TriggerID: t.ID,
 		Name:      t.Name,
 	})
-	w.ev(scpb.Status_PUBLIC, &scpb.TriggerEnabled{
-		TableID:   tbl.GetID(),
-		TriggerID: t.ID,
-		Enabled:   t.Enabled,
-	})
+	if t.Enabled {
+		w.ev(scpb.Status_PUBLIC, &scpb.TriggerEnabled{
+			TableID:   tbl.GetID(),
+			TriggerID: t.ID,
+		})
+	}
 	w.ev(scpb.Status_PUBLIC, &scpb.TriggerTiming{
 		TableID:    tbl.GetID(),
 		TriggerID:  t.ID,
@@ -853,23 +986,118 @@ func (w *walkCtx) walkTrigger(tbl catalog.TableDescriptor, t *descpb.TriggerDesc
 		w.ev(scpb.Status_PUBLIC, &scpb.TriggerWhen{
 			TableID:   tbl.GetID(),
 			TriggerID: t.ID,
-			WhenExpr:  t.WhenExpr,
+			WhenExpr:  string(t.WhenExpr),
 		})
 	}
 	w.ev(scpb.Status_PUBLIC, &scpb.TriggerFunctionCall{
 		TableID:   tbl.GetID(),
 		TriggerID: t.ID,
 		FuncID:    t.FuncID,
-		FuncBody:  t.FuncBody,
+		FuncBody:  string(t.FuncBody),
 		FuncArgs:  t.FuncArgs,
 	})
 	w.ev(scpb.Status_PUBLIC, &scpb.TriggerDeps{
-		TableID:         tbl.GetID(),
-		TriggerID:       t.ID,
-		UsesRelationIDs: t.DependsOn,
-		UsesTypeIDs:     t.DependsOnTypes,
-		UsesRoutineIDs:  t.DependsOnRoutines,
+		TableID:        tbl.GetID(),
+		TriggerID:      t.ID,
+		UsesRelations:  w.buildTriggerRelationDependencies(tbl, t),
+		UsesTypeIDs:    t.DependsOnTypes,
+		UsesRoutineIDs: t.DependsOnRoutines,
 	})
+}
+
+func (w *walkCtx) buildTriggerRelationDependencies(
+	tbl catalog.TableDescriptor, t *descpb.TriggerDescriptor,
+) []scpb.TriggerDeps_RelationReference {
+	usesRelations := make([]scpb.TriggerDeps_RelationReference, 0)
+	for _, id := range t.DependsOn {
+		foundRelation := false
+		to := w.lookupFn(id)
+		toDesc, err := catalog.AsTableDescriptor(to)
+		if err != nil {
+			panic(err)
+		}
+		err = toDesc.ForeachDependedOnBy(func(dep *descpb.TableDescriptor_Reference) error {
+			if dep.ID != tbl.GetID() {
+				return nil
+			}
+			// Only include backreferences for this specific trigger. Legacy backrefs
+			// created before V26_2_TriggerBackrefRepair have TriggerID=0, so we treat
+			// them as matching any trigger until the upgrade repairs them.
+			if dep.TriggerID != t.ID {
+				if w.clusterVersion.IsActive(clusterversion.V26_2_TriggerBackrefRepair) || dep.TriggerID != 0 {
+					return nil
+				}
+			}
+			usesRelations = append(usesRelations, scpb.TriggerDeps_RelationReference{
+				ID:        id,
+				IndexID:   dep.IndexID,
+				ColumnIDs: dep.ColumnIDs,
+			})
+			foundRelation = true
+			return nil
+		})
+		if err != nil {
+			panic(err)
+		}
+		if !foundRelation {
+			panic(errors.AssertionFailedf("could not find back-reference to relation %d", id))
+		}
+	}
+	return usesRelations
+}
+
+func (w *walkCtx) walkPolicy(tbl catalog.TableDescriptor, p *descpb.PolicyDescriptor) {
+	w.ev(scpb.Status_PUBLIC, &scpb.Policy{
+		TableID:  tbl.GetID(),
+		PolicyID: p.ID,
+		Type:     p.Type,
+		Command:  p.Command,
+	})
+	w.ev(scpb.Status_PUBLIC, &scpb.PolicyName{
+		TableID:  tbl.GetID(),
+		PolicyID: p.ID,
+		Name:     p.Name,
+	})
+	for _, role := range p.RoleNames {
+		w.ev(scpb.Status_PUBLIC, &scpb.PolicyRole{
+			TableID:  tbl.GetID(),
+			PolicyID: p.ID,
+			RoleName: role,
+		})
+	}
+	if p.UsingExpr != "" {
+		expr, err := w.newExpression(p.UsingExpr)
+		if err != nil {
+			panic(errors.NewAssertionErrorWithWrappedErrf(err, "USING expression for policy %q in table %q (%d)",
+				p.Name, tbl.GetName(), tbl.GetID()))
+		}
+		w.ev(scpb.Status_PUBLIC, &scpb.PolicyUsingExpr{
+			TableID:    tbl.GetID(),
+			PolicyID:   p.ID,
+			Expression: *expr,
+		})
+	}
+	if p.WithCheckExpr != "" {
+		expr, err := w.newExpression(p.WithCheckExpr)
+		if err != nil {
+			panic(errors.NewAssertionErrorWithWrappedErrf(err, "WITH CHECK expression for policy %q in table %q (%d)",
+				p.Name, tbl.GetName(), tbl.GetID()))
+		}
+		w.ev(scpb.Status_PUBLIC, &scpb.PolicyWithCheckExpr{
+			TableID:    tbl.GetID(),
+			PolicyID:   p.ID,
+			Expression: *expr,
+		})
+	}
+	if p.UsingExpr != "" || p.WithCheckExpr != "" {
+		w.ev(scpb.Status_PUBLIC, &scpb.PolicyDeps{
+			TableID:         tbl.GetID(),
+			PolicyID:        p.ID,
+			UsesTypeIDs:     p.DependsOnTypes,
+			UsesRelationIDs: p.DependsOnRelations,
+			UsesFunctionIDs: p.DependsOnFunctions,
+		})
+	}
 }
 
 func (w *walkCtx) walkForeignKeyConstraint(
@@ -915,10 +1143,11 @@ func (w *walkCtx) walkForeignKeyConstraint(
 func (w *walkCtx) walkFunction(fnDesc catalog.FunctionDescriptor) {
 	typeT := newTypeT(fnDesc.GetReturnType().Type)
 	fn := &scpb.Function{
-		FunctionID: fnDesc.GetID(),
-		ReturnSet:  fnDesc.GetReturnType().ReturnSet,
-		ReturnType: *typeT,
-		Params:     make([]scpb.Function_Parameter, len(fnDesc.GetParams())),
+		FunctionID:  fnDesc.GetID(),
+		ReturnSet:   fnDesc.GetReturnType().ReturnSet,
+		ReturnType:  *typeT,
+		Params:      make([]scpb.Function_Parameter, len(fnDesc.GetParams())),
+		IsProcedure: fnDesc.IsProcedure(),
 	}
 	for i, param := range fnDesc.GetParams() {
 		typeT := newTypeT(param.Type)
@@ -928,7 +1157,7 @@ func (w *walkCtx) walkFunction(fnDesc catalog.FunctionDescriptor) {
 			Type:  *typeT,
 		}
 		if param.DefaultExpr != nil {
-			expr, err := w.newExpression(*param.DefaultExpr)
+			expr, err := w.newExpression(catpb.Expression(*param.DefaultExpr))
 			if err != nil {
 				panic(err)
 			}
@@ -961,10 +1190,24 @@ func (w *walkCtx) walkFunction(fnDesc catalog.FunctionDescriptor) {
 		FunctionID: fnDesc.GetID(),
 		Security:   catpb.FunctionSecurity{Security: fnDesc.GetSecurity()},
 	})
+	if w.clusterVersion.IsActive(clusterversion.V26_2) {
+		w.ev(scpb.Status_PUBLIC, &scpb.FunctionParams{
+			FunctionID: fnDesc.GetID(),
+			Params:     fn.Params,
+		})
+	}
+	if w.clusterVersion.IsActive(clusterversion.V26_3) {
+		if comment, ok := w.commentReader.GetFunctionComment(fnDesc.GetID()); ok {
+			w.ev(scpb.Status_PUBLIC, &scpb.FunctionComment{
+				FunctionID: fnDesc.GetID(),
+				Comment:    comment,
+			})
+		}
+	}
 
 	fnBody := &scpb.FunctionBody{
 		FunctionID:  fnDesc.GetID(),
-		Body:        fnDesc.GetFunctionBody(),
+		Body:        string(fnDesc.GetFunctionBody()),
 		Lang:        catpb.FunctionLanguage{Lang: fnDesc.GetLanguage()},
 		UsesTypeIDs: fnDesc.GetDependsOnTypes(),
 	}
@@ -1048,7 +1291,6 @@ func WalkNamedRanges(
 		w.ev(scpb.Status_PUBLIC, &scpb.NamedRangeZoneConfig{
 			RangeID:    rangeID,
 			ZoneConfig: zoneConfig.ZoneConfigProto(),
-			SeqNum:     0,
 		})
 	}
 }

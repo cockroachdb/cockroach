@@ -315,3 +315,51 @@ BEGIN
   SELECT 1;
 END foo
     ^
+
+pretty
+DECLARE
+x INT;
+BEGIN
+BEGIN
+x := 1 // 0;
+EXCEPTION
+WHEN division_by_zero THEN
+x := 0;
+END;
+RAISE NOTICE '%', x;
+END
+----
+DECLARE
+	x INT8;
+BEGIN
+	BEGIN
+		x := 1 // 0;
+	EXCEPTION
+		WHEN division_by_zero THEN
+			x := 0;
+	END;
+	RAISE NOTICE '%', x;
+END;
+
+pretty
+DECLARE
+x INT;
+BEGIN
+DECLARE
+y INT;
+BEGIN
+RAISE NOTICE '% %', x, y;
+END;
+RAISE NOTICE '%', x;
+END
+----
+DECLARE
+	x INT8;
+BEGIN
+	DECLARE
+		y INT8;
+	BEGIN
+		RAISE NOTICE '% %', x, y;
+	END;
+	RAISE NOTICE '%', x;
+END;

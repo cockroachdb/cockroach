@@ -9,8 +9,7 @@ col_qualification ::=
 	| 'CONSTRAINT' constraint_name 'DEFAULT' b_expr
 	| 'CONSTRAINT' constraint_name 'ON' 'UPDATE' b_expr
 	| 'CONSTRAINT' constraint_name 'REFERENCES' table_name opt_name_parens key_match reference_actions
-	| 'CONSTRAINT' constraint_name generated_as '(' a_expr ')' 'STORED'
-	| 'CONSTRAINT' constraint_name generated_as '(' a_expr ')' 'VIRTUAL'
+	| 'CONSTRAINT' constraint_name generated_as '(' a_expr ')' opt_virtual_or_stored
 	| 'CONSTRAINT' constraint_name 'GENERATED_ALWAYS' 'ALWAYS' 'AS' 'IDENTITY' '(' opt_sequence_option_list ')'
 	| 'CONSTRAINT' constraint_name 'GENERATED_BY_DEFAULT' 'BY' 'DEFAULT' 'AS' 'IDENTITY' '(' opt_sequence_option_list ')'
 	| 'CONSTRAINT' constraint_name 'GENERATED_ALWAYS' 'ALWAYS' 'AS' 'IDENTITY'
@@ -25,8 +24,7 @@ col_qualification ::=
 	| 'DEFAULT' b_expr
 	| 'ON' 'UPDATE' b_expr
 	| 'REFERENCES' table_name opt_name_parens key_match reference_actions
-	| generated_as '(' a_expr ')' 'STORED'
-	| generated_as '(' a_expr ')' 'VIRTUAL'
+	| generated_as '(' a_expr ')' opt_virtual_or_stored
 	| 'GENERATED_ALWAYS' 'ALWAYS' 'AS' 'IDENTITY' '(' opt_sequence_option_list ')'
 	| 'GENERATED_BY_DEFAULT' 'BY' 'DEFAULT' 'AS' 'IDENTITY' '(' opt_sequence_option_list ')'
 	| 'GENERATED_ALWAYS' 'ALWAYS' 'AS' 'IDENTITY'

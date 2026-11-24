@@ -11,6 +11,19 @@ import (
 	"gonum.org/v1/gonum/floats/scalar"
 )
 
+// Normalize scales the dst vector so that it's a unit vector (L2 norm is 1). If
+// dst is a zero vector, then return a zero vector. This function is commonly
+// used to prepare vectors for cosine similarity or distance computations, where
+// unit length is required.
+func Normalize(dst []float32) {
+	// If norm is zero, then this is the degenerate case where dst is the zero
+	// vector - just return it unchanged.
+	norm := Norm(dst)
+	if norm != 0 {
+		Scale(1/norm, dst)
+	}
+}
+
 // L1Distance returns the L1 norm of s - t, which is the Manhattan distance
 // between the two vectors. It panics if the argument lengths do not match.
 func L1Distance(s []float32, t []float32) float32 {
@@ -26,13 +39,7 @@ func L1Distance(s []float32, t []float32) float32 {
 // L2Distance returns the L2 norm of s - t, which is the Euclidean distance
 // between the two vectors. It panics if the argument lengths do not match.
 func L2Distance(s, t []float32) float32 {
-	checkDims(s, t)
-	var distance float32
-	for i := range s {
-		diff := s[i] - t[i]
-		distance += diff * diff
-	}
-	return Sqrt(distance)
+	return Sqrt(L2SquaredDistance(s, t))
 }
 
 // L2SquaredDistance returns the squared L2 norm of s - t, which is the squared
@@ -61,13 +68,18 @@ func Dot(s []float32, t []float32) float32 {
 	return distance
 }
 
-// Norm returns the L2 norm of t.
-func Norm(t []float32) float32 {
+// SquaredNorm returns the squared L2 norm of t.
+func SquaredNorm(t []float32) float32 {
 	var norm float32
 	for i := range t {
 		norm += t[i] * t[i]
 	}
-	return Sqrt(norm)
+	return norm
+}
+
+// Norm returns the L2 norm of t.
+func Norm(t []float32) float32 {
+	return Sqrt(SquaredNorm(t))
 }
 
 // Max returns the maximum value in the input slice. If the slice is empty, Max
@@ -153,9 +165,7 @@ func Sum(x []float32) float32 {
 //
 //gcassert:inline
 func Zero(dst []float32) {
-	for i := range dst {
-		dst[i] = 0.0
-	}
+	clear(dst)
 }
 
 // Round sets every element of the "dst" slice to its rounded value, using
@@ -164,7 +174,7 @@ func Zero(dst []float32) {
 // NB: Upcasting from float32 to float64 to perform the rounding can cause
 // precision issues that affect the result.
 func Round(dst []float32, prec int) {
-	for i := 0; i < len(dst); i++ {
+	for i := range dst {
 		val2 := float64(dst[i])
 		val := scalar.Round(val2, prec)
 		dst[i] = float32(val)
@@ -187,6 +197,13 @@ func AddTo(dst []float32, s []float32, t []float32) []float32 {
 	copy(dst, s)
 	Add(dst, t)
 	return dst
+}
+
+// AddConst adds the scalar c to all of the values in dst.
+func AddConst(c float32, dst []float32) {
+	for i := range dst {
+		dst[i] += c
+	}
 }
 
 // Sub subtracts, element-wise, the elements of s from dst. It panics if the

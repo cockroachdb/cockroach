@@ -137,6 +137,7 @@ select
  │   histogram(2)=  0                 10
  │                <--- 'hello' COLLATE en_US_u_ks_level2
  ├── cost: 43.02
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: ()-->(2)
  ├── distribution: test
@@ -149,6 +150,7 @@ select
  │    │   histogram(2)=  0                 1                 10                  2
  │    │                <--- 'foo' COLLATE en_US_u_ks_level2 ---- 'world' COLLATE en_US_u_ks_level2
  │    ├── cost: 42.86
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    ├── distribution: test

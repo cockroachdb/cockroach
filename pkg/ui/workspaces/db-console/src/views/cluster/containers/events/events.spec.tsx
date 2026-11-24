@@ -4,35 +4,31 @@
 // included in the /LICENSE file.
 
 import { api as clusterUiApi } from "@cockroachlabs/cluster-ui";
-import { mount, shallow } from "enzyme";
-import each from "lodash/each";
+import { render } from "@testing-library/react";
 import React from "react";
+import { MemoryRouter } from "react-router-dom";
 
-import { refreshEvents } from "src/redux/apiReducers";
 import { allEvents } from "src/util/eventTypes";
 import {
-  EventBoxUnconnected as EventBox,
+  EventBox,
   EventRow,
   getEventInfo,
 } from "src/views/cluster/containers/events";
-import { ToolTipWrapper } from "src/views/shared/components/toolTip";
 
-function makeEventBox(
-  events: clusterUiApi.EventsResponse,
-  refreshEventsFn: typeof refreshEvents,
-) {
-  return shallow(
-    <EventBox
-      events={events}
-      refreshEvents={refreshEventsFn}
-      eventsValid={true}
-    />,
-  );
-}
+jest.mock("@cockroachlabs/cluster-ui", () => {
+  const actual = jest.requireActual("@cockroachlabs/cluster-ui");
+  return {
+    ...actual,
+    api: {
+      ...actual.api,
+      useEvents: jest.fn(),
+    },
+  };
+});
 
-function makeEvent(event: clusterUiApi.EventColumns) {
-  return mount(<EventRow event={event}></EventRow>);
-}
+const mockUseEvents = clusterUiApi.useEvents as jest.MockedFunction<
+  typeof clusterUiApi.useEvents
+>;
 
 const createEventWithEventType = (
   eventType: string,
@@ -46,14 +42,54 @@ const createEventWithEventType = (
   };
 };
 
-describe("<EventBox>", function () {
-  const spy = jest.fn();
+function makeEventBox() {
+  return render(
+    <MemoryRouter>
+      <EventBox />
+    </MemoryRouter>,
+  );
+}
 
-  describe("refresh", function () {
-    it("refreshes events when mounted.", function () {
-      makeEventBox([], spy);
-      expect(spy).toHaveBeenCalled();
+function makeEvent(event: clusterUiApi.EventColumns) {
+  return render(
+    <table>
+      <tbody>
+        <EventRow event={event} />
+      </tbody>
+    </table>,
+  );
+}
+
+describe("<EventBox>", function () {
+  beforeEach(() => {
+    mockUseEvents.mockReturnValue({
+      data: { results: [], maxSizeReached: false },
+      error: undefined,
+      isLoading: false,
+      isValidating: false,
+      mutate: jest.fn(),
     });
+  });
+
+  it("renders without crashing when events are empty", function () {
+    makeEventBox();
+  });
+
+  it("renders events when data is available", function () {
+    mockUseEvents.mockReturnValue({
+      data: {
+        results: [createEventWithEventType("create_database")],
+        maxSizeReached: false,
+      },
+      error: undefined,
+      isLoading: false,
+      isValidating: false,
+      mutate: jest.fn(),
+    });
+    const { container } = makeEventBox();
+    expect(
+      container.querySelector("div.events__message span")?.textContent,
+    ).toContain("created database");
   });
 });
 
@@ -62,38 +98,33 @@ describe("<EventRow>", function () {
     it("correctly renders a known event", function () {
       const e: clusterUiApi.EventColumns =
         createEventWithEventType("create_database");
-      const provider = makeEvent(e);
+      const { container } = makeEvent(e);
 
       expect(
-        provider
-          .find("div.events__message > span")
-          .text()
-          .includes("created database"),
-      ).toBe(true);
-      expect(provider.find(ToolTipWrapper).exists()).toBe(true);
+        container.querySelector("div.events__message span")?.textContent,
+      ).toContain("created database");
     });
 
     it("correctly renders an unknown event", function () {
       const e: clusterUiApi.EventColumns = createEventWithEventType("unknown");
-      const provider = makeEvent(e);
+      const { container } = makeEvent(e);
 
       expect(
-        provider.find("div.events__message > span").text().includes("unknown"),
-      ).toBe(true);
-      expect(provider.find(ToolTipWrapper).exists()).toBe(true);
+        container.querySelector("div.events__message span")?.textContent,
+      ).toContain("unknown");
     });
   });
 });
 
 describe("getEventInfo", function () {
   it("covers every currently known event", function () {
-    each(allEvents, eventType => {
+    allEvents.forEach(eventType => {
       const event: clusterUiApi.EventColumns =
         createEventWithEventType(eventType);
-      const eventContent = shallow(
+      const { container } = render(
         getEventInfo(event, "UTC").content as React.ReactElement<any>,
       );
-      expect(eventContent.text()).not.toMatch(/Unknown event type/);
+      expect(container.textContent).not.toMatch(/Unknown event type/);
     });
   });
 });

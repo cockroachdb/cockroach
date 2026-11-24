@@ -8,15 +8,21 @@ package debug_test
 import (
 	"bytes"
 	"context"
+	"io"
 	"net/http"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
 	"github.com/cockroachdb/cockroach/pkg/server/srvtestutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/stretchr/testify/require"
 )
 
 // debugURL returns the root debug URL.
@@ -183,6 +189,69 @@ func TestAdminDebugAuth(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("expected status code %d; got %d", http.StatusOK, resp.StatusCode)
 	}
+}
+
+// TestDebugLSMViz is a smoke test for /debug/lsm-viz/<store>. The endpoint
+// reconstructs a view of the engine's LSM via pebble's tool package, which
+// goes through test-only helpers (NewVersionForTesting / ResetForTesting)
+// that have carried stricter invariants than the production-path organizer
+// and have broken silently across versions (#170896, #170897). This test
+// catches the "code path is fundamentally broken" failure mode by exercising
+// the endpoint end-to-end against a real on-disk store.
+func TestDebugLSMViz(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	// The on-disk testserver setup and shutdown alone can run for tens of
+	// seconds under race instrumentation, which combined with the other tests
+	// in this bundle exceeds the 60s race-mode test timeout. The handler
+	// itself is fast (~250µs per call) — this is purely a budgeting issue.
+	skip.UnderRace(t, "on-disk testserver setup + Stopper.Quiesce exceeds the race-mode test budget")
+
+	tempDir, cleanupFn := testutils.TempDir(t)
+	defer cleanupFn()
+
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		StoreSpecs: []base.StoreSpec{{Path: tempDir}},
+	})
+	defer s.Stopper().Stop(context.Background())
+
+	// /debug/lsm-viz/<storeID> is registered on the system tenant's debug
+	// server because stores belong to the system tenant.
+	ts := s.SystemLayer()
+
+	// Write some data and flush so the LSM has at least one SSTable; the
+	// pebble lsm tool errors out if the MANIFEST contains no edits that
+	// add or delete files.
+	sqlDB := sqlutils.MakeSQLRunner(ts.SQLConn(t))
+	sqlDB.Exec(t, "CREATE TABLE t (id INT PRIMARY KEY, v STRING)")
+	sqlDB.Exec(t,
+		"INSERT INTO t SELECT i, repeat('x', 200) FROM generate_series(1, 1000) AS g(i)")
+	require.NoError(t,
+		s.StorageLayer().GetStores().(*kvserver.Stores).VisitStores(
+			func(store *kvserver.Store) error {
+				return store.StateEngine().Flush()
+			}))
+
+	client, err := ts.GetAdminHTTPClient()
+	require.NoError(t, err)
+
+	url := debugURL(ts, "lsm-viz/1").String()
+	resp, err := client.Get(url)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+
+	require.Equalf(t, http.StatusOK, resp.StatusCode, "body: %s", body)
+	bodyStr := string(body)
+	// On success, the lsm tool produces an HTML page embedding the LSM as
+	// JSON. On error, the handler writes "error analyzing LSM" into the
+	// body (with a 200 status, so check the body content rather than the
+	// status code).
+	require.Containsf(t, bodyStr, "<!DOCTYPE html>",
+		"expected HTML response, got: %s", bodyStr)
+	require.NotContainsf(t, bodyStr, "error analyzing LSM",
+		"handler returned an error: %s", bodyStr)
 }
 
 // TestAdminDebugRedirect verifies that the /debug/ endpoint is redirected to on

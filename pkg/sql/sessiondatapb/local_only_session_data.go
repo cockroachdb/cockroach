@@ -387,6 +387,8 @@ func ParseQoSLevelFromString(val string) (_ QoSLevel, ok bool) {
 		return UserLow, true
 	case NormalName:
 		return Normal, true
+	case BulkLowName:
+		return BulkLow, true
 	default:
 		return 0, false
 	}
@@ -414,7 +416,7 @@ func ToQoSLevelString(value int32) string {
 // Validate checks for a valid user QoSLevel setting before returning it.
 func (e QoSLevel) Validate() QoSLevel {
 	switch e {
-	case Normal, UserHigh, UserLow:
+	case Normal, UserHigh, UserLow, BulkLow:
 		return e
 	default:
 		panic(errors.AssertionFailedf("use of illegal user QoSLevel: %s", e.String()))
@@ -428,4 +430,111 @@ func (e QoSLevel) ValidateInternal() QoSLevel {
 		return e
 	}
 	panic(errors.AssertionFailedf("use of illegal internal QoSLevel: %s", e.String()))
+}
+
+// PgDumpCompatibility values for the pg_dump_compatibility session setting.
+const (
+	// PgDumpCompatibilityOff disables all pg_dump compatibility adjustments.
+	// pg_catalog reports CockroachDB's native OIDs and objects.
+	PgDumpCompatibilityOff = "off"
+	// PgDumpCompatibilityPostgres remaps pg_catalog OIDs to match PostgreSQL,
+	// hides CockroachDB-internal objects, and suppresses CRDB-specific storage
+	// parameters so that pg_dump output can run on non-CockroachDB servers.
+	PgDumpCompatibilityPostgres = "postgres"
+	// PgDumpCompatibilityCockroachDB applies the same pg_catalog OID fixes as
+	// "postgres" mode but retains CockroachDB-specific syntax and objects so
+	// the dump is intended for import into another CockroachDB cluster.
+	PgDumpCompatibilityCockroachDB = "cockroachdb"
+)
+
+// IsPgDumpCompatibilityEnabled returns true if the pg_dump_compatibility
+// setting is set to anything other than "off" (or the zero value).
+func IsPgDumpCompatibilityEnabled(val string) bool {
+	return val != "" && val != PgDumpCompatibilityOff
+}
+
+// PgDumpCompatibilityFromString converts a string into a validated
+// pg_dump_compatibility value. Returns false if the input is not recognized.
+func PgDumpCompatibilityFromString(val string) (_ string, ok bool) {
+	switch strings.ToLower(val) {
+	case PgDumpCompatibilityOff:
+		return PgDumpCompatibilityOff, true
+	case PgDumpCompatibilityPostgres:
+		return PgDumpCompatibilityPostgres, true
+	case PgDumpCompatibilityCockroachDB:
+		return PgDumpCompatibilityCockroachDB, true
+	default:
+		return "", false
+	}
+}
+
+// PgDumpClientAppNames are the application_name values reported by the
+// PostgreSQL dump/restore client tools (pg_dump, pg_restore, pg_dumpall) via
+// libpq's fallback_application_name. The match is exact and case-sensitive,
+// since that is precisely what those tools send.
+var PgDumpClientAppNames = []string{"pg_dump", "pg_restore", "pg_dumpall"}
+
+// DefaultPgDumpCompatibilityForAppName returns the pg_dump_compatibility value
+// to apply by default for a connection whose application_name is appName, along
+// with whether such a default applies. A default is returned only for the
+// PostgreSQL dump/restore client tools (see PgDumpClientAppNames). The chosen
+// value is PgDumpCompatibilityCockroachDB so that dumps round-trip into another
+// CockroachDB cluster without further configuration.
+//
+// Callers are responsible for applying this default only when the client has
+// not explicitly configured pg_dump_compatibility, so that an explicit value
+// (including "off") is always respected.
+func DefaultPgDumpCompatibilityForAppName(appName string) (_ string, ok bool) {
+	for _, name := range PgDumpClientAppNames {
+		if appName == name {
+			return PgDumpCompatibilityCockroachDB, true
+		}
+	}
+	return "", false
+}
+
+// CanaryStatsMode controls which table statistics the optimizer uses for
+// query planning in this session. See the comments on each mode for details.
+type CanaryStatsMode int64
+
+const (
+	// CanaryStatsModeAuto means that the system will automatically decide
+	// to use the canary stats or the stable stats for each query in this
+	// session, based on the sql.stats.canary_fraction cluster setting.
+	CanaryStatsModeAuto CanaryStatsMode = iota
+	// CanaryStatsModeForceStable means that the optimizer always uses the
+	// stable (second-newest) stats for all queries in this session,
+	// regardless of the sql.stats.canary_fraction cluster setting.
+	CanaryStatsModeForceStable
+	// CanaryStatsModeForceCanary means that the optimizer always uses the
+	// canary (newest) stats for all queries in this session, regardless
+	// of the sql.stats.canary_fraction cluster setting.
+	CanaryStatsModeForceCanary
+)
+
+func (m CanaryStatsMode) String() string {
+	switch m {
+	case CanaryStatsModeAuto:
+		return "auto"
+	case CanaryStatsModeForceStable:
+		return "force_stable"
+	case CanaryStatsModeForceCanary:
+		return "force_canary"
+	default:
+		return fmt.Sprintf("invalid (%d)", m)
+	}
+}
+
+// CanaryStatsModeFromString converts a string into a CanaryStatsMode.
+func CanaryStatsModeFromString(val string) (_ CanaryStatsMode, ok bool) {
+	switch strings.ToUpper(val) {
+	case "AUTO":
+		return CanaryStatsModeAuto, true
+	case "FORCE_STABLE":
+		return CanaryStatsModeForceStable, true
+	case "FORCE_CANARY":
+		return CanaryStatsModeForceCanary, true
+	default:
+		return 0, false
+	}
 }

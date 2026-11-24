@@ -196,6 +196,7 @@ func TestColumnTypeSQLString(t *testing.T) {
 		{types.String, "STRING"},
 		{types.MakeString(10), "STRING(10)"},
 		{types.Bytes, "BYTES"},
+		{types.MakePGVector(3), "VECTOR(3)"},
 	}
 	for i, d := range testData {
 		t.Run(d.colType.DebugString(), func(t *testing.T) {
@@ -816,8 +817,8 @@ func TestKeysPerRow(t *testing.T) {
 
 func TestColumnNeedsBackfill(t *testing.T) {
 	// Define variable strings here such that we can pass their address below.
-	null := "NULL"
-	four := "4:::INT8"
+	null := catpb.Expression("NULL")
+	four := catpb.Expression("4:::INT8")
 
 	// Create Column Descriptors that reflect the definition of a column with a
 	// default value of NULL that was set implicitly, one that was set explicitly,
@@ -949,25 +950,6 @@ func TestStrippedDanglingSelfBackReferences(t *testing.T) {
 	desc := b.BuildExistingMutableTable()
 	require.Empty(t, desc.MutationJobs)
 	require.True(t, desc.GetPostDeserializationChanges().Contains(catalog.StrippedDanglingSelfBackReferences))
-}
-
-// TestRemoveDefaultExprFromComputedColumn tests that default expressions are
-// correctly removed from descriptors of computed columns as part of the
-// RunPostDeserializationChanges suite.
-func TestRemoveDefaultExprFromComputedColumn(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer srv.Stopper().Stop(context.Background())
-	tdb := sqlutils.MakeSQLRunner(sqlDB)
-
-	const expectedErrRE = `.*: computed column \"b\" cannot also have a DEFAULT expression`
-	// Create a table with a computed column.
-	tdb.Exec(t, `CREATE DATABASE t`)
-	tdb.Exec(t, `CREATE TABLE t.tbl (a INT PRIMARY KEY, b INT AS (1) STORED)`)
-	// Setting a default value on the computed column should fail.
-	tdb.ExpectErr(t, expectedErrRE, `ALTER TABLE t.tbl ALTER COLUMN b SET DEFAULT 2`)
 }
 
 func TestLogicalColumnID(t *testing.T) {

@@ -76,22 +76,8 @@ func (i *immediateVisitor) addNewColumnType(
 	col *descpb.ColumnDescriptor,
 ) error {
 	col.Type = op.ColumnType.Type
-	if op.ColumnType.ElementCreationMetadata.In_23_1OrLater {
-		col.Nullable = true
-	} else {
-		col.Nullable = op.ColumnType.IsNullable
-	}
+	col.Nullable = true
 	col.Virtual = op.ColumnType.IsVirtual
-	// ComputeExpr is deprecated in favor of a separate element
-	// (ColumnComputeExpression). Any changes in this if block
-	// should also be made in the AddColumnComputeExpression function.
-	if !op.ColumnType.ElementCreationMetadata.In_24_3OrLater {
-		if ce := op.ColumnType.ComputeExpr; ce != nil {
-			expr := string(ce.Expr)
-			col.ComputeExpr = &expr
-			col.UsesSequenceIds = ce.UsesSequenceIDs
-		}
-	}
 	if !col.Virtual {
 		for i := range tbl.Families {
 			fam := &tbl.Families[i]
@@ -157,13 +143,59 @@ func (i *immediateVisitor) updateColumnComputeExpression(
 	if expr == nil {
 		clearComputedExpr(col)
 	} else {
-		expr := string(*expr)
-		col.ComputeExpr = &expr
+		e := *expr
+		col.ComputeExpr = &e
 	}
 	if err := updateColumnExprSequenceUsage(col); err != nil {
 		return err
 	}
 	return updateColumnExprFunctionsUsage(col)
+}
+
+// AddColumnGeneratedAsIdentity will set generated as identity for a column.
+func (i *immediateVisitor) AddColumnGeneratedAsIdentity(
+	ctx context.Context, op scop.AddColumnGeneratedAsIdentity,
+) error {
+	return i.updateColumnGeneratedAsIdentity(
+		ctx, op.GeneratedAsIdentity.TableID, op.GeneratedAsIdentity.ColumnID,
+		op.GeneratedAsIdentity.Type, &op.GeneratedAsIdentity.SequenceOption)
+}
+
+// RemoveColumnGeneratedAsIdentity will drop generated as identity from a column.
+func (i *immediateVisitor) RemoveColumnGeneratedAsIdentity(
+	ctx context.Context, op scop.RemoveColumnGeneratedAsIdentity,
+) error {
+	return i.updateColumnGeneratedAsIdentity(
+		ctx, op.TableID, op.ColumnID, catpb.GeneratedAsIdentityType_NOT_IDENTITY_COLUMN, nil)
+}
+
+// updateColumnGeneratedAsIdentity will handle add or removal of generated as identity
+func (i *immediateVisitor) updateColumnGeneratedAsIdentity(
+	ctx context.Context,
+	tableID descpb.ID,
+	columnID descpb.ColumnID,
+	genType catpb.GeneratedAsIdentityType,
+	sequenceOption *string,
+) error {
+	tbl, err := i.checkOutTable(ctx, tableID)
+	if err != nil {
+		return err
+	}
+
+	catCol, err := catalog.MustFindColumnByID(tbl, columnID)
+	if err != nil {
+		return err
+	}
+
+	col := catCol.ColumnDesc()
+	col.GeneratedAsIdentityType = genType
+	if sequenceOption != nil && *sequenceOption != "" {
+		so := *sequenceOption
+		col.GeneratedAsIdentitySequenceOption = &so
+	} else {
+		col.GeneratedAsIdentitySequenceOption = nil
+	}
+	return nil
 }
 
 func (i *immediateVisitor) MakeDeleteOnlyColumnWriteOnly(
@@ -264,7 +296,7 @@ func (i *immediateVisitor) RemoveDroppedColumnType(
 		return err
 	}
 	col := mut.AsColumn().ColumnDesc()
-	col.Type = types.Any
+	col.Type = types.AnyElement
 	if col.IsComputed() {
 		clearComputedExpr(col)
 	}
@@ -347,7 +379,7 @@ func (i *immediateVisitor) AddColumnDefaultExpression(
 		return err
 	}
 	d := col.ColumnDesc()
-	expr := string(op.Default.Expr)
+	expr := op.Default.Expr
 	d.DefaultExpr = &expr
 	seqRefs := catalog.MakeDescriptorIDSet(d.UsesSequenceIds...)
 	for _, seqID := range op.Default.UsesSequenceIDs {
@@ -386,7 +418,10 @@ func (i *immediateVisitor) RemoveColumnDefaultExpression(
 	if err := updateColumnExprSequenceUsage(d); err != nil {
 		return err
 	}
-	return updateColumnExprFunctionsUsage(d)
+	if err := updateColumnExprFunctionsUsage(d); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (i *immediateVisitor) AddColumnOnUpdateExpression(
@@ -401,7 +436,7 @@ func (i *immediateVisitor) AddColumnOnUpdateExpression(
 		return err
 	}
 	d := col.ColumnDesc()
-	expr := string(op.OnUpdate.Expr)
+	expr := op.OnUpdate.Expr
 	d.OnUpdateExpr = &expr
 	refs := catalog.MakeDescriptorIDSet(d.UsesSequenceIds...)
 	for _, seqID := range op.OnUpdate.UsesSequenceIDs {
@@ -410,6 +445,14 @@ func (i *immediateVisitor) AddColumnOnUpdateExpression(
 		}
 		d.UsesSequenceIds = append(d.UsesSequenceIds, seqID)
 		refs.Add(seqID)
+	}
+	fnRefs := catalog.MakeDescriptorIDSet(d.UsesFunctionIds...)
+	for _, fnID := range op.OnUpdate.UsesFunctionIDs {
+		if fnRefs.Contains(fnID) {
+			continue
+		}
+		d.UsesFunctionIds = append(d.UsesFunctionIds, fnID)
+		fnRefs.Add(fnID)
 	}
 	return nil
 }
@@ -427,7 +470,13 @@ func (i *immediateVisitor) RemoveColumnOnUpdateExpression(
 	}
 	d := col.ColumnDesc()
 	d.OnUpdateExpr = nil
-	return updateColumnExprSequenceUsage(d)
+	if err := updateColumnExprSequenceUsage(d); err != nil {
+		return err
+	}
+	if err := updateColumnExprFunctionsUsage(d); err != nil {
+		return err
+	}
+	return nil
 }
 
 // updateExistingColumnType will handle data type changes to existing columns.
@@ -449,9 +498,42 @@ func clearComputedExpr(col *descpb.ColumnDescriptor) {
 	// the expression for a column that still exists (e.g., a stored column), we do
 	// want to remove the expression.
 	if col.Virtual {
-		null := tree.Serialize(tree.DNull)
-		col.ComputeExpr = &null
+		col.ComputeExpr = new(descpb.Expression(tree.Serialize(tree.DNull)))
 	} else {
 		col.ComputeExpr = nil
 	}
+}
+
+func (i *immediateVisitor) MakeColumnHidden(ctx context.Context, op scop.MakeColumnHidden) error {
+	if err := i.setColumnHidden(ctx, op.TableID, op.ColumnID, true); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (i *immediateVisitor) MakeColumnVisible(ctx context.Context, op scop.MakeColumnVisible) error {
+	if err := i.setColumnHidden(ctx, op.TableID, op.ColumnID, false); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (i *immediateVisitor) setColumnHidden(
+	ctx context.Context, tableID descpb.ID, columnID descpb.ColumnID, hidden bool,
+) error {
+	tbl, err := i.checkOutTable(ctx, tableID)
+	if err != nil {
+		return err
+	}
+
+	catCol, err := catalog.MustFindColumnByID(tbl, columnID)
+	if err != nil {
+		return err
+	}
+	col := catCol.ColumnDesc()
+
+	col.Hidden = hidden
+	return nil
 }

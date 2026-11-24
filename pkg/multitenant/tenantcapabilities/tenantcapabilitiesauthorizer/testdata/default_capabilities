@@ -45,27 +45,49 @@ has-capability-for-batch ten=10 cmds=(AdminUnsplit, Scan, ConditionalPut)
 ----
 ok
 
+
+# Stopping nodes should not be able to make requests.
+upsert ten=10 can_admin_unsplit=true service=stopping
+----
+ok
+
+has-capability-for-batch ten=10 cmds=(Scan, ConditionalPut)
+----
+operation not allowed when in service mode "stopping"
+
+has-capability-for-batch ten=10 cmds=(AdminUnsplit)
+----
+operation not allowed when in service mode "stopping"
+
+# Stopped nodes should not be able to make requests.
+upsert ten=10 can_admin_unsplit=true service=none
+----
+ok
+
+has-capability-for-batch ten=10 cmds=(Scan, ConditionalPut)
+----
+operation not allowed when in service mode "none"
+
+has-capability-for-batch ten=10 cmds=(AdminUnsplit)
+----
+operation not allowed when in service mode "none"
+
+
 # Remove the capability for the tenant entirely.
 delete ten=10
 ----
 ok
 
-has-capability-for-batch ten=10 cmds=(AdminUnsplit, Scan, ConditionalPut)
-----
-client tenant does not have capability "can_admin_unsplit" (*kvpb.AdminUnsplitRequest)
-
-# Tenants are allowed to perform splits if no entry exists for them in the
+# Tenants are not allowed perform operations if the service mode is unkonwn.
 # Authorizer.
-has-capability-for-batch ten=10 cmds=(AdminSplit, Scan, ConditionalPut)
+has-capability-for-batch ten=10 cmds=(Scan, ConditionalPut)
 ----
-ok
+operation not allowed when in service mode "none"
 
-# ditto for scatters.
-has-capability-for-batch ten=10 cmds=(AdminScatter, Scan, ConditionalPut)
+has-capability-for-batch ten=10 cmds=(AdminScatter)
 ----
-ok
+operation not allowed when in service mode "none"
 
-# However, a batch with both unsplit and split should return an appropriate error.
-has-capability-for-batch ten=10 cmds=(AdminSplit, AdminUnsplit, Scan, ConditionalPut)
+has-capability-for-batch ten=10 cmds=(AdminUnsplit)
 ----
-client tenant does not have capability "can_admin_unsplit" (*kvpb.AdminUnsplitRequest)
+operation not allowed when in service mode "none"

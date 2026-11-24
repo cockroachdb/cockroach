@@ -12,13 +12,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/ssmemstorage"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
+
+var _ sqlstats.SSDrainer = &SQLStats{}
 
 // SQLStats carries per-application in-memory statistics for all applications.
 type SQLStats struct {
@@ -38,15 +39,17 @@ type SQLStats struct {
 	// Server level counter
 	atomic *ssmemstorage.SQLStatsAtomicCounters
 
+	discardedStatsCount *metric.Counter
+
 	// flushTarget is a Sink that, when the SQLStats resets at the end of its
 	// reset interval, the SQLStats will dump all of the stats into if it is not
 	// nil.
 	flushTarget Sink
 
 	knobs *sqlstats.TestingKnobs
-
-	anomalies *insights.AnomalyDetector
 }
+
+var _ SQLStatsSink = &SQLStats{}
 
 func newSQLStats(
 	st *cluster.Settings,
@@ -54,23 +57,23 @@ func newSQLStats(
 	uniqueTxnFingerprintLimit *settings.IntSetting,
 	curMemBytesCount *metric.Gauge,
 	maxMemBytesHist metric.IHistogram,
+	discardedStatsCount *metric.Counter,
 	parentMon *mon.BytesMonitor,
 	flushTarget Sink,
 	knobs *sqlstats.TestingKnobs,
-	anomalies *insights.AnomalyDetector,
 ) *SQLStats {
 	monitor := mon.NewMonitor(mon.Options{
-		Name:       "SQLStats",
+		Name:       mon.MakeName("SQLStats"),
 		CurCount:   curMemBytesCount,
 		MaxHist:    maxMemBytesHist,
 		Settings:   st,
 		LongLiving: true,
 	})
 	s := &SQLStats{
-		st:          st,
-		flushTarget: flushTarget,
-		knobs:       knobs,
-		anomalies:   anomalies,
+		st:                  st,
+		flushTarget:         flushTarget,
+		discardedStatsCount: discardedStatsCount,
+		knobs:               knobs,
 	}
 	s.atomic = ssmemstorage.NewSQLStatsAtomicCounters(
 		st,
@@ -79,6 +82,12 @@ func newSQLStats(
 	s.mu.apps = make(map[string]*ssmemstorage.Container)
 	s.mu.mon = monitor
 	s.mu.mon.StartNoReserved(context.Background(), parentMon)
+	// Initialize lastReset to the current time. This ensures that if an instance
+	// is never explicitly reset, its lastReset will be a reasonable timestamp
+	// rather than the zero value. This is important for multi-node clusters where
+	// the Statements() API returns the minimum lastReset across all nodes - if any
+	// node has a zero lastReset, it would incorrectly pull down the overall value.
+	s.mu.lastReset = timeutil.Now()
 	return s
 }
 
@@ -113,10 +122,16 @@ func (s *SQLStats) getStatsForApplication(appName string) *ssmemstorage.Containe
 		s.mu.mon,
 		appName,
 		s.knobs,
-		s.anomalies,
 	)
 	s.mu.apps[appName] = a
 	return a
+}
+
+func (s *SQLStats) getTimeNow() time.Time {
+	if s.knobs != nil && s.knobs.StubTimeNow != nil {
+		return s.knobs.StubTimeNow()
+	}
+	return timeutil.Now()
 }
 
 // resetAndMaybeDumpStats clears all the stored per-app, per-statement and
@@ -180,4 +195,68 @@ func (s *SQLStats) MaybeDumpStatsToLog(
 
 func (s *SQLStats) GetClusterSettings() *cluster.Settings {
 	return s.st
+}
+
+// ObserveTransaction implements the sslocal.SQLStatsSink interface.
+func (s *SQLStats) ObserveTransaction(
+	ctx context.Context,
+	transaction *sqlstats.RecordedTxnStats,
+	statements []*sqlstats.RecordedStmtStats,
+) {
+	if transaction == nil && len(statements) == 0 {
+		// This shouldn't ever happen, but it's cleaner below to work
+		// under the assumption that we either have a valid transaction
+		// or some statements to work with.
+		return
+	}
+
+	// Compute the aggregation timestamp once for the entire batch so that
+	// all statements and their enclosing transaction land in the same
+	// aggregation window.
+	interval := sqlstats.SQLStatsAggregationInterval.Get(&s.st.SV)
+	aggTs := s.getTimeNow().Truncate(interval)
+
+	// Retrieve application container.
+	var application string
+	if transaction != nil {
+		application = transaction.Application
+	} else {
+		application = statements[0].App
+	}
+	appStats := s.getStatsForApplication(application)
+
+	// Record statements.
+	var discardedCount int64
+	for _, stmt := range statements {
+		stmt.AggregatedTs = aggTs
+		stmt.AggInterval = interval
+		if stmt.App != application {
+			application = stmt.App
+			appStats = s.getStatsForApplication(application)
+		}
+		err := appStats.RecordStatement(ctx, stmt)
+		if err != nil {
+			discardedCount++
+		}
+	}
+
+	// Record transaction, if it exists. Currently, statements
+	// executed in connections with an outer transaction are not
+	// recorded with their transaction.
+	if transaction != nil {
+		transaction.AggregatedTs = aggTs
+		transaction.AggInterval = interval
+		err := appStats.RecordTransaction(ctx, transaction)
+		if err != nil {
+			discardedCount++
+		}
+	}
+
+	// Update the counter for discarded stats.
+	if discardedCount > 0 {
+		if s.discardedStatsCount != nil {
+			s.discardedStatsCount.Inc(discardedCount)
+		}
+		appStats.MaybeLogDiscardMessage(ctx)
+	}
 }

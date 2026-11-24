@@ -9,7 +9,6 @@ import (
 	"context"
 	"fmt"
 	"runtime"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -20,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
+	"github.com/gogo/protobuf/proto"
 )
 
 // EventLogger is a convenience object used for logging schema changer events.
@@ -41,7 +41,7 @@ func StartEventf(
 	// Use depth=1 since we want to log as the caller of StartEventf.
 	const depth = 1
 	if log.VDepth(level, depth) {
-		log.InfofDepth(ctx, depth, "%s", msg)
+		log.Dev.InfofDepth(ctx, depth, "%s", msg)
 	}
 	return EventLogger{
 		msg:   msg,
@@ -74,26 +74,25 @@ func (el EventLogger) HandlePanicAndLogError(ctx context.Context, err *error) {
 	switch {
 	case *err == nil:
 		if log.ExpensiveLogEnabled(ctx, 2) {
-			log.InfofDepth(ctx, depth, "done %s in %s", el.msg, redact.Safe(timeutil.Since(el.start)))
+			log.Dev.InfofDepth(ctx, depth, "done %s in %s", el.msg, redact.Safe(timeutil.Since(el.start)))
 		}
 	case HasNotImplemented(*err):
-		log.VEventfDepth(ctx, depth, 1, "declarative schema changer does not support %s: %v", el.msg, *err)
+		log.Dev.InfofDepth(ctx, depth, "declarative schema changer does not support %s: %v", el.msg, *err)
 	case errors.HasAssertionFailure(*err):
 		*err = errors.Wrapf(*err, "%s", el.msg)
 		fallthrough
 	default:
-		log.WarningfDepth(ctx, depth, "failed %s with error: %v", el.msg, *err)
+		log.Dev.WarningfDepth(ctx, depth, "failed %s with error: %v", el.msg, *err)
 	}
 }
 
 type notImplementedError struct {
 	n      tree.NodeFormatter
-	detail string
+	detail redact.RedactableString
 }
 
-// TODO(ajwerner): Deal with redaction.
-
 var _ error = (*notImplementedError)(nil)
+var _ errors.SafeFormatter = (*notImplementedError)(nil)
 
 // HasNotImplemented returns true if the error indicates that the builder does
 // not support the provided statement.
@@ -102,12 +101,21 @@ func HasNotImplemented(err error) bool {
 }
 
 func (e *notImplementedError) Error() string {
-	var buf strings.Builder
-	fmt.Fprintf(&buf, "%T not implemented in the new schema changer", e.n)
+	return redact.Sprint(e).StripMarkers()
+}
+
+// SafeFormatError implements the errors.SafeFormatter interface.
+func (e *notImplementedError) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf("%T not implemented in the new schema changer", e.n)
 	if e.detail != "" {
-		fmt.Fprintf(&buf, ": %s", e.detail)
+		p.Printf(": %s", e.detail)
 	}
-	return buf.String()
+	return nil
+}
+
+// Format implements fmt.Formatter.
+func (e *notImplementedError) Format(s fmt.State, verb rune) {
+	errors.FormatError(e, s, verb)
 }
 
 // NotImplementedError returns an error for which HasNotImplemented would
@@ -118,8 +126,11 @@ func NotImplementedError(n tree.NodeFormatter) error {
 
 // NotImplementedErrorf returns an error for which HasNotImplemented would
 // return true.
-func NotImplementedErrorf(n tree.NodeFormatter, fmtstr string, args ...interface{}) error {
-	return &notImplementedError{n: n, detail: fmt.Sprintf(fmtstr, args...)}
+func NotImplementedErrorf(n tree.NodeFormatter, detail redact.RedactableString) error {
+	return &notImplementedError{
+		n:      n,
+		detail: detail,
+	}
 }
 
 // concurrentSchemaChangeError indicates that building the schema change plan
@@ -163,6 +174,8 @@ type schemaChangerUserError struct {
 	err error
 }
 
+var _ errors.SafeFormatter = &schemaChangerUserError{}
+
 // SchemaChangerUserError wraps an error as user consumable, which will surface
 // it from the declarative schema changer without any wrapping. Normally errors
 // from the declarative schema changer get wrapped with plan details inside
@@ -179,19 +192,34 @@ func HasSchemaChangerUserError(err error) bool {
 	return errors.HasType(err, (*schemaChangerUserError)(nil))
 }
 
-// UnwrapSchemaChangerUserError returns the cause of a schemaChangerUserError,
-// or nil if the error is not a schemaChangerUserError.
-func UnwrapSchemaChangerUserError(err error) error {
-	if scUserError := (*schemaChangerUserError)(nil); errors.As(err, &scUserError) {
-		return scUserError.err
-	}
-	return nil
+// SafeFormatError is part of the errors.SafeFormatter interface.
+// This wrapper is transparent - it doesn't add any message to the error chain.
+// It only serves as a marker to indicate the error should be surfaced directly
+// to the user without additional wrapping.
+func (e *schemaChangerUserError) SafeFormatError(p errors.Printer) (next error) {
+	return e.err
 }
 
+// Error implements error.
 func (e *schemaChangerUserError) Error() string {
-	return fmt.Sprintf("schema change operation encountered an error: %s", e.err.Error())
+	// We don't want to print the schemaChangerUserError wrapper in the error,
+	// this only serves as a marker to the declarative schema changer to surface.
+	return fmt.Sprintf("%v", e.err)
 }
 
+// Unwrap implements errors.Wrapper.
 func (e *schemaChangerUserError) Unwrap() error {
 	return e.err
+}
+
+// schemaChangerUserErrorDecodeWrapper is a wrapper decoder for
+// schemaChangerUserError.
+func schemaChangerUserErrorDecodeWrapper(
+	_ context.Context, cause error, _ string, _ []string, payload proto.Message,
+) error {
+	return &schemaChangerUserError{err: cause}
+}
+
+func init() {
+	errors.RegisterWrapperDecoder(errors.GetTypeKey((*schemaChangerUserError)(nil)), schemaChangerUserErrorDecodeWrapper)
 }

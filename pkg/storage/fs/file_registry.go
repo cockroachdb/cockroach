@@ -9,9 +9,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
-	"sort"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -28,19 +29,28 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-// DefaultNumOldFileRegistryFiles is the default number of old registry files
+// defaultNumOldFileRegistryFiles is the default number of old registry files
 // kept for debugging. Production callers should use this to initialize
 // FileRegistry.NumOldRegistryFiles. The value of two is meant to slightly align
 // the history with what we keep for the Pebble MANIFEST. We keep one Pebble
 // MANIFEST, which is also 128MB in size, however the entry size per file in the
 // MANIFEST is smaller (based on some unit test data it is about half), so we
 // keep double the history for the file registry.
-var DefaultNumOldFileRegistryFiles = envutil.EnvOrDefaultInt(
+var defaultNumOldFileRegistryFiles = envutil.EnvOrDefaultInt(
 	"COCKROACH_STORE_NUM_OLD_FILE_REGISTRY_FILES", 2)
 
-// CanRegistryElideFunc is a function that returns true for entries that can be
-// elided instead of being written to the registry.
-var CanRegistryElideFunc func(entry *enginepb.FileEntry) bool
+// elidePlaintext is a function that returns true for entries that can be elided
+// instead of being written to the registry.
+func elidePlaintext(entry *enginepb.FileEntry) bool {
+	if entry == nil {
+		return true
+	}
+	settings := &enginepb.EncryptionSettings{}
+	if err := protoutil.Unmarshal(entry.EncryptionSettings, settings); err != nil {
+		return false
+	}
+	return settings.EncryptionType == enginepb.EncryptionType_Plaintext
+}
 
 const defaultSoftMaxRegistrySize = 128 << 20 // 128 MB
 
@@ -74,6 +84,10 @@ type FileRegistry struct {
 	// exceeded the registry may consider rolling over to a new file. Defaults
 	// to defaultSoftMaxRegistrySize.
 	SoftMaxSize int64
+	// CanElideEntry is a function that returns true for entries that can be
+	// elided (e.g., they're plaintext and don't need to be stored in the
+	// registry). It's configurable for ease of testing.
+	CanElideEntry func(entry *enginepb.FileEntry) bool
 
 	// Implementation.
 
@@ -184,16 +198,14 @@ func (r *FileRegistry) Load(ctx context.Context) error {
 				// must have crashed while creating it.
 				err := r.FS.Remove(r.FS.PathJoin(r.DBDir, f))
 				if err != nil {
-					log.Errorf(ctx, "unable to remove registry file %s", f)
+					log.Dev.Errorf(ctx, "unable to remove registry file %s", f)
 				}
 			}
 			if fileNum < registryFileNum {
 				obsoleteFiles = append(obsoleteFiles, fileNum)
 			}
 		}
-		sort.Slice(obsoleteFiles, func(i, j int) bool {
-			return obsoleteFiles[i] < obsoleteFiles[j]
-		})
+		slices.Sort(obsoleteFiles)
 		r.writeMu.obsoleteRegistryFiles = make([]string, 0, r.NumOldRegistryFiles+1)
 		for _, f := range obsoleteFiles {
 			r.writeMu.obsoleteRegistryFiles = append(r.writeMu.obsoleteRegistryFiles, makeRegistryFilename(f))
@@ -306,22 +318,18 @@ func (r *FileRegistry) maybeElideEntries(ctx context.Context) error {
 	// recursively List each directory and walk two lists of sorted
 	// filenames. We should test a store with many files to see how much
 	// the current approach slows node start.
-	filenames := make([]string, 0, len(r.writeMu.mu.entries))
-	for filename := range r.writeMu.mu.entries {
-		filenames = append(filenames, filename)
-	}
-	sort.Strings(filenames)
+	filenames := slices.Sorted(maps.Keys(r.writeMu.mu.entries))
 
 	batch := &enginepb.RegistryUpdateBatch{}
 	for _, filename := range filenames {
 		entry, ok := r.writeMu.mu.entries[filename]
 		if !ok {
-			panic("entry disappeared from map")
+			panic(errors.AssertionFailedf("entry disappeared from map"))
 		}
 
-		// Some entries may be elided. This is used within
-		// ccl/storageccl/engineccl to elide plaintext file entries.
-		if CanRegistryElideFunc != nil && CanRegistryElideFunc(entry) {
+		// Some entries may be elided. This is used by encryption-at-rest to
+		// elide plaintext file entries.
+		if r.CanElideEntry != nil && r.CanElideEntry(entry) {
 			batch.DeleteEntry(filename)
 			continue
 		}
@@ -337,7 +345,7 @@ func (r *FileRegistry) maybeElideEntries(ctx context.Context) error {
 			path = r.FS.PathJoin(r.DBDir, filename)
 		}
 		if _, err := r.FS.Stat(path); oserror.IsNotExist(err) {
-			log.Infof(ctx, "eliding file registry entry %s", redact.SafeString(filename))
+			log.Dev.Infof(ctx, "eliding file registry entry %s", redact.SafeString(filename))
 			batch.DeleteEntry(filename)
 		}
 	}

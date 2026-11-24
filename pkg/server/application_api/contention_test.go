@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -38,14 +40,20 @@ func TestStatusAPIContentionEvents(t *testing.T) {
 
 	ctx := context.Background()
 	testCluster := serverutils.StartCluster(t, 3, base.TestClusterArgs{})
-
 	defer testCluster.Stopper().Stop(ctx)
+
+	hostRunner := sqlutils.MakeSQLRunner(testCluster.SystemLayer(0).SQLConn(t))
+	// If we happen to enable buffered writes metamorphically, we must have the
+	// split lock reliability enabled (which can be tweaked metamorphically too,
+	// #146412).
+	hostRunner.Exec(t, "SET CLUSTER SETTING kv.lock_table.unreplicated_lock_reliability.split.enabled = true")
 
 	s0 := testCluster.Server(0).ApplicationLayer()
 	s1 := testCluster.Server(1).ApplicationLayer()
 	s2 := testCluster.Server(2).ApplicationLayer()
 	server1Conn := sqlutils.MakeSQLRunner(s0.SQLConn(t))
 	server2Conn := sqlutils.MakeSQLRunner(s1.SQLConn(t))
+	obsConn := sqlutils.MakeSQLRunner(s1.SQLConn(t))
 
 	contentionCountBefore := s1.SQLServer().(*sql.Server).Metrics.EngineMetrics.SQLContendedTxns.Count()
 
@@ -71,13 +79,21 @@ SET TRACING=on;
 BEGIN;
 UPDATE test SET x = 100 WHERE x = 1;
 `)
-	server2Conn.Exec(t, `
-SET TRACING=on;
-BEGIN PRIORITY HIGH;
-UPDATE test SET x = 1000 WHERE x = 1;
-COMMIT;
-SET TRACING=off;
-`)
+	_, err = server2Conn.DB.ExecContext(ctx, `
+ SET TRACING=on;
+ BEGIN PRIORITY HIGH;
+ UPDATE test SET x = 1000 WHERE x = 1;
+ COMMIT;
+ SET TRACING=off;
+ `)
+	// This test can trigger "duplicate span" errors due to a known race condition
+	// in multi-node tracing. When two connections have SET TRACING=on and execute
+	// concurrent DistSQL queries, remote span recordings may be imported multiple
+	// times. This is benign for this test which is focused on contention events,
+	// not tracing correctness.
+	if err != nil && !strings.Contains(err.Error(), "duplicate span") {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	server1Conn.ExpectErr(
 		t,
 		"^pq: restart transaction.+",
@@ -87,30 +103,31 @@ SET TRACING=off;
 `,
 	)
 
-	var resp serverpb.ListContentionEventsResponse
-	require.NoError(t,
-		srvtestutils.GetStatusJSONProtoWithAdminOption(
+	sqlstatstestutil.WaitForTransactionEntriesAtLeast(t, obsConn, 1,
+		sqlstatstestutil.TransactionFilter{App: "contentionTest"})
+
+	testutils.SucceedsSoon(t, func() error {
+		var resp serverpb.ListContentionEventsResponse
+		if err := srvtestutils.GetStatusJSONProtoWithAdminOption(
 			s2,
 			"contention_events",
 			&resp,
-			true /* isAdmin */),
-	)
-
-	require.GreaterOrEqualf(t, len(resp.Events.IndexContentionEvents), 1,
-		"expecting at least 1 contention event, but found none")
-
-	found := false
-	for _, event := range resp.Events.IndexContentionEvents {
-		if event.TableID == descpb.ID(testTableID) && event.IndexID == descpb.IndexID(1) {
-			found = true
-			break
+			true, /* isAdmin */
+		); err != nil {
+			return err
 		}
-	}
+		for _, event := range resp.Events.IndexContentionEvents {
+			if event.TableID == descpb.ID(testTableID) && event.IndexID == descpb.IndexID(1) {
+				return nil
+			}
+		}
+		return errors.Newf(
+			"contention event for table %d not found in response: %+v",
+			testTableID, resp,
+		)
+	})
 
-	require.True(t, found,
-		"expect to find contention event for table %d, but found %+v", testTableID, resp)
-
-	server1Conn.CheckQueryResults(t, `
+	server1Conn.CheckQueryResultsRetry(t, `
   SELECT count(*)
   FROM crdb_internal.statement_statistics
   WHERE
@@ -118,7 +135,7 @@ SET TRACING=off;
     AND app_name = 'contentionTest'
 `, [][]string{{"1"}})
 
-	server1Conn.CheckQueryResults(t, `
+	server1Conn.CheckQueryResultsRetry(t, `
   SELECT count(*)
   FROM crdb_internal.transaction_statistics
   WHERE

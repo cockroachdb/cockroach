@@ -8,17 +8,18 @@ create table t (i int primary key, j int not null);
 stage-exec phase=PostCommitPhase stage=:
 INSERT INTO t (i) VALUES($stageKey);
 ----
-pq: failed to satisfy CHECK constraint (j IS NOT NULL)
+pq: failed to satisfy CHECK constraint \(j IS NOT NULL\)
 
 stage-exec phase=PostCommitNonRevertiblePhase stage=1
 INSERT INTO t (i) VALUES($stageKey);
 ----
-pq: failed to satisfy CHECK constraint (j IS NOT NULL)
+pq: failed to satisfy CHECK constraint \(j IS NOT NULL\)
 
 
 stage-exec phase=PostCommitNonRevertiblePhase stage=2:
 INSERT INTO t (i) VALUES($stageKey);
 INSERT INTO t (i) VALUES($stageKey + 1);
+----
 
 test
 alter table t drop column j;

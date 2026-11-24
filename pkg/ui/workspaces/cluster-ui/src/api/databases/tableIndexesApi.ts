@@ -6,9 +6,8 @@
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import moment from "moment-timezone";
 import { useMemo } from "react";
-import useSWR from "swr";
 
-import { TimestampToMoment } from "src/util";
+import { TimestampToMoment, useSwrWithClusterId } from "src/util";
 
 import { getIndexStats, resetIndexStats } from "../indexDetailsApi";
 import { QualifiedIdentifier } from "../safesql";
@@ -37,6 +36,9 @@ export type TableIndex = {
   tableName: string;
   escSchemaQualifiedTableName: string;
   indexType: string;
+  createStatement: string;
+  tableID: string;
+  indexID: string;
   lastRead: moment.Moment | null;
   totalReads: number;
   totalRowsRead: number;
@@ -49,8 +51,8 @@ export const useTableIndexStats = ({
   tableName,
 }: GetTableIndexesRequest) => {
   const makeRequest = dbName && tableName;
-  const { data, isLoading, error, mutate } = useSWR(
-    ["tableIndexes", dbName, tableName],
+  const { data, isLoading, error, mutate } = useSwrWithClusterId(
+    { name: "tableIndexes", dbName, tableName },
     makeRequest
       ? () =>
           getIndexStats(
@@ -83,13 +85,20 @@ export const useTableIndexStats = ({
         ]).sqlString(),
         tableName: tableName,
         indexType: stat.index_type?.toLowerCase() ?? "",
+        createStatement: stat.create_statement ?? "",
+        tableID: stat.statistics?.key?.table_id?.toString() ?? "",
+        indexID: stat.statistics?.key?.index_id?.toString() ?? "",
         lastRead: lastRead.unix() <= 0 ? null : lastRead,
         totalReads: stat.statistics?.stats?.total_read_count?.toNumber() ?? 0,
         totalRowsRead:
           stat?.statistics?.stats?.total_rows_read?.toNumber() ?? 0,
         indexRecs:
           data?.index_recommendations
-            ?.filter(rec => rec?.type != null)
+            ?.filter(
+              rec =>
+                rec?.type != null &&
+                rec.index_id === stat.statistics?.key?.index_id,
+            )
             .map(formatIndexRecsProto) ?? [],
       };
     });
@@ -101,6 +110,7 @@ export const useTableIndexStats = ({
     indexStats: {
       tableIndexes,
       lastReset: lastReset.unix() <= 0 ? null : lastReset,
+      databaseID: data?.database_id,
     },
     isLoading,
     error,

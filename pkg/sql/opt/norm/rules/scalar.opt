@@ -7,6 +7,8 @@
 # handle both combinations.
 [CommuteVar, Normalize]
 (Eq | Ne | Is | IsNot | Plus | Mult | Bitand | Bitor | Bitxor
+        | VectorDistance | VectorCosDistance
+        | VectorNegInnerProduct
     $left:^(Variable)
     $right:(Variable)
 )
@@ -240,7 +242,11 @@ $input
     [
         (Subquery
             (Project
-                (Limit $input (IntConst 1) (EmptyOrdering))
+                (Limit
+                    $input
+                    (IntConst (DInt 1))
+                    (EmptyOrdering)
+                )
                 [ (ProjectionsItem (True) (MakeBoolCol)) ]
                 (MakeEmptyColSet)
             )
@@ -273,13 +279,20 @@ $input
 =>
 (Exists $input $existsPrivate)
 
-# EliminateConstValuesSubquery replaces a subquery with a constant value if the
+# EliminateConstValueSubquery replaces a subquery with a constant value if the
 # subquery's input is a single-row, single-column Values expression with a
 # constant value.
 [EliminateConstValueSubquery, Normalize]
 (Subquery (Values [ (Tuple [ $value:(Const) ]) ]))
 =>
 $value
+
+# EliminateUDFCallSubquery replaces a subquery with a udf call if the subquery's
+# input is a single-row, single-column Values expression with a udf call.
+[EliminateUDFCallSubquery, Normalize]
+(Subquery (Values [ (Tuple [ $udf:(UDFCall) ]) ]))
+=>
+$udf
 
 # SimplifyCaseWhenConstValue removes branches known to not match. Any
 # branch known to match is used as the ELSE and further WHEN conditions
@@ -325,6 +338,37 @@ $value
 )
 =>
 (AnyScalar $scalar (InlineValues $values) (SubqueryCmp $private))
+
+# InlineAnyProjectSet replaces an "unnest" subquery used for an ANY comparison
+# with the "unnest" argument. We only match when the ProjectSet has an empty
+# input and only projects the result of a single unnest function.
+#
+# There is some subtlety if the unnest argument evaluates to NULL. In that case,
+# the result of unnest is empty, and the Any filter evaluates to false. However,
+# AnyScalar with a NULL second argument evaluates to NULL. To handle this, we
+# AND the result of AnyScalar with an IsNot NULL check on the argument.
+[InlineAnyProjectSet, Normalize]
+(Any
+    (ProjectSet
+            (Values [ (Tuple []) ])
+            [
+                (ZipItem
+                    (Function
+                        [ $arg:* ]
+                        $fnPrivate:(FunctionPrivate "unnest")
+                    )
+                )
+            ]
+        ) &
+        (CanInlineAnyUnnestSubquery)
+    $scalar:*
+    $private:*
+)
+=>
+(And
+    (AnyScalar $scalar $arg (SubqueryCmp $private))
+    (IsNot $arg (Null (TypeOf $arg)))
+)
 
 # SimplifyEqualsAnyTuple converts a scalar ANY operation to an IN comparison.
 # It transforms
@@ -441,3 +485,21 @@ $value
 (Indirection $input:* $index:* & (IsJSON $input))
 =>
 (FetchVal $input $index)
+
+# ConvertLikeEscapeToLike converts a LIKE x ESCAPE '\' expression, which is
+# parsed as a like_escape function call, to a LIKE expression. This is valid
+# because the default escape character is '\'.
+#
+# Note that the FunctionExpr match pattern is enough to ensure that we are not
+# transforming a UDF because UDF invocations are always built as UDFCallExprs.
+[ConvertLikeEscapeToLike, Normalize]
+(Function
+    $args:*
+    $private:(FunctionPrivate "like_escape") &
+        (Let ($input $iOk):(ScalarExprAt $args 0) $iOk) &
+        (Let ($pattern $pOk):(ScalarExprAt $args 1) $pOk) &
+        (Let ($escape $eOk):(ScalarExprAt $args 2) $eOk) &
+        (ConstStringEquals $escape "\\")
+)
+=>
+(Like $input $pattern)

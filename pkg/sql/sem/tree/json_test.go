@@ -109,7 +109,7 @@ func BenchmarkParseJSON(b *testing.B) {
 		}
 		return res
 	}()
-	log.Infof(context.Background(), "test data generation took %s", timeutil.Since(start))
+	log.Dev.Infof(context.Background(), "test data generation took %s", timeutil.Since(start))
 	b.ResetTimer()
 
 	parseOpts := []jsonb.ParseOption{jsonb.WithFastJSONParser(), jsonb.WithUnorderedObjectKeys()}

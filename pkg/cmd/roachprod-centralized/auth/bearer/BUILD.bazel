@@ -1,0 +1,33 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "bearer",
+    srcs = ["bearer.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth/bearer",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/auth",
+        "//pkg/cmd/roachprod-centralized/services/auth/types",
+        "//pkg/cmd/roachprod-centralized/utils/logger",
+        "//pkg/util/timeutil",
+    ],
+)
+
+go_test(
+    name = "bearer_test",
+    srcs = ["bearer_test.go"],
+    embed = [":bearer"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/auth",
+        "//pkg/cmd/roachprod-centralized/models/auth",
+        "//pkg/cmd/roachprod-centralized/services/auth/mocks",
+        "//pkg/cmd/roachprod-centralized/services/auth/types",
+        "//pkg/cmd/roachprod-centralized/utils/logger",
+        "//pkg/util/timeutil",
+        "//pkg/util/uuid",
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//mock",
+        "@com_github_stretchr_testify//require",
+    ],
+)

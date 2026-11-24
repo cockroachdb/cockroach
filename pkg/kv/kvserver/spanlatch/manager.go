@@ -8,21 +8,25 @@ package spanlatch
 import (
 	"context"
 	"math"
+	"sync/atomic"
 	"time"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/poison"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -66,6 +70,14 @@ type Manager struct {
 	settings           *cluster.Settings
 	everySecondLogger  log.EveryN
 	latchWaitDurations metric.IHistogram
+
+	// clock is used to provide predictable timestamps for testing.
+	clock *hlc.Clock
+
+	// slowLatchRequestThresholdOverride, when set to a nonzero value smaller
+	// than kv.concurrency.slow_latch_request_duration, overrides that setting
+	// as the threshold in seconds for considering a latch request to be slow.
+	slowLatchRequestThresholdOverride atomic.Int64
 }
 
 // scopedManager is a latch manager scoped to either local or global keys.
@@ -82,6 +94,7 @@ func Make(
 	slowReqs *metric.Gauge,
 	settings *cluster.Settings,
 	latchWaitDurations metric.IHistogram,
+	clock *hlc.Clock,
 ) Manager {
 	return Manager{
 		stopper:            stopper,
@@ -89,6 +102,7 @@ func Make(
 		settings:           settings,
 		everySecondLogger:  log.Every(1 * time.Second),
 		latchWaitDurations: latchWaitDurations,
+		clock:              clock,
 	}
 }
 
@@ -114,9 +128,9 @@ func (la *latch) String() string {
 // SafeFormat implements the redact.SafeFormatter interface.
 func (la *latch) SafeFormat(w redact.SafePrinter, verb rune) {
 	w.Printf("%s@%s", la.span, la.ts)
-	if la.g != nil && la.g.baFmt != nil {
+	if la.g != nil && la.g.ba != nil {
 		w.Printf(" for request ")
-		la.g.baFmt.SafeFormat(w, verb)
+		la.g.ba.SafeFormat(w, verb)
 	}
 }
 
@@ -140,8 +154,8 @@ type signals struct {
 // Manager.Acquire and accepted by Manager.Release.
 type Guard struct {
 	signals
-	pp    poison.Policy
-	baFmt redact.SafeFormatter
+	pp poison.Policy
+	ba *kvpb.BatchRequest
 	// latches [spanset.NumSpanScope][spanset.NumSpanAccess][]latch, but half the size.
 	latchesPtrs [spanset.NumSpanScope][spanset.NumSpanAccess]unsafe.Pointer
 	latchesLens [spanset.NumSpanScope][spanset.NumSpanAccess]int32
@@ -199,11 +213,11 @@ func allocGuardAndLatches(nLatches int) (*Guard, []latch) {
 	return new(Guard), make([]latch, nLatches)
 }
 
-func newGuard(spans *spanset.SpanSet, pp poison.Policy, baFmt redact.SafeFormatter) *Guard {
+func newGuard(spans *spanset.SpanSet, pp poison.Policy, ba *kvpb.BatchRequest) *Guard {
 	nLatches := spans.Len()
 	guard, latches := allocGuardAndLatches(nLatches)
 	guard.pp = pp
-	guard.baFmt = baFmt
+	guard.ba = ba
 	for s := spanset.SpanScope(0); s < spanset.NumSpanScope; s++ {
 		for a := spanset.SpanAccess(0); a < spanset.NumSpanAccess; a++ {
 			ss := spans.GetSpans(a, s)
@@ -239,9 +253,9 @@ func newGuard(spans *spanset.SpanSet, pp poison.Policy, baFmt redact.SafeFormatt
 //
 // It returns a Guard which must be provided to Release.
 func (m *Manager) Acquire(
-	ctx context.Context, spans *spanset.SpanSet, pp poison.Policy, baFmt redact.SafeFormatter,
+	ctx context.Context, spans *spanset.SpanSet, pp poison.Policy, ba *kvpb.BatchRequest,
 ) (*Guard, error) {
-	lg, snap := m.sequence(spans, pp, baFmt)
+	lg, snap := m.sequence(spans, pp, ba)
 	defer snap.close()
 
 	err := m.wait(ctx, lg, snap)
@@ -265,9 +279,9 @@ func (m *Manager) Acquire(
 // The method returns a Guard which must be provided to the
 // CheckOptimisticNoConflicts, Release methods.
 func (m *Manager) AcquireOptimistic(
-	spans *spanset.SpanSet, pp poison.Policy, baFmt redact.SafeFormatter,
+	spans *spanset.SpanSet, pp poison.Policy, ba *kvpb.BatchRequest,
 ) *Guard {
-	lg, snap := m.sequence(spans, pp, baFmt)
+	lg, snap := m.sequence(spans, pp, ba)
 	lg.snap = &snap
 	return lg
 }
@@ -276,11 +290,11 @@ func (m *Manager) AcquireOptimistic(
 // any latches itself. Fast path for operations that only require past latches
 // to be released without blocking new latches.
 func (m *Manager) WaitFor(
-	ctx context.Context, spans *spanset.SpanSet, pp poison.Policy, baFmt redact.SafeFormatter,
+	ctx context.Context, spans *spanset.SpanSet, pp poison.Policy, ba *kvpb.BatchRequest,
 ) error {
 	// The guard is only used to store latches by this request. These latches
 	// are not actually inserted using insertLocked.
-	lg := newGuard(spans, pp, baFmt)
+	lg := newGuard(spans, pp, ba)
 
 	m.mu.Lock()
 	snap := m.snapshotLocked(spans)
@@ -377,9 +391,9 @@ func (m *Manager) WaitUntilAcquired(ctx context.Context, lg *Guard) (*Guard, err
 // unlocks the manager. The role of the method is to sequence latch acquisition
 // attempts.
 func (m *Manager) sequence(
-	spans *spanset.SpanSet, pp poison.Policy, baFmt redact.SafeFormatter,
+	spans *spanset.SpanSet, pp poison.Policy, ba *kvpb.BatchRequest,
 ) (*Guard, snapshot) {
-	lg := newGuard(spans, pp, baFmt)
+	lg := newGuard(spans, pp, ba)
 
 	m.mu.Lock()
 	snap := m.snapshotLocked(spans)
@@ -505,7 +519,7 @@ func (m *Manager) wait(ctx context.Context, lg *Guard, snap snapshot) error {
 					// Wait for writes at equal or lower timestamps.
 					a2 := spanset.SpanReadWrite
 					it := tr[a2].MakeIter()
-					if err := m.iterAndWait(ctx, &timer, &it, lg.pp, a, a2, latch, ignoreLater); err != nil {
+					if err := m.iterAndWait(ctx, &timer, &it, lg, a, a2, latch, ignoreLater); err != nil {
 						return err
 					}
 				case spanset.SpanReadWrite:
@@ -517,13 +531,13 @@ func (m *Manager) wait(ctx context.Context, lg *Guard, snap snapshot) error {
 					// to release their latches, so we wait on them first.
 					a2 := spanset.SpanReadWrite
 					it := tr[a2].MakeIter()
-					if err := m.iterAndWait(ctx, &timer, &it, lg.pp, a, a2, latch, ignoreNothing); err != nil {
+					if err := m.iterAndWait(ctx, &timer, &it, lg, a, a2, latch, ignoreNothing); err != nil {
 						return err
 					}
 					// Wait for reads at equal or higher timestamps.
 					a2 = spanset.SpanReadOnly
 					it = tr[a2].MakeIter()
-					if err := m.iterAndWait(ctx, &timer, &it, lg.pp, a, a2, latch, ignoreEarlier); err != nil {
+					if err := m.iterAndWait(ctx, &timer, &it, lg, a, a2, latch, ignoreEarlier); err != nil {
 						return err
 					}
 				default:
@@ -543,11 +557,21 @@ func (m *Manager) iterAndWait(
 	ctx context.Context,
 	t *timeutil.Timer,
 	it *iterator,
-	pp poison.Policy,
+	lg *Guard,
 	waitType, heldType spanset.SpanAccess,
 	wait *latch,
 	ignore ignoreFn,
 ) error {
+	tenantID, _ := roachpb.ClientTenantFromContext(ctx)
+	var info ash.WorkloadInfo
+	if lg.ba != nil {
+		info = ash.WorkloadInfo{
+			WorkloadID:    lg.ba.WorkloadID,
+			AppNameID:     lg.ba.AppNameID,
+			GatewayNodeID: lg.ba.GatewayNodeID,
+			WorkloadType:  workloadid.WorkloadType(lg.ba.WorkloadType),
+		}
+	}
 	for it.FirstOverlap(wait); it.Valid(); it.NextOverlap(wait) {
 		held := it.Cur()
 		if held.g.done.signaled() {
@@ -556,7 +580,12 @@ func (m *Manager) iterAndWait(
 		if ignore(wait.ts, held.ts) {
 			continue
 		}
-		if err := m.waitForSignal(ctx, t, pp, waitType, heldType, wait, held); err != nil {
+		cleanup := ash.SetWorkState(
+			tenantID, info,
+			ash.WorkLock, "LatchWait")
+		err := m.waitForSignal(ctx, t, lg.pp, waitType, heldType, wait, held)
+		cleanup()
+		if err != nil {
 			return err
 		}
 	}
@@ -571,15 +600,16 @@ func (m *Manager) waitForSignal(
 	waitType, heldType spanset.SpanAccess,
 	wait, held *latch,
 ) error {
-	if m.latchWaitDurations != nil {
-		tBegin := crtime.NowMono()
-		defer func() {
-			m.latchWaitDurations.RecordValue(tBegin.Elapsed().Nanoseconds())
-		}()
+	sp := tracing.SpanFromContext(ctx)
+	if sp != nil || m.latchWaitDurations != nil {
+		startTime := m.clock.PhysicalTime()
+		defer m.logWaitTime(sp, startTime, wait, held)
 	}
 	log.Eventf(ctx, "waiting to acquire %s latch %s, held by %s latch %s", waitType, wait, heldType, held)
 	poisonCh := held.g.poison.signalChan()
-	t.Reset(base.SlowRequestThreshold)
+
+	slowThreshold := m.slowLatchRequestThreshold()
+	t.Reset(slowThreshold)
 	for {
 		select {
 		case <-held.g.done.signalChan():
@@ -601,13 +631,11 @@ func (m *Manager) waitForSignal(
 				return errors.Errorf("unsupported poison.Policy %d", pp)
 			}
 		case <-t.C:
-			t.Read = true
-
-			log.Warningf(ctx, "have been waiting %s to acquire %s latch %s, held by %s latch %s",
-				base.SlowRequestThreshold, waitType, wait, heldType, held)
+			log.KvExec.Warningf(ctx, "have been waiting %s to acquire %s latch %s, held by %s latch %s",
+				slowThreshold, waitType, wait, heldType, held)
 			if m.slowReqs != nil {
 				m.slowReqs.Inc(1)
-				defer m.slowReqs.Dec(1)
+				defer m.slowReqs.Dec(1) //nolint:deferloop
 			}
 		case <-ctx.Done():
 			log.VEventf(ctx, 2, "%s while acquiring %s latch %s, held by %s latch %s",
@@ -617,6 +645,29 @@ func (m *Manager) waitForSignal(
 			// While shutting down, requests may acquire
 			// latches and never release them.
 			return &kvpb.NodeUnavailableError{}
+		}
+	}
+}
+
+// logWaitTime records the amount of time spent waiting for a latch held by the
+// transaction with the given ID.213
+func (m *Manager) logWaitTime(sp *tracing.Span, startTime time.Time, wait, held *latch) {
+	elapsed := m.clock.PhysicalTime().Sub(startTime)
+	if m.latchWaitDurations != nil {
+		// Track the wait time in the "per-store" metrics.
+		m.latchWaitDurations.RecordValue(elapsed.Nanoseconds())
+	}
+	if sp != nil {
+		// Emit a contention event if the waiting transaction is different from the
+		// holding transaction. TODO(#124068): consider adding a metric for the case
+		// when the transaction is the same.
+		waitTxn, heldTxn := wait.g.ba.Txn, held.g.ba.Txn
+		if waitTxn != nil && (heldTxn == nil || waitTxn.ID != heldTxn.ID) {
+			ev := &kvpb.ContentionEvent{Key: held.span.Key, Duration: elapsed, IsLatch: true}
+			if heldTxn != nil {
+				ev.TxnMeta = heldTxn.TxnMeta
+			}
+			sp.RecordStructured(ev)
 		}
 	}
 }
@@ -644,12 +695,12 @@ func (m *Manager) Release(ctx context.Context, lg *Guard) {
 		held = lg.acquireTime.Elapsed()
 	}
 	if held > m.longLatchHoldThreshold() {
-		const msg = "%s has held latch for %d ns. Some possible causes are " +
+		const msg = "%s has held latch for %s. Some possible causes are " +
 			"slow disk reads, slow raft replication, and expensive request processing."
 		if m.everySecondLogger.ShouldLog() {
-			log.Warningf(ctx, msg, lg.baFmt, held)
+			log.KvExec.Warningf(ctx, msg, lg.ba, humanizeutil.Duration(held))
 		} else {
-			log.VEventf(ctx, 2, msg, lg.baFmt, held)
+			log.VEventf(ctx, 2, msg, lg.ba, humanizeutil.Duration(held))
 		}
 	}
 }
@@ -680,6 +731,28 @@ func (m *Manager) longLatchHoldThreshold() time.Duration {
 		return math.MaxInt64 // disable
 	}
 	return LongLatchHoldThreshold.Get(&m.settings.SV)
+}
+
+// slowLatchRequestThreshold returns the threshold for logging slow latch requests.
+func (m *Manager) slowLatchRequestThreshold() time.Duration {
+	threshold := time.Duration(math.MaxInt64)
+	if m.settings != nil {
+		threshold = SlowLatchRequestThreshold.Get(&m.settings.SV)
+	}
+
+	thresholdOverride := time.Duration(m.slowLatchRequestThresholdOverride.Load()) * time.Second
+	if thresholdOverride != 0 && thresholdOverride < threshold {
+		threshold = thresholdOverride
+	}
+
+	return threshold
+}
+
+// SetSlowLatchRequestThresholdOverride sets an override for the slow latch
+// request threshold. The override only applies if non-zero and smaller than the
+// cluster setting kv.concurrency.slow_latch_request_duration.
+func (m *Manager) SetSlowLatchRequestThresholdOverride(thresholdSeconds int64) {
+	m.slowLatchRequestThresholdOverride.Store(thresholdSeconds)
 }
 
 // Metrics holds information about the state of a Manager.

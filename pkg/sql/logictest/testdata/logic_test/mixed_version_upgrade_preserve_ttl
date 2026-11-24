@@ -1,12 +1,14 @@
-# LogicTest: cockroach-go-testserver-24.2
+# LogicTest: cockroach-go-testserver-25.4
 
 # This test verifies that when a cluster is upgraded, it preserves the TTL
 # job configuration on a table.
+#
+# Pinned to cockroach-go-testserver-25.4 because upgrading from 26.1 adds
+# schema_locked=true to the SHOW CREATE output, which is unrelated to TTL
+# preservation.
 
-query T
+let $initial_version
 SELECT version FROM [SHOW CLUSTER SETTING version]
-----
-24.2
 
 statement ok
 CREATE TABLE tbl (
@@ -15,11 +17,13 @@ CREATE TABLE tbl (
 
 upgrade all
 
-# Verify that the cluster version upgrades have begun by asserting we're no
-# longer on the previous version. Note that the first cluster upgrade is the
-# one that repairs all descriptors.
-query B retry
-SELECT version != '24.2' FROM [SHOW CLUSTER SETTING version]
+statement ok
+SET CLUSTER SETTING version = crdb_internal.node_executable_version()
+
+# Verify that the cluster version has been upgraded and is no longer on the
+# previous version.
+query B
+SELECT version != '$initial_version' FROM [SHOW CLUSTER SETTING version]
 ----
 true
 
@@ -30,4 +34,4 @@ CREATE TABLE public.tbl (
   id INT8 NOT NULL,
   crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
   CONSTRAINT tbl_pkey PRIMARY KEY (id ASC)
-) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL)
+) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL);

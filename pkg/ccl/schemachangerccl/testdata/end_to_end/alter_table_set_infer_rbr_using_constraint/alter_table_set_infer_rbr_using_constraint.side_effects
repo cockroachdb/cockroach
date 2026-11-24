@@ -1,0 +1,161 @@
+/* setup */
+SET CLUSTER SETTING feature.infer_rbr_region_col_using_constraint.enabled = true;
+CREATE DATABASE multiregion_db PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3";
+USE multiregion_db;
+CREATE TABLE multiregion_db.public.parent (region multiregion_db.public.crdb_internal_region, k INT, PRIMARY KEY (region, k));
+CREATE TABLE multiregion_db.public.rbr (
+  pk INT PRIMARY KEY,
+  region multiregion_db.public.crdb_internal_region NOT NULL,
+  data INT,
+  CONSTRAINT fk_region FOREIGN KEY (region, pk) REFERENCES multiregion_db.public.parent (region, k) MATCH FULL,
+  CONSTRAINT fk_region2 FOREIGN KEY (region, data) REFERENCES multiregion_db.public.parent (region, k) MATCH FULL
+) LOCALITY REGIONAL BY ROW AS region;
+ALTER TABLE multiregion_db.public.rbr SET (infer_rbr_region_col_using_constraint = 'fk_region');
+----
+...
++database {0 0 multiregion_db} -> 104
++schema {104 0 public} -> 105
++object {104 105 crdb_internal_region} -> 106
++object {104 105 _crdb_internal_region} -> 107
++object {104 105 parent} -> 108
++object {104 105 rbr} -> 109
+
+/* test */
+ALTER TABLE multiregion_db.public.rbr SET (infer_rbr_region_col_using_constraint = 'fk_region2');
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: ALTER TABLE
+increment telemetry for sql.schema.alter_table
+increment telemetry for sql.schema.alter_table.set_storage_param
+## StatementPhase stage 1 of 1 with 3 MutationType ops
+upsert descriptor #109
+  ...
+         withGrantOption: "2"
+       version: 3
+  -  rbrUsingConstraint: 2
+  +  rbrUsingConstraint: 3
+     replacementOf:
+       time: {}
+  -  schemaLocked: true
+     unexposedParentSchemaId: 105
+  -  version: "4"
+  +  version: "5"
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 5 MutationType ops
+upsert descriptor #109
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses: <redacted>
+  +    jobId: "1"
+  +    nameMapping:
+  +      columns:
+  +        "1": pk
+  +        "2": region
+  +        "3": data
+  +        "4294967292": crdb_internal_origin_timestamp
+  +        "4294967293": crdb_internal_origin_id
+  +        "4294967294": tableoid
+  +        "4294967295": crdb_internal_mvcc_timestamp
+  +      constraints:
+  +        "2": fk_region
+  +        "3": fk_region2
+  +      families:
+  +        "0": primary
+  +      id: 109
+  +      indexes:
+  +        "1": rbr_pkey
+  +      name: rbr
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: ALTER TABLE ‹multiregion_db›.‹public›.‹rbr› SET ('infer_rbr_region_col_using_constraint' = ‹'fk_region2'›)
+  +        statement: ALTER TABLE multiregion_db.public.rbr SET ('infer_rbr_region_col_using_constraint' = 'fk_region2')
+  +        statementTag: ALTER TABLE
+  +    revertible: true
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+         withGrantOption: "2"
+       version: 3
+  -  rbrUsingConstraint: 2
+  +  rbrUsingConstraint: 3
+     replacementOf:
+       time: {}
+  -  schemaLocked: true
+     unexposedParentSchemaId: 105
+  -  version: "4"
+  +  version: "5"
+persist all catalog changes to storage
+create job #1 (non-cancelable: false): "ALTER TABLE multiregion_db.public.rbr SET ('infer_rbr_region_col_using_constraint' = 'fk_region2')"
+  descriptor IDs: [109]
+# end PreCommitPhase
+commit transaction #1
+notified job registry to adopt jobs: [1]
+# begin PostCommitPhase
+begin transaction #2
+commit transaction #2
+begin transaction #3
+## PostCommitPhase stage 1 of 1 with 3 MutationType ops
+upsert descriptor #109
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses: <redacted>
+  -    jobId: "1"
+  -    nameMapping:
+  -      columns:
+  -        "1": pk
+  -        "2": region
+  -        "3": data
+  -        "4294967292": crdb_internal_origin_timestamp
+  -        "4294967293": crdb_internal_origin_id
+  -        "4294967294": tableoid
+  -        "4294967295": crdb_internal_mvcc_timestamp
+  -      constraints:
+  -        "2": fk_region
+  -        "3": fk_region2
+  -      families:
+  -        "0": primary
+  -      id: 109
+  -      indexes:
+  -        "1": rbr_pkey
+  -      name: rbr
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: ALTER TABLE ‹multiregion_db›.‹public›.‹rbr› SET ('infer_rbr_region_col_using_constraint' = ‹'fk_region2'›)
+  -        statement: ALTER TABLE multiregion_db.public.rbr SET ('infer_rbr_region_col_using_constraint' = 'fk_region2')
+  -        statementTag: ALTER TABLE
+  -    revertible: true
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+     replacementOf:
+       time: {}
+  +  schemaLocked: true
+     unexposedParentSchemaId: 105
+  -  version: "5"
+  +  version: "6"
+persist all catalog changes to storage
+update progress of schema change job #1: "all stages completed"
+set schema change job #1 to non-cancellable
+updated schema change job #1 descriptor IDs to []
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 109
+commit transaction #3
+# end PostCommitPhase

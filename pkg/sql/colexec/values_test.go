@@ -74,7 +74,7 @@ func TestValues(t *testing.T) {
 					} else {
 						expected[i][j] = convFns[j](val)
 					}
-					rows[i][j] = rowenc.DatumToEncDatum(typ, val)
+					rows[i][j] = rowenc.DatumToEncDatumUnsafe(typ, val)
 				}
 			}
 
@@ -115,7 +115,7 @@ func subBenchmarkValues(
 					b.Fatal(err)
 				}
 				op.Init(ctx)
-				for batch := op.Next(); batch.Length() > 0; batch = op.Next() {
+				for batch := colexecop.NextNoMeta(op); batch.Length() > 0; batch = colexecop.NextNoMeta(op) {
 				}
 			}
 		})
@@ -150,7 +150,8 @@ func BenchmarkValues(b *testing.B) {
 					var core execinfrapb.ProcessorCoreUnion
 					core.Values = spec
 					proc, err := rowexec.NewProcessor(
-						ctx, &flowCtx, 0 /* processorID */, &core, &post, nil /* inputs */, nil, /* localProcessors */
+						ctx, &flowCtx, 0 /* processorID */, 0 /* stageID */, &core, &post,
+						nil /* inputs */, nil, /* localProcessors */
 					)
 					if err != nil {
 						b.Fatal(err)

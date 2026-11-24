@@ -70,7 +70,7 @@ func makeEventLogCallback(
 		descID := screl.GetDescID(lt.target.Element())
 		stmtID := lt.target.Metadata.StatementID
 		details := eventpb.CommonSQLEventDetails{
-			Statement:       redact.RedactableString(ts.Statements[stmtID].RedactedStatement),
+			Statement:       ts.Statements[stmtID].RedactedStatement,
 			Tag:             ts.Statements[stmtID].StatementTag,
 			User:            ts.Authorization.UserName,
 			DescriptorID:    uint32(descID),
@@ -208,6 +208,21 @@ func triggerName(b buildCtx, e scpb.Element) string {
 	return triggerNameElem.Name
 }
 
+// policyName returns the name of the policy that element `e` belongs to.
+// `e` must therefore have a DescID and PolicyID attr and is a policy-related
+// element.
+func policyName(b buildCtx, e scpb.Element) string {
+	descID := screl.GetDescID(e)
+	policyID, err := screl.Schema.GetAttribute(screl.PolicyID, e)
+	if err != nil {
+		panic(err)
+	}
+	pn := b.QueryByID(descID).FilterPolicyName().FilterElement(func(e *scpb.PolicyName) bool {
+		return e.PolicyID == policyID
+	}).MustGetOneElement()
+	return pn.Name
+}
+
 // ownerName finds the owner of the descriptor that element `e` belongs to.
 // `e` must therefore have a DescID attr.
 func ownerName(b buildCtx, e scpb.Element) string {
@@ -325,6 +340,10 @@ func (pb payloadBuilder) droppedSchemaObjects(b buildCtx) (ret []string) {
 func (pb payloadBuilder) build(b buildCtx) logpb.EventPayload {
 	const mutationID = 1
 	switch e := pb.Element().(type) {
+	case *scpb.Namespace:
+		if pb.maybePayload != nil {
+			return pb.maybePayload
+		}
 	case *scpb.Database:
 		if pb.TargetStatus == scpb.Status_PUBLIC {
 			return &eventpb.CreateDatabase{
@@ -384,6 +403,14 @@ func (pb payloadBuilder) build(b buildCtx) logpb.EventPayload {
 			}
 		}
 	case *scpb.CompositeType:
+		if pb.TargetStatus == scpb.Status_PUBLIC {
+			return nil
+		} else {
+			return &eventpb.DropType{
+				TypeName: fullyQualifiedName(b, e),
+			}
+		}
+	case *scpb.DomainType:
 		if pb.TargetStatus == scpb.Status_PUBLIC {
 			return nil
 		} else {
@@ -506,13 +533,54 @@ func (pb payloadBuilder) build(b buildCtx) logpb.EventPayload {
 				TriggerName: triggerName(b, e),
 			}
 		}
+	case *scpb.Policy:
+		if pb.TargetStatus == scpb.Status_PUBLIC {
+			return &eventpb.CreatePolicy{
+				TableName:  fullyQualifiedNameFromID(b, e.TableID),
+				PolicyName: policyName(b, e),
+			}
+		} else {
+			return &eventpb.DropPolicy{
+				TableName:  fullyQualifiedNameFromID(b, e.TableID),
+				PolicyName: policyName(b, e),
+			}
+		}
 	}
 	if _, _, tbl := scpb.FindTable(b.QueryByID(screl.GetDescID(pb.Element()))); tbl != nil {
+		// If the table has a payload attached use that instead of ALTER TABLE.
+		if pb.maybePayload != nil {
+			return pb.maybePayload
+		}
 		return &eventpb.AlterTable{
 			TableName:           fullyQualifiedName(b, pb.Element()),
 			MutationID:          mutationID,
 			CascadeDroppedViews: pb.cascadeDroppedViews(b),
 		}
+	}
+	if _, _, seq := scpb.FindSequence(b.QueryByID(screl.GetDescID(pb.Element()))); seq != nil {
+		// If the sequence has a payload attached use that instead of ALTER SEQUENCE.
+		if pb.maybePayload != nil {
+			return pb.maybePayload
+		}
+		return &eventpb.AlterSequence{
+			SequenceName: fullyQualifiedName(b, seq),
+		}
+	}
+	if _, _, e := scpb.FindEnumType(b.QueryByID(screl.GetDescID(pb.Element()))); e != nil {
+		if pb.maybePayload == nil {
+			panic(errors.AssertionFailedf(
+				"missing event payload for ALTER TYPE on enum %s", fullyQualifiedName(b, e),
+			))
+		}
+		return pb.maybePayload
+	}
+	if _, _, e := scpb.FindAliasType(b.QueryByID(screl.GetDescID(pb.Element()))); e != nil {
+		if pb.maybePayload == nil {
+			panic(errors.AssertionFailedf(
+				"missing event payload for ALTER TYPE on alias type %s", fullyQualifiedName(b, e),
+			))
+		}
+		return pb.maybePayload
 	}
 	return nil
 }

@@ -15,6 +15,23 @@
             "pkg/.*_generated\\.go$": "generated code"
         }
     },
+    "roachtestgo": {
+        "exclude_files": {
+            "pkg/cmd/roachtest/roachtestutil/task": "task manager implements goroutine management",
+            "pkg/cmd/roachtest/roachtestutil/mixedversion": "part of the roachtest framework",
+            "pkg/cmd/roachtest/operations": "operations do not run under the managed roachtest framework",
+            "pkg/cmd/roachtest/[^/]+\\.go$": "roachtest framework",
+            "_test\\.go$": "tests"
+        }
+    },
+    "benchdoc": {
+        "exclude_files": {
+            "external/": "exclude all third-party code for all analyzers"
+        },
+        "only_files": {
+            "_test\\.go$": "only run on test files"
+        }
+    },
     "deepequalerrors": {
         "exclude_files": {
             "external/": "exclude all third-party code for all analyzers",
@@ -30,9 +47,9 @@
             ".*\\.pb\\.gw\\.go$": "generated code",
             "pkg/.*_generated\\.go$": "generated code",
             "_test\\.go$": "tests",
-            "pkg/ccl/backupccl/backupinfo/manifest_handling.go": "flagged by linter, should be evaluated",
-            "pkg/ccl/backupccl/restore_job.go": "flagged by linter, should be evaluated",
-            "pkg/ccl/backupccl/restore_progress.go": "flagged by linter, should be evaluated",
+            "pkg/backup/backupinfo/manifest_handling.go": "flagged by linter, should be evaluated",
+            "pkg/backup/restore_job.go": "flagged by linter, should be evaluated",
+            "pkg/backup/restore_progress.go": "flagged by linter, should be evaluated",
             "pkg/ccl/changefeedccl/cdctest/mock_webhook_sink.go": "flagged by linter, should be evaluated",
             "pkg/ccl/changefeedccl/changefeed_processors.go": "flagged by linter, should be evaluated",
             "pkg/ccl/changefeedccl/event_processing.go": "flagged by linter, should be evaluated",
@@ -42,10 +59,10 @@
             "pkg/ccl/changefeedccl/schema_registry.go": "flagged by linter, should be evaluated",
             "pkg/ccl/changefeedccl/sink_kafka.go": "flagged by linter, should be evaluated",
             "pkg/ccl/changefeedccl/sink_pubsub_v2.go": "flagged by linter, should be evaluated",
-            "pkg/ccl/multitenantccl/tenantcostclient/tenant_side.go": "flagged by linter, should be evaluated",
-            "pkg/ccl/sqlproxyccl/acl/watcher.go": "flagged by linter, should be evaluated",
-            "pkg/ccl/sqlproxyccl/tenantdirsvr/test_directory_svr.go": "flagged by linter, should be evaluated",
-            "pkg/ccl/crosscluster/streamclient/random_stream_client.go": "flagged by linter, should be evaluated",
+            "pkg/multitenant/tenantcostclient/tenant_side.go": "flagged by linter, should be evaluated",
+            "pkg/sqlproxy/acl/watcher.go": "flagged by linter, should be evaluated",
+            "pkg/sqlproxy/tenantdirsvr/test_directory_svr.go": "flagged by linter, should be evaluated",
+            "pkg/crosscluster/streamclient/random_stream_client.go": "flagged by linter, should be evaluated",
             "pkg/cli/clisqlexec/format_csv_tsv.go": "flagged by linter, should be evaluated",
             "pkg/cli/clisqlshell/sql.go": "flagged by linter, should be evaluated",
             "pkg/cli/syncbench/syncbench.go": "flagged by linter, should be evaluated",
@@ -135,6 +152,7 @@
             "pkg/sql/contention/event_store.go": "flagged by linter, should be evaluated",
             "pkg/sql/distsql_running.go": "flagged by linter, should be evaluated",
             "pkg/sql/flowinfra/flow_registry.go": "flagged by linter, should be evaluated",
+            "pkg/sql/hints/hint_cache.go": "flagged by linter, should be evaluated",
             "pkg/sql/idxusage/local_idx_usage_stats.go": "flagged by linter, should be evaluated",
             "pkg/sql/importer/import_processor.go": "flagged by linter, should be evaluated",
             "pkg/sql/importer/import_processor_planning.go": "flagged by linter, should be evaluated",
@@ -142,11 +160,11 @@
             "pkg/sql/rowexec/indexbackfiller.go": "flagged by linter, should be evaluated",
             "pkg/sql/rowflow/routers.go": "flagged by linter, should be evaluated",
             "pkg/sql/schemachanger/corpus/corpus.go": "flagged by linter, should be evaluated",
-            "pkg/sql/sem/builtins/builtins.go": "flagged by linter, should be evaluated",
             "pkg/sql/sqlliveness/slinstance/slinstance.go": "flagged by linter, should be evaluated",
             "pkg/sql/sqlstats/ssmemstorage/ss_mem_iterator.go": "flagged by linter, should be evaluated",
             "pkg/sql/stats/stats_cache.go": "flagged by linter, should be evaluated",
             "pkg/sql/stmtdiagnostics/statement_diagnostics.go": "flagged by linter, should be evaluated",
+            "pkg/sql/vecindex/manager.go": "flagged by linter, should be evaluated",
             "pkg/storage/metamorphic/deck.go": "flagged by linter, should be evaluated",
             "pkg/storage/pebble.go": "flagged by linter, should be evaluated",
             "pkg/util/admission/work_queue.go": "flagged by linter, should be evaluated",
@@ -175,6 +193,7 @@
             "pkg/util/tracing/crdbspan.go": "flagged by linter, should be evaluated",
             "pkg/util/tracing/span.go": "flagged by linter, should be evaluated",
             "pkg/util/tracing/tracer.go": "flagged by linter, should be evaluated",
+            "pkg/util/unique/unique.go": "flagged by linter, should be evaluated",
             "pkg/testutils/net.go": "flagged by linter, should be evaluated",
             "pkg/testutils/storageutils/mocking.go": "flagged by linter, should be evaluated",
             "pkg/testutils/testfixtures/test_fixtures.go": "flagged by linter, should be evaluated",
@@ -762,11 +781,6 @@
             "pkg/.*_generated\\.go$": "generated code",
             "pkg/roachprod/vm/aws/embedded\\.go$": "generated code",
             "pkg/security/securitytest/embedded\\.go$": "generated code",
-            "pkg/security/securityassets/security_assets.go$": "excluded until all uses of io/ioutil are replaced",
-            "pkg/security/securitytest/securitytest.go$": "excluded until all uses of io/ioutil are replaced",
-            "pkg/server/dumpstore/dumpstore.go$": "excluded until all uses of io/ioutil are replaced",
-            "pkg/server/dumpstore/dumpstore_test.go$": "excluded until all uses of io/ioutil are replaced",
-            "pkg/server/profiler/profilestore_test.go$": "excluded until all uses of io/ioutil are replaced",
             "pkg/util/bulk/tracing_aggregator.go$":"temporary exclusion until #100438 is resolved",
             "pkg/util/log/file_api.go$": "excluded until all uses of io/ioutil are replaced",
             "pkg/build/bazel/bazel\\.go$": "Runfile function deprecated"

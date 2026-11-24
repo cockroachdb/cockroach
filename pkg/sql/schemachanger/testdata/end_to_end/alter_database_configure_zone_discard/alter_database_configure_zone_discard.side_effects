@@ -7,6 +7,7 @@ CREATE DATABASE db;
 
 /* test */
 ALTER DATABASE db CONFIGURE ZONE USING num_replicas = 7, gc.ttlseconds = 10000;
+ALTER DATABASE db CONFIGURE ZONE USING num_replicas = 8;
 ALTER DATABASE db CONFIGURE ZONE DISCARD;
 ----
 begin transaction #1
@@ -27,6 +28,20 @@ write *eventpb.SetZoneConfig to event log:
 ## StatementPhase stage 1 of 1 with 1 MutationType op
 upsert zone config for #104
 checking for feature: CONFIGURE ZONE
+write *eventpb.SetZoneConfig to event log:
+  config:
+    options:
+    - num_replicas = 8
+    target: DATABASE db
+  resolvedOldConfig: 'gc:<ttl_seconds:10000 > num_replicas:7 inherited_constraints:true null_voter_constraints_is_empty:false inherited_lease_preferences:true '
+  sql:
+    descriptorId: 104
+    statement: ALTER DATABASE ‹db› CONFIGURE ZONE USING ‹num_replicas› = ‹8›
+    tag: CONFIGURE ZONE
+    user: root
+## StatementPhase stage 1 of 1 with 1 MutationType op
+upsert zone config for #104
+checking for feature: CONFIGURE ZONE
 write *eventpb.RemoveZoneConfig to event log:
   config:
     target: DATABASE db
@@ -35,7 +50,7 @@ write *eventpb.RemoveZoneConfig to event log:
     statement: ALTER DATABASE ‹db› CONFIGURE ZONE DISCARD
     tag: CONFIGURE ZONE
     user: root
-## StatementPhase stage 1 of 1 with 1 MutationType op
+## StatementPhase stage 1 of 1 with 2 MutationType ops
 deleting zone config for #104
 # end StatementPhase
 # begin PreCommitPhase

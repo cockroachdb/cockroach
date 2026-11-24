@@ -42,7 +42,7 @@ func (l *LockSpanSet) Add(str lock.Strength, span roachpb.Span) {
 // SortAndDeDup sorts the spans in the LockSpanSet and removes any duplicates.
 func (l *LockSpanSet) SortAndDeDup() {
 	for st := range l.spans {
-		l.spans[st], _ /* distinct */ = roachpb.MergeSpans(&l.spans[st])
+		l.spans[st], _ /* distinct */ = roachpb.MergeSpans(l.spans[st])
 	}
 }
 

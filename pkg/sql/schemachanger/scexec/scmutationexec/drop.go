@@ -79,6 +79,13 @@ func (i *immediateVisitor) RemoveTypeComment(_ context.Context, op scop.RemoveTy
 	return nil
 }
 
+func (i *immediateVisitor) RemoveFunctionComment(
+	_ context.Context, op scop.RemoveFunctionComment,
+) error {
+	i.DeleteComment(op.FunctionID, 0, catalogkeys.FunctionCommentType)
+	return nil
+}
+
 func (i *immediateVisitor) RemoveDatabaseComment(
 	_ context.Context, op scop.RemoveDatabaseComment,
 ) error {
@@ -130,6 +137,13 @@ func (i *immediateVisitor) RemoveUserPrivileges(
 		return err
 	}
 	desc.GetPrivileges().RemoveUser(user)
+	return nil
+}
+
+func (i *immediateVisitor) RemoveOwner(ctx context.Context, op scop.RemoveOwner) error {
+	// RemoveOwner is a noop: the owner goes away when the descriptor is
+	// dropped; when setting the owner (ALTER ... OWNER TO) a replace operation
+	// covers the update.
 	return nil
 }
 

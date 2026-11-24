@@ -37,6 +37,20 @@ user root
 statement ok
 ALTER TYPE s.typ OWNER TO testuser
 
+# Setting the owner to the current owner is a no-op.
+statement ok
+REVOKE CREATE ON SCHEMA s FROM testuser
+
+user testuser
+
+statement ok
+ALTER TYPE s.typ OWNER TO testuser
+
+user root
+
+statement ok
+GRANT CREATE ON SCHEMA s TO testuser
+
 user testuser
 
 statement error must be member of role "testuser2"

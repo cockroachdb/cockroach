@@ -64,63 +64,39 @@ func TestUpgradeToEnabledLevel(t *testing.T) {
 	const SER = tree.SerializableIsolation
 
 	testCases := []struct {
-		in                      tree.IsolationLevel
-		allowRC                 bool
-		allowRR                 bool
-		license                 bool
-		expOut                  tree.IsolationLevel
-		expUpgraded             bool
-		expUpgradedDueToLicense bool
+		in          tree.IsolationLevel
+		allowRC     bool
+		allowRR     bool
+		expOut      tree.IsolationLevel
+		expUpgraded bool
 	}{
-		{in: RU, allowRC: false, allowRR: false, license: false, expOut: SER, expUpgraded: true, expUpgradedDueToLicense: false},
-		{in: RU, allowRC: true, allowRR: false, license: false, expOut: SER, expUpgraded: true, expUpgradedDueToLicense: true},
-		{in: RU, allowRC: false, allowRR: true, license: false, expOut: SER, expUpgraded: true, expUpgradedDueToLicense: true},
-		{in: RU, allowRC: true, allowRR: true, license: false, expOut: SER, expUpgraded: true, expUpgradedDueToLicense: true},
-		{in: RU, allowRC: false, allowRR: false, license: true, expOut: SER, expUpgraded: true, expUpgradedDueToLicense: false},
-		{in: RU, allowRC: true, allowRR: false, license: true, expOut: RC, expUpgraded: true, expUpgradedDueToLicense: false},
-		{in: RU, allowRC: false, allowRR: true, license: true, expOut: RR, expUpgraded: true, expUpgradedDueToLicense: false},
-		{in: RU, allowRC: true, allowRR: true, license: true, expOut: RC, expUpgraded: true, expUpgradedDueToLicense: false},
-		{in: RC, allowRC: false, allowRR: false, license: false, expOut: SER, expUpgraded: true, expUpgradedDueToLicense: false},
-		{in: RC, allowRC: true, allowRR: false, license: false, expOut: SER, expUpgraded: true, expUpgradedDueToLicense: true},
-		{in: RC, allowRC: false, allowRR: true, license: false, expOut: SER, expUpgraded: true, expUpgradedDueToLicense: true},
-		{in: RC, allowRC: true, allowRR: true, license: false, expOut: SER, expUpgraded: true, expUpgradedDueToLicense: true},
-		{in: RC, allowRC: false, allowRR: false, license: true, expOut: SER, expUpgraded: true, expUpgradedDueToLicense: false},
-		{in: RC, allowRC: true, allowRR: false, license: true, expOut: RC, expUpgraded: false, expUpgradedDueToLicense: false},
-		{in: RC, allowRC: false, allowRR: true, license: true, expOut: RR, expUpgraded: true, expUpgradedDueToLicense: false},
-		{in: RC, allowRC: true, allowRR: true, license: true, expOut: RC, expUpgraded: false, expUpgradedDueToLicense: false},
-		{in: RR, allowRC: false, allowRR: false, license: false, expOut: SER, expUpgraded: true, expUpgradedDueToLicense: false},
-		{in: RR, allowRC: true, allowRR: false, license: false, expOut: SER, expUpgraded: true, expUpgradedDueToLicense: false},
-		{in: RR, allowRC: false, allowRR: true, license: false, expOut: SER, expUpgraded: true, expUpgradedDueToLicense: true},
-		{in: RR, allowRC: true, allowRR: true, license: false, expOut: SER, expUpgraded: true, expUpgradedDueToLicense: true},
-		{in: RR, allowRC: false, allowRR: false, license: true, expOut: SER, expUpgraded: true, expUpgradedDueToLicense: false},
-		{in: RR, allowRC: true, allowRR: false, license: true, expOut: SER, expUpgraded: true, expUpgradedDueToLicense: false},
-		{in: RR, allowRC: false, allowRR: true, license: true, expOut: RR, expUpgraded: false, expUpgradedDueToLicense: false},
-		{in: RR, allowRC: true, allowRR: true, license: true, expOut: RR, expUpgraded: false, expUpgradedDueToLicense: false},
-		{in: SI, allowRC: false, allowRR: false, license: false, expOut: SER, expUpgraded: true, expUpgradedDueToLicense: false},
-		{in: SI, allowRC: true, allowRR: false, license: false, expOut: SER, expUpgraded: true, expUpgradedDueToLicense: false},
-		{in: SI, allowRC: false, allowRR: true, license: false, expOut: SER, expUpgraded: true, expUpgradedDueToLicense: true},
-		{in: SI, allowRC: true, allowRR: true, license: false, expOut: SER, expUpgraded: true, expUpgradedDueToLicense: true},
-		{in: SI, allowRC: false, allowRR: false, license: true, expOut: SER, expUpgraded: true, expUpgradedDueToLicense: false},
-		{in: SI, allowRC: true, allowRR: false, license: true, expOut: SER, expUpgraded: true, expUpgradedDueToLicense: false},
-		{in: SI, allowRC: false, allowRR: true, license: true, expOut: RR, expUpgraded: false, expUpgradedDueToLicense: false},
-		{in: SI, allowRC: true, allowRR: true, license: true, expOut: RR, expUpgraded: false, expUpgradedDueToLicense: false},
-		{in: SER, allowRC: false, allowRR: false, license: false, expOut: SER, expUpgraded: false, expUpgradedDueToLicense: false},
-		{in: SER, allowRC: true, allowRR: false, license: false, expOut: SER, expUpgraded: false, expUpgradedDueToLicense: false},
-		{in: SER, allowRC: false, allowRR: true, license: false, expOut: SER, expUpgraded: false, expUpgradedDueToLicense: false},
-		{in: SER, allowRC: true, allowRR: true, license: false, expOut: SER, expUpgraded: false, expUpgradedDueToLicense: false},
-		{in: SER, allowRC: false, allowRR: false, license: true, expOut: SER, expUpgraded: false, expUpgradedDueToLicense: false},
-		{in: SER, allowRC: true, allowRR: false, license: true, expOut: SER, expUpgraded: false, expUpgradedDueToLicense: false},
-		{in: SER, allowRC: false, allowRR: true, license: true, expOut: SER, expUpgraded: false, expUpgradedDueToLicense: false},
-		{in: SER, allowRC: true, allowRR: true, license: true, expOut: SER, expUpgraded: false, expUpgradedDueToLicense: false},
+		{in: RU, allowRC: false, allowRR: false, expOut: SER, expUpgraded: true},
+		{in: RU, allowRC: true, allowRR: false, expOut: RC, expUpgraded: true},
+		{in: RU, allowRC: false, allowRR: true, expOut: RR, expUpgraded: true},
+		{in: RU, allowRC: true, allowRR: true, expOut: RC, expUpgraded: true},
+		{in: RC, allowRC: false, allowRR: false, expOut: SER, expUpgraded: true},
+		{in: RC, allowRC: true, allowRR: false, expOut: RC, expUpgraded: false},
+		{in: RC, allowRC: false, allowRR: true, expOut: RR, expUpgraded: true},
+		{in: RC, allowRC: true, allowRR: true, expOut: RC, expUpgraded: false},
+		{in: RR, allowRC: false, allowRR: false, expOut: SER, expUpgraded: true},
+		{in: RR, allowRC: true, allowRR: false, expOut: SER, expUpgraded: true},
+		{in: RR, allowRC: false, allowRR: true, expOut: RR, expUpgraded: false},
+		{in: RR, allowRC: true, allowRR: true, expOut: RR, expUpgraded: false},
+		{in: SI, allowRC: false, allowRR: false, expOut: SER, expUpgraded: true},
+		{in: SI, allowRC: true, allowRR: false, expOut: SER, expUpgraded: true},
+		{in: SI, allowRC: false, allowRR: true, expOut: RR, expUpgraded: false},
+		{in: SI, allowRC: true, allowRR: true, expOut: RR, expUpgraded: false},
+		{in: SER, allowRC: false, allowRR: false, expOut: SER, expUpgraded: false},
+		{in: SER, allowRC: true, allowRR: false, expOut: SER, expUpgraded: false},
+		{in: SER, allowRC: false, allowRR: true, expOut: SER, expUpgraded: false},
+		{in: SER, allowRC: true, allowRR: true, expOut: SER, expUpgraded: false},
 	}
 
 	for _, tc := range testCases {
 		t.Run("", func(t *testing.T) {
-			res, upgraded, upgradedDueToLicense := tc.in.UpgradeToEnabledLevel(
-				tc.allowRC, tc.allowRR, tc.license)
+			res, upgraded := tc.in.UpgradeToEnabledLevel(tc.allowRC, tc.allowRR)
 			require.Equal(t, tc.expOut, res)
 			require.Equal(t, tc.expUpgraded, upgraded)
-			require.Equal(t, tc.expUpgradedDueToLicense, upgradedDueToLicense)
 		})
 	}
 }

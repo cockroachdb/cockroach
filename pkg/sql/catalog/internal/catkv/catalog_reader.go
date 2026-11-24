@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 )
 
 // CatalogReader queries the system tables containing catalog data.
@@ -35,13 +36,20 @@ type CatalogReader interface {
 	// is known to be in the cache.
 	IsIDInCache(id descpb.ID) bool
 
+	// IsCommentInCache return true when the comment is cached for this descriptor.
+	IsCommentInCache(id descpb.ID) bool
+
 	// IsNameInCache return true when all the by-name catalog data for this name
 	// key is known to be in the cache.
-	IsNameInCache(key catalog.NameKey) bool
+	IsNameInCache(key descpb.NameInfo) bool
 
 	// IsDescIDKnownToNotExist returns true when we know that there definitely
 	// exists no descriptor in storage with that ID.
 	IsDescIDKnownToNotExist(id, maybeParentID descpb.ID) bool
+
+	// IsNameKnownToNotExist returns true when we know that there definitely
+	// exists no namespace entry in storage for this name key.
+	IsNameKnownToNotExist(key descpb.NameInfo) bool
 
 	// Reset resets any state that the CatalogReader may hold.
 	Reset(ctx context.Context)
@@ -85,13 +93,15 @@ type CatalogReader interface {
 
 	// GetByIDs reads the system.descriptor, system.comments and system.zone
 	// entries for the desired IDs, but looks in the system database cache
-	// first if there is one.
+	// first if there is one. opts can be used to control which information should
+	// be read, where the default is to WithDescriptor(true) and WithMetaData(true).
 	GetByIDs(
 		ctx context.Context,
 		txn *kv.Txn,
 		ids []descpb.ID,
 		isDescriptorRequired bool,
 		expectedType catalog.DescriptorType,
+		opts ...GetByIDOption,
 	) (nstree.Catalog, error)
 
 	// GetByNames reads the system.namespace entries for the given keys, but
@@ -99,6 +109,19 @@ type CatalogReader interface {
 	GetByNames(
 		ctx context.Context, txn *kv.Txn, nameInfos []descpb.NameInfo,
 	) (nstree.Catalog, error)
+
+	// ScanAllTableIDsInDatabase scans all descriptors and returns the IDs of
+	// tables whose parent_id matches the given database ID. This uses
+	// lightweight proto parsing to extract the parent_id without full
+	// unmarshaling, making it efficient for finding all tables in a specific
+	// database, including dropped tables that don't have namespace entries.
+	ScanAllTableIDsInDatabase(
+		ctx context.Context, txn *kv.Txn, parentDBID descpb.ID,
+	) ([]descpb.ID, error)
+
+	// InvalidateSystemCacheEntry removes a name→ID mapping from the
+	// SystemDatabaseCache, if one is present.
+	InvalidateSystemCacheEntry(key descpb.NameInfo)
 }
 
 // NewUncachedCatalogReader is the constructor for the default
@@ -107,6 +130,51 @@ func NewUncachedCatalogReader(codec keys.SQLCodec) CatalogReader {
 	return &catalogReader{
 		codec: codec,
 	}
+}
+
+// getByIDOptions options supported by GetByID.
+type getByIDOptions struct {
+	withDescriptor bool
+	withZoneConfig bool
+	withComments   bool
+}
+
+// defaultGetByIDOptions are the default options for GetByID.
+var defaultGetByIDOptions = []GetByIDOption{WithDescriptor(true), WithMetaData(true)}
+
+// withDefaultOptions are the default options for GetByID.
+func withDefaultOptions() []GetByIDOption {
+	return defaultGetByIDOptions
+}
+
+// GetByIDOption are options that GetByID supports.
+type GetByIDOption interface {
+	apply(*getByIDOptions)
+}
+
+func WithMetaData(b bool) GetByIDOption {
+	return getByIDWithMetaData(b)
+}
+
+func WithDescriptor(b bool) GetByIDOption {
+	return getByIDWithDescriptor(b)
+}
+
+// getByIDWithMetaData determines if metadata should be fetched.
+type getByIDWithMetaData bool
+
+// apply implements GetByIDOption.
+func (g getByIDWithMetaData) apply(o *getByIDOptions) {
+	o.withComments = bool(g)
+	o.withZoneConfig = bool(g)
+}
+
+// getByIDWithDescriptor determines if the descriptor should be fetched.
+type getByIDWithDescriptor bool
+
+// apply implements GetByIDOption.
+func (g getByIDWithDescriptor) apply(o *getByIDOptions) {
+	o.withDescriptor = bool(g)
 }
 
 // catalogReader implements the CatalogReader interface by building catalogQuery
@@ -135,13 +203,23 @@ func (cr catalogReader) IsIDInCache(_ descpb.ID) bool {
 	return false
 }
 
+// IsCommentInCache is part of the CatalogReader interface.
+func (cr catalogReader) IsCommentInCache(_ descpb.ID) bool {
+	return false
+}
+
 // IsNameInCache is part of the CatalogReader interface.
-func (cr catalogReader) IsNameInCache(_ catalog.NameKey) bool {
+func (cr catalogReader) IsNameInCache(_ descpb.NameInfo) bool {
 	return false
 }
 
 // IsDescIDKnownToNotExist is part of the CatalogReader interface.
 func (cr catalogReader) IsDescIDKnownToNotExist(_, _ descpb.ID) bool {
+	return false
+}
+
+// IsNameKnownToNotExist is part of the CatalogReader interface.
+func (cr catalogReader) IsNameKnownToNotExist(_ descpb.NameInfo) bool {
 	return false
 }
 
@@ -160,6 +238,66 @@ func (cr catalogReader) ScanAll(ctx context.Context, txn *kv.Txn) (nstree.Catalo
 	}
 	return mc.Catalog, nil
 }
+
+// ScanAllTableIDsInDatabase is part of the CatalogReader interface.
+func (cr catalogReader) ScanAllTableIDsInDatabase(
+	ctx context.Context, txn *kv.Txn, parentDBID descpb.ID,
+) ([]descpb.ID, error) {
+	if txn == nil {
+		return nil, errors.AssertionFailedf("nil txn for catalog query")
+	}
+
+	// Scan only the descriptor table (not namespace/comments/zones).
+	b := txn.NewBatch()
+	scan(ctx, b, catalogkeys.MakeAllDescsMetadataKey(cr.codec))
+	if err := txn.Run(ctx, b); err != nil {
+		return nil, err
+	}
+
+	var ids []descpb.ID
+	for _, result := range b.Results {
+		if result.Err != nil {
+			return nil, result.Err
+		}
+		for _, row := range result.Rows {
+			// Extract parent ID from raw bytes without full unmarshaling.
+			descBytes, err := row.Value.GetBytes()
+			if err != nil {
+				return nil, err
+			}
+
+			parentID, isTable, err := descpb.ExtractParentDatabaseID(descBytes)
+			if err != nil {
+				// Log and skip malformed descriptors rather than failing entirely.
+				// If a descriptor is corrupted to the point where we can't extract
+				// the parent database ID or descriptor type, it's unusable and we
+				// won't be able to apply span configs to it anyway. One corrupted
+				// descriptor shouldn't prevent computing span configs for all other
+				// tables. Descriptor corruption is detected separately via
+				// crdb_internal.invalid_objects and telemetry.
+				log.Dev.Warningf(ctx, "failed to extract parent ID from descriptor: %v", err)
+				continue
+			}
+
+			// Skip non-tables and tables with non-matching parent IDs.
+			if !isTable || parentID != parentDBID {
+				continue
+			}
+
+			// Extract the descriptor ID from the key.
+			u32ID, err := cr.codec.DecodeDescMetadataID(row.Key)
+			if err != nil {
+				return nil, err
+			}
+			ids = append(ids, descpb.ID(u32ID))
+		}
+	}
+
+	return ids, nil
+}
+
+// InvalidateSystemCacheEntry is part of the CatalogReader interface.
+func (cr catalogReader) InvalidateSystemCacheEntry(descpb.NameInfo) {}
 
 // getDescriptorIDFromExclusiveKey translates an exclusive upper bound roach key
 // into an upper bound descriptor ID. It does this by turning the key into a
@@ -342,10 +480,18 @@ func (cr catalogReader) GetByIDs(
 	ids []descpb.ID,
 	isDescriptorRequired bool,
 	expectedType catalog.DescriptorType,
+	opts ...GetByIDOption,
 ) (nstree.Catalog, error) {
 	var mc nstree.MutableCatalog
 	if len(ids) == 0 {
 		return nstree.Catalog{}, nil
+	}
+	var options getByIDOptions
+	if len(opts) == 0 {
+		opts = withDefaultOptions()
+	}
+	for _, opt := range opts {
+		opt.apply(&options)
 	}
 	cq := catalogQuery{
 		codec:                cr.codec,
@@ -359,22 +505,34 @@ func (cr catalogReader) GetByIDs(
 		forEachDescriptorIDSpan(ids, func(startID descpb.ID, endID descpb.ID) {
 			// Only a single descriptor run, so generate a Get request.
 			if startID == endID {
-				get(ctx, b, catalogkeys.MakeDescMetadataKey(codec, startID))
-				for _, t := range catalogkeys.AllCommentTypes {
-					scan(ctx, b, catalogkeys.MakeObjectCommentsMetadataPrefix(codec, t, startID))
+				if options.withDescriptor {
+					get(ctx, b, catalogkeys.MakeDescMetadataKey(codec, startID))
 				}
-				get(ctx, b, config.MakeZoneKey(codec, startID))
+				if options.withComments {
+					for _, t := range catalogkeys.AllCommentTypes {
+						scan(ctx, b, catalogkeys.MakeObjectCommentsMetadataPrefix(codec, t, startID))
+					}
+				}
+				if options.withZoneConfig {
+					get(ctx, b, config.MakeZoneKey(codec, startID))
+				}
 			} else {
 				// Otherwise, generate a Scan request instead. The end key is exclusive,
 				// so we will need to increment the endID.
-				scanRange(ctx, b, catalogkeys.MakeDescMetadataKey(codec, startID),
-					catalogkeys.MakeDescMetadataKey(codec, endID+1))
-				for _, t := range catalogkeys.AllCommentTypes {
-					scanRange(ctx, b, catalogkeys.MakeObjectCommentsMetadataPrefix(codec, t, startID),
-						catalogkeys.MakeObjectCommentsMetadataPrefix(codec, t, endID+1))
+				if options.withDescriptor {
+					scanRange(ctx, b, catalogkeys.MakeDescMetadataKey(codec, startID),
+						catalogkeys.MakeDescMetadataKey(codec, endID+1))
 				}
-				scanRange(ctx, b, config.MakeZoneKey(codec, startID),
-					config.MakeZoneKey(codec, endID+1))
+				if options.withComments {
+					for _, t := range catalogkeys.AllCommentTypes {
+						scanRange(ctx, b, catalogkeys.MakeObjectCommentsMetadataPrefix(codec, t, startID),
+							catalogkeys.MakeObjectCommentsMetadataPrefix(codec, t, endID+1))
+					}
+				}
+				if options.withZoneConfig {
+					scanRange(ctx, b, config.MakeZoneKey(codec, startID),
+						config.MakeZoneKey(codec, endID+1))
+				}
 			}
 		})
 	})

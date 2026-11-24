@@ -85,6 +85,23 @@ var (
 	// index is created. This includes both regular and inverted expression
 	// indexes.
 	ExpressionIndexCounter = telemetry.GetCounterOnce("sql.schema.expression_index")
+
+	// VectorIndexCounter is to be incremented every time a vector index is
+	// created. This includes single-column vector indexes, multi-column vector
+	// indexes, and partial vector indexes.
+	VectorIndexCounter = telemetry.GetCounterOnce("sql.schema.vector_index")
+
+	// PartialVectorIndexCounter is to be incremented every time a partial vector
+	// index is created.
+	PartialVectorIndexCounter = telemetry.GetCounterOnce("sql.schema.partial_vector_index")
+
+	// PartitionedVectorIndexCounter is to be incremented every time a partitioned
+	// vector index is created.
+	PartitionedVectorIndexCounter = telemetry.GetCounterOnce("sql.schema.partitioned_vector_index")
+
+	// MultiColumnVectorIndexCounter is to be incremented every time a
+	// multi-column vector index is created.
+	MultiColumnVectorIndexCounter = telemetry.GetCounterOnce("sql.schema.multi_column_vector_index")
 )
 
 // SchemaChangeIndexCounter is to be incremented for certain CREATE
@@ -214,3 +231,27 @@ var DDLOnlyTransactionSuccessCounter = telemetry.GetCounterOnce("sql.schema.tran
 // DDLOnlyTransactionFailureCounter is incremented whenever an explicit
 // transaction that has only DDL statements fails.
 var DDLOnlyTransactionFailureCounter = telemetry.GetCounterOnce("sql.schema.transaction.ddl_only.failure")
+
+var (
+	// EnableRLSCounter is incremented when row-level security is enabled on a
+	// table via ALTER TABLE ... ENABLE ROW LEVEL SECURITY.
+	EnableRLSCounter = telemetry.GetCounterOnce("sql.schema.enable_rls")
+
+	// DisableRLSCounter is incremented when row-level security is disabled on a
+	// table via ALTER TABLE ... DISABLE ROW LEVEL SECURITY.
+	DisableRLSCounter = telemetry.GetCounterOnce("sql.schema.disable_rls")
+
+	// ForceRLSCounter is incremented when row-level security is forced on a
+	// table via ALTER TABLE ... FORCE ROW LEVEL SECURITY.
+	ForceRLSCounter = telemetry.GetCounterOnce("sql.schema.force_rls")
+
+	// NoForceRLSCounter is incremented when row-level security force is removed
+	// from a table via ALTER TABLE ... NO FORCE ROW LEVEL SECURITY.
+	NoForceRLSCounter = telemetry.GetCounterOnce("sql.schema.no_force_rls")
+)
+
+// SubsetUniqueForeignKeysUseCounter is incremented every time a foreign key is
+// created that is backed by a unique constraint covering only a strict subset
+// of the FK's referenced columns. This is a CRDB extension over the SQL
+// standard and PostgreSQL, which require an exact match.
+var SubsetUniqueForeignKeysUseCounter = telemetry.GetCounterOnce("sql.schema.subset_unique_foreign_keys")

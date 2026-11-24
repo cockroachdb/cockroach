@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/pebble/vfs"
@@ -32,16 +33,16 @@ func TestMinVersion(t *testing.T) {
 	require.NoError(t, mem.MkdirAll(dir, os.ModeDir))
 
 	// Expect !ok min version file doesn't exist.
-	v, ok, err := getMinVersion(mem, dir)
+	v, ok, err := fs.GetMinVersion(mem, dir)
 	require.NoError(t, err)
 	require.Equal(t, roachpb.Version{}, v)
 	require.False(t, ok)
 
 	// Expect min version to not be at least any target version.
-	ok, err = MinVersionIsAtLeastTargetVersion(mem, dir, version1)
+	ok, err = fs.MinVersionIsAtLeastTargetVersion(mem, dir, version1)
 	require.NoError(t, err)
 	require.False(t, ok)
-	ok, err = MinVersionIsAtLeastTargetVersion(mem, dir, version2)
+	ok, err = fs.MinVersionIsAtLeastTargetVersion(mem, dir, version2)
 	require.NoError(t, err)
 	require.False(t, ok)
 
@@ -49,16 +50,16 @@ func TestMinVersion(t *testing.T) {
 	require.NoError(t, writeMinVersionFile(mem, dir, version1))
 
 	// Expect min version to be version1.
-	v, ok, err = getMinVersion(mem, dir)
+	v, ok, err = fs.GetMinVersion(mem, dir)
 	require.NoError(t, err)
 	require.True(t, ok)
 	require.True(t, version1.Equal(v))
 
 	// Expect min version to be at least version1 but not version2.
-	ok, err = MinVersionIsAtLeastTargetVersion(mem, dir, version1)
+	ok, err = fs.MinVersionIsAtLeastTargetVersion(mem, dir, version1)
 	require.NoError(t, err)
 	require.True(t, ok)
-	ok, err = MinVersionIsAtLeastTargetVersion(mem, dir, version2)
+	ok, err = fs.MinVersionIsAtLeastTargetVersion(mem, dir, version2)
 	require.NoError(t, err)
 	require.False(t, ok)
 
@@ -66,22 +67,22 @@ func TestMinVersion(t *testing.T) {
 	require.NoError(t, writeMinVersionFile(mem, dir, version2))
 
 	// Expect min version to be at least version1 and version2.
-	ok, err = MinVersionIsAtLeastTargetVersion(mem, dir, version1)
+	ok, err = fs.MinVersionIsAtLeastTargetVersion(mem, dir, version1)
 	require.NoError(t, err)
 	require.True(t, ok)
-	ok, err = MinVersionIsAtLeastTargetVersion(mem, dir, version2)
+	ok, err = fs.MinVersionIsAtLeastTargetVersion(mem, dir, version2)
 	require.NoError(t, err)
 	require.True(t, ok)
 
 	// Expect min version to be version2.
-	v, ok, err = getMinVersion(mem, dir)
+	v, ok, err = fs.GetMinVersion(mem, dir)
 	require.NoError(t, err)
 	require.True(t, ok)
 	require.True(t, version2.Equal(v))
 
 	// Expect no-op when trying to update min version to a lower version.
 	require.NoError(t, writeMinVersionFile(mem, dir, version1))
-	v, ok, err = getMinVersion(mem, dir)
+	v, ok, err = fs.GetMinVersion(mem, dir)
 	require.NoError(t, err)
 	require.True(t, ok)
 	require.True(t, version2.Equal(v))
@@ -91,7 +92,13 @@ func TestSetMinVersion(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	p, err := Open(context.Background(), InMemory(), cluster.MakeClusterSettings(), CacheSize(0))
+	settings := cluster.MakeClusterSettings()
+	e, err := fs.InitEnv(context.Background(), vfs.NewMem(), "" /* dir */, fs.EnvConfig{
+		Version: settings.Version,
+	}, nil /* diskWriteStats */)
+	// In practice InitEnv is infallible with this configuration.
+	require.NoError(t, err)
+	p, err := Open(context.Background(), e, settings, CacheSize(0))
 	require.NoError(t, err)
 	defer p.Close()
 	require.Equal(t, MinimumSupportedFormatVersion, p.db.FormatMajorVersion())
@@ -110,15 +117,16 @@ func TestMinVersion_IsNotEncrypted(t *testing.T) {
 	// Replace the NewEncryptedEnvFunc global for the duration of this
 	// test. We'll use it to initialize a test caesar cipher
 	// encryption-at-rest implementation.
-	oldNewEncryptedEnvFunc := fs.NewEncryptedEnvFunc
-	defer func() { fs.NewEncryptedEnvFunc = oldNewEncryptedEnvFunc }()
-	fs.NewEncryptedEnvFunc = fauxNewEncryptedEnvFunc
+	oldNewEncryptedEnvFunc := fs.NewEncryptedEnv
+	defer func() { fs.NewEncryptedEnv = oldNewEncryptedEnvFunc }()
+	fs.NewEncryptedEnv = fauxNewEncryptedEnvFunc
 
 	ctx := context.Background()
 	st := cluster.MakeClusterSettings()
 	baseFS := vfs.NewMem()
 	env, err := fs.InitEnv(ctx, baseFS, "", fs.EnvConfig{
-		EncryptionOptions: []byte("foo"),
+		EncryptionOptions: &storageconfig.EncryptionOptions{},
+		Version:           st.Version,
 	}, nil /* statsCollector */)
 	require.NoError(t, err)
 
@@ -129,14 +137,18 @@ func TestMinVersion_IsNotEncrypted(t *testing.T) {
 
 	// Reading the file directly through the unencrypted MemFS should
 	// succeed and yield the correct version.
-	v, ok, err := getMinVersion(env.UnencryptedFS, "")
+	v, ok, err := fs.GetMinVersion(env.UnencryptedFS, "")
 	require.NoError(t, err)
 	require.True(t, ok)
 	require.Equal(t, st.Version.LatestVersion(), v)
 }
 
 func fauxNewEncryptedEnvFunc(
-	unencryptedFS vfs.FS, fr *fs.FileRegistry, dbDir string, readOnly bool, optionBytes []byte,
+	unencryptedFS vfs.FS,
+	fr *fs.FileRegistry,
+	dbDir string,
+	readOnly bool,
+	_ *storageconfig.EncryptionOptions,
 ) (*fs.EncryptionEnv, error) {
 	return &fs.EncryptionEnv{
 		Closer: nopCloser{},

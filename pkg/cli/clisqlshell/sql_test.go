@@ -218,7 +218,6 @@ func Example_misc_table() {
 	//            info
 	// --------------------------
 	//   distribution: local
-	//   vectorized: true
 	//
 	//   • render
 	//   │
@@ -226,7 +225,7 @@ func Example_misc_table() {
 	//         missing stats
 	//         table: t@t_pkey
 	//         spans: FULL SCAN
-	// (9 rows)
+	// (8 rows)
 }
 
 func Example_in_memory() {
@@ -356,6 +355,53 @@ func Example_includes() {
 	// sql -f testdata/i_maxrecursion.sql
 	// ERROR: \i: too many recursion levels (max 10)
 	// ERROR: testdata/i_maxrecursion.sql: testdata/i_maxrecursion.sql: testdata/i_maxrecursion.sql: testdata/i_maxrecursion.sql: testdata/i_maxrecursion.sql: testdata/i_maxrecursion.sql: testdata/i_maxrecursion.sql: testdata/i_maxrecursion.sql: testdata/i_maxrecursion.sql: testdata/i_maxrecursion.sql: \i: too many recursion levels (max 10)
+}
+
+// Example_sql_restrict tests the \restrict and \unrestrict metacommands,
+// which mirror psql's CVE-2025-8714 mitigation by blocking all backslash
+// metacommands except \unrestrict while restricted mode is active.
+func Example_sql_restrict() {
+	c := cli.NewCLITest(cli.TestCLIParams{})
+	defer c.Cleanup()
+
+	// Missing argument is rejected.
+	c.RunWithArgs([]string{`sql`, `-e`, `\restrict`})
+	c.RunWithArgs([]string{`sql`, `-e`, `\unrestrict`})
+
+	// \unrestrict outside of restricted mode is rejected.
+	c.RunWithArgs([]string{`sql`, `-e`, `\unrestrict somekey`})
+
+	// While restricted, other metacommands are blocked but SQL still runs.
+	c.RunWithArgs([]string{`sql`, `-e`, `\restrict mykey`, `-e`, `select 42 as n`, `-e`, `\echo hi`})
+
+	// Wrong key on \unrestrict is rejected.
+	c.RunWithArgs([]string{`sql`, `-e`, `\restrict mykey`, `-e`, `\unrestrict wrong`})
+
+	// Re-running \restrict while already restricted is rejected by the
+	// pre-dispatch check (the in-handler "already in restricted mode" error
+	// is defense-in-depth and not reachable from this path).
+	c.RunWithArgs([]string{`sql`, `-e`, `\restrict mykey`, `-e`, `\restrict other`})
+
+	// Correct key exits restricted mode and \echo works again.
+	c.RunWithArgs([]string{`sql`, `-e`, `\restrict mykey`, `-e`, `\unrestrict mykey`, `-e`, `\echo hi`})
+
+	// Output:
+	// sql -e \restrict
+	// ERROR: -e: \restrict: missing required argument
+	// sql -e \unrestrict
+	// ERROR: -e: \unrestrict: missing required argument
+	// sql -e \unrestrict somekey
+	// ERROR: -e: \unrestrict: not currently in restricted mode
+	// sql -e \restrict mykey -e select 42 as n -e \echo hi
+	// n
+	// 42
+	// ERROR: -e: backslash commands are restricted; only \unrestrict is allowed
+	// sql -e \restrict mykey -e \unrestrict wrong
+	// ERROR: -e: \unrestrict: wrong key
+	// sql -e \restrict mykey -e \restrict other
+	// ERROR: -e: backslash commands are restricted; only \unrestrict is allowed
+	// sql -e \restrict mykey -e \unrestrict mykey -e \echo hi
+	// hi
 }
 
 // Example_sql_lex tests the usage of the lexer in the sql subcommand.
@@ -488,7 +534,7 @@ func TestAutoTraceInAutoRunStatements(t *testing.T) {
 	if !strings.HasPrefix(out, strings.Join(stmt, " ")+"\n?column?\nhello") {
 		t.Errorf("output does not start with statement result")
 	}
-	if !strings.Contains(out, "SPAN START") {
+	if !strings.Contains(out, "=== operation:") {
 		t.Errorf("output does not contain trace")
 	}
 }

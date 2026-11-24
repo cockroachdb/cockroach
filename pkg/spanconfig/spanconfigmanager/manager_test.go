@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/jobutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -104,7 +105,7 @@ func TestManagerConcurrentJobCreation(t *testing.T) {
 
 	var g errgroup.Group
 	g.Go(func() error {
-		started, err := manager.TestingCreateAndStartJobIfNoneExists(ctx)
+		started, err := manager.TestingCreateAndStartJobIfNoneExists(ctx, ts.ClusterSettings())
 		if err != nil {
 			return err
 		}
@@ -117,7 +118,7 @@ func TestManagerConcurrentJobCreation(t *testing.T) {
 		// Only try to start the job if the first goroutine has reached the testing
 		// knob and is blocked.
 		<-isBlocked
-		started, err := manager.TestingCreateAndStartJobIfNoneExists(ctx)
+		started, err := manager.TestingCreateAndStartJobIfNoneExists(ctx, ts.ClusterSettings())
 		if err != nil {
 			return err
 		}
@@ -172,7 +173,7 @@ func TestManagerStartsJobIfFailed(t *testing.T) {
 	_, err = db.Exec(
 		`INSERT INTO system.jobs (id, status) VALUES ($1, $2)`,
 		id,
-		jobs.StatusFailed,
+		jobs.StateFailed,
 	)
 	require.NoError(t, err)
 	_, err = db.Exec(
@@ -183,7 +184,7 @@ func TestManagerStartsJobIfFailed(t *testing.T) {
 	)
 	require.NoError(t, err)
 
-	started, err := manager.TestingCreateAndStartJobIfNoneExists(ctx)
+	started, err := manager.TestingCreateAndStartJobIfNoneExists(ctx, ts.ClusterSettings())
 	require.NoError(t, err)
 	require.True(t, started)
 }
@@ -251,8 +252,6 @@ func TestReconciliationJobIsIdle(t *testing.T) {
 	var jobID jobspb.JobID
 	ctx := context.Background()
 	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109457),
-
 		Knobs: base.TestingKnobs{
 			SpanConfig: &spanconfig.TestingKnobs{
 				ManagerCreatedJobInterceptor: func(jobI interface{}) {
@@ -303,7 +302,7 @@ func TestReconciliationJobErrorAndRecovery(t *testing.T) {
 				ManagerDisableJobCreation:                      true, // disable the automatic job creation
 				JobDisableInternalRetry:                        true,
 				SQLWatcherCheckpointNoopsEveryDurationOverride: 100 * time.Millisecond,
-				JobOnCheckpointInterceptor: func() error {
+				JobOnCheckpointInterceptor: func(_ hlc.Timestamp) error {
 					mu.Lock()
 					defer mu.Unlock()
 
@@ -331,7 +330,7 @@ func TestReconciliationJobErrorAndRecovery(t *testing.T) {
 		},
 	)
 
-	started, err := manager.TestingCreateAndStartJobIfNoneExists(ctx)
+	started, err := manager.TestingCreateAndStartJobIfNoneExists(ctx, ts.ClusterSettings())
 	require.NoError(t, err)
 	require.True(t, started)
 
@@ -348,21 +347,81 @@ func TestReconciliationJobErrorAndRecovery(t *testing.T) {
 	mu.err = errors.New("injected")
 	mu.Unlock()
 
-	waitForJobStatus(t, tdb, jobID, jobs.StatusFailed)
+	waitForJobState(t, tdb, jobID, jobs.StateFailed)
 
 	mu.Lock()
 	mu.err = nil
 	mu.Unlock()
 
-	started, err = manager.TestingCreateAndStartJobIfNoneExists(ctx)
+	started, err = manager.TestingCreateAndStartJobIfNoneExists(ctx, ts.ClusterSettings())
 	require.NoError(t, err)
 	require.True(t, started)
 
-	waitForJobStatus(t, tdb, jobID, jobs.StatusRunning)
+	waitForJobState(t, tdb, jobID, jobs.StateRunning)
 
 	mu.Lock()
 	require.True(t, mu.lastStartTS.IsEmpty(), "expected reconciler to start with empty checkpoint")
 	mu.Unlock()
+}
+
+// TestReconciliationJobFinalErrorIncludesCause verifies that the reconciliation
+// job surfaces the last reconciliation error when internal retries are exhausted.
+func TestReconciliationJobFinalErrorIncludesCause(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	const injectedErrMsg = "injected reconciliation failure"
+	injectedErr := errors.New(injectedErrMsg)
+
+	var jobID jobspb.JobID
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SpanConfig: &spanconfig.TestingKnobs{
+				ManagerDisableJobCreation: true, // disable automatic job creation; we'll create one explicitly
+				JobDisableInternalRetry:   true,
+				JobOnCheckpointInterceptor: func(_ hlc.Timestamp) error {
+					return injectedErr
+				},
+			},
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+	ts := srv.ApplicationLayer()
+
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	manager := spanconfigmanager.New(
+		ts.InternalDB().(isql.DB),
+		ts.JobRegistry().(*jobs.Registry),
+		ts.AppStopper(),
+		ts.ClusterSettings(),
+		ts.SpanConfigReconciler().(spanconfig.Reconciler),
+		&spanconfig.TestingKnobs{
+			ManagerCreatedJobInterceptor: func(jobI interface{}) {
+				jobID = jobI.(*jobs.Job).ID()
+			},
+		},
+	)
+
+	started, err := manager.TestingCreateAndStartJobIfNoneExists(ctx, ts.ClusterSettings())
+	require.NoError(t, err)
+	require.True(t, started)
+
+	testutils.SucceedsSoon(t, func() error {
+		if jobID == 0 {
+			return errors.New("waiting for job to be created")
+		}
+		return nil
+	})
+
+	waitForJobState(t, tdb, jobID, jobs.StateFailed)
+
+	payload := jobutils.GetJobPayload(t, tdb, jobID)
+	require.NotNil(t, payload.FinalResumeError)
+	decodedErr := errors.DecodeError(ctx, *payload.FinalResumeError)
+	require.ErrorContains(t, decodedErr, "reconciliation unsuccessful, failing job")
+	require.ErrorContains(t, decodedErr, injectedErrMsg)
 }
 
 // TestReconciliationUsesRightCheckpoint verifies that the reconciliation
@@ -388,7 +447,7 @@ func TestReconciliationUsesRightCheckpoint(t *testing.T) {
 				},
 				ManagerDisableJobCreation:                      true, // disable the automatic job creation
 				SQLWatcherCheckpointNoopsEveryDurationOverride: 10 * time.Millisecond,
-				JobOnCheckpointInterceptor: func() error {
+				JobOnCheckpointInterceptor: func(_ hlc.Timestamp) error {
 					select {
 					case err := <-errCh:
 						return err
@@ -421,7 +480,7 @@ func TestReconciliationUsesRightCheckpoint(t *testing.T) {
 		nil,
 	)
 
-	started, err := manager.TestingCreateAndStartJobIfNoneExists(ctx)
+	started, err := manager.TestingCreateAndStartJobIfNoneExists(ctx, ts.ClusterSettings())
 	require.NoError(t, err)
 	require.True(t, started)
 
@@ -457,14 +516,12 @@ func TestReconciliationUsesRightCheckpoint(t *testing.T) {
 	})
 }
 
-func waitForJobStatus(
-	t *testing.T, tdb *sqlutils.SQLRunner, jobID jobspb.JobID, status jobs.Status,
-) {
+func waitForJobState(t *testing.T, tdb *sqlutils.SQLRunner, jobID jobspb.JobID, status jobs.State) {
 	testutils.SucceedsSoon(t, func() error {
 		var jobStatus string
 		tdb.QueryRow(t, `SELECT status FROM system.jobs WHERE id = $1`, jobID).Scan(&jobStatus)
 
-		if jobs.Status(jobStatus) != status {
+		if jobs.State(jobStatus) != status {
 			return errors.Newf("expected jobID %d to have status %, got %s", jobID, status, jobStatus)
 		}
 		return nil

@@ -22,7 +22,6 @@ const insightEventBaseFixture: InsightEventBase = {
   cpuSQLNanos: 25000000000,
   elapsedTimeMillis: 127.0,
   endTime: moment.utc("2021-12-10T05:06:07"),
-  implicitTxn: true,
   insights: [
     {
       name: InsightNameEnum.SLOW_EXECUTION,
@@ -51,7 +50,7 @@ const insightEventBaseFixture: InsightEventBase = {
   errorMsg: "",
 };
 
-const insightEventFixture: StmtInsightEvent = Object.assign(
+export const insightEventFixture: StmtInsightEvent = Object.assign(
   insightEventBaseFixture,
   {
     statementExecutionID: "17a8d80bd38900b80000000000000005",
@@ -88,10 +87,6 @@ export const getStatementInsightPropsFixture =
         fixedWindowEnd: moment.utc("2021-12-12"),
         key: "Custom",
       },
-      insightEventDetails: insightEventFixture,
-      insightError: null,
-      hasAdminRole: true,
       setTimeScale: noop,
-      refreshUserSQLRoles: noop,
     };
   };

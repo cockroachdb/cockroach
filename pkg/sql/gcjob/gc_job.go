@@ -125,7 +125,7 @@ func deleteTableData(
 	ctx context.Context, cfg *sql.ExecutorConfig, progress *jobspb.SchemaChangeGCProgress,
 ) error {
 	if log.ExpensiveLogEnabled(ctx, 2) {
-		log.Infof(ctx, "GC is being considered for tables: %+v", progress.Tables)
+		log.Dev.Infof(ctx, "GC is being considered for tables: %+v", progress.Tables)
 	}
 	for _, droppedTable := range progress.Tables {
 		var table catalog.TableDescriptor
@@ -136,7 +136,7 @@ func deleteTableData(
 			if isMissingDescriptorError(err) {
 				// This can happen if another GC job created for the same table got to
 				// the table first. See #50344.
-				log.Warningf(ctx, "table descriptor %d not found while attempting to GC, skipping", droppedTable.ID)
+				log.Dev.Warningf(ctx, "table descriptor %d not found while attempting to GC, skipping", droppedTable.ID)
 				// Update the details payload to indicate that the table was dropped.
 				markTableGCed(ctx, droppedTable.ID, progress, jobspb.SchemaChangeGCProgress_CLEARED)
 				continue
@@ -233,7 +233,7 @@ func unsplitRangesInSpanForSecondaryTenant(
 			// but this means in some cases the user may be left
 			// with empty, unmergable ranges.
 			if !execCfg.Codec.ForSystemTenant() && grpcutil.IsAuthError(err) {
-				log.Warningf(ctx, "failed to unsplit range at %s: %s", key, err)
+				log.Dev.Warningf(ctx, "failed to unsplit range at %s: %s", key, err)
 				continue
 			}
 			return err
@@ -331,7 +331,7 @@ func maybeUnsplitRanges(
 	}
 
 	progress.RangesUnsplitDone = true
-	persistProgress(ctx, execCfg, job, progress, runningStatusGC(progress))
+	persistProgress(ctx, execCfg, job, progress, statusGC(progress))
 
 	return nil
 }
@@ -383,7 +383,7 @@ func (r schemaChangeGCResumer) deleteDataAndWaitForGC(
 	progress *jobspb.SchemaChangeGCProgress,
 ) error {
 	persistProgress(ctx, &execCfg, r.job, progress,
-		sql.RunningStatusDeletingData)
+		sql.StatusDeletingData)
 	if fn := execCfg.GCJobTestingKnobs.RunBeforePerformGC; fn != nil {
 		if err := fn(r.job.ID()); err != nil {
 			return err
@@ -392,12 +392,12 @@ func (r schemaChangeGCResumer) deleteDataAndWaitForGC(
 	if err := deleteData(ctx, &execCfg, details, progress); err != nil {
 		return err
 	}
-	persistProgress(ctx, &execCfg, r.job, progress, sql.RunningStatusWaitingForMVCCGC)
+	persistProgress(ctx, &execCfg, r.job, progress, sql.StatusWaitingForMVCCGC)
 	r.job.MarkIdle(true)
-	return waitForGC(ctx, &execCfg, details, progress)
+	return r.waitForGC(ctx, &execCfg, details, progress)
 }
 
-func waitForGC(
+func (r schemaChangeGCResumer) waitForGC(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
 	details *jobspb.SchemaChangeGCDetails,
@@ -411,7 +411,7 @@ func waitForGC(
 		)
 	case details.Tables != nil:
 		return errors.Wrap(
-			deleteTableDescriptorsAfterGC(ctx, execCfg, details, progress),
+			deleteTableDescriptorsAfterGC(ctx, execCfg, r.job, details, progress),
 			"attempted to delete table data",
 		)
 	default:
@@ -426,7 +426,6 @@ var EmptySpanPollInterval = settings.RegisterDurationSetting(
 	"sql.gc_job.wait_for_gc.interval",
 	"interval at which the GC job should poll to see if the deleted data has been GC'd",
 	5*time.Minute,
-	settings.NonNegativeDuration,
 )
 
 func waitForEmptyPrefix(
@@ -438,7 +437,7 @@ func waitForEmptyPrefix(
 	prefix roachpb.Key,
 ) error {
 	if skipWaiting {
-		log.Infof(ctx, "not waiting for MVCC GC in %v due to testing knob", prefix)
+		log.Dev.Infof(ctx, "not waiting for MVCC GC in %v due to testing knob", prefix)
 		return nil
 	}
 	var timer timeutil.Timer
@@ -456,7 +455,6 @@ func waitForEmptyPrefix(
 		timer.Reset(EmptySpanPollInterval.Get(sv))
 		select {
 		case <-timer.C:
-			timer.Read = true
 			if empty, err := checkForEmptySpan(
 				ctx, db, prefix, prefix.PrefixEnd(),
 			); empty || err != nil {
@@ -536,7 +534,7 @@ func (r schemaChangeGCResumer) legacyWaitAndClearTableData(
 
 		if expired {
 			// Some elements have been marked as DELETING to save the progress.
-			persistProgress(ctx, &execCfg, r.job, progress, runningStatusGC(progress))
+			persistProgress(ctx, &execCfg, r.job, progress, statusGC(progress))
 			if fn := execCfg.GCJobTestingKnobs.RunBeforePerformGC; fn != nil {
 				if err := fn(r.job.ID()); err != nil {
 					return err
@@ -545,7 +543,7 @@ func (r schemaChangeGCResumer) legacyWaitAndClearTableData(
 			if err := performGC(ctx, &execCfg, details, progress); err != nil {
 				return err
 			}
-			persistProgress(ctx, &execCfg, r.job, progress, sql.RunningStatusWaitingGC)
+			persistProgress(ctx, &execCfg, r.job, progress, sql.StatusWaitingGC)
 
 			// Trigger immediate re-run in case of more expired elements.
 			timerDuration = 0
@@ -600,20 +598,18 @@ func waitForWork(
 	wait := func() (done bool) {
 		select {
 		case <-markIdleTimer.Ch():
-			markIdleTimer.MarkRead()
 			markIdle(true)
 			markedIdle = true
 			return false
 
 		case <-gossipUpdateC:
 			if log.V(2) {
-				log.Info(ctx, "received a new system config")
+				log.Dev.Info(ctx, "received a new system config")
 			}
 
 		case <-workTimer.Ch():
-			workTimer.MarkRead()
 			if log.V(2) {
-				log.Info(ctx, "SchemaChangeGC workTimer triggered")
+				log.Dev.Info(ctx, "SchemaChangeGC workTimer triggered")
 			}
 
 		case <-ctx.Done():

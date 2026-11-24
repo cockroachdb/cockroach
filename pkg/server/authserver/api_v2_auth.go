@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -239,7 +240,7 @@ func (a *authenticationV2Server) logout(w http.ResponseWriter, r *http.Request) 
 		err := status.Errorf(
 			codes.InvalidArgument,
 			"session with id %d nonexistent", sessionCookie.ID)
-		log.Infof(ctx, "%v", err)
+		log.Dev.Infof(ctx, "%v", err)
 		http.Error(w, "invalid session", http.StatusBadRequest)
 		return
 	}
@@ -294,12 +295,12 @@ func (a *authenticationV2Mux) getSession(
 	} else {
 		decoded, err := base64.StdEncoding.DecodeString(rawSession)
 		if err != nil {
-			log.Warningf(ctx, "attempted to decode session but failed: %v", err)
+			log.Dev.Warningf(ctx, "attempted to decode session but failed: %v", err)
 			return "", nil, http.StatusBadRequest, err
 		}
 		err = protoutil.Unmarshal(decoded, cookie)
 		if err != nil {
-			log.Warningf(ctx, "attempted to unmarshal session but failed: %v", err)
+			log.Dev.Warningf(ctx, "attempted to unmarshal session but failed: %v", err)
 		}
 	}
 	if err != nil {
@@ -351,7 +352,7 @@ const (
 	ViewClusterMetadataRole
 )
 
-type authzAccessorFactory func(ctx context.Context, opName string) (_ sql.AuthorizationAccessor, cleanup func())
+type authzAccessorFactory func(ctx context.Context, opName redact.SafeString) (_ sql.AuthorizationAccessor, cleanup func())
 
 // roleAuthorizationMux enforces a role (eg. type of user) for an arbitrary
 // inner mux. Meant to be used under authenticationV2Mux. If the logged-in user

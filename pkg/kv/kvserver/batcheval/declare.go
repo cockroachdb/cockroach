@@ -171,7 +171,10 @@ func DeclareKeysForRefresh(
 func DeclareKeysForBatch(
 	rs ImmutableRangeState, header *kvpb.Header, latchSpans *spanset.SpanSet,
 ) error {
-	if header.Txn != nil {
+	// If the batch is transactional and has acquired locks, we will check if the
+	// transaction has been aborted during evaluation (see checkIfTxnAborted), so
+	// declare a read latch on the AbortSpan key.
+	if header.Txn != nil && header.Txn.IsLocking() {
 		header.Txn.AssertInitialized(context.TODO())
 		latchSpans.AddNonMVCC(spanset.SpanReadOnly, roachpb.Span{
 			Key: keys.AbortSpanKey(rs.GetRangeID(), header.Txn.ID),
@@ -208,7 +211,7 @@ type CommandArgs struct {
 	// ScanStats should be mutated to reflect Get, Scan, ReverseScan,
 	// ExportRequest reads made by the command.
 	ScanStats             *kvpb.ScanStats
-	Concurrency           *concurrency.Guard
+	Concurrency           concurrency.Guard
 	Uncertainty           uncertainty.Interval
 	DontInterleaveIntents bool
 	OmitInRangefeeds      bool

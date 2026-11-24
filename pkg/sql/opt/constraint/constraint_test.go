@@ -1229,7 +1229,8 @@ func TestExtractNotNullCols(t *testing.T) {
 	for i, tc := range testData {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			c := ParseConstraint(&evalCtx, tc.c)
-			cols := c.ExtractNotNullCols(ctx, &evalCtx)
+			var cols opt.ColSet
+			c.ExtractNotNullCols(ctx, &evalCtx, &cols)
 			if exp := opt.MakeColSet(tc.e...); !cols.Equals(exp) {
 				t.Errorf("expected %s; got %s", exp, cols)
 			}

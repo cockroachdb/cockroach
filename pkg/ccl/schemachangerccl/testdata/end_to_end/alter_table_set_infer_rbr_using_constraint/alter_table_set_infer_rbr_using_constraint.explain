@@ -1,0 +1,61 @@
+/* setup */
+SET CLUSTER SETTING feature.infer_rbr_region_col_using_constraint.enabled = true;
+CREATE DATABASE multiregion_db PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3";
+USE multiregion_db;
+CREATE TABLE multiregion_db.public.parent (region multiregion_db.public.crdb_internal_region, k INT, PRIMARY KEY (region, k));
+CREATE TABLE multiregion_db.public.rbr (
+  pk INT PRIMARY KEY,
+  region multiregion_db.public.crdb_internal_region NOT NULL,
+  data INT,
+  CONSTRAINT fk_region FOREIGN KEY (region, pk) REFERENCES multiregion_db.public.parent (region, k) MATCH FULL,
+  CONSTRAINT fk_region2 FOREIGN KEY (region, data) REFERENCES multiregion_db.public.parent (region, k) MATCH FULL
+) LOCALITY REGIONAL BY ROW AS region;
+ALTER TABLE multiregion_db.public.rbr SET (infer_rbr_region_col_using_constraint = 'fk_region');
+
+/* test */
+EXPLAIN (DDL) ALTER TABLE multiregion_db.public.rbr SET (infer_rbr_region_col_using_constraint = 'fk_region2');
+----
+Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹rbr› SET ('infer_rbr_region_col_using_constraint' = ‹'fk_region2'›);
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 1 element transitioning toward PUBLIC
+ │         │    └── ABSENT → PUBLIC TableLocalityRegionalByRowUsingConstraint:{DescID: 109 (rbr), ConstraintID: 3 (fk_region2)}
+ │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │         │    └── PUBLIC → ABSENT TableSchemaLocked:{DescID: 109 (rbr)}
+ │         ├── 1 element transitioning toward ABSENT
+ │         │    └── PUBLIC → ABSENT TableLocalityRegionalByRowUsingConstraint:{DescID: 109 (rbr), ConstraintID: 2 (fk_region)}
+ │         └── 3 Mutation operations
+ │              ├── SetTableSchemaLocked {"TableID":109}
+ │              ├── SetTableRBRUsingConstraint {"TableID":109}
+ │              └── SetTableRBRUsingConstraint {"ConstraintID":3,"TableID":109}
+ ├── PreCommitPhase
+ │    ├── Stage 1 of 2 in PreCommitPhase
+ │    │    ├── 1 element transitioning toward PUBLIC
+ │    │    │    └── PUBLIC → ABSENT TableLocalityRegionalByRowUsingConstraint:{DescID: 109 (rbr), ConstraintID: 3 (fk_region2)}
+ │    │    ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │    │    │    └── ABSENT → PUBLIC TableSchemaLocked:{DescID: 109 (rbr)}
+ │    │    ├── 1 element transitioning toward ABSENT
+ │    │    │    └── ABSENT → PUBLIC TableLocalityRegionalByRowUsingConstraint:{DescID: 109 (rbr), ConstraintID: 2 (fk_region)}
+ │    │    └── 1 Mutation operation
+ │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
+ │    └── Stage 2 of 2 in PreCommitPhase
+ │         ├── 1 element transitioning toward PUBLIC
+ │         │    └── ABSENT → PUBLIC TableLocalityRegionalByRowUsingConstraint:{DescID: 109 (rbr), ConstraintID: 3 (fk_region2)}
+ │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │         │    └── PUBLIC → ABSENT TableSchemaLocked:{DescID: 109 (rbr)}
+ │         ├── 1 element transitioning toward ABSENT
+ │         │    └── PUBLIC → ABSENT TableLocalityRegionalByRowUsingConstraint:{DescID: 109 (rbr), ConstraintID: 2 (fk_region)}
+ │         └── 5 Mutation operations
+ │              ├── SetTableSchemaLocked {"TableID":109}
+ │              ├── SetTableRBRUsingConstraint {"TableID":109}
+ │              ├── SetTableRBRUsingConstraint {"ConstraintID":3,"TableID":109}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":109,"Initialize":true}
+ │              └── CreateSchemaChangerJob {"RunningStatus":"Pending: Updatin..."}
+ └── PostCommitPhase
+      └── Stage 1 of 1 in PostCommitPhase
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 109 (rbr)}
+           └── 3 Mutation operations
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":109}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":109}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

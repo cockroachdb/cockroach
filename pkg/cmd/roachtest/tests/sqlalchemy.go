@@ -24,7 +24,7 @@ import (
 var sqlAlchemyResultRegex = regexp.MustCompile(`^(?P<test>test.*::.*::[^ \[\]]*(?:\[.*])?) (?P<result>\w+)\s+\[.+]$`)
 var sqlAlchemyReleaseTagRegex = regexp.MustCompile(`^rel_(?P<major>\d+)_(?P<minor>\d+)_(?P<point>\d+)$`)
 
-var supportedSQLAlchemyTag = "2.0.23"
+var supportedSQLAlchemyTag = "2.0.43"
 
 // This test runs the SQLAlchemy dialect test suite against a single Cockroach
 // node.
@@ -126,6 +126,22 @@ func runSQLAlchemy(ctx context.Context, t test.Test, c cluster.Cluster) {
 
 	if err := alterZoneConfigAndClusterSettings(ctx, t, version, c, node[0]); err != nil {
 		t.Fatal(err)
+	}
+
+	// The test suite requires two schemas to be created ahead of time.
+	// See https://github.com/sqlalchemy/sqlalchemy/blob/b3feb9cd3e87960ee65968b712e73d8464385a4a/README.unittests.rst?plain=1#L139.
+	db, err := c.ConnE(ctx, t.L(), node[0], option.DBName("defaultdb"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	for _, cmd := range []string{
+		`CREATE SCHEMA IF NOT EXISTS test_schema`,
+		`CREATE SCHEMA IF NOT EXISTS test_schema_2`,
+	} {
+		if _, err := db.ExecContext(ctx, cmd); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	blocklistName, expectedFailures := "sqlAlchemyBlocklist", sqlAlchemyBlocklist

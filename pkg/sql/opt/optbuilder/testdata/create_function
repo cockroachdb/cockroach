@@ -54,7 +54,7 @@ create-function
  ├── CREATE FUNCTION f()
  │   	RETURNS STRING
  │   	LANGUAGE SQL
- │   	AS $$SELECT x'40':::@100055::STRING;$$
+ │   	AS $$SELECT 'MON':::workday::STRING;$$
  └── dependencies
       └── workday
 
@@ -132,9 +132,68 @@ create-function
 build
 CREATE FUNCTION f() RETURNS INT LANGUAGE SQL BEGIN ATOMIC SELECT 1; END;
 ----
-error (0A000): unimplemented: CREATE FUNCTION...sql_body unimplemented
+create-function
+ ├── CREATE FUNCTION f()
+ │   	RETURNS INT8
+ │   	LANGUAGE SQL
+ │   	AS $$SELECT 1;$$
+ └── no dependencies
+
+# Bare RETURN expr is rewritten to SELECT expr internally.
+build
+CREATE FUNCTION f() RETURNS INT LANGUAGE SQL RETURN 1
+----
+create-function
+ ├── CREATE FUNCTION f()
+ │   	RETURNS INT8
+ │   	LANGUAGE SQL
+ │   	AS $$SELECT 1;$$
+ └── no dependencies
+
+build
+CREATE FUNCTION f() RETURNS INT LANGUAGE PLPGSQL BEGIN ATOMIC SELECT 1; END
+----
+error (42P13): inline SQL function body only valid for language SQL
+
+build
+CREATE FUNCTION f(x ANYELEMENT) RETURNS ANYELEMENT LANGUAGE SQL RETURN x
+----
+error (42P13): SQL function with unquoted function body cannot have polymorphic arguments
 
 build
 CREATE FUNCTION f() RETURNS UNKNOWN LANGUAGE SQL AS $$ SELECT NULL; $$;
 ----
 error (42P13): SQL functions cannot return type unknown
+
+# Regression test for #138273 - correctly build CTEs in SQL expressions
+# embedded in a PL/pgSQL routine.
+build
+CREATE FUNCTION f138273_1() RETURNS TIMESTAMP LANGUAGE PLpgSQL AS $$
+  DECLARE
+    decl TIMESTAMP;
+  BEGIN
+    WHILE false LOOP
+      IF true THEN
+      ELSIF EXISTS (WITH cte(col) AS (SELECT * FROM (VALUES (random())) AS foo) SELECT 1 FROM cte) THEN
+        RETURN decl;
+      END IF;
+    END LOOP;
+  END;
+$$;
+----
+create-function
+ ├── CREATE FUNCTION f138273_1()
+ │   	RETURNS TIMESTAMP
+ │   	LANGUAGE plpgsql
+ │   	AS $$DECLARE
+ │   decl TIMESTAMP;
+ │   BEGIN
+ │   WHILE false LOOP
+ │   IF true THEN
+ │   ELSIF EXISTS (WITH cte (col) AS (SELECT foo.column1 FROM (VALUES (random())) AS foo) SELECT 1 FROM cte) THEN
+ │   	RETURN decl;
+ │   END IF;
+ │   END LOOP;
+ │   END;
+ │   $$
+ └── no dependencies

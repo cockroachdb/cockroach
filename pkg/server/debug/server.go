@@ -6,6 +6,7 @@
 package debug
 
 import (
+	"context"
 	"expvar"
 	"fmt"
 	"io"
@@ -13,11 +14,12 @@ import (
 	"net/http/pprof"
 	"strconv"
 	"strings"
+	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/base/serverident"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/debug/goroutineui"
@@ -32,6 +34,7 @@ import (
 	"github.com/cockroachdb/pebble"
 	pebbletool "github.com/cockroachdb/pebble/tool"
 	"github.com/cockroachdb/pebble/vfs"
+	"github.com/felixge/fgprof"
 	metrics "github.com/rcrowley/go-metrics"
 	"github.com/rcrowley/go-metrics/exp"
 	"github.com/spf13/cobra"
@@ -69,6 +72,7 @@ func setupProcessWideRoutes(
 	authorizer tenantcapabilities.Authorizer,
 	vsrv *vmoduleServer,
 	profiler pprofui.Profiler,
+	logMetadata func(ctx context.Context, source string),
 ) {
 	authzCheck := func(w http.ResponseWriter, r *http.Request) bool {
 		if err := authorizer.HasProcessDebugCapability(r.Context(), tenantID); err != nil {
@@ -94,7 +98,9 @@ func setupProcessWideRoutes(
 		CPUProfileHandler(st, w, r)
 	}))
 	mux.HandleFunc("/debug/pprof/symbol", authzFunc(pprof.Symbol))
-	mux.HandleFunc("/debug/pprof/trace", authzFunc(pprof.Trace))
+	mux.HandleFunc("/debug/pprof/trace", authzFunc(func(w http.ResponseWriter, r *http.Request) {
+		ExecutionTraceHandler(logMetadata, w, r)
+	}))
 
 	// Cribbed straight from trace's `init()` method. See:
 	// https://github.com/golang/net/blob/master/trace/trace.go
@@ -133,9 +139,17 @@ func setupProcessWideRoutes(
 		_ = dump.HTML(w)
 	}))
 
+	// WARNING: The /debug/pprof/fgprof endpoint provides wall-clock profiling for
+	// both On-CPU and Off-CPU time. While it is safe to use in production, note
+	// that profiling can introduce performance overhead, especially in
+	// applications with a large number of goroutines (>10k). Use this endpoint
+	// judiciously and monitor its impact on system performance.
+	mux.HandleFunc("/debug/pprof/fgprof", authzFunc(fgprof.Handler().ServeHTTP))
 }
 
-// NewServer sets up a debug server.
+// NewServer sets up a debug server. The logMetadata callback, if non-nil, is
+// called when serving /debug/pprof/trace to embed CRDB metadata (node ID,
+// version, wallclock) into Go execution traces.
 func NewServer(
 	ambientContext log.AmbientContext,
 	st *cluster.Settings,
@@ -143,6 +157,7 @@ func NewServer(
 	profiler pprofui.Profiler,
 	tenantID roachpb.TenantID,
 	authorizer tenantcapabilities.Authorizer,
+	logMetadata func(ctx context.Context, source string),
 ) *Server {
 	mux := http.NewServeMux()
 
@@ -151,7 +166,7 @@ func NewServer(
 
 	// Debug routes that retrieve process-wide state.
 	vsrv := &vmoduleServer{}
-	setupProcessWideRoutes(mux, st, tenantID, authorizer, vsrv, profiler)
+	setupProcessWideRoutes(mux, st, tenantID, authorizer, vsrv, profiler, logMetadata)
 
 	if hbaConfDebugFn != nil {
 		// Expose the processed HBA configuration through the debug
@@ -193,7 +208,7 @@ func analyzeLSM(dir string, writer io.Writer) error {
 	}
 
 	t := pebbletool.New(
-		pebbletool.Comparers(storage.EngineComparer),
+		pebbletool.Comparers(&storage.EngineComparer),
 		pebbletool.KeySchema(storage.DefaultKeySchema),
 		pebbletool.KeySchemas(storage.KeySchemas...),
 	)
@@ -221,16 +236,15 @@ func (ds *Server) RegisterWorkloadCollector(stores *kvserver.Stores) error {
 
 // GetLSMStats creates a mapping between store IDs and LSM stats for all of the
 // provided storage engines.
-func GetLSMStats(engines []storage.Engine) (map[roachpb.StoreID]string, error) {
-	stats := make(map[roachpb.StoreID]string)
+func GetLSMStats(engines []kvstorage.Engines) (map[roachpb.StoreID]string, error) {
+	stats := make(map[roachpb.StoreID]string, len(engines))
 	for _, eng := range engines {
-		storeID, err := eng.GetStoreID()
+		storeID, err := eng.TODOBothEngines().GetStoreID()
 		if err != nil {
 			return nil, err
 		}
-		stats[roachpb.StoreID(storeID)] = eng.GetMetrics().String()
+		stats[roachpb.StoreID(storeID)] = eng.TODOBothEngines().GetMetrics().String()
 	}
-
 	return stats, nil
 }
 
@@ -244,12 +258,7 @@ func FormatLSMStats(stats map[roachpb.StoreID]string) string {
 }
 
 // RegisterEngines setups up debug engine endpoints for the known storage engines.
-func (ds *Server) RegisterEngines(specs []base.StoreSpec, engines []storage.Engine) error {
-	if len(specs) != len(engines) {
-		// TODO(yevgeniy): Consider adding accessors to storage.Engine to get their path.
-		return errors.New("number of store specs must match number of engines")
-	}
-
+func (ds *Server) RegisterEngines(engines []kvstorage.Engines) error {
 	ds.mux.HandleFunc("/debug/lsm", func(w http.ResponseWriter, req *http.Request) {
 		stats, err := GetLSMStats(engines)
 		if err != nil {
@@ -258,23 +267,47 @@ func (ds *Server) RegisterEngines(specs []base.StoreSpec, engines []storage.Engi
 		fmt.Fprint(w, FormatLSMStats(stats))
 	})
 
-	for i := 0; i < len(specs); i++ {
-		if specs[i].InMemory {
+	for _, e := range engines {
+		eng := e.TODOBothEngines()
+		dir := eng.Env().Dir
+		if dir == "" {
 			// TODO(yevgeniy): Add plumbing to support LSM visualization for in memory engines.
 			continue
 		}
 
-		storeID, err := engines[i].GetStoreID()
+		storeID, err := eng.GetStoreID()
 		if err != nil {
 			return err
 		}
 
-		dir := specs[i].Path
 		ds.mux.HandleFunc(fmt.Sprintf("/debug/lsm-viz/%d", storeID),
 			func(w http.ResponseWriter, req *http.Request) {
 				if err := analyzeLSM(dir, w); err != nil {
 					fmt.Fprintf(w, "error analyzing LSM at %s: %v", dir, err)
 				}
+			})
+		ds.mux.HandleFunc(fmt.Sprintf("/debug/storage/%d/profiles/separated-value-retrievals", storeID),
+			func(w http.ResponseWriter, req *http.Request) {
+				dur := 30 * time.Second
+				if secsStr := req.Header.Get("seconds"); secsStr != "" {
+					secs, err := strconv.ParseInt(secsStr, 10, 64)
+					if err != nil {
+						http.Error(w, "error parsing seconds", http.StatusBadRequest)
+						return
+					}
+					dur = time.Duration(secs) * time.Second
+				}
+				ctx := req.Context()
+				ctx, cancel := context.WithTimeout(ctx, dur)
+				defer cancel()
+				profile, err := eng.ProfileSeparatedValueRetrievals(ctx)
+				if err != nil {
+					http.Error(w, "error profiling separated value retrievals", http.StatusInternalServerError)
+					return
+				}
+				w.Header().Set("Content-Type", "text/plain")
+				w.WriteHeader(http.StatusOK)
+				fmt.Fprint(w, profile.String())
 			})
 	}
 	return nil

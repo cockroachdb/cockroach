@@ -3,8 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { assert } from "chai";
-import { shallow } from "enzyme";
+import { render } from "@testing-library/react";
 import React from "react";
 
 import {
@@ -75,10 +74,8 @@ describe("ResultsPerPageLabel", () => {
 
   testCases.forEach(tc => {
     it(tc.description, () => {
-      assert.equal(
-        shallow(<ResultsPerPageLabel {...tc.props} />).text(),
-        tc.expected,
-      );
+      const { container } = render(<ResultsPerPageLabel {...tc.props} />);
+      expect(container.textContent).toBe(tc.expected);
     });
   });
 });

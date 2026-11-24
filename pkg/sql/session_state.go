@@ -12,9 +12,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser/statements"
+	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
+	"github.com/cockroachdb/cockroach/pkg/sql/prep"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -54,7 +56,7 @@ func serializeSessionState(
 	prepStmtsState eval.PreparedStatementState,
 	sd *sessiondata.SessionData,
 	execCfg *ExecutorConfig,
-) (*tree.DBytes, error) {
+) (_ *tree.DBytes, err error) {
 	if inExplicitTxn {
 		return nil, pgerror.Newf(
 			pgcode.InvalidTransactionState,
@@ -87,7 +89,9 @@ func serializeSessionState(
 	m.SessionData = sd.SessionData
 	sessiondata.MarshalNonLocal(sd, &m.SessionData)
 	m.LocalOnlySessionData = sd.LocalOnlySessionData
-	m.PreparedStatements = prepStmtsState.MigratablePreparedStatements()
+	if m.PreparedStatements, err = prepStmtsState.MigratablePreparedStatements(); err != nil {
+		return nil, err
+	}
 
 	b, err := protoutil.Marshal(&m)
 	if err != nil {
@@ -141,8 +145,8 @@ func (p *planner) DeserializeSessionState(
 	}
 
 	for _, prepStmt := range m.PreparedStatements {
-		stmts, err := parser.ParseWithInt(
-			prepStmt.SQL, parser.NakedIntTypeFromDefaultIntSize(sd.DefaultIntSize),
+		stmts, err := parser.ParseWithOptions(
+			prepStmt.SQL, parser.DefaultParseOptions.WithIntType(parserutils.NakedIntTypeFromDefaultIntSize(sd.DefaultIntSize)),
 		)
 		if err != nil {
 			return nil, err
@@ -157,7 +161,12 @@ func (p *planner) DeserializeSessionState(
 		}
 		// len(stmts) == 0 results in a nil (empty) statement.
 		id := clusterunique.GenerateID(evalCtx.ExecCfg.Clock.Now(), evalCtx.ExecCfg.NodeInfo.NodeID.SQLInstanceID())
-		stmt := makeStatement(parserStmt, id, tree.FmtFlags(queryFormattingForFingerprintsMask.Get(&evalCtx.Settings.SV)))
+		stmt := makeStatement(
+			ctx, parserStmt, id,
+			tree.FmtFlags(tree.QueryFormattingForFingerprintsMask.Get(&evalCtx.Settings.SV)),
+			evalCtx.ExecCfg.StatementHintsCache,
+			evalCtx.SessionData().Database,
+		)
 
 		var placeholderTypes tree.PlaceholderTypes
 		if len(prepStmt.PlaceholderTypeHints) > 0 {
@@ -205,7 +214,7 @@ func (p *planner) DeserializeSessionState(
 			stmt,
 			placeholderTypes,
 			prepStmt.PlaceholderTypeHints,
-			PreparedStatementOriginSessionMigration,
+			prep.StatementOriginSessionMigration,
 		)
 		if err != nil {
 			return nil, err

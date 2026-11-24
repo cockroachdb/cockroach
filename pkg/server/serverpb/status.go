@@ -8,6 +8,7 @@ package serverpb
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 )
@@ -17,6 +18,8 @@ import (
 type SQLStatusServer interface {
 	ListSessions(context.Context, *ListSessionsRequest) (*ListSessionsResponse, error)
 	ListLocalSessions(context.Context, *ListSessionsRequest) (*ListSessionsResponse, error)
+	ListActiveSessionHistory(context.Context, *ListActiveSessionHistoryRequest) (*ListActiveSessionHistoryResponse, error)
+	ListLocalActiveSessionHistory(context.Context, *ListActiveSessionHistoryRequest) (*ListActiveSessionHistoryResponse, error)
 	CancelQuery(context.Context, *CancelQueryRequest) (*CancelQueryResponse, error)
 	CancelQueryByKey(context.Context, *CancelQueryByKeyRequest) (*CancelQueryByKeyResponse, error)
 	CancelSession(context.Context, *CancelSessionRequest) (*CancelSessionResponse, error)
@@ -45,6 +48,7 @@ type SQLStatusServer interface {
 	TenantServiceStatus(context.Context, *TenantServiceStatusRequest) (*TenantServiceStatusResponse, error)
 	UpdateTableMetadataCache(context.Context, *UpdateTableMetadataCacheRequest) (*UpdateTableMetadataCacheResponse, error)
 	GetUpdateTableMetadataCacheSignal() chan struct{}
+	DrainSqlStats(context.Context, *DrainSqlStatsRequest) (*DrainStatsResponse, error)
 }
 
 // OptionalNodesStatusServer is a StatusServer that is only optionally present
@@ -90,13 +94,16 @@ type TenantStatusServer interface {
 	// download remote files. A method that mutates state should not be on the
 	// status server and so in the long run we should move it.
 	DownloadSpan(ctx context.Context, request *DownloadSpanRequest) (*DownloadSpanResponse, error)
+	NetworkConnectivity(context.Context, *NetworkConnectivityRequest) (*NetworkConnectivityResponse, error)
+	Gossip(context.Context, *GossipRequest) (*gossip.InfoStatus, error)
+	EngineStats(context.Context, *EngineStatsRequest) (*EngineStatsResponse, error)
 }
 
 // OptionalNodesStatusServer returns the wrapped NodesStatusServer, if it is
-// available. If it is not, an error referring to the optionally supplied issues
-// is returned.
+// available. If it is not, an error indicating that the feature is not
+// supported under cluster virtualization is returned.
 func (s *OptionalNodesStatusServer) OptionalNodesStatusServer() (NodesStatusServer, error) {
-	v, err := s.w.OptionalErr(errorutil.FeatureNotAvailableToNonSystemTenantsIssue)
+	v, err := s.w.OptionalErr()
 	if err != nil {
 		return nil, err
 	}

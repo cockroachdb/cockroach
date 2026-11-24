@@ -1,0 +1,25 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "disabled",
+    srcs = ["disabled.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth/disabled",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/auth",
+        "//pkg/cmd/roachprod-centralized/models/auth",
+        "//pkg/util/uuid",
+    ],
+)
+
+go_test(
+    name = "disabled_test",
+    srcs = ["disabled_test.go"],
+    embed = [":disabled"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/models/auth",
+        "//pkg/util/uuid",
+        "@com_github_stretchr_testify//assert",
+        "@com_github_stretchr_testify//require",
+    ],
+)

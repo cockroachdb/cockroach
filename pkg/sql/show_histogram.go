@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 )
@@ -37,7 +38,7 @@ func (p *planner) ShowHistogram(ctx context.Context, n *tree.ShowHistogram) (pla
 		name:    fmt.Sprintf("SHOW HISTOGRAM %d", n.HistogramID),
 		columns: showHistogramColumns,
 
-		constructor: func(ctx context.Context, p *planner) (planNode, error) {
+		constructor: func(ctx context.Context, p *planner) (_ planNode, retErr error) {
 			row, err := p.InternalSQLTxn().QueryRowEx(
 				ctx,
 				"read-histogram",
@@ -62,6 +63,9 @@ func (p *planner) ShowHistogram(ctx context.Context, n *tree.ShowHistogram) (pla
 				return nil, fmt.Errorf("histogram %d not found", n.HistogramID)
 			}
 
+			// Guard against crashes in the code below.
+			defer errorutil.MaybeCatchPanic(&retErr, nil /* errCallback */)
+
 			histogram := &stats.HistogramData{}
 			histData := *row[0].(*tree.DBytes)
 			if err := protoutil.Unmarshal([]byte(histData), histogram); err != nil {
@@ -73,20 +77,17 @@ func (p *planner) ShowHistogram(ctx context.Context, n *tree.ShowHistogram) (pla
 			if err := typedesc.EnsureTypeIsHydrated(ctx, histogram.ColumnType, &resolver); err != nil {
 				return nil, err
 			}
-			var a tree.DatumAlloc
-			for _, b := range histogram.Buckets {
-				var upperBound string
-				datum, err := stats.DecodeUpperBound(histogram.Version, histogram.ColumnType, &a, b.UpperBound)
-				if err != nil {
-					upperBound = fmt.Sprintf("<error: %v>", err)
-				} else {
-					upperBound = datum.String()
-				}
+			decodedBuckets, _, err := histogram.DecodeBuckets(ctx)
+			if err != nil {
+				return nil, err
+			}
+			for _, b := range decodedBuckets {
+				upperBound := b.UpperBound.String()
 				row := tree.Datums{
 					tree.NewDString(upperBound),
-					tree.NewDInt(tree.DInt(b.NumRange)),
+					tree.NewDInt(tree.DInt(int64(b.NumRange))),
 					tree.NewDFloat(tree.DFloat(b.DistinctRange)),
-					tree.NewDInt(tree.DInt(b.NumEq)),
+					tree.NewDInt(tree.DInt(int64(b.NumEq))),
 				}
 				if _, err := v.rows.AddRow(ctx, row); err != nil {
 					v.Close(ctx)

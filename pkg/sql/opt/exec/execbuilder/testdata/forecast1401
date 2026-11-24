@@ -18390,7 +18390,9 @@ __forecast__  {e}    2022-02-06 18:39:47.938163 +0000 UTC  6550920018  160520885
 __forecast__  {f}    2022-02-06 18:39:47.938163 +0000 UTC  6550920018  8977521     25263499    0
 
 statement ok
-SET optimizer_use_forecasts = off
+SET optimizer_use_forecasts = off;
+SET optimizer_clamp_low_histogram_selectivity = off;
+SET optimizer_clamp_inequality_selectivity = off;
 
 # Without forecasts, we estimate 1 row with c newer than 2022-01-25.
 
@@ -18398,7 +18400,6 @@ query T
 EXPLAIN SELECT c FROM t1401 WHERE c >= '2022-01-25T21:17:27.216095Z'
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   estimated row count: 1 (<0.01% of the table; stats collected <hidden> ago)
@@ -18421,7 +18422,6 @@ LIMIT
   100
 ----
 distribution: local
-vectorized: true
 ·
 • limit
 │ count: 100
@@ -18448,7 +18448,6 @@ query T
 EXPLAIN SELECT c FROM t1401 WHERE c >= '2022-01-25T21:17:27.216095Z'
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   estimated row count: 179,489,803 (2.7% of the table; stats collected <hidden> ago; using stats forecast)
@@ -18471,7 +18470,6 @@ LIMIT
   100
 ----
 distribution: local
-vectorized: true
 ·
 • limit
 │ count: 100

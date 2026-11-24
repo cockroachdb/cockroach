@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -45,6 +45,7 @@ func pgURL(
 	insecure bool,
 	clientCerts bool,
 	prefix string,
+	certName string,
 ) (pgURL url.URL, cleanupFn func(), err error) {
 	opts := url.Values{}
 	if tenantName != "" && !strings.HasPrefix(dbName, "cluster:") {
@@ -65,7 +66,7 @@ func pgURL(
 	}
 
 	// No LoopbackListener
-	pgURL, cleanupFn, err = sqlutils.PGUrlWithOptionalClientCertsE(sqlAddr, prefix, user, clientCerts, "")
+	pgURL, cleanupFn, err = pgurlutils.PGUrlWithOptionalClientCertsE(sqlAddr, prefix, user, clientCerts, certName)
 	if err != nil {
 		return pgURL, cleanupFn, err
 	}
@@ -95,9 +96,10 @@ func openTestSQLConn(
 	insecure bool,
 	clientCerts bool,
 	prefix string,
+	certName string,
 ) (*gosql.DB, error) {
 	var goDB *gosql.DB
-	u, cleanupFn, err := pgURL(dbName, user, tenantName, sqlAddr, insecure, clientCerts, prefix)
+	u, cleanupFn, err := pgURL(dbName, user, tenantName, sqlAddr, insecure, clientCerts, prefix, certName)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +124,7 @@ func openTestSQLConn(
 	stopper.AddCloser(stop.CloserFn(func() {
 		err := goDB.Close()
 		if log.V(2) {
-			log.Infof(context.Background(), "closing test SQL connection: %v", err)
+			log.Dev.Infof(context.Background(), "closing test SQL connection: %v", err)
 		}
 		cleanupFn()
 	}))

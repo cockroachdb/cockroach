@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -29,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree/utils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -38,10 +38,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
+	"github.com/gogo/protobuf/proto"
 )
 
 // createViewNode represents a CREATE VIEW statement.
 type createViewNode struct {
+	zeroInputPlanNode
 	createView *tree.CreateView
 	// viewQuery contains the view definition, with all table names fully
 	// qualified.
@@ -58,6 +60,11 @@ type createViewNode struct {
 	// depends on. This is collected during the construction of
 	// the view query's logical plan.
 	typeDeps typeDependencies
+
+	// funcDeps tracks which user-defined functions the view being created
+	// depends on. This is collected during the construction of
+	// the view query's logical plan.
+	funcDeps functionDependencies
 }
 
 // ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
@@ -72,6 +79,13 @@ func (n *createViewNode) startExec(params runParams) error {
 		return pgerror.Newf(pgcode.ReadOnlySQLTransaction, "schema changes are not allowed on a reader catalog")
 	}
 	createView := n.createView
+
+	if !params.p.execCfg.Settings.Version.IsActive(params.ctx, clusterversion.V26_2) &&
+		createView.Options != nil && createView.Options.SecurityInvoker {
+		return pgerror.Newf(pgcode.FeatureNotSupported,
+			"security invoker views are not supported")
+	}
+
 	tableType := tree.GetTableType(
 		false /* isSequence */, true /* isView */, createView.Materialized,
 	)
@@ -212,12 +226,29 @@ func (n *createViewNode) startExec(params runParams) error {
 				if err != nil {
 					return err
 				}
-				// creationTime is initialized to a zero value and populated at read time.
-				// See the comment in desc.MaybeIncrementVersion.
-				//
-				// TODO(ajwerner): remove the timestamp from MakeViewTableDesc, it's
-				// currently relied on in import and restore code and tests.
+				// creationTime is usually initialized to a zero value and populated at
+				// read time. See the comment in desc.MaybeIncrementVersion. However,
+				// for CREATE MATERIALIZED VIEW ... AS OF SYSTEM TIME, we need to set
+				// the creation time to the specified timestamp.
 				var creationTime hlc.Timestamp
+				if asOf := params.p.extendedEvalCtx.AsOfSystemTime; asOf != nil && asOf.ForBackfill && n.createView.Materialized {
+					creationTime = asOf.Timestamp
+
+					var mostRecentModTime hlc.Timestamp
+					for _, mut := range backRefMutables {
+						if mut.ModificationTime.After(mostRecentModTime) {
+							mostRecentModTime = mut.ModificationTime
+						}
+					}
+
+					if creationTime.Less(mostRecentModTime) {
+						return pgerror.Newf(
+							pgcode.InvalidTableDefinition,
+							"timestamp %s is before the most recent modification time of the tables the view depends on (%s)",
+							creationTime, mostRecentModTime,
+						)
+					}
+				}
 				desc, err := makeViewTableDesc(
 					params.ctx,
 					viewName,
@@ -263,6 +294,11 @@ func (n *createViewNode) startExec(params runParams) error {
 					}
 				}
 
+				// Set view options if specified.
+				if createView.Options != nil {
+					desc.SecurityInvoker = proto.Bool(createView.Options.SecurityInvoker)
+				}
+
 				// Collect all the tables/views this view depends on.
 				orderedDependsOn := catalog.DescriptorIDSet{}
 				for backrefID := range n.planDeps {
@@ -276,6 +312,14 @@ func (n *createViewNode) startExec(params runParams) error {
 					orderedTypeDeps.Add(backrefID)
 				}
 				desc.DependsOnTypes = append(desc.DependsOnTypes, orderedTypeDeps.Ordered()...)
+
+				// Collect all routines this view depends on.
+				orderedRoutineDeps := catalog.DescriptorIDSet{}
+				for backrefID := range n.funcDeps {
+					orderedRoutineDeps.Add(backrefID)
+				}
+				desc.DependsOnFunctions = append(desc.DependsOnFunctions, orderedRoutineDeps.Ordered()...)
+
 				newDesc = &desc
 
 				if err = params.p.createDescriptor(
@@ -323,6 +367,13 @@ func (n *createViewNode) startExec(params runParams) error {
 			for id := range n.typeDeps {
 				jobDesc := fmt.Sprintf("updating type back reference %d for table %d", id, newDesc.ID)
 				if err := params.p.addTypeBackReference(params.ctx, id, newDesc.ID, jobDesc); err != nil {
+					return err
+				}
+			}
+
+			// Add back references for the routine dependencies.
+			for id := range n.funcDeps {
+				if err := params.p.addRoutineViewBackReference(params.ctx, id, newDesc.ID); err != nil {
 					return err
 				}
 			}
@@ -401,7 +452,7 @@ func makeViewTableDesc(
 		privileges,
 		persistence,
 	)
-	desc.ViewQuery = viewQuery
+	desc.ViewQuery = descpb.Statement(viewQuery)
 	if isMultiRegion {
 		desc.SetTableLocalityRegionalByTable(tree.PrimaryRegionNotSpecifiedName)
 	}
@@ -411,15 +462,15 @@ func makeViewTableDesc(
 		if err != nil {
 			return tabledesc.Mutable{}, err
 		}
-		desc.ViewQuery = sequenceReplacedQuery
+		desc.ViewQuery = descpb.Statement(sequenceReplacedQuery)
 	}
 
-	typeReplacedQuery, err := serializeUserDefinedTypes(ctx, semaCtx, desc.ViewQuery,
+	typeReplacedQuery, err := serializeUserDefinedTypes(ctx, semaCtx, string(desc.ViewQuery),
 		false /* multiStmt */, "view queries")
 	if err != nil {
 		return tabledesc.Mutable{}, err
 	}
-	desc.ViewQuery = typeReplacedQuery
+	desc.ViewQuery = descpb.Statement(typeReplacedQuery)
 
 	if err := addResultColumns(ctx, semaCtx, evalCtx, st, &desc, resultColumns); err != nil {
 		return tabledesc.Mutable{}, err
@@ -513,7 +564,7 @@ func replaceSeqNamesWithIDsLang(
 		}
 		stmts = plstmt.AST
 
-		v := utils.SQLStmtVisitor{Fn: replaceSeqFunc}
+		v := plpgsqltree.SQLStmtVisitor{Fn: replaceSeqFunc}
 		newStmt := plpgsqltree.Walk(&v, stmts)
 		fmtCtx.FormatNode(newStmt)
 	}
@@ -660,12 +711,12 @@ func serializeUserDefinedTypesLang(
 		}
 		stmts = plstmt.AST
 
-		v := utils.SQLStmtVisitor{Fn: replaceFunc}
+		v := plpgsqltree.SQLStmtVisitor{Fn: replaceFunc}
 		newStmt := plpgsqltree.Walk(&v, stmts)
 		// Some PLpgSQL statements (i.e., declarations), may contain type
 		// annotations containing the UDT. We need to walk the AST to replace them,
 		// too.
-		v2 := utils.TypeRefVisitor{Fn: replaceTypeFunc}
+		v2 := plpgsqltree.TypeRefVisitor{Fn: replaceTypeFunc}
 		newStmt = plpgsqltree.Walk(&v2, newStmt)
 		fmtCtx.FormatNode(newStmt)
 	}
@@ -686,22 +737,29 @@ func (p *planner) replaceViewDesc(
 	backRefMutables map[descpb.ID]*tabledesc.Mutable,
 ) (*tabledesc.Mutable, error) {
 	// Set the query to the new query.
-	toReplace.ViewQuery = n.viewQuery
+	toReplace.ViewQuery = descpb.Statement(n.viewQuery)
 
 	if sc != nil {
 		updatedQuery, err := replaceSeqNamesWithIDs(ctx, sc, n.viewQuery, false /* multiStmt */)
 		if err != nil {
 			return nil, err
 		}
-		toReplace.ViewQuery = updatedQuery
+		toReplace.ViewQuery = descpb.Statement(updatedQuery)
 	}
 
-	typeReplacedQuery, err := serializeUserDefinedTypes(ctx, p.SemaCtx(), toReplace.ViewQuery,
+	typeReplacedQuery, err := serializeUserDefinedTypes(ctx, p.SemaCtx(), string(toReplace.ViewQuery),
 		false /* multiStmt */, "view queries")
 	if err != nil {
 		return nil, err
 	}
-	toReplace.ViewQuery = typeReplacedQuery
+	toReplace.ViewQuery = descpb.Statement(typeReplacedQuery)
+
+	// Update view options if specified in the replacement.
+	if n.createView.Options != nil {
+		toReplace.SecurityInvoker = proto.Bool(n.createView.Options.SecurityInvoker)
+	} else {
+		toReplace.SecurityInvoker = nil
+	}
 
 	// Check that the new view has at least as many columns as the old view before
 	// adding result columns.
@@ -766,6 +824,18 @@ func (p *planner) replaceViewDesc(
 		return nil, err
 	}
 
+	// For each old function dependency (i.e. before replacing the view),
+	// see if we still depend on it. If not, then remove the back reference.
+	var outdatedRoutineRefs []descpb.ID
+	for _, id := range toReplace.DependsOnFunctions {
+		if _, ok := n.funcDeps[id]; !ok {
+			outdatedRoutineRefs = append(outdatedRoutineRefs, id)
+		}
+	}
+	if err := p.removeRoutineViewBackReferences(ctx, outdatedRoutineRefs, toReplace.ID); err != nil {
+		return nil, err
+	}
+
 	// Since the view query has been replaced, the dependencies that this
 	// table descriptor had are gone.
 	toReplace.DependsOn = make([]descpb.ID, 0, len(n.planDeps))
@@ -775,6 +845,10 @@ func (p *planner) replaceViewDesc(
 	toReplace.DependsOnTypes = make([]descpb.ID, 0, len(n.typeDeps))
 	for backrefID := range n.typeDeps {
 		toReplace.DependsOnTypes = append(toReplace.DependsOnTypes, backrefID)
+	}
+	toReplace.DependsOnFunctions = make([]descpb.ID, 0, len(n.funcDeps))
+	for backrefID := range n.funcDeps {
+		toReplace.DependsOnFunctions = append(toReplace.DependsOnFunctions, backrefID)
 	}
 
 	// Since we are replacing an existing view here, we need to write the new
@@ -876,4 +950,37 @@ func overrideColumnNames(cols colinfo.ResultColumns, newNames tree.NameList) col
 func crossDBReferenceDeprecationHint() string {
 	return fmt.Sprintf("Note that cross-database references will be removed in future releases. See: %s",
 		docs.ReleaseNotesURL(`#deprecations`))
+}
+
+func (p *planner) addRoutineViewBackReference(
+	ctx context.Context, routineID descpb.ID, ref descpb.ID,
+) error {
+	mutDesc, err := p.Descriptors().MutableByID(p.txn).Function(ctx, routineID)
+	if err != nil {
+		return err
+	}
+
+	if err := mutDesc.AddViewReference(ref); err != nil {
+		return err
+	}
+	if err := p.writeFuncSchemaChange(ctx, mutDesc); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (p *planner) removeRoutineViewBackReferences(
+	ctx context.Context, routineIDs []descpb.ID, ref descpb.ID,
+) error {
+	for _, routineID := range routineIDs {
+		mutDesc, err := p.Descriptors().MutableByID(p.txn).Function(ctx, routineID)
+		if err != nil {
+			return err
+		}
+		mutDesc.RemoveViewReference(ref)
+		if err := p.writeFuncSchemaChange(ctx, mutDesc); err != nil {
+			return err
+		}
+	}
+	return nil
 }

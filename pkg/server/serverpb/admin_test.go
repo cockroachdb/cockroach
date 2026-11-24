@@ -6,9 +6,14 @@
 package serverpb
 
 import (
+	"context"
+	"sort"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	io_prometheus_client "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestTableStatsResponseAdd verifies that TableStatsResponse.Add()
@@ -107,4 +112,416 @@ func TestTableStatsResponseAdd(t *testing.T) {
 		},
 	}, underTest.MissingNodes)
 
+}
+
+// mockAdminClient is a mock implementation of RPCAdminClient
+// that only implements AllMetricMetadata for testing purposes.
+type mockAdminClient struct {
+	RPCAdminClient // Embed the interface
+	metadata       map[string]metric.Metadata
+}
+
+// AllMetricMetadata returns the mocked metadata.
+func (m *mockAdminClient) AllMetricMetadata(
+	ctx context.Context, req *MetricMetadataRequest,
+) (*MetricMetadataResponse, error) {
+	return &MetricMetadataResponse{Metadata: m.metadata}, nil
+}
+
+// TestApplyMetricsFilter tests the applyMetricsFilter function which handles
+// filtering metrics by literal names and regex patterns.
+func TestApplyMetricsFilter(t *testing.T) {
+	counterType := io_prometheus_client.MetricType_COUNTER
+
+	metadata := map[string]metric.Metadata{
+		"sql.query.count":      {MetricType: counterType},
+		"sql.exec.count":       {MetricType: counterType},
+		"kv.range.count":       {MetricType: counterType},
+		"changefeed.running":   {MetricType: counterType},
+		"distsender.rpc.count": {MetricType: counterType},
+	}
+
+	testCases := []struct {
+		name                string
+		filter              []MetricsFilterEntry
+		expectedNames       []string
+		expectedMatchCounts map[string]int
+		expectedUnmatched   []string
+		expectError         bool
+		errorContains       string
+	}{
+		{
+			name: "literal entries",
+			filter: []MetricsFilterEntry{
+				{Value: "sql.query.count", IsRegex: false},
+				{Value: "kv.range.count", IsRegex: false},
+			},
+			expectedNames:       []string{"kv.range.count", "sql.query.count"},
+			expectedMatchCounts: map[string]int{},
+		},
+		{
+			name: "literal entry not found returns unmatched",
+			filter: []MetricsFilterEntry{
+				{Value: "sql.query.count", IsRegex: false},
+				{Value: "nonexistent.metric", IsRegex: false},
+			},
+			expectedNames:       []string{"sql.query.count"},
+			expectedMatchCounts: map[string]int{},
+			expectedUnmatched:   []string{"nonexistent.metric"},
+		},
+		{
+			name: "regex entry matches multiple",
+			filter: []MetricsFilterEntry{
+				{Value: `sql\..*`, IsRegex: true},
+			},
+			expectedNames:       []string{"sql.exec.count", "sql.query.count"},
+			expectedMatchCounts: map[string]int{`sql\..*`: 2},
+		},
+		{
+			name: "regex matches anywhere in string",
+			filter: []MetricsFilterEntry{
+				{Value: `count`, IsRegex: true},
+			},
+			expectedNames:       []string{"distsender.rpc.count", "kv.range.count", "sql.exec.count", "sql.query.count"},
+			expectedMatchCounts: map[string]int{`count`: 4},
+		},
+		{
+			name: "regex with no matches",
+			filter: []MetricsFilterEntry{
+				{Value: `nonexistent\..*`, IsRegex: true},
+			},
+			expectedNames:       []string{},
+			expectedMatchCounts: map[string]int{`nonexistent\..*`: 0},
+		},
+		{
+			name: "mixed literal and regex",
+			filter: []MetricsFilterEntry{
+				{Value: "changefeed.running", IsRegex: false},
+				{Value: `sql\..*`, IsRegex: true},
+			},
+			expectedNames:       []string{"changefeed.running", "sql.exec.count", "sql.query.count"},
+			expectedMatchCounts: map[string]int{`sql\..*`: 2},
+		},
+		{
+			name: "invalid regex returns error",
+			filter: []MetricsFilterEntry{
+				{Value: `[invalid`, IsRegex: true},
+			},
+			expectError:   true,
+			errorContains: "invalid regex pattern",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result, stats, err := applyMetricsFilter(metadata, tc.filter)
+
+			if tc.expectError {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tc.errorContains)
+				return
+			}
+
+			require.NoError(t, err)
+			sort.Strings(result)
+			require.Equal(t, tc.expectedNames, result)
+
+			for pattern, expectedCount := range tc.expectedMatchCounts {
+				require.Equal(t, expectedCount, stats.RegexMatchCounts[pattern], "match count for pattern %s", pattern)
+			}
+
+			if tc.expectedUnmatched != nil {
+				require.Equal(t, tc.expectedUnmatched, stats.UnmatchedLiterals)
+			} else {
+				require.Empty(t, stats.UnmatchedLiterals)
+			}
+		})
+	}
+}
+
+// TestGetInternalTimeseriesNamesFromServer tests the full pipeline:
+// filtering -> histogram expansion -> prefix addition -> sorting.
+func TestGetInternalTimeseriesNamesFromServer(t *testing.T) {
+	counterType := io_prometheus_client.MetricType_COUNTER
+	gaugeType := io_prometheus_client.MetricType_GAUGE
+	histogramType := io_prometheus_client.MetricType_HISTOGRAM
+
+	mockMetadata := map[string]metric.Metadata{
+		"sql.query.count":      {MetricType: counterType},
+		"changefeed.running":   {MetricType: gaugeType},
+		"request.latency":      {MetricType: histogramType},
+		"distsender.rpc.count": {MetricType: counterType},
+	}
+
+	mockClient := &mockAdminClient{metadata: mockMetadata}
+	ctx := context.Background()
+
+	// Helper to build expected output with prefixes
+	buildExpected := func(baseNames ...string) []string {
+		var result []string
+		for _, prefix := range []string{"cr.node.", "cr.store."} {
+			for _, name := range baseNames {
+				result = append(result, prefix+name)
+			}
+		}
+		sort.Strings(result)
+		return result
+	}
+
+	// Helper to build expected histogram output
+	buildHistogramExpected := func(baseName string) []string {
+		var result []string
+		for _, prefix := range []string{"cr.node.", "cr.store."} {
+			for _, q := range metric.HistogramMetricComputers {
+				result = append(result, prefix+baseName+q.Suffix)
+			}
+		}
+		sort.Strings(result)
+		return result
+	}
+
+	// Build expected output for "all metrics" (nil/empty filter)
+	var allMetricsExpanded []string
+	for _, prefix := range []string{"cr.node.", "cr.store."} {
+		allMetricsExpanded = append(allMetricsExpanded, prefix+"sql.query.count")
+		allMetricsExpanded = append(allMetricsExpanded, prefix+"changefeed.running")
+		allMetricsExpanded = append(allMetricsExpanded, prefix+"distsender.rpc.count")
+		for _, q := range metric.HistogramMetricComputers {
+			allMetricsExpanded = append(allMetricsExpanded, prefix+"request.latency"+q.Suffix)
+		}
+	}
+	sort.Strings(allMetricsExpanded)
+
+	testCases := []struct {
+		name                string
+		filter              []MetricsFilterEntry
+		expectedNames       []string
+		expectedMatchCounts map[string]int
+		expectedUnmatched   []string
+	}{
+		{
+			name:          "nil filter returns all metrics",
+			filter:        nil,
+			expectedNames: allMetricsExpanded,
+		},
+		{
+			name:          "empty filter returns all metrics",
+			filter:        []MetricsFilterEntry{},
+			expectedNames: allMetricsExpanded,
+		},
+		{
+			name: "histogram expansion with all quantile suffixes",
+			filter: []MetricsFilterEntry{
+				{Value: "request.latency", IsRegex: false},
+			},
+			expectedNames: buildHistogramExpected("request.latency"),
+		},
+		{
+			name: "multiple non-histogram metrics gets both prefixes without expansion",
+			filter: []MetricsFilterEntry{
+				{Value: "sql.query.count", IsRegex: false},
+				{Value: "changefeed.running", IsRegex: false},
+			},
+			expectedNames: buildExpected("changefeed.running", "sql.query.count"),
+		},
+		{
+			name: "filter with regex returns match counts",
+			filter: []MetricsFilterEntry{
+				{Value: `.*count`, IsRegex: true},
+			},
+			expectedNames:       buildExpected("distsender.rpc.count", "sql.query.count"),
+			expectedMatchCounts: map[string]int{`.*count`: 2},
+		},
+		{
+			name: "unmatched literal returns in unmatchedLiterals",
+			filter: []MetricsFilterEntry{
+				{Value: "sql.query.count", IsRegex: false},
+				{Value: "nonexistent.metric", IsRegex: false},
+			},
+			expectedNames:     buildExpected("sql.query.count"),
+			expectedUnmatched: []string{"nonexistent.metric"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			names, stats, err := GetInternalTimeseriesNamesFromServer(ctx, mockClient, tc.filter, false)
+			require.NoError(t, err)
+
+			require.Equal(t, tc.expectedNames, names)
+
+			if tc.expectedMatchCounts != nil {
+				for pattern, expectedCount := range tc.expectedMatchCounts {
+					require.Equal(t, expectedCount, stats.RegexMatchCounts[pattern], "match count for pattern %s", pattern)
+				}
+			}
+
+			if tc.expectedUnmatched != nil {
+				require.Equal(t, tc.expectedUnmatched, stats.UnmatchedLiterals)
+			} else {
+				require.Empty(t, stats.UnmatchedLiterals)
+			}
+		})
+	}
+}
+
+// TestGetInternalTimeseriesNamesFromServer_NonVerboseFiltering tests that
+// the nonVerbose parameter correctly filters metrics by visibility.
+func TestGetInternalTimeseriesNamesFromServer_NonVerboseFiltering(t *testing.T) {
+	ctx := context.Background()
+
+	mockMetadata := map[string]metric.Metadata{
+		"sys.cpu.user.percent": {
+			Name:       "sys.cpu.user.percent",
+			Visibility: metric.Metadata_ESSENTIAL,
+			MetricType: io_prometheus_client.MetricType_GAUGE,
+		},
+		"sql.txn.commit.count": {
+			Name:       "sql.txn.commit.count",
+			Visibility: metric.Metadata_ESSENTIAL,
+			MetricType: io_prometheus_client.MetricType_COUNTER,
+		},
+		"queue.gc.pending": {
+			Name:       "queue.gc.pending",
+			Visibility: metric.Metadata_SUPPORT,
+			MetricType: io_prometheus_client.MetricType_GAUGE,
+		},
+		"storage.disk-slow": {
+			Name:       "storage.disk-slow",
+			Visibility: metric.Metadata_SUPPORT,
+			MetricType: io_prometheus_client.MetricType_COUNTER,
+		},
+		"internal.debug.metric1": {
+			Name:       "internal.debug.metric1",
+			Visibility: metric.Metadata_INTERNAL,
+			MetricType: io_prometheus_client.MetricType_GAUGE,
+		},
+		"internal.debug.metric2": {
+			Name:       "internal.debug.metric2",
+			Visibility: metric.Metadata_INTERNAL,
+			MetricType: io_prometheus_client.MetricType_COUNTER,
+		},
+	}
+
+	testCases := []struct {
+		name       string
+		nonVerbose bool
+		expected   []string
+	}{
+		{
+			name:       "verbose mode includes all metrics",
+			nonVerbose: false,
+			expected: []string{
+				"cr.node.sys.cpu.user.percent", "cr.store.sys.cpu.user.percent",
+				"cr.node.sql.txn.commit.count", "cr.store.sql.txn.commit.count",
+				"cr.node.queue.gc.pending", "cr.store.queue.gc.pending",
+				"cr.node.storage.disk-slow", "cr.store.storage.disk-slow",
+				"cr.node.internal.debug.metric1", "cr.store.internal.debug.metric1",
+				"cr.node.internal.debug.metric2", "cr.store.internal.debug.metric2",
+			},
+		},
+		{
+			name:       "non-verbose mode excludes internal metrics",
+			nonVerbose: true,
+			expected: []string{
+				"cr.node.sys.cpu.user.percent", "cr.store.sys.cpu.user.percent",
+				"cr.node.sql.txn.commit.count", "cr.store.sql.txn.commit.count",
+				"cr.node.queue.gc.pending", "cr.store.queue.gc.pending",
+				"cr.node.storage.disk-slow", "cr.store.storage.disk-slow",
+			},
+		},
+	}
+
+	mockClient := &mockAdminClient{metadata: mockMetadata}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			actual, _, err := GetInternalTimeseriesNamesFromServer(ctx, mockClient, nil, tc.nonVerbose)
+			require.NoError(t, err)
+			require.ElementsMatch(t, tc.expected, actual)
+		})
+	}
+}
+
+// TestGetInternalTimeseriesNamesFromServer_OutputValidation verifies empty metadata
+// handling, complete filtering when all metrics are INTERNAL, and alphabetical sorting.
+func TestGetInternalTimeseriesNamesFromServer_OutputValidation(t *testing.T) {
+	ctx := context.Background()
+
+	testCases := []struct {
+		name       string
+		metadata   map[string]metric.Metadata
+		nonVerbose bool
+		validate   func(t *testing.T, names []string, err error)
+	}{
+		{
+			name:       "empty metadata returns empty list",
+			metadata:   map[string]metric.Metadata{},
+			nonVerbose: false,
+			validate: func(t *testing.T, names []string, err error) {
+				require.NoError(t, err)
+				require.Empty(t, names)
+			},
+		},
+		{
+			name: "all internal metrics filtered in non-verbose",
+			metadata: map[string]metric.Metadata{
+				"internal1": {
+					Name:       "internal1",
+					Help:       "Internal metric 1",
+					Visibility: metric.Metadata_INTERNAL,
+					MetricType: io_prometheus_client.MetricType_GAUGE,
+				},
+				"internal2": {
+					Name:       "internal2",
+					Help:       "Internal metric 2",
+					Visibility: metric.Metadata_INTERNAL,
+					MetricType: io_prometheus_client.MetricType_COUNTER,
+				},
+			},
+			nonVerbose: true,
+			validate: func(t *testing.T, names []string, err error) {
+				require.NoError(t, err)
+				require.Empty(t, names, "all internal metrics should be filtered out")
+			},
+		},
+		{
+			name: "metrics are sorted alphabetically",
+			metadata: map[string]metric.Metadata{
+				"zebra": {
+					Name:       "zebra",
+					Help:       "Z metric",
+					Visibility: metric.Metadata_ESSENTIAL,
+					MetricType: io_prometheus_client.MetricType_GAUGE,
+				},
+				"alpha": {
+					Name:       "alpha",
+					Help:       "A metric",
+					Visibility: metric.Metadata_ESSENTIAL,
+					MetricType: io_prometheus_client.MetricType_GAUGE,
+				},
+				"beta": {
+					Name:       "beta",
+					Help:       "B metric",
+					Visibility: metric.Metadata_ESSENTIAL,
+					MetricType: io_prometheus_client.MetricType_GAUGE,
+				},
+			},
+			nonVerbose: false,
+			validate: func(t *testing.T, names []string, err error) {
+				require.NoError(t, err)
+				for i := 1; i < len(names); i++ {
+					require.Less(t, names[i-1], names[i], "names should be sorted alphabetically")
+				}
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			mockClient := &mockAdminClient{metadata: tc.metadata}
+			names, _, err := GetInternalTimeseriesNamesFromServer(ctx, mockClient, nil, tc.nonVerbose)
+			tc.validate(t, names, err)
+		})
+	}
 }

@@ -53,7 +53,13 @@ func TestParseDataDriven(t *testing.T) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "parse":
-				return sqlutils.VerifyParseFormat(t, d.Input, d.Pos, false /* plpgsql */)
+				reparseWithoutLiterals := true
+				for _, arg := range d.CmdArgs {
+					if arg.Key == "no-parse-without-literals" {
+						reparseWithoutLiterals = false
+					}
+				}
+				return sqlutils.VerifyParseFormat(t, d.Input, d.Pos, sqlutils.SQL, reparseWithoutLiterals)
 			case "parse-no-verify":
 				_, err := parser.Parse(d.Input)
 				if err != nil {
@@ -365,18 +371,17 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE ACCESS METHOD a`, 0, `create access method`, ``},
 
 		{`COMMENT ON EXTENSION a`, 74777, `comment on extension`, ``},
-		{`COMMENT ON FUNCTION f() is 'f'`, 17511, ``, ``},
 
-		{`COPY t FROM STDIN OIDS`, 41608, `oids`, ``},
-		{`COPY t FROM STDIN FREEZE`, 41608, `freeze`, ``},
-		{`COPY t FROM STDIN FORCE QUOTE *`, 41608, `quote`, ``},
-		{`COPY t FROM STDIN FORCE NULL *`, 41608, `force_null`, ``},
-		{`COPY t FROM STDIN FORCE NOT NULL *`, 41608, `force_not_null`, ``},
-		{`COPY t FROM STDIN WITH (OIDS)`, 41608, `oids`, ``},
-		{`COPY t FROM STDIN (FREEZE)`, 41608, `freeze`, ``},
-		{`COPY t FROM STDIN WITH (FORCE_QUOTE) *`, 41608, `quote`, ``},
-		{`COPY t FROM STDIN (FORCE_NULL) *`, 41608, `force_null`, ``},
-		{`COPY t FROM STDIN (HEADER, FORCE_NOT_NULL) *`, 41608, `force_not_null`, ``},
+		{`COPY t FROM STDIN OIDS`, 0, `copy from unsupported format`, ``},
+		{`COPY t FROM STDIN FREEZE`, 85573, `freeze`, ``},
+		{`COPY t FROM STDIN FORCE QUOTE *`, 85575, `quote`, ``},
+		{`COPY t FROM STDIN FORCE NULL *`, 85575, `force_null`, ``},
+		{`COPY t FROM STDIN FORCE NOT NULL *`, 85575, `force_not_null`, ``},
+		{`COPY t FROM STDIN WITH (OIDS)`, 0, `copy from unsupported format`, ``},
+		{`COPY t FROM STDIN (FREEZE)`, 85573, `freeze`, ``},
+		{`COPY t FROM STDIN WITH (FORCE_QUOTE) *`, 85575, `quote`, ``},
+		{`COPY t FROM STDIN (FORCE_NULL) *`, 85575, `force_null`, ``},
+		{`COPY t FROM STDIN (HEADER, FORCE_NOT_NULL) *`, 85575, `force_not_null`, ``},
 		{`COPY x FROM STDIN WHERE a = b`, 54580, ``, ``},
 
 		{`ALTER AGGREGATE a`, 74775, `alter aggregate`, ``},
@@ -390,7 +395,7 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE EXTENSION IF NOT EXISTS a WITH schema = 'public'`, 74777, `create extension if not exists with`, ``},
 		{`CREATE FOREIGN DATA WRAPPER a`, 0, `create fdw`, ``},
 		{`CREATE FOREIGN TABLE a`, 0, `create foreign table`, ``},
-		{`CREATE LANGUAGE a`, 17511, `create language a`, ``},
+		{`CREATE LANGUAGE a`, 169118, `create language a`, ``},
 		{`CREATE OPERATOR a`, 65017, ``, ``},
 		{`CREATE PUBLICATION a`, 0, `create publication`, ``},
 		{`CREATE RULE a`, 0, `create rule`, ``},
@@ -404,12 +409,11 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`DROP CAST a`, 0, `drop cast`, ``},
 		{`DROP COLLATION a`, 0, `drop collation`, ``},
 		{`DROP CONVERSION a`, 0, `drop conversion`, ``},
-		{`DROP DOMAIN a`, 27796, `drop`, ``},
 		{`DROP EXTENSION a`, 74777, `drop extension`, ``},
 		{`DROP EXTENSION IF EXISTS a`, 74777, `drop extension if exists`, ``},
 		{`DROP FOREIGN TABLE a`, 0, `drop foreign table`, ``},
 		{`DROP FOREIGN DATA WRAPPER a`, 0, `drop fdw`, ``},
-		{`DROP LANGUAGE a`, 17511, `drop language a`, ``},
+		{`DROP LANGUAGE a`, 169118, `drop language a`, ``},
 		{`DROP OPERATOR a`, 0, `drop operator`, ``},
 		{`DROP PUBLICATION a`, 0, `drop publication`, ``},
 		{`DROP RULE a`, 0, `drop rule`, ``},
@@ -427,8 +431,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE TABLE a(x INT ARRAY[1][2])`, 32552, ``, ``},
 
 		{`CREATE TABLE a(b INT8) WITH OIDS`, 0, `create table with oids`, ``},
-
-		{`CREATE TABLE a AS SELECT b WITH NO DATA`, 0, `create table as with no data`, ``},
 
 		{`CREATE TABLE a(b INT8 REFERENCES c(x) MATCH PARTIAL`, 20305, `match partial`, ``},
 		{`CREATE TABLE a(b INT8, FOREIGN KEY (b) REFERENCES c(x) MATCH PARTIAL)`, 20305, `match partial`, ``},
@@ -462,8 +464,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE TYPE a AS RANGE b`, 27791, ``, ``},
 		{`CREATE TYPE a (b)`, 27793, `base`, ``},
 		{`CREATE TYPE a`, 27793, `shell`, ``},
-		{`CREATE DOMAIN a`, 27796, `create`, ``},
-
 		{`ALTER TYPE db.t RENAME ATTRIBUTE foo TO bar`, 48701, `ALTER TYPE ATTRIBUTE`, ``},
 		{`ALTER TYPE db.s.t ADD ATTRIBUTE foo bar`, 48701, `ALTER TYPE ATTRIBUTE`, ``},
 		{`ALTER TYPE db.s.t ADD ATTRIBUTE foo bar COLLATE hello`, 48701, `ALTER TYPE ATTRIBUTE`, ``},
@@ -478,6 +478,9 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`ALTER TYPE db.s.t ALTER ATTRIBUTE foo SET DATA TYPE typ COLLATE en RESTRICT`, 48701, `ALTER TYPE ATTRIBUTE`, ``},
 		{`ALTER TYPE db.s.t ADD ATTRIBUTE foo bar RESTRICT, DROP ATTRIBUTE foo`, 48701, `ALTER TYPE ATTRIBUTE`, ``},
 
+		{`ALTER TYPE db.t SET (storage = plain)`, 169253, `ALTER TYPE SET`, ``},
+		{`ALTER TYPE db.t SET (receive = recv_fn, send = send_fn)`, 169253, `ALTER TYPE SET`, ``},
+
 		{`CREATE INDEX a ON b USING HASH (c)`, 0, `index using hash`, ``},
 		{`CREATE INDEX a ON b USING SPGIST (c)`, 0, `index using spgist`, ``},
 		{`CREATE INDEX a ON b USING BRIN (c)`, 0, `index using brin`, ``},
@@ -486,7 +489,7 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE INDEX a ON b(a ASC NULLS LAST)`, 6224, ``, ``},
 		{`CREATE INDEX a ON b(a DESC NULLS FIRST)`, 6224, ``, ``},
 
-		{`INSERT INTO foo(a, a.b) VALUES (1,2)`, 27792, ``, ``},
+		{`INSERT INTO foo(a, a.b) VALUES (1,2)`, 102984, ``, ``},
 
 		{`SELECT a(b) 'c'`, 0, `a(...) SCONST`, ``},
 		{`SELECT UNIQUE (SELECT b)`, 0, `UNIQUE predicate`, ``},
@@ -503,7 +506,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE TABLE a(b BOX)`, 21286, `box`, ``},
 		{`CREATE TABLE a(b CIDR)`, 18846, `cidr`, ``},
 		{`CREATE TABLE a(b CIRCLE)`, 21286, `circle`, ``},
-		{`CREATE TABLE a(b JSONPATH)`, 22513, `jsonpath`, ``},
 		{`CREATE TABLE a(b LINE)`, 21286, `line`, ``},
 		{`CREATE TABLE a(b LSEG)`, 21286, `lseg`, ``},
 		{`CREATE TABLE a(b MACADDR)`, 45813, `macaddr`, ``},
@@ -520,9 +522,9 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE TABLE a(a INT, UNIQUE (a) NOT VALID)`, 0, `table constraint`,
 			`UNIQUE constraints cannot be marked NOT VALID`},
 
-		{`UPDATE foo SET (a, a.b) = (1, 2)`, 27792, ``, ``},
-		{`UPDATE foo SET a.b = 1`, 27792, ``, ``},
-		{`UPDATE Foo SET x.y = z`, 27792, ``, ``},
+		{`UPDATE foo SET (a, a.b) = (1, 2)`, 102984, ``, ``},
+		{`UPDATE foo SET a.b = 1`, 102984, ``, ``},
+		{`UPDATE Foo SET x.y = z`, 102984, ``, ``},
 
 		{`REINDEX INDEX a`, 0, `reindex index`, `CockroachDB does not require reindexing.`},
 		{`REINDEX INDEX CONCURRENTLY a`, 0, `reindex index`, `CockroachDB does not require reindexing.`},
@@ -531,7 +533,7 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`REINDEX DATABASE a`, 0, `reindex database`, `CockroachDB does not require reindexing.`},
 		{`REINDEX SYSTEM a`, 0, `reindex system`, `CockroachDB does not require reindexing.`},
 
-		{`UPSERT INTO foo(a, a.b) VALUES (1,2)`, 27792, ``, ``},
+		{`UPSERT INTO foo(a, a.b) VALUES (1,2)`, 102984, ``, ``},
 
 		{`SELECT 1 OPERATOR(public.+) 2`, 65017, ``, ``},
 
@@ -629,6 +631,27 @@ func TestParseSQL(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestParse_RetainComments(t *testing.T) {
+	sql := `SELECT 1 -- my comment`
+	var p parser.Parser
+
+	testutils.RunTrueAndFalse(t, "RetainComments", func(t *testing.T, retainComments bool) {
+		options := parser.DefaultParseOptions
+		if retainComments {
+			options = options.RetainComments()
+		}
+		stmts, err := p.ParseWithOptions(sql, options)
+		require.NoError(t, err)
+		require.Len(t, stmts, 1)
+		if retainComments {
+			require.Len(t, stmts[0].Comments, 1)
+			require.Equal(t, `-- my comment`, stmts[0].Comments[0])
+		} else {
+			require.Len(t, stmts[0].Comments, 0)
+		}
+	})
 }
 
 // TestParseNumPlaceholders verifies that Statement.NumPlaceholders is set

@@ -13,6 +13,8 @@ import (
 	"encoding/asn1"
 	"fmt"
 	"io"
+	"net"
+	"net/url"
 	"strconv"
 	"strings"
 	"testing"
@@ -25,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -37,6 +40,7 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
+	"storj.io/drpc/drpcctx"
 )
 
 // mockServerStream is an implementation of grpc.ServerStream that receives a
@@ -60,7 +64,7 @@ func (s *mockServerStream) RecvMsg(m interface{}) error {
 func TestWrappedServerStream(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ss := mockServerStream{1, 2, 3}
-	ctx := context.WithValue(context.Background(), struct{}{}, "v")
+	ctx := context.WithValue(context.Background(), contextKey{}, "v")
 
 	var recv int
 	wrappedI := rpc.TestingNewWrappedServerStream(ctx, &ss, func(m interface{}) error {
@@ -98,6 +102,10 @@ func TestWrappedServerStream(t *testing.T) {
 
 func TestAuthenticateTenant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	testutils.RunTrueAndFalse(t, "drpc", testAuthenticateTenant)
+}
+
+func testAuthenticateTenant(t *testing.T, enableDRPC bool) {
 	correctOU := []string{security.TenantsOU}
 	stid := roachpb.SystemTenantID
 	tenTen := roachpb.MustMakeTenantID(10)
@@ -114,6 +122,13 @@ func TestAuthenticateTenant(t *testing.T) {
 		clientTenantInMD string
 		certPrincipalMap string
 		certDNSName      string
+		allowDebugUser   bool
+		certDNSSANs      []string
+		certURISANs      []string
+		certIPSANs       []string
+		rootSAN          string
+		nodeSAN          string
+		sanRequired      bool
 	}{
 		{systemID: stid, ous: correctOU, commonName: "10", expTenID: tenTen},
 		{systemID: stid, ous: correctOU, commonName: roachpb.MinTenantID.String(), expTenID: roachpb.MinTenantID},
@@ -131,18 +146,20 @@ func TestAuthenticateTenant(t *testing.T) {
 		{systemID: stid, ous: append([]string{"foo"}, correctOU...), commonName: "other", expErr: `could not parse tenant ID from Common Name`},
 		{systemID: stid, ous: nil, commonName: "root"},
 		{systemID: stid, ous: nil, commonName: "node"},
+		{systemID: stid, ous: nil, commonName: "debug_user", allowDebugUser: true},
 		{systemID: stid, ous: nil, commonName: "root", tenantScope: 10,
-			expErr: `need root or node client cert to perform RPCs on this server \(this is tenant system; cert is valid for "root" on tenant 10\)`},
+			expErr: `need root or node client cert to perform RPCs on this server \(this is tenant system; cert is valid for "root" on tenantID 10\)`},
 		{systemID: tenTen, ous: correctOU, commonName: "10", expTenID: roachpb.TenantID{}},
 		{systemID: tenTen, ous: correctOU, commonName: "123", expErr: `client tenant identity \(123\) does not match server`},
 		{systemID: tenTen, ous: correctOU, commonName: "1", expErr: `invalid tenant ID 1 in Common Name \(CN\)`},
 		{systemID: tenTen, ous: nil, commonName: "root"},
 		{systemID: tenTen, ous: nil, commonName: "node"},
+		{systemID: tenTen, ous: nil, commonName: "debug_user", allowDebugUser: true},
 
 		// Passing a client ID in metadata instead of relying only on the TLS cert.
-		{clientTenantInMD: "invalid", expErr: `could not parse tenant ID from gRPC metadata`},
-		{clientTenantInMD: "1", expErr: `invalid tenant ID 1 in gRPC metadata`},
-		{clientTenantInMD: "-1", expErr: `could not parse tenant ID from gRPC metadata`},
+		{clientTenantInMD: "invalid", expErr: `could not parse tenant ID from (gRPC|drpc) metadata`},
+		{clientTenantInMD: "1", expErr: `invalid tenant ID 1 in (gRPC|drpc) metadata`},
+		{clientTenantInMD: "-1", expErr: `could not parse tenant ID from (gRPC|drpc) metadata`},
 
 		// tenant ID in MD matches that in client cert.
 		// Server is KV node: expect tenant authorization.
@@ -162,6 +179,8 @@ func TestAuthenticateTenant(t *testing.T) {
 		// Server is KV node: expect tenant authorization.
 		{clientTenantInMD: "10",
 			systemID: stid, ous: nil, commonName: "node", expTenID: tenTen},
+		{clientTenantInMD: "10",
+			systemID: stid, ous: nil, commonName: "debug_user", expTenID: tenTen, allowDebugUser: true},
 		// tenant ID present in MD, but not in client cert. However,
 		// client cert is valid. Use MD tenant ID.
 		// Server is secondary tenant: do not do additional tenant authorization.
@@ -169,6 +188,8 @@ func TestAuthenticateTenant(t *testing.T) {
 			systemID: tenTen, ous: nil, commonName: "root", expTenID: roachpb.TenantID{}},
 		{clientTenantInMD: "10",
 			systemID: tenTen, ous: nil, commonName: "node", expTenID: roachpb.TenantID{}},
+		{clientTenantInMD: "10",
+			systemID: tenTen, ous: nil, commonName: "debug_user", expTenID: roachpb.TenantID{}, allowDebugUser: true},
 		// tenant ID present in MD, but not in client cert. Use MD tenant ID.
 		// Server tenant ID does not match client tenant ID.
 		{clientTenantInMD: "123",
@@ -200,8 +221,86 @@ func TestAuthenticateTenant(t *testing.T) {
 		{systemID: stid, ous: nil, commonName: "foo", subjectRequired: true, nodeDNString: "CN=foo"},
 		{systemID: stid, ous: nil, commonName: "foo", subjectRequired: true,
 			rootDNString: "CN=foo", nodeDNString: "CN=bar"},
+		// Test case for disallow root login functionality
+		{systemID: stid, ous: nil, commonName: "root", expErr: "root login has been disallowed"},
+		{systemID: stid, ous: nil, commonName: "foo", certDNSName: "root", expErr: "root login has been disallowed"},
+		// Test cases for allow debug user functionality
+		{systemID: stid, ous: nil, commonName: "debug_user", expErr: "debug_user login is not allowed"},
+		{systemID: stid, ous: nil, commonName: "foo", certDNSName: "debug_user", expErr: "debug_user login is not allowed"},
+
+		// SAN-based authentication tests
+		// SAN validation succeeds with correct cert scope
+		{systemID: stid, ous: nil, commonName: "root", certURISANs: []string{"spiffe://example.com/root"},
+			rootSAN: "URI=spiffe://example.com/root", sanRequired: true},
+		{systemID: stid, ous: nil, commonName: "node", certDNSSANs: []string{"node.example.com"},
+			nodeSAN: "DNS=node.example.com", sanRequired: true},
+		// SAN fails, DN fallback succeeds
+		{systemID: stid, ous: nil, commonName: "root", subjectRequired: true, certURISANs: []string{"spiffe://example.com/wrong"},
+			rootSAN: "URI=spiffe://example.com/root", rootDNString: "CN=root", sanRequired: true},
+		{systemID: stid, ous: nil, commonName: "node", subjectRequired: true, certDNSSANs: []string{"wrong.example.com"},
+			nodeSAN: "DNS=node.example.com", nodeDNString: "CN=node", sanRequired: true},
+		// Both SAN and DN fail
+		{systemID: stid, ous: nil, commonName: "foo", subjectRequired: true, certURISANs: []string{"spiffe://example.com/wrong"},
+			rootSAN: "URI=spiffe://example.com/root", rootDNString: "CN=bar", sanRequired: true,
+			expErr: "need root or node client cert to perform RPCs on this server: SAN and DN validation failed"},
+		// SAN fails, DN not configured
+		{systemID: stid, ous: nil, commonName: "foo", certURISANs: []string{"spiffe://example.com/wrong"},
+			rootSAN: "URI=spiffe://example.com/root", sanRequired: true, subjectRequired: true,
+			expErr: "need root or node client cert to perform RPCs on this server: SAN and DN validation failed"},
+		// Both SAN and DN not configured, both cluster settings enabled
+		{systemID: stid, ous: nil, commonName: "root", sanRequired: true, subjectRequired: true,
+			expErr: "need root or node client cert to perform RPCs on this server: SAN and DN validation failed"},
+		// SAN fails, DN cluster setting not enabled
+		{systemID: stid, ous: nil, commonName: "root", certURISANs: []string{"spiffe://example.com/wrong"},
+			rootSAN: "URI=spiffe://example.com/root", rootDNString: "CN=root", sanRequired: true,
+			expErr: "root and node roles do not have valid SANs set and subject_required cluster setting is not enabled"},
+		// Multiple SAN attributes
+		{systemID: stid, ous: nil, commonName: "root",
+			certURISANs: []string{"spiffe://example.com/root"}, certDNSSANs: []string{"node.example.com"},
+			certIPSANs: []string{"192.168.1.1"}, rootSAN: "URI=spiffe://example.com/root", sanRequired: true},
+		{systemID: stid, ous: nil, commonName: "foo", certURISANs: []string{"spiffe://example.com/root"},
+			rootSAN: "URI=spiffe://example.com/root,DNS=missing.example.com", sanRequired: true,
+			expErr: "root and node roles do not have valid SANs set and subject_required cluster setting is not enabled"},
+		// Both root and node SANs configured
+		{systemID: stid, ous: nil, commonName: "root", certURISANs: []string{"spiffe://example.com/root"},
+			rootSAN: "URI=spiffe://example.com/root", nodeSAN: "DNS=node.example.com", sanRequired: true},
+		{systemID: stid, ous: nil, commonName: "node", certDNSSANs: []string{"node.example.com"},
+			rootSAN: "URI=spiffe://example.com/root", nodeSAN: "DNS=node.example.com", sanRequired: true},
+		// SAN matches but cert has wrong tenant scope - reject
+		{systemID: stid, ous: nil, commonName: "root", certURISANs: []string{"spiffe://example.com/root"},
+			rootSAN: "URI=spiffe://example.com/root", sanRequired: true, tenantScope: 10,
+			expErr: `need root or node client cert to perform RPCs on this server \(this is tenant system; cert is valid for "root" on tenantID 10\)`},
+		// SAN matches and cert has correct tenant scope - accept
+		{systemID: tenTen, ous: nil, commonName: "root", certURISANs: []string{"spiffe://example.com/root"},
+			rootSAN: "URI=spiffe://example.com/root", sanRequired: true, tenantScope: 10},
+		// SAN fails, DN fallback matches, but cert has wrong tenant scope - reject
+		{systemID: stid, ous: nil, commonName: "root", subjectRequired: true,
+			certURISANs: []string{"spiffe://example.com/wrong"},
+			rootSAN:     "URI=spiffe://example.com/root", rootDNString: "CN=root", sanRequired: true, tenantScope: 10,
+			expErr: `need root or node client cert to perform RPCs on this server \(this is tenant system; cert is valid for "root" on tenantID 10\)`},
+		// SAN matches with tenant ID in metadata - expect tenant authorization
+		{clientTenantInMD: "10",
+			systemID: stid, ous: nil, commonName: "root", certURISANs: []string{"spiffe://example.com/root"},
+			rootSAN: "URI=spiffe://example.com/root", sanRequired: true, expTenID: tenTen},
 	} {
 		t.Run(fmt.Sprintf("from %v to %v (md %q)", tc.commonName, tc.systemID, tc.clientTenantInMD), func(t *testing.T) {
+			// Enable root login blocking for the specific test case
+			if tc.expErr == "root login has been disallowed" {
+				security.SetDisallowRootLogin(true)
+				defer security.SetDisallowRootLogin(false)
+			}
+			// Disable debug user login for the specific test case (it's disabled by default)
+			if tc.expErr == "debug_user login is not allowed" {
+				security.SetAllowDebugUser(false)
+				defer security.SetAllowDebugUser(false)
+			}
+
+			// Enable debug user login if specified in the test case
+			if tc.allowDebugUser {
+				security.SetAllowDebugUser(true)
+				defer security.SetAllowDebugUser(false)
+			}
+
 			err := security.SetCertPrincipalMap(strings.Split(tc.certPrincipalMap, ","))
 			if err != nil {
 				t.Fatal(err)
@@ -218,9 +317,19 @@ func TestAuthenticateTenant(t *testing.T) {
 					t.Fatalf("could not set node subject DN, err: %v", err)
 				}
 			}
+			if tc.rootSAN != "" {
+				err = security.SetRootSAN(tc.rootSAN)
+				require.NoError(t, err)
+			}
+			if tc.nodeSAN != "" {
+				err = security.SetNodeSAN(tc.nodeSAN)
+				require.NoError(t, err)
+			}
 			defer func() {
 				security.UnsetRootSubject()
 				security.UnsetNodeSubject()
+				security.UnsetRootSAN()
+				security.UnsetNodeSAN()
 			}()
 
 			cert := &x509.Certificate{
@@ -236,6 +345,26 @@ func TestAuthenticateTenant(t *testing.T) {
 			if tc.certDNSName != "" {
 				cert.DNSNames = append(cert.DNSNames, tc.certDNSName)
 			}
+			// Add DNS SANs
+			if len(tc.certDNSSANs) > 0 {
+				cert.DNSNames = append(cert.DNSNames, tc.certDNSSANs...)
+			}
+			// Add URI SANs
+			if len(tc.certURISANs) > 0 {
+				for _, uriStr := range tc.certURISANs {
+					uri, err := url.Parse(uriStr)
+					require.NoError(t, err)
+					cert.URIs = append(cert.URIs, uri)
+				}
+			}
+			// Add IP SANs
+			if len(tc.certIPSANs) > 0 {
+				for _, ipStr := range tc.certIPSANs {
+					ip := net.ParseIP(ipStr)
+					require.NotNil(t, ip)
+					cert.IPAddresses = append(cert.IPAddresses, ip)
+				}
+			}
 			if tc.tenantScope > 0 {
 				tenantSANs, err := security.MakeTenantURISANs(
 					username.MakeSQLUsernameFromPreNormalizedString(tc.commonName),
@@ -243,14 +372,19 @@ func TestAuthenticateTenant(t *testing.T) {
 				require.NoError(t, err)
 				cert.URIs = append(cert.URIs, tenantSANs...)
 			}
-			tlsInfo := credentials.TLSInfo{
-				State: tls.ConnectionState{
-					PeerCertificates: []*x509.Certificate{cert},
-				},
+			var ctx context.Context
+			if enableDRPC {
+				ctx = drpcctx.WithPeerConnectionInfo(context.Background(),
+					drpcctx.PeerConnectionInfo{Certificates: []*x509.Certificate{cert}})
+			} else {
+				tlsInfo := credentials.TLSInfo{
+					State: tls.ConnectionState{
+						PeerCertificates: []*x509.Certificate{cert},
+					},
+				}
+				p := peer.Peer{AuthInfo: tlsInfo}
+				ctx = peer.NewContext(context.Background(), &p)
 			}
-			p := peer.Peer{AuthInfo: tlsInfo}
-			ctx := peer.NewContext(context.Background(), &p)
-
 			if tc.clientTenantInMD != "" {
 				md := metadata.MD{"client-tid": []string{tc.clientTenantInMD}}
 				ctx = metadata.NewIncomingContext(ctx, md)
@@ -262,8 +396,11 @@ func TestAuthenticateTenant(t *testing.T) {
 			err = u.Set(ctx, security.ClientCertSubjectRequiredSettingName,
 				settings.EncodedValue{Value: strconv.FormatBool(tc.subjectRequired), Type: "b"})
 			require.NoError(t, err)
+			err = u.Set(ctx, security.ClientCertSANRequiredSettingName,
+				settings.EncodedValue{Value: strconv.FormatBool(tc.sanRequired), Type: "b"})
+			require.NoError(t, err)
 
-			tenID, err := rpc.TestingAuthenticateTenant(ctx, tc.systemID, sv)
+			tenID, err := rpc.TestingAuthenticateTenant(ctx, tc.systemID, sv, enableDRPC)
 
 			if tc.expErr == "" {
 				require.Equal(t, tc.expTenID, tenID)
@@ -339,7 +476,7 @@ func BenchmarkAuthenticate(b *testing.B) {
 
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				_, err := rpc.TestingAuthenticateTenant(ctx, tc.systemID, sv)
+				_, err := rpc.TestingAuthenticateTenant(ctx, tc.systemID, sv, false /* enableDRPC */)
 				if err != nil {
 					b.Fatal(err)
 				}
@@ -436,7 +573,7 @@ func TestTenantAuthRequest(t *testing.T) {
 		}
 	}
 
-	tenantTwo := roachpb.MustMakeTenantID(2)
+	tenantThree := roachpb.MustMakeTenantID(3)
 	makeTimeseriesQueryReq := func(tenantID *roachpb.TenantID) *tspb.TimeSeriesQueryRequest {
 		req := &tspb.TimeSeriesQueryRequest{
 			Queries: []tspb.Query{{}},
@@ -572,6 +709,30 @@ func TestTenantAuthRequest(t *testing.T) {
 				expErr: noError,
 			},
 		},
+		"/cockroach.roachpb.Internal/BatchStream": {
+			{
+				req:    &kvpb.BatchRequest{},
+				expErr: `requested key span /Max not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req: &kvpb.BatchRequest{Requests: makeReqs(
+					makeReq("a", "b"),
+				)},
+				expErr: `requested key span {a-b} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req: &kvpb.BatchRequest{Requests: makeReqs(
+					makeReq(prefix(5, "a"), prefix(5, "b")),
+				)},
+				expErr: `requested key span /Tenant/5{a-b} not fully contained in tenant keyspace /Tenant/1{0-1}`,
+			},
+			{
+				req: &kvpb.BatchRequest{Requests: makeReqs(
+					makeReq(prefix(10, "a"), prefix(10, "b")),
+				)},
+				expErr: noError,
+			},
+		},
 		"/cockroach.roachpb.Internal/RangeLookup": {
 			{
 				req:    &kvpb.RangeLookupRequest{},
@@ -634,19 +795,15 @@ func TestTenantAuthRequest(t *testing.T) {
 				expErr: noError,
 			},
 			{
-				req:    &kvpb.GossipSubscriptionRequest{Patterns: []string{"system-db"}},
-				expErr: noError,
-			},
-			{
 				req:    &kvpb.GossipSubscriptionRequest{Patterns: []string{"table-stat-added"}},
 				expErr: `requested pattern "table-stat-added" not permitted`,
 			},
 			{
-				req:    &kvpb.GossipSubscriptionRequest{Patterns: []string{"node:.*", "system-db"}},
+				req:    &kvpb.GossipSubscriptionRequest{Patterns: []string{"node:.*", "store:.*"}},
 				expErr: noError,
 			},
 			{
-				req:    &kvpb.GossipSubscriptionRequest{Patterns: []string{"node:.*", "system-db", "table-stat-added"}},
+				req:    &kvpb.GossipSubscriptionRequest{Patterns: []string{"node:.*", "store:.*", "table-stat-added"}},
 				expErr: `requested pattern "table-stat-added" not permitted`,
 			},
 		},
@@ -978,7 +1135,7 @@ func TestTenantAuthRequest(t *testing.T) {
 				expErr: noError,
 			},
 			{
-				req:    makeTimeseriesQueryReq(&tenantTwo),
+				req:    makeTimeseriesQueryReq(&tenantThree),
 				expErr: `tsdb query with invalid tenant not permitted`,
 			},
 		},
@@ -1009,7 +1166,7 @@ func TestTenantAuthRequest(t *testing.T) {
 						// cross-read capability and the request is a read, expect no error.
 						if canCrossRead && strings.Contains(tc.expErr, "fully contained") {
 							switch method {
-							case "/cockroach.roachpb.Internal/Batch":
+							case "/cockroach.roachpb.Internal/Batch", "/cockroach.roachpb.Internal/BatchStream":
 								if tc.req.(*kvpb.BatchRequest).IsReadOnly() {
 									tc.expErr = noError
 								}
@@ -1235,4 +1392,147 @@ func (m mockAuthorizer) HasNodelocalStorageCapability(
 
 func (m mockAuthorizer) IsExemptFromRateLimiting(context.Context, roachpb.TenantID) bool {
 	return m.hasExemptFromRateLimiterCapability
+}
+
+type contextKey struct{}
+
+// TestServerpbEndpointAccess ensures root user access to serverpb admin and status endpoints
+// works correctly with authentication (considering disallow-root-login flag) and authorization.
+func TestServerpbEndpointAccess(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	systemTenantID := roachpb.SystemTenantID
+	const noError = ""
+
+	// Helper to create a certificate with a given common name
+	createCert := func(t *testing.T, commonName string) *x509.Certificate {
+		cert := &x509.Certificate{
+			Subject: pkix.Name{
+				CommonName: commonName,
+			},
+		}
+		var err error
+		cert.RawSubject, err = asn1.Marshal(cert.Subject.ToRDNSequence())
+		require.NoError(t, err)
+		return cert
+	}
+
+	// Helper to create a context with peer certificate
+	createContextWithCert := func(cert *x509.Certificate) context.Context {
+		tlsInfo := credentials.TLSInfo{
+			State: tls.ConnectionState{
+				PeerCertificates: []*x509.Certificate{cert},
+			},
+		}
+		p := peer.Peer{AuthInfo: tlsInfo}
+		return peer.NewContext(context.Background(), &p)
+	}
+
+	t.Run("authentication", func(t *testing.T) {
+		// Test root user authentication with disallow-root-login flag
+		for _, disallowRoot := range []bool{false, true} {
+			testName := "disallow_root_login_disabled"
+			expectedError := noError
+			if disallowRoot {
+				testName = "disallow_root_login_enabled"
+				expectedError = "failed to perform RPC, as root login has been disallowed"
+			}
+
+			t.Run(testName, func(t *testing.T) {
+				if disallowRoot {
+					security.SetDisallowRootLogin(true)
+					defer security.SetDisallowRootLogin(false)
+				}
+
+				cert := createCert(t, "root")
+				ctx := createContextWithCert(cert)
+
+				sv := &settings.Values{}
+				sv.Init(ctx, settings.TestOpaque)
+
+				// Perform authentication - this is where the root login check happens
+				_, err := rpc.TestingAuthenticateTenant(ctx, systemTenantID, sv, false /* enableDRPC */)
+
+				if expectedError == noError {
+					require.NoError(t, err)
+				} else {
+					require.Error(t, err)
+					require.Equal(t, codes.Unauthenticated, status.Code(err))
+					require.Regexp(t, expectedError, err)
+				}
+			})
+		}
+
+		// Test debuguser authentication with allow-debug-user flag
+		for _, allowDebug := range []bool{false, true} {
+			testName := "allow_debug_user_disabled"
+			expectedError := "failed to perform RPC, as debug_user login is not allowed"
+			if allowDebug {
+				testName = "allow_debug_user_enabled"
+				expectedError = noError
+			}
+
+			t.Run(testName, func(t *testing.T) {
+				security.SetAllowDebugUser(allowDebug)
+				defer security.SetAllowDebugUser(false)
+
+				cert := createCert(t, "debug_user")
+				ctx := createContextWithCert(cert)
+
+				sv := &settings.Values{}
+				sv.Init(ctx, settings.TestOpaque)
+
+				// Perform authentication - this is where the debug user login check happens
+				_, err := rpc.TestingAuthenticateTenant(ctx, systemTenantID, sv, false /* enableDRPC */)
+
+				if expectedError == noError {
+					require.NoError(t, err)
+				} else {
+					require.Error(t, err)
+					require.Equal(t, codes.Unauthenticated, status.Code(err))
+					require.Regexp(t, expectedError, err)
+				}
+			})
+		}
+	})
+
+	t.Run("authorization", func(t *testing.T) {
+		// Test root and debug_user authorization to access serverpb endpoints
+		endpoints := map[string]interface{}{
+			"/cockroach.server.serverpb.Admin/Liveness":      &serverpb.LivenessRequest{},
+			"/cockroach.server.serverpb.Status/Nodes":        &serverpb.NodesRequest{},
+			"/cockroach.server.serverpb.Status/TenantRanges": &serverpb.TenantRangesRequest{},
+			"/cockroach.server.serverpb.Status/Gossip":       &serverpb.GossipRequest{},
+			"/cockroach.server.serverpb.Status/Ranges":       &serverpb.RangesRequest{},
+			"/cockroach.server.serverpb.Status/EngineStats":  &serverpb.EngineStatsRequest{},
+		}
+
+		for method, req := range endpoints {
+			t.Run(strings.ReplaceAll(method, "/", "_"), func(t *testing.T) {
+				// Test both root and debug_user
+				for _, user := range []string{"root", "debug_user"} {
+					t.Run(user, func(t *testing.T) {
+						cert := createCert(t, user)
+						ctx := createContextWithCert(cert)
+
+						sv := &settings.Values{}
+						sv.Init(ctx, settings.TestOpaque)
+
+						// Test authorization with mock authorizer
+						err := rpc.TestingAuthorizeTenantRequest(ctx, sv, systemTenantID, method, req, mockAuthorizer{
+							hasCrossTenantRead:                 true,
+							hasCapabilityForBatch:              true,
+							hasNodestatusCapability:            true,
+							hasTSDBQueryCapability:             true,
+							hasNodelocalStorageCapability:      true,
+							hasExemptFromRateLimiterCapability: true,
+							hasTSDBAllCapability:               true,
+						})
+
+						require.NoError(t, err)
+					})
+				}
+			})
+		}
+	})
 }

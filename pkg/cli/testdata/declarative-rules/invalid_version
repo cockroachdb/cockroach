@@ -2,7 +2,8 @@ invalid_version
 -----
 ----
 debug declarative-print-rules 1.1 op
-unsupported version number, the supported versions are: 
+unsupported version number, the supported versions are:
  latest
- 1000024.3
- 1000024.2
+ 1000026.2
+ 1000026.1
+ 1000025.4

@@ -17,6 +17,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/redact"
+	"github.com/stretchr/testify/require"
 )
 
 func TestPrivilege(t *testing.T) {
@@ -87,7 +89,12 @@ func TestPrivilege(t *testing.T) {
 					{Kind: privilege.CREATE},
 					{Kind: privilege.DELETE},
 					{Kind: privilege.DROP},
+					{Kind: privilege.MAINTAIN},
+					{Kind: privilege.REFERENCES},
+					{Kind: privilege.REPLICATIONDEST},
+					{Kind: privilege.REPLICATIONSOURCE},
 					{Kind: privilege.TRIGGER},
+					{Kind: privilege.TRUNCATE},
 					{Kind: privilege.UPDATE},
 					{Kind: privilege.ZONECONFIG},
 				}},
@@ -125,23 +132,21 @@ func TestPrivilege(t *testing.T) {
 			},
 			privilege.Type,
 		},
-		// Ensure revoking BACKUP, CHANGEFEED, CREATE, DROP, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG
-		// from a user with ALL privilege on a table leaves the user with no privileges.
+		// Ensure revoking table privileges from a user with ALL
+		// privilege on a table leaves the user with no privileges.
 		{testUser,
 			privilege.List{privilege.ALL},
-			privilege.List{privilege.BACKUP, privilege.CHANGEFEED, privilege.CREATE, privilege.DROP, privilege.SELECT, privilege.INSERT,
-				privilege.DELETE, privilege.TRIGGER, privilege.UPDATE, privilege.ZONECONFIG},
+			privilege.TablePrivileges,
 			[]catpb.UserPrivilege{
 				{User: username.AdminRoleName(), Privileges: []privilege.Privilege{{Kind: privilege.ALL, GrantOption: true}}},
 			},
 			privilege.Table,
 		},
-		// Ensure revoking BACKUP, CONNECT, CREATE, DROP, SELECT, INSERT, DELETE, UPDATE, ZONECONFIG, RESTORE
-		// from a user with ALL privilege on a database leaves the user with no privileges.
+		// Ensure revoking database privileges from a user with ALL privilege on
+		// a database leaves the user with no privileges.
 		{testUser,
 			privilege.List{privilege.ALL},
-			privilege.List{privilege.BACKUP, privilege.CONNECT, privilege.CREATE, privilege.DROP, privilege.SELECT,
-				privilege.INSERT, privilege.DELETE, privilege.UPDATE, privilege.ZONECONFIG, privilege.RESTORE},
+			privilege.DBPrivileges,
 			[]catpb.UserPrivilege{
 				{User: username.AdminRoleName(), Privileges: []privilege.Privilege{{Kind: privilege.ALL, GrantOption: true}}},
 			},
@@ -553,6 +558,16 @@ func TestGrantWithGrantOption(t *testing.T) {
 			privilege.List{privilege.ALL, privilege.CREATE},
 			privilege.List{privilege.ALL},
 			privilege.List{privilege.ALL}},
+		{catpb.NewPrivilegeDescriptor(testUser, privilege.List{}, privilege.List{}, username.AdminRoleName()),
+			testUser, privilege.Schema,
+			privilege.List{privilege.CHANGEFEED},
+			privilege.List{privilege.CHANGEFEED},
+			privilege.List{privilege.CHANGEFEED}},
+		{catpb.NewPrivilegeDescriptor(testUser, privilege.List{}, privilege.List{}, username.AdminRoleName()),
+			testUser, privilege.Database,
+			privilege.List{privilege.CHANGEFEED},
+			privilege.List{privilege.CHANGEFEED},
+			privilege.List{privilege.CHANGEFEED}},
 	}
 
 	for tcNum, tc := range testCases {
@@ -605,7 +620,7 @@ func TestRevokeWithGrantOption(t *testing.T) {
 			true,
 			privilege.List{privilege.CREATE},
 			privilege.List{privilege.ALL},
-			privilege.List{privilege.BACKUP, privilege.CHANGEFEED, privilege.DROP, privilege.SELECT, privilege.INSERT, privilege.DELETE, privilege.TRIGGER, privilege.UPDATE, privilege.ZONECONFIG},
+			privilege.List{privilege.BACKUP, privilege.CHANGEFEED, privilege.DELETE, privilege.DROP, privilege.INSERT, privilege.MAINTAIN, privilege.REFERENCES, privilege.REPLICATIONDEST, privilege.REPLICATIONSOURCE, privilege.SELECT, privilege.TRIGGER, privilege.TRUNCATE, privilege.UPDATE, privilege.ZONECONFIG},
 			false},
 		{catpb.NewPrivilegeDescriptor(testUser, privilege.List{privilege.ALL}, privilege.List{privilege.ALL}, username.AdminRoleName()),
 			testUser, privilege.Table,
@@ -639,13 +654,27 @@ func TestRevokeWithGrantOption(t *testing.T) {
 			testUser, privilege.Table,
 			false,
 			privilege.List{privilege.CREATE},
-			privilege.List{privilege.BACKUP, privilege.CHANGEFEED, privilege.DROP, privilege.SELECT, privilege.INSERT, privilege.DELETE, privilege.TRIGGER, privilege.UPDATE, privilege.ZONECONFIG},
-			privilege.List{privilege.BACKUP, privilege.CHANGEFEED, privilege.DROP, privilege.SELECT, privilege.INSERT, privilege.DELETE, privilege.TRIGGER, privilege.UPDATE, privilege.ZONECONFIG},
+			privilege.List{privilege.BACKUP, privilege.CHANGEFEED, privilege.DELETE, privilege.DROP, privilege.INSERT, privilege.MAINTAIN, privilege.REFERENCES, privilege.REPLICATIONDEST, privilege.REPLICATIONSOURCE, privilege.SELECT, privilege.TRIGGER, privilege.TRUNCATE, privilege.UPDATE, privilege.ZONECONFIG},
+			privilege.List{privilege.BACKUP, privilege.CHANGEFEED, privilege.DELETE, privilege.DROP, privilege.INSERT, privilege.MAINTAIN, privilege.REFERENCES, privilege.REPLICATIONDEST, privilege.REPLICATIONSOURCE, privilege.SELECT, privilege.TRIGGER, privilege.TRUNCATE, privilege.UPDATE, privilege.ZONECONFIG},
 			false},
 		{catpb.NewPrivilegeDescriptor(testUser, privilege.List{privilege.SELECT, privilege.INSERT}, privilege.List{privilege.INSERT}, username.AdminRoleName()),
 			testUser, privilege.Table,
 			false,
 			privilege.List{privilege.ALL},
+			privilege.List{},
+			privilege.List{},
+			true},
+		{catpb.NewPrivilegeDescriptor(testUser, privilege.List{privilege.CHANGEFEED}, privilege.List{privilege.CHANGEFEED}, username.AdminRoleName()),
+			testUser, privilege.Database,
+			false,
+			privilege.List{privilege.CHANGEFEED},
+			privilege.List{},
+			privilege.List{},
+			true},
+		{catpb.NewPrivilegeDescriptor(testUser, privilege.List{privilege.CHANGEFEED}, privilege.List{privilege.CHANGEFEED}, username.AdminRoleName()),
+			testUser, privilege.Schema,
+			false,
+			privilege.List{privilege.CHANGEFEED},
 			privilege.List{},
 			privilege.List{},
 			true},
@@ -679,4 +708,29 @@ func TestRevokeWithGrantOption(t *testing.T) {
 				tcNum, actualGrantOption, tc.expectedGrantOption)
 		}
 	}
+}
+
+// TestPrivilegeValidationErrorRedaction tests that privilege validation errors
+// are properly redacted.
+func TestPrivilegeValidationErrorRedaction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Create a descriptor where root/admin don't have the required privileges
+	// This will trigger ValidateSuperuserPrivileges error
+	descriptor := catpb.NewCustomSuperuserPrivilegeDescriptor(
+		privilege.List{privilege.UPDATE}, // Wrong privilege (not ALL)
+		username.AdminRoleName(),
+	)
+
+	id := catid.DescID(bootstrap.TestingMinUserDescID())
+	err := descriptor.Validate(id, privilege.Table, "sensitive_table_name", catpb.DefaultSuperuserPrivileges)
+	require.Error(t, err)
+
+	nonRedactedMsg := redact.Sprint(err).StripMarkers()
+	expectedNonRedacted := `user root must have exactly [ALL] privileges on table "sensitive_table_name"`
+	require.Equal(t, expectedNonRedacted, nonRedactedMsg, "non-redacted message mismatch")
+
+	redactedMsg := redact.Sprint(err).Redact()
+	expectedRedacted := `user root must have exactly [ALL] privileges on table ‹×›`
+	require.Equal(t, expectedRedacted, string(redactedMsg), "redacted message mismatch")
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -37,8 +38,9 @@ import (
 )
 
 const (
-	timeUntilNodeDeadSettingName    = "server.time_until_store_dead"
-	timeAfterNodeSuspectSettingName = "server.time_after_store_suspect"
+	timeUntilNodeDeadSettingName                    = "server.time_until_store_dead"
+	timeAfterNodeSuspectSettingName                 = "server.time_after_store_suspect"
+	timeAfterStoreSuspectInStoreLivenessSettingName = "server.time_after_store_suspect_in_store_liveness"
 )
 
 // Setting this to less than the interval for gossiping stores is a big
@@ -74,6 +76,17 @@ var TimeAfterNodeSuspect = settings.RegisterDurationSetting(
 	timeAfterNodeSuspectSettingName,
 	"the amount of time we consider a node suspect for after it becomes unavailable."+
 		" A suspect node is typically treated the same as an unavailable node.",
+	30*time.Second,
+	settings.DurationInRange(minTimeUntilNodeSuspect, maxTimeAfterNodeSuspect),
+)
+
+// TimeAfterStoreSuspectInStoreLiveness measures how long we consider a store
+// suspect after its support is withdrawn in the StoreLiveness fabric.
+var TimeAfterStoreSuspectInStoreLiveness = settings.RegisterDurationSetting(
+	settings.SystemOnly,
+	timeAfterStoreSuspectInStoreLivenessSettingName,
+	"the amount of time we consider a store suspect for after its support is withdrawn in StoreLiveness."+
+		" A suspect store is typically treated the same as an unavailable store.",
 	30*time.Second,
 	settings.DurationInRange(minTimeUntilNodeSuspect, maxTimeAfterNodeSuspect),
 )
@@ -158,6 +171,9 @@ var (
 		Help:        "Number of live nodes in the cluster (will be 0 if this node is not itself live)",
 		Measurement: "Nodes",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_REPLICATION,
+		HowToUse:    "This is a critical metric that tracks the live nodes in the cluster.",
 	}
 	metaHeartbeatsInFlight = metric.Metadata{
 		Name:        "liveness.heartbeatsinflight",
@@ -176,6 +192,7 @@ var (
 		Help:        "Number of failed node liveness heartbeats from this node",
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
 	}
 	metaEpochIncrements = metric.Metadata{
 		Name:        "liveness.epochincrements",
@@ -188,17 +205,27 @@ var (
 		Help:        "Node liveness heartbeat latency",
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_REPLICATION,
+		HowToUse:    "If this metric exceeds 1 second, it is a sign of cluster instability.",
+	}
+	metaUncachedScans = metric.Metadata{
+		Name:        "liveness.uncached_scans",
+		Help:        "Number of non-cached scans of the node liveness range",
+		Measurement: "Scans",
+		Unit:        metric.Unit_COUNT,
 	}
 )
 
 // Metrics holds metrics for use with node liveness activity.
 type Metrics struct {
-	LiveNodes          *metric.Gauge
+	LiveNodes          *metric.FunctionalGauge
 	HeartbeatsInFlight *metric.Gauge
 	HeartbeatSuccesses *metric.Counter
 	HeartbeatFailures  telemetry.CounterWithMetric
 	EpochIncrements    telemetry.CounterWithMetric
 	HeartbeatLatency   metric.IHistogram
+	UncachedScans      *metric.Counter
 }
 
 // IsLiveCallback is invoked when a node's IsLive state changes to true.
@@ -271,7 +298,7 @@ type NodeLiveness struct {
 
 	// engines is written to before heartbeating to avoid maintaining liveness
 	// when a local disks is stalled.
-	engines []diskStorage.Engine
+	engines []kvstorage.Engines
 
 	// Set to true once Start is called. RegisterCallback can not be called after
 	// Start is called.
@@ -309,7 +336,7 @@ type NodeLivenessOptions struct {
 	// OnNodeDecommissioning is invoked when a node is detected to be
 	// decommissioning.
 	OnNodeDecommissioning func(id roachpb.NodeID)
-	Engines               []diskStorage.Engine
+	Engines               []kvstorage.Engines
 	OnSelfHeartbeat       HeartbeatCallback
 	Cache                 *Cache
 }
@@ -346,6 +373,7 @@ func NewNodeLiveness(opts NodeLivenessOptions) *NodeLiveness {
 			Duration:     opts.HistogramWindowInterval,
 			BucketConfig: metric.IOLatencyBuckets,
 		}),
+		UncachedScans: metric.NewCounter(metaUncachedScans),
 	}
 	nl.cache.setLivenessChangedFn(nl.cacheUpdated)
 	nl.heartbeatToken <- struct{}{}
@@ -389,7 +417,7 @@ func (nl *NodeLiveness) SetDraining(
 		}
 		if err := nl.setDrainingInternal(ctx, oldLivenessRec, drain, reporter); err != nil {
 			if log.V(1) {
-				log.Infof(ctx, "attempting to set liveness draining status to %v: %v", drain, err)
+				log.KvExec.Infof(ctx, "attempting to set liveness draining status to %v: %v", drain, err)
 			}
 			if grpcutil.IsConnectionRejected(err) {
 				return err
@@ -509,7 +537,7 @@ func (nl *NodeLiveness) setDrainingInternal(
 	})
 	if err != nil {
 		if log.V(1) {
-			log.Infof(ctx, "updating liveness record: %v", err)
+			log.KvExec.Infof(ctx, "updating liveness record: %v", err)
 		}
 		if errors.Is(err, errNodeDrainingSet) {
 			return nil
@@ -537,7 +565,7 @@ func (nl *NodeLiveness) cacheUpdated(old livenesspb.Liveness, new livenesspb.Liv
 		nl.onNodeDecommissioning(new.NodeID)
 	}
 	if log.V(2) {
-		log.Infof(nl.ambientCtx.AnnotateCtx(context.Background()), "received liveness update: %s", new)
+		log.KvExec.Infof(nl.ambientCtx.AnnotateCtx(context.Background()), "received liveness update: %s", new)
 	}
 }
 
@@ -606,7 +634,7 @@ func (nl *NodeLiveness) Start(ctx context.Context) {
 	log.VEventf(ctx, 1, "starting node liveness instance")
 	if nl.started.Load() {
 		// This is meant to prevent tests from calling start twice.
-		log.Fatal(ctx, "liveness already started")
+		log.KvExec.Fatal(ctx, "liveness already started")
 	}
 
 	retryOpts := base.DefaultRetryOptions()
@@ -644,7 +672,7 @@ func (nl *NodeLiveness) Start(ctx context.Context) {
 							nodeID := nl.cache.selfID()
 							liveness, err := nl.getLivenessRecordFromKV(ctx, nodeID)
 							if err != nil {
-								log.Infof(ctx, "unable to get liveness record from KV: %s", err)
+								log.KvExec.Infof(ctx, "unable to get liveness record from KV: %s", err)
 								if grpcutil.IsConnectionRejected(err) {
 									return err
 								}
@@ -654,7 +682,7 @@ func (nl *NodeLiveness) Start(ctx context.Context) {
 						}
 						if err := nl.heartbeatInternal(ctx, oldLiveness, incrementEpoch); err != nil {
 							if errors.Is(err, ErrEpochIncremented) {
-								log.Infof(ctx, "%s; retrying", err)
+								log.KvExec.Infof(ctx, "%s; retrying", err)
 								continue
 							}
 							return err
@@ -664,7 +692,7 @@ func (nl *NodeLiveness) Start(ctx context.Context) {
 					}
 					return nil
 				}); err != nil {
-				log.Warningf(ctx, heartbeatFailureLogFormat, err)
+				log.KvExec.Warningf(ctx, heartbeatFailureLogFormat, err)
 			} else if nl.onSelfHeartbeat != nil {
 				nl.onSelfHeartbeat(ctx)
 			}
@@ -750,7 +778,7 @@ func (nl *NodeLiveness) heartbeatInternal(
 		dur := timeutil.Since(start)
 		nl.metrics.HeartbeatLatency.RecordValue(dur.Nanoseconds())
 		if dur > time.Second {
-			log.Warningf(ctx, "slow heartbeat took %s; err=%v", dur, err)
+			log.KvExec.Warningf(ctx, "slow heartbeat took %s; err=%v", dur, err)
 		}
 	}(timeutil.Now())
 
@@ -884,10 +912,16 @@ func (nl *NodeLiveness) GetIsLiveMap() livenesspb.IsLiveMap {
 // ScanNodeVitalityFromCache returns a map of nodeID to boolean liveness status
 // of each node from the cache. This excludes nodes that were decommissioned.
 // Decommissioned nodes are kept in the KV store and the cache forever, but are
-// typically not referenced in normal usage. The method ScanNodeVitalityFromKV
-// does return decommissioned nodes.
+// typically not referenced in normal usage. Use ScanAllNodeVitalityFromCache to
+// include decommissioned nodes.
 func (nl *NodeLiveness) ScanNodeVitalityFromCache() livenesspb.NodeVitalityMap {
 	return nl.cache.ScanNodeVitalityFromCache()
+}
+
+// ScanAllNodeVitalityFromCache is like ScanNodeVitalityFromCache but includes
+// decommissioned nodes.
+func (nl *NodeLiveness) ScanAllNodeVitalityFromCache() livenesspb.NodeVitalityMap {
+	return nl.cache.ScanAllNodeVitalityFromCache()
 }
 
 // ScanNodeVitalityFromKV returns the status for all the nodes from KV including
@@ -898,6 +932,7 @@ func (nl *NodeLiveness) ScanNodeVitalityFromCache() livenesspb.NodeVitalityMap {
 func (nl *NodeLiveness) ScanNodeVitalityFromKV(
 	ctx context.Context,
 ) (livenesspb.NodeVitalityMap, error) {
+	nl.metrics.UncachedScans.Inc(1)
 	records, err := nl.storage.Scan(ctx)
 	if err != nil {
 		return nil, err
@@ -1012,7 +1047,7 @@ func (nl *NodeLiveness) IncrementEpoch(ctx context.Context, liveness livenesspb.
 		return err
 	}
 
-	log.Infof(ctx, "incremented n%d liveness epoch to %d", written.NodeID, written.Epoch)
+	log.KvExec.Infof(ctx, "incremented n%d liveness epoch to %d", written.NodeID, written.Epoch)
 	nl.cache.maybeUpdate(ctx, written)
 	nl.metrics.EpochIncrements.Inc()
 	return nil
@@ -1064,7 +1099,7 @@ func (nl *NodeLiveness) updateLiveness(
 		written, err := nl.updateLivenessAttempt(ctx, update, handleCondFailed)
 		if err != nil {
 			if errors.HasType(err, (*errRetryLiveness)(nil)) {
-				log.Infof(ctx, "retrying liveness update after %s", err)
+				log.KvExec.Infof(ctx, "retrying liveness update after %s", err)
 				continue
 			}
 			return Record{}, err
@@ -1080,6 +1115,7 @@ func (nl *NodeLiveness) updateLiveness(
 // verifyDiskHealth does a sync write to all disks before updating liveness, so
 // that a faulty or stalled disk will cause us to fail liveness and lose our
 // leases. All disks are written concurrently.
+//
 // We do this asynchronously in order to respect the caller's context, and
 // coalesce concurrent writes onto an in-flight one. This is particularly
 // relevant for a stalled disk during a lease acquisition heartbeat, where we
@@ -1096,7 +1132,10 @@ func (nl *NodeLiveness) verifyDiskHealth(ctx context.Context) error {
 				InheritCancelation: false,
 			},
 			func(ctx context.Context) (interface{}, error) {
-				return nil, diskStorage.WriteSyncNoop(eng)
+				// NB: sync only the LogEngine. It is the engine through which all
+				// writes pass first. Also, the StateEngine does not support timely /
+				// incremental syncs, and forcing its Flush here would be too expensive.
+				return nil, diskStorage.WriteSyncNoop(eng.LogEngine())
 			})
 	}
 	for _, resultC := range resultCs {

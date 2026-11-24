@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/event"
 )
 
@@ -38,10 +39,12 @@ type ScheduledEvent struct {
 	TargetEvent event.Event
 }
 
-func (se ScheduledEvent) String() string {
+func (se ScheduledEvent) StringWithTag(tag string) string {
 	buf := strings.Builder{}
-	buf.WriteString(fmt.Sprintf("\texecuted at: %s\n", se.At.Format("2006-01-02 15:04:05")))
-	buf.WriteString(fmt.Sprintf("\t\tevent: %s", se.TargetEvent.String()))
+	buf.WriteString(fmt.Sprintf("%s%s", tag, se.TargetEvent.String()))
+	if !se.At.Equal(config.DefaultStartTime) {
+		buf.WriteString(fmt.Sprintf(" at %s", se.At.Format("15:04:05")))
+	}
 	return buf.String()
 }
 

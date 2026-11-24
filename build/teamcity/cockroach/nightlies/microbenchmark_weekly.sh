@@ -44,6 +44,51 @@ remote_dir="/mnt/data1"
 benchmarks_commit=$(git rev-parse HEAD)
 exit_status=0
 
+# Check if a string is a valid SHA (otherwise it's a branch or tag name).
+is_sha() {
+  local sha="$1"
+  [[ "$sha" =~ ^[0-9a-f]{40}$ ]]
+}
+
+get_latest_patch_tag() {
+  local latest_tag
+  latest_tag=$(git tag -l 'v*' \
+    | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
+    | sort -t. -k1,1 -k2,2n -k3,3n \
+    | tail -n 1)
+  echo "$latest_tag"
+}
+
+# Best-effort disk-usage snapshotter
+log_disk_usage() {
+  echo "=== disk usage: $1 ($(date -u +%H:%M:%SZ)) ===" \
+    | tee -a "$output_dir/disk_usage.log"
+  ./bin/roachprod run "$ROACHPROD_CLUSTER":1-2 -- df -h /mnt/data1 / 2>&1 \
+    | tee -a "$output_dir/disk_usage.log" \
+    || echo "warn: log_disk_usage failed (exit $?)" \
+       | tee -a "$output_dir/disk_usage.log"
+}
+
+# Create arrays for the revisions and their corresponding SHAs.
+revisions=("${BENCH_REVISION}" "${BENCH_COMPARE_REVISION}")
+declare -a sha_arr
+declare -a name_arr
+for rev in "${revisions[@]}"; do
+  if [ "$rev" == "LATEST_PATCH_RELEASE" ]; then
+    git fetch origin --tags
+    rev=$(get_latest_patch_tag)
+  fi
+  if is_sha "$rev"; then
+    sha="$rev"
+    name="${sha:0:8}"
+  else
+    sha=$(git ls-remote origin "$rev" | awk '{print $1}')
+    name="$rev (${sha:0:8})"
+  fi
+  name_arr+=("$name")
+  sha_arr+=("$sha")
+done
+
 # Set up credentials
 google_credentials="$GOOGLE_EPHEMERAL_CREDENTIALS"
 log_into_gcloud
@@ -58,71 +103,20 @@ export SANITIZED_BENCH_PACKAGE=${SANITIZED_BENCH_PACKAGE/.../all}
 
 # Build rochprod and roachprod-microbench
 run_bazel <<'EOF'
-bazel build --config ci --config crosslinux //pkg/cmd/roachprod //pkg/cmd/roachprod-microbench
-BAZEL_BIN=$(bazel info bazel-bin --config ci --config crosslinux)
+bazel build --config crosslinux //pkg/cmd/roachprod //pkg/cmd/roachprod-microbench
+BAZEL_BIN=$(bazel info bazel-bin --config crosslinux)
 mkdir -p bin
 cp $BAZEL_BIN/pkg/cmd/roachprod/roachprod_/roachprod bin
 cp $BAZEL_BIN/pkg/cmd/roachprod-microbench/roachprod-microbench_/roachprod-microbench bin
 chmod a+w bin/roachprod bin/roachprod-microbench
 EOF
 
-# Check if a string is a valid SHA (otherwise it's a branch or tag name).
-is_sha() {
-  local sha="$1"
-  [[ "$sha" =~ ^[0-9a-f]{40}$ ]]
-}
-
-# Check if a string is a valid branch
-is_branch() {
-  local branch="$1"
-  git rev-parse --verify "refs/heads/$branch" >/dev/null 2>&1
-}
-
-# Check if a string is a valid tag
-is_tag() {
-  local tag="$1"
-  git rev-parse --verify "refs/tags/$tag" >/dev/null 2>&1
-}
-
-get_latest_patch_tag() {
-  local latest_tag
-  latest_tag=$(git tag -l 'v*' \
-    | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' \
-    | sort -t. -k1,1 -k2,2n -k3,3n \
-    | tail -n 1)
-  echo "$latest_tag"
-}
-
-git fetch origin --tags
-
-# Create arrays for the revisions and their corresponding SHAs.
-revisions=("${BENCH_REVISION}" "${BENCH_COMPARE_REVISION}")
-declare -a sha_arr
-declare -a name_arr
-for rev in "${revisions[@]}"; do
-  if [ "$rev" == "LATEST_PATCH_RELEASE" ]; then
-    rev=$(get_latest_patch_tag)
-  fi
-  if is_sha "$rev"; then
-    sha="$rev"
-    name="${sha:0:8}"
-  else
-    # Named revision (branch or tag)
-    if is_branch "$rev"; then
-      git fetch origin "$rev"
-      sha=$(git rev-parse origin/"$rev")
-    elif is_tag "$rev"; then
-      sha=$(git rev-parse "$rev")
-    else
-      echo "Invalid revision: $rev"
-      exit 1
-    fi
-    name="$rev (${sha:0:8})"
-  fi
-
-  name_arr+=("$name")
-  sha_arr+=("$sha")
-done
+# Export the benchmark configuration from the experiment branch. This generates
+# a JSON file with per-benchmark settings (benchtime, count, timeout, threshold,
+# post-issue policy) parsed from benchmark-ci: comments in the source code.
+benchmark_config="$output_dir/benchmark_config.json"
+mkdir -p "$output_dir"
+./bin/roachprod-microbench list --export="$benchmark_config"
 
 # Check if the baseline cache exists and copy it to the output directory.
 baseline_cache_path="gs://$BENCH_BUCKET/cache/$GCE_MACHINE_TYPE/$SANITIZED_BENCH_PACKAGE/${sha_arr[1]}"
@@ -155,6 +149,8 @@ log_into_gcloud
   --gce-pd-volume-size=384 \
   --os-volume-size=50
 
+log_disk_usage "before-stage"
+
 # Stage binaries on the cluster
 for sha in "${build_sha_arr[@]}"; do
   archive_name=${BENCH_PACKAGE//\//-}
@@ -162,19 +158,32 @@ for sha in "${build_sha_arr[@]}"; do
   ./bin/roachprod-microbench stage --quiet "$ROACHPROD_CLUSTER" "gs://$BENCH_BUCKET/builds/$archive_name" "$remote_dir/$sha"
 done
 
+log_disk_usage "after-stage"
+
+# Post issues to github for triggered builds (triggered builds are always on master)
+if [ -n "${TRIGGERED_BUILD:-}" ]; then
+  export GITHUB_BRANCH="master"
+  export GITHUB_SHA="${build_sha_arr[0]}"
+  export GITHUB_BINARY="experiment"
+fi
+
 # Execute microbenchmarks
 ./bin/roachprod-microbench run "$ROACHPROD_CLUSTER" \
   --binaries experiment="$remote_dir/${build_sha_arr[0]}" \
   ${build_sha_arr[1]:+--binaries baseline="$remote_dir/${build_sha_arr[1]}"} \
   --output-dir="$output_dir" \
+  --benchmark-config="$benchmark_config" \
   --iterations "$BENCH_ITERATIONS" \
   --shell="$BENCH_SHELL" \
   ${BENCH_TIMEOUT:+--timeout="$BENCH_TIMEOUT"} \
   ${BENCH_EXCLUDE:+--exclude="$BENCH_EXCLUDE"} \
   ${BENCH_IGNORE_PACKAGES:+--ignore-package="$BENCH_IGNORE_PACKAGES"} \
+  ${TRIGGERED_BUILD:+--post-issues} \
   --quiet \
   -- "$TEST_ARGS" \
   || exit_status=$?
+
+log_disk_usage "after-run"
 
 # Write metadata to a file for each set of benchmarks
 declare -A metadata
@@ -215,13 +224,16 @@ if [ -d "$output_dir/experiment" ] && [ "$(ls -A "$output_dir/experiment")" ] \
     influx_token="${MICROBENCH_INFLUX_TOKEN}"
     influx_host="${MICROBENCH_INFLUX_HOST}"
   fi
-  # Sheet description is in the form: `baseline` to `experiment`
-  sheet_description="${name_arr[1]} -> ${name_arr[0]}"
+  # Version context is in the form: `baseline` to `experiment`
+  version_context="${name_arr[1]} -> ${name_arr[0]}"
   ./bin/roachprod-microbench compare "$output_dir/experiment" "$output_dir/baseline" \
     ${slack_token:+--slack-token="$slack_token"} \
-    --sheet-desc="$sheet_description" \
+    --version-context="$version_context" \
+    --generate-sheet \
     ${influx_token:+--influx-token="$influx_token"} \
     ${influx_host:+--influx-host="$influx_host"} \
+    ${TRIGGERED_BUILD:+--post-issues=single} \
+    --benchmark-config="$benchmark_config" \
     2>&1 | tee "$output_dir/sheets.txt"
 else
   echo "No microbenchmarks were run. Skipping comparison."

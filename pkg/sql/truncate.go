@@ -7,7 +7,6 @@ package sql
 
 import (
 	"context"
-	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -18,22 +17,27 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
 type truncateNode struct {
+	zeroInputPlanNode
 	n *tree.Truncate
 }
 
 // Truncate deletes all rows from a table.
-// Privileges: DROP on table.
+// Privileges: TRUNCATE or DROP on table.
 //
 //	Notes: postgres requires TRUNCATE.
 //	       mysql requires DROP (for mysql >= 5.1.16, DELETE before that).
@@ -61,7 +65,7 @@ func (t *truncateNode) startExec(params runParams) error {
 			return err
 		}
 
-		if err := p.CheckPrivilege(ctx, tableDesc, privilege.DROP); err != nil {
+		if err := p.checkTruncatePrivilege(ctx, tableDesc); err != nil {
 			return err
 		}
 
@@ -88,9 +92,12 @@ func (t *truncateNode) startExec(params runParams) error {
 			}
 
 			if n.DropBehavior != tree.DropCascade {
-				return errors.Errorf("%q is %s table %q", tableDesc.Name, msg, other.Name)
+				// The error code returned here matches PGSQL, even though the CASCADE
+				// operation is supported there with TRUNCATE as well.
+				return errors.WithHintf(pgerror.Newf(pgcode.FeatureNotSupported, "%q is %s table %q", tableDesc.Name, msg, other.Name),
+					"truncate dependent tables at the same time or specify the CASCADE option")
 			}
-			if err := p.CheckPrivilege(ctx, other, privilege.DROP); err != nil {
+			if err := p.checkTruncatePrivilege(ctx, other); err != nil {
 				return err
 			}
 			otherName, err := p.getQualifiedTableName(ctx, other)
@@ -116,7 +123,7 @@ func (t *truncateNode) startExec(params runParams) error {
 	}
 
 	for id, name := range toTruncate {
-		if err := p.truncateTable(ctx, id, tree.AsStringWithFQNames(t.n, params.Ann())); err != nil {
+		if err := p.truncateTable(ctx, id, tree.AsStringWithFQNames(t.n, params.Ann()), t.n); err != nil {
 			return err
 		}
 
@@ -137,6 +144,31 @@ func (t *truncateNode) Next(runParams) (bool, error) { return false, nil }
 func (t *truncateNode) Values() tree.Datums          { return tree.Datums{} }
 func (t *truncateNode) Close(context.Context)        {}
 
+// checkTruncatePrivilege checks that the user has TRUNCATE or DROP privilege
+// on the given table. DROP is accepted for backward compatibility.
+func (p *planner) checkTruncatePrivilege(
+	ctx context.Context, tableDesc catalog.TableDescriptor,
+) error {
+	hasTruncate, err := p.HasPrivilege(ctx, tableDesc, privilege.TRUNCATE, p.User())
+	if err != nil {
+		return err
+	}
+	if hasTruncate {
+		return nil
+	}
+	hasDrop, err := p.HasPrivilege(ctx, tableDesc, privilege.DROP, p.User())
+	if err != nil {
+		return err
+	}
+	if hasDrop {
+		return nil
+	}
+	return sqlerrors.NewInsufficientPrivilegeOnDescriptorError(
+		p.User(), []privilege.Kind{privilege.TRUNCATE, privilege.DROP},
+		"relation", tableDesc.GetName(),
+	)
+}
+
 // PreservedSplitCountMultiple is the setting that configures the number of
 // split points that we re-create on a table after a truncate, or that we
 // create in an index backfill . It's scaled by the number of nodes in the cluster.
@@ -148,20 +180,28 @@ var PreservedSplitCountMultiple = settings.RegisterIntSetting(
 		"from the table's indexes or copy them from the primary index. The multiple "+
 		"given will be multiplied with the number of nodes in the cluster to produce "+
 		"the number of preserved range splits. This can improve performance when "+
-		"truncating or backlling an index from a table with significant write traffic.",
+		"truncating or backfilling an index from a table with significant write traffic.",
 	4,
 	settings.WithName("sql.schema.preserved_split_count_multiple"),
+	settings.IntWithMinimum(0),
 )
 
 // truncateTable truncates the data of a table in a single transaction. It does
 // so by dropping all existing indexes on the table and creating new ones without
 // backfilling any data into the new indexes. The old indexes are cleaned up
 // asynchronously by the SchemaChangeGCJob.
-func (p *planner) truncateTable(ctx context.Context, id descpb.ID, jobDesc string) error {
+func (p *planner) truncateTable(
+	ctx context.Context, id descpb.ID, jobDesc string, truncate *tree.Truncate,
+) error {
 	// Read the table descriptor because it might have changed
 	// while another table in the truncation list was truncated.
 	tableDesc, err := p.Descriptors().MutableByID(p.txn).Table(ctx, id)
 	if err != nil {
+		return err
+	}
+
+	// Check if this operation is blocked due to schema_locked.
+	if err := p.checkSchemaChangeIsAllowed(ctx, tableDesc, truncate); err != nil {
 		return err
 	}
 
@@ -208,24 +248,30 @@ func (p *planner) truncateTable(ctx context.Context, id descpb.ID, jobDesc strin
 		}
 	}
 
-	// Create new ID's for all of the indexes in the table.
-	{
-		version := p.ExecCfg().Settings.Version.ActiveVersion(ctx)
-		// Temporarily empty the mutation jobs slice otherwise the descriptor
-		// validation performed by AllocateIDs will fail: the Mutations slice
-		// has been emptied but MutationJobs only gets emptied later on.
-		mutationJobs := tableDesc.MutationJobs
-		tableDesc.MutationJobs = nil
-		if err := tableDesc.AllocateIDs(ctx, version); err != nil {
-			return err
-		}
-		tableDesc.MutationJobs = mutationJobs
+	// Allocate new IDs for all indexes in the table descriptor. We use the
+	// AllocateIDsWithoutValidation variant because some DependedOnBy references
+	// may still point to the old index IDs, which we haven't remapped yet.
+	// Full validation will occur later when writeSchemaChange is called.
+	if err := tableDesc.AllocateIDsWithoutValidation(ctx, true /*createMissingPrimaryKey*/); err != nil {
+		return err
 	}
 
 	// Construct a mapping from old index ID's to new index ID's.
 	indexIDMapping := make(map[descpb.IndexID]descpb.IndexID, len(oldIndexes))
 	for _, idx := range tableDesc.ActiveIndexes() {
 		indexIDMapping[oldIndexes[idx.Ordinal()].ID] = idx.GetID()
+	}
+
+	// Remap index IDs in the DependedOnBy references using the new index ID mapping.
+	for i := range tableDesc.DependedOnBy {
+		ref := &tableDesc.DependedOnBy[i]
+		if ref.IndexID != 0 {
+			var ok bool
+			ref.IndexID, ok = indexIDMapping[ref.IndexID]
+			if !ok {
+				return errors.AssertionFailedf("could not find index ID %d in mapping", ref.IndexID)
+			}
+		}
 	}
 
 	// Create schema change GC jobs for all of the indexes.
@@ -408,7 +454,7 @@ func (p *planner) copySplitPointsToNewIndexes(
 	nNodes := execCfg.NodeDescs.GetNodeDescriptorCount()
 	nSplits := preservedSplitsMultiple * nNodes
 
-	log.Infof(ctx, "making %d new truncate split points (%d * %d)", nSplits, preservedSplitsMultiple, nNodes)
+	log.Dev.Infof(ctx, "making %d new truncate split points (%d * %d)", nSplits, preservedSplitsMultiple, nNodes)
 
 	// Re-split the new set of indexes along the same split points as the old
 	// indexes.
@@ -483,6 +529,7 @@ func (p *planner) copySplitPointsToNewIndexes(
 		step = 1
 	}
 	expirationTime := kvserverbase.SplitByLoadMergeDelay.Get(execCfg.SV()).Nanoseconds()
+	rng, _ := randutil.NewPseudoRand()
 	for i := 0; i < nSplits; i++ {
 		// Evenly space out the ranges that we select from the ranges that are
 		// returned.
@@ -494,10 +541,10 @@ func (p *planner) copySplitPointsToNewIndexes(
 
 		// Jitter the expiration time by 20% up or down from the default.
 		maxJitter := expirationTime / 5
-		jitter := rand.Int63n(maxJitter*2) - maxJitter
+		jitter := rng.Int63n(maxJitter*2) - maxJitter
 		expirationTime += jitter
 
-		log.Infof(ctx, "truncate sending split request for key %s", sp)
+		log.Dev.Infof(ctx, "truncate sending split request for key %s", sp)
 		b.AddRawRequest(&kvpb.AdminSplitRequest{
 			RequestHeader: kvpb.RequestHeader{
 				Key: sp,

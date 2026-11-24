@@ -13,7 +13,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
+	"github.com/lib/pq/oid"
 )
 
 // Expr evaluates a TypedExpr into a Datum.
@@ -59,7 +61,7 @@ func (e *evaluator) EvalAndExpr(ctx context.Context, expr *tree.AndExpr) (tree.D
 }
 
 func (e *evaluator) EvalArray(ctx context.Context, t *tree.Array) (tree.Datum, error) {
-	array, err := arrayOfType(t.ResolvedType())
+	array, err := arrayOfType(t.ResolvedType(), nil /* elements */)
 	if err != nil {
 		return nil, err
 	}
@@ -79,11 +81,6 @@ func (e *evaluator) EvalArray(ctx context.Context, t *tree.Array) (tree.Datum, e
 func (e *evaluator) EvalArrayFlatten(
 	ctx context.Context, t *tree.ArrayFlatten,
 ) (tree.Datum, error) {
-	array, err := arrayOfType(t.ResolvedType())
-	if err != nil {
-		return nil, err
-	}
-
 	d, err := t.Subquery.(tree.TypedExpr).Eval(ctx, e)
 	if err != nil {
 		return nil, err
@@ -93,7 +90,10 @@ func (e *evaluator) EvalArrayFlatten(
 	if !ok {
 		return nil, errors.AssertionFailedf("array subquery result (%v) is not DTuple", d)
 	}
-	array.Array = tuple.D
+	array, err := arrayOfType(t.ResolvedType(), tuple.D)
+	if err != nil {
+		return nil, err
+	}
 	return array, nil
 }
 
@@ -177,8 +177,15 @@ func (e *evaluator) EvalCastExpr(ctx context.Context, expr *tree.CastExpr) (tree
 		return nil, err
 	}
 
-	// NULL cast to anything is NULL.
+	// NULL cast to anything is NULL, but domain NOT NULL constraints must
+	// still be checked. Use expr.Type to access the target type since
+	// ResolvedType() panics on un-type-checked expressions.
 	if d == tree.DNull {
+		if t, ok := expr.Type.(*types.T); ok && t.TypeMeta.DomainData != nil {
+			if err := ValidateDomainConstraints(ctx, e.ctx(), d, t); err != nil {
+				return nil, err
+			}
+		}
 		return d, nil
 	}
 	d = UnwrapDatum(ctx, e.ctx(), d)
@@ -208,17 +215,36 @@ func (e *evaluator) EvalCollateExpr(
 		return nil, err
 	}
 	unwrapped := UnwrapDatum(ctx, e.ctx(), d)
-	if unwrapped == tree.DNull {
-		return tree.DNull, nil
+
+	// buildCollated is a recursive helper function to handle evaluating COLLATE
+	// on arrays.
+	var buildCollated func(tree.Datum) (tree.Datum, error)
+	buildCollated = func(datum tree.Datum) (tree.Datum, error) {
+		if datum == tree.DNull {
+			return tree.DNull, nil
+		}
+		switch d := datum.(type) {
+		case *tree.DString:
+			return tree.NewDCollatedString(string(*d), expr.Locale, &e.CollationEnv)
+		case *tree.DCollatedString:
+			return tree.NewDCollatedString(d.Contents, expr.Locale, &e.CollationEnv)
+		case *tree.DArray:
+			a := tree.NewDArray(types.MakeCollatedType(d.ParamTyp, expr.Locale))
+			a.Array = make(tree.Datums, 0, len(d.Array))
+			for _, elem := range d.Array {
+				collatedElem, err := buildCollated(elem)
+				if err != nil {
+					return nil, err
+				}
+				if err := a.Append(collatedElem); err != nil {
+					return nil, err
+				}
+			}
+			return a, nil
+		}
+		return nil, pgerror.Newf(pgcode.DatatypeMismatch, "incompatible type for COLLATE: %s", datum)
 	}
-	switch d := unwrapped.(type) {
-	case *tree.DString:
-		return tree.NewDCollatedString(string(*d), expr.Locale, &e.CollationEnv)
-	case *tree.DCollatedString:
-		return tree.NewDCollatedString(d.Contents, expr.Locale, &e.CollationEnv)
-	default:
-		return nil, pgerror.Newf(pgcode.DatatypeMismatch, "incompatible type for COLLATE: %s", d)
-	}
+	return buildCollated(unwrapped)
 }
 
 func (e *evaluator) EvalColumnAccessExpr(
@@ -356,6 +382,28 @@ func (e *evaluator) EvalIndirectionExpr(
 			}
 		}
 		return tree.NewDJSON(curr), nil
+	case types.StringFamily:
+		if d.ResolvedType().Oid() != oid.T_name {
+			return nil, errors.AssertionFailedf("unsupported feature should have been rejected during planning")
+		}
+		for i, t := range expr.Indirection {
+			if t.Slice || i > 0 {
+				return nil, errors.AssertionFailedf("unsupported feature should have been rejected during planning")
+			}
+			beginDatum, err := t.Begin.(tree.TypedExpr).Eval(ctx, e)
+			if err != nil {
+				return nil, err
+			}
+			if beginDatum == tree.DNull {
+				return tree.DNull, nil
+			}
+			subscriptIdx = int(tree.MustBeDInt(beginDatum))
+		}
+		str := string(tree.MustBeDString(d))
+		if subscriptIdx < 0 || subscriptIdx >= len(str) {
+			return tree.DNull, nil
+		}
+		return tree.NewDString(string(str[subscriptIdx])), nil
 	}
 	return nil, errors.AssertionFailedf("unsupported feature should have been rejected during planning")
 }
@@ -473,7 +521,7 @@ func (e *evaluator) EvalFuncExpr(ctx context.Context, expr *tree.FuncExpr) (tree
 
 	if fn.Body != "" {
 		// This expression evaluator cannot run functions defined with a SQL body.
-		return nil, pgerror.Newf(pgcode.FeatureNotSupported, "cannot evaluate function in this context")
+		return nil, unimplemented.NewWithIssuef(147472, "cannot evaluate function in this context")
 	}
 	if fn.Fn == nil {
 		// This expression evaluator cannot run functions that are not "normal"
@@ -483,7 +531,7 @@ func (e *evaluator) EvalFuncExpr(ctx context.Context, expr *tree.FuncExpr) (tree
 
 	res, err := fn.Fn.(FnOverload)(ctx, e.ctx(), args)
 	if err != nil {
-		return nil, expr.MaybeWrapError(err)
+		return nil, err
 	}
 	if e.TestingKnobs.AssertFuncExprReturnTypes {
 		if err := ensureExpectedType(fn.FixedReturnType(), res); err != nil {

@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -22,7 +23,7 @@ type joinerBase struct {
 	execinfra.ProcessorBase
 
 	joinType descpb.JoinType
-	onCond   execinfrapb.ExprHelper
+	onCond   execexpr.Helper
 	// combinedRow has enough space for both the left and right input rows even
 	// if only columns from one side of the join are included in the output.
 	// This allows storing values for columns referenced in the ON condition,

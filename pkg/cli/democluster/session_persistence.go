@@ -67,6 +67,13 @@ func (c *transientCluster) doPersistence(
 		WithUsername(username.RootUser).
 		WithAuthn(pgurl.AuthnClientCert(rootCert, rootKey)).
 		WithTransport(pgurl.TransportTLS(pgurl.TLSRequire, caCert))
+	// Use an internal app name so that the connection is allowed to access
+	// system tables without the allow_unsafe_internals session variable.
+	if err := u.SetOption(
+		"application_name", catconstants.InternalAppNamePrefix+" cockroach demo",
+	); err != nil {
+		return err
+	}
 
 	apply := func(filename string, u *pgurl.URL) error {
 		db, err := gosql.Open("postgres", u.ToPQ().String())

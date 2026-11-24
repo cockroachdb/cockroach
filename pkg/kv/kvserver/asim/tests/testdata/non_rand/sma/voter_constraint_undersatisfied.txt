@@ -1,0 +1,52 @@
+# This test reproduces #122292, where a voter constraint is not satisfied when
+# every existing voter is required to satisfy an all-replica constraint and
+# there is no non-voter that could be promoted to satisfy the voter constraint.
+#
+# Topology after initial config: voters in [a,b,c], non-voter in [d].
+# After the second config: voter constraint requires 2 voters in c, but the
+# allocator fails to add a second voter in c (region c has an idle node 4).
+gen_cluster nodes=5 region=(a,b,c,d) nodes_per_region=(1,1,2,1)
+----
+
+gen_ranges ranges=5 repl_factor=4
+----
+
+# Initial config: one replica per region, voters in a/b/c and non-voter in d.
+set_span_config
+[0,10000): num_replicas=4 num_voters=3 constraints={'+region=a':1,'+region=b':1,'+region=c':1,'+region=d':1} voter_constraints={'+region=a':1,'+region=b':1,'+region=c':1}
+----
+
+# After 30s (enough time for the initial config to converge), swap the
+# constraint on region d for a second voter in region c. A correct allocator
+# should add a voter on n4 (region c) and remove the replica on n5 (region d).
+set_span_config delay=30s
+[0,10000): num_replicas=4 num_voters=3 constraints={'+region=a':1,'+region=b':1,'+region=c':1} voter_constraints={'+region=c':2}
+----
+
+# Why this is hard for the allocator. From the initial state
+# (voter@a, voter@b, voter@c, nonvoter@d) the only way to reach a
+# conforming state is a coordinated three-replica change:
+#   1. add a voter on n4 (region c),
+#   2. demote one of the voters on n1/n2 to a non-voter,
+#   3. remove the non-voter on n5 (region d).
+# The simpler local moves don't work:
+#   - Promoting the non-voter on n5 doesn't help; it's in d, not c.
+#   - Moving a voter from a or b to c would drop that region below the
+#     all-replica constraint of 1.
+# The legacy allocator plans replica changes one step at a time looking
+# for a strictly-improving move, and never finds this combination.
+assertion type=conformance under=0 over=0 unavailable=0 violating=0 issue=https://github.com/cockroachdb/cockroach/issues/122292
+----
+
+eval duration=1m cfgs=(sma-count)
+----
+sma-count:
+hash: 43483f0330af172d
+failed assertion sample 1
+  conformance unavailable=0 under=0 over=0 violating=0 
+  actual unavailable=0 under=0, over=0 violating=3 lease-violating=0 lease-less-preferred=0
+violating constraints:
+	r1:000000{0000-2000} [(n1,s1):1, (n2,s2):2, (n4,s4):4, (n5,s5):5NON_VOTER] applying num_replicas=4 num_voters=3 constraints=[+region=a:1 +region=b:1 +region=c:1] voter_constraints=[+region=c:2]
+	r3:000000{4000-6000} [(n2,s2):4, (n4,s4):2, (n1,s1):3, (n5,s5):5NON_VOTER] applying num_replicas=4 num_voters=3 constraints=[+region=a:1 +region=b:1 +region=c:1] voter_constraints=[+region=c:2]
+	r5:00000{08000-10000} [(n2,s2):4, (n1,s1):6, (n3,s3):3, (n5,s5):5NON_VOTER] applying num_replicas=4 num_voters=3 constraints=[+region=a:1 +region=b:1 +region=c:1] voter_constraints=[+region=c:2]
+==========================

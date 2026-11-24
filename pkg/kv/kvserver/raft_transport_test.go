@@ -16,16 +16,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowdispatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/node_rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -82,7 +82,7 @@ func (s channelServer) HandleRaftResponse(
 			return err
 		}
 	}
-	log.Fatalf(ctx, "unexpected raft response: %s", resp)
+	log.KvExec.Fatalf(ctx, "unexpected raft response: %s", resp)
 	return nil
 }
 
@@ -111,6 +111,8 @@ type raftTransportTestContext struct {
 	nodeRPCContext *rpc.Context
 	gossip         *gossip.Gossip
 	st             *cluster.Settings
+
+	skipOnListenErr bool // if true, calls Skip on error from net.Listen
 }
 
 // clockWithManualSource is a pair of clocks: a manual clock and a clock that
@@ -158,8 +160,6 @@ func (rttc *raftTransportTestContext) Stop() {
 func (rttc *raftTransportTestContext) AddNode(nodeID roachpb.NodeID) *kvserver.RaftTransport {
 	transport, addr := rttc.AddNodeWithoutGossip(
 		nodeID, util.TestAddr, rttc.stopper,
-		kvflowdispatch.NewDummyDispatch(), kvserver.NoopStoresFlowControlIntegration{},
-		kvserver.NoopRaftTransportDisconnectListener{},
 		(*node_rac2.AdmittedPiggybacker)(nil),
 		nil, nil,
 	)
@@ -175,9 +175,6 @@ func (rttc *raftTransportTestContext) AddNodeWithoutGossip(
 	nodeID roachpb.NodeID,
 	addr net.Addr,
 	stopper *stop.Stopper,
-	kvflowTokenDispatch kvflowcontrol.DispatchReader,
-	kvflowHandles kvflowcontrol.Handles,
-	disconnectListener kvserver.RaftTransportDisconnectListener,
 	piggybacker node_rac2.PiggybackMsgReader,
 	piggybackedResponseScheduler kvserver.PiggybackedAdmittedResponseScheduler,
 	knobs *kvserver.RaftTransportTestingKnobs,
@@ -185,7 +182,10 @@ func (rttc *raftTransportTestContext) AddNodeWithoutGossip(
 	manual := hlc.NewHybridManualClock()
 	clock := hlc.NewClockForTesting(manual)
 	rttc.clocks[nodeID] = clockWithManualSource{manual: manual, clock: clock}
-	grpcServer, err := rpc.NewServer(context.Background(), rttc.nodeRPCContext)
+	ctx := context.Background()
+	grpcServer, err := rpc.NewServer(ctx, rttc.nodeRPCContext)
+	require.NoError(rttc.t, err)
+	drpcServer, err := rpc.NewDRPCServer(ctx, rttc.nodeRPCContext)
 	require.NoError(rttc.t, err)
 	transport := kvserver.NewRaftTransport(
 		log.MakeTestingAmbientCtxWithNewTracer(),
@@ -194,16 +194,18 @@ func (rttc *raftTransportTestContext) AddNodeWithoutGossip(
 		clock,
 		nodedialer.New(rttc.nodeRPCContext, gossip.AddressResolver(rttc.gossip)),
 		grpcServer,
-		kvflowTokenDispatch,
-		kvflowHandles,
-		disconnectListener,
+		drpcServer,
 		piggybacker,
 		piggybackedResponseScheduler,
 		knobs,
 	)
 	rttc.transports[nodeID] = transport
-	ln, err := netutil.ListenAndServeGRPC(stopper, grpcServer, addr)
+	ln, err := net.Listen(addr.Network(), addr.String())
+	if err != nil && rttc.skipOnListenErr {
+		skip.IgnoreLintf(rttc.t, "skipping test due to listen error: %s", err)
+	}
 	require.NoError(rttc.t, err)
+	require.NoError(rttc.t, netutil.ServeGRPC(stopper, grpcServer, ln))
 	return transport, ln.Addr()
 }
 
@@ -243,7 +245,7 @@ func (rttc *raftTransportTestContext) Send(
 		ToReplica:   to,
 		FromReplica: from,
 	}
-	return rttc.transports[from.NodeID].SendAsync(req, rpc.DefaultClass)
+	return rttc.transports[from.NodeID].SendAsync(req, rpcbase.DefaultClass)
 }
 
 func TestSendAndReceive(t *testing.T) {
@@ -326,7 +328,7 @@ func TestSendAndReceive(t *testing.T) {
 				req := baseReq
 				req.Message.Type = messageType
 
-				if !transports[fromNodeID].SendAsync(&req, rpc.DefaultClass) {
+				if !transports[fromNodeID].SendAsync(&req, rpcbase.DefaultClass) {
 					t.Errorf("unable to send %s from %d to %d", messageType, fromNodeID, toNodeID)
 				}
 				messageTypeCounts[toStoreID][messageType]++
@@ -396,7 +398,7 @@ func TestSendAndReceive(t *testing.T) {
 	}
 	// NB: argument passed to SendAsync is not safe to use after; make a copy.
 	expReqCopy := *expReq
-	if !transports[storeNodes[fromStoreID]].SendAsync(&expReqCopy, rpc.DefaultClass) {
+	if !transports[storeNodes[fromStoreID]].SendAsync(&expReqCopy, rpcbase.DefaultClass) {
 		t.Errorf("unable to send message from %d to %d", fromStoreID, toStoreID)
 	}
 	// NB: we can't use gogoproto's Equal() function here: it will panic
@@ -467,9 +469,6 @@ func TestRaftTransportCircuitBreaker(t *testing.T) {
 		serverReplica.NodeID,
 		util.TestAddr,
 		rttc.stopper,
-		kvflowdispatch.NewDummyDispatch(),
-		kvserver.NoopStoresFlowControlIntegration{},
-		kvserver.NoopRaftTransportDisconnectListener{},
 		(*node_rac2.AdmittedPiggybacker)(nil),
 		nil, nil,
 	)
@@ -577,14 +576,16 @@ func TestReopenConnection(t *testing.T) {
 		StoreID:   2,
 		ReplicaID: 2,
 	}
+
+	// We're re-listening on an old address here, but the port may be
+	// in use. In the very rare case of this happening, skip the test.
+	// See: https://github.com/cockroachdb/cockroach/issues/146175.
+	rttc.skipOnListenErr = true
 	serverTransport, serverAddr :=
 		rttc.AddNodeWithoutGossip(
 			serverReplica.NodeID,
 			util.TestAddr,
 			serverStopper,
-			kvflowdispatch.NewDummyDispatch(),
-			kvserver.NoopStoresFlowControlIntegration{},
-			kvserver.NoopRaftTransportDisconnectListener{},
 			(*node_rac2.AdmittedPiggybacker)(nil),
 			nil, nil,
 		)
@@ -622,9 +623,6 @@ func TestReopenConnection(t *testing.T) {
 		replacementReplica.NodeID,
 		serverAddr,
 		rttc.stopper,
-		kvflowdispatch.NewDummyDispatch(),
-		kvserver.NoopStoresFlowControlIntegration{},
-		kvserver.NoopRaftTransportDisconnectListener{},
 		(*node_rac2.AdmittedPiggybacker)(nil),
 		nil, nil,
 	)
@@ -713,7 +711,7 @@ func TestSendFailureToConnectDoesNotHangRaft(t *testing.T) {
 			ReplicaID: from,
 		},
 		Message: raftpb.Message{To: to, From: from},
-	}, rpc.DefaultClass)
+	}, rpcbase.DefaultClass)
 }
 
 // TestRaftTransportClockPropagation verifies that hlc clock timestamps are

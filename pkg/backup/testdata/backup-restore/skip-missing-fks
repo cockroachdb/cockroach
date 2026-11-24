@@ -1,0 +1,216 @@
+# Test that foreign key mutations with missing referenced tables are properly
+# dropped during restore when skip_missing_foreign_keys is used.
+#
+# Regression test: previously, outbound FKs in table.OutboundFKs were correctly
+# dropped when their referenced table was missing, but FK constraints still
+# in table.Mutations (from an in-progress schema change) were left with stale
+# ReferencedTableIDs, causing catalog corruption.
+
+subtest fk-mutation-with-missing-referenced-table
+
+new-cluster name=s1
+----
+
+exec-sql
+CREATE DATABASE d;
+USE d;
+CREATE TABLE parent (id INT PRIMARY KEY) WITH (schema_locked = false);
+CREATE TABLE child (id INT PRIMARY KEY, parent_id INT) WITH (schema_locked = false);
+INSERT INTO parent VALUES (1), (2), (3);
+INSERT INTO child VALUES (1, 1), (2, 2);
+----
+
+# Use the legacy schema changer so the FK addition goes through
+# table.Mutations rather than the declarative schema changer elements.
+exec-sql
+SET use_declarative_schema_changer = 'off';
+----
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = 'schemachanger.before.exec';
+----
+
+# Start adding a foreign key constraint. The pausepoint will keep it as
+# a pending mutation in the table descriptor.
+schema-change expect-pausepoint tag=sc
+ALTER TABLE d.child ADD CONSTRAINT fk_parent FOREIGN KEY (parent_id) REFERENCES d.parent(id);
+----
+job paused at pausepoint
+
+# Verify the child table descriptor has a FK mutation.
+let $child_id
+SELECT id FROM system.namespace WHERE name = 'child' AND "parentID" != 0 AND "parentSchemaID" != 0;
+----
+
+query-sql
+SELECT
+  json_array_length(
+    COALESCE(
+      crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'table'->'mutations',
+      '[]'
+    )
+  )
+FROM system.descriptor
+WHERE id = $child_id;
+----
+1
+
+# Clear the pausepoint so backup can run.
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = '';
+----
+
+exec-sql
+BACKUP DATABASE d INTO 'nodelocal://1/test-backup';
+----
+
+# Restore only the child table (without parent) into a new database,
+# using skip_missing_foreign_keys. The existing outbound FK should be
+# dropped, and the in-progress FK mutation should also be dropped.
+exec-sql
+CREATE DATABASE d2;
+----
+
+exec-sql
+RESTORE TABLE d.child FROM LATEST IN 'nodelocal://1/test-backup' WITH into_db = 'd2', skip_missing_foreign_keys;
+----
+
+# Verify the restored child table has no FK mutations left. Without the
+# fix, the mutation would still reference the old (now nonexistent) parent
+# table ID, corrupting the catalog.
+let $restored_child_id
+SELECT id FROM system.namespace WHERE name = 'child' AND "parentID" = (SELECT id FROM system.namespace WHERE name = 'd2' AND "parentID" = 0);
+----
+
+query-sql
+SELECT
+  json_array_length(
+    COALESCE(
+      crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'table'->'mutations',
+      '[]'
+    )
+  )
+FROM system.descriptor
+WHERE id = $restored_child_id;
+----
+0
+
+# Also verify no outbound FKs exist on the restored table.
+query-sql
+SELECT
+  json_array_length(
+    COALESCE(
+      crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'table'->'outboundFks',
+      '[]'
+    )
+  )
+FROM system.descriptor
+WHERE id = $restored_child_id;
+----
+0
+
+# Verify the table is usable.
+query-sql
+SELECT * FROM d2.child ORDER BY id;
+----
+1 1
+2 2
+
+subtest end
+
+subtest fk-mutation-with-missing-referenced-table-dsc
+
+new-cluster name=s2
+----
+
+exec-sql
+CREATE DATABASE d;
+USE d;
+CREATE TABLE parent (id INT PRIMARY KEY);
+CREATE TABLE child (id INT PRIMARY KEY, parent_id INT);
+INSERT INTO parent VALUES (1), (2), (3);
+INSERT INTO child VALUES (1, 1), (2, 2);
+----
+
+# Use the declarative schema changer so the FK addition goes through
+# DeclarativeSchemaChangerState targets rather than table.Mutations.
+exec-sql
+SET use_declarative_schema_changer = 'on';
+----
+
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = 'newschemachanger.before.exec';
+----
+
+# Start adding a foreign key constraint. The pausepoint will keep it as
+# a pending target in the declarative schema changer state.
+new-schema-change expect-pausepoint
+ALTER TABLE d.child ADD CONSTRAINT fk_parent FOREIGN KEY (parent_id) REFERENCES d.parent(id);
+----
+job paused at pausepoint
+
+# Verify the child table descriptor has declarative schema changer state
+# with targets.
+let $child_id
+SELECT id FROM system.namespace WHERE name = 'child' AND "parentID" != 0 AND "parentSchemaID" != 0;
+----
+
+query-sql
+SELECT
+  json_array_length(
+    COALESCE(
+      crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'table'->'declarativeSchemaChangerState'->'targets',
+      '[]'
+    )
+  ) > 0
+FROM system.descriptor
+WHERE id = $child_id;
+----
+true
+
+# Clear the pausepoint so backup can run.
+exec-sql
+SET CLUSTER SETTING jobs.debug.pausepoints = '';
+----
+
+exec-sql
+BACKUP DATABASE d INTO 'nodelocal://1/test-backup-dsc';
+----
+
+# Restore only the child table (without parent) into a new database,
+# using skip_missing_foreign_keys. This should handle the FK target
+# in the declarative schema changer state.
+exec-sql
+CREATE DATABASE d2;
+----
+
+exec-sql
+RESTORE TABLE d.child FROM LATEST IN 'nodelocal://1/test-backup-dsc' WITH into_db = 'd2', skip_missing_foreign_keys;
+----
+
+# Also verify no outbound FKs exist on the restored table.
+let $restored_child_id
+SELECT id FROM system.namespace WHERE name = 'child' AND "parentID" = (SELECT id FROM system.namespace WHERE name = 'd2' AND "parentID" = 0);
+----
+
+query-sql
+SELECT
+  json_array_length(
+    COALESCE(
+      crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'table'->'outboundFks',
+      '[]'
+    )
+  )
+FROM system.descriptor
+WHERE id = $restored_child_id;
+----
+0
+
+# Verify the table is usable.
+query-sql
+SELECT * FROM d2.child ORDER BY id;
+----
+1 1
+2 2
+
+subtest end

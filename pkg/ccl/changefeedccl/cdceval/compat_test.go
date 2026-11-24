@@ -35,7 +35,7 @@ func TestCompatRewrite(t *testing.T) {
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	fooDesc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "foo")
 	target := changefeedbase.Target{
-		TableID: fooDesc.GetID(),
+		DescID: fooDesc.GetID(),
 	}
 	fooRef := fmt.Sprintf("[%d AS foo]", fooDesc.GetID())
 

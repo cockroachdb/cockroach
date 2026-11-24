@@ -8,13 +8,13 @@ package perturbation
 import (
 	"context"
 	"fmt"
-	"math"
 	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -31,7 +31,13 @@ var _ perturbation = partition{}
 
 func (p partition) setup() variations {
 	p.partitionSite = true
-	v := setup(p, math.Inf(1))
+	// The partition test isolates an entire region (4 of 12 nodes), removing
+	// 1/3 of leaseholders. Foreground throughput naturally drops sharply
+	// while the partition is in effect, and the meaningful pass/fail signal
+	// is whether the cluster returns to baseline once the partition heals.
+	// Skip the perturbation-interval gate; keep the default recovery gate.
+	v := setup(p, noImpactThresholds())
+	v.recoveryImpact = defaultThresholds()
 	v.leaseType = registry.ExpirationLeases
 	// TODO(baptist): Remove this setting once #120073 is fixed.
 	v.clusterSettings["kv.lease.reject_on_leader_unknown.enabled"] = "true"
@@ -42,7 +48,13 @@ func (p partition) setupMetamorphic(rng *rand.Rand) variations {
 	v := p.setup()
 	p.partitionSite = rng.Intn(2) == 0
 	v.perturbation = p
-	return v.randomize(rng)
+	v = v.randomize(rng)
+	// TODO(#137666): The partition test can cause OOM with low memory
+	// configurations.
+	if v.mem == spec.Low {
+		v.mem = spec.Standard
+	}
+	return v
 }
 
 func (p partition) startTargetNode(ctx context.Context, t test.Test, v variations) {

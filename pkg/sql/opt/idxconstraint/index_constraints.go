@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
@@ -19,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/ltree"
 	"github.com/cockroachdb/errors"
 )
 
@@ -143,6 +146,16 @@ func (c *indexConstraintCtx) makeSpansForSingleColumn(
 ) (tight bool) {
 	if op == opt.InOp && memo.CanExtractConstTuple(val) {
 		tupVal := val.(*memo.TupleExpr)
+		// If the IN list has more elements than the span limit, return
+		// unconstrained.
+		if c.spanLimit > 0 && len(tupVal.Elems) > c.spanLimit {
+			log.VEventf(c.ctx, 2,
+				"not building spans for IN list: has %d elements, exceeds optimizer_span_limit of %d",
+				len(tupVal.Elems), c.spanLimit,
+			)
+			c.unconstrained(offset, out)
+			return false
+		}
 		keyCtx := &c.keyCtx[offset]
 		var spans constraint.Spans
 		spans.Alloc(len(tupVal.Elems))
@@ -336,6 +349,58 @@ func (c *indexConstraintCtx) makeSpansForSingleColumnDatum(
 				c.makeStringPrefixSpan(offset, prefix, out)
 				return complete
 			}
+		}
+
+	case opt.ContainsOp:
+		if l, ok := datum.(*tree.DLTree); ok {
+			var spans constraint.Spans
+			// We need to create an equality span for each subtree of the LTree that
+			// is rooted from the root, including the empty ltree.
+			spans.Alloc(l.LTree.Len() + 1)
+			keyCtx := &c.keyCtx[offset]
+			for i := 0; i <= l.LTree.Len(); i++ {
+				var subLTree ltree.T
+				if l.LTree.Compare(ltree.Empty) != 0 {
+					var err error
+					subLTree, err = l.LTree.SubPath(0 /* offset */, i /* length */)
+					if err != nil {
+						panic(err)
+					}
+				} else {
+					// SubPath is not graceful with empty ltree, thus we handle it here.
+					subLTree = ltree.Empty
+				}
+				key := constraint.MakeKey(tree.NewDLTree(subLTree))
+				var sp constraint.Span
+				sp.Init(key, includeBoundary, key, includeBoundary)
+				spans.Append(&sp)
+			}
+			// Given how we've constructed the spans, they already are ordered and
+			// unique, but we choose to call SortAndMerge for symmetry with other
+			// expressions and as a sanity check (the function exits quickly if the
+			// ordering is already correct).
+			spans.SortAndMerge(keyCtx)
+			out.Init(keyCtx, &spans)
+			return true
+		}
+
+	case opt.ContainedByOp:
+		if l, ok := datum.(*tree.DLTree); ok {
+			end, ok := l.LTree.NextSibling()
+			if !ok {
+				// An empty LTree represents the root of the tree, so it
+				// includes all non-NULL LTrees.
+				// TODO(mgartner): This could be constrained by excluding NULLs.
+				break
+			}
+			startKey := constraint.MakeKey(l)
+			endKey := constraint.MakeKey(tree.NewDLTree(end))
+			c.singleSpan(
+				offset, startKey, includeBoundary, endKey, excludeBoundary,
+				c.columns[offset].Descending(),
+				out,
+			)
+			return true
 		}
 	}
 	c.unconstrained(offset, out)
@@ -550,6 +615,16 @@ func (c *indexConstraintCtx) makeSpansForTupleIn(
 		}
 	}
 	if len(tuplePos) == 0 {
+		c.unconstrained(offset, out)
+		return false
+	}
+
+	// If the tuple has more elements than the span limit, return unconstrained.
+	if c.spanLimit > 0 && len(rhs.Elems) > c.spanLimit {
+		log.VEventf(c.ctx, 2,
+			"not building spans for tuple: has %d elements, exceeds optimizer_span_limit of %d",
+			len(rhs.Elems), c.spanLimit,
+		)
 		c.unconstrained(offset, out)
 		return false
 	}
@@ -837,17 +912,32 @@ func (c *indexConstraintCtx) makeSpansForAnd(
 			break
 		}
 
+		var tightFilters util.FastIntMap
 		tight := c.makeSpansForExpr(offset+delta, filters[0].Condition, &ofsC)
 		if tight {
-			tightDeltaMap.Set(0, delta)
+			tightFilters.Set(0, delta)
 		}
 		for j := 1; j < len(filters); j++ {
 			tight := c.makeSpansForExpr(offset+delta, filters[j].Condition, &exprConstraint)
 			if tight {
-				tightDeltaMap.Set(j, delta)
+				tightFilters.Set(j, delta)
 			}
 			ofsC.IntersectWith(c.ctx, c.evalCtx, &exprConstraint)
 		}
+		// If combining could produce more spans than the limit (e.g. via
+		// cross-product of exact-match prefix spans with suffix spans), skip the
+		// suffix extension.
+		if c.spanLimit > 0 && out.Spans.Count()*ofsC.Spans.Count() > c.spanLimit {
+			log.VEventf(c.ctx, 2,
+				"limiting index span tightness: combining %d spans with %d suffix spans could exceed optimizer_span_limit of %d",
+				out.Spans.Count(), ofsC.Spans.Count(), c.spanLimit,
+			)
+			break
+		}
+		// Record tightness after we've confirmed we'll actually combine.
+		tightFilters.ForEach(func(j, delta int) {
+			tightDeltaMap.Set(j, delta)
+		})
 		out.Combine(c.ctx, c.evalCtx, &ofsC, c.checkCancellation)
 		numIterations++
 		// In case we can't exit this loop, allow the cancel checker to cancel
@@ -1101,6 +1191,11 @@ type Instance struct {
 // they need not generate remaining filters. This is e.g. used for check
 // constraints that can help generate better spans but don't actually need to be
 // enforced.
+//
+// spanLimit limits the number of spans that will be generated during constraint
+// building. When a span-generating operation would produce more spans than this
+// limit, the constraint builder returns a looser result instead (in some cases
+// fully unconstrained). A value of 0 means no limit.
 func (ic *Instance) Init(
 	ctx context.Context,
 	requiredFilters memo.FiltersExpr,
@@ -1113,6 +1208,7 @@ func (ic *Instance) Init(
 	evalCtx *eval.Context,
 	factory *norm.Factory,
 	ps partition.PrefixSorter,
+	spanLimit int,
 	checkCancellation func(),
 ) {
 	// This initialization pattern ensures that fields are not unwittingly
@@ -1129,7 +1225,7 @@ func (ic *Instance) Init(
 		ic.allFilters = requiredFilters[:len(requiredFilters):len(requiredFilters)]
 		ic.allFilters = append(ic.allFilters, optionalFilters...)
 	}
-	ic.indexConstraintCtx.init(ctx, columns, notNullCols, computedCols, colsInComputedColsExpressions, evalCtx, factory, checkCancellation)
+	ic.indexConstraintCtx.init(ctx, columns, notNullCols, computedCols, colsInComputedColsExpressions, evalCtx, factory, spanLimit, checkCancellation)
 	ic.tight = ic.makeSpansForExpr(0 /* offset */, &ic.allFilters, &ic.constraint)
 
 	// Note: If consolidate is true, we only consolidate spans at the
@@ -1241,6 +1337,10 @@ type indexConstraintCtx struct {
 	ctx     context.Context
 	evalCtx *eval.Context
 
+	// spanLimit limits the number of spans that will be generated during
+	// constraint building. A value of 0 means no limit.
+	spanLimit int
+
 	// We pre-initialize the KeyContext for each suffix of the index columns.
 	keyCtx []constraint.KeyContext
 
@@ -1257,6 +1357,7 @@ func (c *indexConstraintCtx) init(
 	colsInComputedColsExpressions opt.ColSet,
 	evalCtx *eval.Context,
 	factory *norm.Factory,
+	spanLimit int,
 	checkCancellation func(),
 ) {
 	var keyCols, computedColSet opt.ColSet
@@ -1278,6 +1379,7 @@ func (c *indexConstraintCtx) init(
 		colsInComputedColsExpressions: colsInComputedColsExpressions,
 		ctx:                           ctx,
 		evalCtx:                       evalCtx,
+		spanLimit:                     spanLimit,
 		factory:                       factory,
 		keyCtx:                        make([]constraint.KeyContext, len(columns)),
 		checkCancellation:             checkCancellation,
@@ -1332,4 +1434,93 @@ func (c *indexConstraintCtx) computedColInSuffix(offset int) bool {
 		}
 	}
 	return false
+}
+
+// IndexPrefixCols returns a slice of ordering columns for each of the prefix
+// columns of the inverted or vector index. It also returns a set of those
+// columns that are NOT NULL. If the index is a single-column inverted index,
+// the function returns nil ordering columns.
+func IndexPrefixCols(
+	tabID opt.TableID, index cat.Index,
+) (_ []opt.OrderingColumn, notNullCols opt.ColSet) {
+	prefixColumnCount := index.PrefixColumnCount()
+
+	// If this is a single-column inverted/vector index, there are no prefix
+	// columns.
+	if prefixColumnCount == 0 {
+		return nil, opt.ColSet{}
+	}
+
+	prefixColumns := make([]opt.OrderingColumn, prefixColumnCount)
+	for i := range prefixColumns {
+		col := index.Column(i)
+		colID := tabID.ColumnID(col.Ordinal())
+		prefixColumns[i] = opt.MakeOrderingColumn(colID, col.Descending)
+		if !col.IsNullable() {
+			notNullCols.Add(colID)
+		}
+	}
+	return prefixColumns, notNullCols
+}
+
+// ConstrainIndexPrefixCols attempts to build a constraint for the prefix
+// columns of the given inverted or vector index. If a constraint is
+// successfully built, it is returned along with remaining filters and ok=true.
+// The function is only successful if it can generate a constraint where all
+// spans have the same start and end keys for all prefix columns. This is
+// required for building spans for scanning multi-column inverted/vector indexes
+// (see span.Builder.SpansFromInvertedSpans).
+//
+// TODO(michae2): Accept and use optimizer_span_limit.
+func ConstrainIndexPrefixCols(
+	ctx context.Context,
+	evalCtx *eval.Context,
+	factory *norm.Factory,
+	columns []opt.OrderingColumn,
+	notNullCols opt.ColSet,
+	filters memo.FiltersExpr,
+	optionalFilters memo.FiltersExpr,
+	tabID opt.TableID,
+	index cat.Index,
+	checkCancellation func(),
+) (_ *constraint.Constraint, remainingFilters memo.FiltersExpr, ok bool) {
+	tabMeta := factory.Metadata().TableMeta(tabID)
+	prefixColumnCount := index.PrefixColumnCount()
+	ps := tabMeta.IndexPartitionLocality(index.Ordinal())
+
+	// Consolidation of a constraint converts contiguous spans into a single
+	// span. By definition, the consolidated span would have different start and
+	// end keys and could not be used for multi-column inverted index scans.
+	// Therefore, we only generate and check the unconsolidated constraint,
+	// allowing the optimizer to plan multi-column inverted/vector index scans in
+	// more cases.
+	//
+	// For example, the consolidated constraint for (x IN (1, 2, 3)) is:
+	//
+	//   /x: [/1 - /3]
+	//   Prefix: 0
+	//
+	// The unconsolidated constraint for the same expression is:
+	//
+	//   /x: [/1 - /1] [/2 - /2] [/3 - /3]
+	//   Prefix: 1
+	//
+	var ic Instance
+	ic.Init(
+		ctx, filters, optionalFilters,
+		columns, notNullCols, tabMeta.ComputedCols,
+		tabMeta.ColsInComputedColsExpressions,
+		false, /* consolidate */
+		evalCtx, factory, ps,
+		0, /* spanLimit */
+		checkCancellation,
+	)
+	var c constraint.Constraint
+	ic.UnconsolidatedConstraint(&c)
+	if c.Prefix(ctx, evalCtx) != prefixColumnCount {
+		// The prefix columns must be constrained to single values.
+		return nil, nil, false
+	}
+
+	return &c, ic.RemainingFilters(), true
 }

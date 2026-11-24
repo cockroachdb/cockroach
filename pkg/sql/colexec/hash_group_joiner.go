@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 )
 
 // hashGroupJoiner currently is the naive implementation of hash group-join
@@ -29,6 +30,7 @@ type hashGroupJoiner struct {
 
 var _ colexecop.BufferingInMemoryOperator = &hashGroupJoiner{}
 var _ colexecop.Closer = &hashGroupJoiner{}
+var _ colexecop.ResettableOperator = &hashGroupJoiner{}
 
 // NewHashGroupJoiner creates a new hash group-join operator.
 func NewHashGroupJoiner(
@@ -83,7 +85,7 @@ func (h *hashGroupJoiner) Init(ctx context.Context) {
 }
 
 // Next implements the colexecop.Operator interface.
-func (h *hashGroupJoiner) Next() coldata.Batch {
+func (h *hashGroupJoiner) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	return h.ha.Next()
 }
 
@@ -144,6 +146,13 @@ func (h *hashGroupJoiner) ReleaseAfterExport(input colexecop.Operator) {
 	h.hjLeftSource.sq = nil
 }
 
+// Reset implements the colexecop.Resetter interface.
+func (h *hashGroupJoiner) Reset(ctx context.Context) {
+	h.TwoInputInitHelper.Reset(ctx)
+	h.hj.(colexecop.ResettableOperator).Reset(ctx)
+	h.ha.Reset(ctx)
+}
+
 // Close implements the colexecop.Closer interface.
 func (h *hashGroupJoiner) Close(ctx context.Context) error {
 	lastErr := h.ha.Close(ctx)
@@ -165,6 +174,7 @@ type copyingOperator struct {
 }
 
 var _ colexecop.ClosableOperator = &copyingOperator{}
+var _ colexecop.ResettableOperator = &copyingOperator{}
 
 func newCopyingOperator(
 	input colexecop.Operator, args *colexecutils.NewSpillingQueueArgs,
@@ -176,11 +186,23 @@ func newCopyingOperator(
 }
 
 // Next implements the colexecop.Operator interface.
-func (c *copyingOperator) Next() coldata.Batch {
-	b := c.Input.Next()
+func (c *copyingOperator) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	b, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	c.sq.Enqueue(c.Ctx, b)
 	c.zeroBatchEnqueued = b.Length() == 0
-	return b
+	return b, nil
+}
+
+// Reset implements the colexecop.Resetter interface.
+func (c *copyingOperator) Reset(ctx context.Context) {
+	if r, ok := c.Input.(colexecop.Resetter); ok {
+		r.Reset(ctx)
+	}
+	c.sq.Reset(ctx)
+	c.zeroBatchEnqueued = false
 }
 
 // Close implements the colexecop.Closer interface.

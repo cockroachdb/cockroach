@@ -9,6 +9,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"math/rand/v2"
 	"path/filepath"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
@@ -18,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/workload/schemachange"
 )
 
 const (
@@ -32,7 +34,7 @@ func registerSchemaChangeRandomLoad(r registry.Registry) {
 		Cluster: r.MakeClusterSpec(
 			3,
 			spec.Geo(),
-			spec.GCEZones("us-east1-b,us-west1-b,europe-west2-b"),
+			spec.GCEZones("us-east1-b,us-west1-c,europe-west2-b"),
 			spec.AWSZones("us-east-2b,us-west-1a,eu-west-1a"),
 		),
 		// TODO(radu): enable this test on AWS.
@@ -57,33 +59,18 @@ func runSchemaChangeRandomLoad(
 	ctx context.Context, t test.Test, c cluster.Cluster, maxOps, concurrency int,
 ) {
 	validate := func(db *gosql.DB) {
-		var (
-			id           int
-			databaseName string
-			schemaName   string
-			objName      string
-			objError     string
-		)
-		numInvalidObjects := 0
-		rows, err := db.QueryContext(ctx, `SELECT id, database_name, schema_name, obj_name, error FROM crdb_internal.invalid_objects`)
+		invalidObjects, err := schemachange.ValidateInvalidObjects(ctx, db)
 		if err != nil {
 			t.Fatal(err)
 		}
-		for rows.Next() {
-			numInvalidObjects++
-			if err := rows.Scan(&id, &databaseName, &schemaName, &objName, &objError); err != nil {
-				t.Fatal(err)
-			}
+		for _, obj := range invalidObjects {
 			t.L().Errorf(
-				"invalid object found: id: %d, database_name: %s, schema_name: %s, obj_name: %s, error: %s",
-				id, databaseName, schemaName, objName, objError,
+				"invalid object found: id: %d, database_name: %s, schema_name: %s, obj_name: %s, error: %v",
+				obj.ID, obj.DatabaseName, obj.SchemaName, obj.ObjName, obj.Error,
 			)
 		}
-		if err := rows.Err(); err != nil {
-			t.Fatal(err)
-		}
-		if numInvalidObjects > 0 {
-			t.Fatalf("found %d invalid objects", numInvalidObjects)
+		if len(invalidObjects) > 0 {
+			t.Fatalf("found %d invalid objects", len(invalidObjects))
 		}
 	}
 	loadNode := c.Node(1)
@@ -142,8 +129,16 @@ func runSchemaChangeRandomLoad(
 
 	t.Status("performing validation after workload")
 	validate(db)
-	t.Status("dropping database")
-	_, err = db.ExecContext(ctx, `USE defaultdb; DROP DATABASE schemachange CASCADE;`)
+	schemaChangerSetting := "on"
+	if rand.Float32() < 0.5 {
+		schemaChangerSetting = "off"
+	}
+	t.Status(fmt.Sprintf("dropping database with use_declarative_schema_changer = %s", schemaChangerSetting))
+	_, err = db.ExecContext(ctx, "SET use_declarative_schema_changer = $1", schemaChangerSetting)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.ExecContext(ctx, "DROP DATABASE schemachange CASCADE")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,8 +156,11 @@ func saveArtifacts(ctx context.Context, t test.Test, c cluster.Cluster, storeDir
 	if err != nil {
 		t.L().Printf("Failed execute backup command on node 1: %v\n", err.Error())
 	}
+	if _, err := db.Exec("SET use_backups_with_ids = true"); err != nil {
+		t.L().Printf("Failed to set use_backups_with_ids on node 1: %v\n", err.Error())
+	}
 	var backupPath string
-	if err := db.QueryRow("SELECT path FROM [SHOW BACKUPS IN 'nodelocal://1/schemachange']").Scan(&backupPath); err != nil {
+	if err := db.QueryRow("SELECT path FROM [SHOW BACKUPS IN 'nodelocal://1/schemachange' WITH DEBUG]").Scan(&backupPath); err != nil {
 		t.L().Printf("Failed to get backup path from node 1: %v\n", err.Error())
 	}
 	remoteBackupFilePath := filepath.Join(storeDirectory, "extern", "schemachange", backupPath)

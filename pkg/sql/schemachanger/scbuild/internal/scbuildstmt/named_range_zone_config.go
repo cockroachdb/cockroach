@@ -42,19 +42,38 @@ func (rzo *namedRangeZoneConfigObj) getZoneConfigElemForAdd(
 }
 
 func (rzo *namedRangeZoneConfigObj) getZoneConfigElemForDrop(
-	_ BuildCtx,
-) (scpb.Element, []scpb.Element) {
-	elem := &scpb.NamedRangeZoneConfig{
-		RangeID:    rzo.rangeID,
-		ZoneConfig: rzo.zoneConfig,
-		SeqNum:     rzo.seqNum,
-	}
-	return elem, nil
+	b BuildCtx,
+) ([]scpb.Element, []scpb.Element) {
+	var elems []scpb.Element
+	// Ensure that we drop all elements associated with this named range. This
+	// becomes more relevant in explicit txns -- where there could be multiple
+	// zone config elements associated with this named range with increasing
+	// seqNums.
+	b.QueryByID(rzo.getTargetID()).FilterNamedRangeZoneConfig().
+		ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.NamedRangeZoneConfig) {
+			elems = append(elems, e)
+		})
+	return elems, nil
 }
 
 func (rzo *namedRangeZoneConfigObj) checkPrivilegeForSetZoneConfig(
 	b BuildCtx, _ tree.ZoneSpecifier,
 ) error {
+	// Only block privileges for non-root users if this is the default range
+	// for a secondary tenant with
+	// sql.zone_configs.default_range_modifiable_by_non_root.enabled set to
+	// false; other ranges just need the REPAIRCLUSTER privilege.
+	//
+	// N.B. The default range has a rangeID of catid.InvalidDescID.
+	if rzo.rangeID == catid.InvalidDescID && !b.Codec().ForSystemTenant() &&
+		!zonepb.DefaultRangeModifiableByNonRoot.Get(&b.ClusterSettings().SV) {
+		if !b.CurrentUser().IsRootUser() {
+			return pgerror.New(
+				pgcode.InsufficientPrivilege,
+				"only root users are allowed to modify the default range",
+			)
+		}
+	}
 	return b.CheckGlobalPrivilege(privilege.REPAIRCLUSTER)
 }
 

@@ -58,7 +58,7 @@ func (l *confirmActionFlag) String() string {
 	case prompt:
 		return "p"
 	}
-	log.Fatalf(context.Background(), "unknown confirm action flag value %d", *l)
+	log.Dev.Fatalf(context.Background(), "unknown confirm action flag value %d", *l)
 	return ""
 }
 
@@ -308,11 +308,12 @@ func runDebugDeadReplicaCollect(cmd *cobra.Command, args []string) error {
 	var stats loqrecovery.CollectionStats
 
 	if len(debugRecoverCollectInfoOpts.Stores.Specs) == 0 {
-		c, finish, err := getAdminClient(ctx, serverCfg)
+		c, finish, err := dialAdminClient(ctx, serverCfg)
 		if err != nil {
 			return errors.Wrapf(err, "failed to get admin connection to cluster")
 		}
 		defer finish()
+
 		replicaInfo, stats, err = loqrecovery.CollectRemoteReplicaInfo(ctx, c,
 			debugRecoverCollectInfoOpts.maxConcurrency, stderr /* logOutput */)
 		if err != nil {
@@ -321,15 +322,15 @@ func runDebugDeadReplicaCollect(cmd *cobra.Command, args []string) error {
 				"Check cluster health and retry the operation.")
 		}
 	} else {
-		var stores []storage.Engine
+		var stores []kvstorage.Engines
 		for _, storeSpec := range debugRecoverCollectInfoOpts.Stores.Specs {
-			db, err := OpenEngine(storeSpec.Path, stopper, fs.ReadOnly, storage.MustExist)
+			eng, err := OpenEngine(storeSpec.Path, stopper, fs.ReadOnly, storage.MustExist)
 			if err != nil {
 				return errors.WithHint(errors.Wrapf(err,
 					"failed to open store at path %q", storeSpec.Path),
 					"Ensure that store path is correct and that it is not used by another process.")
 			}
-			stores = append(stores, db)
+			stores = append(stores, kvstorage.MakeEngines(eng))
 		}
 		var err error
 		replicaInfo, stats, err = loqrecovery.CollectStoresReplicaInfo(ctx, stores)
@@ -426,11 +427,12 @@ func runDebugPlanReplicaRemoval(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
 		// If no replica info is provided, try to connect to a cluster default or
 		// explicitly provided to retrieve replica info.
-		c, finish, err := getAdminClient(ctx, serverCfg)
+		c, finish, err := dialAdminClient(ctx, serverCfg)
 		if err != nil {
 			return errors.Wrapf(err, "failed to get admin connection to cluster")
 		}
 		defer finish()
+
 		replicas, stats, err = loqrecovery.CollectRemoteReplicaInfo(ctx, c,
 			debugRecoverPlanOpts.maxConcurrency, stderr /* logOutput */)
 		if err != nil {
@@ -675,7 +677,7 @@ func stageRecoveryOntoCluster(
 	ignoreInternalVersion bool,
 	maxConcurrency int,
 ) error {
-	c, finish, err := getAdminClient(ctx, serverCfg)
+	c, finish, err := dialAdminClient(ctx, serverCfg)
 	if err != nil {
 		return errors.Wrapf(err, "failed to get admin connection to cluster")
 	}
@@ -686,6 +688,7 @@ func stageRecoveryOntoCluster(
 		nodeID roachpb.NodeID
 		planID string
 	}
+
 	vr, err := c.RecoveryVerify(ctx, &serverpb.RecoveryVerifyRequest{
 		MaxConcurrency: int32(maxConcurrency),
 	})
@@ -810,19 +813,21 @@ func applyRecoveryToLocalStore(
 
 	var localNodeID roachpb.NodeID
 	batches := make(map[roachpb.StoreID]storage.Batch)
-	stores := make([]storage.Engine, len(debugRecoverExecuteOpts.Stores.Specs))
+	stores := make([]kvstorage.Engines, len(debugRecoverExecuteOpts.Stores.Specs))
 	for i, storeSpec := range debugRecoverExecuteOpts.Stores.Specs {
-		store, err := OpenEngine(storeSpec.Path, stopper, fs.ReadWrite, storage.MustExist)
+		eng, err := OpenEngine(storeSpec.Path, stopper, fs.ReadWrite, storage.MustExist)
 		if err != nil {
 			return errors.Wrapf(err, "failed to open store at path %q. ensure that store path is "+
 				"correct and that it is not used by another process", storeSpec.Path)
 		}
+		store := kvstorage.MakeEngines(eng)
 		stores[i] = store
-		batch := store.NewBatch()
-		defer store.Close()
-		defer batch.Close()
 
-		storeIdent, err := kvstorage.ReadStoreIdent(ctx, store)
+		batch := store.TODOBothEngines().NewBatch()
+		defer store.Close() //nolint:deferloop
+		defer batch.Close() //nolint:deferloop
+
+		storeIdent, err := kvstorage.ReadStoreIdent(ctx, store.LogEngine())
 		if err != nil {
 			return err
 		}
@@ -841,6 +846,7 @@ func applyRecoveryToLocalStore(
 	}
 
 	updateTime := timeutil.Now()
+	// TODO(sep-raft-log): batches need to work with the split log/state engines.
 	prepReport, err := loqrecovery.PrepareUpdateReplicas(
 		ctx, nodeUpdates, uuid.DefaultGenerator, updateTime, localNodeID, batches)
 	if err != nil {
@@ -948,11 +954,12 @@ func runDebugVerify(cmd *cobra.Command, args []string) error {
 		_, _ = fmt.Printf("Checking application of recovery plan %s\n", updatePlan.PlanID)
 	}
 
-	c, finish, err := getAdminClient(ctx, serverCfg)
+	c, finish, err := dialAdminClient(ctx, serverCfg)
 	if err != nil {
 		return errors.Wrapf(err, "failed to get admin connection to cluster")
 	}
 	defer finish()
+
 	req := serverpb.RecoveryVerifyRequest{
 		DecommissionedNodeIDs: updatePlan.DecommissionedNodeIDs,
 		MaxReportedRanges:     20,

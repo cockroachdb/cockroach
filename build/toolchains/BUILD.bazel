@@ -32,9 +32,8 @@ platform(
         "@platforms//cpu:x86_64",
     ],
     exec_properties = {
-        "container-image": "docker://us-east1-docker.pkg.dev/crl-ci-images/cockroach/bazel@sha256:5010b5ae3173d61b2d0383cd740c1d97a12fbd0f2936e750dda0a69fe747d3a5",
+        "container-image": "docker://us-east1-docker.pkg.dev/crl-ci-images/cockroach/bazel@sha256:f0ed943695dc15776605c6dc8f91d999e2a3344272a7b48dee9d1a1ca99af461",
         "dockerReuse": "True",
-        "Pool": "default",
     },
 )
 
@@ -137,9 +136,8 @@ platform(
         "@platforms//cpu:arm64",
     ],
     exec_properties = {
-        "container-image": "docker://us-east1-docker.pkg.dev/crl-ci-images/cockroach/bazel@sha256:bb80e89b17e7cf8225540f00a34944608c6520dd40046a39a7858d6aaaf00a7c",
+        "container-image": "docker://us-east1-docker.pkg.dev/crl-ci-images/cockroach/bazel@sha256:67c21447ee9ab61600a62cc304c5e469aeb36f68a89a3afd7ff404b1985d6087",
         "dockerReuse": "True",
-        "Pool": "default",
     },
 )
 
@@ -165,6 +163,31 @@ toolchain(
         ":cross",
     ],
     toolchain = "@toolchain_cross_s390x-ibm-linux-gnu//:toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)
+
+platform(
+    name = "cross_linux_ppc64le",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:ppc64le",
+    ],
+)
+
+toolchain(
+    name = "cross_x86_64_ppc64le_toolchain",
+    exec_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+    target_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:ppc64le",
+    ],
+    target_settings = [
+        ":cross",
+    ],
+    toolchain = "@toolchain_cross_powerpc64le-ibm-linux-gnu//:toolchain",
     toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
 )
 
@@ -237,6 +260,23 @@ toolchain(
 )
 
 toolchain(
+    name = "cross_arm64_ppc64le_toolchain",
+    exec_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:arm64",
+    ],
+    target_compatible_with = [
+        "@platforms//os:linux",
+        "@platforms//cpu:ppc64le",
+    ],
+    target_settings = [
+        ":cross",
+    ],
+    toolchain = "@armtoolchain_cross_powerpc64le-ibm-linux-gnu//:toolchain",
+    toolchain_type = "@bazel_tools//tools/cpp:toolchain_type",
+)
+
+toolchain(
     name = "cross_arm64_macos_toolchain",
     exec_compatible_with = [
         "@platforms//os:linux",
@@ -296,6 +336,19 @@ config_setting(
     flag_values = {
         ":crdb_test_flag": "true",
         ":crdb_test_off_flag": "false",
+    },
+)
+
+bool_flag(
+    name = "crdb_bench_flag",
+    build_setting_default = False,
+    visibility = ["//visibility:public"],
+)
+
+config_setting(
+    name = "crdb_bench",
+    flag_values = {
+        ":crdb_bench_flag": "true",
     },
 )
 

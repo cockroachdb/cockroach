@@ -8,6 +8,8 @@ package install
 import (
 	"testing"
 
+	cloudcluster "github.com/cockroachdb/cockroach/pkg/roachprod/cloud/types"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/stretchr/testify/require"
 )
 
@@ -57,6 +59,107 @@ func TestVirtualClusterLabel(t *testing.T) {
 			require.Equal(t, expectedVirtualClusterName, nameFromLabel)
 
 			require.Equal(t, tc.sqlInstance, instanceFromLabel)
+		})
+	}
+}
+
+func TestShouldAdvertisePublicIP(t *testing.T) {
+	testCases := []struct {
+		name     string
+		vms      vm.List
+		expected bool
+	}{
+		{
+			name: "same VPC uses private IPs",
+			vms: vm.List{
+				{PublicIP: "1.2.3.4", PrivateIP: "10.0.0.1", VPC: "vpc-1"},
+				{PublicIP: "1.2.3.5", PrivateIP: "10.0.0.2", VPC: "vpc-1"},
+				{PublicIP: "1.2.3.6", PrivateIP: "10.0.0.3", VPC: "vpc-1"},
+			},
+			expected: false,
+		},
+		{
+			name: "different VPCs uses public IPs",
+			vms: vm.List{
+				{PublicIP: "1.2.3.4", PrivateIP: "10.0.0.1", VPC: "vpc-1"},
+				{PublicIP: "1.2.3.5", PrivateIP: "10.0.0.2", VPC: "vpc-2"},
+			},
+			expected: true,
+		},
+		{
+			name: "single node uses private IP",
+			vms: vm.List{
+				{PublicIP: "1.2.3.4", PrivateIP: "10.0.0.1", VPC: "vpc-1"},
+			},
+			expected: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := &SyncedCluster{
+				Cluster: cloudcluster.Cluster{
+					Name: "test",
+					VMs:  tc.vms,
+				},
+				Nodes: allNodes(len(tc.vms)),
+			}
+			require.Equal(t, tc.expected, c.shouldAdvertisePublicIP())
+		})
+	}
+}
+
+func TestJoinAddressConsistentWithAdvertiseAddr(t *testing.T) {
+	testCases := []struct {
+		name             string
+		vms              vm.List
+		expectedJoinHost string
+	}{
+		{
+			name: "same VPC joins on private IPs",
+			vms: vm.List{
+				{PublicIP: "1.2.3.4", PrivateIP: "10.0.0.1", VPC: "vpc-1"},
+				{PublicIP: "1.2.3.5", PrivateIP: "10.0.0.2", VPC: "vpc-1"},
+				{PublicIP: "1.2.3.6", PrivateIP: "10.0.0.3", VPC: "vpc-1"},
+			},
+			expectedJoinHost: "10.0.0.1",
+		},
+		{
+			name: "different VPCs joins on public IPs",
+			vms: vm.List{
+				{PublicIP: "1.2.3.4", PrivateIP: "10.0.0.1", VPC: "vpc-1"},
+				{PublicIP: "1.2.3.5", PrivateIP: "10.0.0.2", VPC: "vpc-2"},
+			},
+			expectedJoinHost: "1.2.3.4",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := &SyncedCluster{
+				Cluster: cloudcluster.Cluster{
+					Name: "test",
+					VMs:  tc.vms,
+				},
+				Nodes: allNodes(len(tc.vms)),
+			}
+			joinNode := Node(1)
+			var joinHost string
+			if c.shouldAdvertisePublicIP() {
+				joinHost = c.Host(joinNode)
+			} else {
+				joinHost = c.VMs[joinNode-1].PrivateIP
+			}
+			require.Equal(t, tc.expectedJoinHost, joinHost)
+
+			var advertiseHost string
+			if c.shouldAdvertisePublicIP() {
+				advertiseHost = c.Host(joinNode)
+			} else {
+				advertiseHost = c.VMs[joinNode-1].PrivateIP
+			}
+			require.Equal(t, advertiseHost, joinHost,
+				"join host should be consistent with advertise host")
 		})
 	}
 }

@@ -15,8 +15,8 @@ func init() {
 		toPublic(
 			scpb.Status_ABSENT,
 			to(scpb.Status_PUBLIC,
-				emit(func(this *scpb.SequenceOption) *scop.SetSequenceOptions {
-					return &scop.SetSequenceOptions{
+				emit(func(this *scpb.SequenceOption) *scop.SetSequenceOption {
+					return &scop.SetSequenceOption{
 						SequenceID: this.SequenceID,
 						Key:        this.Key,
 						Value:      this.Value,
@@ -24,11 +24,15 @@ func init() {
 				}),
 			),
 		),
+		toTransientAbsentLikePublic(),
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.SequenceOption) *scop.NotImplementedForPublicObjects {
-					return notImplementedForPublicObjects(this)
+				emit(func(this *scpb.SequenceOption) *scop.UnsetSequenceOption {
+					return &scop.UnsetSequenceOption{
+						SequenceID: this.SequenceID,
+						Key:        this.Key,
+					}
 				}),
 			),
 		),

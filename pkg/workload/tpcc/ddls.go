@@ -6,6 +6,7 @@
 package tpcc
 
 import (
+	"context"
 	gosql "database/sql"
 	"fmt"
 	"strings"
@@ -93,9 +94,6 @@ const (
 		h_amount decimal(6,2),
 		h_data   varchar(24),
 		primary key (h_w_id, rowid)`
-	deprecatedTpccHistorySchemaFkSuffix = `
-		index history_customer_fk_idx (h_c_w_id, h_c_d_id, h_c_id),
-		index history_district_fk_idx (h_w_id, h_d_id)`
 
 	// ORDER table.
 	tpccOrderSchemaBase = `(
@@ -149,8 +147,6 @@ const (
 		s_remote_cnt integer,
 		s_data       varchar(50),
 		primary key (s_w_id, s_i_id)`
-	deprecatedTpccStockSchemaFkSuffix = `
-		index stock_item_fk_idx (s_i_id)`
 
 	// ORDER-LINE table.
 	tpccOrderLineSchemaBase = `(
@@ -165,8 +161,6 @@ const (
 		ol_amount       decimal(6,2),
 		ol_dist_info    char(24),
 		primary key (ol_w_id, ol_d_id, ol_o_id DESC, ol_number)`
-	deprecatedTpccOrderLineSchemaFkSuffix = `
-		index order_line_stock_fk_idx (ol_supply_w_id, ol_i_id)`
 
 	localityRegionalByRowSuffix = `
 		locality regional by row`
@@ -177,21 +171,12 @@ const (
 )
 
 type schemaOptions struct {
-	fkClause       string
 	familyClause   string
 	columnClause   string
 	localityClause string
 }
 
 type makeSchemaOption func(o *schemaOptions)
-
-func maybeAddFkSuffix(fks bool, suffix string) makeSchemaOption {
-	return func(o *schemaOptions) {
-		if fks {
-			o.fkClause = suffix
-		}
-	}
-}
 
 func maybeAddColumnFamiliesSuffix(separateColumnFamilies bool, suffix string) makeSchemaOption {
 	return func(o *schemaOptions) {
@@ -233,9 +218,6 @@ func makeSchema(base string, opts ...makeSchemaOption) string {
 		opt(&o)
 	}
 	ret := base
-	if o.fkClause != "" {
-		ret += "," + o.fkClause
-	}
 	if o.familyClause != "" {
 		ret += "," + o.familyClause
 	}
@@ -249,7 +231,7 @@ func makeSchema(base string, opts ...makeSchemaOption) string {
 	return ret
 }
 
-func scatterRanges(db *gosql.DB) error {
+func scatterRanges(ctx context.Context, conn *gosql.Conn) error {
 	tables := []string{
 		`customer`,
 		`district`,
@@ -266,7 +248,7 @@ func scatterRanges(db *gosql.DB) error {
 	for _, table := range tables {
 		sql := fmt.Sprintf(`ALTER TABLE %s SCATTER`, table)
 		g.Go(func() error {
-			if _, err := db.Exec(sql); err != nil {
+			if _, err := conn.ExecContext(ctx, sql); err != nil {
 				return errors.Wrapf(err, "Couldn't exec %q", sql)
 			}
 			return nil

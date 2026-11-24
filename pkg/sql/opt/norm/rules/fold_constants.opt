@@ -101,6 +101,27 @@ $result
 =>
 $result
 
+# FoldComparisonWithAny evaluates a comparison operation over a constant
+# and an ANY/SOME clause, replacing the entire expression with a constant.
+# It iterates over elements in the clause and tries to find constants that
+# make the comparison a definite value.
+[FoldComparisonWithAny, Normalize]
+(AnyScalar
+    $left:* & (IsConstValueOrGroupOfConstValues $left)
+    $right:* & (IsTuple $right)
+    $cmp:* &
+        (Let
+            ($result $ok):(FoldComparisonWithAny
+                $cmp
+                $left
+                $right
+            )
+            $ok
+        )
+)
+=>
+$result
+
 # FoldComparison is similar to FoldBinary, but it involves a comparison
 # operation. As with FoldBinary, FoldComparison applies as long as the
 # evaluation would not cause an error.

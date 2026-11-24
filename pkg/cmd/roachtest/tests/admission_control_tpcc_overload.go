@@ -56,7 +56,7 @@ func (s tpccOLAPSpec) run(ctx context.Context, t test.Test, c cluster.Cluster) {
 	queryLine := `"` + strings.Replace(tpccOlapQuery, "\n", " ", -1) + `"`
 	c.Run(ctx, option.WithNodes(c.WorkloadNode()), "echo", queryLine, "> "+queryFileName)
 	t.Status("waiting")
-	m := c.NewMonitor(ctx, c.CRDBNodes())
+	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 	rampDuration := 2 * time.Minute
 	duration := 3 * time.Minute
 	labels := getTpccLabels(s.Warehouses, rampDuration, duration, map[string]string{"concurrency": strconv.Itoa(s.Concurrency)})
@@ -190,7 +190,7 @@ func registerTPCCSevereOverload(r registry.Registry) {
 		Cluster:          r.MakeClusterSpec(7, spec.CPU(8), spec.WorkloadNode(), spec.WorkloadNodeCPU(8)),
 		CompatibleClouds: registry.AllClouds,
 		Suites:           registry.Suites(registry.Weekly),
-		Timeout:          5 * time.Hour,
+		Timeout:          6 * time.Hour,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			warehouseCount := 10000
 			rampTime := 4 * time.Hour
@@ -200,7 +200,7 @@ func registerTPCCSevereOverload(r registry.Registry) {
 			}
 
 			c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.CRDBNodes())
-			t.Status("initializing (~30m)")
+			t.Status("initializing (~1h)")
 			cmd := fmt.Sprintf(
 				"./cockroach workload fixtures import tpcc --checks=false --warehouses=%d {pgurl:1}",
 				warehouseCount,

@@ -76,7 +76,7 @@ func TestSpillingQueue(t *testing.T) {
 			// spilling to disk queue occurs after some batches were added to
 			// the in-memory buffer.
 			setInMemEnqueuesLimit := rng.Float64() < 0.5
-			log.Infof(context.Background(), "%sMemoryLimit=%s/DiskQueueCacheMode=%d/AlwaysCompress=%t/NumBatches=%d/InMemEnqueuesLimited=%t",
+			log.Dev.Infof(context.Background(), "%sMemoryLimit=%s/DiskQueueCacheMode=%d/AlwaysCompress=%t/NumBatches=%d/InMemEnqueuesLimited=%t",
 				prefix, humanizeutil.IBytes(memoryLimit), diskQueueCacheMode, alwaysCompress, numBatches, setInMemEnqueuesLimit)
 			// Since the spilling queue coalesces tuples to fill-in the batches
 			// up to their capacity, we cannot use the batches we get when
@@ -176,7 +176,7 @@ func TestSpillingQueue(t *testing.T) {
 			}
 
 			for {
-				b = op.Next()
+				b = colexecop.NextNoMeta(op)
 				q.Enqueue(ctx, b)
 				if b.Length() == 0 {
 					break
@@ -296,7 +296,7 @@ func TestSpillingQueueDidntSpill(t *testing.T) {
 	)
 
 	for {
-		b := op.Next()
+		b := colexecop.NextNoMeta(op)
 		q.Enqueue(ctx, b)
 		b, err := q.Dequeue(ctx)
 		require.NoError(t, err)

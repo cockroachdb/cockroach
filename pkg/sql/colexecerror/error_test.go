@@ -15,8 +15,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -121,75 +119,6 @@ func TestRuntimePanicIsCaught(t *testing.T) {
 	}))
 }
 
-// BenchmarkCatchVectorizedRuntimeError measures the time for
-// CatchVectorizedRuntimeError to catch and process an error.
-func BenchmarkCatchVectorizedRuntimeError(b *testing.B) {
-	err := errors.New("oops")
-	storageErr := colexecerror.NewStorageError(err)
-	pgErr := pgerror.WithCandidateCode(err, pgcode.Warning)
-
-	cases := []struct {
-		name    string
-		thrower func()
-	}{
-		{
-			"noError",
-			func() {},
-		},
-		{
-			"expected",
-			func() {
-				colexecerror.ExpectedError(err)
-			},
-		},
-		{
-			"storage",
-			func() {
-				colexecerror.InternalError(storageErr)
-			},
-		},
-		{
-			"contextCanceled",
-			func() {
-				colexecerror.InternalError(context.Canceled)
-			},
-		},
-		{
-			"internalWithCode",
-			func() {
-				colexecerror.InternalError(pgErr)
-			},
-		},
-		{
-			"internal",
-			func() {
-				colexecerror.InternalError(err)
-			},
-		},
-		{
-			"runtime",
-			func() {
-				arr := []int{0, 1, 2}
-				_ = arr[3]
-			},
-		},
-	}
-
-	// Use the release-build panic-catching behavior instead of the
-	// crdb_test-build behavior.
-	defer colexecerror.ProductionBehaviorForTests()()
-
-	for _, tc := range cases {
-		b.Run(tc.name, func(b *testing.B) {
-			b.RunParallel(func(pb *testing.PB) {
-				for pb.Next() {
-					_ = colexecerror.CatchVectorizedRuntimeError(tc.thrower)
-				}
-			})
-		})
-	}
-}
-
 // BenchmarkSQLCatchVectorizedRuntimeError measures the time for
 // CatchVectorizedRuntimeError to catch and process an error with a deeper stack
 // than in BenchmarkCatchVectorizedRuntimeError.
@@ -255,22 +184,32 @@ func BenchmarkSQLCatchVectorizedRuntimeError(b *testing.B) {
 	// crdb_test-build behavior.
 	defer colexecerror.ProductionBehaviorForTests()()
 
-	for _, parallelism := range []int{1, 20, 50} {
+	const maxParallelism = 32
+	maxNumConns := runtime.GOMAXPROCS(0) * maxParallelism
+	// Create as many warm connections as we will need for the benchmark. These
+	// will be reused across all test cases to avoid the connection churn.
+	connsPool := make([]*gosql.DB, maxNumConns)
+	for i := range connsPool {
+		conn := s.ApplicationLayer().SQLConn(b, serverutils.DBName(""))
+		// Make sure we're using local, vectorized execution.
+		sqlDB := sqlutils.MakeSQLRunner(conn)
+		sqlDB.Exec(b, "SET distsql = off")
+		sqlDB.Exec(b, "SET vectorize = on")
+		connsPool[i] = conn
+	}
+
+	for _, parallelism := range []int{1, 8, maxParallelism} {
 		numConns := runtime.GOMAXPROCS(0) * parallelism
 		b.Run(fmt.Sprintf("conns=%d", numConns), func(b *testing.B) {
 			for _, tc := range cases {
 				stmt := fmt.Sprintf(sqlFmt, tc.builtin)
 				b.Run(tc.name, func(b *testing.B) {
-					// Create as many warm connections as we will need for the benchmark.
 					conns := make(chan *gosql.DB, numConns)
 					for i := 0; i < numConns; i++ {
-						conn := s.ApplicationLayer().SQLConn(b, serverutils.DBName(""))
-						// Make sure we're using local, vectorized execution.
-						sqlDB := sqlutils.MakeSQLRunner(conn)
-						sqlDB.Exec(b, "SET distsql = off")
-						sqlDB.Exec(b, "SET vectorize = on")
-						// Warm up the connection by executing the statement once. We should
-						// always go through the query plan cache after this.
+						conn := connsPool[i]
+						// Warm up the connection by executing the statement
+						// once. We should always go through the query plan
+						// cache after this.
 						_, _ = conn.Exec(stmt)
 						conns <- conn
 					}

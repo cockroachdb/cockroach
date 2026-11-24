@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cli/exit"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/fileutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
@@ -22,6 +23,11 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
 )
+
+// envAlwaysKeepTestLogsEnabled controls whether test and CRDB logs are kept
+// even when the test passes. By default, it’s disabled, so logs are deleted on
+// test success.
+var envAlwaysKeepTestLogsEnabled = envutil.EnvOrDefaultBool("COCKROACH_ALWAYS_KEEP_TEST_LOGS", false)
 
 // TestLogScope represents the lifetime of a logging output.  It
 // ensures that the log files are stored in a directory specific to a
@@ -155,9 +161,10 @@ func newLogScope(t tShim, mostlyInline bool) (sc *TestLogScope) {
 		// destination directory.
 		cfg := getTestConfig(&sc.logDir, mostlyInline)
 
-		// Switch to the new configuration.
-		TestingResetActive()
-		sc.cleanupFn, err = ApplyConfig(cfg, nil /* fileSinkMetricsForDir */, nil /* fatalOnLogStall */)
+		// Switch to the new configuration. We use ApplyConfigForReconfig to
+		// atomically reset the active flag and apply the new configuration,
+		// avoiding a race with background goroutines that may be logging.
+		sc.cleanupFn, err = ApplyConfigForReconfig(cfg, nil /* fileSinkMetricsForDir */, nil /* fatalOnLogStall */)
 		if err != nil {
 			return err
 		}
@@ -328,6 +335,10 @@ func selectAllChannelsExceptSeparated() []logpb.Channel {
 // To ensure that output always goes to one file, use
 // log.ScopeWithoutShowLogs().
 func (l *TestLogScope) SetupSingleFileLogging() (cleanup func()) {
+	return l.SetupSingleFileLoggingFormatted("")
+}
+
+func (l *TestLogScope) SetupSingleFileLoggingFormatted(format string) (cleanup func()) {
 	if l.logDir == "" {
 		// No log directory: no-op.
 		return func() {}
@@ -335,10 +346,17 @@ func (l *TestLogScope) SetupSingleFileLogging() (cleanup func()) {
 
 	// Set up a logging configuration with just one file sink.
 	cfg := logconfig.DefaultConfig()
-	cfg.Sinks.FileGroups = map[string]*logconfig.FileSinkConfig{
-		"default": {
-			Channels: logconfig.SelectChannels(logconfig.AllChannels()...)},
+	defaultSinkConfig := &logconfig.FileSinkConfig{
+		Channels: logconfig.SelectChannels(logconfig.AllChannels()...),
 	}
+
+	if format != "" {
+		defaultSinkConfig.Format = &format
+	}
+	cfg.Sinks.FileGroups = map[string]*logconfig.FileSinkConfig{
+		"default": defaultSinkConfig,
+	}
+
 	// Disable the -stderr.log output so there's really just 1 file.
 	cfg.CaptureFd2.Enable = false
 
@@ -348,9 +366,10 @@ func (l *TestLogScope) SetupSingleFileLogging() (cleanup func()) {
 		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error in predefined log config"))
 	}
 
-	// Apply the configuration.
-	TestingResetActive()
-	cleanup, err := ApplyConfig(cfg, nil /* fileSinkMetricsForDir */, nil /* fatalOnLogStall */)
+	// Apply the configuration. We use ApplyConfigForReconfig to atomically
+	// reset the active flag and apply the new configuration, avoiding a race
+	// with background goroutines that may be logging.
+	cleanup, err := ApplyConfigForReconfig(cfg, nil /* fileSinkMetricsForDir */, nil /* fatalOnLogStall */)
 	if err != nil {
 		panic(errors.NewAssertionErrorWithWrappedErrf(err, "unexpected error in predefined log config"))
 	}
@@ -410,7 +429,7 @@ func (l *TestLogScope) Close(t tShim) {
 				t.Fatal(err)
 			}
 			inPanic := calledDuringPanic()
-			if (t.Failed() && !emptyDir) || inPanic {
+			if (t.Failed() && !emptyDir) || inPanic || envAlwaysKeepTestLogsEnabled {
 				// If the test failed or there was a panic, we keep the log
 				// files for further investigation.
 				if inPanic {

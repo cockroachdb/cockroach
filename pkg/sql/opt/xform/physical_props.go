@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/distribution"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/plangram"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -30,13 +31,20 @@ import (
 // method and then pass through that property in the buildChildPhysicalProps
 // method.
 func CanProvidePhysicalProps(
-	ctx context.Context, evalCtx *eval.Context, e memo.RelExpr, required *physical.Required,
+	ctx context.Context,
+	evalCtx *eval.Context,
+	mem *memo.Memo,
+	e memo.RelExpr,
+	required *physical.Required,
 ) bool {
 	// All operators can provide the Presentation and LimitHint properties, so no
 	// need to check for that.
-	canProvideOrdering := e.Op() == opt.SortOp || ordering.CanProvide(e, &required.Ordering)
-	canProvideDistribution := e.Op() == opt.DistributeOp || distribution.CanProvide(ctx, evalCtx, e, &required.Distribution)
-	return canProvideOrdering && canProvideDistribution
+	canProvideOrdering := e.Op() == opt.SortOp ||
+		ordering.CanProvide(ctx, evalCtx, mem, e, &required.Ordering)
+	canProvideDistribution := e.Op() == opt.DistributeOp ||
+		distribution.CanProvide(ctx, evalCtx, mem, e, &required.Distribution)
+	canProvidePlanGram := plangram.CanProvide(e, required.PlanGram)
+	return canProvideOrdering && canProvideDistribution && canProvidePlanGram
 }
 
 // BuildChildPhysicalProps returns the set of physical properties required of
@@ -81,8 +89,10 @@ func BuildChildPhysicalProps(
 		childProps.Presentation = parent.(*memo.ExportExpr).Props.Presentation
 	}
 
-	childProps.Ordering = ordering.BuildChildRequired(parent, &parentProps.Ordering, nth)
+	childProps.Ordering = ordering.BuildChildRequired(mem, parent, &parentProps.Ordering, nth)
 	childProps.Distribution = distribution.BuildChildRequired(parent, &parentProps.Distribution, nth)
+	childProps.RemoteBranch = parentProps.RemoteBranch
+	childProps.PlanGram = plangram.BuildChildRequired(parent, parentProps.PlanGram, nth, mem.Metadata())
 
 	switch parent.Op() {
 	case opt.LimitOp:
@@ -108,10 +118,16 @@ func BuildChildPhysicalProps(
 		childProps.LimitHint = parentProps.LimitHint
 
 	case opt.ExceptOp, opt.ExceptAllOp, opt.IntersectOp, opt.IntersectAllOp,
-		opt.UnionOp, opt.UnionAllOp, opt.LocalityOptimizedSearchOp:
+		opt.UnionOp, opt.UnionAllOp:
 		// TODO(celine): Set operation limits need further thought; for example,
 		// the right child of an ExceptOp should not be limited.
 		childProps.LimitHint = parentProps.LimitHint
+
+	case opt.LocalityOptimizedSearchOp:
+		childProps.LimitHint = parentProps.LimitHint
+		if nth == 1 {
+			childProps.RemoteBranch = true
+		}
 
 	case opt.DistinctOnOp:
 		distinctCount := parent.Relational().Statistics().RowCount
@@ -302,20 +318,20 @@ func init() {
 		lookupJoin *memo.LookupJoinExpr,
 		required *physical.Required,
 		optimizer interface{},
-	) (physicalDistribution physical.Distribution) {
+	) physical.Distribution {
 		if optimizer == nil {
-			return physicalDistribution
+			return physical.Distribution{}
 		}
 		o, ok := optimizer.(*Optimizer)
-		if !ok {
-			return physicalDistribution
+		if !ok || o.mem == nil || !o.mem.IsOptimized() {
+			return physical.Distribution{}
 		}
 		if o.evalCtx == nil {
-			return physicalDistribution
+			return physical.Distribution{}
 		}
-		_, physicalDistribution = distribution.BuildLookupJoinLookupTableDistribution(
-			o.ctx, o.evalCtx, lookupJoin, required, o.MaybeGetBestCostRelation,
+		_, d := distribution.BuildLookupJoinLookupTableDistribution(
+			o.ctx, o.evalCtx, o.mem, lookupJoin, required, o.MaybeGetBestCostRelation,
 		)
-		return physicalDistribution
+		return d
 	}
 }

@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/validate"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/zone"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/errors"
 )
 
 // MutableCatalog is like Catalog but mutable.
@@ -29,6 +28,7 @@ func (mc *MutableCatalog) maybeInitialize() {
 	}
 	mc.byID = makeByIDMap()
 	mc.byName = makeByNameMap()
+	mc.nsEntryByID = make(map[descpb.ID]*byNameEntry)
 }
 
 // Clear empties the MutableCatalog.
@@ -105,6 +105,7 @@ func (mc *MutableCatalog) DeleteByName(key catalog.NameKey) {
 	}
 	if removed := mc.byName.delete(key); removed != nil {
 		mc.byteSize -= removed.(catalogEntry).ByteSize()
+		delete(mc.nsEntryByID, removed.GetID())
 	}
 }
 
@@ -118,6 +119,7 @@ func (mc *MutableCatalog) UpsertNamespaceEntry(
 	e := mc.ensureForName(key)
 	e.id = id
 	e.timestamp = mvccTimestamp
+	mc.nsEntryByID[id] = e
 }
 
 // DeleteByID removes all by-ID mappings from the MutableCatalog.
@@ -144,8 +146,8 @@ func (mc *MutableCatalog) UpsertDescriptor(desc catalog.Descriptor) {
 // UpsertComment upserts a ((ObjectID, SubID, CommentType) -> Comment) mapping
 // into the catalog.
 func (mc *MutableCatalog) UpsertComment(key catalogkeys.CommentKey, cmt string) error {
-	if !catalogkeys.IsValidCommentType(key.CommentType) {
-		return errors.AssertionFailedf("invalid comment type %d", key.CommentType)
+	if err := key.Validate(); err != nil {
+		return err
 	}
 	e := mc.ensureForID(descpb.ID(key.ObjectID))
 	mc.byteSize -= e.ByteSize()
@@ -177,8 +179,8 @@ func (mc *MutableCatalog) DeleteComment(key catalogkeys.CommentKey) {
 		if uint32(subID) == key.SubID {
 			return
 		}
-		cbt.comments = append(cbt.comments, oldCommentsByType.comments[oldOrdinal])
 		cbt.subObjectOrdinals.Set(subID, len(cbt.comments))
+		cbt.comments = append(cbt.comments, oldCommentsByType.comments[oldOrdinal])
 	})
 	mc.byteSize += e.ByteSize() - oldByteSize
 }
@@ -221,6 +223,7 @@ func (mc *MutableCatalog) AddAll(c Catalog) {
 			mc.byteSize -= e.ByteSize()
 			mc.byteSize += ne.ByteSize()
 		}
+		mc.nsEntryByID[ne.GetID()] = ne
 		return nil
 	})
 	_ = c.byID.ascend(func(entry catalog.NameEntry) error {

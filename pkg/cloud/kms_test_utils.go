@@ -53,6 +53,9 @@ func KMSEncryptDecrypt(t *testing.T, kmsURI string, env KMSEnv) {
 	ctx := context.Background()
 	kms, err := KMSFromURI(ctx, kmsURI, env)
 	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, kms.Close())
+	}()
 
 	t.Run("simple encrypt decrypt", func(t *testing.T) {
 		sampleBytes := "hello world"
@@ -64,8 +67,6 @@ func KMSEncryptDecrypt(t *testing.T, kmsURI string, env KMSEnv) {
 		require.NoError(t, err)
 
 		require.True(t, bytes.Equal(decryptedBytes, []byte(sampleBytes)))
-
-		require.NoError(t, kms.Close())
 	})
 }
 
@@ -75,6 +76,9 @@ func CheckNoKMSAccess(t *testing.T, kmsURI string, env KMSEnv) {
 	ctx := context.Background()
 	kms, err := KMSFromURI(ctx, kmsURI, env)
 	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, kms.Close())
+	}()
 
 	_, err = kms.Encrypt(ctx, []byte("test bytes"))
 	if err == nil {

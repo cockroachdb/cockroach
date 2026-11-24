@@ -22,7 +22,10 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
-const defaultWorkloadPort = 2112
+const (
+	defaultWorkloadPort = 2112
+	nodeExporterStarted = "node_exporter/.started_with_start_grafana"
+)
 
 // Client is an interface allowing queries against Prometheus.
 type Client interface {
@@ -48,8 +51,7 @@ type ScrapeConfig struct {
 // Config is a monitor that watches over the running of prometheus.
 type Config struct {
 	// PrometheusNode identifies a single node in the cluster to run the prometheus instance on.
-	// The type is install.Nodes merely for ease of use.
-	PrometheusNode install.Nodes
+	PrometheusNode install.Node
 
 	// ScrapeConfigs provides the configurations for each scraping instance
 	ScrapeConfigs []ScrapeConfig
@@ -119,7 +121,7 @@ func MakeWorkloadScrapeConfig(
 
 // WithPrometheusNode specifies the node to set up prometheus on.
 func (cfg *Config) WithPrometheusNode(node install.Node) *Config {
-	cfg.PrometheusNode = install.Nodes{node}
+	cfg.PrometheusNode = node
 	return cfg
 }
 
@@ -169,16 +171,18 @@ func (cfg *Config) WithScrapeConfigs(config ...ScrapeConfig) *Config {
 // For more on the node exporter process, see https://prometheus.io/docs/guides/node-exporter/
 func (cfg *Config) WithNodeExporter(nodes install.Nodes) *Config {
 	cfg.NodeExporter = nodes
+
 	// Add a scrape config for each node running node_exporter
 	for _, node := range cfg.NodeExporter {
 		s := strconv.Itoa(int(node))
 		cfg.ScrapeConfigs = append(cfg.ScrapeConfigs, ScrapeConfig{
 			JobName:     "node_exporter-" + s,
-			MetricsPath: "/metrics",
+			MetricsPath: vm.NodeExporterMetricsPath,
 			Labels:      map[string]string{"node": s},
 			ScrapeNodes: []ScrapeNode{{
 				Node: node,
-				Port: 9100}},
+				Port: vm.NodeExporterPort,
+			}},
 		})
 	}
 	return cfg
@@ -237,36 +241,51 @@ type Prometheus struct {
 
 // Init creates a prometheus instance on the given cluster.
 func Init(
-	ctx context.Context, l *logger.Logger, c *install.SyncedCluster, arch vm.CPUArch, cfg Config,
+	ctx context.Context, l *logger.Logger, c *install.SyncedCluster, cfg Config,
 ) (_ *Prometheus, _ error) {
-	binArch := "amd64"
-	if arch == vm.ArchARM64 {
-		binArch = "arm64"
-	}
+
+	promAsInstallNodes := install.Nodes{cfg.PrometheusNode}
 
 	if len(cfg.NodeExporter) > 0 {
-		// NB: when upgrading here, make sure to target a version that picks up this PR:
-		// https://github.com/prometheus/node_exporter/pull/2311
-		// At time of writing, there hasn't been a release in over half a year.
 		if err := c.Run(ctx, l, l.Stdout, l.Stderr, install.WithNodes(cfg.NodeExporter).WithShouldRetryFn(install.AlwaysTrue),
 			"download node exporter",
 			fmt.Sprintf(`
-(sudo systemctl stop node_exporter || true) &&
-rm -rf node_exporter && mkdir -p node_exporter && curl -fsSL \
-  https://storage.googleapis.com/cockroach-test-artifacts/prometheus/node_exporter-1.2.2.linux-%s.tar.gz |
-  tar zxv --strip-components 1 -C node_exporter
-`, binArch)); err != nil {
-			return nil, err
+export ARCH=$(dpkg --print-architecture)
+if [ ! -x node_exporter/node_exporter ]; then
+	rm -rf node_exporter && mkdir -p node_exporter && curl -fsSL \
+		https://storage.googleapis.com/cockroach-test-artifacts/prometheus/node_exporter-%s.linux-${ARCH}.tar.gz |
+		tar zxv --strip-components 1 -C node_exporter
+fi
+`,
+				vm.NodeExporterVersion,
+			)); err != nil {
+			return nil, errors.Wrap(err, "unable to download node_exporter")
 		}
 
 		// Start node_exporter.
+		// Also make it reachable by the Prometheus node in case of firewall rules.
 		if err := c.Run(ctx, l, l.Stdout, l.Stderr, install.WithNodes(cfg.NodeExporter), "init node exporter",
-			`cd node_exporter &&
-sudo systemd-run --unit node_exporter --same-dir ./node_exporter`,
+			fmt.Sprintf(`
+sudo iptables -C INPUT -p tcp -s {ip:%[1]d:public} --dport %[2]d -j ACCEPT || sudo iptables -I INPUT -p tcp -s {ip:%[1]d:public} --dport %[2]d -j ACCEPT;
+if ! systemctl is-active --quiet node_exporter; then
+	# Flag we're starting a node_exporter instance
+	touch %[4]s
+	if systemctl cat node_exporter &>/dev/null; then
+		# Proper unit exists, just start it after resetting failed state if any
+		sudo systemctl reset-failed node_exporter 2>/dev/null || true
+		sudo systemctl start node_exporter
+	else
+		# Somehow proper unit doesn't exists, create transient one
+		cd node_exporter &&
+		sudo systemd-run --unit node_exporter --same-dir ./node_exporter \
+			--web.listen-address=":%[2]d" --web.telemetry-path="%[3]s"
+	fi
+fi
+`, cfg.PrometheusNode, vm.NodeExporterPort, vm.NodeExporterMetricsPath, nodeExporterStarted),
 		); err != nil {
 			// TODO(msbutler): download binary for target platform. currently we
 			// hardcode downloading the linux binary.
-			return nil, errors.Wrap(err, "grafana-start currently cannot run on darwin")
+			return nil, errors.Wrap(err, "unable to start node_exporter")
 		}
 	}
 	if err := c.Run(
@@ -274,7 +293,7 @@ sudo systemd-run --unit node_exporter --same-dir ./node_exporter`,
 		l,
 		l.Stdout,
 		l.Stderr,
-		install.WithNodes(cfg.PrometheusNode).WithShouldRetryFn(install.AlwaysTrue),
+		install.WithNodes(promAsInstallNodes).WithShouldRetryFn(install.AlwaysTrue),
 		"reset prometheus",
 		"sudo systemctl stop prometheus || echo 'no prometheus is running'",
 	); err != nil {
@@ -286,12 +305,15 @@ sudo systemd-run --unit node_exporter --same-dir ./node_exporter`,
 		l,
 		l.Stdout,
 		l.Stderr,
-		install.WithNodes(cfg.PrometheusNode).WithShouldRetryFn(install.AlwaysTrue),
+		install.WithNodes(promAsInstallNodes).WithShouldRetryFn(install.AlwaysTrue),
 		"download prometheus",
-		fmt.Sprintf(`sudo rm -rf /tmp/prometheus && mkdir /tmp/prometheus && cd /tmp/prometheus &&
-			curl -fsSL https://storage.googleapis.com/cockroach-test-artifacts/prometheus/prometheus-2.27.1.linux-%s.tar.gz | tar zxv --strip-components=1`,
-			binArch)); err != nil {
-		return nil, err
+		fmt.Sprintf(`
+export ARCH=$(dpkg --print-architecture)
+sudo rm -rf /tmp/prometheus && mkdir /tmp/prometheus && cd /tmp/prometheus &&
+curl -fsSL https://storage.googleapis.com/cockroach-test-artifacts/prometheus/prometheus-%s.linux-${ARCH}.tar.gz | tar zxv --strip-components=1`,
+			vm.PrometheusVersion,
+		)); err != nil {
+		return nil, errors.Wrap(err, "unable to download prometheus")
 	}
 	// create and upload prom config
 	nodeIPs, err := makeNodeIPMap(c)
@@ -306,12 +328,12 @@ sudo systemd-run --unit node_exporter --same-dir ./node_exporter`,
 	if err := c.PutString(
 		ctx,
 		l,
-		cfg.PrometheusNode,
+		promAsInstallNodes,
 		yamlCfg,
 		"/tmp/prometheus/prometheus.yml",
 		0777,
 	); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "unable to push prometheus config")
 	}
 
 	// Start prometheus as systemd.
@@ -320,43 +342,48 @@ sudo systemd-run --unit node_exporter --same-dir ./node_exporter`,
 		l,
 		l.Stdout,
 		l.Stderr,
-		install.WithNodes(cfg.PrometheusNode),
+		install.WithNodes(promAsInstallNodes),
 		"start-prometheus",
 		`cd /tmp/prometheus &&
 sudo systemd-run --unit prometheus --same-dir \
 	./prometheus --config.file=prometheus.yml --storage.tsdb.path=data/ --web.enable-admin-api`,
 	); err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "unable to start prometheus as a transient systemd unit")
 	}
 
 	if cfg.Grafana.Enabled {
-		// Install Grafana.
-		if err := c.Run(ctx, l,
-			l.Stdout,
-			l.Stderr, install.WithNodes(cfg.PrometheusNode).WithShouldRetryFn(install.AlwaysTrue), "install grafana",
-			fmt.Sprintf(`
+		if len(c.Cluster.VMs) > 0 && c.Cluster.VMs[0].CPUArch == vm.ArchS390x {
+			l.Printf("WARNING: Grafana is not supported on s390x, it won't be installed in the cluster")
+		} else {
+			// Install Grafana.
+			if err := c.Run(ctx, l,
+				l.Stdout,
+				l.Stderr, install.WithNodes(promAsInstallNodes).WithShouldRetryFn(install.AlwaysTrue), "install grafana",
+				fmt.Sprintf(`
+export ARCH=$(dpkg --print-architecture)
 sudo apt-get install -qqy apt-transport-https &&
 sudo apt-get install -qqy software-properties-common &&
 sudo apt-get install -y adduser libfontconfig1 &&
-echo "Downloading https://dl.grafana.com/enterprise/release/grafana-enterprise_9.2.3_%[1]s.deb" &&
-curl https://dl.grafana.com/enterprise/release/grafana-enterprise_9.2.3_%[1]s.deb -sS -o grafana-enterprise_9.2.3_%[1]s.deb &&
-sudo dpkg -i grafana-enterprise_9.2.3_%[1]s.deb &&
+echo "Downloading https://dl.grafana.com/enterprise/release/grafana-enterprise_%[1]s_${ARCH}.deb" &&
+curl https://dl.grafana.com/enterprise/release/grafana-enterprise_%[1]s_${ARCH}.deb -sS -o grafana-enterprise_%[1]s_${ARCH}.deb &&
+sudo dpkg -i grafana-enterprise_%[1]s_${ARCH}.deb &&
 sudo mkdir -p /var/lib/grafana/dashboards`,
-				binArch)); err != nil {
-			return nil, err
-		}
+					vm.GrafanaEnterpriseVersion,
+				)); err != nil {
+				return nil, errors.Wrap(err, "unable to install grafana")
+			}
 
-		// Provision local prometheus instance as data source.
-		if err := c.Run(ctx, l,
-			l.Stdout,
-			l.Stderr, install.WithNodes(cfg.PrometheusNode).WithShouldRetryFn(install.AlwaysTrue), "permissions",
-			`sudo chmod -R 777 /etc/grafana/provisioning/datasources /etc/grafana/provisioning/dashboards /var/lib/grafana/dashboards /etc/grafana/grafana.ini`,
-		); err != nil {
-			return nil, err
-		}
+			// Provision local prometheus instance as data source.
+			if err := c.Run(ctx, l,
+				l.Stdout,
+				l.Stderr, install.WithNodes(promAsInstallNodes).WithShouldRetryFn(install.AlwaysTrue), "permissions",
+				`sudo chmod -R 777 /etc/grafana/provisioning/datasources /etc/grafana/provisioning/dashboards /var/lib/grafana/dashboards /etc/grafana/grafana.ini`,
+			); err != nil {
+				return nil, errors.Wrap(err, "unable to set permissions for grafana provisioning")
+			}
 
-		// Set up grafana config.
-		if err := c.PutString(ctx, l, cfg.PrometheusNode, `apiVersion: 1
+			// Set up grafana config.
+			if err := c.PutString(ctx, l, promAsInstallNodes, `apiVersion: 1
 
 datasources:
   - name: prometheusdata
@@ -364,9 +391,9 @@ datasources:
     uid: localprom
     url: http://localhost:9090
 `, "/etc/grafana/provisioning/datasources/prometheus.yaml", 0777); err != nil {
-			return nil, err
-		}
-		if err := c.PutString(ctx, l, cfg.PrometheusNode, `apiVersion: 1
+				return nil, errors.Wrap(err, "unable to push prometheus datasource config")
+			}
+			if err := c.PutString(ctx, l, promAsInstallNodes, `apiVersion: 1
 
 providers:
  - name: 'default'
@@ -378,36 +405,37 @@ providers:
    options:
      path: /var/lib/grafana/dashboards
 `, "/etc/grafana/provisioning/dashboards/cockroach.yaml", 0777); err != nil {
-			return nil, err
-		}
-		if err := c.PutString(ctx, l, cfg.PrometheusNode, `
+				return nil, errors.Wrap(err, "unable to push grafana dashboard config")
+			}
+			if err := c.PutString(ctx, l, promAsInstallNodes, `
 [auth.anonymous]
 enabled = true
 org_role = Admin
 `,
-			"/etc/grafana/grafana.ini", 0777); err != nil {
-			return nil, err
-		}
-
-		for idx, u := range cfg.Grafana.DashboardURLs {
-			cmd := fmt.Sprintf("curl -fsSL %s -o /var/lib/grafana/dashboards/%d.json", u, idx)
-			if err := c.Run(ctx, l, l.Stdout, l.Stderr, install.WithNodes(cfg.PrometheusNode), "download dashboard",
-				cmd); err != nil {
-				l.PrintfCtx(ctx, "failed to download dashboard from %s: %s", u, err)
+				"/etc/grafana/grafana.ini", 0777); err != nil {
+				return nil, errors.Wrap(err, "unable to push grafana config")
 			}
-		}
 
-		for idx, json := range cfg.Grafana.DashboardJSON {
-			if err := c.PutString(ctx, l, cfg.PrometheusNode, json,
-				fmt.Sprintf("/var/lib/grafana/dashboards/s-%d.json", idx), 0777); err != nil {
-				return nil, err
+			for idx, u := range cfg.Grafana.DashboardURLs {
+				cmd := fmt.Sprintf("curl -fsSL %s -o /var/lib/grafana/dashboards/%d.json", u, idx)
+				if err := c.Run(ctx, l, l.Stdout, l.Stderr, install.WithNodes(promAsInstallNodes), "download dashboard",
+					cmd); err != nil {
+					l.PrintfCtx(ctx, "failed to download dashboard from %s: %s", u, err)
+				}
 			}
-		}
 
-		// Start Grafana. Default port is 3000.
-		if err := c.Run(ctx, l, l.Stdout, l.Stderr, install.WithNodes(cfg.PrometheusNode), "start grafana",
-			`sudo systemctl restart grafana-server`); err != nil {
-			return nil, err
+			for idx, json := range cfg.Grafana.DashboardJSON {
+				if err := c.PutString(ctx, l, promAsInstallNodes, json,
+					fmt.Sprintf("/var/lib/grafana/dashboards/s-%d.json", idx), 0777); err != nil {
+					return nil, errors.Wrap(err, "unable to push grafana dashboard json")
+				}
+			}
+
+			// Start Grafana. Default port is 3000.
+			if err := c.Run(ctx, l, l.Stdout, l.Stderr, install.WithNodes(promAsInstallNodes), "start grafana",
+				`sudo systemctl restart grafana-server`); err != nil {
+				return nil, errors.Wrap(err, "unable to start grafana")
+			}
 		}
 	}
 
@@ -499,8 +527,15 @@ func Shutdown(
 			shutdownErr = errors.CombineErrors(shutdownErr, err)
 		}
 	}
+	// Stop node_exporter if it was started by grafana-start.
+	// Drop the firewall rule added for the Prometheus node.
 	if err := c.Run(ctx, l, l.Stdout, l.Stderr, install.WithNodes(nodes), "stop node exporter",
-		`sudo systemctl stop node_exporter || echo 'Stopped node exporter'`); err != nil {
+		fmt.Sprintf(`
+sudo iptables -D INPUT -p tcp -s {ip:%d:public} --dport %d -j ACCEPT || true;
+if [ -f %s ] ; then
+	sudo systemctl stop node_exporter || echo 'Stopped node exporter'
+fi
+`, promNode[0], vm.NodeExporterPort, nodeExporterStarted)); err != nil {
 		l.Printf("Failed to stop node exporter: %v", err)
 		shutdownErr = errors.CombineErrors(shutdownErr, err)
 	}

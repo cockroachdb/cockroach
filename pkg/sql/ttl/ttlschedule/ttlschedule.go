@@ -6,28 +6,34 @@
 package ttlschedule
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/spanutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	pbtypes "github.com/gogo/protobuf/types"
 )
 
@@ -137,9 +143,10 @@ func (s rowLevelTTLExecutor) ExecuteJob(
 	// which may make debugging quite confusing if the label gets out of whack.
 	p, cleanup := cfg.PlanHookMaker(
 		ctx,
-		fmt.Sprintf("invoke-row-level-ttl-%d", args.TableID),
+		// TableID is not sensitive.
+		redact.SafeString(fmt.Sprintf("invoke-row-level-ttl-%d", args.TableID)),
 		txn.KV(),
-		username.NodeUserName(),
+		sj.Owner(),
 	)
 	defer cleanup()
 
@@ -154,6 +161,8 @@ func (s rowLevelTTLExecutor) ExecuteJob(
 		execCfg.JobRegistry,
 		*args,
 		execCfg.SV(),
+		execCfg.Settings,
+		sj.Owner(),
 	); err != nil {
 		s.metrics.NumFailed.Inc(1)
 		return err
@@ -167,12 +176,12 @@ func (s rowLevelTTLExecutor) NotifyJobTermination(
 	ctx context.Context,
 	txn isql.Txn,
 	jobID jobspb.JobID,
-	jobStatus jobs.Status,
+	jobStatus jobs.State,
 	details jobspb.Details,
 	env scheduledjobs.JobSchedulerEnv,
 	sj *jobs.ScheduledJob,
 ) error {
-	if jobStatus == jobs.StatusFailed {
+	if jobStatus == jobs.StateFailed {
 		jobs.DefaultHandleFailedRun(
 			sj,
 			"row level ttl for table [%d] job failed",
@@ -182,7 +191,7 @@ func (s rowLevelTTLExecutor) NotifyJobTermination(
 		return nil
 	}
 
-	if jobStatus == jobs.StatusSucceeded {
+	if jobStatus == jobs.StateSucceeded {
 		s.metrics.NumSucceeded.Inc(1)
 	}
 
@@ -217,19 +226,30 @@ func (s rowLevelTTLExecutor) GetCreateScheduleStatement(
 
 func makeTTLJobDescription(
 	tableDesc catalog.TableDescriptor, tn tree.ObjectName, sv *settings.Values,
-) string {
+) (string, error) {
 	relationName := tn.FQString()
 	pkIndex := tableDesc.GetPrimaryIndex().IndexDesc()
-	pkColNames := pkIndex.KeyColumnNames
+	pkColNames := make([]string, 0, len(pkIndex.KeyColumnNames))
+	var buf bytes.Buffer
+	for _, name := range pkIndex.KeyColumnNames {
+		lexbase.EncodeRestrictedSQLIdent(&buf, name, lexbase.EncNoFlags)
+		pkColNames = append(pkColNames, buf.String())
+		buf.Reset()
+	}
 	pkColDirs := pkIndex.KeyColumnDirections
+	pkColTypes, err := spanutils.GetPKColumnTypes(tableDesc, pkIndex)
+	if err != nil {
+		return "", err
+	}
 	rowLevelTTL := tableDesc.GetRowLevelTTL()
 	ttlExpirationExpr := rowLevelTTL.GetTTLExpr()
 	numPkCols := len(pkColNames)
 	selectBatchSize := ttlbase.GetSelectBatchSize(sv, rowLevelTTL)
-	selectQuery := ttlbase.BuildSelectQuery(
+	selectQuery, err := ttlbase.BuildSelectQuery(
 		relationName,
 		pkColNames,
 		pkColDirs,
+		pkColTypes,
 		ttlbase.DefaultAOSTDuration,
 		ttlExpirationExpr,
 		numPkCols,
@@ -237,6 +257,9 @@ func makeTTLJobDescription(
 		selectBatchSize,
 		true, /*startIncl*/
 	)
+	if err != nil {
+		return "", err
+	}
 	deleteQuery := ttlbase.BuildDeleteQuery(
 		relationName,
 		pkColNames,
@@ -247,7 +270,7 @@ func makeTTLJobDescription(
 -- for each span, iterate to find rows:
 %s
 -- then delete with:
-%s`, relationName, selectQuery, deleteQuery)
+%s`, relationName, selectQuery, deleteQuery), nil
 }
 
 func createRowLevelTTLJob(
@@ -257,6 +280,8 @@ func createRowLevelTTLJob(
 	jobRegistry *jobs.Registry,
 	ttlArgs catpb.ScheduledRowLevelTTLArgs,
 	sv *settings.Values,
+	st *cluster.Settings,
+	owner username.SQLUsername,
 ) (jobspb.JobID, error) {
 	descsCol := descs.FromTxn(txn)
 	tableID := ttlArgs.TableID
@@ -268,15 +293,25 @@ func createRowLevelTTLJob(
 	if err != nil {
 		return 0, err
 	}
+	description, err := makeTTLJobDescription(tableDesc, tn, sv)
+	if err != nil {
+		return 0, err
+	}
+
+	// We can only use checkpointing starting in v25.4. Checkpointing depends on
+	// using the new dist SQL message flow, where the coordinator manages job
+	// progress updates. This flow is not available in older releases.
+	useCheckpointing := st.Version.IsActive(ctx, clusterversion.V25_4)
+
 	record := jobs.Record{
-		Description: makeTTLJobDescription(tableDesc, tn, sv),
-		Username:    username.NodeUserName(),
+		Description: description,
+		Username:    owner,
 		Details: jobspb.RowLevelTTLDetails{
 			TableID:      tableID,
 			Cutoff:       timeutil.Now(),
 			TableVersion: tableDesc.GetVersion(),
 		},
-		Progress:  jobspb.RowLevelTTLProgress{},
+		Progress:  jobspb.RowLevelTTLProgress{UseCheckpointing: useCheckpointing},
 		CreatedBy: createdByInfo,
 	}
 

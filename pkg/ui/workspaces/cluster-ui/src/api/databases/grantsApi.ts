@@ -3,8 +3,7 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import useSWRImmutable from "swr/immutable";
-
+import { useSwrImmutableWithClusterId } from "../../util";
 import { fetchDataJSON } from "../fetchData";
 import { ResultsWithPagination, PaginationRequest } from "../types";
 
@@ -28,6 +27,16 @@ type DatabaseGrantsRequest = {
   sortBy?: GrantsSortOptions;
   sortOrder?: "asc" | "desc";
   pagination?: PaginationRequest;
+};
+
+const createKey = (req: DatabaseGrantsRequest) => {
+  const {
+    dbId,
+    pagination: { pageSize, pageNum },
+    sortBy,
+    sortOrder,
+  } = req;
+  return { name: "databaseGrants", dbId, pageSize, pageNum, sortBy, sortOrder };
 };
 
 const createDbGrantsPath = (req: DatabaseGrantsRequest): string => {
@@ -68,8 +77,8 @@ const fetchDbGrants = (
 };
 
 export const useDatabaseGrantsImmutable = (req: DatabaseGrantsRequest) => {
-  const { data, isLoading, error } = useSWRImmutable(
-    createDbGrantsPath(req),
+  const { data, isLoading, error } = useSwrImmutableWithClusterId(
+    createKey(req),
     () => fetchDbGrants(req),
   );
 
@@ -123,7 +132,7 @@ const fetchTableGrants = async (
 };
 
 export const useTableGrantsImmutable = (req: TableGrantsRequest) => {
-  const { data, isLoading, error } = useSWRImmutable(
+  const { data, isLoading, error } = useSwrImmutableWithClusterId(
     createTableGrantsPath(req),
     () => fetchTableGrants(req),
   );

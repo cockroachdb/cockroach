@@ -1,0 +1,14 @@
+echo
+----
+test_counter 2
+test_counter{database="test_db",application_name="test_app"} 1
+test_gauge 20
+test_gauge{database="test_db",application_name="test_app"} 10
+test_histogram_bucket{database="test_db",application_name="test_app",le="+Inf"} 1
+test_histogram_bucket{database="test_db",application_name="test_app",le="10"} 1
+test_histogram_bucket{le="+Inf"} 2
+test_histogram_bucket{le="10"} 2
+test_histogram_count 2
+test_histogram_count{database="test_db",application_name="test_app"} 1
+test_histogram_sum 20
+test_histogram_sum{database="test_db",application_name="test_app"} 10

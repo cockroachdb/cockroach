@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "cloud.go",
         "cluster_spec.go",
+        "gce_storage.go",
         "machine_type.go",
         "option.go",
     ],
@@ -15,6 +16,8 @@ go_library(
         "//pkg/roachprod/vm/aws",
         "//pkg/roachprod/vm/azure",
         "//pkg/roachprod/vm/gce",
+        "//pkg/roachprod/vm/gce/gcedb",
+        "//pkg/roachprod/vm/ibm",
         "//pkg/util/randutil",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
@@ -23,8 +26,15 @@ go_library(
 
 go_test(
     name = "spec_test",
-    srcs = ["cluster_spec_test.go"],
+    srcs = [
+        "cluster_spec_test.go",
+        "gce_storage_test.go",
+    ],
     data = glob(["testdata/**"]),
     embed = [":spec"],
-    deps = ["@com_github_stretchr_testify//require"],
+    deps = [
+        "//pkg/roachprod/vm",
+        "//pkg/roachprod/vm/gce",
+        "@com_github_stretchr_testify//require",
+    ],
 )

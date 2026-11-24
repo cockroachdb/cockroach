@@ -9,9 +9,7 @@ import React from "react";
 import { MemoryRouter } from "react-router-dom";
 
 import { StatementsPage } from "./statementsPage";
-import statementsPagePropsFixture, {
-  statementsPagePropsWithRequestError,
-} from "./statementsPage.fixture";
+import statementsPagePropsFixture from "./statementsPage.fixture";
 
 storiesOf("StatementsPage", module)
   .addDecorator(storyFn => <MemoryRouter>{storyFn()}</MemoryRouter>)
@@ -33,9 +31,6 @@ storiesOf("StatementsPage", module)
         history={history}
       />
     );
-  })
-  .add("with error", () => {
-    return <StatementsPage {...statementsPagePropsWithRequestError} />;
   })
   .add("with loading state", () => {
     return <StatementsPage {...statementsPagePropsFixture} />;

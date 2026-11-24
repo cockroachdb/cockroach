@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/cockroach/pkg/util/vector"
 	"github.com/cockroachdb/errors"
 	"github.com/dustin/go-humanize"
 )
@@ -93,6 +94,47 @@ func (v *ValuesCoreSpec) summary() (string, []string) {
 	}
 	detail := fmt.Sprintf("%s (%d chunks)", humanize.IBytes(bytes), len(v.RawBytes))
 	return "Values", []string{detail}
+}
+
+// summary implements the diagramCellType interface.
+func (v *VectorSearchSpec) summary() (string, []string) {
+	details := []string{
+		fmt.Sprintf("%s@%s", v.FetchSpec.TableName, v.FetchSpec.IndexName),
+		fmt.Sprintf("Nearest Neighbor Target Count: %d", v.TargetNeighborCount),
+		fmt.Sprintf("Query Vector: %s", vector.T(v.QueryVector).String()),
+	}
+	if len(v.PrefixKeys) > 0 {
+		// Only show the first prefix key.
+		var spanStr strings.Builder
+		vals, _ := encoding.PrettyPrintValuesWithTypes(nil /* valDirs */, v.PrefixKeys[0])
+		spanStr.WriteString(fmt.Sprintf("Prefix Vals: %s", strings.Join(vals, "/")))
+		if len(v.PrefixKeys) > 1 {
+			spanStr.WriteString(fmt.Sprintf(" and %d more", len(v.PrefixKeys)-1))
+		}
+		details = append(details, spanStr.String())
+	}
+	return "VectorSearch", details
+}
+
+// summary implements the diagramCellType interface.
+func (v *VectorMutationSearchSpec) summary() (string, []string) {
+	var mutationType string
+	if v.IsIndexPut {
+		mutationType = "Index Put"
+	} else {
+		mutationType = "Index Delete"
+	}
+	details := []string{
+		fmt.Sprintf("%s@%s", v.FetchSpec.TableName, v.FetchSpec.IndexName),
+		mutationType,
+		fmt.Sprintf("Query Vector Col: @%d", v.QueryVectorColumnOrdinal+1),
+	}
+	if len(v.PrefixKeyColumnOrdinals) > 0 {
+		details = append(details,
+			fmt.Sprintf("Prefix Columns: %s", colListStr(v.PrefixKeyColumnOrdinals)),
+		)
+	}
+	return "VectorMutationSearch", details
 }
 
 // summary implements the diagramCellType interface.
@@ -506,6 +548,11 @@ func (c *RestoreDataSpec) summary() (string, []string) {
 }
 
 // summary implements the diagramCellType interface.
+func (r *RevlogSpec) summary() (string, []string) {
+	return "RevlogSpec", []string{}
+}
+
+// summary implements the diagramCellType interface.
 func (c *CloudStorageTestSpec) summary() (string, []string) {
 	return "CloudStorageTestSpec", []string{}
 }
@@ -582,6 +629,31 @@ func (s *LogicalReplicationWriterSpec) summary() (string, []string) {
 	}
 
 	return "LogicalReplicationWriter", annotations
+}
+
+func (s *LogicalReplicationOfflineScanSpec) summary() (string, []string) {
+	const spanLimit = 9
+
+	srcTableIDs := []string{}
+	for _, pair := range s.Rekey {
+		srcTableIDs = append(srcTableIDs, fmt.Sprintf("%d", pair.OldID))
+	}
+
+	annotations := []string{
+		fmt.Sprintf("Src Table IDs: %s", strings.Join(srcTableIDs, ",")),
+		fmt.Sprintf("Source node %s", s.PartitionSpec.SrcInstanceID),
+		"Spans:",
+	}
+
+	for i, span := range s.PartitionSpec.Spans {
+		if i == spanLimit {
+			annotations = append(annotations, fmt.Sprintf("and %d more spans", len(s.PartitionSpec.Spans)-spanLimit))
+			break
+		}
+		annotations = append(annotations, fmt.Sprintf("%v", span))
+	}
+
+	return "LogicalReplicationOfflineScanWriter", annotations
 }
 
 // summary implements the diagramCellType interface.
@@ -673,6 +745,13 @@ func (s *TTLSpec) summary() (string, []string) {
 }
 
 // summary implements the diagramCellType interface.
+func (s *InspectSpec) summary() (string, []string) {
+	return "INSPECT", []string{
+		fmt.Sprintf("JobID: %d", s.JobID),
+	}
+}
+
+// summary implements the diagramCellType interface.
 func (s *HashGroupJoinerSpec) summary() (string, []string) {
 	_, details := s.HashJoinerSpec.summary()
 	if len(s.JoinOutputColumns) > 0 {
@@ -708,6 +787,63 @@ func (i *InsertSpec) summary() (string, []string) {
 func (i *IngestStoppedSpec) summary() (string, []string) {
 	detail := fmt.Sprintf("job %d ingest stopped spans", i.JobID)
 	return "IngestStoppedSpec", []string{detail}
+}
+
+// summary implements the diagramCellType interface.
+func (i *IngestFileSpec) summary() (string, []string) {
+	detail := fmt.Sprintf("ingest %d SSTs", len(i.SSTs))
+	return "IngestFileSpec", []string{detail}
+}
+
+// summary implements the diagramCellType interface.
+func (m *CompactBackupsSpec) summary() (string, []string) {
+	var spanStr strings.Builder
+	if len(m.Spans) > 0 {
+		spanStr.WriteString(fmt.Sprintf("Spans [%d]: ", len(m.AssignedSpans)))
+		const limit = 3
+		for i := 0; i < len(m.AssignedSpans) && i < limit; i++ {
+			if i > 0 {
+				spanStr.WriteString(", ")
+			}
+			spanStr.WriteString(m.AssignedSpans[i].String())
+		}
+		if len(m.Spans) > limit {
+			spanStr.WriteString("...")
+		}
+	}
+
+	details := []string{
+		spanStr.String(),
+	}
+	return "CompactBackupsSpec", details
+}
+
+func (m *BulkMergeSpec) summary() (string, []string) {
+	return "BulkMerge", nil
+}
+
+func (m *MergeCoordinatorSpec) summary() (string, []string) {
+	return "MergeCoordinator", nil
+}
+
+func (m *MergeLoopbackSpec) summary() (string, []string) {
+	return "MergeLoopback", nil
+}
+
+func (m *RevlogLocalMergeSpec) summary() (string, []string) {
+	return "RevlogLocalMerge", []string{fmt.Sprintf("%d ticks", len(m.Ticks))}
+}
+
+func (m *TxnLDRCoordinatorSpec) summary() (string, []string) {
+	return "TxnLDRCoordinator", nil
+}
+
+func (m *TxnLDRApplierSpec) summary() (string, []string) {
+	return "TxnLDRApplier", nil
+}
+
+func (m *TxnLDRDepResolverSpec) summary() (string, []string) {
+	return "TxnLDRDepResolver", nil
 }
 
 type diagramCell struct {

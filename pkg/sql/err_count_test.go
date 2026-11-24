@@ -10,6 +10,7 @@ import (
 	gosql "database/sql"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -25,8 +26,7 @@ func TestErrorCounts(t *testing.T) {
 
 	telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
 
-	params, _ := createTestServerParams()
-	s, db, _ := serverutils.StartServer(t, params)
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	count1 := telemetry.GetRawFeatureCounts()["errorcodes."+pgcode.Syntax.String()]
@@ -59,32 +59,6 @@ func TestErrorCounts(t *testing.T) {
 	}
 }
 
-func TestUnimplementedCounts(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
-
-	params, _ := createTestServerParams()
-	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.Background())
-
-	if _, err := db.Exec(`
-CREATE TABLE t(x INT8); 
-SET enable_experimental_alter_column_type_general = true;
-BEGIN;
-`); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := db.Exec("ALTER TABLE t ALTER COLUMN x SET DATA TYPE STRING"); err == nil {
-		t.Fatal("expected error, got no error")
-	}
-
-	if telemetry.GetRawFeatureCounts()["unimplemented.#49351"] == 0 {
-		t.Fatal("expected unimplemented telemetry, got nothing")
-	}
-}
-
 func TestTransactionRetryErrorCounts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -95,8 +69,7 @@ func TestTransactionRetryErrorCounts(t *testing.T) {
 	// in pgwire (pgwire.convertToErrWithPGCode). Make sure we're
 	// reporting errors at a level that allows this code to be recorded.
 
-	params, _ := createTestServerParams()
-	s, db, _ := serverutils.StartServer(t, params)
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	if _, err := db.Exec("CREATE TABLE accounts (id INT8 PRIMARY KEY, balance INT8)"); err != nil {

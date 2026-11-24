@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/resolver"
@@ -24,11 +25,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessionmutator"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/unique"
 	"github.com/cockroachdb/errors"
 )
 
@@ -117,10 +119,10 @@ func incrementSequenceHelper(
 
 	var val int64
 	if seqOpts.Virtual {
-		rowid := builtins.GenerateUniqueInt(
-			builtins.ProcessUniqueID(p.EvalContext().NodeID.SQLInstanceID()),
+		rowid := unique.GenerateUniqueInt(
+			unique.ProcessUniqueID(p.EvalContext().NodeID.SQLInstanceID()),
 		)
-		val = int64(rowid)
+		val = rowid
 	} else {
 		val, err = p.incrementSequenceUsingCache(ctx, descriptor)
 	}
@@ -128,8 +130,8 @@ func incrementSequenceHelper(
 		return 0, err
 	}
 
-	p.sessionDataMutatorIterator.applyOnEachMutator(
-		func(m sessionDataMutator) {
+	p.sessionDataMutatorIterator.ApplyOnEachMutator(
+		func(m sessionmutator.SessionDataMutator) {
 			m.RecordLatestSequenceVal(uint32(descriptor.GetID()), val)
 		},
 	)
@@ -216,7 +218,7 @@ func (p *planner) incrementSequenceUsingCache(
 		}
 	} else {
 		// If cache size option is 1 (default -> not cached), and node cache size option is not 0 (not default -> node-cached), then use node-level cache
-		if seqOpts.CacheSize == 1 && seqOpts.NodeCacheSize != 0 {
+		if seqOpts.SessionCacheSize == 1 && seqOpts.NodeCacheSize != 0 {
 			val, err = p.GetSequenceCacheNode().NextValue(sequenceID, uint32(descriptor.GetVersion()), fetchNextValues)
 		} else {
 			val, err = p.GetOrInitSequenceCache().NextValue(uint32(sequenceID), uint32(descriptor.GetVersion()), fetchNextValues)
@@ -345,8 +347,8 @@ func (p *planner) SetSequenceValueByID(
 	}
 
 	// Clear out the cache and update the last value if needed.
-	p.sessionDataMutatorIterator.applyOnEachMutator(func(m sessionDataMutator) {
-		m.initSequenceCache()
+	p.sessionDataMutatorIterator.ApplyOnEachMutator(func(m sessionmutator.SessionDataMutator) {
+		m.InitSequenceCache()
 		if isCalled {
 			m.RecordLatestSequenceVal(seqID, newVal)
 		}
@@ -735,7 +737,7 @@ func maybeAddSequenceDependencies(
 		if err != nil {
 			return nil, err
 		}
-		s := tree.Serialize(newExpr)
+		s := descpb.Expression(tree.Serialize(newExpr))
 		switch colExprKind {
 		case tabledesc.DefaultExpr:
 			col.DefaultExpr = &s
@@ -903,5 +905,6 @@ func (p *planner) removeSequenceDependencies(
 	}
 	// Remove the reference from the column descriptor to the sequence descriptor.
 	col.ColumnDesc().UsesSequenceIds = []descpb.ID{}
+	col.ColumnDesc().GeneratedAsIdentityType = catpb.GeneratedAsIdentityType_NOT_IDENTITY_COLUMN
 	return nil
 }

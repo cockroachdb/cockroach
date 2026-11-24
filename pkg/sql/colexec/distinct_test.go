@@ -385,7 +385,7 @@ func TestDistinct(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	rng, _ := randutil.NewTestRand()
 	for _, tc := range distinctTestCases {
-		log.Infof(context.Background(), "unordered")
+		log.Dev.Infof(context.Background(), "unordered")
 		tc.runTests(t, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
 			ud := NewUnorderedDistinct(
 				testAllocator, input[0], tc.distinctCols, tc.typs, tc.nullsAreDistinct, tc.errorOnDup,
@@ -395,7 +395,7 @@ func TestDistinct(t *testing.T) {
 		})
 		if tc.isOrderedOnDistinctCols {
 			for numOrderedCols := 1; numOrderedCols < len(tc.distinctCols); numOrderedCols++ {
-				log.Infof(context.Background(), "partiallyOrdered/ordCols=%d", numOrderedCols)
+				log.Dev.Infof(context.Background(), "partiallyOrdered/ordCols=%d", numOrderedCols)
 				orderedCols := make([]uint32, numOrderedCols)
 				for i, j := range rng.Perm(len(tc.distinctCols))[:numOrderedCols] {
 					orderedCols[i] = tc.distinctCols[j]
@@ -406,7 +406,7 @@ func TestDistinct(t *testing.T) {
 					)
 				})
 			}
-			log.Info(context.Background(), "ordered")
+			log.Dev.Info(context.Background(), "ordered")
 			tc.runTests(t, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
 				return colexecbase.NewOrderedDistinct(input[0], tc.distinctCols, tc.typs, tc.nullsAreDistinct, tc.errorOnDup), nil
 			})
@@ -466,6 +466,7 @@ func runDistinctBenchmarks(
 	ctx context.Context,
 	b *testing.B,
 	distinctConstructor func(allocator *colmem.Allocator, input colexecop.Operator, distinctCols []uint32, numOrderedCols int, typs []*types.T) (colexecop.Operator, error),
+	afterEachRun func(),
 	getNumOrderedCols func(nCols int) int,
 	namePrefix string,
 	isExternal bool,
@@ -609,8 +610,9 @@ func runDistinctBenchmarks(
 									b.Fatal(err)
 								}
 								distinct.Init(ctx)
-								for b := distinct.Next(); b.Length() > 0; b = distinct.Next() {
+								for b := colexecop.NextNoMeta(distinct); b.Length() > 0; b = colexecop.NextNoMeta(distinct) {
 								}
+								afterEachRun()
 							}
 							b.StopTimer()
 						})
@@ -643,6 +645,7 @@ func BenchmarkDistinct(b *testing.B) {
 			ctx,
 			b,
 			distinctConstructor,
+			func() {},
 			func(nCols int) int {
 				return int(float64(nCols) * orderedColsFraction[distinctIdx])
 			},

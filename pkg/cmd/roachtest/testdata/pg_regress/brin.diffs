@@ -1,0 +1,484 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/brin.out --label=/mnt/data1/postgres/src/test/regress/results/brin.out /mnt/data1/postgres/src/test/regress/expected/brin.out /mnt/data1/postgres/src/test/regress/results/brin.out
+--- /mnt/data1/postgres/src/test/regress/expected/brin.out
++++ /mnt/data1/postgres/src/test/regress/results/brin.out
+@@ -27,6 +27,23 @@
+ 	lsncol pg_lsn,
+ 	boxcol box
+ ) WITH (fillfactor=10, autovacuum_enabled=off);
++ERROR:  at or near ",": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE TABLE brintest (byteacol bytea,
++	charcol "char",
++	namecol name,
++	int8col bigint,
++	int2col smallint,
++	int4col integer,
++	textcol text,
++	oidcol oid,
++	tidcol tid,
++	float4col real,
++	float8col double precision,
++	macaddrcol macaddr,
++                   ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/45813/_version_
+ INSERT INTO brintest SELECT
+ 	repeat(stringu1, 8)::bytea,
+ 	substr(stringu1, 1, 1)::"char",
+@@ -56,12 +73,37 @@
+ 	format('%s/%s%s', odd, even, tenthous)::pg_lsn,
+ 	box(point(odd, even), point(thousand, twothousand))
+ FROM tenk1 ORDER BY unique2 LIMIT 100;
++ERROR:  at or near ",": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++INSERT INTO brintest SELECT
++	repeat(stringu1, 8)::bytea,
++	substr(stringu1, 1, 1)::"char",
++	stringu1::name, 142857 * tenthous,
++	thousand,
++	twothousand,
++	repeat(stringu1, 8),
++	unique1::oid,
++	format('(%s,%s)', tenthous, twenty)::tid,
++	(four + 1.0)/(hundred+1),
++	odd::float8 / (tenthous + 1),
++	format('%s:00:%s:00:%s:00', to_hex(odd), to_hex(even), to_hex(hundred))::macaddr,
++                                                                                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/45813/_version_
+ -- throw in some NULL's and different values
+ INSERT INTO brintest (inetcol, cidrcol, int4rangecol) SELECT
+ 	inet 'fe80::6e40:8ff:fea9:8c46' + tenthous,
+ 	cidr 'fe80::6e40:8ff:fea9:8c46' + tenthous,
+ 	'empty'::int4range
+ FROM tenk1 ORDER BY thousand, tenthous LIMIT 25;
++ERROR:  at or near "fe80::6e40:8ff:fea9:8c46": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++INSERT INTO brintest (inetcol, cidrcol, int4rangecol) SELECT
++	inet 'fe80::6e40:8ff:fea9:8c46' + tenthous,
++	cidr 'fe80::6e40:8ff:fea9:8c46' + tenthous,
++      ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/18846/_version_
+ CREATE INDEX brinidx ON brintest USING brin (
+ 	byteacol,
+ 	charcol,
+@@ -94,6 +136,21 @@
+ 	lsncol,
+ 	boxcol
+ ) with (pages_per_range = 1);
++ERROR:  at or near "brin": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE INDEX brinidx ON brintest USING brin (
++                                       ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ CREATE TABLE brinopers (colname name, typ text,
+ 	op text[], value text[], matches int[],
+ 	check (cardinality(op) = cardinality(value)),
+@@ -363,8 +420,46 @@
+ 	END LOOP;
+ END;
+ $x$;
++ERROR:  at or near "in": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++DECLARE
++	r record;
++	r2 record;
++	cond text;
++	idx_ctids tid[];
++	ss_ctids tid[];
++	count int;
++	plan_ok bool;
++	plan_line text;
++BEGIN
++	FOR r IN SELECT colname, oper, typ, value[ordinality], matches[ordinality] FROM brinopers, unnest(op) WITH ORDINALITY AS oper LOOP
++       ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ RESET enable_seqscan;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ RESET enable_bitmapscan;
++ERROR:  unimplemented: the configuration setting "enable_bitmapscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ INSERT INTO brintest SELECT
+ 	repeat(stringu1, 42)::bytea,
+ 	substr(stringu1, 1, 1)::"char",
+@@ -394,52 +489,72 @@
+ 	format('%s/%s%s', odd, even, tenthous)::pg_lsn,
+ 	box(point(odd, even), point(thousand, twothousand))
+ FROM tenk1 ORDER BY unique2 LIMIT 5 OFFSET 5;
++ERROR:  at or near ",": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++INSERT INTO brintest SELECT
++	repeat(stringu1, 42)::bytea,
++	substr(stringu1, 1, 1)::"char",
++	stringu1::name, 142857 * tenthous,
++	thousand,
++	twothousand,
++	repeat(stringu1, 42),
++	unique1::oid,
++	format('(%s,%s)', tenthous, twenty)::tid,
++	(four + 1.0)/(hundred+1),
++	odd::float8 / (tenthous + 1),
++	format('%s:00:%s:00:%s:00', to_hex(odd), to_hex(even), to_hex(hundred))::macaddr,
++                                                                                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/45813/_version_
+ SELECT brin_desummarize_range('brinidx', 0);
+- brin_desummarize_range 
+-------------------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: brin_desummarize_range()
+ VACUUM brintest;  -- force a summarization cycle in brinidx
++ERROR:  at or near "vacuum": syntax error
++DETAIL:  source SQL:
++VACUUM brintest
++^
+ UPDATE brintest SET int8col = int8col * int4col;
++ERROR:  relation "brintest" does not exist
+ UPDATE brintest SET textcol = '' WHERE textcol IS NOT NULL;
++ERROR:  relation "brintest" does not exist
+ -- Tests for brin_summarize_new_values
+ SELECT brin_summarize_new_values('brintest'); -- error, not an index
+-ERROR:  "brintest" is not an index
++ERROR:  unknown function: brin_summarize_new_values()
+ SELECT brin_summarize_new_values('tenk1_unique1'); -- error, not a BRIN index
+-ERROR:  "tenk1_unique1" is not a BRIN index
++ERROR:  unknown function: brin_summarize_new_values()
+ SELECT brin_summarize_new_values('brinidx'); -- ok, no change expected
+- brin_summarize_new_values 
+----------------------------
+-                         0
+-(1 row)
+-
++ERROR:  unknown function: brin_summarize_new_values()
+ -- Tests for brin_desummarize_range
+ SELECT brin_desummarize_range('brinidx', -1); -- error, invalid range
+-ERROR:  block number out of range: -1
++ERROR:  unknown function: brin_desummarize_range()
+ SELECT brin_desummarize_range('brinidx', 0);
+- brin_desummarize_range 
+-------------------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: brin_desummarize_range()
+ SELECT brin_desummarize_range('brinidx', 0);
+- brin_desummarize_range 
+-------------------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: brin_desummarize_range()
+ SELECT brin_desummarize_range('brinidx', 100000000);
+- brin_desummarize_range 
+-------------------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: brin_desummarize_range()
+ -- Test brin_summarize_range
+ CREATE TABLE brin_summarize (
+     value int
+ ) WITH (fillfactor=10, autovacuum_enabled=false);
++NOTICE:  storage parameter "fillfactor" is ignored
++NOTICE:  storage parameter "autovacuum_enabled = false" is ignored
+ CREATE INDEX brin_summarize_idx ON brin_summarize USING brin (value) WITH (pages_per_range=2);
++ERROR:  at or near "brin": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE INDEX brin_summarize_idx ON brin_summarize USING brin (value) WITH (pages_per_range=2)
++                                                        ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- Fill a few pages
+ DO $$
+ DECLARE curtid tid;
+@@ -450,82 +565,110 @@
+   END LOOP;
+ END;
+ $$;
++ERROR:  type "tid" does not exist
+ -- summarize one range
+ SELECT brin_summarize_range('brin_summarize_idx', 0);
+- brin_summarize_range 
+-----------------------
+-                    0
+-(1 row)
+-
++ERROR:  unknown function: brin_summarize_range()
+ -- nothing: already summarized
+ SELECT brin_summarize_range('brin_summarize_idx', 1);
+- brin_summarize_range 
+-----------------------
+-                    0
+-(1 row)
+-
++ERROR:  unknown function: brin_summarize_range()
+ -- summarize one range
+ SELECT brin_summarize_range('brin_summarize_idx', 2);
+- brin_summarize_range 
+-----------------------
+-                    1
+-(1 row)
+-
++ERROR:  unknown function: brin_summarize_range()
+ -- nothing: page doesn't exist in table
+ SELECT brin_summarize_range('brin_summarize_idx', 4294967295);
+- brin_summarize_range 
+-----------------------
+-                    0
+-(1 row)
+-
++ERROR:  unknown function: brin_summarize_range()
+ -- invalid block number values
+ SELECT brin_summarize_range('brin_summarize_idx', -1);
+-ERROR:  block number out of range: -1
++ERROR:  unknown function: brin_summarize_range()
+ SELECT brin_summarize_range('brin_summarize_idx', 4294967296);
+-ERROR:  block number out of range: 4294967296
++ERROR:  unknown function: brin_summarize_range()
+ -- test value merging in add_value
+ CREATE TABLE brintest_2 (n numrange);
++ERROR:  type "numrange" does not exist
+ CREATE INDEX brinidx_2 ON brintest_2 USING brin (n);
++ERROR:  at or near "brin": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE INDEX brinidx_2 ON brintest_2 USING brin (n)
++                                           ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ INSERT INTO brintest_2 VALUES ('empty');
++ERROR:  relation "brintest_2" does not exist
+ INSERT INTO brintest_2 VALUES (numrange(0, 2^1000::numeric));
++ERROR:  relation "brintest_2" does not exist
+ INSERT INTO brintest_2 VALUES ('(-1, 0)');
++ERROR:  relation "brintest_2" does not exist
+ SELECT brin_desummarize_range('brinidx', 0);
+- brin_desummarize_range 
+-------------------------
+- 
+-(1 row)
+-
++ERROR:  unknown function: brin_desummarize_range()
+ SELECT brin_summarize_range('brinidx', 0);
+- brin_summarize_range 
+-----------------------
+-                    1
+-(1 row)
+-
++ERROR:  unknown function: brin_summarize_range()
+ DROP TABLE brintest_2;
++ERROR:  relation "brintest_2" does not exist
+ -- test brin cost estimates behave sanely based on correlation of values
+ CREATE TABLE brin_test (a INT, b INT);
+ INSERT INTO brin_test SELECT x/100,x%100 FROM generate_series(1,10000) x(x);
++ERROR:  unsupported binary operator: <int> / <int> (returning <int>)
+ CREATE INDEX brin_test_a_idx ON brin_test USING brin (a) WITH (pages_per_range = 2);
++ERROR:  at or near "brin": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE INDEX brin_test_a_idx ON brin_test USING brin (a) WITH (pages_per_range = 2)
++                                                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ CREATE INDEX brin_test_b_idx ON brin_test USING brin (b) WITH (pages_per_range = 2);
++ERROR:  at or near "brin": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE INDEX brin_test_b_idx ON brin_test USING brin (b) WITH (pages_per_range = 2)
++                                                ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ VACUUM ANALYZE brin_test;
++ERROR:  at or near "vacuum": syntax error
++DETAIL:  source SQL:
++VACUUM ANALYZE brin_test
++^
+ -- Ensure brin index is used when columns are perfectly correlated
+ EXPLAIN (COSTS OFF) SELECT * FROM brin_test WHERE a = 1;
+-                 QUERY PLAN                 
+---------------------------------------------
+- Bitmap Heap Scan on brin_test
+-   Recheck Cond: (a = 1)
+-   ->  Bitmap Index Scan on brin_test_a_idx
+-         Index Cond: (a = 1)
+-(4 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF) SELECT * FROM brin_test WHERE a = 1
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- Ensure brin index is not used when values are not correlated
+ EXPLAIN (COSTS OFF) SELECT * FROM brin_test WHERE b = 1;
+-      QUERY PLAN       
+------------------------
+- Seq Scan on brin_test
+-   Filter: (b = 1)
+-(2 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF) SELECT * FROM brin_test WHERE b = 1
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- make sure data are properly de-toasted in BRIN index
+ CREATE TABLE brintest_3 (a text, b text, c text, d text);
+ -- long random strings (~2000 chars each, so ~6kB for min/max on two
+@@ -533,33 +676,55 @@
+ WITH rand_value AS (SELECT string_agg(fipshash(i::text),'') AS val FROM generate_series(1,60) s(i))
+ INSERT INTO brintest_3
+ SELECT val, val, val, val FROM rand_value;
++ERROR:  unknown function: fipshash()
+ CREATE INDEX brin_test_toast_idx ON brintest_3 USING brin (b, c);
++ERROR:  at or near "brin": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE INDEX brin_test_toast_idx ON brintest_3 USING brin (b, c)
++                                                     ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ DELETE FROM brintest_3;
+ -- We need to wait a bit for all transactions to complete, so that the
+ -- vacuum actually removes the TOAST rows. Creating an index concurrently
+ -- is a one way to achieve that, because it does exactly such wait.
+ CREATE INDEX CONCURRENTLY brin_test_temp_idx ON brintest_3(a);
++NOTICE:  CONCURRENTLY is not required as all indexes are created concurrently
+ DROP INDEX brin_test_temp_idx;
++NOTICE:  the data for dropped indexes is reclaimed asynchronously
++HINT:  The reclamation delay can be customized in the zone configuration for the table.
+ -- vacuum the table, to discard TOAST data
+ VACUUM brintest_3;
++ERROR:  at or near "vacuum": syntax error
++DETAIL:  source SQL:
++VACUUM brintest_3
++^
+ -- retry insert with a different random-looking (but deterministic) value
+ -- the value is different, and so should replace either min or max in the
+ -- brin summary
+ WITH rand_value AS (SELECT string_agg(fipshash((-i)::text),'') AS val FROM generate_series(1,60) s(i))
+ INSERT INTO brintest_3
+ SELECT val, val, val, val FROM rand_value;
++ERROR:  unknown function: fipshash()
+ -- now try some queries, accessing the brin index
+ SET enable_seqscan = off;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ EXPLAIN (COSTS OFF)
+ SELECT * FROM brintest_3 WHERE b < '0';
+-                   QUERY PLAN                   
+-------------------------------------------------
+- Bitmap Heap Scan on brintest_3
+-   Recheck Cond: (b < '0'::text)
+-   ->  Bitmap Index Scan on brin_test_toast_idx
+-         Index Cond: (b < '0'::text)
+-(4 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ SELECT * FROM brintest_3 WHERE b < '0';
+  a | b | c | d 
+ ---+---+---+---
+@@ -567,8 +732,27 @@
+ 
+ DROP TABLE brintest_3;
+ RESET enable_seqscan;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ -- test an unlogged table, mostly to get coverage of brinbuildempty
+ CREATE UNLOGGED TABLE brintest_unlogged (n numrange);
++ERROR:  type "numrange" does not exist
+ CREATE INDEX brinidx_unlogged ON brintest_unlogged USING brin (n);
++ERROR:  at or near "brin": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++CREATE INDEX brinidx_unlogged ON brintest_unlogged USING brin (n)
++                                                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ INSERT INTO brintest_unlogged VALUES (numrange(0, 2^1000::numeric));
++ERROR:  relation "brintest_unlogged" does not exist
+ DROP TABLE brintest_unlogged;
++ERROR:  relation "brintest_unlogged" does not exist

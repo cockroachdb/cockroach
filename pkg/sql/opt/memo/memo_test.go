@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -151,10 +153,6 @@ func TestMemoIsStale(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	// Revoke access to the underlying table. The user should retain indirect
-	// access via the view.
-	catalog.Table(tree.NewTableNameWithSchema("t", catconstants.PublicSchemaName, "abc")).Revoked = true
 
 	// Initialize context with starting values.
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
@@ -294,6 +292,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().DisallowFullTableScans = false
 	notStale()
 
+	// Stale avoid full table scan.
+	evalCtx.SessionData().AvoidFullTableScansInMutations = true
+	stale()
+	evalCtx.SessionData().AvoidFullTableScansInMutations = false
+	notStale()
+
 	// Stale large full scan rows.
 	evalCtx.SessionData().LargeFullScanRows = 1000
 	stale()
@@ -364,6 +368,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().TestingOptimizerDisableRuleProbability = 1
 	stale()
 	evalCtx.SessionData().TestingOptimizerDisableRuleProbability = 0
+	notStale()
+
+	// Stale disable_optimizer_rules.
+	evalCtx.SessionData().DisableOptimizerRules = []string{"some_rule"}
+	stale()
+	evalCtx.SessionData().DisableOptimizerRules = nil
 	notStale()
 
 	// Stale allow_ordinal_column_references.
@@ -485,6 +495,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptSplitScanLimit = 0
 	notStale()
 
+	// Stale optimizer_span_limit.
+	evalCtx.SessionData().OptimizerSpanLimit = 100
+	stale()
+	evalCtx.SessionData().OptimizerSpanLimit = 0
+	notStale()
+
 	// Stale optimizer_use_improved_zigzag_join_costing.
 	evalCtx.SessionData().OptimizerUseImprovedZigzagJoinCosting = true
 	stale()
@@ -495,6 +511,12 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().OptimizerUseImprovedMultiColumnSelectivityEstimate = true
 	stale()
 	evalCtx.SessionData().OptimizerUseImprovedMultiColumnSelectivityEstimate = false
+	notStale()
+
+	// Stale optimizer_use_max_frequency_selectivity.
+	evalCtx.SessionData().OptimizerUseMaxFrequencySelectivity = true
+	stale()
+	evalCtx.SessionData().OptimizerUseMaxFrequencySelectivity = false
 	notStale()
 
 	// Stale optimizer_prove_implication_with_virtual_computed_columns.
@@ -525,6 +547,113 @@ func TestMemoIsStale(t *testing.T) {
 	evalCtx.SessionData().UnsafeAllowTriggersModifyingCascades = true
 	stale()
 	evalCtx.SessionData().UnsafeAllowTriggersModifyingCascades = false
+	notStale()
+
+	evalCtx.SessionData().LegacyVarcharTyping = true
+	stale()
+	evalCtx.SessionData().LegacyVarcharTyping = false
+	notStale()
+
+	evalCtx.SessionData().OptimizerPreferBoundedCardinality = true
+	stale()
+	evalCtx.SessionData().OptimizerPreferBoundedCardinality = false
+	notStale()
+
+	evalCtx.SessionData().OptimizerMinRowCount = 1.0
+	stale()
+	evalCtx.SessionData().OptimizerMinRowCount = 0
+	notStale()
+
+	evalCtx.SessionData().OptimizerCheckInputMinRowCount = 1.0
+	stale()
+	evalCtx.SessionData().OptimizerCheckInputMinRowCount = 0
+	notStale()
+
+	evalCtx.SessionData().OptimizerPlanLookupJoinsWithReverseScans = true
+	stale()
+	evalCtx.SessionData().OptimizerPlanLookupJoinsWithReverseScans = false
+	notStale()
+
+	evalCtx.SessionData().InsertFastPath = true
+	stale()
+	evalCtx.SessionData().InsertFastPath = false
+	notStale()
+
+	evalCtx.SessionData().Internal = true
+	stale()
+	evalCtx.SessionData().Internal = false
+	notStale()
+
+	evalCtx.SessionData().UsePre_25_2VariadicBuiltins = true
+	stale()
+	evalCtx.SessionData().UsePre_25_2VariadicBuiltins = false
+	notStale()
+
+	evalCtx.SessionData().OptimizerUseExistsFilterHoistRule = true
+	stale()
+	evalCtx.SessionData().OptimizerUseExistsFilterHoistRule = false
+	notStale()
+
+	evalCtx.SessionData().OptimizerDisableCrossRegionCascadeFastPathForRBRTables = true
+	stale()
+	evalCtx.SessionData().OptimizerDisableCrossRegionCascadeFastPathForRBRTables = false
+	notStale()
+
+	evalCtx.SessionData().OptimizerUseImprovedHoistJoinProject = true
+	stale()
+	evalCtx.SessionData().OptimizerUseImprovedHoistJoinProject = false
+	notStale()
+
+	evalCtx.SessionData().OptimizerClampLowHistogramSelectivity = true
+	stale()
+	evalCtx.SessionData().OptimizerClampLowHistogramSelectivity = false
+	notStale()
+
+	evalCtx.SessionData().OptimizerClampInequalitySelectivity = true
+	stale()
+	evalCtx.SessionData().OptimizerClampInequalitySelectivity = false
+	notStale()
+
+	// Stale prevent_update_set_column_drop.
+	evalCtx.SessionData().PreventUpdateSetColumnDrop = true
+	stale()
+	evalCtx.SessionData().PreventUpdateSetColumnDrop = false
+	notStale()
+
+	// Stale use_improved_routine_deps_triggers_and_computed_cols.
+	evalCtx.SessionData().UseImprovedRoutineDepsTriggersAndComputedCols = true
+	stale()
+	evalCtx.SessionData().UseImprovedRoutineDepsTriggersAndComputedCols = false
+	notStale()
+
+	// Stale optimizer_inline_any_unnest_subquery.
+	evalCtx.SessionData().OptimizerInlineAnyUnnestSubquery = true
+	stale()
+	evalCtx.SessionData().OptimizerInlineAnyUnnestSubquery = false
+	notStale()
+
+	// Stale optimizer_inline_placeholder_equalities.
+	evalCtx.SessionData().OptimizerInlinePlaceholderEqualities = true
+	stale()
+	evalCtx.SessionData().OptimizerInlinePlaceholderEqualities = false
+	notStale()
+
+	// Stale optimizer_use_min_row_count_anti_join_fix.
+	evalCtx.SessionData().OptimizerUseMinRowCountAntiJoinFix = true
+	stale()
+	evalCtx.SessionData().OptimizerUseMinRowCountAntiJoinFix = false
+	notStale()
+
+	// Stale skip_underlying_view_privilege_checks.
+	sqlclustersettings.SkipUnderlyingViewPrivilegeChecks.Override(ctx, &evalCtx.Settings.SV, true)
+	stale()
+	sqlclustersettings.SkipUnderlyingViewPrivilegeChecks.Override(ctx, &evalCtx.Settings.SV, false)
+	notStale()
+
+	// Stale pg_dump_compatibility.
+	evalCtx.SessionData().PgDumpCompatibility = "postgres"
+	stale()
+	evalCtx.SessionData().PgDumpCompatibility = ""
 	notStale()
 
 	// User no longer has access to view.
@@ -586,6 +715,78 @@ func TestMemoIsStale(t *testing.T) {
 	stale()
 	catalog.Function("one").Version = 0
 	notStale()
+
+	// User changes (without RLS)
+	oldUser := evalCtx.SessionData().UserProto
+	newUser := username.MakeSQLUsernameFromPreNormalizedString("newuser").EncodeProto()
+	evalCtx.SessionData().UserProto = newUser
+	notStale()
+	evalCtx.SessionData().UserProto = oldUser
+	notStale()
+
+	// User changes (with RLS)
+	o.Memo().Metadata().SetRLSEnabled(evalCtx.SessionData().User(), true, /* admin */
+		1 /* tableID */, false, /* isTableOwnerAndNotForced */
+		false /* bypassRLS */)
+	notStale()
+	evalCtx.SessionData().UserProto = newUser
+	stale()
+	evalCtx.SessionData().UserProto = oldUser
+	notStale()
+
+	// User changes (after RLS was reinitialized)
+	o.Memo().Metadata().ClearRLSEnabled()
+	evalCtx.SessionData().UserProto = newUser
+	notStale()
+	evalCtx.SessionData().UserProto = oldUser
+	notStale()
+
+	// Stale row_security.
+	evalCtx.SessionData().RowSecurity = true
+	stale()
+	evalCtx.SessionData().RowSecurity = false
+	notStale()
+
+	// Stale stats rollout mode: Default → Stable.
+	evalCtx.StatsRollout = eval.StatsRolloutStable
+	stale()
+	evalCtx.StatsRollout = eval.StatsRolloutDefault
+	notStale()
+
+	// Default→Canary: not stale (both use newest stats).
+	evalCtx.StatsRollout = eval.StatsRolloutCanary
+	notStale()
+	evalCtx.StatsRollout = eval.StatsRolloutDefault
+	notStale()
+
+	// A canary-built memo can legitimately be cached when the query
+	// doesn't reference canary-window tables (canary and default use
+	// the same stats). Verify IsStale handles this correctly.
+	evalCtx.StatsRollout = eval.StatsRolloutCanary
+	var o2 xform.Optimizer
+	opttestutils.BuildQuery(t, &o2, catalog, &evalCtx, query)
+	// Canary→Canary: not stale.
+	if isStale, err := o2.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
+		t.Fatal(err)
+	} else if isStale {
+		t.Errorf("canary-built memo should not be stale for canary execution")
+	}
+	// Canary→Stable: not stale. A canary-built memo is only cached when
+	// canary and stable stats are identical (write-side guard prevents
+	// caching otherwise), so reuse is safe.
+	evalCtx.StatsRollout = eval.StatsRolloutStable
+	if isStale, err := o2.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
+		t.Fatal(err)
+	} else if isStale {
+		t.Errorf("canary-built memo should not be stale for stable execution")
+	}
+	// Canary→Default: not stale (canary and default use the same stats).
+	evalCtx.StatsRollout = eval.StatsRolloutDefault
+	if isStale, err := o2.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
+		t.Fatal(err)
+	} else if isStale {
+		t.Errorf("canary-built memo should not be stale for default execution")
+	}
 }
 
 // TestStatsAvailable tests that the statisticsBuilder correctly identifies
@@ -614,15 +815,15 @@ func TestStatsAvailable(t *testing.T) {
 
 	// Stats should not be available for any expression.
 	opttestutils.BuildQuery(t, &o, catalog, &evalCtx, "SELECT * FROM t WHERE a=1")
-	testNotAvailable(o.Memo().RootExpr().(memo.RelExpr))
+	testNotAvailable(o.Memo().RootExpr())
 
 	opttestutils.BuildQuery(t, &o, catalog, &evalCtx, "SELECT sum(a), b FROM t GROUP BY b")
-	testNotAvailable(o.Memo().RootExpr().(memo.RelExpr))
+	testNotAvailable(o.Memo().RootExpr())
 
 	opttestutils.BuildQuery(t, &o, catalog, &evalCtx,
 		"SELECT * FROM t AS t1, t AS t2 WHERE t1.a = t2.a AND t1.b = 5",
 	)
-	testNotAvailable(o.Memo().RootExpr().(memo.RelExpr))
+	testNotAvailable(o.Memo().RootExpr())
 
 	if _, err := catalog.ExecuteDDL(
 		`ALTER TABLE t INJECT STATISTICS '[
@@ -652,15 +853,15 @@ func TestStatsAvailable(t *testing.T) {
 
 	// Stats should be available for all expressions.
 	opttestutils.BuildQuery(t, &o, catalog, &evalCtx, "SELECT * FROM t WHERE a=1")
-	testAvailable(o.Memo().RootExpr().(memo.RelExpr))
+	testAvailable(o.Memo().RootExpr())
 
 	opttestutils.BuildQuery(t, &o, catalog, &evalCtx, "SELECT sum(a), b FROM t GROUP BY b")
-	testAvailable(o.Memo().RootExpr().(memo.RelExpr))
+	testAvailable(o.Memo().RootExpr())
 
 	opttestutils.BuildQuery(t, &o, catalog, &evalCtx,
 		"SELECT * FROM t AS t1, t AS t2 WHERE t1.a = t2.a AND t1.b = 5",
 	)
-	testAvailable(o.Memo().RootExpr().(memo.RelExpr))
+	testAvailable(o.Memo().RootExpr())
 }
 
 // traverseExpr is a helper function to recursively traverse a relational

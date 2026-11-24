@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/partialidx"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/errors"
 )
 
@@ -39,6 +40,12 @@ const (
 	// rejectNonPartialIndexes excludes any non-partial indexes during
 	// iteration.
 	rejectNonPartialIndexes
+
+	// rejectVectorIndexes excludes any vector indexes during iteration.
+	rejectVectorIndexes
+
+	// rejectNonVectorIndexes excludes any non-vector indexes during iteration.
+	rejectNonVectorIndexes
 )
 
 // scanIndexIter is a helper struct that facilitates iteration over the indexes
@@ -228,12 +235,22 @@ func (it *scanIndexIter) ForEachStartingAfter(ord int, f enumerateIndexFunc) {
 		}
 
 		// Skip over inverted indexes if rejectInvertedIndexes is set.
-		if it.hasRejectFlags(rejectInvertedIndexes) && index.IsInverted() {
+		if it.hasRejectFlags(rejectInvertedIndexes) && index.Type() == idxtype.INVERTED {
 			continue
 		}
 
 		// Skip over non-inverted indexes if rejectNonInvertedIndexes is set.
-		if it.hasRejectFlags(rejectNonInvertedIndexes) && !index.IsInverted() {
+		if it.hasRejectFlags(rejectNonInvertedIndexes) && index.Type() != idxtype.INVERTED {
+			continue
+		}
+
+		// Skip over vector indexes if rejectVectorIndexes is set.
+		if it.hasRejectFlags(rejectVectorIndexes) && index.Type() == idxtype.VECTOR {
+			continue
+		}
+
+		// Skip over non-vector indexes if rejectNonVectorIndexes is set.
+		if it.hasRejectFlags(rejectNonVectorIndexes) && index.Type() != idxtype.VECTOR {
 			continue
 		}
 
@@ -290,8 +307,9 @@ func (it *scanIndexIter) ForEachStartingAfter(ord int, f enumerateIndexFunc) {
 				isCovering = true
 
 				// Build a projection only for constant columns not in the
-				// index.
-				constCols = constCols.Difference(indexCols)
+				// index and produced by the original scan.
+				constCols.DifferenceWith(indexCols)
+				constCols.IntersectionWith(it.scanPrivate.Cols)
 				constProj = it.buildConstProjectionsFromPredicate(predFilters, constCols)
 			}
 		}
@@ -346,15 +364,14 @@ func (it *scanIndexIter) filtersImplyPredicate(
 // the given filters and of types that do not have composite encodings.
 func (it *scanIndexIter) extractConstNonCompositeColumns(f memo.FiltersExpr) opt.ColSet {
 	constCols := memo.ExtractConstColumns(it.e.ctx, f, it.evalCtx)
-	var constNonCompositeCols opt.ColSet
 	for col, ok := constCols.Next(0); ok; col, ok = constCols.Next(col + 1) {
 		ord := it.tabMeta.MetaID.ColumnOrdinal(col)
 		typ := it.tabMeta.Table.Column(ord).DatumType()
-		if !colinfo.CanHaveCompositeKeyEncoding(typ) {
-			constNonCompositeCols.Add(col)
+		if colinfo.CanHaveCompositeKeyEncoding(typ) {
+			constCols.Remove(col)
 		}
 	}
-	return constNonCompositeCols
+	return constCols
 }
 
 // buildConstProjectionsFromPredicate builds a ProjectionsExpr that projects

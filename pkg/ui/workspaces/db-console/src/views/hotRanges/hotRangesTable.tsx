@@ -12,17 +12,15 @@ import {
   Anchor,
   EmptyTable,
   util,
+  ISortedTablePagination,
 } from "@cockroachlabs/cluster-ui";
 import { Tooltip } from "antd";
 import classNames from "classnames/bind";
 import round from "lodash/round";
-import React, { useState } from "react";
-import { connect } from "react-redux";
+import React, { useEffect } from "react";
 import { Link } from "react-router-dom";
 
 import emptyTableResultsImg from "assets/emptyState/empty-table-results.svg";
-import { sortSettingLocalSetting } from "oss/src/redux/hotRanges";
-import { AdminUIState } from "oss/src/redux/state";
 import { cockroach } from "src/js/protos";
 import {
   performanceBestPracticesHotSpots,
@@ -30,10 +28,15 @@ import {
   uiDebugPages,
 } from "src/util/docs";
 
-import styles from "./hotRanges.module.styl";
+import styles from "./hotRanges.module.scss";
 
 const PAGE_SIZE = 50;
 const cx = classNames.bind(styles);
+
+interface EmptyMessage {
+  title: string;
+  message: string;
+}
 
 interface HotRangesTableProps {
   hotRangesList: cockroach.server.serverpb.HotRangesResponseV2.IHotRange[];
@@ -42,6 +45,11 @@ interface HotRangesTableProps {
   clearFilterContainer: React.ReactNode;
   sortSetting?: SortSetting;
   onSortChange?: (ss: SortSetting) => void;
+  onViewPropertiesChange?: (vp: {
+    sortSetting: SortSetting;
+    pagination: ISortedTablePagination;
+  }) => void;
+  emptyMessage?: EmptyMessage;
 }
 
 const HotRangesTable = ({
@@ -51,12 +59,10 @@ const HotRangesTable = ({
   clearFilterContainer,
   sortSetting,
   onSortChange,
+  onViewPropertiesChange,
+  emptyMessage,
 }: HotRangesTableProps) => {
-  const [pagination, setPagination] = useState({
-    pageSize: PAGE_SIZE,
-    current: 1,
-  });
-
+  const [pagination, updatePagination] = util.usePagination(1, PAGE_SIZE);
   const columns: ColumnDescriptor<cockroach.server.serverpb.HotRangesResponseV2.IHotRange>[] =
     [
       {
@@ -245,7 +251,7 @@ const HotRangesTable = ({
           </Tooltip>
         ),
         cell: val => val.tables.join(", "),
-        sort: val => val.table_name,
+        sort: val => val.tables.join(", "),
       },
       {
         name: "index",
@@ -275,6 +281,13 @@ const HotRangesTable = ({
       },
     ];
 
+  useEffect(() => {
+    onViewPropertiesChange?.({
+      sortSetting,
+      pagination,
+    });
+  }, [sortSetting, pagination, onViewPropertiesChange]);
+
   return (
     <div className="section">
       <div className={cx("hotranges-heading-container")}>
@@ -301,41 +314,30 @@ const HotRangesTable = ({
         pagination={pagination}
         renderNoResult={
           <EmptyTable
-            title="No hot ranges"
+            title={emptyMessage.title}
             icon={emptyTableResultsImg}
             footer={
-              <Anchor href={performanceBestPracticesHotSpots} target="_blank">
-                Learn more about hot ranges
-              </Anchor>
+              <div>
+                <span>{emptyMessage.message}</span>
+                <br />
+                <Anchor href={performanceBestPracticesHotSpots} target="_blank">
+                  Learn more about hot ranges
+                </Anchor>
+              </div>
             }
           />
         }
+        dataTestId="top-ranges-table"
       />
       <Pagination
-        pageSize={PAGE_SIZE}
+        pageSize={pagination.pageSize}
         current={pagination.current}
         total={hotRangesList.length}
-        onChange={(page: number, pageSize?: number) =>
-          setPagination({
-            pageSize,
-            current: page,
-          })
-        }
+        onChange={updatePagination}
+        onShowSizeChange={updatePagination}
       />
     </div>
   );
 };
 
-const mapDispatchToProps = {
-  onSortChange: (ss: SortSetting) =>
-    sortSettingLocalSetting.set({
-      ascending: ss.ascending,
-      columnTitle: ss.columnTitle,
-    }),
-};
-
-const mapStateToProps = (state: AdminUIState) => ({
-  sortSetting: sortSettingLocalSetting.selector(state),
-});
-
-export default connect(mapStateToProps, mapDispatchToProps)(HotRangesTable);
+export default HotRangesTable;

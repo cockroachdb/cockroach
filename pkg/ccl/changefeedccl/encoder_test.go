@@ -9,6 +9,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"encoding/base64"
+	gojson "encoding/json"
 	"fmt"
 	"math/rand"
 	"net/url"
@@ -22,6 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/enum"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -138,13 +142,13 @@ func TestEncoders(t *testing.T) {
 			resolved: `{"resolved":{"string":"1.0000000002"}}`,
 		},
 		`format=avro,envelope=key_only,updated`: {
-			err: `updated is only usable with envelope=wrapped`,
+			err: `updated is only usable with envelope=wrapped or envelope=enriched`,
 		},
 		`format=avro,envelope=key_only,diff`: {
-			err: `diff is only usable with envelope=wrapped`,
+			err: `diff is only usable with envelope=wrapped or envelope=enriched`,
 		},
 		`format=avro,envelope=key_only,updated,diff`: {
-			err: `updated is only usable with envelope=wrapped`,
+			err: `updated is only usable with envelope=wrapped or envelope=enriched`,
 		},
 		`format=avro,envelope=row`: {
 			err: `envelope=row is not supported with format=avro`,
@@ -228,7 +232,7 @@ func TestEncoders(t *testing.T) {
 			targets := changefeedbase.Targets{}
 			targets.Add(changefeedbase.Target{
 				Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
-				TableID:           tableDesc.GetID(),
+				DescID:            tableDesc.GetID(),
 				StatementTimeName: changefeedbase.StatementTimeName(tableDesc.GetName()),
 			})
 
@@ -237,7 +241,7 @@ func TestEncoders(t *testing.T) {
 				return
 			}
 			require.NoError(t, o.Validate())
-			e, err := getEncoder(context.Background(), o, targets, false, nil, nil)
+			e, err := getEncoder(context.Background(), o, targets, false, nil, nil, getTestingEnrichedSourceProvider(t, o))
 			require.NoError(t, err)
 
 			rowInsert := cdcevent.TestingMakeEventRow(tableDesc, 0, row, false)
@@ -379,11 +383,11 @@ func TestAvroEncoderWithTLS(t *testing.T) {
 			targets := changefeedbase.Targets{}
 			targets.Add(changefeedbase.Target{
 				Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
-				TableID:           tableDesc.GetID(),
+				DescID:            tableDesc.GetID(),
 				StatementTimeName: changefeedbase.StatementTimeName(tableDesc.GetName()),
 			})
 
-			e, err := getEncoder(context.Background(), opts, targets, false, nil, nil)
+			e, err := getEncoder(context.Background(), opts, targets, false, nil, nil, getTestingEnrichedSourceProvider(t, opts))
 			require.NoError(t, err)
 
 			rowInsert := cdcevent.TestingMakeEventRow(tableDesc, 0, row, false)
@@ -415,7 +419,7 @@ func TestAvroEncoderWithTLS(t *testing.T) {
 			defer noCertReg.Close()
 			opts.SchemaRegistryURI = noCertReg.URL()
 
-			enc, err := getEncoder(context.Background(), opts, targets, false, nil, nil)
+			enc, err := getEncoder(context.Background(), opts, targets, false, nil, nil, getTestingEnrichedSourceProvider(t, opts))
 			require.NoError(t, err)
 			_, err = enc.EncodeKey(context.Background(), rowInsert)
 			require.Regexp(t, "x509", err)
@@ -428,7 +432,7 @@ func TestAvroEncoderWithTLS(t *testing.T) {
 			defer wrongCertReg.Close()
 			opts.SchemaRegistryURI = wrongCertReg.URL()
 
-			enc, err = getEncoder(context.Background(), opts, targets, false, nil, nil)
+			enc, err = getEncoder(context.Background(), opts, targets, false, nil, nil, getTestingEnrichedSourceProvider(t, opts))
 			require.NoError(t, err)
 			_, err = enc.EncodeKey(context.Background(), rowInsert)
 			require.Regexp(t, `contacting confluent schema registry.*: x509`, err)
@@ -517,6 +521,28 @@ func TestAvroArrayCap(t *testing.T) {
 	}
 
 	cdcTest(t, testFn, feedTestForceSink("kafka"))
+}
+
+func TestCSVEncodeCSVHeaderRow(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tableDesc, err := parseTableDesc(`CREATE TABLE t (rowid INT PRIMARY KEY, "na,me" STRING)`)
+	require.NoError(t, err)
+	row := rowenc.EncDatumRow{
+		rowenc.EncDatum{Datum: tree.NewDInt(1)},
+		rowenc.EncDatum{Datum: tree.NewDString("x")},
+	}
+	cdcRow := cdcevent.TestingMakeEventRow(tableDesc, 0, row, false)
+	enc := newCSVEncoder(changefeedbase.EncodingOptions{})
+	ctx := context.Background()
+	hdr, err := enc.EncodeCSVHeaderRow(ctx, cdcRow)
+	require.NoError(t, err)
+	hdr = append([]byte(nil), hdr...)
+	val, err := enc.EncodeValue(ctx, eventContext{}, cdcRow, cdcevent.Row{})
+	require.NoError(t, err)
+	require.Equal(t, "rowid,\"na,me\"", string(hdr))
+	require.Equal(t, "1,x", string(val))
 }
 
 func TestCollatedString(t *testing.T) {
@@ -630,96 +656,118 @@ func TestAvroSchemaNaming(t *testing.T) {
 		changefeedbase.EventConsumerWorkers.Override(
 			context.Background(), &s.Server.ClusterSettings().SV, -1)
 
-		sqlDB.Exec(t, `CREATE DATABASE movr`)
-		sqlDB.Exec(t, `CREATE TABLE movr.drivers (id INT PRIMARY KEY, name STRING)`)
-		sqlDB.Exec(t,
-			`INSERT INTO movr.drivers VALUES (1, 'Alice')`,
-		)
+		t.Run("single_family", func(t *testing.T) {
+			sqlDB.Exec(t, `CREATE DATABASE movr`)
+			sqlDB.Exec(t, `CREATE TABLE movr.drivers (id INT PRIMARY KEY, name STRING)`)
+			sqlDB.Exec(t,
+				`INSERT INTO movr.drivers VALUES (1, 'Alice')`,
+			)
 
-		movrFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr.drivers `+
-			`WITH format=%s`, changefeedbase.OptFormatAvro))
-		defer closeFeed(t, movrFeed)
+			movrFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr.drivers `+
+				`WITH format=%s`, changefeedbase.OptFormatAvro), optOutOfMetamorphicDBLevelChangefeed{
+				reason: "changefeed watches tables not in the default database",
+			})
+			defer closeFeed(t, movrFeed)
 
-		foo := movrFeed.(*kafkaFeed)
+			foo := movrFeed.(*kafkaFeed)
 
-		assertPayloads(t, movrFeed, []string{
-			`drivers: {"id":{"long":1}}->{"after":{"drivers":{"id":{"long":1},"name":{"string":"Alice"}}}}`,
+			assertPayloads(t, movrFeed, []string{
+				`drivers: {"id":{"long":1}}->{"after":{"drivers":{"id":{"long":1},"name":{"string":"Alice"}}}}`,
+			})
+
+			assertRegisteredSubjects(t, foo.registry, []string{
+				`drivers-key`,
+				`drivers-value`,
+			})
+
+			fqnFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr.drivers `+
+				`WITH format=%s, full_table_name`, changefeedbase.OptFormatAvro),
+				optOutOfMetamorphicDBLevelChangefeed{
+					reason: "changefeed watches tables not in the default database",
+				})
+			defer closeFeed(t, fqnFeed)
+
+			foo = fqnFeed.(*kafkaFeed)
+
+			assertPayloads(t, fqnFeed, []string{
+				`movr.public.drivers: {"id":{"long":1}}->{"after":{"drivers":{"id":{"long":1},"name":{"string":"Alice"}}}}`,
+			})
+
+			assertRegisteredSubjects(t, foo.registry, []string{
+				`movr.public.drivers-key`,
+				`movr.public.drivers-value`,
+			})
+
+			prefixFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr.drivers `+
+				`WITH format=%s, avro_schema_prefix=super`, changefeedbase.OptFormatAvro),
+				optOutOfMetamorphicDBLevelChangefeed{
+					reason: "changefeed watches tables not in the default database",
+				})
+			defer closeFeed(t, prefixFeed)
+
+			foo = prefixFeed.(*kafkaFeed)
+
+			assertPayloads(t, prefixFeed, []string{
+				`drivers: {"id":{"long":1}}->{"after":{"super.drivers":{"id":{"long":1},"name":{"string":"Alice"}}}}`,
+			})
+
+			assertRegisteredSubjects(t, foo.registry, []string{
+				`superdrivers-key`,
+				`superdrivers-value`,
+			})
+
+			prefixFQNFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr.drivers `+
+				`WITH format=%s, avro_schema_prefix=super, full_table_name`, changefeedbase.OptFormatAvro),
+				optOutOfMetamorphicDBLevelChangefeed{
+					reason: "changefeed watches tables not in the default database",
+				})
+			defer closeFeed(t, prefixFQNFeed)
+
+			foo = prefixFQNFeed.(*kafkaFeed)
+
+			assertPayloads(t, prefixFQNFeed, []string{
+				`movr.public.drivers: {"id":{"long":1}}->{"after":{"super.drivers":{"id":{"long":1},"name":{"string":"Alice"}}}}`,
+			})
+
+			assertRegisteredSubjects(t, foo.registry, []string{
+				`supermovr.public.drivers-key`,
+				`supermovr.public.drivers-value`,
+			})
+
+			// Both changes to the subject are also reflected in the schema name in the posted schemas.
+			require.Contains(t, foo.registry.SchemaForSubject(`supermovr.public.drivers-key`), `supermovr`)
+			require.Contains(t, foo.registry.SchemaForSubject(`supermovr.public.drivers-value`), `supermovr`)
 		})
 
-		assertRegisteredSubjects(t, foo.registry, []string{
-			`drivers-key`,
-			`drivers-value`,
+		t.Run("multi_family", func(t *testing.T) {
+			sqlDB.Exec(t, `CREATE DATABASE movr2`)
+			sqlDB.Exec(t, `CREATE TABLE movr2.drivers (id INT PRIMARY KEY, name STRING)`)
+			sqlDB.Exec(t,
+				`INSERT INTO movr2.drivers VALUES (1, 'Alice')`,
+			)
+
+			sqlDB.Exec(t, `ALTER TABLE movr2.drivers ADD COLUMN vehicle_id int CREATE FAMILY volatile`)
+			multiFamilyFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr2.drivers `+
+				`WITH format=%s, %s`, changefeedbase.OptFormatAvro, changefeedbase.OptSplitColumnFamilies),
+				optOutOfMetamorphicDBLevelChangefeed{
+					reason: "changefeed watches tables not in the default database",
+				})
+			defer closeFeed(t, multiFamilyFeed)
+			foo := multiFamilyFeed.(*kafkaFeed)
+
+			sqlDB.Exec(t, `UPDATE movr2.drivers SET vehicle_id = 1 WHERE id=1`)
+
+			assertPayloads(t, multiFamilyFeed, []string{
+				`drivers.primary: {"id":{"long":1}}->{"after":{"drivers_u002e_primary":{"id":{"long":1},"name":{"string":"Alice"}}}}`,
+				`drivers.volatile: {"id":{"long":1}}->{"after":{"drivers_u002e_volatile":{"vehicle_id":{"long":1}}}}`,
+			})
+
+			assertRegisteredSubjects(t, foo.registry, []string{
+				`drivers.primary-key`,
+				`drivers.primary-value`,
+				`drivers.volatile-value`,
+			})
 		})
-
-		fqnFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr.drivers `+
-			`WITH format=%s, full_table_name`, changefeedbase.OptFormatAvro))
-		defer closeFeed(t, fqnFeed)
-
-		foo = fqnFeed.(*kafkaFeed)
-
-		assertPayloads(t, fqnFeed, []string{
-			`movr.public.drivers: {"id":{"long":1}}->{"after":{"drivers":{"id":{"long":1},"name":{"string":"Alice"}}}}`,
-		})
-
-		assertRegisteredSubjects(t, foo.registry, []string{
-			`movr.public.drivers-key`,
-			`movr.public.drivers-value`,
-		})
-
-		prefixFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr.drivers `+
-			`WITH format=%s, avro_schema_prefix=super`,
-			changefeedbase.OptFormatAvro))
-		defer closeFeed(t, prefixFeed)
-
-		foo = prefixFeed.(*kafkaFeed)
-
-		assertPayloads(t, prefixFeed, []string{
-			`drivers: {"id":{"long":1}}->{"after":{"super.drivers":{"id":{"long":1},"name":{"string":"Alice"}}}}`,
-		})
-
-		assertRegisteredSubjects(t, foo.registry, []string{
-			`superdrivers-key`,
-			`superdrivers-value`,
-		})
-
-		prefixFQNFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr.drivers `+
-			`WITH format=%s, avro_schema_prefix=super, full_table_name`, changefeedbase.OptFormatAvro))
-		defer closeFeed(t, prefixFQNFeed)
-
-		foo = prefixFQNFeed.(*kafkaFeed)
-
-		assertPayloads(t, prefixFQNFeed, []string{
-			`movr.public.drivers: {"id":{"long":1}}->{"after":{"super.drivers":{"id":{"long":1},"name":{"string":"Alice"}}}}`,
-		})
-
-		assertRegisteredSubjects(t, foo.registry, []string{
-			`supermovr.public.drivers-key`,
-			`supermovr.public.drivers-value`,
-		})
-
-		//Both changes to the subject are also reflected in the schema name in the posted schemas
-		require.Contains(t, foo.registry.SchemaForSubject(`supermovr.public.drivers-key`), `supermovr`)
-		require.Contains(t, foo.registry.SchemaForSubject(`supermovr.public.drivers-value`), `supermovr`)
-
-		sqlDB.Exec(t, `ALTER TABLE movr.drivers ADD COLUMN vehicle_id int CREATE FAMILY volatile`)
-		multiFamilyFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr.drivers `+
-			`WITH format=%s, %s`, changefeedbase.OptFormatAvro, changefeedbase.OptSplitColumnFamilies))
-		defer closeFeed(t, multiFamilyFeed)
-		foo = multiFamilyFeed.(*kafkaFeed)
-
-		sqlDB.Exec(t, `UPDATE movr.drivers SET vehicle_id = 1 WHERE id=1`)
-
-		assertPayloads(t, multiFamilyFeed, []string{
-			`drivers.primary: {"id":{"long":1}}->{"after":{"drivers_u002e_primary":{"id":{"long":1},"name":{"string":"Alice"}}}}`,
-			`drivers.volatile: {"id":{"long":1}}->{"after":{"drivers_u002e_volatile":{"vehicle_id":{"long":1}}}}`,
-		})
-
-		assertRegisteredSubjects(t, foo.registry, []string{
-			`drivers.primary-key`,
-			`drivers.primary-value`,
-			`drivers.volatile-value`,
-		})
-
 	}
 
 	cdcTest(t, testFn, feedTestForceSink("kafka"), feedTestUseRootUserConnection)
@@ -737,8 +785,15 @@ func TestAvroSchemaNamespace(t *testing.T) {
 			`INSERT INTO movr.drivers VALUES (1, 'Alice')`,
 		)
 
-		noNamespaceFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr.drivers `+
-			`WITH format=%s`, changefeedbase.OptFormatAvro))
+		noNamespaceFeed := feed(t, f,
+			fmt.Sprintf(
+				`CREATE CHANGEFEED FOR movr.drivers WITH format=%s`,
+				changefeedbase.OptFormatAvro,
+			),
+			optOutOfMetamorphicDBLevelChangefeed{
+				reason: "changefeed watches tables not in the default database",
+			},
+		)
 		defer closeFeed(t, noNamespaceFeed)
 
 		assertPayloads(t, noNamespaceFeed, []string{
@@ -751,7 +806,10 @@ func TestAvroSchemaNamespace(t *testing.T) {
 		require.NotContains(t, foo.registry.SchemaForSubject(`drivers-value`), `namespace`)
 
 		namespaceFeed := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr.drivers `+
-			`WITH format=%s, avro_schema_prefix=super`, changefeedbase.OptFormatAvro))
+			`WITH format=%s, avro_schema_prefix=super`, changefeedbase.OptFormatAvro),
+			optOutOfMetamorphicDBLevelChangefeed{
+				reason: "changefeed watches tables not in the default database",
+			})
 		defer closeFeed(t, namespaceFeed)
 
 		foo = namespaceFeed.(*kafkaFeed)
@@ -762,6 +820,44 @@ func TestAvroSchemaNamespace(t *testing.T) {
 
 		require.Contains(t, foo.registry.SchemaForSubject(`superdrivers-key`), `"namespace":"super"`)
 		require.Contains(t, foo.registry.SchemaForSubject(`superdrivers-value`), `"namespace":"super"`)
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("kafka"), feedTestUseRootUserConnection)
+}
+
+func TestAvroSchemaHasExpectedTopLevelFields(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE DATABASE movr`)
+		sqlDB.Exec(t, `CREATE TABLE movr.drivers (id INT PRIMARY KEY, name STRING)`)
+		sqlDB.Exec(t,
+			`INSERT INTO movr.drivers VALUES (1, 'Alice')`,
+		)
+
+		foo := feed(t, f, fmt.Sprintf(`CREATE CHANGEFEED FOR movr.drivers `+
+			`WITH format=%s`, changefeedbase.OptFormatAvro),
+			optOutOfMetamorphicDBLevelChangefeed{
+				reason: "changefeed watches tables not in the default database",
+			})
+		defer closeFeed(t, foo)
+
+		assertPayloads(t, foo, []string{
+			`drivers: {"id":{"long":1}}->{"after":{"drivers":{"id":{"long":1},"name":{"string":"Alice"}}}}`,
+		})
+
+		reg := foo.(*kafkaFeed).registry
+
+		schemaJSON := reg.SchemaForSubject(`drivers-value`)
+		var schema map[string]any
+		require.NoError(t, gojson.Unmarshal([]byte(schemaJSON), &schema))
+		var keys []string
+		for k := range schema {
+			keys = append(keys, k)
+		}
+		require.ElementsMatch(t, keys, []string{"type", "name", "fields"})
 	}
 
 	cdcTest(t, testFn, feedTestForceSink("kafka"), feedTestUseRootUserConnection)
@@ -840,7 +936,7 @@ func TestAvroMigrateToUnsupportedColumn(t *testing.T) {
 		}
 	}
 
-	cdcTest(t, testFn, feedTestForceSink("kafka"))
+	cdcTest(t, testFn, feedTestForceSink("kafka"), withAllowChangefeedErr("checks error manually"))
 }
 
 func TestAvroLedger(t *testing.T) {
@@ -924,7 +1020,7 @@ func BenchmarkEncoders(b *testing.B) {
 	var targets changefeedbase.Targets
 	targets.Add(changefeedbase.Target{
 		Type:              0,
-		TableID:           42,
+		DescID:            42,
 		FamilyName:        "primary",
 		StatementTimeName: "table",
 	})
@@ -934,7 +1030,8 @@ func BenchmarkEncoders(b *testing.B) {
 		b.ReportAllocs()
 		b.StopTimer()
 
-		encoder, err := getEncoder(context.Background(), opts, targets, false, nil, nil)
+		encoder, err := getEncoder(context.Background(), opts, targets, false, nil, nil,
+			getTestingEnrichedSourceProvider(b, opts))
 		if err != nil {
 			b.Fatal(err)
 		}
@@ -950,6 +1047,9 @@ func BenchmarkEncoders(b *testing.B) {
 	rowOnly := []changefeedbase.EnvelopeType{changefeedbase.OptEnvelopeRow}
 	rowAndWrapped := []changefeedbase.EnvelopeType{
 		changefeedbase.OptEnvelopeRow, changefeedbase.OptEnvelopeWrapped,
+	}
+	wrappedBareEnriched := []changefeedbase.EnvelopeType{
+		changefeedbase.OptEnvelopeWrapped, changefeedbase.OptEnvelopeBare, changefeedbase.OptEnvelopeEnriched,
 	}
 
 	for _, tc := range []struct {
@@ -970,6 +1070,12 @@ func BenchmarkEncoders(b *testing.B) {
 			supportsDiff:   false,
 			envelopes:      rowOnly,
 		},
+		{
+			format:         changefeedbase.OptFormatProtobuf,
+			benchEncodeKey: false,
+			supportsDiff:   true,
+			envelopes:      wrappedBareEnriched,
+		},
 	} {
 		b.Run(string(tc.format), func(b *testing.B) {
 			for numKeyCols := 1; numKeyCols <= maxKeyCols; numKeyCols++ {
@@ -977,12 +1083,15 @@ func BenchmarkEncoders(b *testing.B) {
 				b.Logf("column types: %v, keys: %v", colTypes, colTypes[:numKeyCols])
 
 				if tc.benchEncodeKey {
-					b.Run(fmt.Sprintf("encodeKey/%dcols", numKeyCols),
-						func(b *testing.B) {
-							opts := changefeedbase.EncodingOptions{Format: tc.format}
-							bench(b, encodeKey, opts, updatedRows, prevRows)
-						},
-					)
+					testutils.RunValues(b, "envelope", tc.envelopes,
+						func(t *testing.B, envelope changefeedbase.EnvelopeType) {
+							b.Run(fmt.Sprintf("encodeKey/%dcols/envelope=%s", numKeyCols, envelope),
+								func(b *testing.B) {
+									opts := changefeedbase.EncodingOptions{Format: tc.format, Envelope: envelope}
+									bench(b, encodeKey, opts, updatedRows, prevRows)
+								},
+							)
+						})
 				}
 
 				for _, envelope := range tc.envelopes {
@@ -1206,7 +1315,9 @@ func TestJsonRountrip(t *testing.T) {
 			dRow := rowenc.EncDatumRow{rowenc.EncDatum{Datum: tree.NewDInt(1)}, rowenc.EncDatum{Datum: test.datum}}
 			cdcRow := cdcevent.TestingMakeEventRow(tableDesc, 0, dRow, false)
 
-			encoder, err := makeJSONEncoder(context.Background(), jsonEncoderOptions{})
+			// TODO(#139660): test this with other envelopes.
+			opts := jsonEncoderOptions{EncodingOptions: changefeedbase.EncodingOptions{Envelope: changefeedbase.OptEnvelopeBare}}
+			encoder, err := makeJSONEncoder(context.Background(), opts, getTestingEnrichedSourceProvider(t, opts.EncodingOptions), makeChangefeedTargets(test.name))
 			require.NoError(t, err)
 
 			// Encode the value to a string and parse it. Assert that the parsed json matches the
@@ -1227,7 +1338,7 @@ func TestJsonRountrip(t *testing.T) {
 			// In this case, we can just compare strings.
 			if isFloatOrDecimal(test.datum.ResolvedType()) {
 				require.Equal(t, d.String(), j.String())
-			} else if dArr, ok := tree.AsDArray(test.datum); ok && isFloatOrDecimal(dArr.ParamTyp) {
+			} else if dArr, ok := test.datum.(*tree.DArray); ok && isFloatOrDecimal(dArr.ParamTyp) {
 				require.Equal(t, d.String(), j.String())
 			} else {
 				cmp, err := d.Compare(j)
@@ -1311,4 +1422,35 @@ func TestAvroWithRegionalTable(t *testing.T) {
 			})
 		})
 	}
+}
+
+// Create a thin, in-memory user-defined enum type
+func createEnum(enumLabels tree.EnumValueList, typeName tree.TypeName) *types.T {
+
+	members := make([]descpb.TypeDescriptor_EnumMember, len(enumLabels))
+	physReps := enum.GenerateNEvenlySpacedBytes(len(enumLabels))
+	for i := range enumLabels {
+		members[i] = descpb.TypeDescriptor_EnumMember{
+			LogicalRepresentation:  string(enumLabels[i]),
+			PhysicalRepresentation: physReps[i],
+			Capability:             descpb.TypeDescriptor_EnumMember_ALL,
+		}
+	}
+
+	enumKind := descpb.TypeDescriptor_ENUM
+
+	typeDesc := typedesc.NewBuilder(&descpb.TypeDescriptor{
+		Name:        typeName.Type(),
+		ID:          0,
+		Kind:        enumKind,
+		EnumMembers: members,
+		Version:     1,
+	}).BuildCreatedMutableType()
+
+	typ, _ := typedesc.HydratedTFromDesc(context.Background(), &typeName, typeDesc, nil /* res */)
+
+	testTypes[typeName.SQLString()] = typ
+
+	return typ
+
 }

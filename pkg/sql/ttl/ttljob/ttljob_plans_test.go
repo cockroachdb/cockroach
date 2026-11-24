@@ -16,11 +16,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catsessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/spanutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -46,22 +44,15 @@ func TestQueryPlansDataDriven(t *testing.T) {
 	cutoff, err := tree.MakeDTimestamp(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC), time.Second)
 	require.NoError(t, err)
 
-	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
-	sd := sql.NewInternalSessionData(ctx, s.ClusterSettings(), "test" /* opName */)
-	sds := sessiondata.NewStack(sd)
-	dsdp := catsessiondata.NewDescriptorSessionDataStackProvider(sds)
-	descsCol := execCfg.CollectionFactory.NewCollection(ctx, descs.WithDescriptorSessionDataProvider(dsdp))
-
 	getExplainPlan := func(query string, overrides string) string {
 		rows := runner.Query(t, fmt.Sprintf(`SELECT crdb_internal.execute_internally('EXPLAIN %s', '%s');`, query, overrides))
 		var sb strings.Builder
 		for i := 0; rows.Next(); i++ {
-			// Omit first three rows that are of the form:
+			// Omit first two rows that are of the form:
 			//  distribution: local
-			//  vectorized: true
 			//
-			if i >= 3 {
-				if i > 3 {
+			if i >= 2 {
+				if i > 2 {
 					sb.WriteString("\n")
 				}
 				var explainRow string
@@ -73,7 +64,7 @@ func TestQueryPlansDataDriven(t *testing.T) {
 		return sb.String()
 	}
 
-	var selectBounds QueryBounds
+	var selectBounds spanutils.QueryBounds
 	var deleteIDs []string
 
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "ttljob_plans"), func(t *testing.T, path string) {
@@ -103,7 +94,7 @@ func TestQueryPlansDataDriven(t *testing.T) {
 					t.Fatalf("expected equal number of comma-separated datums for Stand and End bounds, "+
 						"found %d and %d", len(starts), len(ends))
 				}
-				selectBounds = QueryBounds{}
+				selectBounds = spanutils.QueryBounds{}
 				for i := range starts {
 					bound, err := strconv.Atoi(starts[i])
 					if err != nil {
@@ -134,8 +125,8 @@ func TestQueryPlansDataDriven(t *testing.T) {
 				var tableID int64
 				row := runner.QueryRow(t, fmt.Sprintf("SELECT '%s'::REGCLASS::OID;", tableName))
 				row.Scan(&tableID)
-				relationName, _, pkColNames, _, pkColDirs, _, _, err := getTableInfo(
-					ctx, db, descsCol, descpb.ID(tableID),
+				relationName, _, pkColNames, pkColTypes, pkColDirs, _, _, err := getTableInfo(
+					ctx, db, descpb.ID(tableID),
 				)
 				require.NoError(t, err)
 
@@ -146,6 +137,7 @@ func TestQueryPlansDataDriven(t *testing.T) {
 							RelationName:    relationName,
 							PKColNames:      pkColNames,
 							PKColDirs:       pkColDirs,
+							PKColTypes:      pkColTypes,
 							Bounds:          selectBounds,
 							SelectBatchSize: ttlbase.DefaultSelectBatchSizeValue,
 							TTLExpr:         catpb.DefaultTTLExpirationExpr,
@@ -168,7 +160,9 @@ func TestQueryPlansDataDriven(t *testing.T) {
 						}
 						return query
 					}
-					selectQuery := replacePlaceholders(selectBuilder.buildQuery())
+					selectQuery, err := selectBuilder.BuildQuery()
+					require.NoError(t, err)
+					selectQuery = replacePlaceholders(selectQuery)
 					if d.Cmd == "check-query" {
 						return selectQuery
 					}
@@ -191,7 +185,7 @@ func TestQueryPlansDataDriven(t *testing.T) {
 						query = strings.ReplaceAll(query, "$1", "'"+cutoff.String()+"'")
 						return query
 					}
-					deleteQuery := replacePlaceholders(deleteBuilder.buildQuery(len(deleteIDs)))
+					deleteQuery := replacePlaceholders(deleteBuilder.BuildQuery(len(deleteIDs)))
 					if d.Cmd == "check-query" {
 						return deleteQuery
 					}

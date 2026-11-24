@@ -1,0 +1,16 @@
+echo
+----
+Regression test to make sure thrashing in only the last index registers.
+input: [2 1 2]
+ 2.00 ┼╮                                     ╭
+ 1.90 ┤╰╮                                   ╭╯
+ 1.81 ┤ ╰─╮                               ╭─╯
+ 1.71 ┤   ╰─╮                           ╭─╯
+ 1.61 ┤     ╰─╮                       ╭─╯
+ 1.51 ┤       ╰─╮                   ╭─╯
+ 1.42 ┤         ╰─╮               ╭─╯
+ 1.32 ┤           ╰─╮           ╭─╯
+ 1.22 ┤             ╰─╮       ╭─╯
+ 1.12 ┤               ╰─╮   ╭─╯
+ 1.03 ┤                 ╰───╯
+tdtv=200.00% (2.0/1.0) uptv=1.0 dntv=1.0 runs=2

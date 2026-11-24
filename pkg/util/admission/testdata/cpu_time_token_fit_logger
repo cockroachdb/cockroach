@@ -1,0 +1,7 @@
+echo
+----
+cpu time tokens: 8.00/16 vcpu/s, 8.00 tok/s, mult=[1.00,1.00]
+cpu time tokens: 8.00/16 vcpu/s, 5.35 tok/s, mult=[1.10,2.00]
+cpu time tokens: 5.67/16 vcpu/s (now low), 2.83 tok/s, mult=[2.00,2.00]
+cpu time tokens: 1.00/16 vcpu/s (low), 0.50 tok/s, mult=[2.00,2.00]
+cpu time tokens: 8.00/16 vcpu/s (now high), 4.00 tok/s, mult=[2.00,2.00]

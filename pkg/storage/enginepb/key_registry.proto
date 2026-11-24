@@ -1,0 +1,79 @@
+// Copyright 2017 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.storage.enginepb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/storage/enginepb";
+
+enum EncryptionType {
+  // No encryption.
+  Plaintext = 0;
+  // AES in counter mode with various key lengths.
+  AES128_CTR = 1;
+  AES192_CTR = 2;
+  AES256_CTR = 3;
+  // AES in counter mode with OpenSSL-compatible behavior for counter
+  // wraparound. This version is faster than the original implementation becasue
+  // it is able to offload more work to highly-optimized library
+  // implementations.
+  AES_128_CTR_V2 = 4;
+  AES_192_CTR_V2 = 5;
+  AES_256_CTR_V2 = 6;
+}
+
+// DataKeysRegistry contains all data keys (including the raw key) as well
+// as store key information (excluding raw key).
+// This is written to disk.
+message DataKeysRegistry {
+  // Map of key_id to KeyInfo (raw key is not included).
+  map<string, KeyInfo> store_keys = 1;
+  // Map of key_id to SecretKey (raw key is included).
+  map<string, SecretKey> data_keys = 2;
+  // Active key IDs. Empty means no keys loaded yet.
+  string active_store_key_id = 3;
+  string active_data_key_id = 4;
+}
+
+// KeyInfo contains information about the key, but not the key itself.
+// This is safe to pass around, log, and store.
+message KeyInfo {
+  // EncryptionType is the type of encryption (aka: cipher) used with this key.
+  EncryptionType encryption_type = 1;
+  // The ID (hash) of this key.
+  string key_id = 2;
+  // First time this key was seen (in seconds since epoch).
+  int64 creation_time = 3;
+  // Source is a description of the source. This could be a filename,
+  // or the key manager that made the key. eg: "data key manager".
+  string source = 4;
+
+  // Was exposed is true if we ever wrote the key in plaintext.
+  // This does not apply to store keys, only data keys.
+  bool was_exposed = 5;
+  // ID of the key that caused this key to be created.
+  string parent_key_id = 6;
+}
+
+// SecretKey contains the information about the key AND the raw key itself.
+// This should never be logged, displayed, or stored outside of the key
+// registry. The name is intended to make users of the key wary of the usage.
+message SecretKey {
+  KeyInfo info = 1;
+  // The raw key.
+  bytes key = 2;
+}
+
+// EncryptionSettings describes the encryption settings for a file.
+// This is stored as a protobuf.Any inside the FileEntry as described in:
+// pkg/storage/enginepb/file_registry.proto
+message EncryptionSettings {
+  EncryptionType encryption_type = 1;
+
+  // Fields for AES-CTR. Empty when encryption_type = Plaintext.
+  string key_id = 2;
+  // len(nonce) + sizeof(counter) should add up to AES_Blocksize (128 bits).
+  bytes nonce = 3;    // 12 bytes
+  uint32 counter = 4; // 4 bytes
+}

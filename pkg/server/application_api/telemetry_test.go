@@ -13,11 +13,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
 	"github.com/cockroachdb/cockroach/pkg/server/apiconstants"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics/diagnosticspb"
 	"github.com/cockroachdb/cockroach/pkg/server/license"
+	"github.com/cockroachdb/cockroach/pkg/server/license/licensepb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srvtestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -155,7 +155,7 @@ func TestThrottlingMetadata(t *testing.T) {
 
 	for _, tc := range []struct {
 		name                        string
-		license                     *licenseccl.License
+		license                     *licensepb.License
 		lastSuccessfulTelemetryPing int64
 		expected                    serverpb.GetThrottlingMetadataResponse
 	}{
@@ -170,8 +170,8 @@ func TestThrottlingMetadata(t *testing.T) {
 		},
 		{
 			name: "free license",
-			license: &licenseccl.License{
-				Type:              licenseccl.License_Free,
+			license: &licensepb.License{
+				Type:              licensepb.License_Free,
 				ValidUntilUnixSec: testtime.Add(1 * time.Hour).Unix(),
 			},
 			lastSuccessfulTelemetryPing: testtime.Unix(),
@@ -186,8 +186,8 @@ func TestThrottlingMetadata(t *testing.T) {
 		},
 		{
 			name: "trial license",
-			license: &licenseccl.License{
-				Type:              licenseccl.License_Trial,
+			license: &licensepb.License{
+				Type:              licensepb.License_Trial,
 				ValidUntilUnixSec: testtime.Add(1 * time.Hour).Unix(),
 			},
 			lastSuccessfulTelemetryPing: testtime.Unix(),
@@ -202,8 +202,8 @@ func TestThrottlingMetadata(t *testing.T) {
 		},
 		{
 			name: "enterprise license",
-			license: &licenseccl.License{
-				Type: licenseccl.License_Enterprise,
+			license: &licensepb.License{
+				Type: licensepb.License_Enterprise,
 			},
 			expected: serverpb.GetThrottlingMetadataResponse{
 				NodeIdsWithTelemetryProblems: []string{},
@@ -211,8 +211,8 @@ func TestThrottlingMetadata(t *testing.T) {
 		},
 		{
 			name: "evaluation license",
-			license: &licenseccl.License{
-				Type:              licenseccl.License_Evaluation,
+			license: &licensepb.License{
+				Type:              licensepb.License_Evaluation,
 				ValidUntilUnixSec: testtime.Add(1 * time.Hour).Unix(),
 			},
 			lastSuccessfulTelemetryPing: testtime.Unix(),
@@ -225,8 +225,8 @@ func TestThrottlingMetadata(t *testing.T) {
 		},
 		{
 			name: "free license with missing telemetry",
-			license: &licenseccl.License{
-				Type:              licenseccl.License_Free,
+			license: &licensepb.License{
+				Type:              licensepb.License_Free,
 				ValidUntilUnixSec: testtime.Add(1 * time.Hour).Unix(),
 			},
 			lastSuccessfulTelemetryPing: testtime.Add(-2 * 24 * time.Hour).Unix(),
@@ -241,8 +241,8 @@ func TestThrottlingMetadata(t *testing.T) {
 		},
 		{
 			name: "free license expired",
-			license: &licenseccl.License{
-				Type:              licenseccl.License_Free,
+			license: &licensepb.License{
+				Type:              licensepb.License_Free,
 				ValidUntilUnixSec: testtime.Add(-1 * time.Hour).Unix(),
 			},
 			lastSuccessfulTelemetryPing: testtime.Unix(),
@@ -257,8 +257,8 @@ func TestThrottlingMetadata(t *testing.T) {
 		},
 		{
 			name: "free license expired and grace period over",
-			license: &licenseccl.License{
-				Type:              licenseccl.License_Free,
+			license: &licensepb.License{
+				Type:              licensepb.License_Free,
 				ValidUntilUnixSec: testtime.Add(-40 * 24 * time.Hour).Unix(),
 			},
 			lastSuccessfulTelemetryPing: testtime.Unix(),
@@ -275,8 +275,8 @@ func TestThrottlingMetadata(t *testing.T) {
 		},
 		{
 			name: "free license telemetry missing and telemetry deadline over",
-			license: &licenseccl.License{
-				Type:              licenseccl.License_Free,
+			license: &licensepb.License{
+				Type:              licensepb.License_Free,
 				ValidUntilUnixSec: testtime.Add(10 * 24 * time.Hour).Unix(),
 			},
 			lastSuccessfulTelemetryPing: testtime.Add(-8 * 24 * time.Hour).Unix(),

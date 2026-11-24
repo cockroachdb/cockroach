@@ -10,25 +10,30 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"reflect"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/distsqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
@@ -49,7 +54,7 @@ type result struct {
 // input rows, and checks that the generated stats match what we expect.
 func runSampleAggregator(
 	t *testing.T,
-	server serverutils.TestServerInterface,
+	server serverutils.ApplicationLayerInterface,
 	sqlDB *gosql.DB,
 	st *cluster.Settings,
 	evalCtx *eval.Context,
@@ -67,7 +72,6 @@ func runSampleAggregator(
 		Cfg: &execinfra.ServerConfig{
 			Settings: st,
 			DB:       server.InternalDB().(descs.DB),
-			Gossip:   gossip.MakeOptionalGossip(server.GossipI().(*gossip.Gossip)),
 		},
 	}
 	// Override the default memory limit. If memLimitBytes is small but
@@ -93,13 +97,11 @@ func runSampleAggregator(
 
 	sketchSpecs := []execinfrapb.SketchSpec{
 		{
-			SketchType:        execinfrapb.SketchType_HLL_PLUS_PLUS_V1,
 			Columns:           []uint32{0},
 			GenerateHistogram: false,
 			StatName:          "a",
 		},
 		{
-			SketchType:          execinfrapb.SketchType_HLL_PLUS_PLUS_V1,
 			Columns:             []uint32{1},
 			GenerateHistogram:   true,
 			HistogramMaxBuckets: maxBuckets,
@@ -123,7 +125,7 @@ func runSampleAggregator(
 			rowPartitions[j] = append(rowPartitions[j], row)
 		}
 		for i := 0; i < numSamplers; i++ {
-			rows := randgen.GenEncDatumRowsInt(rowPartitions[i])
+			rows := randgen.GenEncDatumRowsInt(rowPartitions[i], randgen.DatumEncoding_NONE)
 			in[i] = distsqlutils.NewRowBuffer(types.TwoIntCols, rows, distsqlutils.RowBufferArgs{})
 		}
 
@@ -136,7 +138,7 @@ func runSampleAggregator(
 			rowPartitions[j] = append(rowPartitions[j], row)
 		}
 		for i := 0; i < numSamplers; i++ {
-			rows := randgen.GenEncDatumRowsString(rowPartitions[i])
+			rows := randgen.GenEncDatumRowsString(rowPartitions[i], randgen.DatumEncoding_NONE)
 			in[i] = distsqlutils.NewRowBuffer([]*types.T{types.String, types.String}, rows, distsqlutils.RowBufferArgs{})
 		}
 		// Override original columns in samplerOutTypes.
@@ -147,6 +149,7 @@ func runSampleAggregator(
 		panic(errors.AssertionFailedf("Type %T not supported for inputRows", t))
 	}
 
+	ctx := execversion.TestingWithLatestCtx
 	outputs := make([]*distsqlutils.RowBuffer, numSamplers)
 	for i := 0; i < numSamplers; i++ {
 		outputs[i] = distsqlutils.NewRowBuffer(samplerOutTypes, nil /* rows */, distsqlutils.RowBufferArgs{})
@@ -157,12 +160,12 @@ func runSampleAggregator(
 			Sketches:      sketchSpecs,
 		}
 		p, err := newSamplerProcessor(
-			context.Background(), &flowCtx, 0 /* processorID */, spec, in[i], &execinfrapb.PostProcessSpec{},
+			ctx, &flowCtx, 0 /* processorID */, spec, in[i], &execinfrapb.PostProcessSpec{},
 		)
 		if err != nil {
 			t.Fatal(err)
 		}
-		p.Run(context.Background(), outputs[i])
+		p.Run(ctx, outputs[i])
 	}
 	// Randomly interleave the output rows from the samplers into a single buffer.
 	samplerResults := distsqlutils.NewRowBuffer(samplerOutTypes, nil /* rows */, distsqlutils.RowBufferArgs{})
@@ -191,12 +194,12 @@ func runSampleAggregator(
 	}
 
 	agg, err := newSampleAggregator(
-		context.Background(), &flowCtx, 0 /* processorID */, spec, samplerResults, &execinfrapb.PostProcessSpec{},
+		ctx, &flowCtx, 0 /* processorID */, spec, samplerResults, &execinfrapb.PostProcessSpec{},
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	agg.Run(context.Background(), finalOut)
+	agg.Run(ctx, finalOut)
 	// Make sure there was no error.
 	finalOut.GetRowsNoMeta(t)
 	r := sqlutils.MakeSQLRunner(sqlDB)
@@ -296,11 +299,12 @@ func TestSampleAggregator(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	server, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer server.Stopper().Stop(context.Background())
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
 
-	st := cluster.MakeTestingClusterSettings()
-	evalCtx := eval.MakeTestingEvalContext(st)
+	st := s.ClusterSettings()
+	evalCtx := eval.MakeTestingEvalContextWithCodec(s.Codec(), st)
 	defer evalCtx.Stop(context.Background())
 
 	type sampAggTestCase struct {
@@ -444,10 +448,181 @@ func TestSampleAggregator(t *testing.T) {
 	} {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			runSampleAggregator(
-				t, server, sqlDB, st, &evalCtx, tc.memLimitBytes, tc.expectOutOfMemory,
+				t, s, sqlDB, st, &evalCtx, tc.memLimitBytes, tc.expectOutOfMemory,
 				tc.childNumSamples, tc.childMinNumSamples, tc.aggNumSamples, tc.aggMinNumSamples,
 				tc.maxBuckets, tc.expectedMaxBuckets, tc.inputRows, tc.expected,
 			)
 		})
+	}
+}
+
+// TestPanicDeadlock verifies that the defer-based cleanup fix prevents the deadlock
+// using the real sampleAggregator processor.
+//
+// The original deadlock scenario (issue #160337):
+// 1. A processor panics during execution (without deferred cleanup)
+// 2. Producer goroutines are blocked sending to it via RowChannel
+// 3. The panic is recovered but the processor never calls ConsumerClosed()
+// 4. Producers remain stuck on channel sends indefinitely
+// 5. Wait() blocks forever waiting for producer goroutines
+// 6. Cleanup is never called, so UnregisterFlow never happens
+// 7. Drain waits forever for the flow to unregister
+//
+// The fix uses defer to ensure ConsumerClosed() is called even on panic,
+// which drains the channel and unblocks stuck producers.
+func TestPanicDeadlock(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderDuress(t, "test has a 10-second timeout to detect deadlock")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Set up minimal infrastructure for sampleAggregator
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := eval.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(ctx)
+
+	monitor := mon.NewMonitor(mon.Options{
+		Name:     mon.MakeName("test"),
+		Settings: st,
+	})
+	monitor.Start(ctx, nil, mon.NewStandaloneBudget(1<<30))
+	defer monitor.Stop(ctx)
+
+	// Set up testing knob to inject panic after first row
+	var rowsSeen int
+	flowCtx := &execinfra.FlowCtx{
+		EvalCtx: &evalCtx,
+		Mon:     monitor,
+		Cfg: &execinfra.ServerConfig{
+			Settings: st,
+			TestingKnobs: execinfra.TestingKnobs{
+				SampleAggregatorTestingKnobRowHook: func() {
+					rowsSeen++
+					if rowsSeen >= 1 {
+						panic("sampleAggregator test: injected panic")
+					}
+				},
+			},
+		},
+	}
+
+	// SampleAggregator expects sampler output format: original columns + 8 metadata columns
+	// Sampler adds: rank, sketch_idx, num_rows, num_nulls, size, sketch_data, inv_col_idx, inv_idx_key
+	samplerOutTypes := []*types.T{
+		types.Int,   // original column (the data being sampled)
+		types.Int,   // rank
+		types.Int,   // sketch index
+		types.Int,   // num rows
+		types.Int,   // num nulls
+		types.Int,   // size
+		types.Bytes, // sketch data
+		types.Int,   // inverted column index
+		types.Bytes, // inverted index key
+	}
+
+	// Use unbuffered channel to ensure blocking happens immediately
+	rowChan := &execinfra.RowChannel{}
+	rowChan.InitWithBufSizeAndNumSenders(samplerOutTypes, 0 /* unbuffered */, 1 /* numSenders */)
+	rowChan.Start(ctx)
+
+	// Create the real sampleAggregator
+	spec := &execinfrapb.SampleAggregatorSpec{
+		SampleSize:    100,
+		MinSampleSize: 10,
+		Sketches: []execinfrapb.SketchSpec{
+			{
+				Columns:           []uint32{0},
+				GenerateHistogram: false,
+				StatName:          "test",
+			},
+		},
+	}
+	post := &execinfrapb.PostProcessSpec{}
+
+	proc, err := newSampleAggregator(ctx, flowCtx, 0 /* processorID */, spec, rowChan, post)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Create output channel (sampleAggregator outputs stats results)
+	outputChan := &execinfra.RowChannel{}
+	outputChan.InitWithBufSizeAndNumSenders([]*types.T{types.Bytes}, 10, 1)
+	outputChan.Start(ctx)
+
+	// Track producer goroutine
+	var producerWg sync.WaitGroup
+	producerWg.Add(1)
+
+	// Start producer goroutine that sends rows to the processor
+	go func() {
+		defer producerWg.Done()
+		defer rowChan.ProducerDone()
+
+		// Create a sampler-format row with all 9 columns
+		row := rowenc.EncDatumRow{
+			rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(1)),      // original column
+			rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(0)),      // rank
+			rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(0)),      // sketch index
+			rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(1)),      // num rows
+			rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(0)),      // num nulls
+			rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(0)),      // size
+			rowenc.DatumToEncDatumUnsafe(types.Bytes, tree.NewDBytes("")), // sketch data
+			rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(-1)),     // inverted column index (-1 = not used)
+			rowenc.DatumToEncDatumUnsafe(types.Bytes, tree.NewDBytes("")), // inverted index key
+		}
+
+		// Send multiple rows. The processor will panic after reading the first one.
+		// WITH FIX: The defer in sampleAggregator.Run() calls ConsumerClosed() which drains the channel
+		// WITHOUT FIX: Producer would stay blocked forever
+		for i := 0; i < 5; i++ {
+			rowChan.Push(row, nil)
+		}
+	}()
+
+	// Run the processor in a separate goroutine (simulates flow.Run)
+	processorDone := make(chan bool)
+	var processorPanic interface{}
+
+	go func() {
+		defer func() {
+			// Simulates Wait() catching the panic
+			processorPanic = recover()
+			if processorPanic != nil {
+				// Simulates ctxCancel() being called
+				cancel()
+			}
+			close(processorDone)
+		}()
+
+		proc.Run(ctx, outputChan)
+	}()
+
+	// Wait for processor to panic and exit
+	<-processorDone
+
+	if processorPanic == nil {
+		t.Fatal("expected processor to panic, but it didn't")
+	}
+
+	// Now try to wait for producer goroutine with a timeout
+	// WITH THE FIX: This should complete quickly because the defer calls
+	//               ConsumerClosed(), which drains the channel and unblocks the producer
+	producersDone := make(chan bool)
+	go func() {
+		producerWg.Wait()
+		close(producersDone)
+	}()
+
+	select {
+	case <-producersDone:
+		// SUCCESS: Producer finished (this is what we want with the fix)
+		t.Log("Producer finished successfully after panic - fix is working")
+	case <-time.After(10 * time.Second):
+		// FAILURE: Producer is deadlocked (the fix is not working)
+		t.Fatal("DEADLOCK: Producer goroutine is still blocked 10 seconds after panic. " +
+			"The defer-based fix in sampleAggregator is not working correctly.")
 	}
 }

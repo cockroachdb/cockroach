@@ -115,6 +115,121 @@ Remove the '-noreview' suffix if the team should be requested for Github reviews
 `, b.String())
 }
 
+func TestLintNoStalePaths(t *testing.T) {
+	d := t.TempDir()
+	// Create a minimal repo structure.
+	for _, path := range []string{
+		filepath.Join("pkg", "kv", "kv.go"),
+		filepath.Join("pkg", "sql", "sql.go"),
+		filepath.Join("pkg", "sql", "parser", "parse.go"),
+		filepath.Join("Makefile"),
+		filepath.Join("docs", "README.md"),
+	} {
+		dir := filepath.Dir(filepath.Join(d, path))
+		require.NoError(t, os.MkdirAll(dir, 0755))
+		require.NoError(t, os.WriteFile(filepath.Join(d, path), []byte("x"), 0644))
+	}
+
+	teams := map[team.Alias]team.Team{
+		"cockroachdb/kv": {},
+	}
+
+	for _, tc := range []struct {
+		name    string
+		owners  string
+		stale   []string
+		noStale []string
+	}{
+		{
+			name:   "existing dir",
+			owners: "/pkg/kv/ @cockroachdb/kv",
+		},
+		{
+			name:   "existing file",
+			owners: "/Makefile @cockroachdb/kv",
+		},
+		{
+			name:    "missing dir",
+			owners:  "/pkg/missing/ @cockroachdb/kv",
+			stale:   []string{"/pkg/missing/"},
+			noStale: []string{"/pkg/kv/"},
+		},
+		{
+			name:    "missing file",
+			owners:  "/pkg/kv/gone.go @cockroachdb/kv",
+			stale:   []string{"/pkg/kv/gone.go"},
+			noStale: []string{"/pkg/kv/"},
+		},
+		{
+			name:   "single-star glob matches",
+			owners: "/pkg/sql/*.go @cockroachdb/kv",
+		},
+		{
+			name:   "single-star glob no match",
+			owners: "/pkg/nope/*.go @cockroachdb/kv",
+			stale:  []string{"/pkg/nope/*.go"},
+		},
+		{
+			name:   "double-star glob matches",
+			owners: "**.go @cockroachdb/kv",
+		},
+		{
+			name:   "double-star glob no match",
+			owners: "**.xyz @cockroachdb/kv",
+			stale:  []string{"**.xyz"},
+		},
+		{
+			name:    "mix of valid and stale",
+			owners:  "/pkg/kv/ @cockroachdb/kv\n/pkg/gone/ @cockroachdb/kv",
+			stale:   []string{"/pkg/gone/"},
+			noStale: []string{"/pkg/kv/"},
+		},
+		{
+			name:   "commented-out line with #! prefix",
+			owners: "#!/pkg/kv/ @cockroachdb/kv",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			co, err := LoadCodeOwners(strings.NewReader(tc.owners), teams)
+			require.NoError(t, err)
+			stale := LintNoStalePaths(co, d)
+			for _, s := range tc.stale {
+				found := false
+				for _, got := range stale {
+					if got == s {
+						found = true
+						break
+					}
+				}
+				if !found {
+					t.Errorf("expected stale path %q not found in %v", s, stale)
+				}
+			}
+			for _, s := range tc.noStale {
+				for _, got := range stale {
+					if got == s {
+						t.Errorf("path %q should not be stale but was reported as stale", s)
+					}
+				}
+			}
+			if len(tc.stale) == 0 && len(stale) > 0 {
+				t.Errorf("expected no stale paths, got %v", stale)
+			}
+		})
+	}
+}
+
+func TestLintNoStalePathsDefaultCodeOwners(t *testing.T) {
+	skip.IgnoreLint(t, "only for manual testing")
+	co, err := DefaultLoadCodeOwners()
+	require.NoError(t, err)
+	repoRoot := reporoot.Get()
+	stale := LintNoStalePaths(co, repoRoot)
+	for _, s := range stale {
+		t.Errorf("stale CODEOWNERS path: %s", s)
+	}
+}
+
 func TestLintEverythingIsOwnedDefaultCodeOwners(t *testing.T) {
 	skip.IgnoreLint(t, "only for manual testing")
 	co, err := DefaultLoadCodeOwners()

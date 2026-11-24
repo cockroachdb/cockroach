@@ -6,7 +6,6 @@
 package install
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"fmt"
@@ -17,14 +16,12 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"syscall"
-	"text/template"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/roachprod/cloud"
+	cloudcluster "github.com/cockroachdb/cockroach/pkg/roachprod/cloud/types"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
@@ -69,10 +66,14 @@ var scpTimeout = func() time.Duration {
 // components.
 type SyncedCluster struct {
 	// Cluster metadata, obtained from the respective cloud provider.
-	cloud.Cluster
+	cloudcluster.Cluster
 
 	// Nodes is used by most commands (e.g. Start, Stop, Monitor). It describes
 	// the list of nodes the operation pertains to.
+	//	$ roachprod create local -n 4
+	//	$ roachprod start local          # [1, 2, 3, 4]
+	//	$ roachprod start local:2-4      # [2, 3, 4]
+	//	$ roachprod start local:2,1,4    # [1, 2, 4]
 	Nodes Nodes
 
 	ClusterSettings
@@ -81,6 +82,10 @@ type SyncedCluster struct {
 
 	// AuthorizedKeys is used by SetupSSH to add additional authorized keys.
 	AuthorizedKeys []byte
+
+	// sessionProvider is a function that returns a new session. It serves as a
+	// testing hook, and if null the default session implementations will be used.
+	sessionProvider func(node Node, cmd string) session
 }
 
 // NewSyncedCluster creates a SyncedCluster, given the cluster metadata, node
@@ -88,7 +93,7 @@ type SyncedCluster struct {
 //
 // See ListNodes for a description of the node selector string.
 func NewSyncedCluster(
-	metadata *cloud.Cluster, nodeSelector string, settings ClusterSettings,
+	metadata *cloudcluster.Cluster, nodeSelector string, settings ClusterSettings,
 ) (*SyncedCluster, error) {
 	c := &SyncedCluster{
 		Cluster:         *metadata,
@@ -114,6 +119,14 @@ func NewSyncedCluster(
 		return nil, err
 	}
 	c.Nodes = nodes
+
+	if c.ClusterSettings.secureFlagsOpt != nil {
+		err = c.ClusterSettings.secureFlagsOpt.overrideBasedOnClusterSettings(c)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return c, nil
 }
 
@@ -127,6 +140,34 @@ var DefaultRetryOpt = &retry.Options{
 	MaxBackoff:     1 * time.Minute,
 	// This will run a total of 3 times `runWithMaybeRetry`
 	MaxRetries: 2,
+}
+
+type RetryOptionFunc func(options *retry.Options)
+
+// WithMaxRetries will retry the function up to maxRetries times.
+func WithMaxRetries(maxRetries int) RetryOptionFunc {
+	return func(opts *retry.Options) {
+		opts.MaxRetries = maxRetries
+	}
+}
+
+// RetryEveryDuration will retry the function every duration until it succeeds
+// or the context is cancelled. This is useful for when we want to see incremental
+// progress that is not subject to the backoff/jitter.
+func RetryEveryDuration(duration time.Duration) RetryOptionFunc {
+	return func(opts *retry.Options) {
+		opts.MaxRetries = 0
+		opts.Multiplier = 1
+		opts.InitialBackoff = duration
+	}
+}
+
+// WithMaxDuration sets the max duration the function will be retried for.
+// It will be run at least once.
+func WithMaxDuration(timeout time.Duration) RetryOptionFunc {
+	return func(opts *retry.Options) {
+		opts.MaxDuration = timeout
+	}
 }
 
 var DefaultShouldRetryFn = func(res *RunResultDetails) bool { return rperrors.IsTransient(res.Err) }
@@ -238,17 +279,6 @@ func (c *SyncedCluster) localVMDir(n Node) string {
 	return local.VMDir(c.Name, int(n))
 }
 
-// TargetNodes is the fully expanded, ordered list of nodes that any given
-// roachprod command is intending to target.
-//
-//	$ roachprod create local -n 4
-//	$ roachprod start local          # [1, 2, 3, 4]
-//	$ roachprod start local:2-4      # [2, 3, 4]
-//	$ roachprod start local:2,1,4    # [1, 2, 4]
-func (c *SyncedCluster) TargetNodes() Nodes {
-	return append(Nodes{}, c.Nodes...)
-}
-
 // GetInternalIP returns the internal IP address of the specified node.
 func (c *SyncedCluster) GetInternalIP(n Node) (string, error) {
 	if c.IsLocal() {
@@ -260,6 +290,19 @@ func (c *SyncedCluster) GetInternalIP(n Node) (string, error) {
 		return "", errors.Errorf("no private IP for node %d", n)
 	}
 	return ip, nil
+}
+
+// GetHostname returns the hostname of the specified node.
+func (c *SyncedCluster) GetHostname(n Node) (string, error) {
+	if c.IsLocal() {
+		return c.Host(n), nil
+	}
+
+	hostname := c.VMs[n-1].Name
+	if hostname == "" {
+		return "", errors.Errorf("no private hostname for node %d", n)
+	}
+	return hostname, nil
 }
 
 // roachprodEnvValue returns the value of the ROACHPROD environment variable
@@ -349,7 +392,7 @@ func (c *SyncedCluster) roachprodEnvRegex(node Node) string {
 // By wrapping every command with a hostname check as is done here, we
 // ensure that the cached cluster information is still correct.
 func (c *SyncedCluster) validateHostnameCmd(cmd string, node Node) string {
-	isValidHost := fmt.Sprintf("[[ `hostname` == '%s' ]]", vm.Name(c.Name, int(node)))
+	isValidHost := fmt.Sprintf("[[ `hostname` == '%s' ]]", c.VMs[node-1].Name)
 	errMsg := fmt.Sprintf("expected host to be part of %s, but is `hostname`", c.Name)
 	elseBranch := "fi"
 	if cmd != "" {
@@ -368,16 +411,38 @@ if ! %s; then
 `, isValidHost, errMsg, elseBranch)
 }
 
-// validateHost will run `validateHostnameCmd` on the node passed to
+// validateHost will run `validateHostnameCmd` on the node(s) passed to
 // make sure it still belongs to the SyncedCluster. Returns an error
 // when the hostnames don't match, indicating that the roachprod cache
 // is stale.
-func (c *SyncedCluster) validateHost(ctx context.Context, l *logger.Logger, node Node) error {
+func (c *SyncedCluster) validateHost(ctx context.Context, l *logger.Logger, nodes Nodes) error {
 	if c.IsLocal() {
 		return nil
 	}
-	cmd := c.validateHostnameCmd("", node)
-	return c.Run(ctx, l, l.Stdout, l.Stderr, WithNodes(Nodes{node}), "validate-ssh-host", cmd)
+
+	// Retry on different nodes, in case some of the VMs are unreachable.
+	// While this does indicate something is likely wrong, we don't want to
+	// fail here as some callers want to tolerate this, e.g. fetching logs
+	// after a test failure shouldn't fail just because one VM is down.
+	var combinedErr error
+	retryOpts := *DefaultRetryOpt
+	retryOpts.MaxRetries = 4
+	r := retry.StartWithCtx(ctx, retryOpts)
+	for nodeIdx := 0; r.Next(); nodeIdx = (nodeIdx + 1) % len(nodes) {
+		node := nodes[nodeIdx]
+		cmd := c.validateHostnameCmd("", node)
+
+		err := c.Run(ctx, l, l.Stdout, l.Stderr, WithNodes(Nodes{node}).WithRetryDisabled(), "validate-ssh-host", cmd)
+		if err != nil {
+			if !rperrors.IsTransient(err) {
+				return err
+			}
+			combinedErr = errors.CombineErrors(combinedErr, err)
+			continue
+		}
+		return nil
+	}
+	return combinedErr
 }
 
 // cmdDebugName is the suffix of the generated ssh debug file
@@ -385,6 +450,9 @@ func (c *SyncedCluster) validateHost(ctx context.Context, l *logger.Logger, node
 func (c *SyncedCluster) newSession(
 	l *logger.Logger, node Node, cmd string, options ...remoteSessionOption,
 ) session {
+	if c.sessionProvider != nil {
+		return c.sessionProvider(node, cmd)
+	}
 	if c.IsLocal() {
 		return newLocalSession(cmd)
 	}
@@ -432,30 +500,26 @@ func (c *SyncedCluster) Stop(
 	// killProcesses indicates whether processed need to be stopped.
 	killProcesses := true
 
+	// For shared process secondary tenants, we just stop the service via SQL.
+	// Find out of this is a shared process secondary tenant.
 	if virtualClusterLabel != "" {
 		name, sqlInstance, err := VirtualClusterInfoFromLabel(virtualClusterLabel)
 		if err != nil {
 			return err
 		}
 
-		services, err := c.DiscoverServices(ctx, name, ServiceTypeSQL)
-		if err != nil {
-			return err
-		}
+		if !IsSystemInterface(name) {
+			isExternal, err := c.IsExternalService(ctx, name)
+			if err != nil {
+				return err
+			}
 
-		if len(services) == 0 {
-			return fmt.Errorf("no service for virtual cluster %q", virtualClusterName)
+			if isExternal {
+				virtualClusterDisplay = fmt.Sprintf(" virtual cluster %q, instance %d", virtualClusterName, sqlInstance)
+			} else {
+				killProcesses = false
+			}
 		}
-
-		virtualClusterName = name
-		if services[0].ServiceMode == ServiceModeShared {
-			// For shared process virtual clusters, we just stop the service
-			// via SQL.
-			killProcesses = false
-		} else {
-			virtualClusterDisplay = fmt.Sprintf(" virtual cluster %q, instance %d", virtualClusterName, sqlInstance)
-		}
-
 	}
 
 	if killProcesses {
@@ -563,7 +627,6 @@ fi`,
 				sig,                       // [5]
 				waitCmd,                   // [6]
 			)
-
 			res, err := c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("kill"))
 			if err != nil {
 				return res, err
@@ -589,22 +652,27 @@ func (c *SyncedCluster) Wipe(ctx context.Context, l *logger.Logger, preserveCert
 	if err := c.Stop(ctx, l, int(unix.SIGKILL), true /* wait */, 0 /* gracePeriod */, ""); err != nil {
 		return err
 	}
-	return c.Parallel(ctx, l, WithNodes(c.Nodes).WithDisplay(display), func(ctx context.Context, node Node) (*RunResultDetails, error) {
+	err := c.Parallel(ctx, l, WithNodes(c.Nodes).WithDisplay(display), func(ctx context.Context, node Node) (*RunResultDetails, error) {
 		var cmd string
 		if c.IsLocal() {
 			// Not all shells like brace expansion, so we'll do it here
-			dirs := []string{"data*", "logs*"}
-			if !preserveCerts {
-				dirs = append(dirs, fmt.Sprintf("%s*", CockroachNodeCertsDir))
-				dirs = append(dirs, fmt.Sprintf("%s*", CockroachNodeTenantCertsDir))
+			paths := []string{
+				"data*",
+				"logs*",
+				"cockroach-*.sh",
 			}
-			for _, dir := range dirs {
+			if !preserveCerts {
+				paths = append(paths, fmt.Sprintf("%s*", CockroachNodeCertsDir))
+				paths = append(paths, fmt.Sprintf("%s*", CockroachNodeTenantCertsDir))
+			}
+			for _, dir := range paths {
 				cmd += fmt.Sprintf(`rm -fr %s/%s ;`, c.localVMDir(node), dir)
 			}
 		} else {
 			rmCmds := []string{
 				fmt.Sprintf(`sudo find /mnt/data* -maxdepth 1 -type f -not -name %s -exec rm -f {} \;`, vm.InitializedFile),
 				`sudo rm -fr /mnt/data*/{auxiliary,local,tmp,cassandra,cockroach,cockroach-temp*,mongo-data}`,
+				`sudo rm -fr cockroach-*.sh`,
 				`sudo rm -fr logs* data*`,
 			}
 			if !preserveCerts {
@@ -618,6 +686,16 @@ func (c *SyncedCluster) Wipe(ctx context.Context, l *logger.Logger, preserveCert
 		}
 		return c.runCmdOnSingleNode(ctx, l, node, cmd, defaultCmdOpts("wipe"))
 	})
+	if err != nil {
+		return err
+	}
+
+	err = c.Cluster.DeletePrometheusConfig(ctx, l)
+	if err != nil {
+		l.Printf("WARNING: failed to delete the prometheus config (already wiped?): %s", err)
+	}
+
+	return nil
 }
 
 // NodeStatus contains details about the status of a node.
@@ -670,432 +748,6 @@ fi
 		statuses[i] = NodeStatus{NodeID: int(res.Node), Running: true, Version: info[0], Pid: info[1]}
 	}
 	return statuses, nil
-}
-
-// MonitorProcessSkipped represents a cockroach process whose status
-// was not checked.
-type MonitorProcessSkipped struct {
-	VirtualClusterName string
-	SQLInstance        int
-}
-
-// MonitorProcessRunning represents the cockroach process running on a
-// node.
-type MonitorProcessRunning struct {
-	VirtualClusterName string
-	SQLInstance        int
-	PID                string
-}
-
-// MonitorProcessDead represents the cockroach process dying on a node.
-type MonitorProcessDead struct {
-	VirtualClusterName string
-	SQLInstance        int
-	ExitCode           string
-}
-
-type MonitorError struct {
-	Err error
-}
-
-// MonitorNoCockroachProcessesError is the error returned when the
-// monitor is called on a node that is not running a `cockroach`
-// process by the time the monitor runs.
-var MonitorNoCockroachProcessesError = errors.New("no cockroach processes running")
-
-// NodeMonitorInfo is a message describing a cockroach process' status.
-type NodeMonitorInfo struct {
-	// The index of the node (in a SyncedCluster) at which the message originated.
-	Node Node
-	// Event describes what happened to the node; it is one of
-	// MonitorProcessSkipped (no store directory was found);
-	// MonitorProcessRunning, sent when cockroach is running on a node;
-	// MonitorProcessDead, when the cockroach process stops running on a
-	// node; or MonitorError, typically indicate networking issues or
-	// nodes that have (physically) shut down.
-	Event interface{}
-}
-
-func (nmi NodeMonitorInfo) String() string {
-	var status string
-
-	virtualClusterDesc := func(name string, instance int) string {
-		if name == SystemInterfaceName {
-			return "system interface"
-		}
-
-		return fmt.Sprintf("virtual cluster %q, instance %d", name, instance)
-	}
-
-	switch event := nmi.Event.(type) {
-	case MonitorProcessRunning:
-		status = fmt.Sprintf("cockroach process for %s is running (PID: %s)",
-			virtualClusterDesc(event.VirtualClusterName, event.SQLInstance), event.PID,
-		)
-	case MonitorProcessSkipped:
-		status = fmt.Sprintf("%s was skipped", virtualClusterDesc(event.VirtualClusterName, event.SQLInstance))
-	case MonitorProcessDead:
-		status = fmt.Sprintf("cockroach process for %s died (exit code %s)",
-			virtualClusterDesc(event.VirtualClusterName, event.SQLInstance), event.ExitCode,
-		)
-	case MonitorError:
-		status = fmt.Sprintf("error: %s", event.Err.Error())
-	}
-
-	return fmt.Sprintf("n%d: %s", nmi.Node, status)
-}
-
-// MonitorOpts is used to pass the options needed by Monitor.
-type MonitorOpts struct {
-	OneShot          bool // Report the status of all targeted nodes once, then exit.
-	IgnoreEmptyNodes bool // Only monitor nodes with a nontrivial data directory.
-}
-
-// Monitor writes NodeMonitorInfo for the cluster nodes to the returned channel.
-// Infos sent to the channel always have the Node the event refers to, and the
-// event itself. See documentation for NodeMonitorInfo for possible event types.
-//
-// If OneShot is true, infos are retrieved only once for each node and the
-// channel is subsequently closed; otherwise the process continues indefinitely
-// (emitting new information as the status of the cockroach process changes).
-//
-// If IgnoreEmptyNodes is true, tenants on which no CockroachDB data is found
-// (in {store-dir}) will not be probed and single event, MonitorTenantSkipped,
-// will be emitted for each tenant.
-//
-// Note that the monitor will only send events for tenants that exist
-// at the time this function is called. In other words, this function
-// will not emit events for tenants started *after* a call to
-// Monitor().
-func (c *SyncedCluster) Monitor(
-	l *logger.Logger, ctx context.Context, opts MonitorOpts,
-) chan NodeMonitorInfo {
-	ch := make(chan NodeMonitorInfo)
-	nodes := c.TargetNodes()
-	var wg sync.WaitGroup
-	monitorCtx, cancel := context.WithCancel(ctx)
-
-	// sendEvent sends the NodeMonitorInfo passed through the channel
-	// that is listened to by the caller. Bails if the context is
-	// canceled.
-	sendEvent := func(info NodeMonitorInfo) {
-		// if the monitor's context is already canceled, do not attempt to
-		// send the error down the channel, as it is most likely *caused*
-		// by the cancelation itself.
-		if monitorCtx.Err() != nil {
-			return
-		}
-
-		select {
-		case ch <- info:
-			// We were able to send the info through the channel.
-		case <-monitorCtx.Done():
-			// Don't block trying to send the info.
-		}
-	}
-
-	const (
-		separator  = "|"
-		skippedMsg = "skipped"
-		runningMsg = "running"
-		deadMsg    = "dead"
-	)
-
-	wg.Add(len(nodes))
-	for i := range nodes {
-		go func(i int) {
-			defer wg.Done()
-			node := nodes[i]
-
-			// We first find out all cockroach processes that are currently
-			// running in this node.
-			cockroachProcessesCmd := fmt.Sprintf(`ps axeww -o command | `+
-				`grep -E '%s' | `+ // processes started by roachprod
-				`grep -E -o 'ROACHPROD_VIRTUAL_CLUSTER=[^ ]*' | `+ // ROACHPROD_VIRTUAL_CLUSTER indicates this is a cockroach process
-				`cut -d= -f2`, // grab the virtual cluster label
-				c.roachprodEnvRegex(node),
-			)
-
-			result, err := c.runCmdOnSingleNode(
-				ctx, l, node, cockroachProcessesCmd, defaultCmdOpts("list-processes"),
-			)
-			if err := errors.CombineErrors(err, result.Err); err != nil {
-				err := errors.Wrap(err, "failed to list cockroach processes")
-				sendEvent(NodeMonitorInfo{Node: node, Event: MonitorError{err}})
-				return
-			}
-
-			type virtualClusterInfo struct {
-				Name     string
-				Instance int
-			}
-
-			// Make the collection of virtual clusters a set to handle the
-			// unlikely but possible case that, in `local` runs, we'll find
-			// two processes associated with the same virtual cluster
-			// label. This can happen if we invoke the command above while the
-			// parent cockroach process already created the child,
-			// background process, but has not terminated yet.
-			vcs := map[virtualClusterInfo]struct{}{}
-			vcLines := strings.TrimSuffix(result.CombinedOut, "\n")
-			if vcLines == "" {
-				sendEvent(NodeMonitorInfo{Node: node, Event: MonitorError{MonitorNoCockroachProcessesError}})
-				return
-			}
-			for _, label := range strings.Split(vcLines, "\n") {
-				name, instance, err := VirtualClusterInfoFromLabel(label)
-				if err != nil {
-					sendEvent(NodeMonitorInfo{Node: node, Event: MonitorError{err}})
-					return
-				}
-				vcs[virtualClusterInfo{name, instance}] = struct{}{}
-			}
-
-			data := struct {
-				OneShot     bool
-				Node        Node
-				IgnoreEmpty bool
-				Store       string
-				Local       bool
-				Separator   string
-				SkippedMsg  string
-				RunningMsg  string
-				DeadMsg     string
-				Processes   []virtualClusterInfo
-			}{
-				OneShot:     opts.OneShot,
-				Node:        node,
-				IgnoreEmpty: opts.IgnoreEmptyNodes,
-				Store:       c.NodeDir(node, 1 /* storeIndex */),
-				Local:       c.IsLocal(),
-				Separator:   separator,
-				SkippedMsg:  skippedMsg,
-				RunningMsg:  runningMsg,
-				DeadMsg:     deadMsg,
-				Processes:   maps.Keys(vcs),
-			}
-
-			storeFor := func(name string, instance int) string {
-				return c.InstanceStoreDir(node, name, instance)
-			}
-
-			localPIDFile := func(name string, instance int) string {
-				return filepath.Join(c.LogDir(node, name, instance), "cockroach.pid")
-			}
-
-			// NB.: we parse the output of every line this script
-			// prints. Every call to `echo` must match the parsing logic
-			// down below in order to produce structured results to the
-			// caller.
-			snippet := `
-dead_parent() {
-  ! ps -p "$1" >/dev/null || ps -o ucomm -p "$1" | grep -q defunct
-}
-{{ range .Processes }}
-monitor_process_{{$.Node}}_{{.Name}}_{{.Instance}}() {
-  {{ if $.IgnoreEmpty }}
-  if ! ls {{storeFor .Name .Instance}}/marker.* 1> /dev/null 2>&1; then
-    echo "{{.Name}}{{$.Separator}}{{.Instance}}{{$.Separator}}{{$.SkippedMsg}}"
-    return 0
-  fi
-  {{- end}}
-  # Init with -1 so that when cockroach is initially dead, we print
-  # a dead event for it.
-  lastpid=-1
-  while :; do
-    # if parent process terminated, quit as well.
-    if dead_parent "$1"; then
-      return 0
-    fi
-    {{ if $.Local }}
-    pidFile=$(cat "{{pidFile .Name .Instance}}")
-    # Make sure the process is still running
-    pid=$(test -n "${pidFile}" && ps -p "${pidFile}" >/dev/null && echo "${pidFile}")
-    pid=${pid:-0} # default to 0
-    status="unknown"
-    {{- else }}
-    # When CRDB is not running, this is zero.
-    pid=$(systemctl show "{{virtualClusterLabel .Name .Instance}}" --property MainPID --value)
-    status=$(systemctl show "{{virtualClusterLabel .Name .Instance}}" --property ExecMainStatus --value)
-    {{- end }}
-    if [[ "${lastpid}" == -1 && "${pid}" != 0 ]]; then
-      # On the first iteration through the loop, if the process is running,
-      # don't register a PID change (which would trigger an erroneous dead
-      # event).
-      lastpid=0
-    fi
-    # Output a dead event whenever the PID changes from a nonzero value to
-    # any other value. In particular, we emit a dead event when the node stops
-    # (lastpid is nonzero, pid is zero), but not when the process then starts
-    # again (lastpid is zero, pid is nonzero).
-    if [ "${pid}" != "${lastpid}" ]; then
-      if [ "${lastpid}" != 0 ]; then
-        if [ "${pid}" != 0 ]; then
-          # If the PID changed but neither is zero, then the status refers to
-          # the new incarnation. We lost the actual exit status of the old PID.
-          status="unknown"
-        fi
-    	  echo "{{.Name}}{{$.Separator}}{{.Instance}}{{$.Separator}}{{$.DeadMsg}}{{$.Separator}}${status}"
-      fi
-  	  if [ "${pid}" != 0 ]; then
-  		  echo "{{.Name}}{{$.Separator}}{{.Instance}}{{$.Separator}}{{$.RunningMsg}}{{$.Separator}}${pid}"
-      fi
-      lastpid=${pid}
-    fi
-    {{ if $.OneShot }}
-      return 0
-    {{- end }}
-    sleep 1
-    if [ "${pid}" != 0 ]; then
-      while kill -0 "${pid}" && ! dead_parent "$1"; do
-        sleep 1
-      done
-    fi
-  done
-}
-{{ end }}
-
-# monitor every cockroach process in parallel.
-{{ range .Processes }}
-monitor_process_{{$.Node}}_{{.Name}}_{{.Instance}} $$ &
-{{ end }}
-
-wait
-`
-
-			t := template.Must(template.New("script").Funcs(template.FuncMap{
-				"storeFor":            storeFor,
-				"pidFile":             localPIDFile,
-				"virtualClusterLabel": VirtualClusterLabel,
-			}).Parse(snippet))
-			var buf bytes.Buffer
-			if err := t.Execute(&buf, data); err != nil {
-				err := errors.Wrap(err, "failed to execute template")
-				sendEvent(NodeMonitorInfo{Node: node, Event: MonitorError{err}})
-				return
-			}
-
-			// This is the exception to funneling all SSH traffic through `c.runCmdOnSingleNode`
-			sess := c.newSession(l, node, buf.String(), withDebugDisabled())
-			defer sess.Close()
-
-			p, err := sess.StdoutPipe()
-			if err != nil {
-				err := errors.Wrap(err, "failed to read stdout pipe")
-				sendEvent(NodeMonitorInfo{Node: node, Event: MonitorError{err}})
-				return
-			}
-			// Request a PTY so that the script will receive a SIGPIPE when the
-			// session is closed.
-			if err := sess.RequestPty(); err != nil {
-				err := errors.Wrap(err, "failed to request PTY")
-				sendEvent(NodeMonitorInfo{Node: node, Event: MonitorError{err}})
-				return
-			}
-
-			var readerWg sync.WaitGroup
-			readerWg.Add(1)
-			go func(p io.Reader) {
-				defer readerWg.Done()
-				r := bufio.NewReader(p)
-				for {
-					line, _, err := r.ReadLine()
-					if err == io.EOF {
-						sendEvent(NodeMonitorInfo{Node: node, Event: MonitorError{err}})
-						return
-					}
-					if err != nil {
-						err := errors.Wrap(err, "error reading from session")
-						sendEvent(NodeMonitorInfo{Node: node, Event: MonitorError{err}})
-						return
-					}
-
-					parts := strings.Split(string(line), separator)
-					ensureNumParts := func(n int) {
-						if len(parts) < n {
-							panic(fmt.Errorf("invalid output from monitor: %q", line))
-						}
-					}
-					// Every event is expected to have at least 3 parts. If
-					// that's not the case, panic explicitly below. Otherwise,
-					// we'd get a slice out of bounds error and the error
-					// message would not include the actual problematic line,
-					// which would make understanding the failure more
-					// difficult.
-					ensureNumParts(3) // name, instance, event
-
-					// Virtual cluster name and instance are the first fields of
-					// every event type.
-					name, instanceStr := parts[0], parts[1]
-					instance, _ := strconv.Atoi(instanceStr)
-					switch parts[2] {
-					case skippedMsg:
-						sendEvent(NodeMonitorInfo{Node: node, Event: MonitorProcessSkipped{
-							VirtualClusterName: name, SQLInstance: instance,
-						}})
-					case runningMsg:
-						ensureNumParts(4)
-						pid := parts[3]
-						sendEvent(NodeMonitorInfo{Node: node, Event: MonitorProcessRunning{
-							VirtualClusterName: name, SQLInstance: instance, PID: pid,
-						}})
-					case deadMsg:
-						ensureNumParts(4)
-						exitCode := parts[3]
-						sendEvent(NodeMonitorInfo{Node: node, Event: MonitorProcessDead{
-							VirtualClusterName: name, SQLInstance: instance, ExitCode: exitCode,
-						}})
-					default:
-						err := fmt.Errorf("internal error: unrecognized output from monitor: %q", line)
-						sendEvent(NodeMonitorInfo{Node: node, Event: MonitorError{err}})
-					}
-				}
-			}(p)
-
-			if err := sess.Start(); err != nil {
-				err := errors.Wrap(err, "failed to start session")
-				sendEvent(NodeMonitorInfo{Node: node, Event: MonitorError{err}})
-				return
-			}
-
-			// Watch for context cancellation, which can happen if the test
-			// fails, or if the monitor loop exits.
-			go func() {
-				<-monitorCtx.Done()
-				sess.Close()
-				if pc, ok := p.(io.ReadCloser); ok {
-					_ = pc.Close()
-				}
-			}()
-
-			readerWg.Wait()
-			// We must call `sess.Wait()` only after finishing reading from the stdout
-			// pipe. Otherwise it can be closed under us, causing the reader to loop
-			// infinitely receiving a non-`io.EOF` error.
-			if err := sess.Wait(); err != nil {
-				// If we got an error waiting for the session but the context
-				// is already canceled, do not send an error through the
-				// channel; context cancelation happens at the user's request
-				// or when the test finishes. In either case, the monitor
-				// should quiesce. Reporting the error is confusing and can be
-				// spammy in the case of multiple monitors.
-				if monitorCtx.Err() != nil {
-					return
-				}
-
-				err := errors.Wrap(err, "failed to wait for session")
-				sendEvent(NodeMonitorInfo{Node: node, Event: MonitorError{err}})
-				return
-			}
-		}(i)
-	}
-	go func() {
-		wg.Wait()
-		cancel()
-		close(ch)
-	}()
-
-	return ch
 }
 
 // RunResultDetails holds details of the result of commands executed by Run().
@@ -1167,10 +819,12 @@ func (r *RunResultDetails) Output(decorate bool) string {
 type RunCmdOptions struct {
 	combinedOut             bool
 	includeRoachprodEnvVars bool
-	stdin                   io.Reader
-	stdout, stderr          io.Writer
-	remoteOptions           []remoteSessionOption
-	expanderConfig          ExpanderConfig
+	// If true, logs the expanded result if it differs from the original command.
+	logExpandedCmd bool
+	stdin          io.Reader
+	stdout, stderr io.Writer
+	remoteOptions  []remoteSessionOption
+	expanderConfig ExpanderConfig
 }
 
 // Default RunCmdOptions enable combining output (stdout and stderr) and capturing ssh (verbose) debug output.
@@ -1210,6 +864,9 @@ func (c *SyncedCluster) runCmdOnSingleNode(
 	expandedCmd, err := e.expand(ctx, l, c, opts.expanderConfig, cmd)
 	if err != nil {
 		return &noResult, errors.WithDetailf(err, "error expanding command: %s", cmd)
+	}
+	if opts.logExpandedCmd && expandedCmd != cmd {
+		l.Printf("Node %d expanded cmd: %s", e.node, expandedCmd)
 	}
 
 	nodeCmd := expandedCmd
@@ -1316,6 +973,7 @@ func (c *SyncedCluster) Run(
 			stdout:                  stdout,
 			stderr:                  stderr,
 			expanderConfig:          options.ExpanderConfig,
+			logExpandedCmd:          options.LogExpandedCmd,
 		}
 		result, err := c.runCmdOnSingleNode(ctx, l, node, cmd, opts)
 		return result, err
@@ -1400,6 +1058,7 @@ func (c *SyncedCluster) RunWithDetails(
 			stdout:                  l.Stdout,
 			stderr:                  l.Stderr,
 			expanderConfig:          options.ExpanderConfig,
+			logExpandedCmd:          options.LogExpandedCmd,
 		}
 		result, err := c.runCmdOnSingleNode(ctx, l, node, cmd, opts)
 		return result, err
@@ -1419,27 +1078,36 @@ func (c *SyncedCluster) RunWithDetails(
 	return results, nil
 }
 
-// Wait TODO(peter): document
+// Wait waits for all nodes in the cluster to finish initializing by
+// checking for the existence of the OS initialized file. Uses
+// exponential backoff with a 5-minute timeout.
 func (c *SyncedCluster) Wait(ctx context.Context, l *logger.Logger) error {
 	display := fmt.Sprintf("%s: waiting for nodes to start", c.Name)
-	_, hasError, err := c.ParallelE(ctx, l, WithNodes(c.Nodes).WithDisplay(display).WithRetryDisabled(),
+	results, hasError, err := c.ParallelE(ctx, l, WithNodes(c.Nodes).WithDisplay(display).WithRetryDisabled(),
 		func(ctx context.Context, node Node) (*RunResultDetails, error) {
 			res := &RunResultDetails{Node: node}
 			var err error
-			cmd := fmt.Sprintf("test -e %s -a -e %s", vm.DisksInitializedFile, vm.OSInitializedFile)
+			// Only the `vm.OSInitializedFile` file is checked and not the
+			// `vm.DisksInitializedFile`, because it's possible to create VMs without
+			// any attached disks other than the boot disk.
+			cmd := fmt.Sprintf("test -e %s", vm.OSInitializedFile)
 			// N.B. we disable ssh debug output capture, lest we end up with _thousands_ of useless .log files.
 			opts := cmdOptsWithDebugDisabled()
-			for j := 0; j < 600; j++ {
+			retryOpts := retry.Options{
+				InitialBackoff: 500 * time.Millisecond,
+				MaxBackoff:     30 * time.Second,
+				Multiplier:     2,
+				MaxDuration:    5 * time.Minute,
+			}
+			for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
 				res, err = c.runCmdOnSingleNode(ctx, l, node, cmd, opts)
 				if err != nil {
 					return nil, err
 				}
 
-				if res.Err != nil {
-					time.Sleep(500 * time.Millisecond)
-					continue
+				if res.Err == nil {
+					return res, nil
 				}
-				return res, nil
 			}
 			res.Err = errors.Wrapf(res.Err, "timed out after 5m")
 			logContent, err := c.runCmdOnSingleNode(ctx, nil, node, fmt.Sprintf("tail -n %d %s", 20, vm.StartupLogs), cmdOptsWithDebugDisabled())
@@ -1458,7 +1126,13 @@ func (c *SyncedCluster) Wait(ctx context.Context, l *logger.Logger) error {
 	}
 
 	if hasError {
-		return errors.New("not all nodes booted successfully")
+		errs := []error{}
+		for _, res := range results {
+			if res != nil && res.Err != nil {
+				errs = append(errs, res.Err)
+			}
+		}
+		return errors.Wrap(errors.Join(errs...), "not all nodes booted successfully")
 	}
 	return nil
 }
@@ -1523,9 +1197,9 @@ tar cf - .ssh/id_rsa .ssh/id_rsa.pub .ssh/authorized_keys
 	}
 
 	// Populate the known_hosts file with both internal and external IPs of all
-	// nodes in the cluster. Internal IPs are populated within its provider peers
-	// only, and external IPs are populated for all providers. Note that as a side
-	// effect, this creates the known hosts file in unhashed format, working
+	// nodes in the cluster. Internal IPs are populated within its network peer
+	// group only, and external IPs are populated for all nodes. Note that as a
+	// side effect, this creates the known hosts file in unhashed format, working
 	// around a limitation of jsch (which is used in jepsen tests).
 
 	mu := syncutil.Mutex{}
@@ -1533,31 +1207,52 @@ tar cf - .ssh/id_rsa .ssh/id_rsa.pub .ssh/authorized_keys
 		node Node
 		ip   string
 	}
-	// Build a list of internal IPs for each provider and
+	// Build a list of internal IPs grouped by network peer group and
 	// public IPs for all nodes.
-	providerPrivateIPs := make(map[string][]nodeInfo)
+	//
+	// For most providers, VMs within the same provider can reach each other via
+	// private IPs, so they are grouped by provider. However, for AWS, each
+	// region has its own VPC, and cross-region private IP connectivity via VPC
+	// peering may not be reliably available (e.g., due to infrastructure
+	// configuration or peering state). We group AWS nodes by region to avoid
+	// ssh-keyscan timing out on potentially unreachable cross-region private
+	// IPs. This is safe because multi-region clusters advertise public IPs
+	// (see shouldAdvertisePublicIP).
+	networkPeerGroup := func(v vm.VM) string {
+		if v.Provider == aws.ProviderName {
+			// AWS zones are formatted as "<region><az-letter>" (e.g. "us-east-1a").
+			// Strip the trailing letter to get the region.
+			zone := v.Zone
+			if len(zone) > 0 {
+				return v.Provider + ":" + zone[:len(zone)-1]
+			}
+		}
+		return v.Provider
+	}
+	peerGroupPrivateIPs := make(map[string][]nodeInfo)
 	publicIPs := make([]string, 0, len(c.Nodes))
 	for _, node := range c.Nodes {
 		v := c.VMs[node-1]
-		providerPrivateIPs[v.Provider] = append(providerPrivateIPs[v.Provider], nodeInfo{node: node, ip: v.PrivateIP})
+		group := networkPeerGroup(v)
+		peerGroupPrivateIPs[group] = append(peerGroupPrivateIPs[group], nodeInfo{node: node, ip: v.PrivateIP})
 		publicIPs = append(publicIPs, c.Host(node))
 	}
 
-	providerKnownHostData := make(map[string][]byte)
-	providers := maps.Keys(providerPrivateIPs)
+	peerGroupKnownHostData := make(map[string][]byte)
+	peerGroups := maps.Keys(peerGroupPrivateIPs)
 
-	// Only need to scan on the first node of each provider.
-	firstNodes := make([]Node, len(providers))
-	for i, provider := range providers {
-		firstNodes[i] = providerPrivateIPs[provider][0].node
+	// Only need to scan on the first node of each peer group.
+	firstNodes := make([]Node, len(peerGroups))
+	for i, group := range peerGroups {
+		firstNodes[i] = peerGroupPrivateIPs[group][0].node
 	}
 	if err := c.Parallel(ctx, l, WithNodes(firstNodes).WithDisplay("scanning hosts"),
 		func(ctx context.Context, node Node) (*RunResultDetails, error) {
-			// Scan a combination of all remote IPs and local IPs pertaining to this
-			// node's cloud provider.
+			// Scan a combination of all public IPs and private IPs within this
+			// node's network peer group.
 			scanIPs := append([]string{}, publicIPs...)
-			nodeProvider := c.VMs[node-1].Provider
-			for _, nodeInfo := range providerPrivateIPs[nodeProvider] {
+			nodeGroup := networkPeerGroup(c.VMs[node-1])
+			for _, nodeInfo := range peerGroupPrivateIPs[nodeGroup] {
 				scanIPs = append(scanIPs, nodeInfo.ip)
 			}
 
@@ -1595,7 +1290,7 @@ exit 1
 			}
 			mu.Lock()
 			defer mu.Unlock()
-			providerKnownHostData[nodeProvider] = []byte(res.Stdout)
+			peerGroupKnownHostData[nodeGroup] = []byte(res.Stdout)
 			return res, nil
 		}); err != nil {
 		return err
@@ -1603,7 +1298,7 @@ exit 1
 
 	if err := c.Parallel(ctx, l, WithNodes(c.Nodes).WithDisplay("distributing known_hosts"),
 		func(ctx context.Context, node Node) (*RunResultDetails, error) {
-			provider := c.VMs[node-1].Provider
+			group := networkPeerGroup(c.VMs[node-1])
 			const cmd = `
 known_hosts_data="$(cat)"
 set -e
@@ -1632,7 +1327,7 @@ if [[ "$(whoami)" != "` + config.SharedUser + `" ]]; then
 fi
 `
 			runOpts := defaultCmdOpts("ssh-dist-known-hosts")
-			runOpts.stdin = bytes.NewReader(providerKnownHostData[provider])
+			runOpts.stdin = bytes.NewReader(peerGroupKnownHostData[group])
 			return c.runCmdOnSingleNode(ctx, l, node, cmd, runOpts)
 		}); err != nil {
 		return err
@@ -1712,7 +1407,7 @@ VERSION=$(%[1]s version --build-tag)
 VERSION=${VERSION::5}
 TENANT_SCOPE_OPT=""
 if [[ $VERSION = v22.2 ]]; then
-       TENANT_SCOPE_OPT="--tenant-scope 1,2,3,4,11,12,13,14"
+       TENANT_SCOPE_OPT="--tenant-scope $(echo {1..100} | tr ' ' ',')"
 fi
 %[1]s cert create-ca --certs-dir=%[2]s --ca-key=%[2]s/ca.key
 %[1]s cert create-client root --certs-dir=%[2]s --ca-key=%[2]s/ca.key $TENANT_SCOPE_OPT
@@ -1863,6 +1558,7 @@ fi
 %[3]s cert create-node %[4]s $SHARED_ARGS
 %[3]s cert create-tenant-client %[5]d %[4]s $SHARED_ARGS
 %[3]s cert create-client root $TENANT_SCOPE_OPT $SHARED_ARGS
+%[3]s mt cert create-tenant-signing --certs-dir=$CERT_DIR %[5]d
 tar cvf %[6]s $CERT_DIR
 `,
 				CockroachNodeTenantCertsDir,
@@ -2053,11 +1749,31 @@ func (c *SyncedCluster) PutString(
 	return errors.Wrap(c.Put(ctx, l, nodes, src, dest), "syncedCluster.PutString")
 }
 
+// GetString retrieves the contents of a file from a remote node.
+// Returns an error if the file does not exist.
+func (c *SyncedCluster) GetString(
+	ctx context.Context, l *logger.Logger, node Node, src string,
+) (string, error) {
+	opts := defaultCmdOpts("get-string")
+	opts.combinedOut = true
+
+	result, err := c.runCmdOnSingleNode(ctx, l, node, fmt.Sprintf("cat %s", src), opts)
+	if err != nil {
+		return "", errors.Wrapf(err, "failed to read file %s from node %d", src, node)
+	}
+
+	if result.Err != nil {
+		return "", errors.Wrapf(result.Err, "failed to read file %s from node %d", src, node)
+	}
+
+	return result.CombinedOut, nil
+}
+
 // Put TODO(peter): document
 func (c *SyncedCluster) Put(
 	ctx context.Context, l *logger.Logger, nodes Nodes, src string, dest string,
 ) error {
-	if err := c.validateHost(ctx, l, nodes[0]); err != nil {
+	if err := c.validateHost(ctx, l, nodes); err != nil {
 		return err
 	}
 	// Check if source file exists and if it's a symlink.
@@ -2301,7 +2017,7 @@ func (c *SyncedCluster) Logs(
 	from, to time.Time,
 	out io.Writer,
 ) error {
-	if err := c.validateHost(context.TODO(), l, c.Nodes[0]); err != nil {
+	if err := c.validateHost(context.TODO(), l, c.Nodes); err != nil {
 		return err
 	}
 	rsyncNodeLogs := func(ctx context.Context, node Node) error {
@@ -2429,7 +2145,7 @@ func (c *SyncedCluster) Logs(
 func (c *SyncedCluster) Get(
 	ctx context.Context, l *logger.Logger, nodes Nodes, src, dest string,
 ) error {
-	if err := c.validateHost(context.TODO(), l, nodes[0]); err != nil {
+	if err := c.validateHost(ctx, l, nodes); err != nil {
 		return err
 	}
 	// TODO(peter): Only get 10 nodes at a time. When a node completes, output a
@@ -2632,11 +2348,11 @@ func (c *SyncedCluster) pgurls(
 	}
 	m := make(map[Node]string, len(hosts))
 	for node, host := range hosts {
-		desc, err := c.DiscoverService(ctx, node, virtualClusterName, ServiceTypeSQL, sqlInstance)
+		desc, err := c.ServiceDescriptor(ctx, node, virtualClusterName, ServiceTypeSQL, sqlInstance)
 		if err != nil {
 			return nil, err
 		}
-		m[node] = c.NodeURL(host, desc.Port, virtualClusterName, desc.ServiceMode, DefaultAuthMode(), "" /* database */)
+		m[node] = c.NodeURL(host, desc.Port, virtualClusterName, desc.ServiceMode, DefaultAuthMode(), "" /* database */, false /* disallowUnsafeInternals */)
 	}
 	return m, nil
 }
@@ -2667,24 +2383,19 @@ func (c *SyncedCluster) loadBalancerURL(
 	sqlInstance int,
 	auth PGAuthMode,
 ) (string, error) {
-	services, err := c.DiscoverServices(ctx, virtualClusterName, ServiceTypeSQL)
+	// Note that it's possible for our service to not be running on the entire roachprod
+	// cluster, e.g. one of the nodes is a workload node, or we have a separate process
+	// virtual cluster running on a subset of nodes. We must search for our service on
+	// the entire cluster.
+	descs, err := c.ServiceDescriptors(ctx, c.Nodes, virtualClusterName, ServiceTypeSQL, sqlInstance)
 	if err != nil {
 		return "", err
 	}
-	port := config.DefaultSQLPort
-	serviceMode := ServiceModeExternal
-	for _, service := range services {
-		if service.VirtualClusterName == virtualClusterName && service.Instance == sqlInstance {
-			serviceMode = service.ServiceMode
-			port = service.Port
-			break
-		}
-	}
-	address, err := c.FindLoadBalancer(l, port)
+	address, err := c.FindLoadBalancer(l, descs[0].Port)
 	if err != nil {
 		return "", err
 	}
-	loadBalancerURL := c.NodeURL(address.IP, address.Port, virtualClusterName, serviceMode, auth, "" /* database */)
+	loadBalancerURL := c.NodeURL(address.IP, address.Port, virtualClusterName, descs[0].ServiceMode, auth, "" /* database */, false /* disallowUnsafeInternals */)
 	return loadBalancerURL, nil
 }
 
@@ -2697,7 +2408,7 @@ func (c *SyncedCluster) loadBalancerURL(
 // exclusively.
 func (c *SyncedCluster) SSH(ctx context.Context, l *logger.Logger, sshArgs, args []string) error {
 	targetNode := c.Nodes[0]
-	if err := c.validateHost(ctx, l, targetNode); err != nil {
+	if err := c.validateHost(ctx, l, Nodes{targetNode}); err != nil {
 		return err
 	}
 
@@ -3013,6 +2724,13 @@ func (c *SyncedCluster) WithNodes(nodes Nodes) *SyncedCluster {
 	return &clusterCopy
 }
 
+// WithCerts creates a new copy of SyncedCluster with the given PGURLCerts.
+func (c *SyncedCluster) WithCerts(certs string) *SyncedCluster {
+	clusterCopy := *c
+	clusterCopy.PGUrlCertsDir = certs
+	return &clusterCopy
+}
+
 // GenFilenameFromArgs given a list of cmd args, returns an alphahumeric string up to
 // `maxLen` in length with hyphen delimiters, suitable for use in a filename.
 // e.g. ["/bin/bash", "-c", "'sudo dmesg > dmesg.txt'"] -> binbash-c-sudo-dmesg
@@ -3042,4 +2760,60 @@ func GenFilenameFromArgs(maxLen int, args ...string) string {
 	}
 
 	return sb.String()
+}
+
+func (c *SyncedCluster) PopulateEtcHosts(ctx context.Context, l *logger.Logger) error {
+	if err := c.validateHost(ctx, l, c.Nodes); err != nil {
+		return err
+	}
+
+	hosts := make([]string, len(c.Nodes))
+	for i, node := range c.Nodes {
+		hosts[i] = fmt.Sprintf("{ip:%d}:{hostname:%d}", node, node)
+	}
+
+	cmd := fmt.Sprintf(`
+HOSTS_LIST="%s"
+
+while IFS= read -r entry; do
+  # Skip empty lines if any
+  [[ -z "$entry" ]] && continue
+
+  # Parse IP and hostname
+  i="${entry%%%%:*}"
+  h="${entry##*:}"
+
+  # Remove any existing entries for this IP or hostname
+  # The \b "word boundary" in the regex helps avoid partial matches
+  sudo sed -i "/\b${i}\b/d" /etc/hosts
+  sudo sed -i "/\b${h}\b/d" /etc/hosts
+
+  # Append the new entry
+  echo "$i    $h" | sudo tee -a /etc/hosts >/dev/null
+
+done <<< "$HOSTS_LIST"
+`, strings.Join(hosts, "\n"))
+
+	if err := c.Run(ctx, l, l.Stdout, l.Stderr, WithNodes(c.Nodes), "populating cluster /etc/hosts", cmd); err != nil {
+		return rperrors.TransientFailure(err, "install_flake")
+	}
+
+	return nil
+}
+
+// Reset resets VMs in a cluster.
+func (c *SyncedCluster) Reset(l *logger.Logger) error {
+	if c.IsLocal() {
+		return nil
+	}
+
+	nodes := c.Nodes
+	targetVMs := make(vm.List, len(nodes))
+	for idx, node := range nodes {
+		targetVMs[idx] = c.VMs[node-1]
+	}
+
+	return vm.FanOut(targetVMs, func(p vm.Provider, vms vm.List) error {
+		return p.Reset(l, vms)
+	})
 }

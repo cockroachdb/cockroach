@@ -104,7 +104,8 @@ func (c *CustomFuncs) GeneratePartialIndexScans(
 	// Iterate over all partial indexes.
 	var pkCols opt.ColSet
 	var iter scanIndexIter
-	iter.Init(c.e.evalCtx, c.e, c.e.mem, &c.im, scanPrivate, filters, rejectNonPartialIndexes|rejectInvertedIndexes)
+	reject := rejectNonPartialIndexes | rejectInvertedIndexes | rejectVectorIndexes
+	iter.Init(c.e.evalCtx, c.e, c.e.mem, &c.im, scanPrivate, filters, reject)
 	iter.ForEach(func(index cat.Index, remainingFilters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool, constProj memo.ProjectionsExpr) {
 		var sb indexScanBuilder
 		sb.Init(c, scanPrivate.Table)
@@ -182,6 +183,7 @@ func (c *CustomFuncs) MakeCombinedFiltersConstraint(
 	explicitFilters memo.FiltersExpr,
 	optionalFilters memo.FiltersExpr,
 	filterColumns opt.ColSet,
+	spanLimit int,
 ) (
 	partitionFilters memo.FiltersExpr,
 	remainingFilters memo.FiltersExpr,
@@ -297,6 +299,7 @@ func (c *CustomFuncs) MakeCombinedFiltersConstraint(
 		append(optionalFilters, partitionFilters...),
 		scanPrivate.Table,
 		index.Ordinal(),
+		spanLimit,
 	)
 	if !ok {
 		return nil, nil, nil, false
@@ -308,6 +311,7 @@ func (c *CustomFuncs) MakeCombinedFiltersConstraint(
 			append(optionalFilters, inBetweenFilters...),
 			scanPrivate.Table,
 			index.Ordinal(),
+			spanLimit,
 		)
 		if !ok {
 			// If there are multiple partitioning columns on the index with different
@@ -433,20 +437,24 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 	optionalFilters, filterColumns :=
 		c.GetOptionalFiltersAndFilterColumns(explicitFilters, scanPrivate)
 
-	// Iterate over all non-inverted indexes.
+	// Iterate over all non-inverted, non-vector indexes.
 	var iter scanIndexIter
-	iter.Init(c.e.evalCtx, c.e, c.e.mem, &c.im, scanPrivate, explicitFilters, rejectInvertedIndexes)
+	reject := rejectInvertedIndexes | rejectVectorIndexes
+	iter.Init(c.e.evalCtx, c.e, c.e.mem, &c.im, scanPrivate, explicitFilters, reject)
 	iter.ForEach(func(index cat.Index, filters memo.FiltersExpr, indexCols opt.ColSet, isCovering bool, constProj memo.ProjectionsExpr) {
 
 		// Create a prefix sorter that describes which index partitions are
 		// local to the gateway region.
 		prefixSorter := tabMeta.IndexPartitionLocality(index.Ordinal())
 
+		spanLimit := int(c.e.evalCtx.SessionData().OptimizerSpanLimit)
+
 		// Build Constraints to scan a subset of the table Spans.
 		if partitionFilters, remainingFilters, combinedConstraint, ok =
 			c.MakeCombinedFiltersConstraint(
 				tabMeta, index, scanPrivate, prefixSorter,
 				filters, optionalFilters, filterColumns,
+				spanLimit,
 			); !ok {
 			return
 		}
@@ -532,26 +540,26 @@ func (c *CustomFuncs) GenerateConstrainedScans(
 // inBetweenFilters returns a set of filters that are required to cover all the
 // in-between spans given a set of partition values. This is required for
 // correctness reasons; although values are unlikely to exist between defined
-// partitions, they may exist and so the constraints of the scan must incorporate
-// these spans.
+// partitions, they may exist and so the constraints of the scan must
+// incorporate these spans.
 //
 // For example, if we have:
 //
-//	PARTITION BY LIST (a, b) (
-//	  PARTITION a VALUES IN ((1, 10)),
-//	  PARTITION b VALUES IN ((2, 20)),
-//	)
+// `  PARTITION BY LIST (a, b) (
+// `    PARTITION a VALUES IN ((1, 10)),
+// `    PARTITION b VALUES IN ((2, 20)),
+// `  )
 //
 // The in-between filters are:
 //
-//	(a, b) < (1, 10) OR
-//	((a, b) > (1, 10) AND (a, b) < (2, 20)) OR
-//	(a, b) > (2, 20)
+// (a, b) < (1, 10) OR
+// ((a, b) > (1, 10) AND (a, b) < (2, 20)) OR
+// (a, b) > (2, 20)
 //
 // When passed as optional filters to index constrains, these filters generate
 // the desired spans:
 //
-//	[ - /1/10), (/1/10 - /2/20), (2/20 - ].
+// [ - /1/10), (/1/10 - /2/20), (2/20 - ]
 //
 // TODO(radu,mgartner): technically these filters are not correct with respect
 // to NULL values - we would want the tuple comparisons to treat NULLs as the
@@ -758,25 +766,26 @@ func (c *CustomFuncs) isPrefixOf(pre []tree.Datum, other []tree.Datum) bool {
 //
 // For example consider the following table and partitioned index:
 //
-// CREATE TABLE orders (
+// ` CREATE TABLE orders (
+// `   region STRING NOT NULL,
+// `   id INT8 NOT NULL,
+// `   total DECIMAL NOT NULL,
+// `   seq_num INT NOT NULL,
+// `   PRIMARY KEY (region, id)
+// ` )
 //
-//	region STRING NOT NULL, id INT8 NOT NULL, total DECIMAL NOT NULL, seq_num INT NOT NULL,
-//	PRIMARY KEY (region, id)
-//
-// )
-//
-// CREATE INDEX orders_by_seq_num
-//
-//	ON orders (region, seq_num, id)
-//	STORING (total)
-//	PARTITION BY LIST (region)
-//	    (
-//	        PARTITION us_east1 VALUES IN ('us-east1'),
-//	        PARTITION us_west1 VALUES IN ('us-west1'),
-//	        PARTITION europe_west2 VALUES IN ('europe-west2')
-//	    )
+// ` CREATE INDEX orders_by_seq_num
+// `   ON orders (region, seq_num, id)
+// `   STORING (total)
+// `   PARTITION BY LIST (region)
+// `     (
+// `       PARTITION us_east1 VALUES IN ('us-east1'),
+// `       PARTITION us_west1 VALUES IN ('us-west1'),
+// `       PARTITION europe_west2 VALUES IN ('eu-west2')
+// `     )
 //
 // Now consider the following query:
+//
 // SELECT sum(total) FROM orders WHERE seq_num >= 100 AND seq_num < 200
 //
 // Normally, the index would not be utilized but because we know what the
@@ -786,20 +795,20 @@ func (c *CustomFuncs) isPrefixOf(pre []tree.Datum, other []tree.Datum) bool {
 // By doing so, we get the following plan:
 // scalar-group-by
 //
-//	├── select
-//	│    ├── scan orders@orders_by_seq_num
-//	│    │    └── constraint: /1/4/2: [ - /'europe-west2')
-//	│    │                            [/'europe-west2'/100 - /'europe-west2'/199]
-//	│    │                            [/e'europe-west2\x00'/100 - /'us-east1')
-//	│    │                            [/'us-east1'/100 - /'us-east1'/199]
-//	│    │                            [/e'us-east1\x00'/100 - /'us-west1')
-//	│    │                            [/'us-west1'/100 - /'us-west1'/199]
-//	│    │                            [/e'us-west1\x00'/100 - ]
-//	│    └── filters
-//	│         └── (seq_num >= 100) AND (seq_num < 200)
-//	└── aggregations
-//	     └── sum
-//	          └── variable: total
+// `  ├── select
+// `  │    ├── scan orders@orders_by_seq_num
+// `  │    │    └── constraint: /1/4/2: [ - /'eu-west2')
+// `  │    │                            [/'eu-west2'/100 - /'eu-west2'/199]
+// `  │    │                            [/e'eu-west2\x00'/100 - /'us-east1')
+// `  │    │                            [/'us-east1'/100 - /'us-east1'/199]
+// `  │    │                            [/e'us-east1\x00'/100 - /'us-west1')
+// `  │    │                            [/'us-west1'/100 - /'us-west1'/199]
+// `  │    │                            [/e'us-west1\x00'/100 - ]
+// `  │    └── filters
+// `  │         └── (seq_num >= 100) AND (seq_num < 200)
+// `  └── aggregations
+// `       └── sum
+// `            └── variable: total
 func (c *CustomFuncs) partitionValuesFilters(
 	tabID opt.TableID, index cat.Index,
 ) (partitionFilter, inBetweenFilter memo.FiltersExpr) {
@@ -917,7 +926,7 @@ func (c *CustomFuncs) generateInvertedIndexScansImpl(
 			return
 		}
 		if minimizeSpans {
-			newSpanExpr, ok := reduceInvertedSpans(c.e.ctx, input, scanPrivate.Table, index, spanExpr)
+			newSpanExpr, ok := reduceInvertedSpans(c.e.ctx, c.e.mem, input, scanPrivate.Table, index, spanExpr)
 			if !ok {
 				// The span expression could not be reduced, so skip this index.
 				// An inverted index scan may still be generated for it when
@@ -965,17 +974,33 @@ func (c *CustomFuncs) generateInvertedIndexScansImpl(
 			pkCols = c.PrimaryKeyCols(scanPrivate.Table)
 		}
 
+		// Start with a new Scan that produces only the PK columns produced by
+		// the original scan.
+		// NOTE: Intersection is used intentionally to avoid mutating pkCols.
+		newScanPrivate.Cols = pkCols.Intersection(scanPrivate.Cols)
+
+		// We will need an index join above the scan if the original scan
+		// produces non-PK columns.
+		needIndexJoin := !scanPrivate.Cols.SubsetOf(newScanPrivate.Cols)
 		// We will need an inverted filter above the scan if the spanExpr might
 		// produce duplicate primary keys or requires at least one UNION or
 		// INTERSECTION. In this case, we must scan both the primary key columns
 		// and the inverted key column.
 		needInvertedFilter := !spanExpr.Unique || spanExpr.Operator != inverted.None
-		newScanPrivate.Cols = pkCols.Copy()
+
+		// An index join or an inverted filter require all PK columns.
+		if needIndexJoin || needInvertedFilter {
+			newScanPrivate.Cols.UnionWith(pkCols)
+		}
+
 		var invertedCol opt.ColumnID
 		if needInvertedFilter {
+			// If we need an inverted filter, then we must also produce the
+			// inverted key column.
 			invertedCol = scanPrivate.Table.ColumnID(index.InvertedColumn().Ordinal())
 			newScanPrivate.Cols.Add(invertedCol)
 		}
+
 		sb.SetScan(&newScanPrivate)
 
 		// Add an inverted filter if needed.
@@ -987,9 +1012,7 @@ func (c *CustomFuncs) generateInvertedIndexScansImpl(
 		// be applied above the scan, and one that requires columns not produced
 		// by the scan.
 		filters = sb.AddSelectAfterSplit(filters, pkCols)
-		if !scanPrivate.Cols.SubsetOf(newScanPrivate.Cols) {
-			// Add an index join if the scan does not produce all the needed
-			// columns.
+		if needIndexJoin {
 			sb.AddIndexJoin(scanPrivate.Cols)
 		}
 		// Add the remaining filters, if any.
@@ -1004,6 +1027,7 @@ func (c *CustomFuncs) generateInvertedIndexScansImpl(
 // span expression cannot be reduced, ok=false is returned.
 func reduceInvertedSpans(
 	ctx context.Context,
+	mem *memo.Memo,
 	grp memo.RelExpr,
 	tabID opt.TableID,
 	index cat.Index,
@@ -1015,7 +1039,7 @@ func reduceInvertedSpans(
 	}
 
 	colID := tabID.ColumnID(index.InvertedColumn().Ordinal())
-	colStat, ok := grp.Memo().RequestColStat(grp, opt.MakeColSet(colID))
+	colStat, ok := mem.RequestColStat(grp, opt.MakeColSet(colID))
 	if !ok || colStat.Histogram == nil {
 		// Only attempt to reduce spans if we have histogram statistics.
 		// TODO(mgartner): We could blindly reduce the spans without a
@@ -1183,7 +1207,7 @@ func (c *CustomFuncs) GenerateTrigramSimilarityInvertedIndexScans(
 // filter remaining after extracting the constraint. If no constraint can be
 // derived, then tryConstrainIndex returns ok = false.
 func (c *CustomFuncs) tryConstrainIndex(
-	requiredFilters, optionalFilters memo.FiltersExpr, tabID opt.TableID, indexOrd int,
+	requiredFilters, optionalFilters memo.FiltersExpr, tabID opt.TableID, indexOrd int, spanLimit int,
 ) (_ *constraint.Constraint, remainingFilters memo.FiltersExpr, ok bool) {
 	// Start with fast check to rule out indexes that cannot be constrained.
 	if !c.canMaybeConstrainNonInvertedIndex(requiredFilters, tabID, indexOrd) &&
@@ -1191,7 +1215,7 @@ func (c *CustomFuncs) tryConstrainIndex(
 		return nil, nil, false
 	}
 
-	ic := c.initIdxConstraintForIndex(requiredFilters, optionalFilters, tabID, indexOrd)
+	ic := c.initIdxConstraintForIndex(requiredFilters, optionalFilters, tabID, indexOrd, spanLimit)
 	var cons constraint.Constraint
 	ic.Constraint(&cons)
 	if cons.IsUnconstrained() {
@@ -1330,7 +1354,8 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 	// TODO(mgartner): We should consider primary indexes when it has multiple
 	// columns and only the first is being constrained.
 	var iter scanIndexIter
-	iter.Init(c.e.evalCtx, c.e, c.e.mem, &c.im, scanPrivate, filters, rejectPrimaryIndex|rejectInvertedIndexes)
+	reject := rejectPrimaryIndex | rejectInvertedIndexes | rejectVectorIndexes
+	iter.Init(c.e.evalCtx, c.e, c.e.mem, &c.im, scanPrivate, filters, reject)
 	iter.ForEach(func(leftIndex cat.Index, outerFilters memo.FiltersExpr, leftCols opt.ColSet, _ bool, _ memo.ProjectionsExpr) {
 		leftFixed := c.indexConstrainedCols(leftIndex, scanPrivate.Table, fixedCols)
 		// Short-circuit quickly if the first column in the index is not a fixed
@@ -1340,7 +1365,7 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 		}
 
 		var iter2 scanIndexIter
-		iter2.Init(c.e.evalCtx, c.e, c.e.mem, &c.im, scanPrivate, outerFilters, rejectPrimaryIndex|rejectInvertedIndexes)
+		iter2.Init(c.e.evalCtx, c.e, c.e.mem, &c.im, scanPrivate, outerFilters, reject)
 		iter2.SetOriginalFilters(filters)
 		iter2.ForEachStartingAfter(leftIndex.Ordinal(), func(rightIndex cat.Index, innerFilters memo.FiltersExpr, rightCols opt.ColSet, _ bool, _ memo.ProjectionsExpr) {
 			// Check if we have zigzag hints.
@@ -1676,7 +1701,7 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 			return
 		}
 
-		if index.NonInvertedPrefixColumnCount() > 0 {
+		if index.PrefixColumnCount() > 0 {
 			// TODO(mgartner): We don't yet support using multi-column inverted
 			//  indexes with zigzag joins.
 			return
@@ -1781,7 +1806,7 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 		}
 
 		// The fixed columns include all the prefix columns and the inverted column.
-		fixedColsCount := index.NonInvertedPrefixColumnCount() + 1
+		fixedColsCount := index.PrefixColumnCount() + 1
 
 		// Get constant values and add them to FixedVals as tuples, with associated
 		// Column IDs in both {Left,Right}FixedCols.
@@ -1797,7 +1822,7 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 
 		// invertedColIdx is the position of the inverted column in the inverted
 		// index.
-		invertedColIdx := index.NonInvertedPrefixColumnCount()
+		invertedColIdx := index.PrefixColumnCount()
 		leftVals[invertedColIdx] = c.e.f.ConstructConstVal(&leftVal, leftVal.ResolvedType())
 		leftTypes[invertedColIdx] = leftVal.ResolvedType()
 		rightVals[invertedColIdx] = c.e.f.ConstructConstVal(&rightVal, rightVal.ResolvedType())
@@ -1922,7 +1947,7 @@ func (c *CustomFuncs) SplitDisjunction(
 // An "interesting" pair of expressions is one where:
 //
 //  1. The column sets of both expressions in the pair are not
-//     equal.
+//     equal, and
 //  2. Two index scans can potentially be constrained by both expressions in
 //     the pair.
 //
@@ -1940,6 +1965,13 @@ func (c *CustomFuncs) SplitDisjunction(
 //
 // There is no possible "interesting" pair here because the left and right sides
 // of the disjunction share the same columns.
+//
+// There is one exceptional case when a pair could be interesting even with
+// equal column sets for both expressions: when the table itself contains
+// multiple partial indexes with different predicates referencing the same
+// column. In this case we might be able to use different partial indexes for
+// both expressions, and so consider a pair interesting even with equal column
+// sets.
 //
 // findInterestingDisjunctionPair groups all sub-expressions adjacent to the
 // input's top-level OrExpr into left and right expression groups. These two
@@ -1978,11 +2010,14 @@ func (c *CustomFuncs) findInterestingDisjunctionPair(
 		// not match) on.
 		if leftColSet.Empty() {
 			leftColSet = cols
+			leftExprs = append(leftExprs, expr)
+			return
 		}
 
-		// If the current expression ColSet matches leftColSet, add the expr to
-		// the left group. Otherwise, add it to the right group.
-		if leftColSet.Equals(cols) {
+		// If the current expression ColSet matches leftColSet (and we're not using
+		// the exception for multiple referencing partial index predicates) add the
+		// expr to the left group. Otherwise, add it to the right group.
+		if leftColSet.Equals(cols) && !c.multiplePartialIndexesReferencing(sp, leftColSet) {
 			leftExprs = append(leftExprs, expr)
 		} else {
 			rightColSet.UnionWith(cols)
@@ -2071,6 +2106,56 @@ func (c *CustomFuncs) canMaybeConstrainIndexWithCols(
 			if pred.OuterCols().Intersects(cols) {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+// multiplePartialIndexesReferencing returns true if at least one of the columns
+// is referenced by the predicates of multiple partial indexes. For example,
+// given this table:
+//
+//	CREATE TABLE abc (
+//	  a INT NOT NULL,
+//	  b INT NOT NULL,
+//	  c INT NOT NULL,
+//	  INDEX (a) WHERE b > 10,
+//	  INDEX (a) WHERE b != 100 AND c < 1000,
+//	  INDEX (c) WHERE a > 5 AND a % 2 = 0
+//	)
+//
+// Then multiplePartialIndexesReferencing will return true if called with (b) or
+// (a, b) or (b, c) or (a, b, c) but will return false if called with (a) or (c)
+// or (a, c).
+func (c *CustomFuncs) multiplePartialIndexesReferencing(
+	scanPrivate *memo.ScanPrivate, cols opt.ColSet,
+) bool {
+	md := c.e.mem.Metadata()
+	tabMeta := md.TableMeta(scanPrivate.Table)
+
+	var prevPartialIndexPredCols opt.ColSet
+
+	// Iterate through all partial indexes of the table and return true if one of
+	// the columns is referenced again after being referenced by a previous
+	// partial index.
+	for i := 0; i < tabMeta.Table.IndexCount(); i++ {
+		index := tabMeta.Table.Index(i)
+		if _, isPartialIndex := index.Predicate(); isPartialIndex {
+			p, ok := tabMeta.PartialIndexPredicate(i)
+			if !ok {
+				// A partial index predicate expression was not built for the
+				// partial index. See Builder.buildScan for details on when this
+				// can occur.
+				continue
+			}
+			pred := *p.(*memo.FiltersExpr)
+			partialIndexPredCols := pred.OuterCols().Intersection(cols)
+			// If one of the columns has now been referenced a second time, return
+			// true.
+			if partialIndexPredCols.Intersects(prevPartialIndexPredCols) {
+				return true
+			}
+			prevPartialIndexPredCols.UnionWith(partialIndexPredCols)
 		}
 	}
 	return false

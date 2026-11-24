@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/vfs"
+	"github.com/stretchr/testify/require"
 )
 
 // Helper function to run a datadriven test for a provided diskMap
@@ -40,7 +41,7 @@ func runTestForEngine(ctx context.Context, t *testing.T, filename string, engine
 			// creation and usage code involves too much test-specific code, so use
 			// a type switch with implementation-specific code instead.
 			switch e := engine.(type) {
-			case *pebbleTempEngine:
+			case *tempEngine:
 				iter, err := e.db.NewIter(&pebble.IterOptions{UpperBound: roachpb.KeyMax})
 				if err != nil {
 					t.Fatal(err)
@@ -120,6 +121,19 @@ func runTestForEngine(ctx context.Context, t *testing.T, filename string, engine
 					if err != nil {
 						return err.Error()
 					}
+				case "delete-range":
+					if len(parts) != 3 {
+						return "delete-range <start> <end>\n"
+					}
+					start := []byte(strings.TrimSpace(parts[1]))
+					end := []byte(strings.TrimSpace(parts[2]))
+					// Use "_" as a placeholder for nil/empty keys.
+					if parts[1] == "_" {
+						start = nil
+					}
+					if err := batch.DeleteRange(start, end); err != nil {
+						return err.Error()
+					}
 				default:
 					return fmt.Sprintf("unknown op: %s", parts[0])
 				}
@@ -167,17 +181,17 @@ func runTestForEngine(ctx context.Context, t *testing.T, filename string, engine
 	})
 }
 
-func TestPebbleMap(t *testing.T) {
+func TestTempEngineMap(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	dir, cleanup := testutils.TempDir(t)
 	defer cleanup()
 
-	e, _, err := NewPebbleTempEngine(ctx, base.TempStorageConfig{
+	e, _, err := NewTempEngine(ctx, base.TempStorageConfig{
 		Path:     dir,
 		Settings: cluster.MakeClusterSettings(),
-	}, base.StoreSpec{}, disk.NewWriteStatsManager(vfs.Default))
+	}, disk.NewWriteStatsManager(vfs.Default))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -193,10 +207,10 @@ func TestPebbleMultiMap(t *testing.T) {
 	dir, cleanup := testutils.TempDir(t)
 	defer cleanup()
 
-	e, _, err := NewPebbleTempEngine(ctx, base.TempStorageConfig{
+	e, _, err := NewTempEngine(ctx, base.TempStorageConfig{
 		Path:     dir,
 		Settings: cluster.MakeClusterSettings(),
-	}, base.StoreSpec{}, disk.NewWriteStatsManager(vfs.Default))
+	}, disk.NewWriteStatsManager(vfs.Default))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -206,16 +220,48 @@ func TestPebbleMultiMap(t *testing.T) {
 
 }
 
+func TestPebbleMapNumMutationsSinceFlush(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	dir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+	e, _, err := newTempEngine(ctx, base.TempStorageConfig{
+		Path:     dir,
+		Settings: cluster.MakeClusterSettings(),
+	}, disk.NewWriteStatsManager(vfs.Default))
+	require.NoError(t, err)
+	defer e.Close()
+
+	diskMap := newPebbleMap(e.db, false /* allowDuplicates */)
+	bw := diskMap.NewBatchWriter()
+	defer func() {
+		require.NoError(t, bw.Close(ctx))
+	}()
+
+	require.Equal(t, 0, bw.NumMutationsSinceFlush())
+	require.NoError(t, bw.Put([]byte("a"), []byte("1")))
+	require.Equal(t, 1, bw.NumMutationsSinceFlush())
+	require.NoError(t, bw.Put([]byte("b"), []byte("2")))
+	require.Equal(t, 2, bw.NumMutationsSinceFlush())
+	require.NoError(t, bw.DeleteRange([]byte("a"), []byte("a\x00")))
+	require.Equal(t, 3, bw.NumMutationsSinceFlush())
+	require.NoError(t, bw.Flush())
+	require.Equal(t, 0, bw.NumMutationsSinceFlush())
+	require.NoError(t, bw.DeleteRange([]byte("b"), []byte("b\x00")))
+	require.Equal(t, 1, bw.NumMutationsSinceFlush())
+}
+
 func TestPebbleMapClose(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 	dir, cleanup := testutils.TempDir(t)
 	defer cleanup()
-	e, _, err := newPebbleTempEngine(ctx, base.TempStorageConfig{
+	e, _, err := newTempEngine(ctx, base.TempStorageConfig{
 		Path:     dir,
 		Settings: cluster.MakeClusterSettings(),
-	}, base.StoreSpec{}, disk.NewWriteStatsManager(vfs.Default))
+	}, disk.NewWriteStatsManager(vfs.Default))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -246,13 +292,13 @@ func TestPebbleMapClose(t *testing.T) {
 	startKey := diskMap.makeKey([]byte{'a'})
 	startKeyCopy := make([]byte, len(startKey))
 	copy(startKeyCopy, startKey)
-	if err := e.db.Compact(startKeyCopy, diskMap.makeKey([]byte{'z'}), false /* parallel */); err != nil {
+	if err := e.db.Compact(ctx, startKeyCopy, diskMap.makeKey([]byte{'z'}), false /* parallel */); err != nil {
 		t.Fatal(err)
 	}
 
 	// Verify we have a single sstable.
 	var buf bytes.Buffer
-	fileNums := map[pebble.FileNum]bool{}
+	tableNums := map[pebble.TableNum]bool{}
 	sstInfos, err := e.db.SSTables()
 	if err != nil {
 		t.Fatal(err)
@@ -262,7 +308,7 @@ func TestPebbleMapClose(t *testing.T) {
 			sm := bytes.TrimPrefix(sst.Smallest.UserKey, diskMap.prefix)
 			la := bytes.TrimPrefix(sst.Largest.UserKey, diskMap.prefix)
 			fmt.Fprintf(&buf, "%d: %s - %s\n", l, sm, la)
-			fileNums[sst.FileNum] = true
+			tableNums[sst.FileNum] = true
 		}
 	}
 	const expected = "6: a - z\n"
@@ -297,7 +343,7 @@ func TestPebbleMapClose(t *testing.T) {
 
 			fmt.Fprintf(&lsmBuf, "L%d:\n", l)
 			for _, sst := range ssts {
-				if fileNums[sst.FileNum] {
+				if tableNums[sst.FileNum] {
 					fmt.Fprintf(&stillExistBuf, "%s\n", sst.FileNum)
 				}
 				fmt.Fprintf(&lsmBuf, "  %s: %d bytes, %x (%s) - %x (%s)\n", sst.FileNum, sst.Size,
@@ -319,10 +365,10 @@ func TestPebbleMapClose(t *testing.T) {
 func BenchmarkPebbleMapWrite(b *testing.B) {
 	dir := b.TempDir()
 	ctx := context.Background()
-	tempEngine, _, err := NewPebbleTempEngine(ctx, base.TempStorageConfig{
+	tempEngine, _, err := NewTempEngine(ctx, base.TempStorageConfig{
 		Path:     dir,
 		Settings: cluster.MakeClusterSettings(),
-	}, base.DefaultTestStoreSpec, disk.NewWriteStatsManager(vfs.Default))
+	}, disk.NewWriteStatsManager(vfs.Default))
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -360,10 +406,10 @@ func BenchmarkPebbleMapIteration(b *testing.B) {
 	skip.UnderShort(b)
 	dir := b.TempDir()
 	ctx := context.Background()
-	tempEngine, _, err := NewPebbleTempEngine(ctx, base.TempStorageConfig{
+	tempEngine, _, err := NewTempEngine(ctx, base.TempStorageConfig{
 		Path:     dir,
 		Settings: cluster.MakeClusterSettings(),
-	}, base.DefaultTestStoreSpec, disk.NewWriteStatsManager(vfs.Default))
+	}, disk.NewWriteStatsManager(vfs.Default))
 	if err != nil {
 		b.Fatal(err)
 	}

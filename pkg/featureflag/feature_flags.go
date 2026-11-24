@@ -36,7 +36,7 @@ func CheckEnabled(
 
 		// Increment metrics counter for feature flag denial.
 		if config.GetFeatureFlagMetrics() == nil {
-			log.Warningf(
+			log.Dev.Warningf(
 				ctx,
 				"executorConfig.FeatureFlagMetrics is uninitiated; feature %s was attempted but disabled via cluster settings",
 				featureName,
@@ -50,7 +50,7 @@ func CheckEnabled(
 		config.GetFeatureFlagMetrics().FeatureDenialMetric.Inc(1)
 
 		if log.V(2) {
-			log.Warningf(
+			log.Dev.Warningf(
 				ctx,
 				"feature %s was attempted but disabled via cluster settings",
 				featureName,

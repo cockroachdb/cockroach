@@ -1,3 +1,5 @@
 drop_type_stmt ::=
 	'DROP' 'TYPE' type_name_list 
 	| 'DROP' 'TYPE' 'IF' 'EXISTS' type_name_list 
+	| 'DROP' 'DOMAIN' type_name_list 
+	| 'DROP' 'DOMAIN' 'IF' 'EXISTS' type_name_list 

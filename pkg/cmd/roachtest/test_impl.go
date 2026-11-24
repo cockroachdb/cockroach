@@ -14,17 +14,19 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/version"
 	"github.com/petermattis/goid"
 )
 
@@ -33,10 +35,15 @@ import (
 // each node in the cluster.
 const perfArtifactsDir = "perf"
 
-// goCoverArtifactsDir the directory on cluster nodes in which go coverage
+// goCoverArtifactsDir is the directory on cluster nodes in which go coverage
 // profiles are dumped. At the end of a test this directory is copied into the
 // test's ArtifactsDir() from each node in the cluster.
 const goCoverArtifactsDir = "gocover"
+
+// cpuProfilesDir is the directory on cluster nodes in which pprof (CPU) profiles
+// are dumped. At the end of a test, this directory is copied into the test's
+// ArtifactsDir() from each node in the cluster if --force-cpu-profile is set.
+const cpuProfilesDir = "pprof_dump"
 
 type testStatus struct {
 	msg      string
@@ -72,10 +79,17 @@ type testImpl struct {
 	buildVersion *version.Version
 
 	// l is the logger that the test will use for its output.
-	l *logger.Logger
+	//
+	// N.B. We need to use an atomic pointer here since the test
+	// runner can swap the logger out when running post test assertions
+	// and artifacts collection.
+	l atomic.Pointer[logger.Logger]
 
 	// taskManager manages tasks (goroutines) for tests.
 	taskManager task.Manager
+
+	// monitor monitors for process death in the cluster.
+	monitor test.Monitor
 
 	runner string
 	// runnerID is the test's main goroutine ID.
@@ -126,6 +140,20 @@ type testImpl struct {
 		// parameters if there is a failure. They will additionally be logged in the test itself
 		// in case github issue posting is disabled.
 		extraParams map[string]string
+
+		// githubFatalLogs contains node fatal logs that will be passed to
+		// github.MaybePost
+		githubFatalLogs string
+
+		// githubIpToNodeMapping contains the ip to node map that will be passed to
+		// github.MaybePost
+		githubIpToNodeMapping string
+
+		// preempted is set when the test's failure was attributed to a VM
+		// preemption by runTest's post-failure checks. Read by the test runner
+		// after runTest returns to decide whether to requeue (e.g. retry a
+		// benchmark on non-spot VMs).
+		preempted bool
 	}
 	// Map from version to path to the cockroach binary to be used when
 	// mixed-version test wants a binary for that binary. If a particular version
@@ -167,7 +195,7 @@ func (t *testImpl) Cockroach() string {
 			// If the test is a benchmark test, we don't want to enable assertions
 			// as it will slow down performance.
 			if t.spec.Benchmark {
-				t.l.Printf("Benchmark test, running with standard cockroach")
+				t.L().Printf("Benchmark test, running with standard cockroach")
 				t.randomizedCockroach = t.StandardCockroach()
 				return
 			}
@@ -176,20 +204,20 @@ func (t *testImpl) Cockroach() string {
 				// The build with runtime assertions should exist in every nightly
 				// CI build, but we can't assume it exists in every roachtest call.
 				if path := t.RuntimeAssertionsCockroach(); path != "" {
-					t.l.Printf("Runtime assertions enabled")
+					t.L().Printf("Runtime assertions enabled")
 					t.randomizedCockroach = path
 					return
 				} else {
-					t.l.Printf("WARNING: running without runtime assertions since the corresponding binary was not specified")
+					t.L().Printf("WARNING: running without runtime assertions since the corresponding binary was not specified")
 				}
 			}
-			t.l.Printf("Runtime assertions disabled")
+			t.L().Printf("Runtime assertions disabled")
 			t.randomizedCockroach = t.StandardCockroach()
 		case registry.StandardCockroach:
-			t.l.Printf("Runtime assertions disabled: registry.StandardCockroach set")
+			t.L().Printf("Runtime assertions disabled: registry.StandardCockroach set")
 			t.randomizedCockroach = t.StandardCockroach()
 		case registry.RuntimeAssertionsCockroach:
-			t.l.Printf("Runtime assertions enabled: registry.RuntimeAssertionsCockroach set")
+			t.L().Printf("Runtime assertions enabled: registry.RuntimeAssertionsCockroach set")
 			t.randomizedCockroach = t.RuntimeAssertionsCockroach()
 		default:
 			t.Fatal("Specified cockroach binary does not exist.")
@@ -254,13 +282,12 @@ func (t *testImpl) SnapshotPrefix() string {
 
 // L returns the test's logger.
 func (t *testImpl) L() *logger.Logger {
-	return t.l
+	return t.l.Load()
 }
 
 // ReplaceL replaces the test's logger.
 func (t *testImpl) ReplaceL(l *logger.Logger) {
-	// TODO(tbg): get rid of this, this is racy & hacky.
-	t.l = l
+	t.l.Store(l)
 }
 
 func (t *testImpl) status(ctx context.Context, id int64, args ...interface{}) {
@@ -503,6 +530,21 @@ func (t *testImpl) resetFailures() {
 	t.mu.failuresSuppressed = false
 }
 
+// markPreempted records that this test's failure was attributed to a VM
+// preemption. See the comment on the preempted field for details.
+func (t *testImpl) markPreempted() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.mu.preempted = true
+}
+
+// wasPreempted reports whether markPreempted was called.
+func (t *testImpl) wasPreempted() bool {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.mu.preempted
+}
+
 // We take the "squashed" error that contains information of all the errors for each failure.
 func formatFailure(b *strings.Builder, reportFailures ...failure) {
 	for i, failure := range reportFailures {
@@ -543,6 +585,47 @@ func (t *testImpl) failureMsg() string {
 	var b strings.Builder
 	formatFailure(&b, t.mu.failures...)
 	return b.String()
+}
+
+func (t *testImpl) getGithubFatalLogs() string {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.mu.githubFatalLogs
+}
+
+func (t *testImpl) appendGithubFatalLogs(msg string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.mu.githubFatalLogs += msg
+}
+
+func (t *testImpl) getGithubIpToNodeMapping() string {
+	t.mu.RLock()
+	defer t.mu.RUnlock()
+	return t.mu.githubIpToNodeMapping
+}
+
+func (t *testImpl) appendGithubIpToNodeMapping(msg string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.mu.githubIpToNodeMapping += msg
+}
+
+// getGithubMessage abstracts details on how the Github message is constructed
+// TODO(wchoe): Currently, all information we want to include in the Github
+// message must be passed in as a single string. This is not ideal, especially
+// as we add more information or want to format based on the failure or what
+// information is available. #157021 aims to address this.
+func (t *testImpl) getGithubMessage(failureMsg string) string {
+	githubMsg := failureMsg
+	if githubFatalLogs := t.getGithubFatalLogs(); githubFatalLogs != "" {
+		githubMsg = fmt.Sprintf("%s\n%s", githubMsg, githubFatalLogs)
+	}
+	if githubIpToNodeMapping := t.getGithubIpToNodeMapping(); githubIpToNodeMapping != "" {
+		githubMsg = fmt.Sprintf("%s\n%s", githubMsg, githubIpToNodeMapping)
+	}
+	t.L().Printf("github message: %s", githubMsg)
+	return githubMsg
 }
 
 // failuresMatchingError checks whether the first error in trees of
@@ -673,8 +756,8 @@ func (t *testImpl) IsBuildVersion(minVersion string) bool {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if p := vers.PreRelease(); p != "" {
-		panic("cannot specify a prerelease: " + p)
+	if vers.IsPrerelease() {
+		panic("cannot specify a prerelease: " + vers.Format("%P"))
 	}
 	// We append "-0" to the min-version spec so that we capture all
 	// prereleases of the specified version. Otherwise, "v2.1.0" would compare
@@ -683,19 +766,41 @@ func (t *testImpl) IsBuildVersion(minVersion string) bool {
 	return t.BuildVersion().AtLeast(vers)
 }
 
-func panicHandler(_ context.Context, name string, l *logger.Logger, r interface{}) error {
-	return fmt.Errorf("test task %s panicked: %v", name, r)
+// defaultTaskOptions returns the default options for a task started by the test.
+func defaultTaskOptions() []task.Option {
+	return []task.Option{
+		task.PanicHandler(func(_ context.Context, name string, l *logger.Logger, r interface{}) error {
+			return fmt.Errorf("test task %s panicked: %v", name, r)
+		}),
+	}
 }
 
 // GoWithCancel runs the given function in a goroutine and returns a
 // CancelFunc that can be used to cancel the function.
 func (t *testImpl) GoWithCancel(fn task.Func, opts ...task.Option) context.CancelFunc {
-	return t.taskManager.GoWithCancel(fn, task.PanicHandler(panicHandler), task.OptionList(opts...))
+	return t.taskManager.GoWithCancel(
+		fn, task.OptionList(defaultTaskOptions()...), task.OptionList(opts...),
+	)
 }
 
 // Go is like GoWithCancel but without a cancel function.
 func (t *testImpl) Go(fn task.Func, opts ...task.Option) {
 	_ = t.GoWithCancel(fn, task.OptionList(opts...))
+}
+
+// NewGroup starts a new task group.
+func (t *testImpl) NewGroup(opts ...task.Option) task.Group {
+	return t.taskManager.NewGroup(task.OptionList(defaultTaskOptions()...), task.OptionList(opts...))
+}
+
+// NewErrorGroup starts a new task error group.
+func (t *testImpl) NewErrorGroup(opts ...task.Option) task.ErrorGroup {
+	return t.taskManager.NewErrorGroup(task.OptionList(defaultTaskOptions()...), task.OptionList(opts...))
+}
+
+// Monitor returns the test's monitor.
+func (t *testImpl) Monitor() test.Monitor {
+	return t.monitor
 }
 
 // TeamCityEscape escapes a string for use as <value> in a key='<value>' attribute
@@ -744,13 +849,13 @@ type clusterType int
 
 const (
 	localCluster clusterType = iota
-	roachprodCluster
+	roachprodClusterType
 )
 
 type loggingOpt struct {
-	// l is the test runner logger.
+	// runnerL is the test runner logger.
 	// Note that individual test runs will use a different logger.
-	l *logger.Logger
+	runnerL *logger.Logger
 	// tee controls whether test logs (not test runner logs) also go to stdout or
 	// not.
 	tee            logger.TeeOptType
@@ -780,7 +885,7 @@ type workerStatus struct {
 		// The cluster that the worker is currently operating on. If the worker is
 		// currently running a test, the test is using this cluster. Nil if the
 		// worker does not currently have a cluster.
-		c *clusterImpl
+		c testCluster
 	}
 }
 
@@ -796,13 +901,13 @@ func (w *workerStatus) SetStatus(status string) {
 	w.mu.Unlock()
 }
 
-func (w *workerStatus) Cluster() *clusterImpl {
+func (w *workerStatus) Cluster() testCluster {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return w.mu.c
 }
 
-func (w *workerStatus) SetCluster(c *clusterImpl) {
+func (w *workerStatus) SetCluster(c testCluster) {
 	w.mu.Lock()
 	w.mu.c = c
 	w.mu.Unlock()

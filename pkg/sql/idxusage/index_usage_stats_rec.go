@@ -42,7 +42,6 @@ var DropUnusedIndexDuration = settings.RegisterDurationSetting(
 	"sql.index_recommendation.drop_unused_duration",
 	"the index unused duration at which we begin to recommend dropping the index",
 	defaultUnusedIndexDuration,
-	settings.NonNegativeDuration,
 	settings.WithPublic,
 )
 

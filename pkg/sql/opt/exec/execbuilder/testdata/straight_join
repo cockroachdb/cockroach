@@ -53,12 +53,14 @@ vectorized: true
 │ table: t2@t2_pkey
 │ equality: (x) = (x)
 │ equality cols are key
+│ parallel
 │
 └── • lookup join (inner)
     │ columns: (x, x, y)
     │ estimated row count: 100
     │ table: t2@idx_y
     │ equality: (x) = (y)
+    │ parallel
     │
     └── • scan
           columns: (x)
@@ -79,12 +81,14 @@ vectorized: true
 │ table: t2@t2_pkey
 │ equality: (x) = (x)
 │ equality cols are key
+│ parallel
 │
 └── • lookup join (inner)
     │ columns: (x, x, y)
     │ estimated row count: 100
     │ table: t2@idx_y
     │ equality: (x) = (y)
+    │ parallel
     │
     └── • scan
           columns: (x)

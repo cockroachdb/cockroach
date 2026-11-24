@@ -9,25 +9,22 @@ import map from "lodash/map";
 import React from "react";
 
 import * as protos from "src/js/protos";
-import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 import { REMOTE_DEBUGGING_ERROR_TEXT } from "src/util/constants";
 import Print from "src/views/reports/containers/range/print";
 
 interface AllocatorOutputProps {
-  allocator: CachedDataReducerState<protos.cockroach.server.serverpb.AllocatorRangeResponse>;
+  data: protos.cockroach.server.serverpb.AllocatorRangeResponse;
+  error?: Error;
+  isLoading?: boolean;
 }
 
-export default class AllocatorOutput extends React.Component<
-  AllocatorOutputProps,
-  {}
-> {
-  renderContent = () => {
-    const { allocator } = this.props;
-
-    if (
-      allocator &&
-      (isEmpty(allocator.data) || isEmpty(allocator.data.dry_run))
-    ) {
+export default function AllocatorOutput({
+  data,
+  error,
+  isLoading: loading,
+}: AllocatorOutputProps): React.ReactElement {
+  const renderContent = () => {
+    if (data && (isEmpty(data) || isEmpty(data.dry_run))) {
       return <div>No simulated allocator output was returned.</div>;
     }
 
@@ -42,7 +39,7 @@ export default class AllocatorOutput extends React.Component<
               Message
             </th>
           </tr>
-          {map(allocator.data.dry_run.events, (event, key) => (
+          {map(data.dry_run.events, (event, key) => (
             <tr key={key} className="allocator-table__row">
               <td className="allocator-table__cell allocator-table__cell--date">
                 {Print.Timestamp(event.time)}
@@ -55,40 +52,32 @@ export default class AllocatorOutput extends React.Component<
     );
   };
 
-  render() {
-    const { allocator } = this.props;
-
-    // TODO(couchand): This is a really myopic way to check for this particular
-    // case, but making major changes to the CachedDataReducer or util.api seems
-    // fraught at this point.  We should revisit this soon.
-    if (
-      allocator &&
-      allocator.lastError &&
-      allocator.lastError.message === "Forbidden"
-    ) {
-      return (
-        <div>
-          <h2 className="base-heading">Simulated Allocator Output</h2>
-          {REMOTE_DEBUGGING_ERROR_TEXT}
-        </div>
-      );
-    }
-
-    let fromNodeID = "";
-    if (allocator && !isEmpty(allocator.data)) {
-      fromNodeID = ` (from n${allocator.data.node_id.toString()})`;
-    }
-
+  // TODO(couchand): This is a really myopic way to check for this particular
+  // case, but making major changes to the CachedDataReducer or util.api seems
+  // fraught at this point.  We should revisit this soon.
+  if (error && error.message === "Forbidden") {
     return (
       <div>
-        <h2 className="base-heading">Simulated Allocator Output{fromNodeID}</h2>
-        <Loading
-          loading={!allocator || allocator.inFlight}
-          page={"allocator"}
-          error={allocator && allocator.lastError}
-          render={this.renderContent}
-        />
+        <h2 className="base-heading">Simulated Allocator Output</h2>
+        {REMOTE_DEBUGGING_ERROR_TEXT}
       </div>
     );
   }
+
+  let fromNodeID = "";
+  if (data && !isEmpty(data)) {
+    fromNodeID = ` (from n${data.node_id.toString()})`;
+  }
+
+  return (
+    <div>
+      <h2 className="base-heading">Simulated Allocator Output{fromNodeID}</h2>
+      <Loading
+        loading={loading}
+        page={"allocator"}
+        error={error}
+        render={renderContent}
+      />
+    </div>
+  );
 }

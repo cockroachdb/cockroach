@@ -134,7 +134,13 @@ func validateSystemSchemaAfterUpgradeTest(
 	mvt.Run()
 
 	// Start a cluster with the latest binary and get the system schema
-	// from the cluster.
+	// from the cluster. Mark all processes as expected to die before wiping.
+	t.Monitor().ExpectProcessDead(c.All())
+	// If we have a tenant, mark it as expected to die too.
+	if tenantComparison != nil {
+		t.Monitor().ExpectProcessDead(c.All(), option.VirtualClusterName(tenantComparison.name))
+	}
+
 	c.Wipe(ctx, c.All())
 	settings := install.MakeClusterSettings()
 
@@ -190,9 +196,8 @@ func runValidateSystemSchemaAfterVersionUpgrade(
 	ctx context.Context, t test.Test, c cluster.Cluster,
 ) {
 	validateSystemSchemaAfterUpgradeTest(ctx, t, c,
-		// We limit the number of upgrades since the test is not expected to work
-		// on versions older than 22.2.
-		mixedversion.MaxUpgrades(3),
+		// The test is not expected to work on versions older than 22.2.
+		mixedversion.MinimumBootstrapVersion("v22.2.0"),
 		// Fixtures are generated on a version that's too old for this test.
 		mixedversion.NeverUseFixtures,
 		// Separate-process deployments can't run in 1-node clusters since
@@ -212,9 +217,8 @@ func runValidateSystemSchemaAfterVersionUpgradeSeparateProcess(
 	ctx context.Context, t test.Test, c cluster.Cluster,
 ) {
 	validateSystemSchemaAfterUpgradeTest(ctx, t, c,
-		// We limit the number of upgrades since the test is not expected to work
-		// on versions older than 22.2.
-		mixedversion.MaxUpgrades(3),
+		// The test is not expected to work on versions older than 22.2.
+		mixedversion.MinimumBootstrapVersion("v22.2.0"),
 		// Fixtures are generated on a version that's too old for this test.
 		mixedversion.NeverUseFixtures,
 		mixedversion.EnabledDeploymentModes(mixedversion.SeparateProcessDeployment),
@@ -226,9 +230,9 @@ func registerValidateSystemSchemaAfterVersionUpgradeSeparateProcess(r registry.R
 		Name:             "validate-system-schema-after-version-upgrade/separate-process",
 		Owner:            registry.OwnerSQLFoundations,
 		CompatibleClouds: registry.OnlyGCE,
-		Suites:           registry.Suites(registry.Nightly),
+		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
+		Monitor:          true,
 		Cluster:          r.MakeClusterSpec(3),
-		RequiresLicense:  false,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runValidateSystemSchemaAfterVersionUpgradeSeparateProcess(ctx, t, c)
 		},

@@ -5,6 +5,8 @@
 
 import moment from "moment-timezone";
 
+import { useSwrWithClusterId } from "../util";
+
 import {
   executeInternalSql,
   LARGE_RESULT_SIZE,
@@ -107,4 +109,15 @@ export function getNonRedactedEvents(
       "retrieving events information",
     );
   });
+}
+
+export function useEvents(req: NonRedactedEventsRequest = {}) {
+  return useSwrWithClusterId<SqlApiResponse<EventsResponse>>(
+    "nonRedactedEvents",
+    () => getNonRedactedEvents(req),
+    {
+      revalidateOnFocus: false,
+      dedupingInterval: 10_000,
+    },
+  );
 }

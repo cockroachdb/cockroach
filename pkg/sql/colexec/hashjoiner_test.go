@@ -996,7 +996,7 @@ func runHashJoinTestCase(
 	} else {
 		runner = colexectestutils.RunTestsWithTyps
 	}
-	log.Infof(context.Background(), "%s", tc.description)
+	log.Dev.Infof(context.Background(), "%s", tc.description)
 	runner(t, testAllocator, inputs, typs, tc.expected, verifier, hjOpConstructor)
 }
 
@@ -1015,6 +1015,8 @@ func TestHashJoiner(t *testing.T) {
 	}
 	var monitorRegistry colexecargs.MonitorRegistry
 	defer monitorRegistry.Close(ctx)
+	var closerRegistry colexecargs.CloserRegistry
+	defer closerRegistry.Close(ctx)
 	rng, _ := randutil.NewTestRand()
 
 	for _, tcs := range [][]*joinTestCase{getHJTestCases(), getMJTestCases()} {
@@ -1023,10 +1025,10 @@ func TestHashJoiner(t *testing.T) {
 				runHashJoinTestCase(t, tc, rng, func(sources []colexecop.Operator) (colexecop.Operator, error) {
 					spec := createSpecForHashJoiner(tc)
 					args := &colexecargs.NewColOperatorArgs{
-						Spec:                spec,
-						StreamingMemAccount: monitorRegistry.NewStreamingMemAccount(flowCtx),
-						Inputs:              colexectestutils.MakeInputs(sources),
-						MonitorRegistry:     &monitorRegistry,
+						Spec:            spec,
+						Inputs:          colexectestutils.MakeInputs(sources),
+						MonitorRegistry: &monitorRegistry,
+						CloserRegistry:  &closerRegistry,
 					}
 					args.TestingKnobs.DiskSpillingDisabled = true
 					result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
@@ -1138,7 +1140,7 @@ func BenchmarkHashJoiner(b *testing.B) {
 									hj.Init(ctx)
 
 									b.StartTimer()
-									for hj.Next().Length() != 0 {
+									for colexecop.NextNoMeta(hj).Length() != 0 {
 									}
 									b.StopTimer()
 									leftSource.Reset(ctx)
@@ -1175,6 +1177,8 @@ func TestHashJoinerProjection(t *testing.T) {
 	}
 	var monitorRegistry colexecargs.MonitorRegistry
 	defer monitorRegistry.Close(ctx)
+	var closerRegistry colexecargs.CloserRegistry
+	defer closerRegistry.Close(ctx)
 
 	leftTypes := []*types.T{types.Bool, types.Int, types.Bytes}
 	rightTypes := []*types.T{types.Int, types.Float, types.Decimal}
@@ -1209,12 +1213,13 @@ func TestHashJoinerProjection(t *testing.T) {
 		Spec:            spec,
 		Inputs:          []colexecargs.OpWithMetaInfo{{Root: leftSource}, {Root: rightSource}},
 		MonitorRegistry: &monitorRegistry,
+		CloserRegistry:  &closerRegistry,
 	}
 	args.TestingKnobs.DiskSpillingDisabled = true
 	hjOp, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
 	require.NoError(t, err)
 	hjOp.Root.Init(ctx)
-	for b := hjOp.Root.Next(); b.Length() > 0; b = hjOp.Root.Next() {
+	for b := colexecop.NextNoMeta(hjOp.Root); b.Length() > 0; b = colexecop.NextNoMeta(hjOp.Root) {
 		// The output types should be {Int64, Int64, Bool, Decimal, Float64, Bytes}
 		// and we check this explicitly.
 		b.ColVec(0).Int64()

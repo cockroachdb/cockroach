@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -131,6 +132,11 @@ type hashBasedPartitioner struct {
 		acquiredFDs int
 	}
 	cancelChecker colexecutils.CancelChecker
+
+	// storedLeftBatch is the batch we read from the left input before
+	// encountering the metadata from the right input. It'll always remain nil
+	// if we only have one input.
+	storedLeftBatch coldata.Batch
 
 	partitioners      []*colcontainer.PartitionedDiskQueue
 	partitionedInputs []*partitionerToOperator
@@ -271,6 +277,10 @@ func newHashBasedPartitioner(
 		inputTypes:         inputTypes,
 		hashCols:           hashCols,
 		inMemMainOp:        inMemMainOpConstructor(partitionedInputs),
+		// TODO(yuzefovich): we could delay creation of the disk-backed fallback
+		// operator until we actually need it. This isn't a big deal though
+		// since we only create the hash-based partitioner once some other
+		// operator spills to disk.
 		diskBackedFallbackOp: diskBackedFallbackOpConstructor(
 			partitionedInputs, maxNumberActivePartitions, partitionedDiskQueueSemaphore,
 		),
@@ -408,7 +418,7 @@ func (op *hashBasedPartitioner) partitionBatch(
 	}
 }
 
-func (op *hashBasedPartitioner) Next() coldata.Batch {
+func (op *hashBasedPartitioner) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	var batches [2]coldata.Batch
 StateChanged:
 	for {
@@ -417,7 +427,25 @@ StateChanged:
 		case hbpInitialPartitioning:
 			allZero := true
 			for i := range op.inputs {
-				batches[i] = op.inputs[i].Next()
+				if op.storedLeftBatch != nil {
+					if buildutil.CrdbTestBuild && i != 0 {
+						colexecerror.InternalError(errors.AssertionFailedf("storedLeftBatch must correspond to 0th input"))
+					}
+					batches[i] = op.storedLeftBatch
+					op.storedLeftBatch = nil
+				} else {
+					var meta *execinfrapb.ProducerMetadata
+					batches[i], meta = op.inputs[i].Next()
+					if meta != nil {
+						if i == 1 {
+							// Since we've already fetched a batch from the left
+							// input, we need to make sure to use it on the next
+							// iteration.
+							op.storedLeftBatch = batches[0]
+						}
+						return nil, meta
+					}
+				}
 				allZero = allZero && batches[i].Length() == 0
 			}
 			if allZero {
@@ -438,7 +466,7 @@ StateChanged:
 				// FDs to the semaphore.
 				for i := range op.inputs {
 					if err := op.partitioners[i].CloseAllOpenWriteFileDescriptors(op.Ctx); err != nil {
-						colexecerror.InternalError(err)
+						colexecutils.HandleErrorFromDiskQueue(err)
 					}
 				}
 				op.inMemMainOp.Init(op.Ctx)
@@ -483,7 +511,7 @@ StateChanged:
 					for {
 						op.unlimitedAllocator.PerformOperation(batch.ColVecs(), func() {
 							if err := partitioner.Dequeue(op.Ctx, parentPartitionIdx, batch); err != nil {
-								colexecerror.InternalError(err)
+								colexecutils.HandleErrorFromDiskQueue(err)
 							}
 						})
 						if batch.Length() == 0 {
@@ -494,7 +522,7 @@ StateChanged:
 					// We're done reading from this partition, and it will never
 					// be read from again, so we can close it.
 					if err := partitioner.CloseInactiveReadPartitions(op.Ctx); err != nil {
-						colexecerror.InternalError(err)
+						colexecutils.HandleErrorFromDiskQueue(err)
 					}
 					// We're done writing to the newly created partitions.
 					// TODO(yuzefovich): we should not release the descriptors
@@ -508,7 +536,7 @@ StateChanged:
 					// want. This will allow us to remove the call to
 					// CloseAllOpen... in the first state as well.
 					if err := partitioner.CloseAllOpenWriteFileDescriptors(op.Ctx); err != nil {
-						colexecerror.InternalError(err)
+						colexecutils.HandleErrorFromDiskQueue(err)
 					}
 				}
 				for idx := 0; idx < op.numBuckets; idx++ {
@@ -584,19 +612,22 @@ StateChanged:
 			continue
 
 		case hbpProcessingUsingMain:
-			b := op.inMemMainOp.Next()
+			b, meta := op.inMemMainOp.Next()
+			if meta != nil {
+				return nil, meta
+			}
 			if b.Length() == 0 {
 				// We're done processing these partitions, so we close them and
 				// transition to processing new ones.
 				for i := range op.inputs {
 					if err := op.partitioners[i].CloseInactiveReadPartitions(op.Ctx); err != nil {
-						colexecerror.InternalError(err)
+						colexecutils.HandleErrorFromDiskQueue(err)
 					}
 				}
 				op.state = hbpProcessNewPartitionUsingMain
 				continue
 			}
-			return b
+			return b, nil
 
 		case hbpProcessNewPartitionUsingFallback:
 			if len(op.partitionsToProcessUsingFallback) == 0 {
@@ -615,25 +646,28 @@ StateChanged:
 			continue
 
 		case hbpProcessingUsingFallback:
-			b := op.diskBackedFallbackOp.Next()
+			b, meta := op.diskBackedFallbackOp.Next()
+			if meta != nil {
+				return nil, meta
+			}
 			if b.Length() == 0 {
 				// We're done processing these partitions, so we close them and
 				// transition to processing new ones.
 				for i := range op.inputs {
 					if err := op.partitioners[i].CloseInactiveReadPartitions(op.Ctx); err != nil {
-						colexecerror.InternalError(err)
+						colexecutils.HandleErrorFromDiskQueue(err)
 					}
 				}
 				op.state = hbpProcessNewPartitionUsingFallback
 				continue
 			}
-			return b
+			return b, nil
 
 		case hbpFinished:
 			if err := op.Close(op.Ctx); err != nil {
 				colexecerror.InternalError(err)
 			}
-			return coldata.ZeroBatch
+			return coldata.ZeroBatch, nil
 
 		default:
 			colexecerror.InternalError(errors.AssertionFailedf("unexpected hashBasedPartitionerState %d", op.state))

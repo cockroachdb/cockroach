@@ -30,10 +30,11 @@ go_library(
         "//pkg/kv/kvserver/liveness/livenesspb",
         "//pkg/kv/kvserver/loqrecovery/loqrecoverypb",
         "//pkg/kv/kvserver/raftlog",
-        "//pkg/kv/kvserver/stateloader",
         "//pkg/raft/raftpb",
         "//pkg/roachpb",
         "//pkg/rpc",
+        "//pkg/rpc/nodedialer",
+        "//pkg/rpc/rpcbase",
         "//pkg/server/serverpb",
         "//pkg/settings/cluster",
         "//pkg/storage",
@@ -51,13 +52,13 @@ go_library(
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_pebble//vfs",
         "@com_github_cockroachdb_redact//:redact",
-        "@org_golang_google_grpc//:grpc",
         "@org_golang_x_sync//errgroup",
     ],
 )
 
 go_test(
     name = "loqrecovery_test",
+    size = "large",
     srcs = [
         "apply_test.go",
         "collect_raft_log_test.go",
@@ -90,7 +91,6 @@ go_test(
         "//pkg/kv/kvserver/kvstorage",
         "//pkg/kv/kvserver/loqrecovery/loqrecoverypb",
         "//pkg/kv/kvserver/raftlog",
-        "//pkg/kv/kvserver/stateloader",
         "//pkg/raft/raftpb",
         "//pkg/roachpb",
         "//pkg/rpc",
@@ -105,6 +105,7 @@ go_test(
         "//pkg/storage/fs",
         "//pkg/testutils",
         "//pkg/testutils/datapathutils",
+        "//pkg/testutils/dd",
         "//pkg/testutils/listenerutil",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/skip",

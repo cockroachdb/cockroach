@@ -243,9 +243,14 @@ SELECT * FROM xyzw LIMIT -100
 query error negative value for OFFSET
 SELECT * FROM xyzw OFFSET -100
 
+# In local-prepared, this value overflows int64 so it becomes a DECIMAL
+# placeholder, producing a type mismatch error instead of a range error.
+skipif config local-prepared
 query error numeric constant out of int64 range
 SELECT * FROM xyzw LIMIT 9223372036854775808
 
+# Same as above for OFFSET.
+skipif config local-prepared
 query error numeric constant out of int64 range
 SELECT * FROM xyzw OFFSET 9223372036854775808
 
@@ -368,6 +373,9 @@ SELECT a FROM MaxIntTest WHERE a = 9223372036854775807
 ----
 9223372036854775807
 
+# In local-prepared, $1 is treated as a placeholder from scalar replacement
+# rather than a literal in the SQL text, so the error differs.
+skipif config local-prepared
 query error no value provided for placeholder
 SELECT $1::int
 
@@ -756,6 +764,25 @@ SELECT * FROM t_disallow_scans@{FORCE_INDEX=b_idx,NO_FULL_SCAN} WHERE b > 0
 statement ok
 SELECT * FROM t_disallow_scans@{FORCE_INDEX=b_partial,NO_FULL_SCAN} WHERE a > 0 AND b = 1
 
+# Now avoid full scans with a hint. A full scan should not cause an error.
+statement ok
+SELECT * FROM t_disallow_scans@{AVOID_FULL_SCAN}
+
+statement ok
+SELECT * FROM t_disallow_scans@{FORCE_INDEX=b_idx,AVOID_FULL_SCAN}
+
+statement ok
+SELECT * FROM t_disallow_scans@{FORCE_INDEX=b_partial,AVOID_FULL_SCAN} WHERE a > 0
+
+statement ok
+SELECT * FROM t_disallow_scans@{AVOID_FULL_SCAN} WHERE a > 0
+
+statement ok
+SELECT * FROM t_disallow_scans@{FORCE_INDEX=b_idx,AVOID_FULL_SCAN} WHERE b > 0
+
+statement ok
+SELECT * FROM t_disallow_scans@{FORCE_INDEX=b_partial,AVOID_FULL_SCAN} WHERE a > 0 AND b = 1
+
 # Now disable full scans with the session variable.
 statement ok
 SET disallow_full_table_scans = true;
@@ -764,7 +791,7 @@ SET disallow_full_table_scans = true;
 statement error pq: query `SELECT \* FROM t_disallow_scans` contains a full table/index scan which is explicitly disallowed
 SELECT * FROM t_disallow_scans
 
-statement error pq: index "b_idx" cannot be used for this query\nHINT: try overriding the `disallow_full_table_scans`
+statement error pq: index "b_idx" cannot be used for this query\nHINT: to permit this scan, set disallow_full_table_scans to false or increase the large_full_scan_rows threshold
 SELECT * FROM t_disallow_scans@b_idx
 
 # Full scans of partial indexes are allowed.
@@ -804,7 +831,7 @@ ALTER TABLE t_disallow_scans INJECT STATISTICS '[
 statement error pq: query `SELECT \* FROM t_disallow_scans` contains a full table/index scan which is explicitly disallowed
 SELECT * FROM t_disallow_scans
 
-statement error pq: index "b_idx" cannot be used for this query\nHINT: try overriding the `disallow_full_table_scans`
+statement error pq: index "b_idx" cannot be used for this query\nHINT: to permit this scan, set disallow_full_table_scans to false or increase the large_full_scan_rows threshold to at least 4
 SELECT * FROM t_disallow_scans@b_idx
 
 # Full scans of virtual tables are still allowed with this setting (#123783).
@@ -812,11 +839,11 @@ statement ok
 SELECT * FROM pg_class
 
 statement ok
-SELECT * FROM crdb_internal.jobs
+SELECT * FROM crdb_internal.node_build_info
 
 # Tests for 'large_full_scan_rows'.
 statement ok
-SET large_full_scan_rows = 1000
+SET large_full_scan_rows = 4
 
 # These queries succeed because the full table/index scans aren't considered
 # "large".
@@ -832,7 +859,13 @@ SET large_full_scan_rows = 2
 statement error pq: query `SELECT \* FROM t_disallow_scans` contains a full table/index scan which is explicitly disallowed
 SELECT * FROM t_disallow_scans
 
-statement error pq: index "b_idx" cannot be used for this query\nHINT: try overriding the `disallow_full_table_scans`
+statement error pq: index "b_idx" cannot be used for this query\nHINT: to permit this scan, set disallow_full_table_scans to false or increase the large_full_scan_rows threshold to at least 4
+SELECT * FROM t_disallow_scans@b_idx
+
+statement ok
+SET large_full_scan_rows = 3
+
+statement error pq: query `.*` contains a full table\/index scan which is explicitly disallowed\nHINT: to permit this scan, set disallow_full_table_scans to false or increase the large_full_scan_rows threshold
 SELECT * FROM t_disallow_scans@b_idx
 
 # Cleanup
@@ -949,3 +982,67 @@ query I
 SELECT c FROM t102864 WHERE c IN (0, 862827606027206657::INT8);
 ----
 0
+
+# Regression test for ignoring the reverse direction of the scan in the batch
+# with Gets (#146637).
+statement ok
+CREATE TABLE t146637 (
+    a INT NOT NULL,
+    b TEXT NOT NULL,
+    c TEXT NOT NULL,
+    PRIMARY KEY (a, b),
+    FAMILY (a, b, c)
+);
+
+statement ok
+INSERT INTO t146637 VALUES
+    (0, 'foo', 'bar'),
+    (0, 'foo2', 'bar2'),
+    (0, 'foo3', 'bar3'),
+    (100, 'foo', 'bar'),
+    (100, 'foo2', 'bar2'),
+    (100, 'foo3', 'bar3'),
+    (2, 'foo4', 'bar4'),
+    (2, 'foo5', 'bar5');
+
+retry
+statement ok
+ALTER TABLE t146637 SPLIT AT VALUES (1), (2), (3);
+
+query ITT
+SELECT * FROM t146637 WHERE (a = 0 OR a = 100) AND b = 'foo' ORDER BY a DESC LIMIT 1;
+----
+100  foo  bar
+
+# Regression test for #170544. InlineConstVar must cast an inlined constant to
+# the variable's type when the two are equivalent but not identical, so that
+# type-sensitive expressions such as pg_typeof are not changed.
+statement ok
+CREATE TABLE t170544_name (n NAME);
+INSERT INTO t170544_name VALUES ('hello')
+
+# pg_typeof(n) must still observe NAME (not STRING), so the row is returned.
+query T
+SELECT n FROM t170544_name WHERE n = 'hello' AND pg_typeof(n)::TEXT = 'name'
+----
+hello
+
+# The cast added when inlining must not introduce an evaluation error for
+# out-of-range or lossy casts, because the constant only reaches dead rows.
+# INT8 -> INT2 overflow: the query returns zero rows rather than erroring.
+statement ok
+CREATE TABLE t170544_int2 (i2 INT2);
+INSERT INTO t170544_int2 VALUES (5)
+
+query I
+SELECT i2 FROM t170544_int2 WHERE i2 = 40000 AND i2 + 0 = 5
+----
+
+# VARCHAR(n) truncation: the query returns zero rows rather than incorrect rows.
+statement ok
+CREATE TABLE t170544_varchar (s VARCHAR(3));
+INSERT INTO t170544_varchar VALUES ('abc')
+
+query T
+SELECT s FROM t170544_varchar WHERE s = 'abcdef' AND lower(s) = 'abc'
+----

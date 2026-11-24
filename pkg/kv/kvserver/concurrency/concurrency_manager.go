@@ -8,22 +8,28 @@ package concurrency
 import (
 	"context"
 	"fmt"
-	"runtime/debug"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanlatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -99,6 +105,17 @@ var DiscoveredLocksThresholdToConsultTxnStatusCache = settings.RegisterIntSettin
 	settings.NonNegativeInt,
 )
 
+// DefaultLockTableSize controls the default upper bound on the number of locks
+// in a lock table.
+var DefaultLockTableSize = settings.RegisterIntSetting(
+	settings.SystemOnly,
+	"kv.lock_table.default_size",
+	"the default upper bound on the number of locks in a lock table. This setting "+
+		"controls the maximum number of locks that can be held in memory by the lock table "+
+		"before it starts evicting locks to manage memory pressure.",
+	10000,
+)
+
 // BatchPushedLockResolution controls whether the lock table should allow
 // non-locking readers to defer and batch the resolution of conflicting locks
 // whose holder is known to be pending and have been pushed above the reader's
@@ -111,6 +128,70 @@ var BatchPushedLockResolution = settings.RegisterBoolSetting(
 		"timestamp",
 	true,
 )
+
+// UnreplicatedLockReliabilitySplit controls whether the replica will attempt
+// to keep unreplicated locks during range split operations.
+var UnreplicatedLockReliabilitySplit = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.lock_table.unreplicated_lock_reliability.split.enabled",
+	"whether the replica should attempt to keep unreplicated locks during range splits",
+	metamorphic.ConstantWithTestBool("kv.lock_table.unreplicated_lock_reliability.split.enabled", true),
+)
+
+// UnreplicatedLockReliabilityLeaseTransfer controls whether the replica will attempt
+// to keep unreplicated locks during lease transfer operations.
+var UnreplicatedLockReliabilityLeaseTransfer = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.lock_table.unreplicated_lock_reliability.lease_transfer.enabled",
+	"whether the replica should attempt to keep unreplicated locks during lease transfers",
+	metamorphic.ConstantWithTestBool("kv.lock_table.unreplicated_lock_reliability.lease_transfer.enabled", true),
+)
+
+// UnreplicatedLockReliabilityMerge controls whether the replica will attempt to
+// keep unreplicated locks during range merge operations.
+var UnreplicatedLockReliabilityMerge = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.lock_table.unreplicated_lock_reliability.merge.enabled",
+	"whether the replica should attempt to keep unreplicated locks during range merges",
+	metamorphic.ConstantWithTestBool("kv.lock_table.unreplicated_lock_reliability.merge.enabled", true),
+)
+
+var MaxLockFlushSize = settings.RegisterByteSizeSetting(
+	settings.SystemOnly,
+	"kv.lock_table.unreplicated_lock_reliability.max_flush_size",
+	"maximum size of locks that will be flushed during merge and transfer operations (if 0, defaults to half of the MaxCommandSizeDefault)",
+	0,
+)
+
+// VirtualIntentResolution controls whether the intents encountered by a
+// non-locking read request can be "virtually resolved".
+var VirtualIntentResolution = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.concurrency.virtual_intent_resolution.enabled",
+	"whether read-only, non-locking requests should virtually resolve intents",
+	metamorphic.ConstantWithTestBool("kv.concurrency.virtual_intent_resolution.enabled", false),
+)
+
+// PushUsingCachedClockObservation controls whether we allow intents from
+// PENDING transactions to be resolved by requests with uncertainty intervals by
+// using a cached clock observation from the original pusher.
+var PushUsingCachedClockObservation = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kv.concurrency.push_pending_from_cache.enabled",
+	"whether intents from pending transactions can be resolved using cached clock observations",
+	true,
+)
+
+// MaxLockFlushSize is the maximum number of lock bytes that we will attempt to
+// flush during merge and transfer operations.
+func GetMaxLockFlushSize(sv *settings.Values) int64 {
+	s := MaxLockFlushSize.Get(sv)
+	if s > 0 {
+		return s
+	} else {
+		return kvserverbase.MaxCommandSize.Get(sv) / 2
+	}
+}
 
 // managerImpl implements the Manager interface.
 type managerImpl struct {
@@ -137,9 +218,13 @@ type Config struct {
 	Stopper        *stop.Stopper
 	IntentResolver IntentResolver
 	// Metrics.
-	TxnWaitMetrics     *txnwait.Metrics
-	SlowLatchGauge     *metric.Gauge
-	LatchWaitDurations metric.IHistogram
+	TxnWaitMetrics                    *txnwait.Metrics
+	SlowLatchGauge                    *metric.Gauge
+	LatchWaitDurations                metric.IHistogram
+	LocksShedDueToMemoryLimit         *metric.Counter
+	NumLockShedDueToMemoryLimitEvents *metric.Counter
+	VirtualResolveCondenseCount       *metric.Counter
+	VirtualResolveDisabledCount       *metric.Counter
 	// Configs + Knobs.
 	MaxLockTableSize  int64
 	DisableTxnPushing bool
@@ -148,7 +233,7 @@ type Config struct {
 
 func (c *Config) initDefaults() {
 	if c.MaxLockTableSize == 0 {
-		c.MaxLockTableSize = defaultLockTableSize
+		c.MaxLockTableSize = DefaultLockTableSize.Get(&c.Settings.SV)
 	}
 }
 
@@ -157,7 +242,11 @@ func NewManager(cfg Config) Manager {
 	cfg.initDefaults()
 	m := new(managerImpl)
 	lt := maybeWrapInVerifyingLockTable(
-		newLockTable(cfg.MaxLockTableSize, cfg.RangeDesc.RangeID, cfg.Clock, cfg.Settings),
+		newLockTable(
+			cfg.MaxLockTableSize, cfg.RangeDesc.RangeID, cfg.Clock, cfg.Settings,
+			cfg.LocksShedDueToMemoryLimit, cfg.NumLockShedDueToMemoryLimitEvents,
+			cfg.VirtualResolveCondenseCount, cfg.VirtualResolveDisabledCount,
+		),
 	)
 	*m = managerImpl{
 		st: cfg.Settings,
@@ -170,6 +259,7 @@ func NewManager(cfg Config) Manager {
 				cfg.SlowLatchGauge,
 				cfg.Settings,
 				cfg.LatchWaitDurations,
+				cfg.Clock,
 			),
 		},
 		lt: lt,
@@ -198,9 +288,9 @@ func NewManager(cfg Config) Manager {
 
 // SequenceReq implements the RequestSequencer interface.
 func (m *managerImpl) SequenceReq(
-	ctx context.Context, prev *Guard, req Request, evalKind RequestEvalKind,
-) (*Guard, Response, *Error) {
-	var g *Guard
+	ctx context.Context, prev Guard, req Request, evalKind RequestEvalKind,
+) (Guard, Response, *Error) {
+	var g *guardImpl
 	var branch int
 	if prev == nil {
 		switch evalKind {
@@ -217,7 +307,7 @@ func (m *managerImpl) SequenceReq(
 		}
 		g = newGuard(req)
 	} else {
-		g = prev
+		g = prev.(*guardImpl)
 		switch evalKind {
 		case PessimisticEval:
 			branch = 3
@@ -227,7 +317,7 @@ func (m *managerImpl) SequenceReq(
 			panic("optimistic eval cannot happen when re-sequencing")
 		case PessimisticAfterFailedOptimisticEval:
 			branch = 4
-			if !shouldIgnoreLatches(g.Req) {
+			if !shouldIgnoreLatches(g.req) {
 				g.AssertLatches()
 			}
 			log.Event(ctx, "re-sequencing request after optimistic sequencing failed")
@@ -235,36 +325,36 @@ func (m *managerImpl) SequenceReq(
 			panic("unexpected evalKind")
 		}
 	}
-	g.EvalKind = evalKind
+	g.evalKind = evalKind
 	resp, err := m.sequenceReqWithGuard(ctx, g, branch)
 	if resp != nil || err != nil {
 		// Ensure that we release the guard if we return a response or an error.
-		m.FinishReq(ctx, g)
+		m.finishReqImpl(ctx, g)
 		return nil, resp, err
 	}
 	return g, nil, nil
 }
 
 func (m *managerImpl) sequenceReqWithGuard(
-	ctx context.Context, g *Guard, branch int,
+	ctx context.Context, g *guardImpl, branch int,
 ) (Response, *Error) {
 	// Some requests don't need to acquire latches at all.
-	if shouldIgnoreLatches(g.Req) {
+	if shouldIgnoreLatches(g.req) {
 		log.Event(ctx, "not acquiring latches")
 		return nil, nil
 	}
 
 	// Check if this is a request that waits on latches, but does not acquire
 	// them.
-	if shouldWaitOnLatchesWithoutAcquiring(g.Req) {
+	if shouldWaitOnLatchesWithoutAcquiring(g.req) {
 		log.Event(ctx, "waiting on latches without acquiring")
-		return nil, m.lm.WaitFor(ctx, g.Req.LatchSpans, g.Req.PoisonPolicy, g.Req.BaFmt)
+		return nil, m.lm.WaitFor(ctx, g.req.LatchSpans, g.req.PoisonPolicy, g.req.Batch)
 	}
 
 	// Provide the manager with an opportunity to intercept the request. It
 	// may be able to serve the request directly, and even if not, it may be
 	// able to update its internal state based on the request.
-	resp, err := m.maybeInterceptReq(ctx, g.Req)
+	resp, err := m.maybeInterceptReq(ctx, g.req)
 	if resp != nil || err != nil {
 		return resp, err
 	}
@@ -274,7 +364,7 @@ func (m *managerImpl) sequenceReqWithGuard(
 	firstIteration := true
 	for {
 		if !g.HoldingLatches() {
-			if g.EvalKind == OptimisticEval {
+			if g.evalKind == OptimisticEval {
 				if !firstIteration {
 					// The only way we loop more than once is when conflicting locks are
 					// found -- see below where that happens and the comment there on
@@ -282,13 +372,13 @@ func (m *managerImpl) sequenceReqWithGuard(
 					panic("optimistic eval should not loop in sequenceReqWithGuard")
 				}
 				log.Event(ctx, "optimistically acquiring latches")
-				g.lg = m.lm.AcquireOptimistic(g.Req)
+				g.lg = m.lm.AcquireOptimistic(g.req)
 				g.lm = m.lm
 			} else {
 				// Acquire latches for the request. This synchronizes the request
 				// with all conflicting in-flight requests.
 				log.Event(ctx, "acquiring latches")
-				g.lg, err = m.lm.Acquire(ctx, g.Req)
+				g.lg, err = m.lm.Acquire(ctx, g.req)
 				if err != nil {
 					return nil, err
 				}
@@ -298,11 +388,11 @@ func (m *managerImpl) sequenceReqWithGuard(
 			if !firstIteration {
 				panic(errors.AssertionFailedf("second or later iteration cannot be holding latches"))
 			}
-			if g.EvalKind != PessimisticAfterFailedOptimisticEval {
+			if g.evalKind != PessimisticAfterFailedOptimisticEval {
 				panic(redact.Safe(fmt.Sprintf("must not be holding latches\n"+
 					"this is tracked in github.com/cockroachdb/cockroach/issues/77663; please comment if seen\n"+
 					"eval_kind=%d, holding_latches=%t, branch=%d, first_iteration=%t, stack=\n%s",
-					g.EvalKind, g.HoldingLatches(), branch, firstIteration, string(debug.Stack()))))
+					g.evalKind, g.HoldingLatches(), branch, firstIteration, debugutil.Stack())))
 			}
 			log.Event(ctx, "optimistic failed, so waiting for latches")
 			g.lg, err = m.lm.WaitUntilAcquired(ctx, g.lg)
@@ -313,26 +403,26 @@ func (m *managerImpl) sequenceReqWithGuard(
 		firstIteration = false
 
 		// Some requests don't want the wait on locks.
-		if g.Req.LockSpans.Empty() {
+		if g.req.LockSpans.Empty() {
 			return nil, nil
 		}
 
 		// Set the request's MaxWaitQueueLength based on the cluster setting, if not
 		// already set.
-		if g.Req.MaxLockWaitQueueLength == 0 {
-			g.Req.MaxLockWaitQueueLength = int(MaxLockWaitQueueLength.Get(&m.st.SV))
+		if g.req.MaxLockWaitQueueLength == 0 {
+			g.req.MaxLockWaitQueueLength = int(MaxLockWaitQueueLength.Get(&m.st.SV))
 		}
 
-		if g.EvalKind == OptimisticEval {
+		if g.evalKind == OptimisticEval {
 			if g.ltg != nil {
 				panic("Optimistic locking should not have a non-nil lockTableGuard")
 			}
 			log.Event(ctx, "optimistically scanning lock table for conflicting locks")
-			g.ltg = m.lt.ScanOptimistic(g.Req)
+			g.ltg = m.lt.ScanOptimistic(g.req)
 		} else {
 			// Scan for conflicting locks.
 			log.Event(ctx, "scanning lock table for conflicting locks")
-			g.ltg, err = m.lt.ScanAndEnqueue(g.Req, g.ltg)
+			g.ltg, err = m.lt.ScanAndEnqueue(ctx, g.req, g.ltg)
 			if err != nil {
 				return nil, err
 			}
@@ -345,7 +435,7 @@ func (m *managerImpl) sequenceReqWithGuard(
 			m.lm.Release(ctx, g.moveLatchGuard())
 
 			log.Event(ctx, "waiting in lock wait-queues")
-			if err := m.ltw.WaitOn(ctx, g.Req, g.ltg); err != nil {
+			if err := m.ltw.WaitOn(ctx, g.req, g.ltg); err != nil {
 				return nil, err
 			}
 			continue
@@ -364,7 +454,19 @@ func (m *managerImpl) maybeInterceptReq(ctx context.Context, req Request) (Respo
 		// If necessary, wait in the txnWaitQueue for the pushee transaction to
 		// expire or to move to a finalized state.
 		t := req.Requests[0].GetPushTxn()
+		tenantID, _ := roachpb.ClientTenantFromContext(ctx)
+		var info ash.WorkloadInfo
+		if req.Batch != nil {
+			info = ash.WorkloadInfo{
+				WorkloadID:    req.Batch.WorkloadID,
+				AppNameID:     req.Batch.AppNameID,
+				GatewayNodeID: req.Batch.GatewayNodeID,
+				WorkloadType:  workloadid.WorkloadType(req.Batch.WorkloadType),
+			}
+		}
+		cleanup := ash.SetWorkState(tenantID, info, ash.WorkLock, "TxnPushWait")
 		resp, err := m.twq.MaybeWaitForPush(ctx, t, req.WaitPolicy)
+		cleanup()
 		if err != nil {
 			return nil, err
 		} else if resp != nil {
@@ -374,7 +476,20 @@ func (m *managerImpl) maybeInterceptReq(ctx context.Context, req Request) (Respo
 		// If necessary, wait in the txnWaitQueue for a transaction state update
 		// or for a dependent transaction to change.
 		t := req.Requests[0].GetQueryTxn()
-		return nil, m.twq.MaybeWaitForQuery(ctx, t)
+		tenantID, _ := roachpb.ClientTenantFromContext(ctx)
+		var info ash.WorkloadInfo
+		if req.Batch != nil {
+			info = ash.WorkloadInfo{
+				WorkloadID:    req.Batch.WorkloadID,
+				AppNameID:     req.Batch.AppNameID,
+				GatewayNodeID: req.Batch.GatewayNodeID,
+				WorkloadType:  workloadid.WorkloadType(req.Batch.WorkloadType),
+			}
+		}
+		cleanup := ash.SetWorkState(tenantID, info, ash.WorkLock, "TxnQueryWait")
+		pErr := m.twq.MaybeWaitForQuery(ctx, t)
+		cleanup()
+		return nil, pErr
 	default:
 		// TODO(nvanbenschoten): in the future, use this hook to update the lock
 		// table to allow contending transactions to proceed.
@@ -417,16 +532,32 @@ func shouldWaitOnLatchesWithoutAcquiring(req Request) bool {
 }
 
 // PoisonReq implements the RequestSequencer interface.
-func (m *managerImpl) PoisonReq(g *Guard) {
-	// NB: g.lg == nil is the case for requests that ignore latches, see
+func (m *managerImpl) PoisonReq(g Guard) {
+	gi, ok := g.(*guardImpl)
+	if !ok {
+		// The guard is not a guardImpl, e.g. a mock in tests. Nothing to do.
+		return
+	}
+	// NB: gi.lg == nil is the case for requests that ignore latches, see
 	// shouldIgnoreLatches.
-	if g.lg != nil {
-		m.lm.Poison(g.lg)
+	if gi.lg != nil {
+		m.lm.Poison(gi.lg)
 	}
 }
 
 // FinishReq implements the RequestSequencer interface.
-func (m *managerImpl) FinishReq(ctx context.Context, g *Guard) {
+func (m *managerImpl) FinishReq(ctx context.Context, g Guard) {
+	gi, ok := g.(*guardImpl)
+	if !ok {
+		// The guard is not a guardImpl, e.g. a mock in tests. Nothing to do.
+		return
+	}
+	m.finishReqImpl(ctx, gi)
+}
+
+// finishReqImpl is the internal implementation of FinishReq that operates on
+// the concrete guardImpl type.
+func (m *managerImpl) finishReqImpl(ctx context.Context, g *guardImpl) {
 	// NOTE: we release latches _before_ exiting lock wait-queues deliberately.
 	// Either order would be correct, but the order here avoids non-determinism in
 	// cases where a request A holds both latches and has claimed some keys by
@@ -448,17 +579,18 @@ func (m *managerImpl) FinishReq(ctx context.Context, g *Guard) {
 		m.lm.Release(ctx, lg)
 	}
 	if ltg := g.moveLockTableGuard(); ltg != nil {
-		m.lt.Dequeue(ltg)
+		m.lt.Dequeue(ctx, ltg)
 	}
 	releaseGuard(g)
 }
 
 // HandleLockConflictError implements the ContentionHandler interface.
 func (m *managerImpl) HandleLockConflictError(
-	ctx context.Context, g *Guard, seq roachpb.LeaseSequence, t *kvpb.LockConflictError,
-) (*Guard, *Error) {
-	if g.ltg == nil {
-		log.Fatalf(ctx, "cannot handle LockConflictError %v for request without "+
+	ctx context.Context, g Guard, seq roachpb.LeaseSequence, t *kvpb.LockConflictError,
+) (Guard, *Error) {
+	gi := g.(*guardImpl)
+	if gi.ltg == nil {
+		log.KvExec.Fatalf(ctx, "cannot handle LockConflictError %v for request without "+
 			"lockTableGuard; were lock spans declared for this request?", t)
 	}
 
@@ -482,32 +614,38 @@ func (m *managerImpl) HandleLockConflictError(
 	//
 	// Either way, there is no possibility of the request entering an infinite
 	// loop without making progress.
+
 	consultTxnStatusCache :=
 		int64(len(t.Locks)) > DiscoveredLocksThresholdToConsultTxnStatusCache.Get(&m.st.SV)
+	var numAdded int
 	for i := range t.Locks {
 		foundLock := &t.Locks[i]
-		added, err := m.lt.AddDiscoveredLock(foundLock, seq, consultTxnStatusCache, g.ltg)
+		added, err := m.lt.AddDiscoveredLock(ctx, foundLock, seq, consultTxnStatusCache, gi.ltg)
 		if err != nil {
-			log.Fatalf(ctx, "%v", err)
+			log.KvExec.Fatalf(ctx, "%v", err)
 		}
-		if !added {
+		if added {
+			numAdded++
+		} else {
 			log.VEventf(ctx, 2,
-				"intent on %s discovered but not added to disabled lock table",
-				foundLock.Key.String())
+				"discovered lock on %s not added to disabled lock table", foundLock.Key)
 		}
+	}
+	if numAdded > 0 {
+		log.VEventf(ctx, 2, "added %d discovered lock(s) to lock table: %v", numAdded, t)
 	}
 
 	// Release the Guard's latches but continue to remain in lock wait-queues by
 	// not releasing lockWaitQueueGuards. We expect the caller of this method to
 	// then re-sequence the Request by calling SequenceReq with the un-latched
 	// Guard. This is analogous to iterating through the loop in SequenceReq.
-	m.lm.Release(ctx, g.moveLatchGuard())
+	m.lm.Release(ctx, gi.moveLatchGuard())
 
 	// If the discovery process collected a set of intents to resolve before the
 	// next evaluation attempt, do so.
-	if toResolve := g.ltg.ResolveBeforeScanning(); len(toResolve) > 0 {
-		if err := m.ltw.ResolveDeferredIntents(ctx, g.Req.AdmissionHeader, toResolve); err != nil {
-			m.FinishReq(ctx, g)
+	if toResolve := gi.ltg.ResolveBeforeScanning(); len(toResolve) > 0 {
+		if err := m.ltw.ResolveDeferredIntents(ctx, gi.req.AdmissionHeader, toResolve); err != nil {
+			m.finishReqImpl(ctx, gi)
 			return nil, err
 		}
 	}
@@ -517,8 +655,9 @@ func (m *managerImpl) HandleLockConflictError(
 
 // HandleTransactionPushError implements the ContentionHandler interface.
 func (m *managerImpl) HandleTransactionPushError(
-	ctx context.Context, g *Guard, t *kvpb.TransactionPushError,
-) *Guard {
+	ctx context.Context, g Guard, t *kvpb.TransactionPushError,
+) Guard {
+	gi := g.(*guardImpl)
 	m.twq.EnqueueTxn(&t.PusheeTxn)
 
 	// Release the Guard's latches. The PushTxn request should not be in any
@@ -526,29 +665,38 @@ func (m *managerImpl) HandleTransactionPushError(
 	// caller of this method to then re-sequence the Request by calling
 	// SequenceReq with the un-latched Guard. This is analogous to iterating
 	// through the loop in SequenceReq.
-	m.lm.Release(ctx, g.moveLatchGuard())
+	m.lm.Release(ctx, gi.moveLatchGuard())
 	return g
 }
 
 // OnLockAcquired implements the LockManager interface.
 func (m *managerImpl) OnLockAcquired(ctx context.Context, acq *roachpb.LockAcquisition) {
-	if err := m.lt.AcquireLock(acq); err != nil {
+	if err := m.lt.AcquireLock(ctx, acq); err != nil {
 		if errors.IsAssertionFailure(err) {
-			log.Fatalf(ctx, "%v", err)
+			log.KvExec.Fatalf(ctx, "%v", err)
 		}
 		// It's reasonable to expect benign errors here that the layer above
 		// (command evaluation) isn't equipped to deal with. As long as we're not
 		// violating any assertions, we simply log and move on. One benign case is
 		// when an unreplicated lock is being acquired by a transaction at an older
 		// epoch.
-		log.Errorf(ctx, "%v", err)
+		log.KvExec.Errorf(ctx, "%v", err)
+	}
+}
+
+// OnLockMissing implements the LockManager interface.
+func (m *managerImpl) OnLockMissing(ctx context.Context, acq *roachpb.LockAcquisition) {
+	if err := m.lt.MarkIneligibleForExport(ctx, acq); err != nil {
+		// We don't currently expect any errors other than assertion failures that represent
+		// programming errors from this method.
+		log.KvExec.Fatalf(ctx, "%v", err)
 	}
 }
 
 // OnLockUpdated implements the LockManager interface.
 func (m *managerImpl) OnLockUpdated(ctx context.Context, up *roachpb.LockUpdate) {
-	if err := m.lt.UpdateLocks(up); err != nil {
-		log.Fatalf(ctx, "%v", err)
+	if err := m.lt.UpdateLocks(ctx, up); err != nil {
+		log.KvExec.Fatalf(ctx, "%v", err)
 	}
 }
 
@@ -557,6 +705,13 @@ func (m *managerImpl) QueryLockTableState(
 	ctx context.Context, span roachpb.Span, opts QueryLockTableOptions,
 ) ([]roachpb.LockStateInfo, QueryLockTableResumeState) {
 	return m.lt.QueryLockTableState(span, opts)
+}
+
+// ExportUnreplicatedLocks implements the LockManager interface.
+func (m *managerImpl) ExportUnreplicatedLocks(
+	span roachpb.Span, f func(*roachpb.LockAcquisition) bool,
+) {
+	m.lt.ExportUnreplicatedLocks(span, f)
 }
 
 // OnTransactionUpdated implements the TransactionManager interface.
@@ -572,6 +727,29 @@ func (m *managerImpl) GetDependents(txnID uuid.UUID) []uuid.UUID {
 // OnRangeDescUpdated implements the RangeStateListener interface.
 func (m *managerImpl) OnRangeDescUpdated(desc *roachpb.RangeDescriptor) {
 	m.twq.OnRangeDescUpdated(desc)
+	m.lm.OnRangeDescUpdated(desc)
+}
+
+var allKeysSpan = roachpb.Span{Key: keys.MinKey, EndKey: keys.MaxKey}
+
+// OnRangeLeaseTransferEval implements the RangeStateListener interface.
+func (m *managerImpl) OnRangeLeaseTransferEval() ([]*roachpb.LockAcquisition, int64) {
+	if !UnreplicatedLockReliabilityLeaseTransfer.Get(&m.st.SV) {
+		return nil, 0
+	}
+
+	return m.exportUnreplicatedLocks()
+}
+
+// OnRangeSubumeEval implements the RangeStateListener interface. It is called
+// during evaluation of Subsume. The returned LockAcquisition structs represent
+// held locks that we may want to flush to disk as replicated.
+func (m *managerImpl) OnRangeSubsumeEval() ([]*roachpb.LockAcquisition, int64) {
+	if !UnreplicatedLockReliabilityMerge.Get(&m.st.SV) {
+		return nil, 0
+	}
+
+	return m.exportUnreplicatedLocks()
 }
 
 // OnRangeLeaseUpdated implements the RangeStateListener interface.
@@ -588,21 +766,33 @@ func (m *managerImpl) OnRangeLeaseUpdated(seq roachpb.LeaseSequence, isLeasehold
 	}
 }
 
-// OnRangeSplit implements the RangeStateListener interface.
-func (m *managerImpl) OnRangeSplit() {
-	// TODO(nvanbenschoten): it only essential that we clear the half of the
-	// lockTable which contains locks in the key range that is being split off
-	// from the current range. For now though, we clear it all.
-	const disable = false
-	m.lt.Clear(disable)
-	m.twq.Clear(disable)
+// OnRangeSplit implements the RangeStateListener interface. It is called on the
+// LHS replica of a split and should be passed the new RHS start key (LHS
+// EndKey).
+func (m *managerImpl) OnRangeSplit(rhsStartKey roachpb.Key) []roachpb.LockAcquisition {
+	if UnreplicatedLockReliabilitySplit.Get(&m.st.SV) {
+		lockToMove := m.lt.ClearGE(rhsStartKey)
+		m.twq.ClearGE(rhsStartKey)
+		return lockToMove
+	} else {
+		// TODO(ssd): We could call ClearGE here but ignore the response. But for
+		// now we leave the old behavior unchanged.
+		const disable = false
+		m.lt.Clear(disable)
+		m.twq.Clear(disable)
+		return nil
+	}
 }
 
 // OnRangeMerge implements the RangeStateListener interface.
 func (m *managerImpl) OnRangeMerge() {
-	// Disable all queues - the range is being merged into its LHS neighbor.
-	// It will no longer be informed about all state transitions to locks and
-	// transactions.
+	m.OnReplicaRemoval()
+}
+
+// OnReplicaRemoval implements the RangeStateListener interface.
+func (m *managerImpl) OnReplicaRemoval() {
+	// Disable all queues - the replica is being removed and will no longer be
+	// informed about all state transitions to locks and transactions.
 	const disable = true
 	m.lt.Clear(disable)
 	m.twq.Clear(disable)
@@ -636,7 +826,19 @@ func (m *managerImpl) LockTableMetrics() LockTableMetrics {
 	return m.lt.Metrics()
 }
 
-// TestingLockTableString implements the MetricExporter interface.
+func (m *managerImpl) exportUnreplicatedLocks() ([]*roachpb.LockAcquisition, int64) {
+	// TODO(ssd): Expose a function that allows us to pre-allocate this a bit better.
+	approximateBatchSize := int64(0)
+	acquisitions := make([]*roachpb.LockAcquisition, 0)
+	m.lt.ExportUnreplicatedLocks(allKeysSpan, func(acq *roachpb.LockAcquisition) bool {
+		approximateBatchSize += storage.ApproximateLockTableSize(acq)
+		acquisitions = append(acquisitions, acq)
+		return true
+	})
+	return acquisitions, approximateBatchSize
+}
+
+// TestingLockTableString implements the TestingAccessor interface.
 func (m *managerImpl) TestingLockTableString() string {
 	return m.lt.String()
 }
@@ -646,9 +848,16 @@ func (m *managerImpl) TestingTxnWaitQueue() *txnwait.Queue {
 	return m.twq.(*txnwait.Queue)
 }
 
-// TestingSetMaxLocks implements the TestingAccessor interface.
-func (m *managerImpl) TestingSetMaxLocks(maxLocks int64) {
-	m.lt.TestingSetMaxLocks(maxLocks)
+// TestingPushedTransactionUpdated implements the TestingAccessor interface.
+func (m *managerImpl) TestingPushedTransactionUpdated(
+	txn *roachpb.Transaction, clockObs roachpb.ObservedTimestamp,
+) {
+	m.lt.PushedTransactionUpdated(txn, clockObs)
+}
+
+// SetMaxLockTableSize implements the LockManager interface.
+func (m *managerImpl) SetMaxLockTableSize(maxLocks int64) {
+	m.lt.SetMaxLockTableSize(maxLocks)
 }
 
 func (r *Request) isSingle(m kvpb.Method) bool {
@@ -658,70 +867,84 @@ func (r *Request) isSingle(m kvpb.Method) bool {
 	return r.Requests[0].GetInner().Method() == m
 }
 
-// Used to avoid allocations.
-var guardPool = sync.Pool{
-	New: func() interface{} { return new(Guard) },
+// canVirtuallyResolve returns true if all requests in the batch are read-only
+// and non-locking.
+func (r *Request) canVirtuallyResolve() bool {
+	for _, ru := range r.Requests {
+		req := ru.GetInner()
+		canVirtuallyResolve := kvpb.IsReadOnly(req) && !kvpb.IsLocking(req)
+		if !canVirtuallyResolve {
+			return false
+		}
+	}
+	return true
 }
 
-func newGuard(req Request) *Guard {
-	g := guardPool.Get().(*Guard)
-	g.Req = req
+// Used to avoid allocations.
+var guardPool = sync.Pool{
+	New: func() interface{} { return new(guardImpl) },
+}
+
+func newGuard(req Request) *guardImpl {
+	g := guardPool.Get().(*guardImpl)
+	g.req = req
 	return g
 }
 
-func releaseGuard(g *Guard) {
-	if g.Req.LatchSpans != nil {
-		g.Req.LatchSpans.Release()
+func releaseGuard(g *guardImpl) {
+	if g.req.LatchSpans != nil {
+		g.req.LatchSpans.Release()
 	}
-	if g.Req.LockSpans != nil {
-		g.Req.LockSpans.Release()
+	if g.req.LockSpans != nil {
+		g.req.LockSpans.Release()
 	}
-	*g = Guard{}
+	*g = guardImpl{}
 	guardPool.Put(g)
 }
 
-// LatchSpans returns the maximal set of spans that the request will access.
-// The returned spanset is not safe for use after the guard has been finished.
-func (g *Guard) LatchSpans() *spanset.SpanSet {
-	return g.Req.LatchSpans
+// Req implements the Guard interface.
+func (g *guardImpl) Req() Request {
+	return g.req
 }
 
-// TakeSpanSets transfers ownership of the Guard's LatchSpans and LockSpans
-// SpanSets to the caller, ensuring that the SpanSets are not destroyed with the
-// Guard. The method is only safe if called immediately before passing the Guard
-// to FinishReq.
-func (g *Guard) TakeSpanSets() (*spanset.SpanSet, *lockspanset.LockSpanSet) {
-	la, lo := g.Req.LatchSpans, g.Req.LockSpans
-	g.Req.LatchSpans, g.Req.LockSpans = nil, nil
+// EvalKind implements the Guard interface.
+func (g *guardImpl) EvalKind() RequestEvalKind {
+	return g.evalKind
+}
+
+// LatchSpans implements the Guard interface.
+func (g *guardImpl) LatchSpans() *spanset.SpanSet {
+	return g.req.LatchSpans
+}
+
+// TakeSpanSets implements the Guard interface.
+func (g *guardImpl) TakeSpanSets() (*spanset.SpanSet, *lockspanset.LockSpanSet) {
+	la, lo := g.req.LatchSpans, g.req.LockSpans
+	g.req.LatchSpans, g.req.LockSpans = nil, nil
 	return la, lo
 }
 
-// HoldingLatches returned whether the guard is holding latches or not.
-func (g *Guard) HoldingLatches() bool {
+// HoldingLatches implements the Guard interface.
+func (g *guardImpl) HoldingLatches() bool {
 	return g != nil && g.lg != nil
 }
 
-// AssertLatches asserts that the guard is non-nil and holding latches, if the
-// request is supposed to hold latches while evaluating in the first place.
-func (g *Guard) AssertLatches() {
-	if !shouldIgnoreLatches(g.Req) && !shouldWaitOnLatchesWithoutAcquiring(g.Req) && !g.HoldingLatches() {
+// AssertLatches implements the Guard interface.
+func (g *guardImpl) AssertLatches() {
+	if !shouldIgnoreLatches(g.req) && !shouldWaitOnLatchesWithoutAcquiring(g.req) && !g.HoldingLatches() {
 		panic("expected latches held, found none")
 	}
 }
 
-// AssertNoLatches asserts that the guard is non-nil and not holding latches.
-func (g *Guard) AssertNoLatches() {
+// AssertNoLatches implements the Guard interface.
+func (g *guardImpl) AssertNoLatches() {
 	if g.HoldingLatches() {
 		panic("unexpected latches held")
 	}
 }
 
-// IsolatedAtLaterTimestamps returns whether the request holding the guard would
-// continue to be isolated from other requests / transactions even if it were to
-// increase its request timestamp while evaluating. If the method returns false,
-// the concurrency guard must be dropped and re-acquired with the new timestamp
-// before the request can evaluate at that later timestamp.
-func (g *Guard) IsolatedAtLaterTimestamps() bool {
+// IsolatedAtLaterTimestamps implements the Guard interface.
+func (g *guardImpl) IsolatedAtLaterTimestamps() bool {
 	// If the request acquired any read latches with bounded (MVCC) timestamps
 	// then it cannot trivially bump its timestamp without dropping and
 	// re-acquiring those latches. Doing so could allow the request to read at
@@ -734,7 +957,7 @@ func (g *Guard) IsolatedAtLaterTimestamps() bool {
 	// because if a read latch is declared at hlc.MaxTimestamp, it is isolated at
 	// higher timestamps; shared locking requests do exactly this.
 	readLatchesIsolatedAtHigherTimestamp := true
-	for _, l := range g.Req.LatchSpans.GetSpans(spanset.SpanReadOnly, spanset.SpanGlobal) {
+	for _, l := range g.req.LatchSpans.GetSpans(spanset.SpanReadOnly, spanset.SpanGlobal) {
 		if !l.Timestamp.Equal(hlc.MaxTimestamp) {
 			readLatchesIsolatedAtHigherTimestamp = false
 			break
@@ -750,16 +973,15 @@ func (g *Guard) IsolatedAtLaterTimestamps() bool {
 		// timestamp. Bumping its timestamp could cause the request to conflict with
 		// locks that it previously did not conflict with. It must drop its
 		// lockTableGuard and re-scan the lockTable.
-		len(g.Req.LockSpans.GetSpans(lock.None)) == 0
+		len(g.req.LockSpans.GetSpans(lock.None)) == 0
 }
 
-// CheckOptimisticNoConflicts checks that the {latch,lock}SpansRead do not
-// have a conflicting latch, lock.
-func (g *Guard) CheckOptimisticNoConflicts(
+// CheckOptimisticNoConflicts implements the Guard interface.
+func (g *guardImpl) CheckOptimisticNoConflicts(
 	latchSpansRead *spanset.SpanSet, lockSpansRead *lockspanset.LockSpanSet,
 ) (ok bool) {
-	if g.EvalKind != OptimisticEval {
-		panic(errors.AssertionFailedf("unexpected EvalKind: %d", g.EvalKind))
+	if g.evalKind != OptimisticEval {
+		panic(errors.AssertionFailedf("unexpected EvalKind: %d", g.evalKind))
 	}
 	if g.lg == nil && g.ltg == nil {
 		return true
@@ -775,46 +997,48 @@ func (g *Guard) CheckOptimisticNoConflicts(
 	return false
 }
 
-// CheckOptimisticNoLatchConflicts checks that the declared latch spans for
-// the request do not have a conflicting latch.
-func (g *Guard) CheckOptimisticNoLatchConflicts() (ok bool) {
-	if g.EvalKind != OptimisticEval {
-		panic(errors.AssertionFailedf("unexpected EvalKind: %d", g.EvalKind))
+// CheckOptimisticNoLatchConflicts implements the Guard interface.
+func (g *guardImpl) CheckOptimisticNoLatchConflicts() (ok bool) {
+	if g.evalKind != OptimisticEval {
+		panic(errors.AssertionFailedf("unexpected EvalKind: %d", g.evalKind))
 	}
 	if g.lg == nil {
 		return true
 	}
-	return g.lm.CheckOptimisticNoConflicts(g.lg, g.Req.LatchSpans)
+	return g.lm.CheckOptimisticNoConflicts(g.lg, g.req.LatchSpans)
 }
 
-// IsKeyLockedByConflictingTxn returns whether the specified key is locked by
-// a conflicting transaction in the lockTableGuard's snapshot of the lock
-// table, given the caller's own desired locking strength. If so, true is
-// returned and so is the lock holder. If the lock is held by the transaction
-// itself, there's no conflict to speak of, so false is returned.
-//
-// This method is used by requests in conjunction with the SkipLocked wait
-// policy to determine which keys they should skip over during evaluation.
-//
-// If the supplied lock strength is locking (!= lock.None), then any queued
-// locking requests that came before the lockTableGuard will also be checked
-// for conflicts. This helps prevent a stream of locking SKIP LOCKED requests
-// from starving out regular locking requests. In such cases, true is
-// returned, but so is nil.
-func (g *Guard) IsKeyLockedByConflictingTxn(
+// IsKeyLockedByConflictingTxn implements the Guard interface.
+func (g *guardImpl) IsKeyLockedByConflictingTxn(
 	ctx context.Context, key roachpb.Key, strength lock.Strength,
 ) (bool, *enginepb.TxnMeta, error) {
 	return g.ltg.IsKeyLockedByConflictingTxn(ctx, key, strength)
 }
 
-func (g *Guard) moveLatchGuard() latchGuard {
+// IntentsToResolveVirtually implements the Guard interface.
+func (g *guardImpl) IntentsToResolveVirtually() []roachpb.LockUpdate {
+	if g.ltg != nil {
+		return g.ltg.IntentsToResolveVirtually()
+	}
+	return nil
+}
+
+// HasCondensedIntents implements the Guard interface.
+func (g *guardImpl) HasCondensedIntents() bool {
+	if g.ltg != nil {
+		return g.ltg.HasCondensedIntents()
+	}
+	return false
+}
+
+func (g *guardImpl) moveLatchGuard() latchGuard {
 	lg := g.lg
 	g.lg = nil
 	g.lm = nil
 	return lg
 }
 
-func (g *Guard) moveLockTableGuard() lockTableGuard {
+func (g *guardImpl) moveLockTableGuard() lockTableGuard {
 	ltg := g.ltg
 	g.ltg = nil
 	return ltg

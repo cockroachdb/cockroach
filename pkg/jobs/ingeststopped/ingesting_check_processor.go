@@ -36,7 +36,7 @@ func newIngestStoppedProcessor(
 
 // Start is part of the RowSource interface.
 func (p *proc) Start(ctx context.Context) {
-	p.StartInternal(ctx, "ingeststopped.proc")
+	_ = p.StartInternal(ctx, "ingeststopped.proc")
 	if p.FlowCtx.Cfg.JobRegistry.IsIngesting(p.spec.JobID) {
 		p.MoveToDraining(errors.Errorf("jobs is still ingesting on node %d", p.FlowCtx.NodeID.SQLInstanceID()))
 	} else {

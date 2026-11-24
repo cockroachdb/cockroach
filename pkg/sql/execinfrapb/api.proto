@@ -15,6 +15,7 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb";
 import "gogoproto/gogo.proto";
 import "google/protobuf/timestamp.proto";
 
+import "kv/kvpb/api.proto";
 import "roachpb/data.proto";
 import "sql/execinfrapb/data.proto";
 import "sql/execinfrapb/processors.proto";
@@ -26,7 +27,8 @@ message SetupFlowRequest {
 
   optional util.tracing.tracingpb.TraceInfo trace_info = 11;
   // JobTag is only populated in distributed flows.
-  optional string job_tag = 13 [(gogoproto.nullable) = false];
+  optional string job_tag = 13 [(gogoproto.nullable) = false,
+    (gogoproto.casttype) = "github.com/cockroachdb/redact.SafeString"];
 
   // LeafTxnInputState is the input parameter for the *kv.Txn needed for
   // executing the flow.
@@ -35,10 +37,14 @@ message SetupFlowRequest {
   // flows expect to run in a txn, but some, like backfills, don't.
   optional roachpb.LeafTxnInputState leaf_txn_input_state = 7;
 
+  // LeafTxnAdmissionHeader is used to initialize the admission control
+  // header for the flow's txn, if LeafTxnInputState is set.
+  optional roachpb.AdmissionHeader leaf_txn_admission_header = 12 [(gogoproto.nullable) = false];
+
   // Version of distsqlrun protocol; a server accepts a certain range of
   // versions, up to its own version. See server.go for more details.
   optional uint32 version = 5 [(gogoproto.nullable) = false,
-    (gogoproto.casttype) = "DistSQLVersion"];
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/execversion.V"];
 
   optional FlowSpec flow = 3 [(gogoproto.nullable) = false];
 
@@ -80,6 +86,20 @@ message EvalContext {
   optional int64 txn_timestamp_nanos = 2 [(gogoproto.nullable) = false];
   reserved 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14;
   optional sessiondatapb.SessionData session_data = 15 [(gogoproto.nullable) = false];
+  optional bool testing_knobs_force_production_values = 16  [(gogoproto.nullable) = false];
+  // WorkloadID for ASH sampling.
+  optional uint64 workload_id = 17 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "WorkloadID"];
+  // AppNameID is the hash of the application name, for ASH sampling.
+  // Note(alyshan): This will eventually be replaced by a general
+  // enrichment_id field which will enable the ASH sampler to
+  // enrich samples with more workload context.
+  optional uint64 app_name_id = 18 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "AppNameID"];
+  // WorkloadType distinguishes the kind of workload that workload_id
+  // represents. Used by the ASH sampler to choose the right encoding.
+  optional uint32 workload_type = 19 [(gogoproto.nullable) = false,
+    (gogoproto.customname) = "WorkloadType"];
 }
 
 message SimpleResponse {

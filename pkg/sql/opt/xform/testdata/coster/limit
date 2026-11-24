@@ -22,6 +22,7 @@ index-join a
  ├── cardinality: [0 - 20]
  ├── stats: [rows=1]
  ├── cost: 35.4529295
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: ()-->(2), (1)-->(3,4)
  ├── ordering: +4,-1 opt(2) [actual: +4,-1]
@@ -31,6 +32,7 @@ index-join a
       ├── cardinality: [0 - 20]
       ├── stats: [rows=1]
       ├── cost: 29.3829295
+      ├── cost-flags: unbounded-cardinality
       ├── key: (1)
       ├── fd: ()-->(2), (1)-->(4)
       ├── ordering: +4,-1 opt(2) [actual: +4,-1]
@@ -40,6 +42,7 @@ index-join a
       │    ├── cardinality: [0 - 1020]
       │    ├── stats: [rows=10, distinct(4)=9.56179, null(4)=0]
       │    ├── cost: 29.3629295
+      │    ├── cost-flags: unbounded-cardinality
       │    ├── key: (1)
       │    ├── fd: ()-->(2), (1)-->(4)
       │    ├── ordering: +4,-1 opt(2) [actual: +4,-1]
@@ -47,6 +50,7 @@ index-join a
       │    │    ├── columns: x:1!null y:2!null s:4!null
       │    │    ├── stats: [rows=10, distinct(2)=1, null(2)=0, distinct(4)=9.56179, null(4)=0]
       │    │    ├── cost: 29.2529295
+      │    │    ├── cost-flags: unbounded-cardinality
       │    │    ├── key: (1)
       │    │    ├── fd: ()-->(2), (1)-->(4)
       │    │    ├── ordering: +4,-1 opt(2) [actual: +4,-1]
@@ -56,6 +60,7 @@ index-join a
       │    │         ├── constraint: /2/4/1: [/10 - /10]
       │    │         ├── stats: [rows=10, distinct(2)=1, null(2)=0, distinct(4)=9.56179, null(4)=0]
       │    │         ├── cost: 28.6200001
+      │    │         ├── cost-flags: unbounded-cardinality
       │    │         ├── key: (1)
       │    │         ├── fd: ()-->(2), (1)-->(4)
       │    │         └── ordering: +4 opt(2) [actual: +4]
@@ -87,6 +92,7 @@ top-k
  ├── cardinality: [0 - 10]
  ├── stats: [rows=10, distinct(2)=9.95512, null(2)=0]
  ├── cost: 7840.39841
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: (1)-->(2-4)
  ├── ordering: +2,+3
@@ -94,6 +100,7 @@ top-k
       ├── columns: x:1!null y:2 z:3 s:4!null
       ├── stats: [rows=10000]
       ├── cost: 7748.81875
+      ├── cost-flags: unbounded-cardinality
       ├── key: (1)
       ├── fd: (1)-->(2-4)
       ├── ordering: +2
@@ -102,6 +109,7 @@ top-k
            ├── columns: x:1!null y:2 s:4!null
            ├── stats: [rows=10000]
            ├── cost: 1082.79875
+           ├── cost-flags: unbounded-cardinality
            ├── key: (1)
            ├── fd: (1)-->(2,4)
            ├── ordering: +2

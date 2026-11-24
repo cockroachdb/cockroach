@@ -11,6 +11,8 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/rand"
+	"reflect"
 	"slices"
 	"sort"
 	"strconv"
@@ -20,19 +22,22 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/workload"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigreporter"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/logtags"
 	"github.com/google/btree"
 )
 
@@ -41,7 +46,7 @@ type state struct {
 	stores                  map[StoreID]*store
 	load                    map[RangeID]ReplicaLoad
 	loadsplits              map[StoreID]LoadSplitter
-	nodeLiveness            MockNodeLiveness
+	statusTracker           StatusTracker
 	capacityChangeListeners []CapacityChangeListener
 	newCapacityListeners    []NewCapacityListener
 	configChangeListeners   []ConfigChangeListener
@@ -76,9 +81,11 @@ func newState(settings *config.SimulationSettings) *state {
 		usageInfo:         newClusterUsageInfo(),
 		settings:          settings,
 	}
-	s.nodeLiveness = MockNodeLiveness{
-		clock:     hlc.NewClockForTesting(s.clock),
-		statusMap: map[NodeID]livenesspb.NodeLivenessStatus{},
+	s.statusTracker = StatusTracker{
+		clock:          hlc.NewClockForTesting(s.clock),
+		storeStatusMap: map[StoreID]StoreStatus{},
+		nodeStatusMap:  map[NodeID]NodeStatus{},
+		storeToNode:    map[StoreID]NodeID{},
 	}
 
 	s.load = map[RangeID]ReplicaLoad{FirstRangeID: NewReplicaLoadCounter(s.clock)}
@@ -88,7 +95,7 @@ func newState(settings *config.SimulationSettings) *state {
 type rmap struct {
 	// NB: Both rangeTree and rangeMap hold references to ranges. They must
 	// both be updated on insertion and deletion to maintain consistent state.
-	rangeTree *btree.BTree
+	rangeTree *btree.BTreeG[*rng]
 	rangeMap  map[RangeID]*rng
 
 	// Unique ID generator for Ranges.
@@ -96,18 +103,16 @@ type rmap struct {
 }
 
 func newRMap() *rmap {
+	lessFn := func(a, b *rng) bool {
+		return a.startKey < b.startKey
+	}
 	rmap := &rmap{
-		rangeTree: btree.New(8),
+		rangeTree: btree.NewG[*rng](8, lessFn),
 		rangeMap:  make(map[RangeID]*rng),
 	}
 
 	rmap.initFirstRange()
 	return rmap
-}
-
-// Less is part of the btree.Item interface.
-func (r *rng) Less(than btree.Item) bool {
-	return r.startKey < than.(*rng).startKey
 }
 
 // initFirstRange initializes the first range within the rangemap, with
@@ -164,8 +169,7 @@ func (s *state) String() string {
 	builder := &strings.Builder{}
 
 	orderedRanges := []*rng{}
-	s.ranges.rangeTree.Ascend(func(i btree.Item) bool {
-		r := i.(*rng)
+	s.ranges.rangeTree.Ascend(func(r *rng) bool {
 		orderedRanges = append(orderedRanges, r)
 		return !r.desc.EndKey.Equal(MaxKey.ToRKey())
 	})
@@ -189,16 +193,21 @@ func (s *state) String() string {
 		}
 	}
 	builder.WriteString("] ")
+	builder.WriteString("\n")
 
 	nRanges := len(orderedRanges)
 	iterRanges := 0
 	builder.WriteString(fmt.Sprintf("ranges(%d)=[", nRanges))
+	numOfRangesPerLine := 5
 	for _, r := range orderedRanges {
 		builder.WriteString(r.String())
 		if iterRanges < nRanges-1 {
 			builder.WriteString(",")
 		}
 		iterRanges++
+		if iterRanges%numOfRangesPerLine == 0 {
+			builder.WriteString("\n")
+		}
 	}
 	builder.WriteString("]")
 
@@ -250,6 +259,7 @@ func (s *state) updateStoreCapacity(storeID StoreID) {
 			capacity = mergeOverride(capacity, override)
 		}
 		store.desc.Capacity = capacity
+		store.desc.NodeCapacity = s.NodeCapacity(store.nodeID)
 		s.publishNewCapacityEvent(capacity, storeID)
 	}
 }
@@ -267,7 +277,9 @@ func (s *state) capacity(storeID StoreID) roachpb.StoreCapacity {
 	capacity := store.desc.Capacity
 	capacity.QueriesPerSecond = 0
 	capacity.WritesPerSecond = 0
+	capacity.WriteBytesPerSecond = 0
 	capacity.LogicalBytes = 0
+	capacity.CPUPerSecond = 0
 	capacity.LeaseCount = 0
 	capacity.RangeCount = 0
 	capacity.Used = 0
@@ -275,26 +287,27 @@ func (s *state) capacity(storeID StoreID) roachpb.StoreCapacity {
 
 	for _, repl := range s.Replicas(storeID) {
 		rangeID := repl.Range()
-		replicaID := repl.ReplicaID()
 		rng, _ := s.Range(rangeID)
-		if rng.Leaseholder() == replicaID {
-			// TODO(kvoli): We currently only consider load on the leaseholder
-			// replica for a range. The other replicas have an estimate that is
-			// calculated within the allocation algorithm. Adapt this to
-			// support follower reads, when added to the workload generator.
-			usage := s.RangeUsageInfo(rng.RangeID(), storeID)
-			capacity.QueriesPerSecond += usage.QueriesPerSecond
-			capacity.WritesPerSecond += usage.WritesPerSecond
-			capacity.LogicalBytes += usage.LogicalBytes
+		usage := s.RangeUsageInfo(rng.RangeID(), storeID)
+		// RangeUsageInfo should return valid usage depending on leaseholder. No
+		// special handling needed here.
+		capacity.QueriesPerSecond += usage.QueriesPerSecond
+		capacity.WritesPerSecond += usage.WritesPerSecond
+		capacity.WriteBytesPerSecond += usage.WriteBytesPerSecond
+		capacity.LogicalBytes += usage.LogicalBytes
+		capacity.CPUPerSecond += usage.RequestCPUNanosPerSecond + usage.RaftCPUNanosPerSecond
+		capacity.RangeCount++
+		if leaseholder, _ := s.LeaseholderStore(rangeID); leaseholder.StoreID() == storeID {
 			capacity.LeaseCount++
 		}
-		capacity.RangeCount++
 	}
 
-	// TODO(kvoli): parameterize the logical to actual used storage bytes. At the
-	// moment we use 1.25 as a rough estimate.
-	used := int64(float64(capacity.LogicalBytes) * 1.25)
-	available := capacity.Capacity - used
+	physical := s.nodes[store.nodeID].physical
+	used := int64(float64(capacity.LogicalBytes) * physical.SpaceAmplification)
+	available := capacity.Capacity - used - physical.ReservedDiskBytes
+	if available < 0 {
+		available = 0
+	}
 	capacity.Used = used
 	capacity.Available = available
 	return capacity
@@ -318,6 +331,11 @@ func (s *state) Nodes() []Node {
 	return nodes
 }
 
+func (s *state) Node(nodeID NodeID) Node {
+	node := s.nodes[nodeID]
+	return node
+}
+
 // RangeFor returns the range containing Key in [StartKey, EndKey). This
 // cannot fail.
 func (s *state) RangeFor(key Key) Range {
@@ -330,8 +348,8 @@ func (s *state) rangeFor(key Key) *rng {
 	var r *rng
 	// If keyToFind equals to MinKey of the range, we found the right range, if
 	// the range is less than keyToFind then this is the right range also.
-	s.ranges.rangeTree.DescendLessOrEqual(keyToFind, func(i btree.Item) bool {
-		r = i.(*rng)
+	s.ranges.rangeTree.DescendLessOrEqual(keyToFind, func(i *rng) bool {
+		r = i
 		return false
 	})
 	return r
@@ -406,18 +424,27 @@ func (s *state) Replicas(storeID StoreID) []Replica {
 	return repls
 }
 
-// AddNode modifies the state to include one additional node. This cannot
-// fail. The new Node is returned.
-func (s *state) AddNode() Node {
+// AddNode modifies the state to include one additional node. This cannot fail.
+// The new Node is returned.
+func (s *state) AddNode(nodeCPUCapacity int64, locality roachpb.Locality) Node {
 	s.nodeSeqGen++
 	nodeID := s.nodeSeqGen
+	mmAllocator := mmaprototype.NewAllocatorState(s.clock, rand.New(rand.NewSource(s.settings.Seed)))
+	sp := NewStorePool(s.NodeCountFn(), s.NodeLivenessFn(),
+		hlc.NewClockForTesting(s.clock), s.settings.ST)
 	node := &node{
-		nodeID: nodeID,
-		desc:   roachpb.NodeDescriptor{NodeID: roachpb.NodeID(nodeID)},
-		stores: []StoreID{},
+		nodeID:      nodeID,
+		desc:        roachpb.NodeDescriptor{NodeID: roachpb.NodeID(nodeID)},
+		physical:    DefaultNodePhysicalCharacteristics(),
+		stores:      []StoreID{},
+		mmAllocator: mmAllocator,
+		storepool:   sp,
+		as:          mmaintegration.NewAllocatorSync(sp, mmAllocator, s.settings.ST, nil),
 	}
 	s.nodes[nodeID] = node
-	s.SetNodeLiveness(nodeID, livenesspb.NodeLivenessStatus_LIVE)
+	s.SetNodeStatus(nodeID, NodeStatus{Membership: livenesspb.MembershipStatus_ACTIVE})
+	s.SetNodeLocality(nodeID, locality)
+	s.SetNodeCPURateCapacity(nodeID, nodeCPUCapacity)
 	return node
 }
 func (s *state) SetNodeLocality(nodeID NodeID, locality roachpb.Locality) {
@@ -430,6 +457,48 @@ func (s *state) SetNodeLocality(nodeID NodeID, locality roachpb.Locality) {
 	node.desc.Locality = locality
 	for _, storeID := range node.stores {
 		s.stores[storeID].desc.Node = node.desc
+	}
+}
+
+func (s *state) SetNodeCPURateCapacity(nodeID NodeID, cpuRateCapacity int64) {
+	node, ok := s.nodes[nodeID]
+	if !ok {
+		panic(fmt.Sprintf("programming error: node with ID %d doesn't exist", nodeID))
+	}
+	node.cpuRateCapacity = cpuRateCapacity
+}
+
+func (s *state) SetNodePhysicalCharacteristics(nodeID NodeID, chars NodePhysicalCharacteristics) {
+	node, ok := s.nodes[nodeID]
+	if !ok {
+		panic(fmt.Sprintf("programming error: node with ID %d doesn't exist", nodeID))
+	}
+	node.physical = chars
+}
+
+// NodeCapacity returns the capacity of the Node with ID NodeID. Used by
+// updateStoreCapacity to populate StoreDescriptor.NodeCapacity, which feeds
+// into MakeStoreLoadMsg and ComputeAmplificationFactors.
+//
+// NodeCPURateUsage is inflated by cpuOverheadMultiplier to simulate the gap
+// between OS-level CPU (which includes GC, goroutine overhead, etc.) and the
+// directly-tracked per-replica CPU (StoresCPURate). In real clusters this
+// ratio is typically 1.0-3.0.
+func (s *state) NodeCapacity(nodeID NodeID) roachpb.NodeCapacity {
+	node := s.nodes[nodeID]
+	stores := node.Stores()
+	cpuRate := 0
+	for _, storeID := range stores {
+		capacity := s.capacity(storeID)
+		cpuRate += int(capacity.CPUPerSecond)
+	}
+
+	nodeCPURateUsage := int64(float64(cpuRate) * node.physical.CPUOverheadMultiplier)
+	return roachpb.NodeCapacity{
+		StoresCPURate:       int64(cpuRate),
+		NumStores:           int32(len(stores)),
+		NodeCPURateUsage:    nodeCPURateUsage,
+		NodeCPURateCapacity: node.cpuRateCapacity,
 	}
 }
 
@@ -513,21 +582,34 @@ func (s *state) AddStore(nodeID NodeID) (Store, bool) {
 	}
 
 	node := s.nodes[nodeID]
+	sp := node.storepool
 	s.storeSeqGen++
 	storeID := s.storeSeqGen
-	sp, st := NewStorePool(s.NodeCountFn(), s.NodeLivenessFn(), hlc.NewClockForTesting(s.clock))
+	// Old allocator is still needed for other queues.
+	allocator := allocatorimpl.MakeAllocator(
+		s.settings.ST,
+		node.as,
+		sp.IsDeterministic(),
+		func(id roachpb.NodeID) (time.Duration, bool) { return 0, true },
+		&allocator.TestingKnobs{
+			AllowLeaseTransfersToReplicasNeedingSnapshots: true,
+		},
+	)
 	store := &store{
 		storeID:   storeID,
 		nodeID:    nodeID,
 		desc:      roachpb.StoreDescriptor{StoreID: roachpb.StoreID(storeID), Node: node.Descriptor()},
-		storepool: sp,
-		settings:  st,
+		allocator: allocator,
 		replicas:  make(map[RangeID]ReplicaID),
 	}
 
 	// Commit the new store to state.
 	node.stores = append(node.stores, storeID)
 	s.stores[storeID] = store
+
+	// Register the store with the liveness tracker, associating
+	// this store with its node.
+	s.statusTracker.registerStore(storeID, nodeID)
 
 	// Add a range load splitter for this store.
 	s.loadsplits[storeID] = NewSplitDecider(s.settings)
@@ -549,6 +631,21 @@ func (s *state) SetStoreCapacity(storeID StoreID, capacity int64) {
 	}
 	// TODO(kvoli): deal with overwriting this.
 	store.desc.Capacity.Capacity = capacity
+}
+
+// SetStoreAttrs sets the store-level attributes that the constraint matcher
+// sees as "+attr" tokens (alongside locality tiers). This is the asim
+// analogue of starting a real CRDB store with --store=attrs=…; without it,
+// asim stores have empty Attrs and constraints can only discriminate at the
+// node-locality granularity (region, zone, …).
+func (s *state) SetStoreAttrs(storeID StoreID, attrs []string) {
+	store, ok := s.stores[storeID]
+	if !ok {
+		panic(fmt.Sprintf("programming error: store with ID %d doesn't exist", storeID))
+	}
+	// Clone to avoid aliasing the caller's slice (the event author may
+	// retain it).
+	store.desc.Attrs = roachpb.Attributes{Attrs: slices.Clone(attrs)}
 }
 
 // AddReplica modifies the state to include one additional range for the
@@ -574,6 +671,7 @@ func (s *state) addReplica(
 
 	desc := rng.desc.AddReplica(roachpb.NodeID(nodeID), roachpb.StoreID(storeID), rtype)
 	replica := &replica{
+		nodeID:    nodeID,
 		replicaID: ReplicaID(desc.ReplicaID),
 		storeID:   storeID,
 		rangeID:   rangeID,
@@ -582,7 +680,6 @@ func (s *state) addReplica(
 
 	store.replicas[rangeID] = replica.replicaID
 	rng.replicas[storeID] = replica
-	s.publishCapacityChangeEvent(kvserver.RangeAddEvent, storeID)
 
 	// This is the first replica to be added for this range. Make it the
 	// leaseholder as a placeholder. The caller can update the lease, however
@@ -590,8 +687,13 @@ func (s *state) addReplica(
 	// exists at all times.
 	if rng.leaseholder == -1 && rtype == roachpb.VOTER_FULL {
 		s.setLeaseholder(rangeID, storeID)
+		s.publishCapacityChangeEvent(kvserver.LeaseAddEvent, storeID)
 	}
 
+	// NB: We only publish the capacity change events leaving the range in a
+	// consistent state. This is because they may call back into the state to
+	// generate the store descriptor for gossip.
+	s.publishCapacityChangeEvent(kvserver.RangeAddEvent, storeID)
 	return replica, true
 }
 
@@ -666,6 +768,11 @@ func (s *state) removeReplica(rangeID RangeID, storeID StoreID) bool {
 func (s *state) SetSpanConfigForRange(rangeID RangeID, spanConfig *roachpb.SpanConfig) bool {
 	if rng, ok := s.ranges.rangeMap[rangeID]; ok {
 		rng.config = spanConfig
+		// Invalidate the MMA span config status for all replicas of this range,
+		// so that the new span config will be sent to MMA on the next tick.
+		for _, repl := range rng.replicas {
+			repl.mmaSpanConfigIsUpToDate = false
+		}
 		return true
 	}
 	return false
@@ -688,8 +795,7 @@ func (s *state) SetSpanConfig(span roachpb.Span, config *roachpb.SpanConfig) {
 	//   [f, z)         - keeps old span config from [c,z)
 
 	splitsRequired := []Key{}
-	s.ranges.rangeTree.DescendLessOrEqual(&rng{startKey: startKey}, func(i btree.Item) bool {
-		cur, _ := i.(*rng)
+	s.ranges.rangeTree.DescendLessOrEqual(&rng{startKey: startKey}, func(cur *rng) bool {
 		rStart := cur.startKey
 		// There are two cases we handle:
 		// (1) rStart == startKey: We don't need to split.
@@ -702,8 +808,7 @@ func (s *state) SetSpanConfig(span roachpb.Span, config *roachpb.SpanConfig) {
 		return false
 	})
 
-	s.ranges.rangeTree.DescendLessOrEqual(&rng{startKey: endKey}, func(i btree.Item) bool {
-		cur, _ := i.(*rng)
+	s.ranges.rangeTree.DescendLessOrEqual(&rng{startKey: endKey}, func(cur *rng) bool {
 		rEnd := cur.endKey
 		rStart := cur.startKey
 		if rStart == endKey {
@@ -732,8 +837,7 @@ func (s *state) SetSpanConfig(span roachpb.Span, config *roachpb.SpanConfig) {
 	}
 
 	// Apply the span config to all the ranges affected.
-	s.ranges.rangeTree.AscendGreaterOrEqual(&rng{startKey: startKey}, func(i btree.Item) bool {
-		cur, _ := i.(*rng)
+	s.ranges.rangeTree.AscendGreaterOrEqual(&rng{startKey: startKey}, func(cur *rng) bool {
 		if cur.startKey == endKey {
 			return false
 		}
@@ -800,16 +904,15 @@ func (s *state) SplitRange(splitKey Key) (Range, Range, bool) {
 	endKey := Key(math.MaxInt32)
 	failed := false
 	// Find the sucessor range in the range map, to determine the endkey.
-	ranges.rangeTree.AscendGreaterOrEqual(r, func(i btree.Item) bool {
+	ranges.rangeTree.AscendGreaterOrEqual(r, func(i *rng) bool {
 		// The min key already exists in the range map, we cannot return a new
 		// range.
-		if !r.Less(i) {
+		if r.startKey == i.startKey {
 			failed = true
 			return false
 		}
 
-		successorRange, _ := i.(*rng)
-		endKey = successorRange.startKey
+		endKey = i.startKey
 		return false
 	})
 
@@ -822,10 +925,10 @@ func (s *state) SplitRange(splitKey Key) (Range, Range, bool) {
 	var predecessorRange *rng
 	// Find the predecessor range, to update it's endkey to the new range's min
 	// key.
-	ranges.rangeTree.DescendLessOrEqual(r, func(i btree.Item) bool {
+	ranges.rangeTree.DescendLessOrEqual(r, func(i *rng) bool {
 		// The case where the min key already exists cannot occur here, as the
 		// failed flag will have been set above.
-		predecessorRange, _ = i.(*rng)
+		predecessorRange = i
 		return false
 	})
 
@@ -929,14 +1032,18 @@ func (s *state) replaceLeaseHolder(rangeID RangeID, storeID, oldStoreID StoreID)
 	s.removeLeaseholder(rangeID, oldStoreID)
 	// Update the range to reflect the new leaseholder.
 	s.setLeaseholder(rangeID, storeID)
+	s.publishCapacityChangeEvent(kvserver.LeaseRemoveEvent, oldStoreID)
+	s.publishCapacityChangeEvent(kvserver.LeaseAddEvent, storeID)
 }
 
 func (s *state) setLeaseholder(rangeID RangeID, storeID StoreID) {
 	rng := s.ranges.rangeMap[rangeID]
-	rng.replicas[storeID].holdsLease = true
+	repl := rng.replicas[storeID]
+	repl.holdsLease = true
+	// When a replica acquires the lease, invalidate the MMA span config status.
+	repl.mmaSpanConfigIsUpToDate = false
 	replicaID := s.stores[storeID].replicas[rangeID]
 	rng.leaseholder = replicaID
-	s.publishCapacityChangeEvent(kvserver.LeaseAddEvent, storeID)
 }
 
 func (s *state) removeLeaseholder(rangeID RangeID, storeID StoreID) {
@@ -944,7 +1051,6 @@ func (s *state) removeLeaseholder(rangeID RangeID, storeID StoreID) {
 	if repl, ok := rng.replicas[storeID]; ok {
 		if repl.holdsLease {
 			repl.holdsLease = false
-			s.publishCapacityChangeEvent(kvserver.LeaseRemoveEvent, storeID)
 			return
 		}
 	}
@@ -998,8 +1104,7 @@ func (s *state) ApplyLoad(lb workload.LoadBatch) {
 	// that range is not larger than the any key of the remaining load events.
 	iter := n - 1
 	max := &rng{startKey: Key(lb[iter].Key)}
-	s.ranges.rangeTree.DescendLessOrEqual(max, func(i btree.Item) bool {
-		next, _ := i.(*rng)
+	s.ranges.rangeTree.DescendLessOrEqual(max, func(next *rng) bool {
 		for iter > -1 && lb[iter].Key >= int64(next.startKey) {
 			s.applyLoad(next, lb[iter])
 			iter--
@@ -1025,29 +1130,36 @@ func (s *state) applyLoad(rng *rng, le workload.LoadEvent) {
 	s.loadsplits[store.StoreID()].Record(s.clock.Now(), rng.rangeID, le)
 }
 
-// ReplicaLoad returns the usage information for the Range with ID
-// RangeID on the store with ID StoreID.
+// RangeUsageInfo returns the usage information for the Range with ID RangeID on
+// the store with ID StoreID. If the given store has a replica for the range,
+// this returns the write-bytes-per-second, raft cpu, written keys and logical
+// bytes. If the given store is the leaseholder for the range, then the request
+// cpu and qps is also returned. If the given store does not have a replica for
+// the range, this function panics.
 func (s *state) RangeUsageInfo(rangeID RangeID, storeID StoreID) allocator.RangeUsageInfo {
-	// NB: we only return the actual replica load, if the range leaseholder is
-	// currently on the store given. Otherwise, return an empty, zero counter
-	// value.
-	store, ok := s.LeaseholderStore(rangeID)
+	r, ok := s.Range(rangeID)
 	if !ok {
-		panic(fmt.Sprintf("no leaseholder store found for range %d", storeID))
+		panic(fmt.Sprintf("no leaseholder store found for range %d", rangeID))
 	}
 
-	r, _ := s.Range(rangeID)
-	// TODO(kvoli): The requested storeID is not the leaseholder. Non
-	// leaseholder load tracking is not currently supported but is checked by
-	// other components such as hot ranges. In this case, ignore it but we
-	// should also track non leaseholder load. See load.go for more. Return an
-	// empty initialized load counter here.
-	if store.StoreID() != storeID {
-		return allocator.RangeUsageInfo{LogicalBytes: r.Size()}
+	if _, ok = r.Replica(storeID); !ok {
+		panic(fmt.Sprintf("no replica found for range %v on store %v [replicas=%v]",
+			rangeID, storeID, r.Replicas()))
 	}
 
 	usage := s.load[rangeID].Load()
 	usage.LogicalBytes = r.Size()
+	leaseholderStore, ok := s.LeaseholderStore(rangeID)
+	if !ok {
+		panic(fmt.Sprintf("no leaseholder store found for range %v", rangeID))
+	}
+
+	if leaseholderStore.StoreID() != storeID {
+		// See the method comment, we don't include the request cpu or qps for
+		// non-leaseholder replicas.
+		usage.RequestCPUNanosPerSecond = 0
+		usage.QueriesPerSecond = 0
+	}
 	return usage
 }
 
@@ -1067,22 +1179,39 @@ func (s *state) Clock() timeutil.TimeSource {
 	return s.clock
 }
 
-// UpdateStorePool modifies the state of the StorePool for the Store with
-// ID StoreID.
+// UpdateStorePool modifies the state of the StorePool for the Node with
+// ID NodeID.
 func (s *state) UpdateStorePool(
-	storeID StoreID, storeDescriptors map[roachpb.StoreID]*storepool.StoreDetail,
+	nodeID NodeID, storeDescriptors map[roachpb.StoreID]*storepool.StoreDetailMu,
 ) {
 	var storeIDs roachpb.StoreIDSlice
 	for storeIDA := range storeDescriptors {
 		storeIDs = append(storeIDs, storeIDA)
 	}
 	sort.Sort(storeIDs)
+	node := s.nodes[nodeID]
 	for _, gossipStoreID := range storeIDs {
 		detail := storeDescriptors[gossipStoreID]
-		copiedDetail := *detail
-		copiedDesc := *detail.Desc
-		copiedDetail.Desc = &copiedDesc
-		s.stores[storeID].storepool.DetailsMu.StoreDetails[gossipStoreID] = &copiedDetail
+		copiedDetail := detail.Copy()
+		node.storepool.Details.StoreDetails.Store(gossipStoreID, copiedDetail)
+		copiedDesc := *copiedDetail.Desc
+		// TODO(mma): Support origin timestamps.
+		ts := s.clock.Now()
+		storeLoadMsg := mmaintegration.MakeStoreLoadMsg(copiedDesc, ts.UnixNano())
+		node.mmAllocator.SetStore(StoreAttrAndLocFromDesc(copiedDesc))
+		ctx := logtags.AddTag(context.Background(), fmt.Sprintf("n%d", nodeID), "")
+		ctx = logtags.AddTag(ctx, "t", ts.Sub(s.settings.StartTime))
+		node.mmAllocator.ProcessStoreLoadMsg(ctx, &storeLoadMsg)
+	}
+}
+
+func StoreAttrAndLocFromDesc(desc roachpb.StoreDescriptor) mmaprototype.StoreAttributesAndLocality {
+	return mmaprototype.StoreAttributesAndLocality{
+		StoreID:      desc.StoreID,
+		NodeID:       desc.Node.NodeID,
+		NodeAttrs:    desc.Node.Attrs,
+		NodeLocality: desc.Node.Locality,
+		StoreAttrs:   desc.Attrs,
 	}
 }
 
@@ -1095,10 +1224,45 @@ func (s *state) NextReplicasFn(storeID StoreID) func() []Replica {
 	return nextReplFn
 }
 
-// SetNodeLiveness sets the liveness status of the node with ID NodeID to be
-// the status given.
-func (s *state) SetNodeLiveness(nodeID NodeID, status livenesspb.NodeLivenessStatus) {
-	s.nodeLiveness.statusMap[nodeID] = status
+// SetStoreStatus sets the liveness for a store.
+func (s *state) SetStoreStatus(storeID StoreID, status StoreStatus) {
+	// NB: the store->node map entry was created when the store
+	// was created, so we don't need to create it here.
+	s.statusTracker.storeStatusMap[storeID] = status
+}
+
+// StoreStatus returns the liveness status for a store.
+func (s *state) StoreStatus(storeID StoreID) StoreStatus {
+	return s.statusTracker.storeStatusMap[storeID]
+}
+
+// SetNodeStatus sets the membership and draining signals for a node.
+func (s *state) SetNodeStatus(nodeID NodeID, status NodeStatus) {
+	s.statusTracker.nodeStatusMap[nodeID] = status
+}
+
+// NodeStatus returns the membership and draining signals for a node.
+func (s *state) NodeStatus(nodeID NodeID) NodeStatus {
+	return s.statusTracker.nodeStatusMap[nodeID]
+}
+
+// SetAllStoresLiveness sets the liveness for all stores on a node at once.
+func (s *state) SetAllStoresLiveness(nodeID NodeID, liveness LivenessState) {
+	node, ok := s.nodes[nodeID]
+	if !ok {
+		return
+	}
+	for _, storeID := range node.stores {
+		s.statusTracker.storeStatusMap[storeID] = StoreStatus{Liveness: liveness}
+	}
+}
+
+// NodeLiveness returns the aggregated liveness for a node, which is
+// the "worst" state. In effect, if one store is doing poorly, we
+// report this node as doing as poorly. This is needed for the single-
+// metric allocator, which thinks about liveness at the node level.
+func (s *state) NodeLiveness(nodeID NodeID) LivenessState {
+	return s.statusTracker.worstLivenessForStoresOnNode(nodeID)
 }
 
 // NodeLivenessFn returns a function, that when called will return the
@@ -1106,23 +1270,19 @@ func (s *state) SetNodeLiveness(nodeID NodeID, status livenesspb.NodeLivenessSta
 // TODO(kvoli): Find a better home for this method, required by the storepool.
 func (s *state) NodeLivenessFn() storepool.NodeLivenessFunc {
 	return func(nid roachpb.NodeID) livenesspb.NodeLivenessStatus {
-		return s.nodeLiveness.statusMap[NodeID(nid)]
+		return s.statusTracker.convertToNodeVitality(NodeID(nid), s.statusTracker.clock.Now()).LivenessStatus()
 	}
 }
 
 // NodeCountFn returns a function, that when called will return the current
 // number of nodes that exist in this state.
 // TODO(kvoli): Find a better home for this method, required by the storepool.
-// TODO(wenyihu6): introduce the concept of membership separated from the
-// liveness map.
 func (s *state) NodeCountFn() storepool.NodeCountFunc {
 	return func() int {
 		count := 0
-		for _, status := range s.nodeLiveness.statusMap {
-			// Nodes with a liveness status other than decommissioned or
-			// decommissioning are considered active members (see
-			// liveness.MembershipStatus).
-			if status != livenesspb.NodeLivenessStatus_DECOMMISSIONED && status != livenesspb.NodeLivenessStatus_DECOMMISSIONING {
+		for _, ns := range s.statusTracker.nodeStatusMap {
+			// Only nodes with ACTIVE membership are counted.
+			if ns.Membership.Active() {
 				count++
 			}
 		}
@@ -1130,22 +1290,14 @@ func (s *state) NodeCountFn() storepool.NodeCountFunc {
 	}
 }
 
-// MakeAllocator returns an allocator for the Store with ID StoreID, it
-// populates the storepool with the current state.
-func (s *state) MakeAllocator(storeID StoreID) allocatorimpl.Allocator {
-	return allocatorimpl.MakeAllocator(
-		s.stores[storeID].settings,
-		s.stores[storeID].storepool.IsDeterministic(),
-		func(id roachpb.NodeID) (time.Duration, bool) { return 0, true },
-		&allocator.TestingKnobs{
-			AllowLeaseTransfersToReplicasNeedingSnapshots: true,
-		},
-	)
+// Allocator returns an allocator for the Store with ID StoreID.
+func (s *state) Allocator(storeID StoreID) allocatorimpl.Allocator {
+	return s.stores[storeID].allocator
 }
 
 // StorePool returns the store pool for the given storeID.
 func (s *state) StorePool(storeID StoreID) storepool.AllocatorStorePool {
-	return s.stores[storeID].storepool
+	return s.nodes[s.stores[storeID].nodeID].storepool
 }
 
 // LeaseHolderReplica returns the replica which holds a lease for the range
@@ -1207,7 +1359,7 @@ func (s *state) RaftStatus(rangeID RangeID, storeID StoreID) *raft.Status {
 	status.Commit = 2
 	// TODO(kvoli): A replica is never behind on their raft log, this should
 	// change to enable testing this scenario where replicas fall behind. e.g.
-	// FirstIndex on all replicas will return 2.
+	// Compacted on all replicas will return 1.
 	for _, replica := range rng.replicas {
 		status.Progress[raftpb.PeerID(replica.ReplicaID())] = tracker.Progress{
 			Match: 2,
@@ -1242,19 +1394,24 @@ func (s *state) ComputeSplitKey(
 	panic("not implemented")
 }
 
+// ForEachOverlappingSpanConfig is part of the spanconfig.StoreReader interface.
+func (s *state) ForEachOverlappingSpanConfig(
+	context.Context, roachpb.Span, func(roachpb.Span, roachpb.SpanConfig) error,
+) error {
+	// We don't need to implement this method for conformance reports.
+	panic("not implemented")
+}
+
 // GetSpanConfigForKey is added for the spanconfig.StoreReader interface, required for
 // SpanConfigConformanceReport.
 func (s *state) GetSpanConfigForKey(
 	ctx context.Context, key roachpb.RKey,
-) (roachpb.SpanConfig, roachpb.Span, error) {
+) (roachpb.SpanConfig, error) {
 	rng := s.rangeFor(ToKey(key.AsRawKey()))
 	if rng == nil {
 		panic(fmt.Sprintf("programming error: range for key %s doesn't exist", key))
 	}
-	return *rng.config, roachpb.Span{
-		Key:    rng.startKey.ToRKey().AsRawKey(),
-		EndKey: rng.endKey.ToRKey().AsRawKey(),
-	}, nil
+	return *rng.config, nil
 }
 
 // Scan is added for the rangedesc.Scanner interface, required for
@@ -1282,8 +1439,8 @@ func (s *state) Scan(
 // state of ranges.
 func (s *state) Report() roachpb.SpanConfigConformanceReport {
 	reporter := spanconfigreporter.New(
-		s.nodeLiveness, s, s, s,
-		cluster.MakeClusterSettings(), &spanconfig.TestingKnobs{})
+		s.statusTracker, s, s, s,
+		s.settings.ST, &spanconfig.TestingKnobs{})
 	report, err := reporter.SpanConfigConformance(context.Background(), []roachpb.Span{{}})
 	if err != nil {
 		panic(fmt.Sprintf("programming error: error getting span config report %s", err.Error()))
@@ -1324,12 +1481,118 @@ func (s *state) RegisterConfigChangeListener(listener ConfigChangeListener) {
 	s.configChangeListeners = append(s.configChangeListeners, listener)
 }
 
+func (s *state) SetClusterSetting(Key string, Value interface{}) {
+	switch Key {
+	case "LBRebalancingMode":
+		kvserverbase.OverrideLoadBasedRebalancingMode(context.Background(), &s.settings.ST.SV, kvserverbase.LBRebalancingMode(Value.(int64)))
+	case "LBRebalancingObjective":
+		kvserver.LoadBasedRebalancingObjective.Override(context.Background(), &s.settings.ST.SV, kvserver.LBRebalancingObjective(Value.(int64)))
+	default:
+		panic("other cluster settings not supported")
+	}
+}
+
+// SetSimulationSettings sets the simulation setting for the given key to the
+// given value.
+func (s *state) SetSimulationSettings(Key string, Value interface{}) {
+	settingsValue := reflect.ValueOf(s.settings).Elem()
+	settingsType := settingsValue.Type()
+
+	for i := 0; i < settingsValue.NumField(); i++ {
+		field := settingsType.Field(i)
+		if field.Name == Key {
+			fieldValue := settingsValue.Field(i)
+			if fieldValue.CanSet() {
+				newValue := reflect.ValueOf(Value)
+				if newValue.Type().ConvertibleTo(fieldValue.Type()) {
+					fieldValue.Set(newValue.Convert(fieldValue.Type()))
+				}
+			}
+			break
+		}
+	}
+}
+
+func (s *state) NodesStringWithTag(tag string) string {
+	var buf strings.Builder
+
+	nodes := make([]*node, 0, len(s.nodes))
+	for _, node := range s.nodes {
+		nodes = append(nodes, node)
+	}
+	slices.SortFunc(nodes, func(a, b *node) int {
+		return cmp.Compare(a.nodeID, b.nodeID)
+	})
+
+	for nID, n := range nodes {
+		_, _ = fmt.Fprintf(&buf, "%sn%d(", tag, n.nodeID)
+		for _, locality := range n.desc.Locality.Tiers {
+			_, _ = fmt.Fprintf(&buf, "%s,", locality.Value)
+		}
+		_, _ = fmt.Fprintf(&buf, "%dvcpu): {",
+			n.cpuRateCapacity/time.Second.Nanoseconds())
+		for i, store := range n.Stores() {
+			s, ok := s.Store(store)
+			if ok {
+				attrStr := ""
+				if attrs := s.Descriptor().Attrs; attrs.Size() != 0 {
+					attrStr = fmt.Sprintf("%v,", attrs)
+				}
+				_, _ = fmt.Fprintf(&buf, "s%d:(%s%vGiB)", store, attrStr, s.Descriptor().Capacity.Capacity>>30)
+			} else {
+				_, _ = fmt.Fprintf(&buf, "s%d:notfound", store)
+			}
+			if i < len(n.Stores())-1 {
+				_, _ = fmt.Fprintf(&buf, ",")
+			}
+		}
+		_, _ = fmt.Fprintf(&buf, "}")
+		if nID != len(nodes)-1 {
+			_, _ = fmt.Fprintf(&buf, "\n")
+		}
+	}
+	return buf.String()
+}
+
+// node is an implementation of the Node interface.
+// NodePhysicalCharacteristics models OS-level and filesystem characteristics
+// that affect how the physical model computes load, capacity, and amplification
+// factors. All stores on a node share these characteristics.
+type NodePhysicalCharacteristics struct {
+	// CPUOverheadMultiplier inflates NodeCPURateUsage relative to StoresCPURate
+	// to simulate OS-level overhead (GC, goroutine scheduling, etc.) that isn't
+	// tracked per-replica. In real clusters this ratio is typically 1.0-3.0.
+	CPUOverheadMultiplier float64
+	// SpaceAmplification is the ratio of physical disk bytes (Used) to logical
+	// bytes (LogicalBytes). Default 1.25. Feeds into StoreCapacity.Used and
+	// therefore into computePhysicalDisk's amplification factor.
+	SpaceAmplification float64
+	// ReservedDiskBytes models filesystem reserved blocks (e.g. ext4 reserved
+	// block count). Subtracted from Available in capacity(), making
+	// Total - Available > Used.
+	ReservedDiskBytes int64
+}
+
+// DefaultNodePhysicalCharacteristics returns characteristics with sensible
+// defaults: no CPU overhead, 1.25x space amplification, no reserved blocks.
+func DefaultNodePhysicalCharacteristics() NodePhysicalCharacteristics {
+	return NodePhysicalCharacteristics{
+		CPUOverheadMultiplier: 1.0,
+		SpaceAmplification:    1.25,
+	}
+}
+
 // node is an implementation of the Node interface.
 type node struct {
-	nodeID NodeID
-	desc   roachpb.NodeDescriptor
+	nodeID          NodeID
+	desc            roachpb.NodeDescriptor
+	cpuRateCapacity int64
+	physical        NodePhysicalCharacteristics
 
-	stores []StoreID
+	stores      []StoreID
+	storepool   *storepool.StorePool
+	mmAllocator mmaprototype.Allocator
+	as          *mmaintegration.AllocatorSync
 }
 
 // NodeID returns the ID of this node.
@@ -1347,15 +1610,23 @@ func (n *node) Descriptor() roachpb.NodeDescriptor {
 	return n.desc
 }
 
+func (n *node) MMAllocator() mmaprototype.Allocator {
+	return n.mmAllocator
+}
+
+func (n *node) AllocatorSync() *mmaintegration.AllocatorSync {
+	return n.as
+}
+
 // store is an implementation of the Store interface.
 type store struct {
 	storeID StoreID
 	nodeID  NodeID
 	desc    roachpb.StoreDescriptor
 
-	storepool *storepool.StorePool
-	settings  *cluster.Settings
-	replicas  map[RangeID]ReplicaID
+	replicas map[RangeID]ReplicaID
+	// Old allocator is still used for queues.
+	allocator allocatorimpl.Allocator
 }
 
 // PrettyPrint returns pretty formatted string representation of the store.
@@ -1447,7 +1718,7 @@ func (r *rng) String() string {
 
 	for i, storeID := range storeIDs {
 		replica := r.replicas[storeID]
-		builder.WriteString(fmt.Sprintf("s%d:r%d", storeID, replica.replicaID))
+		builder.WriteString(fmt.Sprintf("s%d:r%d(%s)", storeID, replica.replicaID, replica.desc.Type))
 		if r.leaseholder == replica.replicaID {
 			builder.WriteString("*")
 		}
@@ -1496,15 +1767,29 @@ func (r *rng) Size() int64 {
 // replica is an implementation of the Replica interface.
 type replica struct {
 	replicaID  ReplicaID
+	nodeID     NodeID
 	storeID    StoreID
 	rangeID    RangeID
 	desc       roachpb.ReplicaDescriptor
 	holdsLease bool
+	// mmaSpanConfigIsUpToDate tracks whether the span config for this replica
+	// has been sent to MMA. This mirrors real CockroachDB's per-replica tracking.
+	// It is set to false when:
+	//   - A new replica is created
+	//   - The span config for the range changes
+	//   - This replica acquires a lease (because MMA deletes ranges when we lose the lease)
+	// It is set to true after the span config is successfully sent to MMA.
+	mmaSpanConfigIsUpToDate bool
 }
 
 // ReplicaID returns the ID of this replica.
 func (r *replica) ReplicaID() ReplicaID {
 	return r.replicaID
+}
+
+// NodeID returns the ID of the node this replica is on.
+func (r *replica) NodeID() NodeID {
+	return r.nodeID
 }
 
 // StoreID returns the ID of the store this replica is on.
@@ -1532,4 +1817,16 @@ func (r *replica) String() string {
 	builder := &strings.Builder{}
 	builder.WriteString(fmt.Sprintf("r%d,s%d/%d", r.rangeID, r.storeID, r.replicaID))
 	return builder.String()
+}
+
+// MMASpanConfigIsUpToDate returns whether the span config for this replica
+// has been sent to MMA.
+func (r *replica) MMASpanConfigIsUpToDate() bool {
+	return r.mmaSpanConfigIsUpToDate
+}
+
+// SetMMASpanConfigIsUpToDate sets whether the span config for this replica
+// has been sent to MMA.
+func (r *replica) SetMMASpanConfigIsUpToDate(upToDate bool) {
+	r.mmaSpanConfigIsUpToDate = upToDate
 }

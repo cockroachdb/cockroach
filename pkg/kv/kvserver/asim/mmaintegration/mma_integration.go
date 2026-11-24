@@ -1,0 +1,110 @@
+// Copyright 2025 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package mmaintegration
+
+import (
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/mmaprototype"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/state"
+	kvmmaintegration "github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+)
+
+// MakeStoreLeaseholderMsgFromState creates a StoreLeaseholderMsg from the
+// state of the simulator.
+//
+// The span config is populated when the replica's mmaSpanConfigIsUpToDate flag
+// is false (new replica, span config changed, or lease was just acquired).
+// The caller is responsible for setting mmaSpanConfigIsUpToDate=true on replicas
+// after successfully sending the message to MMA.
+func MakeStoreLeaseholderMsgFromState(
+	s state.State, storeID state.StoreID,
+) mmaprototype.StoreLeaseholderMsg {
+	// Compute amplification factors once for all ranges on this store, matching
+	// the real kvserver which derives these from the store descriptor.
+	amp := mmaprototype.IdentityAmpVector()
+	if descs := s.StoreDescriptors(true /* cached */, storeID); len(descs) > 0 {
+		amp = kvmmaintegration.ComputeAmplificationFactors(descs[0])
+	}
+
+	var rangeMessages []mmaprototype.RangeMsg
+	for _, replica := range s.Replicas(storeID) {
+		if !replica.HoldsLease() {
+			// We only want to send messages for ranges that have a leaseholder
+			// replica on this store.
+			continue
+		}
+		rng, ok := s.Range(replica.Range())
+		if !ok {
+			panic("simulator state is missing a range that should exist")
+		}
+		simReplicas := rng.Replicas()
+		replicas := make([]mmaprototype.StoreIDAndReplicaState, 0, len(simReplicas))
+		foundSelf := false
+		for _, r := range simReplicas {
+			rs := mmaprototype.StoreIDAndReplicaState{
+				StoreID: roachpb.StoreID(r.StoreID()),
+				ReplicaState: mmaprototype.ReplicaState{
+					ReplicaIDAndType: mmaprototype.ReplicaIDAndType{
+						ReplicaID: roachpb.ReplicaID(r.ReplicaID()),
+						ReplicaType: mmaprototype.ReplicaType{
+							ReplicaType:   r.Descriptor().Type,
+							IsLeaseholder: rng.Leaseholder() == r.ReplicaID(),
+						},
+					},
+				},
+			}
+			if rs.StoreID == roachpb.StoreID(storeID) {
+				if !rs.IsLeaseholder {
+					panic(fmt.Sprintf(
+						"simulator state inconsistent for r%d when constructing "+
+							"leaseholder msg for s%d: local store is not leaseholder",
+						replica.Range(), storeID))
+				}
+			}
+			if rs.IsLeaseholder {
+				if rs.StoreID != roachpb.StoreID(storeID) {
+					panic(fmt.Sprintf(
+						"simulator state inconsistent for r%d when constructing leaseholder "+
+							"msg for s%d: remote store s%d is leaseholder",
+						replica.Range(), storeID, rs.StoreID))
+				}
+				foundSelf = true
+			}
+			replicas = append(replicas, rs)
+		}
+		if !foundSelf {
+			panic(fmt.Sprintf("simulator state inconsistent for r%d when constructing leaseholder "+
+				"msg for s%d: did not find itself in the set of replicas", replica.Range(), storeID))
+		}
+
+		load := s.RangeUsageInfo(rng.RangeID(), replica.StoreID())
+		rl := kvmmaintegration.MakePhysicalRangeLoad(
+			load.RequestCPUNanosPerSecond,
+			load.RaftCPUNanosPerSecond,
+			load.WriteBytesPerSecond,
+			load.LogicalBytes,
+			amp,
+		)
+
+		rangeMsg := mmaprototype.RangeMsg{
+			RangeID:                  roachpb.RangeID(replica.Range()),
+			MaybeSpanConfIsPopulated: !replica.MMASpanConfigIsUpToDate(),
+			Replicas:                 replicas,
+			RangeLoad:                rl,
+		}
+		if rangeMsg.MaybeSpanConfIsPopulated {
+			rangeMsg.MaybeSpanConf = *rng.SpanConfig()
+		}
+		rangeMessages = append(rangeMessages, rangeMsg)
+	}
+
+	return mmaprototype.StoreLeaseholderMsg{
+		StoreID: roachpb.StoreID(storeID),
+		Ranges:  rangeMessages,
+	}
+}

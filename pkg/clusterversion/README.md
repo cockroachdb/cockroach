@@ -97,13 +97,15 @@ code for more details.
 
 **When**: When we are ready to select the first beta candidate.
 
+**Claude Prompt**: "Please create a PR to prepare the release-25.4 branch for beta.1 following the R.1 runbook in pkg/clusterversion/runbooks/R1_prepare_for_beta.md"
+
 **Checklist**:
  - [ ] Set `developmentBranch` constant to `false`
  - [ ] Update `version.txt` to the beta version, e.g. `24.1.0-beta.1`
  - [ ] Regenerate docs (`./dev gen docs`)
  - [ ] Regenerate expected test data results as needed
 
-**Example PR:** [#113912](https://github.com/cockroachdb/cockroach/pull/113912)
+**Example PR:** [#153906](https://github.com/cockroachdb/cockroach/pull/153906)
 
 ### R.2: Mint release
 
@@ -111,6 +113,8 @@ code for more details.
 
 **When**: When we are absolutely sure that we no longer need additional version
 gates - right before the final RC at the latest.
+
+**Claude Prompt**: "Please create a PR to mint the 25.4 release following the R.2 runbook in pkg/clusterversion/runbooks/R2_mint_release.md. We're preparing rc.1."
 
 **Checklist**:
 - [ ] Replace temporary constant for current release (e.g. `V24_1`) with a
@@ -136,8 +140,10 @@ any mixed-cluster or upgrade tests with the forked release.
 
 **When**: Around the time we are cutting the first beta of the forked release.
 Technically this step can happen right after forking, but if there are changes
-to the gates or upgrades in the forked release it might cause master-to-master
-upgrades to cause opaque issues.
+to the gates or upgrades in the forked release it might cause issues with
+master-to-master upgrades.
+
+**Claude Prompt**: "Please create a PR to bump master to 26.1 following the M.1 runbook in pkg/clusterversion/runbooks/M1_bump_current_version.md"
 
 **Checklist**:
 
@@ -148,12 +154,11 @@ upgrades to cause opaque issues.
 
 - [ ] Add final version for the previous release (e.g. `V24_1`).
 
-- [ ] Add start version (e.g. `V24_2Start` with version `24.1-2`) and add a new
+- [ ] Add start version (e.g. `V24_2_Start` with version `24.1-2`) and add a new
   first upgrade for it (in `upgrades/upgrades.go`).
 
-- [ ] Do not update `PreviousRelease` constant. We can only update the
-  `PreviousRelease` when an RC is published, which is needed for upgrade
-  roachtests.
+- [ ] Update `SystemDatabaseSchemaBootstrapVersion` in
+  `pkg/sql/catalog/systemschema/system.go` to the start version just created.
 
 - [ ] Update `roachpb.successorSeries` map and update `TestReleaseSeriesSuccessor`
 
@@ -179,7 +184,7 @@ upgrades to cause opaque issues.
 - [ ] Regenerate expected test data as needed (usually
   `pkg/sql/catalog/systemschema_test` and some logictests).
 
-**Sample PR:** [#134750](https://github.com/cockroachdb/cockroach/pull/134750)
+**Sample PR:** [#139387](https://github.com/cockroachdb/cockroach/pull/139387)
 
 ### M.2: Enable mixed-cluster logic tests
 
@@ -191,6 +196,8 @@ respective logictest config.
 of the forked release is cut. It can happen earlier, but we don't want it to
 happen while there is a high chance of in-progress changes that affect the
 bootstrap data in a meaningful way.
+
+**Claude Prompt**: "Please create a PR to enable mixed-cluster logic tests for 25.4 following the M.2 runbook in pkg/clusterversion/runbooks/M2_enable_mixed_cluster_logic_tests.md. Base this on top of the M.1 PR."
 
 **Checklist**:
 
@@ -209,21 +216,24 @@ bootstrap data in a meaningful way.
   (`local-mixed-24.1`). Make sure the new config is part of `DefaultConfigNames`.
   Run `./dev gen`.
 
-- [ ] Update logictests as needed. There should be a few cases where we
-  skip a statement in mixed version scenarios, and we might need to add a
-  `skipif config local-mixed-24.1` alongside an existing `skipif config
-  local-mixed-23.2`.
+- [ ] Update logictests as needed. Only add `skipif config local-mixed-24.1`
+  directives when tests actually fail without them. Most tests should not need
+  the new skipif directive since version gates (e.g., `version.IsActive(v24.1)`)
+  will return true in the `local-mixed-24.1` configuration. Do not proactively
+  add skipif directives alongside existing ones (e.g., `local-mixed-23.2`).
 
 **Sample PR:** [#135291](https://github.com/cockroachdb/cockroach/pull/135291)
 
 ### M.3: Enable upgrade tests
 
-**What**: This change recognizes the forked release as an available release and 
+**What**: This change recognizes the forked release as an available release and
 enables upgrade tests from that version.
 
 **When**: After the first RC of the forked release is published. It can NOT
 happen any earlier, as we currently need a publicly available RC release to
 generate the necessary fixtures.
+
+**Claude Prompt**: "Please create a PR to enable upgrade tests for 25.4 following the M.3 runbook in pkg/clusterversion/runbooks/M3_enable_upgrade_tests.md. The first RC (v25.4.0-rc.1) has been published."
 
 **Checklist**:
 
@@ -236,11 +246,12 @@ generate the necessary fixtures.
 - [ ] Verify the logic in `supportsSkipUpgradeTo`
   (`pkg/cmd/roachtest/roachtestutil/mixedversion/mixedversion.go`) is correct
   for the new release.
- 
+
 - [ ] Add `cockroach-go-testserver-...` logictest config for the forked version
-  (e.g. `cockroach-go-testserver-24.1`). Search for all uses of the previous
-  similar configs and enable them for the new version (or add similar tests).
-  Run `./dev gen`.
+  (e.g. `cockroach-go-testserver-24.1`) and add it to
+  `cockroach-go-testserver-configs`. Update the visibility for
+  `cockroach_predecessor_version` in `pkg/sql/logictest/BUILD.bazel`. Run
+  `./dev gen` and fix up any tests that fail (using a draft PR helps).
 
 - [ ] Update releases file:
   ```
@@ -253,7 +264,7 @@ generate the necessary fixtures.
 - [ ] Check that all gates for the previous release are identical on the
   `master` and release branch.
 
-**Sample PR:** TODO
+**Sample PR:** [#141765](https://github.com/cockroachdb/cockroach/pull/141765)
 
 ### M.4: Bump min supported
 
@@ -269,6 +280,8 @@ cluster below `MinSupported`.
 once or in two separate PRs. Historically we have seen tests that need
 non-trivial fixing when `MinSupported` is bumped, so it is recommended to do it
 in two PRs.
+
+**Claude Prompt**: "Please create a PR to bump MinSupported from v25.3 to v25.4 following the M.4 runbook in pkg/clusterversion/runbooks/M4_bump_minsupported_version.md"
 
 **Checklist**:
 
@@ -295,7 +308,15 @@ in two PRs.
   </details>
 
 - [ ] Remove logictest configs that involve now-unsupported versions (and run
-  `./dev gen testlogic`).
+  `./dev gen testlogic bazel`).
+
+- [ ] Remove `pkg/sql/catalog/bootstrap/data` files for now-unsupported versions.
+
+- [ ] Update `pkg/storage.MinimumSupportedFormatVersion` and `storage.pebbleFormatVersionMap`
+
+- [ ] Update `pkg/sql/schemachanger/scplan.rulesForReleases` and remove the
+  defunct package(s) inside `rules`.
+  - rewrite `TestDeclarativeRules` output: `./dev test pkg/cli -f DeclarativeRules --rewrite`
 
 - [ ] File issue(s) to remove `TODO_Delete_` uses and simplify related code; assign
   to relevant teams (depending on which top-level packages use such gates).
@@ -305,15 +326,15 @@ in two PRs.
   Historically, these cleanup issues have not received much attention and the code
   was carried over for a long time. Feel free to ping individuals or do some of
   the cleanup directly (in separate PRs).
-  
+
   The cleanup comes down to simplifying the code based on the knowledge that
   `IsActive()` will always return `true` for obsolete gates. If simplifying the
   code becomes non-trivial, error on the side of just removing `IsActive()` calls
   and leaving TODOs for further cleanup.
-  
+
   Example PRs: #124013, #124286
   </details>
-  
+
 - [ ] Regenerate expected test data results as needed; file issues for any
   skipped tests. Note that upgrade tests in `pkg/upgrade/upgrades` use
   `clusterversion.SkipWhenMinSupportedVersionIsAtLeast()` so they can be removed
@@ -328,6 +349,8 @@ release.
 
 **When**: When the final .0 release is out.
 
+**Claude Prompt**: "Please perform M.5 for 26.1 following the runbook in pkg/clusterversion/runbooks/M5_finalize_gates_and_bootstrap_data.md"
+
 **Checklist**:
 
 - [ ] Repeat the "create new SQL bootstrap data" step from
@@ -336,4 +359,4 @@ release.
 - [ ] Check that all gates for the previous release are identical on the
   `master` and release branch.
 
-**Example PR:** TODO
+**Example PR:** [#165680](https://github.com/cockroachdb/cockroach/pull/165680)

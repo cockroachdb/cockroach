@@ -1,0 +1,302 @@
+name: Blathers Backport
+
+on:
+  repository_dispatch:
+    types: [backport]
+
+jobs:
+  backport:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write  # needed for Vertex AI OIDC
+
+    env:
+      # When ANTHROPIC_API_KEY is set (e.g. on a personal fork), the
+      # workflow uses it directly instead of Vertex AI.
+      HAS_API_KEY: ${{ secrets.ANTHROPIC_API_KEY != '' }}
+
+    steps:
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.BLATHERS_APP_ID }}
+          private-key: ${{ secrets.BLATHERS_PRIVATE_KEY }}
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Configure git identity
+        run: |
+          git config user.name "blathers-crl[bot]"
+          git config user.email "blathers-crl[bot]@users.noreply.github.com"
+
+      # Vertex AI auth for Claude conflict analysis. Skipped when an
+      # ANTHROPIC_API_KEY secret is set (e.g. on a personal fork).
+      - name: Authenticate to Google Cloud
+        if: env.HAS_API_KEY != 'true'
+        uses: 'google-github-actions/auth@v3'
+        with:
+          project_id: 'vertex-model-runners'
+          service_account: 'ai-review@dev-inf-prod.iam.gserviceaccount.com'
+          workload_identity_provider: 'projects/72497726731/locations/global/workloadIdentityPools/ai-review/providers/ai-review'
+
+      # Save the prompt file before the backport loop checks out release
+      # branches where it does not exist.
+      - name: Stash prompt file
+        run: cp .github/prompts/backport-conflict-analysis.md /tmp/backport-conflict-analysis.md
+
+      - name: Backport PR
+        id: backport
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PR_NUMBER: ${{ github.event.client_payload.pr_number }}
+          BRANCHES: ${{ github.event.client_payload.branches }}
+          PR_AUTHOR: ${{ github.event.client_payload.pr_author }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+
+          # Prepare directory for conflict context files.
+          mkdir -p /tmp/conflict-contexts
+
+          # Fetch PR title and body for use in backport PRs.
+          PR_TITLE=$(gh pr view "$PR_NUMBER" --json title --jq '.title')
+          PR_BODY=$(gh pr view "$PR_NUMBER" --json body --jq '.body')
+
+          # Get commit SHAs from the merged PR.
+          COMMIT_SHAS=$(gh pr view "$PR_NUMBER" --json commits --jq '.commits[].oid')
+          COMMIT_COUNT=$(echo "$COMMIT_SHAS" | wc -l | tr -d ' ')
+
+          # Collect reviewers from the original PR.
+          REVIEWERS=$(gh pr view "$PR_NUMBER" --json reviews --jq '[.reviews[].author.login] | unique | join(",")')
+
+          FAILED_BRANCHES=""
+          SUCCEEDED_BRANCHES=""
+          HAS_CONFLICTS=false
+
+          for BRANCH in $BRANCHES; do
+            echo "=== Backporting to $BRANCH ==="
+
+            # Normalize branch name: try as-is first, then with release- prefix.
+            # Also strip .x suffix (backport labels use e.g. "24.1.x").
+            TARGET_BRANCH="${BRANCH%.x}"
+            if ! git rev-parse --verify "origin/$TARGET_BRANCH" >/dev/null 2>&1; then
+              TARGET_BRANCH="release-$TARGET_BRANCH"
+              if ! git rev-parse --verify "origin/$TARGET_BRANCH" >/dev/null 2>&1; then
+                echo "::error::Branch $BRANCH not found (tried $BRANCH and release-${BRANCH%.x})"
+                FAILED_BRANCHES="$FAILED_BRANCHES $BRANCH"
+                continue
+              fi
+            fi
+
+            BACKPORT_BRANCH="blathers/backport-${TARGET_BRANCH}-${PR_NUMBER}"
+
+            # Clean up any existing backport branch.
+            git branch -D "$BACKPORT_BRANCH" 2>/dev/null || true
+            git push origin --delete "$BACKPORT_BRANCH" 2>/dev/null || true
+
+            # Create backport branch from target.
+            git checkout -b "$BACKPORT_BRANCH" "origin/$TARGET_BRANCH"
+
+            # Cherry-pick all commits from the PR.
+            CHERRY_PICK_FAILED=false
+            for SHA in $COMMIT_SHAS; do
+              if ! git cherry-pick "$SHA"; then
+                echo "::error::Cherry-pick of $SHA failed on branch $TARGET_BRANCH"
+
+                # Capture conflict details BEFORE aborting so the analysis
+                # step can read them. Only save if there are actual merge
+                # conflicts (unmerged files), not other cherry-pick failures.
+                CONFLICTED_FILES=$(git diff --name-only --diff-filter=U 2>/dev/null || true)
+                if [ -n "$CONFLICTED_FILES" ]; then
+                  HAS_CONFLICTS=true
+                  {
+                    echo "# Cherry-pick Conflict Context"
+                    echo ""
+                    echo "- Original PR: #${PR_NUMBER} — ${PR_TITLE}"
+                    echo "- Commit being cherry-picked: ${SHA}"
+                    echo "- Target branch: ${TARGET_BRANCH}"
+                    echo ""
+                    echo "## Conflicted files"
+                    echo '```'
+                    echo "$CONFLICTED_FILES"
+                    echo '```'
+                    echo ""
+                    echo "## Git status"
+                    echo '```'
+                    git status 2>/dev/null || true
+                    echo '```'
+                    echo ""
+                    echo "## Conflict diff"
+                    echo '```'
+                    git diff 2>/dev/null || true
+                    echo '```'
+                  } > "/tmp/conflict-contexts/${TARGET_BRANCH}.md"
+                fi
+
+                git cherry-pick --abort 2>/dev/null || true
+                CHERRY_PICK_FAILED=true
+                break
+              fi
+            done
+
+            if [ "$CHERRY_PICK_FAILED" = "true" ]; then
+              FAILED_BRANCHES="$FAILED_BRANCHES $BRANCH"
+              git checkout -f HEAD 2>/dev/null || true
+              continue
+            fi
+
+            # Push the backport branch.
+            if ! git push origin "$BACKPORT_BRANCH"; then
+              echo "::error::Failed to push branch $BACKPORT_BRANCH"
+              FAILED_BRANCHES="$FAILED_BRANCHES $BRANCH"
+              continue
+            fi
+
+            # Transform version-specific closing keywords.
+            # e.g. "Fixes-26.1 #159676" -> "Fixes #159676" when targeting release-26.1.
+            VERSION="${TARGET_BRANCH#release-}"
+            ESCAPED_VERSION=$(echo "$VERSION" | sed 's/\./\\./g')
+            TRANSFORMED_BODY=$(echo "$PR_BODY" | sed -E "s/(Fixes|Closes|Resolves|Addresses)-${ESCAPED_VERSION}:?[[:space:]]+/\1 /gi")
+
+            # Create backport PR.
+            BACKPORT_PR_URL=$(gh pr create \
+              --base "$TARGET_BRANCH" \
+              --head "$BACKPORT_BRANCH" \
+              --title "${TARGET_BRANCH}: ${PR_TITLE}" \
+              --body "$(cat <<EOF
+          Backport ${COMMIT_COUNT}/${COMMIT_COUNT} commits from #${PR_NUMBER} on behalf of @${PR_AUTHOR}.
+
+          ----
+
+          ${TRANSFORMED_BODY}
+
+          ----
+
+          Release justification:
+          EOF
+          )")
+
+            if [ -z "$BACKPORT_PR_URL" ]; then
+              echo "::error::Failed to create PR for branch $TARGET_BRANCH"
+              FAILED_BRANCHES="$FAILED_BRANCHES $BRANCH"
+              continue
+            fi
+
+            BACKPORT_PR_NUMBER=$(echo "$BACKPORT_PR_URL" | grep -oE '[0-9]+$')
+
+            # Add labels.
+            gh pr edit "$BACKPORT_PR_NUMBER" --add-label "O-robot,blathers-backport"
+
+            # Remove "backport-failed" label if it was previously added by a failed attempt.
+            gh pr edit "$PR_NUMBER" --remove-label "backport-failed" || true
+
+            # Add assignee (original PR author).
+            gh pr edit "$BACKPORT_PR_NUMBER" --add-assignee "$PR_AUTHOR" || true
+
+            # Request reviewers from the original PR.
+            if [ -n "$REVIEWERS" ]; then
+              gh pr edit "$BACKPORT_PR_NUMBER" --add-reviewer "$REVIEWERS" || true
+            fi
+
+            SUCCEEDED_BRANCHES="$SUCCEEDED_BRANCHES $BRANCH"
+            echo "=== Successfully created backport PR: $BACKPORT_PR_URL ==="
+          done
+
+          # Post results on the original PR.
+          if [ -n "$(echo "$SUCCEEDED_BRANCHES" | xargs)" ]; then
+            SUCCESS_MSG="Successfully created backport PRs for:$SUCCEEDED_BRANCHES"
+            if [ -n "$(echo "$FAILED_BRANCHES" | xargs)" ]; then
+              SUCCESS_MSG="$SUCCESS_MSG
+
+          Failed to backport to:$FAILED_BRANCHES
+          Please create these backports manually using the [backport tool](https://github.com/cockroachdb/backport).
+
+          [See action run for details]($RUN_URL)."
+            fi
+            gh pr comment "$PR_NUMBER" --body "$SUCCESS_MSG"
+          fi
+
+          if [ -n "$(echo "$FAILED_BRANCHES" | xargs)" ]; then
+            if [ -z "$(echo "$SUCCEEDED_BRANCHES" | xargs)" ]; then
+              gh pr comment "$PR_NUMBER" --body "$(cat <<EOF
+          Encountered an error creating backports. Some common things that can go wrong:
+          1. The backport branch might have already existed.
+          2. There was a merge conflict.
+          3. The backport branch contained merge commits.
+
+          You might need to create your backport manually using the [backport](https://github.com/cockroachdb/backport) tool.
+
+          [See action run for details]($RUN_URL).
+
+          ----
+
+          Failed branches:$FAILED_BRANCHES
+          EOF
+          )"
+            fi
+            gh issue edit "$PR_NUMBER" --add-label "backport-failed" || true
+          fi
+
+          # Expose whether there were merge conflicts for the analysis step.
+          echo "has_conflicts=$HAS_CONFLICTS" >> "$GITHUB_OUTPUT"
+          echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+
+          # Exit non-zero if any branches failed so the job shows as failed.
+          if [ -n "$(echo "$FAILED_BRANCHES" | xargs)" ]; then
+            exit 1
+          fi
+
+      # When cherry-picks fail with merge conflicts, invoke Claude to
+      # analyze the conflicts and produce actionable resolution guidance.
+      # This runs as a follow-up: the failure comment is already posted
+      # by the step above, and the analysis appears as a second comment.
+      - name: Analyze conflicts
+        id: analyze
+        if: always() && steps.backport.outputs.has_conflicts == 'true'
+        uses: cockroachdb/claude-code-action@v1
+        env:
+          ANTHROPIC_VERTEX_PROJECT_ID: ${{ env.HAS_API_KEY != 'true' && 'vertex-model-runners' || '' }}
+          CLOUD_ML_REGION: ${{ env.HAS_API_KEY != 'true' && 'us-east5' || '' }}
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          use_vertex: ${{ env.HAS_API_KEY != 'true' && 'true' || 'false' }}
+          claude_args: |
+            --model claude-sonnet-4-5
+            --allowedTools "Write,Read,Grep,Glob,Bash(mkdir:*),Bash(ls:*),Bash(cat:*),Bash(git status:*),Bash(git diff:*),Bash(git log:*),Bash(git show:*)"
+          prompt: |
+            Read and follow the instructions in `/tmp/backport-conflict-analysis.md`.
+
+      - name: Post conflict analysis
+        if: always() && steps.analyze.conclusion == 'success'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PR_NUMBER: ${{ steps.backport.outputs.pr_number }}
+        run: |
+          if [ ! -f artifacts/conflict-analysis.md ]; then
+            echo "No conflict analysis file found"
+            exit 0
+          fi
+
+          # Post the analysis as a follow-up comment on the original PR.
+          COMMENT_FILE=$(mktemp)
+          trap 'rm -f "$COMMENT_FILE"' EXIT
+
+          {
+            echo "### Backport conflict analysis"
+            echo ""
+            cat artifacts/conflict-analysis.md
+            echo ""
+            echo "---"
+            echo "*Analysis generated by Claude Code. [Workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})*"
+          } > "$COMMENT_FILE"
+
+          gh pr comment "$PR_NUMBER" --body-file "$COMMENT_FILE"

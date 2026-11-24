@@ -29,7 +29,7 @@ func TestOverrideStorePoolStatusString(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	const nodeCount = 5
 
-	stopper, g, _, testStorePool, mnl := CreateTestStorePool(ctx, st,
+	stopper, g, _, testStorePool, mnl, _ := CreateTestStorePool(ctx, st,
 		liveness.TestTimeUntilNodeDead, false, /* deterministic */
 		func() int { return nodeCount }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
@@ -111,7 +111,7 @@ func TestOverrideStorePoolDecommissioningReplicas(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	const nodeCount = 5
 
-	stopper, g, _, testStorePool, mnl := CreateTestStorePool(ctx, st,
+	stopper, g, _, testStorePool, mnl, _ := CreateTestStorePool(ctx, st,
 		liveness.TestTimeUntilNodeDead, false, /* deterministic */
 		func() int { return nodeCount }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
@@ -228,7 +228,7 @@ func TestOverrideStorePoolGetStoreList(t *testing.T) {
 	const nodeCount = 8
 
 	// We're going to manually mark stores dead in this test.
-	stopper, g, _, testStorePool, mnl := CreateTestStorePool(ctx, st,
+	stopper, g, _, testStorePool, mnl, _ := CreateTestStorePool(ctx, st,
 		liveness.TestTimeUntilNodeDead, false, /* deterministic */
 		func() int { return nodeCount }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
@@ -330,9 +330,11 @@ func TestOverrideStorePoolGetStoreList(t *testing.T) {
 	livenessOverrides[decommissioningStore.Node.NodeID] = livenesspb.NodeLivenessStatus_DECOMMISSIONING
 
 	// Set suspectedStore as suspected.
-	testStorePool.DetailsMu.Lock()
-	testStorePool.DetailsMu.StoreDetails[suspectedStore.StoreID].LastUnavailable = testStorePool.clock.Now()
-	testStorePool.DetailsMu.Unlock()
+	val, ok := testStorePool.Details.StoreDetails.Load(suspectedStore.StoreID)
+	require.True(t, ok)
+	val.Lock()
+	val.LastUnavailable = testStorePool.clock.Now()
+	val.Unlock()
 
 	// No filter or limited set of store IDs.
 	require.NoError(t, verifyStoreList(

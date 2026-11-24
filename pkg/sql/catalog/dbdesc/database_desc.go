@@ -307,7 +307,7 @@ func (desc *immutable) maybeValidateSystemDatabaseSchemaVersion(
 
 	// TODO(radu): this should really be SystemDatabaseSchemaBootstrapVersion.
 	latestVersion := clusterversion.RemoveDevOffset(clusterversion.Latest.Version())
-	if latestVersion.Less(sv) {
+	if latestVersion.Less(sv) && !clusterversion.TestingExtraVersions {
 		vea.Report(errors.AssertionFailedf(
 			`attempting to set system database schema version to version higher than the latest version (%#v): %#v`,
 			latestVersion,
@@ -318,7 +318,9 @@ func (desc *immutable) maybeValidateSystemDatabaseSchemaVersion(
 
 // GetReferencedDescIDs returns the IDs of all descriptors referenced by
 // this descriptor, including itself.
-func (desc *immutable) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
+func (desc *immutable) GetReferencedDescIDs(
+	catalog.ValidationLevel,
+) (catalog.DescriptorIDSet, error) {
 	ids := catalog.MakeDescriptorIDSet(desc.GetID())
 	if desc.IsMultiRegion() {
 		id, err := desc.MultiRegionEnumID()
@@ -568,6 +570,11 @@ func (desc *Mutable) AddSchemaToDatabase(
 // interface.
 func (desc *immutable) GetDeclarativeSchemaChangerState() *scpb.DescriptorState {
 	return desc.DeclarativeSchemaChangerState.Clone()
+}
+
+// Rewrite implements the catalog.MutableDescriptor interface.
+func (desc *Mutable) Rewrite(_ catalog.DescriptorRewriteFn) error {
+	return errors.AssertionFailedf("Rewrite is not implemented for database descriptors")
 }
 
 // SetDeclarativeSchemaChangerState is part of the catalog.MutableDescriptor

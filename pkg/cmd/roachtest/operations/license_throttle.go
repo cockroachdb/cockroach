@@ -10,12 +10,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operation"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
+	"github.com/cockroachdb/cockroach/pkg/server/license/licensepb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -38,7 +38,12 @@ func (c cleanupLicenseRemoval) Cleanup(
 
 func runAddExpiredLicenseToTriggerThrottle(
 	ctx context.Context, o operation.Operation, cl cluster.Cluster,
-) registry.OperationCleanup {
+) (cleanup registry.OperationCleanup) {
+	defer func() {
+		if r := recover(); r != nil {
+			o.Errorf("error during license throttle: %v", r)
+		}
+	}()
 	conn := cl.Conn(ctx, o.L(), 1, option.VirtualClusterName(roachtestflags.VirtualCluster))
 	defer conn.Close()
 
@@ -51,14 +56,17 @@ func runAddExpiredLicenseToTriggerThrottle(
 	}
 
 	// Save off the current license so that we can reinstate it during cleanup.
-	cleanup := cleanupLicenseRemoval{}
-	if err := rows.Scan(&cleanup.license); err != nil {
+	var currentLicense string
+	if err = rows.Scan(&currentLicense); err != nil {
 		o.Fatal(err)
 	}
 
+	// Assign cleanup handler early, before modifying the license.
+	cleanup = &cleanupLicenseRemoval{license: currentLicense}
+
 	// Generate an expired license to trigger throttling once installed.
-	newLicense, err := (&licenseccl.License{
-		Type:              licenseccl.License_Free,
+	newLicense, err := (&licensepb.License{
+		Type:              licensepb.License_Free,
 		ValidUntilUnixSec: timeutil.Unix(771890400, 0).Unix(), // expired on 6/17/94
 	}).Encode()
 	if err != nil {
@@ -68,7 +76,7 @@ func runAddExpiredLicenseToTriggerThrottle(
 	// Change the current license. This will cause the server to be in violation of
 	// the license enforcement policies. Connection throttling, no more than 5 concurrent
 	// transactions opened, will be in effect.
-	o.Status(fmt.Sprintf("updating license from %q to %q", cleanup.license, newLicense))
+	o.Status(fmt.Sprintf("updating license from %q to %q", currentLicense, newLicense))
 	_, err = conn.ExecContext(ctx, fmt.Sprintf("SET CLUSTER SETTING enterprise.license = '%s'", newLicense))
 	if err != nil {
 		o.Fatal(err)

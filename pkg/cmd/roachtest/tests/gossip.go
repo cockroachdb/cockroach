@@ -23,11 +23,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -59,7 +61,17 @@ SELECT node_id
 			tBeforePing := timeutil.Now()
 			db := c.Conn(ctx, t.L(), node)
 			defer db.Close()
-			require.NoError(t, db.Ping())
+
+			testutils.SucceedsSoon(t, func() error {
+				// Having just shut down a node, the sql user table may be in the
+				// process of failing over, and if we're unlucky and try to open a new
+				// conn here, we can sometimes hit an internal 10s timeout should the
+				// failover take longer than usual.
+				//
+				// See https://github.com/cockroachdb/cockroach/issues/153403#issuecomment-3296381756.
+				return db.Ping()
+			})
+
 			tAfterPing := timeutil.Now()
 			if pingDur := tAfterPing.Sub(tBeforePing); pingDur > 20*time.Second {
 				t.L().Printf("sql connection ready after %.2fs", pingDur.Seconds())
@@ -120,7 +132,7 @@ SELECT node_id
 
 				for i := range liveNodes {
 					if liveNodes[i] != expLiveNodes[i] {
-						t.L().Printf("%d: gossip not ok (mismatched view of live nodes); expected %s, got %s (%.0fs)\n",
+						t.L().Printf("%d: gossip not ok (mismatched view of live nodes); expected %+v, got %+v (%.0fs)\n",
 							i, expLiveNodes, liveNodes, timeutil.Since(start).Seconds())
 						return false
 					}
@@ -182,7 +194,7 @@ SELECT node_id
 	r.Add(registry.TestSpec{
 		Name:             "gossip/chaos/nodes=9",
 		Owner:            registry.OwnerKV,
-		Cluster:          r.MakeClusterSpec(9),
+		Cluster:          r.MakeClusterSpec(9, spec.TerminateOnMigration()),
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
 		Leases:           registry.MetamorphicLeases,
@@ -288,35 +300,37 @@ func (g *gossipUtil) checkConnectedAndFunctional(
 	}
 
 	for i := 1; i <= c.Spec().NodeCount; i++ {
-		db := g.conn(ctx, t.L(), i)
-		defer db.Close()
-		if i == 1 {
-			if _, err := db.Exec("CREATE DATABASE IF NOT EXISTS test"); err != nil {
+		func() {
+			db := g.conn(ctx, t.L(), i)
+			defer db.Close()
+			if i == 1 {
+				if _, err := db.Exec("CREATE DATABASE IF NOT EXISTS test"); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := db.Exec("CREATE TABLE IF NOT EXISTS test.kv (k INT PRIMARY KEY, v INT)"); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := db.Exec(`UPSERT INTO test.kv (k, v) VALUES (1, 0)`); err != nil {
+					t.Fatal(err)
+				}
+			}
+			rows, err := db.Query(`UPDATE test.kv SET v=v+1 WHERE k=1 RETURNING v`)
+			if err != nil {
 				t.Fatal(err)
 			}
-			if _, err := db.Exec("CREATE TABLE IF NOT EXISTS test.kv (k INT PRIMARY KEY, v INT)"); err != nil {
-				t.Fatal(err)
+			defer rows.Close()
+			var count int
+			if rows.Next() {
+				if err := rows.Scan(&count); err != nil {
+					t.Fatal(err)
+				}
+				if count != i {
+					t.Fatalf("unexpected value %d for write #%d (expected %d)", count, i, i)
+				}
+			} else {
+				t.Fatalf("no results found from update")
 			}
-			if _, err := db.Exec(`UPSERT INTO test.kv (k, v) VALUES (1, 0)`); err != nil {
-				t.Fatal(err)
-			}
-		}
-		rows, err := db.Query(`UPDATE test.kv SET v=v+1 WHERE k=1 RETURNING v`)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer rows.Close()
-		var count int
-		if rows.Next() {
-			if err := rows.Scan(&count); err != nil {
-				t.Fatal(err)
-			}
-			if count != i {
-				t.Fatalf("unexpected value %d for write #%d (expected %d)", count, i, i)
-			}
-		} else {
-			t.Fatalf("no results found from update")
-		}
+		}()
 	}
 }
 
@@ -354,7 +368,9 @@ func runGossipPeerings(ctx context.Context, t test.Test, c cluster.Cluster) {
 }
 
 func runGossipRestart(ctx context.Context, t test.Test, c cluster.Cluster) {
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
+	opts := option.DefaultStartOpts()
+	opts.RoachprodOpts.ExtraArgs = []string{"--vmodule=*=1"}
+	c.Start(ctx, t.L(), opts, install.MakeClusterSettings())
 
 	// Repeatedly stop and restart a cluster and verify that we can perform basic
 	// operations. This is stressing the gossiping of the first range descriptor
@@ -374,7 +390,7 @@ func runGossipRestart(ctx context.Context, t test.Test, c cluster.Cluster) {
 		t.L().Printf("%d: restarting all nodes\n", i)
 		// Tell the httpClient our saved session cookies are no longer valid after a restart.
 		g.httpClient.ResetSession()
-		c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
+		c.Start(ctx, t.L(), opts, install.MakeClusterSettings())
 	}
 }
 
@@ -382,8 +398,10 @@ func runGossipRestartNodeOne(ctx context.Context, t test.Test, c cluster.Cluster
 	// Reduce the scan max idle time to speed up evacuation of node 1.
 	settings := install.MakeClusterSettings(install.NumRacksOption(c.Spec().NodeCount))
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
+	startOpts := option.DefaultStartOpts()
+	startOpts.RoachprodOpts.ExtraArgs = []string{"--vmodule=*=1"} // see #153441
 
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), settings)
+	c.Start(ctx, t.L(), startOpts, settings)
 
 	db := c.Conn(ctx, t.L(), 1)
 	defer db.Close()
@@ -535,7 +553,10 @@ SELECT count(replicas)
 	// Stop our special snowflake process which won't be recognized by the test
 	// harness, and start it again on the regular.
 	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(1))
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(1))
+	// N.B. Since n1 was initially stripped of all the replicas, we must wait for full replication. Otherwise, the
+	// replica consistency checks may time out.
+	startOpts.WaitForReplicationFactor = 3
+	c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(1))
 }
 
 func runCheckLocalityIPAddress(ctx context.Context, t test.Test, c cluster.Cluster) {
@@ -560,8 +581,6 @@ func runCheckLocalityIPAddress(ctx context.Context, t test.Test, c cluster.Clust
 
 	for i := 1; i <= c.Spec().NodeCount; i++ {
 		db := c.Conn(ctx, t.L(), 1)
-		defer db.Close()
-
 		rows, err := db.Query(
 			`SELECT node_id, advertise_address FROM crdb_internal.gossip_nodes`,
 		)
@@ -591,6 +610,7 @@ func runCheckLocalityIPAddress(ctx context.Context, t test.Test, c cluster.Clust
 				}
 			}
 		}
+		db.Close()
 	}
 	if rowCount <= 0 {
 		t.Fatal("No results for " +

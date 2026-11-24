@@ -157,7 +157,7 @@ func TestDoctorCluster(t *testing.T) {
 		"CREATE TABLE to_drop (id INT)",
 		"DROP TABLE to_drop",
 		"CREATE TABLE foo (id INT)",
-		"INSERT INTO system.users VALUES ('node', NULL, true, 3)",
+		"INSERT INTO system.users VALUES ('node', NULL, true, 3, NULL)",
 		"GRANT node TO root",
 		"DELETE FROM system.namespace WHERE name = 'foo'",
 		"SELECT pg_catalog.pg_sleep(1)",
@@ -222,7 +222,7 @@ func TestDoctorClusterDropped(t *testing.T) {
 	c.RunWithArgs([]string{"sql", "-e", strings.Join([]string{
 		"CREATE TABLE foo (i INT)",
 		desc,
-		"INSERT INTO system.users VALUES ('node', NULL, true, 3)",
+		"INSERT INTO system.users VALUES ('node', NULL, true, 3, NULL)",
 		"GRANT node TO root",
 		"DELETE FROM system.namespace WHERE name = 'foo'",
 		"SELECT pg_catalog.pg_sleep(1)",
@@ -256,6 +256,42 @@ func TestDoctorZipDir(t *testing.T) {
 
 		// Using datadriven allows TESTFLAGS=-rewrite.
 		datadriven.RunTest(t, datapathutils.TestDataPath(t, "doctor", "test_examine_zipdir"), func(t *testing.T, td *datadriven.TestData) string {
+			return out
+		})
+	})
+
+	t.Run("examine", func(t *testing.T) {
+		out, err := c.RunWithCapture("debug doctor examine zipdir testdata/doctor/debugzip-bad-descriptors 21.1-52")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Using datadriven allows TESTFLAGS=-rewrite.
+		datadriven.RunTest(t, datapathutils.TestDataPath(t, "doctor", "test_examine_zipdir_bad_descriptors"), func(t *testing.T, td *datadriven.TestData) string {
+			return out
+		})
+	})
+
+	t.Run("examine", func(t *testing.T) {
+		out, err := c.RunWithCapture("debug doctor examine zipdir testdata/doctor/debugzip-bad-jobs 21.1-52")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Using datadriven allows TESTFLAGS=-rewrite.
+		datadriven.RunTest(t, datapathutils.TestDataPath(t, "doctor", "test_examine_zipdir_bad_jobs"), func(t *testing.T, td *datadriven.TestData) string {
+			return out
+		})
+	})
+
+	t.Run("examine", func(t *testing.T) {
+		out, err := c.RunWithCapture("debug doctor examine zipdir testdata/doctor/debugzip-bad-namespace 21.1-52")
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		// Using datadriven allows TESTFLAGS=-rewrite.
+		datadriven.RunTest(t, datapathutils.TestDataPath(t, "doctor", "test_examine_zipdir_bad_namespace"), func(t *testing.T, td *datadriven.TestData) string {
 			return out
 		})
 	})

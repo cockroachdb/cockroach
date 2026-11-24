@@ -64,6 +64,8 @@ func TestSelectivity(t *testing.T) {
 	// MinSelectivity variations.
 	test(MinSelectivity(s(0.4), s(0.5)), s(0.4))
 	test(MinSelectivity(s(0.5), s(0.4)), s(0.4))
+	test(MinSelectivity(s(0.5), s(0.4), s(0.3)), s(0.3))
+	test(MinSelectivity(s(0.3), s(0.4), s(0.5)), s(0.3))
 	test(MinSelectivity(ZeroSelectivity, OneSelectivity), ZeroSelectivity)
 	test(MinSelectivity(ZeroSelectivity, s(epsilon)), ZeroSelectivity)
 	test(MinSelectivity(s(0), s(epsilon)), s(epsilon))

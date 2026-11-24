@@ -9,6 +9,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
@@ -25,7 +26,8 @@ func TestMain(m *testing.M) {
 	// a version injected. Pretend to be a very up-to-date version.
 	defer build.TestingOverrideVersion("v999.0.0")()
 
-	serverutils.InitTestServerFactory(server.TestServerFactory)
+	serverutils.InitTestServerFactory(server.TestServerFactory,
+		serverutils.WithDRPCOption(base.TestDRPCEnabledRandomly))
 	os.Exit(m.Run())
 }
 

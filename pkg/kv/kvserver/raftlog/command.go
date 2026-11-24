@@ -38,12 +38,14 @@ var _ apply.Command = (*ReplicatedCmd)(nil)
 var _ apply.CheckedCommand = (*ReplicatedCmd)(nil)
 var _ apply.AppliedCommand = (*ReplicatedCmd)(nil)
 
-// Decode populates the receiver from the provided entry.
+// Decode populates the receiver from the provided entry. Safe to call on a
+// previously populated cmd — the old Entry is released and all fields are
+// reset before decoding.
 func (c *ReplicatedCmd) Decode(e *raftpb.Entry) error {
 	if c.Entry != nil {
 		c.Entry.Release()
-		c.Entry = nil
 	}
+	*c = ReplicatedCmd{}
 
 	var err error
 	c.Entry, err = NewEntry(*e)

@@ -5,4 +5,5 @@ go_library(
     srcs = ["server_ident.go"],
     importpath = "github.com/cockroachdb/cockroach/pkg/base/serverident",
     visibility = ["//visibility:public"],
+    deps = ["//pkg/util/ctxutil"],
 )

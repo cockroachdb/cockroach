@@ -179,21 +179,32 @@ COMMIT;
 # Ensure that we can inspect information_schema.applicable_roles inside of a
 # transaction. Prior to the change which introduces this
 
-statement ok;
+statement ok
 CREATE ROLE role_foo;
 
-statement ok;
+statement ok
 CREATE ROLE role_bar;
 
 statement ok
 GRANT role_bar TO role_foo WITH ADMIN OPTION;
 
-statement ok;
+statement ok
 GRANT role_foo TO testuser WITH ADMIN OPTION;
+
+# GRANTS only wait for the new version to be visible, but future schema changes
+# can retry errors if the old version is in use, due to the two version invariant.
+retry
+query I
+SELECT count(*) FROM system.lease WHERE desc_id = 'system.role_members'::REGCLASS::OID GROUP BY desc_id, version;
+----
+1
 
 # switch to testuser
 
 user testuser
+
+statement ok
+SET autocommit_before_ddl = false
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
@@ -227,3 +238,6 @@ grantee  role_name  is_grantable
 
 statement ok
 COMMIT
+
+statement ok
+RESET autocommit_before_ddl

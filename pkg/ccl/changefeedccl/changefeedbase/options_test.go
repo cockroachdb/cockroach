@@ -79,3 +79,88 @@ func TestEncodingOptionsValidations(t *testing.T) {
 	}
 
 }
+
+func TestAvroSchemaPrefixValidation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	invalidPrefixErr := "must start with [A-Za-z_] and subsequently contain only [A-Za-z0-9_]"
+
+	validPrefixes := []string{
+		"",
+		"a",
+		"A",
+		"_",
+		"abc",
+		"ABC",
+		"_abc",
+		"a1",
+		"A1_b2_C3",
+		"crdb_cdc_",
+		"super",
+		"____",
+	}
+
+	invalidPrefixes := []string{
+		// Invalid first characters.
+		"1abc",
+		"123",
+		"-abc",
+
+		// Invalid subsequent characters.
+		"abc-def",
+		"abc.def",
+		"abc def",
+		"abc!",
+	}
+
+	for _, prefix := range validPrefixes {
+		t.Run(fmt.Sprintf("valid/prefix=%q", prefix), func(t *testing.T) {
+			opts := MakeStatementOptions(map[string]string{
+				OptAvroSchemaPrefix: prefix,
+			})
+			err := opts.ValidateForCreateChangefeed(false)
+			require.NoError(t, err)
+		})
+	}
+
+	for _, prefix := range invalidPrefixes {
+		t.Run(fmt.Sprintf("invalid/prefix=%q", prefix), func(t *testing.T) {
+			opts := MakeStatementOptions(map[string]string{
+				OptAvroSchemaPrefix: prefix,
+			})
+			err := opts.ValidateForCreateChangefeed(false)
+			require.Error(t, err)
+			require.Contains(t, err.Error(), invalidPrefixErr)
+		})
+	}
+}
+
+func TestGetCreateKafkaTopics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	for _, tc := range []struct {
+		name        string
+		opts        map[string]string
+		expected    CreateKafkaTopics
+		expectedErr string
+	}{
+		{name: "default", expected: CreateKafkaTopicsBrokerAuto},
+		{name: "broker_auto", opts: map[string]string{OptCreateKafkaTopics: string(CreateKafkaTopicsBrokerAuto)}, expected: CreateKafkaTopicsBrokerAuto},
+		{name: "explicit", opts: map[string]string{OptCreateKafkaTopics: string(CreateKafkaTopicsExplicit)}, expected: CreateKafkaTopicsExplicit},
+		{name: "off", opts: map[string]string{OptCreateKafkaTopics: string(CreateKafkaTopicsOff)}, expected: CreateKafkaTopicsOff},
+		{name: "bare option means broker_auto", opts: map[string]string{OptCreateKafkaTopics: ""}, expected: CreateKafkaTopicsBrokerAuto},
+		{name: "invalid value rejected", opts: map[string]string{OptCreateKafkaTopics: "yes"}, expectedErr: "unknown create_kafka_topics: yes"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := MakeStatementOptions(tc.opts).GetCreateKafkaTopics()
+			if tc.expectedErr != "" {
+				require.ErrorContains(t, err, tc.expectedErr)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.expected, got)
+		})
+	}
+}

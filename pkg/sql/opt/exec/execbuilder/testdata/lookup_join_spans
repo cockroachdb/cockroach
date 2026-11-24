@@ -116,7 +116,6 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ estimated row count: 33
@@ -148,7 +147,6 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ order: +value
@@ -178,7 +176,6 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ estimated row count: 33
@@ -210,7 +207,6 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ order: +value
@@ -239,7 +235,6 @@ WHERE
   name='cpu'
 ----
 distribution: local
-vectorized: true
 ·
 • lookup join
 │ estimated row count: 33
@@ -266,7 +261,6 @@ WHERE
   name='cpu'
 ----
 distribution: local
-vectorized: true
 ·
 • lookup join
 │ table: metric_values_desc@metric_values_desc_pkey
@@ -293,7 +287,6 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ estimated row count: 33
@@ -325,7 +318,6 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ order: +value
@@ -355,7 +347,6 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ estimated row count: 33
@@ -387,7 +378,6 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ order: +value
@@ -417,7 +407,6 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ estimated row count: 11
@@ -449,7 +438,6 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ order: +value
@@ -479,7 +467,6 @@ AND name='cpu'
 ORDER BY value, id
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ estimated row count: 11
@@ -505,7 +492,6 @@ WHERE EXISTS (SELECT * FROM metric_values mv WHERE mv.metric_id = m.id AND time 
 ORDER BY m.id
 ----
 distribution: local
-vectorized: true
 ·
 • lookup join (semi)
 │ estimated row count: 10
@@ -531,7 +517,6 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ estimated row count: 3
@@ -570,28 +555,25 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
 ·
-• lookup join
-│ estimated row count: 0
-│ table: metrics@metrics_pkey
-│ equality: (id) = (id)
-│ equality cols are key
+• sort
+│ estimated row count: 1
+│ order: +value
 │
-└── • sort
-    │ estimated row count: 0
-    │ order: +value
+└── • lookup join
+    │ estimated row count: 1
+    │ table: metric_values@metric_values_pkey
+    │ equality: (metric_id, time) = (metric_id, time)
+    │ equality cols are key
     │
     └── • lookup join
-        │ estimated row count: 0
-        │ table: metric_values@metric_values_pkey
-        │ equality: (metric_id, time) = (metric_id, time)
-        │ equality cols are key
+        │ estimated row count: 1
+        │ table: metric_values@secondary
+        │ lookup condition: ((nullable >= -20) AND (nullable <= -10)) AND (id = metric_id)
         │
-        └── • lookup join
-            │ estimated row count: 0
-            │ table: metric_values@secondary
-            │ lookup condition: ((nullable >= -20) AND (nullable <= -10)) AND (id = metric_id)
+        └── • index join
+            │ estimated row count: 1
+            │ table: metrics@metrics_pkey
             │
             └── • scan
                   estimated row count: 1 (10% of the table; stats collected <hidden> ago)
@@ -611,28 +593,25 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
 ·
-• lookup join
-│ estimated row count: 0
-│ table: metrics@metrics_pkey
-│ equality: (id) = (id)
-│ equality cols are key
+• sort
+│ estimated row count: 1
+│ order: +value
 │
-└── • sort
-    │ estimated row count: 0
-    │ order: +value
+└── • lookup join
+    │ estimated row count: 1
+    │ table: metric_values@metric_values_pkey
+    │ equality: (metric_id, time) = (metric_id, time)
+    │ equality cols are key
     │
     └── • lookup join
-        │ estimated row count: 0
-        │ table: metric_values@metric_values_pkey
-        │ equality: (metric_id, time) = (metric_id, time)
-        │ equality cols are key
+        │ estimated row count: 1
+        │ table: metric_values@secondary
+        │ lookup condition: (nullable > 1) AND (id = metric_id)
         │
-        └── • lookup join
-            │ estimated row count: 0
-            │ table: metric_values@secondary
-            │ lookup condition: (nullable > 1) AND (id = metric_id)
+        └── • index join
+            │ estimated row count: 1
+            │ table: metrics@metrics_pkey
             │
             └── • scan
                   estimated row count: 1 (10% of the table; stats collected <hidden> ago)
@@ -652,28 +631,25 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
 ·
-• lookup join
-│ estimated row count: 0
-│ table: metrics@metrics_pkey
-│ equality: (id) = (id)
-│ equality cols are key
+• sort
+│ estimated row count: 1
+│ order: +value
 │
-└── • sort
-    │ estimated row count: 0
-    │ order: +value
+└── • lookup join
+    │ estimated row count: 1
+    │ table: metric_values@metric_values_pkey
+    │ equality: (metric_id, time) = (metric_id, time)
+    │ equality cols are key
     │
     └── • lookup join
-        │ estimated row count: 0
-        │ table: metric_values@metric_values_pkey
-        │ equality: (metric_id, time) = (metric_id, time)
-        │ equality cols are key
+        │ estimated row count: 1
+        │ table: metric_values@secondary
+        │ lookup condition: (nullable >= 1) AND (id = metric_id)
         │
-        └── • lookup join
-            │ estimated row count: 0
-            │ table: metric_values@secondary
-            │ lookup condition: (nullable >= 1) AND (id = metric_id)
+        └── • index join
+            │ estimated row count: 1
+            │ table: metrics@metrics_pkey
             │
             └── • scan
                   estimated row count: 1 (10% of the table; stats collected <hidden> ago)
@@ -694,28 +670,25 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
 ·
-• lookup join
-│ estimated row count: 0
-│ table: metrics@metrics_pkey
-│ equality: (id) = (id)
-│ equality cols are key
+• sort
+│ estimated row count: 1
+│ order: +value
 │
-└── • sort
-    │ estimated row count: 0
-    │ order: +value
+└── • lookup join
+    │ estimated row count: 1
+    │ table: metric_values@metric_values_pkey
+    │ equality: (metric_id, time) = (metric_id, time)
+    │ equality cols are key
     │
     └── • lookup join
-        │ estimated row count: 0
-        │ table: metric_values@metric_values_pkey
-        │ equality: (metric_id, time) = (metric_id, time)
-        │ equality cols are key
+        │ estimated row count: 1
+        │ table: metric_values@secondary
+        │ lookup condition: (nullable < -10) AND (id = metric_id)
         │
-        └── • lookup join
-            │ estimated row count: 0
-            │ table: metric_values@secondary
-            │ lookup condition: (nullable < -10) AND (id = metric_id)
+        └── • index join
+            │ estimated row count: 1
+            │ table: metrics@metrics_pkey
             │
             └── • scan
                   estimated row count: 1 (10% of the table; stats collected <hidden> ago)
@@ -735,28 +708,25 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
 ·
-• lookup join
-│ estimated row count: 0
-│ table: metrics@metrics_pkey
-│ equality: (id) = (id)
-│ equality cols are key
+• sort
+│ estimated row count: 1
+│ order: +value
 │
-└── • sort
-    │ estimated row count: 0
-    │ order: +value
+└── • lookup join
+    │ estimated row count: 1
+    │ table: metric_values@metric_values_pkey
+    │ equality: (metric_id, time) = (metric_id, time)
+    │ equality cols are key
     │
     └── • lookup join
-        │ estimated row count: 0
-        │ table: metric_values@metric_values_pkey
-        │ equality: (metric_id, time) = (metric_id, time)
-        │ equality cols are key
+        │ estimated row count: 1
+        │ table: metric_values@secondary
+        │ lookup condition: (nullable <= -10) AND (id = metric_id)
         │
-        └── • lookup join
-            │ estimated row count: 0
-            │ table: metric_values@secondary
-            │ lookup condition: (nullable <= -10) AND (id = metric_id)
+        └── • index join
+            │ estimated row count: 1
+            │ table: metrics@metrics_pkey
             │
             └── • scan
                   estimated row count: 1 (10% of the table; stats collected <hidden> ago)
@@ -777,7 +747,6 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ estimated row count: 3
@@ -818,30 +787,27 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
 ·
-• lookup join
-│ estimated row count: 0
-│ table: metrics@metrics_pkey
-│ equality: (id) = (id)
-│ equality cols are key
+• sort
+│ estimated row count: 1
+│ order: +value
 │
-└── • sort
-    │ estimated row count: 0
-    │ order: +value
+└── • lookup join
+    │ estimated row count: 1
+    │ table: metric_values@metric_values_pkey
+    │ equality: (metric_id, time) = (metric_id, time)
+    │ equality cols are key
     │
     └── • lookup join
-        │ estimated row count: 0
-        │ table: metric_values@metric_values_pkey
-        │ equality: (metric_id, time) = (metric_id, time)
-        │ equality cols are key
+        │ estimated row count: 1
+        │ table: metric_values@secondary
+        │ lookup condition: (("time" < '2020-01-01 00:00:10+00') AND (id = metric_id)) AND ("lookup_join_const_col_@3" = nullable)
         │
-        └── • lookup join
-            │ estimated row count: 0
-            │ table: metric_values@secondary
-            │ lookup condition: (("time" < '2020-01-01 00:00:10+00') AND (id = metric_id)) AND ("lookup_join_const_col_@3" = nullable)
+        └── • render
             │
-            └── • render
+            └── • index join
+                │ estimated row count: 1
+                │ table: metrics@metrics_pkey
                 │
                 └── • scan
                       estimated row count: 1 (10% of the table; stats collected <hidden> ago)
@@ -861,7 +827,6 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ estimated row count: 33
@@ -900,7 +865,6 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ estimated row count: 33
@@ -939,7 +903,6 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ estimated row count: 33
@@ -979,7 +942,6 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ estimated row count: 33
@@ -1018,7 +980,6 @@ WHERE
 ORDER BY value
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ estimated row count: 33

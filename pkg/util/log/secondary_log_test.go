@@ -42,8 +42,7 @@ func installSessionsFileSink(sc *TestLogScope, t *testing.T) func() {
 	}
 
 	// Apply the configuration.
-	TestingResetActive()
-	cleanup, err := ApplyConfig(cfg, nil /* fileSinkMetricsForDir */, nil /* fatalOnLogStall */)
+	cleanup, err := ApplyConfigForReconfig(cfg, nil /* fileSinkMetricsForDir */, nil /* fatalOnLogStall */)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -60,10 +59,10 @@ func TestSecondaryLog(t *testing.T) {
 	ctx := context.Background()
 
 	// Interleave some messages.
-	Infof(context.Background(), "test1")
+	Dev.Infof(context.Background(), "test1")
 	ctx = logtags.AddTag(ctx, "hello", "world")
 	Sessions.Infof(ctx, "story time")
-	Infof(context.Background(), "test2")
+	Dev.Infof(context.Background(), "test2")
 
 	// Make sure the content made it to disk.
 	FlushFiles()

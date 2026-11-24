@@ -20,10 +20,6 @@ import (
 // the role modify cluster settings within the cluster.
 type GlobalPrivilege struct{}
 
-// GlobalPrivilegeObjectType represents the object type for
-// GlobalPrivilege.
-const GlobalPrivilegeObjectType = "Global"
-
 var _ Object = &GlobalPrivilege{}
 
 // GetPath implements the Object interface.
@@ -62,6 +58,11 @@ func (p *GlobalPrivilege) GetName() string {
 // ID implements the cat.Object interface.
 func (p *GlobalPrivilege) ID() cat.StableID {
 	return cat.DefaultStableID
+}
+
+// Version implements the cat.Object interface.
+func (p *GlobalPrivilege) Version() uint64 {
+	return cat.InvalidVersion
 }
 
 // PostgresDescriptorID implements the cat.Object interface.

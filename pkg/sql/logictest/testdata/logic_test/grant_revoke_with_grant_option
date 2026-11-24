@@ -19,6 +19,7 @@ test           pg_extension        NULL         schema       public   USAGE     
 test           public              NULL         schema       public   CREATE          false
 test           public              NULL         schema       public   USAGE           false
 test           NULL                NULL         database     public   CONNECT         false
+test           NULL                NULL         database     public   TEMPORARY       false
 
 statement error grant options cannot be granted to "public" role
 GRANT ALL PRIVILEGES ON TABLE t TO public WITH GRANT OPTION
@@ -299,18 +300,23 @@ REVOKE DELETE ON TABLE t FROM testuser
 query TTTTTTB colnames,rowsort
 SHOW GRANTS FOR testuser
 ----
-database_name  schema_name  object_name  object_type  grantee   privilege_type  is_grantable
-test           public       NULL         schema       public    CREATE          false
-test           public       NULL         schema       public    USAGE           false
-test           public       t            table        testuser  BACKUP          true
-test           public       t            table        testuser  CHANGEFEED      true
-test           public       t            table        testuser  CREATE          true
-test           public       t            table        testuser  DROP            true
-test           public       t            table        testuser  INSERT          true
-test           public       t            table        testuser  SELECT          true
-test           public       t            table        testuser  TRIGGER         true
-test           public       t            table        testuser  UPDATE          true
-test           public       t            table        testuser  ZONECONFIG      true
+database_name  schema_name  object_name  object_type  grantee   privilege_type     is_grantable
+test           public       NULL         schema       public    CREATE             false
+test           public       NULL         schema       public    USAGE              false
+test           public       t            table        testuser  BACKUP             true
+test           public       t            table        testuser  CHANGEFEED         true
+test           public       t            table        testuser  CREATE             true
+test           public       t            table        testuser  DROP               true
+test           public       t            table        testuser  INSERT             true
+test           public       t            table        testuser  MAINTAIN           true
+test           public       t            table        testuser  REFERENCES         true
+test           public       t            table        testuser  REPLICATIONDEST    true
+test           public       t            table        testuser  REPLICATIONSOURCE  true
+test           public       t            table        testuser  SELECT             true
+test           public       t            table        testuser  TRIGGER            true
+test           public       t            table        testuser  TRUNCATE           true
+test           public       t            table        testuser  UPDATE             true
+test           public       t            table        testuser  ZONECONFIG         true
 
 statement ok
 GRANT SELECT ON TABLE t TO target
@@ -434,6 +440,7 @@ SHOW GRANTS ON DATABASE d
 database_name  grantee   privilege_type  is_grantable
 d              admin     ALL             true
 d              public    CONNECT         false
+d              public    TEMPORARY       false
 d              root      ALL             true
 d              testuser  ALL             true
 
@@ -455,6 +462,7 @@ SHOW GRANTS ON DATABASE d
 database_name  grantee   privilege_type  is_grantable
 d              admin     ALL             true
 d              public    CONNECT         false
+d              public    TEMPORARY       false
 d              root      ALL             true
 d              target    CONNECT         false
 d              testuser  ALL             true
@@ -489,6 +497,7 @@ SHOW GRANTS ON DATABASE d
 database_name  grantee    privilege_type  is_grantable
 d              admin      ALL             true
 d              public     CONNECT         false
+d              public     TEMPORARY       false
 d              root       ALL             true
 d              target     CONNECT         true
 d              testuser   ALL             true
@@ -504,6 +513,7 @@ SHOW GRANTS ON DATABASE d
 database_name  grantee   privilege_type  is_grantable
 d              admin     ALL             true
 d              public    CONNECT         false
+d              public    TEMPORARY       false
 d              root      ALL             true
 d              target    CONNECT         true
 d              testuser  ALL             true
@@ -675,7 +685,7 @@ test           public       grant_ordering_table  grant_ordering_user  ALL      
 statement ok
 CREATE USER owner_grant_option_child
 
-statement oko
+statement ok
 GRANT testuser to owner_grant_option_child
 
 user testuser

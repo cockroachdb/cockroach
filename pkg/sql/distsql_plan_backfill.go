@@ -11,6 +11,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -27,7 +28,7 @@ func initColumnBackfillerSpec(
 	chunkSize int64,
 	updateChunkSizeThresholdBytes uint64,
 	readAsOf hlc.Timestamp,
-) (execinfrapb.BackfillerSpec, error) {
+) execinfrapb.BackfillerSpec {
 	return execinfrapb.BackfillerSpec{
 		Table:                         *tbl.TableDesc(),
 		Duration:                      duration,
@@ -35,25 +36,26 @@ func initColumnBackfillerSpec(
 		UpdateChunkSizeThresholdBytes: updateChunkSizeThresholdBytes,
 		ReadAsOf:                      readAsOf,
 		Type:                          execinfrapb.BackfillerSpec_Column,
-	}, nil
+	}
 }
 
 func initIndexBackfillerSpec(
 	desc descpb.TableDescriptor,
-	writeAsOf, readAsOf hlc.Timestamp,
+	writeAsOf hlc.Timestamp,
 	writeAtBatchTimestamp bool,
 	chunkSize int64,
 	indexesToBackfill []descpb.IndexID,
-) (execinfrapb.BackfillerSpec, error) {
+	sourceIndexID descpb.IndexID,
+) execinfrapb.BackfillerSpec {
 	return execinfrapb.BackfillerSpec{
 		Table:                 desc,
 		WriteAsOf:             writeAsOf,
 		WriteAtBatchTimestamp: writeAtBatchTimestamp,
-		ReadAsOf:              readAsOf,
 		Type:                  execinfrapb.BackfillerSpec_Index,
 		ChunkSize:             chunkSize,
 		IndexesToBackfill:     indexesToBackfill,
-	}, nil
+		SourceIndexID:         sourceIndexID,
+	}
 }
 
 func initIndexBackfillMergerSpec(
@@ -61,14 +63,22 @@ func initIndexBackfillMergerSpec(
 	addedIndexes []descpb.IndexID,
 	temporaryIndexes []descpb.IndexID,
 	mergeTimestamp hlc.Timestamp,
-) (execinfrapb.IndexBackfillMergerSpec, error) {
+) execinfrapb.IndexBackfillMergerSpec {
 	return execinfrapb.IndexBackfillMergerSpec{
 		Table:            desc,
 		AddedIndexes:     addedIndexes,
 		TemporaryIndexes: temporaryIndexes,
 		MergeTimestamp:   mergeTimestamp,
-	}, nil
+	}
 }
+
+var initialSplitsPerProcessor = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"bulkio.index_backfill.initial_splits_per_processor",
+	"number of initial splits each index backfill processor with enough data will create",
+	3,
+	settings.NonNegativeInt,
+)
 
 // createBackfiller generates a plan consisting of index/column backfiller
 // processors, one for each node that has spans that we are reading. The plan is
@@ -76,17 +86,26 @@ func initIndexBackfillMergerSpec(
 func (dsp *DistSQLPlanner) createBackfillerPhysicalPlan(
 	ctx context.Context, planCtx *PlanningCtx, spec execinfrapb.BackfillerSpec, spans []roachpb.Span,
 ) (*PhysicalPlan, error) {
-	spanPartitions, err := dsp.PartitionSpans(ctx, planCtx, spans)
+	spanPartitions, err := dsp.PartitionSpans(ctx, planCtx, spans, PartitionSpansBoundDefault)
 	if err != nil {
 		return nil, err
 	}
 
 	p := planCtx.NewPhysicalPlan()
+	var containsRemoteProcessor bool
+	for _, sp := range spanPartitions {
+		if sp.SQLInstanceID != p.GatewaySQLInstanceID {
+			containsRemoteProcessor = true
+			break
+		}
+	}
+	stageID := p.NewStage(containsRemoteProcessor, false /* allowPartialDistribution */)
 	p.ResultRouters = make([]physicalplan.ProcessorIdx, len(spanPartitions))
+	initialSplits := initialSplitsPerProcessor.Get(&planCtx.ExtendedEvalCtx.Settings.SV)
 	for i, sp := range spanPartitions {
 		ib := &execinfrapb.BackfillerSpec{}
 		*ib = spec
-		ib.InitialSplits = int32(len(spanPartitions))
+		ib.InitialSplits = int32(initialSplits)
 		ib.Spans = sp.Spans
 
 		proc := physicalplan.Processor{
@@ -94,6 +113,7 @@ func (dsp *DistSQLPlanner) createBackfillerPhysicalPlan(
 			Spec: execinfrapb.ProcessorSpec{
 				Core:        execinfrapb.ProcessorCoreUnion{Backfiller: ib},
 				Output:      []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
+				StageID:     stageID,
 				ResultTypes: []*types.T{},
 			},
 		}
@@ -145,12 +165,20 @@ func (dsp *DistSQLPlanner) createIndexBackfillerMergePhysicalPlan(
 		return idx
 	}
 
-	spanPartitions, err := dsp.PartitionSpans(ctx, planCtx, indexSpans)
+	spanPartitions, err := dsp.PartitionSpans(ctx, planCtx, indexSpans, PartitionSpansBoundDefault)
 	if err != nil {
 		return nil, err
 	}
 
 	p := planCtx.NewPhysicalPlan()
+	var containsRemoteProcessor bool
+	for _, sp := range spanPartitions {
+		if sp.SQLInstanceID != p.GatewaySQLInstanceID {
+			containsRemoteProcessor = true
+			break
+		}
+	}
+	stageID := p.NewStage(containsRemoteProcessor, false /* allowPartialDistribution */)
 	p.ResultRouters = make([]physicalplan.ProcessorIdx, len(spanPartitions))
 	for i, sp := range spanPartitions {
 		ibm := &execinfrapb.IndexBackfillMergerSpec{}
@@ -166,6 +194,7 @@ func (dsp *DistSQLPlanner) createIndexBackfillerMergePhysicalPlan(
 			Spec: execinfrapb.ProcessorSpec{
 				Core:        execinfrapb.ProcessorCoreUnion{IndexBackfillMerger: ibm},
 				Output:      []execinfrapb.OutputRouterSpec{{Type: execinfrapb.OutputRouterSpec_PASS_THROUGH}},
+				StageID:     stageID,
 				ResultTypes: []*types.T{},
 			},
 		}

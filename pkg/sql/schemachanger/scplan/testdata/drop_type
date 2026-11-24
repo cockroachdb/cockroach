@@ -6,9 +6,9 @@ CREATE TYPE defaultdb.ctyp AS (a INT, b INT)
 ops
 DROP TYPE defaultdb.typ
 ----
-StatementPhase stage 1 of 1 with 15 MutationType ops
+StatementPhase stage 1 of 1 with 16 MutationType ops
   transitions:
-    [[Namespace:{DescID: 104, Name: typ, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 104, Name: typ, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 104, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 104, Name: public}, ABSENT], PUBLIC] -> ABSENT
@@ -16,7 +16,7 @@ StatementPhase stage 1 of 1 with 15 MutationType ops
     [[EnumType:{DescID: 104}, ABSENT], PUBLIC] -> DROPPED
     [[EnumTypeValue:{DescID: 104, Name: a}, ABSENT], PUBLIC] -> ABSENT
     [[SchemaChild:{DescID: 104, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 105, Name: _typ, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 105, Name: _typ, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 105}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 105, Name: public}, ABSENT], PUBLIC] -> ABSENT
@@ -26,9 +26,11 @@ StatementPhase stage 1 of 1 with 15 MutationType ops
   ops:
     *scop.MarkDescriptorAsDropped
       DescriptorID: 104
-    *scop.NotImplementedForPublicObjects
-      DescID: 104
-      ElementType: scpb.EnumTypeValue
+    *scop.DemoteEnumTypeValue
+      LogicalRepresentation: a
+      PhysicalRepresentation:
+      - 128
+      TypeID: 104
     *scop.RemoveObjectParent
       ObjectID: 104
       ParentSchemaID: 101
@@ -43,9 +45,8 @@ StatementPhase stage 1 of 1 with 15 MutationType ops
         DescriptorID: 104
         Name: typ
         SchemaID: 101
-    *scop.NotImplementedForPublicObjects
-      DescID: 104
-      ElementType: scpb.Owner
+    *scop.RemoveOwner
+      DescriptorID: 104
     *scop.RemoveUserPrivileges
       DescriptorID: 104
       User: admin
@@ -61,9 +62,8 @@ StatementPhase stage 1 of 1 with 15 MutationType ops
         DescriptorID: 105
         Name: _typ
         SchemaID: 101
-    *scop.NotImplementedForPublicObjects
-      DescID: 105
-      ElementType: scpb.Owner
+    *scop.RemoveOwner
+      DescriptorID: 105
     *scop.RemoveUserPrivileges
       DescriptorID: 105
       User: admin
@@ -73,9 +73,14 @@ StatementPhase stage 1 of 1 with 15 MutationType ops
     *scop.RemoveUserPrivileges
       DescriptorID: 105
       User: root
+    *scop.RemoveEnumTypeValue
+      LogicalRepresentation: a
+      PhysicalRepresentation:
+      - 128
+      TypeID: 104
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
-    [[Namespace:{DescID: 104, Name: typ, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 104, Name: typ, ReferencedDescID: 100, IntValue: 101}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 104}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 104, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 104, Name: public}, ABSENT], ABSENT] -> PUBLIC
@@ -83,7 +88,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[EnumType:{DescID: 104}, ABSENT], DROPPED] -> PUBLIC
     [[EnumTypeValue:{DescID: 104, Name: a}, ABSENT], ABSENT] -> PUBLIC
     [[SchemaChild:{DescID: 104, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
-    [[Namespace:{DescID: 105, Name: _typ, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 105, Name: _typ, ReferencedDescID: 100, IntValue: 101}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 105}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 105, Name: public}, ABSENT], ABSENT] -> PUBLIC
@@ -93,9 +98,9 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 18 MutationType ops
+PreCommitPhase stage 2 of 2 with 19 MutationType ops
   transitions:
-    [[Namespace:{DescID: 104, Name: typ, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 104, Name: typ, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 104}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 104, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 104, Name: public}, ABSENT], PUBLIC] -> ABSENT
@@ -103,7 +108,7 @@ PreCommitPhase stage 2 of 2 with 18 MutationType ops
     [[EnumType:{DescID: 104}, ABSENT], PUBLIC] -> DROPPED
     [[EnumTypeValue:{DescID: 104, Name: a}, ABSENT], PUBLIC] -> ABSENT
     [[SchemaChild:{DescID: 104, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 105, Name: _typ, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 105, Name: _typ, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 105}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 105, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 105, Name: public}, ABSENT], PUBLIC] -> ABSENT
@@ -113,9 +118,11 @@ PreCommitPhase stage 2 of 2 with 18 MutationType ops
   ops:
     *scop.MarkDescriptorAsDropped
       DescriptorID: 104
-    *scop.NotImplementedForPublicObjects
-      DescID: 104
-      ElementType: scpb.EnumTypeValue
+    *scop.DemoteEnumTypeValue
+      LogicalRepresentation: a
+      PhysicalRepresentation:
+      - 128
+      TypeID: 104
     *scop.RemoveObjectParent
       ObjectID: 104
       ParentSchemaID: 101
@@ -130,9 +137,8 @@ PreCommitPhase stage 2 of 2 with 18 MutationType ops
         DescriptorID: 104
         Name: typ
         SchemaID: 101
-    *scop.NotImplementedForPublicObjects
-      DescID: 104
-      ElementType: scpb.Owner
+    *scop.RemoveOwner
+      DescriptorID: 104
     *scop.RemoveUserPrivileges
       DescriptorID: 104
       User: admin
@@ -148,9 +154,8 @@ PreCommitPhase stage 2 of 2 with 18 MutationType ops
         DescriptorID: 105
         Name: _typ
         SchemaID: 101
-    *scop.NotImplementedForPublicObjects
-      DescID: 105
-      ElementType: scpb.Owner
+    *scop.RemoveOwner
+      DescriptorID: 105
     *scop.RemoveUserPrivileges
       DescriptorID: 105
       User: admin
@@ -160,6 +165,11 @@ PreCommitPhase stage 2 of 2 with 18 MutationType ops
     *scop.RemoveUserPrivileges
       DescriptorID: 105
       User: root
+    *scop.RemoveEnumTypeValue
+      LogicalRepresentation: a
+      PhysicalRepresentation:
+      - 128
+      TypeID: 104
     *scop.SetJobStateOnDescriptor
       DescriptorID: 104
       Initialize: true
@@ -175,10 +185,10 @@ PreCommitPhase stage 2 of 2 with 18 MutationType ops
       - 105
       JobID: 1
       NonCancelable: true
-      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 2 MutationType ops pending
+      RunningStatus: 'Pending: Updating schema metadata (2 operations) — PostCommitNonRevertible phase (stage 1 of 1).'
       Statements:
       - statement: DROP TYPE defaultdb.typ
-        redactedstatement: DROP TYPE ‹defaultdb›.‹public›.‹typ›
+        redactedstatement: DROP TYPE defaultdb.public.typ
         statementtag: DROP TYPE
 PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops
   transitions:
@@ -210,7 +220,7 @@ DROP TYPE defaultdb.typ
   kind: PreviousTransactionPrecedence
   rule: descriptor dropped in transaction before removal
 - from: [AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, DROPPED]
-  to:   [Namespace:{DescID: 105, Name: _typ, ReferencedDescID: 100}, ABSENT]
+  to:   [Namespace:{DescID: 105, Name: _typ, ReferencedDescID: 100, IntValue: 101}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, DROPPED]
@@ -238,11 +248,7 @@ DROP TYPE defaultdb.typ
   kind: PreviousTransactionPrecedence
   rule: descriptor dropped in transaction before removal
 - from: [EnumType:{DescID: 104}, DROPPED]
-  to:   [EnumTypeValue:{DescID: 104, Name: a}, ABSENT]
-  kind: Precedence
-  rule: descriptor dropped before dependent element removal
-- from: [EnumType:{DescID: 104}, DROPPED]
-  to:   [Namespace:{DescID: 104, Name: typ, ReferencedDescID: 100}, ABSENT]
+  to:   [Namespace:{DescID: 104, Name: typ, ReferencedDescID: 100, IntValue: 101}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [EnumType:{DescID: 104}, DROPPED]
@@ -269,11 +275,11 @@ DROP TYPE defaultdb.typ
   to:   [EnumType:{DescID: 104}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Namespace:{DescID: 104, Name: typ, ReferencedDescID: 100}, ABSENT]
+- from: [Namespace:{DescID: 104, Name: typ, ReferencedDescID: 100, IntValue: 101}, ABSENT]
   to:   [EnumType:{DescID: 104}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Namespace:{DescID: 105, Name: _typ, ReferencedDescID: 100}, ABSENT]
+- from: [Namespace:{DescID: 105, Name: _typ, ReferencedDescID: 100, IntValue: 101}, ABSENT]
   to:   [AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
@@ -323,7 +329,7 @@ DROP TYPE defaultdb.ctyp
 ----
 StatementPhase stage 1 of 1 with 16 MutationType ops
   transitions:
-    [[Namespace:{DescID: 106, Name: ctyp, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 106, Name: ctyp, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 106, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 106, Name: public}, ABSENT], PUBLIC] -> ABSENT
@@ -333,7 +339,7 @@ StatementPhase stage 1 of 1 with 16 MutationType ops
     [[CompositeTypeAttrType:{DescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[CompositeTypeAttrName:{DescID: 106, Name: b}, ABSENT], PUBLIC] -> ABSENT
     [[SchemaChild:{DescID: 106, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 107, Name: _ctyp, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 107, Name: _ctyp, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 107}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 107, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 107, Name: public}, ABSENT], PUBLIC] -> ABSENT
@@ -363,9 +369,8 @@ StatementPhase stage 1 of 1 with 16 MutationType ops
         DescriptorID: 106
         Name: ctyp
         SchemaID: 101
-    *scop.NotImplementedForPublicObjects
-      DescID: 106
-      ElementType: scpb.Owner
+    *scop.RemoveOwner
+      DescriptorID: 106
     *scop.RemoveUserPrivileges
       DescriptorID: 106
       User: admin
@@ -381,9 +386,8 @@ StatementPhase stage 1 of 1 with 16 MutationType ops
         DescriptorID: 107
         Name: _ctyp
         SchemaID: 101
-    *scop.NotImplementedForPublicObjects
-      DescID: 107
-      ElementType: scpb.Owner
+    *scop.RemoveOwner
+      DescriptorID: 107
     *scop.RemoveUserPrivileges
       DescriptorID: 107
       User: admin
@@ -395,7 +399,7 @@ StatementPhase stage 1 of 1 with 16 MutationType ops
       User: root
 PreCommitPhase stage 1 of 2 with 1 MutationType op
   transitions:
-    [[Namespace:{DescID: 106, Name: ctyp, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 106, Name: ctyp, ReferencedDescID: 100, IntValue: 101}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 106}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 106, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 106, Name: public}, ABSENT], ABSENT] -> PUBLIC
@@ -405,7 +409,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[CompositeTypeAttrType:{DescID: 106}, ABSENT], ABSENT] -> PUBLIC
     [[CompositeTypeAttrName:{DescID: 106, Name: b}, ABSENT], ABSENT] -> PUBLIC
     [[SchemaChild:{DescID: 106, ReferencedDescID: 101}, ABSENT], ABSENT] -> PUBLIC
-    [[Namespace:{DescID: 107, Name: _ctyp, ReferencedDescID: 100}, ABSENT], ABSENT] -> PUBLIC
+    [[Namespace:{DescID: 107, Name: _ctyp, ReferencedDescID: 100, IntValue: 101}, ABSENT], ABSENT] -> PUBLIC
     [[Owner:{DescID: 107}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 107, Name: admin}, ABSENT], ABSENT] -> PUBLIC
     [[UserPrivileges:{DescID: 107, Name: public}, ABSENT], ABSENT] -> PUBLIC
@@ -417,7 +421,7 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
       {}
 PreCommitPhase stage 2 of 2 with 19 MutationType ops
   transitions:
-    [[Namespace:{DescID: 106, Name: ctyp, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 106, Name: ctyp, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 106, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 106, Name: public}, ABSENT], PUBLIC] -> ABSENT
@@ -427,7 +431,7 @@ PreCommitPhase stage 2 of 2 with 19 MutationType ops
     [[CompositeTypeAttrType:{DescID: 106}, ABSENT], PUBLIC] -> ABSENT
     [[CompositeTypeAttrName:{DescID: 106, Name: b}, ABSENT], PUBLIC] -> ABSENT
     [[SchemaChild:{DescID: 106, ReferencedDescID: 101}, ABSENT], PUBLIC] -> ABSENT
-    [[Namespace:{DescID: 107, Name: _ctyp, ReferencedDescID: 100}, ABSENT], PUBLIC] -> ABSENT
+    [[Namespace:{DescID: 107, Name: _ctyp, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC] -> ABSENT
     [[Owner:{DescID: 107}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 107, Name: admin}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 107, Name: public}, ABSENT], PUBLIC] -> ABSENT
@@ -457,9 +461,8 @@ PreCommitPhase stage 2 of 2 with 19 MutationType ops
         DescriptorID: 106
         Name: ctyp
         SchemaID: 101
-    *scop.NotImplementedForPublicObjects
-      DescID: 106
-      ElementType: scpb.Owner
+    *scop.RemoveOwner
+      DescriptorID: 106
     *scop.RemoveUserPrivileges
       DescriptorID: 106
       User: admin
@@ -475,9 +478,8 @@ PreCommitPhase stage 2 of 2 with 19 MutationType ops
         DescriptorID: 107
         Name: _ctyp
         SchemaID: 101
-    *scop.NotImplementedForPublicObjects
-      DescID: 107
-      ElementType: scpb.Owner
+    *scop.RemoveOwner
+      DescriptorID: 107
     *scop.RemoveUserPrivileges
       DescriptorID: 107
       User: admin
@@ -502,10 +504,10 @@ PreCommitPhase stage 2 of 2 with 19 MutationType ops
       - 107
       JobID: 1
       NonCancelable: true
-      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 2 MutationType ops pending
+      RunningStatus: 'Pending: Updating schema metadata (2 operations) — PostCommitNonRevertible phase (stage 1 of 1).'
       Statements:
       - statement: DROP TYPE defaultdb.ctyp
-        redactedstatement: DROP TYPE ‹defaultdb›.‹public›.‹ctyp›
+        redactedstatement: DROP TYPE defaultdb.public.ctyp
         statementtag: DROP TYPE
 PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops
   transitions:
@@ -537,7 +539,7 @@ DROP TYPE defaultdb.ctyp
   kind: PreviousTransactionPrecedence
   rule: descriptor dropped in transaction before removal
 - from: [AliasType:{DescID: 107, ReferencedTypeIDs: [106 107]}, DROPPED]
-  to:   [Namespace:{DescID: 107, Name: _ctyp, ReferencedDescID: 100}, ABSENT]
+  to:   [Namespace:{DescID: 107, Name: _ctyp, ReferencedDescID: 100, IntValue: 101}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [AliasType:{DescID: 107, ReferencedTypeIDs: [106 107]}, DROPPED]
@@ -577,7 +579,7 @@ DROP TYPE defaultdb.ctyp
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [CompositeType:{DescID: 106}, DROPPED]
-  to:   [Namespace:{DescID: 106, Name: ctyp, ReferencedDescID: 100}, ABSENT]
+  to:   [Namespace:{DescID: 106, Name: ctyp, ReferencedDescID: 100, IntValue: 101}, ABSENT]
   kind: Precedence
   rule: descriptor dropped before dependent element removal
 - from: [CompositeType:{DescID: 106}, DROPPED]
@@ -612,11 +614,11 @@ DROP TYPE defaultdb.ctyp
   to:   [CompositeType:{DescID: 106}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Namespace:{DescID: 106, Name: ctyp, ReferencedDescID: 100}, ABSENT]
+- from: [Namespace:{DescID: 106, Name: ctyp, ReferencedDescID: 100, IntValue: 101}, ABSENT]
   to:   [CompositeType:{DescID: 106}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor
-- from: [Namespace:{DescID: 107, Name: _ctyp, ReferencedDescID: 100}, ABSENT]
+- from: [Namespace:{DescID: 107, Name: _ctyp, ReferencedDescID: 100, IntValue: 101}, ABSENT]
   to:   [AliasType:{DescID: 107, ReferencedTypeIDs: [106 107]}, ABSENT]
   kind: Precedence
   rule: non-data dependents removed before descriptor

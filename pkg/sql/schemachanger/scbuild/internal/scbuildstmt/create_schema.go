@@ -84,6 +84,10 @@ func CreateSchema(b BuildCtx, n *tree.CreateSchema) {
 		if err = b.CheckRoleExists(b, authRole); err != nil {
 			panic(sqlerrors.NewUndefinedUserError(authRole))
 		}
+		if !b.CurrentUserHasAdminOrIsMemberOf(authRole) {
+			panic(pgerror.Newf(pgcode.InsufficientPrivilege,
+				"must be member of role %q", authRole))
+		}
 		owner = authRole
 	}
 

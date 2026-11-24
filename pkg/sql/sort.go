@@ -15,11 +15,14 @@ import (
 // sortNode represents a node that sorts the rows returned by its
 // sub-node.
 type sortNode struct {
-	plan     planNode
+	singleInputPlanNode
 	ordering colinfo.ColumnOrdering
 	// When alreadyOrderedPrefix is non-zero, the input is already ordered on
 	// the prefix ordering[:alreadyOrderedPrefix].
 	alreadyOrderedPrefix int
+	// estimatedInputRowCount, when set, is the estimated number of rows that
+	// this sortNode will read from its input.
+	estimatedInputRowCount uint64
 }
 
 func (n *sortNode) startExec(runParams) error {
@@ -35,5 +38,5 @@ func (n *sortNode) Values() tree.Datums {
 }
 
 func (n *sortNode) Close(ctx context.Context) {
-	n.plan.Close(ctx)
+	n.input.Close(ctx)
 }

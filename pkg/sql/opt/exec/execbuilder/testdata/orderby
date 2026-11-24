@@ -12,7 +12,6 @@ query T
 EXPLAIN SELECT a, b FROM t ORDER BY b
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ order: +b
@@ -26,7 +25,6 @@ query T
 EXPLAIN SELECT a, b FROM t ORDER BY b DESC
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ order: -b
@@ -41,7 +39,6 @@ query T
 EXPLAIN SELECT a, b FROM t ORDER BY b LIMIT 2
 ----
 distribution: local
-vectorized: true
 ·
 • top-k
 │ order: +b
@@ -79,7 +76,6 @@ query T
 EXPLAIN SELECT b FROM t ORDER BY a DESC
 ----
 distribution: local
-vectorized: true
 ·
 • revscan
   missing stats
@@ -91,7 +87,6 @@ query T
 EXPLAIN SELECT b FROM t ORDER BY a LIMIT 1
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   missing stats
@@ -103,7 +98,6 @@ query T
 EXPLAIN SELECT b FROM t ORDER BY a DESC, b ASC
 ----
 distribution: local
-vectorized: true
 ·
 • revscan
   missing stats
@@ -114,7 +108,6 @@ query T
 EXPLAIN SELECT b FROM t ORDER BY a DESC, b DESC
 ----
 distribution: local
-vectorized: true
 ·
 • revscan
   missing stats
@@ -194,7 +187,6 @@ query T
 EXPLAIN SELECT * FROM t ORDER BY 1+2
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   missing stats
@@ -205,7 +197,6 @@ query T
 EXPLAIN SELECT 1, * FROM t ORDER BY 1
 ----
 distribution: local
-vectorized: true
 ·
 • render
 │
@@ -218,7 +209,6 @@ query T
 EXPLAIN SELECT * FROM t ORDER BY length('abc')
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   missing stats
@@ -293,10 +283,10 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /abc/abc_pkey/1/2/3 -> <undecoded>
-fetched: /abc/abc_pkey/1/2/3/d -> 'one'
-fetched: /abc/abc_pkey/4/5/6 -> <undecoded>
-fetched: /abc/abc_pkey/4/5/6/d -> 'Two'
+fetched: /abc/abc_pkey/1/2/3:cf=0 -> <undecoded>
+fetched: /abc/abc_pkey/1/2/3/d:cf=1 -> 'one'
+fetched: /abc/abc_pkey/4/5/6:cf=0 -> <undecoded>
+fetched: /abc/abc_pkey/4/5/6/d:cf=1 -> 'Two'
 output row: [1 2 3 'one']
 output row: [4 5 6 'Two']
 
@@ -319,7 +309,6 @@ query T
 EXPLAIN SELECT a, b, c FROM abc ORDER BY b, a, c
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   missing stats
@@ -331,7 +320,6 @@ query T
 EXPLAIN SELECT a, b, c FROM abc WHERE b > 10 AND b < 15 ORDER BY b, a, d
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ order: +b,+a,+d
@@ -350,7 +338,6 @@ query T
 EXPLAIN SELECT a, b, c FROM abc WHERE b > 10 ORDER BY b, a, d
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ order: +b,+a,+d
@@ -401,7 +388,6 @@ query T
 EXPLAIN SELECT a, b FROM abc ORDER BY b, c
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   missing stats
@@ -428,7 +414,6 @@ query T
 EXPLAIN SELECT a, b FROM abc ORDER BY b, c, a
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   missing stats
@@ -439,7 +424,6 @@ query T
 EXPLAIN SELECT a, b FROM abc ORDER BY b, c, a DESC
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   missing stats
@@ -480,10 +464,10 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /abc/abc_pkey/4/?/? -> <undecoded>
-fetched: /abc/abc_pkey/4/?/? -> <undecoded>
-fetched: /abc/abc_pkey/1/?/? -> <undecoded>
-fetched: /abc/abc_pkey/1/?/? -> <undecoded>
+fetched: /abc/abc_pkey/4/?/?:cf=1 -> <undecoded>
+fetched: /abc/abc_pkey/4/?/?:cf=0 -> <undecoded>
+fetched: /abc/abc_pkey/1/?/?:cf=1 -> <undecoded>
+fetched: /abc/abc_pkey/1/?/?:cf=0 -> <undecoded>
 output row: [4]
 output row: [1]
 
@@ -491,7 +475,6 @@ query T
 EXPLAIN SELECT a FROM abc ORDER BY a DESC
 ----
 distribution: local
-vectorized: true
 ·
 • revscan
   missing stats
@@ -502,7 +485,6 @@ query T
 EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   missing stats
@@ -513,7 +495,6 @@ query T
 EXPLAIN SELECT c FROM abc WHERE b = 2 ORDER BY c DESC
 ----
 distribution: local
-vectorized: true
 ·
 • revscan
   missing stats
@@ -573,7 +554,6 @@ query T
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY c
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   missing stats
@@ -584,7 +564,6 @@ query T
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY c, b, a
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   missing stats
@@ -595,7 +574,6 @@ query T
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY b, a, c
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   missing stats
@@ -606,7 +584,6 @@ query T
 EXPLAIN SELECT a, b, c FROM abcd@abc WHERE (a, b) = (1, 4) ORDER BY b, c, a
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   missing stats
@@ -633,7 +610,6 @@ query T
 EXPLAIN SELECT * FROM (VALUES ('a'), ('b'), ('c')) WITH ORDINALITY ORDER BY ordinality ASC
 ----
 distribution: local
-vectorized: true
 ·
 • ordinality
 │ estimated row count: 3
@@ -645,7 +621,6 @@ query T
 EXPLAIN SELECT * FROM (VALUES ('a'), ('b'), ('c')) WITH ORDINALITY ORDER BY ordinality DESC
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ estimated row count: 3
@@ -736,6 +711,7 @@ vectorized: true
           estimated row count: 1 (missing stats)
           table: t@t_pkey
           spans: /3/0
+          locking strength: for update
 
 query T
 EXPLAIN (VERBOSE) UPDATE t SET c = TRUE RETURNING b
@@ -1100,6 +1076,7 @@ vectorized: true
             │ table: kv@kv_pkey
             │ equality: (column1) = (k)
             │ equality cols are key
+            │ parallel
             │
             └── • values
                   columns: (column1)
@@ -1165,6 +1142,7 @@ vectorized: true
     │ estimated row count: 10 (missing stats)
     │ table: xyz@xyz_pkey
     │ key columns: rowid
+    │ parallel
     │
     └── • scan
           columns: (y, z, rowid)

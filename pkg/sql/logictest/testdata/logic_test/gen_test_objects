@@ -179,17 +179,17 @@ query T
 SELECT table_name FROM [SHOW TABLES]
 ORDER BY table_name
 ----
-,settings"
+j%pob_status
+job_Info
+job_progress
 join_tokens
-namespace
-spa  n_stats                 _buckets
-span_stats_unique_ke\\x86ys
-statement_statistiCs
+lease%p
+migrations
+role_id_.seq
+span_cou nt
 sta😣tement_statistics
-task_payloads
-tenant_usage
-user                         s
-web_sessio ns
+tenant  s
+use  rs
 
 # Again, the column names are randomized.
 query TTT
@@ -198,26 +198,27 @@ WHERE table_catalog = 'newdb2' AND table_schema = 'public'
 ORDER BY table_name, column_name
 LIMIT 20
 ----
-",settings"""  "lastUpdated"     timestamp without time zone
-",settings"""  "name?"           text
-",settings"""  rowid             bigint
-",settings"""  value             text
-",settings"""  "valueType"       text
-join_tokens    expiration        timestamp with time zone
-join_tokens    "iD"              uuid
-join_tokens    rowid             bigint
-join_tokens    secret            bytea
-namespace      ")id"             bigint
-namespace      name              text
-namespace      "parentSChemaID"  bigint
-namespace      "pa̐rentID"       bigint
-namespace      rowid             bigint
-"spa  n_stats  _buckets"         end_key_id                   uuid
-"spa  n_stats  _buckets"         "i""d"                       uuid
-"spa  n_stats  _buckets"         "req%puests"                 bigint
-"spa  n_stats  _buckets"         rowid                        bigint
-"spa  n_stats  _buckets"         "sample_Id"                  uuid
-"spa  n_stats  _buckets"         start_key_id                 uuid
+"j%pob_status"  " written"         timestamp with time zone
+"j%pob_status"  "job_ id"          bigint
+"j%pob_status"  rowid              bigint
+"j%pob_status"  status             text
+"job_Info"      " info_key"        text
+"job_Info"      "job""_\\u0EECid"  bigint
+"job_Info"      rowid              bigint
+"job_Info"      value              bytea
+"job_Info"      "wri😈Tten"         timestamp with time zone
+job_progress    "f""raction"       double precision
+job_progress    "j""ob_id "        bigint
+job_progress    resolved           numeric
+job_progress    rowid              bigint
+job_progress    written            timestamp with time zone
+join_tokens     expiratio😺n        timestamp with time zone
+join_tokens     id                 uuid
+join_tokens     rowid              bigint
+join_tokens     "s%pecret"         bytea
+"lease%p"       "cr
+db_region"  bytea
+"lease%p"   desc_id  bigint
 
 subtest templates/different_templates_in_each_db
 
@@ -235,15 +236,15 @@ SELECT quote_ident(database_name), quote_ident(schema_name), quote_ident(name)
 FROM "".crdb_internal.tables WHERE database_name ILIKE '%d%b%t%'
 ORDER BY database_name, schema_name, name
 ----
-"d%qbt_1"  public  "c̈́om""ments%"
-"d%qbt_1"  public  descriptor_id_seq
-"d%qbt_1"  public  tenant_id_seq
-"d%qbt_2"  public  jobs
-"d%qbt_2"  public  join_tokens
-"d%qbt_2"  public  namespace
-dbt_3      public  "job_progress_his""tory"
-dbt_3      public  jobs😳
-dbt_3      public  "scheduled_ j obs"
+"d%qbt_1"  public  "ad̷visoRy_locks"
+"d%qbt_1"  public  job_progress
+"d%qbt_1"  public  zones
+"d%qbt_2"  public  "join_tokens"
+"d%qbt_2"  public  span_stats_buckets
+"d%qbt_2"  public  table_statistics
+dbt_3      public  descriptor_id_seq
+dbt_3      public  "mvcc_statistics\r"
+dbt_3      public  "scheduled_job,s"
 
 
 statement ok

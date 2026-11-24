@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -37,11 +38,11 @@ import (
 // defRangefeedConnClass is the default rpc.ConnectionClass used for rangefeed
 // traffic. Normally it is RangefeedClass, but can be flipped to DefaultClass if
 // the corresponding env variable is true.
-var defRangefeedConnClass = func() rpc.ConnectionClass {
+var defRangefeedConnClass = func() rpcbase.ConnectionClass {
 	if envutil.EnvOrDefaultBool("COCKROACH_RANGEFEED_USE_DEFAULT_CONNECTION_CLASS", false) {
-		return rpc.DefaultClass
+		return rpcbase.DefaultClass
 	}
-	return rpc.RangefeedClass
+	return rpcbase.RangefeedClass
 }()
 
 var catchupStartupRate = settings.RegisterIntSetting(
@@ -68,6 +69,7 @@ type rangeFeedConfig struct {
 	withMatchingOriginIDs []uint32
 	rangeObserver         RangeObserver
 	consumerID            int64
+	bulkDelivery          bool
 
 	knobs struct {
 		// onRangefeedEvent invoked on each rangefeed event.
@@ -82,6 +84,9 @@ type rangeFeedConfig struct {
 		captureMuxRangeFeedRequestSender func(nodeID roachpb.NodeID, sender func(req *kvpb.RangeFeedRequest) error)
 		// beforeSendRequest is a mux rangefeed callback invoked prior to sending rangefeed request.
 		beforeSendRequest func()
+		// afterRoutingReset is a mux rangefeed callback invoked after resetRouting
+		// completes. Used for testing race conditions.
+		afterRoutingReset func()
 	}
 }
 
@@ -114,6 +119,12 @@ func WithDiff() RangeFeedOption {
 func WithFiltering() RangeFeedOption {
 	return optionFunc(func(c *rangeFeedConfig) {
 		c.withFiltering = true
+	})
+}
+
+func WithBulkDelivery() RangeFeedOption {
+	return optionFunc(func(c *rangeFeedConfig) {
+		c.bulkDelivery = true
 	})
 }
 
@@ -557,8 +568,9 @@ func handleRangefeedError(
 			kvpb.RangeFeedRetryError_REASON_LOGICAL_OPS_MISSING,
 			kvpb.RangeFeedRetryError_REASON_SLOW_CONSUMER,
 			kvpb.RangeFeedRetryError_REASON_RANGEFEED_CLOSED:
-			// Try again with same descriptor. These are transient
-			// errors that should not show up again.
+			// Try again with same descriptor. These are transient errors that should
+			// not show up again, or should be retried on another replica which will
+			// likely not have the same issue.
 			return rangefeedErrorInfo{}, nil
 		case kvpb.RangeFeedRetryError_REASON_RANGE_SPLIT,
 			kvpb.RangeFeedRetryError_REASON_RANGE_MERGED,
@@ -585,6 +597,9 @@ func (a catchupAlloc) Release() {
 func (a *activeRangeFeed) acquireCatchupScanQuota(
 	ctx context.Context, rl *catchupScanRateLimiter, metrics *DistSenderRangeFeedMetrics,
 ) error {
+	metrics.RangefeedCatchupRangesWaitingClientSide.Inc(1)
+	defer metrics.RangefeedCatchupRangesWaitingClientSide.Dec(1)
+
 	// Indicate catchup scan is starting.
 	alloc, err := rl.Pace(ctx)
 	if err != nil {
@@ -611,6 +626,7 @@ func newTransportForRange(
 		return nil, err
 	}
 	replicas.OptimizeReplicaOrder(ctx, ds.st, ds.nodeIDGetter(), ds.healthFunc, ds.latencyFunc, ds.locality)
+	log.VEventf(ctx, 2, "replica order for rangefeed transport is: %s", replicas)
 	opts := SendOptions{class: defRangefeedConnClass}
 	return ds.transportFactory(opts, replicas), nil
 }
@@ -628,6 +644,7 @@ func makeRangeFeedRequest(
 	withFiltering bool,
 	withMatchingOriginIDs []uint32,
 	consumerID int64,
+	withBulkDelivery bool,
 ) kvpb.RangeFeedRequest {
 	admissionPri := admissionpb.BulkNormalPri
 	if isSystemRange {
@@ -643,6 +660,7 @@ func makeRangeFeedRequest(
 		WithDiff:              withDiff,
 		WithFiltering:         withFiltering,
 		WithMatchingOriginIDs: withMatchingOriginIDs,
+		WithBulkDelivery:      withBulkDelivery,
 		AdmissionHeader: kvpb.AdmissionHeader{
 			// NB: AdmissionHeader is used only at the start of the range feed
 			// stream since the initial catch-up scan is expensive.
@@ -686,6 +704,14 @@ func TestingWithMuxRangeFeedRequestSenderCapture(
 func TestingWithBeforeSendRequest(fn func()) RangeFeedOption {
 	return optionFunc(func(c *rangeFeedConfig) {
 		c.knobs.beforeSendRequest = fn
+	})
+}
+
+// TestingWithAfterRoutingReset returns a test only option that invokes
+// function after resetRouting completes.
+func TestingWithAfterRoutingReset(fn func()) RangeFeedOption {
+	return optionFunc(func(c *rangeFeedConfig) {
+		c.knobs.afterRoutingReset = fn
 	})
 }
 
@@ -744,13 +770,13 @@ func logSlowCatchupScanAcquisition(loggingMinInterval time.Duration) quotapool.S
 	return func(ctx context.Context, poolName string, r quotapool.Request, start time.Time) func() {
 		shouldLog := logSlowAcquire.ShouldLog()
 		if shouldLog {
-			log.Warningf(ctx, "have been waiting %s attempting to acquire catchup scan quota",
+			log.Dev.Warningf(ctx, "have been waiting %s attempting to acquire catchup scan quota",
 				timeutil.Since(start))
 		}
 
 		return func() {
 			if shouldLog {
-				log.Infof(ctx, "acquired catchup quota after %s", timeutil.Since(start))
+				log.Dev.Infof(ctx, "acquired catchup quota after %s", timeutil.Since(start))
 			}
 		}
 	}

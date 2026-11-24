@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cli/clienturl"
@@ -127,14 +128,9 @@ func checkDemoConfiguration(
 		return nil, errors.Newf("--%s cannot be used with --%s", cliflags.Global.Name, cliflags.DemoNodeLocality.Name)
 	}
 
-	// Whether or not we enable enterprise feature is a combination of:
-	//
-	// - whether the user wants them (they can disable enterprise
-	//   features explicitly with --no-license, e.g. for testing what
-	//   errors come up if no license is available)
-	// - whether enterprise features are enabled in this build, depending
-	//   on whether CCL code is included (and sets democluster.EnableEnterprise).
-	demoCtx.disableEnterpriseFeatures = democluster.EnableEnterprise == nil || demoCtx.disableEnterpriseFeatures
+	// The user can disable enterprise features explicitly with --no-license,
+	// e.g. for testing what errors come up if no license is available.
+	// demoCtx.disableEnterpriseFeatures is already set from flags.
 
 	if demoCtx.GeoPartitionedReplicas {
 		geoFlag := "--" + cliflags.DemoGeoPartitionedReplicas.Name
@@ -211,10 +207,12 @@ func runDemoInternal(
 	ctx := context.Background()
 
 	demoCtx.WorkloadGenerator = gen
+	// Copy the DRPC flag from baseCfg to demoCtx so it's available to the demo cluster.
+	demoCtx.UseDRPC = baseCfg.UseDRPC
 
 	c, err := democluster.NewDemoCluster(ctx, &demoCtx.Context,
-		log.Infof,
-		log.Warningf,
+		log.Dev.Infof,
+		log.Dev.Warningf,
 		log.Ops.Shoutf,
 		func(ctx context.Context) (*stop.Stopper, error) {
 			// Override the default server store spec.
@@ -224,7 +222,7 @@ func runDemoInternal(
 			serverCfg.Stores.Specs = nil
 			return setupAndInitializeLoggingAndProfiling(ctx, cmd, false /* isServerCmd */)
 		},
-		func(ctx context.Context, ac serverpb.AdminClient) error {
+		func(ctx context.Context, ac serverpb.RPCAdminClient) error {
 			return drainAndShutdown(ctx, ac, "local" /* targetNode */)
 		},
 	)
@@ -288,11 +286,9 @@ func runDemoInternal(
 	}
 
 	if !demoCtx.disableEnterpriseFeatures {
-		fn, err := c.EnableEnterprise(ctx)
-		if err != nil {
+		if err := c.EnableEnterprise(ctx); err != nil {
 			return clierrorplus.CheckAndMaybeShout(err)
 		}
-		defer fn()
 	}
 
 	// Initialize the workload, if requested.
@@ -337,6 +333,20 @@ func runDemoInternal(
 				certsDir,
 			)
 		}
+	} else if demoCtx.background {
+		// In non-interactive background mode, print connection info since
+		// the interactive block above was skipped.
+		var nodeList strings.Builder
+		c.ListDemoNodes(&nodeList, stderr, false /* justOne */, true /* verbose */)
+		fmt.Fprintf(stderr, "#\n# Connection parameters:\n#\n#   %s",
+			strings.ReplaceAll(
+				strings.TrimSuffix(nodeList.String(), "\n"), "\n", "\n#   "))
+		if !demoCtx.Insecure {
+			adminUser, adminPassword, certsDir := c.GetSQLCredentials()
+			fmt.Fprintf(stderr, "\n#\n#   Username: %q, password: %q\n", adminUser, adminPassword)
+			fmt.Fprintf(stderr, "#   Certificate directory: %s\n", certsDir)
+		}
+		fmt.Fprintln(stderr)
 	}
 
 	conn, err := sqlCtx.MakeConn(c.GetConnURL())
@@ -369,6 +379,20 @@ func runDemoInternal(
 
 	// Ensure the last few entries in the log files are flushed at the end.
 	defer log.FlushFiles()
+
+	if demoCtx.background {
+		// In background mode, skip the interactive SQL shell and block
+		// until signaled. Connection info was already printed above.
+		fmt.Fprintf(stderr, "# Demo cluster running in background.\n")
+		fmt.Fprintf(stderr, "# To shut down, send SIGINT or SIGTERM (Ctrl+C).\n#\n")
+
+		ch := make(chan os.Signal, 1)
+		signal.Notify(ch, DrainSignals...)
+		<-ch
+
+		fmt.Fprintf(stderr, "\n# Shutting down demo cluster...\n")
+		return nil
+	}
 
 	return sqlCtx.Run(ctx, conn)
 }

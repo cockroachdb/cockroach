@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -45,6 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 	"github.com/stretchr/testify/require"
 )
@@ -597,7 +599,7 @@ func TestCollectionProperlyUsesMemoryMonitoring(t *testing.T) {
 
 	// Create a monitor to be used to track memory usage in a Collection.
 	monitor := mon.NewMonitor(mon.Options{
-		Name:     "test_monitor",
+		Name:     mon.MakeName("test_monitor"),
 		Settings: cluster.MakeTestingClusterSettings(),
 	})
 
@@ -1222,6 +1224,63 @@ SELECT id
 	}))
 }
 
+func TestDescriptorErrorWrap(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	tdb.Exec(t, `CREATE DATABASE db`)
+	tdb.Exec(t, `USE db`)
+	tdb.Exec(t, `CREATE SCHEMA schema`)
+	tdb.Exec(t, `CREATE TABLE db.schema.table()`)
+
+	monitor := mon.NewMonitor(mon.Options{
+		Name:     mon.MakeName("test_monitor"),
+		Settings: cluster.MakeTestingClusterSettings(),
+	})
+	monitor.Start(ctx, nil, mon.NewStandaloneBudget(1))
+	ba := monitor.MakeBoundAccount()
+
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	for _, tc := range []struct {
+		desc        string
+		err         error
+		isAssertion bool
+	}{
+		{"bare error", errors.New("bare error is treated as an assertion"), true},
+		{"out of memory", ba.Grow(ctx, monitor.Limit()), false},
+		{"pgcode error", sqlerrors.NewAlterColTypeInCombinationNotSupportedError(), false},
+	} {
+		t.Run(tc.desc, func(t *testing.T) {
+			require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
+				ctx context.Context, txn isql.Txn, descriptors *descs.Collection,
+			) error {
+				tn := tree.MakeTableNameWithSchema("db", "schema", "table")
+				_, mut, err := descs.PrefixAndMutableTable(ctx, descriptors.MutableByName(txn.KV()), &tn)
+				if err != nil {
+					return err
+				}
+
+				require.False(t, errors.HasAssertionFailure(tc.err))
+				err = descs.DecorateDescriptorError(mut, tc.err)
+				// Ensure err is still an error
+				require.Error(t, err)
+				// Ensure descriptor info is wrapped in the error
+				require.Contains(t, err.Error(), mut.GetName())
+				// Ensure error is promoted to assertion as expected
+				require.Equal(t, tc.isAssertion, errors.HasAssertionFailure(err))
+				return nil
+			}))
+		})
+	}
+	monitor.Stop(ctx)
+}
+
 func getSchemaNames(defaultDBSchemaNames map[descpb.ID]string) []string {
 	var names []string
 	for _, name := range defaultDBSchemaNames {
@@ -1237,4 +1296,191 @@ func getDatabaseNames(allDBs []catalog.DatabaseDescriptor) []string {
 		names = append(names, db.GetName())
 	}
 	return names
+}
+
+// TestForceStorageLookupIDs verifies that when a Collection is created with
+// WithForceStorageLookupIDs, descriptor lookups for IDs in the forced set
+// bypass the leased/cached layers and resolve directly from KV storage.
+func TestForceStorageLookupIDs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	tdb.Exec(t, "CREATE DATABASE db")
+	tdb.Exec(t, "USE db")
+	// Here the descriptor of db.public.typ is commited with initial version = 1.
+	tdb.Exec(t, "CREATE TYPE db.public.typ AS ENUM ('a')")
+
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+
+	require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
+		ctx context.Context, txn isql.Txn, parentCollection *descs.Collection,
+	) error {
+		tn := tree.MakeQualifiedTypeName("db", "public", "typ")
+		_, typ, err := descs.PrefixAndMutableType(ctx, parentCollection.MutableByName(txn.KV()), &tn)
+		require.NoError(t, err)
+		committedVersion := typ.Version
+
+		// Here `WriteDesc()` calls `MaybeIncrementVersion()` that increase the UDT
+		// version by 1.
+		// It also writes to KV within this transaction but without committing.
+		require.NoError(t, parentCollection.WriteDesc(ctx, false /* kvTrace */, typ, txn.KV()))
+		kvVersion := typ.Version
+		require.Greater(t, kvVersion, committedVersion,
+			"WriteDesc should have incremented the version")
+		typID := typ.GetID()
+
+		// Create the child collection with forceStorageLookupIDs set to the
+		// parent's uncommitted descriptor IDs.
+		uncommittedIDs := parentCollection.GetUncommittedDescriptorIDs()
+		require.True(t, uncommittedIDs.Contains(typID),
+			"type descriptor should be in uncommitted IDs")
+
+		childCollection := execCfg.CollectionFactory.NewCollection(
+			ctx, descs.WithForceStorageLookupIDs(uncommittedIDs),
+		)
+		defer childCollection.ReleaseAll(ctx)
+
+		// Also create a child without forceStorageLookupIDs to contrast.
+		childCollectionNoForce := execCfg.CollectionFactory.NewCollection(ctx)
+		defer childCollectionNoForce.ReleaseAll(ctx)
+
+		nonExistentID := descpb.ID(999999)
+
+		testCases := []struct {
+			name            string
+			collection      *descs.Collection
+			id              descpb.ID
+			expectedVersion descpb.DescriptorVersion // 0 means don't check (error case)
+			expectErrStr    string
+		}{
+			{
+				name:            "forced ID resolves from KV storage",
+				collection:      childCollection,
+				id:              typID,
+				expectedVersion: kvVersion,
+			},
+			{
+				name:            "non-forced child gets stale leased version",
+				collection:      childCollectionNoForce,
+				id:              typID,
+				expectedVersion: committedVersion,
+			},
+			{
+				name:         "forced child returns error for non-existent ID",
+				collection:   childCollection,
+				id:           nonExistentID,
+				expectErrStr: "descriptor not found",
+			},
+			{
+				name:         "non-forced child returns error for non-existent ID",
+				collection:   childCollectionNoForce,
+				id:           nonExistentID,
+				expectErrStr: "descriptor not found",
+			},
+		}
+
+		for _, tc := range testCases {
+			t.Run(tc.name, func(t *testing.T) {
+				desc, err := tc.collection.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Desc(ctx, tc.id)
+				if tc.expectErrStr != "" {
+					require.Contains(t, err.Error(), tc.expectErrStr)
+					return
+				}
+				require.NoError(t, err)
+				require.Equal(t, tc.expectedVersion, desc.GetVersion())
+			})
+		}
+
+		return nil
+	}))
+}
+
+// TestSystemDatabaseCacheEvictionOnDescriptorNotFound verifies that when
+// getDescriptorByName resolves a system table name to a stale ID via the
+// SystemDatabaseCache and the descriptor at that ID doesn't exist, the stale
+// cache entry is evicted so the next lookup self-heals through KV.
+func TestSystemDatabaseCacheEvictionOnDescriptorNotFound(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	codec := execCfg.Codec
+
+	const fakeName = "_test_evict_stale_cache"
+	const bogusID descpb.ID = 999999
+	nameKey := descpb.NameInfo{
+		ParentID:       keys.SystemDatabaseID,
+		ParentSchemaID: keys.SystemPublicSchemaID,
+		Name:           fakeName,
+	}
+
+	// Write a namespace entry pointing to an ID with no descriptor.
+	require.NoError(t, execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		return txn.Put(ctx, catalogkeys.EncodeNameKey(codec, &nameKey), int64(bogusID))
+	}))
+	defer func() {
+		require.NoError(t, execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			_, err := txn.Del(ctx, catalogkeys.EncodeNameKey(codec, &nameKey))
+			return err
+		}))
+	}()
+
+	// First lookup: the cached catalog reader reads the bogus namespace entry
+	// from KV and caches it in the SystemDatabaseCache. getDescriptorsByID then
+	// fails with ErrDescriptorNotFound, which triggers eviction of the stale
+	// cache entry.
+	err := sql.DescsTxn(ctx, &execCfg, func(
+		ctx context.Context, txn isql.Txn, col *descs.Collection,
+	) error {
+		db, err := col.ByName(txn.KV()).Get().Database(ctx, "system")
+		if err != nil {
+			return err
+		}
+		sc, err := col.ByName(txn.KV()).Get().Schema(ctx, db, "public")
+		if err != nil {
+			return err
+		}
+		_, err = col.ByName(txn.KV()).Get().Table(ctx, db, sc, fakeName)
+		return err
+	})
+	require.Error(t, err)
+	require.True(t, errors.Is(err, catalog.ErrDescriptorNotFound))
+
+	// Fix the namespace entry to point to a real system table descriptor.
+	realID := descpb.ID(keys.CommentsTableID)
+	require.NoError(t, execCfg.DB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		return txn.Put(ctx, catalogkeys.EncodeNameKey(codec, &nameKey), int64(realID))
+	}))
+
+	// Second lookup: succeeds because the eviction cleared the stale
+	// SystemDatabaseCache entry. Without eviction, the cache would still
+	// return bogusID and this lookup would fail with ErrDescriptorNotFound.
+	require.NoError(t, sql.DescsTxn(ctx, &execCfg, func(
+		ctx context.Context, txn isql.Txn, col *descs.Collection,
+	) error {
+		db, err := col.ByName(txn.KV()).Get().Database(ctx, "system")
+		if err != nil {
+			return err
+		}
+		sc, err := col.ByName(txn.KV()).Get().Schema(ctx, db, "public")
+		if err != nil {
+			return err
+		}
+		desc, err := col.ByName(txn.KV()).Get().Table(ctx, db, sc, fakeName)
+		if err != nil {
+			return err
+		}
+		require.Equal(t, realID, desc.GetID())
+		return nil
+	}))
 }

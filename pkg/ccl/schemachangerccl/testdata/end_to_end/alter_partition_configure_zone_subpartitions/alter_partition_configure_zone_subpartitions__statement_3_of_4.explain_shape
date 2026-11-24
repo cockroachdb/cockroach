@@ -30,4 +30,4 @@ ALTER PARTITION old_au OF TABLE person CONFIGURE ZONE USING gc.ttlseconds = 4;
 EXPLAIN (DDL, SHAPE) ALTER PARTITION yung_au OF TABLE person CONFIGURE ZONE USING gc.ttlseconds = 5;
 ----
 Schema change plan for ALTER PARTITION ‹yung_au› OF INDEX ‹defaultdb›.‹public›.‹person›@‹person_pkey› CONFIGURE ZONE USING ‹"gc.ttlseconds"› = ‹5›; following ALTER PARTITION ‹australia› OF INDEX ‹defaultdb›.‹public›.‹person›@‹person_pkey› CONFIGURE ZONE USING ‹"gc.ttlseconds"› = ‹2›; ALTER PARTITION ‹old_au› OF INDEX ‹defaultdb›.‹public›.‹person›@‹person_pkey› CONFIGURE ZONE USING ‹"gc.ttlseconds"› = ‹4›;
- └── execute 1 system table mutations transaction
+ └── execute 2 system table mutations transactions

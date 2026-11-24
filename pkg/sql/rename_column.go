@@ -20,6 +20,7 @@ import (
 var errEmptyColumnName = pgerror.New(pgcode.Syntax, "empty column name")
 
 type renameColumnNode struct {
+	zeroInputPlanNode
 	n         *tree.RenameColumn
 	tableDesc *tabledesc.Mutable
 }
@@ -52,7 +53,7 @@ func (p *planner) RenameColumn(ctx context.Context, n *tree.RenameColumn) (planN
 	}
 
 	// Disallow schema changes if this table's schema is locked.
-	if err := checkSchemaChangeIsAllowed(tableDesc, n); err != nil {
+	if err := p.checkSchemaChangeIsAllowed(ctx, tableDesc, n); err != nil {
 		return nil, err
 	}
 
@@ -104,7 +105,7 @@ func (p *planner) findColumnToRename(
 	if col.IsSystemColumn() {
 		return nil, pgerror.Newf(
 			pgcode.FeatureNotSupported,
-			"cannot rename system column %q", col.ColName(),
+			"cannot alter system column %q", col.ColName(),
 		)
 	}
 	for _, tableRef := range tableDesc.DependedOnBy {
@@ -116,7 +117,7 @@ func (p *planner) findColumnToRename(
 		}
 		if found {
 			return nil, p.dependentError(
-				ctx, "column", oldName.String(), tableDesc.ParentID, tableRef.ID, "rename",
+				ctx, "column", oldName.String(), tableDesc.ParentID, tableRef.ID, tableDesc.ID, "rename",
 			)
 		}
 	}

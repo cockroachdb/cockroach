@@ -1,0 +1,38 @@
+// Copyright 2025 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+//
+// Processor definitions for distributed SQL APIs. See
+// docs/RFCS/distributed_sql.md.
+// All the concepts here are "physical plan" concepts.
+
+syntax = "proto2";
+// Beware! This package name must not be changed, even though it doesn't match
+// the Go package name, because it defines the Protobuf message names which
+// can't be changed without breaking backward compatibility.
+package cockroach.sql.distsqlrun;
+option go_package = "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb";
+
+import "gogoproto/gogo.proto";
+import "roachpb/data.proto";
+import "jobs/jobspb/jobs.proto";
+
+message InspectSpec {
+  // JobID of the job that ran the inspect processor.
+  optional int64 job_id = 1 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "JobID",
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/jobs/jobspb.JobID"
+  ];
+
+  // InspectDetails are the details of the job that ran the inspect processor.
+  optional jobs.jobspb.InspectDetails inspect_details = 2 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customname) = "InspectDetails"
+  ];
+
+  // Spans determine which records are processed by which nodes in the DistSQL
+  // flow.
+  repeated roachpb.Span spans = 3 [(gogoproto.nullable) = false];
+}

@@ -30,6 +30,16 @@ func (op Operator) String() string {
 	return opNames[opNameIndexes[op]:opNameIndexes[op+1]]
 }
 
+// CamelCase returns the camel-case name of the operator, matching how operator
+// names appear in .opt files, canned opt plans, and plangrams (e.g. "Scan",
+// "InnerJoin").
+func (op Operator) CamelCase() string {
+	if op >= Operator(len(opCamelCaseNames)-1) {
+		return fmt.Sprintf("Operator(%d)", op)
+	}
+	return opCamelCaseNames[opCamelCaseNameIndexes[op]:opCamelCaseNameIndexes[op+1]]
+}
+
 // SyntaxTag returns the name of the operator using the SQL syntax that most
 // closely matches it.
 func (op Operator) SyntaxTag() string {
@@ -73,10 +83,6 @@ type Expr interface {
 	// For example, an operator may choose to return one of its fields, or perhaps
 	// a pointer to itself, or nil if there is nothing useful to return.
 	Private() interface{}
-
-	// String returns a human-readable string representation for the expression
-	// that can be used for debugging and testing.
-	String() string
 }
 
 // ScalarRank is the type of the sort order given to every scalar
@@ -95,6 +101,11 @@ type ScalarExpr interface {
 
 	// DataType is the SQL type of the expression.
 	DataType() *types.T
+
+	// String returns a human-readable string representation for the expression
+	// that can be used for debugging and testing. It is only implemented for
+	// scalar expressions because relational expressions need access to the memo.
+	String() string
 }
 
 // MutableExpr is implemented by expressions that allow their children to be
@@ -166,6 +177,8 @@ var BinaryOpReverseMap = map[Operator]treebin.BinaryOperatorSymbol{
 	VectorDistanceOp:        treebin.Distance,
 	VectorCosDistanceOp:     treebin.CosDistance,
 	VectorNegInnerProductOp: treebin.NegInnerProduct,
+	FirstContainsOp:         treebin.FirstContains,
+	FirstContainedByOp:      treebin.FirstContainedBy,
 }
 
 // UnaryOpReverseMap maps from an optimizer operator type to a semantic tree
@@ -227,6 +240,7 @@ var AggregateOpReverseMap = map[Operator]string{
 	STUnionOp:                     "st_union",
 	STCollectOp:                   "st_collect",
 	STExtentOp:                    "st_extent",
+	STAsMVTOp:                     "st_asmvt",
 	MergeAggregatedStmtMetadataOp: "merge_aggregated_stmt_metadata",
 	MergeStatsMetadataOp:          "merge_stats_metadata",
 	MergeStatementStatsOp:         "merge_statement_stats",
@@ -326,8 +340,8 @@ func AggregateIgnoresNulls(op Operator) bool {
 	case AnyNotNullAggOp, AvgOp, BitAndAggOp, BitOrAggOp, BoolAndOp, BoolOrOp,
 		ConstNotNullAggOp, CorrOp, CountOp, MaxOp, MinOp, SqrDiffOp, StdDevOp,
 		StringAggOp, SumOp, SumIntOp, VarianceOp, XorAggOp, PercentileDiscOp,
-		PercentileContOp, STMakeLineOp, STCollectOp, STExtentOp, STUnionOp, StdDevPopOp,
-		VarPopOp, CovarPopOp, CovarSampOp, RegressionAvgXOp, RegressionAvgYOp,
+		PercentileContOp, STMakeLineOp, STCollectOp, STExtentOp, STUnionOp, STAsMVTOp,
+		StdDevPopOp, VarPopOp, CovarPopOp, CovarSampOp, RegressionAvgXOp, RegressionAvgYOp,
 		RegressionInterceptOp, RegressionR2Op, RegressionSlopeOp, RegressionSXXOp,
 		RegressionSXYOp, RegressionSYYOp, RegressionCountOp, MergeStatsMetadataOp,
 		MergeStatementStatsOp, MergeTransactionStatsOp, MergeAggregatedStmtMetadataOp:
@@ -357,7 +371,7 @@ func AggregateIsNullOnEmpty(op Operator) bool {
 		VarPopOp, CovarPopOp, CovarSampOp, RegressionAvgXOp, RegressionAvgYOp,
 		RegressionInterceptOp, RegressionR2Op, RegressionSlopeOp, RegressionSXXOp,
 		RegressionSXYOp, RegressionSYYOp, MergeStatsMetadataOp, MergeStatementStatsOp,
-		MergeTransactionStatsOp, MergeAggregatedStmtMetadataOp:
+		MergeTransactionStatsOp, MergeAggregatedStmtMetadataOp, STAsMVTOp:
 		return true
 
 	case CountOp, CountRowsOp, RegressionCountOp:
@@ -390,7 +404,7 @@ func AggregateIsNeverNullOnNonNullInput(op Operator) bool {
 		return true
 
 	case VarianceOp, StdDevOp, CorrOp, CovarSampOp, RegressionInterceptOp,
-		RegressionR2Op, RegressionSlopeOp, STExtentOp, STMakeLineOp:
+		RegressionR2Op, RegressionSlopeOp, STExtentOp, STMakeLineOp, STAsMVTOp:
 		// These aggregations can return NULL even with non-null input values.
 		return false
 
@@ -442,7 +456,8 @@ func AggregatesCanMerge(inner, outer Operator) bool {
 		VarPopOp, CovarPopOp, CovarSampOp, RegressionAvgXOp, RegressionAvgYOp,
 		RegressionInterceptOp, RegressionR2Op, RegressionSlopeOp, RegressionSXXOp,
 		RegressionSXYOp, RegressionSYYOp, RegressionCountOp, MergeStatsMetadataOp,
-		MergeStatementStatsOp, MergeTransactionStatsOp, MergeAggregatedStmtMetadataOp:
+		MergeStatementStatsOp, MergeTransactionStatsOp, MergeAggregatedStmtMetadataOp,
+		STAsMVTOp:
 		return false
 
 	default:
@@ -464,8 +479,8 @@ func AggregateIgnoresDuplicates(op Operator) bool {
 	case ArrayAggOp, ArrayCatAggOp, AvgOp, ConcatAggOp, CountOp, CorrOp, CountRowsOp,
 		SumIntOp, SumOp, SqrDiffOp, VarianceOp, StdDevOp, XorAggOp, JsonAggOp, JsonbAggOp,
 		StringAggOp, PercentileDiscOp, PercentileContOp, StdDevPopOp, STMakeLineOp,
-		VarPopOp, JsonObjectAggOp, JsonbObjectAggOp, STCollectOp, STUnionOp, CovarPopOp,
-		CovarSampOp, RegressionAvgXOp, RegressionAvgYOp, RegressionInterceptOp,
+		VarPopOp, JsonObjectAggOp, JsonbObjectAggOp, STCollectOp, STUnionOp, STAsMVTOp,
+		CovarPopOp, CovarSampOp, RegressionAvgXOp, RegressionAvgYOp, RegressionInterceptOp,
 		RegressionR2Op, RegressionSlopeOp, RegressionSXXOp, RegressionSXYOp,
 		RegressionSYYOp, RegressionCountOp, MergeStatsMetadataOp, MergeStatementStatsOp,
 		MergeTransactionStatsOp, MergeAggregatedStmtMetadataOp:

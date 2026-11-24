@@ -15,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -179,7 +178,7 @@ func applyReplicaUpdate(
 	key := keys.RangeDescriptorKey(update.StartKey.AsRKey())
 	res, err := storage.MVCCGet(
 		ctx, readWriter, key, clock.Now(), storage.MVCCGetOptions{Inconsistent: true})
-	if res.Value == nil {
+	if !res.Value.Exists() {
 		return PrepareReplicaReport{}, errors.Errorf(
 			"failed to find a range descriptor for range %v", key)
 	}
@@ -187,7 +186,7 @@ func applyReplicaUpdate(
 		return PrepareReplicaReport{}, err
 	}
 	var localDesc roachpb.RangeDescriptor
-	if err := res.Value.GetProto(&localDesc); err != nil {
+	if err := res.Value.Value.GetProto(&localDesc); err != nil {
 		return PrepareReplicaReport{}, err
 	}
 	// Sanity check that this is indeed the right range.
@@ -208,7 +207,7 @@ func applyReplicaUpdate(
 			"can not find replica with ID %d for range r%d", update.OldReplicaID, update.RangeID)
 	}
 
-	sl := stateloader.Make(localDesc.RangeID)
+	sl := kvstorage.MakeStateLoader(localDesc.RangeID)
 	ms, err := sl.LoadMVCCStats(ctx, readWriter)
 	if err != nil {
 		return PrepareReplicaReport{}, errors.Wrap(err, "loading MVCCStats")
@@ -308,6 +307,21 @@ func applyReplicaUpdate(
 		return PrepareReplicaReport{}, errors.Wrap(err, "updating MVCCStats")
 	}
 
+	// Update the HardState to clear the LeadEpoch, as otherwise we may risk
+	// seeing an epoch regression in raft. See #136908 for more details.
+	hs, err := sl.LoadHardState(ctx, readWriter)
+	if err != nil {
+		return PrepareReplicaReport{}, errors.Wrap(err, "loading HardState")
+	}
+
+	hs.LeadEpoch = 0
+
+	// TODO(sep-raft-log): when raft and state machine engines are separated, this
+	// update must be written to the raft engine.
+	if err := sl.SetHardState(ctx, readWriter, hs); err != nil {
+		return PrepareReplicaReport{}, errors.Wrap(err, "setting HardState")
+	}
+
 	return report, nil
 }
 
@@ -354,7 +368,7 @@ func CommitReplicaChanges(batches map[roachpb.StoreID]storage.Batch) (ApplyUpdat
 // or planStorage issues are propagated.
 // Regardless of application success or failure, staged plan would be removed.
 func MaybeApplyPendingRecoveryPlan(
-	ctx context.Context, planStore PlanStore, engines []storage.Engine, clock timeutil.TimeSource,
+	ctx context.Context, planStore PlanStore, engines []kvstorage.Engines, clock timeutil.TimeSource,
 ) error {
 	if len(engines) < 1 {
 		return nil
@@ -365,15 +379,15 @@ func MaybeApplyPendingRecoveryPlan(
 			return errors.Wrap(err, "failed to check cluster version against storage")
 		}
 
-		log.Infof(ctx, "applying staged loss of quorum recovery plan %s", plan.PlanID)
+		log.KvExec.Infof(ctx, "applying staged loss of quorum recovery plan %s", plan.PlanID)
 		batches := make(map[roachpb.StoreID]storage.Batch)
 		for _, e := range engines {
-			ident, err := kvstorage.ReadStoreIdent(ctx, e)
+			ident, err := kvstorage.ReadStoreIdent(ctx, e.LogEngine())
 			if err != nil {
 				return errors.Wrap(err, "failed to read store ident when trying to apply loss of quorum recovery plan")
 			}
-			b := e.NewBatch()
-			defer b.Close()
+			b := e.TODOBothEngines().NewBatch()
+			defer b.Close() //nolint:deferloop
 			batches[ident.StoreID] = b
 		}
 		prepRep, err := PrepareUpdateReplicas(ctx, plan, uuid.DefaultGenerator, clock.Now(), nodeID, batches)
@@ -381,7 +395,7 @@ func MaybeApplyPendingRecoveryPlan(
 			return err
 		}
 		if len(prepRep.MissingStores) > 0 {
-			log.Warningf(ctx, "loss of quorum recovery plan application expected stores on the node %s",
+			log.KvExec.Warningf(ctx, "loss of quorum recovery plan application expected stores on the node %s",
 				strutil.JoinIDs("s", prepRep.MissingStores))
 		}
 		_, err = CommitReplicaChanges(batches)
@@ -405,20 +419,20 @@ func MaybeApplyPendingRecoveryPlan(
 	}
 
 	// First read node parameters from the first store.
-	storeIdent, err := kvstorage.ReadStoreIdent(ctx, engines[0])
+	storeIdent, err := kvstorage.ReadStoreIdent(ctx, engines[0].LogEngine())
 	if err != nil {
 		if errors.Is(err, &kvstorage.NotBootstrappedError{}) {
 			// This is wrong, we must not have staged plans in a non-bootstrapped
 			// node. But we can't write an error here as store init might refuse to
 			// work if there are already some keys in store.
-			log.Errorf(ctx, "node is not bootstrapped but it already has a recovery plan staged: %s", err)
+			log.KvExec.Errorf(ctx, "node is not bootstrapped but it already has a recovery plan staged: %s", err)
 			return nil
 		}
 		return err
 	}
 
 	if err := planStore.RemovePlan(); err != nil {
-		log.Errorf(ctx, "failed to remove loss of quorum recovery plan: %s", err)
+		log.KvExec.Errorf(ctx, "failed to remove loss of quorum recovery plan: %s", err)
 	}
 
 	err = applyPlan(storeIdent.NodeID, plan)
@@ -428,18 +442,18 @@ func MaybeApplyPendingRecoveryPlan(
 	}
 	if err != nil {
 		r.Error = err.Error()
-		log.Errorf(ctx, "failed to apply staged loss of quorum recovery plan %s", err)
+		log.KvExec.Errorf(ctx, "failed to apply staged loss of quorum recovery plan %s", err)
 	}
-	if err = writeNodeRecoveryResults(ctx, engines[0], r,
+	if err = writeNodeRecoveryResults(ctx, engines[0].LogEngine(), r,
 		loqrecoverypb.DeferredRecoveryActions{DecommissionedNodeIDs: plan.DecommissionedNodeIDs}); err != nil {
-		log.Errorf(ctx, "failed to write loss of quorum recovery results to store: %s", err)
+		log.KvExec.Errorf(ctx, "failed to write loss of quorum recovery results to store: %s", err)
 	}
 	return nil
 }
 
 func CheckEnginesVersion(
 	ctx context.Context,
-	engines []storage.Engine,
+	engines []kvstorage.Engines,
 	plan loqrecoverypb.ReplicaUpdatePlan,
 	ignoreInternal bool,
 ) error {

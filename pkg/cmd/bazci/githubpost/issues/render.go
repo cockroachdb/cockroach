@@ -67,6 +67,14 @@ func (r *Renderer) Escaped(txt string) {
 	r.printf("%s", html.EscapeString(txt))
 }
 
+// Raw writes the given string to the buffer with no escaping or other
+// processing. Use only when injecting pre-rendered output (e.g. a
+// HelpCommand captured by the roachtest DLQ for replay) — for ordinary
+// content prefer Escaped, A, Code, etc., which sanitize input.
+func (r *Renderer) Raw(s string) {
+	r.buf.WriteString(s)
+}
+
 // Code renders a word or phrase as code. Instead of using backticks
 // here (Markdown), we rely on HTML tags since that works even if the
 // this function is called within the context of an HTML tag (such as

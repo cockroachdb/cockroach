@@ -9,8 +9,8 @@ import "github.com/cockroachdb/cockroach/pkg/util/metric"
 
 // RaftTransportMetrics is the set of metrics for a given RaftTransport.
 type RaftTransportMetrics struct {
-	SendQueueSize  *metric.Gauge
-	SendQueueBytes *metric.Gauge
+	SendQueueSize  *metric.FunctionalGauge
+	SendQueueBytes *metric.FunctionalGauge
 
 	MessagesDropped *metric.Counter
 	MessagesSent    *metric.Counter
@@ -89,7 +89,7 @@ responses to Raft messages. Responses are received over another stream.`,
 			Unit:        metric.Unit_COUNT,
 		}),
 
-		// This counts both RACv1 dispatches and RACv2 piggybacked MsgAppResps.
+		// This counts RACv2 piggybacked MsgAppResps.
 		FlowTokenDispatchesDropped: metric.NewCounter(metric.Metadata{
 			Name:        "raft.transport.flow-token-dispatches-dropped",
 			Help:        "Number of flow token dispatches dropped by the Raft Transport",

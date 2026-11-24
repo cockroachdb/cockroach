@@ -19,18 +19,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/lockspanset"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/container/list"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
-
-// Default upper bound on the number of locks in a lockTable.
-const defaultLockTableSize = 10000
 
 // The kind of waiting that the request is subject to.
 type waitKind int
@@ -111,9 +111,9 @@ type waitingState struct {
 	// conflicting request being sequenced through the same lockTable.
 	txn                   *enginepb.TxnMeta // always non-nil
 	key                   roachpb.Key       // the key of the conflict
-	held                  bool              // is the conflict a held lock?
 	queuedLockingRequests int               // how many locking requests are waiting?
 	queuedReaders         int               // how many readers are waiting?
+	held                  bool              // is the conflict a held lock?
 
 	// Represents the lock strength of the action that the request was trying to
 	// perform when it hit the conflict. E.g. was it trying to perform a (possibly
@@ -181,10 +181,6 @@ type treeMu struct {
 	// primarily used for constraining memory consumption. Ideally, we should be
 	// doing better memory accounting than this.
 	numKeysLocked atomic.Int64
-
-	// For dampening the frequency with which we enforce
-	// lockTableImpl.maxKeysLocked.
-	lockAddMaxLocksCheckInterval uint64
 }
 
 // lockTableImpl is an implementation of lockTable.
@@ -265,15 +261,21 @@ type lockTableImpl struct {
 	// table. Locks on both Global and Local keys are stored in the same btree.
 	locks treeMu
 
-	// maxKeysLocked is a soft maximum on amount of per-key lock information
-	// tracking[1]. When it is exceeded, and subject to the dampening in
-	// lockAddMaxLocksCheckInterval, locks will be cleared.
-	//
-	// [1] Simply put, the number of keyLocks objects in the lockTable btree.
-	maxKeysLocked int64
-	// When maxKeysLocked is exceeded, will attempt to clear down to minKeysLocked,
-	// instead of clearing everything.
-	minKeysLocked int64
+	// lockTableLimitsMu contains the lock table limit fields protected by a mutex.
+	lockTableLimitsMu struct {
+		syncutil.Mutex
+		// maxKeysLocked is a soft maximum on amount of per-key lock information
+		// tracking[1]. When it is exceeded, and subject to the dampening in
+		// lockAddMaxLocksCheckInterval, locks will be cleared.
+		//
+		// [1] Simply put, the number of keyLocks objects in the lockTable btree.
+		maxKeysLocked int64
+		// When maxKeysLocked is exceeded, will attempt to clear down to minKeysLocked,
+		// instead of clearing everything.
+		minKeysLocked int64
+		// For dampening the frequency with which we enforce maxKeysLocked.
+		lockAddMaxLocksCheckInterval uint64
+	}
 
 	// txnStatusCache is a small LRU cache that tracks the status of
 	// transactions that have been successfully pushed.
@@ -289,31 +291,69 @@ type lockTableImpl struct {
 
 	// settings provides a handle to cluster settings.
 	settings *cluster.Settings
+
+	// The number of locks that are shed due to the lock table running into memory
+	// limits.
+	locksShedDueToMemoryLimit *metric.Counter
+	// The number of times the lock table ran into memory limits and shed locks as
+	// a result.
+	numLockShedDueToMemoryLimitEvents *metric.Counter
+
+	// The number of times point intent resolutions were condensed into range
+	// resolutions during VIR scanning.
+	virtualResolveCondenseCount *metric.Counter
+	// The number of times VIR was disabled for a request because too many
+	// distinct transactions accumulated range resolves.
+	virtualResolveDisabledCount *metric.Counter
 }
 
 var _ lockTable = &lockTableImpl{}
 
 func newLockTable(
-	maxLocks int64, rangeID roachpb.RangeID, clock *hlc.Clock, settings *cluster.Settings,
+	maxLocks int64,
+	rangeID roachpb.RangeID,
+	clock *hlc.Clock,
+	settings *cluster.Settings,
+	locksShedDueToMemoryLimit *metric.Counter,
+	numLockShedDueToMemoryLimitEvents *metric.Counter,
+	virtualResolveCondenseCount *metric.Counter,
+	virtualResolveDisabledCount *metric.Counter,
 ) *lockTableImpl {
 	lt := &lockTableImpl{
-		rID:      rangeID,
-		clock:    clock,
-		settings: settings,
+		rID:                               rangeID,
+		clock:                             clock,
+		settings:                          settings,
+		locksShedDueToMemoryLimit:         locksShedDueToMemoryLimit,
+		numLockShedDueToMemoryLimitEvents: numLockShedDueToMemoryLimitEvents,
+		virtualResolveCondenseCount:       virtualResolveCondenseCount,
+		virtualResolveDisabledCount:       virtualResolveDisabledCount,
 	}
 	lt.setMaxKeysLocked(maxLocks)
 	return lt
 }
 
 func (t *lockTableImpl) setMaxKeysLocked(maxKeysLocked int64) {
+	t.lockTableLimitsMu.Lock()
+	defer t.lockTableLimitsMu.Unlock()
+
 	// Check at 5% intervals of the max count.
 	lockAddMaxLocksCheckInterval := maxKeysLocked / int64(20)
 	if lockAddMaxLocksCheckInterval == 0 {
 		lockAddMaxLocksCheckInterval = 1
 	}
-	t.maxKeysLocked = maxKeysLocked
-	t.minKeysLocked = maxKeysLocked / 2
-	t.locks.lockAddMaxLocksCheckInterval = uint64(lockAddMaxLocksCheckInterval)
+	t.lockTableLimitsMu.maxKeysLocked = maxKeysLocked
+	t.lockTableLimitsMu.minKeysLocked = maxKeysLocked / 2
+	t.lockTableLimitsMu.lockAddMaxLocksCheckInterval = uint64(lockAddMaxLocksCheckInterval)
+}
+
+// shouldCheckMaxLocks returns true if allocating the supplied sequence number
+// implies that we should check whether the lock table has exceeded its max
+// locks limit or not. We dampen how often the check is performed.
+func (t *lockTableImpl) shouldCheckMaxLocks(seqNum uint64) bool {
+	t.lockTableLimitsMu.Lock()
+	defer t.lockTableLimitsMu.Unlock()
+	interval := t.lockTableLimitsMu.lockAddMaxLocksCheckInterval
+	return seqNum%interval == 0
 }
 
 // lockTableGuardImpl is an implementation of lockTableGuard.
@@ -372,11 +412,20 @@ type lockTableGuardImpl struct {
 	lt     *lockTableImpl
 
 	// Information about this request.
-	txn                *roachpb.Transaction
-	ts                 hlc.Timestamp
-	spans              *lockspanset.LockSpanSet
-	waitPolicy         lock.WaitPolicy
-	maxWaitQueueLength int
+	txn        *roachpb.Transaction
+	ts         hlc.Timestamp
+	spans      *lockspanset.LockSpanSet
+	waitPolicy lock.WaitPolicy
+
+	// virtuallyResolveIntents represents the state of VirtuallyDeferrerIntents at
+	// the outset of this request.
+	virtuallyResolveIntents bool
+	// pushUsingCachedClockObservations represents the state of the
+	// PushUsingCachedClockObservation cluster setting at the this request.
+	pushUsingCachedClockObs bool
+	maxWaitQueueLength      int
+	maxToResolveRangeTxns   int
+	condenseOnScanThreshold int
 
 	// Snapshot of the tree for which this request has some spans. Note that
 	// the lockStates in this snapshot may have been removed from
@@ -431,7 +480,6 @@ type lockTableGuardImpl struct {
 
 	mu struct {
 		syncutil.Mutex
-		startWait bool
 		// curLockWaitStart represents the timestamp when the request started waiting
 		// on the current lock. Multiple consecutive waitingStates might refer to
 		// the same lock, in which case the curLockWaitStart is not updated in between
@@ -474,14 +522,16 @@ type lockTableGuardImpl struct {
 		// waiting state. As such, a call to CurState() can simply return the state
 		// without doing any extra work.
 		mustComputeWaitingState bool
+		startWait               bool
 	}
+
 	// Locks to resolve before scanning again. Doesn't need to be protected by
-	// mu since should only be read after the caller has already synced with mu
-	// in realizing that it is doneWaiting.
+	// mu since should only be read after the caller has already synced with mu in
+	// realizing that it is doneWaiting.
 	//
 	// toResolve should only include replicated locks; for unreplicated locks,
 	// toResolveUnreplicated is used instead.
-	toResolve []roachpb.LockUpdate
+	toResolve resolvableLocks
 
 	// toResolveUnreplicated is a list of locks (only held with durability
 	// unreplicated) that are known to belong to finalized transactions. Such
@@ -496,6 +546,168 @@ type lockTableGuardImpl struct {
 	// on locks belonging to finalized transactions, we wouldn't need to bother
 	// scanning requests.
 	toResolveUnreplicated []roachpb.LockUpdate
+}
+
+// resolvableLocks tracks replicated locks that a guard has determined are
+// resolvable. Point entries accumulate in toResolve during lock table scans.
+//
+// When VIR is enabled and toResolve grows beyond condenseThreshold, point
+// entries are condensed into range entries in toResolveRange. The range entries
+// and resolvableTxns persist across scans so the guard does not re-conflict on
+// locks whose txnStatusCache entry has been evicted.
+type resolvableLocks struct {
+	// toResolve holds point LockUpdates accumulated during scanning. For
+	// non-VIR guards, this is cleared on every entry to ScanAndEnqueue. For
+	// VIR guards, points persist across scans (since VIR results are
+	// ephemeral and must be re-applied) and are condensed into
+	// toResolveRange when exceeding condenseOnScanThreshold.
+	toResolve []roachpb.LockUpdate
+
+	// toResolveRange maps txn IDs to range LockUpdates that persist across
+	// scan attempts. Populated by condensing toResolve. Only used when
+	// virtual intent resolution is enabled.
+	//
+	// This is not cleared across ScanAndEnqueue calls.
+	toResolveRange map[uuid.UUID]roachpb.LockUpdate
+
+	// resolvableTxns maps txn IDs to a partial LockUpdate representing that
+	// transaction's last addition to toResolve. This is not cleared across
+	// ScanAndEnqueue.
+	resolvableTxns map[uuid.UUID]roachpb.LockUpdate
+
+	// virEnabled controls whether resolvableLocks should actually use toResolveRange
+	// and resolvableTxns.
+	virEnabled bool
+}
+
+// condense moves all point entries from toResolve into toResolveRange,
+// extending existing range entries per txn ID.
+func (rl *resolvableLocks) condense() {
+	if len(rl.toResolve) == 0 || !rl.virEnabled {
+		return
+	}
+
+	if rl.toResolveRange == nil {
+		rl.toResolveRange = make(map[uuid.UUID]roachpb.LockUpdate)
+	}
+	for i := range rl.toResolve {
+		up := rl.toResolve[i]
+		txnID := up.Txn.ID
+		existing, ok := rl.toResolveRange[txnID]
+		if !ok {
+			up.Span.EndKey = up.Key.Next()
+			rl.toResolveRange[txnID] = up
+		} else if !existing.Span.ContainsKey(up.Key) {
+			existing.Span = existing.Combine(up.Span)
+			rl.toResolveRange[txnID] = existing
+		}
+	}
+	rl.toResolve = rl.toResolve[:0]
+}
+
+// maybeCondense condenses point entries into range entries if toResolve has
+// grown beyond the configured threshold.
+func (rl *resolvableLocks) maybeCondense(threshold int) bool {
+	if rl.virEnabled && threshold > 0 && len(rl.toResolve) >= threshold {
+		rl.condense()
+		return true
+	}
+	return false
+}
+
+// collect returns all resolvable locks — both point and range entries.
+func (rl *resolvableLocks) collect() []roachpb.LockUpdate {
+	if len(rl.toResolveRange) == 0 {
+		return rl.toResolve
+	}
+	combined := make([]roachpb.LockUpdate, 0, len(rl.toResolve)+len(rl.toResolveRange))
+	combined = append(combined, rl.toResolve...)
+	for _, up := range rl.toResolveRange {
+		combined = append(combined, up)
+	}
+	return combined
+}
+
+// contains returns true if the given (txnID, key) pair is already tracked
+// as resolvable via the range entries. Point entries in toResolve are not
+// checked; duplicates are tolerated and eliminated on condensing.
+func (rl *resolvableLocks) contains(txnID uuid.UUID, key roachpb.Key) bool {
+	if rl.toResolveRange != nil {
+		rangeUp, ok := rl.toResolveRange[txnID]
+		return ok && rangeUp.Span.ContainsKey(key)
+	}
+	return false
+}
+
+func (rl *resolvableLocks) isResolvableTxn(txnID uuid.UUID) (bool, roachpb.LockUpdate) {
+	if !rl.virEnabled {
+		return false, roachpb.LockUpdate{}
+	}
+
+	if lu, ok := rl.resolvableTxns[txnID]; ok {
+		return true, lu
+	}
+	return false, roachpb.LockUpdate{}
+}
+
+// add appends a point LockUpdate. If the key is already covered by a range
+// entry for the same txn, the add is skipped. Duplicate point entries for
+// the same (txn, key) are tolerated.
+func (rl *resolvableLocks) add(lu roachpb.LockUpdate) {
+	// We only track resolvableTxns for VIR-enabled txns.
+	if !rl.virEnabled {
+		rl.toResolve = append(rl.toResolve, lu)
+		return
+	}
+
+	if rl.toResolveRange != nil {
+		existing, ok := rl.toResolveRange[lu.Txn.ID]
+		if ok && existing.Span.ContainsKey(lu.Key) {
+			return
+		}
+	}
+	rl.toResolve = append(rl.toResolve, lu)
+
+	if rl.resolvableTxns == nil {
+		rl.resolvableTxns = make(map[uuid.UUID]roachpb.LockUpdate)
+	}
+	cacheEntry := lu
+	cacheEntry.Span = roachpb.Span{}
+	rl.resolvableTxns[cacheEntry.Txn.ID] = cacheEntry
+}
+
+// filterPointResolves removes point entries for which fn returns false.
+func (rl *resolvableLocks) filterPointResolves(fn func(roachpb.LockUpdate) bool) {
+	if len(rl.toResolve) == 0 {
+		return
+	}
+	j := 0
+	for i := range rl.toResolve {
+		if fn(rl.toResolve[i]) {
+			rl.toResolve[j] = rl.toResolve[i]
+			j++
+		}
+	}
+	rl.toResolve = rl.toResolve[:j]
+}
+
+func (rl *resolvableLocks) rangeResolves() int {
+	return len(rl.toResolveRange)
+}
+
+func (rl *resolvableLocks) len() int {
+	return len(rl.toResolve) + len(rl.toResolveRange)
+}
+
+func (rl *resolvableLocks) clear() {
+	rl.toResolve = rl.toResolve[:0]
+}
+
+func (rl *resolvableLocks) reset(virEnabled bool) {
+	rl.toResolve = rl.toResolve[:0]
+	rl.resolvableTxns = nil
+	rl.toResolveRange = nil
+	rl.virEnabled = virEnabled
 }
 
 var _ lockTableGuard = &lockTableGuardImpl{}
@@ -544,12 +756,40 @@ func (g *lockTableGuardImpl) ShouldWait() bool {
 	// 1. The lock table indicated as such (e.g. the request ran into a
 	// conflicting lock).
 	// 2. OR the request successfully performed its scan but discovered replicated
-	// locks that need to be resolved before it can evaluate.
-	return g.mu.startWait || len(g.toResolve) > 0
+	// locks that need to be resolved before it can evaluate. When virtual intent
+	// resolution is enabled, these locks will be resolved during evaluation (on
+	// a temporary batch) rather than before re-scanning, so the request does not
+	// need to wait.
+	return g.mu.startWait || (!g.virtuallyResolveIntents && g.toResolve.len() > 0)
 }
 
+// ResolveBeforeScanning implements the lockTableGuard interface. The locks to
+// resolve are returned only if virtualized resolution is disabled.
 func (g *lockTableGuardImpl) ResolveBeforeScanning() []roachpb.LockUpdate {
-	return g.toResolve
+	if !g.virtuallyResolveIntents {
+		return g.toResolve.collect()
+	}
+	return nil
+}
+
+// IntentsToResolveVirtually implements the lockTableGuard interface. The locks
+// to resolve are returned only if virtualized resolution is enabled. Returns
+// both point entries from toResolve and range entries from toResolveRange.
+func (g *lockTableGuardImpl) IntentsToResolveVirtually() []roachpb.LockUpdate {
+	if !g.virtuallyResolveIntents {
+		return nil
+	}
+	return g.toResolve.collect()
+}
+
+// VirtuallyResolvesIntents implements the lockTableGuard interface.
+func (g *lockTableGuardImpl) VirtuallyResolvesIntents() bool {
+	return g.virtuallyResolveIntents
+}
+
+// HasCondensedIntents implements the lockTableGuard interface.
+func (g *lockTableGuardImpl) HasCondensedIntents() bool {
+	return len(g.toResolve.toResolveRange) > 0
 }
 
 func (g *lockTableGuardImpl) NewStateChan() chan struct{} {
@@ -776,6 +1016,20 @@ func (g *lockTableGuardImpl) doneActivelyWaitingAtLock() {
 	g.notify()
 }
 
+// AddReplicatedToResolveAndSignal implements the lockTableGuard interface.
+func (g *lockTableGuardImpl) AddReplicatedToResolveAndSignal(up roachpb.LockUpdate) {
+	g.lt.removeReaderFromKey(g, up.Span.Key)
+	g.toResolve.add(up)
+	// removeReaderFromKey notifies the guard when it successfully removes
+	// us from the waiting readers list. If we weren't found (e.g. because
+	// another goroutine already removed us), that goroutine would have
+	// already notified us. We notify defensively here to ensure the guard
+	// always makes progress, even if the above reasoning is violated.
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.doneActivelyWaitingAtLock()
+}
+
 func (g *lockTableGuardImpl) txnMeta() *enginepb.TxnMeta {
 	if g.txn == nil {
 		return nil
@@ -787,8 +1041,137 @@ func (g *lockTableGuardImpl) hasUncertaintyInterval() bool {
 	return g.txn != nil && g.txn.ReadTimestamp.Less(g.txn.GlobalUncertaintyLimit)
 }
 
+func (g *lockTableGuardImpl) hasObservationAtOrBefore(o roachpb.ObservedTimestamp) bool {
+	if o.Timestamp.IsEmpty() {
+		return false
+	}
+	if ts, ok := g.txn.GetObservedTimestamp(o.NodeID); ok {
+		return ts.LessEq(o.Timestamp)
+	}
+	return false
+}
+
+// canResolveKeyForHoldingTransaction returns true and the appropriate
+// LockUpdate if we are able to resolve locks for the given holding
+// transaction.
+//
+// We are able to resolve locks if:
+//
+// 1. The holding transaction is known to be finalized, or
+//
+// 2. The holding transaction is pending and we either have no uncertainty
+// interval or the transaction was known to be pending concurrent with our own
+// transaction.
+//
+// We only allow (2) if lock resolution batching is enabled.
+func (g *lockTableGuardImpl) canResolveKeyForHoldingTransaction(
+	lockHolderTxn *enginepb.TxnMeta, str lock.Strength, key roachpb.Key,
+) (bool, roachpb.LockUpdate) {
+	// If we already know about this txn in our toResolve set but it has just been
+	// pushed, then we can use it from there.
+	if resolvable, up := g.toResolve.isResolvableTxn(lockHolderTxn.ID); resolvable {
+		up.Span = roachpb.Span{Key: key}
+		return true, up
+	}
+
+	// If the transaction is known to be finalized, then we are good to go.
+	finalizedTxn, ok := g.lt.txnStatusCache.finalizedTxns.get(lockHolderTxn.ID)
+	if ok {
+		return true, roachpb.MakeLockUpdate(finalizedTxn, roachpb.Span{Key: key})
+	}
+
+	// If the transaction is pending, we only consider resolution if we are a
+	// non-locking reader and batch resolution is enabled.
+	if str == lock.None && g.lt.batchPushedLockResolution() {
+		pushedTxnEntry, ok := g.lt.txnStatusCache.pendingTxns.get(lockHolderTxn.ID)
+		if ok && g.pendingPushedTransactionCanBeResolved(pushedTxnEntry) {
+			up := roachpb.MakeLockUpdate(pushedTxnEntry.Txn, roachpb.Span{Key: key})
+			if pushedTxnEntry.Txn.Status == roachpb.PENDING {
+				up.ClockWhilePending = pushedTxnEntry.ClockWhilePending
+			}
+			return true, up
+		}
+	}
+
+	return false, roachpb.LockUpdate{}
+}
+
+func (g *lockTableGuardImpl) pendingPushedTransactionCanBeResolved(
+	pushed *pendingTxnCacheEntry,
+) bool {
+	// Txn needs to be pushed above our WriteTimestamp.
+	if !g.ts.Less(pushed.Txn.WriteTimestamp) {
+		return false
+	}
+
+	// In order to usefully resolve a pending transaction, we either need no
+	// uncertainty interval, or we need to be sure that the request was concurrent
+	// with our transaction so that rewritten intent can be ignored even if it is
+	// inside our uncertainty interval.
+	if !g.hasUncertaintyInterval() {
+		return true
+	}
+
+	return g.pushUsingCachedClockObs && g.hasObservationAtOrBefore(pushed.ClockWhilePending)
+}
+
 func (g *lockTableGuardImpl) isSameTxn(txn *enginepb.TxnMeta) bool {
 	return g.txn != nil && g.txn.ID == txn.ID
+}
+
+// conflictsWithHeldLock returns true if the given lock conflicts with the
+// request for this guard.
+//
+// callerOwned indicates whether the caller's goroutine owns this guard. When
+// false (e.g. when called from recomputeWaitQueues on another request's guard),
+// the method avoids accessing unsynchronized guard state such as toResolve and
+// toResolveUnreplicated to prevent data races. When true (the normal scan
+// path), locks that can be resolved based on the txn status cache or existing
+// resolve entries are treated as non-conflicting.
+func (g *lockTableGuardImpl) conflictsWithHeldLock(
+	tl *txnLock, key roachpb.Key, callerOwned bool,
+) bool {
+	lockHolderTxn := tl.getLockHolderTxn()
+	if g.isSameTxn(lockHolderTxn) {
+		// We should never get here if the lock is already held by another request
+		// from the same transaction with sufficient strength (read: greater than
+		// or equal to what this guy wants); this should already be checked in
+		// alreadyHoldsLockAndIsAllowedToProceed.
+		assert(g.curStrength() > tl.getLockMode().Strength,
+			"lock already held by the request's transaction with sufficient strength")
+		return false // no conflict with a lock held by our own transaction
+	}
+
+	if callerOwned {
+		if g.toResolve.contains(lockHolderTxn.ID, key) {
+			return false // No conflict for a lock we are going to resolve.
+		}
+
+		if canResolve, up := g.canResolveKeyForHoldingTransaction(
+			lockHolderTxn, g.curStrength(), key,
+		); canResolve {
+			if !tl.isHeldReplicated() {
+				// Only held unreplicated. Accumulate it as an unreplicated lock to
+				// resolve, in case any other waiting readers can benefit from the
+				// pushed timestamp.
+				//
+				// TODO(arul): this case is only possible while non-locking reads
+				// block on Exclusive locks. Once non-locking reads start only
+				// blocking on intents, it can be removed and asserted against.
+				g.toResolveUnreplicated = append(g.toResolveUnreplicated, up)
+			} else {
+				// Resolve to push the replicated intent, unless this key
+				// is already covered by a range resolve range request.
+				g.toResolve.add(up)
+			}
+			return false // No conflict on a lock we are going to resolve.
+		}
+	}
+
+	// The held lock neither belongs to the request's transaction (which has
+	// special handling above) nor to a transaction whose keys we can resolve.
+	// Check for conflicts.
+	return lock.Conflicts(tl.getLockMode(), g.curLockMode(), &g.lt.settings.SV)
 }
 
 // curStrength returns the lock strength of the current lock span being scanned
@@ -927,8 +1310,7 @@ func (g *lockTableGuardImpl) resumeScan(notify bool) error {
 		span = stepToNextSpan(g)
 	}
 
-	if len(g.toResolve) > 0 {
-		j := 0
+	if !g.virtuallyResolveIntents {
 		// Some of the locks in g.toResolve may already have been claimed by
 		// another concurrent request and removed, or intent resolution could have
 		// happened while this request was waiting (after releasing latches). So
@@ -941,19 +1323,16 @@ func (g *lockTableGuardImpl) resumeScan(notify bool) error {
 		// timestamp to go through. This is because updating the lock ahead of
 		// resolution risks rediscovery loops where the lock is continually
 		// rediscovered at a lower timestamp than that in the lock table.
-		for i := range g.toResolve {
-			var doResolve bool
-			if g.toResolve[i].Status.IsFinalized() {
-				doResolve = g.lt.updateLockInternal(&g.toResolve[i])
+		//
+		// We skip updating the lock table if virtual intent resolution is enabled
+		// since this request won't be committing its intent resolution.
+		g.toResolve.filterPointResolves(func(lu roachpb.LockUpdate) bool {
+			if lu.Status.IsFinalized() {
+				return g.lt.updateLockInternal(&lu)
 			} else {
-				doResolve = true
+				return true
 			}
-			if doResolve {
-				g.toResolve[j] = g.toResolve[i]
-				j++
-			}
-		}
-		g.toResolve = g.toResolve[:j]
+		})
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -962,6 +1341,36 @@ func (g *lockTableGuardImpl) resumeScan(notify bool) error {
 		g.notify()
 	}
 	return nil
+}
+
+func (g *lockTableGuardImpl) maybeDisableVIR(ctx context.Context) {
+	if l := g.toResolve.rangeResolves(); l > g.maxToResolveRangeTxns {
+		log.VEventf(ctx, 2,
+			"disabling virtual intent resolution: resolve range request count exceeds maximum: %d > %d",
+			l, g.maxToResolveRangeTxns)
+		g.virtuallyResolveIntents = false
+		g.toResolve.reset(g.virtuallyResolveIntents)
+		g.lt.virtualResolveDisabledCount.Inc(1)
+	}
+}
+
+func (g *lockTableGuardImpl) String() string {
+	var sb redact.StringBuilder
+	g.safeFormat(&sb)
+	return sb.String()
+}
+
+func (g *lockTableGuardImpl) SafeFormat(w redact.SafePrinter, _ rune) {
+	g.safeFormat(w)
+}
+
+func (g *lockTableGuardImpl) safeFormat(w redact.SafeWriter) {
+	w.Printf("req: %d, txn: ", redact.Safe(g.seqNum))
+	if g.txn == nil {
+		w.SafeString("none")
+	} else {
+		w.SafeString(redact.SafeString(g.txn.ID.String()))
+	}
 }
 
 // queuedGuard is used to wrap waiting locking requests in the keyLocks struct.
@@ -987,6 +1396,31 @@ type queuedGuard struct {
 	mode   lock.Mode // protected by keyLocks.mu
 	active bool      // protected by keyLocks.mu
 	order  queueOrder
+}
+
+func (qg *queuedGuard) String() string {
+	var sb redact.StringBuilder
+	qg.safeFormat(&sb)
+	return sb.String()
+}
+
+func (qg *queuedGuard) SafeFormat(w redact.SafePrinter, _ rune) {
+	qg.safeFormat(w)
+}
+
+func (qg *queuedGuard) safeFormat(w redact.SafeWriter) {
+	optPromotingMsg := redact.SafeString("")
+	if qg.order.isPromoting {
+		optPromotingMsg = " promoting: true"
+	}
+	w.Printf("active: %t req: %d%s, strength: %s, txn: ",
+		qg.active, qg.order.reqSeqNum, optPromotingMsg, qg.mode.Strength,
+	)
+	if qg.guard.txn == nil {
+		w.SafeString("none")
+	} else {
+		w.SafeString(redact.SafeString(qg.guard.txn.ID.String()))
+	}
 }
 
 // queueOrder encapsulates fields that are used to determine the order in which
@@ -1037,9 +1471,71 @@ type unreplicatedLockHolderInfo struct {
 	// highest lock strength for unreplicated locks is Exclusive.
 	strengths [len(unreplicatedHolderStrengths)]enginepb.TxnSeq
 
+	// The ignoredSeqNums slice is the last-seen ignoredSeqNums
+	// from the acquiring transaction. At a given point in time,
+	// the transaction may have a larger set of ignoredSeqNums.
+	//
+	// The intent is to use this for potential flushing of unreplicated
+	// locks as replicated locks. When doing this flush, we want to avoid
+	// clobbering existing replicated locks that may be on disk and should
+	// be preserved to ensure correct rollback behaviour.
+	//
+	// *Motivating example*
+	//
+	// First consider the following state:
+	//
+	//    replicated lock @ seq=1 (on disk, not in memory)
+	//           rollback @ seq=1
+	//  unreplicated lock @ seq=2 (seq 1 ignored)
+	//
+	// The on-disk replicated lock will be ignored by future scans of the
+	// lock table. When we go to flush our unreplicated lock as a
+	// replicated lock, we want to overwrite the replicated lock at seq=1
+	// with our new lock at seq=2.
+	//
+	// Now consider a slightly different scenario:
+	//
+	//    replicated lock @ seq=1 (on disk, not in memory)
+	//  unreplicated lock @ seq=2
+	//
+	// In this case, the in-memory lock table will have an unreplicated lock
+	// at seq=2. When we go to flush our unreplicated lock as a replicated
+	// lock, we DO NOT want to overwrite the replicated lock at seq=1.
+	//
+	// Here we can see that in both cases we have an unreplicated lock held
+	// at seq=2, but what to do when flushing depends on what sequence
+	// numbers have been rolled back. Storing the set of ignored sequence
+	// numbers from the point of acquisition allows us to do this.
+	//
+	// Note that in the second case if seq=2 has been rolled back since we
+	// stored the ignoredSeqNums, that is OK, we have a lock at seq=1
+	// still. If seq=1 has been rolled back since we stored the
+	// ingoredSeqNums, that is also OK, because future requests will include
+	// it in the ignored seq number list and we also know there is no way to
+	// rollback 1 without rolling back 2.
+	//
+	// We may ask whether the min sequence number in strengths above is
+	// sufficient. It isn't since in the cases above, one cannot tell you
+	// whether or not you need to preserve the replicated lock at seq=1
+	// based on the sequence of the held unreplicated lock.
+	ignoredSeqNums []enginepb.IgnoredSeqNumRange
+
+	// ineligibleForExport, if true, indicates that this lock must never be
+	// exported from the lock table for replication. It is set to true via the
+	// lock manager's OnLockMissing function when QueryIntent reports a lock as
+	// missing to a client.
+	//
+	// Writing out a lock that "covers" a lock that we previously reported as
+	// missing can result in transaction recovery erroneously committing an
+	// uncomitted transaction because it finds a lock that the original
+	// transaction failed to find during its attempt to commit.
+	ineligibleForExport bool
+
 	// The timestamp at which the unreplicated lock is held. Must not regress.
 	ts hlc.Timestamp
 }
+
+const notHeldSentinel = -1
 
 // Fixed length slice for all supported lock strengths for unreplicated locks.
 // May be used to iterate supported lock strengths in strength order (strongest
@@ -1057,7 +1553,7 @@ var unreplicatedLockHolderStrengthToIndexMap = func() [lock.MaxStrength + 1]int 
 	var m [lock.MaxStrength + 1]int
 	// Initialize all to -1.
 	for str := range m {
-		m[str] = -1
+		m[str] = notHeldSentinel
 	}
 	// Set the indices of the valid strengths.
 	for i, str := range unreplicatedHolderStrengths {
@@ -1074,6 +1570,7 @@ func (ulh *unreplicatedLockHolderInfo) init() {
 // clear removes previously tracked unreplicated lock holder information.
 func (ulh *unreplicatedLockHolderInfo) clear() {
 	ulh.resetStrengths()
+	ulh.ignoredSeqNums = nil
 	ulh.ts = hlc.Timestamp{}
 }
 
@@ -1082,11 +1579,12 @@ func (ulh *unreplicatedLockHolderInfo) clear() {
 // left unchanged.
 func (ulh *unreplicatedLockHolderInfo) epochBumped() {
 	ulh.resetStrengths()
+	ulh.ignoredSeqNums = nil
 }
 
 func (ulh *unreplicatedLockHolderInfo) resetStrengths() {
 	for strIdx := range ulh.strengths {
-		ulh.strengths[strIdx] = -1
+		ulh.strengths[strIdx] = notHeldSentinel
 	}
 }
 
@@ -1097,12 +1595,40 @@ func (ulh *unreplicatedLockHolderInfo) minSeqNumber(str lock.Strength) enginepb.
 	return ulh.strengths[unreplicatedLockHolderStrengthToIndexMap[str]]
 }
 
+func (ulh *unreplicatedLockHolderInfo) ignoredSequenceNumbersEqual(
+	acq *roachpb.LockAcquisition,
+) bool {
+	// TODO(ssd): This uses structural equality rather than semantic equality. We
+	// should update this to make sure that the lists are semantically equivalent
+	// and add an assertion that the inbound set is a superset of the existing
+	// set.
+	if len(ulh.ignoredSeqNums) != len(acq.IgnoredSeqNums) {
+		return false
+	}
+	for i := range ulh.ignoredSeqNums {
+		if ulh.ignoredSeqNums[i] != acq.IgnoredSeqNums[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func (ulh *unreplicatedLockHolderInfo) setIgnoredSequenceNumbers(
+	ign []enginepb.IgnoredSeqNumRange,
+) {
+	if enginepb.TxnSeqListExtends(ign, ulh.ignoredSeqNums) {
+		ulh.ignoredSeqNums = ign
+	}
+}
+
 // acquire updates tracking on the receiver, if necessary[1], to denote the lock
 // is held with the supplied lock strength at the supplied sequence number.
 //
 // [1] We only track the lowest (non-rolled back) sequence number with which a
 // lock is held, as doing so is sufficient.
-func (ulh *unreplicatedLockHolderInfo) acquire(str lock.Strength, seqNum enginepb.TxnSeq) error {
+func (ulh *unreplicatedLockHolderInfo) acquire(
+	str lock.Strength, seqNum enginepb.TxnSeq, ignoredSeqNums []enginepb.IgnoredSeqNumRange,
+) error {
 	if ulh.held(str) && seqNum < ulh.minSeqNumber(str) {
 		// If the lock is already held at the given strength, with a given sequence
 		// number, that sequence number is not allowed to regress. This invariant
@@ -1115,12 +1641,14 @@ func (ulh *unreplicatedLockHolderInfo) acquire(str lock.Strength, seqNum enginep
 	if !ulh.held(str) {
 		ulh.strengths[unreplicatedLockHolderStrengthToIndexMap[str]] = seqNum
 	}
+	ulh.setIgnoredSequenceNumbers(ignoredSeqNums)
+
 	return nil
 }
 
 // held returns true if the receiver is held with the supplied lock strength.
 func (ulh *unreplicatedLockHolderInfo) held(str lock.Strength) bool {
-	return ulh.minSeqNumber(str) != -1
+	return ulh.minSeqNumber(str) != notHeldSentinel
 }
 
 // rollbackIgnoredSeqNumbers mutates the receiver to rollback any locks that are
@@ -1142,6 +1670,7 @@ func (ulh *unreplicatedLockHolderInfo) rollbackIgnoredSeqNumbers(
 			ulh.strengths[strIdx] = -1
 		}
 	}
+	ulh.setIgnoredSequenceNumbers(ignoredSeqNums)
 }
 
 func (ulh *unreplicatedLockHolderInfo) isEmpty() bool {
@@ -1175,6 +1704,9 @@ func (ulh *unreplicatedLockHolderInfo) safeFormat(sb *redact.StringBuilder) {
 		)
 	}
 	sb.SafeString("]")
+	if len(ulh.ignoredSeqNums) > 0 {
+		sb.Printf(" ign seq: %v", ulh.ignoredSeqNums)
+	}
 }
 
 // Fixed length slice for all supported lock strengths for replicated locks. May
@@ -1408,9 +1940,6 @@ func (tl *txnLock) writeTS() hlc.Timestamp {
 	// lock strength == lock.Exclusive. Note that unreplicated locks can't be held
 	// with lock strength lock.Intent.
 	if tl.isHeldUnreplicated() && tl.unreplicatedInfo.held(lock.Exclusive) {
-		// If there's both a write intent and an unreplicated exclusive lock, we want
-		// to prefer the lower of the two timestamps, since the lower timestamp
-		// blocks more non-locking readers.
 		return tl.unreplicatedInfo.ts
 	}
 	return hlc.MaxTimestamp
@@ -1476,6 +2005,7 @@ func (tl *txnLock) getLockMode() lock.Mode {
 func (tl *txnLock) isIdempotentLockAcquisition(acq *roachpb.LockAcquisition) bool {
 	assert(tl.getLockHolderTxn().ID == acq.Txn.ID,
 		"existing lock transaction is different from the acquisition")
+
 	switch acq.Durability {
 	case lock.Unreplicated:
 		if !tl.unreplicatedInfo.held(acq.Strength) { // unheld lock
@@ -1488,19 +2018,27 @@ func (tl *txnLock) isIdempotentLockAcquisition(acq *roachpb.LockAcquisition) boo
 			// idempotent. Strictly speaking, we could tighten this condition to
 			// consider lock re-acquisition at lower timestamps idempotent, as a
 			// lock's timestamp at a given durability never regresses.
-			tl.unreplicatedInfo.ts.Equal(acq.Txn.WriteTimestamp)
+			tl.unreplicatedInfo.ts.Equal(acq.Txn.WriteTimestamp) && tl.unreplicatedInfo.ignoredSequenceNumbersEqual(acq)
 	case lock.Replicated:
 		// Lock is being re-acquired with the same strength.
-		return tl.replicatedInfo.held(acq.Strength) &&
-			// NB: Lock re-acquisitions at different timestamps are not considered
-			// idempotent. Strictly speaking, we could tighten this condition in a
-			// few ways:
-			// 1. We could consider lock re-acquisition at a lower timestamp idempotent,
-			// as a lock's timestamp at a given durability can never regress.
-			// 2. We could only check the timestamp if the lock is being acquired with
-			// strength lock.Intent, as we disregard the timestamp for all other lock
-			// strengths when dealing with replicated locks.
-			tl.replicatedInfo.ts.Equal(acq.Txn.WriteTimestamp)
+		isIdempotent := tl.replicatedInfo.held(acq.Strength)
+		// NB: Lock re-acquisitions at different timestamps are not considered
+		// idempotent. Strictly speaking, we could tighten this condition in a
+		// few ways:
+		//
+		// 1. We could consider lock re-acquisition at a lower timestamp idempotent,
+		// as a lock's timestamp at a given durability can never regress.
+		//
+		// 2. We could only check the timestamp if the lock is being acquired with
+		// strength lock.Intent, as we disregard the timestamp for all other lock
+		// strengths when dealing with replicated locks.
+		isIdempotent = isIdempotent && tl.replicatedInfo.ts.Equal(acq.Txn.WriteTimestamp)
+		// Lock acquisitions at a new epoch are not considered idempotent. In most
+		// cases of an epoch bump, the WriteTimestamp also changes. But in the case
+		// of an IntentMissingError, the WriteTimestamp isn't forwarded, but the
+		// on-disk intent has still changed.
+		isIdempotent = isIdempotent && tl.txn.Epoch == acq.Txn.Epoch
+		return isIdempotent
 	default:
 		panic(fmt.Sprintf("unknown lock durability: %s", acq.Durability))
 	}
@@ -1540,6 +2078,7 @@ func (tl *txnLock) reacquireLock(acq *roachpb.LockAcquisition) error {
 	if tl.isIdempotentLockAcquisition(acq) {
 		return nil // nothing more to do here.
 	}
+
 	// Forward the lock's timestamp instead of assigning to it blindly.
 	// While lock acquisition uses monotonically increasing timestamps
 	// from the perspective of the transaction's coordinator, this does
@@ -1580,7 +2119,7 @@ func (tl *txnLock) reacquireLock(acq *roachpb.LockAcquisition) error {
 	switch acq.Durability {
 	case lock.Unreplicated:
 		tl.unreplicatedInfo.ts.Forward(acq.Txn.WriteTimestamp)
-		if err := tl.unreplicatedInfo.acquire(acq.Strength, acq.Txn.Sequence); err != nil {
+		if err := tl.unreplicatedInfo.acquire(acq.Strength, acq.Txn.Sequence, acq.IgnoredSeqNums); err != nil {
 			return err
 		}
 	case lock.Replicated:
@@ -1855,32 +2394,13 @@ func (kl *keyLocks) safeFormat(sb *redact.StringBuilder, txnStatusCache *txnStat
 	if kl.waitingReaders.Len() > 0 {
 		sb.SafeString("   waiting readers:\n")
 		for e := kl.waitingReaders.Front(); e != nil; e = e.Next() {
-			g := e.Value
-			sb.Printf("    req: %d, txn: ", redact.Safe(g.seqNum))
-			if g.txn == nil {
-				sb.SafeString("none\n")
-			} else {
-				sb.Printf("%v\n", redact.Safe(g.txn.ID))
-			}
+			sb.Printf("    %s\n", e.Value)
 		}
 	}
 	if kl.queuedLockingRequests.Len() > 0 {
 		sb.SafeString("   queued locking requests:\n")
 		for e := kl.queuedLockingRequests.Front(); e != nil; e = e.Next() {
-			qg := e.Value
-			g := qg.guard
-			optPromotingMsg := redact.SafeString("")
-			if qg.order.isPromoting {
-				optPromotingMsg = " promoting: true"
-			}
-			sb.Printf("    active: %t req: %d%s, strength: %s, txn: ",
-				qg.active, qg.order.reqSeqNum, optPromotingMsg, qg.mode.Strength,
-			)
-			if g.txn == nil {
-				sb.SafeString("none\n")
-			} else {
-				sb.Printf("%v\n", redact.Safe(g.txn.ID))
-			}
+			sb.Printf("    %s\n", e.Value)
 		}
 	}
 }
@@ -1937,7 +2457,7 @@ func (kl *keyLocks) lockStateInfo(now time.Time, rangeID roachpb.RangeID) []roac
 		lockWaiters = append(lockWaiters, lock.Waiter{
 			WaitingTxn:   g.txnMeta(),
 			ActiveWaiter: qg.active,
-			Strength:     lock.Exclusive,
+			Strength:     qg.mode.Strength,
 			WaitDuration: now.Sub(g.mu.curLockWaitStart),
 		})
 		g.mu.Unlock()
@@ -2521,74 +3041,7 @@ func (kl *keyLocks) conflictsWithLockHolders(g *lockTableGuardImpl) bool {
 	}
 
 	for e := kl.holders.Front(); e != nil; e = e.Next() {
-		tl := e.Value
-		lockHolderTxn := tl.getLockHolderTxn()
-
-		if g.isSameTxn(lockHolderTxn) {
-			// We should never get here if the lock is already held by another request
-			// from the same transaction with sufficient strength (read: greater than
-			// or equal to what this guy wants); this should already be checked in
-			// alreadyHoldsLockAndIsAllowedToProceed.
-			assert(g.curStrength() > tl.getLockMode().Strength,
-				"lock already held by the request's transaction with sufficient strength")
-			continue // no conflict with a lock held by our own transaction
-		}
-
-		finalizedTxn, ok := g.lt.txnStatusCache.finalizedTxns.get(lockHolderTxn.ID)
-		if ok {
-			up := roachpb.MakeLockUpdate(finalizedTxn, roachpb.Span{Key: kl.key})
-			// The lock belongs to a finalized transaction. There's no conflict, but
-			// the lock must be resolved -- accumulate it on the appropriate slice.
-			if !tl.isHeldReplicated() { // only held unreplicated
-				g.toResolveUnreplicated = append(g.toResolveUnreplicated, up)
-			} else {
-				g.toResolve = append(g.toResolve, up)
-			}
-			continue // check next lock
-		}
-
-		// The lock is held by a different, un-finalized transaction.
-
-		if g.curStrength() == lock.None {
-			// If the non-locking reader is reading at a higher timestamp than the
-			// lock holder, but it knows that the lock holder has been pushed above
-			// its read timestamp, it can proceed after rewriting the lock at its
-			// transaction's pushed timestamp. Intent resolution can be deferred to
-			// maximize batching opportunities.
-			//
-			// This fast-path is only enabled for readers without uncertainty
-			// intervals, as readers with uncertainty intervals must contend with the
-			// possibility of pushing a conflicting intent up into their uncertainty
-			// interval and causing more work for themselves, which is avoided with
-			// care by the lockTableWaiter but difficult to coordinate through the
-			// txnStatusCache. This limitation is acceptable because the most
-			// important case here is optimizing the Export requests issued by backup.
-			if !g.hasUncertaintyInterval() && g.lt.batchPushedLockResolution() {
-				pushedTxn, ok := g.lt.txnStatusCache.pendingTxns.get(lockHolderTxn.ID)
-				if ok && g.ts.Less(pushedTxn.WriteTimestamp) {
-					up := roachpb.MakeLockUpdate(pushedTxn, roachpb.Span{Key: kl.key})
-					if !tl.isHeldReplicated() {
-						// Only held unreplicated. Accumulate it as an unreplicated lock to
-						// resolve, in case any other waiting readers can benefit from the
-						// pushed timestamp.
-						//
-						// TODO(arul): this case is only possible while non-locking reads
-						// block on Exclusive locks. Once non-locking reads start only
-						// blocking on intents, it can be removed and asserted against.
-						g.toResolveUnreplicated = append(g.toResolveUnreplicated, up)
-					} else {
-						// Resolve to push the replicated intent.
-						g.toResolve = append(g.toResolve, up)
-					}
-					continue // check next lock
-				}
-			}
-		}
-
-		// The held lock neither belongs to the request's transaction (which has
-		// special handling above) nor to a transaction that has been finalized.
-		// Check for conflicts.
-		if lock.Conflicts(tl.getLockMode(), g.curLockMode(), &g.lt.settings.SV) {
+		if g.conflictsWithHeldLock(e.Value, kl.key, true /* callerOwned */) {
 			return true
 		}
 	}
@@ -2952,7 +3405,7 @@ func (kl *keyLocks) acquireLock(
 	switch acq.Durability {
 	case lock.Unreplicated:
 		tl.unreplicatedInfo.ts = acq.Txn.WriteTimestamp
-		if err := tl.unreplicatedInfo.acquire(acq.Strength, acq.Txn.Sequence); err != nil {
+		if err := tl.unreplicatedInfo.acquire(acq.Strength, acq.Txn.Sequence, acq.IgnoredSeqNums); err != nil {
 			return err
 		}
 	case lock.Replicated:
@@ -2976,6 +3429,47 @@ func (kl *keyLocks) acquireLock(
 	return nil
 }
 
+// markLockIneligibleForExport marks any lock held by the same transaction on the
+// same key at an equal or greater strength as ineligible for export from the
+// in-memory lock table to storage because it would erroneously re-materialize a
+// lock that has been previously reported as missing.
+//
+// Acquires kl.mu.
+func (kl *keyLocks) markLockIneligibleForExport(acq *roachpb.LockAcquisition) {
+	assert(acq != nil, "unexpected nil LockAcquisition")
+
+	kl.mu.Lock()
+	defer kl.mu.Unlock()
+	if !kl.isLockedBy(acq.Txn.ID) {
+		return
+	}
+
+	for hl := kl.holders.Front(); hl != nil; hl = hl.Next() {
+		tl := hl.Value
+		if tl == nil || tl.unreplicatedInfo.isEmpty() {
+			continue
+		}
+		if tl.txn == nil {
+			continue
+		}
+		if tl.txn.ID != acq.Txn.ID {
+			continue
+		}
+
+		// NB: We might be able to be more conservative here with something like:
+		//
+		//     heldMode := tl.getLockMode()
+		//     if heldMode.Strength >= acq.Strength {
+		//         tl.unreplicatedInfo.ineligibleForExport = true
+		//     }
+		//
+		// But, we avoid that for now in case we are overlooking any cases where it
+		// would be possible for a transaction to acquire a new unreplicated lock
+		// on this key that would also be a problem to export.
+		tl.unreplicatedInfo.ineligibleForExport = true
+	}
+}
+
 // discoveredLock is called with a lock that is discovered by guard g when trying
 // to access this key with strength accessStrength.
 //
@@ -2986,6 +3480,7 @@ func (kl *keyLocks) discoveredLock(
 	accessStrength lock.Strength,
 	notRemovable bool,
 	clock *hlc.Clock,
+	st *cluster.Settings,
 ) error {
 	kl.mu.Lock()
 	defer kl.mu.Unlock()
@@ -2998,7 +3493,14 @@ func (kl *keyLocks) discoveredLock(
 	if kl.isLockedBy(foundLock.Txn.ID) {
 		e := kl.heldBy[foundLock.Txn.ID]
 		tl = e.Value
+
+		beforeTs := tl.writeTS()
+
 		tl.replicatedInfo.acquire(foundLock.Strength, foundLock.Txn.WriteTimestamp)
+
+		if beforeTs.Less(tl.writeTS()) {
+			kl.recomputeWaitQueues(st)
+		}
 		// TODO(arul): If the discovered lock indicates a newer epoch than what's
 		// being tracked, should we clear out unreplicatedLockInfo here?
 	} else {
@@ -3297,22 +3799,27 @@ func (kl *keyLocks) tryUpdateLockLocked(
 
 // recomputeWaitQueues goes through the receiver's wait queues and recomputes
 // whether actively waiting requests should continue to do so, given the key's
-// locks holders and other waiting requests. A non-exhaustive list scenarios where
-// such computation is necessary is:
-// - A lock's strength has decreased[1]
-// - Or locking requests have dropped out of wait queue's[2] without actually
-// acquiring the lock
-// - Or the lock's timestamp has advanced
-// - Or one of the locks on a key has been released[3]
+// locks holders and other waiting requests. A non-exhaustive list scenarios
+// where such computation is necessary is:
+//
+//   - A lock's strength has decreased[1]
+//   - Or locking requests have dropped out of wait queue's[2] without actually
+//     acquiring the lock
+//   - Or the lock's timestamp has advanced
+//   - Or one of the locks on a key has been released[3]
+//   - The lock's holding transaction has been pushed, making it virtually
+//     resolvable.
 //
 // [1] This can happen as a result of savepoint rollback or when the lock table
 // stops tracking a replicated lock because of a PUSH_TIMESTAMP that
 // successfully bumps the pushee's timestamp.
+//
 // [2] A locking request that doesn't conflict with any held lock(s) may still
 // have to actively wait if it conflicts with a lower sequence numbered request
 // already in the lock's wait queue. Locking requests dropping out of a lock's
 // wait queue can therefore result in other requests no longer needing to
 // actively wait.
+//
 // [3] If there are multiple shared locks on a key and on of the transactions
 // that holds the shared lock is trying to promote its strength to something
 // stronger, then the release of a shared lock may allow it to do so. Note that
@@ -3330,6 +3837,7 @@ func (kl *keyLocks) recomputeWaitQueues(st *cluster.Settings) {
 	// (which are the only ones that exist at the time of writing).
 	var strongestMode lock.Mode
 	var lockHolderTxn *enginepb.TxnMeta // nil if {no,more than one} locks are held
+	var txnLock *txnLock
 	// Go through the list of lock holders.
 	// TODO(arul): We should annotate each of the holders to reflect if the lock
 	// belongs to a finalized transaction or not. If it does, we should exclude
@@ -3338,8 +3846,10 @@ func (kl *keyLocks) recomputeWaitQueues(st *cluster.Settings) {
 		mode := e.Value.getLockMode()
 		if strongestMode.Empty() {
 			lockHolderTxn = e.Value.txn
+			txnLock = e.Value
 		} else {
 			lockHolderTxn = nil
+			txnLock = nil
 		}
 		if strongestMode.Weaker(mode) {
 			strongestMode = mode
@@ -3353,7 +3863,7 @@ func (kl *keyLocks) recomputeWaitQueues(st *cluster.Settings) {
 		reader := e.Value
 		curr := e
 		e = e.Next()
-		if !lock.Conflicts(reader.curLockMode(), strongestMode, &st.SV) {
+		if !reader.conflictsWithHeldLock(txnLock, kl.key, false /* callerOwned */) {
 			kl.removeReader(curr)
 		}
 	}
@@ -3552,7 +4062,7 @@ func (kl *keyLocks) tryFreeLockOnReplicatedAcquire(
 	// Bail if there's an epoch number mismatch, as we can't compare sequence
 	// numbers across epochs. Note that we're not making any effort to forget
 	// unreplicated locks if the replicated lock acquisition corresponds to a
-	// newer epoch -- we defer to acquireLock to handle epcoh bumps instead.
+	// newer epoch -- we defer to acquireLock to handle epoch bumps instead.
 	if tl.txn.Epoch != acq.Txn.Epoch {
 		return false /* freed */, false /* mustGC */
 	}
@@ -3579,6 +4089,10 @@ func (kl *keyLocks) tryFreeLockOnReplicatedAcquire(
 		// UPDATE statements). We thus decide to ignore sequence numbers in our
 		// determination here -- savepoint rollbacks are rare enough. It's also
 		// not like unreplicated locks can't be lost for other reasons.
+		//
+		// TODO(ssd): Any change to this behaviour must consider IgnoredSeqNumbers
+		// and the case of the unreplicated locks being flushed. See the
+		// discussion on #140113.
 	}
 	if !canFree {
 		// The replicated lock acquisition doesn't offer sufficient protection
@@ -3988,10 +4502,9 @@ func (t *treeMu) Reset() {
 	t.btree.Reset()
 }
 
-func (t *treeMu) nextLockSeqNum() (seqNum uint64, checkMaxLocks bool) {
+func (t *treeMu) nextLockSeqNum() uint64 {
 	t.lockIDSeqNum++
-	checkMaxLocks = t.lockIDSeqNum%t.lockAddMaxLocksCheckInterval == 0
-	return t.lockIDSeqNum, checkMaxLocks
+	return t.lockIDSeqNum
 }
 
 func (t *lockTableImpl) ScanOptimistic(req Request) lockTableGuard {
@@ -4001,7 +4514,9 @@ func (t *lockTableImpl) ScanOptimistic(req Request) lockTableGuard {
 }
 
 // ScanAndEnqueue implements the lockTable interface.
-func (t *lockTableImpl) ScanAndEnqueue(req Request, guard lockTableGuard) (lockTableGuard, *Error) {
+func (t *lockTableImpl) ScanAndEnqueue(
+	ctx context.Context, req Request, guard lockTableGuard,
+) (lockTableGuard, *Error) {
 	// NOTE: there is no need to synchronize with enabledMu here. ScanAndEnqueue
 	// scans the lockTable and enters any conflicting lock wait-queues, but a
 	// disabled lockTable will be empty. If the scan's btree snapshot races with
@@ -4021,7 +4536,20 @@ func (t *lockTableImpl) ScanAndEnqueue(req Request, guard lockTableGuard) (lockT
 		g.mu.state = waitingState{}
 		g.mu.mustComputeWaitingState = false
 		g.mu.Unlock()
-		g.toResolve = g.toResolve[:0]
+		if g.virtuallyResolveIntents {
+			// Condense accumulated point entries into range entries if the list
+			// has grown large. Point entries are not cleared for VIR guards;
+			// they persist across scans so that they can be re-resolved
+			// virtually on each evaluation attempt (VIR results are ephemeral).
+			if g.toResolve.maybeCondense(g.condenseOnScanThreshold) {
+				g.lt.virtualResolveCondenseCount.Inc(1)
+			}
+			// If we've accumulated too many range resolves, give up trying to
+			// virtually resolve.
+			g.maybeDisableVIR(ctx)
+		} else {
+			g.toResolve.clear()
+		}
 	}
 	t.doSnapshotForGuard(g)
 
@@ -4037,7 +4565,7 @@ func (t *lockTableImpl) ScanAndEnqueue(req Request, guard lockTableGuard) (lockT
 	if err != nil {
 		// We're not returning the guard on this error path, so we need to
 		// release the guard in case it has already entered any wait-queues.
-		t.Dequeue(g)
+		t.Dequeue(ctx, g)
 		return nil, kvpb.NewError(err)
 	}
 	if g.notRemovableLock != nil {
@@ -4049,6 +4577,11 @@ func (t *lockTableImpl) ScanAndEnqueue(req Request, guard lockTableGuard) (lockT
 	return g, nil
 }
 
+// defaultMaxToResolveRangeTxns is the default maximum number of distinct txns
+// tracked in toResolveRange.
+// TODO(mira): consider making this tunable or increasing it.
+const defaultMaxToResolveRangeTxns = 128
+
 func (t *lockTableImpl) newGuardForReq(req Request) *lockTableGuardImpl {
 	g := newLockTableGuardImpl()
 	g.seqNum = t.seqNum.Add(1)
@@ -4058,8 +4591,13 @@ func (t *lockTableImpl) newGuardForReq(req Request) *lockTableGuardImpl {
 	g.spans = req.LockSpans
 	g.waitPolicy = req.WaitPolicy
 	g.maxWaitQueueLength = req.MaxLockWaitQueueLength
+	g.maxToResolveRangeTxns = defaultMaxToResolveRangeTxns
+	g.condenseOnScanThreshold = int(storage.MaxConflictsPerLockConflictError.Get(&g.lt.settings.SV))
 	g.str = lock.MaxStrength
 	g.index = -1
+	g.pushUsingCachedClockObs = PushUsingCachedClockObservation.Get(&g.lt.settings.SV)
+	g.virtuallyResolveIntents = VirtualIntentResolution.Get(&g.lt.settings.SV) && req.canVirtuallyResolve()
+	g.toResolve.virEnabled = g.virtuallyResolveIntents
 	return g
 }
 
@@ -4076,7 +4614,7 @@ func (t *lockTableImpl) doSnapshotForGuard(g *lockTableGuardImpl) {
 }
 
 // Dequeue implements the lockTable interface.
-func (t *lockTableImpl) Dequeue(guard lockTableGuard) {
+func (t *lockTableImpl) Dequeue(_ context.Context, guard lockTableGuard) {
 	// NOTE: there is no need to synchronize with enabledMu here. Dequeue only
 	// accesses state already held by the guard and does not add anything to the
 	// lockTable.
@@ -4127,6 +4665,7 @@ func (t *lockTableImpl) Dequeue(guard lockTableGuard) {
 // each of the locks. At that point a decision is made whether to consult the
 // txnStatusCache eagerly when adding discovered locks.
 func (t *lockTableImpl) AddDiscoveredLock(
+	ctx context.Context,
 	foundLock *roachpb.Lock,
 	seq roachpb.LeaseSequence,
 	consultTxnStatusCache bool,
@@ -4155,34 +4694,18 @@ func (t *lockTableImpl) AddDiscoveredLock(
 		return false, err
 	}
 	if consultTxnStatusCache {
-		finalizedTxn, ok := t.txnStatusCache.finalizedTxns.get(foundLock.Txn.ID)
-		if ok {
-			g.toResolve = append(
-				g.toResolve, roachpb.MakeLockUpdate(finalizedTxn, roachpb.Span{Key: key}))
+		if canResolve, up := g.canResolveKeyForHoldingTransaction(&foundLock.Txn, str, key); canResolve {
+			g.toResolve.add(up)
 			return true, nil
-		}
-
-		// If the discoverer is a non-locking read, also check whether the lock's
-		// holder is known to have been pushed above the reader's timestamp. See the
-		// comment in scanAndMaybeEnqueue for more details, including why we include
-		// the hasUncertaintyInterval condition.
-		if str == lock.None && !g.hasUncertaintyInterval() && t.batchPushedLockResolution() {
-			pushedTxn, ok := g.lt.txnStatusCache.pendingTxns.get(foundLock.Txn.ID)
-			if ok && g.ts.Less(pushedTxn.WriteTimestamp) {
-				g.toResolve = append(
-					g.toResolve, roachpb.MakeLockUpdate(pushedTxn, roachpb.Span{Key: key}))
-				return true, nil
-			}
 		}
 	}
 	var l *keyLocks
 	t.locks.mu.Lock()
 	iter := t.locks.MakeIter()
 	iter.FirstOverlap(&keyLocks{key: key})
-	checkMaxLocks := false
+	var lockSeqNum uint64
 	if !iter.Valid() {
-		var lockSeqNum uint64
-		lockSeqNum, checkMaxLocks = t.locks.nextLockSeqNum()
+		lockSeqNum = t.locks.nextLockSeqNum()
 		l = &keyLocks{id: lockSeqNum, key: key}
 		l.queuedLockingRequests.Init()
 		l.waitingReaders.Init()
@@ -4202,11 +4725,11 @@ func (t *lockTableImpl) AddDiscoveredLock(
 		g.notRemovableLock = l
 		notRemovableLock = true
 	}
-	err = l.discoveredLock(foundLock, g, str, notRemovableLock, g.lt.clock)
+	err = l.discoveredLock(foundLock, g, str, notRemovableLock, g.lt.clock, g.lt.settings)
 	// Can't release tree.mu until call l.discoveredLock() since someone may
 	// find an empty lock and remove it from the tree.
 	t.locks.mu.Unlock()
-	if checkMaxLocks {
+	if t.shouldCheckMaxLocks(lockSeqNum) {
 		t.checkMaxKeysLockedAndTryClear()
 	}
 	if err != nil {
@@ -4216,7 +4739,7 @@ func (t *lockTableImpl) AddDiscoveredLock(
 }
 
 // AcquireLock implements the lockTable interface.
-func (t *lockTableImpl) AcquireLock(acq *roachpb.LockAcquisition) error {
+func (t *lockTableImpl) AcquireLock(ctx context.Context, acq *roachpb.LockAcquisition) error {
 	t.enabledMu.RLock()
 	defer t.enabledMu.RUnlock()
 	if !t.enabled {
@@ -4235,6 +4758,8 @@ func (t *lockTableImpl) AcquireLock(acq *roachpb.LockAcquisition) error {
 	default:
 		return errors.AssertionFailedf("unsupported lock strength %s", acq.Strength)
 	}
+	log.VEventf(ctx, 2, "txn %s acquiring %s %s lock on %s",
+		acq.Txn.Short(), acq.Durability, acq.Strength, acq.Key)
 	var kl *keyLocks
 	t.locks.mu.Lock()
 	// Can't release tree.mu until call kl.acquireLock() since someone may find
@@ -4243,7 +4768,7 @@ func (t *lockTableImpl) AcquireLock(acq *roachpb.LockAcquisition) error {
 	// tree.mu.RLock().
 	iter := t.locks.MakeIter()
 	iter.FirstOverlap(&keyLocks{key: acq.Key})
-	checkMaxLocks := false
+	var lockSeqNum uint64
 	if !iter.Valid() {
 		if acq.Durability == lock.Replicated {
 			// Don't remember uncontended replicated locks. The downside is that
@@ -4255,8 +4780,7 @@ func (t *lockTableImpl) AcquireLock(acq *roachpb.LockAcquisition) error {
 			t.locks.mu.Unlock()
 			return nil
 		}
-		var lockSeqNum uint64
-		lockSeqNum, checkMaxLocks = t.locks.nextLockSeqNum()
+		lockSeqNum = t.locks.nextLockSeqNum()
 		kl = &keyLocks{id: lockSeqNum, key: acq.Key}
 		kl.queuedLockingRequests.Init()
 		kl.waitingReaders.Init()
@@ -4289,11 +4813,43 @@ func (t *lockTableImpl) AcquireLock(acq *roachpb.LockAcquisition) error {
 	err := kl.acquireLock(acq, t.clock, t.settings)
 	t.locks.mu.Unlock()
 
-	if checkMaxLocks {
+	if t.shouldCheckMaxLocks(lockSeqNum) {
 		t.checkMaxKeysLockedAndTryClear()
 	}
 	if err != nil {
 		return err
+	}
+	return nil
+}
+
+// MarkIneligibleForExport implements the lockTable interface.
+func (t *lockTableImpl) MarkIneligibleForExport(
+	_ context.Context, acq *roachpb.LockAcquisition,
+) error {
+	if acq == nil {
+		return errors.AssertionFailedf("unexpected nil lock acquisition")
+	}
+	if acq.Empty() {
+		return errors.AssertionFailedf("unexpected empty lock acquisition %s", acq)
+	}
+	if acq.Durability != lock.Replicated {
+		return errors.AssertionFailedf("unexpected lock acquisition durability %s", acq.Durability)
+	}
+
+	t.enabledMu.RLock()
+	defer t.enabledMu.RUnlock()
+	if !t.enabled {
+		// If not enabled, don't track any locks.
+		return nil
+	}
+
+	t.locks.mu.Lock()
+	defer t.locks.mu.Unlock()
+
+	iter := t.locks.MakeIter()
+	iter.FirstOverlap(&keyLocks{key: acq.Key})
+	if iter.Valid() {
+		iter.Cur().markLockIneligibleForExport(acq)
 	}
 	return nil
 }
@@ -4303,10 +4859,21 @@ func (t *lockTableImpl) AcquireLock(acq *roachpb.LockAcquisition) error {
 // method relieves memory pressure by clearing as much per-key tracking as it
 // can to bring things under budget.
 func (t *lockTableImpl) checkMaxKeysLockedAndTryClear() {
+	t.lockTableLimitsMu.Lock()
+	defer t.lockTableLimitsMu.Unlock()
+
 	totalLocks := t.locks.numKeysLocked.Load()
-	if totalLocks > t.maxKeysLocked {
-		numToClear := totalLocks - t.minKeysLocked
-		t.tryClearLocks(false /* force */, int(numToClear))
+	if totalLocks > t.lockTableLimitsMu.maxKeysLocked {
+		numToClear := totalLocks - t.lockTableLimitsMu.minKeysLocked
+		numCleared := t.tryClearLocks(false /* force */, int(numToClear))
+		// Update metrics if we successfully cleared any number of locks.
+		if numCleared != 0 {
+			t.locksShedDueToMemoryLimit.Inc(numCleared)
+			t.numLockShedDueToMemoryLimitEvents.Inc(1)
+			log.KvExec.Warningf(context.Background(),
+				"lock table exceeded memory limit (%d locks > %d max); shed %d locks",
+				totalLocks, t.lockTableLimitsMu.maxKeysLocked, numCleared)
+		}
 	}
 }
 
@@ -4321,9 +4888,10 @@ func (t *lockTableImpl) lockCountForTesting() int64 {
 //
 // Waiters of removed locks are told to wait elsewhere or that they are done
 // waiting.
-func (t *lockTableImpl) tryClearLocks(force bool, numToClear int) {
-	clearCount := 0
+func (t *lockTableImpl) tryClearLocks(force bool, numToClear int) int64 {
+	var clearCount int64
 	t.locks.mu.Lock()
+	defer t.locks.mu.Unlock()
 	var locksToClear []*keyLocks
 	iter := t.locks.MakeIter()
 	for iter.First(); iter.Valid(); iter.Next() {
@@ -4331,11 +4899,63 @@ func (t *lockTableImpl) tryClearLocks(force bool, numToClear int) {
 		if l.tryClearLock(force) {
 			locksToClear = append(locksToClear, l)
 			clearCount++
-			if !force && clearCount >= numToClear {
+			if !force && clearCount >= int64(numToClear) {
 				break
 			}
 		}
 	}
+	t.clearLocksMuLocked(locksToClear)
+	return clearCount
+}
+
+// tryClearLockGE attempts to clear all locks greater or equal to given key.
+//
+// Waiters of removed locks are told to wait elsewhere or that they are done
+// waiting.
+func (t *lockTableImpl) tryClearLocksGE(key roachpb.Key) []roachpb.LockAcquisition {
+	t.locks.mu.Lock()
+	defer t.locks.mu.Unlock()
+
+	var locksToClear []*keyLocks
+	var lockAcquisitionsToReturn []roachpb.LockAcquisition
+	iter := t.locks.MakeIter()
+	for iter.SeekGE(&keyLocks{key: key}); iter.Valid(); iter.Next() {
+		l := iter.Cur()
+
+		// Add any held locks to the slice of returned LockAcquisitions that the RHS
+		// should attempt.
+		for hl := l.holders.Front(); hl != nil; hl = hl.Next() {
+			tl := hl.Value
+			// The returned locks are used to populate a new
+			// in-memory lock table. We only return unreplicated
+			// locks because replicated locks already exist on disk.
+			if tl == nil || tl.unreplicatedInfo.isEmpty() {
+				continue
+			}
+
+			for _, str := range unreplicatedHolderStrengths {
+				if tl.unreplicatedInfo.held(str) {
+					lockAcquisitionsToReturn = append(lockAcquisitionsToReturn, roachpb.LockAcquisition{
+						Span: roachpb.Span{
+							Key: l.key,
+						},
+						Txn:        *hl.Value.txn,
+						Durability: lock.Unreplicated,
+						Strength:   str,
+					})
+				}
+			}
+		}
+
+		if l.tryClearLock(true) {
+			locksToClear = append(locksToClear, l)
+		}
+	}
+	t.clearLocksMuLocked(locksToClear)
+	return lockAcquisitionsToReturn
+}
+
+func (t *lockTableImpl) clearLocksMuLocked(locksToClear []*keyLocks) {
 	t.locks.numKeysLocked.Add(int64(-len(locksToClear)))
 	if t.locks.Len() == len(locksToClear) {
 		// Fast-path full clear.
@@ -4345,7 +4965,6 @@ func (t *lockTableImpl) tryClearLocks(force bool, numToClear int) {
 			t.locks.Delete(l)
 		}
 	}
-	t.locks.mu.Unlock()
 }
 
 // findHighestLockStrengthInSpans returns the highest lock strength specified
@@ -4397,7 +5016,7 @@ func (t *lockTableImpl) tryGCLocks(tree *treeMu, locks []*keyLocks) {
 }
 
 // UpdateLocks implements the lockTable interface.
-func (t *lockTableImpl) UpdateLocks(up *roachpb.LockUpdate) error {
+func (t *lockTableImpl) UpdateLocks(_ context.Context, up *roachpb.LockUpdate) error {
 	_ = t.updateLockInternal(up)
 	return nil
 }
@@ -4462,14 +5081,34 @@ func (t *lockTableImpl) batchPushedLockResolution() bool {
 	return BatchPushedLockResolution.Get(&t.settings.SV)
 }
 
+// removeReaderFromKey removes the guard from the waitingReaders list of the
+// keyLocks at the given key, if the guard is present. This is called after a
+// successful push with virtual intent resolution so the guard does not remain
+// as a stale entry in the lock's waiter list.
+func (t *lockTableImpl) removeReaderFromKey(g *lockTableGuardImpl, key roachpb.Key) {
+	t.locks.mu.RLock()
+	defer t.locks.mu.RUnlock()
+	iter := t.locks.MakeIter()
+	iter.FirstOverlap(&keyLocks{key: key})
+	if !iter.Valid() {
+		return
+	}
+	kl := iter.Cur()
+	kl.mu.Lock()
+	defer kl.mu.Unlock()
+	for e := kl.waitingReaders.Front(); e != nil; e = e.Next() {
+		if e.Value == g {
+			kl.removeReader(e)
+			return
+		}
+	}
+}
+
 // PushedTransactionUpdated implements the lockTable interface.
-func (t *lockTableImpl) PushedTransactionUpdated(txn *roachpb.Transaction) {
-	// TODO(sumeer): We don't take any action for requests that are already
-	// waiting on locks held by txn. They need to take some action, like
-	// pushing, and resume their scan, to notice the change to this txn. We
-	// could be more proactive if we knew which locks in lockTableImpl were held
-	// by txn.
-	t.txnStatusCache.add(txn)
+func (t *lockTableImpl) PushedTransactionUpdated(
+	txn *roachpb.Transaction, clockObs roachpb.ObservedTimestamp,
+) {
+	t.txnStatusCache.add(txn, clockObs)
 }
 
 // Enable implements the lockTable interface.
@@ -4498,11 +5137,91 @@ func (t *lockTableImpl) Clear(disable bool) {
 		defer t.enabledMu.Unlock()
 		t.enabled = false
 	}
+	numLocks := t.locks.numKeysLocked.Load()
+	if numLocks > 0 {
+		log.KvExec.VInfof(context.Background(), 2,
+			"clearing lock table (locks=%d)", numLocks)
+	}
 	// The numToClear=0 is arbitrary since it is unused when force=true.
 	t.tryClearLocks(true /* force */, 0)
 	// Also clear the txn status cache, since it won't be needed any time
 	// soon and consumes memory.
 	t.txnStatusCache.clear()
+}
+
+// ClearGE implements the lockTable interface.
+func (t *lockTableImpl) ClearGE(key roachpb.Key) []roachpb.LockAcquisition {
+	numBefore := t.locks.numKeysLocked.Load()
+	acqs := t.tryClearLocksGE(key)
+	numCleared := numBefore - t.locks.numKeysLocked.Load()
+	if numCleared > 0 || len(acqs) > 0 {
+		log.KvExec.VInfof(context.Background(), 2,
+			"cleared %d lock(s) >= key %s, returning %d lock acquisitions",
+			numCleared, key, len(acqs))
+	}
+	return acqs
+}
+
+// ExportUnreplicatedLocks implements the lockTable interface.
+//
+// TODO(ssd): Once we have the full set of functions we need for lock flushing, we
+// should do a refactoring pass to reduce some of the duplication.
+func (t *lockTableImpl) ExportUnreplicatedLocks(
+	span roachpb.Span, exporter func(*roachpb.LockAcquisition) bool,
+) {
+	t.enabledMu.RLock()
+	defer t.enabledMu.RUnlock()
+	if !t.enabled {
+		return
+	}
+
+	t.locks.mu.RLock()
+	defer t.locks.mu.RUnlock()
+
+	exportKeyLocks := func(l *keyLocks) bool {
+		l.mu.Lock()
+		defer l.mu.Unlock()
+
+		if !l.key.Less(span.EndKey) {
+			return false
+		}
+
+		for hl := l.holders.Front(); hl != nil; hl = hl.Next() {
+			tl := hl.Value
+			if tl == nil || tl.unreplicatedInfo.isEmpty() {
+				continue
+			}
+
+			if tl.unreplicatedInfo.ineligibleForExport {
+				continue
+			}
+
+			for _, str := range unreplicatedHolderStrengths {
+				if tl.unreplicatedInfo.held(str) {
+					keepGoing := exporter(&roachpb.LockAcquisition{
+						Span: roachpb.Span{
+							Key: l.key,
+						},
+						Txn:            *hl.Value.txn,
+						Durability:     lock.Unreplicated,
+						Strength:       str,
+						IgnoredSeqNums: tl.unreplicatedInfo.ignoredSeqNums,
+					})
+					if !keepGoing {
+						return false
+					}
+				}
+			}
+		}
+		return true
+	}
+
+	iter := t.locks.MakeIter()
+	for iter.SeekGE(&keyLocks{key: span.Key}); iter.Valid(); iter.Next() {
+		if !exportKeyLocks(iter.Cur()) {
+			break
+		}
+	}
 }
 
 // QueryLockTableState implements the lockTable interface.
@@ -4621,8 +5340,8 @@ func (t *lockTableImpl) stringRLocked() string {
 	return sb.String()
 }
 
-// TestingSetMaxLocks implements the lockTable interface.
-func (t *lockTableImpl) TestingSetMaxLocks(maxKeysLocked int64) {
+// SetMaxLockTableSize implements the lockTable interface.
+func (t *lockTableImpl) SetMaxLockTableSize(maxKeysLocked int64) {
 	t.setMaxKeysLocked(maxKeysLocked)
 }
 

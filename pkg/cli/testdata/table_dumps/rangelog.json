@@ -1,0 +1,52 @@
+{
+  "events": [
+    {
+      "event": {
+        "timestamp": "2025-01-20T11:52:24.424851Z",
+        "range_id": 51,
+        "store_id": 1,
+        "event_type": 3,
+        "other_range_id": 57,
+        "info": {
+          "UpdatedDesc": {
+            "range_id": 51,
+            "start_key": "uA==",
+            "end_key": "wg==",
+            "internal_replicas": [
+              {
+                "node_id": 1,
+                "store_id": 1,
+                "replica_id": 1,
+                "type": 0
+              }
+            ],
+            "next_replica_id": 2,
+            "generation": 5,
+            "sticky_bit": {}
+          },
+          "RemovedDesc": {
+            "range_id": 57,
+            "start_key": "vw==",
+            "end_key": "wg==",
+            "internal_replicas": [
+              {
+                "node_id": 1,
+                "store_id": 1,
+                "replica_id": 1,
+                "type": 0
+              }
+            ],
+            "next_replica_id": 2,
+            "generation": 2,
+            "sticky_bit": {}
+          }
+        }
+      },
+      "pretty_info": {
+        "updated_desc": "r51:/Table/{48-58} [(n1,s1):1, next=2, gen=5]"
+      }
+    }
+  ]
+}
+
+

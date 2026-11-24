@@ -26,11 +26,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/errors"
 )
@@ -108,14 +111,14 @@ func (p *planner) HasAnyPrivilegeForSpecifier(
 	user username.SQLUsername,
 	privs []privilege.Privilege,
 ) (eval.HasAnyPrivilegeResult, error) {
-	desc, err := p.ResolveDescriptorForPrivilegeSpecifier(
+	privObject, err := p.ResolveObjectForPrivilegeSpecifier(
 		ctx,
 		specifier,
 	)
 	if err != nil {
 		return eval.HasNoPrivilege, err
 	}
-	if desc == nil {
+	if privObject == nil {
 		return eval.ObjectNotFound, nil
 	}
 
@@ -128,15 +131,19 @@ func (p *planner) HasAnyPrivilegeForSpecifier(
 			continue
 		}
 
-		if ok, err := p.HasPrivilege(ctx, desc, priv.Kind, user); err != nil {
+		if ok, err := p.HasPrivilege(ctx, privObject, priv.Kind, user); err != nil {
 			return eval.HasNoPrivilege, err
 		} else if !ok {
 			continue
 		}
 
 		if priv.GrantOption {
+			privDesc, err := p.getImmutablePrivilegeDescriptor(ctx, privObject)
+			if err != nil {
+				return eval.HasNoPrivilege, err
+			}
 			isGrantable, err := p.CheckGrantOptionsForUser(
-				ctx, desc.GetPrivileges(), desc, []privilege.Kind{priv.Kind}, user,
+				ctx, privDesc, privObject, []privilege.Kind{priv.Kind}, user,
 			)
 			if err != nil {
 				return eval.HasNoPrivilege, err
@@ -151,11 +158,11 @@ func (p *planner) HasAnyPrivilegeForSpecifier(
 	return eval.HasNoPrivilege, nil
 }
 
-// ResolveDescriptorForPrivilegeSpecifier resolves a tree.HasPrivilegeSpecifier
-// and returns the descriptor for the given object.
-func (p *planner) ResolveDescriptorForPrivilegeSpecifier(
+// ResolveObjectForPrivilegeSpecifier resolves a tree.HasPrivilegeSpecifier
+// and returns the privilege object for the given specifier.
+func (p *planner) ResolveObjectForPrivilegeSpecifier(
 	ctx context.Context, specifier eval.HasPrivilegeSpecifier,
-) (catalog.Descriptor, error) {
+) (privilege.Object, error) {
 	if specifier.DatabaseName != nil {
 		return p.Descriptors().ByNameWithLeased(p.txn).Get().Database(ctx, *specifier.DatabaseName)
 	} else if specifier.DatabaseOID != nil {
@@ -226,6 +233,9 @@ func (p *planner) ResolveDescriptorForPrivilegeSpecifier(
 	} else if specifier.FunctionOID != nil {
 		fnID := funcdesc.UserDefinedFunctionOIDToID(*specifier.FunctionOID)
 		return p.Descriptors().ByIDWithLeased(p.txn).WithoutNonPublic().Get().Function(ctx, fnID)
+	} else if specifier.IsGlobalPrivilege {
+		// Global privileges use a synthetic privilege object.
+		return syntheticprivilege.GlobalPrivilegeObject, nil
 	}
 	return nil, errors.AssertionFailedf("invalid HasPrivilegeSpecifier")
 }
@@ -298,6 +308,27 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 			_, descriptor, err := p.ResolveMutableTypeDescriptor(ctx, typ, required)
 			if err != nil {
 				return nil, err
+			}
+
+			// If the resolved type is an implicit array type (ALIAS), redirect the
+			// privilege change to the base element type. This matches PostgreSQL,
+			// which does not allow setting privileges on array types directly.
+			if descriptor.Kind == descpb.TypeDescriptor_ALIAS &&
+				descriptor.Alias != nil &&
+				descriptor.Alias.Family() == types.ArrayFamily {
+				baseTypeID := typedesc.GetUserDefinedTypeDescID(descriptor.Alias.ArrayContents())
+				baseDesc, err := p.Descriptors().MutableByID(p.txn).Type(ctx, baseTypeID)
+				if err != nil {
+					return nil, err
+				}
+				p.BufferClientNotice(
+					ctx,
+					pgnotice.Newf(
+						"privileges on array type %s are applied to the element type %s",
+						descriptor.GetName(), baseDesc.GetName(),
+					),
+				)
+				descriptor = baseDesc
 			}
 
 			descs = append(descs, DescriptorWithObjectType{
@@ -420,10 +451,6 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 
 			return descs, nil
 		} else if targets.AllFunctionsInSchema || targets.AllProceduresInSchema {
-			isProcs := true
-			if targets.AllFunctionsInSchema {
-				isProcs = false
-			}
 			var descs []DescriptorWithObjectType
 			for _, scName := range targets.Schemas {
 				dbName := p.CurrentDatabase()
@@ -443,10 +470,16 @@ func (p *planner) getDescriptorsFromTargetListForPrivilegeChange(
 					if err != nil {
 						return err
 					}
-					if isProcs != fn.IsProcedure() {
-						// Skip functions if ALL PROCEDURES was specified, and
-						// skip procedures if ALL FUNCTIONS was specified.
-						return nil
+					// Only include procedures if ALL PROCEDURES was specified, and
+					// only include functions if ALL FUNCTIONS was specified.
+					if fn.IsProcedure() {
+						if !targets.AllProceduresInSchema {
+							return nil
+						}
+					} else {
+						if !targets.AllFunctionsInSchema {
+							return nil
+						}
 					}
 					descs = append(descs, DescriptorWithObjectType{
 						descriptor: fn,
@@ -581,6 +614,12 @@ func (p *planner) getFullyQualifiedNamesFromIDs(
 				return nil, err
 			}
 			fullyQualifiedNames = append(fullyQualifiedNames, fName.FQString())
+		case catalog.TypeDescriptor:
+			typeName, err := p.getQualifiedTypeName(ctx, t)
+			if err != nil {
+				return nil, err
+			}
+			fullyQualifiedNames = append(fullyQualifiedNames, typeName.FQString())
 		}
 	}
 	return fullyQualifiedNames, nil
@@ -696,23 +735,23 @@ func expandIndexName(
 	return &tableName, tblMutable, nil
 }
 
-// getTableAndIndex returns the table and index descriptors for a
+// GetTableAndIndex returns the table and index descriptors for a
 // TableIndexName.
 //
 // It can return indexes that are being rolled out.
-func (p *planner) getTableAndIndex(
+func (p *planner) GetTableAndIndex(
 	ctx context.Context,
 	tableWithIndex *tree.TableIndexName,
 	privilege privilege.Kind,
 	skipCache bool,
 ) (prefix catalog.ResolvedObjectPrefix, mut *tabledesc.Mutable, idx catalog.Index, err error) {
 	p.runWithOptions(resolveFlags{skipCache: skipCache}, func() {
-		prefix, mut, idx, err = p.getTableAndIndexImpl(ctx, tableWithIndex, privilege)
+		prefix, mut, idx, err = p.GetTableAndIndexImpl(ctx, tableWithIndex, privilege)
 	})
 	return prefix, mut, idx, err
 }
 
-func (p *planner) getTableAndIndexImpl(
+func (p *planner) GetTableAndIndexImpl(
 	ctx context.Context, tableWithIndex *tree.TableIndexName, privilege privilege.Kind,
 ) (catalog.ResolvedObjectPrefix, *tabledesc.Mutable, catalog.Index, error) {
 	_, resolvedPrefix, tbl, idx, err := resolver.ResolveIndex(
@@ -782,6 +821,17 @@ type fkSelfResolver struct {
 
 var _ resolver.SchemaResolver = &fkSelfResolver{}
 
+// checkFKReferencesPrivilege implements fkPrivilegeChecker by delegating to the
+// inner SchemaResolver.
+func (r *fkSelfResolver) checkFKReferencesPrivilege(
+	ctx context.Context, parent catalog.TableDescriptor,
+) error {
+	if checker, ok := r.SchemaResolver.(fkPrivilegeChecker); ok {
+		return checker.checkFKReferencesPrivilege(ctx, parent)
+	}
+	return nil
+}
+
 // LookupObject implements the tree.ObjectNameExistingResolver interface.
 func (r *fkSelfResolver) LookupObject(
 	ctx context.Context, flags tree.ObjectLookupFlags, dbName, scName, obName string,
@@ -798,6 +848,10 @@ func (r *fkSelfResolver) LookupObject(
 	flags.IncludeOffline = false
 	return r.SchemaResolver.LookupObject(ctx, flags, dbName, scName, obName)
 }
+
+// internalLookupCtxFallbackFn fallback function if something
+// is not cached.
+type internalLookupCtxFallbackFn = func(id descpb.ID) (catalog.Descriptor, error)
 
 // internalLookupCtx can be used in contexts where all descriptors
 // have been recently read, to accelerate the lookup of
@@ -823,6 +877,8 @@ type internalLookupCtx struct {
 	typIDs      []descpb.ID
 	fnDescs     map[descpb.ID]catalog.FunctionDescriptor
 	fnIDs       []descpb.ID
+	// Optionally, a fallback look up function can be provided.
+	fallbackFn internalLookupCtxFallbackFn
 }
 
 // GetSchemaName looks up a schema with the given id in the LookupContext.
@@ -850,6 +906,14 @@ func (l *internalLookupCtx) GetSchemaName(
 	}
 
 	schemaName, found := l.schemaNames[id]
+	// Attempt a fallback lookup if we don't have this schema for some reason.
+	if !found && l.fallbackFn != nil {
+		desc, err := l.fallbackFn(id)
+		if err == nil && !desc.Dropped() {
+			schemaName = desc.GetName()
+			found = true
+		}
+	}
 	return schemaName, found, nil
 }
 
@@ -873,9 +937,12 @@ var useIndexLookupForDescriptorsInDatabase = settings.RegisterBoolSetting(
 type tableLookupFn = *internalLookupCtx
 
 // newInternalLookupCtx provides cached access to a set of descriptors for use
-// in virtual tables.
+// in virtual tables. Optionally, if fallbackFn missing descriptors are
+// looked up, which is required if a leased descriptors were used for population.
 func newInternalLookupCtx(
-	descs []catalog.Descriptor, prefix catalog.DatabaseDescriptor,
+	descs []catalog.Descriptor,
+	prefix catalog.DatabaseDescriptor,
+	fallbackFn internalLookupCtxFallbackFn,
 ) *internalLookupCtx {
 	dbNames := make(map[descpb.ID]string)
 	dbDescs := make(map[descpb.ID]catalog.DatabaseDescriptor)
@@ -938,12 +1005,23 @@ func newInternalLookupCtx(
 		dbIDs:       dbIDs,
 		typIDs:      typIDs,
 		fnIDs:       fnIDs,
+		fallbackFn:  fallbackFn,
 	}
 }
 
 func (l *internalLookupCtx) getDatabaseByID(id descpb.ID) (catalog.DatabaseDescriptor, error) {
 	db, ok := l.dbDescs[id]
-	if !ok {
+	if ok {
+		return db, nil
+	}
+	if l.fallbackFn != nil {
+		desc, err := l.fallbackFn(id)
+		if err != nil {
+			return nil, err
+		}
+		db, _ = desc.(catalog.DatabaseDescriptor)
+	}
+	if db == nil {
 		return nil, sqlerrors.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", id))
 	}
 	return db, nil
@@ -951,7 +1029,17 @@ func (l *internalLookupCtx) getDatabaseByID(id descpb.ID) (catalog.DatabaseDescr
 
 func (l *internalLookupCtx) getTableByID(id descpb.ID) (catalog.TableDescriptor, error) {
 	tb, ok := l.tbDescs[id]
-	if !ok {
+	if ok {
+		return tb, nil
+	}
+	if l.fallbackFn != nil {
+		desc, err := l.fallbackFn(id)
+		if err != nil {
+			return nil, err
+		}
+		tb, _ = desc.(catalog.TableDescriptor)
+	}
+	if tb == nil {
 		return nil, sqlerrors.NewUndefinedRelationError(
 			tree.NewUnqualifiedTableName(tree.Name(fmt.Sprintf("[%d]", id))))
 	}
@@ -960,16 +1048,49 @@ func (l *internalLookupCtx) getTableByID(id descpb.ID) (catalog.TableDescriptor,
 
 func (l *internalLookupCtx) getTypeByID(id descpb.ID) (catalog.TypeDescriptor, error) {
 	typ, ok := l.typDescs[id]
-	if !ok {
+	if ok {
+		return typ, nil
+	}
+	if l.fallbackFn != nil {
+		desc, err := l.fallbackFn(id)
+		if err != nil {
+			return nil, err
+		}
+		typ, _ = desc.(catalog.TypeDescriptor)
+	}
+	if typ == nil {
 		return nil, sqlerrors.NewUndefinedTypeError(
 			tree.NewUnqualifiedTypeName(fmt.Sprintf("[%d]", id)))
 	}
 	return typ, nil
 }
 
+// hasSchemaWithID reports whether a schema with the given ID exists in the
+// lookup context.
+func (l *internalLookupCtx) hasSchemaWithID(id descpb.ID) bool {
+	if id == keys.SystemPublicSchemaID {
+		return true
+	}
+	sc, err := l.getSchemaByID(id)
+	if err != nil {
+		return false
+	}
+	return sc != nil
+}
+
 func (l *internalLookupCtx) getSchemaByID(id descpb.ID) (catalog.SchemaDescriptor, error) {
 	sc, ok := l.schemaDescs[id]
-	if !ok {
+	if ok {
+		return sc, nil
+	}
+	if l.fallbackFn != nil {
+		desc, err := l.fallbackFn(id)
+		if err != nil {
+			return nil, err
+		}
+		sc, _ = desc.(catalog.SchemaDescriptor)
+	}
+	if sc == nil {
 		if id == keys.SystemPublicSchemaID {
 			return schemadesc.GetPublicSchema(), nil
 		}
@@ -993,27 +1114,43 @@ func (l *internalLookupCtx) getSchemaNameByID(id descpb.ID) (string, error) {
 }
 
 func (l *internalLookupCtx) getDatabaseName(table catalog.Descriptor) string {
-	parentName := l.dbNames[table.GetParentID()]
-	if parentName == "" {
-		// The parent database was deleted. This is possible e.g. when
-		// a database is dropped with CASCADE, and someone queries
-		// this table before the dropped table descriptors are
-		// effectively deleted.
-		parentName = fmt.Sprintf("[%d]", table.GetParentID())
+	parentName, exists := l.dbNames[table.GetParentID()]
+	if parentName != "" {
+		return parentName
 	}
-	return parentName
+	// Attempt to resolve the parent name from the lookup function.
+	if !exists && l.fallbackFn != nil {
+		desc, err := l.fallbackFn(table.GetParentID())
+		// If we are able to receive the descriptor, and it
+		// is not dropped, then return the name. Otherwise,
+		// no namespace entry exists.
+		if err == nil && !desc.Dropped() {
+			return desc.GetName()
+		}
+	}
+	// The parent database was deleted. This is possible e.g. when
+	// a database is dropped with CASCADE, and someone queries
+	// this table before the dropped table descriptors are
+	// effectively deleted.
+	return fmt.Sprintf("[%d]", table.GetParentID())
 }
 
 func (l *internalLookupCtx) getSchemaName(table catalog.TableDescriptor) string {
-	schemaName := l.schemaNames[table.GetParentSchemaID()]
-	if schemaName == "" {
-		// The parent schema was deleted. This is possible e.g. when
-		// a schema is dropped with CASCADE, and someone queries
-		// this table before the dropped table descriptors are
-		// effectively deleted.
-		schemaName = fmt.Sprintf("[%d]", table.GetParentSchemaID())
+	schemaName, exists := l.schemaNames[table.GetParentSchemaID()]
+	if schemaName != "" {
+		return schemaName
 	}
-	return schemaName
+	// Attempt to resolve the parent name from the lookup function.
+	if !exists && l.fallbackFn != nil {
+		desc, err := l.fallbackFn(table.GetParentSchemaID())
+		// If we are able to receive the descriptor, and it
+		// is not dropped, then return the name. Otherwise,
+		// no namespace entry exists.
+		if err == nil && !desc.Dropped() {
+			return desc.GetName()
+		}
+	}
+	return fmt.Sprintf("[%d]", table.GetParentSchemaID())
 }
 
 // getTableNameFromTableDescriptor returns a TableName object for a given

@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 func init() {
@@ -29,6 +30,10 @@ func Get(
 	h := cArgs.Header
 	reply := resp.(*kvpb.GetResponse)
 
+	if err := args.Validate(h); err != nil {
+		return result.Result{}, err
+	}
+
 	var lockTableForSkipLocked storage.LockTableView
 	if h.WaitPolicy == lock.WaitPolicy_SkipLocked {
 		lockTableForSkipLocked = newRequestBoundLockTableView(
@@ -37,11 +42,24 @@ func Get(
 		defer lockTableForSkipLocked.Close()
 	}
 
-	getRes, err := storage.MVCCGet(ctx, readWriter, args.Key, h.Timestamp, storage.MVCCGetOptions{
+	readTimestamp := h.Timestamp
+	failOnMoreRecent := args.KeyLockingStrength != lock.None
+	expectExclusionSince := !args.ExpectExclusionSince.IsEmpty()
+
+	// If ExpectExclusionSince is set, use it as the read timestamp and set the
+	// MoreRecentPolicy to ExclusionViolationErrorOnMoreRecent to ensure that an
+	// exclusion violation error is returned if a write has occurred since the
+	// exclusion timestamp.
+	if expectExclusionSince {
+		readTimestamp = args.ExpectExclusionSince
+		failOnMoreRecent = true
+	}
+
+	getRes, err := storage.MVCCGet(ctx, readWriter, args.Key, readTimestamp, storage.MVCCGetOptions{
 		Inconsistent:          h.ReadConsistency != kvpb.CONSISTENT,
 		SkipLocked:            h.WaitPolicy == lock.WaitPolicy_SkipLocked,
 		Txn:                   h.Txn,
-		FailOnMoreRecent:      args.KeyLockingStrength != lock.None,
+		FailOnMoreRecent:      failOnMoreRecent,
 		ScanStats:             cArgs.ScanStats,
 		Uncertainty:           cArgs.Uncertainty,
 		MemoryAccount:         cArgs.EvalCtx.GetResponseMemoryAccount(),
@@ -52,8 +70,20 @@ func Get(
 		AllowEmpty:            cArgs.Header.AllowEmpty,
 		ReadCategory:          fs.BatchEvalReadCategory,
 		ReturnRawMVCCValues:   args.ReturnRawMVCCValues,
+		WorkloadID:            h.WorkloadID,
 	})
 	if err != nil {
+		// If the user has set ExpectExclusionSince, transform any WriteTooOld error
+		// into an ExclusionViolationError.
+		if expectExclusionSince {
+			if wtoErr := (*kvpb.WriteTooOldError)(nil); errors.As(err, &wtoErr) {
+				err = kvpb.NewExclusionViolationError(
+					readTimestamp,
+					wtoErr.ActualTimestamp.Prev(),
+					args.Key,
+				)
+			}
+		}
 		return result.Result{}, err
 	}
 	reply.ResumeSpan = getRes.ResumeSpan
@@ -69,7 +99,7 @@ func Get(
 		intents = append(intents, *getRes.Intent)
 	}
 
-	reply.Value = getRes.Value
+	reply.Value = getRes.Value.ToPointer()
 	if h.ReadConsistency == kvpb.READ_UNCOMMITTED {
 		var intentVals []roachpb.KeyValue
 		// NOTE: MVCCGet uses a Prefix iterator, so we want to use one in
@@ -83,15 +113,21 @@ func Get(
 			case 1:
 				reply.IntentValue = &intentVals[0].Value
 			default:
-				log.Fatalf(ctx, "more than 1 intent on single key: %v", intentVals)
+				log.KvExec.Fatalf(ctx, "more than 1 intent on single key: %v", intentVals)
 			}
 		}
 	}
 
+	shouldLockKey := getRes.Value.Exists() || args.LockNonExisting
 	var res result.Result
-	if args.KeyLockingStrength != lock.None && getRes.Value != nil {
+	if args.KeyLockingStrength != lock.None && shouldLockKey {
+		// ExpectExclusionSince is used by callers (namely, txnWriteBuffers) that
+		// are likely to be sending replicated, locking Get requests at sequence
+		// numbers corresponding to unreplicated locks taken earlier in the
+		// transaction. In this case, sequence number regression is not unexpected.
+		allowSequenceNumberRegression := args.ExpectExclusionSince.IsSet()
 		acq, err := acquireLockOnKey(ctx, readWriter, h.Txn, args.KeyLockingStrength,
-			args.KeyLockingDurability, args.Key, cArgs.Stats, cArgs.EvalCtx.ClusterSettings())
+			args.KeyLockingDurability, args.Key, cArgs.Stats, cArgs.EvalCtx.ClusterSettings(), allowSequenceNumberRegression)
 		if err != nil {
 			return result.Result{}, err
 		}

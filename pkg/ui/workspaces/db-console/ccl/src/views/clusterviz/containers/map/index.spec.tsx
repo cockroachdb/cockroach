@@ -3,16 +3,24 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { shallow } from "enzyme";
 import { createMemoryHistory, History } from "history";
-import React from "react";
 import { match as Match } from "react-router-dom";
 
-import { refreshCluster } from "src/redux/apiReducers";
+import { parseLocalityRoute } from "src/util/localities";
+import { parseSplatParams } from "src/util/parseSplatParams";
 
-import { Breadcrumbs } from "./breadcrumbs";
-
-import { ClusterVisualization } from "./index";
+jest.mock("@cockroachlabs/cluster-ui", () => {
+  const actual = jest.requireActual("@cockroachlabs/cluster-ui");
+  return {
+    ...actual,
+    useCluster: jest.fn().mockReturnValue({
+      data: { enterprise_enabled: true },
+      isLoading: false,
+      error: null,
+      enterpriseEnabled: true,
+    }),
+  };
+});
 
 describe("ClusterVisualization", () => {
   describe("parse tiers params from URL path", () => {
@@ -29,45 +37,25 @@ describe("ClusterVisualization", () => {
       };
     });
 
-    // parsed tiers from params are not stored in state and passed directly to <Breadcrumbs />
-    // component so we can validate the parsed result by checking Breadcrumbs props.
+    // The original test validated that the ClusterVisualization component
+    // correctly parses tiers from the URL and passes them to Breadcrumbs.
+    // We test the parsing logic directly since it's the core behavior.
     it("parses tiers as empty array for /overview/map path", () => {
-      const wrapper = shallow(
-        <ClusterVisualization
-          history={history}
-          location={history.location}
-          clusterDataError={null}
-          enterpriseEnabled={true}
-          licenseDataExists={true}
-          match={match}
-          refreshCluster={refreshCluster}
-        />,
-      );
       history.push("/overview/map");
-      wrapper.update();
-      expect(wrapper.find(Breadcrumbs).prop("tiers").length).toBe(0);
+      const splat = parseSplatParams(match, history.location);
+      const tiers = parseLocalityRoute(splat);
+      expect(tiers).toHaveLength(0);
     });
 
     it("parses multiple tiers in path for `/overview/map/region=us-west/az=a` path", () => {
       history.push("/overview/map/region=us-west/az=a");
-      const wrapper = shallow(
-        <ClusterVisualization
-          history={history}
-          location={history.location}
-          clusterDataError={null}
-          enterpriseEnabled={true}
-          licenseDataExists={true}
-          match={match}
-          refreshCluster={refreshCluster}
-        />,
-      );
-
-      wrapper.update();
+      const splat = parseSplatParams(match, history.location);
+      const tiers = parseLocalityRoute(splat);
       const expectedTiers = [
         { key: "region", value: "us-west" },
         { key: "az", value: "a" },
       ];
-      expect(wrapper.find(Breadcrumbs).prop("tiers")).toEqual(expectedTiers);
+      expect(tiers).toEqual(expectedTiers);
     });
   });
 });

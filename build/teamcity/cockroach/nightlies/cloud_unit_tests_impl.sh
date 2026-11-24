@@ -11,8 +11,8 @@ set -xeuo pipefail
 dir="$(dirname $(dirname $(dirname $(dirname "${0}"))))"
 source "$dir/teamcity-support.sh"  # For log_into_gcloud
 
-bazel build //pkg/cmd/bazci --config=ci
-BAZEL_BIN=$(bazel info bazel-bin --config=ci)
+bazel build //pkg/cmd/bazci
+BAZEL_BIN=$(bazel info bazel-bin)
 
 ARTIFACTS_DIR=/artifacts
 
@@ -63,14 +63,25 @@ bazel_test_env=(--test_env=GO_TEST_WRAP_TESTV=1 \
 exit_status=0
 
 $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci -- test --config=ci \
-    //pkg/cloud/gcp:gcp_test //pkg/cloud/amazon:amazon_test //pkg/ccl/cloudccl/gcp:gcp_test //pkg/ccl/cloudccl/amazon:amazon_test \
+    //pkg/cloud/gcp:gcp_test //pkg/cloud/amazon:amazon_test \
     //pkg/cloud/azure:azure_test //pkg/cloud/azure:azure_test \
     "${bazel_test_env[@]}" \
     --test_timeout=900 \
     || exit_status=$?
 
+test_filter="^TestCloudBackupRestore"
+# If the TESTS environment variable is set, then it must start with "^TestCloudBackupRestore"
+# or else an error will be raised.
+if [ -n "${TESTS:-}" ]; then
+    if [[ "$TESTS" != ^TestCloudBackupRestore* ]]; then
+        echo "TESTS environment variable must start with '^TestCloudBackupRestore'"
+        exit 1
+    fi
+    test_filter="$TESTS"
+fi
+
 $BAZEL_BIN/pkg/cmd/bazci/bazci_/bazci -- test --config=ci \
-    //pkg/ccl/backupccl:backupccl_test --test_filter='^TestCloudBackupRestore' \
+    //pkg/backup:backup_test --test_filter="$test_filter" \
     "${bazel_test_env[@]}" \
     --test_timeout=900 \
     || exit_status=$?

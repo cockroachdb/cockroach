@@ -9,7 +9,7 @@ Schema change plan for DROP SCHEMA ‹db›.‹sc›;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 6 elements transitioning toward ABSENT
- │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 106 (sc-), Name: "sc", ReferencedDescID: 104 (db)}
+ │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 106 (sc-), Name: "sc", ReferencedDescID: 104 (db), IntValue: 0}
  │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 106 (sc-)}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 106 (sc-), Name: "admin"}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 106 (sc-), Name: "root"}
@@ -19,13 +19,13 @@ Schema change plan for DROP SCHEMA ‹db›.‹sc›;
  │              ├── MarkDescriptorAsDropped {"DescriptorID":106}
  │              ├── RemoveSchemaParent {"Parent":{"ParentDatabaseID":104,"SchemaID":106}}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":106,"Name":"sc"}}
- │              ├── NotImplementedForPublicObjects {"DescID":106,"ElementType":"scpb.Owner"}
+ │              ├── RemoveOwner {"DescriptorID":106}
  │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"admin"}
  │              └── RemoveUserPrivileges {"DescriptorID":106,"User":"root"}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
  │    │    ├── 6 elements transitioning toward ABSENT
- │    │    │    ├── ABSENT  → PUBLIC Namespace:{DescID: 106 (sc-), Name: "sc", ReferencedDescID: 104 (db)}
+ │    │    │    ├── ABSENT  → PUBLIC Namespace:{DescID: 106 (sc-), Name: "sc", ReferencedDescID: 104 (db), IntValue: 0}
  │    │    │    ├── ABSENT  → PUBLIC Owner:{DescID: 106 (sc-)}
  │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 106 (sc-), Name: "admin"}
  │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 106 (sc-), Name: "root"}
@@ -35,7 +35,7 @@ Schema change plan for DROP SCHEMA ‹db›.‹sc›;
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
  │         ├── 6 elements transitioning toward ABSENT
- │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 106 (sc-), Name: "sc", ReferencedDescID: 104 (db)}
+ │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 106 (sc-), Name: "sc", ReferencedDescID: 104 (db), IntValue: 0}
  │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 106 (sc-)}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 106 (sc-), Name: "admin"}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 106 (sc-), Name: "root"}
@@ -45,12 +45,12 @@ Schema change plan for DROP SCHEMA ‹db›.‹sc›;
  │              ├── MarkDescriptorAsDropped {"DescriptorID":106}
  │              ├── RemoveSchemaParent {"Parent":{"ParentDatabaseID":104,"SchemaID":106}}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":106,"Name":"sc"}}
- │              ├── NotImplementedForPublicObjects {"DescID":106,"ElementType":"scpb.Owner"}
+ │              ├── RemoveOwner {"DescriptorID":106}
  │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"admin"}
  │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"root"}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":106,"Initialize":true}
- │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+ │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"Pending: Updatin..."}
  └── PostCommitNonRevertiblePhase
       └── Stage 1 of 1 in PostCommitNonRevertiblePhase
            ├── 1 element transitioning toward ABSENT

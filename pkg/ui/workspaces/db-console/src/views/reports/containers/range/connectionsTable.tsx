@@ -14,32 +14,33 @@ import sortBy from "lodash/sortBy";
 import React from "react";
 
 import * as protos from "src/js/protos";
-import { CachedDataReducerState } from "src/redux/cachedDataReducer";
 
 interface ConnectionsTableProps {
-  range: CachedDataReducerState<protos.cockroach.server.serverpb.RangeResponse>;
+  data: protos.cockroach.server.serverpb.RangeResponse;
+  error?: Error;
+  isLoading?: boolean;
 }
 
 export default function ConnectionsTable(props: ConnectionsTableProps) {
-  const { range } = props;
+  const { data, error, isLoading: loading } = props;
   let ids: number[];
   let viaNodeID = "";
-  if (range && !range.inFlight && !isNil(range.data)) {
+  if (data && !isNil(data)) {
     ids = flow(
       keys,
       nodeIds => map(nodeIds, id => parseInt(id, 10)),
       nodeIds => sortBy(nodeIds, id => id),
-    )(range.data.responses_by_node_id);
-    viaNodeID = ` (via n${range.data.node_id.toString()})`;
+    )(data.responses_by_node_id);
+    viaNodeID = ` (via n${data.node_id.toString()})`;
   }
 
   return (
     <div>
       <h2 className="base-heading">Connections {viaNodeID}</h2>
       <Loading
-        loading={!range || range.inFlight}
+        loading={loading}
         page={"connections"}
-        error={range && range.lastError}
+        error={error}
         render={() => (
           <table className="connections-table">
             <tbody>
@@ -58,7 +59,7 @@ export default function ConnectionsTable(props: ConnectionsTableProps) {
                 </th>
               </tr>
               {map(ids, id => {
-                const resp = range.data.responses_by_node_id[id];
+                const resp = data.responses_by_node_id[id];
                 const rowClassName = classNames("connections-table__row", {
                   "connections-table__row--warning":
                     !resp.response || !isEmpty(resp.error_message),

@@ -134,8 +134,20 @@ func prev(version roachpb.Version) roachpb.Version {
 		if version.Minor > 1 {
 			return roachpb.Version{Major: version.Major, Minor: version.Minor - 1}
 		}
-		// Here we assume that there's going to only be 2 releases per year.
-		// Otherwise we'd need to keep some history of what releases we've had.
+
+		// version is the first release of that year, e.g. MM.1
+
+		v25_1 := roachpb.Version{Major: 25, Minor: 1}
+		if v25_1.Equal(version) {
+			// For 2024, we had 3 releases that year.
+			return roachpb.Version{Major: 24, Minor: 3}
+		}
+		if v25_1.Less(version) {
+			// 2025 onwards, we had 4 releases per year.
+			return roachpb.Version{Major: version.Major - 1, Minor: 4}
+		}
+
+		// Prior to 2024, we had 2 releases per year.
 		return roachpb.Version{Major: version.Major - 1, Minor: 2}
 	}
 
@@ -146,7 +158,7 @@ func prev(version roachpb.Version) roachpb.Version {
 	// Logic for versions below 19.1.
 
 	if version.Major > 2 {
-		log.Fatalf(context.Background(), "can't compute previous version for %s", version)
+		log.Dev.Fatalf(context.Background(), "can't compute previous version for %s", version)
 	}
 
 	if version.Minor != 0 {
@@ -154,6 +166,50 @@ func prev(version roachpb.Version) roachpb.Version {
 	} else {
 		// version will be at least 2.0-X, so it's safe to set new Major to be version.Major-1.
 		return roachpb.Version{Major: version.Major - 1}
+	}
+}
+
+func TestPrev(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tests := []struct {
+		this, prev roachpb.Version
+	}{
+		// releases 2025+: 4 releases per year.
+		{
+			this: roachpb.Version{Major: 28, Minor: 4},
+			prev: roachpb.Version{Major: 28, Minor: 3},
+		},
+		{
+			this: roachpb.Version{Major: 28, Minor: 1},
+			prev: roachpb.Version{Major: 27, Minor: 4},
+		},
+		{
+			this: roachpb.Version{Major: 26, Minor: 1},
+			prev: roachpb.Version{Major: 25, Minor: 4},
+		},
+		// releases 2024: 3 releases per year.
+		{
+			this: roachpb.Version{Major: 25, Minor: 1},
+			prev: roachpb.Version{Major: 24, Minor: 3},
+		},
+		// releases 2019-2023: Calendar versioning, with 2 releases per year
+		{
+			this: roachpb.Version{Major: 24, Minor: 1},
+			prev: roachpb.Version{Major: 23, Minor: 2},
+		},
+		{
+			this: roachpb.Version{Major: 21, Minor: 1},
+			prev: roachpb.Version{Major: 20, Minor: 2},
+		},
+	}
+	for _, test := range tests {
+		t.Run("", func(t *testing.T) {
+			if p := prev(test.this); p != test.prev {
+				t.Errorf("expected %s, got %s", test.prev, p)
+			}
+		})
 	}
 }
 
@@ -188,11 +244,9 @@ func TestClusterVersionPersistedOnJoin(t *testing.T) {
 	defer tc.TestCluster.Stopper().Stop(ctx)
 
 	for i := 0; i < len(tc.TestCluster.Servers); i++ {
-		for _, engine := range tc.TestCluster.Servers[i].Engines() {
-			cv := engine.MinVersion()
-			if cv != newVersion {
-				t.Fatalf("n%d: expected version %v, got %v", i+1, newVersion, cv)
-			}
+		for _, e := range tc.TestCluster.Servers[i].Engines() {
+			require.Equalf(t, newVersion, e.StateEngine().MinVersion(), "n%d", i+1)
+			require.Equalf(t, newVersion, e.LogEngine().MinVersion(), "n%d", i+1)
 		}
 	}
 }
@@ -240,21 +294,14 @@ func TestClusterVersionUpgrade(t *testing.T) {
 	}
 
 	// Set CLUSTER SETTING cluster.preserve_downgrade_option to oldVersion to prevent upgrade.
-	if err := tc.setDowngrade(0, oldVersion.String()); err != nil {
-		t.Fatalf("error setting CLUSTER SETTING cluster.preserve_downgrade_option: %s", err)
-	}
+	require.NoError(t, tc.setDowngrade(0, oldVersion.String()))
 	close(disableUpgradeCh)
 
 	// Check the cluster version is still oldVersion.
-	curVersion := tc.getVersionFromSelect(0)
-	if curVersion != oldVersion.String() {
-		t.Fatalf("cluster version should still be %s, but got %s", oldVersion, curVersion)
-	}
+	require.Equal(t, oldVersion.String(), tc.getVersionFromSelect(0))
 
 	// Reset cluster.preserve_downgrade_option to enable auto upgrade.
-	if err := tc.resetDowngrade(0); err != nil {
-		t.Fatalf("error resetting CLUSTER SETTING cluster.preserve_downgrade_option: %s", err)
-	}
+	require.NoError(t, tc.resetDowngrade(0))
 
 	// Check the cluster version is bumped to newVersion.
 	testutils.SucceedsWithin(t, func() error {
@@ -263,7 +310,7 @@ func TestClusterVersionUpgrade(t *testing.T) {
 		}
 		return nil
 	}, 3*time.Minute)
-	curVersion = tc.getVersionFromSelect(0)
+	curVersion := tc.getVersionFromSelect(0)
 	isNoopUpdate := curVersion == newVersion.String()
 
 	testutils.SucceedsWithin(t, func() error {
@@ -274,7 +321,6 @@ func TestClusterVersionUpgrade(t *testing.T) {
 			if isActive := v.IsActiveVersion(newVersion); isActive != wantActive {
 				return errors.Errorf("%d: v%s active=%t (wanted %t)", i, newVersion, isActive, wantActive)
 			}
-
 			if tableV, curV := tc.getVersionFromSelect(i), v.String(); tableV != curV {
 				return errors.Errorf("%d: read v%s from table, v%s from setting", i, tableV, curV)
 			}
@@ -320,15 +366,11 @@ func TestClusterVersionUpgrade(t *testing.T) {
 
 	// Since the wrapped version setting exposes the new versions, it must
 	// definitely be present on all stores on the first try.
-	if err := tc.Servers[1].GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
-		cv := s.TODOEngine().MinVersion()
-		if act := cv.String(); act != exp {
-			t.Fatalf("%s: %s persisted, but should be %s", s, act, exp)
-		}
+	require.NoError(t, tc.Servers[1].GetStores().(*kvserver.Stores).VisitStores(func(s *kvserver.Store) error {
+		require.Equal(t, exp, s.StateEngine().MinVersion().String())
+		require.Equal(t, exp, s.LogEngine().MinVersion().String())
 		return nil
-	}); err != nil {
-		t.Fatal(err)
-	}
+	}))
 }
 
 // Test that, after cluster bootstrap, the different ways of getting the cluster

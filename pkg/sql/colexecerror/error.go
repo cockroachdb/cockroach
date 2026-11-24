@@ -170,12 +170,13 @@ func CatchVectorizedRuntimeError(operation func()) (retErr error) {
 // Multiple actual packages can have the same prefix as a single constant string
 // defined below, but all of such packages are allowed to be caught from.
 const (
-	colPackagesPrefix      = "github.com/cockroachdb/cockroach/pkg/col"
-	encodingPackagePrefix  = "github.com/cockroachdb/cockroach/pkg/util/encoding"
-	execinfraPackagePrefix = "github.com/cockroachdb/cockroach/pkg/sql/execinfra"
-	sqlColPackagesPrefix   = "github.com/cockroachdb/cockroach/pkg/sql/col"
-	sqlRowPackagesPrefix   = "github.com/cockroachdb/cockroach/pkg/sql/row"
-	sqlSemPackagesPrefix   = "github.com/cockroachdb/cockroach/pkg/sql/sem"
+	colPackagesPrefix         = "github.com/cockroachdb/cockroach/pkg/col"
+	encodingPackagePrefix     = "github.com/cockroachdb/cockroach/pkg/util/encoding"
+	execinfraPackagePrefix    = "github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	sqlColPackagesPrefix      = "github.com/cockroachdb/cockroach/pkg/sql/col"
+	sqlRowPackagesPrefix      = "github.com/cockroachdb/cockroach/pkg/sql/row"
+	sqlSemPackagesPrefix      = "github.com/cockroachdb/cockroach/pkg/sql/sem"
+	sqlVecindexPackagesPrefix = "github.com/cockroachdb/cockroach/pkg/sql/vecindex"
 	// When running BenchmarkCatchVectorizedRuntimeError under bazel, the
 	// repository prefix is missing.
 	testSqlColPackagesPrefix = "pkg/sql/col"
@@ -217,6 +218,7 @@ func shouldCatchPanic(panicEmittedFrom string) bool {
 		strings.HasPrefix(panicEmittedFrom, sqlColPackagesPrefix) ||
 		strings.HasPrefix(panicEmittedFrom, sqlRowPackagesPrefix) ||
 		strings.HasPrefix(panicEmittedFrom, sqlSemPackagesPrefix) ||
+		strings.HasPrefix(panicEmittedFrom, sqlVecindexPackagesPrefix) ||
 		strings.HasPrefix(panicEmittedFrom, testSqlColPackagesPrefix)
 }
 

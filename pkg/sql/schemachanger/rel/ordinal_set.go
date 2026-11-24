@@ -15,8 +15,8 @@ import (
 type ordinal uint8
 
 // ordinalSet represents A bitmask over ordinals.
-// Note that it cannot contain attributes with ordinals greater than 30.
-type ordinalSet uint32
+// Note that it cannot contain attributes with ordinals greater than 62.
+type ordinalSet uint64
 
 const ordinalSetCapacity = (unsafe.Sizeof(ordinalSet(0)) * 8)
 const ordinalSetMaxOrdinal = ordinal(ordinalSetCapacity - 1)
@@ -65,12 +65,12 @@ func (m ordinalSet) union(other ordinalSet) ordinalSet {
 
 // len returns the number of ordinals in the set.
 func (m ordinalSet) len() int {
-	return bits.OnesCount32(uint32(m))
+	return bits.OnesCount64(uint64(m))
 }
 
 // rank returns the rank in the set of the passed ordinal.
 func (m ordinalSet) rank(a ordinal) int {
-	return bits.OnesCount32(uint32(m & ((1 << a) - 1)))
+	return bits.OnesCount64(uint64(m & ((1 << a) - 1)))
 }
 
 // isContainedIn returns true of m contains every element of other.

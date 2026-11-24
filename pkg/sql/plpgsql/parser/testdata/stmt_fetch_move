@@ -796,3 +796,40 @@ BEGIN
 FETCH BACKWARD ALL FROM _ INTO _;
 END;
  -- identifiers removed
+
+pretty
+DECLARE
+BEGIN
+MOVE NEXT FROM emp_cur;
+END
+----
+DECLARE
+BEGIN
+	MOVE 1 FROM emp_cur;
+END;
+
+pretty
+DECLARE
+BEGIN
+FETCH BACKWARD ALL FROM some_long_cursor_name INTO first_target_variable, second_target_variable, third_target_variable;
+END
+----
+DECLARE
+BEGIN
+	FETCH BACKWARD ALL FROM some_long_cursor_name
+		INTO
+			first_target_variable,
+			second_target_variable,
+			third_target_variable;
+END;
+
+pretty
+DECLARE
+BEGIN
+FETCH RELATIVE 5 FROM emp_cur INTO target_var;
+END
+----
+DECLARE
+BEGIN
+	FETCH RELATIVE 5 FROM emp_cur INTO target_var;
+END;

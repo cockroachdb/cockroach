@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -76,6 +77,8 @@ func ParseAndRequireString(
 		d, err = ParseDGeometry(s)
 	case types.JsonFamily:
 		d, err = ParseDJSON(s)
+	case types.JsonpathFamily:
+		d, err = ParseDJsonpath(s)
 	case types.OidFamily:
 		if t.Oid() != oid.T_oid && s == UnknownOidName {
 			d = NewDOidWithType(UnknownOidValue, t)
@@ -83,7 +86,12 @@ func ParseAndRequireString(
 			d, err = ParseDOidAsInt(s)
 		}
 	case types.CollatedStringFamily:
-		d, err = NewDCollatedString(s, t.Locale(), ctx.GetCollationEnv())
+		switch t.Oid() {
+		case oidext.T_citext:
+			d, err = NewDCIText(s, ctx.GetCollationEnv())
+		default:
+			d, err = NewDCollatedString(s, t.Locale(), ctx.GetCollationEnv())
+		}
 	case types.StringFamily:
 		s = truncateString(s, t)
 		return NewDString(s), false, nil
@@ -107,6 +115,8 @@ func ParseAndRequireString(
 		d, err = ParseDTSQuery(s)
 	case types.TSVectorFamily:
 		d, err = ParseDTSVector(s)
+	case types.LTreeFamily:
+		d, err = ParseDLTree(s)
 	case types.TupleFamily:
 		d, dependsOnContext, err = ParseDTupleFromString(ctx, s, t)
 	case types.VoidFamily:

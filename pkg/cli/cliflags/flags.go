@@ -284,10 +284,25 @@ example [::1]:26257 or [fe80::f6f2:::]:26257.`,
 	}
 
 	Database = FlagInfo{
-		Name:        "database",
-		Shorthand:   "d",
-		EnvVar:      "COCKROACH_DATABASE",
-		Description: `The name of the database to connect to.`,
+		Name:      "database",
+		Shorthand: "d",
+		EnvVar:    "COCKROACH_DATABASE",
+		Description: `
+The name of the database and (optionally) virtual cluster to connect to:
+<PRE>
+   -d [database]
+   -d cluster:[virtual-cluster]/[database]
+
+</PRE>
+For example:
+<PRE>
+   -d mydb
+   -d cluster:mycluster/mydb
+
+</PRE>
+If empty or unspecified, the virtual cluster defaults to the
+"server.controller.default_target_cluster" cluster setting.
+`,
 	}
 
 	DumpMode = FlagInfo{
@@ -704,6 +719,14 @@ information.
 `,
 	}
 
+	UseNewRPC = FlagInfo{
+		Name: "use-new-rpc",
+		Description: `
+Use the new RPC framework for internode communication instead of gRPC. This is
+a preview feature and is intended for non-production use only.
+`,
+	}
+
 	LocalityAdvertiseAddr = FlagInfo{
 		Name: "locality-advertise-addr",
 		Description: `
@@ -927,6 +950,71 @@ provided for node user if this flag is set.
 `,
 	}
 
+	DisallowRootLogin = FlagInfo{
+		Name: "disallow-root-login",
+		Description: `
+When set, prevents authentication attempts by clients presenting certificates
+with "root" as one of the principals (CommonName or SubjectAlternativeName).
+This applies to both SQL client connections and RPC connections. Authentication
+attempts by root will be rejected with an error.
+<PRE>
+
+</PRE>
+Note: Please ensure none of the certificates that are in use by the cluster or
+the SQL/RPC clients have a root in the SAN fields since the flag will block
+access to that client.
+`,
+	}
+
+	AllowDebugUser = FlagInfo{
+		Name: "allow-debug-user",
+		Description: `
+When set, allows authentication attempts by clients presenting certificates
+with "debuguser" as one of the principals (CommonName or SubjectAlternativeName).
+This applies to both SQL client connections and RPC connections. By default,
+the debuguser is not allowed to authenticate. Authentication attempts by debuguser
+will be rejected with an error unless this flag is explicitly set.
+<PRE>
+
+</PRE>
+Note: This flag is intended for debugging and troubleshooting purposes. The
+debuguser should only be enabled when necessary and disabled when not in use.
+`,
+	}
+
+	RootCertSAN = FlagInfo{
+		Name: "root-cert-san",
+		Description: `
+A string of comma separated list of subject-alternate-name
+<attribute-type>=<attribute-value> mappings for the root
+user. This strictly needs to match the SAN in the client certificate
+provided for root user if this flag is set. Attribute type can be DNS, IP or URI.
+The entire list mentioned here is matched against the SANs in the certificate.
+`,
+	}
+
+	NodeCertSAN = FlagInfo{
+		Name: "node-cert-san",
+		Description: `
+A string of comma separated list of subject-alternate-name
+<attribute-type>=<attribute-value> mappings for the node
+user. This strictly needs to match the SAN in the client certificate
+provided for node user if this flag is set. Attribute type can be DNS, IP or URI.
+The entire list mentioned here is matched against the SANs in the certificate.
+`,
+	}
+
+	TLSCipherSuites = FlagInfo{
+		Name: "tls-cipher-suites",
+		Description: `
+A string of comma separated list of cipher suites to be used for all incoming
+TLS connections to the node. For TLS 1.2, this should strictly be a subset of
+suites defined in security/tls_ciphersuites.go as RecommendedCipherSuites or
+OldCipherSuites. For TLS 1.3, this should be configured to a subset of ciphers
+in crypto/tls/cipher_suites.go, e.g. TLS_AES_256_GCM_SHA384.
+`,
+	}
+
 	CAKey = FlagInfo{
 		Name:        "ca-key",
 		EnvVar:      "COCKROACH_CA_KEY",
@@ -1092,11 +1180,8 @@ See the storage.wal_failover.unhealthy_op_threshold cluster setting.
 	}
 
 	StorageEngine = FlagInfo{
-		Name: "storage-engine",
-		Description: `
-Storage engine to use for all stores on this cockroach node. The only option is pebble. Deprecated;
-only present for backward compatibility.
-`,
+		Name:        "storage-engine",
+		Description: "Deprecated: only present for backward compatibility.",
 	}
 
 	SecondaryCache = FlagInfo{
@@ -1174,10 +1259,14 @@ Verbose output.`,
 	TempDir = FlagInfo{
 		Name: "temp-dir",
 		Description: `
-The parent directory path where a temporary subdirectory will be created to be used for temporary files.
-This path must exist or the node will not start.
-The temporary subdirectory is used primarily as working memory for distributed computations
-and CSV importing.
+The parent directory path where a temporary subdirectory will be created to be
+used for temporary files. This path must exist or the node will not start.
+
+The encryption from one of the stores is used with the temporary directory
+(specifically, the first store that is on-disk and encrypted).
+
+The temporary subdirectory is used primarily as working memory for distributed
+computations and CSV importing.
 For example, the following will generate an arbitrary, temporary subdirectory
 "/mnt/ssd01/temp/cockroach-temp<NUMBER>":
 <PRE>
@@ -1186,7 +1275,8 @@ For example, the following will generate an arbitrary, temporary subdirectory
 
 </PRE>
 If this flag is unspecified, the temporary subdirectory will be located under
-the root of the first store.`,
+the root of one of the stores (with preference for on-disk, encrypted stores).
+`,
 	}
 
 	ExternalIODir = FlagInfo{
@@ -1221,9 +1311,13 @@ The value "disabled" will disable all local file I/O.
 Connection URL, of the form:
 <PRE>
    postgresql://[user[:passwd]@]host[:port]/[db][?parameters...]
+   postgresql://[user[:passwd]@]host[:port]/cluster:[virtual-cluster]/[db][?parameters...]
+
 </PRE>
-For example, postgresql://myuser@localhost:26257/mydb.
+For example:
 <PRE>
+   postgresql://myuser@localhost:26257/mydb
+   postgresql://myuser@localhost:26257/cluster:mycluster/mydb
 
 </PRE>
 If left empty, the discrete connection flags are used: host, port,
@@ -1278,13 +1372,6 @@ is the prefix for range local keys. The hex format takes an encoded MVCCKey.`}
 		Description: `
 File containing the JSON output from a node's /_status/gossip/ endpoint.
 If specified, takes priority over host/port flags.`,
-	}
-
-	PrintSystemConfig = FlagInfo{
-		Name: "print-system-config",
-		Description: `
-If specified, print the system config contents. Beware that the output will be
-long and not particularly human-readable.`,
 	}
 
 	DecodeAsTable = FlagInfo{
@@ -1552,6 +1639,15 @@ Disable the creation of a default dataset in the demo shell.
 This makes 'cockroach demo' faster to start.`,
 	}
 
+	DemoBackground = FlagInfo{
+		Name: "background",
+		Description: `
+Start the demo cluster in the background without opening an interactive SQL
+shell. The cluster runs until the process receives a SIGINT or SIGTERM signal.
+Use --listening-url-file to write the connection URL to a file for use by
+other tools.`,
+	}
+
 	GeoLibsDir = FlagInfo{
 		Name: "spatial-libs",
 		Description: `
@@ -1634,8 +1730,17 @@ The default is to not exclude any node.`,
 List of glob patterns that determine files that can be included
 in the output. The list can be specified as a comma-delimited
 list of patterns, or by using the flag multiple times.
-The patterns apply to the base name of the file, without
-a path prefix.
+<PRE>
+
+</PRE>
+Patterns without '/' apply to the base name of the file (e.g. '*.json').
+Patterns containing '/' are matched against the full path within the zip
+archive (e.g. 'debug/nodes/1/*.json' or 'debug/nodes/*/ranges.json').
+The path matching uses Go's filepath.Match syntax, where '*' matches
+any sequence of non-separator characters within a single path component.
+<PRE>
+
+</PRE>
 The default is to include all files.
 <PRE>
 
@@ -1657,8 +1762,14 @@ List of glob patterns that determine files that are to
 be excluded from the output. The list can be specified
 as a comma-delimited list of patterns, or by using the
 flag multiple times.
-The patterns apply to the base name of the file, without
-a path prefix.
+<PRE>
+
+</PRE>
+Patterns without '/' apply to the base name of the file (e.g. '*.log').
+Patterns containing '/' are matched against the full path within the zip
+archive (e.g. 'debug/nodes/*/ranges.json').
+The path matching uses Go's filepath.Match syntax, where '*' matches
+any sequence of non-separator characters within a single path component.
 <PRE>
 
 </PRE>
@@ -1760,12 +1871,13 @@ Labs support.
 	ZipIncludeGoroutineStacks = FlagInfo{
 		Name: "include-goroutine-stacks",
 		Description: `
-Fetch stack traces for all goroutines running on each targeted node in nodes/*/stacks.txt
-and nodes/*/stacks_with_labels.txt files. Note that fetching stack traces for all goroutines is
-a "stop-the-world" operation, which can momentarily have negative impacts on SQL service
-latency. Note that any periodic goroutine dumps previously taken on the node will still be
-included in nodes/*/goroutines/*.txt.gz, as these would have already been generated and don't
-require any additional stop-the-world operations to be collected.
+Fetch full stack traces for all goroutines running on each targeted node in nodes/*/stacks.txt files.
+Note that fetching text stack traces for all goroutines incurs a brief "stop-the-world" pause of each
+node which can momentarily have negative impacts on SQL service latency. This flag only controls
+collection of new full dump of all current goroutine stacks -- any previously recorded, periodic
+goroutine dumps retained in the logs directories are still included (in nodes/*/goroutines/*.txt.gz)
+and collection of aggregate counts of current goroutine stacks -- which does not incur a stop-the-world
+pause -- remains enabled regardless of this flag's value.
 `,
 	}
 
@@ -1775,6 +1887,21 @@ require any additional stop-the-world operations to be collected.
 Include information about each running, traceable job in jobs/*/*/trace.zip
 files. This involves collecting cluster-wide traces for each running job in the
 cluster.
+`,
+	}
+
+	ZipExcludeLogSeverity = FlagInfo{
+		Name: "exclude-log-severities",
+		Description: `
+List of log severities to exclude from the collected log files.
+The list can be specified as a comma-delimited list of severity
+names, or by using the flag multiple times. Valid severity names
+are: INFO, WARNING, ERROR, FATAL.
+<PRE>
+
+</PRE>
+For example, --exclude-log-severities=INFO will skip all INFO-level
+log entries, significantly reducing zip file size for large clusters.
 `,
 	}
 
@@ -1794,6 +1921,14 @@ Can be set to 1 to ensure only one node is polled for data at a time.
 `,
 	}
 
+	ZipValidateFile = FlagInfo{
+		Name: "validate-zip-file",
+		Description: `
+Validate debug zip file after generation. This is a quick check to validate
+whether the generated zip file is valid and not corrupted.
+`,
+	}
+
 	StmtDiagDeleteAll = FlagInfo{
 		Name:        "all",
 		Description: `Delete all bundles.`,
@@ -1802,47 +1937,6 @@ Can be set to 1 to ensure only one node is polled for data at a time.
 	StmtDiagCancelAll = FlagInfo{
 		Name:        "all",
 		Description: `Cancel all outstanding requests.`,
-	}
-
-	ImportSkipForeignKeys = FlagInfo{
-		Name: "skip-foreign-keys",
-		Description: `
-Speed up data import by ignoring foreign key constraints in the dump file's DDL.
-Also enables importing individual tables that would otherwise fail due to
-dependencies on other tables.
-`,
-	}
-
-	ImportMaxRowSize = FlagInfo{
-		Name: "max-row-size",
-		Description: `
-Override limits on line size when importing Postgres dump files. This setting
-may need to be tweaked if the Postgres dump file has extremely long lines.
-`,
-	}
-
-	ImportIgnoreUnsupportedStatements = FlagInfo{
-		Name: "ignore-unsupported-statements",
-		Description: `
-Ignore statements that are unsupported during an import from a PGDUMP file.
-`,
-	}
-
-	ImportLogIgnoredStatements = FlagInfo{
-		Name: "log-ignored-statements",
-		Description: `
-Log unsupported statements that are ignored during an import from a PGDUMP file to the specified
-destination. This flag should be used in conjunction with the ignore-unsupported-statements flag
-that ignores the unsupported statements during an import.
-`,
-	}
-
-	ImportRowLimit = FlagInfo{
-		Name: "row-limit",
-		Description: `
-Specify the number of rows that will be imported for each table during a PGDUMP or MYSQLDUMP import.
-This can be used to check schema and data correctness without running the entire import.
-`,
 	}
 
 	Log = FlagInfo{
@@ -2059,5 +2153,31 @@ from node to node and previous application or staging attempt failed.
 		Description: `
 Maximum number of characters in printed keys and spans. If key representation
 exceeds this value, it is truncated. Set to 0 to disable truncation.`,
+	}
+	// Attrs and others store the static information for CLI flags.
+
+	EnterpriseEncryption = FlagInfo{
+		Name: "enterprise-encryption",
+		Description: `
+<PRE>Specify encryption options for one of the stores on a node. If multiple
+stores exist, the flag must be specified for each store.
+
+A valid enterprise license is required to use this functionality.
+
+Key files should be generated by "cockroach gen encryption-key".
+
+Valid fields:
+
+* path    (required): must match the path of one of the stores, or the special
+                      value "*" to match all stores
+* key     (required): path to the current key file, or "plain"
+* old-key (required): path to the previous key file, or "plain"
+* rotation-period   : amount of time after which data keys should be rotated
+
+</PRE>
+example:
+<PRE>
+  --enterprise-encryption=path=cockroach-data,key=/keys/aes-128.key,old-key=plain</PRE>
+`,
 	}
 )

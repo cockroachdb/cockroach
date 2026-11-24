@@ -28,7 +28,6 @@ func _() {
 	_ = x[LeaseRejectedErrType-13]
 	_ = x[NodeUnavailableErrType-14]
 	_ = x[RaftGroupDeletedErrType-16]
-	_ = x[ReplicaCorruptionErrType-17]
 	_ = x[ReplicaTooOldErrType-18]
 	_ = x[AmbiguousResultErrType-26]
 	_ = x[StoreNotFoundErrType-27]
@@ -49,6 +48,7 @@ func _() {
 	_ = x[LockConflictErrType-45]
 	_ = x[ReplicaUnavailableErrType-46]
 	_ = x[ProxyFailedErrType-47]
+	_ = x[ExclusionViolationErrType-48]
 	_ = x[CommunicationErrType-22]
 	_ = x[InternalErrType-25]
 }
@@ -85,8 +85,6 @@ func (i ErrorDetailType) String() string {
 		return "NodeUnavailableErrType"
 	case RaftGroupDeletedErrType:
 		return "RaftGroupDeletedErrType"
-	case ReplicaCorruptionErrType:
-		return "ReplicaCorruptionErrType"
 	case ReplicaTooOldErrType:
 		return "ReplicaTooOldErrType"
 	case AmbiguousResultErrType:
@@ -127,6 +125,8 @@ func (i ErrorDetailType) String() string {
 		return "ReplicaUnavailableErrType"
 	case ProxyFailedErrType:
 		return "ProxyFailedErrType"
+	case ExclusionViolationErrType:
+		return "ExclusionViolationErrType"
 	case CommunicationErrType:
 		return "CommunicationErrType"
 	case InternalErrType:

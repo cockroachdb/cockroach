@@ -62,6 +62,7 @@ build_ctng x86_64-unknown-linux-gnu
 build_ctng x86_64-w64-mingw
 build_ctng aarch64-unknown-linux-gnueabi
 build_ctng s390x-ibm-linux-gnu
+build_ctng powerpc64le-unknown-linux-gnu
 rm -rf src
 
 # Build & install the terminfo lib (incl. in ncurses) for the linux targets (x86, arm and s390x).
@@ -97,6 +98,7 @@ build_ncurses() {
 build_ncurses x86_64-unknown-linux-gnu
 build_ncurses aarch64-unknown-linux-gnu
 build_ncurses s390x-ibm-linux-gnu
+build_ncurses powerpc64le-unknown-linux-gnu
 cd ..
 
 # Add openssl header files needed by the FIPS build.
@@ -125,4 +127,5 @@ bundle() {
 bundle /x-tools/x86_64-unknown-linux-gnu
 bundle /x-tools/aarch64-unknown-linux-gnu
 bundle /x-tools/s390x-ibm-linux-gnu
+bundle /x-tools/powerpc64le-unknown-linux-gnu
 bundle /x-tools/x86_64-w64-mingw32

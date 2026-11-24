@@ -32,7 +32,7 @@ func markTableGCed(
 		if tableProgress.ID == tableID {
 			tableProgress.Status = status
 			if log.V(2) {
-				log.Infof(ctx, "determined table %d is GC'd", tableID)
+				log.Dev.Infof(ctx, "determined table %d is GC'd", tableID)
 			}
 		}
 	}
@@ -50,7 +50,7 @@ func markIndexGCed(
 		indexToUpdate := &progress.Indexes[i]
 		if indexToUpdate.IndexID == garbageCollectedIndexID {
 			indexToUpdate.Status = nextStatus
-			log.Infof(ctx, "marked index %d as GC'd", garbageCollectedIndexID)
+			log.Dev.Infof(ctx, "marked index %d as GC'd", garbageCollectedIndexID)
 		}
 	}
 }
@@ -63,7 +63,8 @@ func initDetailsAndProgress(
 	var details jobspb.SchemaChangeGCDetails
 	var progress *jobspb.SchemaChangeGCProgress
 	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		return job.WithTxn(txn).Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+		return job.DeprecatedWithTxn(txn).Update(ctx, func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 			details = *md.Payload.GetSchemaChangeGC()
 			progress = md.Progress.GetSchemaChangeGC()
 			if err := validateDetails(&details); err != nil {
@@ -133,9 +134,9 @@ func isDoneGC(progress *jobspb.SchemaChangeGCProgress) bool {
 	return true
 }
 
-// runningStatusGC generates a RunningStatus string which always remains under
+// statusGC generates a status string which always remains under
 // a certain size, given any progress struct.
-func runningStatusGC(progress *jobspb.SchemaChangeGCProgress) jobs.RunningStatus {
+func statusGC(progress *jobspb.SchemaChangeGCProgress) jobs.StatusMessage {
 	var anyWaitingForMVCCGC bool
 	maybeSetAnyDeletedOrWaitingForMVCCGC := func(status jobspb.SchemaChangeGCProgress_Status) {
 		switch status {
@@ -204,11 +205,11 @@ func runningStatusGC(progress *jobspb.SchemaChangeGCProgress) jobs.RunningStatus
 	switch {
 	// `flag` not set implies we're not GCing anything.
 	case !flag && anyWaitingForMVCCGC:
-		return sql.RunningStatusWaitingForMVCCGC
+		return sql.StatusWaitingForMVCCGC
 	case !flag:
-		return sql.RunningStatusWaitingGC // legacy status
+		return sql.StatusWaitingGC // legacy status
 	default:
-		return jobs.RunningStatus(b.String())
+		return jobs.StatusMessage(b.String())
 	}
 }
 
@@ -255,22 +256,23 @@ func persistProgress(
 	execCfg *sql.ExecutorConfig,
 	job *jobs.Job,
 	progress *jobspb.SchemaChangeGCProgress,
-	runningStatus jobs.RunningStatus,
+	status jobs.StatusMessage,
 ) {
 	if err := execCfg.InternalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
-		return job.WithTxn(txn).Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+		return job.DeprecatedWithTxn(txn).Update(ctx, func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 			if err := md.CheckRunningOrReverting(); err != nil {
 				return err
 			}
-			md.Progress.RunningStatus = string(runningStatus)
+			md.Progress.StatusMessage = string(status)
 			md.Progress.Details = jobspb.WrapProgressDetails(*progress)
 			ju.UpdateProgress(md.Progress)
 			return nil
 		})
 	}); err != nil {
-		log.Warningf(ctx, "failed to update job's progress payload or running status err: %+v", err)
+		log.Dev.Warningf(ctx, "failed to update job's progress payload or running status err: %+v", err)
 	}
-	log.Infof(ctx, "updated progress status: %s, payload: %+v", runningStatus, progress)
+	log.Dev.Infof(ctx, "updated progress status: %s, payload: %+v", status, progress)
 }
 
 // getDropTimes returns the data stored in details as a map for convenience.

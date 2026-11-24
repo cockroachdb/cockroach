@@ -74,8 +74,8 @@ CREATE FUNCTION public.get_l(i INT8)
   LANGUAGE SQL
   SECURITY INVOKER
   AS $$
-  SELECT v FROM test.public.kv WHERE k = i;
-$$
+    SELECT v FROM public.kv WHERE k = i;
+  $$
 
 query T
 SELECT pg_get_functiondef(NULL)
@@ -93,6 +93,30 @@ query T
 SELECT pg_get_functiondef('soundex'::regproc::oid)
 ----
 soundex
+
+# pg_get_function_sqlbody returns the deparsed body only for functions defined
+# with the SQL-standard inline body syntax (RETURN expr or BEGIN ATOMIC ... END).
+# CockroachDB does not support that syntax (#85144), so prosqlbody is always
+# NULL today, matching Postgres' behavior for AS $$...$$ functions.
+query T
+SELECT pg_get_function_sqlbody('get_l'::regproc::oid)
+----
+NULL
+
+query T
+SELECT pg_get_function_sqlbody(NULL)
+----
+NULL
+
+query T
+SELECT pg_get_function_sqlbody(123456)
+----
+NULL
+
+query T
+SELECT pg_get_function_sqlbody('soundex'::regproc::oid)
+----
+NULL
 
 # Only the volatile functions should see the changes made by the UPDATE in the
 # CTE.
@@ -188,3 +212,227 @@ query I
 SELECT strict_fn_imp('foo', NULL)
 ----
 NULL
+
+# Tests for the SQL-standard inline body syntax (BEGIN ATOMIC ... END
+# and bare RETURN expr) for CREATE FUNCTION and CREATE PROCEDURE. These
+# bodies are translated into the legacy string body form during opt
+# building, so the descriptor and execution paths are unchanged.
+
+subtest sql_body
+
+statement ok
+CREATE TABLE abc (a INT PRIMARY KEY, b INT);
+INSERT INTO abc VALUES (1, 10), (2, 20)
+
+subtest sql_body/begin_atomic_single
+
+statement ok
+CREATE FUNCTION f1(i INT) RETURNS INT LANGUAGE SQL
+  BEGIN ATOMIC
+    SELECT b FROM abc WHERE a = i;
+  END
+
+query I
+SELECT f1(1)
+----
+10
+
+subtest sql_body/bare_return
+
+statement ok
+CREATE FUNCTION f2(i INT) RETURNS INT LANGUAGE SQL
+  RETURN (SELECT b FROM abc WHERE a = i)
+
+query I
+SELECT f2(2)
+----
+20
+
+subtest sql_body/begin_atomic_with_return
+
+statement ok
+CREATE FUNCTION f3(i INT) RETURNS INT LANGUAGE SQL
+  BEGIN ATOMIC
+    RETURN (SELECT b FROM abc WHERE a = i);
+  END
+
+query I
+SELECT f3(1)
+----
+10
+
+subtest sql_body/begin_atomic_multi_stmt
+
+statement ok
+CREATE FUNCTION f4(i INT, j INT) RETURNS INT LANGUAGE SQL
+  BEGIN ATOMIC
+    INSERT INTO abc VALUES (i, j);
+    SELECT b FROM abc WHERE a = i;
+  END
+
+query I
+SELECT f4(99, 999)
+----
+999
+
+subtest sql_body/return_not_last
+
+# RETURN is the result expression, not a control-flow statement: it only
+# determines the result when it is the final body statement. A RETURN
+# followed by more statements has its value discarded, and the last
+# statement determines the result. This matches Postgres, which evaluates
+# the last body statement regardless of RETURN position, so rewriting
+# RETURN as SELECT is faithful.
+statement ok
+CREATE FUNCTION f_return_then_select() RETURNS INT LANGUAGE SQL
+  BEGIN ATOMIC
+    RETURN 1;
+    SELECT 2;
+  END
+
+query I
+SELECT f_return_then_select()
+----
+2
+
+statement ok
+CREATE FUNCTION f_select_return_select() RETURNS INT LANGUAGE SQL
+  BEGIN ATOMIC
+    SELECT 7;
+    RETURN 3;
+    SELECT 4;
+  END
+
+query I
+SELECT f_select_return_select()
+----
+4
+
+# Multiple RETURNs are allowed (no "first RETURN wins" short-circuit); the
+# last body statement still determines the result, matching Postgres.
+statement ok
+CREATE FUNCTION f_two_returns() RETURNS INT LANGUAGE SQL
+  BEGIN ATOMIC
+    RETURN 1;
+    RETURN 2;
+  END
+
+query I
+SELECT f_two_returns()
+----
+2
+
+statement ok
+CREATE FUNCTION f_return_return_select() RETURNS INT LANGUAGE SQL
+  BEGIN ATOMIC
+    RETURN 1;
+    RETURN 2;
+    SELECT 3;
+  END
+
+query I
+SELECT f_return_return_select()
+----
+3
+
+subtest sql_body/procedure_begin_atomic
+
+statement ok
+CREATE PROCEDURE p1(i INT) LANGUAGE SQL
+  BEGIN ATOMIC
+    INSERT INTO abc VALUES (i, i);
+  END
+
+statement ok
+CALL p1(50)
+
+query II rowsort
+SELECT a, b FROM abc
+----
+1   10
+2   20
+50  50
+99  999
+
+subtest sql_body/plpgsql_inline_body_rejected
+
+statement error inline SQL function body only valid for language SQL
+CREATE FUNCTION f5() RETURNS INT LANGUAGE PLPGSQL
+  BEGIN ATOMIC
+    RETURN 1;
+  END
+
+subtest sql_body/polymorphic_inline_body_rejected
+
+statement error SQL function with unquoted function body cannot have polymorphic arguments
+CREATE FUNCTION f6(x ANYELEMENT) RETURNS ANYELEMENT LANGUAGE SQL
+  RETURN x
+
+subtest sql_body/early_binding_blocks_drop_column
+
+# The reference tracking that protects existing string-body UDFs also covers
+# inline-body ones, since both paths land in the same opt builder logic.
+statement error pgcode 2BP01 cannot drop column "b" because function "f1" depends on it
+ALTER TABLE abc DROP COLUMN b
+
+subtest sql_body/show_create_renders_string_form
+
+# Inline-body functions are stored as string bodies, so SHOW CREATE
+# FUNCTION renders the AS $$ ... $$ form rather than the original
+# BEGIN ATOMIC syntax. This is a deliberate trade-off to avoid changing
+# descriptor storage.
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION f1]
+----
+CREATE FUNCTION public.f1(i INT8)
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE SQL
+  SECURITY INVOKER
+  AS $$
+    SELECT b FROM public.abc WHERE a = i;
+  $$
+
+subtest sql_body/duplicate_body_rejected
+
+# Specifying both an AS $$ ... $$ string body and an inline RETURN or
+# BEGIN ATOMIC body is rejected, matching Postgres (pgcode 42P13).
+statement error pgcode 42P13 duplicate function body specified
+CREATE FUNCTION f7(x INT) RETURNS INT
+  LANGUAGE SQL
+  AS $$ SELECT x * 2 $$
+  RETURN x * 3
+
+statement error pgcode 42P13 duplicate function body specified
+CREATE FUNCTION f8(x INT) RETURNS INT
+  LANGUAGE SQL
+  AS $$ SELECT x * 2 $$
+  BEGIN ATOMIC
+    SELECT x * 3;
+  END
+
+subtest sql_body/ddl_in_inline_body_rejected
+
+# Postgres parses BEGIN ATOMIC bodies at definition time (early binding), so DDL
+# and DCL are forbidden there. This holds even for procedures, which otherwise
+# support DDL through the dollar-quoted AS $$ ... $$ form.
+statement error pgcode 0A000 CREATE TABLE is not yet supported in unquoted SQL routine body
+CREATE FUNCTION f9() RETURNS INT LANGUAGE SQL
+  BEGIN ATOMIC
+    CREATE TABLE t_inline (a INT);
+    SELECT 1;
+  END
+
+statement error pgcode 0A000 CREATE TABLE is not yet supported in unquoted SQL routine body
+CREATE PROCEDURE p2() LANGUAGE SQL
+  BEGIN ATOMIC
+    CREATE TABLE t_inline (a INT);
+  END
+
+statement error pgcode 0A000 GRANT is not yet supported in unquoted SQL routine body
+CREATE PROCEDURE p3() LANGUAGE SQL
+  BEGIN ATOMIC
+    GRANT ALL ON TABLE abc TO testuser;
+  END

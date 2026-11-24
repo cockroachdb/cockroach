@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/errors"
 	"github.com/robfig/cron/v3"
 )
@@ -24,6 +25,15 @@ var SQLStatsFlushInterval = settings.RegisterDurationSetting(
 	settings.NonNegativeDurationWithMaximum(time.Hour*24),
 	settings.WithPublic)
 
+// SQLStatsFlushBatchSize is the cluster setting that controls how many
+// rows are inserted per upsert during a sql stats flush.
+var SQLStatsFlushBatchSize = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"sql.stats.flush.batch_size",
+	"the number of rows to flush per upsert",
+	10,
+	settings.NonNegativeInt)
+
 // MinimumInterval is the cluster setting that controls the minimum interval
 // between each flush operation. If flush operations get triggered faster
 // than what is allowed by this setting, (e.g. when too many fingerprints are
@@ -36,7 +46,6 @@ var MinimumInterval = settings.RegisterDurationSetting(
 		"flush operation starts within less than the minimum interval, the flush "+
 		"operation will be aborted",
 	0,
-	settings.NonNegativeDuration,
 )
 
 // DiscardInMemoryStatsWhenFlushDisabled is the cluster setting that allows the
@@ -99,16 +108,8 @@ var SQLStatsCleanupRecurrence = settings.RegisterStringSetting(
 	settings.WithPublic,
 )
 
-// SQLStatsAggregationInterval is the cluster setting that controls the aggregation
-// interval for stats when we flush to disk.
-var SQLStatsAggregationInterval = settings.RegisterDurationSetting(
-	settings.ApplicationLevel,
-	"sql.stats.aggregation.interval",
-	"the interval at which we aggregate SQL execution statistics upon flush, "+
-		"this value must be greater than or equal to sql.stats.flush.interval",
-	time.Hour,
-	settings.NonNegativeDurationWithMaximum(time.Hour*24),
-)
+// SQLStatsAggregationInterval is an alias for sqlstats.SQLStatsAggregationInterval.
+var SQLStatsAggregationInterval = sqlstats.SQLStatsAggregationInterval
 
 // CompactionJobRowsToDeletePerTxn is the cluster setting that controls
 // how many rows in the statement/transaction_statistics tables gets deleted
@@ -141,5 +142,4 @@ var SQLStatsLimitTableCheckInterval = settings.RegisterDurationSetting(
 	"controls what interval the check is done if the statement and "+
 		"transaction statistics tables have grown past sql.stats.persisted_rows.max",
 	1*time.Hour,
-	settings.NonNegativeDuration,
 )

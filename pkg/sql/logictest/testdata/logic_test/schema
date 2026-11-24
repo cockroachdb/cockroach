@@ -1,3 +1,4 @@
+# LogicTest: !local-prepared
 statement ok
 SET experimental_enable_temp_tables = true;
 
@@ -167,6 +168,9 @@ SELECT * FROM myschema3.tb2
 # The names should be drained after executing, so we should be able
 # to make another schema with the old name.
 statement ok
+SET autocommit_before_ddl = false
+
+statement ok
 CREATE SCHEMA myschema2
 
 statement ok
@@ -180,6 +184,9 @@ ALTER SCHEMA another_schema RENAME TO another_one
 
 statement ok
 ROLLBACK
+
+statement ok
+RESET autocommit_before_ddl
 
 # We should be able to drop an empty schema without CASCADE.
 statement ok
@@ -301,9 +308,17 @@ subtest drop_schemas_with_database_prefixes
 # Test that empty schemas from different databases can be dropped
 statement ok
 CREATE DATABASE scdrop4_db;
+
+statement ok
 CREATE DATABASE scdrop6_db;
+
+statement ok
 CREATE SCHEMA scdrop4_db.scdrop4;
+
+statement ok
 CREATE SCHEMA scdrop5;
+
+statement ok
 CREATE SCHEMA scdrop6_db.scdrop6;
 
 statement ok
@@ -598,6 +613,90 @@ WHERE
 user1         user1
 user1_schema  user1
 
+# Non-admins must be a member of the role specified in AUTHORIZATION.
+subtest authorization_membership_check
+
+user root
+
+statement ok
+CREATE ROLE auth_check_role;
+
+statement ok
+CREATE DATABASE auth_check_db;
+
+statement ok
+GRANT CREATE ON DATABASE auth_check_db TO testuser;
+
+user testuser
+
+statement ok
+USE auth_check_db
+
+statement error pq: role/user "auth_check_role2" does not exist
+CREATE SCHEMA AUTHORIZATION auth_check_role2
+
+statement error pq: must be member of role "auth_check_role"
+CREATE SCHEMA AUTHORIZATION auth_check_role
+
+statement error pq: must be member of role "auth_check_role"
+CREATE SCHEMA s_auth AUTHORIZATION auth_check_role
+
+# After granting auth_check_role to testuser, the CREATE SCHEMA should succeed.
+user root
+
+statement ok
+GRANT auth_check_role TO testuser
+
+user testuser
+
+statement ok
+USE auth_check_db
+
+statement ok
+CREATE SCHEMA AUTHORIZATION auth_check_role
+
+statement ok
+CREATE SCHEMA s_auth AUTHORIZATION auth_check_role
+
+# A user can always create a schema with authorization as themselves.
+statement ok
+CREATE SCHEMA s_testuser AUTHORIZATION testuser
+
+user root
+
+# Admin role must bypass role membership.
+statement ok
+CREATE USER db_admin_role;
+GRANT CREATE ON DATABASE auth_check_db TO db_admin_role;
+
+statement ok
+SET ROLE db_admin_role;
+USE auth_check_db
+
+statement error pq: must be member of role "auth_check_role"
+CREATE SCHEMA s_admin AUTHORIZATION auth_check_role
+
+statement ok
+RESET ROLE;
+REVOKE CREATE ON DATABASE auth_check_db FROM db_admin_role;
+GRANT ADMIN TO db_admin_role;
+SET ROLE db_admin_role
+
+statement ok
+CREATE SCHEMA s_admin AUTHORIZATION auth_check_role
+
+statement ok
+CREATE SCHEMA s_admin_root AUTHORIZATION root
+
+statement ok
+RESET ROLE;
+DROP USER db_admin_role
+
+statement ok
+USE defaultdb
+
+subtest end
+
 # Ensure that we need CREATE on a database to create a schema.
 statement ok
 CREATE DATABASE perms
@@ -773,16 +872,16 @@ subtest show_tables
 statement ok
 CREATE DATABASE for_show;
 
-statement ok;
+statement ok
 USE for_show;
 
-statement ok;
+statement ok
 CREATE TABLE t1 (i INT PRIMARY KEY);
 
-statement ok;
+statement ok
 CREATE SCHEMA sc1;
 
-statement ok;
+statement ok
 CREATE TABLE sc1.t1 (i INT PRIMARY KEY);
 
 query TT rowsort
@@ -1500,5 +1599,98 @@ CREATE SCHEMA ""."";
 
 statement error pgcode 42601 pq: .*empty schema name
 CREATE SCHEMA "";
+
+subtest end
+
+
+# Regression test for #154248, which ensures that during cascade drops of schemas,
+# we will clean up triggers before functions that reference them.
+subtest drop_schema_with_triggers
+
+statement ok
+CREATE SCHEMA drop_schema_with_triggers;
+
+statement ok
+CREATE TYPE drop_schema_with_triggers.typ_1 AS ENUM ('foo');
+
+statement ok
+CREATE TYPE typ_2_drop_schema_with_triggers AS ENUM ('foo');
+
+statement ok
+CREATE TABLE drop_schema_with_triggers.t1 (
+	n INT8 PRIMARY KEY, j INT8 UNIQUE
+);
+
+statement ok
+CREATE TABLE t2_drop_schema_with_triggers (
+	n
+		INT8 PRIMARY KEY,
+	j
+		INT8 REFERENCES drop_schema_with_triggers.t1 (j)
+);
+
+statement ok
+CREATE FUNCTION drop_schema_with_triggers.trigger_function_w4_520()
+	RETURNS TRIGGER
+	LANGUAGE plpgsql
+	AS $$ BEGIN SELECT 'foo'::drop_schema_with_triggers.typ_1, 'foo'::public.typ_2_drop_schema_with_triggers FROM drop_schema_with_triggers.t1;RETURN NEW;END; $$;
+
+skipif config local-legacy-schema-changer
+statement ok
+CREATE TRIGGER trigger_w4_521 BEFORE UPDATE OR DELETE ON drop_schema_with_triggers.t1 FOR EACH ROW EXECUTE FUNCTION drop_schema_with_triggers.trigger_function_w4_520();
+
+skipif config local-legacy-schema-changer
+statement ok
+DROP SCHEMA drop_schema_with_triggers CASCADE;
+
+subtest end
+
+subtest concurrent_schema_drop
+
+statement ok
+CREATE SCHEMA concurrent_drop_sc;
+
+statement ok
+CREATE TABLE concurrent_drop_sc.t1 (id INT PRIMARY KEY);
+
+statement ok
+CREATE TABLE public.fk_ref_to_concurrent_t1 (
+    id INT PRIMARY KEY,
+    fk INT REFERENCES concurrent_drop_sc.t1(id)
+);
+
+statement ok
+CREATE OR REPLACE FUNCTION concurrent_rename_fn (a INT) RETURNS INT AS 'SELECT a*a' LANGUAGE SQL;
+
+statement ok
+SET CLUSTER SETTING jobs.debug.pausepoints = 'newschemachanger.before.exec';
+
+skipif config local-legacy-schema-changer
+statement error pq: job \d+ was paused before it completed with reason: pause point
+DROP SCHEMA concurrent_drop_sc CASCADE;
+
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+
+statement ok
+set autocommit_before_ddl=false;
+
+# Confirm we hit a retry error if attempt to us the schema.
+skipif config local-legacy-schema-changer
+statement error restart transaction: descriptor \d+ is undergoing another schema change
+ALTER FUNCTION concurrent_rename_fn SET SCHEMA concurrent_drop_sc;
+
+statement ok
+ROLLBACK;
+
+statement ok
+RESET autocommit_before_ddl;
+
+statement ok
+RESET CLUSTER SETTING jobs.debug.pausepoints;
+
+statement ok
+RESUME JOBS (SELECT job_id FROM crdb_internal.jobs WHERE status = 'paused');
+
 
 subtest end

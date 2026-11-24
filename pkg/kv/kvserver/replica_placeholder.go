@@ -10,7 +10,6 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/google/btree"
 )
 
 // ReplicaPlaceholder represents a "lock" of a part of the keyspace on a given
@@ -85,20 +84,9 @@ type ReplicaPlaceholder struct {
 	tainted   int32 // atomic
 }
 
-var _ rangeKeyItem = (*ReplicaPlaceholder)(nil)
-
 // Desc returns the range Placeholder's descriptor.
 func (r *ReplicaPlaceholder) Desc() *roachpb.RangeDescriptor {
 	return &r.rangeDesc
-}
-
-func (r *ReplicaPlaceholder) key() roachpb.RKey {
-	return r.Desc().StartKey
-}
-
-// Less implements the btree.Item interface.
-func (r *ReplicaPlaceholder) Less(i btree.Item) bool {
-	return r.Desc().StartKey.Less(i.(rangeKeyItem).key())
 }
 
 func (r *ReplicaPlaceholder) String() string {

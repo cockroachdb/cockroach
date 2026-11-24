@@ -11,10 +11,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
@@ -111,6 +109,31 @@ type scope struct {
 
 	// atRoot is whether we are currently at a root context.
 	atRoot bool
+
+	// checkMaxParamOrd is true if attempts to resolve a routine parameter via
+	// ordinal reference syntax (like $1) should be checked against the
+	// maxParamOrd.
+	checkMaxParamOrd bool
+
+	// maxParamOrd, if set, is the maximum 1-based ordinal reference that can be
+	// used to resolve a routine parameter. This is used to selectively allow
+	// references to internally-generated parameters such as those for PL/pgSQL
+	// sub-routines.
+	maxParamOrd int
+
+	// plpgsqlVarRef, if non-nil, is invoked by VisitPre to give PL/pgSQL a
+	// chance to rewrite a ColumnItem of the form `var.field` (where `var` is
+	// a composite-typed PL/pgSQL variable) into a parenthesized field-access
+	// expression. This mirrors the post-column-ref hook Postgres installs in
+	// pl_comp.c. It returns:
+	//   - rewritten != nil: the rewritten expression to use in place of the
+	//     ColumnItem.
+	//   - rewritten == nil && knownVar: the prefix names a PL/pgSQL variable
+	//     in scope, but no field-access rewrite applies (e.g. the variable is
+	//     scalar or no field with the given name exists).
+	//   - rewritten == nil && !knownVar: the prefix does not name any
+	//     PL/pgSQL variable in scope.
+	plpgsqlVarRef func(*tree.ColumnItem) (rewritten tree.Expr, knownVar bool)
 }
 
 // exprKind is used to represent the kind of the current expression in the
@@ -207,6 +230,20 @@ func (s *scope) replace() *scope {
 	return r
 }
 
+// findPLpgSQLVarRef walks the parent scope chain and returns the nearest
+// non-nil plpgsqlVarRef hook, or nil if no ancestor has one installed. This
+// mirrors how findFuncArgCol locates checkMaxParamOrd / maxParamOrd by
+// traversing parents, so the hook only has to be set on the scope passed to
+// buildSQLExpr / buildSQLStatement and not propagated through push/replace.
+func (s *scope) findPLpgSQLVarRef() func(*tree.ColumnItem) (tree.Expr, bool) {
+	for ; s != nil; s = s.parent {
+		if s.plpgsqlVarRef != nil {
+			return s.plpgsqlVarRef
+		}
+	}
+	return nil
+}
+
 // appendColumnsFromScope adds newly bound variables to this scope.
 // The expressions in the new columns are reset to nil.
 func (s *scope) appendColumnsFromScope(src *scope) {
@@ -216,28 +253,6 @@ func (s *scope) appendColumnsFromScope(src *scope) {
 	// the new scope.
 	for i := l; i < len(s.cols); i++ {
 		s.cols[i].scalar = nil
-	}
-}
-
-// appendOrdinaryColumnsFromTable adds all non-mutation and non-system columns from the
-// given table metadata to this scope.
-func (s *scope) appendOrdinaryColumnsFromTable(tabMeta *opt.TableMeta, alias *tree.TableName) {
-	tab := tabMeta.Table
-	if s.cols == nil {
-		s.cols = make([]scopeColumn, 0, tab.ColumnCount())
-	}
-	for i, n := 0, tab.ColumnCount(); i < n; i++ {
-		tabCol := tab.Column(i)
-		if tabCol.Kind() != cat.Ordinary {
-			continue
-		}
-		s.cols = append(s.cols, scopeColumn{
-			name:       scopeColName(tabCol.ColName()),
-			table:      *alias,
-			typ:        tabCol.DatumType(),
-			id:         tabMeta.MetaID.ColumnID(i),
-			visibility: columnVisibility(tabCol.Visibility()),
-		})
 	}
 }
 
@@ -507,7 +522,7 @@ func (s *scope) resolveTypeAndReject(
 
 // ensureNullType tests the type of the given expression. If types.Unknown, then
 // ensureNullType wraps the expression in a CAST to the desired type (assuming
-// it is not types.Any). types.Unknown is a special type used for null values,
+// it is not types.AnyElement). types.Unknown is a special type used for null values,
 // and can be cast to any other type.
 func (s *scope) ensureNullType(texpr tree.TypedExpr, desired *types.T) tree.TypedExpr {
 	if desired.Family() != types.AnyFamily && texpr.ResolvedType().Family() == types.UnknownFamily {
@@ -607,12 +622,6 @@ func (s *scope) removeHiddenCols() {
 	s.cols = s.cols[:n]
 }
 
-// isAnonymousTable returns true if the table name of the first column
-// in this scope is empty.
-func (s *scope) isAnonymousTable() bool {
-	return len(s.cols) > 0 && s.cols[0].table.ObjectName == ""
-}
-
 // setTableAlias qualifies the names of all columns in this scope with the
 // given alias name, as if they were part of a table with that name. If the
 // alias is the empty string, then setTableAlias removes any existing column
@@ -634,7 +643,10 @@ func findExistingColInList(
 		if expr == col {
 			return col
 		}
-		if exprStr == col.getExprStr() {
+		// TODO(yuzefovich): using equivalent type condition is not exactly the
+		// right thing to do. See discussion on PR #165860 the right fix in the
+		// type-checker.
+		if col.typ.Equivalent(expr.ResolvedType()) && exprStr == col.getExprStr() {
 			if allowSideEffects || col.scalar == nil {
 				return col
 			}
@@ -650,7 +662,9 @@ func findExistingColInList(
 
 // findExistingCol finds the given expression among the bound variables in this
 // scope. Returns nil if the expression is not found (or an expression is found
-// but it has side-effects and allowSideEffects is false).
+// but it has side-effects and allowSideEffects is false). The types of the
+// given expression and the bound variable need to be equivalent.
+//
 // If a column is found and we are tracking view dependencies, we add the column
 // to the view dependencies since it means this column is being referenced.
 func (s *scope) findExistingCol(expr tree.TypedExpr, allowSideEffects bool) *scopeColumn {
@@ -662,28 +676,19 @@ func (s *scope) findExistingCol(expr tree.TypedExpr, allowSideEffects bool) *sco
 }
 
 // findFuncArgCol returns the column that represents a function argument and has
-// an ordinal matching the given placeholder index. If such a column is not
-// found in the current scope, ancestor scopes are successively searched. If no
-// matching function argument column is found, nil is returned.
-func (s *scope) findFuncArgCol(idx tree.PlaceholderIdx) *scopeColumn {
+// an ordinal matching the given 0-based ordinal position. If such a column is
+// not found in the current scope, ancestor scopes are successively searched.
+// If no matching function argument column is found, nil is returned.
+func (s *scope) findFuncArgCol(ord int) *scopeColumn {
 	for ; s != nil; s = s.parent {
-		for i := range s.cols {
-			col := &s.cols[i]
-			if col.funcParamReferencedBy(idx) {
-				return col
-			}
+		if s.checkMaxParamOrd && ord > (s.maxParamOrd-1) {
+			// Referencing this function parameter by ordinal is not allowed. Subtract
+			// 1 from maxParamOrd to convert it to a 0-based ordinal.
+			return nil
 		}
-	}
-	return nil
-}
-
-// findAnonymousColumnWithMetadataName returns the first anonymous column that
-// has the given name in the query metadata.
-func (s *scope) findAnonymousColumnWithMetadataName(metadataName string) *scopeColumn {
-	for ; s != nil; s = s.parent {
 		for i := range s.cols {
 			col := &s.cols[i]
-			if col.name.refName == "" && col.name.metadataName == metadataName {
+			if col.funcParamReferencedBy(ord) {
 				return col
 			}
 		}
@@ -872,7 +877,7 @@ func (s *scope) FindSourceProvidingColumn(
 			if candidate.ambiguous {
 				return nil, nil, -1, s.newAmbiguousColumnError(colName, candidate.matchClass)
 			}
-			return &col.table, col, int(col.id), nil
+			return &col.table, col, int(col.id), col.resolveErr
 		}
 		// No matches in this scope; proceed to the parent scope.
 	}
@@ -1015,7 +1020,7 @@ func (s *scope) Resolve(
 		if col.visibility != inaccessible &&
 			col.name.MatchesReferenceName(colName) &&
 			sourceNameMatches(*prefix, col.table) {
-			return col, nil
+			return col, col.resolveErr
 		}
 	}
 
@@ -1080,20 +1085,53 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 				}()
 			}
 			if sqlerrors.IsUndefinedRelationError(resolveErr) && t.TableName.Object() != "" {
-				// Attempt to resolve as columnname.fieldname in order to provide a more
-				// helpful error message.
-				_, sourceResolveErr := colinfo.ResolveColumnItem(
-					s.builder.ctx, s, &tree.ColumnItem{ColumnName: tree.Name(t.TableName.Object())},
-				)
-				if sourceResolveErr == nil {
-					panic(errors.WithIssueLink(errors.WithHint(resolveErr,
-						"to access a field of a composite-typed column or variable, "+
-							"surround the column/variable name in parentheses: (varName).fieldName"),
-						errors.IssueLink{IssueURL: build.MakeIssueURL(114687)},
-					))
+				// If we are inside a PL/pgSQL routine and the prefix names a
+				// composite-typed PL/pgSQL variable, rewrite `var.field` into
+				// the equivalent parenthesized field access `(var).field`.
+				// Postgres does this via a post-column-ref parser hook in
+				// pl_comp.c; we reproduce the behavior here.
+				var plpgsqlKnownVar bool
+				if hook := s.findPLpgSQLVarRef(); hook != nil {
+					rewritten, knownVar := hook(t)
+					if rewritten != nil {
+						return true, rewritten
+					}
+					plpgsqlKnownVar = knownVar
+				}
+				// If the prefix already names a PL/pgSQL variable in scope, the
+				// "surround in parentheses" hint would be misleading: parens
+				// won't help when the variable is scalar or lacks the named
+				// field. Postgres also emits no hint in this case. Fall through
+				// to the bare error below.
+				if !plpgsqlKnownVar {
+					// Attempt to resolve as columnname.fieldname in order to provide a more
+					// helpful error message.
+					_, sourceResolveErr := colinfo.ResolveColumnItem(
+						s.builder.ctx, s, &tree.ColumnItem{ColumnName: tree.Name(t.TableName.Object())},
+					)
+					if sourceResolveErr == nil {
+						panic(errors.WithHint(resolveErr,
+							"to access a field of a composite-typed column, "+
+								"surround the column name in parentheses: (colName).fieldName"))
+					}
 				}
 			}
 			panic(resolveErr)
+		}
+		// Check for an ambiguous reference: SQL name resolution succeeded,
+		// but a same-named composite PL/pgSQL variable in scope would also
+		// resolve. Postgres raises ERRCODE_AMBIGUOUS_COLUMN here (see
+		// plpgsql_post_column_ref in pl_comp.c).
+		if t.TableName != nil && t.TableName.Object() != "" {
+			if hook := s.findPLpgSQLVarRef(); hook != nil {
+				if rewritten, _ := hook(t); rewritten != nil {
+					panic(errors.WithDetail(
+						pgerror.Newf(pgcode.AmbiguousColumn,
+							"column reference %q is ambiguous", tree.AsStringWithFlags(t, tree.FmtSimple)),
+						"It could refer to either a PL/pgSQL variable or a table column.",
+					))
+				}
+			}
 		}
 		return false, colI.(*scopeColumn)
 
@@ -1104,7 +1142,7 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 		// NOTE: This likely won't work if we want to allow PREPARE statements
 		// within user-defined function bodies. We'll need to avoid replacing
 		// placeholders that are prepared statement parameters.
-		if col := s.findFuncArgCol(t.Idx); col != nil {
+		if col := s.findFuncArgCol(int(t.Idx)); col != nil {
 			return false, col
 		}
 
@@ -1206,7 +1244,7 @@ func (s *scope) replaceSRF(f *tree.FuncExpr, def *tree.ResolvedFunctionDefinitio
 		tree.RejectAggregates|tree.RejectWindowApplications|tree.RejectNestedGenerators)
 
 	expr := f.Walk(s)
-	typedFunc, err := tree.TypeCheck(s.builder.ctx, expr, s.builder.semaCtx, types.Any)
+	typedFunc, err := tree.TypeCheck(s.builder.ctx, expr, s.builder.semaCtx, types.AnyElement)
 	if err != nil {
 		panic(err)
 	}
@@ -1307,7 +1345,7 @@ func (s *scope) replaceAggregate(f *tree.FuncExpr, def *tree.ResolvedFunctionDef
 		copy(fCopy.Exprs, oldExprs)
 
 		// Add implicit column to the input expressions.
-		fCopy.Exprs = append(fCopy.Exprs, s.resolveType(fCopy.OrderBy[0].Expr, types.Any))
+		fCopy.Exprs = append(fCopy.Exprs, s.resolveType(fCopy.OrderBy[0].Expr, types.AnyElement))
 	}
 
 	expr := fCopy.Walk(s)
@@ -1326,14 +1364,14 @@ func (s *scope) replaceAggregate(f *tree.FuncExpr, def *tree.ResolvedFunctionDef
 			defer func() { s.builder.semaCtx.Properties.Restore(oldProps) }()
 
 			s.builder.semaCtx.Properties.Require("FILTER", tree.RejectSpecial)
-			_, err := tree.TypeCheck(s.builder.ctx, expr.(*tree.FuncExpr).Filter, s.builder.semaCtx, types.Any)
+			_, err := tree.TypeCheck(s.builder.ctx, expr.(*tree.FuncExpr).Filter, s.builder.semaCtx, types.AnyElement)
 			if err != nil {
 				panic(err)
 			}
 		}()
 	}
 
-	typedFunc, err := tree.TypeCheck(s.builder.ctx, expr, s.builder.semaCtx, types.Any)
+	typedFunc, err := tree.TypeCheck(s.builder.ctx, expr, s.builder.semaCtx, types.AnyElement)
 	if err != nil {
 		panic(err)
 	}
@@ -1405,7 +1443,7 @@ func (s *scope) replaceWindowFn(f *tree.FuncExpr, def *tree.ResolvedFunctionDefi
 
 	expr := fCopy.Walk(s)
 
-	typedFunc, err := tree.TypeCheck(s.builder.ctx, expr, s.builder.semaCtx, types.Any)
+	typedFunc, err := tree.TypeCheck(s.builder.ctx, expr, s.builder.semaCtx, types.AnyElement)
 	if err != nil {
 		panic(err)
 	}
@@ -1426,7 +1464,7 @@ func (s *scope) replaceWindowFn(f *tree.FuncExpr, def *tree.ResolvedFunctionDefi
 	oldPartitions := f.WindowDef.Partitions
 	f.WindowDef.Partitions = make(tree.Exprs, len(oldPartitions))
 	for i, e := range oldPartitions {
-		typedExpr := s.resolveType(e, types.Any)
+		typedExpr := s.resolveType(e, types.AnyElement)
 		f.WindowDef.Partitions[i] = typedExpr
 	}
 
@@ -1437,7 +1475,7 @@ func (s *scope) replaceWindowFn(f *tree.FuncExpr, def *tree.ResolvedFunctionDefi
 		if ord.OrderType != tree.OrderByColumn {
 			panic(errOrderByIndexInWindow)
 		}
-		typedExpr := s.resolveType(ord.Expr, types.Any)
+		typedExpr := s.resolveType(ord.Expr, types.AnyElement)
 		ord.Expr = typedExpr
 		f.WindowDef.OrderBy[i] = &ord
 	}
@@ -1489,7 +1527,7 @@ func (s *scope) replaceSQLFn(f *tree.FuncExpr, def *tree.ResolvedFunctionDefinit
 	s.builder.semaCtx.Properties.Require("SQL function", tree.RejectSpecial)
 
 	expr := f.Walk(s)
-	typedFunc, err := tree.TypeCheck(s.builder.ctx, expr, s.builder.semaCtx, types.Any)
+	typedFunc, err := tree.TypeCheck(s.builder.ctx, expr, s.builder.semaCtx, types.AnyElement)
 	if err != nil {
 		panic(err)
 	}
@@ -1635,7 +1673,7 @@ func (s *scope) replaceCount(
 			// We call TypeCheck to fill in FuncExpr internals. This is a fixed
 			// expression; we should not hit an error here.
 			semaCtx := tree.MakeSemaContext(nil /* resolver */)
-			if _, err := e.TypeCheck(s.builder.ctx, &semaCtx, types.Any); err != nil {
+			if _, err := e.TypeCheck(s.builder.ctx, &semaCtx, types.AnyElement); err != nil {
 				panic(err)
 			}
 			newDef, err := e.Func.Resolve(s.builder.ctx, s.builder.semaCtx.SearchPath, nil /* resolver */)

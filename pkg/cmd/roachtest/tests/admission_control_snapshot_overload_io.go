@@ -47,6 +47,10 @@ func registerSnapshotOverloadIO(r registry.Registry) {
 				spec.VolumeSize(cfg.volumeSize),
 				spec.ReuseNone(),
 				spec.DisableLocalSSD(),
+				spec.RandomizeVolumeType(),
+				spec.RandomlyUseXfs(),
+				// TODO(darryl): Enable FIPS once we can upgrade to Ubuntu 22 and use cgroups v2 for disk stalls.
+				spec.Arch(spec.AllExceptFIPS),
 			),
 			Leases:  registry.MetamorphicLeases,
 			Timeout: 12 * time.Hour,
@@ -70,9 +74,10 @@ func registerSnapshotOverloadIO(r registry.Registry) {
 		limitDiskBandwidth:         false,
 		readPercent:                75,
 		workloadBlockBytes:         12288,
+		rebalanceRate:              "256MiB",
 	}))
 
-	// This tests the behaviour of snpashot ingestion in bandwidth constrained
+	// This tests the behaviour of snapshot ingestion in bandwidth constrained
 	// environments.
 	r.Add(spec("bandwidth", admissionControlSnapshotOverloadIOOpts{
 		// 2x headroom from the ~500GB pre-population of the test.
@@ -81,6 +86,7 @@ func registerSnapshotOverloadIO(r registry.Registry) {
 		limitDiskBandwidth:         true,
 		readPercent:                20,
 		workloadBlockBytes:         1024,
+		rebalanceRate:              "1GiB",
 	}))
 
 }
@@ -91,6 +97,7 @@ type admissionControlSnapshotOverloadIOOpts struct {
 	limitDiskBandwidth         bool
 	readPercent                int
 	workloadBlockBytes         int
+	rebalanceRate              string
 }
 
 func runAdmissionControlSnapshotOverloadIO(
@@ -128,19 +135,15 @@ func runAdmissionControlSnapshotOverloadIO(
 	{
 		// Defensive, since admission control is enabled by default.
 		roachtestutil.SetAdmissionControl(ctx, t, c, true)
-		// Ensure ingest splits and excises are enabled. (Enabled by default in v24.1+)
-		if _, err := db.ExecContext(
-			ctx, "SET CLUSTER SETTING kv.snapshot_receiver.excise.enabled = 'true'"); err != nil {
-			t.Fatalf("failed to set kv.snapshot_receiver.excise.enabled: %v", err)
-		}
+		// Ensure ingest splits are enabled. (Enabled by default in v24.1+)
 		if _, err := db.ExecContext(
 			ctx, "SET CLUSTER SETTING storage.ingest_split.enabled = 'true'"); err != nil {
 			t.Fatalf("failed to set storage.ingest_split.enabled: %v", err)
 		}
 
-		// Set a high rebalance rate.
+		// Set rebalance rate.
 		if _, err := db.ExecContext(
-			ctx, "SET CLUSTER SETTING kv.snapshot_rebalance.max_rate = '256MiB'"); err != nil {
+			ctx, fmt.Sprintf("SET CLUSTER SETTING kv.snapshot_rebalance.max_rate = '%s'", cfg.rebalanceRate)); err != nil {
 			t.Fatalf("failed to set kv.snapshot_rebalance.max_rate: %v", err)
 		}
 	}
@@ -173,15 +176,15 @@ func runAdmissionControlSnapshotOverloadIO(
 
 	// Now set disk bandwidth limits
 	if cfg.limitDiskBandwidth {
-		const bandwidthLimit = 128 << 20 // 128 MiB
-		t.Status(fmt.Sprintf("limiting disk bandwidth to %d bytes/s", bandwidthLimit))
+		const bandwidthLimitMbs = 128
+		t.Status(fmt.Sprintf("limiting disk bandwidth to %d MB/s", bandwidthLimitMbs))
 		staller := roachtestutil.MakeCgroupDiskStaller(t, c,
-			false /* readsToo */, false /* logsToo */)
+			false /* readsToo */, false /* logsToo */, false /* disableStateValidation */)
 		staller.Setup(ctx)
-		staller.Slow(ctx, c.CRDBNodes(), bandwidthLimit)
+		staller.Slow(ctx, c.CRDBNodes(), bandwidthLimitMbs<<20 /* bytesPerSecond */)
 
 		if _, err := db.ExecContext(
-			ctx, fmt.Sprintf("SET CLUSTER SETTING kvadmission.store.provisioned_bandwidth = '%dMiB'", bandwidthLimit)); err != nil {
+			ctx, fmt.Sprintf("SET CLUSTER SETTING kvadmission.store.provisioned_bandwidth = '%dMiB'", bandwidthLimitMbs)); err != nil {
 			t.Fatalf("failed to set kvadmission.store.provisioned_bandwidth: %v", err)
 		}
 		if _, err := db.ExecContext(
@@ -191,7 +194,7 @@ func runAdmissionControlSnapshotOverloadIO(
 	}
 
 	t.Status(fmt.Sprintf("starting kv workload thread (<%s)", time.Minute))
-	m := c.NewMonitor(ctx, c.CRDBNodes())
+	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 	m.Go(func(ctx context.Context) error {
 
 		labels := map[string]string{
@@ -262,50 +265,50 @@ func runAdmissionControlSnapshotOverloadIO(
 			return float64(fromVec[0].Value), nil
 		}
 
-		// TODO(aaditya): assert on disk bandwidth subtest once integrated.
-		if !cfg.limitDiskBandwidth {
-			// Assert on l0 sublevel count and p99 latencies.
-			latencyMetric := divQuery("histogram_quantile(0.99, sum by(le) (rate(sql_service_latency_bucket[2m])))", 1<<20 /* 1ms */)
-			const latencyThreshold = 100 // 100ms since the metric is scaled to 1ms above.
-			const sublevelMetric = "storage_l0_sublevels"
-			const sublevelThreshold = 20
-			var l0SublevelCount []float64
-			const sampleCountForL0Sublevel = 12
-			const collectionIntervalSeconds = 10.0
-			// Loop for ~120 minutes.
-			const numIterations = int(120 / (collectionIntervalSeconds / 60))
-			numErrors := 0
-			numSuccesses := 0
-			for i := 0; i < numIterations; i++ {
-				time.Sleep(collectionIntervalSeconds * time.Second)
-				val, err := getHistMetricVal(latencyMetric)
-				if err != nil {
-					numErrors++
-					continue
-				}
-				if val > latencyThreshold {
-					t.Fatalf("sql p99 latency %f exceeded threshold", val)
-				}
-				val, err = getMetricVal(sublevelMetric, "store")
-				if err != nil {
-					numErrors++
-					continue
-				}
-				l0SublevelCount = append(l0SublevelCount, val)
-				// We want to use the mean of the last 2m of data to avoid short-lived
-				// spikes causing failures.
-				if len(l0SublevelCount) >= sampleCountForL0Sublevel {
-					latestSampleMeanL0Sublevels := roachtestutil.GetMeanOverLastN(sampleCountForL0Sublevel, l0SublevelCount)
-					if latestSampleMeanL0Sublevels > sublevelThreshold {
-						t.Fatalf("sub-level mean %f over last %d iterations exceeded threshold", latestSampleMeanL0Sublevels, sampleCountForL0Sublevel)
-					}
-				}
-				numSuccesses++
+		// Assert on l0 sublevel count and p99 latencies.
+		//
+		// TODO(aaditya): Add disk bandwidth assertion once
+		// https://github.com/cockroachdb/cockroach/pull/133310 lands.
+		latencyMetric := divQuery("histogram_quantile(0.99, sum by(le) (rate(sql_service_latency_bucket[2m])))", 1<<20 /* 1ms */)
+		const latencyThreshold = 100 // 100ms since the metric is scaled to 1ms above.
+		const sublevelMetric = "storage_l0_sublevels"
+		const sublevelThreshold = 20
+		var l0SublevelCount []float64
+		const sampleCountForL0Sublevel = 12
+		const collectionIntervalSeconds = 10.0
+		// Loop for ~120 minutes.
+		const numIterations = int(120 / (collectionIntervalSeconds / 60))
+		numErrors := 0
+		numSuccesses := 0
+		for i := 0; i < numIterations; i++ {
+			time.Sleep(collectionIntervalSeconds * time.Second)
+			val, err := getHistMetricVal(latencyMetric)
+			if err != nil {
+				numErrors++
+				continue
 			}
-			t.Status(fmt.Sprintf("done monitoring, errors: %d successes: %d", numErrors, numSuccesses))
-			if numErrors > numSuccesses {
-				t.Fatalf("too many errors retrieving metrics")
+			if val > latencyThreshold {
+				t.Fatalf("sql p99 latency %f exceeded threshold", val)
 			}
+			val, err = getMetricVal(sublevelMetric, "store")
+			if err != nil {
+				numErrors++
+				continue
+			}
+			l0SublevelCount = append(l0SublevelCount, val)
+			// We want to use the mean of the last 2m of data to avoid short-lived
+			// spikes causing failures.
+			if len(l0SublevelCount) >= sampleCountForL0Sublevel {
+				latestSampleMeanL0Sublevels := roachtestutil.GetMeanOverLastN(sampleCountForL0Sublevel, l0SublevelCount)
+				if latestSampleMeanL0Sublevels > sublevelThreshold {
+					t.Fatalf("sub-level mean %f over last %d iterations exceeded threshold", latestSampleMeanL0Sublevels, sampleCountForL0Sublevel)
+				}
+			}
+			numSuccesses++
+		}
+		t.Status(fmt.Sprintf("done monitoring, errors: %d successes: %d", numErrors, numSuccesses))
+		if numErrors > numSuccesses {
+			t.Fatalf("too many errors retrieving metrics")
 		}
 		return nil
 	})

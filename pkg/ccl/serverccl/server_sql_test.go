@@ -17,12 +17,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/license/licensepb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -94,8 +94,8 @@ func TestTenantCanUseEnterpriseFeaturesWithEnvVar(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	license, _ := (&licenseccl.License{
-		Type: licenseccl.License_Enterprise,
+	license, _ := (&licensepb.License{
+		Type: licensepb.License_Enterprise,
 	}).Encode()
 
 	defer ccl.TestingDisableEnterprise()()
@@ -121,8 +121,8 @@ func TestTenantCanUseEnterpriseFeaturesWithSetting(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	license, _ := (&licenseccl.License{
-		Type:             licenseccl.License_Enterprise,
+	license, _ := (&licensepb.License{
+		Type:             licensepb.License_Enterprise,
 		OrganizationName: "mytest",
 	}).Encode()
 
@@ -283,12 +283,9 @@ func TestTenantProcessDebugging(t *testing.T) {
 			require.Equal(t, http.StatusForbidden, resp.StatusCode)
 			require.Contains(t, string(body), "tenant does not have capability to debug the running process")
 
-			_, err = db.Exec(`ALTER TENANT processdebug GRANT CAPABILITY can_debug_process=true`)
-			require.NoError(t, err)
-
-			serverutils.WaitForTenantCapabilities(t, s, serverutils.TestTenantID(), map[tenantcapabilities.ID]string{
-				tenantcapabilities.CanDebugProcess: "true",
-			}, "")
+			require.NoError(t, s.GrantTenantCapabilities(
+				ctx, serverutils.TestTenantID(),
+				map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanDebugProcess: "true"}))
 		}
 		resp, err := httpClient.Get(url.String())
 		require.NoError(t, err)
@@ -301,8 +298,8 @@ func TestTenantProcessDebugging(t *testing.T) {
 		_, err = db.Exec(`ALTER TENANT processdebug REVOKE CAPABILITY can_debug_process`)
 		require.NoError(t, err)
 
-		serverutils.WaitForTenantCapabilities(t, s, serverutils.TestTenantID(), map[tenantcapabilities.ID]string{
-			tenantcapabilities.CanDebugProcess: "false",
+		serverutils.WaitForTenantCapabilities(t, s, serverutils.TestTenantID(), map[tenantcapabilitiespb.ID]string{
+			tenantcapabilitiespb.CanDebugProcess: "false",
 		}, "")
 	})
 
@@ -326,12 +323,9 @@ func TestTenantProcessDebugging(t *testing.T) {
 			require.Equal(t, http.StatusForbidden, resp.StatusCode)
 			require.Contains(t, string(body), "tenant does not have capability to debug the running process")
 
-			_, err = db.Exec(`ALTER TENANT processdebug GRANT CAPABILITY can_debug_process=true`)
-			require.NoError(t, err)
-
-			serverutils.WaitForTenantCapabilities(t, s, serverutils.TestTenantID(), map[tenantcapabilities.ID]string{
-				tenantcapabilities.CanDebugProcess: "true",
-			}, "")
+			require.NoError(t, s.GrantTenantCapabilities(
+				ctx, serverutils.TestTenantID(),
+				map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanDebugProcess: "true"}))
 		}
 		resp, err := httpClient.Get(url.String())
 		require.NoError(t, err)
@@ -344,8 +338,8 @@ func TestTenantProcessDebugging(t *testing.T) {
 		_, err = db.Exec(`ALTER TENANT processdebug REVOKE CAPABILITY can_debug_process`)
 		require.NoError(t, err)
 
-		serverutils.WaitForTenantCapabilities(t, s, serverutils.TestTenantID(), map[tenantcapabilities.ID]string{
-			tenantcapabilities.CanDebugProcess: "false",
+		serverutils.WaitForTenantCapabilities(t, s, serverutils.TestTenantID(), map[tenantcapabilitiespb.ID]string{
+			tenantcapabilitiespb.CanDebugProcess: "false",
 		}, "")
 	})
 }

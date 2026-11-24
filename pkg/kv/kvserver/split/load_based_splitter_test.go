@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/rand/v2"
 	"sort"
 	"strings"
 	"testing"
@@ -19,13 +20,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/dd"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/workload/workloadimpl"
 	"github.com/cockroachdb/cockroach/pkg/workload/ycsb"
 	"github.com/cockroachdb/datadriven"
-	"golang.org/x/exp/rand"
 )
 
 // This is a testing framework to benchmark load-based splitters, enabling
@@ -112,7 +113,7 @@ func newGenerator(randSource *rand.Rand, generatorType int, iMax uint64) generat
 	var g generator
 	var err error
 	if generatorType == zipfGenerator {
-		g, err = ycsb.NewZipfGenerator(randSource, 1, iMax, 0.99, false)
+		g, err = workloadimpl.NewZipfGenerator(randSource, 1, iMax, 0.99, false)
 	} else if generatorType == uniformGenerator {
 		g, err = ycsb.NewUniformGenerator(randSource, 1, iMax)
 	} else {
@@ -219,7 +220,7 @@ type requestGenerator struct {
 	numRequests         int
 }
 
-func (rg requestGenerator) generate() ([]request, []weightedKey, float64) {
+func (rg requestGenerator) generate(rng *rand.Rand) ([]request, []weightedKey, float64) {
 	var totalWeight float64
 	requests := make([]request, 0, rg.numRequests)
 	weightedKeys := make([]weightedKey, 0, 2*rg.numRequests)
@@ -231,7 +232,7 @@ func (rg requestGenerator) generate() ([]request, []weightedKey, float64) {
 
 		var span roachpb.Span
 		span.Key = uint32ToKey(startKey)
-		if rand.Float64() < rg.rangeRequestPercent {
+		if rng.Float64() < rg.rangeRequestPercent {
 			endKey := startKey + spanLength
 			span.EndKey = uint32ToKey(endKey)
 
@@ -265,7 +266,7 @@ type multiRequestGenerator struct {
 	numRequests       int
 }
 
-func (mrg multiRequestGenerator) generate() ([]request, []weightedKey, float64) {
+func (mrg multiRequestGenerator) generate(rng *rand.Rand) ([]request, []weightedKey, float64) {
 	numRequests := 0
 	for _, gen := range mrg.requestGenerators {
 		numRequests += gen.numRequests
@@ -275,7 +276,7 @@ func (mrg multiRequestGenerator) generate() ([]request, []weightedKey, float64) 
 	requests := make([]request, 0, numRequests)
 	weightedKeys := make([]weightedKey, 0, numRequests*2)
 	for _, gen := range mrg.requestGenerators {
-		reqs, keys, weight := gen.generate()
+		reqs, keys, weight := gen.generate(rng)
 		requests = append(requests, reqs...)
 		weightedKeys = append(weightedKeys, keys...)
 		totalWeight += weight
@@ -325,10 +326,7 @@ func (dc deciderConfig) makeDecider(randSource rand.Source) *Decider {
 		statThreshold: dc.threshold,
 	}
 
-	Init(d, &loadSplitConfig, &LoadSplitterMetrics{
-		PopularKeyCount: metric.NewCounter(metric.Metadata{}),
-		NoSplitKeyCount: metric.NewCounter(metric.Metadata{}),
-	}, dc.objective)
+	Init(d, &loadSplitConfig, newSplitterMetrics(), dc.objective)
 	return d
 }
 
@@ -402,10 +400,10 @@ type result struct {
 func runTest(
 	recordFn func(span roachpb.Span, weight int),
 	keyFn func() roachpb.Key,
-	randSource rand.Source,
+	rng *rand.Rand,
 	mrg multiRequestGenerator,
 ) result {
-	requests, weightedKeys, totalWeight := mrg.generate()
+	requests, weightedKeys, totalWeight := mrg.generate(rng)
 	optimalKey, optimalLeftWeight, optimalRightWeight := getOptimalKey(
 		weightedKeys,
 		totalWeight,
@@ -514,7 +512,7 @@ func runTestRepeated(settings *lbsTestSettings) repeatedResult {
 		noKeyFoundPercent                           float64
 		lastStateString                             string
 	)
-	randSource := rand.New(rand.NewSource(settings.seed))
+	randSource := rand.New(rand.NewPCG(settings.seed, 0))
 	requestGen := settings.requestConfig.makeGenerator(randSource)
 
 	for i := 0; i < settings.iterations; i++ {
@@ -697,8 +695,8 @@ func makeMultiRequestConfigs(
 	} else {
 		// This is expensive, we could instead pass in the source.
 		n := len(requestConfigs)
-		rand := rand.New(rand.NewSource(seed))
-		perms := rand.Perm(n)
+		rng := rand.New(rand.NewPCG(seed, 0))
+		perms := rng.Perm(n)
 		for i := 0; i < n; i += mixCount {
 			mrc := multiReqConfig{
 				mix:        mix,
@@ -793,51 +791,38 @@ func TestDataDriven(t *testing.T) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "requests":
-				var keyDist, spanDist, weightDist string
-				var keyIMax, spanIMax, weightIMax int
-				var rangeRequestPercent, requestCount int
+				keyDist := dd.ScanArg[string](t, d, "key_dist")
+				spanDist := dd.ScanArg[string](t, d, "span_dist")
+				weightDist := dd.ScanArg[string](t, d, "weight_dist")
 
-				d.ScanArgs(t, "key_dist", &keyDist)
-				d.ScanArgs(t, "span_dist", &spanDist)
-				d.ScanArgs(t, "weight_dist", &weightDist)
+				keyIMax := dd.ScanArg[uint64](t, d, "key_max")
+				spanIMax := dd.ScanArg[uint64](t, d, "span_max")
+				weightIMax := dd.ScanArg[uint64](t, d, "weight_max")
 
-				d.ScanArgs(t, "key_max", &keyIMax)
-				d.ScanArgs(t, "span_max", &spanIMax)
-				d.ScanArgs(t, "weight_max", &weightIMax)
-
-				d.ScanArgs(t, "range_request_percent", &rangeRequestPercent)
-				d.ScanArgs(t, "request_count", &requestCount)
+				rangeRequestPercent := dd.ScanArg[int](t, d, "range_request_percent")
+				requestCount := dd.ScanArg[int](t, d, "request_count")
 
 				reqConfigs = append(reqConfigs, requestConfig{
 					startKeyGeneratorType:   parseGeneratorType(keyDist),
-					startKeyGeneratorIMax:   uint64(keyIMax),
+					startKeyGeneratorIMax:   keyIMax,
 					spanLengthGeneratorType: parseGeneratorType(spanDist),
-					spanLengthGeneratorIMax: uint64(spanIMax),
+					spanLengthGeneratorIMax: spanIMax,
 					weightGeneratorType:     parseGeneratorType(weightDist),
-					weightGeneratorIMax:     uint64(weightIMax),
+					weightGeneratorIMax:     weightIMax,
 					rangeRequestPercent:     float64(rangeRequestPercent) / 100.0,
 					numRequests:             requestCount,
 				})
 				return ""
 			case "finder":
-				var weighted bool
-				d.ScanArgs(t, "weighted", &weighted)
-
 				findConfig = &finderConfig{
-					weighted: weighted,
+					weighted: dd.ScanArg[bool](t, d, "weighted"),
 				}
 				decConfig = nil
 			case "decider":
-				var duration int
-				var threshold int
-				var retentionSeconds, durationSeconds int
-				var objective string
-
-				d.ScanArgs(t, "duration", &duration)
-				d.ScanArgs(t, "retention", &retentionSeconds)
-				d.ScanArgs(t, "duration", &durationSeconds)
-				d.ScanArgs(t, "objective", &objective)
-				d.ScanArgs(t, "threshold", &threshold)
+				duration := dd.ScanArg[int](t, d, "duration")
+				retentionSeconds := dd.ScanArg[int](t, d, "retention")
+				objective := dd.ScanArg[string](t, d, "objective")
+				threshold := dd.ScanArg[int](t, d, "threshold")
 				splitObj := parseObjType(objective)
 
 				decConfig = &deciderConfig{
@@ -848,21 +833,17 @@ func TestDataDriven(t *testing.T) {
 				}
 				findConfig = nil
 			case "eval":
-				var seed uint64
-				var iterations, mixCount int
-				var showTiming, cartesian, all, showLastState bool
-				var mix string
-				var mixT mixType
+				seed := dd.ScanArg[uint64](t, d, "seed")
+				iterations := dd.ScanArg[int](t, d, "iterations")
+				showTiming := dd.ScanArgOr(t, d, "timing", false)
+				cartesian := dd.ScanArgOr(t, d, "cartesian", false)
+				all := dd.ScanArgOr(t, d, "all", false)
+				showLastState := dd.ScanArgOr(t, d, "show_last", false)
 
-				d.ScanArgs(t, "seed", &seed)
-				d.ScanArgs(t, "iterations", &iterations)
-				d.MaybeScanArgs(t, "timing", &showTiming)
-				d.MaybeScanArgs(t, "cartesian", &cartesian)
-				d.MaybeScanArgs(t, "all", &all)
-				d.MaybeScanArgs(t, "show_last", &showLastState)
-				if d.HasArg("mix") {
-					d.ScanArgs(t, "mix", &mix)
-					d.ScanArgs(t, "mix_count", &mixCount)
+				var mixCount int
+				var mixT mixType
+				if mix, ok := dd.ScanArgOpt[string](t, d, "mix"); ok {
+					mixCount = dd.ScanArg[int](t, d, "mix_count")
 					switch mix {
 					case "sequential":
 						mixT = sequential

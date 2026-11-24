@@ -13,7 +13,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptreconcile"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/scheduledjobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -44,9 +43,9 @@ func GetMetaType(metaType MetaType) string {
 	return metaTypes[metaType]
 }
 
-// MakeStatusFunc returns a function which determines whether the job or
+// MakeStateFunc returns a function which determines whether the job or
 // schedule implied with this value of meta should be removed by the reconciler.
-func MakeStatusFunc(jr *jobs.Registry, metaType MetaType) ptreconcile.StatusFunc {
+func MakeStateFunc(jr *jobs.Registry, metaType MetaType) ptreconcile.StatusFunc {
 	switch metaType {
 	case Jobs:
 		return func(ctx context.Context, txn isql.Txn, meta []byte) (shouldRemove bool, _ error) {
@@ -61,7 +60,7 @@ func MakeStatusFunc(jr *jobs.Registry, metaType MetaType) ptreconcile.StatusFunc
 			if err != nil {
 				return false, err
 			}
-			return j.Status().Terminal(), nil
+			return j.State().Terminal(), nil
 		}
 	case Schedules:
 		return func(ctx context.Context, txn isql.Txn, meta []byte) (shouldRemove bool, _ error) {
@@ -82,25 +81,20 @@ func MakeStatusFunc(jr *jobs.Registry, metaType MetaType) ptreconcile.StatusFunc
 
 // MakeRecord makes a protected timestamp record to protect a timestamp on
 // behalf of this job.
-//
-// TODO(adityamaru): In 22.2 stop passing `deprecatedSpans` since PTS records
-// will stop protecting key spans.
 func MakeRecord(
 	recordID uuid.UUID,
 	metaID int64, /* jobID or scheduleID, matching the MetaType */
 	tsToProtect hlc.Timestamp,
-	deprecatedSpans []roachpb.Span,
 	metaType MetaType,
 	target *ptpb.Target,
 ) *ptpb.Record {
 	return &ptpb.Record{
-		ID:              recordID.GetBytesMut(),
-		Timestamp:       tsToProtect,
-		Mode:            ptpb.PROTECT_AFTER,
-		MetaType:        metaTypes[metaType],
-		Meta:            encodeID(metaID),
-		DeprecatedSpans: deprecatedSpans,
-		Target:          target,
+		ID:        recordID.GetBytesMut(),
+		Timestamp: tsToProtect,
+		Mode:      ptpb.PROTECT_AFTER,
+		MetaType:  metaTypes[metaType],
+		Meta:      encodeID(metaID),
+		Target:    target,
 	}
 }
 

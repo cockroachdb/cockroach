@@ -8,12 +8,12 @@ package kvserverbase
 import (
 	"context"
 	"os"
-	"runtime/debug"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
@@ -52,18 +52,18 @@ func LimitBulkIOWrite(ctx context.Context, limiter *rate.Limiter, cost int) erro
 	}
 
 	if d := timeutil.Since(begin); d > bulkIOWriteLimiterLongWait {
-		log.Warningf(ctx, "bulk io write limiter took %s (>%s):\n%s",
-			d, bulkIOWriteLimiterLongWait, debug.Stack())
+		log.KvExec.Warningf(ctx, "bulk io write limiter took %s (>%s):\n%s",
+			d, bulkIOWriteLimiterLongWait, debugutil.Stack())
 	}
 	return nil
 }
 
-// sstWriteSyncRate wraps "kv.bulk_sst.sync_size". 0 disables syncing.
 var sstWriteSyncRate = settings.RegisterByteSizeSetting(
 	settings.SystemOnly,
 	"kv.bulk_sst.sync_size",
-	"threshold after which non-Rocks SST writes must fsync (0 disables)",
+	"threshold after which non-Rocks SST writes must fsync",
 	BulkIOWriteBurst,
+	settings.ByteSizeWithMinimum(128<<10 /* 128 KB */),
 )
 
 // WriteFileSyncing is essentially os.WriteFile -- writes data to a file
@@ -84,10 +84,9 @@ func WriteFileSyncing(
 	category vfs.DiskWriteCategory,
 ) error {
 	chunkSize := sstWriteSyncRate.Get(&settings.SV)
-	sync := true
 	if chunkSize == 0 {
+		// Defensive, since sstWriteSyncRate has a min > 0.
 		chunkSize = BulkIOWriteBurst
-		sync = false
 	}
 
 	f, err := fs.Create(filename, category)
@@ -111,13 +110,11 @@ func WriteFileSyncing(
 		if _, err = f.Write(chunk); err != nil {
 			break
 		}
-		if sync {
-			if err = f.Sync(); err != nil {
-				break
-			}
+		if err = f.Sync(); err != nil {
+			break
 		}
 	}
-
+	// NB: if err != nil, all the writes are synced.
 	closeErr := f.Close()
 	if err == nil {
 		err = closeErr

@@ -10,6 +10,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -17,14 +18,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/span"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -69,6 +71,7 @@ var maxTimestampAge = settings.RegisterDurationSetting(
 	"sql.stats.max_timestamp_age",
 	"maximum age of timestamp during table statistics collection",
 	5*time.Minute,
+	settings.PositiveDuration,
 )
 
 // minAutoHistogramSamples and maxAutoHistogramSamples are the bounds used by
@@ -125,7 +128,7 @@ func computeNumberSamples(ctx context.Context, numRows uint64, st *cluster.Setti
 	minSampleSize := minAutoHistogramSamples.Get(&st.SV)
 
 	if maxSampleSize < minSampleSize {
-		log.Infof(
+		log.Dev.Infof(
 			ctx,
 			"using default sample size bounds since max sample size %d is less than min sample size %d",
 			maxSampleSize,
@@ -135,14 +138,10 @@ func computeNumberSamples(ctx context.Context, numRows uint64, st *cluster.Setti
 		minSampleSize = minAutoHistogramSamples.Default()
 	}
 
-	numSamples := math.Max(
-		math.Min(
-			582.0*math.Pow(float64(numRows), 0.29),
-			float64(maxSampleSize),
-		),
+	return uint32(max(
+		min(582.0*math.Pow(float64(numRows), 0.29), float64(maxSampleSize)),
 		float64(minSampleSize),
-	)
-	return uint32(numSamples)
+	))
 }
 
 func (dsp *DistSQLPlanner) createAndAttachSamplers(
@@ -165,7 +164,6 @@ func (dsp *DistSQLPlanner) createAndAttachSamplers(
 		if autoStatsFractionStaleRowsForTable, ok := desc.AutoStatsFractionStaleRows(); ok {
 			overhead = autoStatsFractionStaleRowsForTable
 		}
-		// Convert to a signed integer first to make the linter happy.
 		if details.UsingExtremes {
 			rowsExpected = uint64(int64(
 				// The total expected number of rows is the estimated number of stale
@@ -186,24 +184,20 @@ func (dsp *DistSQLPlanner) createAndAttachSamplers(
 	sampler := &execinfrapb.SamplerSpec{
 		Sketches:         sketchSpec,
 		InvertedSketches: invSketchSpec,
+		MaxFractionIdle:  details.MaxFractionIdle,
 	}
-	sampler.MaxFractionIdle = details.MaxFractionIdle
-	// For partial statistics this loop should only iterate once
-	// since we only support one reqStat at a time.
+	// For partial statistics this loop should only iterate once since we only
+	// support one reqStat at a time.
 	for _, s := range reqStats {
 		if s.histogram {
 			var histogramSamplesCount uint32
 			if tableSampleCount, ok := desc.HistogramSamplesCount(); ok {
 				histogramSamplesCount = tableSampleCount
-			} else if clusterSampleCount := histogramSamples.Get(&dsp.st.SV); clusterSampleCount != histogramSamples.Default() {
+			} else if clusterSampleCount := histogramSamples.Get(&dsp.st.SV); clusterSampleCount != 0 {
 				histogramSamplesCount = uint32(clusterSampleCount)
 			} else {
-				histogramSamplesCount = computeNumberSamples(
-					ctx,
-					rowsExpected,
-					dsp.st,
-				)
-				log.Infof(ctx, "using computed sample size of %d for histogram construction", histogramSamplesCount)
+				histogramSamplesCount = computeNumberSamples(ctx, rowsExpected, dsp.st)
+				log.Dev.Infof(ctx, "using computed sample size of %d for histogram construction", histogramSamplesCount)
 			}
 			sampler.SampleSize = histogramSamplesCount
 			// This could be anything >= 2 to produce a histogram, but the max number
@@ -217,7 +211,7 @@ func (dsp *DistSQLPlanner) createAndAttachSamplers(
 
 	// The sampler outputs the original columns plus a rank column, five
 	// sketch columns, and two inverted histogram columns.
-	outTypes := make([]*types.T, 0, len(p.GetResultTypes())+5)
+	outTypes := make([]*types.T, 0, len(p.GetResultTypes())+8)
 	outTypes = append(outTypes, p.GetResultTypes()...)
 	// An INT column for the rank of each row.
 	outTypes = append(outTypes, types.Int)
@@ -242,21 +236,26 @@ func (dsp *DistSQLPlanner) createAndAttachSamplers(
 		execinfrapb.PostProcessSpec{},
 		outTypes,
 		execinfrapb.Ordering{},
+		nil, /* finalizeLastStageCb */
 	)
+
+	canaryStatsEnabled := desc.TableDesc().StatsCanaryWindow != 0 &&
+		dsp.st.Version.IsActive(ctx, clusterversion.V26_2_AddTableStatisticsDelayDeleteColumn)
 
 	// Set up the final SampleAggregator stage.
 	agg := &execinfrapb.SampleAggregatorSpec{
-		Sketches:         sketchSpec,
-		InvertedSketches: invSketchSpec,
-		SampleSize:       sampler.SampleSize,
-		MinSampleSize:    sampler.MinSampleSize,
-		SampledColumnIDs: sampledColumnIDs,
-		TableID:          desc.GetID(),
-		JobID:            jobID,
-		RowsExpected:     rowsExpected,
-		DeleteOtherStats: details.DeleteOtherStats,
-		NumIndexes:       uint64(numIndexes),
-		CurIndex:         uint64(curIndex),
+		Sketches:           sketchSpec,
+		InvertedSketches:   invSketchSpec,
+		SampleSize:         sampler.SampleSize,
+		MinSampleSize:      sampler.MinSampleSize,
+		SampledColumnIDs:   sampledColumnIDs,
+		TableID:            desc.GetID(),
+		JobID:              jobID,
+		RowsExpected:       rowsExpected,
+		DeleteOtherStats:   details.DeleteOtherStats,
+		NumIndexes:         uint64(numIndexes),
+		CurIndex:           uint64(curIndex),
+		CanaryStatsEnabled: canaryStatsEnabled,
 	}
 	// Plan the SampleAggregator on the gateway, unless we have a single Sampler.
 	node := dsp.gatewaySQLInstanceID
@@ -269,6 +268,7 @@ func (dsp *DistSQLPlanner) createAndAttachSamplers(
 		execinfrapb.ProcessorCoreUnion{SampleAggregator: agg},
 		execinfrapb.PostProcessSpec{},
 		[]*types.T{},
+		nil, /* finalizeLastStageCb */
 	)
 	p.PlanToStreamColMap = []int{}
 	return p
@@ -288,20 +288,26 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 	// so we only support one requested stat at a time here.
 	if len(reqStats) > 1 {
 		return nil, unimplemented.NewWithIssue(
-			128904,
-			"cannot process multiple partial statistics requests at once",
+			128904, "cannot process multiple partial statistics requests at once",
 		)
 	}
 
 	reqStat := reqStats[0]
-
 	if len(reqStat.columns) > 1 {
-		// TODO (faizaanmadhani): Add support for creating multi-column stats
+		// TODO(#94076): add support for creating multi-column stats.
 		return nil, pgerror.Newf(pgcode.FeatureNotSupported, "multi-column partial statistics are not currently supported")
 	}
+	if !reqStat.histogram {
+		return nil, pgerror.Newf(pgcode.FeatureNotSupported, "partial statistics without histograms are not supported")
+	}
 
+	var typeResolver *descs.DistSQLTypeResolver
+	if p := planCtx.planner; p != nil {
+		r := descs.NewDistSQLTypeResolver(p.Descriptors(), p.Txn())
+		typeResolver = &r
+	}
 	// Fetch all stats for the table that matches the given table descriptor.
-	tableStats, err := planCtx.ExtendedEvalCtx.ExecCfg.TableStatsCache.GetTableStats(ctx, desc)
+	tableStats, err := planCtx.ExtendedEvalCtx.ExecCfg.TableStatsCache.GetFreshTableStats(ctx, desc, typeResolver)
 	if err != nil {
 		return nil, err
 	}
@@ -311,36 +317,34 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 		return nil, err
 	}
 
-	// Calculate the column we need to scan
-	// TODO (faizaanmadhani): Iterate through all columns in a requested stat when
-	// when we add support for multi-column statistics.
+	// Calculate the column we need to scan.
+	// TODO(#94076): iterate through all columns in a requested stat when we add
+	// support for multi-column statistics.
 	var colCfg scanColumnsConfig
 	colCfg.wantedColumns = append(colCfg.wantedColumns, column.GetID())
 
 	// Initialize a dummy scanNode for the requested statistic.
-	scan := scanNode{desc: desc}
-	err = scan.initDescSpecificCol(colCfg, column)
+	var scan scanNode
+	scan.desc = desc
+	if details.UsingExtremes {
+		err = scan.initDescSpecificCol(colCfg, column)
+	} else if details.WhereClause != "" {
+		err = scan.initDescSpecificIndex(colCfg, column, details.WhereIndexID)
+	}
 	if err != nil {
 		return nil, err
 	}
-	// Map the ColumnIDs to their ordinals in scan.cols
-	// This loop should only iterate once, since we only
-	// handle single column partial statistics.
-	// TODO(faizaanmadhani): Add support for multi-column partial stats next
+	// Map the ColumnIDs to their ordinals in scan.cols. This loop should only
+	// iterate once, since we only handle single column partial statistics.
+	// TODO(#94076): add support for creating multi-column stats.
 	var colIdxMap catalog.TableColMap
-	for i, c := range scan.cols {
+	for i, c := range scan.catalogCols {
 		colIdxMap.Set(c.GetID(), i)
 	}
 
-	var sb span.Builder
-	sb.InitAllowingExternalRowData(
-		planCtx.EvalContext(), planCtx.ExtendedEvalCtx.Codec, desc, scan.index,
-	)
-
 	var stat *stats.TableStatistic
-	var histogram []cat.HistogramBucket
-	// Find the statistic and histogram from the newest table statistic for our
-	// column that is not partial and not forecasted. The first one we find will
+	// Find the statistic from the newest table statistic for our column that is
+	// not partial, not merged, and not forecasted. The first one we find will
 	// be the latest due to the newest to oldest ordering property of the cache.
 	for _, t := range tableStats {
 		if len(t.ColumnIDs) == 1 && column.GetID() == t.ColumnIDs[0] &&
@@ -361,7 +365,6 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 				)
 			}
 			stat = t
-			histogram = t.Histogram
 			break
 		}
 	}
@@ -369,21 +372,58 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 		return nil, pgerror.Newf(
 			pgcode.ObjectNotInPrerequisiteState,
 			"column %s does not have a prior statistic",
-			column.GetName())
+			column.GetName(),
+		)
 	}
-	lowerBound, upperBound, err := bounds.GetUsingExtremesBounds(ctx, planCtx.EvalContext(), histogram)
-	if err != nil {
-		return nil, err
+	if len(stat.Histogram) == 1 && stat.Histogram[0].UpperBound == tree.DNull {
+		return nil, pgerror.Newf(
+			pgcode.ObjectNotInPrerequisiteState,
+			"the latest full statistic histogram for column %s has only NULL values",
+			column.GetName(),
+		)
 	}
-	extremesSpans, err := bounds.ConstructUsingExtremesSpans(lowerBound, upperBound, scan.index)
-	if err != nil {
-		return nil, err
-	}
-	extremesPredicate := bounds.ConstructUsingExtremesPredicate(lowerBound, upperBound, column.GetName())
-	// Get roachpb.Spans from constraint.Spans
-	scan.spans, err = sb.SpansFromConstraintSpan(&extremesSpans, span.NoopSplitter())
-	if err != nil {
-		return nil, err
+
+	var predicate string
+	var prevLowerBound tree.Datum
+	if details.UsingExtremes {
+		var sb span.Builder
+		sb.InitAllowingExternalRowData(
+			planCtx.EvalContext(), planCtx.ExtendedEvalCtx.Codec, desc, scan.index,
+		)
+
+		lowerBound, upperBound, err := bounds.GetUsingExtremesBounds(
+			ctx, planCtx.EvalContext(), stat.Histogram,
+		)
+		if err != nil {
+			return nil, err
+		}
+		if lowerBound == nil {
+			return nil, pgerror.Newf(
+				pgcode.ObjectNotInPrerequisiteState,
+				"only outer or NULL bounded buckets exist in %s@%s (table ID %d, column IDs %v), "+
+					"so partial stats cannot be collected",
+				scan.desc.GetName(), scan.index.GetName(), stat.TableID, stat.ColumnIDs,
+			)
+		}
+		prevLowerBound = lowerBound
+
+		extremesSpans, err := bounds.ConstructUsingExtremesSpans(
+			lowerBound, upperBound, scan.index,
+		)
+		if err != nil {
+			return nil, err
+		}
+		predicate = bounds.ConstructUsingExtremesPredicate(lowerBound, upperBound, column.GetName())
+		scan.spans, err = sb.SpansFromConstraintSpan(&extremesSpans, span.NoopSplitter())
+		if err != nil {
+			return nil, err
+		}
+	} else if details.WhereClause != "" {
+		predicate = details.WhereClause
+		scan.spans = details.WhereSpans
+	} else {
+		return nil, errors.AssertionFailedf(
+			"partial stats require either USING EXTREMES or a WHERE clause")
 	}
 	p, err := dsp.createTableReaders(ctx, planCtx, &scan)
 	if err != nil {
@@ -397,20 +437,22 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 		}
 	}
 
-	sampledColumnIDs := make([]descpb.ColumnID, len(scan.cols))
+	sampledColumnIDs := make([]descpb.ColumnID, len(scan.catalogCols))
 	spec := execinfrapb.SketchSpec{
-		SketchType:          execinfrapb.SketchType_HLL_PLUS_PLUS_V1,
 		GenerateHistogram:   reqStat.histogram,
 		HistogramMaxBuckets: reqStat.histogramMaxBuckets,
 		Columns:             make([]uint32, len(reqStat.columns)),
 		StatName:            reqStat.name,
-		PartialPredicate:    extremesPredicate,
-		FullStatisticID:     stat.StatisticID,
-		PrevLowerBound:      tree.Serialize(lowerBound),
+		PartialPredicate:    predicate,
 	}
-	// For now, this loop should iterate only once, as we only
-	// handle single-column partial statistics.
-	// TODO(faizaanmadhani): Add support for multi-column partial stats next
+	if details.UsingExtremes && prevLowerBound != nil {
+		spec.PrevLowerBound = tree.Serialize(prevLowerBound)
+		spec.FullStatisticID = stat.StatisticID
+	}
+
+	// For now, this loop should iterate only once, as we only handle
+	// single-column partial statistics.
+	// TODO(#94076): add support for creating multi-column stats.
 	for i, colID := range reqStat.columns {
 		colIdx, ok := colIdxMap.Get(colID)
 		if !ok {
@@ -434,7 +476,7 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 		// (i.e., with different configurations). See #50655.
 		if len(reqStat.columns) == 1 {
 			for _, index := range desc.PublicNonPrimaryIndexes() {
-				if index.GetType() == descpb.IndexDescriptor_INVERTED && index.InvertedColumnID() == column.GetID() {
+				if index.GetType() == idxtype.INVERTED && index.InvertedColumnID() == column.GetID() {
 					spec.Index = index.IndexDesc()
 					break
 				}
@@ -449,16 +491,9 @@ func (dsp *DistSQLPlanner) createPartialStatsPlan(
 		sketchSpec = append(sketchSpec, spec)
 	}
 	return dsp.createAndAttachSamplers(
-		ctx,
-		p,
-		desc,
-		tableStats,
-		details,
-		sampledColumnIDs,
-		jobID,
-		reqStats,
-		sketchSpec, invSketchSpec,
-		numIndexes, curIndex), nil
+		ctx, p, desc, tableStats, details, sampledColumnIDs, jobID, reqStats,
+		sketchSpec, invSketchSpec, numIndexes, curIndex,
+	), nil
 }
 
 func (dsp *DistSQLPlanner) createStatsPlan(
@@ -504,7 +539,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	if len(virtComputedCols) != 0 {
 		exprStrings := make([]string, 0, len(virtComputedCols))
 		for _, col := range virtComputedCols {
-			exprStrings = append(exprStrings, col.GetComputeExpr())
+			exprStrings = append(exprStrings, string(col.GetComputeExpr()))
 		}
 
 		virtComputedExprs, err := parser.ParseExprs(exprStrings)
@@ -528,14 +563,14 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	}
 
 	// Create the table readers; for this we initialize a dummy scanNode.
-	scan := scanNode{desc: desc}
+	var scan scanNode
 	if colCfg.wantedColumns == nil {
 		// wantedColumns cannot be left nil, and if it is nil at this point,
 		// then we only have virtual computed columns, so we'll allocate an
 		// empty slice.
 		colCfg.wantedColumns = []tree.ColumnID{}
 	}
-	err := scan.initDescDefaults(colCfg)
+	err := scan.initDescDefaults(desc, colCfg)
 	if err != nil {
 		return nil, err
 	}
@@ -569,7 +604,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		virtComputedExprs, _, err := schemaexpr.MakeComputedExprs(
 			ctx,
 			virtComputedCols,
-			scan.cols,
+			scan.catalogCols,
 			desc,
 			tree.NewUnqualifiedTableName(tree.Name(desc.GetName())),
 			planCtx.EvalContext(),
@@ -583,7 +618,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		exprs := make(tree.TypedExprs, len(requestedCols))
 		resultCols := colinfo.ResultColumnsFromColumns(desc.GetID(), requestedCols)
 
-		ivh := tree.MakeIndexedVarHelper(nil /* container */, len(scan.cols))
+		ivh := tree.MakeIndexedVarHelper(nil /* container */, len(scan.catalogCols))
 		var scanIdx, virtIdx int
 		var distSQLVisitor distSQLExprCheckVisitor
 		for i, col := range requestedCols {
@@ -597,20 +632,20 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 				// Check that the virtual computed column expression can be distributed.
 				// TODO(michae2): Add the ability to run CREATE STATISTICS locally if a
 				// local-only virtual computed column expression is needed.
-				if err := checkExprForDistSQL(virtComputedExprs[virtIdx], &distSQLVisitor); err != nil {
-					return nil, err
+				if blockers := checkExprForDistSQL(virtComputedExprs[virtIdx], &distSQLVisitor); blockers != 0 {
+					return nil, errors.Newf("cannot be executed with distsql: %s", blockers)
 				}
 				exprs[i] = virtComputedExprs[virtIdx]
 				virtIdx++
 			} else {
 				// Confirm that the scan columns contain the requested column in the
 				// expected order.
-				if scanIdx >= len(scan.cols) || scan.cols[scanIdx].GetID() != col.GetID() {
+				if scanIdx >= len(scan.catalogCols) || scan.catalogCols[scanIdx].GetID() != col.GetID() {
 					return nil, errors.AssertionFailedf(
-						"scan columns do not match requested columns: %v vs %v", scan.cols, requestedCols,
+						"scan columns do not match requested columns: %v vs %v", scan.catalogCols, requestedCols,
 					)
 				}
-				exprs[i] = ivh.IndexedVarWithType(scanIdx, scan.cols[scanIdx].GetType())
+				exprs[i] = ivh.IndexedVarWithType(scanIdx, scan.catalogCols[scanIdx].GetType())
 				scanIdx++
 			}
 		}
@@ -627,9 +662,9 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		// No virtual computed columns. Confirm that the scan columns match the
 		// requested columns.
 		for i, col := range requestedCols {
-			if i >= len(scan.cols) || scan.cols[i].GetID() != col.GetID() {
+			if i >= len(scan.catalogCols) || scan.catalogCols[i].GetID() != col.GetID() {
 				return nil, errors.AssertionFailedf(
-					"scan columns do not match requested columns: %v vs %v", scan.cols, requestedCols,
+					"scan columns do not match requested columns: %v vs %v", scan.catalogCols, requestedCols,
 				)
 			}
 		}
@@ -645,7 +680,6 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	sampledColumnIDs := make([]descpb.ColumnID, len(requestedCols))
 	for _, s := range reqStats {
 		spec := execinfrapb.SketchSpec{
-			SketchType:          execinfrapb.SketchType_HLL_PLUS_PLUS_V1,
 			GenerateHistogram:   s.histogram,
 			HistogramMaxBuckets: s.histogramMaxBuckets,
 			Columns:             make([]uint32, len(s.columns)),
@@ -674,7 +708,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 			if len(s.columns) == 1 {
 				col := s.columns[0]
 				for _, index := range desc.PublicNonPrimaryIndexes() {
-					if index.GetType() == descpb.IndexDescriptor_INVERTED && index.InvertedColumnID() == col {
+					if index.GetType() == idxtype.INVERTED && index.InvertedColumnID() == col {
 						spec.Index = index.IndexDesc()
 						break
 					}
@@ -690,24 +724,27 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		}
 	}
 
-	tableStats, err := planCtx.ExtendedEvalCtx.ExecCfg.TableStatsCache.GetTableStats(ctx, desc)
+	var typeResolver *descs.DistSQLTypeResolver
+	if p := planCtx.planner; p != nil {
+		r := descs.NewDistSQLTypeResolver(p.Descriptors(), p.Txn())
+		typeResolver = &r
+	}
+	tableStats, err := planCtx.ExtendedEvalCtx.ExecCfg.TableStatsCache.GetFreshTableStats(ctx, desc, typeResolver)
 	if err != nil {
 		return nil, err
 	}
 
 	return dsp.createAndAttachSamplers(
-		ctx,
-		p,
-		desc,
-		tableStats,
-		details,
-		sampledColumnIDs,
-		jobID,
-		reqStats,
-		sketchSpecs, invSketchSpecs,
-		numIndexes, curIndex), nil
+		ctx, p, desc, tableStats, details, sampledColumnIDs, jobID, reqStats,
+		sketchSpecs, invSketchSpecs, numIndexes, curIndex,
+	), nil
 }
 
+// createPlanForCreateStats creates the DistSQL plan to perform the table stats
+// collection according to CreateStatsDetails.
+//
+// If the returned error has pgcode.ObjectNotInPrerequisiteState, it might be
+// benign and the caller might want to swallow it, depending on the context.
 func (dsp *DistSQLPlanner) createPlanForCreateStats(
 	ctx context.Context,
 	planCtx *PlanningCtx,
@@ -743,7 +780,7 @@ func (dsp *DistSQLPlanner) createPlanForCreateStats(
 		return nil, errors.New("no stats requested")
 	}
 
-	if details.UsingExtremes {
+	if details.UsingExtremes || details.WhereClause != "" {
 		return dsp.createPartialStatsPlan(ctx, planCtx, tableDesc, reqStats, jobID, details, numIndexes, curIndex)
 	}
 	return dsp.createStatsPlan(ctx, planCtx, semaCtx, tableDesc, reqStats, jobID, details, numIndexes, curIndex)
@@ -751,7 +788,7 @@ func (dsp *DistSQLPlanner) createPlanForCreateStats(
 
 func (dsp *DistSQLPlanner) planAndRunCreateStats(
 	ctx context.Context,
-	evalCtx *extendedEvalContext,
+	extEvalCtx *extendedEvalContext,
 	planCtx *PlanningCtx,
 	semaCtx *tree.SemaContext,
 	txn *kv.Txn,
@@ -765,6 +802,17 @@ func (dsp *DistSQLPlanner) planAndRunCreateStats(
 
 	physPlan, err := dsp.createPlanForCreateStats(ctx, planCtx, semaCtx, jobId, details, numIndexes, curIndex)
 	if err != nil {
+		if pgerror.GetPGCode(err) == pgcode.ObjectNotInPrerequisiteState {
+			// This error is benign, so we'll swallow it. Concretely, this means
+			// that we'll proceed with collecting partial stats if there are
+			// more to do and the stats job overall will be marked as having
+			// "succeeded". Even though this might seem confusing, it's a better
+			// trade-off than having auto partial stats fail repeatedly due to
+			// expected conditions (like a lower bound doesn't exist) raising
+			// concerns for users. See #149279 for more discussion.
+			log.Dev.Infof(ctx, "job %d: stats collection is swallowing benign error %v", jobId, err)
+			return nil
+		}
 		return err
 	}
 
@@ -774,13 +822,15 @@ func (dsp *DistSQLPlanner) planAndRunCreateStats(
 		ctx,
 		resultWriter,
 		tree.DDL,
-		evalCtx.ExecCfg.RangeDescriptorCache,
+		extEvalCtx.ExecCfg.RangeDescriptorCache,
 		txn,
-		evalCtx.ExecCfg.Clock,
-		evalCtx.Tracing,
+		extEvalCtx.ExecCfg.Clock,
+		extEvalCtx.Tracing,
 	)
 	defer recv.Release()
 
-	dsp.Run(ctx, planCtx, txn, physPlan, recv, evalCtx, nil /* finishedSetupFn */)
+	// Copy the eval.Context, as dsp.Run() might change it.
+	evalCtxCopy := extEvalCtx.Context.Copy()
+	dsp.Run(ctx, planCtx, txn, physPlan, recv, evalCtxCopy, nil /* finishedSetupFn */)
 	return resultWriter.Err()
 }

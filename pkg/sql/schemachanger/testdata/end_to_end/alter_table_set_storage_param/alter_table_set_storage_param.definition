@@ -1,0 +1,9 @@
+setup
+CREATE TABLE t (i int);
+CREATE SCHEMA sc;
+----
+
+# note that autovacuum_enabled should not show a param because setting it is a noop
+test
+ALTER TABLE t SET (exclude_data_from_backup=true, autovacuum_enabled=false, sql_stats_histogram_buckets_count=64);
+----

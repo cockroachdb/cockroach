@@ -17,8 +17,11 @@ CREATE TABLE crdb_internal.kv_builtin_function_comments (
 // crdb_internal.kv_catalog_comments table.
 var CrdbInternalCatalogComments = `
 CREATE TABLE crdb_internal.kv_catalog_comments (
-  classoid    OID NOT NULL,
-  objoid      OID NOT NULL,
-  objsubid    INT4 NOT NULL,
-  description STRING NOT NULL
+  classoid         OID NOT NULL,
+  objoid           OID NOT NULL,
+  objsubid         INT4 NOT NULL,
+  description      STRING NOT NULL,
+  -- compat_classoid holds the standard PostgreSQL OID for the catalog table
+  -- when pg_dump_compatibility is enabled, or matches classoid otherwise.
+  compat_classoid  OID NOT NULL
 )`

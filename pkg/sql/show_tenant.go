@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -40,6 +41,7 @@ type showTenantNodeCapability struct {
 }
 
 type showTenantNode struct {
+	zeroInputPlanNode
 	tenantSpec           tenantSpec
 	withReplication      bool
 	withPriorReplication bool
@@ -123,8 +125,8 @@ func (n *showTenantNode) getTenantValues(
 
 	// Add capabilities if requested.
 	if n.withCapabilities {
-		showTenantNodeCapabilities := make([]showTenantNodeCapability, 0, len(tenantcapabilities.IDs))
-		for _, id := range tenantcapabilities.IDs {
+		showTenantNodeCapabilities := make([]showTenantNodeCapability, 0, len(tenantcapabilitiespb.IDs))
+		for _, id := range tenantcapabilitiespb.IDs {
 			value := tenantcapabilities.MustGetValueByID(&tenantInfo.Capabilities, id)
 			showTenantNodeCapabilities = append(showTenantNodeCapabilities, showTenantNodeCapability{
 				name:  id.String(),
@@ -148,7 +150,7 @@ func (n *showTenantNode) getTenantValues(
 			stats, status, err := mgr.GetReplicationStatsAndStatus(params.ctx, jobId)
 			values.dataState = status
 			if err != nil {
-				log.Warningf(params.ctx, "replication stats unavailable for tenant %q and job %d: %v",
+				log.Dev.Warningf(params.ctx, "replication stats unavailable for tenant %q and job %d: %v",
 					tenantInfo.Name, jobId, err)
 			} else if n.withReplication {
 				values.replicationInfo = stats
@@ -158,7 +160,7 @@ func (n *showTenantNode) getTenantValues(
 					record, err := ptp.GetRecord(params.ctx, *stats.IngestionDetails.ProtectedTimestampRecordID)
 					if err != nil {
 						// Protected timestamp might not be set yet, no need to fail.
-						log.Warningf(params.ctx, "protected timestamp unavailable for tenant %q and job %d: %v",
+						log.Dev.Warningf(params.ctx, "protected timestamp unavailable for tenant %q and job %d: %v",
 							tenantInfo.Name, jobId, err)
 					} else {
 						values.protectedTimestamp = record.Timestamp
@@ -225,6 +227,7 @@ func (n *showTenantNode) Values() tree.Datums {
 		)
 	} else {
 		// This is a 'SHOW VIRTUAL CLUSTER name WITH REPLICATION STATUS' command.
+		replicationJobID := tree.DNull
 		sourceTenantName := tree.DNull
 		sourceClusterUri := tree.DNull
 		replicatedTimestamp := tree.DNull
@@ -234,8 +237,9 @@ func (n *showTenantNode) Values() tree.Datums {
 
 		replicationInfo := v.replicationInfo
 		if replicationInfo != nil {
+			replicationJobID = tree.NewDInt(tree.DInt(v.tenantInfo.PhysicalReplicationConsumerJobID))
 			sourceTenantName = tree.NewDString(string(replicationInfo.IngestionDetails.SourceTenantName))
-			sourceClusterUri = tree.NewDString(replicationInfo.IngestionDetails.StreamAddress)
+			sourceClusterUri = tree.NewDString(replicationInfo.IngestionDetails.SourceClusterConnUri)
 			if replicationInfo.ReplicationLagInfo != nil {
 				minIngested := replicationInfo.ReplicationLagInfo.MinIngestedTimestamp
 				// The latest fully replicated time. Truncating to the nearest microsecond
@@ -264,6 +268,7 @@ func (n *showTenantNode) Values() tree.Datums {
 		}
 
 		result = append(result,
+			replicationJobID,
 			sourceTenantName,
 			sourceClusterUri,
 			retainedTimestamp,

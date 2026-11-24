@@ -79,7 +79,7 @@ func (g *sqlSmith) Tables() []workload.Table {
 	rng := rand.New(rand.NewSource(RandomSeed.Seed()))
 	var tables []workload.Table
 	for idx := 0; idx < g.tables; idx++ {
-		schema := randgen.RandCreateTable(context.Background(), rng, "table", idx, randgen.TableOptNone)
+		schema := randgen.RandCreateTable(context.Background(), rng, "table", idx, nil)
 		// workload expects the schema to be missing the 'CREATE TABLE "name"', so
 		// we only want to format the schema, not the whole statement.
 		fmtCtx := tree.NewFmtCtx(tree.FmtSerializable)

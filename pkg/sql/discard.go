@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessionmutator"
 	"github.com/cockroachdb/errors"
 )
 
@@ -22,6 +23,7 @@ func (p *planner) Discard(ctx context.Context, s *tree.Discard) (planNode, error
 }
 
 type discardNode struct {
+	zeroInputPlanNode
 	mode tree.DiscardMode
 }
 
@@ -37,13 +39,12 @@ func (n *discardNode) startExec(params runParams) error {
 		}
 
 		// SET SESSION AUTHORIZATION DEFAULT
-		if err := params.p.setRole(params.ctx, false /* local */, params.p.SessionData().SessionUser()); err != nil {
+		if err := params.p.setRole(params.ctx, setScopeSession, params.p.SessionData().SessionUser()); err != nil {
 			return err
 		}
 
 		// RESET ALL
 		if err := params.p.resetAllSessionVars(params.ctx); err != nil {
-
 			return err
 		}
 
@@ -51,9 +52,9 @@ func (n *discardNode) startExec(params runParams) error {
 		params.p.preparedStatements.DeleteAll(params.ctx)
 
 		// DISCARD SEQUENCES
-		params.p.sessionDataMutatorIterator.applyOnEachMutator(func(m sessionDataMutator) {
-			m.data.SequenceState = sessiondata.NewSequenceState()
-			m.initSequenceCache()
+		params.p.sessionDataMutatorIterator.ApplyOnEachMutator(func(m sessionmutator.SessionDataMutator) {
+			m.Data.SequenceState = sessiondata.NewSequenceState()
+			m.InitSequenceCache()
 		})
 
 		// DISCARD TEMP
@@ -63,9 +64,9 @@ func (n *discardNode) startExec(params runParams) error {
 		}
 
 	case tree.DiscardModeSequences:
-		params.p.sessionDataMutatorIterator.applyOnEachMutator(func(m sessionDataMutator) {
-			m.data.SequenceState = sessiondata.NewSequenceState()
-			m.initSequenceCache()
+		params.p.sessionDataMutatorIterator.ApplyOnEachMutator(func(m sessionmutator.SessionDataMutator) {
+			m.Data.SequenceState = sessiondata.NewSequenceState()
+			m.InitSequenceCache()
 		})
 	case tree.DiscardModeTemp:
 		err := deleteTempTables(params.ctx, params.p)
@@ -84,7 +85,6 @@ func deleteTempTables(ctx context.Context, p *planner) error {
 	if len(p.SessionData().DatabaseIDToTempSchemaID) == 0 {
 		return nil
 	}
-	codec := p.execCfg.Codec
 	descCol := p.Descriptors()
 	// Note: grabbing all the databases here is somewhat suspect. It appears
 	// that the logic related to maintaining the set of database temp schemas
@@ -107,7 +107,7 @@ func deleteTempTables(ctx context.Context, p *planner) error {
 			continue
 		}
 		err = cleanupTempSchemaObjects(
-			ctx, p.InternalSQLTxn(), descCol, codec, db, sc,
+			ctx, p.InternalSQLTxn(), descCol, db, sc,
 		)
 		if err != nil {
 			return err

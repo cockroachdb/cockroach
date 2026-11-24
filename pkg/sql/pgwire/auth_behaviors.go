@@ -7,8 +7,13 @@ package pgwire
 
 import (
 	"context"
+	"sync"
+	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/security/provisioning"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/errors"
 	"github.com/go-ldap/ldap/v3"
 )
@@ -20,18 +25,29 @@ import (
 // associated network connection has been terminated to allow external
 // resources to be released.
 type AuthBehaviors struct {
-	authenticator       Authenticator
-	connClose           func()
-	replacementIdentity string
-	replacedIdentity    bool
-	roleMapper          RoleMapper
-	authorizer          Authorizer
+	authenticator         Authenticator
+	connClose             func()
+	replacementIdentity   string
+	replacedIdentity      bool
+	roleMapper            RoleMapper
+	enhancedRoleMapper    EnhancedRoleMapper
+	enhancedRoleMapperSet bool
+	authorizer            Authorizer
+	provisioningManager   struct {
+		sync.Once
+		pc provisioning.UserProvisioningConfig
+	}
+	provisioner      Provisioner
+	externalAuthTime time.Duration
+	sanIdentities    []string
+	usedCertSANAuth  bool
 }
 
 // Ensure that an AuthBehaviors is easily composable with itself.
 var _ Authenticator = (*AuthBehaviors)(nil).Authenticate
 var _ func() = (*AuthBehaviors)(nil).ConnClose
 var _ RoleMapper = (*AuthBehaviors)(nil).MapRole
+var _ EnhancedRoleMapper = (*AuthBehaviors)(nil).EnhancedMapRole
 var _ Authorizer = (*AuthBehaviors)(nil).MaybeAuthorize
 
 // This is a hack for the unused-symbols linter. These two functions
@@ -102,9 +118,31 @@ func (b *AuthBehaviors) MapRole(
 	return nil, errors.New("no RoleMapper provided to AuthBehaviors")
 }
 
+// EnhancedMapRole delegates to the EnhancedRoleMapper passed to SetEnhancedRoleMapper
+// or returns an error if SetEnhancedRoleMapper has not been called.
+func (b *AuthBehaviors) EnhancedMapRole(
+	ctx context.Context, systemIdentities []string,
+) ([]identmap.IdentityMapping, error) {
+	if found := b.enhancedRoleMapper; found != nil {
+		return found(ctx, systemIdentities)
+	}
+	return nil, errors.New("no SAN RoleMapper provided to AuthBehaviors")
+}
+
 // SetRoleMapper updates the RoleMapper to be used.
 func (b *AuthBehaviors) SetRoleMapper(m RoleMapper) {
 	b.roleMapper = m
+}
+
+// SetEnhancedRoleMapper sets the enhanced mapper that returns identity associations.
+// This is used when multiple system identities exist (e.g., certificate SANs).
+func (b *AuthBehaviors) SetEnhancedRoleMapper(fn EnhancedRoleMapper) {
+	b.enhancedRoleMapper = fn
+	b.enhancedRoleMapperSet = true
+}
+
+func (b *AuthBehaviors) IsEnhancedRoleMapperSet() bool {
+	return b.enhancedRoleMapperSet
 }
 
 // SetAuthorizer updates the SetAuthorizer to be used.
@@ -121,4 +159,86 @@ func (b *AuthBehaviors) MaybeAuthorize(
 		return found(ctx, systemIdentity, clientConnection)
 	}
 	return nil
+}
+
+// Provisioner is a component of an AuthMethod that can be optionally set for an
+// authentication method which allows the provisioning of the user
+// authenticating using the said method. This overrides any previous validations
+// for user to exist and have privileges for sql log in.
+type Provisioner = func(
+	ctx context.Context,
+) error
+
+// SetProvisioner updates the Provisioner to be used.
+func (b *AuthBehaviors) SetProvisioner(p Provisioner) {
+	b.provisioner = p
+}
+
+func (b *AuthBehaviors) maybeSetProvisioningConfig(settings *cluster.Settings) {
+	b.provisioningManager.Do(func() {
+		if b.provisioningManager.pc == nil {
+			b.provisioningManager.pc = provisioning.ClusterProvisioningConfig(settings)
+		}
+	})
+}
+
+// IsProvisioningEnabled validates if provisioning is possible for an
+// authenticating user as mandated by the authentication method selected.
+func (b *AuthBehaviors) IsProvisioningEnabled(settings *cluster.Settings, authMethod string) bool {
+	b.maybeSetProvisioningConfig(settings)
+	return b.provisioningManager.pc != nil && b.provisioningManager.pc.Enabled(authMethod)
+}
+
+// MaybeProvisionUser optionally provisions the user if authentication method
+// corresponds to an enabled method for user provisioning feature and the user's
+// identity has been validated on the identity provider.
+func (b *AuthBehaviors) MaybeProvisionUser(
+	ctx context.Context, settings *cluster.Settings, authMethod string,
+) error {
+	if b.IsProvisioningEnabled(settings, authMethod) {
+		if b.replacedIdentity {
+			if found := b.provisioner; found != nil {
+				return found(ctx)
+			} else {
+				return errors.New("no provisioner provided to AuthBehaviors")
+			}
+		} else {
+			return errors.New("user identity unknown for identity provider")
+		}
+	}
+	return nil
+}
+
+// AddExternalAuthTime adds a time duration to the externalAuthTime during auth.
+// The AuthMethod implementation adds new time durations which track time spent
+// where auth is waiting on a response from an external service like making an
+// API call or validating a response from an external service.
+func (b *AuthBehaviors) AddExternalAuthTime(t time.Duration) {
+	b.externalAuthTime += t
+}
+
+// GetTotalExternalAuthTime returns the total aggregated time spent on external
+// service during authentication.
+func (b *AuthBehaviors) GetTotalExternalAuthTime() time.Duration {
+	return b.externalAuthTime
+}
+
+// SetSANIdentities sets the SAN identities extracted from the client certificate.
+func (b *AuthBehaviors) SetSANIdentities(sans []string) {
+	b.sanIdentities = sans
+}
+
+// GetSANIdentities returns the SAN identities extracted from the client certificate.
+func (b *AuthBehaviors) GetSANIdentities() []string {
+	return b.sanIdentities
+}
+
+// MarkUsedCertSANAuth marks that SAN-based authentication was used for this connection.
+func (b *AuthBehaviors) MarkUsedCertSANAuth() {
+	b.usedCertSANAuth = true
+}
+
+// UsedCertSANAuth returns whether SAN-based authentication was used for this connection.
+func (b *AuthBehaviors) UsedCertSANAuth() bool {
+	return b.usedCertSANAuth
 }

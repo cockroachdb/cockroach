@@ -27,14 +27,18 @@ esac
 
 build_arch=${1:-amd64}
 
-bazel build //pkg/cmd/cockroach //c-deps:libgeos --config $CROSSCONFIG --jobs 100 $(./build/github/engflow-args.sh)
-cp _bazel/bin/pkg/cmd/cockroach/cockroach_/cockroach build/deploy
-cp _bazel/cockroach/external/$ARCHIVEDIR/lib/libgeos.so build/deploy
-cp _bazel/cockroach/external/$ARCHIVEDIR/lib/libgeos_c.so build/deploy
+bazel build //pkg/cmd/cockroach //c-deps:libgeos --config $CROSSCONFIG --jobs 50 $(./build/github/engflow-args.sh)
 
-cp LICENSE licenses/THIRD-PARTY-NOTICES.txt build/deploy/
+# The Dockerfile expects per-arch files under ${TARGETARCH}/ subdirectories.
+mkdir -p "build/deploy/${build_arch}"
+cp _bazel/bin/pkg/cmd/cockroach/cockroach_/cockroach "build/deploy/${build_arch}/"
+LIBDIR=$(bazel info execution_root --config $CROSSCONFIG)/external/$ARCHIVEDIR/lib
+cp $LIBDIR/libgeos.so "build/deploy/${build_arch}/"
+cp $LIBDIR/libgeos_c.so "build/deploy/${build_arch}/"
+cp build/deploy/cockroach.sh "build/deploy/${build_arch}/"
+cp LICENSE licenses/THIRD-PARTY-NOTICES.txt "build/deploy/${build_arch}/"
 
-chmod 755 build/deploy/cockroach
+chmod 755 "build/deploy/${build_arch}/cockroach"
 
 docker_image_tar_name="cockroach-docker-image.tar"
 
@@ -59,4 +63,4 @@ bazel test \
   --config=crosslinux \
   --test_timeout=3000 \
   --remote_download_minimal \
-  --jobs 100 $(./build/github/engflow-args.sh) --build_event_binary_file=bes.bin
+  --jobs 50 $(./build/github/engflow-args.sh) --build_event_binary_file=bes.bin

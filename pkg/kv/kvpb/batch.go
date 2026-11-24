@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
@@ -94,10 +95,37 @@ func (ba *BatchRequest) EarliestActiveTimestamp() hlc.Timestamp {
 	ts := ba.Timestamp
 	for _, ru := range ba.Requests {
 		switch t := ru.GetInner().(type) {
+		case *DeleteRequest:
+			// A DeleteRequest with ExpectExclusionSince set need to be able to
+			// observe MVCC versions from the specified time to correctly detect
+			// isolation violations.
+			//
+			// See the example in RefreshRequest for more details.
+			if !t.ExpectExclusionSince.IsEmpty() {
+				ts.Backward(t.ExpectExclusionSince)
+			}
 		case *ExportRequest:
 			if !t.StartTime.IsEmpty() {
 				// NB: StartTime.Next() because StartTime is exclusive.
 				ts.Backward(t.StartTime.Next())
+			}
+		case *GetRequest:
+			// A GetRequest with ExpectExclusionSince set need to be able to observe
+			// MVCC versions from the specified time to correctly detect isolation
+			// violations.
+			//
+			// See the example in RefreshRequest for more details.
+			if !t.ExpectExclusionSince.IsEmpty() {
+				ts.Backward(t.ExpectExclusionSince)
+			}
+		case *PutRequest:
+			// A PutRequest with ExpectExclusionSince set need to be able to observe MVCC
+			// versions from the specified time to correctly detect isolation
+			// violations.
+			//
+			// See the example in RefreshRequest for more details.
+			if !t.ExpectExclusionSince.IsEmpty() {
+				ts.Backward(t.ExpectExclusionSince)
 			}
 		case *RevertRangeRequest:
 			// This method is only used to check GC Threshold so Revert requests that
@@ -171,11 +199,6 @@ func (ba *BatchRequest) IsWrite() bool {
 // IsReadOnly returns true if all requests within are read-only.
 func (ba *BatchRequest) IsReadOnly() bool {
 	return len(ba.Requests) > 0 && !ba.hasFlag(isWrite|isAdmin)
-}
-
-// IsReverse returns true iff the BatchRequest contains a reverse request.
-func (ba *BatchRequest) IsReverse() bool {
-	return ba.hasFlag(isReverse)
 }
 
 // IsTransactional returns true iff the BatchRequest contains requests that can
@@ -405,6 +428,25 @@ func (ba *BatchRequest) IsCompleteTransaction() bool {
 	panic(fmt.Sprintf("unreachable. Batch requests: %s", TruncatedRequestsString(ba.Requests, 1024)))
 }
 
+// IsBulkLowPriorityRead returns whether a given BatchRequest is a low-priority
+// bulk read-only request that needs to be throttled in the KV server.
+func (ba *BatchRequest) IsBulkLowPriorityRead() bool {
+	if len(ba.Requests) != 1 {
+		return false
+	}
+
+	// This function interprets BulkNormalPri as low-priority for Export
+	// requests because that's how backups emit them up to v26.2.
+	// TODO(disaster-recovery): update this logic when Export priority changes.
+	switch ba.Requests[0].GetInner().(type) {
+	case *ScanRequest, *ReverseScanRequest:
+		return ba.AdmissionHeader.Priority <= int32(admissionpb.BulkLowPri)
+	case *ExportRequest:
+		return ba.AdmissionHeader.Priority <= int32(admissionpb.BulkNormalPri)
+	}
+	return false
+}
+
 // hasFlag returns true iff at least one of the requests within the batch
 // contains at least one of the specified flags.
 func (ba *BatchRequest) hasFlag(flags flag) bool {
@@ -453,20 +495,26 @@ func (ba *BatchRequest) GetArg(method Method) (Request, bool) {
 }
 
 func (br *BatchResponse) String() string {
-	var str []string
-	str = append(str, fmt.Sprintf("(err: %v)", br.Error))
+	return redact.StringWithoutMarkers(br)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (br *BatchResponse) SafeFormat(s redact.SafePrinter, verb rune) {
+	// Marking Error of BatchResponse as safe as Outside of the RPC boundaries,
+	// this field is nil and must neither be checked nor populated
+	s.Printf("(err: %v)", br.Error)
+
 	for count, union := range br.Responses {
 		// Limit the strings to provide just a summary. Without this limit a log
 		// message with a BatchResponse can be very long.
 		if count >= 20 && count < len(br.Responses)-5 {
 			if count == 20 {
-				str = append(str, fmt.Sprintf("... %d skipped ...", len(br.Responses)-25))
+				s.Printf(", ... %d skipped ...", len(br.Responses)-25)
 			}
 			continue
 		}
-		str = append(str, fmt.Sprintf("%T", union.GetInner()))
+		s.Printf(", %T", redact.Safe(union.GetInner()))
 	}
-	return strings.Join(str, ", ")
 }
 
 // LockSpanIterate calls LockSpanIterate for each request in the batch.
@@ -504,7 +552,7 @@ func LockSpanIterate(req Request, resp Response, fn func(roachpb.Span, lock.Dura
 	if canIterateResponseKeys(req, resp) {
 		return ResponseKeyIterate(req, resp, func(key roachpb.Key) {
 			fn(roachpb.Span{Key: key}, dur)
-		})
+		}, true /* includeLockedNonExisting */)
 	}
 	if span, ok := actualSpan(req, resp); ok {
 		fn(span, dur)
@@ -548,7 +596,7 @@ func (ba *BatchRequest) RefreshSpanIterate(br *BatchResponse, fn func(roachpb.Sp
 			// transaction ever needs to refresh.
 			if err := ResponseKeyIterate(req, resp, func(k roachpb.Key) {
 				fn(roachpb.Span{Key: k})
-			}); err != nil {
+			}, false /* includeLockedNonExisting */); err != nil {
 				return err
 			}
 		} else {
@@ -608,13 +656,19 @@ func canIterateResponseKeys(req Request, resp Response) bool {
 // the function will not be called.
 // NOTE: it is assumed that req (if it is a Scan or a ReverseScan) didn't use
 // COL_BATCH_RESPONSE scan format.
-func ResponseKeyIterate(req Request, resp Response, fn func(roachpb.Key)) error {
+func ResponseKeyIterate(
+	req Request, resp Response, fn func(roachpb.Key), includeLockedNonExisting bool,
+) error {
 	if resp == nil {
 		return errors.Errorf("cannot iterate over response keys of %s request with nil response", req.Method())
 	}
 	switch v := resp.(type) {
 	case *GetResponse:
-		if v.Value != nil {
+		getReq, ok := req.(*GetRequest)
+		if !ok {
+			return errors.AssertionFailedf("GetRequest expected for GetResponse: %#+v", req)
+		}
+		if (v.Value != nil) || (includeLockedNonExisting && getReq.LockNonExisting) {
 			fn(req.Header().Key)
 		}
 	case *ScanResponse:
@@ -726,6 +780,9 @@ func (ba *BatchRequest) Add(requests ...Request) {
 	for _, args := range requests {
 		ba.Requests = append(ba.Requests, RequestUnion{})
 		ba.Requests[len(ba.Requests)-1].MustSetInner(args)
+		if _, isReverse := args.(*ReverseScanRequest); isReverse {
+			ba.IsReverse = true
+		}
 	}
 }
 
@@ -776,22 +833,7 @@ func (ba *BatchRequest) Split(canSplitET bool) [][]RequestUnion {
 		// enforcing are that a batch can't mix non-writes with writes.
 		// Checking isRead would cause ConditionalPut and Put to conflict,
 		// which is not what we want.
-		mask := isWrite | isAdmin
-		if (exFlags&isRange) != 0 && (newFlags&isRange) != 0 {
-			// The directions of requests in a batch need to be the same because
-			// the DistSender (in divideAndSendBatchToRanges) will perform a
-			// single traversal of all requests while advancing the
-			// RangeIterator. If we were to have requests with different
-			// directions in a single batch, the DistSender wouldn't know how to
-			// route the requests (without incurring a noticeable performance
-			// hit).
-			//
-			// At the same time, non-ranged operations are not directional, so
-			// we need to require the same value for isReverse flag iff the
-			// existing and the new requests are ranged. For example, this
-			// allows us to have Gets and ReverseScans in a single batch.
-			mask |= isReverse
-		}
+		const mask = isWrite | isAdmin
 		return (mask & exFlags) == (mask & newFlags)
 	}
 	reqs := ba.Requests
@@ -932,12 +974,15 @@ func (ba *BatchRequest) ValidateForEvaluation() error {
 	if _, ok := ba.GetArg(EndTxn); ok && ba.Txn == nil {
 		return errors.AssertionFailedf("EndTxn request without transaction")
 	}
-	if ba.Txn != nil {
-		if ba.Txn.WriteTooOld && ba.Txn.ReadTimestamp == ba.Txn.WriteTimestamp {
-			return errors.AssertionFailedf("WriteTooOld set but no offset in timestamps. txn: %s", ba.Txn)
-		}
-	}
 	return nil
+}
+
+// MightStopEarly returns true if any of the batch's options might result in the
+// batch response being returned before all requests have been fully processed
+// without an error.
+func (ba *BatchRequest) MightStopEarly() bool {
+	h := ba.Header
+	return h.MaxSpanRequestKeys != 0 || h.TargetBytes != 0 || h.ReturnElasticCPUResumeSpans
 }
 
 func (cb ColBatches) Size() int {

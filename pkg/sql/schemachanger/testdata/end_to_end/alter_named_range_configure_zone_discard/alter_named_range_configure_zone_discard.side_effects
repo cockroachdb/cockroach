@@ -1,0 +1,57 @@
+/* setup */
+----
+
+
+/* test */
+ALTER RANGE meta CONFIGURE ZONE USING num_replicas = 7;
+ALTER RANGE meta CONFIGURE ZONE USING gc.ttlseconds = 10000;
+ALTER RANGE meta CONFIGURE ZONE DISCARD;
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: CONFIGURE ZONE
+write *eventpb.SetZoneConfig to event log:
+  config:
+    options:
+    - num_replicas = 7
+    target: RANGE meta
+  resolvedOldConfig: 'range_min_bytes:134217728 range_max_bytes:536870912 gc:<ttl_seconds:14400 > num_replicas:5 inherited_constraints:false null_voter_constraints_is_empty:true inherited_lease_preferences:false '
+  sql:
+    descriptorId: 16
+    statement: ALTER RANGE ‹meta› CONFIGURE ZONE USING ‹num_replicas› = ‹7›
+    tag: CONFIGURE ZONE
+    user: root
+## StatementPhase stage 1 of 1 with 1 MutationType op
+upsert zone config for #16
+checking for feature: CONFIGURE ZONE
+write *eventpb.SetZoneConfig to event log:
+  config:
+    options:
+    - '"gc.ttlseconds" = 10000'
+    target: RANGE meta
+  resolvedOldConfig: 'num_replicas:7 inherited_constraints:true null_voter_constraints_is_empty:false inherited_lease_preferences:true '
+  sql:
+    descriptorId: 16
+    statement: ALTER RANGE ‹meta› CONFIGURE ZONE USING ‹"gc.ttlseconds"› = ‹10000›
+    tag: CONFIGURE ZONE
+    user: root
+## StatementPhase stage 1 of 1 with 1 MutationType op
+upsert zone config for #16
+checking for feature: CONFIGURE ZONE
+write *eventpb.RemoveZoneConfig to event log:
+  config:
+    target: RANGE meta
+  sql:
+    descriptorId: 16
+    statement: ALTER RANGE ‹meta› CONFIGURE ZONE DISCARD
+    tag: CONFIGURE ZONE
+    user: root
+## StatementPhase stage 1 of 1 with 2 MutationType ops
+deleting zone config for #16
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 1 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+# end PreCommitPhase
+commit transaction #1

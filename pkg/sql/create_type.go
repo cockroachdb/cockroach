@@ -8,7 +8,10 @@ package sql
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -16,8 +19,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/enum"
+	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
@@ -36,6 +41,7 @@ import (
 )
 
 type createTypeNode struct {
+	zeroInputPlanNode
 	n        *tree.CreateType
 	typeName *tree.TypeName
 	dbDesc   catalog.DatabaseDescriptor
@@ -106,6 +112,14 @@ func (n *createTypeNode) startExec(params runParams) error {
 func resolveNewTypeName(
 	ctx context.Context, p *planner, name *tree.UnresolvedObjectName,
 ) (*tree.TypeName, catalog.DatabaseDescriptor, error) {
+	// Check that we are not creating in a temporary schema. To support this,
+	// we'd need to update the type descriptor to have an IsTemporary flag, and
+	// the temporary object cleaner would need to handle these.
+	if name.HasExplicitSchema() && strings.HasPrefix(name.Schema(), catconstants.PgTempSchemaName) {
+		return nil, nil, pgerror.Newf(pgcode.InvalidSchemaName,
+			"cannot create type %q in temporary schema", name.Object(),
+		)
+	}
 	// Resolve the target schema and database.
 	db, _, prefix, err := p.ResolveTargetObject(ctx, name)
 	if err != nil {
@@ -232,6 +246,12 @@ func CreateUserDefinedArrayTypeDesc(
 			labels[i] = e.ElementLabel
 		}
 		elemTyp = types.NewCompositeType(catid.TypeIDToOID(typDesc.GetID()), catid.TypeIDToOID(id), contents, labels)
+	case descpb.TypeDescriptor_DOMAIN:
+		elemTyp = types.MakeDomain(
+			typDesc.Domain.BaseType,
+			catid.TypeIDToOID(typDesc.GetID()),
+			catid.TypeIDToOID(id),
+		)
 	default:
 		return nil, errors.AssertionFailedf("cannot make array type for kind %s", t.String())
 	}
@@ -313,6 +333,8 @@ func (p *planner) createUserDefinedType(params runParams, n *createTypeNode) err
 		return params.p.createCompositeWithID(
 			params, id, n.n.CompositeTypeList, n.dbDesc, n.typeName,
 		)
+	case tree.Domain:
+		return params.p.createDomainWithID(params, id, n.n, n.dbDesc, n.typeName)
 	}
 	return unimplemented.NewWithIssue(25123, "CREATE TYPE")
 }
@@ -390,6 +412,10 @@ func CreateEnumTypeDesc(
 	}).BuildCreatedMutableType(), nil
 }
 
+var jsonpathInCompositeErr = unimplemented.NewWithIssueDetailf(
+	144910, "", "jsonpath cannot be used in a composite type",
+)
+
 // createCompositeTypeDesc creates a new composite type descriptor.
 func createCompositeTypeDesc(
 	params runParams,
@@ -415,6 +441,10 @@ func createCompositeTypeDesc(
 		}
 		if typ.Identical(types.Trigger) {
 			return nil, tree.CannotAcceptTriggerErr
+		}
+		if typ.Oid() == oidext.T_jsonpath || typ.Oid() == oidext.T__jsonpath {
+			// TODO(#144910): this is unsupported for now, out of caution.
+			return nil, jsonpathInCompositeErr
 		}
 		if err = tree.CheckUnsupportedType(params.ctx, &params.p.semaCtx, typ); err != nil {
 			return nil, err
@@ -507,6 +537,140 @@ func (p *planner) createCompositeWithID(
 		return err
 	}
 	return nil
+}
+
+func (p *planner) createDomainWithID(
+	params runParams,
+	id descpb.ID,
+	n *tree.CreateType,
+	dbDesc catalog.DatabaseDescriptor,
+	typeName *tree.TypeName,
+) error {
+	if !params.EvalContext().Settings.Version.IsActive(params.ctx, clusterversion.V26_3) {
+		return pgerror.Newf(pgcode.FeatureNotSupported,
+			"CREATE DOMAIN requires all nodes to be upgraded to %v",
+			clusterversion.V26_3.Version())
+	}
+	schema, err := getCreateTypeParams(params.ctx, p, typeName, dbDesc)
+	if err != nil {
+		return err
+	}
+
+	// Resolve the base type.
+	baseType, err := tree.ResolveType(params.ctx, n.DomainType, params.p.semaCtx.TypeResolver)
+	if err != nil {
+		return err
+	}
+	if err = tree.CheckUnsupportedType(params.ctx, &params.p.semaCtx, baseType); err != nil {
+		return err
+	}
+	// Reject domain-of-domain. Full nested domain support is tracked in #165347.
+	if baseType.TypeMeta.DomainData != nil {
+		return unimplemented.NewWithIssue(165347, "domain of domain is not yet supported")
+	}
+	// Reject domain of arrays and tuples types as well.
+	if baseType.Family() == types.ArrayFamily || baseType.Family() == types.TupleFamily {
+		return unimplemented.NewWithIssue(32552, "domain of arrays and tuples is not yet supported")
+	}
+
+	var nextConstraintID descpb.ConstraintID = 1
+	var usedNames []string
+	checks := make(
+		[]descpb.TypeDescriptor_Domain_CheckConstraint, len(n.DomainConstraints),
+	)
+	for i, c := range n.DomainConstraints {
+		if _, err := schemaexpr.TypeCheckDomainCheckExpr(params.ctx, params.p.SemaCtx(), c.Expr, baseType); err != nil {
+			return pgerror.Wrapf(err, pgcode.InvalidObjectDefinition,
+				"invalid CHECK expression for domain %s", typeName.Type())
+		}
+
+		name := string(c.Name)
+		if name == "" {
+			name = chooseDomainConstraintName(
+				typeName.Type(), "check", usedNames,
+			)
+		} else if slices.Contains(usedNames, name) {
+			return pgerror.Newf(pgcode.DuplicateObject,
+				"constraint %q for domain %s already exists", name, typeName.Type())
+		}
+		usedNames = append(usedNames, name)
+		checks[i] = descpb.TypeDescriptor_Domain_CheckConstraint{
+			Name:         name,
+			Expr:         tree.Serialize(c.Expr),
+			ConstraintID: nextConstraintID,
+		}
+		nextConstraintID++
+	}
+
+	// Assign a constraint ID and auto-generated name for the NOT NULL constraint.
+	var notNullConstraintName string
+	var notNullConstraintID descpb.ConstraintID
+	notNullState := descpb.TypeDescriptor_Domain_NONE
+	if n.DomainNotNull {
+		notNullConstraintName = chooseDomainConstraintName(
+			typeName.Type(), "not_null", usedNames,
+		)
+		notNullConstraintID = nextConstraintID
+		nextConstraintID++
+		notNullState = descpb.TypeDescriptor_Domain_ENFORCING
+	}
+
+	// Serialize default expression if present.
+	var defaultExpr string
+	if n.DomainDefault != nil {
+		defaultExpr = tree.Serialize(n.DomainDefault)
+	}
+
+	privs, err := catprivilege.CreatePrivilegesFromDefaultPrivileges(
+		dbDesc.GetDefaultPrivilegeDescriptor(),
+		schema.GetDefaultPrivilegeDescriptor(),
+		dbDesc.GetID(),
+		params.SessionData().User(),
+		privilege.Types,
+	)
+	if err != nil {
+		return err
+	}
+
+	typeDesc := typedesc.NewBuilder(&descpb.TypeDescriptor{
+		Name:           typeName.Type(),
+		ID:             id,
+		ParentID:       dbDesc.GetID(),
+		ParentSchemaID: schema.GetID(),
+		Kind:           descpb.TypeDescriptor_DOMAIN,
+		Domain: &descpb.TypeDescriptor_Domain{
+			BaseType:              baseType,
+			NotNullState:          notNullState,
+			NotNullConstraintName: notNullConstraintName,
+			NotNullConstraintID:   notNullConstraintID,
+			DefaultExpr:           defaultExpr,
+			CheckConstraints:      checks,
+			NextConstraintID:      nextConstraintID,
+		},
+		Version:    1,
+		Privileges: privs,
+	}).BuildCreatedMutableType()
+
+	if err := p.finishCreateType(params.ctx, params.EvalContext(), typeName, typeDesc, dbDesc, schema); err != nil {
+		return err
+	}
+	// Install back references to types used by this domain (e.g., if the base
+	// type is a user-defined type like an enum).
+	return p.addBackRefsFromAllTypesInType(params.ctx, typeDesc)
+}
+
+// chooseDomainConstraintName generates a unique constraint name for a domain
+// constraint.
+func chooseDomainConstraintName(domainName string, label string, usedNames []string) string {
+	candidate := fmt.Sprintf("%s_%s", domainName, label)
+	for pass := 0; ; pass++ {
+		if pass > 0 {
+			candidate = fmt.Sprintf("%s_%s%d", domainName, label, pass)
+		}
+		if !slices.Contains(usedNames, candidate) {
+			return candidate
+		}
+	}
 }
 
 func (p *planner) finishCreateType(

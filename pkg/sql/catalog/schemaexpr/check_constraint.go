@@ -103,7 +103,7 @@ func (b *CheckConstraintBuilder) Build(
 	constraintID := b.desc.TableDesc().GetNextConstraintID()
 	b.desc.TableDesc().NextConstraintID++
 	return &descpb.TableDescriptor_CheckConstraint{
-		Expr:                  expr,
+		Expr:                  descpb.Expression(expr),
 		Name:                  name,
 		ColumnIDs:             colIDs.Ordered(),
 		FromHashShardedColumn: c.FromHashShardedColumn,

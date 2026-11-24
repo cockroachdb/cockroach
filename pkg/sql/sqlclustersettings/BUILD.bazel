@@ -6,9 +6,11 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/clusterversion",
         "//pkg/keys",
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/util/metamorphic",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

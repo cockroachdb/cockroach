@@ -19,9 +19,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvprober"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
@@ -30,13 +33,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"google.golang.org/grpc"
 )
 
 // TestServerInterfaceRaw is the interface of server.testServer.
@@ -74,10 +77,10 @@ type TestServerInterface interface {
 	// the .TenantController() method.
 	TenantControlInterface
 
-	// ApplicationLayer returns the interface to the application layer that is
-	// exercised by the test. Depending on how the test server is started
-	// and (optionally) randomization, this can be either the SQL layer
-	// of a virtual cluster or that of the system interface.
+	// ApplicationLayer returns the interface to the application layer used
+	// in testing. If the server starts with tenancy enabled under the default
+	// tenant option, this refers to the SQL layer of the virtual cluster.
+	// Otherwise, in single-tenant mode, it refers to the system layer.
 	ApplicationLayer() ApplicationLayerInterface
 
 	// SystemLayer returns the interface to the application layer
@@ -128,6 +131,38 @@ type TestServerController interface {
 	// TODO(knz): Migrate this logic to a demo-specific init task
 	// or config profile.
 	RunInitialSQL(ctx context.Context, startSingleNode bool, adminUser, adminPassword string) error
+}
+
+// DeploymentMode defines the mode of the underlying test server or tenant,
+// which can be single-tenant (system-only), shared-process, or
+// external-process.
+type DeploymentMode uint8
+
+const (
+	SingleTenant DeploymentMode = iota
+	SharedProcess
+	ExternalProcess
+)
+
+func (d DeploymentMode) IsExternal() bool {
+	return d == ExternalProcess
+}
+
+// IsSingleTenant returns whether the deployment mode is single tenant or not.
+func (d DeploymentMode) IsSingleTenant() bool {
+	return d == SingleTenant
+}
+
+// RPCConn defines a common interface for creating RPC clients. It hides the
+// underlying RPC connection (gRPC or DRPC), making it easy to swap
+// them without changing the caller code.
+type RPCConn interface {
+	NewStatusClient() serverpb.RPCStatusClient
+	NewAdminClient() serverpb.RPCAdminClient
+	NewInitClient() serverpb.RPCInitClient
+	NewTimeSeriesClient() tspb.RPCTimeSeriesClient
+	NewInternalClient() kvpb.RPCInternalClient
+	NewDistSQLClient() execinfrapb.RPCDistSQLClient
 }
 
 // ApplicationLayerInterface defines accessors to the application
@@ -259,19 +294,19 @@ type ApplicationLayerInterface interface {
 	NewClientRPCContext(ctx context.Context, userName username.SQLUsername) *rpc.Context
 
 	// RPCClientConn opens a RPC client connection to the server.
-	RPCClientConn(t TestFataler, userName username.SQLUsername) *grpc.ClientConn
+	RPCClientConn(t TestFataler, userName username.SQLUsername) RPCConn
 
 	// RPCClientConnE is like RPCClientConn but it allows the test to check the
 	// error.
-	RPCClientConnE(userName username.SQLUsername) (*grpc.ClientConn, error)
+	RPCClientConnE(userName username.SQLUsername) (RPCConn, error)
 
 	// GetAdminClient creates a serverpb.AdminClient connection to the server.
 	// Shorthand for serverpb.AdminClient(.RPCClientConn(t, "root"))
-	GetAdminClient(t TestFataler) serverpb.AdminClient
+	GetAdminClient(t TestFataler) serverpb.RPCAdminClient
 
 	// GetStatusClient creates a serverpb.StatusClient connection to the server.
 	// Shorthand for serverpb.StatusClient(.RPCClientConn(t, "root"))
-	GetStatusClient(t TestFataler) serverpb.StatusClient
+	GetStatusClient(t TestFataler) serverpb.RPCStatusClient
 
 	// AnnotateCtx annotates a context.
 	AnnotateCtx(context.Context) context.Context
@@ -321,6 +356,9 @@ type ApplicationLayerInterface interface {
 	// TestingKnobs returns the TestingKnobs in use by the test server.
 	TestingKnobs() *base.TestingKnobs
 
+	// ExternalIODir returns ExternalIODir form the server config.
+	ExternalIODir() string
+
 	// SQLServerInternal returns the *server.SQLServer as an interface{}
 	// Note: most tests should use SQLServer() and InternalExecutor() instead.
 	SQLServerInternal() interface{}
@@ -339,6 +377,12 @@ type ApplicationLayerInterface interface {
 	// Discourages implementer from using unauthenticated http connections
 	// with verbose method name.
 	GetUnauthenticatedHTTPClient() (http.Client, error)
+
+	// GetUnauthenticatedHTTPClientWithTransport returns an http client and its
+	// corresponding transport configured with the client TLS config required by
+	// the TestServer's configuration. Discourages implementer from using
+	// unauthenticated http connections with verbose method name.
+	GetUnauthenticatedHTTPClientWithTransport() (http.Client, *http.Transport, error)
 
 	// GetAdminHTTPClient returns an http client which has been
 	// authenticated to access Admin API methods (via a cookie).
@@ -419,11 +463,6 @@ type ApplicationLayerInterface interface {
 		ctx context.Context, span roachpb.Span,
 	) (*serverpb.TableStatsResponse, error)
 
-	// ForceTableGC forces a KV GC round on the key range for the given table.
-	ForceTableGC(
-		ctx context.Context, database, table string, timestamp hlc.Timestamp,
-	) error
-
 	// DefaultZoneConfig is a convenience function that accesses
 	// .SystemConfigProvider().GetSystemConfig().DefaultZoneConfig.
 	DefaultZoneConfig() zonepb.ZoneConfig
@@ -448,6 +487,16 @@ type ApplicationLayerInterface interface {
 
 	// DistSQLPlanningNodeID returns the NodeID to use by the DistSQL span resolver.
 	DistSQLPlanningNodeID() roachpb.NodeID
+
+	// DeploymentMode returns the deployment mode of the underlying server or
+	// tenant, which can be single-tenant (system-only), shared-process, or
+	// external-process.
+	DeploymentMode() DeploymentMode
+
+	// TxnRegistry returns the internal transaction diagnostics registry
+	// from the SQLServer. This registry holds the currently active
+	// transaction diagnostics requests.
+	TxnRegistry() interface{}
 }
 
 // TenantControlInterface defines the API of a test server that can
@@ -487,13 +536,23 @@ type TenantControlInterface interface {
 	// if the tenant record exists in KV.
 	WaitForTenantReadiness(ctx context.Context, tenantID roachpb.TenantID) error
 
+	// GrantTenantCapabilities grants a capability to a tenant and waits until the
+	// in-memory cache reflects the change.
+	//
+	// Note: There is no need to call WaitForTenantCapabilities separately.
+	GrantTenantCapabilities(
+		context.Context,
+		roachpb.TenantID,
+		map[tenantcapabilitiespb.ID]string,
+	) error
+
 	// WaitForTenantCapabilities waits until the in-RAM cache of
 	// tenant capabilities has been populated for the given tenant ID
 	// with the expected target capability values.
 	WaitForTenantCapabilities(
 		ctx context.Context,
 		tenID roachpb.TenantID,
-		targetCaps map[tenantcapabilities.ID]string,
+		targetCaps map[tenantcapabilitiespb.ID]string,
 		errPrefix string,
 	) error
 
@@ -613,7 +672,7 @@ type StorageLayerInterface interface {
 		error)
 
 	// Engines returns the TestServer's engines.
-	Engines() []storage.Engine
+	Engines() []kvstorage.Engines
 
 	// MetricsRecorder periodically records node-level and store-level metrics.
 	MetricsRecorder() *status.MetricsRecorder
@@ -621,13 +680,6 @@ type StorageLayerInterface interface {
 	// SpanConfigKVSubscriber returns the embedded spanconfig.KVSubscriber for
 	// the server.
 	SpanConfigKVSubscriber() interface{}
-
-	// KVFlowController returns the embedded kvflowcontrol.Controller for the
-	// server.
-	KVFlowController() interface{}
-
-	// KVFlowHandles returns the embedded kvflowcontrol.Handles for the server.
-	KVFlowHandles() interface{}
 
 	// KvProber returns a *kvprober.Prober, which is useful when asserting the
 	// correctness of the prober from integration tests.
@@ -675,6 +727,17 @@ type StorageLayerInterface interface {
 
 	// RaftConfig retrieves a copy of the raft configuration.
 	RaftConfig() base.RaftConfig
+
+	// ForceTableGC forces a KV GC round on the key range for the given table.
+	//
+	// Note that we don't provide this functionality as part of the
+	// ApplicationLayerInterface because on secondary tenants we don't put
+	// split points between all tables, so the KV GC request could affect other
+	// system tables (since they could share the underlying range with the user
+	// table).
+	ForceTableGC(
+		ctx context.Context, database, table string, timestamp hlc.Timestamp,
+	) error
 }
 
 // TestServerFactory encompasses the actual implementation of the shim

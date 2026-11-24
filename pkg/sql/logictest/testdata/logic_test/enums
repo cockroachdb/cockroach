@@ -1,3 +1,5 @@
+# LogicTest: !local-prepared
+
 statement ok
 CREATE TYPE t AS ENUM ()
 
@@ -185,10 +187,10 @@ SELECT enum_range('cockroach'::dbs, 'spanner'::dbs)
 ----
 {}
 
-query error pq: enum_range\(\): both arguments cannot be NULL
+query error pq: both arguments cannot be NULL
 SELECT enum_range(NULL::dbs, NULL::dbs)
 
-query error pq: enum_range\(\): mismatched types
+query error pq: mismatched types
 SELECT enum_range('cockroach'::dbs, 'hello'::greeting)
 
 # Test inserting and reading enum data from tables.
@@ -221,8 +223,10 @@ SELECT x1, enum_first(x1) FROM greeting_table
 ----
 hi hello
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE t1 (x greeting, INDEX i (x));
+
+statement ok
 CREATE TABLE t2 (x greeting, INDEX i (x));
 INSERT INTO t1 VALUES ('hello');
 INSERT INTO t2 VALUES ('hello')
@@ -385,6 +389,7 @@ SELECT b'\xFF'::as_bytes
 
 # Regression for #49300. Ensure that virtual tables have access to hydrated
 # type descriptors.
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE t1
 ----
@@ -393,10 +398,22 @@ t1  CREATE TABLE public.t1 (
       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
       CONSTRAINT t1_pkey PRIMARY KEY (rowid ASC),
       INDEX i (x ASC)
-    )
+    );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE t1
+----
+t1  CREATE TABLE public.t1 (
+      x public.greeting NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT t1_pkey PRIMARY KEY (rowid ASC),
+      INDEX i (x ASC)
+    ) WITH (schema_locked = true);
 
 # SHOW CREATE uses a virtual index, so also check the code path where a
 # descriptor scan is used.
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM crdb_internal.create_statements WHERE descriptor_name = 't1'
 ----
@@ -406,6 +423,17 @@ CREATE TABLE public.t1 (
    CONSTRAINT t1_pkey PRIMARY KEY (rowid ASC),
    INDEX i (x ASC)
 )
+
+skipif config schema-locked-disabled
+query T
+SELECT create_statement FROM crdb_internal.create_statements WHERE descriptor_name = 't1'
+----
+CREATE TABLE public.t1 (
+  x public.greeting NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t1_pkey PRIMARY KEY (rowid ASC),
+  INDEX i (x ASC)
+) WITH (schema_locked = true)
 
 # Test that the implicit array type has been created, and that we can use it.
 query TT
@@ -427,10 +455,12 @@ SELECT * FROM enum_array
 {hello} {hello}
 {howdy} {howdy}
 
+# In certain configs, the type doesn't get hydrated with the fully-qualified name.
+skipif config 3node-tenant fakedist-disk fakedist-vec-off fakedist
 query TTT
 SELECT pg_typeof(x), pg_typeof(x[1]), pg_typeof(ARRAY['hello']::_greeting) FROM enum_array LIMIT 1
 ----
-greeting[]  greeting  greeting[]
+public.greeting[]  public.greeting  public.greeting[]
 
 # Ensure that the implicitly created array type will tolerate collisions.
 # _collision will create __collision as its implicit array type, so the
@@ -464,7 +494,7 @@ FROM
 WHERE
   descriptor_name = 'enum_array' AND column_name = 'x'
 ----
-x  family:ArrayFamily width:0 precision:0 locale:"" visible_type:0 oid:100118 array_contents:<family: EnumFamily width: 0 precision: 0 locale: "" visible_type: 0 oid: 100117 time_precision_is_set: false udt_metadata: <   array_type_oid: 100118 > > time_precision_is_set:false
+x  family:ArrayFamily width:0 precision:0 locale:"" oid:100118 array_contents:<family: EnumFamily width: 0 precision: 0 locale: "" oid: 100117 time_precision_is_set: false udt_metadata: <   array_type_oid: 100118 > > time_precision_is_set:false
 
 # Test tables using enums in DEFAULT expressions.
 statement ok
@@ -499,6 +529,7 @@ WHERE
 'hello'::public.greeting
 
 # Test that enum default values are formatted in human readable ways.
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE enum_default
 ----
@@ -509,7 +540,20 @@ enum_default  CREATE TABLE public.enum_default (
                 rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                 CONSTRAINT enum_default_pkey PRIMARY KEY (rowid ASC),
                 FAMILY fam_0_x_y_z_rowid (x, y, z, rowid)
-              )
+              );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE enum_default
+----
+enum_default  CREATE TABLE public.enum_default (
+                x INT8 NULL,
+                y public.greeting NULL DEFAULT 'hello':::public.greeting,
+                z BOOL NULL DEFAULT 'hello':::public.greeting IS OF (public.greeting, public.greeting),
+                rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                CONSTRAINT enum_default_pkey PRIMARY KEY (rowid ASC),
+                FAMILY fam_0_x_y_z_rowid (x, y, z, rowid)
+              ) WITH (schema_locked = true);
 
 # Test crdb_internal.table_columns.
 query TT
@@ -556,6 +600,7 @@ SELECT * FROM enum_computed
 1 hello false hello
 2 hello false hello
 
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE enum_computed
 ----
@@ -567,7 +612,21 @@ enum_computed  CREATE TABLE public.enum_computed (
                  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
                  CONSTRAINT enum_computed_pkey PRIMARY KEY (rowid ASC),
                  FAMILY fam_0_x_y_z_w_rowid (x, y, z, w, rowid)
-               )
+               );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE enum_computed
+----
+enum_computed  CREATE TABLE public.enum_computed (
+                 x INT8 NULL,
+                 y public.greeting NULL AS ('hello':::public.greeting) STORED,
+                 z BOOL NULL AS (w = 'howdy':::public.greeting) STORED,
+                 w public.greeting NULL,
+                 rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                 CONSTRAINT enum_computed_pkey PRIMARY KEY (rowid ASC),
+                 FAMILY fam_0_x_y_z_w_rowid (x, y, z, w, rowid)
+               ) WITH (schema_locked = true);
 
 # Test information_schema.columns. generation_expression should not be
 # formatted with type annotations.
@@ -585,14 +644,17 @@ y  'hello'
 z  w = 'howdy'
 
 # Test check constraints with enum values.
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE enum_checks (
   x greeting,
   CHECK (x = 'hello'::greeting),
   CHECK ('hello':::greeting = 'hello':::greeting)
 );
+
+statement ok
 INSERT INTO enum_checks VALUES ('hello')
 
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE enum_checks
 ----
@@ -602,7 +664,19 @@ enum_checks  CREATE TABLE public.enum_checks (
                CONSTRAINT enum_checks_pkey PRIMARY KEY (rowid ASC),
                CONSTRAINT check_x CHECK (x = 'hello':::public.greeting),
                CONSTRAINT "check" CHECK ('hello':::public.greeting = 'hello':::public.greeting)
-             )
+             );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE enum_checks
+----
+enum_checks  CREATE TABLE public.enum_checks (
+               x public.greeting NULL,
+               rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+               CONSTRAINT enum_checks_pkey PRIMARY KEY (rowid ASC),
+               CONSTRAINT check_x CHECK (x = 'hello':::public.greeting),
+               CONSTRAINT "check" CHECK ('hello':::public.greeting = 'hello':::public.greeting)
+             ) WITH (schema_locked = true);
 
 # Ensure that we can add check constraints to tables with enums.
 statement ok
@@ -633,6 +707,7 @@ DROP TABLE enum_checks;
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 CREATE TABLE enum_checks (x greeting);
 INSERT INTO enum_checks VALUES ('hi'), ('howdy');
 ALTER TABLE enum_checks ADD CHECK (x > 'hello')
@@ -645,6 +720,7 @@ ROLLBACK
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 CREATE TABLE enum_checks (x greeting);
 INSERT INTO enum_checks VALUES ('hi'), ('howdy');
 
@@ -733,6 +809,7 @@ DROP TABLE sc
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 CREATE TABLE sc (x greeting NOT NULL, y int NOT NULL);
 INSERT INTO sc VALUES ('hello', 0), ('howdy', 1), ('hi', 2);
 CREATE INDEX i1 ON sc (x);
@@ -763,6 +840,7 @@ COMMIT
 # the same transaction.
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 CREATE TYPE in_txn AS ENUM ('in', 'txn');
 CREATE TABLE tbl_in_txn (x in_txn);
 INSERT INTO tbl_in_txn VALUES ('txn');
@@ -793,6 +871,7 @@ DROP TABLE enum_pk
 # Repeat the above tests, but in a transaction.
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 CREATE TABLE enum_not_pk (x INT PRIMARY KEY, y greeting NOT NULL);
 INSERT INTO enum_not_pk VALUES (1, 'howdy');
 ALTER TABLE enum_not_pk ALTER PRIMARY KEY USING COLUMNS (y);
@@ -800,6 +879,7 @@ ROLLBACK
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 CREATE TABLE enum_pk (x GREETING PRIMARY KEY, y INT NOT NULL);
 INSERT INTO enum_pk VALUES ('howdy', 1);
 ALTER TABLE enum_pk ALTER PRIMARY KEY USING COLUMNS (y);
@@ -822,6 +902,7 @@ DROP TABLE enum_ctas
 # Test basic CTAS in a transaction.
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 CREATE TABLE enum_ctas AS TABLE enum_ctas_base
 
 query TTT
@@ -847,6 +928,7 @@ DROP TABLE enum_ctas;
 # Test CTAS with a SELECT query in a transaction.
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 CREATE TABLE enum_ctas AS (SELECT x, enum_first(y), z, enum_range(x) FROM enum_ctas_base)
 
 query TTTT
@@ -872,6 +954,7 @@ DROP TABLE enum_ctas;
 # Test CTAS from a VALUES clause in a transaction.
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 CREATE TABLE enum_ctas AS VALUES ('howdy'::greeting, 'cockroach'::dbs)
 
 query TT
@@ -930,6 +1013,7 @@ DROP TABLE column_add
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 CREATE TABLE column_add (x greeting);
 INSERT INTO column_add VALUES ('hello');
 ALTER TABLE column_add ADD COLUMN y INT DEFAULT 1;
@@ -949,6 +1033,7 @@ COMMIT
 # same transaction.
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 CREATE TYPE in_txn AS ENUM ('in', 'txn');
 CREATE TABLE tbl_in_txn (x INT);
 INSERT INTO tbl_in_txn VALUES (1);
@@ -979,7 +1064,11 @@ DROP TABLE enum_referenced, enum_origin;
 
 # Try the above, but in a transaction.
 statement ok
+SET autocommit_before_ddl = false
+
+statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 CREATE TABLE enum_origin (x greeting PRIMARY KEY);
 CREATE TABLE enum_referenced (x greeting PRIMARY KEY);
 INSERT INTO enum_origin VALUES ('hello');
@@ -991,6 +1080,9 @@ INSERT INTO enum_origin VALUES ('howdy')
 
 statement ok
 ROLLBACK
+
+statement ok
+RESET autocommit_before_ddl
 
 # Try adding a foreign key that fails validation when building.
 # Foreign keys added in the same transaction as a new table are not validated,
@@ -1005,6 +1097,7 @@ statement error pq: foreign key violation: "enum_origin" row x='hello' has no ma
 ALTER TABLE enum_origin ADD FOREIGN KEY (x) REFERENCES enum_referenced (x)
 
 # Tests for ALTER COLUMN SET DATA TYPE.
+onlyif config local-legacy-schema-changer
 statement ok
 SET enable_experimental_alter_column_type_general = true;
 
@@ -1013,18 +1106,22 @@ CREATE TABLE enum_data_type (x STRING, y INT);
 INSERT INTO enum_data_type VALUES ('hello'), ('howdy');
 
 # The legacy schema changed doesn't hydrate the type name in the message.
-skipif config local-legacy-schema-changer local-mixed-24.2
+skipif config local-legacy-schema-changer
 statement error pq: column "y" cannot be cast automatically to type public.greeting\nHINT: You might need to specify "USING y::public.greeting".
 ALTER TABLE enum_data_type ALTER COLUMN y SET DATA TYPE greeting;
 
+# This and all subsequent attempts to alter a column type that require a backfill
+# are skipped in the legacy schema changer, as it does not support such operations.
+skipif config local-legacy-schema-changer
 statement error pq: invalid cast: int -> greeting
 ALTER TABLE enum_data_type ALTER COLUMN y SET DATA TYPE greeting USING y::greeting;
 
 # The legacy schema changed doesn't hydrate the type name in the message.
-skipif config local-legacy-schema-changer local-mixed-24.2
+skipif config local-legacy-schema-changer
 statement error pq: column "x" cannot be cast automatically to type public.greeting\nHINT: You might need to specify "USING x::public.greeting".
 ALTER TABLE enum_data_type ALTER COLUMN x SET DATA TYPE greeting;
 
+skipif config local-legacy-schema-changer
 statement ok
 ALTER TABLE enum_data_type ALTER COLUMN x SET DATA TYPE greeting USING x::greeting;
 
@@ -1056,6 +1153,7 @@ statement ok
 ALTER TABLE enum_data_type ALTER COLUMN x SET DATA TYPE greeting
 
 # Now, set it to string.
+skipif config local-legacy-schema-changer
 statement ok
 ALTER TABLE enum_data_type ALTER COLUMN x SET DATA TYPE STRING
 
@@ -1079,10 +1177,12 @@ statement ok
 CREATE TABLE enum_data_type (x greeting);
 INSERT INTO enum_data_type VALUES ('hello'), ('hi')
 
+skipif config local-legacy-schema-changer
 statement ok
 ALTER TABLE enum_data_type ALTER COLUMN x SET DATA TYPE dbs USING
   (CASE WHEN x = 'hello' THEN 'cockroach' ELSE 'postgres' END)
 
+skipif config local-legacy-schema-changer
 query T rowsort
 SELECT * FROM enum_data_type
 ----
@@ -1103,18 +1203,22 @@ statement ok
 CREATE TABLE enum_data_type (x STRING);
 INSERT INTO enum_data_type VALUES ('notagreeting')
 
+skipif config local-legacy-schema-changer
 statement error pq: .*invalid input value for enum greeting: "notagreeting"
 ALTER TABLE enum_data_type ALTER COLUMN x SET DATA TYPE greeting USING x::greeting
 
+skipif config local-legacy-schema-changer
 statement ok
 ALTER TABLE enum_data_type
   ALTER COLUMN x SET DATA TYPE greeting USING (CASE WHEN x = 'notagreeting' THEN 'hello' ELSE 'hi' END)
 
+skipif config local-legacy-schema-changer
 query T
 SELECT * FROM enum_data_type
 ----
 hello
 
+skipif config local-legacy-schema-changer
 query T
 SELECT to_json('hello'::greeting)
 ----
@@ -1135,6 +1239,7 @@ howdy
 # plans to remote nodes.
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 CREATE TYPE local_type AS ENUM ('local');
 CREATE TABLE local_table (x INT);
 INSERT INTO local_table VALUES (1), (2)
@@ -1149,6 +1254,7 @@ ROLLBACK
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 ALTER TYPE greeting RENAME TO greeting_local;
 CREATE TABLE local_table (x INT);
 INSERT INTO local_table VALUES (1), (2)
@@ -1166,6 +1272,7 @@ ROLLBACK
 # or created a type.
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 CREATE TYPE local_type AS ENUM ('local');
 CREATE TABLE local_table (x local_type);
 INSERT INTO local_table VALUES ('local')
@@ -1244,10 +1351,11 @@ statement ok
 CREATE TYPE enum_with_vals AS ENUM ('val', 'other_val');
 
 statement ok
-CREATE TABLE table_with_not_null_enum (i INT PRIMARY KEY, v enum_with_vals NOT NULL);
+CREATE TABLE table_with_not_null_enum (i INT PRIMARY KEY, v enum_with_vals NOT NULL) WITH (schema_locked=false);
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 
 statement ok
 ALTER TABLE table_with_not_null_enum DROP COLUMN v;
@@ -1262,10 +1370,11 @@ statement ok
 CREATE TYPE enum_with_no_vals AS ENUM ();
 
 statement ok
-CREATE TABLE table_with_not_null_enum_no_vals (i INT PRIMARY KEY, v enum_with_no_vals NOT NULL);
+CREATE TABLE table_with_not_null_enum_no_vals (i INT PRIMARY KEY, v enum_with_no_vals NOT NULL) WITH (schema_locked=false);
 
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 
 statement ok
 ALTER TABLE table_with_not_null_enum_no_vals DROP COLUMN v;
@@ -1372,7 +1481,6 @@ CREATE TABLE table_ifne (x INT)
 statement ok
 CREATE TYPE IF NOT EXISTS table_ifne AS ENUM ('hi')
 
-
 subtest enum_array_cast
 
 statement ok
@@ -1432,7 +1540,6 @@ query T
 SELECT * from arr_t5
 ----
 {a,b}
-
 
 # Test that if an enum value is being used by a default expression
 # or computed column, we disallow dropping it.
@@ -1521,7 +1628,6 @@ ALTER TYPE computed_abc2 DROP VALUE 'a'
 statement error could not remove enum value "b" as it is being used in a computed column of "t7"
 ALTER TYPE computed_abc2 DROP VALUE 'b'
 
-
 # Test that types used in arrays can be renamed.
 subtest rename_type_in_array
 
@@ -1541,6 +1647,7 @@ ALTER TYPE arr_typ RENAME TO arr_typ2
 statement ok
 INSERT INTO arr_t6 VALUES (default, default, default)
 
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE arr_t6
 ----
@@ -1551,8 +1658,20 @@ arr_t6  CREATE TABLE public.arr_t6 (
           rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
           CONSTRAINT arr_t6_pkey PRIMARY KEY (rowid ASC),
           FAMILY fam_0_i_j_k_rowid (i, j, k, rowid)
-        )
+        );
 
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE arr_t6
+----
+arr_t6  CREATE TABLE public.arr_t6 (
+          i public.arr_typ2[] NULL DEFAULT ARRAY['a':::public.arr_typ2]:::public.arr_typ2[],
+          j public.arr_typ2 NULL DEFAULT (ARRAY['b':::public.arr_typ2]:::public.arr_typ2[])[1:::INT8],
+          k public.arr_typ2[] NULL DEFAULT ARRAY['c':::public.arr_typ2]:::public.arr_typ2[],
+          rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+          CONSTRAINT arr_t6_pkey PRIMARY KEY (rowid ASC),
+          FAMILY fam_0_i_j_k_rowid (i, j, k, rowid)
+        ) WITH (schema_locked = true);
 
 subtest regression_63138
 
@@ -1738,8 +1857,13 @@ CREATE TABLE tab2 (k greeting)
 statement ok
 INSERT INTO tab2 VALUES ('hello')
 
+skipif config schema-locked-disabled
+statement ok
+ALTER TABLE tab2 SET (schema_locked=false)
+
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl = false;
 
 statement ok
 ALTER TABLE tab2 ADD COLUMN j INT
@@ -1753,6 +1877,10 @@ INSERT INTO tab2 VALUES ('salud')
 
 statement ok
 ROLLBACK
+
+skipif config schema-locked-disabled
+statement ok
+ALTER TABLE tab2 SET (schema_locked=true)
 
 # This is a regression test for mixed case type references.
 subtest mixed_case_type_names
@@ -1792,7 +1920,6 @@ USE "DB➕➕"
 statement ok
 CREATE SCHEMA "➖➖"
 
-
 statement ok
 CREATE TABLE t (i INT PRIMARY KEY);
 CREATE TYPE "➖➖"."MixedCase" AS ENUM ('mixed', 'Case');
@@ -1804,6 +1931,7 @@ ALTER TABLE t ADD COLUMN "MixedCase Column" "➖➖"."MixedCase" DEFAULT ('mixed
 statement ok
 ALTER TABLE t ADD COLUMN "🙏" "DB➕➕".public."Emoji 😉" DEFAULT ('😊'::"DB➕➕".public."Emoji 😉") ON UPDATE ('😔':::public."Emoji 😉");
 
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE t]
 ----
@@ -1812,8 +1940,18 @@ CREATE TABLE public.t (
   "MixedCase Column" ➖➖."MixedCase" NULL DEFAULT 'mixed':::➖➖."MixedCase",
   🙏 public."Emoji 😉" NULL DEFAULT e'\U0001F60A':::public."Emoji 😉" ON UPDATE e'\U0001F614':::public."Emoji 😉",
   CONSTRAINT t_pkey PRIMARY KEY (i ASC)
-)
+);
 
+skipif config schema-locked-disabled
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t]
+----
+CREATE TABLE public.t (
+  i INT8 NOT NULL,
+  "MixedCase Column" ➖➖."MixedCase" NULL DEFAULT 'mixed':::➖➖."MixedCase",
+  🙏 public."Emoji 😉" NULL DEFAULT e'\U0001F60A':::public."Emoji 😉" ON UPDATE e'\U0001F614':::public."Emoji 😉",
+  CONSTRAINT t_pkey PRIMARY KEY (i ASC)
+) WITH (schema_locked = true);
 
 # Ensure that there's a database qualification on the enum type in
 # SHOW CREATE TABLE.
@@ -1822,8 +1960,11 @@ subtest show_create_table_udf_qualification
 statement ok
 CREATE DATABASE db1;
 CREATE TYPE db1.mytype AS ENUM ('foo');
+
+statement disable-cf-mutator ok
 CREATE TABLE db1.t (m db1.mytype)
 
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE db1.public.t]
 ----
@@ -1831,4 +1972,177 @@ CREATE TABLE public.t (
   m public.mytype NULL,
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
+);
+
+skipif config schema-locked-disabled
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE db1.public.t]
+----
+CREATE TABLE public.t (
+  m public.mytype NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT t_pkey PRIMARY KEY (rowid ASC)
+) WITH (schema_locked = true);
+
+# Testcase for issue 154461: drop an enum value when the histogram contains
+# range counts.
+subtest 154461
+
+statement ok
+USE test
+
+statement ok
+CREATE TYPE e154461 AS ENUM ('e', 'f', 'g')
+
+statement ok
+CREATE TABLE t154461 (a e154461, INDEX (a)) WITH (sql_stats_histogram_buckets_count = 2)
+
+statement ok
+INSERT INTO t154461 VALUES ('e'), ('e'), ('f'), ('g'), ('g')
+
+statement ok
+CREATE STATISTICS s FROM t154461
+
+query T
+SELECT * FROM t154461 WHERE a != 'g' ORDER BY a
+----
+e
+e
+f
+
+let $hist_id_1
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE t154461]
+WHERE statistics_name = 's' AND column_names = '{a}'
+
+query TIRI colnames,nosort
+SHOW HISTOGRAM $hist_id_1
+----
+upper_bound  range_rows  distinct_range_rows  equal_rows
+'e'          0           0                    2
+'g'          1           1                    2
+
+query T
+SELECT jsonb_pretty(stat)
+FROM (
+  SELECT json_array_elements(statistics) - 'created_at' - 'id' - 'avg_size' AS stat
+  FROM [SHOW STATISTICS USING JSON FOR TABLE t154461]
 )
+WHERE stat->>'columns' = '["a"]'
+----
+{
+    "columns": [
+        "a"
+    ],
+    "delay_delete": false,
+    "distinct_count": 3,
+    "histo_buckets": [
+        {
+            "distinct_range": 0,
+            "num_eq": 2,
+            "num_range": 0,
+            "upper_bound": "e"
+        },
+        {
+            "distinct_range": 1,
+            "num_eq": 2,
+            "num_range": 1,
+            "upper_bound": "g"
+        }
+    ],
+    "histo_col_type": "test.public.e154461",
+    "histo_version": 3,
+    "name": "s",
+    "null_count": 0,
+    "row_count": 5
+}
+
+# Now drop the enum value that is the first bucket in the 2-bucket histogram.
+
+statement count 2
+DELETE FROM t154461 WHERE a = 'e'
+
+statement ok
+ALTER TYPE e154461 DROP VALUE 'e'
+
+query T
+SELECT * FROM t154461 WHERE a != 'g' ORDER BY a
+----
+f
+
+let $hist_id_1
+SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE t154461]
+WHERE statistics_name = 's' AND column_names = '{a}'
+
+query TIRI colnames,nosort
+SHOW HISTOGRAM $hist_id_1
+----
+upper_bound  range_rows  distinct_range_rows  equal_rows
+'f'          0           0                    1
+'g'          0           0                    2
+
+query T
+SELECT jsonb_pretty(stat)
+FROM (
+  SELECT json_array_elements(statistics) - 'created_at' - 'id' - 'avg_size' AS stat
+  FROM [SHOW STATISTICS USING JSON FOR TABLE t154461]
+)
+WHERE stat->>'columns' = '["a"]'
+----
+{
+    "columns": [
+        "a"
+    ],
+    "delay_delete": false,
+    "distinct_count": 2,
+    "histo_buckets": [
+        {
+            "distinct_range": 0,
+            "num_eq": 1,
+            "num_range": 0,
+            "upper_bound": "f"
+        },
+        {
+            "distinct_range": 0,
+            "num_eq": 2,
+            "num_range": 0,
+            "upper_bound": "g"
+        }
+    ],
+    "histo_col_type": "test.public.e154461",
+    "histo_version": 3,
+    "name": "s",
+    "null_count": 0,
+    "row_count": 5
+}
+
+# Regression test for #158154. Don't add transitive column dependencies to
+# routines that build check constraints for enum columns.
+subtest regression_158154
+
+statement ok
+CREATE TYPE typ158154 AS ENUM ('foo', 'bar');
+
+statement ok
+CREATE TABLE t158154 (a INT, b typ158154);
+
+statement ok
+CREATE PROCEDURE p158154() LANGUAGE SQL AS $$
+  INSERT INTO t158154 (a) VALUES (1);
+  UPDATE t158154 SET a = a + 1;
+$$;
+
+statement ok
+CALL p158154();
+
+statement ok
+ALTER TABLE t158154 DROP COLUMN b;
+
+statement ok
+CALL p158154();
+
+statement ok
+DROP PROCEDURE p158154;
+DROP TABLE t158154;
+DROP TYPE typ158154;
+
+subtest end

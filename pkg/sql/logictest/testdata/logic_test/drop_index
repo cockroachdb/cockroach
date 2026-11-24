@@ -307,7 +307,7 @@ subtest fk_drop
 
 # Ensure that DROP INDEX CASCADE does not delete the foreign key when
 # there is another index that can satisfy the foreign key constraint.
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE fk1 (x int);
 
 statement ok
@@ -325,6 +325,7 @@ ALTER TABLE fk1 ADD CONSTRAINT fk1 FOREIGN KEY (x) REFERENCES fk2 (x);
 statement ok
 DROP INDEX fk1@i CASCADE
 
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE fk1
 ----
@@ -334,15 +335,31 @@ fk1  CREATE TABLE public.fk1 (
        CONSTRAINT fk1_pkey PRIMARY KEY (rowid ASC),
        CONSTRAINT fk1 FOREIGN KEY (x) REFERENCES public.fk2(x),
        INDEX i2 (x ASC)
-     )
+     );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE fk1
+----
+fk1  CREATE TABLE public.fk1 (
+       x INT8 NULL,
+       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+       CONSTRAINT fk1_pkey PRIMARY KEY (rowid ASC),
+       CONSTRAINT fk1 FOREIGN KEY (x) REFERENCES public.fk2(x),
+       INDEX i2 (x ASC)
+     ) WITH (schema_locked = true);
 
 # test that notices are generated on index drops
 subtest notice_on_drop_index
 
+statement ok
+CREATE TABLE drop_index_test(a int);
+CREATE INDEX drop_index_test_index ON drop_index_test(a);
+
 # Weak isolation levels emit extra notices, so skip them.
 skipif config weak-iso-level-configs
 query T noticetrace
-CREATE TABLE drop_index_test(a int); CREATE INDEX drop_index_test_index ON drop_index_test(a); DROP INDEX drop_index_test_index
+DROP INDEX drop_index_test_index
 ----
 NOTICE: the data for dropped indexes is reclaimed asynchronously
 HINT: The reclamation delay can be customized in the zone configuration for the table.
@@ -353,6 +370,13 @@ subtest new_uniqueness_constraint_error
 statement ok
 CREATE TABLE t (a INT PRIMARY KEY, b DECIMAL(10,1) NOT NULL DEFAULT(0), UNIQUE INDEX t_secondary (b), FAMILY (a, b));
 INSERT INTO t VALUES (100, 500.5);
+
+statement ok
+SET autocommit_before_ddl = false;
+
+skipif config schema-locked-disabled
+statement ok
+ALTER TABLE t SET (schema_locked=false)
 
 statement ok
 BEGIN;
@@ -366,6 +390,13 @@ UPSERT INTO t SELECT a + 1 FROM t;
 
 statement ok
 COMMIT;
+
+statement ok
+RESET autocommit_before_ddl
+
+skipif config schema-locked-disabled
+statement ok
+ALTER TABLE t SET (schema_locked=true)
 
 # test the primary key cannot be dropped with drop index; see #56853
 subtest drop_primary_key
@@ -406,19 +437,21 @@ DROP INDEX t2_96731_idx CASCADE;
 query TTTTB colnames
 SELECT * FROM [SHOW CONSTRAINTS FROM t1_96731] ORDER BY constraint_name
 ----
-table_name  constraint_name  constraint_type  details                                 validated
-t1_96731    t1_96731_j_fkey  FOREIGN KEY      FOREIGN KEY (j) REFERENCES t2_96731(j)  true
-t1_96731    t1_96731_pkey    PRIMARY KEY      PRIMARY KEY (i ASC)                     true
+table_name  constraint_name      constraint_type  details                                 validated
+t1_96731    t1_96731_i_not_null  NOT NULL         NOT NULL                                true
+t1_96731    t1_96731_j_fkey      FOREIGN KEY      FOREIGN KEY (j) REFERENCES t2_96731(j)  true
+t1_96731    t1_96731_pkey        PRIMARY KEY      PRIMARY KEY (i ASC)                     true
 
 # Drop the last unique index will drop the FK as well this time.
 statement ok
 DROP INDEX t2_96731_idx2 CASCADE;
 
-query TTTTB colnames
+query TTTTB colnames,nosort
 SHOW CONSTRAINTS FROM t1_96731;
 ----
-table_name  constraint_name  constraint_type  details              validated
-t1_96731    t1_96731_pkey    PRIMARY KEY      PRIMARY KEY (i ASC)  true
+table_name  constraint_name      constraint_type  details              validated
+t1_96731    t1_96731_i_not_null  NOT NULL         NOT NULL             true
+t1_96731    t1_96731_pkey        PRIMARY KEY      PRIMARY KEY (i ASC)  true
 
 # Recreate the unique index and FK constraint.
 statement ok
@@ -441,9 +474,10 @@ DROP INDEX t2_96731_idx CASCADE;
 query TTTTB colnames
 SELECT * FROM [SHOW CONSTRAINTS FROM t1_96731] ORDER BY constraint_name
 ----
-table_name  constraint_name  constraint_type  details                                 validated
-t1_96731    t1_96731_j_fkey  FOREIGN KEY      FOREIGN KEY (j) REFERENCES t2_96731(j)  true
-t1_96731    t1_96731_pkey    PRIMARY KEY      PRIMARY KEY (i ASC)                     true
+table_name  constraint_name      constraint_type  details                                 validated
+t1_96731    t1_96731_i_not_null  NOT NULL         NOT NULL                                true
+t1_96731    t1_96731_j_fkey      FOREIGN KEY      FOREIGN KEY (j) REFERENCES t2_96731(j)  true
+t1_96731    t1_96731_pkey        PRIMARY KEY      PRIMARY KEY (i ASC)                     true
 
 # Recreate the unique index, drop the unique_without_index constraint,
 # and add another one on different columns.
@@ -460,11 +494,12 @@ ALTER TABLE t2_96731 ADD CONSTRAINT unique_i UNIQUE WITHOUT INDEX (i);
 statement ok
 DROP INDEX t2_96731_idx CASCADE;
 
-query TTTTB colnames
+query TTTTB colnames,nosort
 SHOW CONSTRAINTS FROM t1_96731;
 ----
-table_name  constraint_name  constraint_type  details              validated
-t1_96731    t1_96731_pkey    PRIMARY KEY      PRIMARY KEY (i ASC)  true
+table_name  constraint_name      constraint_type  details              validated
+t1_96731    t1_96731_i_not_null  NOT NULL         NOT NULL             true
+t1_96731    t1_96731_pkey        PRIMARY KEY      PRIMARY KEY (i ASC)  true
 
 statement ok
 DROP TABLE t1_96731, t2_96731;
@@ -505,3 +540,84 @@ SELECT constraint_name from [SHOW CONSTRAINTS FROM fk_ref_dst];
 fk_ref_dst_pkey
 j_fk
 m_fk
+fk_ref_dst_k_not_null
+
+subtest safe_updates_rejects_drop_index
+
+statement ok
+set sql_safe_updates = true;
+set autocommit_before_ddl = true;
+CREATE TABLE roaches(id INT PRIMARY KEY, value STRING);
+CREATE INDEX roaches_value_idx ON roaches(value);
+
+statement error pq: rejected \(sql_safe_updates = true\): DROP INDEX
+DROP INDEX IF EXISTS roaches@roaches_value_idx;
+
+statement ok
+SET sql_safe_updates = false;
+
+subtest drop_hash_sharded_index_depended_on_by_procedure
+
+statement ok
+CREATE TABLE tab_145100 (
+  id UUID PRIMARY KEY,
+  i INT NOT NULL,
+  j int not null,
+  INDEX (i ASC) USING HASH,
+  FAMILY (id, i, j)
+)
+
+statement ok
+CREATE PROCEDURE proc_select_145100() LANGUAGE SQL AS $$
+  SELECT *, crdb_internal_i_shard_16 FROM tab_145100;
+$$;
+
+statement error cannot drop column "crdb_internal_i_shard_16" because function "proc_select_145100" depends on it
+DROP INDEX tab_145100@tab_145100_i_idx
+
+statement ok
+DROP PROCEDURE proc_select_145100
+
+statement ok
+CREATE PROCEDURE proc_insert_145100(in_id UUID, in_i INT) LANGUAGE SQL AS $$
+  INSERT INTO tab_145100 (id, i) VALUES (in_id, in_i);
+$$;
+
+statement ok
+DROP INDEX tab_145100@tab_145100_i_idx
+
+statement ok
+DROP PROCEDURE proc_insert_145100
+
+onlyif config schema-locked-disabled
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE tab_145100]
+----
+CREATE TABLE public.tab_145100 (
+  id UUID NOT NULL,
+  i INT8 NOT NULL,
+  j INT8 NOT NULL,
+  CONSTRAINT tab_145100_pkey PRIMARY KEY (id ASC),
+  FAMILY fam_0_id_i_j (id, i, j)
+);
+
+skipif config schema-locked-disabled
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE tab_145100]
+----
+CREATE TABLE public.tab_145100 (
+  id UUID NOT NULL,
+  i INT8 NOT NULL,
+  j INT8 NOT NULL,
+  CONSTRAINT tab_145100_pkey PRIMARY KEY (id ASC),
+  FAMILY fam_0_id_i_j (id, i, j)
+) WITH (schema_locked = true);
+
+# DROP INDEX ... CASCADE should have caused the procedure to be dropped.
+statement error procedure proc_select_145100 does not exist
+CALL proc_select_145100()
+
+statement ok
+DROP TABLE tab_145100
+
+subtest end

@@ -79,6 +79,8 @@ message SessionData {
   // parallelize lookup batches under all circumstances. Enabling this will
   // increase the speed of lookup joins when each input row might get multiple
   // looked up rows at the cost of increased memory usage.
+  // TODO(yuzefovich): this field can be moved into the local part of
+  // SessionData when compatibility with 25.2 is no longer needed.
   bool parallelize_multi_key_lookup_joins_enabled = 19;
   // TrigramSimilarityThreshold configures the value that's used to compare
   // trigram similarities to in order to evaluate the string % string overload.
@@ -143,6 +145,11 @@ message SessionData {
   // for deadlock detection.
   google.protobuf.Duration deadlock_timeout = 33 [(gogoproto.nullable) = false,
     (gogoproto.stdduration) = true];
+
+  // UseBackupsWithIDs, when true, enables the use of backup IDs in SHOW BACKUP
+  // and RESTORE. If set, SHOW BACKUPS with display backups with IDs that can
+  // then be used in SHOW BACKUP and RESTORE statements.
+  bool use_backups_with_ids = 34 [(gogoproto.customname) = "UseBackupsWithIDs"];
 }
 
 // DataConversionConfig contains the parameters that influence the output

@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "event_generator.go",
         "generator.go",
+        "printer.go",
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/gen",
     visibility = ["//visibility:public"],

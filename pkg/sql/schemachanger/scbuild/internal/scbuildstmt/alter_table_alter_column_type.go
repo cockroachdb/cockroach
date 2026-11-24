@@ -8,9 +8,6 @@ package scbuildstmt
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -19,16 +16,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachange"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 func alterTableAlterColumnType(
@@ -40,7 +38,7 @@ func alterTableAlterColumnType(
 ) {
 	colID := getColumnIDFromColumnName(b, tbl.TableID, t.Column, true /* required */)
 	col := mustRetrieveColumnElem(b, tbl.TableID, colID)
-	panicIfSystemColumn(col, t.Column.String())
+	panicIfSystemColumn(col, t.Column)
 
 	// Setup for the new type ahead of any checking. As we need its resolved type
 	// for the checks.
@@ -68,6 +66,17 @@ func alterTableAlterColumnType(
 		case *scpb.FunctionBody:
 			fnName := b.QueryByID(e.FunctionID).FilterFunctionName().MustGetOneElement()
 			panic(sqlerrors.NewDependentBlocksOpError(op, objType, t.Column.String(), "function", fnName.Name))
+		case *scpb.TriggerDeps:
+			tableElts := b.QueryByID(e.TableID)
+			tableName := tableElts.FilterNamespace().MustGetOneElement()
+			triggerName := tableElts.FilterTriggerName().Filter(
+				func(_ scpb.Status, _ scpb.TargetStatus, tn *scpb.TriggerName) bool {
+					return tn.TriggerID == e.TriggerID
+				}).MustGetOneElement()
+			panic(sqlerrors.NewDependentObjectErrorf(
+				"cannot %s %s %q because trigger %q on table %q depends on it",
+				redact.SafeString(op), redact.SafeString(objType), t.Column.String(), triggerName.Name, tableName.Name,
+			))
 		case *scpb.RowLevelTTL:
 			// If a duration expression is set, the column level dependency is on the
 			// internal ttl column, which we are attempting to alter.
@@ -77,13 +86,15 @@ func alterTableAlterColumnType(
 			// Otherwise, it is a dependency on the column used in the expiration
 			// expression.
 			panic(sqlerrors.NewAlterDependsOnExpirationExprError(op, objType, t.Column.String(), tn.Object(), string(e.ExpirationExpr)))
+		case *scpb.PolicyUsingExpr, *scpb.PolicyWithCheckExpr:
+			panic(sqlerrors.NewAlterDependsOnPolicyExprError(op, objType, t.Column.String()))
 		}
-	})
+	}, false /* allowPartialIdxPredicateRef */)
 
 	var err error
 	newColType.Type, err = schemachange.ValidateAlterColumnTypeChecks(
 		b, t, b.ClusterSettings(), newColType.Type,
-		col.GeneratedAsIdentityType != catpb.GeneratedAsIdentityType_NOT_IDENTITY_COLUMN,
+		isColumnGeneratedAsIdentity(b, tbl.TableID, col.ColumnID),
 		newColType.IsVirtual)
 	if err != nil {
 		panic(err)
@@ -107,8 +118,7 @@ func alterTableAlterColumnType(
 	case schemachange.ColumnConversionGeneral:
 		handleGeneralColumnConversion(b, stmt, t, tn, tbl, col, oldColType, &newColType)
 	default:
-		panic(scerrors.NotImplementedErrorf(t,
-			"alter type conversion %v not handled", kind))
+		panic(errors.AssertionFailedf("alter type conversion %v not handled", kind))
 	}
 }
 
@@ -147,7 +157,7 @@ func validateAutomaticCastForNewType(
 	// We have a USING clause, but if we have DEFAULT or ON UPDATE expressions,
 	// then we raise an error because those expressions cannot be automatically
 	// cast to the new type.
-	columnElements(b, tableID, colID).ForEach(func(
+	columnElements(b, tableID, colID).Filter(publicTargetFilter).ForEach(func(
 		_ scpb.Status, _ scpb.TargetStatus, e scpb.Element,
 	) {
 		var exprType string
@@ -201,7 +211,7 @@ func validateNewTypeForComputedColumn(
 		func() colinfo.ResultColumns {
 			return getNonDropResultColumns(b, tableID)
 		},
-		func(columnName tree.Name) (exists bool, accessible bool, id catid.ColumnID, typ *types.T) {
+		func(columnName tree.Name) (exists, accessible, computed bool, id catid.ColumnID, typ *types.T) {
 			return columnLookupFn(b, tableID, columnName)
 		},
 	)
@@ -265,7 +275,16 @@ func handleGeneralColumnConversion(
 	col *scpb.Column,
 	oldColType, newColType *scpb.ColumnType,
 ) {
-	failIfExperimentalSettingNotSet(b, oldColType, newColType)
+	failIfExplicitTransaction(b)
+	failIfSafeUpdates(b, t)
+
+	// TODO(#47137): Only support alter statements that only have a single command.
+	switch s := stmt.(type) {
+	case *tree.AlterTable:
+		if len(s.Cmds) > 1 {
+			panic(sqlerrors.NewAlterColTypeInCombinationNotSupportedError())
+		}
+	}
 
 	// To handle the conversion, we remove the old column and add a new one with
 	// the correct type. The new column will temporarily have a computed expression
@@ -285,7 +304,7 @@ func handleGeneralColumnConversion(
 		case *scpb.SecondaryIndex:
 			panic(sqlerrors.NewAlterColumnTypeColInIndexNotSupportedErr())
 		}
-	})
+	}, false /* allowPartialIdxPredicateRef */)
 
 	// This code path should never be reached for virtual columns, as their values
 	// are always computed dynamically on access and are never stored on disk.
@@ -296,29 +315,14 @@ func handleGeneralColumnConversion(
 	// We block any attempt to alter the type of a column that is a key column in
 	// the primary key. We can't use walkColumnDependencies here, as it doesn't
 	// differentiate between key columns and stored columns.
-	pk := mustRetrievePrimaryIndex(b, tbl.TableID)
+	pk := getLatestPrimaryIndex(b, tbl.TableID)
 	for _, keyCol := range getIndexColumns(b.QueryByID(tbl.TableID), pk.IndexID, scpb.IndexColumn_KEY) {
 		if keyCol.ColumnID == col.ColumnID {
 			panic(sqlerrors.NewAlterColumnTypeColInIndexNotSupportedErr())
 		}
 	}
 
-	// TODO(#47137): Only support alter statements that only have a single command.
-	switch s := stmt.(type) {
-	case *tree.AlterTable:
-		if len(s.Cmds) > 1 {
-			panic(sqlerrors.NewAlterColTypeInCombinationNotSupportedError())
-		}
-	}
-
-	// In version 25.1, we introduced the necessary dependency rules to ensure the
-	// general path works. Without these rules, we encounter failures during the
-	// ALTER operation. To avoid this, we revert to legacy handling if not running
-	// on version 25.1.
-	if !b.EvalCtx().Settings.Version.ActiveVersion(b).IsActive(clusterversion.V25_1) {
-		panic(scerrors.NotImplementedErrorf(t,
-			"old active version; ALTER COLUMN TYPE requires backfill. Reverting to legacy handling"))
-	}
+	colHidden := retrieveColumnHidden(b, tbl.TableID, col.ColumnID)
 
 	colNotNull := retrieveColumnNotNull(b, tbl.TableID, col.ColumnID)
 
@@ -364,6 +368,9 @@ func handleGeneralColumnConversion(
 	}
 	if colNotNull != nil {
 		b.Drop(colNotNull)
+	}
+	if colHidden != nil {
+		b.Drop(colHidden)
 	}
 	if oldColComment != nil {
 		b.Drop(oldColComment)
@@ -413,6 +420,7 @@ func handleGeneralColumnConversion(
 			Expression: *b.WrapExpression(tbl.TableID, expr),
 			Usage:      scpb.ColumnComputeExpression_ALTER_TYPE_USING,
 		},
+		hidden:  colHidden != nil,
 		notNull: retrieveColumnNotNull(b, tbl.TableID, col.ColumnID) != nil,
 		// The new column will be placed in the same column family as the one
 		// it's replacing, so there's no need to specify a family.
@@ -429,20 +437,12 @@ func updateColumnType(b BuildCtx, oldColType, newColType *scpb.ColumnType) {
 	b.Add(newColType)
 }
 
-// failIfExperimentalSettingNotSet checks if the setting that allows altering
-// types is enabled. If the setting is not enabled, this function will panic.
-func failIfExperimentalSettingNotSet(b BuildCtx, oldColType, newColType *scpb.ColumnType) {
-	if !b.SessionData().AlterColumnTypeGeneralEnabled {
-		panic(pgerror.WithCandidateCode(
-			errors.WithHint(
-				errors.WithIssueLink(
-					errors.Newf("ALTER COLUMN TYPE from %v to %v is only "+
-						"supported experimentally",
-						oldColType.Type, newColType.Type),
-					errors.IssueLink{IssueURL: build.MakeIssueURL(49329)}),
-				"you can enable alter column type general support by running "+
-					"`SET enable_experimental_alter_column_type_general = true`"),
-			pgcode.ExperimentalFeature))
+// failIfExplicitTransaction blocks the operation if it's part of an explicit
+// transaction, unless the schema changer mode is set to 'unsafe_always'.
+func failIfExplicitTransaction(b BuildCtx) {
+	if !b.EvalCtx().TxnIsSingleStmt &&
+		b.SessionData().NewSchemaChangerMode != sessiondatapb.UseNewSchemaChangerUnsafeAlways {
+		panic(sqlerrors.NewAlterColTypeInTxnNotSupportedErr())
 	}
 }
 
@@ -479,7 +479,7 @@ func maybeWriteNoticeForFKColTypeMismatch(b BuildCtx, col *scpb.Column, colType 
 		case *scpb.ForeignKeyConstraintUnvalidated:
 			writeNoticeHelper(e.ColumnIDs, e.ReferencedColumnIDs, e.ReferencedTableID)
 		}
-	})
+	}, false /* allowPartialIdxPredicateRef */)
 }
 
 func getComputeExpressionForBackfill(
@@ -505,7 +505,7 @@ func getComputeExpressionForBackfill(
 		func() colinfo.ResultColumns {
 			return getNonDropResultColumns(b, tableID)
 		},
-		func(columnName tree.Name) (exists bool, accessible bool, id catid.ColumnID, typ *types.T) {
+		func(columnName tree.Name) (exists, accessible, computed bool, id catid.ColumnID, typ *types.T) {
 			return columnLookupFn(b, tableID, columnName)
 		},
 	)

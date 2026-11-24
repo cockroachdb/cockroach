@@ -65,6 +65,7 @@ func (b *Builder) buildCreateView(
 		cols,
 		cv.Deps,
 		cv.TypeDeps,
+		cv.FuncDeps,
 	)
 	return execPlan{root: root}, colOrdMap{}, err
 }
@@ -167,6 +168,15 @@ func (b *Builder) buildExplain(
 		return b.buildExplainOpt(explainExpr)
 	}
 
+	if explainExpr.Options.Mode == tree.ExplainFingerprint {
+		var ep execPlan
+		ep.root, err = b.factory.ConstructExplainOpt(explainExpr.Fingerprint, exec.ExplainEnvData{})
+		if err != nil {
+			return execPlan{}, colOrdMap{}, err
+		}
+		return ep, b.outputColsFromList(explainExpr.ColList), nil
+	}
+
 	var ep execPlan
 	ep.root, err = b.factory.ConstructExplain(
 		&explainExpr.Options,
@@ -176,14 +186,33 @@ func (b *Builder) buildExplain(
 			// annotates nodes with extra information when the factory is an
 			// exec.ExplainFactory so it must be the outer factory and the gist
 			// factory must be the inner factory.
-			gf := explain.NewPlanGistFactory(f)
-			ef := explain.NewFactory(gf, b.semaCtx, b.evalCtx)
+			var gf explain.PlanGistFactory
+			gf.Init(f)
+			ef := explain.NewFactory(&gf, b.semaCtx, b.evalCtx)
 
 			explainBld := New(
 				b.ctx, ef, b.optimizer, b.mem, b.catalog, explainExpr.Input,
 				b.semaCtx, b.evalCtx, b.initialAllowAutoCommit, b.IsANSIDML,
 			)
 			explainBld.disableTelemetry = true
+			if b.evalCtx.TxnReadOnly {
+				// Since we're building a "pure" EXPLAIN (as opposed to EXPLAIN
+				// ANALYZE variant which the execbuilder is unaware of), we
+				// won't actually execute the plan, and in order to match the
+				// behavior of Postgres we want to allow EXPLAINing the
+				// mutations even in the read-only state.
+				//
+				// Out of caution, we'll only allow this for "regular" mutation
+				// statements (where it's most useful and less risky),
+				// prohibiting EXPLAINing DDLs and ALTERs.
+				switch explainExpr.Input.Op() {
+				case opt.DeleteOp, opt.InsertOp, opt.UpdateOp, opt.UpsertOp:
+					b.evalCtx.TxnReadOnly = false
+					defer func() {
+						b.evalCtx.TxnReadOnly = true
+					}()
+				}
+			}
 			plan, err := explainBld.Build()
 			if err != nil {
 				return nil, err
@@ -218,8 +247,7 @@ func (b *Builder) buildAlterTableSplit(
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
-	scalarCtx := buildScalarCtx{}
-	expiration, err := b.buildScalar(&scalarCtx, split.Expiration)
+	expiration, err := b.buildScalar(&emptyBuildScalarCtx, split.Expiration)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
@@ -294,12 +322,11 @@ func (b *Builder) buildAlterRangeRelocate(
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
-	scalarCtx := buildScalarCtx{}
-	toStoreID, err := b.buildScalar(&scalarCtx, relocate.ToStoreID)
+	toStoreID, err := b.buildScalar(&emptyBuildScalarCtx, relocate.ToStoreID)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
-	fromStoreID, err := b.buildScalar(&scalarCtx, relocate.FromStoreID)
+	fromStoreID, err := b.buildScalar(&emptyBuildScalarCtx, relocate.FromStoreID)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
@@ -324,8 +351,7 @@ func (b *Builder) buildControlJobs(
 		return execPlan{}, colOrdMap{}, err
 	}
 
-	scalarCtx := buildScalarCtx{}
-	reason, err := b.buildScalar(&scalarCtx, ctl.Reason)
+	reason, err := b.buildScalar(&emptyBuildScalarCtx, ctl.Reason)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
@@ -415,7 +441,9 @@ func (b *Builder) buildCancelSessions(
 func (b *Builder) buildCreateStatistics(
 	c *memo.CreateStatisticsExpr,
 ) (_ execPlan, outputCols colOrdMap, err error) {
-	node, err := b.factory.ConstructCreateStatistics(c.Syntax)
+	table := b.mem.Metadata().Table(c.Table)
+	index := table.Index(c.Index)
+	node, err := b.factory.ConstructCreateStatistics(c.Syntax, table, index, c.Constraint)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
@@ -431,8 +459,7 @@ func (b *Builder) buildExport(
 		return execPlan{}, colOrdMap{}, err
 	}
 
-	scalarCtx := buildScalarCtx{}
-	fileName, err := b.buildScalar(&scalarCtx, export.FileName)
+	fileName, err := b.buildScalar(&emptyBuildScalarCtx, export.FileName)
 	if err != nil {
 		return execPlan{}, colOrdMap{}, err
 	}
@@ -441,7 +468,7 @@ func (b *Builder) buildExport(
 	for i, o := range export.Options {
 		opts[i].Key = o.Key
 		var err error
-		opts[i].Value, err = b.buildScalar(&scalarCtx, o.Value)
+		opts[i].Value, err = b.buildScalar(&emptyBuildScalarCtx, o.Value)
 		if err != nil {
 			return execPlan{}, colOrdMap{}, err
 		}

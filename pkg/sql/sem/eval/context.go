@@ -9,6 +9,7 @@ import (
 	"context"
 	"math"
 	"math/rand"
+	"slices"
 	"time"
 
 	apd "github.com/cockroachdb/apd/v3"
@@ -20,8 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/repstream/streampb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -50,6 +54,34 @@ import (
 
 var ErrNilTxnInClusterContext = errors.New("nil txn in cluster context")
 
+// StatsRolloutSelection describes the role of a query execution in the
+// canary stats rollout experiment.
+type StatsRolloutSelection int
+
+const (
+	// StatsRolloutDefault means the canary experiment is not active for
+	// this execution. The optimizer uses default stats.
+	StatsRolloutDefault StatsRolloutSelection = iota
+	// StatsRolloutCanary means this execution uses canary (newest) table
+	// statistics as part of the canary experiment.
+	StatsRolloutCanary
+	// StatsRolloutStable means this execution uses stable (second-newest)
+	// table statistics while the canary experiment is active.
+	StatsRolloutStable
+)
+
+// String returns the string representation for the stats rollout selection.
+func (s StatsRolloutSelection) String() string {
+	switch s {
+	case StatsRolloutCanary:
+		return "canary"
+	case StatsRolloutStable:
+		return "stable"
+	default:
+		return "default"
+	}
+}
+
 // Context defines the context in which to evaluate an expression, allowing
 // the retrieval of state such as the node ID or statement start time.
 //
@@ -70,6 +102,12 @@ type Context struct {
 	// context. Each element on the stack represents the beginning of a new
 	// transaction or nested transaction (savepoints).
 	SessionDataStack *sessiondata.Stack
+
+	// effectiveUserStack temporarily overrides EffectiveUser when a SECURITY
+	// DEFINER routine body is on the call stack. Pushed by PushEffectiveUser on
+	// routine entry and popped by the returned restore closure on exit; the
+	// top entry wins. See EffectiveUser / PushEffectiveUser.
+	effectiveUserStack []username.SQLUsername
 	// TxnState is a string representation of the current transactional state.
 	TxnState string
 	// TxnReadOnly specifies if the current transaction is read-only.
@@ -81,8 +119,7 @@ type Context struct {
 	TxnIsSingleStmt bool
 	// TxnIsoLevel is the isolation level of the current transaction.
 	TxnIsoLevel isolation.Level
-
-	Settings *cluster.Settings
+	Settings    *cluster.Settings
 	// ClusterID is the logical cluster ID for this tenant.
 	ClusterID uuid.UUID
 	// ClusterName is the security string used to secure the RPC layer.
@@ -100,11 +137,6 @@ type Context struct {
 	//   [region=us,dc=east]
 	// The region entry in this variable is the gateway region.
 	Locality roachpb.Locality
-
-	// OriginalLocality is the initial Locality at the time the connection was
-	// established. Since Locality may be overridden in some paths, this provides
-	// a means of restoring the original Locality.
-	OriginalLocality roachpb.Locality
 
 	Tracer *tracing.Tracer
 
@@ -203,9 +235,20 @@ type Context struct {
 	// where each aggregate function struct grows its own memory account by
 	// tiny amount, yet the account reserves a lot more resulting in
 	// significantly overestimating the memory usage.
+	//
+	// Additionally, this memory account is touched by some aggregate builtins
+	// that store multiple datums in order to access the memory monitor this
+	// account is bound to.
+	//
+	// It **must** be bound to an unlimited memory monitor.
 	SingleDatumAggMemAccount *mon.BoundAccount
 
 	SQLLivenessReader sqlliveness.Reader
+
+	// BlockingSQLLivenessReader is a sqlliveness.Reader that synchronously
+	// blocks to determine the status of a session which it does not know about or
+	// thinks might be expired.
+	BlockingSQLLivenessReader sqlliveness.Reader
 
 	SQLStatsController SQLStatsController
 
@@ -246,6 +289,11 @@ type Context struct {
 	// bundle request.
 	StmtDiagnosticsRequestInserter StmtDiagnosticsRequestInsertFunc
 
+	// TxnDiagnosticsRequestInsertFunc is used by the
+	// crdb_internal.request_transaction_bundle builtin to insert a transaction
+	// bundle request.
+	TxnDiagnosticsRequestInserter TxnDiagnosticsRequestInsertFunc
+
 	// CatalogBuiltins is used by various builtins which depend on looking up
 	// catalog information. Unlike the Planner, it is available in DistSQL.
 	CatalogBuiltins CatalogBuiltins
@@ -259,8 +307,8 @@ type Context struct {
 	// RangeStatsFetcher is used to fetch RangeStats.
 	RangeStatsFetcher RangeStatsFetcher
 
-	// ChangefeedState stores the state (progress) of core changefeeds.
-	ChangefeedState ChangefeedState
+	// CoreChangefeedState stores the in-memory progress of core changefeeds.
+	CoreChangefeedState CoreChangefeedState
 
 	// ParseHelper makes date parsing more efficient.
 	ParseHelper pgdate.ParseHelper
@@ -307,6 +355,92 @@ type Context struct {
 
 	// CidrLookup is used to look up the tag name for a given IP address.
 	CidrLookup *cidr.Lookup
+
+	// StartedRoutineStatementCounters contains metrics for statements initiated by
+	// users when calling a UDF/SP. These metrics count user-initiated
+	// operations, regardless of success
+	StartedRoutineStatementCounters RoutineStatementCounters
+	// ExecutedStatementCounters contains metrics for successfully executed
+	// statements defined within the body of a UDF/SP.
+	ExecutedRoutineStatementCounters RoutineStatementCounters
+	// StatsRollout records the outcome of the canary stats rollout dice
+	// roll for this query execution. It has three possible values:
+	//
+	//   - StatsRolloutDefault: the canary experiment is not active
+	//     (sql.stats.canary_fraction = 0). The optimizer uses whatever
+	//     stats are available (default behavior). The execution is not
+	//     classified as canary or stable.
+	//
+	//   - StatsRolloutCanary: the canary experiment is active and this
+	//     execution was selected to use canary (newest) table statistics.
+	//     The optimizer attempts to use canary stats for all tables
+	//     referenced by the query. If a table lacks distinct canary stats
+	//     (e.g., only one version exists or canary stats have expired),
+	//     the optimizer falls back to stable stats for that table.
+	//
+	//   - StatsRolloutStable: the canary experiment is active but this
+	//     execution was not selected for canary — it uses stable
+	//     (second-newest) table statistics.
+	//
+	// The selection is determined probabilistically during query planning
+	// based on the sql.stats.canary_fraction cluster setting. It is
+	// atomic per query: all tables use the same rollout path.
+	//
+	// Only set for non-internal, non-prepared queries. Internal queries
+	// and prepared statements always use StatsRolloutDefault.
+	//
+	// When StatsRolloutCanary and the query references tables with a
+	// positive sql_stats_canary_window setting, the optimizer bypasses
+	// the query cache and the cached memo within a prepared stmt,
+	// building a one-off memo for this execution. For queries that do
+	// not reference any canary-window tables, caching proceeds normally
+	// since canary and stable stats are identical.
+	StatsRollout StatsRolloutSelection
+
+	// WorkloadID for ASH sampling.
+	WorkloadID uint64
+
+	// AppNameID is the hash of the application name, for ASH
+	// sampling. Set alongside WorkloadID in the connExecutor.
+	// Note(alyshan): This will eventually be replaced by a general
+	// enrichment_id field which will enable the ASH sampler to
+	// enrich samples with more workload context.
+	AppNameID uint64
+
+	// WorkloadType distinguishes the kind of workload that WorkloadID
+	// represents (statement fingerprint, job ID, system task).
+	WorkloadType workloadid.WorkloadType
+}
+
+// RoutineStatementCounters encapsulates metrics for tracking the execution
+// of different statement types defined within the body of a UDF or stored
+// procedure (SP).
+type RoutineStatementCounters struct {
+	// QueryCount includes all statements, and it is therefore the sum of
+	// all the below metrics.
+	QueryCount *telemetry.CounterWithMetric
+
+	// Basic CRUD statements.
+	SelectCount *telemetry.CounterWithAggMetric
+	UpdateCount *telemetry.CounterWithAggMetric
+	InsertCount *telemetry.CounterWithAggMetric
+	DeleteCount *telemetry.CounterWithAggMetric
+
+	// DDL/DCL statements. CREATE TABLE is split by tree.Persistence:
+	// CreateTableCount tracks permanent tables and CreateTempTableCount
+	// tracks temporary tables. DROP TABLE is not split because
+	// persistence is not known at the increment site without descriptor
+	// resolution.
+	CreateTableCount            *telemetry.CounterWithAggMetric
+	CreateTempTableCount        *telemetry.CounterWithAggMetric
+	DropTableCount              *telemetry.CounterWithAggMetric
+	CreateSchemaCount           *telemetry.CounterWithAggMetric
+	DropSchemaCount             *telemetry.CounterWithAggMetric
+	CreateRoleCount             *telemetry.CounterWithAggMetric
+	DropRoleCount               *telemetry.CounterWithAggMetric
+	GrantCount                  *telemetry.CounterWithAggMetric
+	RevokeCount                 *telemetry.CounterWithAggMetric
+	AlterDefaultPrivilegesCount *telemetry.CounterWithAggMetric
 }
 
 // RNGFactory is a simple wrapper to preserve the RNG throughout the session.
@@ -377,7 +511,7 @@ type DescIDGenerator interface {
 
 	// IncrementDescID increments the descriptor ID counter by at least inc.
 	// It returns the first ID in the incremented range:
-	// <val> .. <val> + inc  are all available to the caller.
+	// [<val>, <val> + inc) are all available to the caller.
 	IncrementDescID(ctx context.Context, inc int64) (catid.DescID, error)
 }
 
@@ -427,20 +561,36 @@ func (ec *Context) MustGetPlaceholderValue(ctx context.Context, p *tree.Placehol
 // MakeTestingEvalContext returns an EvalContext that includes a MemoryMonitor.
 func MakeTestingEvalContext(st *cluster.Settings) Context {
 	monitor := mon.NewMonitor(mon.Options{
-		Name:     "test-monitor",
+		Name:     mon.MakeName("test-monitor"),
 		Settings: st,
 	})
-	return MakeTestingEvalContextWithMon(st, monitor)
+	return MakeTestingEvalContextWithMon(keys.SystemSQLCodec, st, monitor)
+}
+
+// MakeTestingEvalContextWithCodec is the same as MakeTestingEvalContext but
+// allows overriding keys.SystemSQLCodec.
+func MakeTestingEvalContextWithCodec(codec keys.SQLCodec, st *cluster.Settings) Context {
+	monitor := mon.NewMonitor(mon.Options{
+		Name:     mon.MakeName("test-monitor"),
+		Settings: st,
+	})
+	return MakeTestingEvalContextWithMon(codec, st, monitor)
 }
 
 // MakeTestingEvalContextWithMon returns an EvalContext with the given
 // MemoryMonitor. Ownership of the memory monitor is transferred to the
 // EvalContext so do not start or close the memory monitor.
-func MakeTestingEvalContextWithMon(st *cluster.Settings, monitor *mon.BytesMonitor) Context {
+func MakeTestingEvalContextWithMon(
+	codec keys.SQLCodec, st *cluster.Settings, monitor *mon.BytesMonitor,
+) Context {
+	sessionData := &sessiondata.SessionData{}
+	// Set defaults that match what the session variables system expects.
+	// allow_unsafe_internals defaults to true.
+	sessionData.AllowUnsafeInternals = true
 	ctx := Context{
-		Codec:            keys.SystemSQLCodec,
+		Codec:            codec,
 		Txn:              &kv.Txn{},
-		SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{}),
+		SessionDataStack: sessiondata.NewStack(sessionData),
 		Settings:         st,
 		NodeID:           base.TestingIDContainer,
 	}
@@ -459,8 +609,13 @@ type fakePlannerWithMonitor struct {
 	monitor *mon.BytesMonitor
 }
 
-// Mon is part of the Planner interface.
-func (p *fakePlannerWithMonitor) Mon() *mon.BytesMonitor {
+// TxnMon is part of the Planner interface.
+func (p *fakePlannerWithMonitor) TxnMon() *mon.BytesMonitor {
+	return p.monitor
+}
+
+// ExecMon is part of the Planner interface.
+func (p *fakePlannerWithMonitor) ExecMon() *mon.BytesMonitor {
 	return p.monitor
 }
 
@@ -495,6 +650,16 @@ func (p *fakePlannerWithMonitor) AutoCommit() bool {
 	return false
 }
 
+// UsingHintInjection is part of the eval.Planner interface.
+func (p *fakePlannerWithMonitor) UsingHintInjection() bool {
+	return false
+}
+
+// GetHintIDs is part of the eval.Planner interface.
+func (o *fakePlannerWithMonitor) GetHintIDs() []int64 {
+	return nil
+}
+
 type fakeStreamManagerFactory struct {
 	StreamManagerFactory
 }
@@ -507,11 +672,52 @@ func (ec *Context) SessionData() *sessiondata.SessionData {
 	return ec.SessionDataStack.Top()
 }
 
-// Copy returns a deep copy of ctx.
+// EffectiveUser returns the user that should be used for privilege checks,
+// ownership assignment, and the current_user builtin. When a SECURITY DEFINER
+// routine body is executing this is the routine owner; otherwise it falls
+// back to the session user. session_user is never affected.
+func (ec *Context) EffectiveUser() username.SQLUsername {
+	if n := len(ec.effectiveUserStack); n > 0 {
+		return ec.effectiveUserStack[n-1]
+	}
+	if sd := ec.SessionData(); sd != nil {
+		return sd.User()
+	}
+	return username.SQLUsername{}
+}
+
+// PushEffectiveUser pushes u onto the effective-user stack and returns a
+// closure that pops it. The caller must defer the closure immediately so
+// that errors, panics, and PL/pgSQL exception handlers all restore the
+// prior user, and so pops occur in reverse push order. See EffectiveUser
+// for read semantics.
+func (ec *Context) PushEffectiveUser(u username.SQLUsername) (restore func()) {
+	ec.effectiveUserStack = append(ec.effectiveUserStack, u)
+	expectedLen := len(ec.effectiveUserStack)
+	return func() {
+		// Detect misordered pops or a missing intervening push. The defer
+		// pattern guarantees LIFO order, so any divergence here is a bug in
+		// a future caller, not a routine occurrence.
+		if got := len(ec.effectiveUserStack); got != expectedLen {
+			panic(errors.AssertionFailedf(
+				"PushEffectiveUser restore called out of order: stack length %d, expected %d", got, expectedLen,
+			))
+		}
+		ec.effectiveUserStack = ec.effectiveUserStack[:expectedLen-1]
+	}
+}
+
+// Copy returns a copy of the EvalCtx that can safely be used concurrently with
+// the original.
 func (ec *Context) Copy() *Context {
 	ctxCopy := *ec
+	// CollationEnvironment is not thread safe.
+	ctxCopy.CollationEnv = tree.CollationEnvironment{}
 	ctxCopy.iVarContainerStack = make([]tree.IndexedVarContainer, len(ec.iVarContainerStack), cap(ec.iVarContainerStack))
 	copy(ctxCopy.iVarContainerStack, ec.iVarContainerStack)
+	// Clone the effective-user stack so subsequent pushes on either copy
+	// don't alias each other via the shared backing array.
+	ctxCopy.effectiveUserStack = slices.Clone(ec.effectiveUserStack)
 	return &ctxCopy
 }
 
@@ -819,7 +1025,7 @@ func (ec *Context) BoundedStaleness() bool {
 }
 
 // ensureExpectedType will return an error if a datum does not match the
-// provided type. If the expected type is Any or if the datum is a Null
+// provided type. If the expected type is AnyElement or if the datum is a Null
 // type, then no error will be returned.
 func ensureExpectedType(exp *types.T, d tree.Datum) error {
 	if !(exp.Family() == types.AnyFamily || d.ResolvedType().Family() == types.UnknownFamily ||
@@ -830,13 +1036,17 @@ func ensureExpectedType(exp *types.T, d tree.Datum) error {
 	return nil
 }
 
-// arrayOfType returns a fresh DArray of the input type.
-func arrayOfType(typ *types.T) (*tree.DArray, error) {
+// arrayOfType returns a fresh tree.DArray of the input type. 'elements'
+// argument is optional.
+func arrayOfType(typ *types.T, elements tree.Datums) (*tree.DArray, error) {
 	if typ.Family() != types.ArrayFamily {
 		return nil, errors.AssertionFailedf("array node type (%v) is not types.TArray", typ)
 	}
 	if err := types.CheckArrayElementType(typ.ArrayContents()); err != nil {
 		return nil, err
+	}
+	if elements != nil {
+		return tree.NewDArrayFromDatums(typ.ArrayContents(), elements), nil
 	}
 	return tree.NewDArray(typ.ArrayContents()), nil
 }
@@ -915,8 +1125,9 @@ type ReplicationStreamManager interface {
 		successfulIngestion bool,
 	) error
 
-	DebugGetProducerStatuses(ctx context.Context) []streampb.DebugProducerStatus
-	DebugGetLogicalConsumerStatuses(ctx context.Context) []*streampb.DebugLogicalConsumerStatus
+	DebugGetProducerStatuses(ctx context.Context) ([]streampb.DebugProducerStatus, error)
+	DebugGetLogicalConsumerStatuses(ctx context.Context) ([]*streampb.DebugLogicalConsumerStatus, error)
+	DebugGetPhysicalConsumerStatuses(ctx context.Context) ([]streampb.DebugPhysicalConsumerStatus, error)
 
 	PlanLogicalReplication(
 		ctx context.Context,
@@ -927,6 +1138,9 @@ type ReplicationStreamManager interface {
 		ctx context.Context,
 		req streampb.ReplicationProducerRequest,
 	) (streampb.ReplicationProducerSpec, error)
+
+	AuthorizeViaJob(ctx context.Context, streamID streampb.StreamID) error
+	AuthorizeViaReplicationPriv(ctx context.Context, tableNames ...string) error
 }
 
 // StreamIngestManager represents a collection of APIs that streaming replication supports
@@ -946,4 +1160,23 @@ type StreamIngestManager interface {
 		tenantName roachpb.TenantName,
 		revertTo hlc.Timestamp,
 	) error
+}
+
+// triggerDepthKey is the context key for storing the current trigger nesting
+// depth. This is used by pg_trigger_depth() and for enforcing recursion limits.
+type triggerDepthKey struct{}
+
+// GetTriggerDepth returns the current trigger nesting depth from the context.
+// Returns 0 if not currently executing within a trigger.
+func GetTriggerDepth(ctx context.Context) int {
+	if v := ctx.Value(triggerDepthKey{}); v != nil {
+		return v.(int)
+	}
+	return 0
+}
+
+// ContextWithIncrementedTriggerDepth returns a new context with the trigger
+// depth incremented by 1.
+func ContextWithIncrementedTriggerDepth(ctx context.Context) context.Context {
+	return context.WithValue(ctx, triggerDepthKey{}, GetTriggerDepth(ctx)+1)
 }

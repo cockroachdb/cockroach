@@ -10,16 +10,6 @@ set -euxo pipefail
 
 CROSSCONFIG=$1
 
-if [ $CROSSCONFIG == "crosslinuxfips" ]
-then
-    fips_enabled=$(cat /proc/sys/crypto/fips_enabled)
-
-    if [[ $fips_enabled != "1" ]]; then
-        echo "FIPS mode is not enabled. Exiting."
-        exit 1
-    fi
-fi
-
 BAZEL_BIN=$(bazel info bazel-bin --config=$CROSSCONFIG)
 EXECROOT=$(bazel info execution_root --config=$CROSSCONFIG)
 
@@ -29,7 +19,7 @@ set -x
 
 bazel build --config=$CROSSCONFIG $(./build/github/engflow-args.sh) \
       --bes_keywords integration-test-artifact-build \
-      --jobs 100 \
+      --jobs 50 \
       //pkg/cmd/cockroach-short \
       //pkg/cmd/roachtest \
       //pkg/cmd/roachprod \

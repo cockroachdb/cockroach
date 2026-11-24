@@ -7,9 +7,8 @@ package sql
 
 import (
 	"context"
-	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/build"
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -25,25 +24,31 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 type alterFunctionOptionsNode struct {
+	zeroInputPlanNode
 	n *tree.AlterFunctionOptions
 }
 
 type alterFunctionRenameNode struct {
+	zeroInputPlanNode
 	n *tree.AlterRoutineRename
 }
 
 type alterFunctionSetOwnerNode struct {
+	zeroInputPlanNode
 	n *tree.AlterRoutineSetOwner
 }
 
 type alterFunctionSetSchemaNode struct {
+	zeroInputPlanNode
 	n *tree.AlterRoutineSetSchema
 }
 
 type alterFunctionDepExtensionNode struct {
+	zeroInputPlanNode
 	n *tree.AlterFunctionDepExtension
 }
 
@@ -183,6 +188,8 @@ func (n *alterFunctionRenameNode) startExec(params runParams) error {
 		return err
 	}
 	maybeExistingFuncObj.FuncName.ObjectName = n.n.NewName
+	maybeExistingFuncObj.FuncName.SchemaName = tree.Name(scDesc.GetName())
+	maybeExistingFuncObj.FuncName.ExplicitSchema = true
 	existing, err := params.p.matchRoutine(
 		params.ctx, maybeExistingFuncObj, false, /* required */
 		tree.UDFRoutine|tree.ProcedureRoutine, false, /* inDropContext */
@@ -205,32 +212,18 @@ func (n *alterFunctionRenameNode) startExec(params runParams) error {
 		}
 	}
 
-	// Disallow renaming if this rename operation will break other UDF's invoking
-	// this one.
-	var dependentFuncs []string
-	for _, dep := range fnDesc.GetDependedOnBy() {
-		desc, err := params.p.Descriptors().ByIDWithoutLeased(params.p.Txn()).Get().Desc(params.ctx, dep.ID)
-		if err != nil {
-			return err
-		}
-		_, ok := desc.(catalog.FunctionDescriptor)
-		if !ok {
-			continue
-		}
-		fullyResolvedName, err := params.p.GetQualifiedFunctionNameByID(params.ctx, int64(dep.ID))
-		if err != nil {
-			return err
-		}
-		dependentFuncs = append(dependentFuncs, fullyResolvedName.FQString())
+	// Disallow renaming if this rename operation will break other UDF's or views
+	// invoking this one.
+	dependentObjects, err := getFuncRefsDisallowingAlter(params, fnDesc)
+	if err != nil {
+		return err
 	}
-	if len(dependentFuncs) > 0 {
-		return errors.UnimplementedErrorf(
-			errors.IssueLink{
-				IssueURL: build.MakeIssueURL(83233),
-				Detail:   "renames are disallowed because references are by name",
-			},
-			"cannot rename function %q because other functions ([%v]) still depend on it",
-			fnDesc.Name, strings.Join(dependentFuncs, ", "))
+	if len(dependentObjects) > 0 {
+		// TODO(#146475): once functions are rewritten to use ID references, we can
+		// allow renames for views.
+		return newAlterFunctionDependentObjectsError(
+			"rename", "renames are disallowed because references are by name",
+			fnDesc, dependentObjects)
 	}
 
 	scDesc.RemoveFunction(fnDesc.GetName(), fnDesc.GetID())
@@ -378,33 +371,17 @@ func (n *alterFunctionSetSchemaNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	}
-	// Disallow renaming if this rename operation will break other UDF's invoking
-	// this one.
-	var dependentFuncs []string
-	for _, dep := range fnDesc.GetDependedOnBy() {
-		desc, err := params.p.Descriptors().ByIDWithoutLeased(params.p.Txn()).Get().Desc(params.ctx, dep.ID)
-		if err != nil {
-			return err
-		}
-		_, ok := desc.(catalog.FunctionDescriptor)
-		if !ok {
-			continue
-		}
-		fullyResolvedName, err := params.p.GetQualifiedFunctionNameByID(params.ctx, int64(dep.ID))
-		if err != nil {
-			return err
-		}
-		dependentFuncs = append(dependentFuncs, fullyResolvedName.FQString())
+	// Disallow renaming if this rename operation will break other UDF's or views
+	// invoking this one.
+	dependentObjects, err := getFuncRefsDisallowingAlter(params, fnDesc)
+	if err != nil {
+		return err
 	}
-	if len(dependentFuncs) > 0 {
-		return errors.UnimplementedErrorf(
-			errors.IssueLink{
-				IssueURL: build.MakeIssueURL(83233),
-				Detail: "set schema is disallowed because there are references from " +
-					"other objects by name",
-			},
-			"cannot set schema for function %q because other functions ([%v]) still depend on it",
-			fnDesc.Name, strings.Join(dependentFuncs, ", "))
+	if len(dependentObjects) > 0 {
+		return newAlterFunctionDependentObjectsError(
+			"set schema for",
+			"set schema is disallowed because there are references from other objects by name",
+			fnDesc, dependentObjects)
 	}
 
 	switch sc.SchemaKind() {
@@ -542,4 +519,90 @@ func toSchemaOverloadSignature(fnDesc *funcdesc.Mutable) descpb.SchemaDescriptor
 		}
 	}
 	return ret
+}
+
+// newAlterFunctionDependentObjectsError builds the error returned when an
+// ALTER FUNCTION operation is blocked by name-based references from other
+// objects. The user-visible message has redaction markers stripped; the
+// redactable form is attached as safe details so logs and Sentry retain the
+// structural words ("trigger", "policy", "view") while user-supplied names
+// get redacted.
+func newAlterFunctionDependentObjectsError(
+	operation, detail string, fnDesc *funcdesc.Mutable, dependentObjects []redact.RedactableString,
+) error {
+	joined := redact.Join(", ", dependentObjects)
+	err := unimplemented.NewWithIssueDetailf(83233, detail,
+		"cannot %s function %q because other objects ([%s]) still depend on it",
+		operation, fnDesc.Name, joined.StripMarkers())
+	return errors.WithSafeDetails(err, "dependents: %s", joined)
+}
+
+// getFuncRefsDisallowingAlter returns descriptions of objects that reference
+// fnDesc by name and would therefore be broken by a rename or schema change.
+// Each entry is a redact.RedactableString so that object kinds (e.g. "trigger",
+// "policy") remain visible in redacted logs and Sentry reports while
+// user-supplied names get redacted.
+func getFuncRefsDisallowingAlter(
+	params runParams, fnDesc *funcdesc.Mutable,
+) (dependentObjects []redact.RedactableString, err error) {
+	for _, dep := range fnDesc.GetDependedOnBy() {
+		desc, err := params.p.Descriptors().ByIDWithoutLeased(params.p.Txn()).Get().Desc(params.ctx, dep.ID)
+		if err != nil {
+			return nil, err
+		}
+		switch t := desc.(type) {
+		case catalog.TableDescriptor:
+			// Trigger and policy back-references only block renames/schema
+			// changes once the cluster version reaches V26_3_Start. During
+			// a rolling upgrade from v26.2, some nodes may not enforce this
+			// check, so we skip it until all nodes are guaranteed to agree.
+			checkTriggerPolicyDeps := params.p.ExecCfg().Settings.Version.IsActive(
+				params.ctx, clusterversion.V26_3_Start,
+			)
+			hasTriggerPolicyDeps := len(dep.TriggerIDs) > 0 || len(dep.PolicyIDs) > 0
+			if !t.IsView() && !(checkTriggerPolicyDeps && hasTriggerPolicyDeps) {
+				continue
+			}
+			fullyResolvedName, err := params.p.GetQualifiedTableNameByID(
+				params.ctx, int64(dep.ID), tree.ResolveAnyTableKind)
+			if err != nil {
+				return nil, err
+			}
+			if t.IsView() {
+				dependentObjects = append(dependentObjects,
+					redact.Sprintf("%s", fullyResolvedName.FQString()))
+				continue
+			}
+			for _, triggerID := range dep.TriggerIDs {
+				trigger := catalog.FindTriggerByID(t, triggerID)
+				if trigger == nil {
+					return nil, errors.AssertionFailedf(
+						"trigger %d not found on relation %q (%d) referenced by function %q (%d)",
+						triggerID, t.GetName(), t.GetID(), fnDesc.GetName(), fnDesc.GetID())
+				}
+				dependentObjects = append(dependentObjects,
+					redact.Sprintf("trigger %q on %s", trigger.Name, fullyResolvedName.FQString()))
+			}
+			for _, policyID := range dep.PolicyIDs {
+				policy := catalog.FindPolicyByID(t, policyID)
+				if policy == nil {
+					return nil, errors.AssertionFailedf(
+						"policy %d not found on relation %q (%d) referenced by function %q (%d)",
+						policyID, t.GetName(), t.GetID(), fnDesc.GetName(), fnDesc.GetID())
+				}
+				dependentObjects = append(dependentObjects,
+					redact.Sprintf("policy %q on %s", policy.Name, fullyResolvedName.FQString()))
+			}
+		case catalog.FunctionDescriptor:
+			fullyResolvedName, err := params.p.GetQualifiedFunctionNameByID(params.ctx, int64(dep.ID))
+			if err != nil {
+				return nil, err
+			}
+			dependentObjects = append(dependentObjects,
+				redact.Sprintf("%s", fullyResolvedName.FQString()))
+		default:
+			continue
+		}
+	}
+	return dependentObjects, nil
 }

@@ -7,6 +7,8 @@ package rttanalysis
 
 import "testing"
 
+// BenchmarkUDFResolution is a benchmark for user-defined function resolution.
+// benchmark-ci: benchtime=20x
 func BenchmarkUDFResolution(b *testing.B) { reg.Run(b) }
 func init() {
 	reg.Register("UDFResolution", []RoundTripBenchTestCase{

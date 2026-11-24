@@ -9,12 +9,14 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
+	"google.golang.org/grpc"
 )
 
-type pmb map[peerKey]*peer // peer map builder
+type pmb map[peerKey]*peer[*grpc.ClientConn] // peer map builder
 
 func (m pmb) k(k peerKey) pmb {
 	return m.kh(k, true /* healthy */)
@@ -24,7 +26,7 @@ func (m pmb) kh(k peerKey, healthy bool) pmb {
 	if m == nil {
 		m = pmb{}
 	}
-	p := &peer{}
+	p := &peer[*grpc.ClientConn]{}
 	p.b = circuit.NewBreaker(circuit.Options{
 		Name: "test",
 	})
@@ -35,7 +37,9 @@ func (m pmb) kh(k peerKey, healthy bool) pmb {
 	return m
 }
 
-func (m pmb) p(nodeID roachpb.NodeID, targetAddr string, class ConnectionClass, healthy bool) pmb {
+func (m pmb) p(
+	nodeID roachpb.NodeID, targetAddr string, class rpcbase.ConnectionClass, healthy bool,
+) pmb {
 	k := peerKey{TargetAddr: targetAddr, NodeID: nodeID, Class: class}
 	return m.kh(k, healthy)
 }
@@ -50,8 +54,8 @@ func Test_hasSiblingConn(t *testing.T) {
 		n1  = roachpb.NodeID(1)
 		n2  = roachpb.NodeID(2)
 		n3  = roachpb.NodeID(3)
-		def = DefaultClass
-		sys = SystemClass
+		def = rpcbase.DefaultClass
+		sys = rpcbase.SystemClass
 	)
 
 	defSelf := func() peerKey {

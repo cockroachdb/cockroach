@@ -9,12 +9,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/errors"
 )
 
 // DropType implements DROP TYPE.
@@ -27,17 +27,27 @@ func DropType(b BuildCtx, n *tree.DropType) {
 	for _, name := range n.Names {
 		elts := b.ResolveUserDefinedTypeType(name, ResolveParams{
 			IsExistenceOptional: n.IfExists,
-			RequiredPrivilege:   privilege.DROP,
 		})
 		var typ scpb.Element
 		var typeID, arrayTypeID catid.DescID
 		if _, _, enum := scpb.FindEnumType(elts); enum != nil {
+			// Multi-region enums cannot be dropped directly.
+			if enum.IsMultiRegion {
+				prefix := b.NamePrefix(enum)
+				typeName := tree.MakeTypeNameWithPrefix(prefix, name.Object())
+				panic(errors.WithHintf(pgerror.Newf(pgcode.DependentObjectsStillExist,
+					"%q is a multi-region enum and cannot be modified directly", typeName.FQString()),
+					"try ALTER DATABASE DROP REGION %s", name.Object()))
+			}
 			b.IncrementEnumCounter(sqltelemetry.EnumDrop)
 			typeID, arrayTypeID = enum.TypeID, enum.ArrayTypeID
 			typ = enum
 		} else if _, _, composite := scpb.FindCompositeType(elts); composite != nil {
 			typeID, arrayTypeID = composite.TypeID, composite.ArrayTypeID
 			typ = composite
+		} else if _, _, domain := scpb.FindDomainType(elts); domain != nil {
+			typeID, arrayTypeID = domain.TypeID, domain.ArrayTypeID
+			typ = domain
 		} else {
 			continue
 		}

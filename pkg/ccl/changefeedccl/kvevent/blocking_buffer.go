@@ -17,15 +17,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 )
 
 // blockingBuffer is an implementation of Buffer which allocates memory
 // from a mon.BoundAccount and blocks if no resources are available.
 type blockingBuffer struct {
 	sv       *settings.Values
-	metrics  *PerBufferMetricsWithCompat
+	metrics  *PerBufferMetrics
 	qp       allocPool     // Pool for memory allocations.
 	signalCh chan struct{} // Signal when new events are available.
 
@@ -43,6 +43,8 @@ type blockingBuffer struct {
 		canFlush   bool
 		queue      *bufferEventChunkQueue // Queue of added events.
 	}
+
+	knobs BlockingBufferTestingKnobs
 }
 
 // NewMemBuffer returns a new in-memory buffer which will store events.
@@ -50,9 +52,12 @@ type blockingBuffer struct {
 // runs out of space. If ever any entry exceeds the allocatable size of the
 // account, an error will be returned when attempting to buffer it.
 func NewMemBuffer(
-	acc mon.BoundAccount, sv *settings.Values, metrics *PerBufferMetricsWithCompat,
+	acc mon.BoundAccount,
+	sv *settings.Values,
+	metrics *PerBufferMetrics,
+	options ...BlockingBufferOption,
 ) Buffer {
-	return newMemBuffer(acc, sv, metrics, nil)
+	return newMemBuffer(acc, sv, metrics, nil, options...)
 }
 
 // TestingNewMemBuffer allows test to construct buffer which will invoked
@@ -60,7 +65,7 @@ func NewMemBuffer(
 func TestingNewMemBuffer(
 	acc mon.BoundAccount,
 	sv *settings.Values,
-	metrics *PerBufferMetricsWithCompat,
+	metrics *PerBufferMetrics,
 	onWaitStart quotapool.OnWaitStartFunc,
 ) Buffer {
 	return newMemBuffer(acc, sv, metrics, onWaitStart)
@@ -69,8 +74,9 @@ func TestingNewMemBuffer(
 func newMemBuffer(
 	acc mon.BoundAccount,
 	sv *settings.Values,
-	metrics *PerBufferMetricsWithCompat,
+	metrics *PerBufferMetrics,
 	onWaitStart quotapool.OnWaitStartFunc,
+	options ...BlockingBufferOption,
 ) Buffer {
 	const slowAcquisitionThreshold = 5 * time.Second
 
@@ -109,14 +115,31 @@ func newMemBuffer(
 		metrics:      metrics,
 	}
 
+	for _, opt := range options {
+		opt(b)
+	}
+
 	return b
 }
 
 var _ Buffer = (*blockingBuffer)(nil)
 
+type BlockingBufferOption func(b *blockingBuffer)
+
+func WithBlockingBufferTestingKnobs(knobs BlockingBufferTestingKnobs) BlockingBufferOption {
+	return func(b *blockingBuffer) {
+		b.knobs = knobs
+	}
+}
+
 func (b *blockingBuffer) pop() (e Event, ok bool, err error) {
+	if b.knobs.BeforePop != nil {
+		b.knobs.BeforePop()
+	}
+
 	b.mu.Lock()
 	defer b.mu.Unlock()
+
 	if b.mu.closed {
 		return Event{}, false, ErrBufferClosed{reason: b.mu.reason}
 	}
@@ -143,6 +166,7 @@ func (b *blockingBuffer) pop() (e Event, ok bool, err error) {
 		close(b.mu.drainCh)
 		b.mu.drainCh = nil
 	}
+
 	return e, ok, nil
 }
 
@@ -254,8 +278,16 @@ func (b *blockingBuffer) AcquireMemory(ctx context.Context, n int64) (alloc Allo
 
 // Add implements Writer interface.
 func (b *blockingBuffer) Add(ctx context.Context, e Event) error {
+	if b.knobs.BeforeAdd != nil {
+		var shouldAdd bool
+		ctx, e, shouldAdd = b.knobs.BeforeAdd(ctx, e)
+		if !shouldAdd {
+			return nil
+		}
+	}
+
 	if log.V(2) {
-		log.Infof(ctx, "Add event: %s", e.String())
+		log.Changefeed.Infof(ctx, "Add event: %s", e.String())
 	}
 
 	// Immediately enqueue event if it already has allocation,
@@ -267,7 +299,7 @@ func (b *blockingBuffer) Add(ctx context.Context, e Event) error {
 
 	// Acquire the quota first.
 	n := int64(changefeedbase.EventMemoryMultiplier.Get(b.sv) * float64(e.ApproximateSize()))
-	e.bufferAddTimestamp = timeutil.Now()
+	e.bufferAddTimestamp = crtime.NowMono()
 	alloc, err := b.AcquireMemory(ctx, n)
 	if err != nil {
 		return err
@@ -290,7 +322,16 @@ func (b *blockingBuffer) tryDrain() chan struct{} {
 }
 
 // Drain implements Writer interface.
-func (b *blockingBuffer) Drain(ctx context.Context) error {
+func (b *blockingBuffer) Drain(ctx context.Context) (err error) {
+	if b.knobs.BeforeDrain != nil {
+		ctx = b.knobs.BeforeDrain(ctx)
+	}
+	if b.knobs.AfterDrain != nil {
+		defer func() {
+			b.knobs.AfterDrain(err)
+		}()
+	}
+
 	if drained := b.tryDrain(); drained != nil {
 		select {
 		case <-ctx.Done():
@@ -304,7 +345,13 @@ func (b *blockingBuffer) Drain(ctx context.Context) error {
 }
 
 // CloseWithReason implements Writer interface.
-func (b *blockingBuffer) CloseWithReason(ctx context.Context, reason error) error {
+func (b *blockingBuffer) CloseWithReason(ctx context.Context, reason error) (err error) {
+	if b.knobs.AfterCloseWithReason != nil {
+		defer func() {
+			b.knobs.AfterCloseWithReason(err)
+		}()
+	}
+
 	// Close quota pool -- any requests waiting to acquire will receive an error.
 	b.qp.Close("blocking buffer closing")
 
@@ -445,7 +492,7 @@ func (r *memRequest) ShouldWait() bool {
 
 type allocPool struct {
 	*quotapool.AbstractPool
-	metrics *PerBufferMetricsWithCompat
+	metrics *PerBufferMetrics
 	sv      *settings.Values
 }
 
@@ -479,13 +526,14 @@ func logSlowAcquisition(
 	return func(ctx context.Context, poolName string, r quotapool.Request, start time.Time) func() {
 		shouldLog := logSlowAcquire.ShouldLog()
 		if shouldLog {
-			log.Warningf(ctx, "have been waiting %s attempting to acquire changefeed quota (buffer=%s)", redact.SafeString(bufType),
-				timeutil.Since(start))
+			log.Changefeed.Warningf(ctx, "have been waiting %s attempting to acquire changefeed quota (buffer=%s)",
+				timeutil.Since(start), bufType)
 		}
 
 		return func() {
 			if shouldLog {
-				log.Infof(ctx, "acquired changefeed quota after %s (buffer=%s)", timeutil.Since(start), redact.SafeString(bufType))
+				log.Changefeed.Infof(ctx, "acquired changefeed quota after %s (buffer=%s)",
+					timeutil.Since(start), bufType)
 			}
 		}
 	}

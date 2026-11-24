@@ -10,7 +10,7 @@ package tochar
 type fromCharDateMode int
 
 const (
-	fromCharDateNone = 0
+	fromCharDateNone fromCharDateMode = iota
 	fromCharDateGregorian
 	fromCharDateISOWeek
 )
@@ -163,12 +163,12 @@ var dchKeywords = []keyWord{
 	{"Day", DCH_Day, false, fromCharDateNone},
 	{"Dy", DCH_Dy, false, fromCharDateNone},
 	{"D", DCH_D, true, fromCharDateGregorian},
-	{"FF1", DCH_FF1, false, fromCharDateNone}, /* F */
-	{"FF2", DCH_FF2, false, fromCharDateNone},
-	{"FF3", DCH_FF3, false, fromCharDateNone},
-	{"FF4", DCH_FF4, false, fromCharDateNone},
-	{"FF5", DCH_FF5, false, fromCharDateNone},
-	{"FF6", DCH_FF6, false, fromCharDateNone},
+	{"FF1", DCH_FF1, true, fromCharDateNone}, /* F */
+	{"FF2", DCH_FF2, true, fromCharDateNone},
+	{"FF3", DCH_FF3, true, fromCharDateNone},
+	{"FF4", DCH_FF4, true, fromCharDateNone},
+	{"FF5", DCH_FF5, true, fromCharDateNone},
+	{"FF6", DCH_FF6, true, fromCharDateNone},
 	{"FX", DCH_FX, false, fromCharDateNone},
 	{"HH24", DCH_HH24, true, fromCharDateNone}, /* H */
 	{"HH12", DCH_HH12, true, fromCharDateNone},
@@ -219,12 +219,12 @@ var dchKeywords = []keyWord{
 	{"dd", DCH_DD, true, fromCharDateGregorian},
 	{"dy", DCH_dy, false, fromCharDateNone},
 	{"d", DCH_D, true, fromCharDateGregorian},
-	{"ff1", DCH_FF1, false, fromCharDateNone}, /* f */
-	{"ff2", DCH_FF2, false, fromCharDateNone},
-	{"ff3", DCH_FF3, false, fromCharDateNone},
-	{"ff4", DCH_FF4, false, fromCharDateNone},
-	{"ff5", DCH_FF5, false, fromCharDateNone},
-	{"ff6", DCH_FF6, false, fromCharDateNone},
+	{"ff1", DCH_FF1, true, fromCharDateNone}, /* f */
+	{"ff2", DCH_FF2, true, fromCharDateNone},
+	{"ff3", DCH_FF3, true, fromCharDateNone},
+	{"ff4", DCH_FF4, true, fromCharDateNone},
+	{"ff5", DCH_FF5, true, fromCharDateNone},
+	{"ff6", DCH_FF6, true, fromCharDateNone},
 	{"fx", DCH_FX, false, fromCharDateNone},
 	{"hh24", DCH_HH24, true, fromCharDateNone}, /* h */
 	{"hh12", DCH_HH12, true, fromCharDateNone},

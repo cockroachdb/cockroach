@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/base/serverident"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/logtags"
 )
@@ -66,9 +67,20 @@ type AmbientContext struct {
 	backgroundCtx context.Context
 }
 
+// GetServerIdentificationPayload implements serverident.ServerIdentifier
+func (ac *AmbientContext) GetServerIdentificationPayload() serverident.ServerIdentificationPayload {
+	return ac.ServerIDs
+}
+
 // AddLogTag adds a tag to the ambient context.
 func (ac *AmbientContext) AddLogTag(name string, value interface{}) {
 	ac.tags = ac.tags.Add(name, value)
+	ac.refreshCache()
+}
+
+// AddLogTags adds a set of tags to the ambient context.
+func (ac *AmbientContext) AddLogTags(tags *logtags.Buffer) {
+	ac.tags = ac.tags.Merge(tags)
 	ac.refreshCache()
 }
 
@@ -111,22 +123,43 @@ func (ac *AmbientContext) ResetAndAnnotateCtx(ctx context.Context) context.Conte
 		}
 		return ctx
 	default:
-		ctx = logtags.WithTags(ctx, ac.tags)
-		if ac.ServerIDs != nil {
-			ctx = serverident.ContextWithServerIdentification(ctx, ac.ServerIDs)
-		}
-		return ctx
+		bld := ctxutil.WithFastValues(ctx)
+		// We set these unconditionally in case they are already set in the context.
+		bld.Set(ctxutil.LogTagsKey, ac.tags)
+		bld.Set(serverident.ServerIdentificationContextKey, ac.ServerIDs)
+		return bld.Finish()
 	}
 }
 
+// ResetAndAnnotateCtxPrealloc is like ResetAndAnnotateCtx but allocates a
+// container to avoid allocations on future annotations on the context and its
+// descendants.
+func (ac *AmbientContext) ResetAndAnnotateCtxPrealloc(ctx context.Context) context.Context {
+	bld := ctxutil.WithFastValuesPrealloc(ctx)
+	// We set these unconditionally in case they are already set in the context.
+	bld.Set(ctxutil.LogTagsKey, ac.tags)
+	bld.Set(serverident.ServerIdentificationContextKey, ac.ServerIDs)
+	return bld.Finish()
+}
+
 func (ac *AmbientContext) annotateCtxInternal(ctx context.Context) context.Context {
+	bld := ctxutil.WithFastValues(ctx)
 	if ac.tags != nil {
-		ctx = logtags.AddTags(ctx, ac.tags)
+		// Note: this is similar to logtags.AddTags but uses a FastValuesBuilder.
+		if v := bld.Get(ctxutil.LogTagsKey); v != nil {
+			existing := v.(*logtags.Buffer)
+			newTags := existing.Merge(ac.tags)
+			if newTags != existing {
+				bld.Set(ctxutil.LogTagsKey, newTags)
+			}
+		} else {
+			bld.Set(ctxutil.LogTagsKey, ac.tags)
+		}
 	}
-	if ac.ServerIDs != nil && serverident.ServerIdentificationFromContext(ctx) == nil {
-		ctx = serverident.ContextWithServerIdentification(ctx, ac.ServerIDs)
+	if ac.ServerIDs != nil && bld.Get(serverident.ServerIdentificationContextKey) == nil {
+		bld.Set(serverident.ServerIdentificationContextKey, ac.ServerIDs)
 	}
-	return ctx
+	return bld.Finish()
 }
 
 // AnnotateCtxWithSpan annotates the given context with the information in
@@ -146,12 +179,7 @@ func (ac *AmbientContext) AnnotateCtxWithSpan(
 			ctx = ac.backgroundCtx
 		}
 	default:
-		if ac.tags != nil {
-			ctx = logtags.AddTags(ctx, ac.tags)
-		}
-		if ac.ServerIDs != nil && serverident.ServerIdentificationFromContext(ctx) == nil {
-			ctx = serverident.ContextWithServerIdentification(ctx, ac.ServerIDs)
-		}
+		ctx = ac.annotateCtxInternal(ctx)
 	}
 
 	return tracing.ChildSpan(ctx, opName)

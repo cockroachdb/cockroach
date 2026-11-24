@@ -1,3 +1,5 @@
+# LogicTest: !local-prepared
+
 statement ok
 CREATE TABLE t (
   a INT PRIMARY KEY,
@@ -13,10 +15,10 @@ INSERT INTO t VALUES (1,1,1)
 statement ok
 CREATE INDEX foo ON t (b)
 
-statement error column b of type int is not allowed as the last column in an inverted index\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
+statement error column b has type int, which is not allowed as the last column in an inverted index\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
 CREATE INVERTED INDEX foo_inv ON t(b)
 
-statement error column b of type int is not allowed as the last column in an inverted index\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
+statement error column b has type int, which is not allowed as the last column in an inverted index\nHINT: see the documentation for more information about inverted indexes: https://www.cockroachlabs.com/docs/.*/inverted-indexes.html
 CREATE INDEX foo_inv2 ON t USING GIN (b)
 
 statement error pq: inverted indexes can't be unique
@@ -33,6 +35,7 @@ CREATE TABLE c (
   FAMILY "primary" (id, foo, "bAr", "qUuX")
 )
 
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE c
 ----
@@ -44,7 +47,21 @@ c  CREATE TABLE public.c (
      CONSTRAINT c_pkey PRIMARY KEY (id ASC),
      INVERTED INDEX c_foo_idx (foo),
      INVERTED INDEX "c_bAr_idx" ("bAr")
-   )
+   );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE c
+----
+c  CREATE TABLE public.c (
+     id INT8 NOT NULL,
+     foo JSONB NULL,
+     "bAr" JSONB NULL,
+     "qUuX" JSONB NULL,
+     CONSTRAINT c_pkey PRIMARY KEY (id ASC),
+     INVERTED INDEX c_foo_idx (foo),
+     INVERTED INDEX "c_bAr_idx" ("bAr")
+   ) WITH (schema_locked = true);
 
 # Test that only the permitted opclasses are usable to make an inverted index.
 statement error operator class \"blah_ops\" does not exist
@@ -73,7 +90,7 @@ CREATE INVERTED INDEX ON c (foo DESC)
 statement ok
 CREATE INVERTED INDEX ON c("qUuX")
 
-statement error column foo of type int is not allowed as the last column in an inverted index\nHINT: see the documentation for more information about inverted indexes
+statement error column foo has type int, which is not allowed as the last column in an inverted index\nHINT: see the documentation for more information about inverted indexes
 CREATE TABLE d (
   id INT PRIMARY KEY,
   foo INT,
@@ -226,7 +243,7 @@ SELECT * FROM d WHERE b @>'[{"a": {"b": [1]}}]' ORDER BY a;
 ----
 16  [{"a": {"b": [1, [2]]}}, "d"]
 
-statement ok
+statement count 1
 DELETE FROM d WHERE a=1;
 
 query IT
@@ -242,7 +259,7 @@ EXECUTE query ('a', '"b"')
 ----
 7  {"a": "b", "c": "d"}
 
-statement ok
+statement count 1
 DELETE FROM d WHERE a=6;
 
 query IT
@@ -687,7 +704,7 @@ SELECT * FROM del_cascade_test ORDER BY delete_cascade;
 2  {"a": "b", "c": "d"}
 3  ["b", "c"]
 
-statement ok
+statement count 1
 DELETE FROM update_test WHERE j @> '["c"]'
 
 query IT
@@ -1553,6 +1570,7 @@ INSERT INTO c VALUES(1, ARRAY[], ARRAY['foo', 'bar', 'baz'])
 statement ok
 CREATE INDEX ON c USING GIN (bar)
 
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE c
 ----
@@ -1563,7 +1581,20 @@ c  CREATE TABLE public.c (
      CONSTRAINT c_pkey PRIMARY KEY (id ASC),
      INVERTED INDEX c_foo_idx (foo),
      INVERTED INDEX c_bar_idx (bar)
-   )
+   );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE c
+----
+c  CREATE TABLE public.c (
+     id INT8 NOT NULL,
+     foo INT8[] NULL,
+     bar STRING[] NULL,
+     CONSTRAINT c_pkey PRIMARY KEY (id ASC),
+     INVERTED INDEX c_foo_idx (foo),
+     INVERTED INDEX c_bar_idx (bar)
+   ) WITH (schema_locked = true);
 
 query ITT
 SELECT * FROM c WHERE bar @> ARRAY['foo']
@@ -1923,6 +1954,7 @@ CREATE TABLE table_desc_inverted_index (
    FAMILY f2 (testdata)
 );
 
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE TABLE table_desc_inverted_index];
 ----
@@ -1934,7 +1966,21 @@ CREATE TABLE public.table_desc_inverted_index (
   INVERTED INDEX inv_idx_testdata (last_accessed DESC, testdata),
   FAMILY f1 (id, last_accessed),
   FAMILY f2 (testdata)
-)
+);
+
+skipif config schema-locked-disabled
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE table_desc_inverted_index];
+----
+CREATE TABLE public.table_desc_inverted_index (
+  id INT8 NOT NULL,
+  last_accessed TIMESTAMP NULL,
+  testdata JSONB NULL,
+  CONSTRAINT table_desc_inverted_index_pkey PRIMARY KEY (id ASC),
+  INVERTED INDEX inv_idx_testdata (last_accessed DESC, testdata),
+  FAMILY f1 (id, last_accessed),
+  FAMILY f2 (testdata)
+) WITH (schema_locked = true);
 
 subtest overlaps_with_array
 
@@ -2073,3 +2119,30 @@ c" STRING
 statement ok
 CREATE INVERTED INDEX ON t126444 ("b
 c" gin_trgm_ops)
+
+# Regression test for panicking with some GEOS errors (#151995).
+statement ok
+CREATE TABLE t151995 (
+  c0 INT PRIMARY KEY,
+  c1 GEOMETRY,
+  INVERTED INDEX (c1 ASC)
+);
+
+statement ok
+INSERT INTO t151995 (c0, c1) VALUES (
+        0,
+        '010300004001000000040000004ED667271F45EEC180F702131A41A7C138EDC3641D46F041E9E58A67A768F0C1CBB3A399C439FEC1189C38E3BBDDEEC16074F4D5F0C7FA414CCB652363EC01429029CED0E787E1C14ED667271F45EEC180F702131A41A7C138EDC3641D46F041':::GEOMETRY
+       );
+
+statement ok
+ANALYZE t151995;
+
+# Clear the stat cache so that the new statistic is guaranteed to be used (which
+# are needed for the inverted join to be picked).
+statement ok
+SELECT crdb_internal.clear_table_stats_cache();
+
+statement error pq: Buffer: parameter distance must be a finite value
+SELECT *
+  FROM t151995 AS t1
+  JOIN t151995 AS t2 ON st_dfullywithinexclusive(t2.c1, t1.c1, '+Inf');

@@ -51,6 +51,8 @@ func TestExternalDistinct(t *testing.T) {
 	defer cleanup()
 	var monitorRegistry colexecargs.MonitorRegistry
 	defer monitorRegistry.Close(ctx)
+	var closerRegistry colexecargs.CloserRegistry
+	defer closerRegistry.Close(ctx)
 
 	rng, _ := randutil.NewTestRand()
 	numForcedRepartitions := rng.Intn(5)
@@ -59,20 +61,13 @@ func TestExternalDistinct(t *testing.T) {
 	for _, spillForced := range []bool{false, true} {
 		flowCtx.Cfg.TestingKnobs.ForceDiskSpill = spillForced
 		for tcIdx, tc := range distinctTestCases {
-			log.Infof(context.Background(), "spillForced=%t/%d", spillForced, tcIdx)
+			log.Dev.Infof(context.Background(), "spillForced=%t/%d", spillForced, tcIdx)
 			var semsToCheck []semaphore.Semaphore
 			var outputOrdering execinfrapb.Ordering
 			verifier := colexectestutils.UnorderedVerifier
-			// Check that the disk spiller, the external distinct, and the
-			// disk-backed sort (which includes both the disk spiller and the
-			// sort) were added as Closers.
-			numExpectedClosers := 4
 			if tc.isOrderedOnDistinctCols {
 				outputOrdering = convertDistinctColsToOrdering(tc.distinctCols)
 				verifier = colexectestutils.OrderedVerifier
-				// The disk spiller and the sort included in the final
-				// disk-backed sort must also be added as Closers.
-				numExpectedClosers += 2
 			}
 			tc.runTests(t, verifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
 				// A sorter should never exceed ExternalSorterMinPartitions, even
@@ -80,14 +75,16 @@ func TestExternalDistinct(t *testing.T) {
 				// more than this number of file descriptors.
 				sem := colexecop.NewTestingSemaphore(colexecop.ExternalSorterMinPartitions)
 				semsToCheck = append(semsToCheck, sem)
-				distinct, closers, err := createExternalDistinct(
+				return createExternalDistinct(
 					ctx, flowCtx, input, tc.typs, tc.distinctCols, tc.nullsAreDistinct, tc.errorOnDup,
 					outputOrdering, queueCfg, sem, nil /* spillingCallbackFn */, numForcedRepartitions,
-					&monitorRegistry,
+					&monitorRegistry, &closerRegistry,
 				)
-				require.Equal(t, numExpectedClosers, len(closers))
-				return distinct, err
 			})
+			// Close all closers manually (in production this is done on the
+			// flow cleanup).
+			closerRegistry.Close(ctx)
+			closerRegistry.Reset()
 			for i, sem := range semsToCheck {
 				require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
 			}
@@ -118,6 +115,8 @@ func TestExternalDistinctSpilling(t *testing.T) {
 	defer cleanup()
 	var monitorRegistry colexecargs.MonitorRegistry
 	defer monitorRegistry.Close(ctx)
+	var closerRegistry colexecargs.CloserRegistry
+	defer closerRegistry.Close(ctx)
 
 	rng, _ := randutil.NewTestRand()
 	nCols := 1 + rng.Intn(3)
@@ -147,7 +146,7 @@ func TestExternalDistinctSpilling(t *testing.T) {
 	newTupleProbability := rng.Float64()
 	nTuples := int(float64(nDistinctBatches*coldata.BatchSize()) / newTupleProbability)
 	const maxNumTuples = 25000
-	spillingMightNotHappen := false
+	spillingMustHappen := true
 	if nTuples > maxNumTuples {
 		// If we happen to set a large value for coldata.BatchSize() and a small
 		// value for newTupleProbability, we might end up with huge number of
@@ -159,11 +158,12 @@ func TestExternalDistinctSpilling(t *testing.T) {
 		// limit to the in-memory distinct. In such (relatively rare) scenario
 		// we cannot check that we spilled every time, yet we might as well run
 		// the correctness check.
-		spillingMightNotHappen = true
+		spillingMustHappen = false
 	}
 	tups, expected := generateRandomDataForUnorderedDistinct(rng, nTuples, nCols, newTupleProbability)
 
-	var numRuns, numSpills int
+	var numRuns int
+	runSpilled := make(map[int]struct{})
 	var semsToCheck []semaphore.Semaphore
 	numForcedRepartitions := rng.Intn(5)
 	colexectestutils.RunTestsWithoutAllNullsInjection(
@@ -181,30 +181,32 @@ func TestExternalDistinctSpilling(t *testing.T) {
 			// of file descriptors.
 			sem := colexecop.NewTestingSemaphore(0 /* limit */)
 			semsToCheck = append(semsToCheck, sem)
-			var outputOrdering execinfrapb.Ordering
-			distinct, closers, err := createExternalDistinct(
-				ctx, flowCtx, input, typs, distinctCols, false /* nullsAreDistinct */, "", /* errorOnDup */
-				outputOrdering, queueCfg, sem, func() { numSpills++ }, numForcedRepartitions,
-				&monitorRegistry,
-			)
-			require.NoError(t, err)
-			// Check that the disk spiller, the external distinct, and the
-			// disk-backed sort (which accounts for two) were added as Closers.
-			numExpectedClosers := 4
-			require.Equal(t, numExpectedClosers, len(closers))
 			numRuns++
-			return distinct, nil
+			return createExternalDistinct(
+				ctx, flowCtx, input, typs, distinctCols, false /* nullsAreDistinct */, "", /* errorOnDup */
+				execinfrapb.Ordering{}, queueCfg, sem, func() { runSpilled[numRuns] = struct{}{} }, numForcedRepartitions,
+				&monitorRegistry, &closerRegistry,
+			)
 		},
 	)
+	if spillingMustHappen {
+		// We expect that we spilled during each run.
+		for run := 1; run <= numRuns; run++ {
+			_, spilled := runSpilled[run]
+			require.Truef(t, spilled, "run %d didn't spill to disk", run)
+		}
+		// For each run we expect to see the following closers:
+		// - the disk spiller for the unordered distinct
+		// - the disk spiller for the disk-backed sort used in the fallback
+		// strategy of the external distinct
+		// - the hash-based partitioner for the external distinct.
+		//
+		// In some scenarios we might also see the external sort there (if the
+		// disk-backed sort actually spills to disk), but we'll ignore that.
+		require.GreaterOrEqual(t, closerRegistry.NumClosers(), 3*numRuns)
+	}
 	for i, sem := range semsToCheck {
 		require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
-	}
-	if !spillingMightNotHappen {
-		// The "randomNullsInjection" subtest might not spill to disk when a
-		// large portion of rows is made NULL, so we allow two cases:
-		// - numSpills == numRuns
-		// - numSpills == numRuns - 1.
-		require.GreaterOrEqual(t, numSpills, numRuns-1, "the spilling didn't occur in all cases")
 	}
 }
 
@@ -241,7 +243,7 @@ func generateRandomDataForUnorderedDistinct(
 		}
 	}
 
-	rand.Shuffle(nTups, func(i, j int) { tups[i], tups[j] = tups[j], tups[i] })
+	rng.Shuffle(nTups, func(i, j int) { tups[i], tups[j] = tups[j], tups[i] })
 	return tups, expected
 }
 
@@ -272,7 +274,11 @@ func BenchmarkExternalDistinct(b *testing.B) {
 	queueCfg, cleanup := colcontainerutils.NewTestingDiskQueueCfg(b, false /* inMem */)
 	defer cleanup()
 	var monitorRegistry colexecargs.MonitorRegistry
-	defer monitorRegistry.Close(ctx)
+	var closerRegistry colexecargs.CloserRegistry
+	afterEachRun := func() {
+		closerRegistry.BenchmarkReset(ctx)
+		monitorRegistry.BenchmarkReset(ctx)
+	}
 
 	for _, spillForced := range []bool{false, true} {
 		for _, maintainOrdering := range []bool{false, true} {
@@ -293,15 +299,15 @@ func BenchmarkExternalDistinct(b *testing.B) {
 					if maintainOrdering {
 						outputOrdering = convertDistinctColsToOrdering(distinctCols)
 					}
-					op, _, err := createExternalDistinct(
+					return createExternalDistinct(
 						ctx, flowCtx, []colexecop.Operator{input}, typs,
 						distinctCols, false /* nullsAreDistinct */, "", /* errorOnDup */
 						outputOrdering, queueCfg, &colexecop.TestingSemaphore{},
 						nil /* spillingCallbackFn */, 0, /* numForcedRepartitions */
-						&monitorRegistry,
+						&monitorRegistry, &closerRegistry,
 					)
-					return op, err
 				},
+				afterEachRun,
 				func(nCols int) int {
 					return 0
 				},
@@ -329,7 +335,8 @@ func createExternalDistinct(
 	spillingCallbackFn func(),
 	numForcedRepartitions int,
 	monitorRegistry *colexecargs.MonitorRegistry,
-) (colexecop.Operator, []colexecop.Closer, error) {
+	closerRegistry *colexecargs.CloserRegistry,
+) (colexecop.Operator, error) {
 	distinctSpec := &execinfrapb.DistinctSpec{
 		DistinctColumns:  distinctCols,
 		NullsAreDistinct: nullsAreDistinct,
@@ -345,15 +352,15 @@ func createExternalDistinct(
 		ResultTypes: typs,
 	}
 	args := &colexecargs.NewColOperatorArgs{
-		Spec:                spec,
-		Inputs:              colexectestutils.MakeInputs(sources),
-		StreamingMemAccount: testMemAcc,
-		DiskQueueCfg:        diskQueueCfg,
-		FDSemaphore:         testingSemaphore,
-		MonitorRegistry:     monitorRegistry,
+		Spec:            spec,
+		Inputs:          colexectestutils.MakeInputs(sources),
+		DiskQueueCfg:    diskQueueCfg,
+		FDSemaphore:     testingSemaphore,
+		MonitorRegistry: monitorRegistry,
+		CloserRegistry:  closerRegistry,
 	}
 	args.TestingKnobs.SpillingCallbackFn = spillingCallbackFn
 	args.TestingKnobs.NumForcedRepartitions = numForcedRepartitions
 	result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
-	return result.Root, result.ToClose, err
+	return result.Root, err
 }

@@ -6,6 +6,7 @@
 package state
 
 import (
+	"context"
 	"sort"
 	"testing"
 	"time"
@@ -218,8 +219,8 @@ func TestReplicaChange(t *testing.T) {
 			initVoters:    stores(1),
 			initNonVoters: stores(2),
 			change: testMakeReplicaChange(2,
-				testRC(2, roachpb.REMOVE_NON_VOTER),
-				testRC(2, roachpb.ADD_VOTER)),
+				testRC(2, roachpb.ADD_VOTER),
+				testRC(2, roachpb.REMOVE_NON_VOTER)),
 			expectedVoters:      stores(1, 2),
 			expectedNonVoters:   stores(),
 			expectedLeaseholder: 1,
@@ -229,8 +230,8 @@ func TestReplicaChange(t *testing.T) {
 			stores:     2,
 			initVoters: stores(1),
 			change: testMakeReplicaChange(2,
-				testRC(1, roachpb.REMOVE_VOTER),
 				testRC(1, roachpb.ADD_NON_VOTER),
+				testRC(1, roachpb.REMOVE_VOTER),
 				testRC(2, roachpb.ADD_VOTER)),
 			expectedVoters:      stores(2),
 			expectedNonVoters:   stores(1),
@@ -241,8 +242,8 @@ func TestReplicaChange(t *testing.T) {
 			stores:     2,
 			initVoters: stores(1, 2),
 			change: testMakeReplicaChange(2,
-				testRC(2, roachpb.REMOVE_VOTER),
-				testRC(2, roachpb.ADD_NON_VOTER)),
+				testRC(2, roachpb.ADD_NON_VOTER),
+				testRC(2, roachpb.REMOVE_VOTER)),
 			expectedVoters:      stores(1),
 			expectedNonVoters:   stores(2),
 			expectedLeaseholder: 1,
@@ -252,8 +253,8 @@ func TestReplicaChange(t *testing.T) {
 			stores:     2,
 			initVoters: stores(1, 2),
 			change: testMakeReplicaChange(2,
-				testRC(1, roachpb.REMOVE_VOTER),
-				testRC(1, roachpb.ADD_NON_VOTER)),
+				testRC(1, roachpb.ADD_NON_VOTER),
+				testRC(1, roachpb.REMOVE_VOTER)),
 			expectedVoters:      stores(1, 2),
 			expectedNonVoters:   stores(),
 			expectedLeaseholder: 1,
@@ -264,10 +265,10 @@ func TestReplicaChange(t *testing.T) {
 			initVoters:    stores(1),
 			initNonVoters: stores(2),
 			change: testMakeReplicaChange(2,
-				testRC(2, roachpb.REMOVE_NON_VOTER),
 				testRC(2, roachpb.ADD_VOTER),
-				testRC(1, roachpb.REMOVE_VOTER),
-				testRC(1, roachpb.ADD_NON_VOTER)),
+				testRC(2, roachpb.REMOVE_NON_VOTER),
+				testRC(1, roachpb.ADD_NON_VOTER),
+				testRC(1, roachpb.REMOVE_VOTER)),
 			expectedVoters:      stores(2),
 			expectedNonVoters:   stores(1),
 			expectedLeaseholder: 2,
@@ -321,11 +322,12 @@ func TestReplicaChange(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
+			ctx := context.Background()
 			state := testMakeRangeState(tc.stores, tc.initVoters, tc.initNonVoters)
 			r, _ := state.Range(1)
 			state.TransferLease(r.RangeID(), StoreID(1))
 			change := tc.change(state)
-			change.Apply(state)
+			change.Apply(ctx, state)
 			voters := testGetReplLocations(state, r, roachpb.VOTER_FULL)
 			nonVoters := testGetReplLocations(state, r, roachpb.NON_VOTER)
 			leaseholder := StoreID(-1)
@@ -686,8 +688,9 @@ func TestReplicaStateChanger(t *testing.T) {
 			tsResults := make([]int64, 0, 1)
 			resultLeaseholders := make(map[int64]map[int64]StoreID)
 
+			ctx := context.Background()
 			for _, tick := range tc.ticks {
-				changer.Tick(OffsetTick(start, tick), state)
+				changer.Tick(ctx, OffsetTick(start, tick), state)
 				if change, ok := tc.pushes[tick]; ok {
 					if ts, ok := changer.Push(OffsetTick(start, tick), change(state)); ok {
 						tsResults = append(tsResults, ReverseOffsetTick(start, ts))

@@ -43,6 +43,16 @@ func init() {
 						BackReferencedTableID: this.TableID,
 					}
 				}),
+				emit(func(this *scpb.CheckConstraintUnvalidated) *scop.AddTableConstraintBackReferencesInFunctions {
+					if len(this.UsesFunctionIDs) == 0 {
+						return nil
+					}
+					return &scop.AddTableConstraintBackReferencesInFunctions{
+						FunctionIDs:                this.UsesFunctionIDs,
+						BackReferencedTableID:      this.TableID,
+						BackReferencedConstraintID: this.ConstraintID,
+					}
+				}),
 			),
 		),
 		toAbsent(
@@ -70,6 +80,16 @@ func init() {
 					return &scop.UpdateTableBackReferencesInSequences{
 						SequenceIDs:           this.UsesSequenceIDs,
 						BackReferencedTableID: this.TableID,
+					}
+				}),
+				emit(func(this *scpb.CheckConstraintUnvalidated) *scop.RemoveTableConstraintBackReferencesFromFunctions {
+					if len(this.UsesFunctionIDs) == 0 {
+						return nil
+					}
+					return &scop.RemoveTableConstraintBackReferencesFromFunctions{
+						FunctionIDs:                this.UsesFunctionIDs,
+						BackReferencedTableID:      this.TableID,
+						BackReferencedConstraintID: this.ConstraintID,
 					}
 				}),
 			),

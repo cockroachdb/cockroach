@@ -1,0 +1,128 @@
+// Copyright 2015 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+package sql
+
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/backup/backuppb"
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
+)
+
+// BackupRestoreTestingKnobs contains knobs for backup and restore behavior.
+type BackupRestoreTestingKnobs struct {
+	// AfterBackupChunk is called after each chunk of a backup is completed.
+	AfterBackupChunk func()
+
+	// AfterBackupCheckpoint if set will be called after a BACKUP-CHECKPOINT
+	// is written.
+	AfterBackupCheckpoint func()
+
+	// AfterLoadingCompactionManifestOnResume is run once the backup manifest has been
+	// loaded/created on the resumption of a compaction job.
+	AfterLoadingCompactionManifestOnResume func(manifest *backuppb.BackupManifest)
+
+	// CaptureResolvedTableDescSpans allows for intercepting the spans which are
+	// resolved during backup planning, and will eventually be backed up during
+	// execution.
+	CaptureResolvedTableDescSpans func([]roachpb.Span)
+
+	// RunAfterSplitAndScatteringEntry allows blocking the RESTORE job after a
+	// single RestoreSpanEntry has been split and scattered.
+	RunAfterSplitAndScatteringEntry func(ctx context.Context)
+
+	// RunAfterProcessingRestoreSpanEntry allows blocking the RESTORE job after a
+	// single RestoreSpanEntry has been processed and added to the SSTBatcher.
+	RunAfterProcessingRestoreSpanEntry func(ctx context.Context, entry *execinfrapb.RestoreSpanEntry) error
+
+	// RunAfterExportingSpanEntry allows blocking the BACKUP job after a single
+	// span has been exported.
+	RunAfterExportingSpanEntry func(ctx context.Context, response *kvpb.ExportResponse)
+
+	// InjectErrorsInBackupRowDataStorage, if non-nil and returning true, causes
+	// errors to be injected when backup processors attempts to write row data to
+	// the external storage.
+	InjectErrorsInBackupRowDataStorage func() bool
+
+	// BackupMonitor is used to overwrite the monitor used by backup during
+	// testing. This is typically the bulk mem monitor if not
+	// specified here.
+	BackupMemMonitor *mon.BytesMonitor
+
+	RestoreDistSQLRetryPolicy *retry.Options
+
+	// RestoreRetryProgressThreshold allows configuring the threshold at which
+	// the restore will no longer fast fail after a certain number of retries.
+	RestoreRetryProgressThreshold float32
+
+	RunBeforeRestoreFlow func() error
+
+	RunAfterRestoreFlow func() error
+
+	EnableBackupRetriesUnderTest bool
+
+	BackupDistSQLInitialRetryPolicy *retry.Options
+
+	BackupDistSQLSecondaryRetryPolicy *retry.Options
+
+	RunBeforeBackupFlow func() error
+
+	RunAfterBackupFlow func() error
+
+	RunAfterRetryIteration func(err error) error
+
+	RunAfterRestoreProcDrains func()
+
+	RunBeforeResolvingCompactionDest func() error
+
+	// RunBeforeSendingDownloadSpan is called within the retry loop of the
+	// download span worker before sending the download span request.
+	RunBeforeSendingDownloadSpan func() error
+
+	// RunAfterSendingDownloadSpan is called after the download span RPC
+	// completes; a non-nil return value is returned in place of the real
+	// result, allowing tests to inject a failure while letting the
+	// underlying download actually run.
+	RunAfterSendingDownloadSpan func() error
+
+	// OverrideRemainingBytesFn, if set, replaces the value returned by the
+	// remaining-bytes computation inside waitForDownloadToComplete. Tests
+	// use it to drive the observer through deterministic progress patterns
+	// without depending on the actual download's pacing.
+	OverrideRemainingBytesFn func() uint64
+
+	// AfterAddRemoteSST is called after a remote SST is linked to pebble during
+	// the link phase of online restore.
+	AfterAddRemoteSST func() error
+
+	// AfterRevertRestoreDropDescriptors is called after a reverting restore
+	// drops its descriptors.
+	AfterRevertRestoreDropDescriptors func() error
+
+	// DownloadPhaseRetryPolicy, if set, overrides the default retry policy
+	// used for the download phase of online restore.
+	DownloadPhaseRetryPolicy *retry.Options
+
+	RestoreSpanConfigConformanceRetryPolicy *retry.Options
+
+	OnCompactionFileAccess *func(processorLocality roachpb.Locality, fileLocality string) error
+
+	// BackupProcessFileOverride, if set, is called for each file entry
+	// produced during backup. It can modify and return the entry, e.g. to
+	// inflate file sizes for testing restore behavior under conditions that
+	// would normally require a very large backup fixture.
+	BackupProcessFileOverride func(backuppb.BackupManifest_File) backuppb.BackupManifest_File
+}
+
+var _ base.ModuleTestingKnobs = &BackupRestoreTestingKnobs{}
+
+// ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
+func (*BackupRestoreTestingKnobs) ModuleTestingKnobs() {}

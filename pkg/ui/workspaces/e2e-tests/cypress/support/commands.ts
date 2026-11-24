@@ -23,3 +23,49 @@ Cypress.Commands.add("getUserWithExactPrivileges", (privs: SQLPrivilege[]) => {
     );
   });
 });
+
+// measureRender can capture render time for a given action. Currently this will
+// only work in scale tests because the `logTiming` task is only available in
+// scale tests.
+Cypress.Commands.add(
+  "measureRender",
+  { prevSubject: "optional" },
+  (subject, renderName, actionFn, assertionChain) => {
+    // If subject is provided, it means the command is chained (e.g., cy.get('selector').measureRender(...))
+    const chainable = subject ? cy.wrap(subject) : cy;
+
+    let startTime;
+
+    chainable
+      .then(() => {
+        startTime = performance.now();
+      })
+      .then(() => {
+        // Execute the action function provided by the user
+        // The actionFn should return a chainable Cypress command
+        return actionFn();
+      })
+      .then((actionResult) => {
+        // Assert on the element/state that indicates render completion
+        // The assertionChain should be a function that takes the result
+        // of the action and returns a chainable assertion
+        const assertionChainable = assertionChain(actionResult);
+
+        // Ensure the assertion chain is properly waited on
+        return assertionChainable.then(() => {
+          const endTime = performance.now();
+          const duration = endTime - startTime;
+          const testTitle = Cypress.currentTest.title;
+
+          cy.task("logTiming", {
+            testTitle,
+            renderName,
+            duration,
+          });
+          cy.screenshot(`timing-${renderName}-${Date.now()}`);
+
+          return assertionChainable;
+        });
+      });
+  },
+);

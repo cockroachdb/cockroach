@@ -97,9 +97,10 @@ type AllocatorReplica interface {
 	LeaseCheckReplica
 	RangeUsageInfo() allocator.RangeUsageInfo
 	RaftStatus() *raft.Status
-	GetFirstIndex() kvpb.RaftIndex
+	GetCompactedIndex() kvpb.RaftIndex
 	LastReplicaAdded() (roachpb.ReplicaID, time.Time)
 	StoreID() roachpb.StoreID
+	NodeID() roachpb.NodeID
 	GetRangeID() roachpb.RangeID
 	SendStreamStats(*rac2.RangeSendStreamStats)
 }
@@ -166,7 +167,10 @@ func (rp ReplicaPlanner) ShouldPlanChange(
 	voterReplicas := desc.Replicas().VoterDescriptors()
 	nonVoterReplicas := desc.Replicas().NonVoterDescriptors()
 	if !rp.knobs.DisableReplicaRebalancing {
-		scorerOptions := rp.allocator.ScorerOptions(ctx)
+		scorerOptions := allocatorimpl.ScorerOptions(rp.allocator.ScorerOptions(ctx))
+		if rp.allocator.CountBasedRebalancingDisabled(ctx) {
+			scorerOptions = rp.allocator.BaseScorerOptionsWithNoConvergence()
+		}
 		rangeUsageInfo := repl.RangeUsageInfo()
 		_, _, _, ok := rp.allocator.RebalanceVoter(
 			ctx,
@@ -789,6 +793,9 @@ func (rp ReplicaPlanner) considerRebalance(
 	if scatter {
 		scorerOpts = rp.allocator.ScorerOptionsForScatter(ctx)
 	}
+	if rp.allocator.CountBasedRebalancingDisabled(ctx) {
+		scorerOpts = rp.allocator.BaseScorerOptionsWithNoConvergence()
+	}
 	rangeUsageInfo := repl.RangeUsageInfo()
 	addTarget, removeTarget, details, ok := rp.allocator.RebalanceVoter(
 		ctx,
@@ -893,7 +900,6 @@ func (rp ReplicaPlanner) maybeTransferLeaseAwayTarget(
 		desc.Replicas().VoterDescriptors(),
 		repl,
 		usageInfo,
-		false, /* forceDecisionWithoutStats */
 		allocator.TransferLeaseOptions{
 			Goal: allocator.LeaseCountConvergence,
 			// NB: This option means that the allocator is asked to not consider the
@@ -908,8 +914,14 @@ func (rp ReplicaPlanner) maybeTransferLeaseAwayTarget(
 	log.KvDistribution.Infof(ctx, "transferring away lease to s%d", target.StoreID)
 
 	op = AllocationTransferLeaseOp{
-		Source:             repl.StoreID(),
-		Target:             target.StoreID,
+		Source: roachpb.ReplicationTarget{
+			NodeID:  repl.NodeID(),
+			StoreID: repl.StoreID(),
+		},
+		Target: roachpb.ReplicationTarget{
+			NodeID:  target.NodeID,
+			StoreID: target.StoreID,
+		},
 		Usage:              usageInfo,
 		bypassSafetyChecks: false,
 	}

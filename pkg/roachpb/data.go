@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
@@ -94,7 +95,7 @@ var (
 	// PrettyPrintRange prints a key range in human readable format. It's
 	// implemented in package git.com/cockroachdb/cockroach/keys to avoid
 	// package circle import.
-	PrettyPrintRange func(start, end Key, maxChars int) string
+	PrettyPrintRange func(start, end Key, maxChars int) redact.RedactableString
 )
 
 // RKey denotes a Key whose local addressing has been accounted for.
@@ -288,7 +289,17 @@ const (
 	extendedPreludeSize    = extendedMVCCValLenSize + 1
 )
 
-var _ redact.SafeFormatter = ValueType(0)
+var _ redact.SafeFormatter = new(ValueType)
+var _ redact.SafeFormatter = new(LockStateInfo)
+var _ redact.SafeFormatter = new(RKey)
+var _ redact.SafeFormatter = new(Key)
+var _ redact.SafeFormatter = new(StoreProperties)
+var _ redact.SafeFormatter = new(Transaction)
+var _ redact.SafeFormatter = new(ChangeReplicasTrigger)
+var _ redact.SafeFormatter = new(Lease)
+var _ redact.SafeFormatter = new(Span)
+var _ redact.SafeFormatter = new(RSpan)
+var _ redact.SafeFormatter = new(LockAcquisition)
 
 // Safeformat implements the redact.SafeFormatter interface.
 func (t ValueType) SafeFormat(w redact.SafePrinter, _ rune) {
@@ -514,6 +525,15 @@ func (v *Value) SetBytes(b []byte) {
 	v.ensureRawBytes(headerSize + len(b))
 	copy(v.dataBytes(), b)
 	v.setTag(ValueType_BYTES)
+}
+
+// AllocBytes allocates space for a BYTES value of the given size and clears the
+// checksum. The caller must populate the returned slice with exactly the same
+// number of bytes.
+func (v *Value) AllocBytes(size int) []byte {
+	v.ensureRawBytes(headerSize + size)
+	v.setTag(ValueType_BYTES)
+	return v.RawBytes[headerSize:]
 }
 
 // SetTagAndData copies the bytes and tag field to the receiver and clears the
@@ -944,17 +964,17 @@ func (v Value) PrettyPrint() (ret string) {
 			if i != 0 {
 				buf.WriteRune('/')
 			}
-			_, _, colIDDiff, typ, err := encoding.DecodeValueTag(b)
+			_, _, colIDDelta, typ, err := encoding.DecodeValueTag(b)
 			if err != nil {
 				break
 			}
-			colID += colIDDiff
+			colID += colIDDelta
 			var s string
 			b, s, err = encoding.PrettyPrintValueEncoded(b)
 			if err != nil {
 				break
 			}
-			fmt.Fprintf(&buf, "%d:%d:%s/%s", colIDDiff, colID, typ, s)
+			fmt.Fprintf(&buf, "%d:%d:%s/%s", colIDDelta, colID, typ, s)
 		}
 	case ValueType_INT:
 		var i int64
@@ -990,6 +1010,18 @@ func (v Value) PrettyPrint() (ret string) {
 		var d duration.Duration
 		d, err = v.GetDuration()
 		buf.WriteString(d.StringNanos())
+	case ValueType_TIMETZ:
+		var tz timetz.TimeTZ
+		tz, err = v.GetTimeTZ()
+		buf.WriteString(tz.String())
+	case ValueType_GEO:
+		var g geopb.SpatialObject
+		g, err = v.GetGeo()
+		buf.WriteString(g.String())
+	case ValueType_BOX2D:
+		var g geopb.BoundingBox
+		g, err = v.GetBox2D()
+		buf.WriteString(g.String())
 	default:
 		err = errors.Errorf("unknown tag: %s", t)
 	}
@@ -1166,7 +1198,7 @@ func (t Transaction) Clone() *Transaction {
 // AssertInitialized crashes if the transaction is not initialized.
 func (t *Transaction) AssertInitialized(ctx context.Context) {
 	if t.ID == (uuid.UUID{}) || t.WriteTimestamp.IsEmpty() {
-		log.Fatalf(ctx, "uninitialized txn: %s", *t)
+		log.Dev.Fatalf(ctx, "uninitialized txn: %s", *t)
 	}
 }
 
@@ -1304,7 +1336,6 @@ func (t *Transaction) Restart(
 	t.UpgradePriority(upgradePriority)
 	// Reset all epoch-scoped state.
 	t.Sequence = 0
-	t.WriteTooOld = false
 	t.ReadTimestampFixed = false
 	t.LockSpans = nil
 	t.InFlightWrites = nil
@@ -1345,8 +1376,6 @@ func (t *Transaction) BumpEpoch() {
 func (t *Transaction) BumpReadTimestamp(timestamp hlc.Timestamp) {
 	t.ReadTimestamp.Forward(timestamp)
 	t.WriteTimestamp.Forward(t.ReadTimestamp)
-	// TODO(nvanbenschoten): remove this when the WriteTooOld flag is removed.
-	t.WriteTooOld = false
 }
 
 // Update ratchets priority, timestamp and original timestamp values (among
@@ -1362,7 +1391,7 @@ func (t *Transaction) Update(o *Transaction) {
 		*t = *o
 		return
 	} else if t.ID != o.ID {
-		log.Fatalf(ctx, "updating txn %s with different txn %s", t.String(), o.String())
+		log.Dev.Fatalf(ctx, "updating txn %s with different txn %s", t.String(), o.String())
 		return
 	}
 	if len(t.Key) == 0 {
@@ -1377,11 +1406,10 @@ func (t *Transaction) Update(o *Transaction) {
 		if !t.Status.IsFinalized() {
 			t.Status = o.Status
 		} else if t.Status == COMMITTED {
-			log.Warningf(ctx, "updating COMMITTED txn %s with txn at later epoch %s", t.String(), o.String())
+			log.Dev.Warningf(ctx, "updating COMMITTED txn %s with txn at later epoch %s", t.String(), o.String())
 		}
 		// Replace all epoch-scoped state.
 		t.Epoch = o.Epoch
-		t.WriteTooOld = o.WriteTooOld
 		t.ReadTimestampFixed = o.ReadTimestampFixed
 		t.Sequence = o.Sequence
 		t.LockSpans = o.LockSpans
@@ -1392,34 +1420,29 @@ func (t *Transaction) Update(o *Transaction) {
 		switch t.Status {
 		case PENDING:
 			t.Status = o.Status
+		case PREPARED:
+			if o.Status != PENDING {
+				t.Status = o.Status
+			}
 		case STAGING:
 			if o.Status != PENDING {
 				t.Status = o.Status
 			}
 		case ABORTED:
 			if o.Status == COMMITTED {
-				log.Warningf(ctx, "updating ABORTED txn %s with COMMITTED txn %s", t.String(), o.String())
+				log.Dev.Warningf(ctx, "updating ABORTED txn %s with COMMITTED txn %s", t.String(), o.String())
 			}
 		case COMMITTED:
 			// Nothing to do.
+		default:
+			log.Dev.Fatalf(ctx, "unexpected txn status: %s", t.Status)
 		}
 
 		if t.ReadTimestamp == o.ReadTimestamp {
-			// If neither of the transactions has a bumped ReadTimestamp, then the
-			// WriteTooOld flag is cumulative.
-			t.WriteTooOld = t.WriteTooOld || o.WriteTooOld
 			t.ReadTimestampFixed = t.ReadTimestampFixed || o.ReadTimestampFixed
 		} else if t.ReadTimestamp.Less(o.ReadTimestamp) {
-			// If `o` has a higher ReadTimestamp (i.e. it's the result of a refresh,
-			// which refresh generally clears the WriteTooOld field), then it dictates
-			// the WriteTooOld field. This relies on refreshes not being performed
-			// concurrently with any requests whose response's WriteTooOld field
-			// matters.
-			t.WriteTooOld = o.WriteTooOld
 			t.ReadTimestampFixed = o.ReadTimestampFixed
 		}
-		// If t has a higher ReadTimestamp, than it gets to dictate the
-		// WriteTooOld field - so there's nothing to update.
 
 		if t.Sequence < o.Sequence {
 			t.Sequence = o.Sequence
@@ -1442,8 +1465,8 @@ func (t *Transaction) Update(o *Transaction) {
 			// have incremented the txn's epoch without realizing that it was
 			// aborted.
 			t.Status = ABORTED
-		case COMMITTED:
-			log.Warningf(ctx, "updating txn %s with COMMITTED txn at earlier epoch %s", t.String(), o.String())
+		case PREPARED, COMMITTED:
+			log.Dev.Warningf(ctx, "updating txn %s with %s txn at earlier epoch %s", t.String(), o.Status, o.String())
 		}
 	}
 
@@ -1524,8 +1547,31 @@ func (t Transaction) SafeFormat(w redact.SafePrinter, _ rune) {
 	if len(t.Name) > 0 {
 		w.Printf("%q ", redact.SafeString(t.Name))
 	}
-	w.Printf("meta={%s} lock=%t stat=%s rts=%s wto=%t gul=%s",
-		t.TxnMeta, t.IsLocking(), t.Status, t.ReadTimestamp, t.WriteTooOld, t.GlobalUncertaintyLimit)
+	w.Printf("meta={%s} lock=%t stat=%s rts=%s gul=%s",
+		t.TxnMeta, t.IsLocking(), t.Status, t.ReadTimestamp, t.GlobalUncertaintyLimit)
+
+	// Print observed timestamps (limited to 5 for readability).
+	if obsCount := len(t.ObservedTimestamps); obsCount > 0 {
+		w.Printf(" obs={")
+		limit := obsCount
+		if limit > 5 {
+			limit = 5
+		}
+
+		for i := 0; i < limit; i++ {
+			if i > 0 {
+				w.Printf(" ")
+			}
+			obs := t.ObservedTimestamps[i]
+			w.Printf("n%d@%s", obs.NodeID, obs.Timestamp)
+		}
+
+		if obsCount > 5 {
+			w.Printf(", ...")
+		}
+		w.Printf("}")
+	}
+
 	if ni := len(t.LockSpans); t.Status != PENDING && ni > 0 {
 		w.Printf(" int=%d", ni)
 	}
@@ -1577,48 +1623,9 @@ func (t *Transaction) GetObservedTimestamp(nodeID NodeID) (hlc.ClockTimestamp, b
 // allow interior mutations, the existing list is copied instead of being
 // mutated in place.
 //
-// The following invariants are assumed to hold and are preserved:
-// - the list contains no overlapping ranges
-// - the list contains no contiguous ranges
-// - the list is sorted, with larger seqnums at the end
-//
-// Additionally, the caller must ensure:
-//
-//  1. if the new range overlaps with some range in the list, then it
-//     also overlaps with every subsequent range in the list.
-//
-//  2. the new range's "end" seqnum is larger or equal to the "end"
-//     seqnum of the last element in the list.
-//
-// For example:
-//
-//	current list [3 5] [10 20] [22 24]
-//	new item:    [8 26]
-//	final list:  [3 5] [8 26]
-//
-//	current list [3 5] [10 20] [22 24]
-//	new item:    [28 32]
-//	final list:  [3 5] [10 20] [22 24] [28 32]
-//
-// This corresponds to savepoints semantics:
-//
-//   - Property 1 says that a rollback to an earlier savepoint
-//     rolls back over all writes following that savepoint.
-//   - Property 2 comes from that the new range's 'end' seqnum is the
-//     current write seqnum and thus larger than or equal to every
-//     previously seen value.
+// See enginepb.TxnSeqListAppend for more details.
 func (t *Transaction) AddIgnoredSeqNumRange(newRange enginepb.IgnoredSeqNumRange) {
-	// Truncate the list at the last element not included in the new range.
-
-	list := t.IgnoredSeqNums
-	i := sort.Search(len(list), func(i int) bool {
-		return list[i].End >= newRange.Start
-	})
-
-	cpy := make([]enginepb.IgnoredSeqNumRange, i+1)
-	copy(cpy[:i], list[:i])
-	cpy[i] = newRange
-	t.IgnoredSeqNums = cpy
+	t.IgnoredSeqNums = enginepb.TxnSeqListAppend(t.IgnoredSeqNums, newRange)
 }
 
 // AsRecord returns a TransactionRecord object containing only the subset of
@@ -1942,7 +1949,7 @@ func (l Lease) SafeFormat(w redact.SafePrinter, _ rune) {
 		w.SafeString("<empty>")
 		return
 	}
-	w.Printf("repl=%s seq=%d start=%s", l.Replica, l.Sequence, l.Start)
+	w.Printf("repl=%s seq=%d start=%s type=%s", l.Replica, l.Sequence, l.Start, l.Type())
 	switch l.Type() {
 	case LeaseExpiration:
 		w.Printf(" exp=%s", l.Expiration)
@@ -1969,7 +1976,7 @@ func (l Lease) OwnedBy(storeID StoreID) bool {
 // LeaseType describes the type of lease.
 //
 //go:generate stringer -type=LeaseType
-type LeaseType int
+type LeaseType int32
 
 const (
 	// LeaseNone specifies no lease, to be used as a default value.
@@ -1985,9 +1992,29 @@ const (
 	LeaseLeader
 )
 
-// LeaseTypes returns a list of all lease types.
-func LeaseTypes() []LeaseType {
+func (t LeaseType) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("%s", redact.SafeString(t.String()))
+}
+
+// TestingAllLeaseTypes returns a list of all lease types to test against.
+func TestingAllLeaseTypes() []LeaseType {
+	if syncutil.DeadlockEnabled {
+		// Skip expiration-based leases under deadlock since it could overload the
+		// testing cluster.
+		return []LeaseType{LeaseEpoch, LeaseLeader}
+	}
 	return []LeaseType{LeaseExpiration, LeaseEpoch, LeaseLeader}
+}
+
+// EpochAndLeaderLeaseType returns a list of {epcoh, leader} lease types.
+func EpochAndLeaderLeaseType() []LeaseType {
+	return []LeaseType{LeaseEpoch, LeaseLeader}
+}
+
+// ExpirationAndLeaderLeaseType returns a list of {expiration, leader} lease
+// types.
+func ExpirationAndLeaderLeaseType() []LeaseType {
+	return []LeaseType{LeaseExpiration, LeaseLeader}
 }
 
 // Type returns the lease type.
@@ -2002,6 +2029,40 @@ func (l Lease) Type() LeaseType {
 		return LeaseLeader
 	}
 	return LeaseExpiration
+}
+
+// SupportsQuiescence returns whether the lease supports quiescence or not.
+func (l Lease) SupportsQuiescence() bool {
+	switch l.Type() {
+	case LeaseExpiration, LeaseLeader:
+		// Expiration based leases do not support quiescence because they'll likely
+		// be renewed soon, so there's not much point to it.
+		//
+		// Leader leases use the similar but separate concept of sleep to indicate
+		// that followers should stop ticking.
+		return false
+	case LeaseEpoch:
+		return true
+	default:
+		panic("unexpected lease type")
+	}
+}
+
+// SupportsSleep returns whether the lease supports replica sleep or not.
+func (l Lease) SupportsSleep() bool {
+	switch l.Type() {
+	case LeaseExpiration, LeaseEpoch:
+		// Expiration based leases do not support sleep because they'll likely be
+		// renewed soon, so there's not much point to it.
+		//
+		// Epoch leases use the similar but separate concept of quiescence to
+		// indicate that replicas should stop ticking.
+		return false
+	case LeaseLeader:
+		return true
+	default:
+		panic("unexpected lease type")
+	}
 }
 
 // Speculative returns true if this lease instance doesn't correspond to a
@@ -2315,6 +2376,11 @@ func (m *LockAcquisition) Empty() bool {
 	return m.Span.Equal(Span{})
 }
 
+func (m LockAcquisition) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("{span=%v %v durability=%v strength=%v ignored=%v}",
+		m.Span, m.Txn, m.Durability, m.Strength, m.IgnoredSeqNums)
+}
+
 // MakeLockUpdate makes a lock update from the given txn and span.
 //
 // See also txn.LocksAsLockUpdates().
@@ -2538,8 +2604,13 @@ func (s Span) AsRange() interval.Range {
 }
 
 func (s Span) String() string {
+	return redact.StringWithoutMarkers(s)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (s Span) SafeFormat(w redact.SafePrinter, _ rune) {
 	const maxChars = math.MaxInt32
-	return PrettyPrintRange(s.Key, s.EndKey, maxChars)
+	w.Print(PrettyPrintRange(s.Key, s.EndKey, maxChars))
 }
 
 // SplitOnKey returns two spans where the left span has EndKey and right span
@@ -2735,8 +2806,12 @@ func (rs RSpan) ContainsKeyRange(start, end RKey) bool {
 }
 
 func (rs RSpan) String() string {
+	return redact.StringWithoutMarkers(rs)
+}
+
+func (rs RSpan) SafeFormat(w redact.SafePrinter, r rune) {
 	const maxChars = math.MaxInt32
-	return PrettyPrintRange(Key(rs.Key), Key(rs.EndKey), maxChars)
+	w.Print(PrettyPrintRange(Key(rs.Key), Key(rs.EndKey), maxChars))
 }
 
 // Intersect returns the intersection of the current span and the

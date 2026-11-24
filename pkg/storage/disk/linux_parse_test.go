@@ -4,7 +4,6 @@
 // included in the /LICENSE file.
 
 //go:build linux
-// +build linux
 
 package disk
 
@@ -19,16 +18,17 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/require"
 )
 
 func compareDeviceIDs(a, b DeviceID) int {
-	if v := cmp.Compare(a.major, b.major); v != 0 {
+	if v := cmp.Compare(a.Major, b.Major); v != 0 {
 		return v
 	}
-	return cmp.Compare(a.minor, b.minor)
+	return cmp.Compare(a.Minor, b.Minor)
 }
 
 func TestLinux_CollectDiskStats(t *testing.T) {
@@ -44,10 +44,10 @@ func TestLinux_CollectDiskStats(t *testing.T) {
 				var deviceID DeviceID
 				v, err := strconv.ParseUint(cmdArg.Vals[0], 10, 32)
 				require.NoError(t, err)
-				deviceID.major = uint32(v)
+				deviceID.Major = uint32(v)
 				v, err = strconv.ParseUint(cmdArg.Vals[1], 10, 32)
 				require.NoError(t, err)
-				deviceID.minor = uint32(v)
+				deviceID.Minor = uint32(v)
 				tracer := newMonitorTracer(1000)
 				disks = append(disks, &monitoredDisk{deviceID: deviceID, tracer: tracer})
 			}
@@ -60,7 +60,7 @@ func TestLinux_CollectDiskStats(t *testing.T) {
 				// resizing logic.
 				buf: make([]byte, 16),
 			}
-			err := s.collect(disks)
+			_, err := s.collect(disks, timeutil.Now())
 			if err != nil {
 				return err.Error()
 			}

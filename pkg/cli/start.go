@@ -6,7 +6,6 @@
 package cli
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"math"
@@ -34,12 +33,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/clientsecopts"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/server/profiler"
 	"github.com/cockroachdb/cockroach/pkg/server/serverctl"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/cgroups"
@@ -134,8 +133,8 @@ var customLoggingSetupCmds = append(
 	serverCmds, debugCheckLogConfigCmd, demoCmd, statementBundleRecreateCmd,
 )
 
-// RegisterCommandWithCustomLogging is used by cliccl to note commands which
-// want to suppress default logging setup.
+// RegisterCommandWithCustomLogging notes commands which want to suppress default
+// logging setup.
 func RegisterCommandWithCustomLogging(cmd *cobra.Command) {
 	customLoggingSetupCmds = append(customLoggingSetupCmds, cmd)
 }
@@ -180,7 +179,7 @@ func initTraceDir(ctx context.Context, dir string) {
 		// from a directory which is not writable, we won't
 		// be able to create a sub-directory here.
 		err = errors.WithHint(err, "Try changing the CWD of the cockroach process to a writable directory.")
-		log.Warningf(ctx, "cannot create trace dir; traces will not be dumped: %v", err)
+		log.Dev.Warningf(ctx, "cannot create trace dir; traces will not be dumped: %v", err)
 		return
 	}
 }
@@ -194,9 +193,9 @@ func initTempStorageConfig(
 	// target, if any. If we can't find one, we use the first StoreSpec in the
 	// list.
 	//
-	// While we look, we also clean up any abandoned temporary directories. We
-	// don't know which store spec was used previously—and it may change if
-	// encryption gets enabled after the fact—so we check each store.
+	// Note that we already cleaned up any abandoned temporary directories from
+	// the previous process earlier in the startup sequence (see
+	// reclaimDiskSpace).
 	specIdxDisk := -1
 	specIdxEncrypted := -1
 	for i, spec := range stores.Specs {
@@ -212,11 +211,6 @@ func initTempStorageConfig(
 		if specIdxDisk == -1 {
 			specIdxDisk = i
 		}
-		recordPath := filepath.Join(spec.Path, server.TempDirsRecordFilename)
-		if err := fs.CleanupTempDirs(recordPath); err != nil {
-			return base.TempStorageConfig{}, errors.Wrap(err,
-				"could not cleanup temporary directories from record file")
-		}
 	}
 
 	// Use first store by default. This might be an in-memory store.
@@ -229,11 +223,6 @@ func initTempStorageConfig(
 		specIdx = specIdxDisk
 	}
 	useStore := stores.Specs[specIdx]
-
-	var recordPath string
-	if !useStore.InMemory {
-		recordPath = filepath.Join(useStore.Path, server.TempDirsRecordFilename)
-	}
 
 	// The temp store size can depend on the location of the first regular store
 	// (if it's expressed as a percentage), so we resolve that flag here.
@@ -270,43 +259,70 @@ func initTempStorageConfig(
 		}
 	}
 
-	// Initialize a base.TempStorageConfig based on first store's spec and
-	// cli flags.
-	tempStorageConfig := base.TempStorageConfigFromEnv(
-		ctx,
-		st,
-		useStore,
-		startCtx.tempDir,
-		tempStorageMaxSizeBytes,
-	)
+	// If all stores are in-memory and no temp dir was specified, the temp
+	// store will also be in memory. This is a testing scenario.
+	if startCtx.tempDir == "" && useStore.InMemory {
+		return base.NewTempStorageConfig(
+			ctx,
+			st,
+			true, // inMem
+			"",   // path
+			useStore.EncryptionOptions,
+			tempStorageMaxSizeBytes,
+			"", // tempDirsRecordPath
+		), nil
+	}
 
 	// Set temp directory to first store's path if the temp storage is not
 	// in memory.
-	tempDir := startCtx.tempDir
-	if tempDir == "" && !tempStorageConfig.InMemory {
-		tempDir = useStore.Path
-	}
-	// Create the temporary subdirectory for the temp engine.
-	{
-		var err error
-		if tempStorageConfig.Path, err = fs.CreateTempDir(tempDir, server.TempDirPrefix, stopper); err != nil {
-			return base.TempStorageConfig{}, errors.Wrap(err, "could not create temporary directory for temp storage")
-		}
+	parentDir := startCtx.tempDir
+	if parentDir == "" {
+		parentDir = useStore.Path
 	}
 
-	// We record the new temporary directory in the record file (if it
-	// exists) for cleanup in case the node crashes.
-	if recordPath != "" {
-		if err := fs.RecordTempDir(recordPath, tempStorageConfig.Path); err != nil {
+	tmpPath, unlockDirFn, err := fs.CreateTempDir(parentDir, server.TempDirPrefix)
+	if err != nil {
+		return base.TempStorageConfig{}, errors.Wrap(err, "could not create temporary directory for temp storage")
+	}
+
+	recordPath := ""
+	if useStore.InMemory {
+		stopper.AddCloser(stop.CloserFn(func() {
+			unlockDirFn()
+			// Remove the temp directory directly since there is no record file.
+			if err := os.RemoveAll(tmpPath); err != nil {
+				log.Dev.Errorf(ctx, "could not remove temporary store directory: %v", err.Error())
+			}
+		}))
+	} else {
+		recordPath = filepath.Join(useStore.Path, server.TempDirsRecordFilename)
+		if err := fs.RecordTempDir(recordPath, tmpPath); err != nil {
 			return base.TempStorageConfig{}, errors.Wrapf(
 				err,
 				"could not record temporary directory path to record file: %s",
 				recordPath,
 			)
 		}
+		// Remove temporary directory on shutdown.
+		stopper.AddCloser(stop.CloserFn(func() {
+			unlockDirFn()
+			if err := fs.CleanupTempDirs(ctx, vfs.Default, recordPath); err != nil {
+				log.Dev.Errorf(ctx, "could not remove temporary store directory: %v", err.Error())
+			}
+		}))
 	}
 
-	return tempStorageConfig, nil
+	// Initialize a base.TempStorageConfig based on first store's spec and
+	// cli flags.
+	return base.NewTempStorageConfig(
+		ctx,
+		st,
+		false, // inMem
+		tmpPath,
+		useStore.EncryptionOptions,
+		tempStorageMaxSizeBytes,
+		recordPath,
+	), nil
 }
 
 type newServerFn func(ctx context.Context, serverCfg server.Config, stopper *stop.Stopper) (serverctl.ServerStartupInterface, error)
@@ -414,13 +430,18 @@ func runStartInternal(
 		signal.Notify(signalCh, exitAbruptlySignal)
 	}
 
+	// Set up a cancellable context for the entire start command.
+	// The context will be canceled at the end.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// Check for stores with full disks and exit with an informative exit
 	// code. This needs to happen early during start, before we perform any
 	// writes to the filesystem including log rotation. We need to guarantee
 	// that the process continues to exit with the Disk Full exit code. A
 	// flapping exit code can affect alerting, including the alerting
 	// performed within CockroachCloud.
-	if err := exitIfDiskFull(vfs.Default, serverCfg.Stores.Specs); err != nil {
+	if err := exitIfDiskFull(ctx, vfs.Default, serverCfg.Stores.Specs); err != nil {
 		return err
 	}
 
@@ -434,11 +455,6 @@ func runStartInternal(
 	// against a persistent disk stall that prevents the process from exiting or
 	// making progress.
 	log.SetMakeProcessUnavailableFunc(closeAllSockets)
-
-	// Set up a cancellable context for the entire start command.
-	// The context will be canceled at the end.
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	// The context annotation ensures that server identifiers show up
 	// in the logging metadata as soon as they are known.
@@ -604,20 +620,14 @@ func runStartInternal(
 		return errors.Wrapf(err, "failed to initialize %s", serverType)
 	}
 
-	st := serverCfg.BaseConfig.Settings
-
 	// Derive temporary/auxiliary directory specifications.
-	st.ExternalIODir = startCtx.externalIODir
+	serverCfg.ExternalIODir = startCtx.externalIODir
 
+	st := serverCfg.BaseConfig.Settings
 	if serverCfg.SQLConfig.TempStorageConfig, err = initTempStorageConfig(
 		ctx, st, stopper, serverCfg.Stores,
 	); err != nil {
 		return err
-	}
-
-	// Configure the default storage engine.
-	if serverCfg.StorageEngine == enginepb.EngineTypeDefault {
-		serverCfg.StorageEngine = enginepb.EngineTypePebble
 	}
 
 	// The configuration is now ready to report to the user and the log
@@ -869,7 +879,7 @@ func createAndStartServerAsync(
 			// Now inform the user that the server is running and tell the
 			// user about its run-time derived parameters.
 			return reportServerInfo(ctx, tBegin, serverCfg, s.ClusterSettings(),
-				serverType, s.InitialStart(), s.LogicalClusterID())
+				serverType, s.InitialStart(), s.LogicalClusterID(), startCtx.externalIODir)
 		}(); err != nil {
 			shutdownReqC <- serverctl.MakeShutdownRequest(
 				serverctl.ShutdownReasonServerStartupError, errors.Wrapf(err, "server startup failed"))
@@ -880,7 +890,7 @@ func createAndStartServerAsync(
 				select {
 				case req := <-s.ShutdownRequested():
 					shutdownCtx := s.AnnotateCtx(context.Background())
-					log.Infof(shutdownCtx, "server requesting spontaneous shutdown: %v", req.ShutdownCause())
+					log.Dev.Infof(shutdownCtx, "server requesting spontaneous shutdown: %v", req.ShutdownCause())
 					shutdownReqC <- req
 				case <-stopper.ShouldQuiesce():
 				}
@@ -1173,6 +1183,10 @@ func startShutdownAsync(
 	}()
 }
 
+// cgoAllocConfStr is populated from start_jemalloc.go if we are using jemalloc.
+// Otherwise, it stays empty.
+var cgoAllocConfStr string
+
 // reportServerInfo prints out the server version and network details
 // in a standardized format.
 func reportServerInfo(
@@ -1183,12 +1197,16 @@ func reportServerInfo(
 	serverType redact.SafeString,
 	initialStart bool,
 	tenantClusterID uuid.UUID,
+	externalIODir string,
 ) error {
 	var buf redact.StringBuilder
 	info := build.GetInfo()
 	buf.Printf("CockroachDB %s starting at %s (took %0.1fs)\n", serverType, timeutil.Now(), timeutil.Since(startTime).Seconds())
 	buf.Printf("build:\t%s %s @ %s (%s)\n",
 		redact.Safe(info.Distribution), redact.Safe(info.Tag), redact.Safe(info.Time), redact.Safe(info.GoVersion))
+	if cgoAllocConfStr != "" {
+		buf.Printf("malloc_conf:\t%s\n", redact.Safe(cgoAllocConfStr))
+	}
 	buf.Printf("webui:\t%s\n", log.SafeManaged(serverCfg.AdminURL()))
 
 	// (Re-)compute the client connection URL. We cannot do this
@@ -1227,15 +1245,14 @@ func reportServerInfo(
 	if tmpDir := serverCfg.SQLConfig.TempStorageConfig.Path; tmpDir != "" {
 		buf.Printf("temp dir:\t%s\n", log.SafeManaged(tmpDir))
 	}
-	if ext := st.ExternalIODir; ext != "" {
-		buf.Printf("external I/O path: \t%s\n", log.SafeManaged(ext))
+	if externalIODir != "" {
+		buf.Printf("external I/O path: \t%s\n", log.SafeManaged(externalIODir))
 	} else {
 		buf.Printf("external I/O path: \t<disabled>\n")
 	}
 	for i, spec := range serverCfg.Stores.Specs {
-		buf.Printf("store[%d]:\t%s\n", i, log.SafeManaged(spec))
+		buf.Printf("store[%d]:\t%s\n", i, log.SafeManaged(base.StoreSpecCmdLineString(spec)))
 	}
-	buf.Printf("storage engine: \t%s\n", &serverCfg.StorageEngine)
 
 	// Print the commong server identifiers.
 	if baseCfg.ClusterName != "" {
@@ -1349,16 +1366,16 @@ func reportConfiguration(ctx context.Context) {
 func maybeWarnMemorySizes(ctx context.Context) {
 	// Is the cache configuration OK?
 	if !startCtx.cacheSizeValue.IsSet() {
-		var buf bytes.Buffer
-		fmt.Fprintf(&buf, "Using the default setting for --cache (%s).\n", &startCtx.cacheSizeValue)
-		fmt.Fprintf(&buf, "  A significantly larger value is usually needed for good performance.\n")
+		var buf redact.StringBuilder
+		buf.Printf("Using the default setting for --cache (%s).\n", &startCtx.cacheSizeValue)
+		buf.Printf("  A significantly larger value is usually needed for good performance.\n")
 		if size, err := status.GetTotalMemory(ctx); err == nil {
-			fmt.Fprintf(&buf, "  If you have a dedicated server a reasonable setting is --cache=.25 (%s).",
+			buf.Printf("  If you have a dedicated server a reasonable setting is --cache=.25 (%s).",
 				humanizeutil.IBytes(size/4))
 		} else {
-			fmt.Fprintf(&buf, "  If you have a dedicated server a reasonable setting is 25%% of physical memory.")
+			buf.Printf("  If you have a dedicated server a reasonable setting is 25%% of physical memory.")
 		}
-		log.Ops.Warningf(ctx, "%s", redact.Safe(buf.String()))
+		log.Ops.Warningf(ctx, "%s", buf.RedactableString())
 	}
 
 	// Check that the total suggested "max" memory is well below the available memory.
@@ -1376,7 +1393,14 @@ func maybeWarnMemorySizes(ctx context.Context) {
 	}
 }
 
-func exitIfDiskFull(fs vfs.FS, specs []base.StoreSpec) error {
+func exitIfDiskFull(ctx context.Context, fs vfs.FS, specs []base.StoreSpec) error {
+	// First try to reclaim disk space by cleaning up obsolete files. It's
+	// possible this will free up enough space to allow us to start when we
+	// otherwise would not be able to.
+	if err := reclaimDiskSpace(ctx, fs, specs); err != nil {
+		return err
+	}
+
 	var cause error
 	var ballastPaths []string
 	var ballastMissing bool
@@ -1416,6 +1440,22 @@ disk space exhaustion may result in node loss.`, ballastPathsStr)
 	return err
 }
 
+// reclaimDiskSpace attempts to reclaim disk space by cleaning up obsolete files
+// leftover from the previous process. For example, SQL temporary directories
+// become obsolete when a process exits and can be reclaimed.
+func reclaimDiskSpace(ctx context.Context, rootFS vfs.FS, specs []base.StoreSpec) error {
+	var err error
+	// Reclaim any temporary directories.
+	for _, spec := range specs {
+		if spec.InMemory {
+			continue
+		}
+		recordPath := filepath.Join(spec.Path, server.TempDirsRecordFilename)
+		err = errors.CombineErrors(err, fs.CleanupTempDirs(ctx, rootFS, recordPath))
+	}
+	return err
+}
+
 // setupAndInitializeLoggingAndProfiling does what it says on the label.
 // Prior to this however it determines suitable defaults for the
 // logging output directory and the verbosity level of stderr logging.
@@ -1451,8 +1491,8 @@ func setupAndInitializeLoggingAndProfiling(
 				"consider --accept-sql-without-tls instead. For other options, see:\n\n"+
 				"- %s\n"+
 				"- %s",
-			redact.Safe(build.MakeIssueURL(53404)),
-			redact.Safe(docs.URL("secure-a-cluster.html")),
+			redact.SafeString(build.MakeIssueURL(53404)),
+			redact.SafeString(docs.URL("secure-a-cluster.html")),
 		)
 	}
 
@@ -1465,7 +1505,7 @@ func setupAndInitializeLoggingAndProfiling(
 				"to databases, the --locality flag must contain a \"region\" tier.\n" +
 				"For more information, see:\n\n" +
 				"- %s"
-			log.Shoutf(ctx, severity.WARNING, warningString,
+			log.Dev.Shoutf(ctx, severity.WARNING, warningString,
 				redact.Safe(docs.URL("cockroach-start.html#locality")))
 		}
 	}
@@ -1475,7 +1515,7 @@ func setupAndInitializeLoggingAndProfiling(
 	// We log build information to stdout (for the short summary), but also
 	// to stderr to coincide with the full logs.
 	info := build.GetInfo()
-	log.Ops.Infof(ctx, "%s", log.SafeManaged(info.Short()))
+	log.Ops.Infof(ctx, "%s", info.Short())
 
 	// Disable Stopper task tracking as performing that call site tracking is
 	// moderately expensive (certainly outweighing the infrequent benefit it
@@ -1484,6 +1524,12 @@ func setupAndInitializeLoggingAndProfiling(
 	initTraceDir(ctx, serverCfg.InflightTraceDirName)
 	initBlockProfile()
 	initMutexProfile()
+
+	var gceContinuousProfilerEnabled = envutil.EnvOrDefaultBool("COCKROACH_GOOGLE_CONTINUOUS_PROFILER_ENABLED", false)
+	if gceContinuousProfilerEnabled {
+		profiler.InitGoogleProfiler(ctx)
+	}
+
 	log.Event(ctx, "initialized profiles")
 
 	return stopper, nil
@@ -1538,7 +1584,7 @@ func reportReadinessExternally(ctx context.Context, cmd *cobra.Command, waitForI
 		clientConnOptions, serverParams := server.MakeServerOptionsForURL(serverCfg.Config)
 		pgURL, err := clientsecopts.MakeURLForServer(clientConnOptions, serverParams, url.User(username.RootUser))
 		if err != nil {
-			log.Errorf(ctx, "failed computing the URL: %v", err)
+			log.Dev.Errorf(ctx, "failed computing the URL: %v", err)
 			return
 		}
 

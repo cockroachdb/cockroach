@@ -8,11 +8,14 @@ package changefeedccl
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvfeed"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/resolvedspan"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -48,41 +51,52 @@ type TestingKnobs struct {
 	NullSinkIsExternalIOAccounted bool
 	// OnDistflowSpec is called when specs for distflow planning have been created
 	OnDistflowSpec func(aggregatorSpecs []*execinfrapb.ChangeAggregatorSpec, frontierSpec *execinfrapb.ChangeFrontierSpec)
-	// RaiseRetryableError is a knob used to possibly return an error.
-	RaiseRetryableError func() error
+	// BeforeCheckpoint, if set, is called at the start of
+	// checkpointJobProgress. Returning a non-nil error causes a retryable
+	// failure before the checkpoint is persisted.
+	BeforeCheckpoint func() error
+	// OnRetryBackoffReset, if set, is called when the changefeed retry loop
+	// resets its backoff due to changefeed progress.
+	OnRetryBackoffReset func()
 	// StartDistChangefeedInitialHighwater is called when starting the dist changefeed with the initial highwater
 	// of the changefeed. Note that this will be called when the changefeed starts and subsequently when the changefeed
 	// is retried.
 	StartDistChangefeedInitialHighwater func(ctx context.Context, initialHighwater hlc.Timestamp)
-	// LoadJobErr is called when the changefeed loads the job record during a retry to check for progress updates.
-	LoadJobErr func() error
+	// AfterReloadJobProgressForRetry is called after the changefeed reloads
+	// the job progress during a transient error retry.
+	AfterReloadJobProgressForRetry func() error
 	// This is currently used to test negative timestamp in cursor i.e of the form
 	// "-3us". Check TestChangefeedCursor for more info. This function needs to be in the
 	// knobs as current statement time will only be available once the create changefeed statement
 	// starts executing.
 	OverrideCursor func(currentTime *hlc.Timestamp) string
 
-	// FilterDrainingNodes is a callback that's invoked by changefeed dist planner
-	// in order to filter draining nodes from the list of eligible nodes.
-	// Normally, we rely on dist sql planner to do that for us.
-	FilterDrainingNodes func(
-		partitions []sql.SpanPartition, draining []roachpb.NodeID,
-	) ([]sql.SpanPartition, error)
+	// ShouldFlushFrontier returns true if the change aggregator should flush
+	// its frontier after processing a resolved span.
+	ShouldFlushFrontier func(rs jobspb.ResolvedSpan) bool
 
 	// ShouldCheckpointToJobRecord returns true if change frontier should checkpoint itself
 	// to the job record.
 	ShouldCheckpointToJobRecord func(hw hlc.Timestamp) bool
 
-	// OnDrain returns the channel to select on to detect node drain
-	OnDrain func() <-chan struct{}
-
 	// SpanPartitionsCallback is called with the span partition
 	// when the changefeed is planned.
 	SpanPartitionsCallback func([]sql.SpanPartition)
 
+	// RangeDistributionStrategyCallback is called with the resolved
+	// range distribution strategy when the changefeed is planned.
+	RangeDistributionStrategyCallback func(changefeedbase.ChangefeedRangeDistributionStrategy)
+
 	// PreserveDeprecatedPts is used to prevent a changefeed from upgrading
 	// its PTS record from the deprecated style to the new style.
 	PreserveDeprecatedPts func() bool
+
+	// PreservePTSTargets is used to prevent a changefeed from upgrading
+	// its PTS record to include all required targets.
+	PreservePTSTargets func() bool
+
+	// ManagePTSError is used to return an error when managing protected timestamps.
+	ManagePTSError func() error
 
 	// PulsarClientSkipCreation skips creating the sink client when
 	// dialing.
@@ -96,6 +110,37 @@ type TestingKnobs struct {
 
 	// AsyncFlushSync is called in async flush goroutines as a way to provide synchronization between them.
 	AsyncFlushSync func()
+
+	// AfterCoordinatorFrontierRestore is called on the start of the changefeed coordinator so we can
+	// make assertions about its frontier.
+	AfterCoordinatorFrontierRestore func(frontier *resolvedspan.CoordinatorFrontier)
+
+	// WrapTelemetryLogger is used to wrap the periodic telemetry logger in tests.
+	WrapTelemetryLogger func(logger telemetryLogger) telemetryLogger
+
+	// OverrideCursorAge is used to change how old a cursor is. Returns time in nanoseconds.
+	OverrideCursorAge func() int64
+
+	// EventConsumerError, if set, is called before creating the event consumer.
+	// If it returns a non-nil error, newEventConsumer returns that error.
+	// This is useful for testing error handling in changeAggregator.Start().
+	EventConsumerError func() error
+
+	// MakeKVFeedToAggregatorBufferKnobs is used to make a fresh set of testing knobs
+	// to pass to the constructor of the kv feed to change aggregator buffer.
+	MakeKVFeedToAggregatorBufferKnobs func() kvevent.BlockingBufferTestingKnobs
+
+	// AfterComputeDistChangefeedTimestamps is called when a changefeed is starting, after
+	// the initial timestamps are computed and before the changefeed targets'
+	// descriptors are fetched.
+	AfterComputeDistChangefeedTimestamps func(context.Context)
+
+	// AfterPersistFrontier is called after the frontier is persisted
+	// (either to CoreChangefeedState or the job frontier table). For
+	// core changefeeds, the CoreChangefeedState is passed; for job-based
+	// changefeeds, it is nil. A non-nil return error is propagated to
+	// the change frontier.
+	AfterPersistFrontier func(eval.CoreChangefeedState) error
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

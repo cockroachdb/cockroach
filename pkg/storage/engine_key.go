@@ -264,6 +264,11 @@ type LockTableKey struct {
 	TxnUUID  uuid.UUID
 }
 
+// Format implements the fmt.Formatter interface.
+func (lk LockTableKey) Format(f fmt.State, _ rune) {
+	fmt.Fprintf(f, "%s/%s/%s", lk.Key, lk.Strength, lk.TxnUUID)
+}
+
 // replicatedLockStrengthToByte is a mapping between lock.Strength and the
 // strength byte persisted in a lock table key's encoding. See
 // LockTableKey.ToEngineKey().

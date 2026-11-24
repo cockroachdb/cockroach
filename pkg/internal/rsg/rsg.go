@@ -47,6 +47,13 @@ func NewRSG(seed int64, y string, allowDuplicates bool) (*RSG, error) {
 	return &rsg, nil
 }
 
+// HasProduction returns true if the given production rule name exists in the
+// grammar.
+func (r *RSG) HasProduction(name string) bool {
+	_, ok := r.prods[name]
+	return ok
+}
+
 // Generate generates a unique random syntax from the root node. At most depth
 // levels of token expansion are performed. An empty string is returned on
 // error or if depth is exceeded. Generate is safe to call from multiple

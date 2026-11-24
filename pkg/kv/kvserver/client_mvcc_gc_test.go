@@ -73,7 +73,7 @@ func TestMVCCGCCorrectStats(t *testing.T) {
 	ms.ValBytes = 32 * (1 << 20) // 16mb
 	ms.GCBytesAge = 48 * (1 << 20) * 100 * int64(time.Hour.Seconds())
 
-	repl.SetMVCCStatsForTesting(&ms)
+	repl.TestingSetMVCCStats(&ms)
 	require.NoError(t, store.ManualMVCCGC(repl))
 
 	// Verify that the mvcc gc queue restored the stats.
@@ -132,7 +132,7 @@ func TestSystemSpanConfigProtectionPoliciesApplyAfterGC(t *testing.T) {
 		ptp := execCfg.ProtectedTimestampProvider
 		insqlDB := execCfg.InternalDB
 		recordID := uuid.MakeV4()
-		rec := jobsprotectedts.MakeRecord(recordID, int64(1), ts, nil, /* deprecatedSpans */
+		rec := jobsprotectedts.MakeRecord(recordID, int64(1), ts,
 			jobsprotectedts.Jobs, target)
 		require.NoError(t, insqlDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 			return ptp.WithTxn(txn).Protect(ctx, rec)
@@ -201,7 +201,7 @@ SELECT count(*)
 		if len(cfg.GCPolicy.ProtectionPolicies) == 0 {
 			return errors.New("waiting for span config to apply")
 		}
-		require.NoError(t, repl.ReadProtectedTimestampsForTesting(ctx))
+		require.NoError(t, repl.TestingReadProtectedTimestamps(ctx))
 		return nil
 	})
 
@@ -260,7 +260,7 @@ SELECT count(*)
 	// applied to foo's empty range.
 	ptsReader := store.GetStoreConfig().ProtectedTimestampReader
 	require.NoError(t,
-		spanconfigptsreader.TestingRefreshPTSState(ctx, t, ptsReader, s.Clock().Now()))
+		spanconfigptsreader.TestingRefreshPTSState(ctx, ptsReader, s.Clock().Now()))
 	ts, _, err := kvSubscriber.GetProtectionTimestamps(ctx, sp)
 	require.NoError(t, err)
 	require.Len(t, ts, 1)
@@ -269,7 +269,7 @@ SELECT count(*)
 	testutils.SucceedsSoon(t, func() error {
 		require.NoError(t, store.ManualMVCCGC(repl))
 		require.NoError(t,
-			spanconfigptsreader.TestingRefreshPTSState(ctx, t, ptsReader, s.Clock().Now()))
+			spanconfigptsreader.TestingRefreshPTSState(ctx, ptsReader, s.Clock().Now()))
 		threshold := repl.GetGCThreshold()
 		if !threshold.Equal(ptsTime.Prev()) {
 			require.False(t, ptsTime.Prev().Less(threshold), "range GC threshold should never pass protected timestamp")

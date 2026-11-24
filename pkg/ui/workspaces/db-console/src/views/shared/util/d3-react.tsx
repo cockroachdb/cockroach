@@ -3,10 +3,10 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import d3 from "d3";
-import React from "react";
+import { select, Selection } from "d3-selection";
+import React, { useEffect, useRef } from "react";
 
-type Chart<T> = (sel: d3.Selection<T>) => void;
+export type Chart<T> = (sel: Selection<SVGElement, T, null, undefined>) => void;
 
 /**
  * createChartComponent wraps a D3 reusable chart in a React component.
@@ -16,42 +16,28 @@ export default function createChartComponent<T>(
   containerTy: string,
   chart: Chart<T>,
 ) {
-  return class WrappedChart extends React.Component<T> {
-    containerEl: React.RefObject<Element> = React.createRef();
+  return function WrappedChart(props: T) {
+    const containerEl = useRef<SVGElement>(null);
+    // Keep a ref to current props so the resize handler always has the latest.
+    const propsRef = useRef(props);
+    propsRef.current = props;
 
-    componentDidMount() {
-      this.redraw();
-      this.addResizeHandler();
-    }
+    // Redraw on every render — equivalent to shouldComponentUpdate calling
+    // redraw(nextProps) and returning false.
+    useEffect(() => {
+      select(containerEl.current).datum(props).call(chart);
+    });
 
-    componentWillUnmount() {
-      this.removeResizeHandler();
-    }
+    // Set up and tear down resize listener on mount/unmount.
+    useEffect(() => {
+      const handleResize = () => {
+        select(containerEl.current).datum(propsRef.current).call(chart);
+      };
+      window.addEventListener("resize", handleResize);
+      return () => window.removeEventListener("resize", handleResize);
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
-    shouldComponentUpdate(props: T) {
-      this.redraw(props);
-
-      return false;
-    }
-
-    redraw(props: T = this.props) {
-      d3.select(this.containerEl.current).datum(props).call(chart);
-    }
-
-    handleResize = () => {
-      this.redraw();
-    };
-
-    addResizeHandler() {
-      window.addEventListener("resize", this.handleResize);
-    }
-
-    removeResizeHandler() {
-      window.removeEventListener("resize", this.handleResize);
-    }
-
-    render() {
-      return React.createElement(containerTy, { ref: this.containerEl });
-    }
+    return React.createElement(containerTy, { ref: containerEl });
   };
 }

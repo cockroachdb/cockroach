@@ -238,3 +238,63 @@ statement error pgcode 22001 value too long for type CHAR\(3\)
 SELECT f_check_colerr_vals(NULL, 'abcd')
 
 subtest end
+
+subtest regression_146414
+
+statement ok
+CREATE TABLE t146414 (
+  a INT NOT NULL,
+  b INT AS (a + 1) VIRTUAL
+)
+
+statement ok
+CREATE FUNCTION f146414() RETURNS INT LANGUAGE SQL AS $$
+  UPSERT INTO t146414 (a) VALUES (100) RETURNING b;
+  SELECT 1;
+$$;
+
+statement error pgcode 2BP01 pq: cannot drop column "b" because function "f146414" depends on it
+ALTER TABLE t146414 DROP COLUMN b;
+
+statement ok
+SELECT f146414()
+
+subtest end
+
+# Make sure that the routine does not add unnecessary columns as dependencies.
+subtest drop_column
+
+statement ok
+CREATE TABLE table_drop (
+  a INT NOT NULL,
+  b INT NOT NULL,
+  c INT NOT NULL,
+  d INT AS (a + b) STORED,
+  -- Hash-sharded indexes generate a hidden computed column.
+  INDEX i (b ASC) USING HASH
+);
+INSERT INTO table_drop VALUES (1,2,3), (4,5,6), (7,8,9);
+
+statement ok
+DROP FUNCTION f_upsert;
+CREATE FUNCTION f_upsert() RETURNS INT LANGUAGE SQL AS $$
+  UPSERT INTO table_drop (a, b) VALUES (100, 200);
+  SELECT 1;
+$$;
+
+statement ok
+DROP INDEX i;
+
+statement ok
+ALTER TABLE table_drop DROP COLUMN d;
+
+statement ok
+ALTER TABLE table_drop DROP COLUMN c;
+
+statement error pgcode 2BP01 pq: cannot drop column "b" because function "f_upsert" depends on it
+ALTER TABLE table_drop DROP COLUMN b;
+
+statement error pgcode 2BP01 pq: cannot drop column "a" because function "f_upsert" depends on it
+ALTER TABLE table_drop DROP COLUMN a;
+
+subtest end

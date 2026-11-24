@@ -4,7 +4,7 @@
 // included in the /LICENSE file.
 
 import React from "react";
-import "./styles.styl";
+import "./styles.scss";
 
 interface IChipProps {
   title: React.ReactChild;

@@ -1,4 +1,12 @@
 parse
+EXPERIMENTAL CHANGEFEED FOR foo
+----
+EXPERIMENTAL CHANGEFEED FOR TABLE foo -- normalized!
+EXPERIMENTAL CHANGEFEED FOR TABLE (foo) -- fully parenthesized
+EXPERIMENTAL CHANGEFEED FOR TABLE foo -- literals removed
+EXPERIMENTAL CHANGEFEED FOR TABLE _ -- identifiers removed
+
+parse
 EXPERIMENTAL CHANGEFEED FOR TABLE foo
 ----
 EXPERIMENTAL CHANGEFEED FOR TABLE foo
@@ -70,7 +78,7 @@ CREATE CHANGEFEED FOR TABLE foo INTO 'sink' WITH bar = 'baz'
 CREATE CHANGEFEED FOR TABLE foo INTO '*****' WITH OPTIONS (bar = 'baz') -- normalized!
 CREATE CHANGEFEED FOR TABLE (foo) INTO ('*****') WITH OPTIONS (bar = ('baz')) -- fully parenthesized
 CREATE CHANGEFEED FOR TABLE foo INTO '_' WITH OPTIONS (bar = '_') -- literals removed
-CREATE CHANGEFEED FOR TABLE _ INTO '*****' WITH OPTIONS (_ = 'baz') -- identifiers removed
+CREATE CHANGEFEED FOR TABLE _ INTO '*****' WITH OPTIONS (bar = 'baz') -- identifiers removed
 CREATE CHANGEFEED FOR TABLE foo INTO 'sink' WITH OPTIONS (bar = 'baz') -- passwords exposed
 
 parse
@@ -111,7 +119,7 @@ CREATE CHANGEFEED WITH opt='val' AS SELECT * FROM foo WHERE a  > b
 CREATE CHANGEFEED WITH OPTIONS (opt = 'val') AS SELECT * FROM foo WHERE a > b -- normalized!
 CREATE CHANGEFEED WITH OPTIONS (opt = ('val')) AS SELECT (*) FROM foo WHERE ((a) > (b)) -- fully parenthesized
 CREATE CHANGEFEED WITH OPTIONS (opt = '_') AS SELECT * FROM foo WHERE a > b -- literals removed
-CREATE CHANGEFEED WITH OPTIONS (_ = 'val') AS SELECT * FROM _ WHERE _ > _ -- identifiers removed
+CREATE CHANGEFEED WITH OPTIONS (opt = 'val') AS SELECT * FROM _ WHERE _ > _ -- identifiers removed
 
 parse
 CREATE CHANGEFEED INTO 'null://' WITH opt='val' AS SELECT * FROM foo WHERE a  > b
@@ -119,7 +127,7 @@ CREATE CHANGEFEED INTO 'null://' WITH opt='val' AS SELECT * FROM foo WHERE a  > 
 CREATE CHANGEFEED INTO 'null://' WITH OPTIONS (opt = 'val') AS SELECT * FROM foo WHERE a > b -- normalized!
 CREATE CHANGEFEED INTO ('null://') WITH OPTIONS (opt = ('val')) AS SELECT (*) FROM foo WHERE ((a) > (b)) -- fully parenthesized
 CREATE CHANGEFEED INTO '_' WITH OPTIONS (opt = '_') AS SELECT * FROM foo WHERE a > b -- literals removed
-CREATE CHANGEFEED INTO 'null://' WITH OPTIONS (_ = 'val') AS SELECT * FROM _ WHERE _ > _ -- identifiers removed
+CREATE CHANGEFEED INTO 'null://' WITH OPTIONS (opt = 'val') AS SELECT * FROM _ WHERE _ > _ -- identifiers removed
 
 parse
 CREATE CHANGEFEED WITH OPTIONS ( BUCKET_COUNT = PLACEHOLDER ) AS SELECT * , * FROM FAMILY AS DECIMAL
@@ -127,4 +135,90 @@ CREATE CHANGEFEED WITH OPTIONS ( BUCKET_COUNT = PLACEHOLDER ) AS SELECT * , * FR
 CREATE CHANGEFEED WITH OPTIONS (bucket_count = 'placeholder') AS SELECT *, * FROM "family" AS "decimal" -- normalized!
 CREATE CHANGEFEED WITH OPTIONS (bucket_count = ('placeholder')) AS SELECT (*), (*) FROM "family" AS "decimal" -- fully parenthesized
 CREATE CHANGEFEED WITH OPTIONS (bucket_count = '_') AS SELECT *, * FROM "family" AS "decimal" -- literals removed
-CREATE CHANGEFEED WITH OPTIONS (_ = 'placeholder') AS SELECT *, * FROM _ AS _ -- identifiers removed
+CREATE CHANGEFEED WITH OPTIONS (bucket_count = 'placeholder') AS SELECT *, * FROM _ AS _ -- identifiers removed
+
+parse
+CREATE CHANGEFEED FOR DATABASE d1 INTO 'foo'
+----
+CREATE CHANGEFEED FOR DATABASE d1 INTO '*****' -- normalized!
+CREATE CHANGEFEED FOR DATABASE d1 INTO ('*****') -- fully parenthesized
+CREATE CHANGEFEED FOR DATABASE d1 INTO '_' -- literals removed
+CREATE CHANGEFEED FOR DATABASE _ INTO '*****' -- identifiers removed
+CREATE CHANGEFEED FOR DATABASE d1 INTO 'foo' -- passwords exposed
+
+# If you use quotes, you can create a changefeed for a table named "DATABASE".
+parse
+CREATE CHANGEFEED FOR "DATABASE" INTO 'foo'
+----
+CREATE CHANGEFEED FOR TABLE "DATABASE" INTO '*****' -- normalized!
+CREATE CHANGEFEED FOR TABLE ("DATABASE") INTO ('*****') -- fully parenthesized
+CREATE CHANGEFEED FOR TABLE "DATABASE" INTO '_' -- literals removed
+CREATE CHANGEFEED FOR TABLE _ INTO '*****' -- identifiers removed
+CREATE CHANGEFEED FOR TABLE "DATABASE" INTO 'foo' -- passwords exposed
+
+# If you use "FOR TABLE", you can also create a changefeed for a table named
+# "DATABASE".
+parse
+CREATE CHANGEFEED FOR TABLE DATABASE INTO 'foo'
+----
+CREATE CHANGEFEED FOR TABLE database INTO '*****' -- normalized!
+CREATE CHANGEFEED FOR TABLE (database) INTO ('*****') -- fully parenthesized
+CREATE CHANGEFEED FOR TABLE database INTO '_' -- literals removed
+CREATE CHANGEFEED FOR TABLE _ INTO '*****' -- identifiers removed
+CREATE CHANGEFEED FOR TABLE database INTO 'foo' -- passwords exposed
+
+# This works too.
+parse
+CREATE CHANGEFEED FOR TABLE "DATABASE" INTO 'foo'
+----
+CREATE CHANGEFEED FOR TABLE "DATABASE" INTO '*****' -- normalized!
+CREATE CHANGEFEED FOR TABLE ("DATABASE") INTO ('*****') -- fully parenthesized
+CREATE CHANGEFEED FOR TABLE "DATABASE" INTO '_' -- literals removed
+CREATE CHANGEFEED FOR TABLE _ INTO '*****' -- identifiers removed
+CREATE CHANGEFEED FOR TABLE "DATABASE" INTO 'foo' -- passwords exposed
+
+# You can't create a table-level changefeed for a table named "DATABASE" without
+# quotes.
+error
+CREATE CHANGEFEED FOR database INTO 'foo'
+----
+at or near "into": syntax error
+DETAIL: source SQL:
+CREATE CHANGEFEED FOR database INTO 'foo'
+                               ^
+
+parse
+CREATE CHANGEFEED FOR DATABASE d1 EXCLUDE TABLES bar INTO 'foo'
+----
+CREATE CHANGEFEED FOR DATABASE d1 EXCLUDE TABLES bar INTO '*****' -- normalized!
+CREATE CHANGEFEED FOR DATABASE d1 EXCLUDE TABLES bar INTO ('*****') -- fully parenthesized
+CREATE CHANGEFEED FOR DATABASE d1 EXCLUDE TABLES bar INTO '_' -- literals removed
+CREATE CHANGEFEED FOR DATABASE _ EXCLUDE TABLES _ INTO '*****' -- identifiers removed
+CREATE CHANGEFEED FOR DATABASE d1 EXCLUDE TABLES bar INTO 'foo' -- passwords exposed
+
+parse
+CREATE CHANGEFEED FOR DATABASE d1 EXCLUDE TABLES foo,bar INTO 'foo'
+----
+CREATE CHANGEFEED FOR DATABASE d1 EXCLUDE TABLES foo, bar INTO '*****' -- normalized!
+CREATE CHANGEFEED FOR DATABASE d1 EXCLUDE TABLES foo, bar INTO ('*****') -- fully parenthesized
+CREATE CHANGEFEED FOR DATABASE d1 EXCLUDE TABLES foo, bar INTO '_' -- literals removed
+CREATE CHANGEFEED FOR DATABASE _ EXCLUDE TABLES _, _ INTO '*****' -- identifiers removed
+CREATE CHANGEFEED FOR DATABASE d1 EXCLUDE TABLES foo, bar INTO 'foo' -- passwords exposed
+
+parse
+CREATE CHANGEFEED FOR DATABASE d1 INCLUDE TABLES bar INTO 'foo'
+----
+CREATE CHANGEFEED FOR DATABASE d1 INCLUDE TABLES bar INTO '*****' -- normalized!
+CREATE CHANGEFEED FOR DATABASE d1 INCLUDE TABLES bar INTO ('*****') -- fully parenthesized
+CREATE CHANGEFEED FOR DATABASE d1 INCLUDE TABLES bar INTO '_' -- literals removed
+CREATE CHANGEFEED FOR DATABASE _ INCLUDE TABLES _ INTO '*****' -- identifiers removed
+CREATE CHANGEFEED FOR DATABASE d1 INCLUDE TABLES bar INTO 'foo' -- passwords exposed
+
+parse
+CREATE CHANGEFEED FOR DATABASE d1 INCLUDE TABLES foo,bar INTO 'foo'
+----
+CREATE CHANGEFEED FOR DATABASE d1 INCLUDE TABLES foo, bar INTO '*****' -- normalized!
+CREATE CHANGEFEED FOR DATABASE d1 INCLUDE TABLES foo, bar INTO ('*****') -- fully parenthesized
+CREATE CHANGEFEED FOR DATABASE d1 INCLUDE TABLES foo, bar INTO '_' -- literals removed
+CREATE CHANGEFEED FOR DATABASE _ INCLUDE TABLES _, _ INTO '*****' -- identifiers removed
+CREATE CHANGEFEED FOR DATABASE d1 INCLUDE TABLES foo, bar INTO 'foo' -- passwords exposed

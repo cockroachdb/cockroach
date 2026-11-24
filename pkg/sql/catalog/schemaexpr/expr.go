@@ -15,7 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/errors"
 )
 
@@ -81,7 +80,16 @@ func DequalifyAndValidateExprImpl(
 	}
 
 	if err := funcdesc.MaybeFailOnUDFUsage(typedExpr, context, version); err != nil {
-		return "", nil, colIDs, unimplemented.NewWithIssue(83234, "usage of user-defined function from relations not supported")
+		return "", nil, colIDs, err
+	}
+
+	// For computed columns, verify that any UDF calls can be inlined for
+	// backfill. A table with a computed column that can't be backfilled
+	// can't have schema changes performed on it, so we reject upfront.
+	if context == tree.StoredComputedColumnExpr || context == tree.VirtualComputedColumnExpr {
+		if _, err := inlineUDFCalls(ctx, typedExpr, semaCtx, context); err != nil {
+			return "", nil, colIDs, err
+		}
 	}
 
 	// We need to do the rewrite here before the expression is serialized because
@@ -114,12 +122,12 @@ func DequalifyAndValidateExpr(
 	getAllNonDropColumnsFn := func() colinfo.ResultColumns {
 		return colinfo.ResultColumnsFromColumns(desc.GetID(), desc.NonDropColumns())
 	}
-	columnLookupByNameFn := func(columnName tree.Name) (exists bool, accessible bool, id catid.ColumnID, typ *types.T) {
+	columnLookupByNameFn := func(columnName tree.Name) (exists, accessible, computed bool, id catid.ColumnID, typ *types.T) {
 		col, err := catalog.MustFindColumnByTreeName(desc, columnName)
 		if err != nil || col.Dropped() {
-			return false, false, 0, nil
+			return false, false, false, 0, nil
 		}
-		return true, !col.IsInaccessible(), col.GetID(), col.GetType()
+		return true, !col.IsInaccessible(), col.IsComputed(), col.GetID(), col.GetType()
 	}
 
 	return DequalifyAndValidateExprImpl(ctx, expr, typ, context, semaCtx, maxVolatility, tn, version,
@@ -206,7 +214,7 @@ func HasValidColumnReferences(desc catalog.TableDescriptor, rootExpr tree.Expr) 
 func FormatExprForDisplay(
 	ctx context.Context,
 	desc catalog.TableDescriptor,
-	exprStr string,
+	exprStr catpb.Expression,
 	evalCtx *eval.Context,
 	semaCtx *tree.SemaContext,
 	sessionData *sessiondata.SessionData,
@@ -231,7 +239,7 @@ func FormatExprForDisplay(
 func FormatExprForExpressionIndexDisplay(
 	ctx context.Context,
 	desc catalog.TableDescriptor,
-	exprStr string,
+	exprStr catpb.Expression,
 	evalCtx *eval.Context,
 	semaCtx *tree.SemaContext,
 	sessionData *sessiondata.SessionData,
@@ -250,12 +258,12 @@ func FormatExprForExpressionIndexDisplay(
 }
 
 func makeColumnLookupFnForTableDesc(desc catalog.TableDescriptor) ColumnLookupFn {
-	return func(columnName tree.Name) (exists bool, accessible bool, id catid.ColumnID, typ *types.T) {
+	return func(columnName tree.Name) (exists, accessible, computed bool, id catid.ColumnID, typ *types.T) {
 		col, err := catalog.MustFindColumnByTreeName(desc, columnName)
 		if err != nil || col.Dropped() {
-			return false, false, 0, nil
+			return false, false, false, 0, nil
 		}
-		return true, !col.IsInaccessible(), col.GetID(), col.GetType()
+		return true, !col.IsInaccessible(), col.IsComputed(), col.GetID(), col.GetType()
 	}
 }
 
@@ -265,19 +273,19 @@ func makeColumnLookupFnForTableDesc(desc catalog.TableDescriptor) ColumnLookupFn
 func ParseTriggerWhenExprForDisplay(
 	ctx context.Context,
 	tableTyp *types.T,
-	exprStr string,
+	exprStr catpb.Expression,
 	evalCtx *eval.Context,
 	semaCtx *tree.SemaContext,
 	fmtFlags tree.FmtFlags,
 ) (tree.Expr, error) {
-	lookupFn := func(columnName tree.Name) (exists bool, accessible bool, id catid.ColumnID, typ *types.T) {
+	lookupFn := func(columnName tree.Name) (exists, accessible, computed bool, id catid.ColumnID, typ *types.T) {
 		// Trigger WHEN expressions can reference only the special OLD and NEW
 		// columns.
 		switch columnName {
 		case "old", "new":
-			return true, true, 0, tableTyp
+			return true, true, false, 0, tableTyp
 		}
-		return false, false, 0, nil
+		return false, false, false, 0, nil
 	}
 	return parseExprForDisplayImpl(
 		ctx,
@@ -292,7 +300,7 @@ func ParseTriggerWhenExprForDisplay(
 func formatExprForDisplayImpl(
 	ctx context.Context,
 	lookupFn ColumnLookupFn,
-	exprStr string,
+	exprStr catpb.Expression,
 	evalCtx *eval.Context,
 	semaCtx *tree.SemaContext,
 	sessionData *sessiondata.SessionData,
@@ -322,7 +330,7 @@ func formatExprForDisplayImpl(
 func parseExprForDisplayImpl(
 	ctx context.Context,
 	lookupFn ColumnLookupFn,
-	exprStr string,
+	exprStr catpb.Expression,
 	evalCtx *eval.Context,
 	semaCtx *tree.SemaContext,
 	fmtFlags tree.FmtFlags,
@@ -338,12 +346,12 @@ func parseExprForDisplayImpl(
 func deserializeExprForFormatting(
 	ctx context.Context,
 	lookupFn ColumnLookupFn,
-	exprStr string,
+	exprStr catpb.Expression,
 	evalCtx *eval.Context,
 	semaCtx *tree.SemaContext,
 	fmtFlags tree.FmtFlags,
 ) (tree.Expr, error) {
-	expr, err := parser.ParseExpr(exprStr)
+	expr, err := parserutils.ParseExpr(string(exprStr))
 	if err != nil {
 		return nil, err
 	}
@@ -356,7 +364,7 @@ func deserializeExprForFormatting(
 	}
 
 	// Type-check the expression to resolve user defined types.
-	typedExpr, err := replacedExpr.TypeCheck(ctx, semaCtx, types.Any)
+	typedExpr, err := replacedExpr.TypeCheck(ctx, semaCtx, types.AnyElement)
 	if err != nil {
 		return nil, err
 	}
@@ -384,7 +392,6 @@ func deserializeExprForFormatting(
 // nameResolver is used to replace unresolved names in expressions with
 // IndexedVars.
 type nameResolver struct {
-	evalCtx    *eval.Context
 	tableID    descpb.ID
 	source     *colinfo.DataSourceInfo
 	nrc        *nameResolverIVarContainer
@@ -392,9 +399,7 @@ type nameResolver struct {
 }
 
 // newNameResolver creates and returns a nameResolver.
-func newNameResolver(
-	evalCtx *eval.Context, tableID descpb.ID, tn *tree.TableName, cols []catalog.Column,
-) *nameResolver {
+func newNameResolver(tableID descpb.ID, tn *tree.TableName, cols []catalog.Column) *nameResolver {
 	source := colinfo.NewSourceInfoForSingleTable(
 		*tn,
 		colinfo.ResultColumnsFromColumns(tableID, cols),
@@ -403,7 +408,6 @@ func newNameResolver(
 	ivarHelper := tree.MakeIndexedVarHelper(nrc, len(cols))
 
 	return &nameResolver{
-		evalCtx:    evalCtx,
 		tableID:    tableID,
 		source:     source,
 		nrc:        nrc,
@@ -470,6 +474,24 @@ func SanitizeVarFreeExpr(
 			"variable sub-expressions are not allowed in %s", context)
 	}
 
+	return sanitizeExpr(ctx, expr, expectedType, context, semaCtx, maxVolatility, allowAssignmentCast)
+}
+
+// sanitizeExpr type-checks an expression, rejects special functions
+// (generators, aggregates, window functions, procedures) and optionally
+// restricts volatility. It is the shared core of SanitizeVarFreeExpr
+// (which additionally rejects variable sub-expressions) and is also used
+// by inlineUDFCalls to validate inlined UDF bodies that legitimately
+// contain column references.
+func sanitizeExpr(
+	ctx context.Context,
+	expr tree.Expr,
+	expectedType *types.T,
+	context tree.SchemaExprContext,
+	semaCtx *tree.SemaContext,
+	maxVolatility volatility.V,
+	allowAssignmentCast bool,
+) (tree.TypedExpr, error) {
 	// We need to save and restore the previous value of the field in
 	// semaCtx in case we are recursively called from another context
 	// which uses the properties field.
@@ -527,7 +549,7 @@ func ValidateTTLExpression(
 		return nil
 	}
 	expirationExpr := rowLevelTTL.ExpirationExpr
-	if hasRef, err := validateExpressionDoesNotDependOnColumn(tableDesc, string(expirationExpr), col.GetID()); err != nil {
+	if hasRef, err := validateExpressionDoesNotDependOnColumn(tableDesc, expirationExpr, col.GetID()); err != nil {
 		return err
 	} else if hasRef {
 		return sqlerrors.NewAlterDependsOnExpirationExprError(op, "column", string(col.ColName()), tn.Object(), string(expirationExpr))
@@ -556,6 +578,35 @@ func ValidateComputedColumnExpressionDoesNotDependOnColumn(
 	return nil
 }
 
+// ValidatePolicyExpressionsDoNotDependOnColumn will check if the dependendCol
+// has a dependency on any expressions defined for row-level security policies.
+func ValidatePolicyExpressionsDoNotDependOnColumn(
+	tableDesc catalog.TableDescriptor, dependentCol catalog.Column, objType, op string,
+) error {
+	for _, p := range tableDesc.GetPolicies() {
+		checkExpr := func(expr catpb.Expression) error {
+			if hasRef, err := validateExpressionDoesNotDependOnColumn(tableDesc, expr, dependentCol.GetID()); err != nil {
+				return err
+			} else if hasRef {
+				return sqlerrors.NewAlterDependsOnPolicyExprError(op, objType,
+					string(dependentCol.ColName()))
+			}
+			return nil
+		}
+		if p.UsingExpr != "" {
+			if err := checkExpr(p.UsingExpr); err != nil {
+				return err
+			}
+		}
+		if p.WithCheckExpr != "" {
+			if err := checkExpr(p.WithCheckExpr); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // ValidatePartialIndex verifies that we have no partial indexes
 // that reference the column through the partial index's predicate.
 func ValidatePartialIndex(
@@ -563,7 +614,7 @@ func ValidatePartialIndex(
 ) error {
 	for _, idx := range tableDesc.AllIndexes() {
 		if idx.IsPartial() {
-			expr, err := parser.ParseExpr(idx.GetPredicate())
+			expr, err := parserutils.ParseExpr(string(idx.GetPredicate()))
 			if err != nil {
 				return err
 			}
@@ -588,29 +639,33 @@ func ValidatePartialIndex(
 // * type-checks as a TIMESTAMPTZ.
 // * is not volatile.
 // * references valid columns in the table.
+//
+// Returns the serialized expression with UDF names replaced by OID references.
+// If the TTL does not have an expiration expression, returns an empty string.
 func ValidateTTLExpirationExpression(
 	ctx context.Context,
-	tableDesc catalog.TableDescriptor,
 	semaCtx *tree.SemaContext,
 	tableName *tree.TableName,
 	ttl *catpb.RowLevelTTL,
 	version clusterversion.ClusterVersion,
-) error {
+	getAllNonDropColumnsFn func() colinfo.ResultColumns,
+	columnLookupByNameFn ColumnLookupFn,
+) (string, error) {
 
 	if !ttl.HasExpirationExpr() {
-		return nil
+		return "", nil
 	}
 
-	exprs, err := parser.ParseExprs([]string{string(ttl.ExpirationExpr)})
+	exprs, err := parserutils.ParseExprs([]string{string(ttl.ExpirationExpr)})
 	if err != nil {
-		return pgerror.Wrapf(
+		return "", pgerror.Wrapf(
 			err,
 			pgcode.InvalidParameterValue,
 			`ttl_expiration_expression %q must be a valid expression`,
 			ttl.ExpirationExpr,
 		)
 	} else if len(exprs) != 1 {
-		return pgerror.Newf(
+		return "", pgerror.Newf(
 			pgcode.InvalidParameterValue,
 			`ttl_expiration_expression %q must be a single expression`,
 			ttl.ExpirationExpr,
@@ -624,9 +679,8 @@ func ValidateTTLExpirationExpression(
 	// inside a single transaction.
 	// Only config changes can affect the results of Stable functions in the TTL
 	// job because session data cannot be modified.
-	if _, _, _, err := DequalifyAndValidateExpr(
+	serializedExpr, _, _, err := DequalifyAndValidateExprImpl(
 		ctx,
-		tableDesc,
 		exprs[0],
 		types.TimestampTZ,
 		tree.TTLExpirationExpr,
@@ -634,12 +688,15 @@ func ValidateTTLExpirationExpression(
 		volatility.Stable,
 		tableName,
 		version,
-	); err != nil {
-		return pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
+		getAllNonDropColumnsFn,
+		columnLookupByNameFn,
+	)
+	if err != nil {
+		return "", pgerror.WithCandidateCode(err, pgcode.InvalidParameterValue)
 	}
 
 	// todo: check dropped column here?
-	return nil
+	return serializedExpr, nil
 }
 
 func MaybeReplaceUDFNameWithOIDReferenceInTypedExpr(
@@ -692,8 +749,8 @@ func GetUDFIDs(e tree.Expr) (catalog.DescriptorIDSet, error) {
 // GetUDFIDsFromExprStr extracts all UDF descriptor ids from the given
 // expression string, assuming that the UDF names has been replaced with OID
 // references. It's a convenient wrapper of GetUDFIDs.
-func GetUDFIDsFromExprStr(exprStr string) (catalog.DescriptorIDSet, error) {
-	expr, err := parser.ParseExpr(exprStr)
+func GetUDFIDsFromExprStr(exprStr catpb.Expression) (catalog.DescriptorIDSet, error) {
+	expr, err := parserutils.ParseExpr(string(exprStr))
 	if err != nil {
 		return catalog.DescriptorIDSet{}, err
 	}
@@ -701,9 +758,11 @@ func GetUDFIDsFromExprStr(exprStr string) (catalog.DescriptorIDSet, error) {
 }
 
 func validateExpressionDoesNotDependOnColumn(
-	tableDesc catalog.TableDescriptor, expirationExpr string, dependentColID descpb.ColumnID,
+	tableDesc catalog.TableDescriptor,
+	expirationExpr catpb.Expression,
+	dependentColID descpb.ColumnID,
 ) (bool, error) {
-	expr, err := parser.ParseExpr(expirationExpr)
+	expr, err := parserutils.ParseExpr(string(expirationExpr))
 	if err != nil {
 		// At this point, we should be able to parse the expression.
 		return false, errors.WithAssertionFailure(err)

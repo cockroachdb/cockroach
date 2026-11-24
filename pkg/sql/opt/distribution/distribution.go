@@ -20,7 +20,11 @@ import (
 // CanProvide returns true if the given operator returns rows that can
 // satisfy the given required distribution.
 func CanProvide(
-	ctx context.Context, evalCtx *eval.Context, expr memo.RelExpr, required *physical.Distribution,
+	ctx context.Context,
+	evalCtx *eval.Context,
+	mem *memo.Memo,
+	expr memo.RelExpr,
+	required *physical.Distribution,
 ) bool {
 	if required.Any() {
 		return true
@@ -38,7 +42,7 @@ func CanProvide(
 		provided.FromLocality(evalCtx.Locality)
 
 	case *memo.ScanExpr:
-		tabMeta := t.Memo().Metadata().TableMeta(t.Table)
+		tabMeta := mem.Metadata().TableMeta(t.Table)
 		if t.Distribution.Regions != nil {
 			provided = t.Distribution
 		} else {
@@ -89,7 +93,11 @@ func BuildChildRequired(
 // This function assumes that the provided distributions have already been set in
 // the children of the expression.
 func BuildProvided(
-	ctx context.Context, evalCtx *eval.Context, expr memo.RelExpr, required *physical.Distribution,
+	ctx context.Context,
+	evalCtx *eval.Context,
+	mem *memo.Memo,
+	expr memo.RelExpr,
+	required *physical.Distribution,
 ) physical.Distribution {
 	var provided physical.Distribution
 	switch t := expr.(type) {
@@ -100,7 +108,7 @@ func BuildProvided(
 		provided.FromLocality(evalCtx.Locality)
 
 	case *memo.ScanExpr:
-		tabMeta := t.Memo().Metadata().TableMeta(t.Table)
+		tabMeta := mem.Metadata().TableMeta(t.Table)
 		if t.Distribution.Regions != nil {
 			provided = t.Distribution
 		} else {
@@ -153,6 +161,7 @@ func GetDEnumAsStringFromConstantExpr(expr opt.Expr) (enumAsString string, ok bo
 func getCRBDRegionColSetFromInput(
 	ctx context.Context,
 	evalCtx *eval.Context,
+	mem *memo.Memo,
 	join *memo.LookupJoinExpr,
 	required *physical.Required,
 	maybeGetBestCostRelation func(grp memo.RelExpr, required *physical.Required) (best memo.RelExpr, ok bool),
@@ -184,7 +193,7 @@ func getCRBDRegionColSetFromInput(
 		if lookupJoinExpr, ok := maybeScan.(*memo.LookupJoinExpr); ok {
 			crdbRegionColSet, inputDistribution =
 				BuildLookupJoinLookupTableDistribution(
-					ctx, evalCtx, lookupJoinExpr, required, maybeGetBestCostRelation)
+					ctx, evalCtx, mem, lookupJoinExpr, required, maybeGetBestCostRelation)
 			return crdbRegionColSet, inputDistribution
 		}
 		if localityOptimizedScan, ok := maybeScan.(*memo.LocalityOptimizedSearchExpr); ok {
@@ -196,12 +205,12 @@ func getCRBDRegionColSetFromInput(
 		if !ok {
 			return crdbRegionColSet, physical.Distribution{}
 		}
-		tab := maybeScan.Memo().Metadata().Table(scanExpr.Table)
+		tab := mem.Metadata().Table(scanExpr.Table)
 		if !tab.IsRegionalByRow() {
 			return crdbRegionColSet, physical.Distribution{}
 		}
 		inputDistribution =
-			BuildProvided(ctx, evalCtx, scanExpr, &required.Distribution)
+			BuildProvided(ctx, evalCtx, mem, scanExpr, &required.Distribution)
 		index := tab.Index(scanExpr.Index)
 		crdbRegionColID := scanExpr.Table.IndexColumnID(index, 0)
 		if needRemap {
@@ -242,14 +251,15 @@ func getCRBDRegionColSetFromInput(
 func BuildLookupJoinLookupTableDistribution(
 	ctx context.Context,
 	evalCtx *eval.Context,
+	mem *memo.Memo,
 	lookupJoin *memo.LookupJoinExpr,
 	required *physical.Required,
 	maybeGetBestCostRelation func(grp memo.RelExpr, required *physical.Required) (best memo.RelExpr, ok bool),
 ) (crdbRegionColSet opt.ColSet, provided physical.Distribution) {
 	localCrdbRegionColSet, inputDistribution :=
-		getCRBDRegionColSetFromInput(ctx, evalCtx, lookupJoin, required, maybeGetBestCostRelation)
+		getCRBDRegionColSetFromInput(ctx, evalCtx, mem, lookupJoin, required, maybeGetBestCostRelation)
 
-	lookupTableMeta := lookupJoin.Memo().Metadata().TableMeta(lookupJoin.Table)
+	lookupTableMeta := mem.Metadata().TableMeta(lookupJoin.Table)
 	lookupTable := lookupTableMeta.Table
 
 	idx := lookupTable.Index(lookupJoin.Index)
@@ -299,7 +309,7 @@ func BuildLookupJoinLookupTableDistribution(
 				return crdbRegionColSet, provided
 			}
 		} else if len(lookupJoin.LookupJoinPrivate.LookupExpr) > 0 {
-			if filterIdx, ok := lookupJoin.GetConstPrefixFilter(lookupJoin.Memo().Metadata()); ok {
+			if filterIdx, ok := lookupJoin.GetConstPrefixFilter(mem.Metadata()); ok {
 				firstIndexColEqExpr := lookupJoin.LookupJoinPrivate.LookupExpr[filterIdx].Condition
 				if firstIndexColEqExpr.Op() == opt.EqOp {
 					if regionName, ok := GetDEnumAsStringFromConstantExpr(firstIndexColEqExpr.Child(1)); ok {
@@ -309,7 +319,7 @@ func BuildLookupJoinLookupTableDistribution(
 						return crdbRegionColSet, provided
 					}
 				}
-			} else if lookupJoin.LookupIndexPrefixIsEquatedWithColInColSet(lookupJoin.Memo().Metadata(), localCrdbRegionColSet) {
+			} else if lookupJoin.LookupIndexPrefixIsEquatedWithColInColSet(mem.Metadata(), localCrdbRegionColSet) {
 				// We have a `crdb_region = crdb_region` term in `LookupJoinPrivate.LookupExpr`.
 				provided.FromIndexScan(ctx, evalCtx, lookupTableMeta, lookupJoin.Index, nil)
 				if !inputDistribution.Any() &&
@@ -330,9 +340,9 @@ func BuildLookupJoinLookupTableDistribution(
 // from performing lookups of an inverted join, if that distribution can be
 // statically determined.
 func BuildInvertedJoinLookupTableDistribution(
-	ctx context.Context, evalCtx *eval.Context, invertedJoin *memo.InvertedJoinExpr,
+	ctx context.Context, evalCtx *eval.Context, mem *memo.Memo, invertedJoin *memo.InvertedJoinExpr,
 ) (provided physical.Distribution) {
-	lookupTableMeta := invertedJoin.Memo().Metadata().TableMeta(invertedJoin.Table)
+	lookupTableMeta := mem.Metadata().TableMeta(invertedJoin.Table)
 	lookupTable := lookupTableMeta.Table
 
 	if lookupTable.IsGlobalTable() {

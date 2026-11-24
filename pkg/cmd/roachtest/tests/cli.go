@@ -22,12 +22,23 @@ import (
 )
 
 func runCLINodeStatus(ctx context.Context, t test.Test, c cluster.Cluster) {
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, 3))
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, 5))
 
 	db := c.Conn(ctx, t.L(), 1)
 	defer db.Close()
 
-	err := roachtestutil.WaitFor3XReplication(ctx, t.L(), db)
+	// Create user ranges at default 3x replication. With 5 nodes and 2 killed,
+	// some of these ranges will lose quorum — the test verifies that
+	// "node status" still works in that scenario.
+	_, err := db.ExecContext(ctx, `CREATE TABLE defaultdb.t (k INT PRIMARY KEY)`)
+	require.NoError(t, err)
+	_, err = db.ExecContext(ctx, `ALTER TABLE defaultdb.t SPLIT AT SELECT generate_series(1, 100)`)
+	require.NoError(t, err)
+
+	// Wait for all ranges to reach their configured replication factor.
+	// In particular, system/meta ranges need to reach 5x before we kill
+	// nodes, so SQL stays available.
+	err = roachtestutil.WaitForFullReplication(ctx, t.L(), db, "")
 	require.NoError(t, err)
 
 	lastWords := func(s string) []string {
@@ -51,22 +62,6 @@ func runCLINodeStatus(ctx context.Context, t test.Test, c cluster.Cluster) {
 		return result.Stdout, lastWords(result.Stdout), nil
 	}
 
-	{
-		expected := []string{
-			"is_available is_live",
-			"true true",
-			"true true",
-			"true true",
-		}
-		raw, actual, err := nodeStatus()
-		if err != nil {
-			t.Fatalf("node status failed: %v\n%s", err, raw)
-		}
-		if !reflect.DeepEqual(expected, actual) {
-			t.Fatalf("expected %s, but found %s:\nfrom:\n%s", expected, actual, raw)
-		}
-	}
-
 	waitUntil := func(expected []string) {
 		var (
 			raw    string
@@ -88,40 +83,63 @@ func runCLINodeStatus(ctx context.Context, t test.Test, c cluster.Cluster) {
 		}
 	}
 
-	// Kill node 2 and wait for it to be marked as !is_available and !is_live.
-	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(2))
+	// Verify all 5 nodes are available and live.
+	{
+		expected := []string{
+			"is_available is_live",
+			"true true",
+			"true true",
+			"true true",
+			"true true",
+			"true true",
+		}
+		raw, actual, err := nodeStatus()
+		if err != nil {
+			t.Fatalf("node status failed: %v\n%s", err, raw)
+		}
+		if !reflect.DeepEqual(expected, actual) {
+			t.Fatalf("expected %s, but found %s:\nfrom:\n%s", expected, actual, raw)
+		}
+	}
+
+	// Kill node 4 and wait for it to be marked as !is_available and !is_live.
+	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(4))
 	waitUntil([]string{
 		"is_available is_live",
+		"true true",
+		"true true",
 		"true true",
 		"false false",
 		"true true",
 	})
 
-	// Kill node 3 and wait for all of the nodes to be marked as
-	// !is_available. Node 1 is not available because the liveness check can no
-	// longer write to the liveness range due to lack of quorum. This test is
-	// verifying that "node status" still returns info in this situation since
-	// it only accesses gossip info.
-	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(3))
+	// Kill node 5. System ranges are 5x replicated and retain quorum with
+	// 3 of 5 nodes alive. Some user ranges (3x replicated) may lose quorum.
+	// This verifies that "node status" still works in this scenario.
+	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Node(5))
 	waitUntil([]string{
 		"is_available is_live",
-		"false false",
+		"true true",
+		"true true",
+		"true true",
 		"false false",
 		"false false",
 	})
 
-	// Stop the cluster and restart only 2 of the nodes. Verify that three nodes
+	// Stop the remaining nodes and restart them. Verify that all five nodes
 	// show up in the node status output.
-	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Range(1, 2))
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, 2))
+	c.Stop(ctx, t.L(), option.DefaultStopOpts(), c.Range(1, 3))
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(1, 3))
 
 	waitUntil([]string{
 		"is_available is_live",
 		"true true",
 		"true true",
+		"true true",
+		"false false",
 		"false false",
 	})
 
-	// Start node again to satisfy roachtest.
-	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Node(3))
+	// Start remaining nodes to satisfy roachtest.
+	c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings(), c.Range(4, 5))
 }

@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/cancelchecker"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxlog"
+	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/optional"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -157,7 +158,7 @@ type Flow interface {
 	// GetOnCleanupFns returns a couple of functions that should be called at
 	// the very beginning and the very end of Cleanup, respectively. Both will
 	// be non-nil.
-	GetOnCleanupFns() (startCleanup, endCleanup func())
+	GetOnCleanupFns() (startCleanup func(), endCleanup func(context.Context))
 
 	// Cleanup must be called whenever the flow is done (meaning it either
 	// completes gracefully after all processors and mailboxes exited or an
@@ -227,7 +228,7 @@ type FlowBase struct {
 	// onCleanupStart and onCleanupEnd will be called in the very beginning and
 	// the very end of Cleanup(), respectively.
 	onCleanupStart func()
-	onCleanupEnd   func()
+	onCleanupEnd   func(context.Context)
 
 	statementSQL string
 
@@ -281,6 +282,7 @@ func (f *FlowBase) Setup(
 func (f *FlowBase) SetTxn(txn *kv.Txn) {
 	f.FlowCtx.Txn = txn
 	f.EvalCtx.Txn = txn
+	f.EvalCtx.CatalogBuiltins.SetTxn(txn)
 }
 
 // ConcurrentTxnUse is part of the Flow interface.
@@ -323,7 +325,7 @@ func NewFlowBase(
 	batchSyncFlowConsumer execinfra.BatchReceiver,
 	localProcessors []execinfra.LocalProcessor,
 	localVectorSources map[int32]any,
-	onFlowCleanupEnd func(),
+	onFlowCleanupEnd func(context.Context),
 	statementSQL string,
 ) *FlowBase {
 	// We are either in a single tenant cluster, or a SQL node in a multi-tenant
@@ -331,6 +333,10 @@ func NewFlowBase(
 	// within SQL (not KV), so using an arbitrary tenant is ok -- we choose to
 	// use SystemTenantID since it is already defined.
 	admissionInfo := admission.WorkInfo{TenantID: roachpb.SystemTenantID}
+	admissionInfo.WorkloadID = flowCtx.EvalCtx.WorkloadID
+	admissionInfo.AppNameID = flowCtx.EvalCtx.AppNameID
+	admissionInfo.GatewayNodeID = roachpb.NodeID(flowCtx.NodeID.SQLInstanceID())
+	admissionInfo.WorkloadType = flowCtx.EvalCtx.WorkloadType
 	if flowCtx.Txn == nil {
 		admissionInfo.Priority = admissionpb.NormalPri
 		admissionInfo.CreateTime = timeutil.Now().UnixNano()
@@ -461,6 +467,7 @@ func (f *FlowBase) StartInternal(
 		ctx, 1, "starting (%d processors, %d startables) asynchronously", len(processors), len(f.startables),
 	)
 
+	cpuHandle := admission.SQLCPUHandleFromContext(ctx)
 	// Only register the flow if it is a part of the distributed plan. This is
 	// needed to satisfy two different use cases:
 	// 1. there are inbound stream connections that need to look up this flow in
@@ -494,7 +501,7 @@ func (f *FlowBase) StartInternal(
 	}
 
 	if log.V(1) {
-		log.Infof(ctx, "registered flow %s", f.ID.Short())
+		log.Dev.Infof(ctx, "registered flow %s", f.ID.Short())
 	}
 	for _, s := range f.startables {
 		// Note that it is safe to pass the context cancellation function
@@ -505,7 +512,17 @@ func (f *FlowBase) StartInternal(
 	for i := 0; i < len(processors); i++ {
 		f.waitGroup.Add(1)
 		go func(i int) {
-			processors[i].Run(ctx, outputs[i])
+			if cpuHandle != nil {
+				gh := cpuHandle.RegisterGoroutine()
+				defer gh.Close(ctx)
+			}
+			output := outputs[i]
+			if grunning.Supported {
+				w := &grunningMetaOutput{RowReceiver: outputs[i]}
+				w.cpuStopWatch.Start()
+				output = w
+			}
+			processors[i].Run(ctx, output)
 			f.waitGroup.Done()
 		}(i)
 	}
@@ -642,15 +659,16 @@ func (f *FlowBase) AddOnCleanupStart(fn func()) {
 }
 
 var noopFn = func() {}
+var noopCtxFn = func(context.Context) {}
 
 // GetOnCleanupFns is part of the Flow interface.
-func (f *FlowBase) GetOnCleanupFns() (startCleanup, endCleanup func()) {
+func (f *FlowBase) GetOnCleanupFns() (startCleanup func(), endCleanup func(context.Context)) {
 	onCleanupStart, onCleanupEnd := f.onCleanupStart, f.onCleanupEnd
 	if onCleanupStart == nil {
 		onCleanupStart = noopFn
 	}
 	if onCleanupEnd == nil {
-		onCleanupEnd = noopFn
+		onCleanupEnd = noopCtxFn
 	}
 	return onCleanupStart, onCleanupEnd
 }
@@ -714,7 +732,7 @@ func (f *FlowBase) Cleanup(ctx context.Context) {
 		}
 	}
 	if log.V(1) {
-		log.Infof(ctx, "cleaning up")
+		log.Dev.Infof(ctx, "cleaning up")
 	}
 	// Local flows do not get registered.
 	if !f.IsLocal() && f.Started() {
@@ -739,4 +757,75 @@ func (f *FlowBase) cancel() {
 	// Pending streams have yet to be started; send an error to its receivers
 	// and prevent them from being connected.
 	f.flowRegistry.cancelPendingStreams(f.ID, cancelchecker.QueryCanceledError)
+}
+
+// MakeCPUHandle creates a SQLCPUHandle and injects it into the context, and
+// returns the new context along with the SQLCPUHandle and the GoroutineCPUHandle
+// for the calling goroutine. The SQLCPUHandle is available to other code,
+// including other goroutines, that use the same context. The calling goroutine
+// is registered, which starts measuring that goroutine at this point (and
+// possibly waits for admission).
+//
+// The caller is responsible for:
+//  1. Calling gh.Close() when the calling goroutine's flow-related work is done
+//     (typically in a defer at the flow entry point).
+//  2. Calling cpuHandle.Close() after all goroutines have closed their
+//     GoroutineCPUHandles.
+func MakeCPUHandle(
+	ctx context.Context,
+	provider admission.SQLCPUProvider,
+	tenantID roachpb.TenantID,
+	txn *kv.Txn,
+	atGateway bool,
+	workloadID uint64,
+	appNameID uint64,
+	gatewayNodeID roachpb.NodeID,
+) (context.Context, *admission.SQLCPUHandle, *admission.GoroutineCPUHandle, error) {
+	var priority admissionpb.WorkPriority
+	var createTime int64
+	if txn == nil {
+		priority = admissionpb.NormalPri
+		createTime = timeutil.Now().UnixNano()
+	} else {
+		h := txn.AdmissionHeader()
+		priority = admissionpb.WorkPriority(h.Priority)
+		createTime = h.CreateTime
+	}
+	cpuHandle := provider.GetHandle(admission.WorkInfo{
+		TenantID:      tenantID,
+		Priority:      priority,
+		CreateTime:    createTime,
+		WorkloadID:    workloadID,
+		AppNameID:     appNameID,
+		GatewayNodeID: gatewayNodeID,
+	}, atGateway)
+	newCtx := admission.ContextWithSQLCPUHandle(ctx, cpuHandle)
+	gh := cpuHandle.RegisterGoroutine()
+	err := gh.MeasureAndAdmit(ctx)
+	if err != nil {
+		gh.Close(ctx)
+		cpuHandle.Close()
+		return ctx, nil, nil, err
+	}
+	return newCtx, cpuHandle, gh, err
+}
+
+// grunningMetaOutput wraps a RowReceiver to inject a RawSQLCPUTime metadata
+// entry just before ProducerDone closes the channel. This captures the
+// processor goroutine's raw CPU time via grunning, measured from the start
+// time recorded when the wrapper was created (on the processor goroutine).
+type grunningMetaOutput struct {
+	execinfra.RowReceiver
+	cpuStopWatch timeutil.CPUStopWatch
+}
+
+// ProducerDone implements the execinfra.RowReceiver interface.
+func (g *grunningMetaOutput) ProducerDone() {
+	if delta := g.cpuStopWatch.Stop(); delta > 0 {
+		meta := execinfrapb.GetProducerMeta()
+		meta.Metrics = execinfrapb.GetMetricsMeta()
+		meta.Metrics.RawSQLCPUTime = int64(delta)
+		g.RowReceiver.Push(nil, meta)
+	}
+	g.RowReceiver.ProducerDone()
 }

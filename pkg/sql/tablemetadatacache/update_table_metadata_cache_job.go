@@ -43,6 +43,7 @@ func (j *tableMetadataUpdateJobResumer) Resume(ctx context.Context, execCtxI int
 	j.job.MarkIdle(true)
 
 	execCtx := execCtxI.(sql.JobExecContext)
+	db := execCtx.ExecCfg().InternalDB
 	metrics := execCtx.ExecCfg().JobRegistry.MetricsStruct().
 		JobSpecificMetrics[jobspb.TypeUpdateTableMetadataCache].(TableMetadataUpdateJobMetrics)
 	j.metrics = &metrics
@@ -60,10 +61,11 @@ func (j *tableMetadataUpdateJobResumer) Resume(ctx context.Context, execCtxI int
 
 	if updater == nil {
 		updater = newTableMetadataUpdater(
-			j.updateProgress,
+			func(ctx context.Context, progress float32) { j.updateProgress(ctx, db, progress) },
 			&metrics,
 			execCtx.ExecCfg().TenantStatusServer,
 			execCtx.ExecCfg().InternalDB.Executor(),
+			execCtx.ExecCfg().Codec,
 			timeutil.DefaultTimeSource{},
 			updateJobBatchSizeSetting.Get(&execCtx.ExecCfg().Settings.SV),
 			testKnobs)
@@ -98,14 +100,13 @@ func (j *tableMetadataUpdateJobResumer) Resume(ctx context.Context, execCtxI int
 		}
 		select {
 		case <-scheduleSettingsCh:
-			log.Info(ctx, "table metadata job settings updated, stopping timer.")
+			log.Dev.Info(ctx, "table metadata job settings updated, stopping timer.")
 			timer.Stop()
 			continue
 		case <-timer.C:
-			timer.Read = true
-			log.Info(ctx, "running table metadata update job after data cache expiration")
+			log.Dev.Info(ctx, "running table metadata update job after data cache expiration")
 		case <-signalCh:
-			log.Info(ctx, "running table metadata update job via grpc signal")
+			log.Dev.Info(ctx, "running table metadata update job via grpc signal")
 		case <-ctx.Done():
 			return ctx.Err()
 		}
@@ -117,7 +118,7 @@ func (j *tableMetadataUpdateJobResumer) Resume(ctx context.Context, execCtxI int
 		j.markAsRunning(ctx)
 		err := updater.RunUpdater(ctx)
 		if err != nil {
-			log.Errorf(ctx, "error running table metadata update job: %s", err)
+			log.Dev.Errorf(ctx, "error running table metadata update job: %s", err)
 			j.metrics.Errors.Inc(1)
 		}
 		j.markAsCompleted(ctx)
@@ -127,20 +128,25 @@ func (j *tableMetadataUpdateJobResumer) Resume(ctx context.Context, execCtxI int
 	}
 }
 
-func (j *tableMetadataUpdateJobResumer) updateProgress(ctx context.Context, progress float32) {
-	if err := j.job.NoTxn().FractionProgressed(ctx, jobs.FractionUpdater(progress)); err != nil {
-		log.Errorf(ctx, "Error updating table metadata log progress. error: %s", err.Error())
+func (j *tableMetadataUpdateJobResumer) updateProgress(
+	ctx context.Context, db isql.DB, progress float32,
+) {
+	if err := db.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		return jobs.ProgressStorage(j.job.ID()).SetFraction(ctx, txn, float64(progress))
+	}); err != nil {
+		log.Dev.Errorf(ctx, "Error updating table metadata log progress. error: %s", err.Error())
 	}
 }
 
 // markAsRunning updates the last_start_time and status fields in the job's progress
 // details and writes the job progress as a JSON string to the running status.
 func (j *tableMetadataUpdateJobResumer) markAsRunning(ctx context.Context) {
-	if err := j.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+	if err := j.job.DeprecatedNoTxn().Update(ctx, func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 		progress := md.Progress
 		details := progress.Details.(*jobspb.Progress_TableMetadataCache).TableMetadataCache
 		now := timeutil.Now()
-		progress.RunningStatus = fmt.Sprintf("Job started at %s", now)
+		progress.StatusMessage = fmt.Sprintf("Job started at %s", now)
 		details.LastStartTime = &now
 		details.Status = jobspb.UpdateTableMetadataCacheProgress_RUNNING
 		progress.Progress = &jobspb.Progress_FractionCompleted{
@@ -149,18 +155,19 @@ func (j *tableMetadataUpdateJobResumer) markAsRunning(ctx context.Context) {
 		ju.UpdateProgress(progress)
 		return nil
 	}); err != nil {
-		log.Errorf(ctx, "%s", err.Error())
+		log.Dev.Errorf(ctx, "%s", err.Error())
 	}
 }
 
 // markAsCompleted updates the last_completed_time and status fields in the job's progress
 // details and writes the job progress as a JSON string to the running status.
 func (j *tableMetadataUpdateJobResumer) markAsCompleted(ctx context.Context) {
-	if err := j.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+	if err := j.job.DeprecatedNoTxn().Update(ctx, func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 		progress := md.Progress
 		details := progress.Details.(*jobspb.Progress_TableMetadataCache).TableMetadataCache
 		now := timeutil.Now()
-		progress.RunningStatus = fmt.Sprintf("Job completed at %s", now)
+		progress.StatusMessage = fmt.Sprintf("Job completed at %s", now)
 		details.LastCompletedTime = &now
 		details.Status = jobspb.UpdateTableMetadataCacheProgress_NOT_RUNNING
 		progress.Progress = &jobspb.Progress_FractionCompleted{
@@ -169,7 +176,7 @@ func (j *tableMetadataUpdateJobResumer) markAsCompleted(ctx context.Context) {
 		ju.UpdateProgress(progress)
 		return nil
 	}); err != nil {
-		log.Errorf(ctx, "%s", err.Error())
+		log.Dev.Errorf(ctx, "%s", err.Error())
 	}
 }
 
@@ -181,7 +188,7 @@ func (j *tableMetadataUpdateJobResumer) OnFailOrCancel(
 		err := errors.NewAssertionErrorWithWrappedErrf(
 			jobErr, "update table metadata cache job is not cancelable",
 		)
-		log.Errorf(ctx, "%v", err)
+		log.Dev.Errorf(ctx, "%v", err)
 	}
 	return nil
 }
@@ -200,7 +207,7 @@ type TableMetadataUpdateJobMetrics struct {
 	Duration      metric.IHistogram
 }
 
-func (m TableMetadataUpdateJobMetrics) MetricStruct() {}
+func (TableMetadataUpdateJobMetrics) MetricStruct() {}
 
 func newTableMetadataUpdateJobMetrics() metric.Struct {
 	return TableMetadataUpdateJobMetrics{

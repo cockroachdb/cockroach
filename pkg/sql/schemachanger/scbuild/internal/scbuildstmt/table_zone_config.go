@@ -9,12 +9,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 )
 
@@ -41,13 +39,19 @@ func (tzo *tableZoneConfigObj) getZoneConfigElemForAdd(_ BuildCtx) (scpb.Element
 	return elem, nil
 }
 
-func (tzo *tableZoneConfigObj) getZoneConfigElemForDrop(_ BuildCtx) (scpb.Element, []scpb.Element) {
-	elem := &scpb.TableZoneConfig{
-		TableID:    tzo.tableID,
-		ZoneConfig: tzo.zoneConfig,
-		SeqNum:     tzo.seqNum,
-	}
-	return elem, nil
+func (tzo *tableZoneConfigObj) getZoneConfigElemForDrop(
+	b BuildCtx,
+) ([]scpb.Element, []scpb.Element) {
+	var elems []scpb.Element
+	// Ensure that we drop all elements associated with this table. This becomes
+	// more relevant in explicit txns -- where there could be multiple zone config
+	// elements associated with this table with increasing seqNums.
+	b.QueryByID(tzo.getTargetID()).FilterTableZoneConfig().
+		ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.TableZoneConfig) {
+			e.ZoneConfig.DeleteTableConfig()
+			elems = append(elems, e)
+		})
+	return elems, nil
 }
 
 func (tzo *tableZoneConfigObj) checkPrivilegeForSetZoneConfig(
@@ -66,15 +70,7 @@ func (tzo *tableZoneConfigObj) checkPrivilegeForSetZoneConfig(
 	}
 	// Can configure zone of a table (or its index) if user has either CREATE or
 	// ZONECONFIG privilege on the table.
-	tableCreatePrivilegeErr := b.CheckPrivilege(tblElem, privilege.CREATE)
-	tableZoneConfigPrivilegeErr := b.CheckPrivilege(tblElem, privilege.ZONECONFIG)
-	if tableCreatePrivilegeErr == nil || tableZoneConfigPrivilegeErr == nil {
-		return nil
-	}
-
-	reqNonAdminPrivs := []privilege.Kind{privilege.ZONECONFIG, privilege.CREATE}
-	return sqlerrors.NewInsufficientPrivilegeOnDescriptorError(b.CurrentUser(),
-		reqNonAdminPrivs, string(catalog.Table), tblNamespaceElem.Name)
+	return b.CheckPrivilege(tblElem, privilege.CREATE, privilege.ZONECONFIG)
 }
 
 func (tzo *tableZoneConfigObj) checkZoneConfigChangePermittedForMultiRegion(
@@ -101,7 +97,7 @@ func (tzo *tableZoneConfigObj) checkZoneConfigChangePermittedForMultiRegion(
 		return nil
 	}
 
-	return maybeMultiregionErrorWithHint(b, tzo, options)
+	return maybeMultiregionErrorWithHint(b, tzo, zs, options)
 }
 
 func (tzo *tableZoneConfigObj) getTargetID() catid.DescID {

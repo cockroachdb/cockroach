@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig/spanconfigstore"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -58,7 +59,6 @@ var metricsPollerInterval = settings.RegisterDurationSetting(
 	"spanconfig.kvsubscriber.metrics_poller_interval",
 	"the interval at which the spanconfig.kvsubscriber.* metrics are kept up-to-date; set to 0 to disable the mechanism",
 	5*time.Second,
-	settings.NonNegativeDuration,
 )
 
 // KVSubscriber is used to subscribe to global span configuration changes. It's
@@ -170,19 +170,34 @@ func (k *Metrics) MetricStruct() {}
 
 var _ metric.Struct = &Metrics{}
 
-// spanConfigurationsTableRowSize is an estimate of the size of a single row in
-// the system.span_configurations table (size of start/end key, and size of a
-// marshaled span config proto). The value used here was pulled out of thin air
-// -- it only serves to coarsely limit how large the KVSubscriber's underlying
-// rangefeed buffer can get.
-const spanConfigurationsTableRowSize = 5 << 10 // 5 KB
+// spanConfigurationsTableRowSize is an estimate of the size of a single
+// BufferEvent in the KVSubscriber's rangefeed buffer. This is used to calculate
+// the buffer capacity from the memory limit. The estimate is based on:
+//   - Target.Span (start/end keys): ~80 bytes (two encoded table prefix keys)
+//   - roachpb.SpanConfig proto: ~150 bytes (mostly default values, empty slices
+//     for constraints/lease_preferences, plus fixed fields like range_min_bytes,
+//     range_max_bytes, gc_policy, num_replicas, etc.)
+//   - hlc.Timestamp: 16 bytes
+//   - Go slice/pointer overhead: ~50 bytes
+//
+// Total: ~300 bytes per entry. We round up to 512 bytes to be conservative and
+// account for variations in key length and non-default SpanConfig fields.
+// Configurable via COCKROACH_SPANCONFIG_KVSUBSCRIBER_BUFFER_ROW_SIZE.
+var spanConfigurationsTableRowSize = envutil.EnvOrDefaultInt64(
+	"COCKROACH_SPANCONFIG_KVSUBSCRIBER_BUFFER_ROW_SIZE", 512)
+
+// bufferMemLimit is the memory limit for the KVSubscriber's rangefeed buffer.
+// The buffer capacity is calculated by dividing this limit by the estimated
+// entry size (spanConfigurationsTableRowSize). Configurable via
+// COCKROACH_SPANCONFIG_KVSUBSCRIBER_BUFFER_SIZE.
+var bufferMemLimit = envutil.EnvOrDefaultInt64(
+	"COCKROACH_SPANCONFIG_KVSUBSCRIBER_BUFFER_SIZE", 4<<20 /* 4 MB */)
 
 // New instantiates a KVSubscriber.
 func New(
 	clock *hlc.Clock,
 	rangeFeedFactory *rangefeed.Factory,
 	spanConfigurationsTableID uint32,
-	bufferMemLimit int64,
 	fallback roachpb.SpanConfig,
 	settings *cluster.Settings,
 	boundsReader spanconfigstore.BoundsReader,
@@ -271,7 +286,6 @@ func (s *KVSubscriber) Start(ctx context.Context, stopper *stop.Stopper) error {
 				}
 				select {
 				case <-timer.C:
-					timer.Read = true
 					s.updateMetrics(ctx)
 					continue
 
@@ -293,7 +307,7 @@ func (s *KVSubscriber) Start(ctx context.Context, stopper *stop.Stopper) error {
 func (s *KVSubscriber) updateMetrics(ctx context.Context) {
 	protectedTimestamps, lastUpdated, err := s.GetProtectionTimestamps(ctx, keys.EverythingSpan)
 	if err != nil {
-		log.Errorf(ctx, "while refreshing kvsubscriber metrics: %v", err)
+		log.Dev.Errorf(ctx, "while refreshing kvsubscriber metrics: %v", err)
 		return
 	}
 
@@ -352,11 +366,22 @@ func (s *KVSubscriber) ComputeSplitKey(
 // GetSpanConfigForKey is part of the spanconfig.KVSubscriber interface.
 func (s *KVSubscriber) GetSpanConfigForKey(
 	ctx context.Context, key roachpb.RKey,
-) (roachpb.SpanConfig, roachpb.Span, error) {
+) (roachpb.SpanConfig, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
 	return s.mu.internal.GetSpanConfigForKey(ctx, key)
+}
+
+// ForEachOverlappingSpanConfig is part of the spanconfig.KVSubscriber
+// interface.
+func (s *KVSubscriber) ForEachOverlappingSpanConfig(
+	ctx context.Context, span roachpb.Span, f func(roachpb.Span, roachpb.SpanConfig) error,
+) error {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	return s.mu.internal.ForEachOverlappingSpanConfig(ctx, span, f)
 }
 
 // GetProtectionTimestamps is part of the spanconfig.KVSubscriber interface.

@@ -9,12 +9,11 @@ import React, { useCallback, useEffect, useState } from "react";
 import { useHistory } from "react-router-dom";
 
 import { Anchor } from "src/anchor";
-import { TxnInsightsRequest } from "src/api";
+import { useTxnInsights } from "src/api";
 import {
   filterTransactionInsights,
   getAppsFromTransactionInsights,
   WorkloadInsightEventFilters,
-  TxnInsightEvent,
 } from "src/insights";
 import { Loading } from "src/loading/loading";
 import { PageConfig, PageConfigItem } from "src/pageConfig/pageConfig";
@@ -29,15 +28,11 @@ import {
 import { getWorkloadInsightEventFiltersFromURL } from "src/queryFilter/utils";
 import { Search } from "src/search/search";
 import { getTableSortFromURL } from "src/sortedtable/getTableSortFromURL";
-import {
-  ISortedTablePagination,
-  SortSetting,
-} from "src/sortedtable/sortedtable";
+import { SortSetting } from "src/sortedtable/sortedtable";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 import styles from "src/statementsPage/statementsPage.module.scss";
 import { TableStatistics } from "src/tableStatistics";
 import { insights } from "src/util";
-import { useScheduleFunction } from "src/util/hooks";
 import { queryByName, syncHistory } from "src/util/query";
 
 import { commonStyles } from "../../../common";
@@ -45,8 +40,8 @@ import {
   TimeScale,
   defaultTimeScaleOptions,
   TimeScaleDropdown,
-  timeScaleRangeToObj,
 } from "../../../timeScaleDropdown";
+import { usePagination } from "../../../util";
 import { InsightsError } from "../../insightsErrorComponent";
 import { EmptyInsightsTablePlaceholder } from "../util";
 
@@ -56,23 +51,16 @@ const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
 
 export type TransactionInsightsViewStateProps = {
-  isDataValid: boolean;
-  lastUpdated: moment.Moment;
-  transactions: TxnInsightEvent[];
-  transactionsError: Error | null;
   insightTypes: string[];
   filters: WorkloadInsightEventFilters;
   sortSetting: SortSetting;
-  isLoading?: boolean;
   dropDownSelect?: React.ReactElement;
   timeScale?: TimeScale;
-  maxSizeApiReached?: boolean;
 };
 
 export type TransactionInsightsViewDispatchProps = {
   onFiltersChange: (filters: WorkloadInsightEventFilters) => void;
   onSortChange: (ss: SortSetting) => void;
-  refreshTransactionInsights: (req: TxnInsightsRequest) => void;
   setTimeScale: (ts: TimeScale) => void;
 };
 
@@ -86,48 +74,30 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
   props: TransactionInsightsViewProps,
 ) => {
   const {
-    isDataValid,
-    lastUpdated,
     sortSetting,
-    transactions,
-    transactionsError,
     insightTypes,
     filters,
     timeScale,
-    isLoading,
-    refreshTransactionInsights,
     onFiltersChange,
     onSortChange,
     setTimeScale,
     dropDownSelect,
-    maxSizeApiReached,
   } = props;
 
-  const [pagination, setPagination] = useState<ISortedTablePagination>({
-    current: 1,
-    pageSize: 10,
-  });
+  const {
+    data: txnInsightsResp,
+    error: transactionsError,
+    isLoading,
+  } = useTxnInsights(timeScale);
+
+  const transactions = txnInsightsResp?.results;
+  const maxSizeApiReached = txnInsightsResp?.maxSizeReached;
+
+  const [pagination, updatePagination, resetPagination] = usePagination(1, 10);
   const history = useHistory();
   const [search, setSearch] = useState<string>(
     queryByName(history.location, INSIGHT_TXN_SEARCH_PARAM),
   );
-
-  const refresh = useCallback(() => {
-    const req = timeScaleRangeToObj(timeScale);
-    refreshTransactionInsights(req);
-  }, [refreshTransactionInsights, timeScale]);
-
-  const shouldPoll = timeScale.key !== "Custom";
-  const [refetch, clearPolling] = useScheduleFunction(
-    refresh,
-    shouldPoll, // Don't reschedule refresh if we have a custom time interval.
-    10 * 1000, // 10s polling interval
-    lastUpdated,
-  );
-
-  useEffect(() => {
-    if (!isDataValid) refetch();
-  }, [isDataValid, refetch]);
 
   useEffect(() => {
     // We use this effect to sync settings defined on the URL (sort, filters),
@@ -168,20 +138,6 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
     search,
   ]);
 
-  const onChangePage = (current: number): void => {
-    setPagination({
-      current: current,
-      pageSize: 10,
-    });
-  };
-
-  const resetPagination = () => {
-    setPagination({
-      current: 1,
-      pageSize: 10,
-    });
-  };
-
   const onChangeSortSetting = (ss: SortSetting): void => {
     onSortChange(ss);
     resetPagination();
@@ -221,10 +177,9 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
 
   const onTimeScaleChange = useCallback(
     (ts: TimeScale) => {
-      clearPolling();
       setTimeScale(ts);
     },
-    [clearPolling, setTimeScale],
+    [setTimeScale],
   );
 
   return (
@@ -301,7 +256,8 @@ export const TransactionInsightsView: React.FC<TransactionInsightsViewProps> = (
               pageSize={pagination.pageSize}
               current={pagination.current}
               total={filteredTransactions?.length}
-              onChange={onChangePage}
+              onChange={updatePagination}
+              onShowSizeChange={updatePagination}
             />
             {maxSizeApiReached && (
               <InlineAlert

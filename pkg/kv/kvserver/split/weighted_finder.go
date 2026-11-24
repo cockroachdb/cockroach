@@ -49,10 +49,14 @@ type weightedSample struct {
 	count       int
 }
 
+func (ws weightedSample) balance() float64 {
+	return math.Abs(ws.left-ws.right) / (ws.left + ws.right)
+}
+
 // SafeFormat implements the redact.SafeFormatter interface.
 func (ws weightedSample) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("%s(l=%.1f r=%.1f c=%d w=%.1f)",
-		ws.key, ws.left, ws.right, ws.count, ws.weight)
+	w.Printf("%s bal=%.2f (l=%.1f r=%.1f c=%d w=%.1f)",
+		ws.key, ws.balance(), ws.left, ws.right, ws.count, ws.weight)
 }
 
 func (ws weightedSample) String() string {
@@ -87,7 +91,14 @@ func (f *WeightedFinder) Ready(nowTime time.Time) bool {
 // key) lies with regard to the candidate split keys. We use weighted reservoir
 // sampling (a simplified version of A-Chao algorithm) to get the candidate
 // split keys.
-func (f *WeightedFinder) record(key roachpb.Key, weight float64) {
+//
+// Typically, `key` being equal to `sample.key` increments the right counter
+// because the start key of a range is inclusive (i.e. splitting at that key
+// would move the load to the right side of the split key). However, when we
+// record a point access on behalf of the end key of a ranged request, this
+// reverses: the access would be on the left side, so this cases sets
+// `excl=true`.
+func (f *WeightedFinder) record(key roachpb.Key, weight float64, excl bool) {
 	if f == nil {
 		return
 	}
@@ -113,9 +124,10 @@ func (f *WeightedFinder) record(key roachpb.Key, weight float64) {
 			//                    Candidate split key
 			// Left range split  [         )
 			// Right range split           [         )
-			if comp := key.Compare(f.samples[i].key); comp < 0 {
+			if comp := key.Compare(f.samples[i].key); comp < 0 || (excl && comp == 0) {
 				// Case key < f.samples[i].Key i.e. key is to the left of the candidate
-				// split key (left is exclusive to split key).
+				// split key (left is exclusive to split key). Exception: if this is an
+				// "exclusive" point access, in the equality case it still ends up here.
 				f.samples[i].left += weight
 			} else {
 				// Case key >= f.samples[i].Key i.e. key is to the right of or on the
@@ -126,7 +138,7 @@ func (f *WeightedFinder) record(key roachpb.Key, weight float64) {
 		}
 		return
 	} else {
-		idx = f.randSource.Intn(splitKeySampleSize)
+		idx = f.randSource.IntN(splitKeySampleSize)
 	}
 
 	// Note we always use the start key of the span. We could
@@ -149,11 +161,16 @@ func (f *WeightedFinder) record(key roachpb.Key, weight float64) {
 // a candidate split key will contribute half of its weight to the left counter
 // and half of its weight to the right counter of that candidate split key.
 func (f *WeightedFinder) Record(span roachpb.Span, weight float64) {
+	const (
+		// See comment on `record` for details.
+		incl = false
+		excl = true
+	)
 	if span.EndKey == nil {
-		f.record(span.Key, weight)
+		f.record(span.Key, weight, incl)
 	} else {
-		f.record(span.Key, weight/2)
-		f.record(span.EndKey, weight/2)
+		f.record(span.Key, weight/2, incl)
+		f.record(span.EndKey, weight/2, excl)
 	}
 }
 
@@ -211,7 +228,7 @@ func (f *WeightedFinder) Key() roachpb.Key {
 		if s.count < splitKeyMinCounter {
 			continue
 		}
-		balanceScore := math.Abs(s.left-s.right) / (s.left + s.right)
+		balanceScore := s.balance()
 		if balanceScore >= splitKeyThreshold {
 			continue
 		}
@@ -234,7 +251,7 @@ func (f *WeightedFinder) noSplitKeyCause() (insufficientCounters, imbalance int)
 	for _, s := range f.samples {
 		if s.count < splitKeyMinCounter {
 			insufficientCounters++
-		} else if balanceScore := math.Abs(s.left-s.right) / (s.left + s.right); balanceScore >= splitKeyThreshold {
+		} else if balanceScore := s.balance(); balanceScore >= splitKeyThreshold {
 			imbalance++
 		}
 	}
@@ -252,8 +269,8 @@ func (f *WeightedFinder) NoSplitKeyCauseLogMsg() redact.RedactableString {
 		insufficientCounters, imbalance)
 }
 
-// PopularKeyFrequency implements the LoadBasedSplitter interface.
-func (f *WeightedFinder) PopularKeyFrequency() float64 {
+// PopularKey implements the LoadBasedSplitter interface.
+func (f *WeightedFinder) PopularKey() PopularKey {
 	// Sort the sample slice to determine the frequency that a popular key
 	// appears. We could copy the slice, however it would require an allocation.
 	// The probability a sample is replaced doesn't change as it is independent
@@ -263,6 +280,7 @@ func (f *WeightedFinder) PopularKeyFrequency() float64 {
 	})
 
 	weight := f.samples[0].weight
+	key := f.samples[0].key
 	currentKeyWeight := weight
 	popularKeyWeight := weight
 	totalWeight := weight
@@ -274,12 +292,32 @@ func (f *WeightedFinder) PopularKeyFrequency() float64 {
 			currentKeyWeight = weight
 		}
 		if popularKeyWeight < currentKeyWeight {
+			key = f.samples[i].key
 			popularKeyWeight = currentKeyWeight
 		}
 		totalWeight += weight
 	}
 
-	return popularKeyWeight / totalWeight
+	return PopularKey{
+		Key:       key,
+		Frequency: popularKeyWeight / totalWeight,
+	}
+}
+
+// AccessDirection returns a value in [-1, 1] indicating the direction of access
+// requests over time. A negative value implies more traffic is moving to the left
+// (lower keys), a positive value implies more traffic is moving to the right
+// (higher keys), and zero indicates even distribution.
+func (f *WeightedFinder) AccessDirection() float64 {
+	var left, right float64
+	for _, s := range f.samples {
+		left += s.left
+		right += s.right
+	}
+	if left+right == 0 {
+		return 0
+	}
+	return (right - left) / (right + left)
 }
 
 // SafeFormat implements the redact.SafeFormatter interface.

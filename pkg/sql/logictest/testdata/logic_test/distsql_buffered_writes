@@ -1,0 +1,111 @@
+# LogicTest: 5node
+
+statement ok
+SET kv_transaction_buffered_writes_enabled=true
+
+statement ok
+SET CLUSTER SETTING kv.transaction.write_buffering.max_buffer_size = '2KiB';
+
+subtest regression_151325
+
+statement ok
+CREATE TABLE kv (k INT PRIMARY KEY, v INT);
+INSERT INTO kv VALUES (1, 1), (2, 2);
+
+statement ok
+ALTER TABLE kv SPLIT AT SELECT i FROM generate_series(1, 2) AS g(i)
+
+retry
+statement ok
+ALTER TABLE kv EXPERIMENTAL_RELOCATE
+  SELECT ARRAY[i+1], i FROM generate_series(0, 2) AS g(i)
+
+# First txn performs a write that is buffered and then a stmt for which we
+# should disable DistSQL.
+
+statement ok
+BEGIN;
+
+# No writes have been buffered yet, so we shouldn't disable DistSQL.
+query T
+SELECT info FROM [EXPLAIN SELECT crdb_internal_mvcc_timestamp FROM kv] WHERE info LIKE 'distribution%'
+----
+distribution: full
+
+statement ok
+INSERT INTO kv VALUES (3, 3);
+
+query T
+SELECT info FROM [EXPLAIN SELECT crdb_internal_mvcc_timestamp FROM kv] WHERE info LIKE 'distribution%'
+----
+distribution: local
+
+# The tableoid system column doesn't require MVCC decoding, so it doesn't
+# disable DistSQL.
+query T
+SELECT info FROM [EXPLAIN SELECT tableoid FROM kv] WHERE info LIKE 'distribution%'
+----
+distribution: full
+
+# Executing this query will flush the buffer and disable buffered writes for the
+# txn.
+statement count 3
+SELECT crdb_internal_mvcc_timestamp FROM kv;
+
+statement ok
+COMMIT;
+
+# Another txn where the system column is fetched via the lookup join.
+statement ok
+BEGIN;
+
+# No writes have been buffered yet, so we shouldn't disable DistSQL.
+query T
+SELECT info FROM [EXPLAIN SELECT kv2.crdb_internal_mvcc_timestamp FROM kv AS kv1 INNER LOOKUP JOIN kv AS kv2 ON kv1.v = kv2.k] WHERE info LIKE 'distribution%'
+----
+distribution: full
+
+statement ok
+INSERT INTO kv VALUES (4, 4);
+
+query T
+SELECT info FROM [EXPLAIN SELECT kv2.crdb_internal_mvcc_timestamp FROM kv AS kv1 INNER LOOKUP JOIN kv AS kv2 ON kv1.v = kv2.k] WHERE info LIKE 'distribution%'
+----
+distribution: local
+
+# Executing this query will flush the buffer and disable buffered writes for the
+# txn.
+statement count 4
+SELECT kv2.crdb_internal_mvcc_timestamp FROM kv AS kv1 INNER LOOKUP JOIN kv AS kv2 ON kv1.v = kv2.k;
+
+statement ok
+COMMIT;
+
+# Try another txn where the subquery in the first stmt buffers a write and
+# DistSQL is disabled for the main query, but then the next stmt should
+# encounter an error.
+
+statement ok
+BEGIN;
+
+statement count 4
+SELECT
+  crdb_internal_mvcc_timestamp
+FROM
+  [
+    INSERT INTO kv VALUES (5, 5) RETURNING NULL
+  ],
+  kv;
+
+statement error duplicate key value violates unique constraint \"kv_pkey\"
+INSERT INTO kv VALUES (5, 5);
+
+statement ok
+ROLLBACK;
+
+query I
+SELECT count(*) FROM kv;
+----
+4
+
+subtest end

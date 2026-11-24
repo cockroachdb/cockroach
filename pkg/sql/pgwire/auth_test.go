@@ -32,7 +32,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
@@ -42,8 +41,8 @@ import (
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/stdstrings"
 	"github.com/cockroachdb/redact"
-	"github.com/jackc/pgconn"
-	pgx "github.com/jackc/pgx/v4"
+	pgx "github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
 )
 
@@ -185,7 +184,6 @@ func hbaRunTest(t *testing.T, insecure bool) {
 		defer sc.Close(t)
 
 		// Enable logging channels.
-		log.TestingResetActive()
 		cfg := logconfig.DefaultConfig()
 		// Make a sink for just the session log.
 		bt := true
@@ -207,19 +205,26 @@ func hbaRunTest(t *testing.T, insecure bool) {
 		if err := cfg.Validate(&dir); err != nil {
 			t.Fatal(err)
 		}
-		cleanup, err := log.ApplyConfig(cfg, nil /* fileSinkMetricsForDir */, nil /* fatalOnLogStall */)
+		cleanup, err := log.ApplyConfigForReconfig(cfg, nil /* fileSinkMetricsForDir */, nil /* fatalOnLogStall */)
 		if err != nil {
 			t.Fatal(err)
 		}
 		defer cleanup()
 
-		s := serverutils.StartServerOnly(t,
+		srv := serverutils.StartServerOnly(t,
 			base.TestServerArgs{
+				// TODO(yuzefovich): I looked into making the test work with
+				// shared-process tenant, and only a single test case is
+				// failing. It appears as if though set_hba and set_map_identity
+				// modify the cluster settings within the secondary tenant, yet
+				// the system tenant's cluster settings are used for
+				// authentication.
 				DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(107310),
 				Insecure:          insecure,
 				SocketFile:        maybeSocketFile,
 			})
-		defer s.Stopper().Stop(ctx)
+		defer srv.Stopper().Stop(ctx)
+		s := srv.ApplicationLayer()
 
 		pgURL, cleanup := s.PGUrl(t, serverutils.User(username.RootUser), serverutils.ClientCerts(!insecure))
 		defer cleanup()
@@ -232,11 +237,10 @@ func hbaRunTest(t *testing.T, insecure bool) {
 		// Enable conn/auth logging.
 		// We can't use the cluster settings to do this, because
 		// cluster settings propagate asynchronously.
-		testServer := s.ApplicationLayer()
-		pgServer := testServer.PGServer().(*pgwire.Server)
+		pgServer := s.PGServer().(*pgwire.Server)
 		pgServer.TestingEnableConnLogging()
 		pgServer.TestingEnableAuthLogging()
-		testServer.PGPreServer().(*pgwire.PreServeConnHandler).TestingAcceptSystemIdentityOption(true)
+		s.PGPreServer().(*pgwire.PreServeConnHandler).TestingAcceptSystemIdentityOption(true)
 
 		httpClient, err := s.GetAdminHTTPClient()
 		if err != nil {
@@ -275,10 +279,10 @@ func hbaRunTest(t *testing.T, insecure bool) {
 					}
 
 				case "accept_sql_without_tls":
-					testServer.SetAcceptSQLWithoutTLS(true)
+					s.SetAcceptSQLWithoutTLS(true)
 
 				case "reject_sql_without_tls":
-					testServer.SetAcceptSQLWithoutTLS(false)
+					s.SetAcceptSQLWithoutTLS(false)
 
 				case "set_hba":
 					_, err := rootConn.Exec(ctx,
@@ -507,10 +511,12 @@ func hbaRunTest(t *testing.T, insecure bool) {
 
 					// We want the certs to be present in the filesystem for this test.
 					// However, certs are only generated for users "root" and "testuser" specifically.
-					sqlURL, cleanupFn := sqlutils.PGUrlWithOptionalClientCerts(
-						t, s.AdvSQLAddr(), t.Name(), url.User(systemIdentity),
-						forceCerts || systemIdentity == username.RootUser ||
-							systemIdentity == username.TestUser, certName)
+					sqlURL, cleanupFn := s.PGUrl(
+						t,
+						serverutils.User(systemIdentity),
+						serverutils.ClientCerts(forceCerts || systemIdentity == username.RootUser || systemIdentity == username.TestUser),
+						serverutils.CertName(certName),
+					)
 					defer cleanupFn()
 
 					var host, port string
@@ -548,9 +554,10 @@ func hbaRunTest(t *testing.T, insecure bool) {
 							datadriven.CmdArg{Key: key, Vals: []string{options.Get(key)}})
 					}
 
+					const optionsKey = "options"
 					if explicitSystemIdentity {
 						args = append(args,
-							datadriven.CmdArg{Key: "options", Vals: []string{"-csystem_identity=" + systemIdentity}})
+							datadriven.CmdArg{Key: optionsKey, Vals: []string{"-csystem_identity=" + systemIdentity}})
 					}
 
 					// Now turn the cmdargs into a dsn.
@@ -558,7 +565,11 @@ func hbaRunTest(t *testing.T, insecure bool) {
 					sp := ""
 					seenKeys := map[string]struct{}{}
 					for _, a := range args {
-						if _, ok := seenKeys[a.Key]; ok {
+						if _, ok := seenKeys[a.Key]; ok && a.Key != optionsKey {
+							// 'options' key is an exception and is allowed to
+							// have multiple entries since in multi-tenant
+							// deployments we need to set -ccluster value and we
+							// might use an explicit system identity too.
 							continue
 						}
 						seenKeys[a.Key] = struct{}{}
@@ -586,6 +597,14 @@ func hbaRunTest(t *testing.T, insecure bool) {
 						defer func() { _ = dbSQL.Close(ctx) }()
 					}
 					if err != nil {
+						// If the error is a PgError, return that directly instead of the
+						// wrapped error. The wrapped error includes additional contextual
+						// information that complicates checking for the expected error
+						// string in tests.
+						pgErr := new(pgconn.PgError)
+						if errors.As(err, &pgErr) {
+							return "", pgErr
+						}
 						return "", err
 					}
 					row := dbSQL.QueryRow(ctx, "SELECT current_catalog")
@@ -664,7 +683,7 @@ func fmtErr(err error) string {
 			// pgx uses an internal type (pgconn.connectError) for "TLS not enabled"
 			// errors here. We need to munge the error here to avoid including
 			// non-stable information like IP addresses in the output.
-			const tlsErr = "tls error (server refused TLS connection)"
+			const tlsErr = "tls error: server refused TLS connection"
 			if strings.HasSuffix(errStr, tlsErr) {
 				errStr = tlsErr
 			}
@@ -852,12 +871,6 @@ func TestSSLSessionVar(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Set the system layer to accept SQL without TLS in the event of a shared
-	// process virtual cluster.
-	srv.SystemLayer().SetAcceptSQLWithoutTLS(true)
-
-	// TODO(herko): What effect should this have on a shared process virtual
-	// cluster? See: https://github.com/cockroachdb/cockroach/issues/112961
 	s.SetAcceptSQLWithoutTLS(true)
 
 	pgURLWithCerts, cleanupFuncCerts := s.PGUrl(t,

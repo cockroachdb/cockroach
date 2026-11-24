@@ -14,21 +14,24 @@ import (
 
 // Score returns, as the second return value, whether IO admission control is
 // considering the Store overloaded wrt compaction of L0. The first return
-// value is a 1-normalized float (i.e. 1.0 is the threshold at which the
-// second value flips to true).
+// value is a 1-normalized float, where 1.0 represents severe overload, and
+// therefore 1.0 is the threshold at which the second value flips to true.
+// Admission control currently trys to maintain a store around a score
+// threshold of 0.5 for regular work and lower than 0.25 for elastic work. NB:
+// this is an incomplete representation of the signals considered by admission
+// control -- admission control additionally considers disk and flush
+// throughput bottlenecks.
 //
 // The zero value returns (0, false). Use of the nil pointer is not allowed.
-//
-// TODO(sumeer): consider whether we need to enhance this to incorporate
-// overloading via flush bandwidth. I suspect we can get away without
-// incorporating flush bandwidth since typically chronic overload will be due
-// to compactions falling behind (though that may change if we increase the
-// max number of compactions). And we will need to incorporate overload due to
-// disk bandwidth bottleneck.
 //
 // NOTE: Future updates to the scoring function should be version gated as the
 // threshold is gossiped and used to determine lease/replica placement via the
 // allocator.
+//
+// IOThreshold has various parameters that can evolve over time. The source of
+// truth for an IOThreshold struct is admission.ioLoadListener, and is
+// propagated elsewhere using the admission.IOThresholdConsumer interface. No
+// other production code should create one from scratch.
 func (iot *IOThreshold) Score() (float64, bool) {
 	// iot.L0NumFilesThreshold and iot.L0NumSubLevelsThreshold are initialized to
 	// 0 by default, and there appears to be a period of time before we update

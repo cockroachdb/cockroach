@@ -157,11 +157,7 @@ var enabledDjangoTests = []string{
 }
 
 // Maintain that this list is alphabetized.
-var djangoBlocklist = blocklist{
-	`schema.tests.SchemaTests.test_alter_text_field_to_date_field`:     "alter type requires USING",
-	`schema.tests.SchemaTests.test_alter_text_field_to_datetime_field`: "alter type requires USING",
-	`schema.tests.SchemaTests.test_alter_text_field_to_time_field`:     "alter type requires USING",
-}
+var djangoBlocklist = blocklist{}
 
 var djangoIgnoreList = blocklist{
 	`select_for_update.tests.SelectForUpdateTests.test_nowait_raises_error_on_block`: "flaky; see #120196",

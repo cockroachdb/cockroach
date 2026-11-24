@@ -62,12 +62,11 @@ if {! [string match "$cwd/$tempdir/$tempprefix*" [gets $rfile]]} {
   exit 1
 }
 close $rfile
-interrupt
-eexpect "shutdown completed"
+interrupt_and_wait
 # Verify the temp directory is removed.
 glob_not_exists "$tempdir/$tempprefix*"
 # Verify temp directory path is removed from record file.
-if {[file size "$storedir/$recordfile"] > 0} {
+if {[file exists "$storedir/$recordfile"] && [file size "$storedir/$recordfile"] > 0} {
   report "RECORD FILE NOT EMPTY"
   exit 1
 }
@@ -80,8 +79,7 @@ eexpect "node starting"
 eexpect "temp dir:*$tempdir/$tempprefix"
 # Verify the temp directory under first store is created.
 glob_exists "$tempdir/$tempprefix*"
-interrupt
-eexpect "shutdown completed"
+interrupt_and_wait
 # Verify the temp directory is removed.
 glob_not_exists "$tempdir/$tempprefix*"
 end_test
@@ -97,8 +95,7 @@ eexpect "temp dir:*$cwd/$tempdir/$tempprefix"
 # Verify temp1 and temp2 are removed shortly after startup.
 file_not_exists "$storedir/temp1"
 file_not_exists "$storedir/temp2"
-interrupt
-eexpect "shutdown completed"
+interrupt_and_wait
 # Verify the temp directory is removed.
 glob_not_exists "$tempdir/$tempprefix*"
 # Verify store directory still exists.
@@ -111,8 +108,7 @@ eexpect "node starting"
 eexpect "temp dir:*$cwd/$storedir/$tempprefix"
 # Verify the temp directory under first store is created.
 glob_exists "$storedir/$tempprefix*"
-interrupt
-eexpect "shutdown completed"
+interrupt_and_wait
 # Verify the temp directory is removed.
 glob_not_exists "$storedir/$tempprefix*"
 # Verify the store file still exists.
@@ -124,13 +120,12 @@ send "$argv start-single-node --insecure --store=$storedir --background\r"
 eexpect ":/# "
 # Try to start up a second cockroach instance with the same store path.
 send "$argv start-single-node --insecure --store=$storedir\r"
-eexpect "ERROR: could not cleanup temporary directories from record file: could not lock temporary directory $cwd/$storedir/$tempprefix*"
+eexpect "ERROR: could not lock temporary directory $cwd/$storedir/$tempprefix*"
 # Verify the temp directory still exists.
 glob_exists "$storedir/$tempprefix*"
 send "pkill -9 cockroach\r"
 # We should be able to start the cockroach instance again.
 send "$argv start-single-node --insecure --store=$storedir\r"
 eexpect "node starting"
-interrupt
-eexpect "shutdown completed"
+interrupt_and_wait
 end_test

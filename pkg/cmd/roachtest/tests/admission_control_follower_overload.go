@@ -286,7 +286,7 @@ sudo systemd-run --property=Type=exec \
 	}
 	t.L().Printf("deployed workload")
 
-	wait(c.NewMonitor(ctx, c.CRDBNodes()), phaseDuration)
+	wait(c.NewDeprecatedMonitor(ctx, c.CRDBNodes()), phaseDuration)
 
 	if cfg.ioNemesis {
 		// Limit write throughput on s3 to 20mb/s. This is not enough to keep up
@@ -307,7 +307,7 @@ sudo systemd-run --property=Type=exec \
 		t.L().Printf("installed write throughput limit on n3")
 	}
 
-	wait(c.NewMonitor(ctx, c.CRDBNodes()), phaseDuration)
+	wait(c.NewDeprecatedMonitor(ctx, c.CRDBNodes()), phaseDuration)
 
 	// TODO(aaditya,irfansharif): collect, assert on, and export metrics, using:
 	// https://github.com/cockroachdb/cockroach/pull/80724.

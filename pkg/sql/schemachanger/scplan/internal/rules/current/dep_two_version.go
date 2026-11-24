@@ -21,7 +21,6 @@ import (
 // be sequenced in order to safely enact online schema changes are sequenced
 // in separate transactions.
 func init() {
-
 	findNoopSourceStatuses := func(
 		el scpb.Element, targetStatus scpb.TargetStatus,
 	) map[scpb.Status][]scpb.Status {
@@ -67,12 +66,42 @@ func init() {
 			from.Node.AttrEq(screl.CurrentStatus, t.From()),
 			to.Node.AttrEq(screl.CurrentStatus, t.To()),
 			descriptorIsNotBeingDropped(from.El),
-			// Make sure to join a data element to confirm that data exists.
-			descriptorData.Type((*scpb.TableData)(nil)),
-			descriptorData.JoinTargetNode(),
-			descriptorData.CurrentStatus(scpb.Status_PUBLIC),
-			descriptorData.DescIDEq(descID),
-			descriptorDataIsNotBeingAdded(descID),
+		}
+		// Join a data element on elements of table descriptors to avoid
+		// enforcing 2-version for newly created tables.
+		if isTableDescriptorChildElement(el) {
+			clauses = append(clauses,
+				descriptorData.Type((*scpb.TableData)(nil)),
+				descriptorData.JoinTargetNode(),
+				descriptorData.CurrentStatus(scpb.Status_PUBLIC),
+				descriptorData.DescIDEq(descID),
+				descriptorDataIsNotBeingAdded(descID),
+			)
+		}
+		// Indexes are allowed to skip the two version invariant if we can guarantee
+		// no backfill is required. For truncate both the source and temporary index
+		// IDs will be cleared to indicate this.
+		addIndexClause := false
+		switch el.(type) {
+		case *scpb.SecondaryIndex:
+			addIndexClause = true
+		case *scpb.PrimaryIndex:
+			addIndexClause = true
+		}
+		if addIndexClause && targetStatus == scpb.ToPublic {
+			clauses = append(clauses,
+				FilterElements("skip indexes that no require no backfill", from, to, func(from, to scpb.Element) bool {
+					if targetStatus == scpb.ToAbsent {
+						return true
+					}
+					switch elt := from.(type) {
+					case *scpb.PrimaryIndex:
+						return elt.TemporaryIndexID != 0 && elt.SourceIndexID != 0
+					case *scpb.SecondaryIndex:
+						return elt.TemporaryIndexID != 0 && elt.SourceIndexID != 0
+					}
+					return true
+				}))
 		}
 		if len(prePrevStatuses) > 0 {
 			clauses = append(clauses,
@@ -114,8 +143,12 @@ func init() {
 			addRules(el, scpb.ToPublic)
 		}
 		if opgen.HasTransient(el) {
-			addRules(el, scpb.Transient)
+			addRules(el, scpb.TransientAbsent)
 		}
+		if opgen.HasTransientPublic(el) {
+			addRules(el, scpb.TransientPublic)
+		}
+
 		addRules(el, scpb.ToAbsent) // every element has ToAbsent
 		return nil
 	})

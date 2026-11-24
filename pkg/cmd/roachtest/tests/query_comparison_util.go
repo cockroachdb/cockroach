@@ -179,8 +179,11 @@ func runOneRoundQueryComparison(
 		fmt.Fprint(failureLog, "\n")
 	}
 
+	setStmtTimeout := fmt.Sprintf("SET statement_timeout='%s';", statementTimeout.String())
+	setUnconstrainedStmt := "SET unconstrained_non_covering_index_scan_enabled = true;"
+
+	// connSetup needs to be kept in sync with connSetupForLog.
 	connSetup := func(conn *gosql.DB) {
-		setStmtTimeout := fmt.Sprintf("SET statement_timeout='%s';", statementTimeout.String())
 		t.Status("setting statement_timeout")
 		t.L().Printf("statement timeout:\n%s", setStmtTimeout)
 		if _, err := conn.Exec(setStmtTimeout); err != nil {
@@ -188,7 +191,6 @@ func runOneRoundQueryComparison(
 		}
 		logStmt(setStmtTimeout)
 
-		setUnconstrainedStmt := "SET unconstrained_non_covering_index_scan_enabled = true;"
 		t.Status("setting unconstrained_non_covering_index_scan_enabled")
 		t.L().Printf("\n%s", setUnconstrainedStmt)
 		if _, err := conn.Exec(setUnconstrainedStmt); err != nil {
@@ -196,6 +198,15 @@ func runOneRoundQueryComparison(
 			t.Fatal(err)
 		}
 		logStmt(setUnconstrainedStmt)
+	}
+	// connSetupForLog mirrors what connSetup does so that we can log all
+	// necessary SET statements after having opened a new connection (when using
+	// different nodes to execute the queries).
+	connSetupForLog := func() []string {
+		return []string{
+			setStmtTimeout,
+			setUnconstrainedStmt,
+		}
 	}
 
 	node := 1
@@ -293,13 +304,14 @@ func runOneRoundQueryComparison(
 				logTest(finalStmt, "Valid Query")
 
 				h := queryComparisonHelper{
-					conn1:      conn,
-					conn2:      conn,
-					logStmt:    logStmt,
-					logFailure: logFailure,
-					printStmt:  printStmt,
-					stmtNo:     0,
-					rnd:        rnd,
+					conn1:           conn,
+					conn2:           conn,
+					connSetupForLog: connSetupForLog,
+					logStmt:         logStmt,
+					logFailure:      logFailure,
+					printStmt:       printStmt,
+					stmtNo:          0,
+					rnd:             rnd,
 				}
 
 				workloadqg := workloadReplayGenerator{finalStmt}
@@ -315,15 +327,26 @@ func runOneRoundQueryComparison(
 
 		setup := sqlsmith.Setups[qct.setupName](rnd)
 
-		t.Status("executing setup")
-		t.L().Printf("setup:\n%s", strings.Join(setup, "\n"))
-		for _, stmt := range setup {
-			if _, err := conn.Exec(stmt); err != nil {
-				t.Fatal(err)
-			} else {
-				logStmt(stmt)
+		// The seed setup is executed as a multi-statement batch, against
+		// which statement_timeout applies cumulatively and can be exceeded
+		// on slow hardware. For multi-region setups, bump the timeout 3x
+		// for the duration of setup, mirroring the bump inside
+		// setupMultiRegionDatabase. The IIFE scopes the deferred restore
+		// to the setup phase only.
+		func() {
+			if qct.isMultiRegion {
+				defer withIncreasedStmtTimeout(t, conn, logStmt, 3)()
 			}
-		}
+			t.Status("executing setup")
+			t.L().Printf("setup:\n%s", strings.Join(setup, "\n"))
+			for _, stmt := range setup {
+				if _, err := conn.Exec(stmt); err != nil {
+					t.Fatal(err)
+				} else {
+					logStmt(stmt)
+				}
+			}
+		}()
 
 		conn2 := conn
 		node2 := 1
@@ -354,6 +377,7 @@ func runOneRoundQueryComparison(
 			sqlsmith.SetComplexity(.3),
 			sqlsmith.SetScalarComplexity(.1),
 			sqlsmith.SimpleNames(),
+			sqlsmith.SetLogger(t.L().Printf),
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -385,7 +409,7 @@ func runOneRoundQueryComparison(
 				// Initialize a new mutating smither that generates INSERT, UPDATE and
 				// DELETE statements with the MutationsOnly option.
 				mutatingSmither = newMutatingSmither(conn, rnd, t, false /* disableDelete */, qct.isMultiRegion)
-				defer mutatingSmither.Close()
+				defer mutatingSmither.Close() //nolint:deferloop
 			}
 
 			if i%numInitialMutations == 0 {
@@ -395,15 +419,16 @@ func runOneRoundQueryComparison(
 			}
 
 			h := queryComparisonHelper{
-				conn1:      conn,
-				conn2:      conn2,
-				node1:      node,
-				node2:      node2,
-				logStmt:    logStmt,
-				logFailure: logFailure,
-				printStmt:  printStmt,
-				stmtNo:     i,
-				rnd:        rnd,
+				conn1:           conn,
+				conn2:           conn2,
+				node1:           node,
+				node2:           node2,
+				connSetupForLog: connSetupForLog,
+				logStmt:         logStmt,
+				logFailure:      logFailure,
+				printStmt:       printStmt,
+				stmtNo:          i,
+				rnd:             rnd,
 			}
 
 			// Run `numInitialMutations` mutations first so that the tables have rows.
@@ -411,7 +436,7 @@ func runOneRoundQueryComparison(
 			// state of the database.
 			if i < numInitialMutations || i%25 == 0 {
 				mConn, mConnInfo := h.chooseConn()
-				runMutationStatement(mConn, mConnInfo, mutatingSmither, logStmt)
+				runMutationStatement(t, mConn, mConnInfo, mutatingSmither, logStmt)
 				continue
 			}
 
@@ -432,6 +457,7 @@ func newMutatingSmither(
 		sqlsmith.SetComplexity(.05),
 		sqlsmith.SetScalarComplexity(.01),
 		sqlsmith.SimpleNames(),
+		sqlsmith.SetLogger(t.L().Printf),
 	)
 	if disableDelete {
 		smitherOpts = append(smitherOpts, sqlsmith.InsUpdOnly())
@@ -462,13 +488,14 @@ type sqlAndOutput struct {
 type queryComparisonHelper struct {
 	// There are two different connections so that we sometimes execute the
 	// queries on different nodes.
-	conn1, conn2 *gosql.DB
-	node1, node2 int
-	logStmt      func(string)
-	logFailure   func(string, [][]string)
-	printStmt    func(string)
-	stmtNo       int
-	rnd          *rand.Rand
+	conn1, conn2    *gosql.DB
+	node1, node2    int
+	connSetupForLog func() []string
+	logStmt         func(string)
+	logFailure      func(string, [][]string)
+	printStmt       func(string)
+	stmtNo          int
+	rnd             *rand.Rand
 
 	statements            []string
 	statementsAndExplains []sqlAndOutput
@@ -487,10 +514,10 @@ func (h *queryComparisonHelper) chooseConn() (conn *gosql.DB, connInfo string) {
 	defaultFirstPort, _ := strconv.Atoi(base.DefaultPort)
 	if h.rnd.Intn(2) == 0 {
 		conn = h.conn1
-		connInfo = fmt.Sprintf("\\connect - - - %d\n", defaultFirstPort+h.node1-1)
+		connInfo = fmt.Sprintf("\\connect - - - %d\n%s\n", defaultFirstPort+h.node1-1, strings.Join(h.connSetupForLog(), "\n"))
 	} else {
 		conn = h.conn2
-		connInfo = fmt.Sprintf("\\connect - - - %d\n", defaultFirstPort+h.node2-1)
+		connInfo = fmt.Sprintf("\\connect - - - %d\n%s\n", defaultFirstPort+h.node2-1, strings.Join(h.connSetupForLog(), "\n"))
 	}
 	return conn, connInfo
 }
@@ -502,10 +529,7 @@ func (h *queryComparisonHelper) chooseConn() (conn *gosql.DB, connInfo string) {
 //
 //	stmt - the query to run
 //	conn - the connection to use
-//	connInfo - a string to identify the connection for debugging purposes
-func (h *queryComparisonHelper) runQuery(
-	stmt string, conn *gosql.DB, connInfo string,
-) ([][]string, error) {
+func (h *queryComparisonHelper) runQuery(stmt string, conn *gosql.DB) ([][]string, error) {
 	// Log this statement with a timestamp but commented out. This will help in
 	// cases when the stmt will get stuck and the whole test will time out (in
 	// such a scenario, since the stmt didn't execute successfully, it won't get
@@ -515,7 +539,7 @@ func (h *queryComparisonHelper) runQuery(
 		// stmt as a single line. This way this auxiliary logging takes up less
 		// space (if the stmt executes successfully, it'll still get logged with the
 		// usual formatting below).
-		strconv.Quote(connInfo+stmt+";"),
+		strconv.Quote(stmt+";"),
 	))
 
 	runQueryImpl := func(stmt string, conn *gosql.DB) ([][]string, error) {
@@ -553,13 +577,17 @@ func (h *queryComparisonHelper) runQuery(
 	// Only save the stmt on success - this makes it easier to reproduce the
 	// log. The caller still can include it into the statements later if
 	// necessary.
-	h.addStmtForLogging(connInfo+stmt, rows)
+	h.addStmtForLogging(stmt, rows)
 	return rows, nil
 }
 
 // addStmtForLogging includes the provided stmt (as well as optional output
 // rows) to be included into logging later.
 func (h *queryComparisonHelper) addStmtForLogging(stmt string, rows [][]string) {
+	if stmt == "" && rows == nil {
+		// Special case to no-op when called with ("" /* connInfo */, nil /* rows */)
+		return
+	}
 	h.statements = append(h.statements, stmt)
 	h.statementsAndExplains = append(h.statementsAndExplains, sqlAndOutput{sql: stmt, output: rows})
 }
@@ -569,9 +597,8 @@ func (h *queryComparisonHelper) addStmtForLogging(stmt string, rows [][]string) 
 //
 //	stmt - the statement to execute
 //	conn - the connection to use
-//	connInfo - a string to identify the connection for debugging purposes
-func (h *queryComparisonHelper) execStmt(stmt string, conn *gosql.DB, connInfo string) error {
-	h.addStmtForLogging(connInfo+stmt, nil /* rows */)
+func (h *queryComparisonHelper) execStmt(stmt string, conn *gosql.DB) error {
+	h.addStmtForLogging(stmt, nil /* rows */)
 	_, err := conn.Exec(stmt)
 	return err
 }
@@ -611,13 +638,48 @@ func joinAndSortRows(rowMatrix1, rowMatrix2 [][]string, sep string) (rows1, rows
 	return rows1, rows2
 }
 
+func isFloat(colType string) bool {
+	switch colType {
+	case "FLOAT4", "FLOAT8":
+		return true
+	default:
+		return false
+	}
+}
+
+func isFloatArray(colType string) bool {
+	switch colType {
+	case "[]FLOAT4", "[]FLOAT8", "_FLOAT4", "_FLOAT8":
+		return true
+	default:
+		return false
+	}
+}
+
+func isDecimal(colType string) bool {
+	switch colType {
+	case "DECIMAL", "NUMERIC":
+		return true
+	default:
+		return false
+	}
+}
+
+func isDecimalArray(colType string) bool {
+	switch colType {
+	case "[]DECIMAL", "_DECIMAL", "[]NUMERIC", "_NUMERIC":
+		return true
+	default:
+		return false
+	}
+}
+
 func needApproximateMatch(colType string) bool {
 	// On s390x, check that values for both float and decimal coltypes are
 	// approximately equal to take into account platform differences in floating
 	// point calculations. On other architectures, check float values only.
-	return (runtime.GOARCH == "s390x" && (colType == "DECIMAL" || colType == "[]DECIMAL")) ||
-		colType == "FLOAT4" || colType == "[]FLOAT4" ||
-		colType == "FLOAT8" || colType == "[]FLOAT8"
+	return (runtime.GOARCH == "s390x" && (isDecimal(colType) || isDecimalArray(colType))) ||
+		isFloat(colType) || isFloatArray(colType)
 }
 
 // sortRowsWithFloatComp is similar to joinAndSortRows, but it uses float
@@ -627,7 +689,7 @@ func sortRowsWithFloatComp(rowMatrix1, rowMatrix2 [][]string, colTypes []string)
 		for idx := range colTypes {
 			if needApproximateMatch(colTypes[idx]) {
 				cmpFn := floatcmp.FloatsCmp
-				if strings.HasPrefix(colTypes[idx], "[]") {
+				if isFloatArray(colTypes[idx]) || isDecimalArray(colTypes[idx]) {
 					cmpFn = floatcmp.FloatArraysCmp
 				}
 				res, err := cmpFn(rowMatrix[i][idx], rowMatrix[j][idx])
@@ -655,6 +717,28 @@ func sortRowsWithFloatComp(rowMatrix1, rowMatrix2 [][]string, colTypes []string)
 	})
 }
 
+func trimDecimalTrailingZeroes(d string) string {
+	if !strings.Contains(d, ".") {
+		// The number is an integer - nothing to trim.
+		return d
+	}
+	d = strings.TrimRight(d, "0")
+	if d[len(d)-1] == '.' {
+		// We fully trimmed the fractional part, so we need to remove the
+		// dangling dot.
+		d = d[:len(d)-1]
+	}
+	return d
+}
+
+func trimDecimalsTrailingZeroesInArray(array string) string {
+	decimals := strings.Split(strings.Trim(array, "{}"), ",")
+	for i := range decimals {
+		decimals[i] = trimDecimalTrailingZeroes(decimals[i])
+	}
+	return "{" + strings.Join(decimals, ",") + "}"
+}
+
 // unsortedMatricesDiffWithFloatComp sorts and compares the rows in rowMatrix1
 // to rowMatrix2 and outputs a diff or message related to the comparison. If a
 // string comparison of the rows fails, and they contain floats or decimals, it
@@ -673,14 +757,14 @@ func unsortedMatricesDiffWithFloatComp(
 	if len(rows1) != len(rows2) || len(colTypes) != len(rowMatrix1[0]) || len(colTypes) != len(rowMatrix2[0]) {
 		return result, nil
 	}
-	var needApproxMatch bool
+	var needCustomMatch bool
 	for _, colType := range colTypes {
-		if needApproximateMatch(colType) {
-			needApproxMatch = true
+		if needApproximateMatch(colType) || isDecimal(colType) || isDecimalArray(colType) {
+			needCustomMatch = true
 			break
 		}
 	}
-	if !needApproxMatch {
+	if !needCustomMatch {
 		return result, nil
 	}
 	sortRowsWithFloatComp(rowMatrix1, rowMatrix2, colTypes)
@@ -690,14 +774,19 @@ func unsortedMatricesDiffWithFloatComp(
 
 		for j, colType := range colTypes {
 			if needApproximateMatch(colType) {
+				isFloatOrDecimalArray := isFloatArray(colType) || isDecimalArray(colType)
 				cmpFn := floatcmp.FloatsMatch
 				switch {
-				case runtime.GOARCH == "s390x" && strings.HasPrefix(colType, "[]"):
+				case runtime.GOARCH == "s390x" && isFloatOrDecimalArray:
 					cmpFn = floatcmp.FloatArraysMatchApprox
-				case runtime.GOARCH == "s390x" && !strings.HasPrefix(colType, "[]"):
+				case runtime.GOARCH == "s390x" && !isFloatOrDecimalArray:
 					cmpFn = floatcmp.FloatsMatchApprox
-				case strings.HasPrefix(colType, "[]"):
+				case isDecimalArray(colType):
 					cmpFn = floatcmp.FloatArraysMatch
+				case isFloatArray(colType):
+					cmpFn = floatcmp.FloatArraysMatchApprox
+				case isFloat(colType):
+					cmpFn = floatcmp.FloatsMatchApprox
 				}
 				match, err := cmpFn(row1[j], row2[j])
 				if err != nil {
@@ -707,6 +796,17 @@ func unsortedMatricesDiffWithFloatComp(
 					return result, nil
 				}
 			} else {
+				switch {
+				case isDecimal(colType):
+					// For decimals, remove any trailing zeroes.
+					row1[j] = trimDecimalTrailingZeroes(row1[j])
+					row2[j] = trimDecimalTrailingZeroes(row2[j])
+				case isDecimalArray(colType):
+					// For decimal arrays, remove any trailing zeroes from each
+					// decimal.
+					row1[j] = trimDecimalsTrailingZeroesInArray(row1[j])
+					row2[j] = trimDecimalsTrailingZeroesInArray(row2[j])
+				}
 				// Check that other columns are equal with a string comparison.
 				if row1[j] != row2[j] {
 					return result, nil

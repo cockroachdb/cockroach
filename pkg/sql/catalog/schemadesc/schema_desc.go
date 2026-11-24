@@ -15,7 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -270,13 +270,20 @@ func (desc *immutable) ValidateSelf(vea catalog.ValidationErrorAccumulator) {
 
 // GetReferencedDescIDs returns the IDs of all descriptors referenced by
 // this descriptor, including itself.
-func (desc *immutable) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
+func (desc *immutable) GetReferencedDescIDs(
+	level catalog.ValidationLevel,
+) (catalog.DescriptorIDSet, error) {
 	ret := catalog.MakeDescriptorIDSet(desc.GetID(), desc.GetParentID())
-	for _, f := range desc.Functions {
-		for _, sig := range f.Signatures {
-			ret.Add(sig.ID)
+	// We only need to resolve functions in this schema if we are validating
+	// back references as well.
+	if level&catalog.ValidationLevelBackReferences == catalog.ValidationLevelBackReferences {
+		for _, f := range desc.Functions {
+			for _, sig := range f.Signatures {
+				ret.Add(sig.ID)
+			}
 		}
 	}
+
 	return ret, nil
 }
 
@@ -473,6 +480,11 @@ func (desc *immutable) GetDeclarativeSchemaChangeState() *scpb.DescriptorState {
 	return desc.DeclarativeSchemaChangerState.Clone()
 }
 
+// Rewrite implements the catalog.MutableDescriptor interface.
+func (desc *Mutable) Rewrite(_ catalog.DescriptorRewriteFn) error {
+	return errors.AssertionFailedf("Rewrite is not implemented for schema descriptors")
+}
+
 // SetDeclarativeSchemaChangerState is part of the catalog.MutableDescriptor
 // interface.
 func (desc *Mutable) SetDeclarativeSchemaChangerState(state *scpb.DescriptorState) {
@@ -621,12 +633,12 @@ func (desc *immutable) GetResolvedFuncDefinition(
 			overload.DefaultExprs = make(tree.Exprs, len(sig.DefaultExprs))
 			for j, expr := range sig.DefaultExprs {
 				var err error
-				overload.DefaultExprs[j], err = parser.ParseExpr(expr)
+				overload.DefaultExprs[j], err = parserutils.ParseExpr(expr)
 				if err != nil {
 					// We should never get an error during parsing the default
 					// expr.
 					inputParamOrdinal := len(sig.ArgTypes) - (len(sig.DefaultExprs) - j)
-					log.Errorf(
+					log.Dev.Errorf(
 						ctx, "DEFAULT expr for input param %d for routine %s: %v",
 						inputParamOrdinal, name, err,
 					)

@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -95,7 +95,7 @@ func TestDebugCheckStore(t *testing.T) {
 			storage.MustExist)
 		require.NoError(t, err)
 		defer eng.Close()
-		sl := stateloader.Make(1)
+		sl := kvstorage.MakeStateLoader(1)
 		ms, err := sl.LoadMVCCStats(ctx, eng)
 		require.NoError(t, err)
 		ms.ContainsEstimates = 0

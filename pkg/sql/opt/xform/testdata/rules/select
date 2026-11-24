@@ -281,7 +281,7 @@ CREATE INDEX idx2 ON p (s) WHERE i > 0
 memo expect=GeneratePartialIndexScans
 SELECT * FROM p WHERE i > 0 AND s = 'foo'
 ----
-memo (optimized, ~18KB, required=[presentation: k:1,i:2,f:3,s:4,b:5])
+memo (optimized, ~19KB, required=[presentation: k:1,i:2,f:3,s:4,b:5])
  ├── G1: (select G2 G3) (index-join G4 p,cols=(1-5)) (index-join G5 p,cols=(1-5)) (index-join G6 p,cols=(1-5)) (index-join G7 p,cols=(1-5))
  │    └── [presentation: k:1,i:2,f:3,s:4,b:5]
  │         ├── best: (index-join G4 p,cols=(1-5))
@@ -329,7 +329,7 @@ memo (optimized, ~18KB, required=[presentation: k:1,i:2,f:3,s:4,b:5])
 memo expect-not=GeneratePartialIndexScans
 SELECT * FROM p@{NO_INDEX_JOIN} WHERE i > 0 AND s = 'foo'
 ----
-memo (optimized, ~9KB, required=[presentation: k:1,i:2,f:3,s:4,b:5])
+memo (optimized, ~10KB, required=[presentation: k:1,i:2,f:3,s:4,b:5])
  ├── G1: (select G2 G3)
  │    └── [presentation: k:1,i:2,f:3,s:4,b:5]
  │         ├── best: (select G2 G3)
@@ -557,6 +557,43 @@ project
       ├── columns: k:1!null
       └── key: (1)
 
+exec-ddl
+CREATE TABLE t140019 (
+  k INT PRIMARY KEY,
+  i INT,
+  j INT,
+  INDEX (k) WHERE i = 0 AND j = 1
+)
+----
+
+# Regression test for #140019. Do not project unnecessary columns, like i=0,
+# that are held constant by the partial index predicate.
+opt disable=(SimplifyZeroCardinalityGroup,EliminateZeroCardSelect,EliminateZeroCardProject)
+SELECT NULL FROM t140019 WHERE false GROUP BY j
+----
+project
+ ├── columns: "?column?":6
+ ├── cardinality: [0 - 0]
+ ├── fd: ()-->(6)
+ ├── distinct-on
+ │    ├── columns: j:3
+ │    ├── grouping columns: j:3
+ │    ├── cardinality: [0 - 0]
+ │    ├── key: (3)
+ │    └── select
+ │         ├── columns: j:3
+ │         ├── cardinality: [0 - 0]
+ │         ├── project
+ │         │    ├── columns: j:3!null
+ │         │    ├── fd: ()-->(3)
+ │         │    ├── scan t140019@t140019_k_idx,partial
+ │         │    └── projections
+ │         │         └── 1 [as=j:3]
+ │         └── filters
+ │              └── false [constraints=(contradiction; tight)]
+ └── projections
+      └── NULL [as="?column?":6]
+
 # --------------------------------------------------
 # GenerateConstrainedScans
 # --------------------------------------------------
@@ -574,7 +611,7 @@ scan a
 memo
 SELECT k FROM a WHERE k = 1
 ----
-memo (optimized, ~6KB, required=[presentation: k:1])
+memo (optimized, ~7KB, required=[presentation: k:1])
  ├── G1: (select G2 G3) (scan a,cols=(1),constrained)
  │    └── [presentation: k:1]
  │         ├── best: (scan a,cols=(1),constrained)
@@ -686,7 +723,7 @@ project
 memo
 SELECT k FROM a WHERE u = 1 AND k+u = 1
 ----
-memo (optimized, ~10KB, required=[presentation: k:1])
+memo (optimized, ~11KB, required=[presentation: k:1])
  ├── G1: (project G2 G3 k)
  │    └── [presentation: k:1]
  │         ├── best: (project G2 G3 k)
@@ -738,7 +775,7 @@ project
 memo
 SELECT k FROM a WHERE u = 1 AND v = 5
 ----
-memo (optimized, ~11KB, required=[presentation: k:1])
+memo (optimized, ~12KB, required=[presentation: k:1])
  ├── G1: (project G2 G3 k)
  │    └── [presentation: k:1]
  │         ├── best: (project G2 G3 k)
@@ -830,7 +867,7 @@ index-join b
 memo
 SELECT * FROM b WHERE v >= 1 AND v <= 10
 ----
-memo (optimized, ~7KB, required=[presentation: k:1,u:2,v:3,j:4])
+memo (optimized, ~8KB, required=[presentation: k:1,u:2,v:3,j:4])
  ├── G1: (select G2 G3) (index-join G4 b,cols=(1-4))
  │    └── [presentation: k:1,u:2,v:3,j:4]
  │         ├── best: (index-join G4 b,cols=(1-4))
@@ -892,7 +929,7 @@ index-join b
 memo
 SELECT * FROM b WHERE v >= 1 AND v <= 10 AND k > 5
 ----
-memo (optimized, ~10KB, required=[presentation: k:1,u:2,v:3,j:4])
+memo (optimized, ~11KB, required=[presentation: k:1,u:2,v:3,j:4])
  ├── G1: (select G2 G3) (select G4 G5) (index-join G6 b,cols=(1-4))
  │    └── [presentation: k:1,u:2,v:3,j:4]
  │         ├── best: (index-join G6 b,cols=(1-4))
@@ -1318,7 +1355,7 @@ memo (optimized, ~8KB, required=[presentation: s:4,i:2,f:3] [ordering: +2 opt(4)
 memo
 SELECT j FROM kifs WHERE s = 'foo'
 ----
-memo (optimized, ~9KB, required=[presentation: j:5])
+memo (optimized, ~10KB, required=[presentation: j:5])
  ├── G1: (project G2 G3 j)
  │    └── [presentation: j:5]
  │         ├── best: (project G2 G3 j)
@@ -1344,7 +1381,7 @@ memo (optimized, ~9KB, required=[presentation: j:5])
 memo
 SELECT i, k FROM kifs WHERE s >= 'foo'
 ----
-memo (optimized, ~8KB, required=[presentation: i:2,k:1])
+memo (optimized, ~9KB, required=[presentation: i:2,k:1])
  ├── G1: (project G2 G3 k i)
  │    └── [presentation: i:2,k:1]
  │         ├── best: (project G2 G3 k i)
@@ -1753,15 +1790,15 @@ CREATE INDEX idx2 ON p (i) WHERE s = 'foo'
 memo
 SELECT i FROM p WHERE i = 3 AND s = 'foo'
 ----
-memo (optimized, ~23KB, required=[presentation: i:2])
+memo (optimized, ~24KB, required=[presentation: i:2])
  ├── G1: (project G2 G3 i)
  │    └── [presentation: i:2]
  │         ├── best: (project G2 G3 i)
- │         └── cost: 19.03
+ │         └── cost: 19.12
  ├── G2: (select G4 G5) (select G6 G7) (select G8 G7) (select G9 G7) (project G10 G11 i)
  │    └── []
  │         ├── best: (project G10 G11 i)
- │         └── cost: 19.00
+ │         └── cost: 19.09
  ├── G3: (projections)
  ├── G4: (scan p,cols=(2,4))
  │    └── []
@@ -1784,7 +1821,7 @@ memo (optimized, ~23KB, required=[presentation: i:2])
  ├── G10: (scan p@idx2,partial,cols=(2),constrained)
  │    └── []
  │         ├── best: (scan p@idx2,partial,cols=(2),constrained)
- │         └── cost: 18.96
+ │         └── cost: 19.05
  ├── G11: (projections G17)
  ├── G12: (eq G18 G19)
  ├── G13: (eq G20 G17)
@@ -6779,7 +6816,7 @@ CREATE INVERTED INDEX idx2 ON pi (j) WHERE s = 'bar'
 memo expect=GenerateInvertedIndexScans
 SELECT * FROM pi WHERE j @> '{"a": "b"}' AND s = 'bar'
 ----
-memo (optimized, ~14KB, required=[presentation: k:1,s:2,j:3])
+memo (optimized, ~15KB, required=[presentation: k:1,s:2,j:3])
  ├── G1: (select G2 G3) (select G4 G5) (index-join G6 pi,cols=(1-3))
  │    └── [presentation: k:1,s:2,j:3]
  │         ├── best: (index-join G6 pi,cols=(1-3))
@@ -6827,7 +6864,7 @@ CREATE INVERTED INDEX idx ON pi (j) WHERE s IN ('foo', 'bar')
 memo expect-not=GenerateInvertedIndexScans
 SELECT * FROM pi WHERE j @> '{"a": "b"}' AND s = 'baz'
 ----
-memo (optimized, ~8KB, required=[presentation: k:1,s:2,j:3])
+memo (optimized, ~9KB, required=[presentation: k:1,s:2,j:3])
  ├── G1: (select G2 G3)
  │    └── [presentation: k:1,s:2,j:3]
  │         ├── best: (select G2 G3)
@@ -8517,6 +8554,80 @@ project
  └── projections
       └── 1 [as="?column?":15]
 
+# Regression test for #136078. A project expression must be added above an
+# inverted filter to prune output columns to match the original group when there
+# is no index join to do so.
+exec-ddl
+CREATE TABLE t136078 (
+  a INT,
+  b STRING,
+  col3_8 STRING AS (lower(b)) VIRTUAL,
+  PRIMARY KEY (a, b),
+  INVERTED INDEX (col3_8 gin_trgm_ops)
+)
+----
+
+opt expect=GenerateInvertedIndexScans set=(optimizer_use_trigram_similarity_optimization=false)
+SELECT b FROM t136078 WHERE 'abc' % col3_8
+----
+project
+ ├── columns: b:2!null
+ ├── stable
+ └── inverted-filter
+      ├── columns: a:1!null b:2!null
+      ├── inverted expression: /6
+      │    ├── tight: false, unique: false
+      │    └── union spans
+      │         ├── ["  a", "  a"]
+      │         ├── [" ab", " ab"]
+      │         ├── ["abc", "abc"]
+      │         └── ["bc ", "bc "]
+      ├── stable
+      ├── key: (1,2)
+      └── select
+           ├── columns: a:1!null b:2!null col3_8_inverted_key:6!null
+           ├── stable
+           ├── scan t136078@t136078_col3_8_idx,inverted
+           │    ├── columns: a:1!null b:2!null col3_8_inverted_key:6!null
+           │    └── inverted constraint: /6/1/2
+           │         └── spans
+           │              ├── ["  a", "  a"]
+           │              ├── [" ab", " ab"]
+           │              ├── ["abc", "abc"]
+           │              └── ["bc ", "bc "]
+           └── filters
+                └── 'abc' % lower(b:2) [outer=(2), stable]
+
+exec-ddl
+CREATE TABLE t143070 (
+  a STRING,
+  b STRING,
+  c STRING AS (b) VIRTUAL,
+  PRIMARY KEY (a, b),
+  INVERTED INDEX (c gin_trgm_ops)
+)
+----
+
+# Regression test for #143070. The inverted index scan should not produce
+# unneeded PK cols.
+opt expect=GenerateInvertedIndexScans
+SELECT 1 FROM t143070 WHERE c LIKE 'aaa'
+----
+project
+ ├── columns: "?column?":7!null
+ ├── fd: ()-->(7)
+ ├── select
+ │    ├── columns: b:2!null
+ │    ├── fd: ()-->(2)
+ │    ├── scan t143070@t143070_c_idx,inverted
+ │    │    ├── columns: b:2!null
+ │    │    └── inverted constraint: /6/1/2
+ │    │         └── spans: ["aaa", "aaa"]
+ │    └── filters
+ │         └── b:2 LIKE 'aaa' [outer=(2), constraints=(/2: [/'aaa' - /'aaa']; tight), fd=()-->(2)]
+ └── projections
+      └── 1 [as="?column?":7]
+
 
 # --------------------------------------------------
 # GenerateMinimalInvertedIndexScans
@@ -9029,11 +9140,11 @@ inner-join (zigzag pqr@q pqr@r)
 memo expect=GenerateZigzagJoins
 SELECT q,r FROM pqr WHERE q = 1 AND r = 2
 ----
-memo (optimized, ~17KB, required=[presentation: q:2,r:3])
+memo (optimized, ~18KB, required=[presentation: q:2,r:3])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7) (select G8 G7) (zigzag-join G3 pqr@q pqr@r)
  │    └── [presentation: q:2,r:3]
  │         ├── best: (zigzag-join G3 pqr@q pqr@r)
- │         └── cost: 19.24
+ │         └── cost: 30.13
  ├── G2: (scan pqr,cols=(2,3))
  │    └── []
  │         ├── best: (scan pqr,cols=(2,3))
@@ -9110,11 +9221,11 @@ inner-join (lookup pqr)
 memo expect=GenerateZigzagJoins
 SELECT q,r,s FROM pqr WHERE q = 1 AND r = 2
 ----
-memo (optimized, ~20KB, required=[presentation: q:2,r:3,s:4])
+memo (optimized, ~21KB, required=[presentation: q:2,r:3,s:4])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7) (select G8 G7) (lookup-join G9 G10 pqr,keyCols=[1],outCols=(2-4))
  │    └── [presentation: q:2,r:3,s:4]
  │         ├── best: (lookup-join G9 G10 pqr,keyCols=[1],outCols=(2-4))
- │         └── cost: 23.86
+ │         └── cost: 40.25
  ├── G2: (scan pqr,cols=(2-4))
  │    └── []
  │         ├── best: (scan pqr,cols=(2-4))
@@ -9137,7 +9248,7 @@ memo (optimized, ~20KB, required=[presentation: q:2,r:3,s:4])
  ├── G9: (zigzag-join G3 pqr@q pqr@r)
  │    └── []
  │         ├── best: (zigzag-join G3 pqr@q pqr@r)
- │         └── cost: 19.24
+ │         └── cost: 30.14
  ├── G10: (filters)
  ├── G11: (eq G16 G17)
  ├── G12: (eq G18 G19)
@@ -9175,11 +9286,11 @@ inner-join (zigzag pqr@q pqr@s)
 memo expect=GenerateZigzagJoins
 SELECT q,s FROM pqr WHERE q = 1 AND s = 'foo'
 ----
-memo (optimized, ~14KB, required=[presentation: q:2,s:4])
+memo (optimized, ~15KB, required=[presentation: q:2,s:4])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7) (zigzag-join G3 pqr@q pqr@s)
  │    └── [presentation: q:2,s:4]
  │         ├── best: (zigzag-join G3 pqr@q pqr@s)
- │         └── cost: 30.03
+ │         └── cost: 30.14
  ├── G2: (scan pqr,cols=(2,4))
  │    └── []
  │         ├── best: (scan pqr,cols=(2,4))
@@ -9707,11 +9818,11 @@ select
 memo
 SELECT p,q,r,s FROM pqr WHERE q = 1 AND r = 1 AND s = 'foo'
 ----
-memo (optimized, ~40KB, required=[presentation: p:1,q:2,r:3,s:4])
+memo (optimized, ~43KB, required=[presentation: p:1,q:2,r:3,s:4])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7) (select G8 G9) (select G10 G9) (lookup-join G11 G12 pqr,keyCols=[1],outCols=(1-4)) (zigzag-join G3 pqr@q pqr@s) (zigzag-join G3 pqr@q pqr@rs) (lookup-join G13 G9 pqr,keyCols=[1],outCols=(1-4))
  │    └── [presentation: p:1,q:2,r:3,s:4]
  │         ├── best: (zigzag-join G3 pqr@q pqr@s)
- │         └── cost: 18.17
+ │         └── cost: 30.17
  ├── G2: (scan pqr,cols=(1-4))
  │    └── []
  │         ├── best: (scan pqr,cols=(1-4))
@@ -9739,7 +9850,7 @@ memo (optimized, ~40KB, required=[presentation: p:1,q:2,r:3,s:4])
  ├── G11: (zigzag-join G21 pqr@q pqr@r)
  │    └── []
  │         ├── best: (zigzag-join G21 pqr@q pqr@r)
- │         └── cost: 19.24
+ │         └── cost: 30.14
  ├── G12: (filters G16)
  ├── G13: (zigzag-join G5 pqr@r pqr@s)
  │    └── []
@@ -9799,7 +9910,7 @@ select
 memo
 SELECT q,t FROM pqr WHERE q = 1 AND t = 'foo'
 ----
-memo (optimized, ~11KB, required=[presentation: q:2,t:5])
+memo (optimized, ~12KB, required=[presentation: q:2,t:5])
  ├── G1: (select G2 G3) (select G4 G5) (select G6 G7)
  │    └── [presentation: q:2,t:5]
  │         ├── best: (select G4 G5)
@@ -9838,7 +9949,7 @@ memo (optimized, ~11KB, required=[presentation: q:2,t:5])
 memo
 SELECT c FROM zz_redundant WHERE b = 1
 ----
-memo (optimized, ~8KB, required=[presentation: c:3])
+memo (optimized, ~9KB, required=[presentation: c:3])
  ├── G1: (project G2 G3 c)
  │    └── [presentation: c:3]
  │         ├── best: (project G2 G3 c)
@@ -10353,6 +10464,7 @@ inner-join (lookup b)
  │    ├── right fixed columns: [9] = ['\x376300012a0400']
  │    ├── left locking: for-update
  │    ├── right locking: for-update
+ │    ├── volatile
  │    └── filters (true)
  └── filters (true)
 
@@ -11776,7 +11888,7 @@ CREATE TABLE t58390 (
 memo
 SELECT * FROM t58390 WHERE a > 1 OR b > 1
 ----
-memo (optimized, ~24KB, required=[presentation: k:1,a:2,b:3,c:4])
+memo (optimized, ~25KB, required=[presentation: k:1,a:2,b:3,c:4])
  ├── G1: (select G2 G3) (index-join G4 t58390,cols=(1-4)) (distinct-on G5 G6 cols=(1)) (distinct-on G5 G6 cols=(1),ordering=+1)
  │    └── [presentation: k:1,a:2,b:3,c:4]
  │         ├── best: (select G2 G3)
@@ -11891,7 +12003,7 @@ JOIN t61795 AS t2 ON t1.c = t1.b AND t1.b = t2.b
 WHERE t1.a = 10 OR t2.b != abs(t2.b)
 ORDER BY t1.b ASC
 ----
-memo (optimized, ~36KB, required=[presentation: a:1] [ordering: +2])
+memo (optimized, ~38KB, required=[presentation: a:1] [ordering: +2])
  ├── G1: (project G2 G3 a b)
  │    ├── [presentation: a:1] [ordering: +2]
  │    │    ├── best: (sort G1)
@@ -11926,13 +12038,13 @@ memo (optimized, ~36KB, required=[presentation: a:1] [ordering: +2])
  ├── G8: (union-all G13 G14)
  │    ├── [ordering: +(2|3)]
  │    │    ├── best: (union-all G13 G14="[ordering: +(17|18)]")
- │    │    └── cost: 1107.83
+ │    │    └── cost: 1107.87
  │    ├── [ordering: +1]
  │    │    ├── best: (union-all G13 G14="[ordering: +16]")
- │    │    └── cost: 1107.79
+ │    │    └── cost: 1107.80
  │    └── []
  │         ├── best: (union-all G13 G14)
- │         └── cost: 1107.79
+ │         └── cost: 1107.80
  ├── G9: (aggregations G15 G16)
  ├── G10: (eq G17 G18)
  ├── G11: (or G19 G20)
@@ -11950,7 +12062,7 @@ memo (optimized, ~36KB, required=[presentation: a:1] [ordering: +2])
  ├── G14: (select G28 G29) (select G30 G31)
  │    ├── [ordering: +(17|18)]
  │    │    ├── best: (sort G14)
- │    │    └── cost: 1098.70
+ │    │    └── cost: 1098.73
  │    ├── [ordering: +16]
  │    │    ├── best: (select G28="[ordering: +16]" G29)
  │    │    └── cost: 1098.66
@@ -12052,6 +12164,364 @@ memo (optimized, ~36KB, required=[presentation: a:1] [ordering: +2])
  │         └── cost: 1047.62
  ├── G51: (filters G39)
  └── G52: (scalar-list G48)
+
+# Regression test for #157073: explore splitting a disjunction on the same
+# column if there are multiple partial indexes with predicates on that column
+# that could be used.
+
+exec-ddl
+CREATE TABLE t157073 (
+  a INT NOT NULL PRIMARY KEY,
+  b INT NOT NULL,
+  c INT NOT NULL,
+  INDEX (c) WHERE b < 0,
+  INDEX (c, b) WHERE b >= 9990
+)
+----
+
+opt expect=SplitDisjunction
+SELECT c, a FROM t157073 WHERE c = 5 AND (b < 0 OR b >= 9990)
+----
+project
+ ├── columns: c:3!null a:1!null
+ ├── key: (1)
+ ├── fd: ()-->(3)
+ └── distinct-on
+      ├── columns: a:1!null b:2!null c:3!null
+      ├── grouping columns: a:1!null
+      ├── key: (1)
+      ├── fd: ()-->(3), (1)-->(2)
+      ├── union-all
+      │    ├── columns: a:1!null b:2!null c:3!null
+      │    ├── left columns: a:6 b:7 c:8
+      │    ├── right columns: a:11 b:12 c:13
+      │    ├── index-join t157073
+      │    │    ├── columns: a:6!null b:7!null c:8!null
+      │    │    ├── key: (6)
+      │    │    ├── fd: ()-->(8), (6)-->(7)
+      │    │    └── scan t157073@t157073_c_idx,partial
+      │    │         ├── columns: a:6!null c:8!null
+      │    │         ├── constraint: /8/6: [/5 - /5]
+      │    │         ├── key: (6)
+      │    │         └── fd: ()-->(8)
+      │    └── scan t157073@t157073_c_b_idx,partial
+      │         ├── columns: a:11!null b:12!null c:13!null
+      │         ├── constraint: /13/12/11: [/5 - /5]
+      │         ├── key: (11)
+      │         └── fd: ()-->(13), (11)-->(12)
+      └── aggregations
+           ├── const-agg [as=b:2, outer=(2)]
+           │    └── b:2
+           └── const-agg [as=c:3, outer=(3)]
+                └── c:3
+
+opt expect=SplitDisjunction
+SELECT c, a FROM t157073 WHERE c = 5 AND (a > 10 OR b < 0 OR b >= 9990)
+----
+project
+ ├── columns: c:3!null a:1!null
+ ├── key: (1)
+ ├── fd: ()-->(3)
+ └── distinct-on
+      ├── columns: a:1!null b:2!null c:3!null
+      ├── grouping columns: a:1!null
+      ├── key: (1)
+      ├── fd: ()-->(3), (1)-->(2)
+      ├── union-all
+      │    ├── columns: a:1!null b:2!null c:3!null
+      │    ├── left columns: a:6 b:7 c:8
+      │    ├── right columns: a:11 b:12 c:13
+      │    ├── select
+      │    │    ├── columns: a:6!null b:7!null c:8!null
+      │    │    ├── key: (6)
+      │    │    ├── fd: ()-->(8), (6)-->(7)
+      │    │    ├── scan t157073
+      │    │    │    ├── columns: a:6!null b:7!null c:8!null
+      │    │    │    ├── constraint: /6: [/11 - ]
+      │    │    │    ├── key: (6)
+      │    │    │    └── fd: (6)-->(7,8)
+      │    │    └── filters
+      │    │         └── c:8 = 5 [outer=(8), constraints=(/8: [/5 - /5]; tight), fd=()-->(8)]
+      │    └── distinct-on
+      │         ├── columns: a:11!null b:12!null c:13!null
+      │         ├── grouping columns: a:11!null
+      │         ├── key: (11)
+      │         ├── fd: ()-->(13), (11)-->(12)
+      │         ├── union-all
+      │         │    ├── columns: a:11!null b:12!null c:13!null
+      │         │    ├── left columns: a:16 b:17 c:18
+      │         │    ├── right columns: a:21 b:22 c:23
+      │         │    ├── scan t157073@t157073_c_b_idx,partial
+      │         │    │    ├── columns: a:16!null b:17!null c:18!null
+      │         │    │    ├── constraint: /18/17/16: [/5 - /5]
+      │         │    │    ├── key: (16)
+      │         │    │    └── fd: ()-->(18), (16)-->(17)
+      │         │    └── index-join t157073
+      │         │         ├── columns: a:21!null b:22!null c:23!null
+      │         │         ├── key: (21)
+      │         │         ├── fd: ()-->(23), (21)-->(22)
+      │         │         └── scan t157073@t157073_c_idx,partial
+      │         │              ├── columns: a:21!null c:23!null
+      │         │              ├── constraint: /23/21: [/5 - /5]
+      │         │              ├── key: (21)
+      │         │              └── fd: ()-->(23)
+      │         └── aggregations
+      │              ├── const-agg [as=b:12, outer=(12)]
+      │              │    └── b:12
+      │              └── const-agg [as=c:13, outer=(13)]
+      │                   └── c:13
+      └── aggregations
+           ├── const-agg [as=b:2, outer=(2)]
+           │    └── b:2
+           └── const-agg [as=c:3, outer=(3)]
+                └── c:3
+
+opt expect=SplitDisjunction
+SELECT c, a FROM t157073 WHERE c = 5 AND (b < 0 OR a > 10 OR b >= 9990)
+----
+project
+ ├── columns: c:3!null a:1!null
+ ├── key: (1)
+ ├── fd: ()-->(3)
+ └── distinct-on
+      ├── columns: a:1!null b:2!null c:3!null
+      ├── grouping columns: a:1!null
+      ├── key: (1)
+      ├── fd: ()-->(3), (1)-->(2)
+      ├── union-all
+      │    ├── columns: a:1!null b:2!null c:3!null
+      │    ├── left columns: a:6 b:7 c:8
+      │    ├── right columns: a:11 b:12 c:13
+      │    ├── index-join t157073
+      │    │    ├── columns: a:6!null b:7!null c:8!null
+      │    │    ├── key: (6)
+      │    │    ├── fd: ()-->(8), (6)-->(7)
+      │    │    └── scan t157073@t157073_c_idx,partial
+      │    │         ├── columns: a:6!null c:8!null
+      │    │         ├── constraint: /8/6: [/5 - /5]
+      │    │         ├── key: (6)
+      │    │         └── fd: ()-->(8)
+      │    └── distinct-on
+      │         ├── columns: a:11!null b:12!null c:13!null
+      │         ├── grouping columns: a:11!null
+      │         ├── key: (11)
+      │         ├── fd: ()-->(13), (11)-->(12)
+      │         ├── union-all
+      │         │    ├── columns: a:11!null b:12!null c:13!null
+      │         │    ├── left columns: a:16 b:17 c:18
+      │         │    ├── right columns: a:21 b:22 c:23
+      │         │    ├── scan t157073@t157073_c_b_idx,partial
+      │         │    │    ├── columns: a:16!null b:17!null c:18!null
+      │         │    │    ├── constraint: /18/17/16: [/5 - /5]
+      │         │    │    ├── key: (16)
+      │         │    │    └── fd: ()-->(18), (16)-->(17)
+      │         │    └── select
+      │         │         ├── columns: a:21!null b:22!null c:23!null
+      │         │         ├── key: (21)
+      │         │         ├── fd: ()-->(23), (21)-->(22)
+      │         │         ├── scan t157073
+      │         │         │    ├── columns: a:21!null b:22!null c:23!null
+      │         │         │    ├── constraint: /21: [/11 - ]
+      │         │         │    ├── key: (21)
+      │         │         │    └── fd: (21)-->(22,23)
+      │         │         └── filters
+      │         │              └── c:23 = 5 [outer=(23), constraints=(/23: [/5 - /5]; tight), fd=()-->(23)]
+      │         └── aggregations
+      │              ├── const-agg [as=b:12, outer=(12)]
+      │              │    └── b:12
+      │              └── const-agg [as=c:13, outer=(13)]
+      │                   └── c:13
+      └── aggregations
+           ├── const-agg [as=b:2, outer=(2)]
+           │    └── b:2
+           └── const-agg [as=c:3, outer=(3)]
+                └── c:3
+
+opt expect=SplitDisjunction
+SELECT c, a FROM t157073 WHERE c = 5 AND (b < 0 OR b >= 9990 OR a > 10)
+----
+project
+ ├── columns: c:3!null a:1!null
+ ├── key: (1)
+ ├── fd: ()-->(3)
+ └── distinct-on
+      ├── columns: a:1!null b:2!null c:3!null
+      ├── grouping columns: a:1!null
+      ├── key: (1)
+      ├── fd: ()-->(3), (1)-->(2)
+      ├── union-all
+      │    ├── columns: a:1!null b:2!null c:3!null
+      │    ├── left columns: a:6 b:7 c:8
+      │    ├── right columns: a:11 b:12 c:13
+      │    ├── index-join t157073
+      │    │    ├── columns: a:6!null b:7!null c:8!null
+      │    │    ├── key: (6)
+      │    │    ├── fd: ()-->(8), (6)-->(7)
+      │    │    └── scan t157073@t157073_c_idx,partial
+      │    │         ├── columns: a:6!null c:8!null
+      │    │         ├── constraint: /8/6: [/5 - /5]
+      │    │         ├── key: (6)
+      │    │         └── fd: ()-->(8)
+      │    └── distinct-on
+      │         ├── columns: a:11!null b:12!null c:13!null
+      │         ├── grouping columns: a:11!null
+      │         ├── key: (11)
+      │         ├── fd: ()-->(13), (11)-->(12)
+      │         ├── union-all
+      │         │    ├── columns: a:11!null b:12!null c:13!null
+      │         │    ├── left columns: a:16 b:17 c:18
+      │         │    ├── right columns: a:21 b:22 c:23
+      │         │    ├── select
+      │         │    │    ├── columns: a:16!null b:17!null c:18!null
+      │         │    │    ├── key: (16)
+      │         │    │    ├── fd: ()-->(18), (16)-->(17)
+      │         │    │    ├── scan t157073
+      │         │    │    │    ├── columns: a:16!null b:17!null c:18!null
+      │         │    │    │    ├── constraint: /16: [/11 - ]
+      │         │    │    │    ├── key: (16)
+      │         │    │    │    └── fd: (16)-->(17,18)
+      │         │    │    └── filters
+      │         │    │         └── c:18 = 5 [outer=(18), constraints=(/18: [/5 - /5]; tight), fd=()-->(18)]
+      │         │    └── scan t157073@t157073_c_b_idx,partial
+      │         │         ├── columns: a:21!null b:22!null c:23!null
+      │         │         ├── constraint: /23/22/21: [/5 - /5]
+      │         │         ├── key: (21)
+      │         │         └── fd: ()-->(23), (21)-->(22)
+      │         └── aggregations
+      │              ├── const-agg [as=b:12, outer=(12)]
+      │              │    └── b:12
+      │              └── const-agg [as=c:13, outer=(13)]
+      │                   └── c:13
+      └── aggregations
+           ├── const-agg [as=b:2, outer=(2)]
+           │    └── b:2
+           └── const-agg [as=c:3, outer=(3)]
+                └── c:3
+
+# In this case, we split the disjunction but then we do not choose the
+# split-disjunction plan because the split scans cannot be constrained.
+opt expect=SplitDisjunction
+SELECT c, a FROM t157073 WHERE c = 5 AND (b < 9990 OR b >= 9990)
+----
+project
+ ├── columns: c:3!null a:1!null
+ ├── key: (1)
+ ├── fd: ()-->(3)
+ └── select
+      ├── columns: a:1!null b:2!null c:3!null
+      ├── key: (1)
+      ├── fd: ()-->(3), (1)-->(2)
+      ├── scan t157073
+      │    ├── columns: a:1!null b:2!null c:3!null
+      │    ├── partial index predicates
+      │    │    ├── t157073_c_idx: filters
+      │    │    │    └── b:2 < 0 [outer=(2), constraints=(/2: (/NULL - /-1]; tight)]
+      │    │    └── t157073_c_b_idx: filters
+      │    │         └── b:2 >= 9990 [outer=(2), constraints=(/2: [/9990 - ]; tight)]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2,3)
+      └── filters
+           ├── c:3 = 5 [outer=(3), constraints=(/3: [/5 - /5]; tight), fd=()-->(3)]
+           └── (b:2 < 9990) OR (b:2 >= 9990) [outer=(2), constraints=(/2: (/NULL - /9989] [/9990 - ]; tight)]
+
+opt expect=SplitDisjunction
+SELECT c, a FROM t157073 WHERE c = 5 AND ((b >= 9990 AND b < 10000) OR b > 11000 OR a > 10)
+----
+project
+ ├── columns: c:3!null a:1!null
+ ├── key: (1)
+ ├── fd: ()-->(3)
+ └── distinct-on
+      ├── columns: a:1!null b:2!null c:3!null
+      ├── grouping columns: a:1!null
+      ├── key: (1)
+      ├── fd: ()-->(3), (1)-->(2)
+      ├── union-all
+      │    ├── columns: a:1!null b:2!null c:3!null
+      │    ├── left columns: a:6 b:7 c:8
+      │    ├── right columns: a:11 b:12 c:13
+      │    ├── scan t157073@t157073_c_b_idx,partial
+      │    │    ├── columns: a:6!null b:7!null c:8!null
+      │    │    ├── constraint: /8/7/6: [/5 - /5/9999]
+      │    │    ├── key: (6)
+      │    │    └── fd: ()-->(8), (6)-->(7)
+      │    └── distinct-on
+      │         ├── columns: a:11!null b:12!null c:13!null
+      │         ├── grouping columns: a:11!null
+      │         ├── key: (11)
+      │         ├── fd: ()-->(13), (11)-->(12)
+      │         ├── union-all
+      │         │    ├── columns: a:11!null b:12!null c:13!null
+      │         │    ├── left columns: a:16 b:17 c:18
+      │         │    ├── right columns: a:21 b:22 c:23
+      │         │    ├── select
+      │         │    │    ├── columns: a:16!null b:17!null c:18!null
+      │         │    │    ├── key: (16)
+      │         │    │    ├── fd: ()-->(18), (16)-->(17)
+      │         │    │    ├── scan t157073
+      │         │    │    │    ├── columns: a:16!null b:17!null c:18!null
+      │         │    │    │    ├── constraint: /16: [/11 - ]
+      │         │    │    │    ├── key: (16)
+      │         │    │    │    └── fd: (16)-->(17,18)
+      │         │    │    └── filters
+      │         │    │         └── c:18 = 5 [outer=(18), constraints=(/18: [/5 - /5]; tight), fd=()-->(18)]
+      │         │    └── scan t157073@t157073_c_b_idx,partial
+      │         │         ├── columns: a:21!null b:22!null c:23!null
+      │         │         ├── constraint: /23/22/21: [/5/11001 - /5]
+      │         │         ├── key: (21)
+      │         │         └── fd: ()-->(23), (21)-->(22)
+      │         └── aggregations
+      │              ├── const-agg [as=b:12, outer=(12)]
+      │              │    └── b:12
+      │              └── const-agg [as=c:13, outer=(13)]
+      │                   └── c:13
+      └── aggregations
+           ├── const-agg [as=b:2, outer=(2)]
+           │    └── b:2
+           └── const-agg [as=c:3, outer=(3)]
+                └── c:3
+
+# Check that we still get a multi-span constrained scan for IN sets.
+opt
+SELECT c, a FROM t157073 WHERE c = 5 AND b IN (9990, 9991, 9992, 9993, 9994, 9996, 9998)
+----
+project
+ ├── columns: c:3!null a:1!null
+ ├── key: (1)
+ ├── fd: ()-->(3)
+ └── scan t157073@t157073_c_b_idx,partial
+      ├── columns: a:1!null b:2!null c:3!null
+      ├── constraint: /3/2/1
+      │    ├── [/5/9990 - /5/9994]
+      │    ├── [/5/9996 - /5/9996]
+      │    └── [/5/9998 - /5/9998]
+      ├── key: (1)
+      └── fd: ()-->(3), (1)-->(2)
+
+# Ideally we would split the -1 from the rest of the IN set, but we do not currently.
+opt
+SELECT c, a FROM t157073 WHERE c = 5 AND b IN (-1, 9990, 9991, 9992, 9993, 9994, 9996, 9998)
+----
+project
+ ├── columns: c:3!null a:1!null
+ ├── key: (1)
+ ├── fd: ()-->(3)
+ └── select
+      ├── columns: a:1!null b:2!null c:3!null
+      ├── key: (1)
+      ├── fd: ()-->(3), (1)-->(2)
+      ├── scan t157073
+      │    ├── columns: a:1!null b:2!null c:3!null
+      │    ├── partial index predicates
+      │    │    ├── t157073_c_idx: filters
+      │    │    │    └── b:2 < 0 [outer=(2), constraints=(/2: (/NULL - /-1]; tight)]
+      │    │    └── t157073_c_b_idx: filters
+      │    │         └── b:2 >= 9990 [outer=(2), constraints=(/2: [/9990 - ]; tight)]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2,3)
+      └── filters
+           ├── c:3 = 5 [outer=(3), constraints=(/3: [/5 - /5]; tight), fd=()-->(3)]
+           └── b:2 IN (-1, 9990, 9991, 9992, 9993, 9994, 9996, 9998) [outer=(2), constraints=(/2: [/-1 - /-1] [/9990 - /9990] [/9991 - /9991] [/9992 - /9992] [/9993 - /9993] [/9994 - /9994] [/9996 - /9996] [/9998 - /9998]; tight)]
 
 # --------------------------------------------------
 # SplitDisjunctionAddKey
@@ -13464,3 +13934,584 @@ scan t124455
  ├── columns: s:1!null
  ├── constraint: /1: [/e'\\' - /']')
  └── key: (1)
+
+
+opt expect=GenerateInvertedIndexScans
+SELECT k FROM b WHERE jsonb_path_exists(j, '$.a.b')
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── inverted-filter
+      ├── columns: k:1!null
+      ├── inverted expression: /9
+      │    ├── tight: true, unique: false
+      │    └── union spans
+      │         ├── [???, Arr/"a"/Arr/Arr/)
+      │         ├── [???, Arr/"a"/Arr/)
+      │         ├── [???, "a"/Arr/Arr/)
+      │         └── [???, "a"/Arr/)
+      ├── key: (1)
+      └── scan b@j_inv_idx,inverted
+           ├── columns: k:1!null j_inverted_key:9!null
+           └── inverted constraint: /9/1
+                └── spans
+                     ├── [???, Arr/"a"/Arr/Arr/)
+                     ├── [???, Arr/"a"/Arr/)
+                     ├── [???, "a"/Arr/Arr/)
+                     └── [???, "a"/Arr/)
+
+
+memo expect=GenerateInvertedIndexScans
+SELECT k FROM b WHERE jsonb_path_exists(j, '$.a.b')
+----
+memo (optimized, ~11KB, required=[presentation: k:1])
+ ├── G1: (project G2 G3 k) (project G4 G3 k)
+ │    └── [presentation: k:1]
+ │         ├── best: (project G4 G3 k)
+ │         └── cost: 113337.84
+ ├── G2: (select G5 G6) (index-join G4 b,cols=(1,4))
+ │    └── []
+ │         ├── best: (select G5 G6)
+ │         └── cost: 587519.12
+ ├── G3: (projections)
+ ├── G4: (inverted-filter G7 j_inverted_key)
+ │    └── []
+ │         ├── best: (inverted-filter G7 j_inverted_key)
+ │         └── cost: 111671.19
+ ├── G5: (scan b,cols=(1,4))
+ │    └── []
+ │         ├── best: (scan b,cols=(1,4))
+ │         └── cost: 582519.19
+ ├── G6: (filters G8)
+ ├── G7: (scan b@j_inv_idx,inverted,cols=(1,9),constrained inverted)
+ │    └── []
+ │         ├── best: (scan b@j_inv_idx,inverted,cols=(1,9),constrained inverted)
+ │         └── cost: 110704.58
+ ├── G8: (function G9 jsonb_path_exists)
+ ├── G9: (scalar-list G10 G11)
+ ├── G10: (variable j)
+ └── G11: (const '$."a"."b"')
+
+opt expect=GenerateInvertedIndexScans
+SELECT k FROM b WHERE jsonb_path_exists(j, '$.a')
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── inverted-filter
+      ├── columns: k:1!null
+      ├── inverted expression: /9
+      │    ├── tight: true, unique: false
+      │    └── union spans
+      │         ├── [???, Arr/Arr/)
+      │         └── [???, Arr/)
+      ├── key: (1)
+      └── scan b@j_inv_idx,inverted
+           ├── columns: k:1!null j_inverted_key:9!null
+           └── inverted constraint: /9/1
+                └── spans
+                     ├── [???, Arr/Arr/)
+                     └── [???, Arr/)
+
+opt expect=GenerateInvertedIndexScans
+SELECT k FROM b WHERE jsonb_path_exists(j, '$.a[*]')
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── inverted-filter
+      ├── columns: k:1!null
+      ├── inverted expression: /9
+      │    ├── tight: true, unique: false
+      │    └── union spans
+      │         ├── [???, Arr/Arr/)
+      │         └── [???, Arr/)
+      ├── key: (1)
+      └── scan b@j_inv_idx,inverted
+           ├── columns: k:1!null j_inverted_key:9!null
+           └── inverted constraint: /9/1
+                └── spans
+                     ├── [???, Arr/Arr/)
+                     └── [???, Arr/)
+
+opt expect=GenerateInvertedIndexScans
+SELECT k FROM b WHERE jsonb_path_exists(j, '$.a[*].b')
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── inverted-filter
+      ├── columns: k:1!null
+      ├── inverted expression: /9
+      │    ├── tight: true, unique: false
+      │    └── union spans
+      │         ├── [???, Arr/"a"/Arr/Arr/Arr/)
+      │         ├── [???, Arr/"a"/Arr/Arr/)
+      │         ├── [???, Arr/"a"/Arr/)
+      │         ├── [???, "a"/Arr/Arr/Arr/)
+      │         ├── [???, "a"/Arr/Arr/)
+      │         └── [???, "a"/Arr/)
+      ├── key: (1)
+      └── scan b@j_inv_idx,inverted
+           ├── columns: k:1!null j_inverted_key:9!null
+           └── inverted constraint: /9/1
+                └── spans
+                     ├── [???, Arr/"a"/Arr/Arr/Arr/)
+                     ├── [???, Arr/"a"/Arr/Arr/)
+                     ├── [???, Arr/"a"/Arr/)
+                     ├── [???, "a"/Arr/Arr/Arr/)
+                     ├── [???, "a"/Arr/Arr/)
+                     └── [???, "a"/Arr/)
+
+opt expect=GenerateInvertedIndexScans
+SELECT k FROM b WHERE jsonb_path_exists(j, '$.a[*].b.c')
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── inverted-filter
+      ├── columns: k:1!null
+      ├── inverted expression: /9
+      │    ├── tight: true, unique: false
+      │    └── union spans
+      │         ├── [???, Arr/"a"/Arr/Arr/"b"/Arr/Arr/)
+      │         ├── [???, Arr/"a"/Arr/Arr/"b"/Arr/)
+      │         ├── [???, Arr/"a"/Arr/"b"/Arr/Arr/)
+      │         ├── [???, Arr/"a"/Arr/"b"/Arr/)
+      │         ├── [???, Arr/"a"/"b"/Arr/Arr/)
+      │         ├── [???, Arr/"a"/"b"/Arr/)
+      │         ├── [???, "a"/Arr/Arr/"b"/Arr/Arr/)
+      │         ├── [???, "a"/Arr/Arr/"b"/Arr/)
+      │         ├── [???, "a"/Arr/"b"/Arr/Arr/)
+      │         ├── [???, "a"/Arr/"b"/Arr/)
+      │         ├── [???, "a"/"b"/Arr/Arr/)
+      │         └── [???, "a"/"b"/Arr/)
+      ├── key: (1)
+      └── scan b@j_inv_idx,inverted
+           ├── columns: k:1!null j_inverted_key:9!null
+           └── inverted constraint: /9/1
+                └── spans
+                     ├── [???, Arr/"a"/Arr/Arr/"b"/Arr/Arr/)
+                     ├── [???, Arr/"a"/Arr/Arr/"b"/Arr/)
+                     ├── [???, Arr/"a"/Arr/"b"/Arr/Arr/)
+                     ├── [???, Arr/"a"/Arr/"b"/Arr/)
+                     ├── [???, Arr/"a"/"b"/Arr/Arr/)
+                     ├── [???, Arr/"a"/"b"/Arr/)
+                     ├── [???, "a"/Arr/Arr/"b"/Arr/Arr/)
+                     ├── [???, "a"/Arr/Arr/"b"/Arr/)
+                     ├── [???, "a"/Arr/"b"/Arr/Arr/)
+                     ├── [???, "a"/Arr/"b"/Arr/)
+                     ├── [???, "a"/"b"/Arr/Arr/)
+                     └── [???, "a"/"b"/Arr/)
+
+opt expect=GenerateInvertedIndexScans
+SELECT k FROM b WHERE jsonb_path_exists(j, '$.a[*][*].b[*].c[*][*]')
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── inverted-filter
+      ├── columns: k:1!null
+      ├── inverted expression: /9
+      │    ├── tight: true, unique: false
+      │    └── union spans
+      │         ├── [???, Arr/"a"/Arr/Arr/Arr/"b"/Arr/Arr/Arr/)
+      │         ├── [???, Arr/"a"/Arr/Arr/Arr/"b"/Arr/Arr/)
+      │         ├── [???, Arr/"a"/Arr/Arr/Arr/"b"/Arr/)
+      │         ├── [???, Arr/"a"/Arr/Arr/"b"/Arr/Arr/Arr/)
+      │         ├── [???, Arr/"a"/Arr/Arr/"b"/Arr/Arr/)
+      │         ├── [???, Arr/"a"/Arr/Arr/"b"/Arr/)
+      │         ├── [???, Arr/"a"/Arr/"b"/Arr/Arr/Arr/)
+      │         ├── [???, Arr/"a"/Arr/"b"/Arr/Arr/)
+      │         ├── [???, Arr/"a"/Arr/"b"/Arr/)
+      │         ├── [???, Arr/"a"/"b"/Arr/Arr/Arr/)
+      │         ├── [???, Arr/"a"/"b"/Arr/Arr/)
+      │         ├── [???, Arr/"a"/"b"/Arr/)
+      │         ├── [???, "a"/Arr/Arr/Arr/"b"/Arr/Arr/Arr/)
+      │         ├── [???, "a"/Arr/Arr/Arr/"b"/Arr/Arr/)
+      │         ├── [???, "a"/Arr/Arr/Arr/"b"/Arr/)
+      │         ├── [???, "a"/Arr/Arr/"b"/Arr/Arr/Arr/)
+      │         ├── [???, "a"/Arr/Arr/"b"/Arr/Arr/)
+      │         ├── [???, "a"/Arr/Arr/"b"/Arr/)
+      │         ├── [???, "a"/Arr/"b"/Arr/Arr/Arr/)
+      │         ├── [???, "a"/Arr/"b"/Arr/Arr/)
+      │         ├── [???, "a"/Arr/"b"/Arr/)
+      │         ├── [???, "a"/"b"/Arr/Arr/Arr/)
+      │         ├── [???, "a"/"b"/Arr/Arr/)
+      │         └── [???, "a"/"b"/Arr/)
+      ├── key: (1)
+      └── scan b@j_inv_idx,inverted
+           ├── columns: k:1!null j_inverted_key:9!null
+           └── inverted constraint: /9/1
+                └── spans
+                     ├── [???, Arr/"a"/Arr/Arr/Arr/"b"/Arr/Arr/Arr/)
+                     ├── [???, Arr/"a"/Arr/Arr/Arr/"b"/Arr/Arr/)
+                     ├── [???, Arr/"a"/Arr/Arr/Arr/"b"/Arr/)
+                     ├── [???, Arr/"a"/Arr/Arr/"b"/Arr/Arr/Arr/)
+                     ├── [???, Arr/"a"/Arr/Arr/"b"/Arr/Arr/)
+                     ├── [???, Arr/"a"/Arr/Arr/"b"/Arr/)
+                     ├── [???, Arr/"a"/Arr/"b"/Arr/Arr/Arr/)
+                     ├── [???, Arr/"a"/Arr/"b"/Arr/Arr/)
+                     ├── [???, Arr/"a"/Arr/"b"/Arr/)
+                     ├── [???, Arr/"a"/"b"/Arr/Arr/Arr/)
+                     ├── [???, Arr/"a"/"b"/Arr/Arr/)
+                     ├── [???, Arr/"a"/"b"/Arr/)
+                     ├── [???, "a"/Arr/Arr/Arr/"b"/Arr/Arr/Arr/)
+                     ├── [???, "a"/Arr/Arr/Arr/"b"/Arr/Arr/)
+                     ├── [???, "a"/Arr/Arr/Arr/"b"/Arr/)
+                     ├── [???, "a"/Arr/Arr/"b"/Arr/Arr/Arr/)
+                     ├── [???, "a"/Arr/Arr/"b"/Arr/Arr/)
+                     ├── [???, "a"/Arr/Arr/"b"/Arr/)
+                     ├── [???, "a"/Arr/"b"/Arr/Arr/Arr/)
+                     ├── [???, "a"/Arr/"b"/Arr/Arr/)
+                     ├── [???, "a"/Arr/"b"/Arr/)
+                     ├── [???, "a"/"b"/Arr/Arr/Arr/)
+                     ├── [???, "a"/"b"/Arr/Arr/)
+                     └── [???, "a"/"b"/Arr/)
+
+opt expect=GenerateInvertedIndexScans
+SELECT k FROM b WHERE jsonb_path_exists(j, '$.a ? (@.x == "y")')
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── inverted-filter
+      ├── columns: k:1!null
+      ├── inverted expression: /9
+      │    ├── tight: true, unique: false
+      │    └── union spans
+      │         ├── [Arr/"a"/Arr/Arr/"x"/"y", Arr/"a"/Arr/Arr/"x"/"y"]
+      │         ├── [Arr/"a"/Arr/Arr/"x"/Arr/"y", Arr/"a"/Arr/Arr/"x"/Arr/"y"]
+      │         ├── [Arr/"a"/Arr/"x"/"y", Arr/"a"/Arr/"x"/"y"]
+      │         ├── [Arr/"a"/Arr/"x"/Arr/"y", Arr/"a"/Arr/"x"/Arr/"y"]
+      │         ├── [Arr/"a"/"x"/"y", Arr/"a"/"x"/"y"]
+      │         ├── [Arr/"a"/"x"/Arr/"y", Arr/"a"/"x"/Arr/"y"]
+      │         ├── ["a"/Arr/Arr/"x"/"y", "a"/Arr/Arr/"x"/"y"]
+      │         ├── ["a"/Arr/Arr/"x"/Arr/"y", "a"/Arr/Arr/"x"/Arr/"y"]
+      │         ├── ["a"/Arr/"x"/"y", "a"/Arr/"x"/"y"]
+      │         ├── ["a"/Arr/"x"/Arr/"y", "a"/Arr/"x"/Arr/"y"]
+      │         ├── ["a"/"x"/"y", "a"/"x"/"y"]
+      │         └── ["a"/"x"/Arr/"y", "a"/"x"/Arr/"y"]
+      ├── key: (1)
+      └── scan b@j_inv_idx,inverted
+           ├── columns: k:1!null j_inverted_key:9!null
+           └── inverted constraint: /9/1
+                └── spans
+                     ├── [Arr/"a"/Arr/Arr/"x"/"y", Arr/"a"/Arr/Arr/"x"/"y"]
+                     ├── [Arr/"a"/Arr/Arr/"x"/Arr/"y", Arr/"a"/Arr/Arr/"x"/Arr/"y"]
+                     ├── [Arr/"a"/Arr/"x"/"y", Arr/"a"/Arr/"x"/"y"]
+                     ├── [Arr/"a"/Arr/"x"/Arr/"y", Arr/"a"/Arr/"x"/Arr/"y"]
+                     ├── [Arr/"a"/"x"/"y", Arr/"a"/"x"/"y"]
+                     ├── [Arr/"a"/"x"/Arr/"y", Arr/"a"/"x"/Arr/"y"]
+                     ├── ["a"/Arr/Arr/"x"/"y", "a"/Arr/Arr/"x"/"y"]
+                     ├── ["a"/Arr/Arr/"x"/Arr/"y", "a"/Arr/Arr/"x"/Arr/"y"]
+                     ├── ["a"/Arr/"x"/"y", "a"/Arr/"x"/"y"]
+                     ├── ["a"/Arr/"x"/Arr/"y", "a"/Arr/"x"/Arr/"y"]
+                     ├── ["a"/"x"/"y", "a"/"x"/"y"]
+                     └── ["a"/"x"/Arr/"y", "a"/"x"/Arr/"y"]
+
+opt expect=GenerateInvertedIndexScans
+SELECT k FROM b WHERE jsonb_path_exists(j, '$.a ? (@.x == 123)')
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── inverted-filter
+      ├── columns: k:1!null
+      ├── inverted expression: /9
+      │    ├── tight: true, unique: false
+      │    └── union spans
+      │         ├── [Arr/"a"/Arr/Arr/"x"/123, Arr/"a"/Arr/Arr/"x"/123]
+      │         ├── [Arr/"a"/Arr/Arr/"x"/Arr/123, Arr/"a"/Arr/Arr/"x"/Arr/123]
+      │         ├── [Arr/"a"/Arr/"x"/123, Arr/"a"/Arr/"x"/123]
+      │         ├── [Arr/"a"/Arr/"x"/Arr/123, Arr/"a"/Arr/"x"/Arr/123]
+      │         ├── [Arr/"a"/"x"/123, Arr/"a"/"x"/123]
+      │         ├── [Arr/"a"/"x"/Arr/123, Arr/"a"/"x"/Arr/123]
+      │         ├── ["a"/Arr/Arr/"x"/123, "a"/Arr/Arr/"x"/123]
+      │         ├── ["a"/Arr/Arr/"x"/Arr/123, "a"/Arr/Arr/"x"/Arr/123]
+      │         ├── ["a"/Arr/"x"/123, "a"/Arr/"x"/123]
+      │         ├── ["a"/Arr/"x"/Arr/123, "a"/Arr/"x"/Arr/123]
+      │         ├── ["a"/"x"/123, "a"/"x"/123]
+      │         └── ["a"/"x"/Arr/123, "a"/"x"/Arr/123]
+      ├── key: (1)
+      └── scan b@j_inv_idx,inverted
+           ├── columns: k:1!null j_inverted_key:9!null
+           └── inverted constraint: /9/1
+                └── spans
+                     ├── [Arr/"a"/Arr/Arr/"x"/123, Arr/"a"/Arr/Arr/"x"/123]
+                     ├── [Arr/"a"/Arr/Arr/"x"/Arr/123, Arr/"a"/Arr/Arr/"x"/Arr/123]
+                     ├── [Arr/"a"/Arr/"x"/123, Arr/"a"/Arr/"x"/123]
+                     ├── [Arr/"a"/Arr/"x"/Arr/123, Arr/"a"/Arr/"x"/Arr/123]
+                     ├── [Arr/"a"/"x"/123, Arr/"a"/"x"/123]
+                     ├── [Arr/"a"/"x"/Arr/123, Arr/"a"/"x"/Arr/123]
+                     ├── ["a"/Arr/Arr/"x"/123, "a"/Arr/Arr/"x"/123]
+                     ├── ["a"/Arr/Arr/"x"/Arr/123, "a"/Arr/Arr/"x"/Arr/123]
+                     ├── ["a"/Arr/"x"/123, "a"/Arr/"x"/123]
+                     ├── ["a"/Arr/"x"/Arr/123, "a"/Arr/"x"/Arr/123]
+                     ├── ["a"/"x"/123, "a"/"x"/123]
+                     └── ["a"/"x"/Arr/123, "a"/"x"/Arr/123]
+
+opt expect=GenerateInvertedIndexScans
+SELECT k FROM b WHERE jsonb_path_exists(j, '$.a ? (@.x == true)')
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── inverted-filter
+      ├── columns: k:1!null
+      ├── inverted expression: /9
+      │    ├── tight: true, unique: false
+      │    └── union spans
+      │         ├── [Arr/"a"/Arr/Arr/"x"/True, Arr/"a"/Arr/Arr/"x"/True]
+      │         ├── [Arr/"a"/Arr/Arr/"x"/Arr/True, Arr/"a"/Arr/Arr/"x"/Arr/True]
+      │         ├── [Arr/"a"/Arr/"x"/True, Arr/"a"/Arr/"x"/True]
+      │         ├── [Arr/"a"/Arr/"x"/Arr/True, Arr/"a"/Arr/"x"/Arr/True]
+      │         ├── [Arr/"a"/"x"/True, Arr/"a"/"x"/True]
+      │         ├── [Arr/"a"/"x"/Arr/True, Arr/"a"/"x"/Arr/True]
+      │         ├── ["a"/Arr/Arr/"x"/True, "a"/Arr/Arr/"x"/True]
+      │         ├── ["a"/Arr/Arr/"x"/Arr/True, "a"/Arr/Arr/"x"/Arr/True]
+      │         ├── ["a"/Arr/"x"/True, "a"/Arr/"x"/True]
+      │         ├── ["a"/Arr/"x"/Arr/True, "a"/Arr/"x"/Arr/True]
+      │         ├── ["a"/"x"/True, "a"/"x"/True]
+      │         └── ["a"/"x"/Arr/True, "a"/"x"/Arr/True]
+      ├── key: (1)
+      └── scan b@j_inv_idx,inverted
+           ├── columns: k:1!null j_inverted_key:9!null
+           └── inverted constraint: /9/1
+                └── spans
+                     ├── [Arr/"a"/Arr/Arr/"x"/True, Arr/"a"/Arr/Arr/"x"/True]
+                     ├── [Arr/"a"/Arr/Arr/"x"/Arr/True, Arr/"a"/Arr/Arr/"x"/Arr/True]
+                     ├── [Arr/"a"/Arr/"x"/True, Arr/"a"/Arr/"x"/True]
+                     ├── [Arr/"a"/Arr/"x"/Arr/True, Arr/"a"/Arr/"x"/Arr/True]
+                     ├── [Arr/"a"/"x"/True, Arr/"a"/"x"/True]
+                     ├── [Arr/"a"/"x"/Arr/True, Arr/"a"/"x"/Arr/True]
+                     ├── ["a"/Arr/Arr/"x"/True, "a"/Arr/Arr/"x"/True]
+                     ├── ["a"/Arr/Arr/"x"/Arr/True, "a"/Arr/Arr/"x"/Arr/True]
+                     ├── ["a"/Arr/"x"/True, "a"/Arr/"x"/True]
+                     ├── ["a"/Arr/"x"/Arr/True, "a"/Arr/"x"/Arr/True]
+                     ├── ["a"/"x"/True, "a"/"x"/True]
+                     └── ["a"/"x"/Arr/True, "a"/"x"/Arr/True]
+
+opt expect=GenerateInvertedIndexScans
+SELECT k FROM b WHERE jsonb_path_exists(j, '$.a ? (@.x == false)')
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── inverted-filter
+      ├── columns: k:1!null
+      ├── inverted expression: /9
+      │    ├── tight: true, unique: false
+      │    └── union spans
+      │         ├── [Arr/"a"/Arr/Arr/"x"/False, Arr/"a"/Arr/Arr/"x"/False]
+      │         ├── [Arr/"a"/Arr/Arr/"x"/Arr/False, Arr/"a"/Arr/Arr/"x"/Arr/False]
+      │         ├── [Arr/"a"/Arr/"x"/False, Arr/"a"/Arr/"x"/False]
+      │         ├── [Arr/"a"/Arr/"x"/Arr/False, Arr/"a"/Arr/"x"/Arr/False]
+      │         ├── [Arr/"a"/"x"/False, Arr/"a"/"x"/False]
+      │         ├── [Arr/"a"/"x"/Arr/False, Arr/"a"/"x"/Arr/False]
+      │         ├── ["a"/Arr/Arr/"x"/False, "a"/Arr/Arr/"x"/False]
+      │         ├── ["a"/Arr/Arr/"x"/Arr/False, "a"/Arr/Arr/"x"/Arr/False]
+      │         ├── ["a"/Arr/"x"/False, "a"/Arr/"x"/False]
+      │         ├── ["a"/Arr/"x"/Arr/False, "a"/Arr/"x"/Arr/False]
+      │         ├── ["a"/"x"/False, "a"/"x"/False]
+      │         └── ["a"/"x"/Arr/False, "a"/"x"/Arr/False]
+      ├── key: (1)
+      └── scan b@j_inv_idx,inverted
+           ├── columns: k:1!null j_inverted_key:9!null
+           └── inverted constraint: /9/1
+                └── spans
+                     ├── [Arr/"a"/Arr/Arr/"x"/False, Arr/"a"/Arr/Arr/"x"/False]
+                     ├── [Arr/"a"/Arr/Arr/"x"/Arr/False, Arr/"a"/Arr/Arr/"x"/Arr/False]
+                     ├── [Arr/"a"/Arr/"x"/False, Arr/"a"/Arr/"x"/False]
+                     ├── [Arr/"a"/Arr/"x"/Arr/False, Arr/"a"/Arr/"x"/Arr/False]
+                     ├── [Arr/"a"/"x"/False, Arr/"a"/"x"/False]
+                     ├── [Arr/"a"/"x"/Arr/False, Arr/"a"/"x"/Arr/False]
+                     ├── ["a"/Arr/Arr/"x"/False, "a"/Arr/Arr/"x"/False]
+                     ├── ["a"/Arr/Arr/"x"/Arr/False, "a"/Arr/Arr/"x"/Arr/False]
+                     ├── ["a"/Arr/"x"/False, "a"/Arr/"x"/False]
+                     ├── ["a"/Arr/"x"/Arr/False, "a"/Arr/"x"/Arr/False]
+                     ├── ["a"/"x"/False, "a"/"x"/False]
+                     └── ["a"/"x"/Arr/False, "a"/"x"/Arr/False]
+
+
+opt expect=GenerateInvertedIndexScans
+SELECT k FROM b WHERE jsonb_path_exists(j, '$.a.b.*')
+----
+project
+ ├── columns: k:1!null
+ ├── immutable
+ ├── key: (1)
+ └── inverted-filter
+      ├── columns: k:1!null
+      ├── inverted expression: /9
+      │    ├── tight: true, unique: false
+      │    └── union spans
+      │         ├── [???, Arr/"a"/Arr/"b")
+      │         ├── [Arr/"a"/Arr/"b"/PrefixEnd, Arr/"a"/Arr/"b"/Arr)
+      │         ├── [Arr/"a"/Arr/"b"/Arr/PrefixEnd, Arr/"a"/Arr/Arr/)
+      │         ├── [???, Arr/"a"/"b")
+      │         ├── [Arr/"a"/"b"/PrefixEnd, Arr/"a"/"b"/Arr)
+      │         ├── [Arr/"a"/"b"/Arr/PrefixEnd, Arr/"a"/Arr/)
+      │         ├── [???, "a"/Arr/"b")
+      │         ├── ["a"/Arr/"b"/PrefixEnd, "a"/Arr/"b"/Arr)
+      │         ├── ["a"/Arr/"b"/Arr/PrefixEnd, "a"/Arr/Arr/)
+      │         ├── [???, "a"/"b")
+      │         ├── ["a"/"b"/PrefixEnd, "a"/"b"/Arr)
+      │         └── ["a"/"b"/Arr/PrefixEnd, "a"/Arr/)
+      ├── key: (1)
+      └── scan b@j_inv_idx,inverted
+           ├── columns: k:1!null j_inverted_key:9!null
+           └── inverted constraint: /9/1
+                └── spans
+                     ├── [???, Arr/"a"/Arr/"b")
+                     ├── [Arr/"a"/Arr/"b"/PrefixEnd, Arr/"a"/Arr/"b"/Arr)
+                     ├── [Arr/"a"/Arr/"b"/Arr/PrefixEnd, Arr/"a"/Arr/Arr/)
+                     ├── [???, Arr/"a"/"b")
+                     ├── [Arr/"a"/"b"/PrefixEnd, Arr/"a"/"b"/Arr)
+                     ├── [Arr/"a"/"b"/Arr/PrefixEnd, Arr/"a"/Arr/)
+                     ├── [???, "a"/Arr/"b")
+                     ├── ["a"/Arr/"b"/PrefixEnd, "a"/Arr/"b"/Arr)
+                     ├── ["a"/Arr/"b"/Arr/PrefixEnd, "a"/Arr/Arr/)
+                     ├── [???, "a"/"b")
+                     ├── ["a"/"b"/PrefixEnd, "a"/"b"/Arr)
+                     └── ["a"/"b"/Arr/PrefixEnd, "a"/Arr/)
+
+# --------------------------------------------------
+# optimizer_span_limit
+# --------------------------------------------------
+
+exec-ddl
+CREATE TABLE span_limit (
+    k INT PRIMARY KEY,
+    a INT,
+    b INT,
+    c INT,
+    INDEX ab (a, b),
+    INDEX abc (a, b, c)
+)
+----
+
+# With optimizer_span_limit=0 (the default, meaning no limit),
+# GenerateConstrainedScans should fire normally for IN lists.
+# Using non-contiguous values on both columns generates 3 * 3 = 9 individual
+# spans since they cannot be consolidated into ranges.
+opt expect=GenerateConstrainedScans
+SELECT k FROM span_limit WHERE a IN (1, 3, 5) AND b IN (2, 4, 6)
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── scan span_limit@ab
+      ├── columns: k:1!null a:2!null b:3!null
+      ├── constraint: /2/3/1
+      │    ├── [/1/2 - /1/2]
+      │    ├── [/1/4 - /1/4]
+      │    ├── [/1/6 - /1/6]
+      │    ├── [/3/2 - /3/2]
+      │    ├── [/3/4 - /3/4]
+      │    ├── [/3/6 - /3/6]
+      │    ├── [/5/2 - /5/2]
+      │    ├── [/5/4 - /5/4]
+      │    └── [/5/6 - /5/6]
+      ├── key: (1)
+      └── fd: (1)-->(2,3)
+
+# Setting optimizer_span_limit=10 still allows 9 spans.
+opt expect=GenerateConstrainedScans set=(optimizer_span_limit=10)
+SELECT k FROM span_limit WHERE a IN (1, 3, 5) AND b IN (2, 4, 6)
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── scan span_limit@ab
+      ├── columns: k:1!null a:2!null b:3!null
+      ├── constraint: /2/3/1
+      │    ├── [/1/2 - /1/2]
+      │    ├── [/1/4 - /1/4]
+      │    ├── [/1/6 - /1/6]
+      │    ├── [/3/2 - /3/2]
+      │    ├── [/3/4 - /3/4]
+      │    ├── [/3/6 - /3/6]
+      │    ├── [/5/2 - /5/2]
+      │    ├── [/5/4 - /5/4]
+      │    └── [/5/6 - /5/6]
+      ├── key: (1)
+      └── fd: (1)-->(2,3)
+
+# Setting optimizer_span_limit=8 would produce 3*3=9 spans without the limit.
+# The cross-product is skipped during span building, so we get a partial
+# constraint on just column a (3 spans). Column b is applied as a remaining
+# filter after the scan.
+opt expect=GenerateConstrainedScans set=(optimizer_span_limit=8)
+SELECT k FROM span_limit WHERE a IN (1, 3, 5) AND b IN (2, 4, 6)
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null a:2!null b:3!null
+      ├── key: (1)
+      ├── fd: (1)-->(2,3)
+      ├── scan span_limit@ab
+      │    ├── columns: k:1!null a:2!null b:3
+      │    ├── constraint: /2/3/1
+      │    │    ├── [/1 - /1]
+      │    │    ├── [/3 - /3]
+      │    │    └── [/5 - /5]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2,3)
+      └── filters
+           └── b:3 IN (2, 4, 6) [outer=(3), constraints=(/3: [/2 - /2] [/4 - /4] [/6 - /6]; tight)]
+
+# 4 non-contiguous values on each column would produce 4*4=16 spans.
+# With optimizer_span_limit=10, the cross-product is skipped, and we get a
+# partial constraint on just column a (4 spans).
+opt expect=GenerateConstrainedScans set=(optimizer_span_limit=10)
+SELECT k FROM span_limit WHERE a IN (1, 3, 5, 7) AND b IN (2, 4, 6, 8)
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null a:2!null b:3!null
+      ├── key: (1)
+      ├── fd: (1)-->(2,3)
+      ├── scan span_limit@ab
+      │    ├── columns: k:1!null a:2!null b:3
+      │    ├── constraint: /2/3/1
+      │    │    ├── [/1 - /1]
+      │    │    ├── [/3 - /3]
+      │    │    ├── [/5 - /5]
+      │    │    └── [/7 - /7]
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2,3)
+      └── filters
+           └── b:3 IN (2, 4, 6, 8) [outer=(3), constraints=(/3: [/2 - /2] [/4 - /4] [/6 - /6] [/8 - /8]; tight)]
+
+# A filter on just one column produces fewer spans (3 spans for 3 values).
+# With optimizer_span_limit=5, the constrained scan is within the limit.
+opt expect=GenerateConstrainedScans set=(optimizer_span_limit=5)
+SELECT k FROM span_limit WHERE a IN (1, 3, 5)
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── scan span_limit@ab
+      ├── columns: k:1!null a:2!null
+      ├── constraint: /2/3/1
+      │    ├── [/1 - /1]
+      │    ├── [/3 - /3]
+      │    └── [/5 - /5]
+      ├── key: (1)
+      └── fd: (1)-->(2)

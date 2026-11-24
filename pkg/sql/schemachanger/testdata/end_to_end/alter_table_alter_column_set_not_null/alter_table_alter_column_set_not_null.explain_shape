@@ -7,4 +7,4 @@ EXPLAIN (DDL, SHAPE) ALTER TABLE t ALTER COLUMN j SET NOT NULL;
 Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER COLUMN ‹j› SET NOT NULL;
  ├── execute 1 system table mutations transaction
  ├── validate NOT NULL constraint on column j in index t@[0] in relation t
- └── execute 1 system table mutations transaction
+ └── execute 2 system table mutations transactions

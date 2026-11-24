@@ -19,9 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/version"
 	"golang.org/x/time/rate"
 )
 
@@ -49,17 +49,22 @@ func Setup(
 		return 0, err
 	}
 
+	tables := gen.Tables()
+	log.Dev.Infof(ctx, "starting split operations for %d tables", len(tables))
 	const splitConcurrency = 384 // TODO(dan): Don't hardcode this.
-	for _, table := range gen.Tables() {
+	for _, table := range tables {
 		if err := Split(ctx, db, table, splitConcurrency); err != nil {
 			return 0, err
 		}
 	}
+	log.Dev.Infof(ctx, "finished split operations for %d tables", len(tables))
 
 	if hooks.PostLoad != nil {
+		log.Dev.Infof(ctx, "starting PostLoad hook")
 		if err := hooks.PostLoad(ctx, db); err != nil {
 			return 0, errors.Wrapf(err, "Could not postload")
 		}
+		log.Dev.Infof(ctx, "finished PostLoad hook")
 	}
 
 	return bytes, nil
@@ -84,7 +89,7 @@ func maybeDisableMergeQueue(db *gosql.DB) error {
 	v, err := version.Parse(versionStr)
 	// If we can't parse the error then we'll assume that we should disable the
 	// queue. This happens in testing.
-	if err == nil && (v.Major() > 19 || (v.Major() == 19 && v.Minor() >= 2)) {
+	if err == nil && v.Major().AtLeast(version.MustParseMajorVersion("v19.2")) {
 		return nil
 	}
 	_, err = db.Exec("SET CLUSTER SETTING kv.range_merge.queue.enabled = false")
@@ -117,7 +122,7 @@ func Split(ctx context.Context, db *gosql.DB, table workload.Table, concurrency 
 
 	// Check to see if we're on a tenant;
 
-	log.Infof(ctx, `starting %d splits`, len(splitPoints))
+	log.Dev.Infof(ctx, `starting %d splits`, len(splitPoints))
 	g := ctxgroup.WithContext(ctx)
 	// Rate limit splitting to prevent replica imbalance.
 	r := rate.NewLimiter(128, 1)
@@ -162,7 +167,7 @@ func Split(ctx context.Context, db *gosql.DB, table workload.Table, concurrency 
 						// SCATTER can collide with normal replicate queue
 						// operations and fail spuriously, so only print the
 						// error.
-						log.Warningf(ctx, `%s: %v`, stmt, err)
+						log.Dev.Warningf(ctx, `%s: %v`, stmt, err)
 					}
 
 					select {
@@ -191,7 +196,7 @@ func Split(ctx context.Context, db *gosql.DB, table workload.Table, concurrency 
 			case <-doneCh:
 				finished++
 				if finished%1000 == 0 {
-					log.Infof(ctx, "finished %d of %d splits", finished, len(splitPoints))
+					log.Dev.Infof(ctx, "finished %d of %d splits", finished, len(splitPoints))
 				}
 			case <-ctx.Done():
 				return ctx.Err()

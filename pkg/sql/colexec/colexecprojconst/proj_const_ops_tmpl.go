@@ -5,7 +5,6 @@
 
 // {{/*
 //go:build execgen_template
-// +build execgen_template
 
 //
 // This file is the execgen template for proj_const_{left,right}_ops.eg.go.
@@ -28,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
@@ -49,6 +49,8 @@ var (
 	_ telemetry.Counter
 	_ json.JSON
 	_ = coldataext.CompareDatum
+	_ = encoding.UnsafeConvertStringToBytes
+	_ *execinfrapb.ProducerMetadata
 )
 
 // {{/*
@@ -97,7 +99,7 @@ type _OP_CONST_NAME struct {
 	// {{end}}
 }
 
-func (p _OP_CONST_NAME) Next() coldata.Batch {
+func (p _OP_CONST_NAME) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	// {{if .NeedsBinaryOverloadHelper}}
 	// {{/*
 	//     In order to inline the templated code of the binary overloads
@@ -123,10 +125,13 @@ func (p _OP_CONST_NAME) Next() coldata.Batch {
 	// */}}
 	_caseInsensitive := p.caseInsensitive
 	// {{end}}
-	batch := p.Input.Next()
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	vec := batch.ColVec(p.colIdx)
 	var col _NON_CONST_GOTYPESLICE
@@ -154,7 +159,7 @@ func (p _OP_CONST_NAME) Next() coldata.Batch {
 			_SET_PROJECTION(false)
 		}
 	})
-	return batch
+	return batch, nil
 }
 
 // {{end}}

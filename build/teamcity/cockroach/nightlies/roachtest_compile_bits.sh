@@ -13,11 +13,15 @@ set -euo pipefail
 
 source $root/build/teamcity/util/roachtest_arch_util.sh
 
+if [[ "${ROACHTEST_BUILD_CACHE:-}" == "true" ]]; then
+  gcs_setup_credentials
+fi
+
 if [ "$#" -eq 0 ]; then
   echo "Builds all bits needed for roachtests and stages them in bin/ and lib/."
   echo ""
   echo "Usage: $0 [--with-code-coverage] arch [arch...]"
-  echo "  where arch is one of: amd64, arm64, amd64-fips"
+  echo "  where arch is one of: amd64, arm64, amd64-fips, s390x"
   exit 1
 fi
 

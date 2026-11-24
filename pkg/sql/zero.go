@@ -16,6 +16,7 @@ import (
 // have no results. (e.g. a table for which the filtering condition has a
 // contradiction).
 type zeroNode struct {
+	zeroInputPlanNode
 	columns colinfo.ResultColumns
 }
 

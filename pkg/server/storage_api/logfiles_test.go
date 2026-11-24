@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/redact"
@@ -99,13 +100,13 @@ func TestStatusLocalLogs(t *testing.T) {
 	time.Sleep(sleepBuffer)
 	// Ignoring fmtsafe lintrule is essential in this test to make filtering
 	// log events easier and compare entry messages later on.
-	// Changing formatting to log.Error(logCtx, "%s", spy.MsgErr) will wrap
+	// Changing formatting to log.Dev.Error(logCtx, "%s", spy.MsgErr) will wrap
 	// message with < > brackets and would require to strip them of later.
-	log.Errorf(logCtx, "%s", redact.Safe(spy.MsgErr))
+	log.Dev.Errorf(logCtx, "%s", redact.Safe(spy.MsgErr))
 	time.Sleep(sleepBuffer)
-	log.Warningf(logCtx, "%s", redact.Safe(spy.MsgWarn))
+	log.Dev.Warningf(logCtx, "%s", redact.Safe(spy.MsgWarn))
 	time.Sleep(sleepBuffer)
-	log.Infof(logCtx, "%s", redact.Safe(spy.MsgInf))
+	log.Dev.Infof(logCtx, "%s", redact.Safe(spy.MsgInf))
 	time.Sleep(sleepBuffer)
 
 	// Ensure all log lines above are written to disk.
@@ -263,17 +264,17 @@ func TestStatusLocalLogsTenantFilter(t *testing.T) {
 	// be a sufficient buffer.
 	// See util/log/clog.go formatHeader() for more details.
 	const sleepBuffer = time.Microsecond * 20
-	log.Errorf(ctxSysTenant, "system tenant msg 1")
+	log.Dev.Errorf(ctxSysTenant, "system tenant msg 1")
 	time.Sleep(sleepBuffer)
-	log.Errorf(ctxAppTenant, "app tenant msg 1")
+	log.Dev.Errorf(ctxAppTenant, "app tenant msg 1")
 	time.Sleep(sleepBuffer)
-	log.Warningf(ctxSysTenant, "system tenant msg 2")
+	log.Dev.Warningf(ctxSysTenant, "system tenant msg 2")
 	time.Sleep(sleepBuffer)
-	log.Warningf(ctxAppTenant, "app tenant msg 2")
+	log.Dev.Warningf(ctxAppTenant, "app tenant msg 2")
 	time.Sleep(sleepBuffer)
-	log.Infof(ctxSysTenant, "system tenant msg 3")
+	log.Dev.Infof(ctxSysTenant, "system tenant msg 3")
 	time.Sleep(sleepBuffer)
-	log.Infof(ctxAppTenant, "app tenant msg 3")
+	log.Dev.Infof(ctxAppTenant, "app tenant msg 3")
 	timestampEnd := timeutil.Now().UnixNano()
 
 	var listFilesResp serverpb.LogFilesListResponse
@@ -384,7 +385,7 @@ func TestStatusLogRedaction(t *testing.T) {
 
 			// Log something.
 			logCtx := ts.AnnotateCtx(context.Background())
-			log.Infof(logCtx, "THISISSAFE %s", "THISISUNSAFE")
+			log.Dev.Infof(logCtx, "THISISSAFE %s", "THISISUNSAFE")
 
 			// Determine the log file name.
 			var wrapper serverpb.LogFilesListResponse
@@ -472,41 +473,46 @@ func TestStatusLogCorruptedEntry(t *testing.T) {
 		skip.IgnoreLint(t, "Test only works with low verbosity levels")
 	}
 
-	s := log.ScopeWithoutShowLogs(t)
-	defer s.Close(t)
-
 	// This test cares about the number of output files. Ensure
 	// there's just one.
-	defer s.SetupSingleFileLogging()()
+	type testcase struct {
+		format         string
+		expectedErrors int
+	}
+	testutils.RunValues(t, "format", []testcase{{logconfig.DefaultFileFormat, 2}, {logconfig.DefaultStderrFormat, 2}, {logconfig.DefaultFluentFormat, 1}, {logconfig.DefaultHTTPFormat, 1}, {logconfig.DefaultOTLPFormat, 1}}, func(t *testing.T, tc testcase) {
+		s := log.ScopeWithoutShowLogs(t)
+		defer s.Close(t)
+		defer s.SetupSingleFileLoggingFormatted(tc.format)()
 
-	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer srv.Stopper().Stop(context.Background())
-	ts := srv.ApplicationLayer()
+		srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+		defer srv.Stopper().Stop(context.Background())
+		ts := srv.ApplicationLayer()
 
-	logCtx := ts.AnnotateCtx(context.Background())
+		logCtx := ts.AnnotateCtx(context.Background())
 
-	log.Errorf(logCtx, "TestStatusLogCorruptedEntry test message")
-	log.FlushFiles()
+		log.Dev.Errorf(logCtx, "TestStatusLogCorruptedEntry test message")
+		log.FlushFiles()
 
-	files, err := log.ListLogFiles()
-	require.NoError(t, err)
-	require.Equal(t, len(files), 1)
-	file := files[0]
-	f, err := os.OpenFile(fmt.Sprintf("%s%s%s", s.GetDirectory(), string(os.PathSeparator), file.Name), os.O_APPEND|os.O_WRONLY, 0600)
-	require.NoError(t, err)
-	// Insert empty lines into log file to simulate corrupted rows that cannot be
-	// parsed. And then append random log.
-	_, err = f.WriteString("\n\n")
-	require.NoError(t, err)
-	err = f.Close()
-	require.NoError(t, err)
-	log.Errorf(logCtx, "TestStatusLogCorruptedEntry test message 2")
-	log.FlushFiles()
+		files, err := log.ListLogFiles()
+		require.NoError(t, err)
+		require.Equal(t, len(files), 1)
+		file := files[0]
+		f, err := os.OpenFile(fmt.Sprintf("%s%s%s", s.GetDirectory(), string(os.PathSeparator), file.Name), os.O_APPEND|os.O_WRONLY, 0600)
+		require.NoError(t, err)
+		// Insert empty line and malformed entry into log file to simulate corrupted rows that cannot be
+		// parsed. And then append random log.
+		_, err = f.WriteString("\nMalformed Log Line")
+		require.NoError(t, err)
+		err = f.Close()
+		require.NoError(t, err)
+		log.Dev.Errorf(logCtx, "TestStatusLogCorruptedEntry test message 2")
+		log.FlushFiles()
 
-	var wrapper serverpb.LogEntriesResponse
-	err = srvtestutils.GetStatusJSONProto(ts, "logfiles/local/"+file.Name, &wrapper)
-	require.NoError(t, err)
-	require.NotEmpty(t, wrapper.Entries)
-	require.NotEmpty(t, wrapper.ParseErrors)
-	require.Equal(t, 2, len(wrapper.ParseErrors))
+		var wrapper serverpb.LogEntriesResponse
+		err = srvtestutils.GetStatusJSONProto(ts, "logfiles/local/"+file.Name, &wrapper)
+		require.NoError(t, err)
+		require.NotEmpty(t, wrapper.Entries)
+		require.NotEmpty(t, wrapper.ParseErrors)
+		require.Equal(t, tc.expectedErrors, len(wrapper.ParseErrors))
+	})
 }

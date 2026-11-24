@@ -11,6 +11,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -88,9 +90,11 @@ var backpressureByteTolerance = settings.RegisterByteSizeSetting(
 // to be backpressured.
 var backpressurableSpans = []roachpb.Span{
 	{Key: keys.TimeseriesPrefix, EndKey: keys.TimeseriesKeyMax},
-	// Backpressure from the end of the system config forward instead of
-	// over all table data to avoid backpressuring unsplittable ranges.
-	{Key: keys.SystemConfigTableDataMax, EndKey: keys.TableDataMax},
+	// Exclude the span_configurations table to avoid
+	// catch-22 situations where protected timestamp updates or garbage
+	// collection TTL updates are blocked by backpressure.
+	{Key: keys.SystemConfigTableDataMax, EndKey: keys.SpanConfigTableMin},
+	{Key: keys.SpanConfigTableMax, EndKey: keys.TableDataMax},
 }
 
 // canBackpressureBatch returns whether the provided BatchRequest is eligible
@@ -118,11 +122,14 @@ func canBackpressureBatch(ba *kvpb.BatchRequest) bool {
 	return false
 }
 
-// signallerForBatch returns the signaller to use for this batch. This is the
-// Replica's breaker's signaller except if any request in the batch uses
-// poison.Policy_Wait, in which case it's a neverTripSignaller. In particular,
-// `(signaller).C() == nil` signals that the request bypasses the circuit
-// breakers.
+// signallerForBatch returns the signaller to use for this batch in the
+// following priorities:
+// 1. If the batch contains a request uses poison.Policy_Wait, we will return
+// neverTripSignaller.
+// 2. If the replica is leaderless for a time longer than the threshold in
+// `kv.replica_raft.leaderless_unavailable_threshold`, use the
+// leaderlessWatcher signal.
+// 3. Otherwise, use the replica's breaker's signaller
 func (r *Replica) signallerForBatch(ba *kvpb.BatchRequest) signaller {
 	for _, ru := range ba.Requests {
 		req := ru.GetInner()
@@ -130,6 +137,14 @@ func (r *Replica) signallerForBatch(ba *kvpb.BatchRequest) signaller {
 			return neverTripSignaller{}
 		}
 	}
+
+	// If the leaderless watcher indicates that this replica is leaderless for a
+	// long time, use it as the signal.
+	if r.LeaderlessWatcher.IsUnavailable() {
+		return r.LeaderlessWatcher
+	}
+
+	// Otherwise, use the replica's breaker.
 	return r.breaker.Signal()
 }
 
@@ -142,13 +157,16 @@ func (r *Replica) signallerForBatch(ba *kvpb.BatchRequest) signaller {
 // range's size is already larger than the absolute maximum we'll allow.
 func (r *Replica) shouldBackpressureWrites() bool {
 	r.mu.RLock()
-	defer r.mu.RUnlock()
+	size := r.shMu.state.Stats.Total()
+	rangeMaxBytes := r.mu.conf.RangeMaxBytes
+	largestPreviousMaxRangeSize := r.mu.largestPreviousMaxRangeSizeBytes
+	r.mu.RUnlock()
 
 	// Check if the current range's size is already over the absolute maximum
 	// we'll allow. Don't bother with any multipliers/byte tolerance calculations
 	// if it is.
 	rangeSizeHardCap := backpressureRangeHardCap.Get(&r.store.cfg.Settings.SV)
-	size := r.shMu.state.Stats.Total()
+
 	if size >= rangeSizeHardCap {
 		return true
 	}
@@ -159,7 +177,8 @@ func (r *Replica) shouldBackpressureWrites() bool {
 		return false
 	}
 
-	exceeded, bytesOver := r.exceedsMultipleOfSplitSizeRLocked(mult)
+	exceeded, bytesOver := exceedsMultipleOfSplitSize(mult, rangeMaxBytes,
+		largestPreviousMaxRangeSize, size)
 	if !exceeded {
 		return false
 	}
@@ -175,6 +194,7 @@ func (r *Replica) maybeBackpressureBatch(ctx context.Context, ba *kvpb.BatchRequ
 	if !canBackpressureBatch(ba) {
 		return nil
 	}
+	tenantID, _ := roachpb.ClientTenantFromContext(ctx)
 
 	// If we need to apply backpressure, wait for an ongoing split to finish
 	// if one exists. This does not place a hard upper bound on the size of
@@ -182,24 +202,47 @@ func (r *Replica) maybeBackpressureBatch(ctx context.Context, ba *kvpb.BatchRequ
 	// the quota pool), but it does create an effective soft upper bound.
 	for first := true; r.shouldBackpressureWrites(); first = false {
 		if first {
+			cleanup := ash.SetWorkState(
+				tenantID, ash.WorkloadInfo{
+					WorkloadID:    ba.WorkloadID,
+					AppNameID:     ba.AppNameID,
+					GatewayNodeID: ba.GatewayNodeID,
+					WorkloadType:  workloadid.WorkloadType(ba.WorkloadType),
+				},
+				ash.WorkOther, "Backpressure")
+			defer cleanup() //nolint:deferloop
+
 			r.store.metrics.BackpressuredOnSplitRequests.Inc(1)
-			defer r.store.metrics.BackpressuredOnSplitRequests.Dec(1)
+			defer r.store.metrics.BackpressuredOnSplitRequests.Dec(1) //nolint:deferloop
 
 			if backpressureLogLimiter.ShouldLog() {
-				log.Warningf(ctx, "applying backpressure to limit range growth on batch %s", ba)
+				log.KvExec.Warningf(ctx, "applying backpressure to limit range growth on batch %s", ba)
 			}
 		}
 
 		// Register a callback on an ongoing split for this range in the splitQueue.
 		splitC := make(chan error, 1)
-		if !r.store.splitQueue.MaybeAddCallback(r.RangeID, func(err error) {
-			splitC <- err
+		if !r.store.splitQueue.MaybeAddCallback(r.RangeID, processCallback{
+			onEnqueueResult: func(rank int, err error) {},
+			onProcessResult: func(err error) {
+				select {
+				case splitC <- err:
+				default:
+					// Drop the error if the channel is already full. This prevents
+					// blocking if the callback is invoked multiple times.
+					return
+				}
+			},
 		}) {
 			// No split ongoing. We may have raced with its completion. There's
 			// no good way to prevent this race, so we conservatively allow the
 			// request to proceed instead of throwing an error that would surface
 			// to the client.
 			return nil
+		}
+
+		if knobs := r.store.TestingKnobs(); knobs != nil && knobs.TestingBackpressureCallbackRegistered != nil {
+			knobs.TestingBackpressureCallbackRegistered(r.RangeID)
 		}
 
 		const errHint = `For help understanding this error and troubleshooting, visit:

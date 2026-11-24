@@ -110,24 +110,21 @@ func randomOptions() *pebble.Options {
 	if opts.L0StopWritesThreshold < opts.L0CompactionThreshold {
 		opts.L0StopWritesThreshold = opts.L0CompactionThreshold
 	}
-	for i := range opts.Levels {
-		if i == 0 {
-			opts.Levels[i].BlockRestartInterval = int(rngIntRange(rng, 1, 64))
-			opts.Levels[i].BlockSize = 1 << rngIntRange(rng, 1, 20)
-			opts.Levels[i].BlockSizeThreshold = int(rngIntRange(rng, 50, 100))
-			opts.Levels[i].IndexBlockSize = opts.Levels[i].BlockSize
-			opts.Levels[i].TargetFileSize = 1 << rngIntRange(rng, 1, 20)
-		} else {
-			opts.Levels[i] = opts.Levels[i-1]
-			opts.Levels[i].TargetFileSize = opts.Levels[i-1].TargetFileSize * 2
-		}
+	opts.Levels[0].BlockRestartInterval = int(rngIntRange(rng, 1, 64))
+	opts.Levels[0].BlockSize = 1 << rngIntRange(rng, 1, 20)
+	opts.Levels[0].BlockSizeThreshold = int(rngIntRange(rng, 50, 100))
+	opts.Levels[0].IndexBlockSize = opts.Levels[0].BlockSize
+	opts.TargetFileSizes[0] = int64(max(1<<rngIntRange(rng, 9, 20), 570))
+	for i := 1; i < len(opts.Levels); i++ {
+		opts.Levels[i] = opts.Levels[i-1]
+		opts.TargetFileSizes[i] = opts.TargetFileSizes[i-1] * 2
 	}
 	opts.MaxManifestFileSize = 1 << rngIntRange(rng, 1, 28)
 	opts.MaxOpenFiles = int(rngIntRange(rng, 20, 2000))
 	opts.MemTableSize = 1 << rngIntRange(rng, 11, 28)
 	opts.MemTableStopWritesThreshold = int(rngIntRange(rng, 2, 7))
 	maxConcurrentCompactions := int(rngIntRange(rng, 1, 4))
-	opts.MaxConcurrentCompactions = func() int { return maxConcurrentCompactions }
+	opts.CompactionConcurrencyRange = func() (lower, upper int) { return 1, maxConcurrentCompactions }
 
 	opts.Cache = pebble.NewCache(1 << rngIntRange(rng, 1, 30))
 	defer opts.Cache.Unref()

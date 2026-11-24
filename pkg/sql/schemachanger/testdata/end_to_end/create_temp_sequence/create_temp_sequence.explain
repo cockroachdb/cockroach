@@ -4,18 +4,18 @@ SET CLUSTER SETTING sql.defaults.experimental_temporary_tables.enabled=true;
 /* test */
 EXPLAIN (DDL) CREATE TEMPORARY SEQUENCE sq1 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 32;
 ----
-Schema change plan for CREATE TEMPORARY SEQUENCE ‹defaultdb›.‹public›.‹sq1› MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 32;
+Schema change plan for CREATE TEMPORARY SEQUENCE ‹defaultdb›.‹pg_temp_123_456›.‹sq1› MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 32;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
  │         ├── 18 elements transitioning toward PUBLIC
  │         │    ├── ABSENT → PUBLIC Schema:{DescID: 104 (pg_temp_123_456+)}
  │         │    ├── ABSENT → PUBLIC SchemaParent:{DescID: 104 (pg_temp_123_456+), ReferencedDescID: 100 (defaultdb)}
- │         │    ├── ABSENT → PUBLIC Namespace:{DescID: 104 (pg_temp_123_456+), Name: "pg_temp_123_456", ReferencedDescID: 100 (defaultdb)}
+ │         │    ├── ABSENT → PUBLIC Namespace:{DescID: 104 (pg_temp_123_456+), Name: "pg_temp_123_456", ReferencedDescID: 100 (defaultdb), IntValue: 0}
  │         │    ├── ABSENT → PUBLIC Sequence:{DescID: 105 (sq1+)}
- │         │    ├── ABSENT → PUBLIC Namespace:{DescID: 105 (sq1+), Name: "sq1", ReferencedDescID: 100 (defaultdb)}
+ │         │    ├── ABSENT → PUBLIC Namespace:{DescID: 105 (sq1+), Name: "sq1", ReferencedDescID: 100 (defaultdb), IntValue: 104}
  │         │    ├── ABSENT → PUBLIC SchemaChild:{DescID: 105 (sq1+), ReferencedDescID: 104 (pg_temp_123_456+)}
  │         │    ├── ABSENT → PUBLIC TableData:{DescID: 105 (sq1+), ReferencedDescID: 100 (defaultdb)}
- │         │    ├── ABSENT → PUBLIC SequenceOption:{DescID: 105 (sq1+), Name: "START"}
+ │         │    ├── ABSENT → PUBLIC SequenceOption:{DescID: 105 (sq1+), Name: "START", Value: "32"}
  │         │    ├── ABSENT → PUBLIC Column:{DescID: 105 (sq1+), ColumnID: 1 (value+)}
  │         │    ├── ABSENT → PUBLIC ColumnType:{DescID: 105 (sq1+), ColumnFamilyID: 0, ColumnID: 1 (value+), TypeName: "INT8"}
  │         │    ├── ABSENT → PUBLIC ColumnNotNull:{DescID: 105 (sq1+), ColumnID: 1 (value+), IndexID: 0}
@@ -33,7 +33,7 @@ Schema change plan for CREATE TEMPORARY SEQUENCE ‹defaultdb›.‹public›.�
  │              ├── SetNameInDescriptor {"DescriptorID":105,"Name":"sq1"}
  │              ├── AddDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":105,"Name":"sq1","SchemaID":104}}
  │              ├── SetObjectParentID {"ObjParent":{"ChildObjectID":105,"SchemaID":104}}
- │              ├── SetSequenceOptions {"Key":"START","SequenceID":105,"Value":"32"}
+ │              ├── SetSequenceOption {"Key":"START","SequenceID":105,"Value":"32"}
  │              ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":1,"TableID":105}}
  │              ├── UpsertColumnType {"ColumnType":{"ColumnID":1,"TableID":105}}
  │              ├── SetColumnName {"ColumnID":1,"Name":"value","TableID":105}
@@ -59,12 +59,12 @@ Schema change plan for CREATE TEMPORARY SEQUENCE ‹defaultdb›.‹public›.�
       │    ├── 18 elements transitioning toward PUBLIC
       │    │    ├── PUBLIC → ABSENT Schema:{DescID: 104 (pg_temp_123_456+)}
       │    │    ├── PUBLIC → ABSENT SchemaParent:{DescID: 104 (pg_temp_123_456+), ReferencedDescID: 100 (defaultdb)}
-      │    │    ├── PUBLIC → ABSENT Namespace:{DescID: 104 (pg_temp_123_456+), Name: "pg_temp_123_456", ReferencedDescID: 100 (defaultdb)}
+      │    │    ├── PUBLIC → ABSENT Namespace:{DescID: 104 (pg_temp_123_456+), Name: "pg_temp_123_456", ReferencedDescID: 100 (defaultdb), IntValue: 0}
       │    │    ├── PUBLIC → ABSENT Sequence:{DescID: 105 (sq1+)}
-      │    │    ├── PUBLIC → ABSENT Namespace:{DescID: 105 (sq1+), Name: "sq1", ReferencedDescID: 100 (defaultdb)}
+      │    │    ├── PUBLIC → ABSENT Namespace:{DescID: 105 (sq1+), Name: "sq1", ReferencedDescID: 100 (defaultdb), IntValue: 104}
       │    │    ├── PUBLIC → ABSENT SchemaChild:{DescID: 105 (sq1+), ReferencedDescID: 104 (pg_temp_123_456+)}
       │    │    ├── PUBLIC → ABSENT TableData:{DescID: 105 (sq1+), ReferencedDescID: 100 (defaultdb)}
-      │    │    ├── PUBLIC → ABSENT SequenceOption:{DescID: 105 (sq1+), Name: "START"}
+      │    │    ├── PUBLIC → ABSENT SequenceOption:{DescID: 105 (sq1+), Name: "START", Value: "32"}
       │    │    ├── PUBLIC → ABSENT Column:{DescID: 105 (sq1+), ColumnID: 1 (value+)}
       │    │    ├── PUBLIC → ABSENT ColumnType:{DescID: 105 (sq1+), ColumnFamilyID: 0, ColumnID: 1 (value+), TypeName: "INT8"}
       │    │    ├── PUBLIC → ABSENT ColumnNotNull:{DescID: 105 (sq1+), ColumnID: 1 (value+), IndexID: 0}
@@ -81,12 +81,12 @@ Schema change plan for CREATE TEMPORARY SEQUENCE ‹defaultdb›.‹public›.�
            ├── 18 elements transitioning toward PUBLIC
            │    ├── ABSENT → PUBLIC Schema:{DescID: 104 (pg_temp_123_456+)}
            │    ├── ABSENT → PUBLIC SchemaParent:{DescID: 104 (pg_temp_123_456+), ReferencedDescID: 100 (defaultdb)}
-           │    ├── ABSENT → PUBLIC Namespace:{DescID: 104 (pg_temp_123_456+), Name: "pg_temp_123_456", ReferencedDescID: 100 (defaultdb)}
+           │    ├── ABSENT → PUBLIC Namespace:{DescID: 104 (pg_temp_123_456+), Name: "pg_temp_123_456", ReferencedDescID: 100 (defaultdb), IntValue: 0}
            │    ├── ABSENT → PUBLIC Sequence:{DescID: 105 (sq1+)}
-           │    ├── ABSENT → PUBLIC Namespace:{DescID: 105 (sq1+), Name: "sq1", ReferencedDescID: 100 (defaultdb)}
+           │    ├── ABSENT → PUBLIC Namespace:{DescID: 105 (sq1+), Name: "sq1", ReferencedDescID: 100 (defaultdb), IntValue: 104}
            │    ├── ABSENT → PUBLIC SchemaChild:{DescID: 105 (sq1+), ReferencedDescID: 104 (pg_temp_123_456+)}
            │    ├── ABSENT → PUBLIC TableData:{DescID: 105 (sq1+), ReferencedDescID: 100 (defaultdb)}
-           │    ├── ABSENT → PUBLIC SequenceOption:{DescID: 105 (sq1+), Name: "START"}
+           │    ├── ABSENT → PUBLIC SequenceOption:{DescID: 105 (sq1+), Name: "START", Value: "32"}
            │    ├── ABSENT → PUBLIC Column:{DescID: 105 (sq1+), ColumnID: 1 (value+)}
            │    ├── ABSENT → PUBLIC ColumnType:{DescID: 105 (sq1+), ColumnFamilyID: 0, ColumnID: 1 (value+), TypeName: "INT8"}
            │    ├── ABSENT → PUBLIC ColumnNotNull:{DescID: 105 (sq1+), ColumnID: 1 (value+), IndexID: 0}
@@ -97,14 +97,15 @@ Schema change plan for CREATE TEMPORARY SEQUENCE ‹defaultdb›.‹public›.�
            │    ├── ABSENT → PUBLIC Owner:{DescID: 105 (sq1+)}
            │    ├── ABSENT → PUBLIC UserPrivileges:{DescID: 105 (sq1+), Name: "admin"}
            │    └── ABSENT → PUBLIC UserPrivileges:{DescID: 105 (sq1+), Name: "root"}
-           └── 27 Mutation operations
+           └── 28 Mutation operations
                 ├── InsertTemporarySchema {"DescriptorID":104}
                 ├── AddDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":104,"Name":"pg_temp_123_456"}}
                 ├── CreateSequenceDescriptor {"SequenceID":105,"Temporary":true}
                 ├── SetNameInDescriptor {"DescriptorID":105,"Name":"sq1"}
                 ├── AddDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":105,"Name":"sq1","SchemaID":104}}
+                ├── UpdateTTLScheduleMetadata {"NewName":"sq1","TableID":105}
                 ├── SetObjectParentID {"ObjParent":{"ChildObjectID":105,"SchemaID":104}}
-                ├── SetSequenceOptions {"Key":"START","SequenceID":105,"Value":"32"}
+                ├── SetSequenceOption {"Key":"START","SequenceID":105,"Value":"32"}
                 ├── MakeAbsentColumnDeleteOnly {"Column":{"ColumnID":1,"TableID":105}}
                 ├── UpsertColumnType {"ColumnType":{"ColumnID":1,"TableID":105}}
                 ├── SetColumnName {"ColumnID":1,"Name":"value","TableID":105}

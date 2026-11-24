@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -48,7 +49,7 @@ func TestingWriteResumeSpan(
 	ctx, traceSpan := tracing.ChildSpan(ctx, "checkpoint")
 	defer traceSpan.Finish()
 
-	resumeSpans, job, mutationIdx, err := rowexec.GetResumeSpans(
+	resumeSpans, manifests, job, mutationIdx, err := rowexec.GetResumeSpansAndSSTManifests(
 		ctx, jobsRegistry, txn, codec, col, id, mutationID, filter,
 	)
 	if err != nil {
@@ -56,7 +57,7 @@ func TestingWriteResumeSpan(
 	}
 
 	resumeSpans = roachpb.SubtractSpans(resumeSpans, finished)
-	return rowexec.SetResumeSpansInJob(ctx, resumeSpans, mutationIdx, txn, job)
+	return rowexec.SetResumeSpansAndSSTManifestsInJob(ctx, &codec, resumeSpans, manifests, mutationIdx, txn, job)
 }
 
 func TestWriteResumeSpan(t *testing.T) {
@@ -65,7 +66,7 @@ func TestWriteResumeSpan(t *testing.T) {
 
 	ctx := context.Background()
 
-	server, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+	srv, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			// Disable all schema change execution.
 			SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
@@ -75,33 +76,46 @@ func TestWriteResumeSpan(t *testing.T) {
 			},
 		},
 	})
-	defer server.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
+	sqlRunner.Exec(t, `SET create_table_with_schema_locked=false`)
 	sqlRunner.Exec(t, `SET use_declarative_schema_changer='off'`)
 	sqlRunner.Exec(t, `CREATE DATABASE t;`)
 	sqlRunner.Exec(t, `CREATE TABLE t.test (k INT PRIMARY KEY, v INT);`)
 	sqlRunner.Exec(t, `CREATE UNIQUE INDEX vidx ON t.test (v);`)
 
-	resumeSpans := []roachpb.Span{
-		{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
-		{Key: roachpb.Key("c"), EndKey: roachpb.Key("d")},
-		{Key: roachpb.Key("e"), EndKey: roachpb.Key("f")},
-		{Key: roachpb.Key("g"), EndKey: roachpb.Key("h")},
-		{Key: roachpb.Key("i"), EndKey: roachpb.Key("j")},
-		{Key: roachpb.Key("k"), EndKey: roachpb.Key("l")},
-		{Key: roachpb.Key("m"), EndKey: roachpb.Key("n")},
-		{Key: roachpb.Key("o"), EndKey: roachpb.Key("p")},
-		{Key: roachpb.Key("q"), EndKey: roachpb.Key("r")},
+	// makeKey creates a key with the tenant prefix to work correctly
+	// when running with an external test tenant.
+	prefix := s.Codec().TenantPrefix()
+	prefix = prefix[:len(prefix):len(prefix)]
+	makeKey := func(str string) roachpb.Key {
+		key := make(roachpb.Key, 0, len(prefix)+len(str))
+		key = append(key, prefix...)
+		key = append(key, str...)
+		return key
 	}
 
-	registry := server.JobRegistry().(*jobs.Registry)
+	resumeSpans := []roachpb.Span{
+		{Key: makeKey("a"), EndKey: makeKey("b")},
+		{Key: makeKey("c"), EndKey: makeKey("d")},
+		{Key: makeKey("e"), EndKey: makeKey("f")},
+		{Key: makeKey("g"), EndKey: makeKey("h")},
+		{Key: makeKey("i"), EndKey: makeKey("j")},
+		{Key: makeKey("k"), EndKey: makeKey("l")},
+		{Key: makeKey("m"), EndKey: makeKey("n")},
+		{Key: makeKey("o"), EndKey: makeKey("p")},
+		{Key: makeKey("q"), EndKey: makeKey("r")},
+	}
+
+	registry := s.JobRegistry().(*jobs.Registry)
 	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(
-		kvDB, keys.SystemSQLCodec, "t", "test")
+		kvDB, s.Codec(), "t", "test")
 
 	if err := kvDB.Put(
 		ctx,
-		catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.ID),
+		catalogkeys.MakeDescMetadataKey(s.Codec(), tableDesc.ID),
 		tableDesc.DescriptorProto(),
 	); err != nil {
 		t.Fatal(err)
@@ -127,14 +141,16 @@ func TestWriteResumeSpan(t *testing.T) {
 		t.Fatal(errors.Wrapf(err, "can't find job %d", jobID))
 	}
 
-	require.NoError(t, job.NoTxn().Update(ctx, func(
-		_ isql.Txn, _ jobs.JobMetadata, ju *jobs.JobUpdater,
+	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+	require.NoError(t, job.DeprecatedNoTxn().Update(ctx, func(
+		_ isql.Txn, _ jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater,
 	) error {
-		ju.UpdateStatus(jobs.StatusRunning)
+		ju.UpdateState(jobs.StateRunning)
 		return nil
 	}))
 
-	err = job.NoTxn().SetDetails(ctx, details)
+	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+	err = job.DeprecatedNoTxn().SetDetails(ctx, details)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -144,28 +160,28 @@ func TestWriteResumeSpan(t *testing.T) {
 		resume roachpb.Span
 	}{
 		// Work performed in the middle of a span.
-		{orig: roachpb.Span{Key: roachpb.Key("a1"), EndKey: roachpb.Key("a3")},
-			resume: roachpb.Span{Key: roachpb.Key("a2"), EndKey: roachpb.Key("a3")}},
+		{orig: roachpb.Span{Key: makeKey("a1"), EndKey: makeKey("a3")},
+			resume: roachpb.Span{Key: makeKey("a2"), EndKey: makeKey("a3")}},
 		// Work completed in the middle of a span.
-		{orig: roachpb.Span{Key: roachpb.Key("c1"), EndKey: roachpb.Key("c2")},
+		{orig: roachpb.Span{Key: makeKey("c1"), EndKey: makeKey("c2")},
 			resume: roachpb.Span{}},
 		// Work performed in the right of a span.
-		{orig: roachpb.Span{Key: roachpb.Key("e1"), EndKey: roachpb.Key("f")},
-			resume: roachpb.Span{Key: roachpb.Key("e2"), EndKey: roachpb.Key("f")}},
+		{orig: roachpb.Span{Key: makeKey("e1"), EndKey: makeKey("f")},
+			resume: roachpb.Span{Key: makeKey("e2"), EndKey: makeKey("f")}},
 		// Work completed in the right of a span.
-		{orig: roachpb.Span{Key: roachpb.Key("g1"), EndKey: roachpb.Key("h")},
+		{orig: roachpb.Span{Key: makeKey("g1"), EndKey: makeKey("h")},
 			resume: roachpb.Span{}},
 		// Work performed in the left of a span.
-		{orig: roachpb.Span{Key: roachpb.Key("i"), EndKey: roachpb.Key("i2")},
-			resume: roachpb.Span{Key: roachpb.Key("i1"), EndKey: roachpb.Key("i2")}},
+		{orig: roachpb.Span{Key: makeKey("i"), EndKey: makeKey("i2")},
+			resume: roachpb.Span{Key: makeKey("i1"), EndKey: makeKey("i2")}},
 		// Work completed in the left of a span.
-		{orig: roachpb.Span{Key: roachpb.Key("k"), EndKey: roachpb.Key("k2")},
+		{orig: roachpb.Span{Key: makeKey("k"), EndKey: makeKey("k2")},
 			resume: roachpb.Span{}},
 		// Work performed on a span.
-		{orig: roachpb.Span{Key: roachpb.Key("m"), EndKey: roachpb.Key("n")},
-			resume: roachpb.Span{Key: roachpb.Key("m1"), EndKey: roachpb.Key("n")}},
+		{orig: roachpb.Span{Key: makeKey("m"), EndKey: makeKey("n")},
+			resume: roachpb.Span{Key: makeKey("m1"), EndKey: makeKey("n")}},
 		// Work completed on a span.
-		{orig: roachpb.Span{Key: roachpb.Key("o"), EndKey: roachpb.Key("p")},
+		{orig: roachpb.Span{Key: makeKey("o"), EndKey: makeKey("p")},
 			resume: roachpb.Span{}},
 	}
 	for _, test := range testData {
@@ -173,11 +189,11 @@ func TestWriteResumeSpan(t *testing.T) {
 		if test.resume.Key != nil {
 			finished.EndKey = test.resume.Key
 		}
-		if err := sql.TestingDescsTxn(ctx, server, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		if err := sqltestutils.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 			return TestingWriteResumeSpan(
 				ctx,
 				txn,
-				keys.SystemSQLCodec,
+				s.Codec(),
 				col,
 				tableDesc.ID,
 				mutationID,
@@ -192,30 +208,30 @@ func TestWriteResumeSpan(t *testing.T) {
 
 	expected := []roachpb.Span{
 		// Work performed in the middle of a span.
-		{Key: roachpb.Key("a"), EndKey: roachpb.Key("a1")},
-		{Key: roachpb.Key("a2"), EndKey: roachpb.Key("b")},
+		{Key: makeKey("a"), EndKey: makeKey("a1")},
+		{Key: makeKey("a2"), EndKey: makeKey("b")},
 		// Work completed in the middle of a span.
-		{Key: roachpb.Key("c"), EndKey: roachpb.Key("c1")},
-		{Key: roachpb.Key("c2"), EndKey: roachpb.Key("d")},
+		{Key: makeKey("c"), EndKey: makeKey("c1")},
+		{Key: makeKey("c2"), EndKey: makeKey("d")},
 		// Work performed in the right of a span.
-		{Key: roachpb.Key("e"), EndKey: roachpb.Key("e1")},
-		{Key: roachpb.Key("e2"), EndKey: roachpb.Key("f")},
+		{Key: makeKey("e"), EndKey: makeKey("e1")},
+		{Key: makeKey("e2"), EndKey: makeKey("f")},
 		// Work completed in the right of a span.
-		{Key: roachpb.Key("g"), EndKey: roachpb.Key("g1")},
+		{Key: makeKey("g"), EndKey: makeKey("g1")},
 		// Work performed in the left of a span.
-		{Key: roachpb.Key("i1"), EndKey: roachpb.Key("j")},
+		{Key: makeKey("i1"), EndKey: makeKey("j")},
 		// Work completed in the left of a span.
-		{Key: roachpb.Key("k2"), EndKey: roachpb.Key("l")},
+		{Key: makeKey("k2"), EndKey: makeKey("l")},
 		// Work performed on a span.
-		{Key: roachpb.Key("m1"), EndKey: roachpb.Key("n")},
+		{Key: makeKey("m1"), EndKey: makeKey("n")},
 		// Work completed on a span; ["o", "p"] complete.
-		{Key: roachpb.Key("q"), EndKey: roachpb.Key("r")},
+		{Key: makeKey("q"), EndKey: makeKey("r")},
 	}
 
 	var got []roachpb.Span
-	if err := sql.TestingDescsTxn(ctx, server, func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
+	if err := sqltestutils.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) (err error) {
 		got, _, _, err = rowexec.GetResumeSpans(
-			ctx, registry, txn, keys.SystemSQLCodec, col, tableDesc.ID, mutationID, backfill.IndexMutationFilter)
+			ctx, registry, txn, s.Codec(), col, tableDesc.ID, mutationID, backfill.IndexMutationFilter)
 		return err
 	}); err != nil {
 		t.Error(err)

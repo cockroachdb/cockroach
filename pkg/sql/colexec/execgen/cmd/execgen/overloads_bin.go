@@ -26,13 +26,13 @@ var binaryOpDecMethod = map[treebin.BinaryOperatorSymbol]string{
 	treebin.Div:      "Quo",
 	treebin.FloorDiv: "QuoInteger",
 	treebin.Mod:      "Rem",
-	treebin.Pow:      "Pow",
+	treebin.Pow:      "DecimalPow",
 }
 
 var binaryOpFloatMethod = map[treebin.BinaryOperatorSymbol]string{
 	treebin.FloorDiv: "math.Trunc",
 	treebin.Mod:      "math.Mod",
-	treebin.Pow:      "math.Pow",
+	treebin.Pow:      "eval.FloatPow", // returns two arguments so has to be treated separately
 }
 
 var binaryOpDecCtx = map[treebin.BinaryOperatorSymbol]string{
@@ -114,7 +114,7 @@ func registerBinOpOutputTypes() {
 	for _, binOp := range []treebin.BinaryOperatorSymbol{treebin.Bitand, treebin.Bitor, treebin.Bitxor} {
 		binOpOutputTypes[binOp] = make(map[typePair]*types.T)
 		populateBinOpIntOutputTypeOnIntArgs(binOp)
-		binOpOutputTypes[binOp][typePair{typeconv.DatumVecCanonicalTypeFamily, anyWidth, typeconv.DatumVecCanonicalTypeFamily, anyWidth}] = types.Any
+		binOpOutputTypes[binOp][typePair{typeconv.DatumVecCanonicalTypeFamily, anyWidth, typeconv.DatumVecCanonicalTypeFamily, anyWidth}] = types.AnyElement
 	}
 
 	// Simple arithmetic binary operators.
@@ -157,8 +157,8 @@ func registerBinOpOutputTypes() {
 		types.IntervalFamily, // types.Time + types.Interval
 	} {
 		for _, width := range supportedWidthsByCanonicalTypeFamily[compatibleFamily] {
-			binOpOutputTypes[treebin.Plus][typePair{typeconv.DatumVecCanonicalTypeFamily, anyWidth, compatibleFamily, width}] = types.Any
-			binOpOutputTypes[treebin.Plus][typePair{compatibleFamily, width, typeconv.DatumVecCanonicalTypeFamily, anyWidth}] = types.Any
+			binOpOutputTypes[treebin.Plus][typePair{typeconv.DatumVecCanonicalTypeFamily, anyWidth, compatibleFamily, width}] = types.AnyElement
+			binOpOutputTypes[treebin.Plus][typePair{compatibleFamily, width, typeconv.DatumVecCanonicalTypeFamily, anyWidth}] = types.AnyElement
 		}
 	}
 	for _, compatibleFamily := range []types.Family{
@@ -168,8 +168,8 @@ func registerBinOpOutputTypes() {
 		types.BytesFamily,                    // types.Jsonb - types.String
 	} {
 		for _, width := range supportedWidthsByCanonicalTypeFamily[compatibleFamily] {
-			binOpOutputTypes[treebin.Minus][typePair{typeconv.DatumVecCanonicalTypeFamily, anyWidth, compatibleFamily, width}] = types.Any
-			binOpOutputTypes[treebin.Minus][typePair{compatibleFamily, width, typeconv.DatumVecCanonicalTypeFamily, anyWidth}] = types.Any
+			binOpOutputTypes[treebin.Minus][typePair{typeconv.DatumVecCanonicalTypeFamily, anyWidth, compatibleFamily, width}] = types.AnyElement
+			binOpOutputTypes[treebin.Minus][typePair{compatibleFamily, width, typeconv.DatumVecCanonicalTypeFamily, anyWidth}] = types.AnyElement
 		}
 	}
 
@@ -188,14 +188,14 @@ func registerBinOpOutputTypes() {
 	// Other non-arithmetic binary operators.
 	binOpOutputTypes[treebin.Concat] = map[typePair]*types.T{
 		{types.BytesFamily, anyWidth, types.BytesFamily, anyWidth}:                                       types.Bytes,
-		{typeconv.DatumVecCanonicalTypeFamily, anyWidth, typeconv.DatumVecCanonicalTypeFamily, anyWidth}: types.Any,
+		{typeconv.DatumVecCanonicalTypeFamily, anyWidth, typeconv.DatumVecCanonicalTypeFamily, anyWidth}: types.AnyElement,
 	}
 
 	for _, binOp := range []treebin.BinaryOperatorSymbol{treebin.LShift, treebin.RShift} {
 		binOpOutputTypes[binOp] = make(map[typePair]*types.T)
 		populateBinOpIntOutputTypeOnIntArgs(binOp)
 		for _, intWidth := range supportedWidthsByCanonicalTypeFamily[types.IntFamily] {
-			binOpOutputTypes[binOp][typePair{typeconv.DatumVecCanonicalTypeFamily, anyWidth, types.IntFamily, intWidth}] = types.Any
+			binOpOutputTypes[binOp][typePair{typeconv.DatumVecCanonicalTypeFamily, anyWidth, types.IntFamily, intWidth}] = types.AnyElement
 		}
 	}
 
@@ -322,6 +322,7 @@ func (decimalCustomizer) getBinOpAssignFunc() assignFunc {
 			"Target":           targetElem,
 			"Left":             leftElem,
 			"Right":            rightElem,
+			"IsPow":            binOp == treebin.Pow,
 		}
 		buf := strings.Builder{}
 		t := template.Must(template.New("").Parse(`
@@ -331,7 +332,11 @@ func (decimalCustomizer) getBinOpAssignFunc() assignFunc {
 					colexecerror.ExpectedError(tree.ErrDivByZero)
 				}
 				{{end}}
+				{{if .IsPow -}}
+				err := eval.{{.Op}}(tree.{{.Ctx}}, &{{.Target}}, &{{.Left}}, &{{.Right}})
+				{{else -}}
 				_, err := tree.{{.Ctx}}.{{.Op}}(&{{.Target}}, &{{.Left}}, &{{.Right}})
+				{{end -}}
 				if err != nil {
 					colexecerror.ExpectedError(err)
 				}
@@ -352,12 +357,38 @@ func (decimalCustomizer) getBinOpAssignFunc() assignFunc {
 func (c floatCustomizer) getBinOpAssignFunc() assignFunc {
 	return func(op *lastArgWidthOverload, targetElem, leftElem, rightElem, targetCol, leftCol, rightCol string) string {
 		binOp := op.overloadBase.BinOp
+		tmpl := `
+			{
+				{{if .CheckRightIsZero}}
+				if {{.Right}} == 0.0 && !math.IsNaN({{.Left}}) {
+					colexecerror.ExpectedError(tree.ErrDivByZero)
+				}
+				{{end}}`
+		if binOp == treebin.Pow {
+			// Floats use eval.FloatPow which returns two arguments and has to
+			// be treated separately.
+			tmpl += fmt.Sprintf(`
+				res, err := eval.FloatPow(float64(%s), float64(%s))
+				if err != nil {
+					colexecerror.ExpectedError(err)
+				}
+				{{.Target}} = float64(*res)
+			}
+			`, leftElem, rightElem)
+		} else {
+			tmpl += `
+				{{.Target}} = {{.ComputeBinOp}}
+			}
+			`
+		}
 		var computeBinOp string
 		switch binOp {
 		case treebin.FloorDiv:
 			computeBinOp = fmt.Sprintf("%s(float64(%s) / float64(%s))", binaryOpFloatMethod[binOp], leftElem, rightElem)
-		case treebin.Mod, treebin.Pow:
+		case treebin.Mod:
 			computeBinOp = fmt.Sprintf("%s(float64(%s), float64(%s))", binaryOpFloatMethod[binOp], leftElem, rightElem)
+		case treebin.Pow:
+			// Handled separately above.
 		default:
 			computeBinOp = fmt.Sprintf("float64(%s) %s float64(%s)", leftElem, binOp, rightElem)
 		}
@@ -369,16 +400,7 @@ func (c floatCustomizer) getBinOpAssignFunc() assignFunc {
 			"ComputeBinOp":     computeBinOp,
 		}
 		buf := strings.Builder{}
-		t := template.Must(template.New("").Parse(`
-			{
-				{{if .CheckRightIsZero}}
-				if {{.Right}} == 0.0 && !math.IsNaN({{.Left}}) {
-					colexecerror.ExpectedError(tree.ErrDivByZero)
-				}
-				{{end}}
-				{{.Target}} = {{.ComputeBinOp}}
-			}
-			`))
+		t := template.Must(template.New("").Parse(tmpl))
 		if err := t.Execute(&buf, args); err != nil {
 			colexecerror.InternalError(err)
 		}
@@ -489,7 +511,7 @@ func (c intCustomizer) getBinOpAssignFunc() assignFunc {
 				var leftTmpDec, rightTmpDec apd.Decimal //gcassert:noescape
 				leftTmpDec.SetInt64(int64({{.Left}}))
 				rightTmpDec.SetInt64(int64({{.Right}}))
-				if _, err := tree.{{.Ctx}}.Pow(&leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
+				if err := eval.DecimalPow(tree.{{.Ctx}}, &leftTmpDec, &leftTmpDec, &rightTmpDec); err != nil {
 					colexecerror.ExpectedError(err)
 				}
 				resultInt, err := leftTmpDec.Int64()
@@ -542,6 +564,7 @@ func (c decimalIntCustomizer) getBinOpAssignFunc() assignFunc {
 			"Target":           targetElem,
 			"Left":             leftElem,
 			"Right":            rightElem,
+			"IsPow":            binOp == treebin.Pow,
 		}
 		buf := strings.Builder{}
 		t := template.Must(template.New("").Parse(`
@@ -553,7 +576,11 @@ func (c decimalIntCustomizer) getBinOpAssignFunc() assignFunc {
 				{{end}}
 				var tmpDec apd.Decimal //gcassert:noescape
 				tmpDec.SetInt64(int64({{.Right}}))
+				{{if .IsPow -}}
+				if err := eval.{{.Op}}(tree.{{.Ctx}}, &{{.Target}}, &{{.Left}}, &tmpDec); err != nil {
+				{{else -}}
 				if _, err := tree.{{.Ctx}}.{{.Op}}(&{{.Target}}, &{{.Left}}, &tmpDec); err != nil {
+				{{end -}}
 					colexecerror.ExpectedError(err)
 				}
 			}
@@ -576,6 +603,7 @@ func (c intDecimalCustomizer) getBinOpAssignFunc() assignFunc {
 			"Target":           targetElem,
 			"Left":             leftElem,
 			"Right":            rightElem,
+			"IsPow":            binOp == treebin.Pow,
 		}
 		buf := strings.Builder{}
 		t := template.Must(template.New("").Parse(`
@@ -587,7 +615,11 @@ func (c intDecimalCustomizer) getBinOpAssignFunc() assignFunc {
 				{{end}}
 				var tmpDec apd.Decimal //gcassert:noescape
 				tmpDec.SetInt64(int64({{.Left}}))
+				{{if .IsPow -}}
+				err := eval.{{.Op}}(tree.{{.Ctx}}, &{{.Target}}, &tmpDec, &{{.Right}})
+				{{else -}}
 				_, err := tree.{{.Ctx}}.{{.Op}}(&{{.Target}}, &tmpDec, &{{.Right}})
+				{{end -}}
 				if err != nil {
 					colexecerror.ExpectedError(err)
 				}

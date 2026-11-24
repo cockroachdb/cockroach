@@ -1,0 +1,841 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/errors.out --label=/mnt/data1/postgres/src/test/regress/results/errors.out /mnt/data1/postgres/src/test/regress/expected/errors.out /mnt/data1/postgres/src/test/regress/results/errors.out
+--- /mnt/data1/postgres/src/test/regress/expected/errors.out
++++ /mnt/data1/postgres/src/test/regress/results/errors.out
+@@ -23,68 +23,68 @@
+ -- no such relation
+ select * from nonesuch;
+ ERROR:  relation "nonesuch" does not exist
+-LINE 1: select * from nonesuch;
+-                      ^
+ -- bad name in target list
+ select nonesuch from pg_database;
+ ERROR:  column "nonesuch" does not exist
+-LINE 1: select nonesuch from pg_database;
+-               ^
+ -- empty distinct list isn't OK
+ select distinct from pg_database;
+-ERROR:  syntax error at or near "from"
+-LINE 1: select distinct from pg_database;
+-                        ^
++ERROR:  at or near "from": syntax error
++DETAIL:  source SQL:
++select distinct from pg_database
++                ^
+ -- bad attribute name on lhs of operator
+ select * from pg_database where nonesuch = pg_database.datname;
+ ERROR:  column "nonesuch" does not exist
+-LINE 1: select * from pg_database where nonesuch = pg_database.datna...
+-                                        ^
+ -- bad attribute name on rhs of operator
+ select * from pg_database where pg_database.datname = nonesuch;
+ ERROR:  column "nonesuch" does not exist
+-LINE 1: ...ect * from pg_database where pg_database.datname = nonesuch;
+-                                                              ^
+ -- bad attribute name in select distinct on
+ select distinct on (foobar) * from pg_database;
+ ERROR:  column "foobar" does not exist
+-LINE 1: select distinct on (foobar) * from pg_database;
+-                            ^
+ -- grouping with FOR UPDATE
+ select null from pg_database group by datname for update;
+-ERROR:  FOR UPDATE is not allowed with GROUP BY clause
++ERROR:  user test_admin does not have UPDATE privilege on relation pg_database
+ select null from pg_database group by grouping sets (()) for update;
+-ERROR:  FOR UPDATE is not allowed with GROUP BY clause
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++select null from pg_database group by grouping sets (()) for update
++                                                    ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/46280/_version_
+ --
+ -- DELETE
+ -- missing relation name (this had better not wildcard!)
+ delete from;
+-ERROR:  syntax error at or near ";"
+-LINE 1: delete from;
+-                   ^
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++delete from
++           ^
++HINT:  try \h DELETE
+ -- no such relation
+ delete from nonesuch;
+ ERROR:  relation "nonesuch" does not exist
+-LINE 1: delete from nonesuch;
+-                    ^
+ --
+ -- DROP
+ -- missing relation name (this had better not wildcard!)
+ drop table;
+-ERROR:  syntax error at or near ";"
+-LINE 1: drop table;
+-                  ^
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++drop table
++          ^
++HINT:  try \h DROP TABLE
+ -- no such relation
+ drop table nonesuch;
+-ERROR:  table "nonesuch" does not exist
++ERROR:  relation "nonesuch" does not exist
+ --
+ -- ALTER TABLE
+ -- relation renaming
+ -- missing relation name
+ alter table rename;
+-ERROR:  syntax error at or near ";"
+-LINE 1: alter table rename;
+-                          ^
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++alter table rename
++                  ^
++HINT:  try \h ALTER TABLE
+ -- no such relation
+ alter table nonesuch rename to newnonesuch;
+ ERROR:  relation "nonesuch" does not exist
+@@ -93,23 +93,23 @@
+ ERROR:  relation "nonesuch" does not exist
+ -- conflict
+ alter table stud_emp rename to student;
+-ERROR:  relation "student" already exists
++ERROR:  relation "stud_emp" does not exist
+ -- self-conflict
+ alter table stud_emp rename to stud_emp;
+-ERROR:  relation "stud_emp" already exists
++ERROR:  relation "stud_emp" does not exist
+ -- attribute renaming
+ -- no such relation
+ alter table nonesuchrel rename column nonesuchatt to newnonesuchatt;
+ ERROR:  relation "nonesuchrel" does not exist
+ -- no such attribute
+ alter table emp rename column nonesuchatt to newnonesuchatt;
+-ERROR:  column "nonesuchatt" does not exist
++ERROR:  relation "emp" does not exist
+ -- conflict
+ alter table emp rename column salary to manager;
+-ERROR:  column "manager" of relation "stud_emp" already exists
++ERROR:  relation "emp" does not exist
+ -- conflict
+ alter table emp rename column salary to ctid;
+-ERROR:  column name "ctid" conflicts with a system column name
++ERROR:  relation "emp" does not exist
+ --
+ -- TRANSACTION STUFF
+ -- not in a xact
+@@ -126,24 +126,38 @@
+ 			  stype = int4,
+ 			  finalfunc = int2um,
+ 			  initcond = '0');
+-ERROR:  function int2um(integer) does not exist
++ERROR:  at or near "newavg2": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create aggregate newavg2 (sfunc = int4pl,
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ -- left out basetype
+ create aggregate newcnt1 (sfunc = int4inc,
+ 			  stype = int4,
+ 			  initcond = '0');
+-ERROR:  aggregate input type must be specified
++ERROR:  at or near "newcnt1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create aggregate newcnt1 (sfunc = int4inc,
++                 ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ --
+ -- DROP INDEX
+ -- missing index name
+ drop index;
+-ERROR:  syntax error at or near ";"
+-LINE 1: drop index;
+-                  ^
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++drop index
++          ^
++HINT:  try \h DROP INDEX
+ -- bad index name
+ drop index 314159;
+-ERROR:  syntax error at or near "314159"
+-LINE 1: drop index 314159;
+-                   ^
++ERROR:  at or near "314159": syntax error
++DETAIL:  source SQL:
++drop index 314159
++           ^
++HINT:  try \h DROP INDEX
+ -- no such index
+ drop index nonesuch;
+ ERROR:  index "nonesuch" does not exist
+@@ -151,55 +165,87 @@
+ -- DROP AGGREGATE
+ -- missing aggregate name
+ drop aggregate;
+-ERROR:  syntax error at or near ";"
+-LINE 1: drop aggregate;
+-                      ^
++ERROR:  at or near "EOF": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop aggregate
++              ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ -- missing aggregate type
+ drop aggregate newcnt1;
+-ERROR:  syntax error at or near ";"
+-LINE 1: drop aggregate newcnt1;
+-                              ^
++ERROR:  at or near "newcnt1": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop aggregate newcnt1
++               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ -- bad aggregate name
+ drop aggregate 314159 (int);
+-ERROR:  syntax error at or near "314159"
+-LINE 1: drop aggregate 314159 (int);
+-                       ^
++ERROR:  at or near "314159": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop aggregate 314159 (int)
++               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ -- bad aggregate type
+ drop aggregate newcnt (nonesuch);
+-ERROR:  type "nonesuch" does not exist
++ERROR:  at or near "newcnt": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop aggregate newcnt (nonesuch)
++               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ -- no such aggregate
+ drop aggregate nonesuch (int4);
+-ERROR:  aggregate nonesuch(integer) does not exist
++ERROR:  at or near "nonesuch": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop aggregate nonesuch (int4)
++               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ -- no such aggregate for type
+ drop aggregate newcnt (float4);
+-ERROR:  aggregate newcnt(real) does not exist
++ERROR:  at or near "newcnt": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop aggregate newcnt (float4)
++               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/74775/_version_
+ --
+ -- DROP FUNCTION
+ -- missing function name
+ drop function ();
+-ERROR:  syntax error at or near "("
+-LINE 1: drop function ();
+-                      ^
++ERROR:  at or near "(": syntax error
++DETAIL:  source SQL:
++drop function ()
++              ^
++HINT:  try \h DROP FUNCTION
+ -- bad function name
+ drop function 314159();
+-ERROR:  syntax error at or near "314159"
+-LINE 1: drop function 314159();
+-                      ^
++ERROR:  at or near "314159": syntax error
++DETAIL:  source SQL:
++drop function 314159()
++              ^
++HINT:  try \h DROP FUNCTION
+ -- no such function
+ drop function nonesuch();
+-ERROR:  function nonesuch() does not exist
++ERROR:  unknown function: nonesuch()
+ --
+ -- DROP TYPE
+ -- missing type name
+ drop type;
+-ERROR:  syntax error at or near ";"
+-LINE 1: drop type;
+-                 ^
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++drop type
++         ^
++HINT:  try \h DROP TYPE
+ -- bad type name
+ drop type 314159;
+-ERROR:  syntax error at or near "314159"
+-LINE 1: drop type 314159;
+-                  ^
++ERROR:  at or near "314159": syntax error
++DETAIL:  source SQL:
++drop type 314159
++          ^
++HINT:  try \h DROP TYPE
+ -- no such type
+ drop type nonesuch;
+ ERROR:  type "nonesuch" does not exist
+@@ -207,93 +253,297 @@
+ -- DROP OPERATOR
+ -- missing everything
+ drop operator;
+-ERROR:  syntax error at or near ";"
+-LINE 1: drop operator;
+-                     ^
++ERROR:  at or near "EOF": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop operator
++             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- bad operator name
+ drop operator equals;
+-ERROR:  syntax error at or near ";"
+-LINE 1: drop operator equals;
+-                            ^
++ERROR:  at or near "equals": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop operator equals
++              ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- missing type list
+ drop operator ===;
+-ERROR:  syntax error at or near ";"
+-LINE 1: drop operator ===;
+-                         ^
++ERROR:  at or near "=": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop operator ===
++              ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- missing parentheses
+ drop operator int4, int4;
+-ERROR:  syntax error at or near ","
+-LINE 1: drop operator int4, int4;
+-                          ^
++ERROR:  at or near "int4": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop operator int4, int4
++              ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- missing operator name
+ drop operator (int4, int4);
+-ERROR:  syntax error at or near "("
+-LINE 1: drop operator (int4, int4);
+-                      ^
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop operator (int4, int4)
++              ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- missing type list contents
+ drop operator === ();
+-ERROR:  syntax error at or near ")"
+-LINE 1: drop operator === ();
+-                           ^
++ERROR:  at or near "=": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop operator === ()
++              ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- no such operator
+ drop operator === (int4);
+-ERROR:  missing argument
+-LINE 1: drop operator === (int4);
+-                               ^
+-HINT:  Use NONE to denote the missing argument of a unary operator.
++ERROR:  at or near "=": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop operator === (int4)
++              ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- no such operator by that name
+ drop operator === (int4, int4);
+-ERROR:  operator does not exist: integer === integer
++ERROR:  at or near "=": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop operator === (int4, int4)
++              ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- no such type1
+ drop operator = (nonesuch);
+-ERROR:  missing argument
+-LINE 1: drop operator = (nonesuch);
+-                                 ^
+-HINT:  Use NONE to denote the missing argument of a unary operator.
++ERROR:  at or near "=": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop operator = (nonesuch)
++              ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- no such type1
+ drop operator = ( , int4);
+-ERROR:  syntax error at or near ","
+-LINE 1: drop operator = ( , int4);
+-                          ^
++ERROR:  at or near "=": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop operator = ( , int4)
++              ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- no such type1
+ drop operator = (nonesuch, int4);
+-ERROR:  type "nonesuch" does not exist
++ERROR:  at or near "=": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop operator = (nonesuch, int4)
++              ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- no such type2
+ drop operator = (int4, nonesuch);
+-ERROR:  type "nonesuch" does not exist
++ERROR:  at or near "=": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop operator = (int4, nonesuch)
++              ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- no such type2
+ drop operator = (int4, );
+-ERROR:  syntax error at or near ")"
+-LINE 1: drop operator = (int4, );
+-                               ^
++ERROR:  at or near "=": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop operator = (int4, )
++              ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ --
+ -- DROP RULE
+ -- missing rule name
+ drop rule;
+-ERROR:  syntax error at or near ";"
+-LINE 1: drop rule;
+-                 ^
++ERROR:  at or near "EOF": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop rule
++         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- bad rule name
+ drop rule 314159;
+-ERROR:  syntax error at or near "314159"
+-LINE 1: drop rule 314159;
+-                  ^
++ERROR:  at or near "314159": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop rule 314159
++          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- no such rule
+ drop rule nonesuch on noplace;
+-ERROR:  relation "noplace" does not exist
++ERROR:  at or near "nonesuch": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop rule nonesuch on noplace
++          ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ -- these postquel variants are no longer supported
+ drop tuple rule nonesuch;
+-ERROR:  syntax error at or near "tuple"
+-LINE 1: drop tuple rule nonesuch;
+-             ^
++ERROR:  at or near "tuple": syntax error
++DETAIL:  source SQL:
++drop tuple rule nonesuch
++     ^
++HINT:  try \h DROP
+ drop instance rule nonesuch on noplace;
+-ERROR:  syntax error at or near "instance"
+-LINE 1: drop instance rule nonesuch on noplace;
+-             ^
++ERROR:  at or near "instance": syntax error
++DETAIL:  source SQL:
++drop instance rule nonesuch on noplace
++     ^
++HINT:  try \h DROP
+ drop rewrite rule nonesuch;
+-ERROR:  syntax error at or near "rewrite"
+-LINE 1: drop rewrite rule nonesuch;
+-             ^
++ERROR:  at or near "rewrite": syntax error
++DETAIL:  source SQL:
++drop rewrite rule nonesuch
++     ^
++HINT:  try \h DROP
+ --
+ -- Check that division-by-zero is properly caught.
+ --
+@@ -323,62 +573,85 @@
+ -- Test psql's reporting of syntax error location
+ --
+ xxx;
+-ERROR:  syntax error at or near "xxx"
+-LINE 1: xxx;
+-        ^
++ERROR:  at or near "xxx": syntax error
++DETAIL:  source SQL:
++xxx
++^
+ CREATE foo;
+-ERROR:  syntax error at or near "foo"
+-LINE 1: CREATE foo;
+-               ^
++ERROR:  at or near "foo": syntax error
++DETAIL:  source SQL:
++CREATE foo
++       ^
++HINT:  try \h CREATE
+ CREATE TABLE ;
+-ERROR:  syntax error at or near ";"
+-LINE 1: CREATE TABLE ;
+-                     ^
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++CREATE TABLE 
++             ^
++HINT:  try \h CREATE TABLE
+ CREATE TABLE
+ \g
+-ERROR:  syntax error at end of input
+-LINE 1: CREATE TABLE
+-                    ^
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++CREATE TABLE
++            ^
++HINT:  try \h CREATE TABLE
+ INSERT INTO foo VALUES(123) foo;
+-ERROR:  syntax error at or near "foo"
+-LINE 1: INSERT INTO foo VALUES(123) foo;
+-                                    ^
++ERROR:  at or near "foo": syntax error
++DETAIL:  source SQL:
++INSERT INTO foo VALUES(123) foo
++                            ^
+ INSERT INTO 123
+ VALUES(123);
+-ERROR:  syntax error at or near "123"
+-LINE 1: INSERT INTO 123
+-                    ^
++ERROR:  at or near "123": syntax error
++DETAIL:  source SQL:
++INSERT INTO 123
++            ^
++HINT:  try \h INSERT
+ INSERT INTO foo
+ VALUES(123) 123
+ ;
+-ERROR:  syntax error at or near "123"
+-LINE 2: VALUES(123) 123
+-                    ^
++ERROR:  at or near "123": syntax error
++DETAIL:  source SQL:
++INSERT INTO foo
++VALUES(123) 123
++            ^
+ -- with a tab
+ CREATE TABLE foo
+   (id INT4 UNIQUE NOT NULL, id2 TEXT NOT NULL PRIMARY KEY,
+ 	id3 INTEGER NOT NUL,
+    id4 INT4 UNIQUE NOT NULL, id5 TEXT UNIQUE NOT NULL);
+-ERROR:  syntax error at or near "NUL"
+-LINE 3:  id3 INTEGER NOT NUL,
+-                         ^
++ERROR:  at or near "nul": syntax error
++DETAIL:  source SQL:
++CREATE TABLE foo
++  (id INT4 UNIQUE NOT NULL, id2 TEXT NOT NULL PRIMARY KEY,
++	id3 INTEGER NOT NUL,
++                 ^
++HINT:  try \h CREATE TABLE
+ -- long line to be truncated on the left
+ CREATE TABLE foo(id INT4 UNIQUE NOT NULL, id2 TEXT NOT NULL PRIMARY KEY, id3 INTEGER NOT NUL,
+ id4 INT4 UNIQUE NOT NULL, id5 TEXT UNIQUE NOT NULL);
+-ERROR:  syntax error at or near "NUL"
+-LINE 1: ...OT NULL, id2 TEXT NOT NULL PRIMARY KEY, id3 INTEGER NOT NUL,
+-                                                                   ^
++ERROR:  at or near "nul": syntax error
++DETAIL:  source SQL:
++CREATE TABLE foo(id INT4 UNIQUE NOT NULL, id2 TEXT NOT NULL PRIMARY KEY, id3 INTEGER NOT NUL,
++                                                                                         ^
++HINT:  try \h CREATE TABLE
+ -- long line to be truncated on the right
+ CREATE TABLE foo(
+ id3 INTEGER NOT NUL, id4 INT4 UNIQUE NOT NULL, id5 TEXT UNIQUE NOT NULL, id INT4 UNIQUE NOT NULL, id2 TEXT NOT NULL PRIMARY KEY);
+-ERROR:  syntax error at or near "NUL"
+-LINE 2: id3 INTEGER NOT NUL, id4 INT4 UNIQUE NOT NULL, id5 TEXT UNIQ...
+-                        ^
++ERROR:  at or near "nul": syntax error
++DETAIL:  source SQL:
++CREATE TABLE foo(
++id3 INTEGER NOT NUL, id4 INT4 UNIQUE NOT NULL, id5 TEXT UNIQUE NOT NULL, id INT4 UNIQUE NOT NULL, id2 TEXT NOT NULL PRIMARY KEY)
++                ^
++HINT:  try \h CREATE TABLE
+ -- long line to be truncated both ways
+ CREATE TABLE foo(id INT4 UNIQUE NOT NULL, id2 TEXT NOT NULL PRIMARY KEY, id3 INTEGER NOT NUL, id4 INT4 UNIQUE NOT NULL, id5 TEXT UNIQUE NOT NULL);
+-ERROR:  syntax error at or near "NUL"
+-LINE 1: ...L, id2 TEXT NOT NULL PRIMARY KEY, id3 INTEGER NOT NUL, id4 I...
+-                                                             ^
++ERROR:  at or near "nul": syntax error
++DETAIL:  source SQL:
++CREATE TABLE foo(id INT4 UNIQUE NOT NULL, id2 TEXT NOT NULL PRIMARY KEY, id3 INTEGER NOT NUL, id4 INT4 UNIQUE NOT NULL, id5 TEXT UNIQUE NOT NULL)
++                                                                                         ^
++HINT:  try \h CREATE TABLE
+ -- long line to be truncated on the left, many lines
+ CREATE
+ TEMPORARY
+@@ -393,9 +666,14 @@
+ NOT
+ NULL)
+ ;
+-ERROR:  syntax error at or near "NUL"
+-LINE 4: ...OT NULL, id2 TEXT NOT NULL PRIMARY KEY, id3 INTEGER NOT NUL,
+-                                                                   ^
++ERROR:  at or near "nul": syntax error
++DETAIL:  source SQL:
++CREATE
++TEMPORARY
++TABLE
++foo(id INT4 UNIQUE NOT NULL, id2 TEXT NOT NULL PRIMARY KEY, id3 INTEGER NOT NUL,
++                                                                            ^
++HINT:  try \h CREATE TABLE
+ -- long line to be truncated on the right, many lines
+ CREATE
+ TEMPORARY
+@@ -403,9 +681,15 @@
+ foo(
+ id3 INTEGER NOT NUL, id4 INT4 UNIQUE NOT NULL, id5 TEXT UNIQUE NOT NULL, id INT4 UNIQUE NOT NULL, id2 TEXT NOT NULL PRIMARY KEY)
+ ;
+-ERROR:  syntax error at or near "NUL"
+-LINE 5: id3 INTEGER NOT NUL, id4 INT4 UNIQUE NOT NULL, id5 TEXT UNIQ...
+-                        ^
++ERROR:  at or near "nul": syntax error
++DETAIL:  source SQL:
++CREATE
++TEMPORARY
++TABLE
++foo(
++id3 INTEGER NOT NUL, id4 INT4 UNIQUE NOT NULL, id5 TEXT UNIQUE NOT NULL, id INT4 UNIQUE NOT NULL, id2 TEXT NOT NULL PRIMARY KEY)
++                ^
++HINT:  try \h CREATE TABLE
+ -- long line to be truncated both ways, many lines
+ CREATE
+ TEMPORARY
+@@ -416,9 +700,17 @@
+ UNIQUE NOT NULL, idx INT4 UNIQUE NOT NULL, idy INT4 UNIQUE NOT NULL, id2 TEXT NOT NULL PRIMARY KEY, id3 INTEGER NOT NUL, id4 INT4 UNIQUE NOT NULL, id5 TEXT UNIQUE NOT NULL,
+ idz INT4 UNIQUE NOT NULL,
+ idv INT4 UNIQUE NOT NULL);
+-ERROR:  syntax error at or near "NUL"
+-LINE 7: ...L, id2 TEXT NOT NULL PRIMARY KEY, id3 INTEGER NOT NUL, id4 I...
+-                                                             ^
++ERROR:  at or near "nul": syntax error
++DETAIL:  source SQL:
++CREATE
++TEMPORARY
++TABLE
++foo
++(id
++INT4
++UNIQUE NOT NULL, idx INT4 UNIQUE NOT NULL, idy INT4 UNIQUE NOT NULL, id2 TEXT NOT NULL PRIMARY KEY, id3 INTEGER NOT NUL, id4 INT4 UNIQUE NOT NULL, id5 TEXT UNIQUE NOT NULL,
++                                                                                                                    ^
++HINT:  try \h CREATE TABLE
+ -- more than 10 lines...
+ CREATE
+ TEMPORARY
+@@ -442,6 +734,23 @@
+ UNIQUE
+ NOT
+ NULL);
+-ERROR:  syntax error at or near "NUL"
+-LINE 16: ...L, id2 TEXT NOT NULL PRIMARY KEY, id3 INTEGER NOT NUL, id4 I...
+-                                                              ^
++ERROR:  at or near "nul": syntax error
++DETAIL:  source SQL:
++CREATE
++TEMPORARY
++TABLE
++foo
++(id
++INT4
++UNIQUE
++NOT
++NULL
++,
++idm
++INT4
++UNIQUE
++NOT
++NULL,
++idx INT4 UNIQUE NOT NULL, idy INT4 UNIQUE NOT NULL, id2 TEXT NOT NULL PRIMARY KEY, id3 INTEGER NOT NUL, id4 INT4 UNIQUE NOT NULL, id5 TEXT UNIQUE NOT NULL,
++                                                                                                   ^
++HINT:  try \h CREATE TABLE

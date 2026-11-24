@@ -1,2 +1,2 @@
 abort_stmt ::=
-	'ABORT' opt_abort_mod
+	'ABORT' opt_transaction opt_transaction_chain

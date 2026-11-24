@@ -18,13 +18,13 @@ func TestEventJSON(t *testing.T) {
 		ev  logpb.EventPayload
 		exp string
 	}{
-		// Check that sensitive fields get redaction markers.
-		{&CreateDatabase{DatabaseName: "hello"}, `"DatabaseName":"‹hello›"`},
-		{&CreateDatabase{DatabaseName: "he‹llo"}, `"DatabaseName":"‹he?llo›"`},
+		// Check that names do not get redaction markers.
+		{&CreateDatabase{DatabaseName: "hello"}, `"DatabaseName":"hello"`},
+		{&CreateDatabase{DatabaseName: "he‹llo"}, `"DatabaseName":"he‹llo"`},
 
-		// Check that strings in arrays are redactable too.
+		// Check that names in arrays are not redacted either.
 		{&DropDatabase{DatabaseName: "hello", DroppedSchemaObjects: []string{"world", "uni‹verse"}},
-			`"DatabaseName":"‹hello›","DroppedSchemaObjects":["‹world›","‹uni?verse›"]`},
+			`"DatabaseName":"hello","DroppedSchemaObjects":["world","uni‹verse"]`},
 
 		// Check that non-sensitive fields are not redacted.
 		{&ReverseSchemaChange{SQLSTATE: "XXUUU"}, `"SQLSTATE":"XXUUU"`},
@@ -43,7 +43,8 @@ func TestEventJSON(t *testing.T) {
 		{&CreateDatabase{CommonSQLEventDetails: CommonSQLEventDetails{ApplicationName: "myapp"}}, `"ApplicationName":"myapp"`},
 
 		// Check that redactable strings get their redaction markers preserved.
-		{&CreateDatabase{CommonSQLEventDetails: CommonSQLEventDetails{Statement: "CREATE DATABASE ‹foo›"}}, `"Statement":"CREATE DATABASE ‹foo›"`},
+		{&CreateDatabase{CommonSQLEventDetails: CommonSQLEventDetails{Statement: "CREATE DATABASE ‹foo›"}},
+			`"Statement":"CREATE DATABASE ‹foo›"`},
 
 		// Integer and boolean fields are not redactable in any case.
 		{&UnsafeDeleteDescriptor{ParentID: 123, Force: true}, `"ParentID":123,"Force":true`},

@@ -25,22 +25,32 @@ func (c *cliState) handleStatementDiag(
 		cmd = args[0]
 		args = args[1:]
 	}
-
+	// `\statement-diag download` writes a zip file to the local
+	// filesystem with the shell process's UID, so it must be gated by
+	// DisableUnsafeCmds. `list` only issues a server-side query and
+	// remains enabled. The dispatcher cannot reject this from
+	// embedderSafeCmds because the dangerous subcommand is in
+	// args[0], not cmd[0].
+	if c.sqlCtx.DisableUnsafeCmds && cmd == stmtDiagDownload {
+		return c.cliError(errState, errors.Newf(
+			"%s %s: command disabled by embedder", cmdStmtDiag, stmtDiagDownload))
+	}
+	defer c.conn.AllowExecuteInternal(context.Background())()
 	var cmdErr error
 	switch cmd {
-	case "list":
+	case stmtDiagList:
 		if len(args) > 0 {
 			return c.invalidSyntax(errState)
 		}
 		cmdErr = c.statementDiagList()
 
-	case "download":
+	case stmtDiagDownload:
 		if len(args) < 1 || len(args) > 2 {
 			return c.invalidSyntax(errState)
 		}
 		id, err := strconv.ParseInt(args[0], 10, 64)
 		if err != nil {
-			return c.cliError(errState, errors.Wrapf(err, "%q is not a valid bundle ID", args[1]))
+			return c.cliError(errState, errors.Wrapf(err, "%q is not a valid bundle ID", args[0]))
 		}
 		var filename string
 		if len(args) > 1 {

@@ -7,15 +7,16 @@ package kvserver
 
 import (
 	"context"
+	"slices"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -38,7 +39,7 @@ import (
 // nowNanos: the timestamp at which to write the initial engine data.
 func WriteInitialClusterData(
 	ctx context.Context,
-	eng storage.Engine,
+	eng kvstorage.Engines,
 	initialValues []roachpb.KeyValue,
 	bootstrapVersion roachpb.Version,
 	numStores int,
@@ -86,9 +87,9 @@ func WriteInitialClusterData(
 		roachpb.KeyValue{Key: keys.RangeIDGenerator, Value: rangeIDVal},
 		roachpb.KeyValue{Key: keys.NodeLivenessKey(kvstorage.FirstNodeID), Value: livenessVal})
 
-	// firstRangeMS is going to accumulate the stats for the first range, as we
-	// write the meta records for all the other ranges.
-	firstRangeMS := &enginepb.MVCCStats{}
+	// meta2RangeMS is going to accumulate the stats for the second range
+	// (meta2), as we write the meta records for all the other ranges.
+	meta2RangeMS := &enginepb.MVCCStats{}
 
 	// filter initial values for a given descriptor, returning only the ones that
 	// pertain to the respective range.
@@ -106,10 +107,18 @@ func WriteInitialClusterData(
 	if knobs.InitialReplicaVersionOverride != nil {
 		initialReplicaVersion = *knobs.InitialReplicaVersionOverride
 	}
+
+	// Some tests run this function without providing any splits. In that case, we
+	// don't split meta2. We explicitly record whether we're splitting meta2 or
+	// not because it will be used later when writing meta1 key range addressing.
+	shouldSplitMeta2 := slices.ContainsFunc(splits, func(split roachpb.RKey) bool {
+		return split.Equal(keys.Meta2Prefix)
+	})
+
 	// We iterate through the ranges backwards, since they all need to contribute
-	// to the stats of the first range (i.e. because they all write meta2 records
-	// in the first range), and so we want to create the first range last so that
-	// the stats we compute for it are correct.
+	// to the stats of the second range (i.e. because they all write meta2 records
+	// in the second range), and so we want to create the second range at the end
+	// so that the stats we compute for it are correct.
 	startKey := roachpb.RKeyMax
 	for i := len(splits) - 1; i >= -1; i-- {
 		endKey := startKey
@@ -126,6 +135,7 @@ func WriteInitialClusterData(
 			EndKey:        endKey,
 			NextReplicaID: 2,
 		}
+
 		const firstReplicaID = 1
 		replicas := []roachpb.ReplicaDescriptor{
 			{
@@ -142,86 +152,129 @@ func WriteInitialClusterData(
 		log.VEventf(
 			ctx, 2, "creating range %d [%s, %s). Initial values: %d",
 			desc.RangeID, desc.StartKey, desc.EndKey, len(rangeInitialValues))
-		batch := eng.NewBatch()
-		defer batch.Close()
 
-		now := hlc.Timestamp{
-			WallTime: nowNanos,
-			Logical:  0,
-		}
+		// TODO(#97616): the ranges are written one by one, so it is possible to end
+		// up with a partially initialized store if there is a crash in the middle.
+		// Write through a single batch, or find another way to make this atomic.
 
-		// NOTE: We don't do stats computations in any of the puts below. Instead,
-		// we write everything and then compute the stats over the whole range.
+		// TODO(sep-raft-log): this code path initializes replicas when bootstrapping
+		// the cluster and will need to write through WAG.
+		factory := kvstorage.MakeBatchFactory(&eng, nil /* seq */)
 
-		// If requested, write an MVCC range tombstone at the bottom of the
-		// keyspace, for performance and correctness testing.
-		if knobs.GlobalMVCCRangeTombstone {
-			if err := writeGlobalMVCCRangeTombstone(ctx, batch, desc, now.Prev()); err != nil {
-				return err
+		err := func() error {
+			batch := factory.NewBatch()
+			defer batch.Close()
+
+			now := hlc.Timestamp{
+				WallTime: nowNanos,
+				Logical:  0,
 			}
-		}
 
-		// Range descriptor.
-		if err := storage.MVCCPutProto(
-			ctx, batch, keys.RangeDescriptorKey(desc.StartKey),
-			now, desc, storage.MVCCWriteOptions{},
-		); err != nil {
-			return err
-		}
+			// NOTE: We don't do stats computations in any of the puts below. Instead,
+			// we write everything and then compute the stats over the whole range.
 
-		// Replica GC timestamp.
-		if err := storage.MVCCPutProto(
-			ctx, batch, keys.RangeLastReplicaGCTimestampKey(desc.RangeID),
-			hlc.Timestamp{}, &now, storage.MVCCWriteOptions{},
-		); err != nil {
-			return err
-		}
-		// Range addressing for meta2.
-		meta2Key := keys.RangeMetaKey(endKey)
-		if err := storage.MVCCPutProto(
-			ctx, batch, meta2Key.AsRawKey(),
-			now, desc, storage.MVCCWriteOptions{Stats: firstRangeMS},
-		); err != nil {
-			return err
-		}
+			// If requested, write an MVCC range tombstone at the bottom of the
+			// keyspace, for performance and correctness testing.
+			if knobs.GlobalMVCCRangeTombstone {
+				if err := writeGlobalMVCCRangeTombstone(ctx, batch.State(), desc, now.Prev()); err != nil {
+					return err
+				}
+			}
 
-		// The first range gets some special treatment.
-		if startKey.Equal(roachpb.RKeyMin) {
-			// Range addressing for meta1.
-			meta1Key := keys.RangeMetaKey(keys.RangeMetaKey(roachpb.RKeyMax))
+			// Range descriptor.
 			if err := storage.MVCCPutProto(
-				ctx, batch, meta1Key.AsRawKey(), now, desc, storage.MVCCWriteOptions{},
+				ctx, batch.State(), keys.RangeDescriptorKey(desc.StartKey),
+				now, desc, storage.MVCCWriteOptions{},
 			); err != nil {
 				return err
 			}
-		}
 
-		// Now add all passed-in default entries.
-		for _, kv := range rangeInitialValues {
-			// Initialize the checksums.
-			kv.Value.InitChecksum(kv.Key)
-			if _, err := storage.MVCCPut(
-				ctx, batch, kv.Key, now, kv.Value, storage.MVCCWriteOptions{},
+			// Replica GC timestamp.
+			if err := storage.MVCCBlindPutProto(
+				ctx, batch.Raft(), keys.RangeLastReplicaGCTimestampKey(desc.RangeID),
+				hlc.Timestamp{}, &now, storage.MVCCWriteOptions{},
 			); err != nil {
 				return err
 			}
-		}
 
-		if err := stateloader.WriteInitialRangeState(
-			ctx, batch, *desc, firstReplicaID, initialReplicaVersion); err != nil {
-			return err
-		}
-		computedStats, err := rditer.ComputeStatsForRange(ctx, desc, batch, now.WallTime)
+			// Set the last processed timestamp for the consistency checker as "now".
+			// This helps delay running the consistency checker for
+			// 'server.consistency_check.interval'. Note that splitting this range
+			// will copy the last processed timestamp to the right hand side, so newly
+			// split ranges will also delay running the consistency checker. This
+			// should improve the performance in workloads that cause many range
+			// splits by delaying the consistency checker.
+			if err := storage.MVCCPutProto(
+				ctx, batch.State(), keys.QueueLastProcessedKey(desc.StartKey, "consistencyChecker"),
+				hlc.Timestamp{}, &now, storage.MVCCWriteOptions{},
+			); err != nil {
+				return err
+			}
+
+			// All range descriptors are stored in meta2. Note that we're also storing
+			// the range descriptor for the second range in meta2 as well. This is
+			// because the second range doesn't end at the end of meta2 -- there's
+			// still some keys between the end of meta2 and the start of node
+			// liveness.
+			metaKey := keys.RangeMetaKey(endKey)
+			if err := storage.MVCCPutProto(
+				ctx, batch.State(), metaKey.AsRawKey(),
+				now, desc, storage.MVCCWriteOptions{Stats: meta2RangeMS},
+			); err != nil {
+				return err
+			}
+
+			// If we want to split meta2 range, we need to write the meta1 record
+			// for it.
+			// Also, some tests call this function with an empty splits list. In that
+			// case, we also need to write the meta1 but for the range, except that
+			// range is the one starting at KeyMin since both meta1 and meta2 are on
+			// the same range.
+			if startKey.Equal(keys.Meta2Prefix) || !shouldSplitMeta2 {
+				// The range descriptor is stored in meta1.
+				meta1Key := keys.RangeMetaKey(keys.RangeMetaKey(roachpb.RKeyMax)) // range addressing for meta1
+				if err := storage.MVCCPutProto(
+					ctx, batch.State(), meta1Key.AsRawKey(), now, desc, storage.MVCCWriteOptions{},
+				); err != nil {
+					return err
+				}
+			}
+
+			// Now add all passed-in default entries.
+			for _, kv := range rangeInitialValues {
+				// Initialize the checksums.
+				kv.Value.InitChecksum(kv.Key)
+				if _, err := storage.MVCCPut(
+					ctx, batch.State(), kv.Key, now, kv.Value, storage.MVCCWriteOptions{},
+				); err != nil {
+					return err
+				}
+			}
+
+			if err := kvstorage.WriteInitialRangeState(
+				ctx, batch.State(), batch.Raft(),
+				*desc, firstReplicaID, initialReplicaVersion,
+			); err != nil {
+				return err
+			}
+
+			// TODO(sep-raft-log): the computed stats much be reflected in the WAG
+			// node written in WriteInitialRangeState, before the write is committed.
+			// Decompose WriteInitialRangeState to make it possible.
+			computedStats, err := rditer.ComputeStatsForRange(
+				ctx, desc, batch.State(), fs.UnknownReadCategory, now.WallTime)
+			if err != nil {
+				return err
+			}
+
+			sl := kvstorage.MakeStateLoader(rangeID)
+			if err := sl.SetMVCCStats(ctx, batch.State(), &computedStats); err != nil {
+				return err
+			}
+
+			return batch.Commit(true /* sync */)
+		}()
 		if err != nil {
-			return err
-		}
-
-		sl := stateloader.Make(rangeID)
-		if err := sl.SetMVCCStats(ctx, batch, &computedStats); err != nil {
-			return err
-		}
-
-		if err := batch.Commit(true /* sync */); err != nil {
 			return err
 		}
 	}
@@ -251,6 +304,6 @@ func writeGlobalMVCCRangeTombstone(
 	if err := w.PutMVCCRangeKey(rangeKey, storage.MVCCValue{}); err != nil {
 		return err
 	}
-	log.Warningf(ctx, "wrote global MVCC range tombstone %s", rangeKey)
+	log.KvDistribution.Warningf(ctx, "wrote global MVCC range tombstone %s", rangeKey)
 	return nil
 }

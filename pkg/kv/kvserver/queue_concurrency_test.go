@@ -58,7 +58,6 @@ func TestBaseQueueConcurrent(t *testing.T) {
 		// We don't care about these, but we don't want to crash.
 		successes:       metric.NewCounter(metric.Metadata{Name: "processed"}),
 		failures:        metric.NewCounter(metric.Metadata{Name: "failures"}),
-		storeFailures:   metric.NewCounter(metric.Metadata{Name: "store_failures"}),
 		pending:         metric.NewGauge(metric.Metadata{Name: "pending"}),
 		processingNanos: metric.NewCounter(metric.Metadata{Name: "processingnanos"}),
 		purgatory:       metric.NewGauge(metric.Metadata{Name: "purgatory"}),
@@ -113,7 +112,7 @@ func TestBaseQueueConcurrent(t *testing.T) {
 			})
 		}
 		g.Go(func() error {
-			bq.assertInvariants()
+			bq.assertInvariants(func(item *replicaItem) {})
 			return nil
 		})
 	}
@@ -141,7 +140,7 @@ func (fakeQueueImpl) shouldQueue(
 }
 
 func (fq fakeQueueImpl) process(
-	ctx context.Context, repl *Replica, confReader spanconfig.StoreReader,
+	ctx context.Context, repl *Replica, confReader spanconfig.StoreReader, _ float64,
 ) (bool, error) {
 	return fq.pr(ctx, repl, confReader)
 }

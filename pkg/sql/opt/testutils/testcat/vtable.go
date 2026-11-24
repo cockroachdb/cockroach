@@ -8,6 +8,7 @@ package testcat
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/systemschema"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/vtable"
 	"github.com/cockroachdb/errors"
@@ -53,7 +54,6 @@ var pgCatalogTables = []string{
 	vtable.PGCatalogIndexes,
 	vtable.PGCatalogInherits,
 	vtable.PGCatalogLanguage,
-	vtable.PGCatalogLocks,
 	vtable.PGCatalogMatViews,
 	vtable.PGCatalogNamespace,
 	vtable.PGCatalogOperator,
@@ -134,6 +134,12 @@ var systemTables = []string{
 	systemschema.TxnExecutionStatsTableSchema,
 	systemschema.StatementExecutionStatsTableSchema,
 	systemschema.TableMetadataTableSchema,
+	systemschema.PreparedTransactionsTableSchema,
+	systemschema.InspectErrorsTableSchema,
+	systemschema.TransactionDiagnosticsRequestsTableSchema,
+	systemschema.TransactionDiagnosticsTableSchema,
+	systemschema.StatementHintsTableSchema,
+	systemschema.TableStatisticsLocksTableSchema,
 }
 
 func init() {

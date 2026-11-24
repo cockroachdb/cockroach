@@ -18,6 +18,7 @@ import (
 )
 
 type commentOnColumnNode struct {
+	zeroInputPlanNode
 	n         *tree.CommentOnColumn
 	tableDesc catalog.TableDescriptor
 }

@@ -2,13 +2,11 @@
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
-
 package main
 
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -18,7 +16,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/internal/team"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
@@ -33,14 +30,14 @@ import (
 
 var (
 	teamsYaml = `cockroachdb/unowned:
-  aliases:
-    cockroachdb/rfc-prs: other
-  triage_column_id: 0
+ aliases:
+   cockroachdb/rfc-prs: other
 cockroachdb/test-eng:
-  label: T-testeng
-  triage_column_id: 14041337
+ label: T-testeng
 cockroachdb/dev-inf:
-  triage_column_id: 10210759`
+ label: T-dev-inf
+cockroachdb/sql-foundations:
+ label: T-sql-foundations`
 
 	validTeamsFn   = func() (team.Map, error) { return loadYamlTeams(teamsYaml) }
 	invalidTeamsFn = func() (team.Map, error) { return loadYamlTeams("invalid yaml") }
@@ -93,7 +90,7 @@ func TestShouldPost(t *testing.T) {
 
 		ti := &testImpl{spec: testSpec}
 		ti.mu.failures = c.failures
-		github := &githubIssues{disable: c.disableIssues}
+		github := &githubIssues{disable: c.disableIssues, dryRun: false}
 
 		skipReason := github.shouldPost(ti)
 		require.Equal(t, c.expectedReason, skipReason)
@@ -105,14 +102,17 @@ func TestGenerateHelpCommand(t *testing.T) {
 	end := time.Date(2023, time.July, 21, 16, 42, 13, 137, time.UTC)
 
 	r := &issues.Renderer{}
-	generateHelpCommand("acceptance/gossip/locality-address", "foo-cluster", spec.GCE, start, end)(r)
+	generateHelpCommand("acceptance/gossip/locality-address", "foo-cluster", start, end)(r)
 
 	echotest.Require(t, r.String(), filepath.Join("testdata", "help_command.txt"))
 
+	// With TC_BUILD_BRANCH=master, Datadog log upload is enabled and the
+	// help command should include a Datadog Logs link.
+	t.Setenv("TC_BUILD_BRANCH", "master")
 	r = &issues.Renderer{}
-	generateHelpCommand("acceptance/gossip/locality-address", "foo-cluster", spec.AWS, start, end)(r)
+	generateHelpCommand("acceptance/gossip/locality-address", "foo-cluster", start, end)(r)
 
-	echotest.Require(t, r.String(), filepath.Join("testdata", "help_command_non_gce.txt"))
+	echotest.Require(t, r.String(), filepath.Join("testdata", "help_command_with_dd.txt"))
 }
 
 func TestCreatePostRequest(t *testing.T) {
@@ -125,6 +125,7 @@ func TestCreatePostRequest(t *testing.T) {
 	type githubIssueOpts struct {
 		failures        []failure
 		loadTeamsFailed bool
+		message         string
 	}
 
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "github"), func(t *testing.T, path string) {
@@ -139,14 +140,14 @@ func TestCreatePostRequest(t *testing.T) {
 
 		ti := &testImpl{
 			spec:        testSpec,
-			l:           nilLogger(),
 			start:       time.Date(2023, time.July, 21, 16, 34, 3, 817, time.UTC),
 			end:         time.Date(2023, time.July, 21, 16, 42, 13, 137, time.UTC),
 			cockroach:   "cockroach",
 			cockroachEA: "cockroach-ea",
 		}
+		ti.ReplaceL(nilLogger())
 
-		testClusterImpl := &clusterImpl{spec: clusterSpec, arch: vm.ArchAMD64, name: "foo"}
+		var testClusterImpl testCluster = &roachprodCluster{spec: clusterSpec, arch: vm.ArchAMD64, name: "foo"}
 		vo := vm.DefaultCreateOpts()
 		vmOpts := &vo
 		teamLoadFn := validTeamsFn
@@ -156,10 +157,9 @@ func TestCreatePostRequest(t *testing.T) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			if d.Cmd == "post" {
 				github := &githubIssues{
-					vmCreateOpts: vmOpts,
-					cluster:      testClusterImpl,
-					teamLoader:   teamLoadFn,
+					teamLoader: teamLoadFn,
 				}
+				issueInfo := newGithubIssueInfo(testClusterImpl, vmOpts)
 
 				// See: `formatFailure` which formats failures for roachtests. Try to
 				// follow it here.
@@ -173,12 +173,13 @@ func TestCreatePostRequest(t *testing.T) {
 					// on where this test is run and prone to flaking.
 					fmt.Fprintf(&b, "%v", f.squashedErr)
 				}
-				message := b.String()
+				message := b.String() + testCase.message
 
-				params := getTestParameters(ti, github.cluster, github.vmCreateOpts)
+				params := getTestParameters(ti, issueInfo.cluster, issueInfo.vmCreateOpts)
 				req, err := github.createPostRequest(
 					testName, ti.start, ti.end, testSpec, testCase.failures,
-					message, "https://app.side-eye.io/snapshots/1", roachtestutil.UsingRuntimeAssertions(ti), ti.goCoverEnabled, params,
+					message, roachtestutil.UsingRuntimeAssertions(ti), ti.goCoverEnabled, params,
+					issueInfo,
 				)
 				if testCase.loadTeamsFailed {
 					// Assert that if TEAMS.yaml cannot be loaded then function errors.
@@ -187,7 +188,7 @@ func TestCreatePostRequest(t *testing.T) {
 				}
 				require.NoError(t, err)
 
-				post, err := formatPostRequest(req)
+				post, _, err := formatPostRequest(req)
 				require.NoError(t, err)
 
 				return post
@@ -214,8 +215,15 @@ func TestCreatePostRequest(t *testing.T) {
 							refError = vmPreemptionError("my_VM")
 						case "vm-host-error":
 							refError = vmHostError("my_VM")
+						case "live-migration-error":
+							refError = liveMigrationError("my_VM")
 						case "error-with-owner-sql-foundations":
 							refError = registry.ErrorWithOwner(registry.OwnerSQLFoundations, refError)
+						case "error-with-owner-sql-foundations-title-override":
+							refError = registry.ErrorWithOwner(
+								registry.OwnerSQLFoundations, refError,
+								registry.WithTitleOverride("schema_change_workload_failure"),
+							)
 						case "error-with-owner-test-eng":
 							refError = registry.ErrorWithOwner(registry.OwnerTestEng, refError)
 						case "require-no-error-failed":
@@ -226,6 +234,8 @@ func TestCreatePostRequest(t *testing.T) {
 						case "lose-error-object":
 							// Lose the error object which should make our flake detection fail.
 							refError = errors.Newf("%s", redact.SafeString(refError.Error()))
+						case "node-fatal":
+							refError = errors.Newf(`(monitor.go:267).Wait: monitor failure: dial tcp 127.0.0.1:29000: connect: connection refused`)
 						}
 					}
 				}
@@ -248,53 +258,23 @@ func TestCreatePostRequest(t *testing.T) {
 				ti.spec.CockroachBinary = registry.RuntimeAssertionsCockroach
 			case "set-coverage-enabled-build":
 				ti.goCoverEnabled = true
+			case "set-branch":
+				t.Setenv("TC_BUILD_BRANCH", d.CmdArgs[0].Vals[0])
+			case "add-additional-info":
+				msg_type := d.CmdArgs[0].Vals[0]
+				switch msg_type {
+				case "ip-node-info":
+					testCase.message = fmt.Sprintf("%s\n%s", testCase.message, `| Node | Public IP | Private IP |
+| --- | --- | --- |
+| teamcity-1758834520-01-n1cpu4-0001 | 34.139.44.53 | 10.142.0.2 |`)
+				case "fatal-logs":
+					testCase.message = fmt.Sprintf("%s\n%s", testCase.message, `F250826 19:49:07.194443 3106 sql/sem/builtins/builtins.go:6063 ⋮ [T1,Vsystem,n1,client=127.0.0.1:54552,hostssl,user=‹roachprod›] 250  force_log_fatal(): ‹oops›`)
+				default:
+					return fmt.Sprintf("unknown additional info argument: %s", msg_type)
+				}
 			}
 
 			return "ok"
 		})
 	})
-}
-
-// formatPostRequest returns a string representation of the rendered PostRequest.
-// Additionally, it also includes labels, as well as a link that can be followed
-// to open the issue in Github.
-func formatPostRequest(req issues.PostRequest) (string, error) {
-	data := issues.TemplateData{
-		PostRequest:        req,
-		Parameters:         req.ExtraParams,
-		SideEyeSnapshotMsg: req.SideEyeSnapshotMsg,
-		SideEyeSnapshotURL: req.SideEyeSnapshotURL,
-		CondensedMessage:   issues.CondensedMessage(req.Message),
-		Branch:             "test_branch",
-		Commit:             "test_SHA",
-		PackageNameShort:   strings.TrimPrefix(req.PackageName, issues.CockroachPkgPrefix),
-	}
-
-	formatter := issues.UnitTestFormatter
-	r := &issues.Renderer{}
-	if err := formatter.Body(r, data); err != nil {
-		return "", err
-	}
-
-	var post strings.Builder
-	post.WriteString(r.String())
-
-	// Github labels are normally not part of the rendered issue body, but we want to
-	// still test that they are correctly set so append them here.
-	post.WriteString("\n------\nLabels:\n")
-	for _, label := range req.Labels {
-		post.WriteString(fmt.Sprintf("- <code>%s</code>\n", label))
-	}
-
-	u, err := url.Parse("https://github.com/cockroachdb/cockroach/issues/new")
-	if err != nil {
-		return "", err
-	}
-	q := u.Query()
-	q.Add("title", formatter.Title(data))
-	q.Add("body", post.String())
-	u.RawQuery = q.Encode()
-	post.WriteString(fmt.Sprintf("Rendered:\n%s", u.String()))
-
-	return post.String(), nil
 }

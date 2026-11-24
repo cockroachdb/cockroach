@@ -13,11 +13,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -66,6 +67,7 @@ func makeNotUsableFalseBuiltin() builtinDefinition {
 // the existence of this map.
 var typeBuiltinsHaveUnderscore = map[oid.Oid]struct{}{
 	types.Any.Oid():         {},
+	types.AnyElement.Oid():  {},
 	types.AnyArray.Oid():    {},
 	types.Date.Oid():        {},
 	types.Time.Oid():        {},
@@ -82,6 +84,7 @@ var typeBuiltinsHaveUnderscore = map[oid.Oid]struct{}{
 	oid.T_bit:               {},
 	types.Timestamp.Oid():   {},
 	types.TimestampTZ.Oid(): {},
+	types.Trigger.Oid():     {},
 	types.AnyTuple.Oid():    {},
 }
 
@@ -107,10 +110,6 @@ func init() {
 	// Make non-array type i/o builtins.
 	for _, typ := range types.OidToType {
 		switch typ.Oid() {
-		case oid.T_trigger:
-			// TRIGGER is not valid in any context apart from the return-type of a
-			// trigger function.
-			continue
 		case oid.T_int2vector, oid.T_oidvector:
 			// Handled separately below.
 		default:
@@ -286,23 +285,35 @@ func makeTypeIOBuiltin(paramTypes tree.TypeList, returnType *types.T) builtinDef
 	)
 }
 
-// makeTypeIOBuiltins generates the 4 i/o builtins that Postgres implements for
-// every type: typein, typeout, typerecv, and typsend. All 4 builtins are no-op,
-// and only supported because ORMs sometimes use their names to form a map for
-// client-side type encoding and decoding. See issue #12526 for more details.
+// makeTypeIOBuiltins generates the i/o builtins that Postgres implements for
+// each type. Typically this includes typein, typeout, typerecv, and typsend.
+// However, for certain pseudo-types like "any" and "trigger", PostgreSQL only
+// has the in/out functions. All builtins are no-op, and only supported because
+// ORMs sometimes use their names to form a map for client-side type encoding
+// and decoding. See issue #12526 for more details.
 func makeTypeIOBuiltins(builtinPrefix string, typ *types.T) map[string]builtinDefinition {
 	typname := typ.String()
-	return map[string]builtinDefinition{
-		builtinPrefix + "send": makeTypeIOBuiltin(tree.ParamTypes{{Name: typname, Typ: typ}}, types.Bytes),
-		// Note: PG takes type 2281 "internal" for these builtins, which we don't
-		// provide. We won't implement these functions anyway, so it shouldn't
-		// matter.
-		builtinPrefix + "recv": makeTypeIOBuiltin(tree.ParamTypes{{Name: "input", Typ: types.Any}}, typ),
+	result := map[string]builtinDefinition{
 		// Note: PG returns 'cstring' for these builtins, but we don't support that.
 		builtinPrefix + "out": makeTypeIOBuiltin(tree.ParamTypes{{Name: typname, Typ: typ}}, types.Bytes),
 		// Note: PG takes 'cstring' for these builtins, but we don't support that.
-		builtinPrefix + "in": makeTypeIOBuiltin(tree.ParamTypes{{Name: "input", Typ: types.Any}}, typ),
+		builtinPrefix + "in": makeTypeIOBuiltin(tree.ParamTypes{{Name: "input", Typ: types.AnyElement}}, typ),
 	}
+
+	// PostgreSQL doesn't have send/recv functions for certain pseudo-types.
+	switch typ.Oid() {
+	case oid.T_any, oid.T_trigger:
+		// PostgreSQL has any_in/any_out and trigger_in/trigger_out but not
+		// any_send/any_recv or trigger_send/trigger_recv.
+	default:
+		result[builtinPrefix+"send"] = makeTypeIOBuiltin(tree.ParamTypes{{Name: typname, Typ: typ}}, types.Bytes)
+		// Note: PG takes type 2281 "internal" for these builtins, which we don't
+		// provide. We won't implement these functions anyway, so it shouldn't
+		// matter.
+		result[builtinPrefix+"recv"] = makeTypeIOBuiltin(tree.ParamTypes{{Name: "input", Typ: types.AnyElement}}, typ)
+	}
+
+	return result
 }
 
 // http://doxygen.postgresql.org/pg__wchar_8h.html#a22e0c8b9f59f6e226a5968620b4bb6a9aac3b065b882d3231ba59297524da2f23
@@ -315,6 +326,10 @@ var (
 	DatEncodingEnUTF8        = tree.NewDString("en_US.utf8")
 	datEncodingUTF8ShortName = tree.NewDString("UTF8")
 )
+
+// DatLocProviderLibC is the locale provider for our databases. CockroachDB
+// uses the libc locale provider, represented as 'c' in pg_database.
+var DatLocProviderLibC = tree.NewDString("c")
 
 // Make a pg_get_viewdef function with the given arguments.
 func makePGGetViewDef(paramTypes tree.ParamTypes) tree.Overload {
@@ -342,7 +357,24 @@ func makePGGetConstraintDef(paramTypes tree.ParamTypes) tree.Overload {
 		Types:      paramTypes,
 		ReturnType: tree.FixedReturnType(types.String),
 		Body:       `SELECT condef FROM pg_catalog.pg_constraint WHERE oid=$1 LIMIT 1`,
-		Info:       notUsableInfo,
+		Info:       "Returns the definition of the specified constraint.",
+		Volatility: volatility.Stable,
+		Language:   tree.RoutineLangSQL,
+	}
+}
+
+// makePGGetTriggerDef makes a pg_get_triggerdef function with the given arguments.
+func makePGGetTriggerDef(paramTypes tree.ParamTypes) tree.Overload {
+	return tree.Overload{
+		Types:      paramTypes,
+		ReturnType: tree.FixedReturnType(types.String),
+		Body: `SELECT c.create_statement
+           FROM pg_catalog.pg_trigger t
+           JOIN crdb_internal.create_trigger_statements c
+             ON c.table_id = t.tgrelid::INT8 AND c.trigger_name = t.tgname
+           WHERE t.oid = $1
+           LIMIT 1`,
+		Info:       "Returns the CREATE TRIGGER statement for the specified trigger.",
 		Volatility: volatility.Stable,
 		Language:   tree.RoutineLangSQL,
 	}
@@ -428,7 +460,7 @@ func makePGPrivilegeInquiryDef(
 					user = username.MakeSQLUsernameFromPreNormalizedString(userS)
 					if user.Undefined() {
 						if _, ok := arg.(*tree.DOid); ok {
-							// Postgres returns falseifn no matching user is
+							// Postgres returns false if no matching user is
 							// found when given an OID.
 							return tree.DBoolFalse, nil
 						}
@@ -439,11 +471,11 @@ func makePGPrivilegeInquiryDef(
 					// Remove the first argument.
 					args = args[1:]
 				} else {
-					if evalCtx.SessionData().User().Undefined() {
+					user = evalCtx.EffectiveUser()
+					if user.Undefined() {
 						// Wut... is this possible?
 						return tree.DNull, nil
 					}
-					user = evalCtx.SessionData().User()
 				}
 				ret, err := fn(ctx, evalCtx, args, user)
 				if err != nil {
@@ -488,11 +520,21 @@ func getNameForArg(
 		if u == username.PublicRoleName() {
 			return username.PublicRole, nil
 		}
+		if pgTable == "pg_roles" {
+			if u == username.NodeUserName() || u == username.RootUserName() || u == username.AdminRoleName() {
+				return u.Normalized(), nil
+			}
+		}
 		arg = tree.NewDString(u.Normalized())
 		query = fmt.Sprintf("SELECT %s FROM pg_catalog.%s WHERE %s = $1 LIMIT 1", pgCol, pgTable, pgCol)
 	case *tree.DOid:
 		if t.Oid == username.PublicRoleID {
 			return username.PublicRole, nil
+		}
+		if pgTable == "pg_roles" {
+			if name, ok := evalCtx.Planner.MaybeResolveSystemRoleOID(ctx, t.Oid); ok {
+				return name, nil
+			}
 		}
 		query = fmt.Sprintf("SELECT %s FROM pg_catalog.%s WHERE oid = $1 LIMIT 1", pgCol, pgTable)
 	default:
@@ -565,7 +607,11 @@ func makeCreateRegDef(typ *types.T) builtinDefinition {
 }
 
 func makeToRegOverload(typ *types.T, helpText string) builtinDefinition {
-	return makeBuiltin(tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
+	return makeBuiltin(
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true,
+		},
 		tree.Overload{
 			Types: tree.ParamTypes{
 				{Name: "text", Typ: types.String},
@@ -573,8 +619,9 @@ func makeToRegOverload(typ *types.T, helpText string) builtinDefinition {
 			ReturnType: tree.FixedReturnType(types.RegType),
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				typName := tree.MustBeDString(args[0])
-				int, _ := strconv.Atoi(strings.TrimSpace(string(typName)))
-				if int > 0 {
+				_, err := strconv.Atoi(strings.TrimSpace(string(typName)))
+				if err == nil {
+					// If a number was passed in, return NULL.
 					return tree.DNull, nil
 				}
 				typOid, err := eval.ParseDOid(ctx, evalCtx, string(typName), typ)
@@ -591,18 +638,155 @@ func makeToRegOverload(typ *types.T, helpText string) builtinDefinition {
 	)
 }
 
-// Format the array {type,othertype} as type, othertype.
-// If there are no args, output the empty string.
-const getFunctionArgStringQuery = `
-SELECT COALESCE(
-    (SELECT trim('{}' FROM replace(
-        (
-            SELECT array_agg(unnested::REGTYPE::TEXT)
-            FROM unnest(proargtypes) AS unnested
-        )::TEXT, ',', ', '))
-    ), '')
-FROM pg_catalog.pg_proc WHERE oid=$1 GROUP BY oid, proargtypes LIMIT 1
-`
+// formatFunctionArguments returns the comma-separated CREATE FUNCTION argument
+// list for the given OID, matching PostgreSQL's pg_get_function_arguments and
+// pg_get_function_identity_arguments. When printDefaults is false, DEFAULT
+// clauses are omitted (the identity-arguments form). The returned datum is
+// tree.DNull for OIDs that do not resolve to a function — pg_dump and other
+// catalog readers expect NULL rather than an error in that case.
+func formatFunctionArguments(
+	ctx context.Context, evalCtx *eval.Context, funcOID oid.Oid, printDefaults bool,
+) (tree.Datum, error) {
+	_, overload, err := evalCtx.Planner.ResolveFunctionByOID(ctx, funcOID)
+	if err != nil {
+		if errors.Is(err, tree.ErrRoutineUndefined) {
+			return tree.DNull, nil
+		}
+		return nil, err
+	}
+
+	// Built-in overloads do not populate RoutineParams; their parameters live
+	// on overload.Types. Built-ins also have no parameter names, modes, or
+	// DEFAULTs to render, so fall back to a types-only formatting helper.
+	if len(overload.RoutineParams) == 0 {
+		return formatBuiltinArguments(overload), nil
+	}
+
+	isProcedure := overload.Type == tree.ProcedureRoutine
+	var sb strings.Builder
+	for i := range overload.RoutineParams {
+		p := &overload.RoutineParams[i]
+		// TODO(#88947): when CRDB models RETURNS TABLE columns separately from
+		// regular OUT params, skip them here so they aren't emitted in the
+		// arguments list.
+		if i > 0 {
+			sb.WriteString(", ")
+		}
+		// Mode prefix. Procedures show every mode (including IN) so that the
+		// dumped signature is unambiguous when used with DROP/ALTER PROCEDURE.
+		// Functions hide the implicit IN mode and only emit the non-IN ones.
+		switch p.Class {
+		case tree.RoutineParamDefault, tree.RoutineParamIn:
+			if isProcedure {
+				sb.WriteString("IN ")
+			}
+		case tree.RoutineParamOut:
+			sb.WriteString("OUT ")
+		case tree.RoutineParamInOut:
+			sb.WriteString("INOUT ")
+		case tree.RoutineParamVariadic:
+			sb.WriteString("VARIADIC ")
+		}
+		if p.Name != "" {
+			sb.WriteString(p.Name.String())
+			sb.WriteString(" ")
+		}
+		sb.WriteString(typeReferencePGName(p.Type))
+		if printDefaults && p.IsInParam() && p.DefaultVal != nil {
+			// DefaultExpr is stored on the descriptor via tree.Serialize, which
+			// adds type-disambiguation annotations like 5:::INT8 as syntactic
+			// AnnotateTypeExpr nodes. Those nodes survive re-parsing and are
+			// not controlled by format flags, so strip them by walking the
+			// expression tree before formatting.
+			sb.WriteString(" DEFAULT ")
+			stripped, _ := tree.WalkExpr(stripTypeAnnotations{}, p.DefaultVal)
+			sb.WriteString(tree.AsString(stripped))
+		}
+	}
+	return tree.NewDString(sb.String()), nil
+}
+
+// formatBuiltinArguments returns the comma-separated input-argument types of
+// a built-in overload. It handles each TypeList kind that built-ins use:
+// fixed-arity (ParamTypes), variadic (VariadicType, e.g. concat, format), and
+// homogeneous (HomogeneousType, e.g. greatest, least).
+func formatBuiltinArguments(overload *tree.Overload) tree.Datum {
+	var sb strings.Builder
+	switch t := overload.Types.(type) {
+	case tree.ParamTypes:
+		for i := range t {
+			if i > 0 {
+				sb.WriteString(", ")
+			}
+			sb.WriteString(t[i].Typ.PGName())
+		}
+	case tree.VariadicType:
+		for i, ft := range t.FixedTypes {
+			if i > 0 {
+				sb.WriteString(", ")
+			}
+			sb.WriteString(ft.PGName())
+		}
+		if len(t.FixedTypes) > 0 {
+			sb.WriteString(", ")
+		}
+		// Built-ins do not populate pg_proc.proargmodes, so the rendered
+		// signature does not include the VARIADIC keyword either — keeping the
+		// argument list consistent with the proargtypes-only metadata that
+		// callers see for built-ins.
+		sb.WriteString(t.VarType.PGName())
+	case tree.HomogeneousType:
+		sb.WriteString(types.AnyElement.PGName())
+	}
+	return tree.NewDString(sb.String())
+}
+
+// typeReferencePGName renders a parameter type using PostgreSQL-compatible
+// names (e.g. "bytea" instead of "BYTES", "int8" instead of "INT8" — CRDB and
+// PG happen to share most non-string OIDs). User-defined types are
+// schema-qualified, and real arrays render as `<elem>[]` rather than the
+// pg_type internal name `_<elem>` so the output is parseable as a CREATE
+// FUNCTION argument list. For unresolved or OID-based references we fall back
+// to the standard SQLString form.
+func typeReferencePGName(ref tree.ResolvableTypeReference) string {
+	t, ok := ref.(*types.T)
+	if !ok {
+		return ref.SQLString()
+	}
+	// UDTs (enums, composites, domains) need schema qualification so the
+	// dumped signature resolves when restored under a different search_path.
+	// SQLString uses FQName(explicitCatalog=false), matching PG's
+	// format_type_be_qualified output.
+	if t.UserDefined() {
+		return t.SQLString()
+	}
+	// Real arrays render as `<elem>[]`. anyarray, int2vector, and oidvector
+	// have distinct OIDs that PG also exposes by name (not as arrays of
+	// something), so leave those alone.
+	if t.Family() == types.ArrayFamily {
+		switch t.Oid() {
+		case oid.T_anyarray, oid.T_int2vector, oid.T_oidvector:
+			return t.PGName()
+		}
+		return typeReferencePGName(t.ArrayContents()) + "[]"
+	}
+	return t.PGName()
+}
+
+// stripTypeAnnotations is a tree.Visitor that unwraps *tree.AnnotateTypeExpr
+// nodes, replacing each with its inner expression. It is used to drop the
+// CRDB-specific 5:::INT8 disambiguation suffixes from default-value text so
+// the rendered DEFAULT clause is plain SQL.
+type stripTypeAnnotations struct{}
+
+func (stripTypeAnnotations) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
+	if a, ok := expr.(*tree.AnnotateTypeExpr); ok {
+		return true, a.Expr
+	}
+	return true, expr
+}
+
+func (stripTypeAnnotations) VisitPost(expr tree.Expr) tree.Expr { return expr }
 
 var pgBuiltins = map[string]builtinDefinition{
 	// See https://www.postgresql.org/docs/9.6/static/functions-info.html.
@@ -619,6 +803,20 @@ var pgBuiltins = map[string]builtinDefinition{
 				"function was only added for compatibility, and unlike in Postgres, the " +
 				"returned value does not correspond to a real process ID.",
 			Volatility: volatility.Stable,
+		},
+	),
+
+	// See https://www.postgresql.org/docs/current/functions-info.html.
+	"pg_trigger_depth": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ParamTypes{},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(ctx context.Context, _ *eval.Context, _ tree.Datums) (tree.Datum, error) {
+				return tree.NewDInt(tree.DInt(eval.GetTriggerDepth(ctx))), nil
+			},
+			Info:             "Returns the current nesting level of PostgreSQL triggers (0 if not called, directly or indirectly, from inside a trigger).",
+			Volatility:       volatility.Volatile,
+			DistsqlBlocklist: true,
 		},
 	),
 
@@ -703,6 +901,13 @@ var pgBuiltins = map[string]builtinDefinition{
 		makePGGetConstraintDef(tree.ParamTypes{{Name: "constraint_oid", Typ: types.Oid}}),
 	),
 
+	// pg_get_triggerdef functions like SHOW CREATE TRIGGER.
+	"pg_get_triggerdef": makeBuiltin(tree.FunctionProperties{DistsqlBlocklist: true},
+		makePGGetTriggerDef(tree.ParamTypes{{Name: "trigger_oid", Typ: types.Oid}}),
+		makePGGetTriggerDef(tree.ParamTypes{
+			{Name: "trigger_oid", Typ: types.Oid}, {Name: "pretty_bool", Typ: types.Bool}}),
+	),
+
 	// pg_get_partkeydef is only provided for compatibility and always returns
 	// NULL. It is supposed to return the PARTITION BY clause of a table's
 	// CREATE statement.
@@ -744,12 +949,17 @@ var pgBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "func_oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.String),
-			Body:       getFunctionArgStringQuery,
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return tree.DNull, nil
+				}
+				o := tree.MustBeDOid(args[0])
+				return formatFunctionArguments(ctx, evalCtx, o.Oid, true /* printDefaults */)
+			},
 			Info: "Returns the argument list (with defaults) necessary to identify a function, " +
 				"in the form it would need to appear in within CREATE FUNCTION.",
 			Volatility:        volatility.Stable,
 			CalledOnNullInput: true,
-			Language:          tree.RoutineLangSQL,
 		},
 	),
 
@@ -758,12 +968,45 @@ var pgBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "func_oid", Typ: types.Oid}, {Name: "arg_num", Typ: types.Int4}},
 			ReturnType: tree.FixedReturnType(types.String),
-			Body:       "SELECT NULL",
+			Body: `
+WITH defaults_parsed AS (
+  SELECT
+    proargdefaults,
+    pronargs,
+    proargmodes,
+    array_upper(proargmodes, 1) AS total_args,
+    CASE
+      WHEN proargdefaults IS NULL THEN 0
+      ELSE array_length(string_to_array(trim('()' FROM proargdefaults), '}, {'), 1)
+    END AS num_defaults,
+    trim('()' FROM proargdefaults) AS defaults_trimmed,
+    -- Count input arguments up to position $2
+    CASE
+      WHEN proargmodes IS NULL THEN $2
+      ELSE (
+        SELECT count(*)
+        FROM generate_series(1, $2) AS i
+        WHERE proargmodes[i] IN ('i', 'b', 'v')
+      )
+    END AS nth_input_arg
+  FROM pg_catalog.pg_proc
+  WHERE oid = $1
+  LIMIT 1
+)
+SELECT
+  CASE
+    WHEN proargdefaults IS NULL THEN NULL
+    WHEN $2 < 1 OR $2 > COALESCE(total_args, pronargs) THEN NULL
+    WHEN (proargmodes IS NOT NULL AND proargmodes[$2] NOT IN ('i', 'b', 'v')) THEN NULL
+    WHEN nth_input_arg <= (pronargs - num_defaults) THEN NULL
+    ELSE trim('{}' FROM split_part(defaults_trimmed, '}, {', nth_input_arg - (pronargs - num_defaults)))
+  END
+FROM defaults_parsed
+			`,
 			Info: "Get textual representation of a function argument's default value. " +
 				"The second argument of this function is the argument number among all " +
 				"arguments (i.e. proallargtypes, *not* proargtypes), starting with 1, " +
-				"because that's how information_schema.sql uses it. Currently, this " +
-				"always returns NULL, since CockroachDB does not support default values.",
+				"because that's how information_schema.sql uses it.",
 			Volatility:        volatility.Stable,
 			CalledOnNullInput: true,
 			Language:          tree.RoutineLangSQL,
@@ -800,9 +1043,38 @@ var pgBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "func_oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.String),
-			Body:       getFunctionArgStringQuery,
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return tree.DNull, nil
+				}
+				o := tree.MustBeDOid(args[0])
+				return formatFunctionArguments(ctx, evalCtx, o.Oid, false /* printDefaults */)
+			},
 			Info: "Returns the argument list (without defaults) necessary to identify a function, " +
 				"in the form it would need to appear in within ALTER FUNCTION, for instance.",
+			Volatility:        volatility.Stable,
+			CalledOnNullInput: true,
+		},
+	),
+
+	// pg_get_function_sqlbody returns the deparsed SQL body of a function defined
+	// with the SQL-standard inline body syntax (RETURN expr or BEGIN ATOMIC ...
+	// END), and NULL otherwise. CockroachDB does not yet support that syntax (see
+	// issue #85144), so pg_proc.prosqlbody is always NULL today and this builtin
+	// returns NULL for every input. It exists for compatibility with tools that
+	// probe pg_catalog (e.g. psql's \df+).
+	// https://www.postgresql.org/docs/14/functions-info.html
+	"pg_get_function_sqlbody": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "func_oid", Typ: types.Oid}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Body: `SELECT prosqlbody
+             FROM pg_catalog.pg_proc
+             WHERE oid=$1
+             LIMIT 1`,
+			Info: "Returns the SQL-standard body of the specified function, or NULL " +
+				"if the function was not defined with the SQL-standard inline body syntax.",
 			Volatility:        volatility.Stable,
 			CalledOnNullInput: true,
 			Language:          tree.RoutineLangSQL,
@@ -837,12 +1109,39 @@ var pgBuiltins = map[string]builtinDefinition{
 						ELSE a.attname
 					END as pg_get_indexdef
 					FROM pg_catalog.pg_index i
-					LEFT JOIN pg_catalog.pg_attribute a ON (a.attrelid = i.indexrelid AND a.attnum = $2)
+					-- Use an index hint to avoid an incomplete virtual index lookup join
+					-- that degrades to a full scan.
+					LEFT JOIN pg_catalog.pg_attribute@primary AS a ON (a.attrelid = i.indexrelid AND a.attnum = $2)
 					LEFT JOIN pg_catalog.pg_indexes defs ON ($2 = 0 AND defs.crdb_oid = i.indexrelid)
 					WHERE i.indexrelid = $1`,
 			Info:       "Gets the CREATE INDEX command for index, or definition of just one index column when given a non-zero column number",
 			Volatility: volatility.Stable,
 			Language:   tree.RoutineLangSQL,
+		},
+	),
+
+	// pg_get_statisticsobjdef returns the CREATE STATISTICS command for
+	// an extended statistics object.
+	"pg_get_statisticsobjdef": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo, DistsqlBlocklist: true},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "statobj_oid", Typ: types.Oid}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Body: `SELECT 'CREATE STATISTICS ' || quote_ident(n.nspname) || '.' || quote_ident(s.stxname) ||
+				' ON ' ||
+				(SELECT string_agg(quote_ident(a.attname), ', ' ORDER BY ordinality)
+				 FROM unnest(s.stxkeys::INT2[]) WITH ORDINALITY AS u(attnum, ordinality)
+				 JOIN pg_catalog.pg_attribute a ON a.attrelid = s.stxrelid AND a.attnum = u.attnum::INT8) ||
+				' FROM ' || quote_ident(n2.nspname) || '.' || quote_ident(c.relname)
+			FROM pg_catalog.pg_statistic_ext s
+			JOIN pg_catalog.pg_namespace n ON n.oid = s.stxnamespace
+			JOIN pg_catalog.pg_class c ON c.oid = s.stxrelid
+			JOIN pg_catalog.pg_namespace n2 ON n2.oid = c.relnamespace
+			WHERE s.oid = $1`,
+			Info:              "Returns the CREATE STATISTICS command for an extended statistics object.",
+			Volatility:        volatility.Stable,
+			CalledOnNullInput: true,
+			Language:          tree.RoutineLangSQL,
 		},
 	),
 
@@ -864,7 +1163,7 @@ var pgBuiltins = map[string]builtinDefinition{
 			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				tableName := tree.MustBeDString(args[0])
 				columnName := tree.MustBeDString(args[1])
-				qualifiedName, err := parser.ParseQualifiedTableName(string(tableName))
+				qualifiedName, err := parserutils.ParseQualifiedTableName(string(tableName))
 				if err != nil {
 					return nil, err
 				}
@@ -911,7 +1210,10 @@ var pgBuiltins = map[string]builtinDefinition{
 	// none.
 	// https://www.postgresql.org/docs/11/functions-info.html
 	"pg_my_temp_schema": makeBuiltin(
-		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true, // applicable only on the gateway
+		},
 		tree.Overload{
 			Types:      tree.ParamTypes{},
 			ReturnType: tree.FixedReturnType(types.Oid),
@@ -944,7 +1246,10 @@ var pgBuiltins = map[string]builtinDefinition{
 	// session's temporary schema.
 	// https://www.postgresql.org/docs/11/functions-info.html
 	"pg_is_other_temp_schema": makeBuiltin(
-		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo},
+		tree.FunctionProperties{
+			Category:         builtinconstants.CategorySystemInfo,
+			DistsqlBlocklist: true, // applicable only on the gateway
+		},
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.Bool),
@@ -978,7 +1283,7 @@ var pgBuiltins = map[string]builtinDefinition{
 	// TODO(bram): Make sure the reported type is correct for tuples. See #25523.
 	"pg_typeof": makeBuiltin(defProps(),
 		tree.Overload{
-			Types:      tree.ParamTypes{{Name: "val", Typ: types.Any}},
+			Types:      tree.ParamTypes{{Name: "val", Typ: types.AnyElement}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				return tree.NewDString(args[0].ResolvedType().SQLStandardName()), nil
@@ -993,16 +1298,21 @@ var pgBuiltins = map[string]builtinDefinition{
 	"pg_collation_for": makeBuiltin(
 		tree.FunctionProperties{Category: builtinconstants.CategoryString},
 		tree.Overload{
-			Types:      tree.ParamTypes{{Name: "str", Typ: types.Any}},
+			Types:      tree.ParamTypes{{Name: "str", Typ: types.AnyElement}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				d := args[0]
 				var collation string
-				switch t := args[0].(type) {
+				switch t := d.(type) {
 				case *tree.DString:
 					collation = "default"
 				case *tree.DCollatedString:
 					collation = t.Locale
 				default:
+					if w, ok := d.(*tree.DOidWrapper); ok && w.Oid == oidext.T_citext {
+						collation = "default"
+						break
+					}
 					return tree.DNull, pgerror.Newf(pgcode.DatatypeMismatch,
 						"collations are not supported by type: %s", t.ResolvedType())
 				}
@@ -1084,7 +1394,29 @@ var pgBuiltins = map[string]builtinDefinition{
 					hasTypmod = true
 					typmod = int(tree.MustBeDInt(maybeTypmod))
 				}
-				return tree.NewDString(typ.SQLStandardNameWithTypmod(hasTypmod, typmod)), nil
+				// Postgres will append the type name with the schema if type is user defined
+				// and if it does not exist in the search_path.
+				isUserDefined := types.IsOIDUserDefinedType(oid)
+				useFQName := true
+				if isUserDefined && typ.TypeMeta.Name != nil {
+					// Based on the base name, see if the type resolves to the
+					// same OID as the user specified one.
+					lookupName, err := tree.NewUnresolvedObjectName(1, [3]string{typ.TypeMeta.Name.Basename()}, tree.NoAnnotation)
+					if err != nil {
+						return nil, err
+					}
+					resolvedTyp, err := evalCtx.Planner.ResolveType(ctx, lookupName)
+					if err != nil && pgerror.GetPGCode(err) != pgcode.UndefinedObject &&
+						!catalog.HasInactiveDescriptorError(err) {
+						return nil, err
+					}
+					// If the type resolved successfully, then determine if we looked up
+					// the same type. Resolution here can fail, which will just cause us
+					// to always fully qualify the name.
+					useFQName = err != nil || resolvedTyp.Oid() != oid
+				}
+
+				return tree.NewDString(typ.SQLStandardNameWithTypmod(hasTypmod, typmod, useFQName)), nil
 			},
 			Info: "Returns the SQL name of a data type that is " +
 				"identified by its type OID and possibly a type modifier. " +
@@ -1197,6 +1529,155 @@ var pgBuiltins = map[string]builtinDefinition{
 		},
 	),
 
+	"pg_advisory_xact_lock": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "key", Typ: types.Int}},
+			ReturnType: tree.FixedReturnType(types.Void),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				key := int64(*args[0].(*tree.DInt))
+				err := evalCtx.Planner.AdvisoryXactLock(ctx, key, false /* shared */)
+				if err != nil {
+					return nil, err
+				}
+				return tree.DVoidDatum, nil
+			},
+			Info: "Acquires an exclusive transaction-level advisory lock, waiting if necessary. " +
+				"The lock is released automatically at the end of the current transaction.",
+			Volatility: volatility.Volatile,
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "key1", Typ: types.Int4}, {Name: "key2", Typ: types.Int4}},
+			ReturnType: tree.FixedReturnType(types.Void),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				k1 := int32(*args[0].(*tree.DInt))
+				k2 := int32(*args[1].(*tree.DInt))
+				if err := evalCtx.Planner.AdvisoryXactLockInt4(ctx, k1, k2, false /* shared */); err != nil {
+					return nil, err
+				}
+				return tree.DVoidDatum, nil
+			},
+			Info: "Acquires an exclusive transaction-level advisory lock, waiting if necessary. " +
+				"The lock is released automatically at the end of the current transaction.",
+			Volatility: volatility.Volatile,
+		},
+	),
+
+	"pg_advisory_xact_lock_shared": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "key", Typ: types.Int}},
+			ReturnType: tree.FixedReturnType(types.Void),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				key := int64(*args[0].(*tree.DInt))
+				if err := evalCtx.Planner.AdvisoryXactLock(ctx, key, true /* shared */); err != nil {
+					return nil, err
+				}
+				return tree.DVoidDatum, nil
+			},
+			Info: "Acquires a shared transaction-level advisory lock, waiting if necessary. " +
+				"The lock is released automatically at the end of the current transaction.",
+			Volatility: volatility.Volatile,
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "key1", Typ: types.Int4}, {Name: "key2", Typ: types.Int4}},
+			ReturnType: tree.FixedReturnType(types.Void),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				k1 := int32(*args[0].(*tree.DInt))
+				k2 := int32(*args[1].(*tree.DInt))
+				if err := evalCtx.Planner.AdvisoryXactLockInt4(ctx, k1, k2, true /* shared */); err != nil {
+					return nil, err
+				}
+				return tree.DVoidDatum, nil
+			},
+			Info: "Acquires a shared transaction-level advisory lock, waiting if necessary. " +
+				"The lock is released automatically at the end of the current transaction.",
+			Volatility: volatility.Volatile,
+		},
+	),
+
+	"pg_try_advisory_xact_lock": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "key", Typ: types.Int}},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				key := int64(*args[0].(*tree.DInt))
+				ok, err := evalCtx.Planner.AdvisoryTryXactLock(ctx, key, false /* shared */)
+				if err != nil {
+					return nil, err
+				}
+				if ok {
+					return tree.DBoolTrue, nil
+				}
+				return tree.DBoolFalse, nil
+			},
+			Info: "Acquires an exclusive transaction-level advisory lock if available. " +
+				"Returns true if the lock was acquired, false if it was not. " +
+				"The lock is released automatically at the end of the current transaction.",
+			Volatility: volatility.Volatile,
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "key1", Typ: types.Int4}, {Name: "key2", Typ: types.Int4}},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				k1 := int32(*args[0].(*tree.DInt))
+				k2 := int32(*args[1].(*tree.DInt))
+				ok, err := evalCtx.Planner.AdvisoryTryXactLockInt4(ctx, k1, k2, false /* shared */)
+				if err != nil {
+					return nil, err
+				}
+				if ok {
+					return tree.DBoolTrue, nil
+				}
+				return tree.DBoolFalse, nil
+			},
+			Info: "Acquires an exclusive transaction-level advisory lock if available. " +
+				"Returns true if the lock was acquired, false if it was not. " +
+				"The lock is released automatically at the end of the current transaction.",
+			Volatility: volatility.Volatile,
+		},
+	),
+
+	"pg_try_advisory_xact_lock_shared": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "key", Typ: types.Int}},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				key := int64(*args[0].(*tree.DInt))
+				ok, err := evalCtx.Planner.AdvisoryTryXactLock(ctx, key, true /* shared */)
+				if err != nil {
+					return nil, err
+				}
+				if ok {
+					return tree.DBoolTrue, nil
+				}
+				return tree.DBoolFalse, nil
+			},
+			Info: "Acquires a shared transaction-level advisory lock if available. " +
+				"Returns true if the lock was acquired, false if it was not. " +
+				"The lock is released automatically at the end of the current transaction.",
+			Volatility: volatility.Volatile,
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "key1", Typ: types.Int4}, {Name: "key2", Typ: types.Int4}},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				k1 := int32(*args[0].(*tree.DInt))
+				k2 := int32(*args[1].(*tree.DInt))
+				ok, err := evalCtx.Planner.AdvisoryTryXactLockInt4(ctx, k1, k2, true /* shared */)
+				if err != nil {
+					return nil, err
+				}
+				if ok {
+					return tree.DBoolTrue, nil
+				}
+				return tree.DBoolFalse, nil
+			},
+			Info: "Acquires a shared transaction-level advisory lock if available. " +
+				"Returns true if the lock was acquired, false if it was not. " +
+				"The lock is released automatically at the end of the current transaction.",
+			Volatility: volatility.Volatile,
+		},
+	),
+
 	"pg_advisory_unlock": makeBuiltin(defProps(),
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "key", Typ: types.Int}},
@@ -1265,60 +1746,84 @@ var pgBuiltins = map[string]builtinDefinition{
 		},
 	),
 
-	// pg_function_is_visible returns true if the input oid corresponds to a
-	// builtin function that is part of the databases on the search path.
-	// https://www.postgresql.org/docs/9.6/static/functions-info.html
+	// pg_function_is_visible returns true iff the function with the given
+	// OID is the first one in the current search_path with its proname AND
+	// proargtypes — i.e., the bare name+signature resolves back to this
+	// OID. Mirrors Postgres's signature-aware FunctionIsVisible: two
+	// same-named functions in different schemas with disjoint argument
+	// lists do not shadow each other.
+	// https://www.postgresql.org/docs/current/functions-info.html
 	"pg_function_is_visible": makeBuiltin(defProps(),
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.Bool),
-			Body: `SELECT n.nspname = any current_schemas(true)
+			Body: `SELECT (SELECT n2.nspname
+                       FROM pg_catalog.pg_proc p2
+                       JOIN pg_catalog.pg_namespace n2 ON p2.pronamespace = n2.oid
+                       WHERE p2.proname = p.proname
+                         AND p2.proargtypes = p.proargtypes
+                         AND n2.nspname = ANY current_schemas(true)
+                       ORDER BY array_position(current_schemas(true), n2.nspname)
+                       LIMIT 1) IS NOT DISTINCT FROM
+                    (SELECT n.nspname FROM pg_catalog.pg_namespace n WHERE n.oid = p.pronamespace)
              FROM pg_catalog.pg_proc p
-             INNER LOOKUP JOIN pg_catalog.pg_namespace n
-             ON p.pronamespace = n.oid
-             WHERE p.oid=$1 LIMIT 1`,
+             WHERE p.oid = $1
+             LIMIT 1`,
 			CalledOnNullInput: true,
-			Info:              "Returns whether the function with the given OID belongs to one of the schemas on the search path.",
+			Info:              "Returns whether the function with the given OID is visible in the search path (its schema is on the search path and no function with the same name and signature shadows it from an earlier schema).",
 			Volatility:        volatility.Stable,
 			Language:          tree.RoutineLangSQL,
 		},
 	),
-	// pg_table_is_visible returns true if the input oid corresponds to a table
-	// that is part of the schemas on the search path.
-	// https://www.postgresql.org/docs/9.6/static/functions-info.html
+	// pg_table_is_visible returns true iff the table with the given OID is
+	// the first one in the current search_path with its relname — i.e., the
+	// bare name resolves back to this OID. Mirrors Postgres's
+	// RelationIsVisible.
+	// https://www.postgresql.org/docs/current/functions-info.html
 	"pg_table_is_visible": makeBuiltin(defProps(),
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.Bool),
-			Body: `SELECT n.nspname = any current_schemas(true)
+			Body: `SELECT (SELECT n2.nspname
+                       FROM pg_catalog.pg_class c2
+                       JOIN pg_catalog.pg_namespace n2 ON c2.relnamespace = n2.oid
+                       WHERE c2.relname = c.relname
+                         AND n2.nspname = ANY current_schemas(true)
+                       ORDER BY array_position(current_schemas(true), n2.nspname)
+                       LIMIT 1) IS NOT DISTINCT FROM
+                    (SELECT n.nspname FROM pg_catalog.pg_namespace n WHERE n.oid = c.relnamespace)
              FROM pg_catalog.pg_class c
-             INNER LOOKUP JOIN pg_catalog.pg_namespace n
-             ON c.relnamespace = n.oid
-             WHERE c.oid=$1 LIMIT 1`,
+             WHERE c.oid = $1
+             LIMIT 1`,
 			CalledOnNullInput: true,
-			Info:              "Returns whether the table with the given OID belongs to one of the schemas on the search path.",
+			Info:              "Returns whether the table with the given OID is visible in the search path (its schema is on the search path and no table with the same name shadows it from an earlier schema).",
 			Volatility:        volatility.Stable,
 			Language:          tree.RoutineLangSQL,
 		},
 	),
 
-	// pg_type_is_visible returns true if the input oid corresponds to a type
-	// that is part of the databases on the search path, or NULL if no such type
-	// exists. CockroachDB doesn't support the notion of type visibility for
-	// builtin types, so we  always return true for those. For user-defined types,
-	// we consult pg_type.
-	// https://www.postgresql.org/docs/9.6/static/functions-info.html
+	// pg_type_is_visible returns true iff the type with the given OID is
+	// the first one in the current search_path with its typname — i.e., the
+	// bare name resolves back to this OID. Mirrors Postgres's
+	// TypeIsVisible.
+	// https://www.postgresql.org/docs/current/functions-info.html
 	"pg_type_is_visible": makeBuiltin(defProps(),
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "oid", Typ: types.Oid}},
 			ReturnType: tree.FixedReturnType(types.Bool),
-			Body: `SELECT n.nspname = any current_schemas(true)
+			Body: `SELECT (SELECT n2.nspname
+                       FROM pg_catalog.pg_type t2
+                       JOIN pg_catalog.pg_namespace n2 ON t2.typnamespace = n2.oid
+                       WHERE t2.typname = t.typname
+                         AND n2.nspname = ANY current_schemas(true)
+                       ORDER BY array_position(current_schemas(true), n2.nspname)
+                       LIMIT 1) IS NOT DISTINCT FROM
+                    (SELECT n.nspname FROM pg_catalog.pg_namespace n WHERE n.oid = t.typnamespace)
              FROM pg_catalog.pg_type t
-             INNER LOOKUP JOIN pg_catalog.pg_namespace n
-             ON t.typnamespace = n.oid
-             WHERE t.oid=$1 LIMIT 1`,
+             WHERE t.oid = $1
+             LIMIT 1`,
 			CalledOnNullInput: true,
-			Info:              "Returns whether the type with the given OID belongs to one of the schemas on the search path.",
+			Info:              "Returns whether the type with the given OID is visible in the search path (its schema is on the search path and no type with the same name shadows it from an earlier schema).",
 			Volatility:        volatility.Stable,
 			Language:          tree.RoutineLangSQL,
 		},
@@ -1448,8 +1953,8 @@ var pgBuiltins = map[string]builtinDefinition{
 				"INSERT WITH GRANT OPTION":     {Kind: privilege.INSERT, GrantOption: true},
 				"UPDATE":                       {Kind: privilege.UPDATE},
 				"UPDATE WITH GRANT OPTION":     {Kind: privilege.UPDATE, GrantOption: true},
-				"REFERENCES":                   {Kind: privilege.SELECT},
-				"REFERENCES WITH GRANT OPTION": {Kind: privilege.SELECT, GrantOption: true},
+				"REFERENCES":                   {Kind: privilege.REFERENCES},
+				"REFERENCES WITH GRANT OPTION": {Kind: privilege.REFERENCES, GrantOption: true},
 			})
 			if err != nil {
 				return eval.HasNoPrivilege, err
@@ -1476,8 +1981,8 @@ var pgBuiltins = map[string]builtinDefinition{
 				"INSERT WITH GRANT OPTION":     {Kind: privilege.INSERT, GrantOption: true},
 				"UPDATE":                       {Kind: privilege.UPDATE},
 				"UPDATE WITH GRANT OPTION":     {Kind: privilege.UPDATE, GrantOption: true},
-				"REFERENCES":                   {Kind: privilege.SELECT},
-				"REFERENCES WITH GRANT OPTION": {Kind: privilege.SELECT, GrantOption: true},
+				"REFERENCES":                   {Kind: privilege.REFERENCES},
+				"REFERENCES WITH GRANT OPTION": {Kind: privilege.REFERENCES, GrantOption: true},
 			})
 			if err != nil {
 				return eval.HasNoPrivilege, err
@@ -1592,7 +2097,7 @@ var pgBuiltins = map[string]builtinDefinition{
 
 			// For user-defined function, utilize the descriptor based way.
 			if catid.IsOIDUserDefined(oid.(*tree.DOid).Oid) {
-				return evalCtx.Planner.HasAnyPrivilegeForSpecifier(ctx, specifier, evalCtx.SessionData().User(), privs)
+				return evalCtx.Planner.HasAnyPrivilegeForSpecifier(ctx, specifier, user, privs)
 			}
 
 			// For builtin functions, all users should have `EXECUTE` privilege, but
@@ -1756,14 +2261,16 @@ var pgBuiltins = map[string]builtinDefinition{
 				"UPDATE WITH GRANT OPTION":     {Kind: privilege.UPDATE, GrantOption: true},
 				"DELETE":                       {Kind: privilege.DELETE},
 				"DELETE WITH GRANT OPTION":     {Kind: privilege.DELETE, GrantOption: true},
-				"TRUNCATE":                     {Kind: privilege.DELETE},
-				"TRUNCATE WITH GRANT OPTION":   {Kind: privilege.DELETE, GrantOption: true},
-				"REFERENCES":                   {Kind: privilege.SELECT},
-				"REFERENCES WITH GRANT OPTION": {Kind: privilege.SELECT, GrantOption: true},
-				"TRIGGER":                      {Kind: privilege.CREATE},
-				"TRIGGER WITH GRANT OPTION":    {Kind: privilege.CREATE, GrantOption: true},
+				"TRUNCATE":                     {Kind: privilege.TRUNCATE},
+				"TRUNCATE WITH GRANT OPTION":   {Kind: privilege.TRUNCATE, GrantOption: true},
+				"REFERENCES":                   {Kind: privilege.REFERENCES},
+				"REFERENCES WITH GRANT OPTION": {Kind: privilege.REFERENCES, GrantOption: true},
+				"TRIGGER":                      {Kind: privilege.TRIGGER},
+				"TRIGGER WITH GRANT OPTION":    {Kind: privilege.TRIGGER, GrantOption: true},
 				"RULE":                         {Kind: privilege.RULE},
 				"RULE WITH GRANT OPTION":       {Kind: privilege.RULE, GrantOption: true},
+				"MAINTAIN":                     {Kind: privilege.MAINTAIN},
+				"MAINTAIN WITH GRANT OPTION":   {Kind: privilege.MAINTAIN, GrantOption: true},
 			})
 			if err != nil {
 				return eval.HasNoPrivilege, err
@@ -1853,6 +2360,35 @@ var pgBuiltins = map[string]builtinDefinition{
 			// All users have USAGE privileges to all types.
 			_ = privs
 			return eval.HasPrivilege, nil
+		},
+	),
+
+	"has_system_privilege": makePGPrivilegeInquiryDef(
+		"system",
+		paramTypeOpts{},
+		func(ctx context.Context, evalCtx *eval.Context, args tree.Datums, user username.SQLUsername) (eval.HasAnyPrivilegeResult, error) {
+			// Build the privilege map dynamically from GlobalPrivileges so that
+			// this function automatically picks up new privileges as they are added.
+			m := make(privMap)
+			for _, priv := range privilege.GlobalPrivileges {
+				// ALL is not a valid input for this function.
+				if priv == privilege.ALL {
+					continue
+				}
+				privName := strings.ToUpper(string(priv.DisplayName()))
+				m[privName] = privilege.Privilege{Kind: priv}
+				m[privName+" WITH GRANT OPTION"] = privilege.Privilege{Kind: priv, GrantOption: true}
+			}
+
+			privs, err := parsePrivilegeStr(args[0], m)
+			if err != nil {
+				return eval.HasNoPrivilege, err
+			}
+
+			specifier := eval.HasPrivilegeSpecifier{
+				IsGlobalPrivilege: true,
+			}
+			return evalCtx.Planner.HasAnyPrivilegeForSpecifier(ctx, specifier, user, privs)
 		},
 	),
 
@@ -2052,8 +2588,278 @@ var pgBuiltins = map[string]builtinDefinition{
 				return tree.NewDInt(tree.DInt(totalSize)), nil
 			},
 			Info:       "Return size in bytes of the column provided as an argument",
+			Volatility: volatility.Stable,
+		}),
+
+	"pg_size_pretty": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "size", Typ: types.Int}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				return tree.NewDString(pgSizePrettyInt(int64(tree.MustBeDInt(args[0])))), nil
+			},
+			Info:       "Converts a size in bytes into a human-readable string with units (e.g. '1024 bytes', '10 MB').",
+			Volatility: volatility.Immutable,
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "size", Typ: types.Decimal}},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				dd := tree.MustBeDDecimal(args[0])
+				s, err := pgSizePrettyDecimal(&dd.Decimal)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDString(s), nil
+			},
+			Info:       "Converts a size in bytes into a human-readable string with units (e.g. '1024 bytes', '10 MB').",
 			Volatility: volatility.Immutable,
 		}),
+
+	"pg_size_bytes": makeBuiltin(defProps(),
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "size", Typ: types.String}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				v, err := pgSizeBytes(string(tree.MustBeDString(args[0])))
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDInt(tree.DInt(v)), nil
+			},
+			Info:       "Parses a human-readable size string (e.g. '1.5 MB') and returns the size in bytes.",
+			Volatility: volatility.Immutable,
+		}),
+
+	"pg_database_size": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo, DistsqlBlocklist: true},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "database_oid", Typ: types.Oid}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			// Two error conditions, both matching Postgres:
+			//   - 42704 if the OID does not name an existing database
+			//   - 42501 if the caller lacks CONNECT on that database
+			Body: `SELECT CASE
+                  WHEN sub.db_id IS NULL
+                    THEN crdb_internal.force_error('42704',
+                           'database with OID ' || $1::STRING || ' does not exist')::INT
+                  WHEN NOT has_database_privilege(session_user, sub.db_id::OID, 'CONNECT')
+                    THEN crdb_internal.force_error('42501',
+                           'permission denied for database ' || sub.db_name)::INT
+                  ELSE sub.size
+                END
+           FROM (
+             SELECT db.id AS db_id, db.name AS db_name,
+                    COALESCE(sum(tm.replication_size_bytes), 0)::INT AS size
+               FROM (SELECT $1::INT AS id) input
+               LEFT JOIN system.namespace db
+                      ON db.id = input.id
+                     AND db."parentID" = 0
+                     AND db."parentSchemaID" = 0
+               LEFT JOIN system.table_metadata tm ON tm.db_id = input.id
+              GROUP BY db.id, db.name
+           ) sub`,
+			Info: "Returns the on-disk size, in bytes, of all tables in the database with the " +
+				"given OID. The size is read from a periodically-refreshed cache and may lag " +
+				"behind the true value by minutes. Errors if the database does not exist or " +
+				"if the caller lacks CONNECT on it.",
+			// Volatile to match PostgreSQL's pg_proc.provolatile for this function.
+			Volatility:   volatility.Volatile,
+			Language:     tree.RoutineLangSQL,
+			SecurityMode: tree.RoutineDefiner,
+		},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "database_name", Typ: types.String}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Body: `SELECT CASE
+                  WHEN sub.db_id IS NULL
+                    THEN crdb_internal.force_error('3D000',
+                           'database "' || $1 || '" does not exist')::INT
+                  WHEN NOT has_database_privilege(session_user, sub.db_id::OID, 'CONNECT')
+                    THEN crdb_internal.force_error('42501',
+                           'permission denied for database ' || $1)::INT
+                  ELSE sub.size
+                END
+           FROM (
+             SELECT db.id AS db_id,
+                    COALESCE(sum(tm.replication_size_bytes), 0)::INT AS size
+               FROM (SELECT $1::STRING AS name) input
+               LEFT JOIN system.namespace db
+                      ON db.name = input.name
+                     AND db."parentID" = 0
+                     AND db."parentSchemaID" = 0
+               LEFT JOIN system.table_metadata tm ON tm.db_id = db.id
+              GROUP BY db.id
+           ) sub`,
+			Info: "Returns the on-disk size, in bytes, of all tables in the named database. " +
+				"The size is read from a periodically-refreshed cache and may lag behind the " +
+				"true value by minutes. Errors if the database does not exist or if the caller " +
+				"lacks CONNECT on it.",
+			Volatility:   volatility.Volatile,
+			Language:     tree.RoutineLangSQL,
+			SecurityMode: tree.RoutineDefiner,
+		}),
+
+	// pg_relation_size and pg_table_size return the size of the table's
+	// primary index — equivalent to PG's "heap only" since CRDB's primary
+	// index *is* the row data. pg_total_relation_size keeps reading the
+	// whole-table-prefix size from system.table_metadata, so any
+	// dropped-index garbage that hasn't yet been GC'd shows up as the
+	// difference between pg_total_relation_size and (pg_table_size +
+	// pg_indexes_size).
+	//
+	// All five are SECURITY DEFINER SQL-body builtins so they read the
+	// admin-only system.table_metadata under the implicit NodeUser definer.
+	// The four relation size builtins do not gate on caller privilege —
+	// Postgres treats these as effectively public (any user can ask for the
+	// size of any relation). pg_database_size matches Postgres' stricter
+	// rule: the caller must have CONNECT on the database, otherwise the
+	// builtin errors with 42501. The gate passes session_user explicitly
+	// because current_user inside a SECURITY DEFINER body resolves to the
+	// definer (NodeUser, which trivially has CONNECT). session_user ignores
+	// SET ROLE, so the check is against the connection's authenticated user
+	// rather than its currently-impersonated role. The bodies inline into outer queries, so
+	// bulk calls (e.g. SELECT pg_relation_size(c.oid) FROM pg_class c)
+	// scan system.table_metadata once total rather than once per row.
+	//
+	// During a mixed-version upgrade, cache rows written by the previous
+	// version may not yet have a primary_index_id field in details. Both
+	// pg_relation_size and pg_table_size fall back to replication_size_bytes
+	// in that case so callers see the v1 (over-counted) value rather than
+	// NULL or 0. Once the cluster is fully upgraded and the cache cycles
+	// once, all rows have the per-index data and the fallback is dormant.
+	//
+	// Relations with no system.table_metadata row return NULL. This covers
+	// virtual tables (pg_catalog, information_schema, crdb_internal) which
+	// have no on-disk storage, as well as physical tables whose metadata
+	// row has not yet been written by the cache job. NULL is preferable to
+	// 0 because it lets SUM-style aggregations skip rows where the concept
+	// of on-disk size does not apply, instead of summing meaningless zeros.
+	"pg_relation_size": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo, DistsqlBlocklist: true},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "relation_oid", Typ: types.Oid}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			// pg_relation_size accepts either a table OID or an index OID and
+			// dispatches via the two CASE branches below. The table branch
+			// (d.id IS NOT NULL) bypasses pg_class visibility — matching the
+			// other size builtins — while the index branch goes through
+			// pg_class@primary. The @primary hint forces a hash join: pg_class
+			// has an incomplete virtual index on oid, and a lookup join on a
+			// hashed index OID silently degrades to a full scan. See the
+			// comment above pgCatalogClassTable in pkg/sql/pg_catalog.go.
+			Body: `SELECT CASE
+                  WHEN c.relkind = 'i' THEN
+                    COALESCE((tm_idx.details->'index_sizes'->>ti.index_id::TEXT)::INT, 0)
+                  WHEN c.relkind IS NOT NULL THEN COALESCE(
+                    (tm.details->'index_sizes'->>(tm.details->>'primary_index_id'))::INT,
+                    tm.replication_size_bytes)
+                  ELSE NULL
+                END
+           FROM (SELECT $1::INT AS id) input
+           LEFT JOIN pg_catalog.pg_class@primary c    ON c.oid = $1
+           LEFT JOIN system.table_metadata tm         ON tm.table_id = input.id
+           LEFT JOIN pg_catalog.pg_index i            ON i.indexrelid = c.oid
+           LEFT JOIN crdb_internal.table_indexes ti
+                  ON ti.descriptor_id = i.indrelid AND ti.index_name = c.relname
+           LEFT JOIN system.table_metadata tm_idx     ON tm_idx.table_id = i.indrelid`,
+			Info: "Returns the on-disk size, in bytes, of the relation with the given OID. " +
+				"For a table-class relation this is the primary index size (matching PG's " +
+				"\"heap only\" semantics, since CockroachDB's primary index is the row data). " +
+				"For an index this is the size of just that index. The size is read from a " +
+				"periodically-refreshed cache and may lag behind the true value by minutes. " +
+				"Returns NULL if no such relation exists or has no on-disk representation.",
+			Volatility:   volatility.Volatile,
+			Language:     tree.RoutineLangSQL,
+			SecurityMode: tree.RoutineDefiner,
+		},
+	),
+
+	"pg_table_size": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo, DistsqlBlocklist: true},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "relation_oid", Typ: types.Oid}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			// Returns NULL if the OID is not a table-class relation (e.g. a
+			// type, function, or index OID). CRDB diverges from PG for the
+			// index-OID case: PG returns the index size, we return NULL.
+			Body: `SELECT CASE
+                  WHEN c.relkind IS NULL OR c.relkind = 'i' THEN NULL
+                  ELSE COALESCE(
+                    (tm.details->'index_sizes'->>(tm.details->>'primary_index_id'))::INT,
+                    tm.replication_size_bytes)
+                END
+           FROM (SELECT $1::INT AS id) input
+           LEFT JOIN pg_catalog.pg_class@primary c ON c.oid = $1
+           LEFT JOIN system.table_metadata tm      ON tm.table_id = input.id`,
+			Info: "Returns the on-disk size, in bytes, of the table with the given OID, " +
+				"excluding indexes. In CockroachDB this is the primary index size, since the " +
+				"primary index is the row data. The size is read from a periodically-refreshed " +
+				"cache and may lag behind the true value by minutes. Returns NULL if no such " +
+				"relation exists or has no on-disk representation.",
+			Volatility:   volatility.Volatile,
+			Language:     tree.RoutineLangSQL,
+			SecurityMode: tree.RoutineDefiner,
+		},
+	),
+
+	"pg_total_relation_size": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo, DistsqlBlocklist: true},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "relation_oid", Typ: types.Oid}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Body: `SELECT CASE
+                  WHEN c.relkind IS NULL OR c.relkind = 'i' THEN NULL
+                  ELSE tm.replication_size_bytes
+                END
+           FROM (SELECT $1::INT AS id) input
+           LEFT JOIN pg_catalog.pg_class@primary c ON c.oid = $1
+           LEFT JOIN system.table_metadata tm      ON tm.table_id = input.id`,
+			Info: "Returns the on-disk size, in bytes, of the relation with the given OID, " +
+				"including all indexes and any data still occupying the table's keyspace " +
+				"(such as dropped-index data awaiting garbage collection). The size is read " +
+				"from a periodically-refreshed cache and may lag behind the true value by " +
+				"minutes. Returns NULL if no such relation exists or has no on-disk " +
+				"representation.",
+			Volatility:   volatility.Volatile,
+			Language:     tree.RoutineLangSQL,
+			SecurityMode: tree.RoutineDefiner,
+		},
+	),
+
+	"pg_indexes_size": makeBuiltin(
+		tree.FunctionProperties{Category: builtinconstants.CategorySystemInfo, DistsqlBlocklist: true},
+		tree.Overload{
+			Types:      tree.ParamTypes{{Name: "relation_oid", Typ: types.Oid}},
+			ReturnType: tree.FixedReturnType(types.Int),
+			Body: `SELECT CASE
+                  WHEN c.relkind IS NULL OR c.relkind = 'i' THEN NULL
+                  WHEN tm.table_id IS NULL THEN NULL
+                  ELSE COALESCE((
+                    SELECT sum(value::INT)::INT
+                      FROM jsonb_each_text(tm.details->'index_sizes')
+                     WHERE key != (tm.details->>'primary_index_id')
+                  ), 0)
+                END
+           FROM (SELECT $1::INT AS id) input
+           LEFT JOIN pg_catalog.pg_class@primary c ON c.oid = $1
+           LEFT JOIN system.table_metadata tm      ON tm.table_id = input.id`,
+			// CRDB diverges from PG slightly: PostgreSQL's pg_indexes_size
+			// includes the primary index, but in CRDB the primary index is the
+			// row data (it has no separate heap), so including it would
+			// double-count against pg_table_size and break the identity
+			// pg_table_size + pg_indexes_size <= pg_total_relation_size.
+			Info: "Returns the total on-disk size, in bytes, of the secondary indexes attached " +
+				"to the relation with the given OID. The primary index is excluded (it is " +
+				"reported by pg_relation_size and pg_table_size, since CockroachDB stores " +
+				"row data in the primary index). The size is read from a " +
+				"periodically-refreshed cache and may lag behind the true value by minutes. " +
+				"Returns NULL if no such relation exists or has no on-disk representation.",
+			Volatility:   volatility.Volatile,
+			Language:     tree.RoutineLangSQL,
+			SecurityMode: tree.RoutineDefiner,
+		},
+	),
 
 	// NOTE: these two builtins could be defined as user-defined functions, like
 	// they are in Postgres:
@@ -2345,6 +3151,205 @@ SELECT
 			Language:          tree.RoutineLangSQL,
 		},
 	),
+
+	"makeaclitem": makeBuiltin(
+		tree.FunctionProperties{DistsqlBlocklist: true},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "grantee", Typ: types.Oid},
+				{Name: "grantor", Typ: types.Oid},
+				{Name: "privileges", Typ: types.String},
+				{Name: "is_grantable", Typ: types.Bool},
+			},
+			ReturnType: tree.FixedReturnType(types.AclItem),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				granteeOid := tree.MustBeDOid(args[0]).Oid
+				grantorOid := tree.MustBeDOid(args[1]).Oid
+				privileges := string(tree.MustBeDString(args[2]))
+				isGrantable := bool(tree.MustBeDBool(args[3]))
+
+				// Parse privilege names to a privilege.List.
+				privNames := strings.Split(privileges, ",")
+				var privList privilege.List
+				for _, name := range privNames {
+					name = strings.TrimSpace(name)
+					if name == "" {
+						continue
+					}
+					ch, ok := privilege.PrivNameToACLChar[strings.ToUpper(name)]
+					if !ok {
+						return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+							"unrecognized privilege type: %q", name)
+					}
+					privName := privilege.ACLCharToPrivName[ch]
+					kind, ok := privilege.ByDisplayName[privilege.KindDisplayName(privName)]
+					if !ok {
+						continue
+					}
+					privList = append(privList, kind)
+				}
+
+				var grantOptions privilege.List
+				if isGrantable {
+					grantOptions = make(privilege.List, len(privList))
+					copy(grantOptions, privList)
+				}
+
+				// Resolve OIDs to role names. OID 0 = PUBLIC (empty grantee).
+				// Like postgres, fall back to the numeric OID if the role
+				// doesn't exist.
+				grantee := username.PublicRoleName()
+				if granteeOid != 0 {
+					name, err := getNameForArg(
+						ctx, evalCtx, tree.NewDOid(granteeOid), "pg_roles", "rolname",
+					)
+					if err != nil {
+						return nil, err
+					}
+					if name == "" {
+						name = fmt.Sprintf("%d", granteeOid)
+					}
+					grantee = username.MakeSQLUsernameFromPreNormalizedString(name)
+				}
+				grantorName, err := getNameForArg(
+					ctx, evalCtx, tree.NewDOid(grantorOid), "pg_roles", "rolname",
+				)
+				if err != nil {
+					return nil, err
+				}
+				if grantorName == "" {
+					grantorName = fmt.Sprintf("%d", grantorOid)
+				}
+				grantor := username.MakeSQLUsernameFromPreNormalizedString(grantorName)
+
+				item := privilege.NewACLItem(grantee, grantor, privList, grantOptions)
+				return tree.NewDACLItem(item), nil
+			},
+			Info: "Constructs an aclitem from the given grantee, grantor, privileges, and grant option.",
+			// Marked immutable to match postgres. Our implementation resolves
+			// OIDs to role names (a catalog lookup), but the risk of stale
+			// results from constant-folding is low: these functions are
+			// almost always called with column references, and CRDB does
+			// not support role renames.
+			Volatility: volatility.Immutable,
+		},
+	),
+
+	"acldefault": makeBuiltin(
+		tree.FunctionProperties{DistsqlBlocklist: true},
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "type", Typ: types.QChar},
+				{Name: "ownerId", Typ: types.Oid},
+			},
+			ReturnType: tree.FixedReturnType(types.MakeArray(types.AclItem)),
+			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+				typeChar := string(tree.MustBeDString(tree.UnwrapDOidWrapper(args[0])))
+				ownerOid := tree.MustBeDOid(args[1]).Oid
+
+				// Resolve owner OID to role name. Like postgres, fall back to
+				// the numeric OID if the role doesn't exist.
+				ownerName, err := getNameForArg(
+					ctx, evalCtx, tree.NewDOid(ownerOid), "pg_roles", "rolname",
+				)
+				if err != nil {
+					return nil, err
+				}
+				if ownerName == "" {
+					ownerName = fmt.Sprintf("%d", ownerOid)
+				}
+
+				// Map type chars to CRDB object types for descriptor-backed
+				// objects. For these, use DefaultACLItems to ensure consistency
+				// with privilegeDescriptorToACLArray's default detection.
+				// See also PostgreSQL's src/backend/catalog/aclchk.c acldefault().
+				charToObjectType := map[string]privilege.ObjectType{
+					"r": privilege.Table,
+					"s": privilege.Sequence,
+					"d": privilege.Database,
+					"f": privilege.Routine,
+					"n": privilege.Schema,
+					"T": privilege.Type,
+				}
+
+				if objType, ok := charToObjectType[typeChar]; ok {
+					owner := username.MakeSQLUsernameFromPreNormalizedString(ownerName)
+					items, err := privilege.DefaultACLItems(objType, owner)
+					if err != nil {
+						return nil, err
+					}
+					arr := tree.NewDArray(types.AclItem)
+					for _, item := range items {
+						if err := arr.Append(tree.NewDACLItem(item)); err != nil {
+							return nil, err
+						}
+					}
+					return arr, nil
+				}
+
+				// Non-CRDB object types: use hardcoded defaults.
+				type aclDefault struct {
+					ownerPrivs  privilege.List
+					publicPrivs privilege.List
+				}
+				defaults := map[string]aclDefault{
+					"l": {ownerPrivs: privilege.List{privilege.USAGE}, publicPrivs: privilege.List{privilege.USAGE}},
+					"c": {},
+					"L": {ownerPrivs: privilege.List{privilege.SELECT, privilege.UPDATE}},
+					"t": {ownerPrivs: privilege.List{privilege.CREATE}},
+					"F": {ownerPrivs: privilege.List{privilege.USAGE}},
+					"S": {ownerPrivs: privilege.List{privilege.USAGE}},
+					"p": {ownerPrivs: privilege.List{privilege.SET, privilege.ALTERSYSTEM}},
+				}
+
+				def, ok := defaults[typeChar]
+				if !ok {
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+						"unrecognized object type abbreviation: %q", typeChar)
+				}
+
+				owner := username.MakeSQLUsernameFromPreNormalizedString(ownerName)
+				arr := tree.NewDArray(types.AclItem)
+
+				appendItem := func(item privilege.ACLItem) error {
+					return arr.Append(tree.NewDACLItem(item))
+				}
+
+				if len(def.publicPrivs) > 0 {
+					if err := appendItem(privilege.NewACLItem(
+						username.PublicRoleName(), owner, def.publicPrivs, nil,
+					)); err != nil {
+						return nil, err
+					}
+				}
+				if len(def.ownerPrivs) > 0 {
+					for _, role := range []username.SQLUsername{
+						username.AdminRoleName(),
+						username.RootUserName(),
+					} {
+						if err := appendItem(privilege.NewACLItem(
+							role, owner, def.ownerPrivs, def.ownerPrivs,
+						)); err != nil {
+							return nil, err
+						}
+					}
+					if !owner.IsAdminRole() && !owner.IsRootUser() {
+						if err := appendItem(privilege.NewACLItem(
+							owner, owner, def.ownerPrivs, nil,
+						)); err != nil {
+							return nil, err
+						}
+					}
+				}
+
+				return arr, nil
+			},
+			Info: "Returns the default access privileges for an object of the given type belonging to the given owner.",
+			// Marked immutable to match postgres. See the comment on
+			// makeaclitem for justification.
+			Volatility: volatility.Immutable,
+		},
+	),
 }
 
 func getSessionVar(
@@ -2614,4 +3619,262 @@ func isAdminOfRole(
 		return eval.HasPrivilege, nil
 	}
 	return eval.HasNoPrivilege, nil
+}
+
+// sizePrettyUnit describes one unit in the pg_size_pretty / pg_size_bytes unit
+// table. The implementation mirrors PostgreSQL's algorithm in
+// src/backend/utils/adt/dbsize.c so that output strings match exactly.
+type sizePrettyUnit struct {
+	name     string
+	limit    int64 // upper limit, prior to half rounding after converting to this unit
+	round    bool  // do half rounding for this unit
+	unitBits uint  // (1 << unitBits) bytes to make 1 of this unit
+}
+
+// sizePrettyUnits is the unit table for pg_size_pretty and pg_size_bytes.
+// It mirrors PostgreSQL's size_pretty_units. All units are powers of two.
+var sizePrettyUnits = []sizePrettyUnit{
+	{"bytes", 10 * 1024, false, 0},
+	{"kB", 20*1024 - 1, true, 10},
+	{"MB", 20*1024 - 1, true, 20},
+	{"GB", 20*1024 - 1, true, 30},
+	{"TB", 20*1024 - 1, true, 40},
+	{"PB", 20*1024 - 1, true, 50},
+}
+
+// sizeBytesAlias is a unit alias accepted by pg_size_bytes but not produced by
+// pg_size_pretty.
+type sizeBytesAlias struct {
+	alias     string
+	unitIndex int
+}
+
+var sizeBytesAliases = []sizeBytesAlias{
+	{"B", 0},
+}
+
+// pgSizePrettyInt formats a byte count as a human-readable string with units,
+// matching the output of PostgreSQL's pg_size_pretty(bigint).
+func pgSizePrettyInt(size int64) string {
+	for i := range sizePrettyUnits {
+		unit := &sizePrettyUnits[i]
+		// Compute the absolute size as a uint64 to handle math.MinInt64 correctly.
+		var absSize uint64
+		if size < 0 {
+			absSize = uint64(-(size + 1)) + 1
+		} else {
+			absSize = uint64(size)
+		}
+
+		// Use this unit if there are no more units or the absolute size is
+		// below the limit for the current unit.
+		if i == len(sizePrettyUnits)-1 || absSize < uint64(unit.limit) {
+			if unit.round {
+				size = halfRoundedInt64(size)
+			}
+			return fmt.Sprintf("%d %s", size, unit.name)
+		}
+
+		// Determine the number of bits to use to build the divisor. We may
+		// need to use 1 bit less than the difference between this and the
+		// next unit if the next unit uses half rounding. Or we may need to
+		// shift an extra bit if this unit uses half rounding and the next one
+		// does not.
+		next := &sizePrettyUnits[i+1]
+		bits := next.unitBits - unit.unitBits - boolToUint(next.round) + boolToUint(unit.round)
+		size /= int64(1) << bits
+	}
+	// Unreachable: the loop always returns when reaching the last unit.
+	return ""
+}
+
+// pgSizePrettyDecimal is the apd.Decimal-based equivalent of pgSizePrettyInt,
+// matching PostgreSQL's pg_size_pretty(numeric).
+func pgSizePrettyDecimal(size *apd.Decimal) (string, error) {
+	d := new(apd.Decimal).Set(size)
+	for i := range sizePrettyUnits {
+		unit := &sizePrettyUnits[i]
+		abs := new(apd.Decimal).Abs(d)
+		limit := apd.New(unit.limit, 0)
+		if i == len(sizePrettyUnits)-1 || abs.Cmp(limit) < 0 {
+			if unit.round {
+				if err := halfRoundedDecimal(d); err != nil {
+					return "", err
+				}
+			}
+			return fmt.Sprintf("%s %s", d.Text('f'), unit.name), nil
+		}
+
+		next := &sizePrettyUnits[i+1]
+		bits := next.unitBits - unit.unitBits - boolToUint(next.round) + boolToUint(unit.round)
+		divisor := apd.New(int64(1)<<bits, 0)
+		if _, err := tree.HighPrecisionCtx.QuoInteger(d, d, divisor); err != nil {
+			return "", err
+		}
+	}
+	return "", nil
+}
+
+// halfRoundedInt64 rounds size by adding (or subtracting, for negatives) one
+// half of the next unit's worth and truncating. PostgreSQL achieves the same
+// result via integer division of (size ± 1) by 2.
+func halfRoundedInt64(size int64) int64 {
+	if size >= 0 {
+		return (size + 1) / 2
+	}
+	return (size - 1) / 2
+}
+
+// halfRoundedDecimal applies the same half-rounding as halfRoundedInt64 to a
+// decimal, in place.
+func halfRoundedDecimal(d *apd.Decimal) error {
+	one := apd.New(1, 0)
+	two := apd.New(2, 0)
+	zero := apd.New(0, 0)
+	if d.Cmp(zero) >= 0 {
+		if _, err := tree.HighPrecisionCtx.Add(d, d, one); err != nil {
+			return err
+		}
+	} else {
+		if _, err := tree.HighPrecisionCtx.Sub(d, d, one); err != nil {
+			return err
+		}
+	}
+	_, err := tree.HighPrecisionCtx.QuoInteger(d, d, two)
+	return err
+}
+
+func boolToUint(b bool) uint {
+	if b {
+		return 1
+	}
+	return 0
+}
+
+// pgSizeBytes parses a human-readable byte count (e.g. "1.5 MB") and returns
+// the equivalent number of bytes, matching PostgreSQL's pg_size_bytes.
+func pgSizeBytes(input string) (int64, error) {
+	str := input
+	// Skip leading whitespace.
+	i := 0
+	for i < len(str) && isASCIISpace(str[i]) {
+		i++
+	}
+	numStart := i
+
+	// Parse an optional sign.
+	if i < len(str) && (str[i] == '+' || str[i] == '-') {
+		i++
+	}
+
+	// Parse the integer part.
+	haveDigits := false
+	for i < len(str) && isASCIIDigit(str[i]) {
+		i++
+		haveDigits = true
+	}
+
+	// Parse an optional fractional part.
+	if i < len(str) && str[i] == '.' {
+		i++
+		for i < len(str) && isASCIIDigit(str[i]) {
+			i++
+			haveDigits = true
+		}
+	}
+
+	if !haveDigits {
+		return 0, pgerror.Newf(pgcode.InvalidParameterValue, "invalid size: %q", input)
+	}
+
+	// Parse an optional exponent. We only consume the 'e'/'E' if it is followed
+	// by a valid integer; otherwise it is treated as the start of the unit.
+	if i < len(str) && (str[i] == 'e' || str[i] == 'E') {
+		j := i + 1
+		if j < len(str) && (str[j] == '+' || str[j] == '-') {
+			j++
+		}
+		if j < len(str) && isASCIIDigit(str[j]) {
+			for j < len(str) && isASCIIDigit(str[j]) {
+				j++
+			}
+			i = j
+		}
+	}
+
+	numStr := str[numStart:i]
+
+	// Skip whitespace between the number and the unit.
+	for i < len(str) && isASCIISpace(str[i]) {
+		i++
+	}
+
+	// Parse the optional unit, trimming trailing whitespace.
+	unitStr := strings.TrimRightFunc(str[i:], func(r rune) bool {
+		return r == ' ' || r == '\t' || r == '\n' || r == '\r' || r == '\v' || r == '\f'
+	})
+
+	num, _, err := apd.NewFromString(numStr)
+	if err != nil {
+		return 0, pgerror.Newf(pgcode.InvalidParameterValue, "invalid size: %q", input)
+	}
+
+	if unitStr != "" {
+		unitBits, ok := lookupSizeUnit(unitStr)
+		if !ok {
+			return 0, errors.WithHint(
+				errors.WithDetail(
+					pgerror.Newf(pgcode.InvalidParameterValue, "invalid size: %q", input),
+					fmt.Sprintf("Invalid size unit: %q.", unitStr),
+				),
+				`Valid units are "bytes", "B", "kB", "MB", "GB", "TB", and "PB".`,
+			)
+		}
+		if unitBits > 0 {
+			multiplier := apd.New(int64(1)<<unitBits, 0)
+			if _, err := tree.HighPrecisionCtx.Mul(num, num, multiplier); err != nil {
+				return 0, err
+			}
+		}
+	}
+
+	// Round to the nearest integer using PG's "round half away from zero" rule
+	// to match numeric_int8.
+	rounded := new(apd.Decimal)
+	if _, err := tree.HighPrecisionCtx.RoundToIntegralValue(rounded, num); err != nil {
+		return 0, err
+	}
+	result, err := rounded.Int64()
+	if err != nil {
+		return 0, pgerror.Newf(pgcode.NumericValueOutOfRange, "bigint out of range")
+	}
+	return result, nil
+}
+
+// lookupSizeUnit returns the unit-bits value for a unit name (case-insensitive),
+// or false if the name is not recognized.
+func lookupSizeUnit(name string) (uint, bool) {
+	for i := range sizePrettyUnits {
+		if strings.EqualFold(name, sizePrettyUnits[i].name) {
+			return sizePrettyUnits[i].unitBits, true
+		}
+	}
+	for _, a := range sizeBytesAliases {
+		if strings.EqualFold(name, a.alias) {
+			return sizePrettyUnits[a.unitIndex].unitBits, true
+		}
+	}
+	return 0, false
+}
+
+func isASCIISpace(b byte) bool {
+	switch b {
+	case ' ', '\t', '\n', '\r', '\v', '\f':
+		return true
+	}
+	return false
+}
+
+func isASCIIDigit(b byte) bool {
+	return b >= '0' && b <= '9'
 }

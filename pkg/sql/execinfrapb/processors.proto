@@ -18,11 +18,15 @@ import "sql/execinfrapb/data.proto";
 import "sql/execinfrapb/processors_base.proto";
 import "sql/execinfrapb/processors_sql.proto";
 import "sql/execinfrapb/processors_ttl.proto";
+import "sql/execinfrapb/processors_inspect.proto";
 import "sql/execinfrapb/processors_bulk_io.proto";
 import "sql/execinfrapb/processors_changefeeds.proto";
+import "sql/execinfrapb/processors_txn_ldr.proto";
+import "sql/execinfrapb/processors_export.proto";
 import "sql/execinfrapb/processors_table_stats.proto";
 import "sql/types/types.proto";
 import "gogoproto/gogo.proto";
+import "google/protobuf/timestamp.proto";
 
 // Each processor has the following components:
 //  - one or more input synchronizers; each one merges rows between one or more
@@ -80,6 +84,10 @@ message ProcessorSpec {
   // estimated_row_count contains the number of rows that the optimizer expects
   // will be emitted from this processor, or 0 if the estimate wasn't populated.
   optional uint64 estimated_row_count = 8 [(gogoproto.nullable) = false];
+
+  // stats_created_at, if set, is the time when the latest table statistics were
+  // collected for the table that this processor is operating on.
+  optional google.protobuf.Timestamp stats_created_at = 9 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
 }
 
 message ProcessorCoreUnion {
@@ -122,9 +130,23 @@ message ProcessorCoreUnion {
   optional InsertSpec insert = 43;
   optional IngestStoppedSpec ingestStopped = 44;
   optional LogicalReplicationWriterSpec logicalReplicationWriter = 45;
+  optional LogicalReplicationOfflineScanSpec logicalReplicationOfflineScan = 46;
+  optional VectorSearchSpec vectorSearch = 47;
+  optional VectorMutationSearchSpec vectorMutationSearch = 48;
+  optional CompactBackupsSpec compactBackups = 49;
+  optional InspectSpec inspect = 50;
+  optional BulkMergeSpec bulkMerge = 51;
+  optional MergeCoordinatorSpec mergeCoordinator = 52;
+  optional MergeLoopbackSpec mergeLoopback = 53;
+  optional IngestFileSpec ingestFile = 54;
+  optional RevlogSpec revlog = 55;
+  optional RevlogLocalMergeSpec revlogLocalMerge = 56;
+  optional TxnLDRCoordinatorSpec txnLdrCoordinator = 57;
+  optional TxnLDRApplierSpec txnLdrApplier = 58;
+  optional TxnLDRDepResolverSpec txnLdrDepResolver = 59;
 
   reserved 6, 12, 14, 17, 18, 19, 20, 32;
-  // NEXT ID: 45.
+  // NEXT ID: 60.
 }
 
 // NoopCoreSpec indicates a "no-op" processor core. This is used when we just
@@ -144,4 +166,7 @@ message LocalPlanNodeSpec {
   optional uint32 RowSourceIdx = 1 [(gogoproto.nullable) = false];
   optional uint32 NumInputs = 2 [(gogoproto.nullable) = false];
   optional string Name = 3 [(gogoproto.nullable) = false];
+  // SingleNodeWrap, if set, indicates that exactly one local planNode is
+  // wrapped by this LocalPlanNodeSpec.
+  optional bool SingleNodeWrap = 4 [(gogoproto.nullable) = false];
 }

@@ -6,16 +6,18 @@
 package gce
 
 import (
+	"io"
 	"math"
 	"math/rand"
 	"reflect"
 	"sort"
-	"strconv"
 	"strings"
 	"testing"
 	"testing/quick"
 	"time"
 
+	computepb "cloud.google.com/go/compute/apiv1/computepb"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -24,7 +26,7 @@ import (
 )
 
 func TestAllowedLocalSSDCount(t *testing.T) {
-	for i, c := range []struct {
+	for _, c := range []struct {
 		machineType string
 		expected    []int
 		unsupported bool
@@ -32,7 +34,7 @@ func TestAllowedLocalSSDCount(t *testing.T) {
 		// N1 has the same ssd counts for all cpu counts.
 		{"n1-standard-4", []int{1, 2, 3, 4, 5, 6, 7, 8, 16, 24}, false},
 		{"n1-highcpu-64", []int{1, 2, 3, 4, 5, 6, 7, 8, 16, 24}, false},
-		{"n1-higmem-96", []int{1, 2, 3, 4, 5, 6, 7, 8, 16, 24}, false},
+		{"n1-highmem-96", []int{1, 2, 3, 4, 5, 6, 7, 8, 16, 24}, false},
 
 		{"n2-standard-4", []int{1, 2, 4, 8, 16, 24}, false},
 		{"n2-standard-8", []int{1, 2, 4, 8, 16, 24}, false},
@@ -51,10 +53,17 @@ func TestAllowedLocalSSDCount(t *testing.T) {
 		{"c2-standard-16", []int{2, 4, 8}, false},
 		{"c2-standard-30", []int{4, 8}, false},
 		{"c2-standard-60", []int{8}, false},
-		// c2-standard-64 doesn't exist and exceed cpu count, so we expect an error.
-		{"c2-standard-64", nil, true},
+		// N.B. n2-standard-64 doesn't exist, but we still get the ssd counts based on cpu count.
+		{"c2-standard-64", []int{8}, false},
+
+		{"c4a-standard-4", nil, true},
+		{"c4a-standard-4-lssd", []int{1}, false},
+		{"c4a-standard-16-lssd", []int{4}, false},
+		{"c4a-standard-1-lssd", nil, true},
+		{"c4a-highmem-32-lssd", []int{6}, false},
+		{"c4a-highcpu-32-lssd", nil, true},
 	} {
-		t.Run(strconv.Itoa(i), func(t *testing.T) {
+		t.Run(c.machineType, func(t *testing.T) {
 			actual, err := AllowedLocalSSDCount(c.machineType)
 			if c.unsupported {
 				assert.Error(t, err)
@@ -64,6 +73,183 @@ func TestAllowedLocalSSDCount(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestBuildInstancePropertiesLocalSSDDisks(t *testing.T) {
+	l, err := (&logger.Config{Stdout: io.Discard, Stderr: io.Discard}).NewLogger("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := &Provider{Projects: []string{"test-project"}, defaultProject: "default-project"}
+
+	testCases := []struct {
+		name                 string
+		machineType          string
+		ssdCount             int
+		expectedScratchDisks int
+		expectedSSDCount     int
+	}{
+		{
+			name:                 "requestable single-count local SSD machine attaches scratch disks",
+			machineType:          "c2-standard-60",
+			ssdCount:             8,
+			expectedScratchDisks: 8,
+			expectedSSDCount:     8,
+		},
+		{
+			name:                 "requestable local SSD machine bumps below-min count",
+			machineType:          "c2-standard-60",
+			ssdCount:             1,
+			expectedScratchDisks: 8,
+			expectedSSDCount:     8,
+		},
+		{
+			name:                 "requestable local SSD machine passes through above-min invalid count",
+			machineType:          "c2-standard-30",
+			ssdCount:             5,
+			expectedScratchDisks: 5,
+			expectedSSDCount:     5,
+		},
+		{
+			name:                 "auto-attached local SSD machine does not request scratch disks",
+			machineType:          "c4a-standard-4-lssd",
+			ssdCount:             1,
+			expectedScratchDisks: 0,
+			expectedSSDCount:     1,
+		},
+		{
+			name:                 "auto-attached local SSD machine normalizes mismatched count",
+			machineType:          "c4a-standard-4-lssd",
+			ssdCount:             2,
+			expectedScratchDisks: 0,
+			expectedSSDCount:     1,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			opts := vm.DefaultCreateOpts()
+			opts.SSDOpts.UseLocalSSD = true
+			providerOpts := DefaultProviderOpts()
+			providerOpts.MachineType = tc.machineType
+			providerOpts.SSDCount = tc.ssdCount
+
+			props, err := p.buildInstanceProperties(
+				l, opts, providerOpts, "startup-script", "us-east1-b", nil,
+			)
+			assert.NoError(t, err)
+			if err != nil {
+				return
+			}
+
+			scratchDisks := 0
+			for _, disk := range props.GetDisks() {
+				if disk.GetType() == computepb.AttachedDisk_SCRATCH.String() {
+					scratchDisks++
+				}
+			}
+			assert.Equal(t, tc.expectedScratchDisks, scratchDisks)
+			assert.Equal(t, tc.expectedSSDCount, providerOpts.SSDCount)
+		})
+	}
+}
+
+func TestParseGCECapacityError(t *testing.T) {
+	const details = `ERROR: (gcloud.compute.instances.create) Could not fetch resource:
+---
+code: ZONE_RESOURCE_POOL_EXHAUSTED_WITH_DETAILS
+errorDetails:
+- localizedMessage:
+    locale: en-US
+    message: A t2a-standard-8 VM instance is currently unavailable in the us-central1-a
+      zone. Consider trying your request in the us-central1-f zone(s), which currently
+      has capacity to accommodate your request.
+- errorInfo:
+    domain: compute.googleapis.com
+    metadatas:
+      vmType: t2a-standard-8
+      zone: us-central1-a
+      zonesAvailable: us-central1-f
+    reason: resource_availability
+message: The zone 'projects/cockroach-ephemeral/zones/us-central1-a' does not have
+  enough resources available to fulfill the request.`
+
+	capacityErr := parseGCECapacityError(details)
+	assert.NotNil(t, capacityErr)
+	assert.Equal(t, vm.CreateCapacityClassZone, capacityErr.CapacityClass)
+	assert.Equal(t, ProviderName, capacityErr.Provider)
+	assert.Equal(t, "t2a-standard-8", capacityErr.MachineType)
+	assert.Equal(t, []string{"us-central1-a"}, capacityErr.FailedZones)
+	assert.Equal(t, []string{"us-central1-f"}, capacityErr.SuggestedZones)
+}
+
+func TestAnnotateGCECapacityErrorAddsZone(t *testing.T) {
+	const details = `ERROR: (gcloud.compute.instance-groups.managed.wait-until) The zone does not have enough resources available to fulfill the request.`
+
+	err := maybeGCECapacityError(errors.New("wait-until failed"), []byte(details))
+	err = annotateGCECapacityError(err, "us-central1-a")
+
+	var capacityErr *vm.CreateCapacityError
+	assert.True(t, errors.As(err, &capacityErr))
+	assert.Equal(t, vm.CreateCapacityClassZone, capacityErr.CapacityClass)
+	assert.Equal(t, []string{"us-central1-a"}, capacityErr.FailedZones)
+}
+
+func TestDefaultC4AZonesExcludesUnsupportedZones(t *testing.T) {
+	for _, geo := range []bool{false, true} {
+		for i := 0; i < 20; i++ {
+			zones := DefaultC4AZones(geo)
+			if !IsSupportedC4AZone(zones) {
+				t.Errorf("DefaultC4AZones(geo=%v) returned zones unsupported by C4A: %v", geo, zones)
+			}
+		}
+	}
+}
+
+func TestC4AZoneValidation(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		zones     []string
+		supported bool
+	}{
+		{name: "empty", supported: true},
+		{name: "supported default", zones: []string{"us-east1-b", "us-west1-c", "europe-central2-a"}, supported: true},
+		{name: "unsupported west1 b", zones: []string{"us-east1-b", "us-west1-b"}, supported: false},
+		{name: "unsupported asia northeast1 a", zones: []string{"asia-northeast1-a"}, supported: false},
+		{name: "unsupported europe central2 b", zones: []string{"europe-central2-b"}, supported: false},
+		{name: "unsupported europe central2 c", zones: []string{"europe-central2-c"}, supported: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.supported, IsSupportedC4AZone(tc.zones))
+		})
+	}
+}
+
+func TestComputeZonesRejectsUnsupportedC4AExplicitZones(t *testing.T) {
+	_, err := computeZones(vm.CreateOpts{GeoDistributed: true}, &ProviderOpts{
+		MachineType: "c4a-standard-4-lssd",
+		Zones:       []string{"us-east1-b", "us-west1-b"},
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "C4A instances are not supported")
+}
+
+func TestDefaultRetryZoneCandidates(t *testing.T) {
+	assert.Equal(
+		t,
+		[]string{"us-east1-b", "us-east1-c", "us-east1-d"},
+		DefaultRetryZoneCandidates("n2-standard-4"),
+	)
+	assert.Equal(
+		t,
+		[]string{"us-east1-b", "us-east1-c", "us-east1-d"},
+		DefaultRetryZoneCandidates("c4a-standard-4-lssd"),
+	)
+	assert.Equal(
+		t,
+		[]string{"us-central1-a", "us-central1-b", "us-central1-f"},
+		DefaultRetryZoneCandidates("t2a-standard-4"),
+	)
 }
 
 func Test_buildFilterPreemptionCliArgs(t *testing.T) {

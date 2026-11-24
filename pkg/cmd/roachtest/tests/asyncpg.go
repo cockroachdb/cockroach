@@ -18,11 +18,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 )
 
+var asyncpgWarningArgs = "ignore::ResourceWarning"
+
 var asyncpgRunTestCmd = fmt.Sprintf(`
 source venv/bin/activate &&
 cd /mnt/data1/asyncpg &&
-PGPORT={pgport:1} PGHOST=localhost PGUSER=%s PGPASSWORD=%s PGSSLROOTCERT=$HOME/%s/ca.crt PGSSLMODE=require PGDATABASE=defaultdb python3 setup.py test > asyncpg.stdout
-`, install.DefaultUser, install.DefaultPassword, install.CockroachNodeCertsDir)
+PGPORT={pgport:1} PGHOST=localhost PGUSER=%s PGPASSWORD=%s PGSSLROOTCERT=$HOME/%s/ca.crt PGSSLMODE=require PGDATABASE=defaultdb python3 -W%q setup.py test > asyncpg.stdout
+`, install.DefaultUser, install.DefaultPassword, install.CockroachNodeCertsDir, asyncpgWarningArgs,
+)
 
 var asyncpgReleaseTagRegex = regexp.MustCompile(`^(?P<major>v\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
 
@@ -168,7 +171,7 @@ func registerAsyncpg(r registry.Registry) {
 		Name:             "asyncpg",
 		Owner:            registry.OwnerSQLFoundations,
 		Cluster:          r.MakeClusterSpec(1, spec.CPU(16)),
-		CompatibleClouds: registry.AllExceptAWS,
+		CompatibleClouds: registry.AllClouds.NoAWS().NoIBM(),
 		Suites:           registry.Suites(registry.Nightly, registry.ORM),
 		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {

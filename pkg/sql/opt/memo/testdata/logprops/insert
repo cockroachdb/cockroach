@@ -85,7 +85,7 @@ project
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null)
  ├── cardinality: [0 - 10]
  ├── volatile, mutations
- ├── fd: ()-->(3), (1)==(2), (2)==(1), (1)-->(4)
+ ├── fd: ()-->(3), (1)-->(4), (1)==(2), (2)==(1)
  ├── prune: (1-4)
  └── insert abcde
       ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null) rowid:5(int!null)
@@ -104,7 +104,7 @@ project
       │    └── rowid_default:15 => rowid:5
       ├── cardinality: [0 - 10]
       ├── volatile, mutations
-      ├── fd: ()-->(3), (1)==(2), (2)==(1), (1)-->(4)
+      ├── fd: ()-->(3), (1)-->(4), (1)==(2), (2)==(1)
       └── project
            ├── columns: d_comp:17(int!null) y:10(int!null) c_default:14(int!null) rowid_default:15(int) e_default:16(int)
            ├── cardinality: [0 - 10]
@@ -158,7 +158,7 @@ INSERT INTO abcde (a, b) SELECT y, y FROM xyz ORDER BY y, z RETURNING *
 project
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null)
  ├── volatile, mutations
- ├── fd: ()-->(3), (1)==(2), (2)==(1), (1)-->(4)
+ ├── fd: ()-->(3), (1)-->(4), (1)==(2), (2)==(1)
  ├── prune: (1-4)
  └── insert abcde
       ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int!null) rowid:5(int!null)
@@ -176,7 +176,7 @@ project
       │    ├── d_comp:17 => d:4
       │    └── rowid_default:15 => rowid:5
       ├── volatile, mutations
-      ├── fd: ()-->(3), (1)==(2), (2)==(1), (1)-->(4)
+      ├── fd: ()-->(3), (1)-->(4), (1)==(2), (2)==(1)
       └── project
            ├── columns: d_comp:17(int!null) y:10(int!null) c_default:14(int!null) rowid_default:15(int) e_default:16(int)
            ├── volatile

@@ -28,7 +28,7 @@ write *eventpb.DropIndex to event log:
     tag: DROP INDEX
     user: root
   tableName: defaultdb.public.v2
-## StatementPhase stage 1 of 1 with 42 MutationType ops
+## StatementPhase stage 1 of 1 with 47 MutationType ops
 delete object namespace entry {100 101 v3} -> 106
 upsert descriptor #105
   ...
@@ -62,6 +62,7 @@ upsert descriptor #105
   -    name: idx
   -    partitioning: {}
   -    sharded: {}
+  -    vecConfig: {}
   -    version: 4
   +  indexes: []
      isMaterializedView: true
@@ -86,6 +87,7 @@ upsert descriptor #105
   +      name: idx
   +      partitioning: {}
   +      sharded: {}
+  +      vecConfig: {}
   +      version: 4
   +    mutationId: 1
   +    state: WRITE_ONLY
@@ -99,6 +101,12 @@ upsert descriptor #105
      viewQuery: SELECT i, j FROM defaultdb.public.t1
 upsert descriptor #106
   ...
+         width: 64
+     - defaultExpr: unique_rowid()
+  -    hidden: true
+       id: 2
+       name: rowid
+  ...
      replacementOf:
        time: {}
   +  state: DROP
@@ -111,7 +119,7 @@ upsert descriptor #106
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 45 MutationType ops
+## PreCommitPhase stage 2 of 2 with 50 MutationType ops
 delete object namespace entry {100 101 v3} -> 106
 upsert descriptor #105
   ...
@@ -172,6 +180,7 @@ upsert descriptor #105
   -    name: idx
   -    partitioning: {}
   -    sharded: {}
+  -    vecConfig: {}
   -    version: 4
   +  indexes: []
      isMaterializedView: true
@@ -196,6 +205,7 @@ upsert descriptor #105
   +      name: idx
   +      partitioning: {}
   +      sharded: {}
+  +      vecConfig: {}
   +      version: 4
   +    mutationId: 1
   +    state: WRITE_ONLY
@@ -208,6 +218,12 @@ upsert descriptor #105
   +  version: "10"
      viewQuery: SELECT i, j FROM defaultdb.public.t1
 upsert descriptor #106
+  ...
+         width: 64
+     - defaultExpr: unique_rowid()
+  -    hidden: true
+       id: 2
+       name: rowid
   ...
      createAsOfTime:
        wallTime: "1640995200000000000"
@@ -255,6 +271,7 @@ upsert descriptor #105
   +      name: crdb_internal_index_2_name_placeholder
          partitioning: {}
          sharded: {}
+  ...
          version: 4
        mutationId: 1
   -    state: WRITE_ONLY
@@ -270,7 +287,7 @@ upsert descriptor #105
 persist all catalog changes to storage
 create job #2 (non-cancelable: true): "GC for DROP INDEX defaultdb.public.v2@idx CASCADE"
   descriptor IDs: [106]
-update progress of schema change job #1: "PostCommitNonRevertiblePhase stage 2 of 2 with 2 MutationType ops pending"
+update progress of schema change job #1: "Pending: Updating schema metadata (2 operations) — PostCommitNonRevertible phase (stage 2 of 2)."
 set schema change job #1 to non-cancellable
 updated schema change job #1 descriptor IDs to [105]
 commit transaction #3
@@ -333,6 +350,7 @@ upsert descriptor #105
   -      name: crdb_internal_index_2_name_placeholder
   -      partitioning: {}
   -      sharded: {}
+  -      vecConfig: {}
   -      version: 4
   -    mutationId: 1
   -    state: DELETE_ONLY

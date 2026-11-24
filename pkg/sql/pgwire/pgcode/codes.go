@@ -124,6 +124,20 @@ var (
 	InvalidXMLContent                     = MakeCode("2200N")
 	InvalidXMLComment                     = MakeCode("2200S")
 	InvalidXMLProcessingInstruction       = MakeCode("2200T")
+	InvalidSQLJSONSubscript               = MakeCode("22033")
+	MoreThanOneSQLJSONItem                = MakeCode("22034")
+	NoSQLJSONItem                         = MakeCode("22035")
+	NonNumericSQLJSONItem                 = MakeCode("22036")
+	NonUniqueKeysInJSONObject             = MakeCode("22037")
+	SingletonSQLJSONItemRequired          = MakeCode("22038")
+	SQLJSONArrayNotFound                  = MakeCode("22039")
+	SQLJSONMemberNotFound                 = MakeCode("2203A")
+	SQLJSONNumberNotFound                 = MakeCode("2203B")
+	SQLJSONObjectNotFound                 = MakeCode("2203C")
+	TooManyJSONArrayElements              = MakeCode("2203D")
+	TooManyJSONObjectMembers              = MakeCode("2203E")
+	SQLJSONScalarRequired                 = MakeCode("2203F")
+	SQLJSONItemCannotBeCastToTargetType   = MakeCode("2203G")
 	// Section: Class 23 - Integrity Constraint Violation
 	IntegrityConstraintViolation = MakeCode("23000")
 	RestrictViolation            = MakeCode("23001")
@@ -377,7 +391,7 @@ var (
 	// internally on a connection between different Cockroach nodes.
 	InternalConnectionFailure = MakeCode("58C01")
 
-	// ProxyConnectionError is returned by the sqlproxyccl and it indicates a
+	// ProxyConnectionError is returned by the sqlproxy and it indicates a
 	// problem establishing the connection through the proxy.
 	ProxyConnectionError = MakeCode("08C00")
 

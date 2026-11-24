@@ -9,7 +9,9 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -24,10 +26,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/diagutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/cloudinfo"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -39,6 +44,14 @@ import (
 )
 
 const elemName = "somestring"
+
+var setTelemetryHttpTimeout = func(newVal time.Duration) func() {
+	prior := diagnostics.TelemetryHttpTimeout
+	diagnostics.TelemetryHttpTimeout = newVal
+	return func() {
+		diagnostics.TelemetryHttpTimeout = prior
+	}
+}
 
 func TestTenantReport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -58,7 +71,7 @@ func TestTenantReport(t *testing.T) {
 	setupCluster(t, tenantDB)
 
 	// Clear the SQL stat pool before getting diagnostics.
-	rt.server.SQLServer().(*sql.Server).GetSQLStatsController().ResetLocalSQLStats(ctx)
+	require.NoError(t, rt.server.SQLServer().(*sql.Server).GetLocalSQLStatsProvider().Reset(ctx))
 	reporter.ReportDiagnostics(ctx)
 
 	require.Equal(t, 1, rt.diagServer.NumRequests())
@@ -138,15 +151,36 @@ func TestServerReport(t *testing.T) {
 		require.NoError(t, err)
 	}
 
+	// We want to ensure that non-reportable settings, sensitive
+	// settings, and all string settings are redacted. Below we override
+	// one of each.
+	_, err := rt.serverDB.Exec(`SET application_name = 'test'`)
+	require.NoError(t, err)
+	schemaAndQueriesForTest := []string{
+		`CREATE TABLE diagnostics_test_table (diagnostics_test_id int)`,
+		`ALTER TABLE diagnostics_test_table ADD COLUMN diagnostics_test_name string`,
+		`INSERT INTO diagnostics_test_table VALUES (123456, 'diagnostics_test_name_value') ON CONFLICT DO NOTHING`,
+	}
+	for _, s := range schemaAndQueriesForTest {
+		_, err := rt.serverDB.Exec(s)
+		require.NoError(t, err)
+	}
+
+	conn := sqlutils.MakeSQLRunner(rt.serverDB)
+	sqlstatstestutil.WaitForStatementEntriesAtLeast(t, conn, len(schemaAndQueriesForTest),
+		sqlstatstestutil.StatementFilter{App: "test"})
+
 	expectedUsageReports := 0
 
 	clusterSecret := sql.ClusterSecret.Get(&rt.settings.SV)
+
+	foundStmt := false
 	testutils.SucceedsSoon(t, func() error {
 		expectedUsageReports++
 
 		node := rt.server.MetricsRecorder().GenerateNodeStatus(ctx)
 		// Clear the SQL stat pool before getting diagnostics.
-		rt.server.SQLServer().(*sql.Server).GetSQLStatsController().ResetLocalSQLStats(ctx)
+		require.NoError(t, rt.server.SQLServer().(*sql.Server).GetLocalSQLStatsProvider().Reset(ctx))
 		rt.server.DiagnosticsReporter().(*diagnostics.Reporter).ReportDiagnostics(ctx)
 
 		keyCounts := make(map[roachpb.StoreID]int64)
@@ -170,6 +204,22 @@ func TestServerReport(t *testing.T) {
 
 		last := rt.diagServer.LastRequestData()
 
+		// Verify SQL Stats fingerprinting. We need to run this check
+		// inside the `SucceedsSoon` call because the diagnostic reporter
+		// resets SQL stats once it's completed the report. This means that
+		// if this procedure is retried, subsequent values of `last` will
+		// be missing the sql stats since they will have been "consumed".
+		// Hence, we proactively look through them for the fingerprint.
+		if len(last.SqlStats) > 0 {
+			for _, s := range last.SqlStats {
+				require.False(t, strings.HasPrefix(s.Key.App, "$ internal"), "expected app name %s to not be internal", s.Key.App)
+				if s.Key.Query == "INSERT INTO _ VALUES (_, __more__) ON CONFLICT DO NOTHING" {
+					foundStmt = true
+					require.Equal(t, int64(1), s.Stats.Count)
+				}
+			}
+		}
+
 		if minExpected, actual := totalKeys, last.Node.KeyCount; minExpected > actual {
 			return errors.Errorf("expected node keys at least %v got %v", minExpected, actual)
 		}
@@ -190,6 +240,8 @@ func TestServerReport(t *testing.T) {
 		}
 		return nil
 	})
+
+	require.True(t, foundStmt, "expected to find INSERT INTO _ VALUES (_, __more__) ON CONFLICT DO NOTHING in stats")
 
 	last := rt.diagServer.LastRequestData()
 	require.Equal(t, rt.server.StorageClusterID().String(), last.UUID)
@@ -289,6 +341,14 @@ func TestServerReport(t *testing.T) {
 			require.Equal(t, prefs, zone.LeasePreferences)
 		}
 	}
+
+	// Verify schema name redaction.
+	require.Equal(t, 1, len(last.Schema))
+	require.Equal(t, "_", last.Schema[0].Name)
+	require.Equal(t, 3, len(last.Schema[0].Columns))
+	for _, c := range last.Schema[0].Columns {
+		require.Equal(t, "_", c.Name)
+	}
 }
 
 func TestTelemetry_SuccessfulTelemetryPing(t *testing.T) {
@@ -296,6 +356,7 @@ func TestTelemetry_SuccessfulTelemetryPing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	defer setTelemetryHttpTimeout(3 * time.Second)()
 	rt := startReporterTest(t, base.TestIsSpecificToStorageLayerAndNeedsASystemTenant)
 	defer rt.Close()
 
@@ -306,6 +367,7 @@ func TestTelemetry_SuccessfulTelemetryPing(t *testing.T) {
 		name                  string
 		respError             error
 		respCode              int
+		waitSeconds           int
 		expectTimestampUpdate bool
 	}{
 		{
@@ -331,26 +393,59 @@ func TestTelemetry_SuccessfulTelemetryPing(t *testing.T) {
 			respError:             errors.New("connection refused"),
 			expectTimestampUpdate: false,
 		},
+		{
+			name:                  "client timeout",
+			respError:             &timeutil.TimeoutError{},
+			waitSeconds:           5,
+			expectTimestampUpdate: true,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			defer rt.diagServer.SetRespError(tc.respError)()
 			defer rt.diagServer.SetRespCode(tc.respCode)()
+			defer rt.diagServer.SetWaitSeconds(tc.waitSeconds)()
+			rt.timesource.Advance(time.Hour)
 
 			dr := rt.server.DiagnosticsReporter().(*diagnostics.Reporter)
 
-			before := timeutil.Now().Unix()
+			before := rt.timesource.Now().Unix()
 			oldTimestamp := dr.LastSuccessfulTelemetryPing.Load()
 			require.LessOrEqual(t, dr.LastSuccessfulTelemetryPing.Load(), before)
+
+			rt.timesource.Advance(time.Hour)
 			dr.ReportDiagnostics(ctx)
 
 			if tc.expectTimestampUpdate {
-				require.GreaterOrEqual(t, dr.LastSuccessfulTelemetryPing.Load(), before)
+				require.Greater(t, dr.LastSuccessfulTelemetryPing.Load(), before)
 			} else {
 				require.Equal(t, oldTimestamp, dr.LastSuccessfulTelemetryPing.Load())
 			}
 		})
 	}
 
+}
+
+// This test will block on `stopper.Stop` if the diagnostics reporter
+// doesn't honor stopper quiescence when making its HTTP request.
+func TestTelemetryQuiesce(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	defer setTelemetryHttpTimeout(10 * time.Minute)()
+	rt := startReporterTest(t, base.TestIsSpecificToStorageLayerAndNeedsASystemTenant)
+	defer rt.Close()
+
+	ctx := context.Background()
+	setupCluster(t, rt.serverDB)
+
+	// Ensure that we block for long enough to trigger test timeout.
+	defer rt.diagServer.SetWaitSeconds(15 * 60)()
+	dr := rt.server.DiagnosticsReporter().(*diagnostics.Reporter)
+	stopper := rt.server.Stopper()
+
+	dr.PeriodicallyReportDiagnostics(ctx, stopper)
+	stopper.Stop(ctx)
+	<-stopper.IsStopped()
 }
 
 func TestUsageQuantization(t *testing.T) {
@@ -365,12 +460,21 @@ func TestUsageQuantization(t *testing.T) {
 	ctx := context.Background()
 
 	url := r.URL()
+	// Pin the SQL stats clock so that all executions land in the same
+	// aggregation window. In-memory stats are partitioned by aggregation
+	// timestamp, so a real clock that crosses an hour boundary mid-test
+	// would split a query's executions across multiple entries and break
+	// the per-entry count assertion below.
+	stubTime := timeutil.Now()
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Server: &server.TestingKnobs{
 				DiagnosticsTestingKnobs: diagnostics.TestingKnobs{
 					OverrideReportingURL: &url,
 				},
+			},
+			SQLStatsKnobs: &sqlstats.TestingKnobs{
+				StubTimeNow: func() time.Time { return stubTime },
 			},
 		},
 	})
@@ -407,9 +511,15 @@ func TestUsageQuantization(t *testing.T) {
 	}
 
 	ts := s.ApplicationLayer()
+	obsConn := sqlutils.MakeSQLRunner(ts.SQLConn(t))
+
+	sqlstatstestutil.WaitForStatementEntriesAtLeast(t, obsConn, 1, sqlstatstestutil.StatementFilter{
+		Query:     "SHOW application_name",
+		ExecCount: 10010,
+	})
 
 	// Flush the SQL stat pool.
-	ts.SQLServer().(*sql.Server).GetSQLStatsController().ResetLocalSQLStats(ctx)
+	require.NoError(t, ts.SQLServer().(*sql.Server).GetLocalSQLStatsProvider().Reset(ctx))
 
 	// Collect a round of statistics.
 	ts.DiagnosticsReporter().(*diagnostics.Reporter).ReportDiagnostics(ctx)
@@ -455,6 +565,7 @@ type reporterTest struct {
 	serverArgs   base.TestServerArgs
 	server       serverutils.TestServerInterface
 	serverDB     *gosql.DB
+	timesource   *timeutil.ManualTime
 }
 
 func (t *reporterTest) Close() {
@@ -472,6 +583,7 @@ func startReporterTest(
 		cloudEnable: cloudinfo.Disable(),
 		settings:    cluster.MakeTestingClusterSettings(),
 		diagServer:  diagutils.NewServer(),
+		timesource:  timeutil.NewManualTime(timeutil.Now()),
 	}
 
 	url := rt.diagServer.URL()
@@ -484,12 +596,13 @@ func startReporterTest(
 		Server: &server.TestingKnobs{
 			DiagnosticsTestingKnobs: diagnostics.TestingKnobs{
 				OverrideReportingURL: &url,
+				TimeSource:           rt.timesource,
 			},
 		},
 	}
 
 	storeSpec := base.DefaultTestStoreSpec
-	storeSpec.Attributes = roachpb.Attributes{Attrs: []string{elemName}}
+	storeSpec.Attributes = []string{elemName}
 	rt.serverArgs = base.TestServerArgs{
 		DefaultTestTenant: defaultTestTenant,
 		StoreSpecs: []base.StoreSpec{

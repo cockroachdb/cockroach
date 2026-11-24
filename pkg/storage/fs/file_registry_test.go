@@ -7,12 +7,12 @@ package fs
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"fmt"
 	"io"
 	"os"
-	"runtime/debug"
-	"sort"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
+	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
@@ -101,7 +102,7 @@ func TestFileRegistryOps(t *testing.T) {
 		registry.writeMu.Lock()
 		defer registry.writeMu.Unlock()
 		if diff := pretty.Diff(registry.writeMu.mu.entries, expected); diff != nil {
-			t.Log(string(debug.Stack()))
+			t.Log(debugutil.Stack())
 			t.Fatalf("%s\n%v", strings.Join(diff, "\n"), registry.writeMu.mu.entries)
 		}
 	}
@@ -195,30 +196,24 @@ func TestFileRegistryCheckNoFile(t *testing.T) {
 	require.Error(t, checkNoRegistryFile(mem, "" /* dbDir */))
 }
 
-func TestFileRegistryElideUnencrypted(t *testing.T) {
+func TestFileRegistry_CanElideEntry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	// Temporarily change the global CanRegistryElideFunc to test it.
-	prevRegistryElideFunc := CanRegistryElideFunc
-	defer func() {
-		CanRegistryElideFunc = prevRegistryElideFunc
-	}()
-	CanRegistryElideFunc = func(entry *enginepb.FileEntry) bool {
-		return entry == nil || len(entry.EncryptionSettings) == 0
-	}
-
 	// Create a new pebble file registry and inject a registry with an unencrypted file.
 	mem := vfs.NewMem()
-
 	for _, name := range []string{"test1", "test2"} {
 		f, err := mem.Create(name, UnspecifiedWriteCategory)
 		require.NoError(t, err)
 		require.NoError(t, f.Close())
 	}
 
-	registry := &FileRegistry{FS: mem}
-	require.NoError(t, registry.Load(context.Background()))
+	canElideEntry := func(entry *enginepb.FileEntry) bool {
+		return entry == nil || len(entry.EncryptionSettings) == 0
+	}
+
+	registry := &FileRegistry{FS: mem, CanElideEntry: canElideEntry}
+	require.NoError(t, registry.Load(t.Context()))
 	require.NoError(t, registry.writeToRegistryFileLocked(&enginepb.RegistryUpdateBatch{
 		Updates: []*enginepb.RegistryUpdate{
 			{Filename: "test1", Entry: &enginepb.FileEntry{EnvType: enginepb.EnvType_Data, EncryptionSettings: []byte(nil)}},
@@ -228,8 +223,8 @@ func TestFileRegistryElideUnencrypted(t *testing.T) {
 	require.NoError(t, registry.Close())
 
 	// Create another pebble file registry to verify that the unencrypted file is elided on startup.
-	registry2 := &FileRegistry{FS: mem}
-	require.NoError(t, registry2.Load(context.Background()))
+	registry2 := &FileRegistry{FS: mem, CanElideEntry: canElideEntry}
+	require.NoError(t, registry2.Load(t.Context()))
 	require.NotContains(t, registry2.writeMu.mu.entries, "test1")
 	entry := registry2.writeMu.mu.entries["test2"]
 	require.NotNil(t, entry)
@@ -392,8 +387,8 @@ func TestFileRegistry(t *testing.T) {
 					entry: entry,
 				})
 			}
-			sort.Slice(fileEntries, func(i, j int) bool {
-				return fileEntries[i].name < fileEntries[j].name
+			slices.SortFunc(fileEntries, func(a, b fileEntry) int {
+				return cmp.Compare(a.name, b.name)
 			})
 			var b bytes.Buffer
 			for _, fe := range fileEntries {
@@ -751,4 +746,48 @@ func TestFileRegistryBlockedWriteAllowsRead(t *testing.T) {
 	require.Equal(t, 1, len(registry.List()))
 	fs.WaitForBlockAndUnblock()
 	require.NoError(t, registry.Close())
+}
+
+func TestSafeWriteToUnencryptedFile(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// Use an in-memory FS that strictly enforces syncs.
+	mem := vfs.NewCrashableMem()
+	syncDir := func(dir string) {
+		fdir, err := mem.OpenDir(dir)
+		require.NoError(t, err)
+		require.NoError(t, fdir.Sync())
+		require.NoError(t, fdir.Close())
+	}
+	readFile := func(mem *vfs.MemFS, filename string) []byte {
+		f, err := mem.Open("foo/bar")
+		require.NoError(t, err)
+		b, err := io.ReadAll(f)
+		require.NoError(t, err)
+		require.NoError(t, f.Close())
+		return b
+	}
+
+	require.NoError(t, mem.MkdirAll("foo", os.ModePerm))
+	syncDir("")
+	f, err := mem.Create("foo/bar", UnspecifiedWriteCategory)
+	require.NoError(t, err)
+	_, err = io.WriteString(f, "Hello world")
+	require.NoError(t, err)
+	require.NoError(t, f.Sync())
+	require.NoError(t, f.Close())
+	syncDir("foo")
+
+	// Discard any unsynced writes to make sure we set up the test
+	// preconditions correctly.
+	crashFS := mem.CrashClone(vfs.CrashCloneCfg{})
+	require.Equal(t, []byte("Hello world"), readFile(crashFS, "foo/bar"))
+
+	// Use SafeWriteToUnencryptedFile to atomically, durably change the contents of the
+	// file.
+	require.NoError(t, SafeWriteToUnencryptedFile(crashFS, "foo", "foo/bar", []byte("Hello everyone"), UnspecifiedWriteCategory))
+
+	// Discard any unsynced writes.
+	crashFS = crashFS.CrashClone(vfs.CrashCloneCfg{})
+	require.Equal(t, []byte("Hello everyone"), readFile(crashFS, "foo/bar"))
 }

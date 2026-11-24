@@ -11,8 +11,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -33,7 +31,6 @@ var ErrExists = errors.New("protected timestamp record already exists")
 // It exists to abstract interaction with subsystem.
 type Provider interface {
 	Manager
-	Cache
 	Reconciler
 
 	Start(context.Context, *stop.Stopper) error
@@ -91,9 +88,6 @@ type Storage interface {
 	// passed txn remains safe for future use.
 	Release(context.Context, uuid.UUID) error
 
-	// GetMetadata retrieves the metadata with the provided Txn.
-	GetMetadata(context.Context) (ptpb.Metadata, error)
-
 	// GetState retrieves the entire state of protectedts.Storage with the
 	// provided Txn.
 	GetState(context.Context) (ptpb.State, error)
@@ -101,35 +95,6 @@ type Storage interface {
 	// UpdateTimestamp updates the timestamp protected by the record with the
 	// specified UUID.
 	UpdateTimestamp(ctx context.Context, id uuid.UUID, timestamp hlc.Timestamp) error
-}
-
-// Iterator iterates records in a cache until wantMore is false or all Records
-// in the requested range have been seen.
-type Iterator func(*ptpb.Record) (wantMore bool)
-
-// Cache is used in the storage package to determine a safe timestamp for
-// garbage collection of expired data. A storage.Replica can remove data when
-// it has a proof from the Cache that there was no Record providing
-// protection. For example, a Replica which determines that it is not protected
-// by any Records at a given asOf can move its GC threshold up to that
-// timestamp less its GC TTL.
-type Cache interface {
-	spanconfig.ProtectedTSReader
-
-	// Iterate examines the records with spans which overlap with [from, to).
-	// Nil values for from or to are equivalent to Key{}. The order of records
-	// between independent calls to Iterate is not defined; the order of records
-	// may differ even for the same key range that occurs at the same timestamp.
-	// The Records passed to the iterator are safe to be retained but must not be
-	// modified.
-	Iterate(_ context.Context, from, to roachpb.Key, it Iterator) (asOf hlc.Timestamp)
-
-	// QueryRecord determines whether a Record with the provided ID exists in
-	// the Cache state and returns the timestamp corresponding to that state.
-	QueryRecord(_ context.Context, id uuid.UUID) (exists bool, asOf hlc.Timestamp)
-
-	// Refresh forces the cache to update to at least asOf.
-	Refresh(_ context.Context, asOf hlc.Timestamp) error
 }
 
 // Reconciler provides a mechanism to reconcile protected timestamp records with
@@ -142,35 +107,4 @@ type Reconciler interface {
 	// StartReconciler can be called more than once since the work it does is
 	// idempotent.
 	StartReconciler(ctx context.Context, stopper *stop.Stopper) error
-}
-
-// EmptyCache returns a Cache which always returns the current time and no
-// records. This is often useful in testing where you want a cache which
-// holds nothing and is always up-to-date.
-func EmptyCache(c *hlc.Clock) Cache {
-	return (*emptyCache)(c)
-}
-
-type emptyCache hlc.Clock
-
-func (c *emptyCache) Iterate(
-	_ context.Context, from, to roachpb.Key, it Iterator,
-) (asOf hlc.Timestamp) {
-	return (*hlc.Clock)(c).Now()
-}
-
-func (c *emptyCache) QueryRecord(
-	_ context.Context, id uuid.UUID,
-) (exists bool, asOf hlc.Timestamp) {
-	return false, (*hlc.Clock)(c).Now()
-}
-
-func (c *emptyCache) Refresh(_ context.Context, asOf hlc.Timestamp) error {
-	return nil
-}
-
-func (c *emptyCache) GetProtectionTimestamps(
-	context.Context, roachpb.Span,
-) (protectionTimestamps []hlc.Timestamp, asOf hlc.Timestamp, err error) {
-	return protectionTimestamps, (*hlc.Clock)(c).Now(), nil
 }

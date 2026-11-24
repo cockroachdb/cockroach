@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -17,11 +18,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/plpgsql"
 	plpgsqlparser "github.com/cockroachdb/cockroach/pkg/sql/plpgsql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
@@ -36,11 +37,16 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		}
 	}
 
-	sch, resName := b.resolveSchemaForCreateFunction(&cf.Name)
+	isTemp := resolveTemporaryStatus(cf.Name.ObjectNamePrefix, tree.PersistencePermanent)
+	if isTemp {
+		panic(unimplemented.NewWithIssue(104687, "cannot create user-defined functions under a temporary schema"))
+	}
+	sch, resName := b.resolveSchemaForCreateFunction(&cf.Name, isTemp)
 	schID := b.factory.Metadata().AddSchema(sch)
 	cf.Name.ObjectNamePrefix = resName
 
 	b.insideFuncDef = true
+	b.insideProcDef = cf.IsProcedure
 	b.trackSchemaDeps = true
 	// Make sure datasource names are qualified.
 	b.qualifyDataSourceNamesInAST = true
@@ -48,6 +54,7 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 	oldSemaCtxAnn := b.semaCtx.Annotations
 	defer func() {
 		b.insideFuncDef = false
+		b.insideProcDef = false
 		b.trackSchemaDeps = false
 		b.schemaDeps = nil
 		b.schemaTypeDeps = intsets.Fast{}
@@ -66,8 +73,17 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		}
 	}()
 
-	if cf.RoutineBody != nil {
-		panic(unimplemented.New("CREATE FUNCTION sql_body", "CREATE FUNCTION...sql_body unimplemented"))
+	// inlineBody records whether the user wrote the SQL-standard inline body
+	// syntax (`BEGIN ATOMIC ... END` or a bare `RETURN expr`). The conversion
+	// below rewrites it into the legacy string body form so the rest of this
+	// function can process both shapes uniformly. We retain the flag because
+	// some validation rules (e.g. polymorphic-arg rejection) only apply when
+	// the body was inline.
+	inlineBody := cf.RoutineBody != nil
+	if inlineBody {
+		if err := tree.ConvertInlineRoutineBodyToOption(cf); err != nil {
+			panic(err)
+		}
 	}
 
 	if err := tree.ValidateRoutineOptions(cf.Options, cf.IsProcedure); err != nil {
@@ -100,11 +116,6 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 	}
 	if !languageFound {
 		panic(pgerror.New(pgcode.InvalidFunctionDefinition, "no language specified"))
-	}
-	if language == tree.RoutineLangPLpgSQL {
-		if err := plpgsql.CheckClusterSupportsPLpgSQL(b.evalCtx.Settings); err != nil {
-			panic(err)
-		}
 	}
 
 	// Track the dependencies in the arguments, return type, and statements in
@@ -281,6 +292,13 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		}
 	}
 
+	if inlineBody && sawPolymorphicInParam {
+		// PostgreSQL forbids polymorphic IN parameters with inline body syntax
+		// because early binding requires concrete argument types at parse time.
+		panic(pgerror.New(pgcode.InvalidFunctionDefinition,
+			"SQL function with unquoted function body cannot have polymorphic arguments"))
+	}
+
 	// Determine OUT parameter based return type.
 	var outParamType *types.T
 	if (cf.IsProcedure && len(outParamTypes) > 0) || len(outParamTypes) > 1 {
@@ -302,11 +320,12 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 			panic(pgerror.Newf(pgcode.InvalidFunctionDefinition, "function result type must be %s because of OUT parameters", outParamType.Name()))
 		}
 		// Override the return types so that we do return type validation and SHOW
-		// CREATE correctly.
-		funcReturnType = outParamType
-		cf.ReturnType = &tree.RoutineReturnType{
-			Type: outParamType,
+		// CREATE correctly. Take care not to override the SetOf value if it is set.
+		if cf.ReturnType == nil {
+			cf.ReturnType = &tree.RoutineReturnType{}
 		}
+		cf.ReturnType.Type = outParamType
+		funcReturnType = outParamType
 	} else if funcReturnType == nil {
 		if cf.IsProcedure {
 			// A procedure doesn't need a return type. Use a VOID return type to avoid
@@ -365,8 +384,16 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 		typeDeps.Add(int(id))
 	})
 
+	isSetReturning := cf.ReturnType != nil && cf.ReturnType.SetOf
 	targetVolatility := tree.GetRoutineVolatility(cf.Options)
-	fmtCtx := tree.NewFmtCtx(tree.FmtSerializable)
+	fmtCtx := tree.NewFmtCtx(tree.FmtParsable | tree.FmtAlwaysQualifyUserDefinedTypeNames)
+
+	// When late binding is enabled for PL/pgSQL procedures, we parse but do not
+	// build the body statements. References are resolved at CALL time instead.
+	// LANGUAGE SQL procedures always use early binding.
+	lateBinding := cf.IsProcedure &&
+		language == tree.RoutineLangPLpgSQL &&
+		sqlclustersettings.PLpgSQLProcedureLateBindingEnabled(b.ctx, b.evalCtx.Settings)
 
 	defer func(origValue bool) {
 		b.insideSQLRoutine = origValue
@@ -377,7 +404,8 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 	var stmtScope *scope
 	switch language {
 	case tree.RoutineLangSQL:
-		// Parse the function body.
+		// Parse the function body. lateBinding cannot be true here: it requires
+		// language == RoutineLangPLpgSQL.
 		stmts, err := parser.Parse(funcBodyStr)
 		if err != nil {
 			panic(err)
@@ -406,13 +434,6 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 			afterBuildStmt()
 		}
 	case tree.RoutineLangPLpgSQL:
-		if cf.ReturnType != nil && cf.ReturnType.SetOf {
-			panic(unimplemented.NewWithIssueDetail(105240,
-				"set-returning PL/pgSQL functions",
-				"set-returning PL/pgSQL functions are not yet supported",
-			))
-		}
-
 		// Parse the function body.
 		stmt, err := plpgsqlparser.Parse(funcBodyStr)
 		if err != nil {
@@ -431,8 +452,49 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 			}
 		}
 
-		// Special handling for trigger functions.
-		buildSQL := true
+		// Walk the body to classify any DDL statements before deciding
+		// whether to build it. The PL/pgSQL builder relies on this check
+		// for two reasons:
+		//   1. Under late binding the body is not analyzed, so the
+		//      optbuilder's per-statement DDL gate in builder.go is never
+		//      reached. Unsupported DDL has to be rejected here or it
+		//      would silently survive until CALL time.
+		//   2. Under early binding, supported DDL is rejected here with a
+		//      hint pointing at the late-binding setting, since an early
+		//      build cannot validate references that the DDL would create
+		//      or alter later in the body.
+		// Unsupported DDL takes precedence: enabling late binding does
+		// not make it work.
+		if cf.IsProcedure {
+			var dv ddlVisitor
+			plpgsqltree.Walk(&dv, stmt.AST)
+			if dv.unsupportedStmt != nil {
+				panic(unimplemented.NewWithIssuef(110080,
+					"%s usage inside a function definition is not supported",
+					dv.unsupportedStmt.StatementTag(),
+				))
+			}
+			if dv.foundDDLStmt != nil && !lateBinding {
+				// Distinguish "the cluster has not finished upgrading" from
+				// "late binding is off" so the user sees an actionable
+				// message rather than a hint that does not yet apply.
+				if !b.evalCtx.Settings.Version.IsActive(b.ctx, clusterversion.V26_3) {
+					panic(pgerror.Newf(pgcode.FeatureNotSupported,
+						"%s usage inside a stored procedure is not supported until upgrade to version 26.3 is finalized",
+						dv.foundDDLStmt.StatementTag(),
+					))
+				}
+				panic(errors.WithHintf(
+					pgerror.Newf(pgcode.FeatureNotSupported,
+						"DDL statements in PL/pgSQL procedure bodies require late binding"),
+					"enable the cluster setting %s",
+					sqlclustersettings.PLpgSQLProcedureLateBinding.Name(),
+				))
+			}
+		}
+
+		// Special handling for trigger functions and late-bound procedures.
+		var skipSQL, isTriggerFn bool
 		if funcReturnType.Identical(types.Trigger) {
 			// Trigger functions cannot have user-defined parameters. However, they do
 			// have a set of implicitly defined parameters.
@@ -453,54 +515,82 @@ func (b *Builder) buildCreateFunction(cf *tree.CreateRoutine, inScope *scope) (o
 
 			// Analysis of SQL expressions for trigger functions must be deferred
 			// until the function is bound to a trigger.
-			buildSQL = false
+			isTriggerFn = true
+			skipSQL = true
+		} else if lateBinding {
+			// Under late binding the body is stored verbatim and references
+			// are resolved at CALL time, so no back-references should be
+			// installed on referenced descriptors. Setting skipSQL prevents
+			// the PL/pgSQL builder from analyzing SQL inside the body, and
+			// the call to afterBuildStmt below is skipped so that any
+			// schemaDeps / schemaTypeDeps / schemaFunctionDeps that did get
+			// pushed are not appended to the routine's dependency set.
+			// Parameter and return type dependencies are tracked separately
+			// and still survive.
+			skipSQL = true
 		}
 
 		// We need to disable stable function folding because we want to catch the
 		// volatility of stable functions. If folded, we only get a scalar and lose
 		// the volatility.
+		options := basePLOptions().
+			SetIsSetReturning(isSetReturning).
+			SetIsProcedure(cf.IsProcedure).
+			SetIsTriggerFn(isTriggerFn).
+			SetSkipSQL(skipSQL)
 		b.factory.FoldingControl().TemporarilyDisallowStableFolds(func() {
 			plBuilder := newPLpgSQLBuilder(
-				b, cf.Name.Object(), stmt.AST.Label, nil /* colRefs */, routineParams,
-				funcReturnType, cf.IsProcedure, buildSQL, nil, /* outScope */
+				b, options, cf.Name.Object(), stmt.AST.Label, nil /* colRefs */, routineParams,
+				funcReturnType, nil /* outScope */, 0, /* resultBufferID */
 			)
 			stmtScope = plBuilder.buildRootBlock(stmt.AST, bodyScope, routineParams)
 		})
-		checkStmtVolatility(targetVolatility, stmtScope, stmt)
+		if !lateBinding {
+			checkStmtVolatility(targetVolatility, stmtScope, stmt)
 
-		// Format the statements with qualified datasource names.
-		formatFuncBodyStmt(fmtCtx, stmt.AST, language, false /* newLine */)
-		afterBuildStmt()
+			// Format the statements with qualified datasource names.
+			formatFuncBodyStmt(fmtCtx, stmt.AST, language, false /* newLine */)
+			afterBuildStmt()
+		}
 	default:
 		panic(errors.AssertionFailedf("unexpected language: %v", language))
 	}
 
-	if stmtScope != nil {
-		// Validate that the result type of the last statement matches the
-		// return type of the function.
-		// TODO(mgartner): stmtScope.cols does not describe the result
-		// columns of the statement. We should use physical.Presentation
-		// instead.
-		err = validateReturnType(b.ctx, b.semaCtx, funcReturnType, stmtScope.cols)
-		if err != nil {
-			panic(err)
+	if !lateBinding {
+		if stmtScope != nil && (language != tree.RoutineLangPLpgSQL || !isSetReturning) {
+			// Validate that the result type of the last statement matches the
+			// return type of the function. We skip this validation for PL/pgSQL SRFs
+			// because those handle their own validation, and do not return a result
+			// directly from their last body statement anyway.
+			//
+			// TODO(mgartner): stmtScope.cols does not describe the result
+			// columns of the statement. We should use physical.Presentation
+			// instead.
+			err = validateReturnType(b.ctx, b.semaCtx, funcReturnType, stmtScope.cols)
+			if err != nil {
+				panic(err)
+			}
+		}
+
+		if targetVolatility == tree.RoutineImmutable && len(deps) > 0 {
+			panic(
+				pgerror.Newf(
+					pgcode.InvalidParameterValue,
+					"referencing relations is not allowed in immutable function",
+				),
+			)
 		}
 	}
 
-	if targetVolatility == tree.RoutineImmutable && len(deps) > 0 {
-		panic(
-			pgerror.Newf(
-				pgcode.InvalidParameterValue,
-				"referencing relations is not allowed in immutable function",
-			),
-		)
-	}
-
-	// Override the function body so that references are fully qualified.
-	for i, option := range cf.Options {
-		if _, ok := option.(tree.RoutineBodyStr); ok {
-			cf.Options[i] = tree.RoutineBodyStr(fmtCtx.CloseAndGetString())
-			break
+	if lateBinding {
+		fmtCtx.Close()
+	} else {
+		// Override the function body so that references are fully qualified.
+		for i, option := range cf.Options {
+			if _, ok := option.(tree.RoutineBodyStr); ok {
+				cf.Options[i] = tree.RoutineBodyStr(fmtCtx.CloseAndGetString())
+				break
+			}
 		}
 	}
 

@@ -162,7 +162,7 @@ func TestSplitQueue(t *testing.T) {
 				sq.Tick(ctx, state.OffsetTick(start, tick), s)
 
 				// Tick state updates that are queued for completion.
-				changer.Tick(state.OffsetTick(start, tick), s)
+				changer.Tick(ctx, state.OffsetTick(start, tick), s)
 
 				// Check every replica on the leaseholder store for enqueuing.
 				for _, repl := range s.Replicas(store.StoreID()) {

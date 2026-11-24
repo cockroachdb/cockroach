@@ -10,6 +10,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/errors"
@@ -62,17 +63,16 @@ func InitIndexFetchSpec(
 
 	s.FamilyDefaultColumns = table.FamilyDefaultColumns()
 
-	families := table.GetFamilies()
-	for i := range families {
-		if id := families[i].ID; id > s.MaxFamilyID {
-			s.MaxFamilyID = id
-		}
+	var err error
+	s.MaxFamilyID, err = table.MaxFamilyIDForIndex(index)
+	if err != nil {
+		return err
 	}
 
 	s.KeyAndSuffixColumns = table.IndexFetchSpecKeyAndSuffixColumns(index)
 
 	var invertedColumnID descpb.ColumnID
-	if index.GetType() == descpb.IndexDescriptor_INVERTED {
+	if index.GetType() == idxtype.INVERTED {
 		invertedColumnID = index.InvertedColumnID()
 	}
 
@@ -106,7 +106,7 @@ func InitIndexFetchSpec(
 		colIDs.UnionWith(index.CollectKeySuffixColumnIDs())
 		for i := range s.FetchedColumns {
 			if !colIDs.Contains(s.FetchedColumns[i].ColumnID) {
-				return errors.AssertionFailedf("requested column %s not in index", s.FetchedColumns[i].Name)
+				return errors.AssertionFailedf("requested column '%s' not in index", s.FetchedColumns[i].Name)
 			}
 		}
 	}

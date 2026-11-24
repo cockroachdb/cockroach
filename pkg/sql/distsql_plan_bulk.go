@@ -24,7 +24,7 @@ func (dsp *DistSQLPlanner) SetupAllNodesPlanning(
 	ctx context.Context, evalCtx *extendedEvalContext, execCfg *ExecutorConfig,
 ) (*PlanningCtx, []base.SQLInstanceID, error) {
 	return dsp.SetupAllNodesPlanningWithOracle(
-		ctx, evalCtx, execCfg, physicalplan.DefaultReplicaChooser, roachpb.Locality{},
+		ctx, evalCtx, execCfg, physicalplan.DefaultReplicaChooser, []roachpb.Locality{}, NoStrictLocalityFiltering,
 	)
 }
 
@@ -38,12 +38,26 @@ func (dsp *DistSQLPlanner) SetupAllNodesPlanningWithOracle(
 	evalCtx *extendedEvalContext,
 	execCfg *ExecutorConfig,
 	oracle replicaoracle.Oracle,
-	localityFilter roachpb.Locality,
+	localityFilters []roachpb.Locality,
+	strictFiltering bool,
 ) (*PlanningCtx, []base.SQLInstanceID, error) {
-	if dsp.codec.ForSystemTenant() {
-		return dsp.setupAllNodesPlanningSystem(ctx, evalCtx, execCfg, oracle, localityFilter)
+
+	if strictFiltering && len(localityFilters) == 0 {
+		return nil, nil, errors.New("strict locality filtering requested with no locality filters")
 	}
-	return dsp.setupAllNodesPlanningTenant(ctx, evalCtx, execCfg, oracle, localityFilter)
+
+	for _, lf := range localityFilters {
+		if lf.Empty() {
+			return nil, nil, errors.New("empty locality filter is not allowed")
+		}
+	}
+
+	if dsp.codec.ForSystemTenant() {
+		// TODO(yuzefovich): evaluate whether we can remove system tenant
+		// specific code.
+		return dsp.setupAllNodesPlanningSystem(ctx, evalCtx, execCfg, oracle, localityFilters, strictFiltering)
+	}
+	return dsp.setupAllNodesPlanningTenant(ctx, evalCtx, execCfg, oracle, localityFilters, strictFiltering)
 }
 
 // setupAllNodesPlanningSystem creates a planCtx and returns all nodes available
@@ -54,10 +68,11 @@ func (dsp *DistSQLPlanner) setupAllNodesPlanningSystem(
 	evalCtx *extendedEvalContext,
 	execCfg *ExecutorConfig,
 	oracle replicaoracle.Oracle,
-	localityFilter roachpb.Locality,
+	localityFilters []roachpb.Locality,
+	strictFiltering bool,
 ) (*PlanningCtx, []base.SQLInstanceID, error) {
 	planCtx := dsp.NewPlanningCtxWithOracle(
-		ctx, evalCtx, nil /* planner */, nil /* txn */, FullDistribution, oracle, localityFilter,
+		ctx, evalCtx, nil /* planner */, nil /* txn */, FullDistribution, oracle, localityFilters, strictFiltering,
 	)
 
 	ss, err := execCfg.NodesStatusServer.OptionalNodesStatusServer()
@@ -72,8 +87,15 @@ func (dsp *DistSQLPlanner) setupAllNodesPlanningSystem(
 	// planCtx.nodeStatuses map ourselves. checkInstanceHealthAndVersionSystem() will
 	// populate it.
 	for _, node := range resp.Nodes {
-		if ok, _ := node.Desc.Locality.Matches(localityFilter); ok {
+		if len(localityFilters) == 0 {
 			_ /* NodeStatus */ = dsp.checkInstanceHealthAndVersionSystem(ctx, planCtx, base.SQLInstanceID(node.Desc.NodeID))
+		} else {
+			for _, filter := range localityFilters {
+				if ok, _ := node.Desc.Locality.Matches(filter); ok {
+					_ /* NodeStatus */ = dsp.checkInstanceHealthAndVersionSystem(ctx, planCtx, base.SQLInstanceID(node.Desc.NodeID))
+					break
+				}
+			}
 		}
 	}
 	nodes := make([]base.SQLInstanceID, 0, len(planCtx.nodeStatuses))
@@ -93,10 +115,11 @@ func (dsp *DistSQLPlanner) setupAllNodesPlanningTenant(
 	evalCtx *extendedEvalContext,
 	execCfg *ExecutorConfig,
 	oracle replicaoracle.Oracle,
-	localityFilter roachpb.Locality,
+	localityFilters []roachpb.Locality,
+	strictFiltering bool,
 ) (*PlanningCtx, []base.SQLInstanceID, error) {
 	planCtx := dsp.NewPlanningCtxWithOracle(
-		ctx, evalCtx, nil /* planner */, nil /* txn */, FullDistribution, oracle, localityFilter,
+		ctx, evalCtx, nil /* planner */, nil /* txn */, FullDistribution, oracle, localityFilters, strictFiltering,
 	)
 	pods, err := dsp.sqlAddressResolver.GetAllInstances(ctx)
 	if err != nil {
@@ -106,8 +129,15 @@ func (dsp *DistSQLPlanner) setupAllNodesPlanningTenant(
 
 	sqlInstanceIDs := make([]base.SQLInstanceID, 0, len(pods))
 	for _, pod := range pods {
-		if ok, _ := pod.Locality.Matches(localityFilter); ok {
+		if len(localityFilters) == 0 {
 			sqlInstanceIDs = append(sqlInstanceIDs, pod.InstanceID)
+		} else {
+			for _, locality := range localityFilters {
+				if ok, _ := pod.Locality.Matches(locality); ok {
+					sqlInstanceIDs = append(sqlInstanceIDs, pod.InstanceID)
+					break
+				}
+			}
 		}
 	}
 	return planCtx, sqlInstanceIDs, nil
@@ -121,8 +151,10 @@ type PhysicalPlanMaker func(context.Context, *DistSQLPlanner) (*PhysicalPlan, *P
 // the number in the old one.
 func calculatePlanGrowth(before, after *PhysicalPlan) (int, float64) {
 	var changed int
-	beforeSpecs := before.GenerateFlowSpecs()
-	afterSpecs := after.GenerateFlowSpecs()
+	beforeSpecs, beforeCleanup := before.GenerateFlowSpecs()
+	defer beforeCleanup(beforeSpecs)
+	afterSpecs, afterCleanup := after.GenerateFlowSpecs()
+	defer afterCleanup(afterSpecs)
 
 	// How many nodes are in after that are not in before, or are in both but
 	// have changed their spec?
@@ -166,7 +198,7 @@ func ReplanOnChangedFraction(thresholdFn func() float64) PlanChangeDecision {
 		threshold := thresholdFn()
 		replan := threshold != 0.0 && growth > threshold
 		if replan || growth > 0.1 || log.V(1) {
-			log.Infof(ctx, "Re-planning would add or alter flows on %d nodes / %.2f, threshold %.2f, replan %v",
+			log.Dev.Infof(ctx, "Re-planning would add or alter flows on %d nodes / %.2f, threshold %.2f, replan %v",
 				changed, growth, threshold, replan)
 		}
 		return replan
@@ -255,7 +287,7 @@ func PhysicalPlanChangeChecker(
 				dsp := execCtx.DistSQLPlanner()
 				p, _, err := fn(ctx, dsp)
 				if err != nil {
-					log.Warningf(ctx, "job replanning check failed to generate plan: %v", err)
+					log.Dev.Warningf(ctx, "job replanning check failed to generate plan: %v", err)
 					continue
 				}
 				if decider(ctx, initial, p) {

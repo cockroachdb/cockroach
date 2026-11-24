@@ -8,6 +8,7 @@ package vector
 import (
 	"math"
 	"math/rand"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -19,6 +20,8 @@ import (
 
 // MaxDim is the maximum number of dimensions a vector can have.
 const MaxDim = 16000
+
+var MaxDimExceededErr = pgerror.Newf(pgcode.ProgramLimitExceeded, "vector cannot have more than %d dimensions", MaxDim)
 
 // T is the type of a PGVector-like vector.
 type T []float32
@@ -37,7 +40,7 @@ func ParseVector(input string) (T, error) {
 	parts := strings.Split(input, ",")
 
 	if len(parts) > MaxDim {
-		return T{}, pgerror.Newf(pgcode.ProgramLimitExceeded, "vector cannot have more than %d dimensions", MaxDim)
+		return T{}, MaxDimExceededErr
 	}
 
 	vector := make([]float32, len(parts))
@@ -69,16 +72,16 @@ func (v T) AsSet() Set {
 	return Set{
 		Dims:  len(v),
 		Count: 1,
-		Data:  v[:len(v):len(v)],
+		Data:  slices.Clip(v),
 	}
 }
 
 // String implements the fmt.Stringer interface.
 func (v T) String() string {
 	var sb strings.Builder
-	sb.WriteString("[")
 	// Pre-grow by a reasonable amount to avoid multiple allocations.
-	sb.Grow(len(v) * 8)
+	sb.Grow(len(v)*8 + 2)
+	sb.WriteString("[")
 	for i, v := range v {
 		if i > 0 {
 			sb.WriteString(",")
@@ -113,29 +116,29 @@ func (v T) Compare(v2 T) (int, error) {
 }
 
 // Encode encodes the vector as a byte array suitable for storing in KV.
-func Encode(appendTo []byte, t T) ([]byte, error) {
+func Encode(appendTo []byte, t T) []byte {
 	appendTo = encoding.EncodeUint32Ascending(appendTo, uint32(len(t)))
 	for i := range t {
 		appendTo = encoding.EncodeUntaggedFloat32Value(appendTo, t[i])
 	}
-	return appendTo, nil
+	return appendTo
 }
 
-// Decode decodes the byte array into a vector.
-func Decode(b []byte) (ret T, err error) {
+// Decode decodes the byte array into a vector and returns any remaining bytes.
+func Decode(b []byte) (remaining []byte, ret T, err error) {
 	var n uint32
 	b, n, err = encoding.DecodeUint32Ascending(b)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	ret = make(T, n)
 	for i := range ret {
 		b, ret[i], err = encoding.DecodeUntaggedFloat32Value(b)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
-	return ret, nil
+	return b, ret, nil
 }
 
 // L1Distance returns the L1 (Manhattan) distance between t and t2.
@@ -191,7 +194,7 @@ func CosDistance(t T, t2 T) (float64, error) {
 	return 1 - similarity, nil
 }
 
-// InnerProduct returns the negative inner product of t1 and t2.
+// InnerProduct returns the inner product of t1 and t2.
 func InnerProduct(t T, t2 T) (float64, error) {
 	if err := checkDims(t, t2); err != nil {
 		return 0, err
@@ -202,7 +205,7 @@ func InnerProduct(t T, t2 T) (float64, error) {
 // NegInnerProduct returns the negative inner product of t1 and t2.
 func NegInnerProduct(t T, t2 T) (float64, error) {
 	p, err := InnerProduct(t, t2)
-	return p * -1, err
+	return -p, err
 }
 
 // Norm returns the L2 norm of t.
@@ -271,13 +274,14 @@ func Mult(t T, t2 T) (T, error) {
 	return ret, nil
 }
 
-// Random returns a random vector.
-func Random(rng *rand.Rand) T {
-	n := 1 + rng.Intn(1000)
+// Random returns a random vector with the number of dimensions in [1, maxDim]
+// range.
+func Random(rng *rand.Rand, maxDim int) T {
+	n := 1 + rng.Intn(maxDim)
 	v := make(T, n)
 	for i := range v {
 		for {
-			v[i] = math.Float32frombits(rng.Uint32())
+			v[i] = float32(rng.NormFloat64())
 			if math.IsNaN(float64(v[i])) || math.IsInf(float64(v[i]), 0) {
 				continue
 			}

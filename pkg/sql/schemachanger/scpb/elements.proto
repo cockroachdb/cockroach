@@ -2,6 +2,9 @@
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
+// 
+// This file is used by `element_generator.go` to build `elements_generated.go`.
+// It's sensitive to formatting; tools such as `buf format` aren't recommended.
 
 syntax = "proto3";
 package cockroach.sql.schemachanger.scpb;
@@ -9,10 +12,12 @@ option go_package = "github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb
 
 import "sql/catalog/catenumpb/index.proto";
 import "sql/catalog/catpb/catalog.proto";
+import "sql/sem/idxtype/idxtype.proto";
 import "sql/sem/semenumpb/constraint.proto";
 import "sql/sem/semenumpb/trigger.proto";
 import "sql/catalog/catpb/function.proto";
 import "sql/types/types.proto";
+import "sql/vecindex/vecpb/vec.proto";
 import "gogoproto/gogo.proto";
 import "geo/geopb/config.proto";
 import "config/zonepb/zone.proto";
@@ -59,6 +64,7 @@ message ElementProto {
     AliasType alias_type = 7;
     CompositeType composite_type = 8;
     Function function = 9;
+    DomainType domain_type = 10;
 
     // Zero-level elements.
     // These elements do not own a corresponding descriptor in the catalog,
@@ -87,12 +93,17 @@ message ElementProto {
     LDRJobIDs ldr_job_ids = 134 [(gogoproto.customname) = "LDRJobIDs", (gogoproto.moretags) = "parent:\"Table\""];
     PartitionZoneConfig partition_zone_config = 135 [(gogoproto.moretags) = "parent:\"TablePartitioning\""];
     Trigger trigger = 136 [(gogoproto.moretags) = "parent:\"Table, View\""];
+    Policy policy = 137 [(gogoproto.moretags) = "parent:\"Table\""];
+    RowLevelSecurityEnabled row_level_security_enabled = 138 [(gogoproto.moretags) = "parent:\"Table\""];
+    RowLevelSecurityForced row_level_security_forced = 139 [(gogoproto.moretags) = "parent:\"Table\""];
+    TableStorageParam table_storage_param = 142 [(gogoproto.moretags) = "parent:\"Table\""];
 
     // Multi-region elements.
     TableLocalityGlobal table_locality_global = 110 [(gogoproto.moretags) = "parent:\"Table\""];
     TableLocalityPrimaryRegion table_locality_primary_region = 111 [(gogoproto.moretags) = "parent:\"Table\""];
     TableLocalitySecondaryRegion table_locality_secondary_region = 112 [(gogoproto.moretags) = "parent:\"Table\""];
     TableLocalityRegionalByRow table_locality_regional_by_row = 113 [(gogoproto.moretags) = "parent:\"Table\""];
+    TableLocalityRegionalByRowUsingConstraint table_locality_regional_by_row_using_constraint = 114 [(gogoproto.moretags) = "parent:\"Table\""];
 
     // Column elements.
     ColumnName column_name = 30 [(gogoproto.moretags) = "parent:\"Column\""];
@@ -103,26 +114,28 @@ message ElementProto {
     ColumnComment column_comment = 35 [(gogoproto.moretags) = "parent:\"Column\""];
     ColumnNotNull column_not_null = 36 [(gogoproto.moretags) = "parent:\"Column\""];
     ColumnComputeExpression column_compute_expression = 190 [(gogoproto.moretags) = "parent:\"Column\""];
+    ColumnGeneratedAsIdentity column_generated_as_identity = 191 [(gogoproto.moretags) = "parent:\"Column\""];
+    ColumnHidden column_hidden = 192 [(gogoproto.moretags) = "parent:\"Column\""];
 
     // Sequence elements.
     SequenceOption sequence_option = 37 [(gogoproto.moretags) = "parent:\"Sequence\""];
+    SequenceValue sequence_value = 38 [(gogoproto.moretags) = "parent:\"Sequence\""];
 
     // Index elements.
     IndexName index_name = 40 [(gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex\""];
     IndexPartitioning index_partitioning = 41 [(gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex\""];
-    SecondaryIndexPartial secondary_index_partial = 42 [(gogoproto.moretags) = "parent:\"SecondaryIndex\""];
     IndexComment index_comment = 43 [(gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex\""];
     IndexColumn index_column = 44 [(gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex, TemporaryIndex, Column\""];
     IndexData index_data = 45 [(gogoproto.customname) = "IndexData", (gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex, TemporaryIndex\""];
 
     // Constraint elements.
     ConstraintWithoutIndexName constraint_without_index_name = 51 [(gogoproto.moretags) = "parent:\"UniqueWithoutIndexConstraint, CheckConstraint, ForeignKeyConstraint\""];
-    ConstraintComment constraint_comment = 52 [(gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex, UniqueWithoutIndexConstraint, CheckConstraint, ForeignKeyConstraint\""];
+    ConstraintComment constraint_comment = 52 [(gogoproto.moretags) = "parent:\"PrimaryIndex, SecondaryIndex, UniqueWithoutIndexConstraint, CheckConstraint, ForeignKeyConstraint, DomainCheckConstraint\""];
 
     // Common elements.
-    Namespace namespace = 60 [(gogoproto.moretags) = "parent:\"Table, View, Sequence, Database, Schema, AliasType, EnumType\""];
-    Owner owner = 61 [(gogoproto.moretags) = "parent:\"Table, View, Sequence, Database, Schema, AliasType, EnumType\""];
-    UserPrivileges user_privileges = 62 [(gogoproto.moretags) = "parent:\"Table, View, Sequence, Database, Schema, AliasType, EnumType\""];
+    Namespace namespace = 60 [(gogoproto.moretags) = "parent:\"Table, View, Sequence, Database, Schema, AliasType, EnumType, DomainType\""];
+    Owner owner = 61 [(gogoproto.moretags) = "parent:\"Table, View, Sequence, Database, Schema, AliasType, EnumType, DomainType\""];
+    UserPrivileges user_privileges = 62 [(gogoproto.moretags) = "parent:\"Table, View, Sequence, Database, Schema, AliasType, EnumType, DomainType\""];
 
     // Database elements.
     DatabaseRegionConfig database_region_config = 80 [(gogoproto.moretags) = "parent:\"Database\""];
@@ -136,7 +149,7 @@ message ElementProto {
     SchemaComment schema_comment = 91 [(gogoproto.moretags) = "parent:\"Schema\""];
 
     // SchemaChild elements.
-    SchemaChild schema_child = 100 [(gogoproto.moretags) = "parent:\"AliasType, EnumType, Table, View, Sequence\""];
+    SchemaChild schema_child = 100 [(gogoproto.moretags) = "parent:\"AliasType, EnumType, DomainType, Table, View, Sequence\""];
 
     // Enum type elements.
     EnumTypeValue enum_type_value = 120 [(gogoproto.moretags) = "parent:\"EnumType\""];
@@ -152,9 +165,18 @@ message ElementProto {
     FunctionNullInputBehavior function_null_input_behavior = 163 [(gogoproto.moretags) = "parent:\"Function\""];
     FunctionBody function_body = 164 [(gogoproto.moretags) = "parent:\"Function\""];
     FunctionSecurity function_security = 165 [(gogoproto.moretags) = "parent:\"Function\""];
+    FunctionParams function_params = 166 [(gogoproto.moretags) = "parent:\"Function\""];
+    FunctionComment function_comment = 167 [(gogoproto.moretags) = "parent:\"Function\""];
+
+    // Domain type elements.
+    DomainDefault domain_default = 250 [(gogoproto.moretags) = "parent:\"DomainType\""];
+    DomainNotNull domain_not_null = 251 [(gogoproto.moretags) = "parent:\"DomainType\""];
+    DomainCheckConstraint domain_check_constraint = 252 [(gogoproto.moretags) = "parent:\"DomainType\""];
+    DomainCheckConstraintUnvalidated domain_check_constraint_unvalidated = 253 [(gogoproto.moretags) = "parent:\"DomainType\""];
+    DomainConstraintName domain_constraint_name = 254 [(gogoproto.moretags) = "parent:\"DomainCheckConstraint, DomainCheckConstraintUnvalidated, DomainNotNull\""];
 
     // Type elements.
-    TypeComment type_comment = 180 [(gogoproto.moretags) = "parent:\"CompositeType,EnumType\""];
+    TypeComment type_comment = 180 [(gogoproto.moretags) = "parent:\"CompositeType,EnumType,DomainType\""];
 
     // Trigger elements.
     TriggerName trigger_name = 200 [(gogoproto.moretags) = "parent:\"Trigger\""];
@@ -166,8 +188,18 @@ message ElementProto {
     TriggerFunctionCall trigger_function_call = 206 [(gogoproto.moretags) = "parent:\"Trigger\""];
     TriggerDeps trigger_deps = 207 [(gogoproto.moretags) = "parent:\"Trigger\""];
 
-    // Next element group start id: 240
+    // Policy elements.
+    PolicyName policy_name = 240 [(gogoproto.moretags) = "parent:\"Policy\""];
+    PolicyRole policy_role = 241 [(gogoproto.moretags) = "parent:\"Policy\""];
+    PolicyUsingExpr policy_using_expr = 242 [(gogoproto.moretags) = "parent:\"Policy\""];
+    PolicyWithCheckExpr policy_with_check_expr = 243 [(gogoproto.moretags) = "parent:\"Policy\""];
+    PolicyDeps policy_deps = 244 [(gogoproto.moretags) = "parent:\"Policy\""];
+
+    // Next element group start id: 260
   }
+
+  // Reserved for the now-removed SecondaryIndexPartial element.
+  reserved 42;
 }
 
 // TypeT is a wrapper for a types.T which contains its user-defined type ID
@@ -202,10 +234,12 @@ message Expression {
 message Column {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   uint32 column_id = 2 [(gogoproto.customname) = "ColumnID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
-  bool is_hidden = 3;
+  // Deprecated.
+  // The hidden attribute is now handled as a separate element (see ColumnHidden).
+  bool is_hidden = 3 [deprecated = true];
   bool is_inaccessible = 4;
-  uint32 generated_as_identity_type = 5 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.GeneratedAsIdentityType"];
-  string generated_as_identity_sequence_option = 6;
+  uint32 generated_as_identity_type = 5 [deprecated = true, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.GeneratedAsIdentityType"];
+  string generated_as_identity_sequence_option = 6 [deprecated = true];
   uint32 pg_attribute_num = 7 [(gogoproto.customname) = "PgAttributeNum", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.PGAttributeNum"];
   bool is_system_column = 8;
 }
@@ -226,22 +260,13 @@ message ColumnType {
   uint32 family_id = 2 [(gogoproto.customname) = "FamilyID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.FamilyID"];
   uint32 column_id = 3 [(gogoproto.customname) = "ColumnID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
   TypeT embedded_type_t = 4 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  // Deprecated
-  // We changed element modelling for NOT NULL constraint in V23_1 and thus
-  // deprecated `is_nullable`. The new way is to handle NOT NULL constraint
-  // through a newly introduced `ColumnNotNull` element. This change is
-  // necessary to support adding/dropping NOT NULL constraint on an existing
-  // column.
-  bool is_nullable = 5 [deprecated = true];
-  // Deprecated
-  // compute expression is now handled as a separate element (see ColumnComputeExpression).
-  Expression compute_expr = 6 [deprecated = true];
+  reserved 5, 6;
   bool is_virtual = 7;
   reserved 8, 9, 10;
   // ElementCreationMetadata stores information about when this element is created.
   // It can be used in a similar way to version gates to ensure compatibility
   // in mixed version state.
-  ElementCreationMetadata element_creation_metadata= 11;
+  ElementCreationMetadata element_creation_metadata = 11;
   // If non-zero, the column will be added to the column family after the column with
   // this ID. This is used for operations like 'ALTER COLUMN .. TYPE', where
   // maintaining column family order is necessary when replacing columns.
@@ -265,6 +290,19 @@ message ColumnComputeExpression {
   Usage usage = 5;
 }
 
+message ColumnGeneratedAsIdentity {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 column_id = 2 [(gogoproto.customname) = "ColumnID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
+  uint32 type = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.GeneratedAsIdentityType"];
+  string sequence_option = 4;
+}
+
+message ColumnHidden {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 column_id = 2 [(gogoproto.customname) = "ColumnID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
+}
+
+
 message ColumnFamily {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   uint32 family_id = 2 [(gogoproto.customname) = "FamilyID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.FamilyID"];
@@ -280,7 +318,9 @@ message Index {
   uint32 index_id = 2 [(gogoproto.customname) = "IndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
 
   bool is_unique = 10;
-  bool is_inverted = 11;
+  // IsInverted is replaced by the Type enumeration.
+  bool is_inverted = 11 [deprecated = true];
+  cockroach.sql.sem.idxtype.T type = 26;
   cockroach.sql.catalog.catpb.ShardedDescriptor sharding = 12;
 
   // IsCreatedExplicitly specifies whether this index was created explicitly
@@ -297,7 +337,11 @@ message Index {
   // TODO(postamar): try to get rid of these altogether
   //  Perhaps move these to the target metadata instead?
   bool is_concurrently = 20;
+  // SourceIndexID refers back to the primary index for which a secondary index
+  // was created.
   uint32 source_index_id = 21 [(gogoproto.customname) = "SourceIndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
+  // TemporaryIndexID refers to the temporary index that was created while this
+  // index is being backfilled.
   uint32 temporary_index_id = 22 [(gogoproto.customname) = "TemporaryIndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
 
   cockroach.geo.geoindex.Config geo_config = 24 [(gogoproto.nullable) = true];
@@ -308,6 +352,15 @@ message Index {
 
   // Invisibility specifies index invisibility to the optimizer.
   double invisibility = 25;
+
+  cockroach.sql.vecindex.vecpb.Config vec_config = 27 [(gogoproto.nullable) = true];
+
+  // SkipUniqueChecks disables unique constraint checks for this index when set
+  // to true. This is useful in cases when the application can statically
+  // guarantee that indexed columns will not contain duplicates.
+  bool skip_unique_checks = 28;
+
+  // Next field is 29.
 
   reserved 3, 4, 5, 6, 7;
 }
@@ -324,19 +377,19 @@ message SecondaryIndex {
   // secondary index that we are trying to replace (this
   // is done for primary key changes).
   uint32 recreate_source_id = 4 [(gogoproto.customname) = "RecreateSourceIndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
+  // If an index is being recreated, this is the final primary
+  // index that will make it usable (i.e. the columns required
+  // to back this index will be public in this index)
+  uint32 recreate_target_id = 5 [(gogoproto.customname) = "RecreateTargetIndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
+  // In a mixed version environment indicates if its safe to hide the
+  // element using the new HideForPrimaryKeyRecreate flag.
+  bool hide_for_primary_key_recreated = 6;
 }
 
 message TemporaryIndex {
   Index embedded_index = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   bool is_using_secondary_encoding = 2;
   Expression expr = 3 [(gogoproto.nullable) = true];
-}
-
-message SecondaryIndexPartial {
-  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
-  uint32 index_id = 2 [(gogoproto.customname) = "IndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
-  Expression embedded_expr = 3 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  reserved 10;
 }
 
 // SchemaParent models the schema to parent database relationship.
@@ -357,6 +410,67 @@ message SchemaChild {
   uint32 schema_id = 2 [(gogoproto.customname) = "SchemaID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
 }
 
+// Policy represents a row-level security policy for a table.
+// Note: This struct only stores the immutable parts of a policy. Any mutable
+// components should be stored in separate elements so that an ALTER can update
+// the policy by add/drop new elements.
+message Policy {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 policy_id = 2 [(gogoproto.customname) = "PolicyID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.PolicyID"];
+  uint32 type = 3 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.PolicyType"];
+  uint32 command = 4 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb.PolicyCommand"];
+}
+
+// PolicyName is the name assigned to a specific policy, based on its ID.
+message PolicyName {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 policy_id = 2 [(gogoproto.customname) = "PolicyID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.PolicyID"];
+  string name = 3;
+}
+
+// PolicyRole is the role that is attached to a specific policy.
+message PolicyRole {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 policy_id = 2 [(gogoproto.customname) = "PolicyID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.PolicyID"];
+  string role_name = 3;
+}
+
+// PolicyUsingExpr represents the expression used in the USING clause of a policy.
+message PolicyUsingExpr {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 policy_id = 2 [(gogoproto.customname) = "PolicyID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.PolicyID"];
+  Expression embedded_expr = 3 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// PolicyWithCheckExpression represents the expression used in the WITH CHECK
+// clause of a policy.
+message PolicyWithCheckExpr {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 policy_id = 2 [(gogoproto.customname) = "PolicyID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.PolicyID"];
+  Expression embedded_expr = 3 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+// PolicyDeps includes the dependencies for types, sequences, or functions referenced
+// by both the USING and WITH CHECK expressions in the policy.
+message PolicyDeps {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 policy_id = 2 [(gogoproto.customname) = "PolicyID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.PolicyID"];
+  repeated uint32 uses_type_ids = 3 [(gogoproto.customname) = "UsesTypeIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  repeated uint32 uses_relation_ids = 4 [(gogoproto.customname) = "UsesRelationIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  repeated uint32 uses_function_ids = 5 [(gogoproto.customname) = "UsesFunctionIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+}
+
+// RowLevelSecurityEnabled handles enabling and disabling row level security of a table.
+message RowLevelSecurityEnabled {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+}
+
+// RowLevelSecurityForced handles forced and no-force row level security of a table.
+message RowLevelSecurityForced {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  bool is_forced = 2;
+}
+
 message Sequence {
   uint32 sequence_id = 1 [(gogoproto.customname) = "SequenceID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   int64 restart_with = 2;
@@ -370,6 +484,17 @@ message SequenceOption {
   string value = 3;
 }
 
+message SequenceValue {
+  uint32 sequence_id = 1 [(gogoproto.customname) = "SequenceID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  int64 prev_increment = 2;
+  int64 updated_increment = 3;
+  int64 prev_min_value = 4;
+  int64 updated_min_value = 5;
+  int64 prev_max_value = 6;
+  int64 updated_max_value = 7;
+  int64 prev_start = 8;
+  int64 updated_start = 9;
+}
 
 message SequenceOwner {
   uint32 sequence_id = 1 [(gogoproto.customname) = "SequenceID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
@@ -393,6 +518,7 @@ message View {
   uint32 view_id = 1 [(gogoproto.customname) = "ViewID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   repeated uint32 uses_type_ids = 2 [(gogoproto.customname) = "UsesTypeIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   repeated uint32 uses_relation_ids = 3 [(gogoproto.customname) = "UsesRelationIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  repeated uint32 uses_routine_ids = 12 [(gogoproto.customname) = "UsesRoutineIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
 
   // a reference from this view to another relation, tracked down to index/column level.
   message Reference {
@@ -495,10 +621,12 @@ message TriggerName {
   string name = 3;
 }
 
+// TriggerEnabled indicates that a trigger is enabled. If this element is
+// absent, the trigger is disabled.
 message TriggerEnabled {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   uint32 trigger_id = 2 [(gogoproto.customname) = "TriggerID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.TriggerID"];
-  bool enabled = 3;
+  reserved 3; // was: bool enabled
 }
 
 message TriggerTiming {
@@ -541,11 +669,26 @@ message TriggerFunctionCall {
 }
 
 message TriggerDeps {
+  message RelationReference {
+    uint32 id = 1 [(gogoproto.customname) = "ID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+    repeated uint32 column_ids = 2 [(gogoproto.customname) = "ColumnIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ColumnID"];
+    uint32 index_id = 3 [(gogoproto.customname) = "IndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
+  }
+
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   uint32 trigger_id = 2 [(gogoproto.customname) = "TriggerID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.TriggerID"];
-  repeated uint32 uses_relation_ids = 3 [(gogoproto.customname) = "UsesRelationIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  // UsesRelationIDs is a deprecated field that tracks the IDs of relations
+  // used by this trigger. It remains for backward compatibility with older
+  // versions and is superseded by UsesRelations.
+  repeated uint32 uses_relation_ids = 3 [deprecated = true, (gogoproto.customname) = "UsesRelationIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  // UsesRelations specifies the relations that this trigger depends on.
+  // In addition to the relation itself, it may include optional ColumnIDs
+  // or IndexIDs to capture fine-grained dependencies.
+  repeated RelationReference uses_relations = 6 [(gogoproto.nullable) = false];
   repeated uint32 uses_type_ids = 4 [(gogoproto.customname) = "UsesTypeIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   repeated uint32 uses_routine_ids = 5 [(gogoproto.customname) = "UsesRoutineIDs", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+
+  // NEXT VALUE: 7
 }
 
 message EnumType {
@@ -562,6 +705,40 @@ message AliasType {
 message CompositeType {
   uint32 type_id = 1 [(gogoproto.customname) = "TypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   uint32 array_type_id = 2 [(gogoproto.customname) = "ArrayTypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+}
+
+message DomainType {
+  uint32 type_id = 1 [(gogoproto.customname) = "TypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 array_type_id = 2 [(gogoproto.customname) = "ArrayTypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  TypeT base_type_t = 3 [(gogoproto.nullable) = false];
+}
+
+message DomainDefault {
+  uint32 type_id = 1 [(gogoproto.customname) = "TypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  Expression embedded_expr = 2 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+message DomainNotNull {
+  uint32 type_id = 1 [(gogoproto.customname) = "TypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 constraint_id = 2 [(gogoproto.customname) = "ConstraintID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ConstraintID"];
+}
+
+message DomainCheckConstraint {
+  uint32 type_id = 1 [(gogoproto.customname) = "TypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 constraint_id = 2 [(gogoproto.customname) = "ConstraintID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ConstraintID"];
+  Expression embedded_expr = 3 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+message DomainCheckConstraintUnvalidated {
+  uint32 type_id = 1 [(gogoproto.customname) = "TypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 constraint_id = 2 [(gogoproto.customname) = "ConstraintID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ConstraintID"];
+  Expression embedded_expr = 3 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+}
+
+message DomainConstraintName {
+  uint32 type_id = 1 [(gogoproto.customname) = "TypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 constraint_id = 2 [(gogoproto.customname) = "ConstraintID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ConstraintID"];
+  string name = 3;
 }
 
 message Schema {
@@ -625,6 +802,11 @@ message TableLocalityRegionalByRow {
   string as = 2;
 }
 
+message TableLocalityRegionalByRowUsingConstraint {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  uint32 constraint_id = 2 [(gogoproto.customname) = "ConstraintID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.ConstraintID"];
+}
+
 message IndexPartitioning {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   uint32 index_id = 2 [(gogoproto.customname) = "IndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
@@ -639,6 +821,10 @@ message RowLevelTTL {
   // ExpirationExpr is not set. This expression is used to establish column
   // dependencies.
   Expression ttl_expr = 3 [(gogoproto.customname) = "TTLExpr"];
+  // SeqNum differentiates different versions of the TTL configuration for the
+  // same table. When modifying TTL parameters, the old element is dropped and
+  // a new one with an incremented SeqNum is added.
+  uint32 seq_num = 4 [(gogoproto.customname) = "SeqNum"];
 }
 
 message ColumnName {
@@ -666,6 +852,11 @@ message TableComment {
 
 message TypeComment {
   uint32 type_id = 1 [(gogoproto.customname) = "TypeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  string comment = 2;
+}
+
+message FunctionComment {
+  uint32 function_id = 1 [(gogoproto.customname) = "FunctionID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   string comment = 2;
 }
 
@@ -785,13 +976,18 @@ message TableZoneConfig {
 message IndexZoneConfig {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
   uint32 index_id = 2 [(gogoproto.customname) = "IndexID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.IndexID"];
-  cockroach.config.zonepb.Subzone subzone = 3 [(gogoproto.nullable) = false];
-  repeated cockroach.config.zonepb.SubzoneSpan subzone_spans = 4 [(gogoproto.nullable) = false];
+  cockroach.config.zonepb.Subzone subzone = 4 [(gogoproto.nullable) = false];
+  repeated cockroach.config.zonepb.SubzoneSpan subzone_spans = 5 [(gogoproto.nullable) = false];
   // `seq_num` is used to differentiate different subzone config elements tied
   // to the same index. E.g. If we attempt to update an index subzone config,
   // our solution is to drop the existing element and add a new element, with
   // different `seq_num`.
-  uint32 seq_num = 5;
+  uint32 seq_num = 6;
+  int32 old_idx_ref = 7;
+  // In v24.3, we deprecated this field ID (previously: partition_name) in favor
+  // of creating a new element that represents partitions --
+  // PartitionZoneConfig.
+  reserved 3;
 }
 
 message PartitionZoneConfig {
@@ -805,6 +1001,7 @@ message PartitionZoneConfig {
   // config, our solution is to drop the existing element and add a new element,
   // with different `seq_num`.
   uint32 seq_num = 6;
+  int32 old_idx_ref = 7;
 }
 
 // DatabaseData models what needs to be GCed when a database is dropped.
@@ -831,6 +1028,13 @@ message TablePartitioning {
 // TableSchemaLocked models storage parameter `schema_locked` of a table.
 message TableSchemaLocked {
   uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+}
+
+// TableStorageParam models the storage parameters of a table other than `schema_locked` and RowLevelTTL-related ones.
+message TableStorageParam {
+  uint32 table_id = 1 [(gogoproto.customname) = "TableID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  string name = 2;
+  string value = 3;
 }
 
 // LDRJobIDs models the field `ldr_job_ids` of a table descriptor.
@@ -903,7 +1107,13 @@ message FunctionSecurity {
   cockroach.sql.catalog.catpb.FunctionSecurity security = 2 [(gogoproto.nullable) = false];
 }
 
+message FunctionParams {
+  uint32 function_id = 1 [(gogoproto.customname) = "FunctionID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/catid.DescID"];
+  repeated Function.Parameter params = 2 [(gogoproto.nullable) = false];
+  TypeT return_type = 3 [(gogoproto.nullable) = true];
+}
+
 message ElementCreationMetadata {
-  bool in_23_1_or_later = 1;
-  bool in_24_3_or_later = 2;
+  reserved 1, 2;
+  bool in_26_1_or_later = 3;
 }

@@ -14,7 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats/sqlstatstestutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -33,7 +33,11 @@ func TestPersistedSQLStatsReset(t *testing.T) {
 	skip.UnderStress(t, "the test is too slow to run under stress")
 
 	ctx := context.Background()
-	cluster := serverutils.StartCluster(t, 3 /* numNodes */, base.TestClusterArgs{})
+	cluster := serverutils.StartCluster(t, 3 /* numNodes */, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DisableElasticCPUAdmission: true,
+		},
+	})
 	defer cluster.Stopper().Stop(ctx)
 	server := cluster.Server(0 /* idx */).ApplicationLayer()
 
@@ -61,35 +65,44 @@ func TestPersistedSQLStatsReset(t *testing.T) {
 	appName := "controller_test"
 	sqlDB.Exec(t, "SET application_name = $1", appName)
 
-	expectedStmtFingerprintToFingerprintID := make(map[string]string)
+	// Map canonical fingerprint text to the expected hex-encoded fingerprint
+	// ID. Persisted rows are identified by fingerprint ID rather than query
+	// text because the query column is populated asynchronously via a JOIN
+	// against system.statements.
+	expectedFingerprintIDs := make(map[string]string)
 	for fingerprint, query := range testCasesForDisk {
-		// We will populate the fingerprint ID later.
-		expectedStmtFingerprintToFingerprintID[fingerprint] = ""
+		expectedFingerprintIDs[fingerprint] = sqlstatstestutil.FingerprintIDHex(fingerprint, "defaultdb")
 		sqlDB.Exec(t, query)
 	}
 
-	sqlStats := server.SQLServer().(*sql.Server).GetSQLStatsProvider()
-	sqlStats.(*persistedsqlstats.PersistedSQLStats).MaybeFlush(ctx, cluster.ApplicationLayer(0).AppStopper())
+	sqlstatstestutil.WaitForStatementEntriesAtLeast(t, observer,
+		len(testCasesForDisk),
+		sqlstatstestutil.StatementFilter{App: appName})
 
-	checkInsertedStmtStatsAndUpdateFingerprintIDs(t, appName, observer, expectedStmtFingerprintToFingerprintID)
-	checkInsertedTxnStats(t, appName, observer, expectedStmtFingerprintToFingerprintID)
+	sqlStats := server.SQLServer().(*sql.Server).GetSQLStatsProvider()
+	sqlStats.MaybeFlush(ctx, cluster.ApplicationLayer(0).AppStopper())
+
+	checkInsertedStmtStats(t, appName, observer, expectedFingerprintIDs)
+	checkInsertedTxnStats(t, appName, observer, expectedFingerprintIDs)
 
 	// Run few additional queries, so we would also have some SQL stats in-memory.
 	for fingerprint, query := range testCasesForMem {
 		sqlDB.Exec(t, query)
-		if _, ok := expectedStmtFingerprintToFingerprintID[fingerprint]; !ok {
-			expectedStmtFingerprintToFingerprintID[fingerprint] = ""
+		if _, ok := expectedFingerprintIDs[fingerprint]; !ok {
+			expectedFingerprintIDs[fingerprint] = sqlstatstestutil.FingerprintIDHex(fingerprint, "defaultdb")
 		}
 	}
+	sqlstatstestutil.WaitForStatementEntriesAtLeast(t, observer,
+		len(testCasesForMem),
+		sqlstatstestutil.StatementFilter{App: appName})
 
 	// Sanity check that we still have the same count since we are still within
 	// the same aggregation interval.
-	checkInsertedStmtStatsAndUpdateFingerprintIDs(t, appName, observer, expectedStmtFingerprintToFingerprintID)
-	checkInsertedTxnStats(t, appName, observer, expectedStmtFingerprintToFingerprintID)
+	checkInsertedStmtStats(t, appName, observer, expectedFingerprintIDs)
+	checkInsertedTxnStats(t, appName, observer, expectedFingerprintIDs)
 
 	// Resets cluster wide SQL stats.
-	sqlStatsController := server.SQLServer().(*sql.Server).GetSQLStatsController()
-	require.NoError(t, sqlStatsController.ResetClusterSQLStats(ctx))
+	require.NoError(t, sqlStats.ResetClusterSQLStats(ctx))
 
 	var count int
 	observer.QueryRow(t,
@@ -103,29 +116,27 @@ func TestPersistedSQLStatsReset(t *testing.T) {
 	require.Equal(t, 0 /* expected */, count)
 }
 
-func checkInsertedStmtStatsAndUpdateFingerprintIDs(
+func checkInsertedStmtStats(
 	t *testing.T,
 	appName string,
 	observer *sqlutils.SQLRunner,
-	expectedStmtFingerprintToFingerprintID map[string]string,
+	expectedFingerprintIDs map[string]string,
 ) {
 	result := observer.QueryStr(t,
 		`
-SELECT encode(fingerprint_id, 'hex'), metadata ->> 'query'
+SELECT encode(fingerprint_id, 'hex')
 FROM crdb_internal.statement_statistics
 WHERE app_name = $1`, appName)
 
-	for expectedFingerprint := range expectedStmtFingerprintToFingerprintID {
-		var found bool
-		for _, row := range result {
-			if expectedFingerprint == row[1] {
-				found = true
-
-				// Populate fingerprintID.
-				expectedStmtFingerprintToFingerprintID[expectedFingerprint] = row[0]
-			}
-		}
-		require.True(t, found, "expect %s to be found, but it was not", expectedFingerprint)
+	got := make(map[string]struct{}, len(result))
+	for _, row := range result {
+		got[row[0]] = struct{}{}
+	}
+	for canonical, expectedID := range expectedFingerprintIDs {
+		_, found := got[expectedID]
+		require.True(t, found,
+			"expected fingerprint %q (id=%s) to be found, but it was not",
+			canonical, expectedID)
 	}
 }
 
@@ -162,7 +173,9 @@ func TestActivityTablesReset(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DisableElasticCPUAdmission: true,
+	})
 	sqlDB := sqlutils.MakeSQLRunner(db)
 	defer s.Stopper().Stop(context.Background())
 
@@ -181,7 +194,7 @@ func TestActivityTablesReset(t *testing.T) {
 	})
 
 	// Give the query runner privilege to insert into the activity tables.
-	sqlDB.Exec(t, "INSERT INTO system.users VALUES ('node', NULL, true, 3)")
+	sqlDB.Exec(t, "INSERT INTO system.users VALUES ('node', NULL, true, 3, NULL)")
 	sqlDB.Exec(t, "GRANT node TO root")
 
 	// Insert into system.statement_activity table
@@ -254,155 +267,17 @@ func TestActivityTablesReset(t *testing.T) {
 	require.Equal(t, 0 /* expected */, count)
 }
 
-func TestInsightsTablesReset(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	sqlDB := sqlutils.MakeSQLRunner(db)
-	defer s.Stopper().Stop(context.Background())
-
-	// Give the query runner privilege to insert into the insights tables.
-	sqlDB.Exec(t, "INSERT INTO system.users VALUES ('node', NULL, true, 3)")
-	sqlDB.Exec(t, "GRANT node TO root")
-
-	// Insert into system.statement_execution_insights table
-	sqlDB.Exec(t, `
-		INSERT INTO system.public.statement_execution_insights (
-		                                                        session_id,
-		                                                        transaction_id,
-		                                                        transaction_fingerprint_id,
-		                                                        statement_id,
-		                                                        statement_fingerprint_id,
-		                                                        problem,
-		                                                        causes,
-		                                                        query,
-		                                                        status,
-		                                                        start_time,
-		                                                        end_time,
-		                                                        full_scan,
-		                                                        user_name,
-		                                                        app_name,
-		                                                        user_priority,
-		                                                        database_name,
-		                                                        plan_gist,
-		                                                        retries,
-		                                                        last_retry_reason,
-		                                                        execution_node_ids,
-		                                                        index_recommendations,
-		                                                        implicit_txn,
-		                                                        cpu_sql_nanos,
-		                                                        error_code,
-		                                                        contention_time,
-		                                                        contention_info,
-		                                                        details
-		                                                        )
-		VALUES (
-		        '178b8f4d507072200000000000000001',
-		        '14a07bbc-dfdb-41df-9231-b6235943847d',
-		        '\xd98ea7ce7040ab94',
-		        '178b8f50ab40d8680000000000000001',
-		        '\x125167e869920859',
-		        1,
-		        '{}',
-		        'SELECT a.balance, b.balance FROM insights_workload_table_0 AS a LEFT JOIN insights_workload_table_1 AS b ON a.shared_key = b.shared_key WHERE a.balance < _',
-		        1,
-		        '2023-10-06 15:47:41',
-		        '2023-10-06 15:47:42',
-		        't',
-		        'root',
-		        'insights_tables_reset',
-		        'normal',
-		        'insights',
-		        'AgHmAQIACgAAAAHkAQIACgAAAAMJAgICAAAFBAYE',
-		        0,
-		        null,
-		        '{}',
-		        '{"creation : CREATE INDEX ON insights.public.insights_workload_table_0 (balance) STORING (shared_key);"}',
-		        't',
-		        0,
-		        'XXUUU',
-		        null,
-		        null,
-		        '{}'
-		)
-	`)
-	//Insert into system.transaction_execution_insights table
-	sqlDB.Exec(t, `
-			INSERT INTO system.public.transaction_execution_insights (
-			                                                        session_id,
-			                                                        transaction_id,
-			                                                        transaction_fingerprint_id,
-			                                                        stmt_execution_ids,
-			                                                        problems,
-			                                                        causes,
-			                                                        query_summary,
-			                                                        status,
-			                                                        start_time,
-			                                                        end_time,
-			                                                        user_name,
-			                                                        app_name,
-			                                                        user_priority,
-			                                                        retries,
-			                                                        last_retry_reason,
-			                                                        implicit_txn,
-			                                                        cpu_sql_nanos,
-			                                                        last_error_code,
-			                                                        contention_time,
-			                                                        contention_info,
-			                                                        details
-	
-	)
-			VALUES (
-			        '178b8f4d507072200000000000000001',
-			        '14a07bbc-dfdb-41df-9231-b6235943847d',
-			        '\xd98ea7ce7040ab94',
-			        '{"178b8f50ab40d8680000000000000001"}',
-			        '{1}',
-			        '{}',
-			        'SELECT a.balance, b.balance FROM insights_workload_table_0 AS a LEFT JOIN insights_workload_table_1 AS b ON a.shared_key = b.shared_key WHERE a.balance < _',
-			        1,
-			        '2023-10-06 15:47:41',
-			        '2023-10-06 15:47:42',
-			        'root',
-			        'insights_tables_reset',
-			        'normal',
-			        0,
-			        null,
-			        't',
-			        0,
-			        'XXUUU',
-			        null,
-			        null,
-			        '{}'
-			)
-		`)
-
-	// Check that system.{statement|transaction}_execution_insights tables both have 1 row.
-	var count int
-	sqlDB.QueryRow(t, "SELECT count(*) FROM system.statement_execution_insights").Scan(&count)
-	require.Equal(t, 1 /* expected */, count)
-
-	sqlDB.QueryRow(t, "SELECT count(*) FROM system.transaction_execution_insights").Scan(&count)
-	require.Equal(t, 1 /* expected */, count)
-
-	// Flush the tables.
-	sqlDB.QueryRow(t, "SELECT crdb_internal.reset_insights_tables()")
-
-	sqlDB.QueryRow(t, "SELECT count(*) FROM system.statement_execution_insights").Scan(&count)
-	require.Equal(t, 0 /* expected */, count)
-
-	sqlDB.QueryRow(t, "SELECT count(*) FROM system.transaction_execution_insights").Scan(&count)
-	require.Equal(t, 0 /* expected */, count)
-}
-
 func TestStmtStatsEnable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	// Start the cluster. (One node is sufficient; the outliers system is currently in-memory only.)
 	ctx := context.Background()
-	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			DisableElasticCPUAdmission: true,
+		},
+	})
 	defer tc.Stopper().Stop(ctx)
 
 	serverutils.SetClusterSetting(t, tc, "sql.metrics.statement_details.enabled", "false")

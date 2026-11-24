@@ -5,9 +5,15 @@
 
 package tracing
 
-import "context"
+import (
+	"context"
+	"time"
 
-type activeSpanKey struct{}
+	"github.com/cockroachdb/cockroach/pkg/util/ctxutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
+)
+
+var activeSpanKey = ctxutil.RegisterFastValueKey()
 
 // noCtx is a singleton that we use internally to unify code paths that only
 // optionally take a Context. The specific construction here does not matter,
@@ -17,9 +23,8 @@ var noCtx context.Context = &struct{ context.Context }{context.Background()}
 
 // SpanFromContext returns the *Span contained in the Context, if any.
 func SpanFromContext(ctx context.Context) *Span {
-	val := ctx.Value(activeSpanKey{})
-	if sp, ok := val.(*Span); ok {
-		return sp
+	if v := ctxutil.FastValue(ctx, activeSpanKey); v != nil {
+		return v.(*Span)
 	}
 	return nil
 }
@@ -41,26 +46,46 @@ func maybeWrapCtx(ctx context.Context, sp *Span) (context.Context, *Span) {
 	if ctx == noCtx {
 		return noCtx, sp
 	}
-	// NB: we check sp != nil explicitly because some callers want to remove a
-	// Span from a Context, and thus pass nil.
-	if sp != nil && sp.IsNoop() {
-		// If the context originally had the noop span, and we would now be wrapping
-		// the noop span in it again, we don't have to wrap at all and can save an
+	// NB: Some callers want to remove a Span from a Context, and thus pass nil.
+	if sp == nil {
+		// If the context originally had the nil span, and we would now be wrapping
+		// the nil span in it again, we don't have to wrap at all and can save an
 		// allocation.
 		//
 		// Note that applying this optimization for a nontrivial ctxSp would
 		// constitute a bug: A real, non-recording span might later start recording.
 		// Besides, the caller expects to get their own span, and will .Finish() it,
 		// leading to an extra, premature call to Finish().
-		if ctxSp := SpanFromContext(ctx); ctxSp != nil && ctxSp.IsNoop() {
+		if ctxSp := SpanFromContext(ctx); ctxSp == nil {
 			return ctx, sp
 		}
 	}
-	return context.WithValue(ctx, activeSpanKey{}, sp), sp
+	return ctxutil.WithFastValue(ctx, activeSpanKey, sp), sp
 }
 
 // ContextWithSpan returns a Context wrapping the supplied Span.
 func ContextWithSpan(ctx context.Context, sp *Span) context.Context {
 	ctx, _ = maybeWrapCtx(ctx, sp)
 	return ctx
+}
+
+// InjectCompletedSpan adds a span to the current trace that represents work
+// that already happened. The span is recorded as already finished with the
+// specified start time and duration. It cannot have children and no Span
+// pointer is returned.
+//
+// This is useful for recording delays that happened in library or runtime code
+// where a span couldn't be created before the work started.
+//
+// If ctx doesn't contain a recording span, this is a no-op.
+func InjectCompletedSpan(
+	ctx context.Context, name string, start time.Time, duration time.Duration,
+) {
+	sp := SpanFromContext(ctx)
+	if sp == nil || sp.RecordingType() == tracingpb.RecordingOff {
+		return
+	}
+	// Create a child span with the custom start time, then immediately finish it.
+	child := sp.Tracer().StartSpan(name, WithParent(sp), WithStartTime(start))
+	child.FinishAt(start.Add(duration))
 }

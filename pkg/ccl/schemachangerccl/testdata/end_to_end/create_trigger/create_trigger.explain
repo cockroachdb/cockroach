@@ -20,43 +20,65 @@ Schema change plan for CREATE TRIGGER tr BEFORE INSERT OR UPDATE OR DELETE ON �
  │         │    ├── ABSENT → PUBLIC TriggerTiming:{DescID: 104 (t), TriggerID: 1}
  │         │    ├── ABSENT → PUBLIC TriggerEvents:{DescID: 104 (t), TriggerID: 1}
  │         │    ├── ABSENT → PUBLIC TriggerFunctionCall:{DescID: 104 (t), TriggerID: 1}
- │         │    └── ABSENT → PUBLIC TriggerDeps:{DescID: 104 (t), TriggerID: 1}
- │         └── 8 Mutation operations
+ │         │    └── ABSENT → PUBLIC TriggerDeps:{DescID: 104 (t), TriggerID: 1, ReferencedFunctionIDs: [105 (f)]}
+ │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │         │    └── PUBLIC → ABSENT TableSchemaLocked:{DescID: 104 (t)}
+ │         └── 10 Mutation operations
+ │              ├── SetTableSchemaLocked {"TableID":104}
  │              ├── AddTrigger {"Trigger":{"TableID":104,"TriggerID":1}}
  │              ├── SetTriggerName {"Name":{"Name":"tr","TableID":104,"TriggerID":1}}
- │              ├── SetTriggerEnabled {"Enabled":{"Enabled":true,"TableID":104,"TriggerID":1}}
+ │              ├── SetTriggerEnabled {"Enabled":true,"TableID":104,"TriggerID":1}
  │              ├── SetTriggerTiming {"Timing":{"ActionTime":1,"ForEachRow":true,"TableID":104,"TriggerID":1}}
  │              ├── SetTriggerEvents {"Events":{"TableID":104,"TriggerID":1}}
  │              ├── SetTriggerFunctionCall {"FunctionCall":{"FuncBody":"BEGIN\nRAISE NOTI...","FuncID":105,"TableID":104,"TriggerID":1}}
  │              ├── SetTriggerForwardReferences {"Deps":{"TableID":104,"TriggerID":1}}
+ │              ├── UpdateTriggerBackReferencesInRelations {"TableID":104,"TriggerID":1}
  │              └── AddTriggerBackReferencesInRoutines {"BackReferencedTableID":104,"BackReferencedTriggerID":1}
- └── PreCommitPhase
-      ├── Stage 1 of 2 in PreCommitPhase
-      │    ├── 7 elements transitioning toward PUBLIC
-      │    │    ├── PUBLIC → ABSENT Trigger:{DescID: 104 (t), TriggerID: 1}
-      │    │    ├── PUBLIC → ABSENT TriggerName:{DescID: 104 (t), TriggerID: 1}
-      │    │    ├── PUBLIC → ABSENT TriggerEnabled:{DescID: 104 (t), TriggerID: 1}
-      │    │    ├── PUBLIC → ABSENT TriggerTiming:{DescID: 104 (t), TriggerID: 1}
-      │    │    ├── PUBLIC → ABSENT TriggerEvents:{DescID: 104 (t), TriggerID: 1}
-      │    │    ├── PUBLIC → ABSENT TriggerFunctionCall:{DescID: 104 (t), TriggerID: 1}
-      │    │    └── PUBLIC → ABSENT TriggerDeps:{DescID: 104 (t), TriggerID: 1}
-      │    └── 1 Mutation operation
-      │         └── UndoAllInTxnImmediateMutationOpSideEffects
-      └── Stage 2 of 2 in PreCommitPhase
-           ├── 7 elements transitioning toward PUBLIC
-           │    ├── ABSENT → PUBLIC Trigger:{DescID: 104 (t), TriggerID: 1}
-           │    ├── ABSENT → PUBLIC TriggerName:{DescID: 104 (t), TriggerID: 1}
-           │    ├── ABSENT → PUBLIC TriggerEnabled:{DescID: 104 (t), TriggerID: 1}
-           │    ├── ABSENT → PUBLIC TriggerTiming:{DescID: 104 (t), TriggerID: 1}
-           │    ├── ABSENT → PUBLIC TriggerEvents:{DescID: 104 (t), TriggerID: 1}
-           │    ├── ABSENT → PUBLIC TriggerFunctionCall:{DescID: 104 (t), TriggerID: 1}
-           │    └── ABSENT → PUBLIC TriggerDeps:{DescID: 104 (t), TriggerID: 1}
-           └── 8 Mutation operations
-                ├── AddTrigger {"Trigger":{"TableID":104,"TriggerID":1}}
-                ├── SetTriggerName {"Name":{"Name":"tr","TableID":104,"TriggerID":1}}
-                ├── SetTriggerEnabled {"Enabled":{"Enabled":true,"TableID":104,"TriggerID":1}}
-                ├── SetTriggerTiming {"Timing":{"ActionTime":1,"ForEachRow":true,"TableID":104,"TriggerID":1}}
-                ├── SetTriggerEvents {"Events":{"TableID":104,"TriggerID":1}}
-                ├── SetTriggerFunctionCall {"FunctionCall":{"FuncBody":"BEGIN\nRAISE NOTI...","FuncID":105,"TableID":104,"TriggerID":1}}
-                ├── SetTriggerForwardReferences {"Deps":{"TableID":104,"TriggerID":1}}
-                └── AddTriggerBackReferencesInRoutines {"BackReferencedTableID":104,"BackReferencedTriggerID":1}
+ ├── PreCommitPhase
+ │    ├── Stage 1 of 2 in PreCommitPhase
+ │    │    ├── 7 elements transitioning toward PUBLIC
+ │    │    │    ├── PUBLIC → ABSENT Trigger:{DescID: 104 (t), TriggerID: 1}
+ │    │    │    ├── PUBLIC → ABSENT TriggerName:{DescID: 104 (t), TriggerID: 1}
+ │    │    │    ├── PUBLIC → ABSENT TriggerEnabled:{DescID: 104 (t), TriggerID: 1}
+ │    │    │    ├── PUBLIC → ABSENT TriggerTiming:{DescID: 104 (t), TriggerID: 1}
+ │    │    │    ├── PUBLIC → ABSENT TriggerEvents:{DescID: 104 (t), TriggerID: 1}
+ │    │    │    ├── PUBLIC → ABSENT TriggerFunctionCall:{DescID: 104 (t), TriggerID: 1}
+ │    │    │    └── PUBLIC → ABSENT TriggerDeps:{DescID: 104 (t), TriggerID: 1, ReferencedFunctionIDs: [105 (f)]}
+ │    │    ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │    │    │    └── ABSENT → PUBLIC TableSchemaLocked:{DescID: 104 (t)}
+ │    │    └── 1 Mutation operation
+ │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
+ │    └── Stage 2 of 2 in PreCommitPhase
+ │         ├── 7 elements transitioning toward PUBLIC
+ │         │    ├── ABSENT → PUBLIC Trigger:{DescID: 104 (t), TriggerID: 1}
+ │         │    ├── ABSENT → PUBLIC TriggerName:{DescID: 104 (t), TriggerID: 1}
+ │         │    ├── ABSENT → PUBLIC TriggerEnabled:{DescID: 104 (t), TriggerID: 1}
+ │         │    ├── ABSENT → PUBLIC TriggerTiming:{DescID: 104 (t), TriggerID: 1}
+ │         │    ├── ABSENT → PUBLIC TriggerEvents:{DescID: 104 (t), TriggerID: 1}
+ │         │    ├── ABSENT → PUBLIC TriggerFunctionCall:{DescID: 104 (t), TriggerID: 1}
+ │         │    └── ABSENT → PUBLIC TriggerDeps:{DescID: 104 (t), TriggerID: 1, ReferencedFunctionIDs: [105 (f)]}
+ │         ├── 1 element transitioning toward TRANSIENT_PUBLIC
+ │         │    └── PUBLIC → ABSENT TableSchemaLocked:{DescID: 104 (t)}
+ │         └── 13 Mutation operations
+ │              ├── SetTableSchemaLocked {"TableID":104}
+ │              ├── AddTrigger {"Trigger":{"TableID":104,"TriggerID":1}}
+ │              ├── SetTriggerName {"Name":{"Name":"tr","TableID":104,"TriggerID":1}}
+ │              ├── SetTriggerEnabled {"Enabled":true,"TableID":104,"TriggerID":1}
+ │              ├── SetTriggerTiming {"Timing":{"ActionTime":1,"ForEachRow":true,"TableID":104,"TriggerID":1}}
+ │              ├── SetTriggerEvents {"Events":{"TableID":104,"TriggerID":1}}
+ │              ├── SetTriggerFunctionCall {"FunctionCall":{"FuncBody":"BEGIN\nRAISE NOTI...","FuncID":105,"TableID":104,"TriggerID":1}}
+ │              ├── SetTriggerForwardReferences {"Deps":{"TableID":104,"TriggerID":1}}
+ │              ├── UpdateTriggerBackReferencesInRelations {"TableID":104,"TriggerID":1}
+ │              ├── AddTriggerBackReferencesInRoutines {"BackReferencedTableID":104,"BackReferencedTriggerID":1}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":104,"Initialize":true}
+ │              ├── SetJobStateOnDescriptor {"DescriptorID":105,"Initialize":true}
+ │              └── CreateSchemaChangerJob {"RunningStatus":"Pending: Updatin..."}
+ └── PostCommitPhase
+      └── Stage 1 of 1 in PostCommitPhase
+           ├── 1 element transitioning toward TRANSIENT_PUBLIC
+           │    └── ABSENT → TRANSIENT_PUBLIC TableSchemaLocked:{DescID: 104 (t)}
+           └── 4 Mutation operations
+                ├── SetTableSchemaLocked {"Locked":true,"TableID":104}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":104}
+                ├── RemoveJobStateFromDescriptor {"DescriptorID":105}
+                └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"all stages compl..."}

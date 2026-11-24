@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
@@ -19,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
@@ -46,9 +48,6 @@ import (
 // has been optimized.
 type RelExpr interface {
 	opt.Expr
-
-	// Memo is the memo which contains this relational expression.
-	Memo() *Memo
 
 	// Relational is the set of logical properties that describe the content and
 	// characteristics of this expression's behavior and results.
@@ -409,6 +408,9 @@ type ScanFlags struct {
 	// NoFullScan disallows use of a full scan for scanning this table.
 	NoFullScan bool
 
+	// AvoidFullScan avoids use of a full scan for scanning this table.
+	AvoidFullScan bool
+
 	// ForceIndex forces the use of a specific index (specified in Index).
 	// ForceIndex and NoIndexJoin cannot both be set at the same time.
 	ForceIndex bool
@@ -593,19 +595,19 @@ func (jf JoinFlags) String() string {
 }
 
 func (ij *InnerJoinExpr) initUnexportedFields(mem *Memo) {
-	initJoinMultiplicity(ij)
+	initJoinMultiplicity(mem, ij)
 }
 
 func (lj *LeftJoinExpr) initUnexportedFields(mem *Memo) {
-	initJoinMultiplicity(lj)
+	initJoinMultiplicity(mem, lj)
 }
 
 func (fj *FullJoinExpr) initUnexportedFields(mem *Memo) {
-	initJoinMultiplicity(fj)
+	initJoinMultiplicity(mem, fj)
 }
 
 func (sj *SemiJoinExpr) initUnexportedFields(mem *Memo) {
-	initJoinMultiplicity(sj)
+	initJoinMultiplicity(mem, sj)
 }
 
 func (lj *LookupJoinExpr) initUnexportedFields(mem *Memo) {
@@ -733,7 +735,8 @@ type UDFDefinition struct {
 	Params opt.ColList
 
 	// Body contains a relational expression for each statement in the function
-	// body. It is unset during construction of a recursive UDF.
+	// body. It is nil during construction of a recursive UDF, and when body
+	// building is deferred to execution time (see BodyBuilder).
 	Body []RelExpr
 
 	// BodyProps contains the physical properties with which each body statement
@@ -741,9 +744,25 @@ type UDFDefinition struct {
 	// at the same position in Body.
 	BodyProps []*physical.Required
 
+	// BodyASTs contains the AST representation of each statement in Body. The
+	// size of this slice matches that of Body, but it may contain nil entries
+	// for non tree.RoutineLangSQL types.
+	BodyASTs []tree.Statement
+
 	// BodyStmts, if set, is the string representation of each statement in
 	// Body. It is only populated when verbose tracing is enabled.
 	BodyStmts []string
+
+	// BodyTags contains the type of each statement in Body, which is populated
+	// via `tree.Statement.StatementTag()`.
+	BodyTags []string
+
+	// FirstStmtOutput allows the result of the first body statement to be
+	// redirected. Only one of the options can be set. If one is set, there will
+	// be at least two body statements - the first with redirected output, and the
+	// last to produce the result of the routine. This invariant is enforced when
+	// the routine is built.
+	FirstStmtOutput RoutineStmtOutput
 
 	// ExceptionBlock contains information needed for exception-handling when the
 	// body of this routine returns an error. It can be unset.
@@ -754,12 +773,28 @@ type UDFDefinition struct {
 	// handling.
 	BlockState *tree.BlockState
 
-	// CursorDeclaration contains the information needed to open a SQL cursor with
-	// the result of the *first* body statement. If it is set, there will be at
-	// least two body statements - one to open the cursor, and one to evaluate the
-	// result of the routine. This invariant is enforced when the PLpgSQL routine
-	// is built. CursorDeclaration may be unset.
-	CursorDeclaration *tree.RoutineOpenCursor
+	// ResultBufferID, if set, identifies the buffer that stores the result for
+	// the set-returning PL/pgSQL function that this UDFDefinition represents.
+	// Sub-routines within the body statements may use this ID to add their
+	// results to the same buffer. This is used to implement the PL/pgsql
+	// RETURN NEXT and RETURN QUERY statements.
+	ResultBufferID RoutineResultBufferID
+
+	// BodyBuilder, when non-nil, defers body building to execution time.
+	// When set, Body and BodyProps are nil at plan time; they will be
+	// populated by calling BodyBuilder.Build() at execution time.
+	BodyBuilder RoutineBodyBuilder
+
+	// SecurityMode is RoutineDefiner when this routine was declared SECURITY
+	// DEFINER. It is consumed at runtime in pkg/sql/routine.go to push the
+	// routine owner onto the eval context's effective-user stack for the
+	// duration of the body's execution, so privilege checks, ownership
+	// assignments, and the current_user builtin all resolve to RoutineOwner.
+	SecurityMode tree.RoutineSecurity
+
+	// RoutineOwner is the owner of the routine, populated only when
+	// SecurityMode is RoutineDefiner. See SecurityMode for how it is used.
+	RoutineOwner username.SQLUsername
 }
 
 // ExceptionBlock contains the information needed to match and handle errors in
@@ -775,6 +810,27 @@ type ExceptionBlock struct {
 	// each code in the Codes slice.
 	Actions []*UDFDefinition
 }
+
+// RoutineStmtOutput allows the result of a statement in a PL/pgSQL function to
+// be redirected from the default output buffer. This is used to open cursors
+// and implement the RETURN NEXT and RETURN QUERY statements.
+//
+// Only one of the members can be set.
+type RoutineStmtOutput struct {
+	// CursorDeclaration contains the information needed to open a SQL cursor
+	// with the result of the *first* body statement.
+	CursorDeclaration *tree.RoutineOpenCursor
+
+	// TargetBufferID identifies the result buffer of an ancestor set-returning
+	// PL/pgSQL function. The result of the *first* body statement will be added
+	// to this buffer.
+	TargetBufferID RoutineResultBufferID
+}
+
+// RoutineResultBufferID identifies a buffer that is used to store the result of
+// a set-returning PL/pgSQL function. The RoutineBufferID is unique within the
+// scope of a single query.
+type RoutineResultBufferID uint64
 
 // WindowFrame denotes the definition of a window frame for an individual
 // window function, excluding the OFFSET expressions, if present.
@@ -859,7 +915,7 @@ func (s *ScanPrivate) IsFullIndexScan() bool {
 // IsInvertedScan returns true if the index being scanned is an inverted
 // index.
 func (s *ScanPrivate) IsInvertedScan(md *opt.Metadata) bool {
-	return md.Table(s.Table).Index(s.Index).IsInverted()
+	return md.Table(s.Table).Index(s.Index).Type() == idxtype.INVERTED
 }
 
 // IsVirtualTable returns true if the table being scanned is a virtual table.
@@ -1402,6 +1458,60 @@ type PostQueryBuilder interface {
 		bindingProps *props.Relational,
 		colMap opt.ColMap,
 	) (RelExpr, error)
+}
+
+// RoutineBodyBuilder defers building of SQL routine body statements to
+// execution time. At plan time, the builder captures metadata (parameter
+// types, privilege context, statement tree state). At execution time,
+// Build constructs the body RelExprs in a fresh memo.
+//
+// Like PostQueryBuilder, Build does not mutate captured state; it is
+// safe to call concurrently if the plan is cached and reused.
+//
+// Note: factory is always *norm.Factory; declared as interface{} to
+// avoid circular package dependencies.
+type RoutineBodyBuilder interface {
+	// Build constructs all body statements at once into the single provided
+	// factory, for callers that do not interleave building with execution. It
+	// produces the same per-statement RelExprs as BuildStmt over
+	// [0, NumStmts()), but with all statements sharing one factory and one set
+	// of parameter columns. (BuildStmt requires a fresh factory per call to
+	// keep parameter column IDs stable; see BuildStmt.)
+	Build(
+		ctx context.Context,
+		semaCtx *tree.SemaContext,
+		evalCtx *eval.Context,
+		catalog cat.Catalog,
+		factory interface{},
+	) (body []RelExpr, bodyProps []*physical.Required, params opt.ColList, err error)
+
+	// NumStmts returns the number of body statements that will be built,
+	// including any synthetic statement appended for a VOID-returning
+	// routine. It is stable for the lifetime of the builder.
+	NumStmts() int
+
+	// BuildStmt builds the body statement at stmtIdx into a RelExpr using the
+	// provided catalog and factory. The caller may refresh the catalog
+	// between calls so that a statement can resolve names introduced by DDL
+	// executed in an earlier statement.
+	//
+	// The caller must pass a fresh, empty factory on each call. Parameter
+	// columns are then synthesized with identical column IDs across calls, so
+	// one argument-to-parameter mapping serves every statement.
+	//
+	// TODO(janexing): think about the mutation detection with interleaving
+	// model. Unlike the lump-sum Build path, where all statements share one
+	// statementTree and a later body statement sees mutations registered by
+	// earlier ones, BuildStmt re-inits the tree per call, so cross-statement
+	// conflict detection within a body no longer happens here.
+	BuildStmt(
+		ctx context.Context,
+		semaCtx *tree.SemaContext,
+		evalCtx *eval.Context,
+		catalog cat.Catalog,
+		factory interface{},
+		stmtIdx int,
+	) (stmt RelExpr, props *physical.Required, params opt.ColList, err error)
 }
 
 // GroupingOrderType is the grouping column order type for group by and distinct

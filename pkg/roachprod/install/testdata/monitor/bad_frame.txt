@@ -1,0 +1,13 @@
+monitor nodes=1
+----
+
+write node=1
+cockroach-system=500
+cockroach-tenant_0=50
+status=unknown
+<\n>
+----
+
+events count=1
+----
+n1: error: bad frame from script

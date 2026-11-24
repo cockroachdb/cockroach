@@ -8,14 +8,45 @@ package kvserver
 import (
 	"context"
 	"runtime"
-	"runtime/debug"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/readsummary/rspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 )
+
+// mergePreApplyInput contains the input needed for mergePreApply.
+type mergePreApplyInput struct {
+	// lhsID identifies the LHS replica applying the merge.
+	lhsID roachpb.FullReplicaID
+	// lhsStartKey is the LHS range's start key, recorded in the WAG event.
+	lhsStartKey roachpb.RKey
+	// raftIndex is the raft log index of the merge command.
+	raftIndex kvpb.RaftIndex
+	// rhsDestroyInfo describes the RHS replica being subsumed.
+	rhsDestroyInfo kvstorage.DestroyReplicaInfo
+}
+
+// mergePreApply is called when the raft merge command is applied. It subsumes
+// the RHS replica and stages WAG events for both sides of the merge.
+//
+// The caller is responsible for flushing the writer after mergePreApply returns.
+func mergePreApply(
+	ctx context.Context, rw kvstorage.ReadWriter, wagWriter *wag.Writer, in mergePreApplyInput,
+) error {
+	if err := kvstorage.SubsumeReplica(ctx, rw, wagWriter, in.rhsDestroyInfo); err != nil {
+		return err
+	}
+	// Stage a WAG EventMerge for the LHS.
+	wagWriter.AddEvent(wagpb.MakeAddr(in.lhsID, in.raftIndex), wagpb.EventMerge, in.lhsStartKey)
+	return nil
+}
 
 // maybeAssertNoHole, if enabled (see within), starts a watcher that
 // periodically checks the replicasByKey btree for any gaps in the monitored
@@ -38,7 +69,7 @@ func (s *Store) maybeAssertNoHole(ctx context.Context, from, to roachpb.RKey) fu
 	}
 
 	goroutineStopped := make(chan struct{})
-	caller := string(debug.Stack())
+	caller := debugutil.Stack()
 	if from.Equal(roachpb.RKeyMax) {
 		// There will be a hole to the right of RKeyMax but it's just the end of
 		// the addressable keyspace.
@@ -62,7 +93,7 @@ func (s *Store) maybeAssertNoHole(ctx context.Context, from, to roachpb.RKey) fu
 						// TODO(tbg): this deadlocks, see #74384. By disabling this branch,
 						// the only check that we perform is the one that the monitored
 						// keyspace isn't all a gap.
-						if last.item != nil {
+						if !last.isEmpty() {
 							gapStart, gapEnd := last.Desc().EndKey, cur.Desc().StartKey
 							if !gapStart.Equal(gapEnd) {
 								return errors.AssertionFailedf(
@@ -75,10 +106,10 @@ func (s *Store) maybeAssertNoHole(ctx context.Context, from, to roachpb.RKey) fu
 						return nil
 					})
 				if err != nil {
-					log.Fatalf(ctx, "%v", err)
+					log.KvDistribution.Fatalf(ctx, "%v", err)
 				}
-				if last.item == nil {
-					log.Fatalf(ctx, "found hole in keyspace [%s,%s), during:\n%s", from, to, caller)
+				if last.isEmpty() {
+					log.KvDistribution.Fatalf(ctx, "found hole in keyspace [%s,%s), during:\n%s", from, to, caller)
 				}
 				runtime.Gosched()
 			}()
@@ -126,19 +157,19 @@ func (s *Store) MergeRange(
 	//
 	// We ask removeInitializedReplicaRaftMuLocked to install a placeholder which
 	// we'll drop atomically with extending the right-hand side down below.
-	ph, err := s.removeInitializedReplicaRaftMuLocked(ctx, rightRepl, rightDesc.NextReplicaID, RemoveOptions{
-		// The replica was destroyed by the tombstones added to the batch in
-		// runPostAddTriggers.
-		DestroyData:       false,
-		InsertPlaceholder: true,
-	})
+	ph, err := s.removeInitializedReplicaRaftMuLocked(
+		ctx, rightRepl, rightDesc.NextReplicaID, "merge trigger",
+		RemoveOptions{
+			// The replica was destroyed by the tombstones added to the batch in
+			// runPostAddTriggers.
+			DestroyData:       false,
+			InsertPlaceholder: true,
+		})
 	if err != nil {
 		return errors.Wrap(err, "cannot remove range")
 	}
 
-	if err := rightRepl.postDestroyRaftMuLocked(ctx, rightRepl.GetMVCCStats()); err != nil {
-		return err
-	}
+	rightRepl.postDestroyRaftMuLocked(ctx)
 
 	leftRepl.loadStats.Merge(rightRepl.loadStats)
 

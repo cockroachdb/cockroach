@@ -1,0 +1,95 @@
+# Test that prepared statement result type validation happens during Bind,
+# not Execute. This matches PostgreSQL's behavior of returning
+# "cached plan must not change result type" before sending BindComplete.
+# See issue #152791.
+
+# Create test table and prepare a SELECT statement.
+send
+Query {"String": "DROP TABLE IF EXISTS drop_cols"}
+----
+
+until ignore=NoticeResponse
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DROP TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "CREATE TABLE drop_cols (id INT PRIMARY KEY, f1 TEXT)"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send
+Query {"String": "INSERT INTO drop_cols VALUES (1, 'hello')"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"INSERT 0 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Prepare a SELECT * query that returns both columns.
+send
+Parse {"Name": "s1", "Query": "SELECT * FROM drop_cols WHERE id = $1", "ParameterOIDs": [23]}
+Describe {"ObjectType": "S", "Name": "s1"}
+Sync
+----
+
+until ignore_table_oids ignore_type_oids ignore_data_type_sizes
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"ParameterDescription","ParameterOIDs":[23]}
+{"Type":"RowDescription","Fields":[{"Name":"id","TableOID":0,"TableAttributeNumber":1,"DataTypeOID":0,"DataTypeSize":0,"TypeModifier":-1,"Format":0},{"Name":"f1","TableOID":0,"TableAttributeNumber":2,"DataTypeOID":0,"DataTypeSize":0,"TypeModifier":-1,"Format":0}]}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Execute the prepared statement successfully.
+send
+Bind {"DestinationPortal": "p1", "PreparedStatement": "s1", "ParameterFormatCodes": [0], "Parameters": [{"text":"1"}]}
+Execute {"Portal": "p1"}
+Sync
+----
+
+until
+ReadyForQuery
+----
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"1"},{"text":"hello"}]}
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Now drop column f1, changing the result type of the prepared statement.
+send
+Query {"String": "ALTER TABLE drop_cols DROP COLUMN f1"}
+----
+
+until
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"ALTER TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Re-bind the same prepared statement. This should fail with
+# "cached plan must not change result type" during Bind (ErrorResponse
+# instead of BindComplete), matching PostgreSQL behavior.
+send
+Bind {"DestinationPortal": "p1", "PreparedStatement": "s1", "ParameterFormatCodes": [0], "Parameters": [{"text":"1"}]}
+Execute {"Portal": "p1"}
+Sync
+----
+
+until
+ErrorResponse
+----
+{"Type":"ErrorResponse","Code":"0A000"}
+
+until
+ReadyForQuery
+----
+{"Type":"ReadyForQuery","TxStatus":"I"}

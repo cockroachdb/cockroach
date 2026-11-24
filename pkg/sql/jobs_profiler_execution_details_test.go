@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"runtime/pprof"
 	"sort"
 	"strings"
 	"testing"
@@ -35,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -115,7 +115,7 @@ func TestShowJobsWithExecutionDetails(t *testing.T) {
 	ctx, cancel := context.WithTimeout(ctx, time.Minute*2)
 	defer cancel()
 
-	params, _ := createTestServerParams()
+	var params base.TestServerArgs
 	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 	defer jobs.ResetConstructors()()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
@@ -159,7 +159,7 @@ func TestReadWriteProfilerExecutionDetails(t *testing.T) {
 	ctx, cancel := context.WithTimeout(ctx, time.Minute*2)
 	defer cancel()
 
-	params, _ := createTestServerParams()
+	var params base.TestServerArgs
 	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 	defer jobs.ResetConstructors()()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
@@ -195,7 +195,7 @@ func TestReadWriteProfilerExecutionDetails(t *testing.T) {
 		runner.Exec(t, `SELECT crdb_internal.request_job_execution_details($1)`, importJobID)
 		distSQLDiagram, err := checkExecutionDetails(t, s, jobspb.JobID(importJobID), "distsql")
 		require.NoError(t, err)
-		require.Regexp(t, "<meta http-equiv=\"Refresh\" content=\"0\\; url=https://cockroachdb\\.github\\.io/distsqlplan/decode.html.*>", string(distSQLDiagram))
+		require.Regexp(t, "https://cockroachdb\\.github\\.io/distsqlplan/decode.html.*", string(distSQLDiagram))
 		close(continueRunning)
 		jobutils.WaitForJobToSucceed(t, runner, jobspb.JobID(importJobID))
 	})
@@ -208,10 +208,10 @@ func TestReadWriteProfilerExecutionDetails(t *testing.T) {
 		defer jobs.TestingRegisterConstructor(jobspb.TypeImport, func(j *jobs.Job, _ *cluster.Settings) jobs.Resumer {
 			return fakeExecResumer{
 				OnResume: func(ctx context.Context) error {
-					pprof.Do(ctx, pprof.Labels("foo", "bar"), func(ctx2 context.Context) {
+					pprofutil.Do(ctx, func(ctx2 context.Context) {
 						blockCh <- struct{}{}
 						<-continueCh
-					})
+					}, "foo", "bar")
 					return nil
 				},
 			}
@@ -224,12 +224,40 @@ func TestReadWriteProfilerExecutionDetails(t *testing.T) {
 		require.NoError(t, err)
 		continueCh <- struct{}{}
 		jobutils.WaitForJobToSucceed(t, runner, jobspb.JobID(importJobID))
-		require.True(t, strings.Contains(string(goroutines), fmt.Sprintf("labels: {\"foo\":\"bar\", \"job\":\"IMPORT id=%d\", \"n\":\"1\"}", importJobID)))
-		require.True(t, strings.Contains(string(goroutines), "github.com/cockroachdb/cockroach/pkg/sql_test.fakeExecResumer.Resume"))
+		expectedSubstrings := []string{
+			fmt.Sprintf("labels: {\"foo\":\"bar\", \"job\":\"IMPORT id=%d\", \"n\":\"1\"}", importJobID),
+			"github.com/cockroachdb/cockroach/pkg/sql_test.fakeExecResumer.Resume",
+		}
+		goroutinesStr := string(goroutines)
+		for _, substr := range expectedSubstrings {
+			if s.DeploymentMode().IsExternal() {
+				require.NotContains(t, goroutinesStr, substr)
+			} else {
+				require.Contains(t, goroutinesStr, substr)
+			}
+		}
 	})
 
 	t.Run("execution details for invalid job ID", func(t *testing.T) {
-		runner.ExpectErr(t, `coordinator not found for job -123`, `SELECT crdb_internal.request_job_execution_details(-123)`)
+		runner.ExpectErr(t, `job with ID -123 does not exist`, `SELECT crdb_internal.request_job_execution_details(-123)`)
+	})
+
+	t.Run("execution details for unclaimed job", func(t *testing.T) {
+		defer jobs.TestingRegisterConstructor(jobspb.TypeImport, func(j *jobs.Job, _ *cluster.Settings) jobs.Resumer {
+			return fakeExecResumer{}
+		}, jobs.UsesTenantCostControl)()
+
+		var importJobID int
+		runner.QueryRow(t, `IMPORT INTO t CSV DATA ('nodelocal://1/foo') WITH DETACHED`).Scan(&importJobID)
+		jobutils.WaitForJobToSucceed(t, runner, jobspb.JobID(importJobID))
+
+		// NULL out the claim_instance_id to simulate an unclaimed job.
+		runner.Exec(t, `UPDATE system.jobs SET claim_instance_id = NULL WHERE id = $1`, importJobID)
+
+		runner.ExpectErr(
+			t, `is not currently claimed by any node`,
+			`SELECT crdb_internal.request_job_execution_details($1)`, importJobID,
+		)
 	})
 
 	t.Run("read/write terminal trace", func(t *testing.T) {
@@ -323,7 +351,7 @@ func TestListProfilerExecutionDetails(t *testing.T) {
 	ctx, cancel := context.WithTimeout(ctx, time.Minute*2)
 	defer cancel()
 
-	params, _ := createTestServerParams()
+	var params base.TestServerArgs
 	params.Knobs.JobsTestingKnobs = jobs.NewTestingKnobsWithShortIntervals()
 	defer jobs.ResetConstructors()()
 	s, sqlDB, _ := serverutils.StartServer(t, params)
@@ -366,18 +394,32 @@ func TestListProfilerExecutionDetails(t *testing.T) {
 
 		runner.Exec(t, `SELECT crdb_internal.request_job_execution_details($1)`, importJobID)
 		files := listExecutionDetails(t, s, jobspb.JobID(importJobID))
-		require.Len(t, files, 3)
-		require.Regexp(t, "distsql\\..*\\.html", files[0])
-		require.Regexp(t, "goroutines\\..*\\.txt", files[1])
-		require.Regexp(t, "trace\\..*\\.zip", files[2])
+
+		patterns := []string{
+			".*/distsql-plan.url",
+			".*/distsql-plan.url.html",
+		}
+		if !s.DeploymentMode().IsExternal() {
+			patterns = append(patterns, ".*/job-goroutines.txt")
+		}
+		patterns = append(patterns, ".*/trace.zip")
+
+		require.Len(t, files, len(patterns))
+		for i, pattern := range patterns {
+			require.Regexp(t, pattern, files[i])
+		}
 
 		continueCh <- struct{}{}
 		jobutils.WaitForJobToPause(t, runner, jobspb.JobID(importJobID))
 
 		testutils.SucceedsSoon(t, func() error {
 			files = listExecutionDetails(t, s, jobspb.JobID(importJobID))
-			if len(files) != 5 {
-				return errors.Newf("expected 5 files, got %d: %v", len(files), files)
+			expectedCount := 6
+			if s.DeploymentMode().IsExternal() {
+				expectedCount--
+			}
+			if len(files) != expectedCount {
+				return errors.Newf("expected %d files, got %d: %v", expectedCount, len(files), files)
 			}
 			return nil
 		})
@@ -393,21 +435,34 @@ func TestListProfilerExecutionDetails(t *testing.T) {
 		jobutils.WaitForJobToSucceed(t, runner, jobspb.JobID(importJobID))
 		testutils.SucceedsSoon(t, func() error {
 			files = listExecutionDetails(t, s, jobspb.JobID(importJobID))
-			if len(files) != 10 {
-				return errors.Newf("expected 10 files, got %d: %v", len(files), files)
+			expectedCount := 12
+			if s.DeploymentMode().IsExternal() {
+				expectedCount = 10
+			}
+			if len(files) != expectedCount {
+				return errors.Newf("expected %d files, got %d: %v", expectedCount, len(files), files)
 			}
 			return nil
 		})
-		require.Regexp(t, "[0-9]/resumer-trace/.*~cockroach\\.sql\\.jobs\\.jobspb\\.TraceData\\.binpb", files[0])
-		require.Regexp(t, "[0-9]/resumer-trace/.*~cockroach\\.sql\\.jobs\\.jobspb\\.TraceData\\.binpb.txt", files[1])
-		require.Regexp(t, "[0-9]/resumer-trace/.*~cockroach\\.sql\\.jobs\\.jobspb\\.TraceData\\.binpb", files[2])
-		require.Regexp(t, "[0-9]/resumer-trace/.*~cockroach\\.sql\\.jobs\\.jobspb\\.TraceData\\.binpb.txt", files[3])
-		require.Regexp(t, "distsql\\..*\\.html", files[4])
-		require.Regexp(t, "distsql\\..*\\.html", files[5])
-		require.Regexp(t, "goroutines\\..*\\.txt", files[6])
-		require.Regexp(t, "goroutines\\..*\\.txt", files[7])
-		require.Regexp(t, "trace\\..*\\.zip", files[8])
-		require.Regexp(t, "trace\\..*\\.zip", files[9])
+		patterns = []string{
+			".*/distsql-plan.url",
+			".*/distsql-plan.url",
+			".*/distsql-plan.url.html",
+			".*/distsql-plan.url.html",
+		}
+		if !s.DeploymentMode().IsExternal() {
+			patterns = append(patterns, ".*/job-goroutines.txt", ".*/job-goroutines.txt")
+		}
+		patterns = append(patterns,
+			"[0-9_.]*/resumer-trace/.*~cockroach\\.sql\\.jobs\\.jobspb\\.TraceData\\.binpb",
+			"[0-9_.]*/resumer-trace/.*~cockroach\\.sql\\.jobs\\.jobspb\\.TraceData\\.binpb",
+			"[0-9_.]*/resumer-trace/.*~cockroach\\.sql\\.jobs\\.jobspb\\.TraceData\\.binpb.txt",
+			"[0-9_.]*/resumer-trace/.*~cockroach\\.sql\\.jobs\\.jobspb\\.TraceData\\.binpb.txt",
+		)
+		patterns = append(patterns, ".*/trace.zip", ".*/trace.zip")
+		for i, pattern := range patterns {
+			require.Regexp(t, pattern, files[i])
+		}
 	})
 }
 
@@ -433,8 +488,9 @@ func listExecutionDetails(
 
 	edResp := serverpb.ListJobProfilerExecutionDetailsResponse{}
 	require.NoError(t, protoutil.Unmarshal(body, &edResp))
+	// Sort the responses with the variable date/time digits in the prefix removed.
 	sort.Slice(edResp.Files, func(i, j int) bool {
-		return edResp.Files[i] < edResp.Files[j]
+		return strings.TrimLeft(edResp.Files[i], "0123456789_.") < strings.TrimLeft(edResp.Files[j], "0123456789_.")
 	})
 	return edResp.Files
 }

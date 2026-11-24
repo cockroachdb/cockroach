@@ -63,17 +63,20 @@ func BenchmarkRangefeed(b *testing.B) {
 // processes a set of events.
 func BenchmarkRangefeedBudget(b *testing.B) {
 	for _, budget := range []bool{false, true} {
-		b.Run(fmt.Sprintf("budget=%t", budget), func(b *testing.B) {
-			var budgetSize int64
-			if budget {
-				budgetSize = math.MaxInt64
-			}
-			runBenchmarkRangefeed(b, benchmarkRangefeedOpts{
-				opType:           writeOpType,
-				numRegistrations: 1,
-				budget:           budgetSize,
+		for _, procType := range testTypes {
+			b.Run(fmt.Sprintf("budget=%t/proc=%s", budget, procType), func(b *testing.B) {
+				var budgetSize int64
+				if budget {
+					budgetSize = math.MaxInt64
+				}
+				runBenchmarkRangefeed(b, benchmarkRangefeedOpts{
+					rangefeedTestType: procType,
+					opType:            writeOpType,
+					numRegistrations:  1,
+					budget:            budgetSize,
+				})
 			})
-		})
+		}
 	}
 }
 
@@ -104,8 +107,8 @@ func runBenchmarkRangefeed(b *testing.B, opts benchmarkRangefeedOpts) {
 		const withFiltering = false
 		streams[i] = &noopStream{ctx: ctx, done: make(chan *kvpb.Error, 1)}
 		ok, _, _ := p.Register(ctx, span, hlc.MinTimestamp, nil,
-			withDiff, withFiltering, false, /* withOmitRemote */
-			streams[i], nil)
+			withDiff, withFiltering, false /* withOmitRemote */, noBulkDelivery,
+			streams[i])
 		require.True(b, ok)
 	}
 

@@ -60,7 +60,6 @@ END IF;
 END;
  -- identifiers removed
 
-
 parse
 DECLARE
 BEGIN
@@ -138,3 +137,28 @@ stmt_block: 1
 stmt_if: 2
 stmt_if_else_if: 3
 stmt_null: 2
+
+pretty
+DECLARE
+BEGIN
+IF johnnyGyro THEN
+NULL;
+diego := 1 + 2;
+ELSIF hiHotPants THEN
+diego := 7 + 7;
+ELSE
+diego := 0;
+END IF;
+END
+----
+DECLARE
+BEGIN
+	IF johnnygyro THEN
+		NULL;
+		diego := 1 + 2;
+	ELSIF hihotpants THEN
+		diego := 7 + 7;
+	ELSE
+		diego := 0;
+	END IF;
+END;

@@ -11,6 +11,20 @@ def _impl(rctx):
         stripPrefix = "x-tools/x86_64-apple-darwin21.2/",
     )
 
+    # Create a plain "ld" wrapper that delegates to the target-prefixed linker.
+    # Clang searches for a linker named "ld" in the compiler's tool directories.
+    # The osxcross toolchain only ships target-prefixed binaries (e.g.
+    # arm64-apple-darwin21.2-ld), so without this wrapper clang falls back to
+    # the system /bin/ld (GNU ld), which fails on Ubuntu 24.04+ with
+    # "unrecognised emulation mode".
+    rctx.file(
+        "bin/ld",
+        content = '#!/bin/bash\nexec "$(dirname "$0")/{}-apple-darwin21.2-ld" "$@"\n'.format(
+            rctx.attr.target,
+        ),
+        executable = True,
+    )
+
     rctx.template(
         "BUILD",
         Label("@com_github_cockroachdb_cockroach//build:toolchains/darwin/BUILD.tmpl"),

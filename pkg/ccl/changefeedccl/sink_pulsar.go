@@ -132,9 +132,11 @@ func (p *pulsarSink) EmitRow(
 	td TopicDescriptor,
 	key []byte,
 	value []byte,
+	csvColumnHeader []byte,
 	updated hlc.Timestamp,
 	mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
+	_headers rowHeaders,
 ) error {
 	// TODO(jayant): cache the encoded topics to save an alloc
 	// TODO(#118863): support updated, mvcc, topic_prefix etc.
@@ -261,7 +263,7 @@ func (p *pulsarSink) msgCallback(
 	oneMsgCb := p.metrics.recordOneMessage()
 
 	return func(id pulsar.MessageID, message *pulsar.ProducerMessage, err error) {
-		sendCb()
+		sendCb.End()
 		if err == nil {
 			oneMsgCb(mvcc, len(message.Payload), len(message.Payload))
 		} else {
@@ -296,7 +298,7 @@ func (p *pulsarSink) checkError() error {
 func makePulsarSink(
 	// TODO(jayant): save this context and add logging
 	_ context.Context,
-	u sinkURL,
+	u *changefeedbase.SinkURL,
 	encodingOpts changefeedbase.EncodingOptions,
 	targets changefeedbase.Targets,
 	// TODO(#118862): configure the batching config
@@ -310,7 +312,7 @@ func makePulsarSink(
 	// TODO(#118858): configure auth and validate URL query params
 	unsupportedParams := []string{changefeedbase.SinkParamTopicPrefix, changefeedbase.SinkParamTopicName, changefeedbase.SinkParamSchemaTopic}
 	for _, param := range unsupportedParams {
-		if u.consumeParam(param) != "" {
+		if u.ConsumeParam(param) != "" {
 			return nil, unimplemented.NewWithIssuef(118863, "%s is not yet supported", param)
 		}
 	}
@@ -318,6 +320,13 @@ func makePulsarSink(
 	topicNamer, err := MakeTopicNamer(targets)
 	if err != nil {
 		return nil, err
+	}
+
+	switch encodingOpts.Envelope {
+	case changefeedbase.OptEnvelopeEnriched:
+		return nil, errors.Errorf(`this sink is incompatible with %s=%s`,
+			changefeedbase.OptEnvelope, encodingOpts.Envelope)
+	default:
 	}
 
 	sink := &pulsarSink{

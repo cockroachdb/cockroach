@@ -6,7 +6,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"log"
@@ -21,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/google"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/model"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/util"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/testutils/benchdoc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
@@ -32,13 +33,21 @@ import (
 )
 
 type compareConfig struct {
-	slackConfig   slackConfig
-	influxConfig  influxConfig
-	experimentDir string
-	baselineDir   string
-	sheetDesc     string
-	threshold     float64
+	slackConfig     slackConfig
+	influxConfig    influxConfig
+	experimentDir   string
+	baselineDir     string
+	versionContext  string
+	benchmarkConfig string
+	generateSheet   bool
+	threshold       float64
+	postIssues      string
 }
+
+const (
+	postIssuesGroup  = "group"
+	postIssuesSingle = "single"
+)
 
 type slackConfig struct {
 	user    string
@@ -54,9 +63,10 @@ type influxConfig struct {
 
 type compare struct {
 	compareConfig
-	service  *google.Service
-	packages []string
-	ctx      context.Context
+	service          *google.Service
+	packages         []string
+	benchmarkInfoMap benchmarkInfoMap
+	ctx              context.Context
 }
 
 var defaultInfluxMetadata = map[string]string{
@@ -70,9 +80,13 @@ var defaultInfluxMetadata = map[string]string{
 }
 
 const (
-	slackPercentageThreshold = 20.0
-	slackReportMax           = 3
-	skipComparison           = math.MaxFloat64
+	defaultPercentageThreshold = 20.0
+	slackReportMax             = 3
+	skipComparison             = math.MaxFloat64
+	// slackWarningThresholdDivisor is used to compute the warning threshold
+	// for Slack reports. Changes that exceed threshold/divisor but not the
+	// full threshold are shown with a warning indicator (orange diamond).
+	slackWarningThresholdDivisor = 2
 )
 
 const slackCompareTemplateScript = `
@@ -95,15 +109,30 @@ func newCompare(config compareConfig) (*compare, error) {
 		}
 	}
 
+	var infoMap benchmarkInfoMap
+	if config.benchmarkConfig != "" {
+		benchmarkInfoList, listErr := loadBenchmarkList(config.benchmarkConfig)
+		if listErr != nil {
+			return nil, listErr
+		}
+		infoMap = newBenchmarkInfoMap(benchmarkInfoList)
+	}
+
 	ctx := context.Background()
 	var service *google.Service
-	if config.sheetDesc != "" {
+	if config.generateSheet {
 		service, err = google.New(ctx)
 		if err != nil {
 			return nil, err
 		}
 	}
-	return &compare{compareConfig: config, service: service, packages: packages, ctx: ctx}, nil
+	return &compare{
+		compareConfig:    config,
+		service:          service,
+		packages:         packages,
+		benchmarkInfoMap: infoMap,
+		ctx:              ctx,
+	}, nil
 }
 
 func defaultCompareConfig() compareConfig {
@@ -213,8 +242,8 @@ func (c *compare) publishToGoogleSheets(
 	sheets := make(map[string]string)
 	for pkgGroup, comparisonResults := range comparisonResultsMap {
 		sheetName := pkgGroup + "/..."
-		if c.sheetDesc != "" {
-			sheetName = fmt.Sprintf("%s (%s)", sheetName, c.sheetDesc)
+		if c.versionContext != "" {
+			sheetName = fmt.Sprintf("%s (%s)", sheetName, c.versionContext)
 		}
 
 		url, err := c.service.CreateSheet(c.ctx, sheetName, comparisonResults, "baseline", "experiment")
@@ -259,9 +288,10 @@ func (c *compare) postToSlack(
 				comparison := detail.Comparison
 				metric := result.Metric
 
-				if (comparison.Delta < 0 && metric.Better < 0) ||
-					(comparison.Delta > 0 && metric.Better > 0) ||
-					comparison.Delta == 0 {
+				threshold := c.benchmarkThreshold(detail.BenchmarkName)
+				warningThreshold := threshold / slackWarningThresholdDivisor
+				if !isRegression(comparison.Delta, metric.Better) ||
+					!meetsThreshold(comparison.Delta, warningThreshold) {
 					continue
 				}
 				nameSplit := strings.Split(detail.BenchmarkName, util.PackageSeparator)
@@ -273,7 +303,7 @@ func (c *compare) postToSlack(
 					highestPercentChange = math.Abs(comparison.Delta)
 				}
 				ci.ChangeSymbol = ":small_orange_diamond:"
-				if math.Abs(comparison.Delta) > slackPercentageThreshold {
+				if meetsThreshold(comparison.Delta, threshold) {
 					ci.ChangeSymbol = ":small_red_triangle:"
 				}
 				mi.Changes = append(mi.Changes, ci)
@@ -295,7 +325,7 @@ func (c *compare) postToSlack(
 				return err
 			}
 			status = "warning"
-			if highestPercentChange > slackPercentageThreshold {
+			if highestPercentChange > defaultPercentageThreshold {
 				status = "danger"
 			}
 			output = sb.String()
@@ -312,7 +342,7 @@ func (c *compare) postToSlack(
 
 	s := newSlackClient(c.slackConfig.user, c.slackConfig.channel, c.slackConfig.token)
 	return s.Post(
-		slack.MsgOptionText(fmt.Sprintf("Microbenchmark comparison summary: %s", c.sheetDesc), false),
+		slack.MsgOptionText(fmt.Sprintf("Microbenchmark comparison summary: %s", c.versionContext), false),
 		slack.MsgOptionAttachments(attachments...),
 	)
 }
@@ -350,169 +380,204 @@ func (c *compare) compareUsingThreshold(comparisonResultsMap model.ComparisonRes
 	return nil
 }
 
-func (c *compare) createBenchSeries() ([]*benchseries.ComparisonSeries, error) {
-	opts := benchseries.DefaultBuilderOptions()
-	opts.Experiment = "run-time"
-	opts.Compare = "cockroach"
-	builder, err := benchseries.NewBuilder(opts)
-	if err != nil {
-		return nil, err
-	}
+func (c *compare) maybePostRegressionIssuesGroup(
+	comparisonResultsMap model.ComparisonResultsMap,
+) error {
+	loggerCfg := logger.Config{Stdout: os.Stdout, Stderr: os.Stderr}
+	l, _ := loggerCfg.NewLogger("")
 
-	var benchBuf bytes.Buffer
-	readFileFn := func(filePath string, required bool) error {
-		data, err := os.ReadFile(filePath)
-		if err != nil {
-			if !required && oserror.IsNotExist(err) {
-				return nil
-			}
-			return errors.Wrapf(err, "failed to read file %s", filePath)
-		}
-		benchBuf.Write(data)
-		benchBuf.WriteString("\n")
-		return nil
-	}
+	// Collect errors encountered while creating benchmark issues.
+	var createBenchmarkIssueErrors []error
 
-	for k, v := range c.influxConfig.metadata {
-		benchBuf.WriteString(fmt.Sprintf("%s: %s\n", k, v))
-	}
+	for pkgName, comparisonResults := range comparisonResultsMap {
+		var regressions []regressionInfo
 
-	logPaths := map[string]string{
-		"experiment": c.experimentDir,
-		"baseline":   c.baselineDir,
-	}
-	for logType, dir := range logPaths {
-		benchBuf.WriteString(fmt.Sprintf("cockroach: %s\n", logType))
-		logPath := filepath.Join(dir, "metadata.log")
-		if err = readFileFn(logPath, true); err != nil {
-			return nil, err
-		}
-		for _, pkg := range c.packages {
-			benchBuf.WriteString(fmt.Sprintf("pkg: %s\n", pkg))
-			logPath = filepath.Join(dir, getReportLogName(reportLogName, pkg))
-			if err = readFileFn(logPath, false); err != nil {
-				return nil, err
-			}
-		}
-	}
+		for _, result := range comparisonResults {
+			for _, detail := range result.Comparisons {
+				comparison := detail.Comparison
+				metric := result.Metric
 
-	benchReader := benchfmt.NewReader(bytes.NewReader(benchBuf.Bytes()), "buffer")
-	recordsMap := make(map[string][]*benchfmt.Result)
-	seen := make(map[string]map[string]struct{})
-	for benchReader.Scan() {
-		switch rec := benchReader.Result().(type) {
-		case *benchfmt.SyntaxError:
-			// In case the benchmark log is corrupted or contains a syntax error, we
-			// want to return an error to the caller.
-			return nil, fmt.Errorf("syntax error: %v", rec)
-		case *benchfmt.Result:
-			var cmp, pkg string
-			for _, config := range rec.Config {
-				if config.Key == "pkg" {
-					pkg = string(config.Value)
-				}
-				if config.Key == opts.Compare {
-					cmp = string(config.Value)
+				threshold := c.benchmarkThreshold(detail.BenchmarkName)
+				if isRegression(comparison.Delta, metric.Better) && meetsThreshold(comparison.Delta, threshold) {
+					regressions = append(regressions, regressionInfo{
+						benchmarkName:  detail.BenchmarkName,
+						metricUnit:     result.Metric.Unit,
+						percentChange:  math.Abs(comparison.Delta),
+						formattedDelta: comparison.FormattedDelta,
+						threshold:      threshold,
+					})
 				}
 			}
-			key := pkg + util.PackageSeparator + string(rec.Name)
-			// Update the name to include the package name. This is a workaround for
-			// `benchseries`, that currently does not support package names.
-			rec.Name = benchfmt.Name(key)
-			recordsMap[key] = append(recordsMap[key], rec.Clone())
-			// Determine if we've seen this package/benchmark combination for both
-			// the baseline and experiment run.
-			if _, ok := seen[key]; !ok {
-				seen[key] = make(map[string]struct{})
+		}
+
+		if len(regressions) > 0 {
+			formatter, req, err := createRegressionPostRequest(pkgName, regressions, c.versionContext)
+			if err != nil {
+				log.Printf("failed to create regression post request for package %s: %v", pkgName, err)
+				// Accumulate the error but continue processing other packages.
+				createBenchmarkIssueErrors = append(createBenchmarkIssueErrors, err)
+				continue
 			}
-			seen[key][cmp] = struct{}{}
+			err = postBenchmarkIssue(c.ctx, l, formatter, req)
+			if err != nil {
+				log.Printf("failed to post regression issue for package %s: %v", pkgName, err)
+				// Accumulate the error but continue processing other packages.
+				createBenchmarkIssueErrors = append(createBenchmarkIssueErrors, err)
+				continue
+			}
+			log.Printf("Posted regression issue for package: %s with %d regression(s)", pkgName, len(regressions))
 		}
 	}
 
-	// Add only the benchmarks that have been seen in both the baseline and
-	// experiment run.
-	for key, records := range recordsMap {
-		if len(seen[key]) != 2 {
-			continue
-		}
-		for _, rec := range records {
-			builder.Add(rec)
-		}
+	if len(createBenchmarkIssueErrors) > 0 {
+		return errors.Join(createBenchmarkIssueErrors...)
 	}
 
-	comparisons, err := builder.AllComparisonSeries(nil, benchseries.DUPE_REPLACE)
-	if err != nil {
-		return nil, errors.Wrap(err, "failed to create comparison series")
-	}
-	return comparisons, nil
+	return nil
 }
 
-func (c *compare) pushToInfluxDB() error {
+func (c *compare) maybePostRegressionIssuesSingle(
+	comparisonResultsMap model.ComparisonResultsMap,
+) error {
+	loggerCfg := logger.Config{Stdout: os.Stdout, Stderr: os.Stderr}
+	l, _ := loggerCfg.NewLogger("")
+	var errs []error
+
+	for _, comparisonResults := range comparisonResultsMap {
+		for _, result := range comparisonResults {
+			for _, detail := range result.Comparisons {
+				comparison := detail.Comparison
+				metric := result.Metric
+
+				packagePath, functionName, err := parseBenchmarkName(detail.BenchmarkName)
+				if err != nil {
+					log.Printf("failed to parse benchmark name %s: %v", detail.BenchmarkName, err)
+					errs = append(errs, err)
+					continue
+				}
+
+				compareArgs := benchdoc.NewCompareArgs()
+				if info, ok := c.benchmarkInfoMap.lookup(packagePath, functionName); ok {
+					compareArgs = info.CompareArgs
+				}
+				if compareArgs.PostIssue == benchdoc.PostIssueNone {
+					continue
+				}
+
+				if !isRegression(comparison.Delta, metric.Better) ||
+					!meetsThreshold(comparison.Delta, c.benchmarkThreshold(detail.BenchmarkName)) {
+					continue
+				}
+
+				reg := regressionInfo{
+					benchmarkName:  detail.BenchmarkName,
+					metricUnit:     result.Metric.Unit,
+					percentChange:  math.Abs(comparison.Delta),
+					formattedDelta: comparison.FormattedDelta,
+					threshold:      c.benchmarkThreshold(detail.BenchmarkName),
+				}
+
+				releaseBlocker := compareArgs.PostIssue == benchdoc.PostIssueBlocker
+				formatter, req, err := createSingleRegressionPostRequest(
+					reg, c.versionContext, releaseBlocker,
+				)
+				if err != nil {
+					log.Printf("failed to create single regression request for %s: %v",
+						detail.BenchmarkName, err)
+					errs = append(errs, err)
+					continue
+				}
+				if err = postBenchmarkIssue(c.ctx, l, formatter, req); err != nil {
+					log.Printf("failed to post single regression issue for %s: %v",
+						detail.BenchmarkName, err)
+					errs = append(errs, err)
+					continue
+				}
+				log.Printf("Posted single regression issue for: %s", detail.BenchmarkName)
+			}
+		}
+	}
+
+	if len(errs) > 0 {
+		return errors.Join(errs...)
+	}
+	return nil
+}
+
+func (c *compare) pushToInfluxDB(comparisonResultsMap model.ComparisonResultsMap) error {
 	client := influxdb2.NewClient(c.influxConfig.host, c.influxConfig.token)
 	defer client.Close()
 	writeAPI := client.WriteAPI("cockroach", "microbench")
 	errorChan := writeAPI.Errors()
 
-	comparisons, err := c.createBenchSeries()
+	metadata, err := loadMetadata(filepath.Join(c.experimentDir, "metadata.log"))
 	if err != nil {
 		return err
 	}
-
-	for _, cs := range comparisons {
-		cs.AddSummaries(0.95, 1000)
-		residues := make(map[string]string)
-		for _, r := range cs.Residues {
-			residues[r.S] = r.Slice[0]
-		}
-
-		for idx, benchmarkName := range cs.Benchmarks {
-			sum := cs.Summaries[0][idx]
-			if !sum.Defined() {
-				continue
-			}
-
-			experimentTime := cs.Series[0]
-			ts, err := benchseries.ParseNormalizedDateString(experimentTime)
-			if err != nil {
-				return errors.Wrap(err, "error parsing experiment commit date")
-			}
-			fields := map[string]interface{}{
-				"low":               sum.Low,
-				"center":            sum.Center,
-				"high":              sum.High,
-				"upload-time":       residues["upload-time"],
-				"baseline-commit":   cs.HashPairs[experimentTime].DenHash,
-				"experiment-commit": cs.HashPairs[experimentTime].NumHash,
-				"benchmarks-commit": residues["benchmarks-commit"],
-			}
-			pkg := strings.Split(benchmarkName, util.PackageSeparator)[0]
-			benchmarkName = strings.Split(benchmarkName, util.PackageSeparator)[1]
-			tags := map[string]string{
-				"name":         benchmarkName,
-				"unit":         cs.Unit,
-				"pkg":          pkg,
-				"repository":   "cockroach",
-				"branch":       residues["branch"],
-				"goarch":       residues["goarch"],
-				"goos":         residues["goos"],
-				"machine-type": residues["machine-type"],
-			}
-			p := influxdb2.NewPoint("benchmark-result", tags, fields, ts)
-			writeAPI.WritePoint(p)
-		}
+	experimentTime := metadata.ExperimentCommitTime
+	normalizedDateString, err := benchseries.NormalizeDateString(experimentTime)
+	if err != nil {
+		return errors.Wrap(err, "error normalizing experiment commit date")
 	}
-	done := make(chan struct{})
+	ts, err := benchseries.ParseNormalizedDateString(normalizedDateString)
+	if err != nil {
+		return errors.Wrap(err, "error parsing experiment commit date")
+	}
+
+	// Monitor errorChan for the first writing error. On error, cancel the
+	// context to stop writing further points. Subsequent errors are swallowed.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	var writeErr error
 	go func() {
-		defer close(done)
-		writeAPI.Flush()
+		for err := range errorChan {
+			if writeErr == nil {
+				writeErr = errors.Wrap(err, "writing to InfluxDB")
+				cancel()
+			}
+		}
 	}()
 
-	select {
-	case err = <-errorChan:
-		return errors.Wrap(err, "failed to write to InfluxDB")
-	case <-done:
-		return nil
+	for _, group := range comparisonResultsMap {
+		for _, result := range group {
+			for _, detail := range result.Comparisons {
+				if ctx.Err() != nil {
+					break
+				}
+				ci := detail.Comparison.ConfidenceInterval
+				if model.IsUndefinedConfidenceInterval(ci) {
+					continue
+				}
+				fields := map[string]interface{}{
+					"low":               ci.Low,
+					"center":            ci.Center,
+					"high":              ci.High,
+					"upload-time":       metadata.RunTime,
+					"baseline-commit":   metadata.BaselineCommit,
+					"experiment-commit": metadata.ExperimentCommit,
+					"benchmarks-commit": metadata.BenchmarksCommit,
+				}
+				pkg := strings.Split(detail.BenchmarkName, util.PackageSeparator)[0]
+				benchmarkName := strings.Split(detail.BenchmarkName, util.PackageSeparator)[1]
+				tags := map[string]string{
+					"name":         benchmarkName,
+					"unit":         result.Metric.Unit,
+					"pkg":          pkg,
+					"repository":   "cockroach",
+					"branch":       "master",
+					"goarch":       metadata.GoArch,
+					"goos":         metadata.GoOS,
+					"machine-type": metadata.Machine,
+				}
+				p := influxdb2.NewPoint("benchmark-result", tags, fields, ts)
+				writeAPI.WritePoint(p)
+			}
+		}
 	}
+	// Flush triggers sending any remaining buffered points and closes
+	// errorChan when done, which terminates the error-monitoring goroutine.
+	writeAPI.Flush()
+	return writeErr
 }
 
 func processReportFile(builder *model.Builder, id, pkg, path string) error {
@@ -543,4 +608,30 @@ func truncateBenchmarkName(text string, maxLen int) string {
 		}
 	}
 	return text
+}
+
+func isRegression(delta float64, better int) bool {
+	return delta*float64(better) < 0
+}
+
+func meetsThreshold(delta float64, threshold float64) bool {
+	return math.Abs(delta) >= threshold
+}
+
+// benchmarkThreshold returns the regression threshold (in percentage) for the
+// given benchmark. If a per-benchmark threshold is configured via benchdoc, it
+// is converted from a fraction (e.g., 0.3) to a percentage (30.0). Otherwise,
+// the defaultPercentageThreshold is returned.
+func (c *compare) benchmarkThreshold(benchmarkName string) float64 {
+	if c.benchmarkInfoMap != nil {
+		packagePath, functionName, err := parseBenchmarkName(benchmarkName)
+		if err == nil {
+			if info, ok := c.benchmarkInfoMap.lookup(packagePath, functionName); ok {
+				if info.CompareArgs.Threshold > 0 {
+					return info.CompareArgs.Threshold * 100
+				}
+			}
+		}
+	}
+	return defaultPercentageThreshold
 }

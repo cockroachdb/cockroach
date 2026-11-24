@@ -1,0 +1,2 @@
+alter_job_stmt ::=
+	'ALTER' 'JOB' a_expr 'OWNER' 'TO' role_spec

@@ -20,6 +20,7 @@ import (
 var errEmptyIndexName = pgerror.New(pgcode.Syntax, "empty index name")
 
 type renameIndexNode struct {
+	zeroInputPlanNode
 	n         *tree.RenameIndex
 	tableDesc *tabledesc.Mutable
 	idx       catalog.Index
@@ -63,7 +64,7 @@ func (p *planner) RenameIndex(ctx context.Context, n *tree.RenameIndex) (planNod
 	}
 
 	// Disallow schema changes if this table's schema is locked.
-	if err := checkSchemaChangeIsAllowed(tableDesc, n); err != nil {
+	if err := p.checkSchemaChangeIsAllowed(ctx, tableDesc, n); err != nil {
 		return nil, err
 	}
 
@@ -86,7 +87,7 @@ func (n *renameIndexNode) startExec(params runParams) error {
 			continue
 		}
 		return p.dependentError(
-			ctx, "index", n.n.Index.Index.String(), tableDesc.ParentID, tableRef.ID, "rename",
+			ctx, "index", n.n.Index.Index.String(), tableDesc.ParentID, tableRef.ID, tableDesc.ID, "rename",
 		)
 	}
 

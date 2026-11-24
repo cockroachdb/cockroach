@@ -66,9 +66,10 @@ const (
 // aggType is a helper struct that allows tests to test both the ordered and
 // hash aggregators at the same time.
 type aggType struct {
-	new   func(context.Context, *colexecagg.NewAggregatorArgs) colexecop.ResettableOperator
-	name  string
-	order ordering
+	new          func(context.Context, *colexecagg.NewAggregatorArgs) colexecop.ResettableOperator
+	afterEachRun func() // if set, will be called at the end of each benchmark iteration
+	name         string
+	order        ordering
 }
 
 var aggTypesWithPartial = []aggType{
@@ -813,7 +814,7 @@ func TestAggregators(t *testing.T) {
 				// Filtering aggregation is only supported with hash aggregator.
 				continue
 			}
-			log.Infof(ctx, "%s/%s", tc.name, agg.name)
+			log.Dev.Infof(ctx, "%s/%s", tc.name, agg.name)
 			verifier := colexectestutils.OrderedVerifier
 			if tc.unorderedInput {
 				verifier = colexectestutils.UnorderedVerifier
@@ -855,7 +856,7 @@ func TestAggregatorRandom(t *testing.T) {
 		for _, numInputBatches := range []int{1, 2, 64} {
 			for _, hasNulls := range []bool{true, false} {
 				for _, agg := range aggTypesWithPartial {
-					log.Infof(context.Background(), "%s/groupSize=%d/numInputBatches=%d/hasNulls=%t", agg.name, groupSize, numInputBatches, hasNulls)
+					log.Dev.Infof(context.Background(), "%s/groupSize=%d/numInputBatches=%d/hasNulls=%t", agg.name, groupSize, numInputBatches, hasNulls)
 					nTuples := coldata.BatchSize() * numInputBatches
 					typs := []*types.T{types.Int, types.Float}
 					cols := []*coldata.Vec{
@@ -1155,10 +1156,21 @@ func benchmarkAggregateFunction(
 	if numSameAggs != 1 {
 		numSameAggsSuffix = fmt.Sprintf("/numSameAggs=%d", numSameAggs)
 	}
+	afterEachRunDefault := func(b *testing.B, op colexecop.Operator) {
+		if err = op.(colexecop.Closer).Close(ctx); err != nil {
+			b.Fatal(err)
+		}
+	}
 	b.Run(fmt.Sprintf(
 		"%s/%s/%s%s/groupSize=%d%s/numInputRows=%d",
 		fName, agg.name, inputTypesString, numSameAggsSuffix, groupSize, distinctProbString, numInputRows),
 		func(b *testing.B) {
+			afterEachRun := afterEachRunDefault
+			if agg.afterEachRun != nil {
+				afterEachRun = func(*testing.B, colexecop.Operator) {
+					agg.afterEachRun()
+				}
+			}
 			// Simulate the scenario when the optimizer has the perfect
 			// estimate.
 			estimatedRowCount := uint64(math.Ceil(float64(numInputRows) / float64(groupSize)))
@@ -1180,15 +1192,13 @@ func benchmarkAggregateFunction(
 				// Exhaust aggregator until all batches have been read or limit, if
 				// non-zero, is reached.
 				tupleCount := 0
-				for b := a.Next(); b.Length() != 0; b = a.Next() {
+				for b := colexecop.NextNoMeta(a); b.Length() != 0; b = colexecop.NextNoMeta(a) {
 					tupleCount += b.Length()
 					if limit > 0 && tupleCount >= limit {
 						break
 					}
 				}
-				if err = a.(colexecop.Closer).Close(ctx); err != nil {
-					b.Fatal(err)
-				}
+				afterEachRun(b, a)
 				source.Reset(ctx)
 			}
 		},

@@ -1,0 +1,49 @@
+# This test tests ReplicaPlacement parser which is used for
+# placement_type=replica_placement option for gen_ranges command.
+parse
+{s3}:1
+----
+{s3:*}:1000
+
+parse
+{s3}:7
+----
+{s3:*}:1000
+
+parse
+{s2:*}:100
+----
+{s2:*}:1000
+
+parse
+{s2:NON_VOTER,s4:*}:100
+----
+{s2:NON_VOTER,s4:*}:1000
+
+parse
+{s2:NON_VOTER,s4:*, s1}:100
+----
+{s2:NON_VOTER,s4:*,s1}:1000
+
+parse
+{s1:*,s2,s3:NON_VOTER}:1 {s4:*,s5,s6}:1
+----
+{s1:*,s2,s3:NON_VOTER}:500
+{s4:*,s5,s6}:500
+
+parse
+{s1:NON_VOTER,s2,s3}:10 {s4,s5:*,s6}:10 {s7,s2}:1
+----
+{s1:NON_VOTER*,s2,s3}:477
+{s4,s5:*,s6}:476
+{s7:*,s2}:47
+
+parse
+{s1:VOTER_FULL*,s2,s3}:1
+----
+{s1:*,s2,s3}:1000
+
+parse
+{s1:VOTER_INCOMING*,s2,s3}:1
+----
+{s1:VOTER_INCOMING*,s2,s3}:1000

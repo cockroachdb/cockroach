@@ -19,7 +19,7 @@ go_library(
         "//pkg/util/log",
         "//pkg/util/netutil",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_jackc_pgconn//:pgconn",
+        "@com_github_jackc_pgx_v5//pgconn",
         "@com_github_spf13_cobra//:cobra",
         "@org_golang_google_grpc//codes",
         "@org_golang_google_grpc//status",

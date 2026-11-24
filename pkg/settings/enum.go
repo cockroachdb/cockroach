@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cockroachdb/errors"
 	"golang.org/x/exp/constraints"
 )
 
@@ -22,12 +23,16 @@ type EnumSetting[T constraints.Integer] struct {
 	defaultValue T
 	// enumValues maps each valid value of T to a lowercase string.
 	enumValues map[T]string
+	validateFn func(string) error
 }
 
 // AnyEnumSetting is an interface that is used when the specific enum type T is
 // not known.
 type AnyEnumSetting interface {
 	internalSetting
+
+	// Validate validates the enum value.
+	Validate(value int64) error
 
 	// ParseEnum parses a string that is either a string in enumValues or an
 	// integer and returns the enum value as an int64 (and a boolean that
@@ -85,16 +90,30 @@ func (e *EnumSetting[T]) setToDefault(ctx context.Context, sv *Values) {
 	// See if the default value was overridden.
 	if val := sv.getDefaultOverride(e.slot); val != nil {
 		// As per the semantics of override, these values don't go through
-		// validation.
-		sv.setInt64(ctx, e.slot, val.(int64))
+		// validation. TODO(wenyihu6): there seems to be a bug here. See more in
+		// #149982.
+		_ = e.set(ctx, sv, val.(int64))
 		return
 	}
-	sv.setInt64(ctx, e.slot, int64(e.defaultValue))
+	if err := e.set(ctx, sv, int64(e.defaultValue)); err != nil {
+		panic(err)
+	}
+}
+
+func (e *EnumSetting[T]) set(ctx context.Context, sv *Values, v int64) error {
+	if err := e.Validate(v); err != nil {
+		return err
+	}
+	sv.setInt64(ctx, e.slot, v)
+	return nil
 }
 
 func (e *EnumSetting[T]) decodeAndSet(ctx context.Context, sv *Values, encoded string) error {
 	v, err := strconv.ParseInt(encoded, 10, 64)
 	if err != nil {
+		return err
+	}
+	if err := e.Validate(v); err != nil {
 		return err
 	}
 	sv.setInt64(ctx, e.slot, v)
@@ -122,6 +141,26 @@ func (e *EnumSetting[T]) DecodeToString(encoded string) (string, error) {
 		return str, nil
 	}
 	return encoded, nil
+}
+
+// parseEnumInt64 converts an int64 to its enum string value for validation.
+// The string value is used by validateFn to validate the enum.
+func (e *EnumSetting[T]) parseEnumInt64(value int64) (string, bool) {
+	for k, v := range e.enumValues {
+		if value == int64(k) {
+			return v, true
+		}
+	}
+	return "", false
+}
+
+// Validate validates the enum value.
+func (e *EnumSetting[T]) Validate(value int64) error {
+	parsed, ok := e.parseEnumInt64(value)
+	if !ok {
+		return fmt.Errorf("invalid enum value: %d", value)
+	}
+	return e.validateFn(parsed)
 }
 
 // ParseEnum parses a string that is either a string in enumValues or an integer
@@ -212,6 +251,22 @@ func RegisterEnumSetting[T constraints.Integer](
 		enumValuesLower[k] = strings.ToLower(v)
 	}
 
+	validateFn := func(val string) error {
+		for _, opt := range opts {
+			switch {
+			case opt.commonOpt != nil:
+				continue
+			case opt.validateEnumFn != nil:
+			default:
+				panic(errors.AssertionFailedf("wrong validator type"))
+			}
+			if err := opt.validateEnumFn(val); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
 	defaultVal := func() T {
 		for k, v := range enumValues {
 			if v == defaultValue {
@@ -221,9 +276,14 @@ func RegisterEnumSetting[T constraints.Integer](
 		panic(fmt.Sprintf("enum registered with default value %s not in map %s", defaultValue, enumValuesToDesc(enumValuesLower)))
 	}()
 
+	if err := validateFn(defaultValue); err != nil {
+		panic(errors.Wrap(err, "invalid default"))
+	}
+
 	setting := &EnumSetting[T]{
 		defaultValue: defaultVal,
 		enumValues:   enumValuesLower,
+		validateFn:   validateFn,
 	}
 
 	register(class, key, fmt.Sprintf("%s %s", desc, enumValuesToDesc(enumValues)), setting)

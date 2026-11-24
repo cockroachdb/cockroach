@@ -1,3 +1,5 @@
+# LogicTest: !local-prepared
+
 # test MODIFYCLUSTERSETTING
 user testuser
 
@@ -301,20 +303,10 @@ statement ok
 BEGIN TRANSACTION PRIORITY HIGH ISOLATION LEVEL SERIALIZABLE;
 
 statement ok
-GRANT SELECT ON crdb_internal.feature_usage TO testuser4
+SET LOCAL autocommit_before_ddl=off;
 
-query TTTT
-SELECT username, path, privileges, grant_options FROM system.privileges ORDER BY 1,2
-----
-public     /vtable/crdb_internal/feature_usage  {}                                         {}
-root       /global/                             {MODIFYCLUSTERSETTING}                     {}
-testuser   /externalconn/foo                    {USAGE}                                    {}
-testuser   /global/                             {MODIFYCLUSTERSETTING}                     {}
-testuser   /vtable/crdb_internal/tables         {SELECT}                                   {}
-testuser2  /externalconn/foo                    {USAGE}                                    {}
-testuser2  /global/                             {MODIFYCLUSTERSETTING}                     {}
-testuser3  /global/                             {EXTERNALCONNECTION,MODIFYCLUSTERSETTING}  {}
-testuser4  /vtable/crdb_internal/feature_usage  {SELECT}                                   {}
+statement ok
+GRANT SELECT ON crdb_internal.feature_usage TO testuser4
 
 # This should not cache the uncommitted privilege.
 query B
@@ -325,28 +317,24 @@ true
 statement ok
 ROLLBACK
 
-query TTTT
-SELECT username, path, privileges, grant_options FROM system.privileges ORDER BY 1,2
-----
-public     /vtable/crdb_internal/feature_usage  {}                                         {}
-root       /global/                             {MODIFYCLUSTERSETTING}                     {}
-testuser   /externalconn/foo                    {USAGE}                                    {}
-testuser   /global/                             {MODIFYCLUSTERSETTING}                     {}
-testuser   /vtable/crdb_internal/tables         {SELECT}                                   {}
-testuser2  /externalconn/foo                    {USAGE}                                    {}
-testuser2  /global/                             {MODIFYCLUSTERSETTING}                     {}
-testuser3  /global/                             {EXTERNALCONNECTION,MODIFYCLUSTERSETTING}  {}
-
 query B
 SELECT has_table_privilege('testuser4', 'crdb_internal.feature_usage', 'SELECT')
 ----
 false
+
+# Cleanup the privilege that was added.
+statement ok
+REVOKE SYSTEM MODIFYCLUSTERSETTING FROM testuser
 
 # This subtest makes sure that an unknown privilege in the system.privileges
 # table does not break code that is trying to look up other privileges.
 # This situation can happen if a new synthetic privilege is backported to an
 # older branch.
 subtest unknown_privilege
+
+# Add an arbitrary privilege so that we can test manually overriding it.
+statement ok
+GRANT SYSTEM CREATEDB TO testuser
 
 statement ok
 INSERT INTO system.users VALUES ('node', NULL, true, 0);
@@ -424,6 +412,6 @@ testuser  NULL
 
 # testuser still should not have write privileges.
 statement error user testuser does not have INSERT privilege on relation users
-INSERT INTO system.users VALUES ('cat', null, true, 200)
+INSERT INTO system.users (username, "hashedPassword", "isRole", user_id) VALUES ('cat', null, true, 200)
 
 subtest end

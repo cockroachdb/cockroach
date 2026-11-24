@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
@@ -137,6 +138,21 @@ func (i *immediateVisitor) checkOutTrigger(
 		triggerID, tbl.GetName(), tbl.GetID()))
 }
 
+func (i *immediateVisitor) checkOutPolicy(
+	ctx context.Context, tableID descpb.ID, policyID catid.PolicyID,
+) (*descpb.PolicyDescriptor, error) {
+	tbl, err := i.checkOutTable(ctx, tableID)
+	if err != nil {
+		return nil, err
+	}
+	policy := catalog.FindPolicyByID(tbl, policyID)
+	if policy != nil {
+		return policy, nil
+	}
+	panic(errors.AssertionFailedf("failed to find policy with ID %d in table %q (%d)",
+		policyID, tbl.GetName(), tbl.GetID()))
+}
+
 func mutationStateChange(
 	tbl *tabledesc.Mutable,
 	f MutationSelector,
@@ -254,7 +270,7 @@ func enqueueIndexMutation(
 
 func updateColumnExprSequenceUsage(d *descpb.ColumnDescriptor) error {
 	var all catalog.DescriptorIDSet
-	for _, expr := range [3]*string{d.ComputeExpr, d.DefaultExpr, d.OnUpdateExpr} {
+	for _, expr := range [3]*descpb.Expression{d.ComputeExpr, d.DefaultExpr, d.OnUpdateExpr} {
 		if expr == nil {
 			continue
 		}
@@ -265,13 +281,12 @@ func updateColumnExprSequenceUsage(d *descpb.ColumnDescriptor) error {
 		ids.ForEach(all.Add)
 	}
 	d.UsesSequenceIds = all.Ordered()
-	d.OwnsSequenceIds = all.Ordered()
 	return nil
 }
 
 func updateColumnExprFunctionsUsage(d *descpb.ColumnDescriptor) error {
 	var all catalog.DescriptorIDSet
-	for _, expr := range [3]*string{d.ComputeExpr, d.DefaultExpr, d.OnUpdateExpr} {
+	for _, expr := range [3]*descpb.Expression{d.ComputeExpr, d.DefaultExpr, d.OnUpdateExpr} {
 		if expr == nil {
 			continue
 		}
@@ -285,8 +300,8 @@ func updateColumnExprFunctionsUsage(d *descpb.ColumnDescriptor) error {
 	return nil
 }
 
-func sequenceIDsInExpr(expr string) (ids catalog.DescriptorIDSet, _ error) {
-	e, err := parser.ParseExpr(expr)
+func sequenceIDsInExpr(expr catpb.Expression) (ids catalog.DescriptorIDSet, _ error) {
+	e, err := parser.ParseExpr(string(expr))
 	if err != nil {
 		return ids, err
 	}

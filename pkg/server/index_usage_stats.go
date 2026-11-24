@@ -69,7 +69,7 @@ func (s *statusServer) IndexUsageStatistics(
 		return statusClient.IndexUsageStatistics(ctx, localReq)
 	}
 
-	fetchIndexUsageStats := func(ctx context.Context, statusClient serverpb.StatusClient, _ roachpb.NodeID) (interface{}, error) {
+	fetchIndexUsageStats := func(ctx context.Context, statusClient serverpb.RPCStatusClient, _ roachpb.NodeID) (interface{}, error) {
 		return statusClient.IndexUsageStatistics(ctx, localReq)
 	}
 
@@ -167,7 +167,7 @@ func (s *statusServer) ResetIndexUsageStats(
 		return statusClient.ResetIndexUsageStats(ctx, localReq)
 	}
 
-	resetIndexUsageStats := func(ctx context.Context, statusClient serverpb.StatusClient, _ roachpb.NodeID) (interface{}, error) {
+	resetIndexUsageStats := func(ctx context.Context, statusClient serverpb.RPCStatusClient, _ roachpb.NodeID) (interface{}, error) {
 		return statusClient.ResetIndexUsageStats(ctx, localReq)
 	}
 
@@ -248,7 +248,7 @@ func getTableIndexUsageStats(
   	JOIN pg_catalog.pg_index AS pgidx ON indrelid = us.table_id
   	JOIN pg_catalog.pg_indexes AS pgidxs ON pgidxs.crdb_oid = indexrelid
 		AND indexname = ti.index_name
- 		WHERE ti.descriptor_id = $::REGCLASS`,
+		WHERE ti.descriptor_id::OID = $::REGCLASS::OID`,
 		tableID,
 	)
 	it, err := ie.QueryIteratorEx(ctx, "index-usage-stats", nil,

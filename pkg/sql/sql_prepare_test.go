@@ -55,3 +55,20 @@ func TestPreparePrepareExecute(t *testing.T) {
 	_, err = s.Exec(3)
 	require.Contains(t, err.Error(), "expected 0 arguments, got 1")
 }
+
+// Makes sure that schema changes can be prepared as the first operation in
+// on a connection.
+func TestPrepareSchemaChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{Insecure: true})
+	defer srv.Stopper().Stop(context.Background())
+
+	newConn := srv.SQLConn(t)
+	s, err := newConn.Prepare("PREPARE x AS CREATE SCHEMA sc1;")
+	require.NoError(t, err)
+
+	_, err = s.Exec()
+	require.NoError(t, err)
+}

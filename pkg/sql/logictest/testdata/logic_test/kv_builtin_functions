@@ -49,7 +49,7 @@ SELECT crdb_internal.kv_set_queue_active('timeseriesMaintenance', false);
 ----
 true
 
-query error pq: crdb_internal.kv_set_queue_active\(\): unknown queue "non-existent"
+query error pq: unknown queue "non-existent"
 SELECT crdb_internal.kv_set_queue_active('non-existent', true);
 
 # Test crdb_internal.kv_set_queue_active commands that target a named store on
@@ -61,5 +61,5 @@ SELECT crdb_internal.kv_set_queue_active('split', false, 1);
 ----
 true
 
-query error pq: crdb_internal.kv_set_queue_active\(\): store 42 not found on this node
+query error pq: store 42 not found on this node
 SELECT crdb_internal.kv_set_queue_active('split', false, 42);

@@ -8,14 +8,15 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/bazci/githubpost/issues"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/datadog"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/internal/team"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
@@ -23,27 +24,43 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 )
 
-type githubIssues struct {
-	disable      bool
-	cluster      *clusterImpl
-	vmCreateOpts *vm.CreateOpts
-	issuePoster  func(context.Context, issues.Logger, issues.IssueFormatter, issues.PostRequest, *issues.Options) (*issues.TestFailureIssue, error)
-	teamLoader   func() (team.Map, error)
+// GithubPoster interface allows MaybePost to be mocked in unit tests that test
+// failure modes.
+type GithubPoster interface {
+	MaybePost(
+		t *testImpl, issueInfo *githubIssueInfo, l *logger.Logger, message string,
+		params map[string]string) (
+		*issues.TestFailureIssue, error)
 }
 
-func newGithubIssues(disable bool, c *clusterImpl, vmCreateOpts *vm.CreateOpts) *githubIssues {
-	return &githubIssues{
-		disable:      disable,
+// githubIssues struct implements GithubPoster
+type githubIssues struct {
+	disable     bool
+	dryRun      bool
+	issuePoster func(context.Context, issues.Logger, issues.IssueFormatter, issues.PostRequest,
+		*issues.Options) (*issues.TestFailureIssue, error)
+	teamLoader func() (team.Map, error)
+}
+
+// githubIssueInfo struct contains information related to this issue on this
+// worker / test
+// separate from githubIssues because githubIssues is shared amongst all workers
+type githubIssueInfo struct {
+	cluster      testCluster
+	vmCreateOpts *vm.CreateOpts
+}
+
+// newGithubIssueInfo constructor for newGithubIssueInfo
+func newGithubIssueInfo(cluster testCluster, vmCreateOpts *vm.CreateOpts) *githubIssueInfo {
+	return &githubIssueInfo{
+		cluster:      cluster,
 		vmCreateOpts: vmCreateOpts,
-		cluster:      c,
-		issuePoster:  issues.Post,
-		teamLoader:   team.DefaultLoadTeams,
 	}
 }
 
 // generateHelpCommand creates a HelpCommand for createPostRequest
 func generateHelpCommand(
-	testName string, clusterName string, cloud spec.Cloud, start time.Time, end time.Time,
+	testName string, clusterName string, start time.Time, end time.Time,
 ) func(renderer *issues.Renderer) {
 	return func(renderer *issues.Renderer) {
 		issues.HelpCommandAsLink(
@@ -55,19 +72,30 @@ func generateHelpCommand(
 			"https://cockroachlabs.atlassian.net/l/c/SSSBr8c7",
 		)(renderer)
 		// An empty clusterName corresponds to a cluster creation failure.
-		// We only scrape metrics from GCE clusters for now.
 		if clusterName != "" {
-			if spec.GCE == cloud {
-				// N.B. This assumes we are posting from a source that does not run a test more than once.
-				// Otherwise, we'd need to use `testRunId`, which encodes the run number and allows us
-				// to distinguish between multiple runs of the same test, instead of `testName`.
+			// N.B. This assumes we are posting from a source that does not run a test more than once.
+			// Otherwise, we'd need to use `testRunId`, which encodes the run number and allows us
+			// to distinguish between multiple runs of the same test, instead of `testName`.
+			issues.HelpCommandAsLink(
+				"Grafana",
+				fmt.Sprintf("https://go.crdb.dev/roachtest-grafana/%s/%s/%d/%d", vm.SanitizeLabel(runID),
+					vm.SanitizeLabel(testName), start.UnixMilli(), end.Add(2*time.Minute).UnixMilli()),
+			)(renderer)
+			// Link to the Datadog Log Explorer with logs for this test run.
+			// ShouldUploadTestLogsToDatadog(true) is correct because we only
+			// generate help commands for failed tests (which file issues).
+			if datadog.ShouldUploadTestLogsToDatadog(true /* testFailed */) {
+				ddQuery := fmt.Sprintf("service:roachtest @cluster:%s", clusterName)
 				issues.HelpCommandAsLink(
-					"Grafana",
-					fmt.Sprintf("https://go.crdb.dev/roachtest-grafana/%s/%s/%d/%d", vm.SanitizeLabel(runID),
-						vm.SanitizeLabel(testName), start.UnixMilli(), end.Add(2*time.Minute).UnixMilli()),
+					"Datadog Logs",
+					fmt.Sprintf(
+						"https://us5.datadoghq.com/logs?query=%s&from_ts=%d&to_ts=%d&live=false&storage=flex_tier",
+						url.QueryEscape(ddQuery),
+						start.UnixMilli(),
+						end.Add(2*time.Minute).UnixMilli()),
 				)(renderer)
 			} else {
-				renderer.Escaped(fmt.Sprintf("_Grafana is not yet available for %s clusters_", cloud))
+				renderer.Escaped("\n_Logs were not uploaded to Datadog_")
 			}
 		}
 	}
@@ -174,13 +202,12 @@ func (g *githubIssues) createPostRequest(
 	spec *registry.TestSpec,
 	failures []failure,
 	message string,
-	sideEyeTimeoutSnapshotURL string,
 	runtimeAssertionsBuild bool,
 	coverageBuild bool,
 	params map[string]string,
+	issueInfo *githubIssueInfo,
 ) (issues.PostRequest, error) {
 	var mention []string
-	var projColID int
 
 	var (
 		issueOwner    = spec.Owner
@@ -219,6 +246,7 @@ func (g *githubIssues) createPostRequest(
 	const infraFlakeLabel = "X-infra-flake"
 	const runtimeAssertionsLabel = "B-runtime-assertions-enabled"
 	const coverageLabel = "B-coverage-enabled"
+	const s390xTestFailureLabel = "s390x-test-failure"
 	labels := []string{"O-roachtest"}
 	if infraFlake {
 		labels = append(labels, infraFlakeLabel)
@@ -237,6 +265,11 @@ func (g *githubIssues) createPostRequest(
 			labels = append(labels, coverageLabel)
 		}
 	}
+	// N.B. To simplify tracking failures on s390x, we add the designated s390x-test-failure label. This could be removed
+	// in the future, i.e., after several major releases, when we expect s390x to be sufficiently stable.
+	if arch := params["arch"]; vm.CPUArch(arch) == vm.ArchS390x {
+		labels = append(labels, s390xTestFailureLabel)
+	}
 	labels = append(labels, spec.ExtraLabels...)
 
 	teams, err := g.teamLoader()
@@ -250,11 +283,8 @@ func (g *githubIssues) createPostRequest(
 			if mentionTeam {
 				mention = append(mention, "@"+string(alias))
 			}
-			if label := teams[alias].Label; label != "" {
-				labels = append(labels, label)
-			}
+			labels = append(labels, teams[alias].Labels()...)
 		}
-		projColID = teams[sl[0]].TriageColumnID
 	}
 
 	branch := os.Getenv("TC_BUILD_BRANCH")
@@ -264,8 +294,8 @@ func (g *githubIssues) createPostRequest(
 
 	artifacts := fmt.Sprintf("/%s", testName)
 
-	if g.cluster != nil {
-		issueClusterName = g.cluster.name
+	if issueInfo.cluster != nil {
+		issueClusterName = issueInfo.cluster.Name()
 	}
 
 	issueMessage := messagePrefix + message
@@ -287,14 +317,8 @@ func (g *githubIssues) createPostRequest(
 				"then this failure is likely due to an assertion violation or (assertion) timeout.")
 	}
 
-	sideEyeMsg := ""
-	if sideEyeTimeoutSnapshotURL != "" {
-		sideEyeMsg = "A Side-Eye cluster snapshot was captured on timeout: "
-	}
-
 	return issues.PostRequest{
 		MentionOnCreate: mention,
-		ProjectColumnID: projColID,
 		PackageName:     "roachtest",
 		TestName:        issueName,
 		Labels:          labels,
@@ -303,20 +327,23 @@ func (g *githubIssues) createPostRequest(
 		TopLevelNotes:           topLevelNotes,
 		Message:                 issueMessage,
 		Artifacts:               artifacts,
-		SideEyeSnapshotMsg:      sideEyeMsg,
-		SideEyeSnapshotURL:      sideEyeTimeoutSnapshotURL,
 		ExtraParams:             params,
-		HelpCommand:             generateHelpCommand(testName, issueClusterName, roachtestflags.Cloud, start, end),
+		HelpCommand:             generateHelpCommand(testName, issueClusterName, start, end),
 	}, nil
 }
 
+// MaybePost entry point for POSTing an issue to GitHub
 func (g *githubIssues) MaybePost(
 	t *testImpl,
+	issueInfo *githubIssueInfo,
 	l *logger.Logger,
 	message string,
-	sideEyeTimeoutSnapshotURL string,
 	params map[string]string,
 ) (*issues.TestFailureIssue, error) {
+	if g.dryRun {
+		return nil, g.dryRunPost(t, issueInfo, l, message, params)
+	}
+
 	skipReason := g.shouldPost(t)
 	if skipReason != "" {
 		l.Printf("skipping GitHub issue posting (%s)", skipReason)
@@ -325,8 +352,8 @@ func (g *githubIssues) MaybePost(
 
 	postRequest, err := g.createPostRequest(
 		t.Name(), t.start, t.end, t.spec, t.failures(),
-		message, sideEyeTimeoutSnapshotURL,
-		roachtestutil.UsingRuntimeAssertions(t), t.goCoverEnabled, params,
+		message,
+		roachtestutil.UsingRuntimeAssertions(t), t.goCoverEnabled, params, issueInfo,
 	)
 
 	if err != nil {
@@ -341,4 +368,76 @@ func (g *githubIssues) MaybePost(
 		postRequest,
 		opts,
 	)
+}
+
+// dryRunPost simulates posting an issue to GitHub by rendering
+// the issue and logging a clickable link.
+func (g *githubIssues) dryRunPost(
+	t *testImpl,
+	issueInfo *githubIssueInfo,
+	l *logger.Logger,
+	message string,
+	params map[string]string,
+) error {
+	postRequest, err := g.createPostRequest(
+		t.Name(), t.start, t.end, t.spec, t.failures(),
+		message,
+		roachtestutil.UsingRuntimeAssertions(t), t.goCoverEnabled, params, issueInfo,
+	)
+	if err != nil {
+		return err
+	}
+	_, url, err := formatPostRequest(postRequest)
+	if err != nil {
+		return err
+	}
+	l.Printf("GitHub issue posting in dry-run mode:\n%s", url)
+	return nil
+}
+
+// formatPostRequest returns a string representation of the rendered PostRequest
+// as well as a link that can be followed to open the issue in Github. The rendered
+// PostRequest also includes the labels that would be applied to the issue as part
+// of the body.
+func formatPostRequest(req issues.PostRequest) (string, string, error) {
+	data := issues.TemplateData{
+		PostRequest:      req,
+		Parameters:       req.ExtraParams,
+		CondensedMessage: issues.CondensedMessage(req.Message),
+		Branch:           "test_branch",
+		Commit:           "test_SHA",
+		PackageNameShort: strings.TrimPrefix(req.PackageName, issues.CockroachPkgPrefix),
+	}
+
+	formatter := issues.UnitTestFormatter
+	r := &issues.Renderer{}
+	if err := formatter.Body(r, data); err != nil {
+		return "", "", err
+	}
+
+	var post strings.Builder
+	post.WriteString(r.String())
+
+	// Github labels are normally not part of the rendered issue body, but we want to
+	// still test that they are correctly set so append them here.
+	post.WriteString("\n------\nLabels:\n")
+	for _, label := range req.Labels {
+		post.WriteString(fmt.Sprintf("- <code>%s</code>\n", label))
+	}
+
+	u, err := url.Parse("https://github.com/cockroachdb/cockroach/issues/new")
+	if err != nil {
+		return "", "", err
+	}
+	q := u.Query()
+	q.Add("title", formatter.Title(data))
+	q.Add("body", post.String())
+	// Adding a template parameter is required to be able to view the rendered
+	// template on GitHub, otherwise it just takes you to the template selection
+	// page.
+	q.Add("template", "none")
+	u.RawQuery = q.Encode()
+	post.WriteString(fmt.Sprintf("Rendered:\n%s", u.String()))
+
+	return post.String(), u.String(), nil
 }

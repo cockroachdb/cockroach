@@ -30,6 +30,7 @@ go_library(
         "//pkg/sql/execinfra",
         "//pkg/sql/schemachanger/scpb",
         "//pkg/storage",
+        "//pkg/util/admission/admissionpb",
         "//pkg/util/encoding",
         "//pkg/util/hlc",
         "//pkg/util/intsets",
@@ -37,7 +38,10 @@ go_library(
         "//pkg/util/metric",
         "//pkg/util/syncutil",
         "//pkg/util/timeutil",
+        "//pkg/util/tracing",
+        "@com_github_cockroachdb_crlib//crtime",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_logtags//:logtags",
     ],
 )
 
@@ -85,7 +89,6 @@ go_test(
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_datadriven//:datadriven",
         "@com_github_cockroachdb_errors//:errors",
-        "@com_github_gogo_protobuf//proto",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],

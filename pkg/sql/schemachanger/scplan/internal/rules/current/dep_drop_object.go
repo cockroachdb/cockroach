@@ -43,7 +43,7 @@ func init() {
 		func(from, to NodeVars) rel.Clauses {
 			return rel.Clauses{
 				from.TypeFilter(rulesVersionKey, isDescriptor),
-				to.TypeFilter(rulesVersionKey, Or(isSimpleDependent, isOwner), Not(isConstraintDependent)),
+				to.TypeFilter(rulesVersionKey, Or(isSimpleDependent, isOwner), Not(isConstraintDependent), Not(isTriggerOrDependent)),
 				JoinOnDescID(from, to, "desc-id"),
 				StatusesToAbsent(from, scpb.Status_DROPPED, to, scpb.Status_ABSENT),
 			}
@@ -182,7 +182,6 @@ func init() {
 			}
 		},
 	)
-
 }
 
 // These rules ensure that descriptor, back-reference in parent descriptor,

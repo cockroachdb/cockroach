@@ -15,14 +15,15 @@ import (
 )
 
 // ValuesLegalForInsertFastPath tests if `values` is a Values expression that
-// has no subqueries or UDFs and has less rows than the max number of entries in
-// a KV batch for a mutation operation.
+// has no subqueries or UDFs and has less rows than the max number of rows in
+// the SQL-level batch for a mutation operation.
 func ValuesLegalForInsertFastPath(values *ValuesExpr) bool {
 	//  - The input is Values with at most mutations.MaxBatchSize, and there are no
 	//    subqueries;
-	//    (note that mutations.MaxBatchSize() is a quantity of keys in the batch
-	//     that we send, not a number of rows. We use this as a guideline only,
-	//     and there is no guarantee that we won't produce a bigger batch.)
+	//    (note that mutations.MaxBatchSize() is a quantity of modified rows in
+	//     the SQL-level batch that we send, not the number of KV batch entries.
+	//     We use this as a guideline only, and there is no guarantee that we
+	//     won't produce a bigger batch.)
 	if values.ChildCount() > mutations.MaxBatchSize(false /* forceProductionMaxBatchSize */) ||
 		values.Relational().HasSubquery ||
 		values.Relational().HasUDF {

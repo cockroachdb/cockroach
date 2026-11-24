@@ -120,6 +120,14 @@ func MakeCommentKey(objID uint32, subID uint32, cmtType CommentType) CommentKey 
 	}
 }
 
+// Validate returns if a comment key is valid.
+func (k CommentKey) Validate() error {
+	if !IsValidCommentType(k.CommentType) {
+		return errors.Errorf("invalid comment type: %d on object ID: %d", k.CommentType, k.ObjectID)
+	}
+	return nil
+}
+
 // IndexColumnEncodingDirection converts a direction from the proto to an
 // encoding.Direction.
 func IndexColumnEncodingDirection(dir catenumpb.IndexColumn_Direction) (encoding.Direction, error) {
@@ -277,6 +285,11 @@ func MakeAllDescsMetadataKey(codec keys.SQLCodec) roachpb.Key {
 // MakeDescMetadataKey returns the key for the descriptor.
 func MakeDescMetadataKey(codec keys.SQLCodec, descID descpb.ID) roachpb.Key {
 	return codec.DescMetadataKey(uint32(descID))
+}
+
+// MakeDescUpdateKey returns the key for the descriptor.
+func MakeDescUpdateKey(codec keys.SQLCodec, id descpb.ID) roachpb.Key {
+	return codec.DescMetadataUpdateKey(uint32(id))
 }
 
 // CommentsMetadataPrefix returns the key prefix for all comments in the

@@ -9,7 +9,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math"
 	"regexp"
 	"strings"
 	"testing"
@@ -23,9 +22,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventlog"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logtestutils"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtestutils/telemetrylogtestutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -39,16 +40,32 @@ func TestTelemetryLogging(t *testing.T) {
 	sc := log.ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
 
-	cleanup := logtestutils.InstallLogFileSink(sc, t, logpb.Channel_TELEMETRY)
+	ctx := context.Background()
+	stmtSpy := logtestutils.NewStructuredLogSpy(
+		t,
+		[]logpb.Channel{logpb.Channel_TELEMETRY, logpb.Channel_SQL_EXEC},
+		[]string{"sampled_query"},
+		logtestutils.AsLogEntry,
+	)
+	cleanup := log.InterceptWith(ctx, stmtSpy)
 	defer cleanup()
 
-	st := logtestutils.StubTime{}
-	sqm := logtestutils.StubQueryStats{}
-	sts := logtestutils.StubTracingStatus{}
+	txnSpy := logtestutils.NewStructuredLogSpy(
+		t,
+		[]logpb.Channel{logpb.Channel_TELEMETRY, logpb.Channel_SQL_EXEC},
+		[]string{"sampled_transaction"},
+		logtestutils.AsLogEntry,
+	)
+	txnCleanup := log.InterceptWith(ctx, txnSpy)
+	defer txnCleanup()
+
+	st := telemetrylogtestutils.StubTime{}
+	sqm := telemetrylogtestutils.StubQueryStats{}
+	sts := telemetrylogtestutils.StubTracingStatus{}
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			EventLog: &EventLogTestingKnobs{
+			EventLog: &eventlog.EventLogTestingKnobs{
 				// The sampling checks below need to have a deterministic
 				// number of statements run by internal executor.
 				SyncWrites: true,
@@ -71,7 +88,7 @@ func TestTelemetryLogging(t *testing.T) {
 	db.QueryRow(t, `SHOW database`).Scan(&databaseName)
 	db.Exec(t, `SET application_name = 'telemetry-logging-test'`)
 	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;`)
-	db.Exec(t, "CREATE TABLE t();")
+	db.Exec(t, "CREATE TABLE t() WITH (schema_locked=false);")
 	db.Exec(t, "CREATE TABLE u(x int);")
 	db.Exec(t, "INSERT INTO u SELECT generate_series(1, 100);")
 	// Use INJECT STATISTICS instead of ANALYZE to avoid test flakes.
@@ -134,12 +151,12 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedIndexes:         false,
 			queryLevelStats: execstats.QueryLevelStats{
 				ContentionTime:                     0 * time.Nanosecond,
-				NetworkBytesSent:                   1,
+				DistSQLNetworkBytesSent:            1,
 				MaxMemUsage:                        2,
 				MaxDiskUsage:                       3,
 				KVBytesRead:                        4,
 				KVRowsRead:                         5,
-				NetworkMessages:                    6,
+				DistSQLNetworkMessages:             6,
 				MvccValueBytes:                     100,
 				MvccSteps:                          101,
 				MvccStepsInternal:                  102,
@@ -153,7 +170,7 @@ func TestTelemetryLogging(t *testing.T) {
 				MvccKeyBytes:                       110,
 				MvccBlockBytesInCache:              111,
 				MvccBlockBytes:                     112,
-				CPUTime:                            113,
+				SQLCPUTime:                         113,
 				KVBatchRequestsIssued:              113,
 				KVTime:                             114,
 				Regions:                            []string{"eastus1"},
@@ -201,10 +218,10 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedWrite:           false,
 			expectedIndexes:         true,
 			queryLevelStats: execstats.QueryLevelStats{
-				ContentionTime:   2 * time.Nanosecond,
-				NetworkBytesSent: 1,
-				MaxMemUsage:      2,
-				NetworkMessages:  6,
+				ContentionTime:          2 * time.Nanosecond,
+				DistSQLNetworkBytesSent: 1,
+				MaxMemUsage:             2,
+				DistSQLNetworkMessages:  6,
 			},
 			enableTracing: false,
 		},
@@ -226,13 +243,13 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedWrite:           false,
 			expectedIndexes:         true,
 			queryLevelStats: execstats.QueryLevelStats{
-				ContentionTime:   3 * time.Nanosecond,
-				NetworkBytesSent: 1124,
-				MaxMemUsage:      132,
-				MaxDiskUsage:     3,
-				KVBytesRead:      4,
-				KVRowsRead:       2345,
-				NetworkMessages:  36,
+				ContentionTime:          3 * time.Nanosecond,
+				DistSQLNetworkBytesSent: 1124,
+				MaxMemUsage:             132,
+				MaxDiskUsage:            3,
+				KVBytesRead:             4,
+				KVRowsRead:              2345,
+				DistSQLNetworkMessages:  36,
 			},
 			enableTracing: false,
 		},
@@ -254,12 +271,12 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedWrite:           false,
 			expectedIndexes:         true,
 			queryLevelStats: execstats.QueryLevelStats{
-				ContentionTime:   0 * time.Nanosecond,
-				NetworkBytesSent: 124235,
-				MaxMemUsage:      12412,
-				MaxDiskUsage:     3,
-				KVRowsRead:       5,
-				NetworkMessages:  6235,
+				ContentionTime:          0 * time.Nanosecond,
+				DistSQLNetworkBytesSent: 124235,
+				MaxMemUsage:             12412,
+				MaxDiskUsage:            3,
+				KVRowsRead:              5,
+				DistSQLNetworkMessages:  6235,
 			},
 			enableTracing: false,
 		},
@@ -281,11 +298,11 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedWrite:           true,
 			expectedIndexes:         true,
 			queryLevelStats: execstats.QueryLevelStats{
-				ContentionTime:   0 * time.Nanosecond,
-				NetworkBytesSent: 1,
-				KVBytesRead:      4,
-				KVRowsRead:       5,
-				NetworkMessages:  6,
+				ContentionTime:          0 * time.Nanosecond,
+				DistSQLNetworkBytesSent: 1,
+				KVBytesRead:             4,
+				KVRowsRead:              5,
+				DistSQLNetworkMessages:  6,
 			},
 			enableTracing: false,
 		},
@@ -327,13 +344,13 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedWrite:           false,
 			expectedIndexes:         true,
 			queryLevelStats: execstats.QueryLevelStats{
-				ContentionTime:   2 * time.Nanosecond,
-				NetworkBytesSent: 10,
-				MaxMemUsage:      20,
-				MaxDiskUsage:     33,
-				KVBytesRead:      24,
-				KVRowsRead:       55,
-				NetworkMessages:  66,
+				ContentionTime:          2 * time.Nanosecond,
+				DistSQLNetworkBytesSent: 10,
+				MaxMemUsage:             20,
+				MaxDiskUsage:            33,
+				KVBytesRead:             24,
+				KVRowsRead:              55,
+				DistSQLNetworkMessages:  66,
 			},
 			enableTracing: true,
 		},
@@ -374,13 +391,13 @@ func TestTelemetryLogging(t *testing.T) {
 			expectedIndexes:         true,
 			queryLevelStats: execstats.QueryLevelStats{
 				ContentionTime:                     9223372036854775807 * time.Nanosecond,
-				NetworkBytesSent:                   9223372036854775807,
+				DistSQLNetworkBytesSent:            9223372036854775807,
 				MaxMemUsage:                        9223372036854775807,
 				MaxDiskUsage:                       9223372036854775807,
 				KVBytesRead:                        9223372036854775807,
 				KVPairsRead:                        9223372036854775807,
 				KVRowsRead:                         9223372036854775807,
-				NetworkMessages:                    9223372036854775807,
+				DistSQLNetworkMessages:             9223372036854775807,
 				MvccValueBytes:                     9223372036854775807,
 				MvccSteps:                          9223372036854775807,
 				MvccStepsInternal:                  9223372036854775807,
@@ -394,7 +411,7 @@ func TestTelemetryLogging(t *testing.T) {
 				MvccKeyBytes:                       9223372036854775807,
 				MvccBlockBytesInCache:              9223372036854775807,
 				MvccBlockBytes:                     9223372036854775807,
-				CPUTime:                            9223372036854775807,
+				SQLCPUTime:                         9223372036854775807,
 				KVBatchRequestsIssued:              9223372036854775807,
 				KVTime:                             9223372036854775807,
 				Regions:                            []string{"9223372036854775807EastUS9223372036854775807/z^&*&#()(!@%&^61%^7'\\\\&*@#$%"},
@@ -431,27 +448,10 @@ func TestTelemetryLogging(t *testing.T) {
 
 	// We should not see any transaction events in statement
 	// telemetry mode.
-	txnEntries, err := log.FetchEntriesFromFiles(
-		0,
-		math.MaxInt64,
-		10000,
-		regexp.MustCompile(`"EventType":"sampled_transaction"`),
-		log.WithMarkedSensitiveData,
-	)
-	require.NoError(t, err)
+	txnEntries := txnSpy.GetLastNLogs(getSampleQueryLoggingChannel(), txnSpy.Count())
 	require.Emptyf(t, txnEntries, "found unexpected transaction telemetry events: %v", txnEntries)
 
-	entries, err := log.FetchEntriesFromFiles(
-		0,
-		math.MaxInt64,
-		10000,
-		regexp.MustCompile(`"EventType":"sampled_query"`),
-		log.WithMarkedSensitiveData,
-	)
-
-	if err != nil {
-		t.Fatal(err)
-	}
+	entries := stmtSpy.GetLastNLogs(getSampleQueryLoggingChannel(), stmtSpy.Count())
 
 	if len(entries) == 0 {
 		t.Fatal(errors.Newf("no entries found"))
@@ -470,9 +470,7 @@ func TestTelemetryLogging(t *testing.T) {
 			})
 			logCount := 0
 			expectedLogCount := len(tc.expectedSkipped)
-			// NB: FetchEntriesFromFiles delivers entries in reverse order.
-			for i := len(entries) - 1; i >= 0; i-- {
-				e := entries[i]
+			for _, e := range entries {
 				if strings.Contains(e.Message, tc.expectedLogStatement+"\"") {
 
 					if logCount == expectedLogCount {
@@ -481,14 +479,14 @@ func TestTelemetryLogging(t *testing.T) {
 					}
 
 					var sampledQueryFromLog eventpb.SampledQuery
-					err = json.Unmarshal([]byte(e.Message), &sampledQueryFromLog)
+					err := json.Unmarshal([]byte(e.Message), &sampledQueryFromLog)
 					require.NoError(t, err)
 
 					require.Equal(t, tc.expectedSkipped[logCount], sampledQueryFromLog.SkippedQueries, "%v", e.Message)
 
 					logCount++
 
-					costRe := regexp.MustCompile("\"CostEstimate\":[0-9]*\\.[0-9]*")
+					costRe := regexp.MustCompile("\"CostEstimate\":[0-9]*\\.?[0-9]*")
 					if !costRe.MatchString(e.Message) {
 						t.Errorf("expected to find CostEstimate but none was found")
 					}
@@ -527,7 +525,7 @@ func TestTelemetryLogging(t *testing.T) {
 					// All expected logs in this test are single stmt txns.
 					require.Equal(t, uint32(1), sampledQueryFromLog.StmtPosInTxn)
 
-					stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(tc.queryNoConstants, true, databaseName)
+					stmtFingerprintID := appstatspb.ConstructStatementFingerprintID(tc.queryNoConstants, databaseName)
 
 					require.Equal(t, stmtFingerprintID.String(), sampledQueryFromLog.StatementFingerprintID)
 
@@ -589,7 +587,7 @@ func TestTelemetryLogging(t *testing.T) {
 					require.Equal(t, tc.queryLevelStats.Regions, sampledQueryFromLog.Regions)
 					require.Equal(t, tc.queryLevelStats.SQLInstanceIDs, sampledQueryFromLog.SQLInstanceIDs)
 					require.Equal(t, tc.queryLevelStats.KVNodeIDs, sampledQueryFromLog.KVNodeIDs)
-					require.Equal(t, tc.queryLevelStats.CPUTime.Nanoseconds(), sampledQueryFromLog.CpuTimeNanos)
+					require.Equal(t, tc.queryLevelStats.SQLCPUTime.Nanoseconds(), sampledQueryFromLog.CpuTimeNanos)
 					require.Greater(t, sampledQueryFromLog.PlanLatencyNanos, int64(0))
 					require.Greater(t, sampledQueryFromLog.RunLatencyNanos, int64(0))
 					require.Equal(t, int64(0), sampledQueryFromLog.IdleLatencyNanos)
@@ -631,10 +629,10 @@ func TestTelemetryLogging(t *testing.T) {
 						t.Errorf("expected no ContentionNanos field, but was found")
 					}
 					networkBytesSent := regexp.MustCompile("\"NetworkBytesSent\":[0-9]*")
-					if tc.queryLevelStats.NetworkBytesSent > 0 && !networkBytesSent.MatchString(e.Message) {
+					if tc.queryLevelStats.DistSQLNetworkBytesSent > 0 && !networkBytesSent.MatchString(e.Message) {
 						// If we have sent network bytes, we expect the NetworkBytesSent field to be populated.
 						t.Errorf("expected to find NetworkBytesSent but none was found")
-					} else if tc.queryLevelStats.NetworkBytesSent == 0 && networkBytesSent.MatchString(e.Message) {
+					} else if tc.queryLevelStats.DistSQLNetworkBytesSent == 0 && networkBytesSent.MatchString(e.Message) {
 						// If we have not sent network bytes, expect no NetworkBytesSent field.
 						t.Errorf("expected no NetworkBytesSent field, but was found")
 					}
@@ -671,10 +669,10 @@ func TestTelemetryLogging(t *testing.T) {
 						t.Errorf("expected no KVRowsRead field, but was found")
 					}
 					networkMessages := regexp.MustCompile("\"NetworkMessages\":[0-9]*")
-					if tc.queryLevelStats.NetworkMessages > 0 && !networkMessages.MatchString(e.Message) {
+					if tc.queryLevelStats.DistSQLNetworkMessages > 0 && !networkMessages.MatchString(e.Message) {
 						// If we have network messages, we expect the NetworkMessages field to be populated.
 						t.Errorf("expected to find NetworkMessages but none was found")
-					} else if tc.queryLevelStats.NetworkMessages == 0 && networkMessages.MatchString(e.Message) {
+					} else if tc.queryLevelStats.DistSQLNetworkMessages == 0 && networkMessages.MatchString(e.Message) {
 						// If we do not have network messages, expect no NetworkMessages field.
 						t.Errorf("expected no NetworkMessages field, but was found")
 					}
@@ -706,16 +704,22 @@ func TestTelemetryLoggingInternalEnabled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	sc := log.ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
-
-	cleanup := logtestutils.InstallLogFileSink(sc, t, logpb.Channel_TELEMETRY)
+	ctx := context.Background()
+	stmtSpy := logtestutils.NewStructuredLogSpy(
+		t,
+		[]logpb.Channel{logpb.Channel_TELEMETRY, logpb.Channel_SQL_EXEC},
+		[]string{"sampled_query"},
+		logtestutils.AsLogEntry,
+	)
+	cleanup := log.InterceptWith(ctx, stmtSpy)
 	defer cleanup()
 
-	st := logtestutils.StubTime{}
-	sts := logtestutils.StubTracingStatus{}
+	st := telemetrylogtestutils.StubTime{}
+	sts := telemetrylogtestutils.StubTracingStatus{}
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			EventLog: &EventLogTestingKnobs{
+			EventLog: &eventlog.EventLogTestingKnobs{
 				// The sampling checks below need to have a deterministic
 				// number of statements run by internal executor.
 				SyncWrites: true,
@@ -747,19 +751,7 @@ func TestTelemetryLoggingInternalEnabled(t *testing.T) {
 		`TRUNCATE TABLE system.public.transaction_statistics`,
 	}
 
-	log.FlushFiles()
-
-	entries, err := log.FetchEntriesFromFiles(
-		0,
-		math.MaxInt64,
-		10000,
-		regexp.MustCompile(`"EventType":"sampled_query"`),
-		log.WithMarkedSensitiveData,
-	)
-
-	if err != nil {
-		t.Fatal(err)
-	}
+	entries := stmtSpy.GetLogs(getSampleQueryLoggingChannel())
 
 	if len(entries) == 0 {
 		t.Fatal(errors.Newf("no entries found"))
@@ -796,15 +788,22 @@ func TestTelemetryLoggingInternalConsoleEnabled(t *testing.T) {
 	sc := log.ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
 
-	cleanup := logtestutils.InstallLogFileSink(sc, t, logpb.Channel_TELEMETRY)
+	ctx := context.Background()
+	stmtSpy := logtestutils.NewStructuredLogSpy(
+		t,
+		[]logpb.Channel{logpb.Channel_TELEMETRY, logpb.Channel_SQL_EXEC},
+		[]string{"sampled_query"},
+		logtestutils.AsLogEntry,
+	)
+	cleanup := log.InterceptWith(ctx, stmtSpy)
 	defer cleanup()
 
-	st := logtestutils.StubTime{}
-	sts := logtestutils.StubTracingStatus{}
+	st := telemetrylogtestutils.StubTime{}
+	sts := telemetrylogtestutils.StubTracingStatus{}
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			EventLog: &EventLogTestingKnobs{
+			EventLog: &eventlog.EventLogTestingKnobs{
 				// The sampling checks below need to have a deterministic
 				// number of statements run by internal executor.
 				SyncWrites: true,
@@ -819,6 +818,7 @@ func TestTelemetryLoggingInternalConsoleEnabled(t *testing.T) {
 	st.SetTime(stubTime)
 	defer s.Stopper().Stop(context.Background())
 
+	sqlDB.SetMaxOpenConns(1)
 	db := sqlutils.MakeSQLRunner(sqlDB)
 	db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.enabled = true;`)
 	// Set query internal to `false` to guarantee that if an entry qith `internal-console` is showing
@@ -853,23 +853,14 @@ func TestTelemetryLoggingInternalConsoleEnabled(t *testing.T) {
 		},
 	}
 
-	query := `SELECT count(*) FROM crdb_internal.statement_statistics`
+	query := `SELECT count(*) FROM defaultdb.crdb_internal.statement_statistics`
 	for _, tc := range testData {
 		db.Exec(t, `SET application_name = $1`, tc.appName)
 		db.Exec(t, `SET CLUSTER SETTING sql.telemetry.query_sampling.internal_console.enabled = $1;`, tc.logInternalConsole)
 		db.Exec(t, query)
 		log.FlushFiles()
 
-		entries, err := log.FetchEntriesFromFiles(
-			0,
-			math.MaxInt64,
-			10000,
-			regexp.MustCompile(`"EventType":"sampled_query"`),
-			log.WithMarkedSensitiveData,
-		)
-		if err != nil {
-			t.Fatal(err)
-		}
+		entries := stmtSpy.GetUnreadLogs(getSampleQueryLoggingChannel())
 		if len(entries) == 0 {
 			t.Fatal(errors.Newf("no entries found"))
 		}
@@ -893,10 +884,17 @@ func TestNoTelemetryLogOnTroubleshootMode(t *testing.T) {
 	sc := log.ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
 
-	cleanup := logtestutils.InstallLogFileSink(sc, t, logpb.Channel_TELEMETRY)
+	ctx := context.Background()
+	stmtSpy := logtestutils.NewStructuredLogSpy(
+		t,
+		[]logpb.Channel{logpb.Channel_TELEMETRY, logpb.Channel_SQL_EXEC},
+		[]string{"sampled_query"},
+		logtestutils.AsLogEntry,
+	)
+	cleanup := log.InterceptWith(ctx, stmtSpy)
 	defer cleanup()
 
-	st := logtestutils.StubTime{}
+	st := telemetrylogtestutils.StubTime{}
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
@@ -961,19 +959,7 @@ func TestNoTelemetryLogOnTroubleshootMode(t *testing.T) {
 		db.Exec(t, tc.query)
 	}
 
-	log.FlushFiles()
-
-	entries, err := log.FetchEntriesFromFiles(
-		0,
-		math.MaxInt64,
-		10000,
-		regexp.MustCompile(`"EventType":"sampled_query"`),
-		log.WithMarkedSensitiveData,
-	)
-
-	if err != nil {
-		t.Fatal(err)
-	}
+	entries := stmtSpy.GetUnreadLogs(getSampleQueryLoggingChannel())
 
 	if len(entries) == 0 {
 		t.Fatal(errors.Newf("no entries found"))
@@ -1002,7 +988,14 @@ func TestTelemetryLogJoinTypesAndAlgorithms(t *testing.T) {
 	sc := log.ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
 
-	cleanup := logtestutils.InstallLogFileSink(sc, t, logpb.Channel_TELEMETRY)
+	ctx := context.Background()
+	stmtSpy := logtestutils.NewStructuredLogSpy(
+		t,
+		[]logpb.Channel{logpb.Channel_TELEMETRY, logpb.Channel_SQL_EXEC},
+		[]string{"sampled_query"},
+		logtestutils.AsLogEntry,
+	)
+	cleanup := log.InterceptWith(ctx, stmtSpy)
 	defer cleanup()
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
@@ -1165,19 +1158,7 @@ func TestTelemetryLogJoinTypesAndAlgorithms(t *testing.T) {
 		db.Exec(t, tc.query)
 	}
 
-	log.FlushFiles()
-
-	entries, err := log.FetchEntriesFromFiles(
-		0,
-		math.MaxInt64,
-		10000,
-		regexp.MustCompile(`"EventType":"sampled_query"`),
-		log.WithMarkedSensitiveData,
-	)
-
-	if err != nil {
-		t.Fatal(err)
-	}
+	entries := stmtSpy.GetUnreadLogs(getSampleQueryLoggingChannel())
 
 	if len(entries) == 0 {
 		t.Fatal(errors.Newf("no entries found"))
@@ -1241,7 +1222,14 @@ func TestTelemetryScanCounts(t *testing.T) {
 	sc := log.ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
 
-	cleanup := logtestutils.InstallLogFileSink(sc, t, logpb.Channel_TELEMETRY)
+	ctx := context.Background()
+	stmtSpy := logtestutils.NewStructuredLogSpy(
+		t,
+		[]logpb.Channel{logpb.Channel_TELEMETRY, logpb.Channel_SQL_EXEC},
+		[]string{"sampled_query"},
+		logtestutils.AsLogEntry,
+	)
+	cleanup := log.InterceptWith(ctx, stmtSpy)
 	defer cleanup()
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
@@ -1420,19 +1408,7 @@ func TestTelemetryScanCounts(t *testing.T) {
 		db.Exec(t, tc.query)
 	}
 
-	log.FlushFiles()
-
-	entries, err := log.FetchEntriesFromFiles(
-		0,
-		math.MaxInt64,
-		10000,
-		regexp.MustCompile(`"EventType":"sampled_query"`),
-		log.WithMarkedSensitiveData,
-	)
-
-	if err != nil {
-		t.Fatal(err)
-	}
+	entries := stmtSpy.GetUnreadLogs(getSampleQueryLoggingChannel())
 
 	if len(entries) == 0 {
 		t.Fatal(errors.Newf("no entries found"))
@@ -1511,7 +1487,14 @@ func TestFunctionBodyRedacted(t *testing.T) {
 	sc := log.ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
 
-	cleanup := logtestutils.InstallLogFileSink(sc, t, logpb.Channel_TELEMETRY)
+	ctx := context.Background()
+	stmtSpy := logtestutils.NewStructuredLogSpy(
+		t,
+		[]logpb.Channel{logpb.Channel_TELEMETRY, logpb.Channel_SQL_EXEC},
+		[]string{"sampled_query"},
+		logtestutils.AsLogEntry,
+	)
+	cleanup := log.InterceptWith(ctx, stmtSpy)
 	defer cleanup()
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
@@ -1534,19 +1517,7 @@ $$`
 
 	db.Exec(t, stmt)
 
-	log.FlushFiles()
-
-	entries, err := log.FetchEntriesFromFiles(
-		0,
-		math.MaxInt64,
-		10000,
-		regexp.MustCompile(`"EventType":"sampled_query"`),
-		log.WithMarkedSensitiveData,
-	)
-
-	if err != nil {
-		t.Fatal(err)
-	}
+	entries := stmtSpy.GetLogs(getSampleQueryLoggingChannel())
 
 	if len(entries) == 0 {
 		t.Fatal(errors.Newf("no entries found"))
@@ -1572,15 +1543,22 @@ func TestTelemetryLoggingStmtPosInTxn(t *testing.T) {
 	sc := log.ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
 
-	cleanup := logtestutils.InstallLogFileSink(sc, t, logpb.Channel_TELEMETRY)
+	ctx := context.Background()
+	stmtSpy := logtestutils.NewStructuredLogSpy(
+		t,
+		[]logpb.Channel{logpb.Channel_TELEMETRY, logpb.Channel_SQL_EXEC},
+		[]string{"sampled_query"},
+		logtestutils.AsLogEntry,
+	)
+	cleanup := log.InterceptWith(ctx, stmtSpy)
 	defer cleanup()
 
-	st := logtestutils.StubTime{}
-	sts := logtestutils.StubTracingStatus{}
+	st := telemetrylogtestutils.StubTime{}
+	sts := telemetrylogtestutils.StubTracingStatus{}
 
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			EventLog: &EventLogTestingKnobs{
+			EventLog: &eventlog.EventLogTestingKnobs{
 				// The sampling checks below need to have a deterministic
 				// number of statements run by internal executor.
 				SyncWrites: true,
@@ -1615,19 +1593,7 @@ func TestTelemetryLoggingStmtPosInTxn(t *testing.T) {
 		`BEGIN`, `SELECT ‹1›`, `SELECT ‹2›`, `SELECT ‹3›`, `COMMIT`,
 	}
 
-	log.FlushFiles()
-
-	entries, err := log.FetchEntriesFromFiles(
-		0,
-		math.MaxInt64,
-		10000,
-		regexp.MustCompile(`"EventType":"sampled_query"`),
-		log.WithMarkedSensitiveData,
-	)
-
-	if err != nil {
-		t.Fatal(err)
-	}
+	entries := stmtSpy.GetLogs(getSampleQueryLoggingChannel())
 
 	require.NotEmpty(t, entries)
 	var expectedTxnID string
@@ -1660,4 +1626,8 @@ func TestTelemetryLoggingStmtPosInTxn(t *testing.T) {
 			t.Errorf("did not find expected query log in log entries: %s", expected)
 		}
 	}
+}
+
+func getSampleQueryLoggingChannel() logpb.Channel {
+	return logpb.Channel_SQL_EXEC
 }

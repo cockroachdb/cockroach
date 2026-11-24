@@ -7,6 +7,7 @@ package spanconfigreconciler
 
 import (
 	"context"
+	"runtime/trace"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -139,6 +140,7 @@ func (r *Reconciler) Reconcile(
 	session sqlliveness.Session,
 	onCheckpoint func() error,
 ) error {
+	defer trace.StartRegion(ctx, "spanconfig.Reconciler.Reconcile").End()
 	// TODO(irfansharif): Avoid the full reconciliation pass if the startTS
 	// provided is visible to the rangefeed. Right now we're doing a full
 	// reconciliation pass every time the reconciliation job kicks us off.
@@ -185,6 +187,9 @@ func (r *Reconciler) Reconcile(
 		r.mu.lastCheckpoint = reconciledUpUntil
 		r.mu.Unlock()
 
+		if log.V(3) {
+			log.Dev.Infof(ctx, "reconciled up until %s", reconciledUpUntil)
+		}
 		return onCheckpoint()
 	})
 }
@@ -217,6 +222,10 @@ type fullReconciler struct {
 func (f *fullReconciler) reconcile(
 	ctx context.Context,
 ) (storeWithLatestSpanConfigs *spanconfigstore.Store, _ hlc.Timestamp, _ error) {
+	if f.knobs != nil && f.knobs.OnFullReconcilerStart != nil {
+		f.knobs.OnFullReconcilerStart()
+	}
+
 	storeWithExistingSpanConfigs, err := f.fetchExistingSpanConfigs(ctx)
 	if err != nil {
 		return nil, hlc.Timestamp{}, err
@@ -456,10 +465,14 @@ func updateSpanConfigRecords(
 				// We expect the underlying sqlliveness session's expiration to be
 				// extended automatically, which makes this retry loop effective in the
 				// face of these retryable lease expired errors from the RPC.
-				log.Infof(ctx, "lease expired while updating span config records, retrying..")
+				log.Dev.Infof(ctx, "lease expired while updating span config records, retrying..")
 				continue
 			}
 			return err // not a retryable error, bubble up
+		}
+
+		if log.V(3) {
+			log.Dev.Infof(ctx, "successfully updated span config records: deleted = %+#v; upserted = %+#v", toDelete, toUpsert)
 		}
 		return nil // we performed the update; we're done here
 	}
@@ -494,6 +507,9 @@ func (r *incrementalReconciler) reconcile(
 			if len(sqlUpdates) == 0 {
 				return callback(checkpoint) // nothing to do; propagate the checkpoint
 			}
+			if log.V(3) {
+				log.Dev.Infof(ctx, "processing %d SQL updates", len(sqlUpdates))
+			}
 
 			// Process the SQLUpdates and identify all descriptor IDs that require
 			// translation. If the SQLUpdates includes ProtectedTimestampUpdates then
@@ -518,6 +534,16 @@ func (r *incrementalReconciler) reconcile(
 			) error {
 				var err error
 
+				// Using a fixed timestamp prevents this background job from contending
+				// with foreground schema change traffic. Schema changes modify system
+				// objects like system.descriptor, system.descriptor_id_seq, and
+				// system.span_count. The spanconfig reconciler needs to read these
+				// objects also. A fixed timestamp is a defensive measure to help
+				// avoid contention caused by this background job.
+				err = txn.KV().SetFixedTimestamp(ctx, checkpoint)
+				if err != nil {
+					return err
+				}
 				// TODO(irfansharif): Instead of these filter methods for missing
 				// tables and system targets that live on the Reconciler, we could
 				// move this to the SQLTranslator instead, now that the SQLTranslator

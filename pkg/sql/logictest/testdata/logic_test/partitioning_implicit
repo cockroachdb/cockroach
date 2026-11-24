@@ -1,0 +1,1692 @@
+# LogicTest: local
+
+statement error declared partition columns \(partition_by\) do not match first 1 columns in index being partitioned \(a\)
+CREATE TABLE t (
+  pk INT PRIMARY KEY,
+  partition_by int,
+  a INT,
+  INDEX (a) PARTITION BY LIST (partition_by) (
+    PARTITION one VALUES IN (1),
+    PARTITION two VALUES IN (2)
+  )
+)
+
+statement error PARTITION ALL BY LIST/RANGE is currently experimental
+CREATE TABLE public.t (
+  pk int PRIMARY KEY,
+  partition_by int
+) PARTITION ALL BY LIST (partition_by) (
+  PARTITION one VALUES IN (1),
+  PARTITION two VALUES IN (2)
+)
+
+statement ok
+SET experimental_enable_implicit_column_partitioning = true
+
+statement error found multiple definitions in partition using column "a"
+CREATE TABLE t (
+  pk INT PRIMARY KEY,
+  a INT,
+  b INT,
+  c INT
+) PARTITION BY LIST (a, a) (
+  PARTITION a1 VALUES IN ((1, 1))
+)
+
+statement error implicit column partitioning on a subpartition is not yet supported
+CREATE TABLE t (
+  pk INT PRIMARY KEY,
+  a INT,
+  b INT,
+  c INT,
+  INDEX (c) PARTITION BY LIST (a) (
+    PARTITION a1 VALUES IN (1) PARTITION BY LIST (b) (
+      PARTITION a1b1 VALUES IN ((1))
+    )
+  )
+)
+
+statement ok
+CREATE TABLE t (a INT, b INT, INDEX(a))
+
+statement error cannot ALTER INDEX and change the partitioning to contain implicit columns
+ALTER INDEX t@t_a_idx PARTITION BY LIST(b) (PARTITION one VALUES IN (1))
+
+statement error cannot ALTER TABLE and change the partitioning to contain implicit columns
+ALTER TABLE t PARTITION BY LIST(b) (PARTITION one VALUES IN (1))
+
+statement ok
+DROP TABLE t
+
+statement ok
+CREATE TABLE t (
+  pk INT PRIMARY KEY,
+  a INT,
+  b INT,
+  c INT,
+  d INT,
+  j JSON,
+  INDEX (b) PARTITION BY LIST(a) (
+    PARTITION b_implicit VALUES IN (2)
+  ),
+  UNIQUE INDEX (c) PARTITION BY LIST (a) (
+    PARTITION c_implicit VALUES IN (3)
+  ),
+  INDEX (a, b, c) PARTITION BY LIST (d) (
+    PARTITION a_b_c_implicit VALUES IN ((4))
+  ),
+  INVERTED INDEX (j) PARTITION BY LIST(a) (
+    PARTITION j_implicit VALUES IN (5)
+  ),
+  FAMILY (pk, a, b, c, d, j)
+) PARTITION BY LIST(a) (
+  PARTITION pk_implicit VALUES IN (1)
+)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t]
+----
+CREATE TABLE public.t (
+  pk INT8 NOT NULL,
+  a INT8 NOT NULL,
+  b INT8 NULL,
+  c INT8 NULL,
+  d INT8 NULL,
+  j JSONB NULL,
+  CONSTRAINT t_pkey PRIMARY KEY (pk ASC),
+  INDEX t_b_idx (b ASC) PARTITION BY LIST (a) (
+    PARTITION b_implicit VALUES IN ((2))
+  ),
+  UNIQUE INDEX t_c_key (c ASC) PARTITION BY LIST (a) (
+    PARTITION c_implicit VALUES IN ((3))
+  ),
+  INDEX t_a_b_c_idx (a ASC, b ASC, c ASC) PARTITION BY LIST (d) (
+    PARTITION a_b_c_implicit VALUES IN ((4))
+  ),
+  INVERTED INDEX t_j_idx (j) PARTITION BY LIST (a) (
+    PARTITION j_implicit VALUES IN ((5))
+  ),
+  FAMILY fam_0_pk_a_b_c_d_j (pk, a, b, c, d, j)
+) PARTITION BY LIST (a) (
+  PARTITION pk_implicit VALUES IN ((1))
+) WITH (schema_locked = true)
+-- Warning: Partitioned table with no zone configurations.
+;
+
+statement ok
+CREATE INDEX new_idx ON t(d) PARTITION BY LIST (a) (
+  PARTITION d_implicit VALUES IN (1)
+)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t]
+----
+CREATE TABLE public.t (
+  pk INT8 NOT NULL,
+  a INT8 NOT NULL,
+  b INT8 NULL,
+  c INT8 NULL,
+  d INT8 NULL,
+  j JSONB NULL,
+  CONSTRAINT t_pkey PRIMARY KEY (pk ASC),
+  INDEX t_b_idx (b ASC) PARTITION BY LIST (a) (
+    PARTITION b_implicit VALUES IN ((2))
+  ),
+  UNIQUE INDEX t_c_key (c ASC) PARTITION BY LIST (a) (
+    PARTITION c_implicit VALUES IN ((3))
+  ),
+  INDEX t_a_b_c_idx (a ASC, b ASC, c ASC) PARTITION BY LIST (d) (
+    PARTITION a_b_c_implicit VALUES IN ((4))
+  ),
+  INVERTED INDEX t_j_idx (j) PARTITION BY LIST (a) (
+    PARTITION j_implicit VALUES IN ((5))
+  ),
+  INDEX new_idx (d ASC) PARTITION BY LIST (a) (
+    PARTITION d_implicit VALUES IN ((1))
+  ),
+  FAMILY fam_0_pk_a_b_c_d_j (pk, a, b, c, d, j)
+) PARTITION BY LIST (a) (
+  PARTITION pk_implicit VALUES IN ((1))
+) WITH (schema_locked = true)
+-- Warning: Partitioned table with no zone configurations.
+;
+
+query T
+EXPLAIN (OPT, CATALOG) SELECT * FROM t
+----
+TABLE t
+ ├── pk int not null
+ ├── a int not null
+ ├── b int
+ ├── c int
+ ├── d int
+ ├── j jsonb
+ ├── crdb_internal_mvcc_timestamp decimal [hidden] [system]
+ ├── tableoid oid [hidden] [system]
+ ├── crdb_internal_origin_id int4 [hidden] [system]
+ ├── crdb_internal_origin_timestamp decimal [hidden] [system]
+ ├── j_inverted_key encodedkey not null [inverted]
+ ├── FAMILY fam_0_pk_a_b_c_d_j (pk, a, b, c, d, j)
+ ├── PRIMARY INDEX t_pkey
+ │    ├── a int not null (implicit)
+ │    ├── pk int not null
+ │    └── partitions
+ │         └── pk_implicit
+ │              └── partition by list prefixes
+ │                   └── (1)
+ ├── INDEX t_b_idx
+ │    ├── a int not null (implicit)
+ │    ├── b int
+ │    ├── pk int not null
+ │    └── partitions
+ │         └── b_implicit
+ │              └── partition by list prefixes
+ │                   └── (2)
+ ├── UNIQUE INDEX t_c_key
+ │    ├── a int not null (implicit)
+ │    ├── c int
+ │    ├── pk int not null (storing)
+ │    └── partitions
+ │         └── c_implicit
+ │              └── partition by list prefixes
+ │                   └── (3)
+ ├── INDEX t_a_b_c_idx
+ │    ├── d int (implicit)
+ │    ├── a int not null
+ │    ├── b int
+ │    ├── c int
+ │    ├── pk int not null
+ │    └── partitions
+ │         └── a_b_c_implicit
+ │              └── partition by list prefixes
+ │                   └── (4)
+ ├── INVERTED INDEX t_j_idx
+ │    ├── a int not null (implicit)
+ │    ├── j_inverted_key encodedkey not null [inverted]
+ │    ├── pk int not null
+ │    └── partitions
+ │         └── j_implicit
+ │              └── partition by list prefixes
+ │                   └── (5)
+ ├── INDEX new_idx
+ │    ├── a int not null (implicit)
+ │    ├── d int
+ │    ├── pk int not null
+ │    └── partitions
+ │         └── d_implicit
+ │              └── partition by list prefixes
+ │                   └── (1)
+ ├── UNIQUE WITHOUT INDEX (pk)
+ └── UNIQUE WITHOUT INDEX (c)
+scan t
+
+statement ok
+INSERT INTO t VALUES (1, 2, 3, 4, 5)
+
+# Tests for FK references against the implicit columns.
+statement ok
+CREATE TABLE fk_using_implicit_columns_against_t (
+  pk INT NOT NULL PRIMARY KEY,
+  ref_t_pk INT NOT NULL REFERENCES t,
+  ref_t_c INT NOT NULL REFERENCES t(c)
+)
+
+statement ok
+CREATE TABLE fk_using_implicit_columns_against_t_one_family (
+  pk INT NOT NULL PRIMARY KEY,
+  ref_t_pk INT NOT NULL REFERENCES t,
+  ref_t_c INT NOT NULL REFERENCES t(c),
+  FAMILY (pk, ref_t_pk, ref_t_c)
+)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE fk_using_implicit_columns_against_t_one_family]
+----
+CREATE TABLE public.fk_using_implicit_columns_against_t_one_family (
+  pk INT8 NOT NULL,
+  ref_t_pk INT8 NOT NULL,
+  ref_t_c INT8 NOT NULL,
+  CONSTRAINT fk_using_implicit_columns_against_t_one_family_pkey PRIMARY KEY (pk ASC),
+  CONSTRAINT fk_using_implicit_columns_against_t_one_family_ref_t_pk_fkey FOREIGN KEY (ref_t_pk) REFERENCES public.t(pk),
+  CONSTRAINT fk_using_implicit_columns_against_t_one_family_ref_t_c_fkey FOREIGN KEY (ref_t_c) REFERENCES public.t(c),
+  FAMILY fam_0_pk_ref_t_pk_ref_t_c (pk, ref_t_pk, ref_t_c)
+) WITH (schema_locked = true);
+
+
+query T
+EXPLAIN INSERT INTO fk_using_implicit_columns_against_t VALUES (1, 1, 4)
+----
+distribution: local
+·
+• root
+│
+├── • insert
+│   │ into: fk_using_implicit_columns_against_t(pk, ref_t_pk, ref_t_c)
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • values
+│             size: 3 columns, 1 row
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right anti)
+│           │ equality: (pk) = (column2)
+│           │ left cols are key
+│           │ right cols are key
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: t@t_b_idx
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 estimated row count: 1
+│                 label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • hash join (right anti)
+            │ equality: (c) = (column3)
+            │ right cols are key
+            │
+            ├── • scan
+            │     missing stats
+            │     table: t@t_c_key
+            │     spans: FULL SCAN
+            │
+            └── • scan buffer
+                  estimated row count: 1
+                  label: buffer 1
+
+statement ok
+INSERT INTO fk_using_implicit_columns_against_t VALUES (1, 1, 4)
+
+statement error Key \(ref_t_pk\)=\(2\) is not present in table "t"
+INSERT INTO fk_using_implicit_columns_against_t VALUES (2, 2, 4)
+
+# We are allowed to reference the implicit partitioning in the foreign key.
+statement ok
+CREATE TABLE fk_including_implicit_columns_against_t (
+  pk INT NOT NULL PRIMARY KEY,
+  ref_t_a INT,
+  ref_t_pk INT,
+  ref_t_c INT,
+  CONSTRAINT a_pk FOREIGN KEY(ref_t_a, ref_t_pk) REFERENCES t(a, pk)
+)
+
+statement error cannot ALTER TABLE PARTITION BY on a table which already has implicit column partitioning
+ALTER TABLE t PARTITION BY LIST(d) (
+  PARTITION pk_implicit VALUES IN (1)
+)
+
+statement error cannot ALTER INDEX PARTITION BY on an index which already has implicit column partitioning
+ALTER INDEX t@t_b_idx PARTITION BY LIST(d) (
+  PARTITION pk_implicit VALUES IN (1)
+)
+
+statement error cannot ALTER INDEX PARTITION BY on an index which already has implicit column partitioning
+ALTER INDEX t@t_b_idx PARTITION BY NOTHING
+
+statement error cannot ALTER TABLE PARTITION BY on a table which already has implicit column partitioning
+ALTER TABLE t PARTITION BY NOTHING
+
+statement ok
+CREATE TABLE t_implicit_idx (
+  id INT PRIMARY KEY,
+  a INT,
+  INDEX t_a_idx (a) PARTITION BY LIST (id) (
+    PARTITION "one" VALUES IN (1)
+  )
+)
+
+statement error cannot ALTER INDEX PARTITION BY on an index which already has implicit column partitioning
+ALTER INDEX t_implicit_idx@t_a_idx PARTITION BY LIST (a) (
+    PARTITION "one" VALUES IN (1)
+)
+
+skipif backup-restore
+query TTTTTT colnames
+SELECT
+  indexrelid, indrelid, indkey, indclass, indoption, indcollation
+FROM pg_index
+WHERE indrelid = (SELECT oid FROM pg_class WHERE relname = 't')
+ORDER BY 1,2,3
+----
+indexrelid  indrelid  indkey   indclass  indoption  indcollation
+3428148192  107       2 5      0 0       2 2        0 0
+3428148194  107       5 2 3 4  0 0 0 0   2 2 2 2    0 0 0 0
+3428148195  107       2 6      0 0       2 2        0 0
+3428148196  107       2 3      0 0       2 2        0 0
+3428148197  107       2 4      0 0       2 2        0 0
+3428148199  107       2 1      0 0       2 2        0 0
+
+query TTB colnames
+SELECT index_name, column_name, implicit FROM crdb_internal.index_columns
+WHERE descriptor_name = 't' AND column_type = 'key'
+ORDER BY 1, 2
+----
+index_name   column_name  implicit
+new_idx      a            true
+new_idx      d            false
+t_a_b_c_idx  a            false
+t_a_b_c_idx  b            false
+t_a_b_c_idx  c            false
+t_a_b_c_idx  d            true
+t_b_idx      a            true
+t_b_idx      b            false
+t_c_key      a            true
+t_c_key      c            false
+t_j_idx      a            true
+t_j_idx      j            false
+t_pkey       a            true
+t_pkey       pk           false
+
+query TTT colnames
+SELECT
+  tablename, indexname, indexdef
+FROM pg_indexes
+WHERE tablename = 't'
+ORDER BY 1, 2, 3
+----
+tablename  indexname    indexdef
+t          new_idx      CREATE INDEX new_idx ON public.t USING btree (d ASC)
+t          t_a_b_c_idx  CREATE INDEX t_a_b_c_idx ON public.t USING btree (a ASC, b ASC, c ASC)
+t          t_b_idx      CREATE INDEX t_b_idx ON public.t USING btree (b ASC)
+t          t_c_key      CREATE UNIQUE INDEX t_c_key ON public.t USING btree (c ASC)
+t          t_j_idx      CREATE INDEX t_j_idx ON public.t USING gin (j)
+t          t_pkey       CREATE UNIQUE INDEX t_pkey ON public.t USING btree (pk ASC)
+
+statement error cannot ALTER INDEX PARTITION BY on an index which already has implicit column partitioning
+ALTER INDEX new_idx PARTITION BY LIST (a) (
+  PARTITION d_implicit VALUES IN (1)
+)
+
+statement error cannot ALTER TABLE PARTITION BY on a table which already has implicit column partitioning
+ALTER TABLE t PARTITION BY LIST (a) (
+  PARTITION pk_implicit VALUES IN (1)
+)
+
+statement error PARTITION ALL BY not yet implemented
+ALTER TABLE t PARTITION ALL BY LIST (a) (
+  PARTITION pk_implicit VALUES IN (1)
+)
+
+statement ok
+DROP TABLE t CASCADE
+
+statement error cannot define PARTITION BY on an index if the table is implicitly partitioned with PARTITION ALL BY or LOCALITY REGIONAL BY ROW definition
+CREATE TABLE public.t (
+  pk int PRIMARY KEY,
+  partition_by int,
+  a int,
+  INDEX(a) PARTITION BY LIST (partition_by) (
+    PARTITION one VALUES IN (1)
+  )
+) PARTITION ALL BY LIST (partition_by) (
+  PARTITION one VALUES IN (1),
+  PARTITION two VALUES IN (2)
+)
+
+statement error cannot define PARTITION BY on an unique constraint if the table is implicitly partitioned with PARTITION ALL BY or LOCALITY REGIONAL BY ROW definition
+CREATE TABLE public.t (
+  pk int PRIMARY KEY,
+  partition_by int,
+  a int,
+  UNIQUE(a) PARTITION BY LIST (partition_by) (
+    PARTITION one VALUES IN (1)
+  )
+) PARTITION ALL BY LIST (partition_by) (
+  PARTITION one VALUES IN (1),
+  PARTITION two VALUES IN (2)
+)
+
+query T noticetrace
+CREATE TABLE public.t (
+  pk int PRIMARY KEY,
+  pk2 int NOT NULL,
+  partition_by int,
+  a int NOT NULL,
+  b int NOT NULL,
+  c int NOT NULL,
+  d int NOT NULL,
+  j JSON,
+  u STRING UNIQUE,
+  INDEX (a),
+  UNIQUE (b),
+  INDEX (partition_by, c),
+  INVERTED INDEX (j),
+  FAMILY (pk, pk2, partition_by, a, b, c, d, j, u)
+) PARTITION ALL BY LIST (partition_by) (
+  PARTITION one VALUES IN (1),
+  PARTITION two VALUES IN (2)
+)
+----
+
+statement error cannot define PARTITION BY on an index if the table has a PARTITION ALL BY definition
+CREATE INDEX created_idx ON t(c) PARTITION BY LIST (d) (
+  PARTITION one VALUES IN ((1))
+)
+
+statement error cannot change the partitioning of an index if the table has PARTITION ALL BY defined
+ALTER INDEX t@t_a_idx PARTITION BY LIST (a) (
+  PARTITION one VALUES IN (1)
+)
+
+query T noticetrace
+CREATE INDEX created_idx ON t(c)
+----
+
+statement ok
+ALTER TABLE t ADD COLUMN e INT8 NOT NULL UNIQUE
+
+statement ok
+ALTER TABLE t ADD CONSTRAINT unique_c_d UNIQUE(c, d)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t]
+----
+CREATE TABLE public.t (
+  pk INT8 NOT NULL,
+  pk2 INT8 NOT NULL,
+  partition_by INT8 NOT NULL,
+  a INT8 NOT NULL,
+  b INT8 NOT NULL,
+  c INT8 NOT NULL,
+  d INT8 NOT NULL,
+  j JSONB NULL,
+  u STRING NULL,
+  e INT8 NOT NULL,
+  CONSTRAINT t_pkey PRIMARY KEY (pk ASC),
+  UNIQUE INDEX t_u_key (u ASC),
+  INDEX t_a_idx (a ASC),
+  UNIQUE INDEX t_b_key (b ASC),
+  INDEX t_partition_by_c_idx (partition_by ASC, c ASC),
+  INVERTED INDEX t_j_idx (j),
+  INDEX created_idx (c ASC),
+  UNIQUE INDEX t_e_key (e ASC),
+  UNIQUE INDEX unique_c_d (c ASC, d ASC),
+  FAMILY fam_0_pk_pk2_partition_by_a_b_c_d_j_u (pk, pk2, partition_by, a, b, c, d, j, u, e)
+) PARTITION ALL BY LIST (partition_by) (
+  PARTITION one VALUES IN ((1)),
+  PARTITION two VALUES IN ((2))
+) WITH (schema_locked = true)
+-- Warning: Partitioned table with no zone configurations.
+;
+
+query TTB
+SELECT index_name, column_name, implicit FROM [SHOW INDEXES FROM t]
+ORDER BY index_name, seq_in_index
+----
+created_idx           partition_by  true
+created_idx           c             false
+created_idx           pk            true
+t_a_idx               partition_by  true
+t_a_idx               a             false
+t_a_idx               pk            true
+t_b_key               partition_by  true
+t_b_key               b             false
+t_b_key               pk            true
+t_e_key               partition_by  true
+t_e_key               e             false
+t_e_key               pk            true
+t_j_idx               partition_by  true
+t_j_idx               j             false
+t_j_idx               pk            true
+t_partition_by_c_idx  partition_by  false
+t_partition_by_c_idx  c             false
+t_partition_by_c_idx  pk            true
+t_pkey                partition_by  true
+t_pkey                pk            false
+t_pkey                pk2           false
+t_pkey                a             false
+t_pkey                b             false
+t_pkey                c             false
+t_pkey                d             false
+t_pkey                j             false
+t_pkey                u             false
+t_pkey                e             false
+t_u_key               partition_by  true
+t_u_key               u             false
+t_u_key               pk            true
+unique_c_d            partition_by  true
+unique_c_d            c             false
+unique_c_d            d             false
+unique_c_d            pk            true
+
+query TTB colnames
+SELECT index_name, column_name, implicit FROM crdb_internal.index_columns
+WHERE descriptor_name = 't' AND column_type = 'key'
+ORDER BY 1, 2
+----
+index_name            column_name   implicit
+created_idx           c             false
+created_idx           partition_by  true
+t_a_idx               a             false
+t_a_idx               partition_by  true
+t_b_key               b             false
+t_b_key               partition_by  true
+t_e_key               e             false
+t_e_key               partition_by  true
+t_j_idx               j             false
+t_j_idx               partition_by  true
+t_partition_by_c_idx  c             false
+t_partition_by_c_idx  partition_by  false
+t_pkey                partition_by  true
+t_pkey                pk            false
+t_u_key               partition_by  true
+t_u_key               u             false
+unique_c_d            c             false
+unique_c_d            d             false
+unique_c_d            partition_by  true
+
+statement ok
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS (pk2)
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t]
+----
+CREATE TABLE public.t (
+  pk INT8 NOT NULL,
+  pk2 INT8 NOT NULL,
+  partition_by INT8 NOT NULL,
+  a INT8 NOT NULL,
+  b INT8 NOT NULL,
+  c INT8 NOT NULL,
+  d INT8 NOT NULL,
+  j JSONB NULL,
+  u STRING NULL,
+  e INT8 NOT NULL,
+  CONSTRAINT t_pkey PRIMARY KEY (pk2 ASC),
+  UNIQUE INDEX t_u_key (u ASC),
+  INDEX t_a_idx (a ASC),
+  UNIQUE INDEX t_b_key (b ASC),
+  INDEX t_partition_by_c_idx (partition_by ASC, c ASC),
+  INVERTED INDEX t_j_idx (j),
+  INDEX created_idx (c ASC),
+  UNIQUE INDEX t_e_key (e ASC),
+  UNIQUE INDEX unique_c_d (c ASC, d ASC),
+  UNIQUE INDEX t_pk_key (pk ASC),
+  FAMILY fam_0_pk_pk2_partition_by_a_b_c_d_j_u (pk, pk2, partition_by, a, b, c, d, j, u, e)
+) PARTITION ALL BY LIST (partition_by) (
+  PARTITION one VALUES IN ((1)),
+  PARTITION two VALUES IN ((2))
+) WITH (schema_locked = true)
+-- Warning: Partitioned table with no zone configurations.
+;
+
+
+query TTB colnames
+SELECT index_name, column_name, implicit FROM crdb_internal.index_columns
+WHERE descriptor_name = 't' AND column_type = 'key'
+ORDER BY 1, 2
+----
+index_name            column_name   implicit
+created_idx           c             false
+created_idx           partition_by  true
+t_a_idx               a             false
+t_a_idx               partition_by  true
+t_b_key               b             false
+t_b_key               partition_by  true
+t_e_key               e             false
+t_e_key               partition_by  true
+t_j_idx               j             false
+t_j_idx               partition_by  true
+t_partition_by_c_idx  c             false
+t_partition_by_c_idx  partition_by  false
+t_pk_key              partition_by  true
+t_pk_key              pk            false
+t_pkey                partition_by  true
+t_pkey                pk2           false
+t_u_key               partition_by  true
+t_u_key               u             false
+unique_c_d            c             false
+unique_c_d            d             false
+unique_c_d            partition_by  true
+
+statement ok
+DROP TABLE t
+
+# Tests for PARTITION ALL BY RANGE.
+statement ok
+CREATE TABLE public.t (
+  pk int PRIMARY KEY,
+  pk2 int NOT NULL,
+  partition_by int,
+  a int,
+  b int,
+  c int,
+  d int,
+  INDEX (a),
+  UNIQUE (b),
+  UNIQUE (c) WHERE d > 100,
+  INDEX (partition_by, c),
+  FAMILY (pk, pk2, partition_by, a, b, c, d)
+) PARTITION ALL BY RANGE (partition_by) (
+  PARTITION one VALUES FROM (minvalue) TO (2),
+  PARTITION two VALUES FROM (2) TO (maxvalue)
+)
+
+statement error cannot define PARTITION BY on an index if the table has a PARTITION ALL BY definition
+CREATE INDEX created_idx ON t(c) PARTITION BY LIST (d) (
+  PARTITION one VALUES IN ((1))
+)
+
+statement ok
+CREATE INDEX created_idx ON t(c)
+
+query TTB colnames
+SELECT index_name, column_name, implicit FROM crdb_internal.index_columns
+WHERE descriptor_name = 't' AND column_type = 'key'
+ORDER BY 1, 2
+----
+index_name            column_name   implicit
+created_idx           c             false
+created_idx           partition_by  true
+t_a_idx               a             false
+t_a_idx               partition_by  true
+t_b_key               b             false
+t_b_key               partition_by  true
+t_c_key               c             false
+t_c_key               partition_by  true
+t_partition_by_c_idx  c             false
+t_partition_by_c_idx  partition_by  false
+t_pkey                partition_by  true
+t_pkey                pk            false
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t]
+----
+CREATE TABLE public.t (
+  pk INT8 NOT NULL,
+  pk2 INT8 NOT NULL,
+  partition_by INT8 NOT NULL,
+  a INT8 NULL,
+  b INT8 NULL,
+  c INT8 NULL,
+  d INT8 NULL,
+  CONSTRAINT t_pkey PRIMARY KEY (pk ASC),
+  INDEX t_a_idx (a ASC),
+  UNIQUE INDEX t_b_key (b ASC),
+  UNIQUE INDEX t_c_key (c ASC) WHERE d > 100:::INT8,
+  INDEX t_partition_by_c_idx (partition_by ASC, c ASC),
+  INDEX created_idx (c ASC),
+  FAMILY fam_0_pk_pk2_partition_by_a_b_c_d (pk, pk2, partition_by, a, b, c, d)
+) PARTITION ALL BY RANGE (partition_by) (
+  PARTITION one VALUES FROM (MINVALUE) TO (2),
+  PARTITION two VALUES FROM (2) TO (MAXVALUE)
+) WITH (schema_locked = true)
+-- Warning: Partitioned table with no zone configurations.
+;
+
+statement error changing partition of table with PARTITION ALL BY not yet implemented
+ALTER TABLE t PARTITION BY NOTHING
+
+subtest unique-checks
+
+# We should plan uniqueness checks for all implicitly partitioned unique indexes.
+query T
+EXPLAIN INSERT INTO t VALUES (1, 1, 1, 1, 1, 1, 1)
+----
+distribution: local
+·
+• root
+│
+├── • insert
+│   │ into: t(pk, pk2, partition_by, a, b, c, d)
+│   │
+│   └── • values
+│         size: 8 columns, 1 row
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • cross join
+│           │
+│           ├── • values
+│           │     size: 1 column, 1 row
+│           │
+│           └── • limit
+│               │ count: 1
+│               │
+│               └── • filter
+│                   │ filter: pk = 1
+│                   │
+│                   └── • scan
+│                         missing stats
+│                         table: t@t_a_idx
+│                         spans: [ - /0] [/2 - ]
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • cross join
+│           │
+│           ├── • values
+│           │     size: 1 column, 1 row
+│           │
+│           └── • limit
+│               │ count: 1
+│               │
+│               └── • filter
+│                   │ filter: (b = 1) AND ((pk != 1) OR (partition_by != 1))
+│                   │
+│                   └── • scan
+│                         missing stats
+│                         table: t@t_b_key
+│                         spans: FULL SCAN (SOFT LIMIT)
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • norows
+
+statement ok
+INSERT INTO t VALUES (1, 1, 1, 1, 1, 1, 1), (2, 2, 2, 2, 2, 2, 2)
+
+statement error pq: duplicate key value violates unique constraint "t_b_key"\nDETAIL: Key \(b\)=\(1\) already exists\.
+UPDATE t SET b = 1 WHERE pk = 2
+
+subtest upsert
+
+# The conflict columns in an upsert should only include the primary key,
+# not any implicit partitioning columns.
+query T
+EXPLAIN UPSERT INTO t VALUES (3, 3, 3, 3, 3, 3, 3)
+----
+distribution: local
+·
+• root
+│
+├── • upsert
+│   │ into: t(pk, pk2, partition_by, a, b, c, d)
+│   │ arbiter constraints: t_pkey
+│   │
+│   └── • buffer
+│       │ label: buffer 1
+│       │
+│       └── • render
+│           │
+│           └── • cross join (left outer)
+│               │
+│               ├── • values
+│               │     size: 7 columns, 1 row
+│               │
+│               └── • filter
+│                   │ filter: pk = 3
+│                   │
+│                   └── • scan
+│                         missing stats
+│                         table: t@t_pkey
+│                         spans: FULL SCAN
+│
+├── • constraint-check
+│   │
+│   └── • error if rows
+│       │
+│       └── • hash join (right semi)
+│           │ equality: (b) = (column5)
+│           │ right cols are key
+│           │ pred: (upsert_pk != pk) OR (column3 != partition_by)
+│           │
+│           ├── • scan
+│           │     missing stats
+│           │     table: t@t_b_key
+│           │     spans: FULL SCAN
+│           │
+│           └── • scan buffer
+│                 label: buffer 1
+│
+└── • constraint-check
+    │
+    └── • error if rows
+        │
+        └── • limit
+            │ count: 1
+            │
+            └── • lookup join
+                │ table: t@t_pkey
+                │ equality: (partition_by, pk) = (partition_by, pk)
+                │ equality cols are key
+                │
+                └── • hash join
+                    │ equality: (c) = (column6)
+                    │ right cols are key
+                    │ pred: (upsert_pk != pk) OR (column3 != partition_by)
+                    │
+                    ├── • scan
+                    │     missing stats
+                    │     table: t@t_c_key (partial index)
+                    │     spans: FULL SCAN
+                    │
+                    └── • filter
+                        │ filter: column7 > 100
+                        │
+                        └── • scan buffer
+                              label: buffer 1
+
+# One row already exists, one row is new.
+statement ok
+UPSERT INTO t VALUES (2, 4, 4, 4, 4, 4, 4), (3, 3, 3, 3, 3, 3, 3)
+
+statement error pq: duplicate key value violates unique constraint "t_b_key"\nDETAIL: Key \(b\)=\(1\) already exists\.
+UPSERT INTO t VALUES (3, 2, 2, 1, 1, 1, 1)
+
+query IIIIIII colnames,rowsort
+SELECT * from t
+----
+pk  pk2  partition_by  a  b  c  d
+1   1    1             1  1  1  1
+3   3    3             3  3  3  3
+2   4    4             4  4  4  4
+
+# Regression tests for #59583.
+statement ok
+DROP TABLE t;
+
+statement ok
+CREATE TABLE t (
+  pk INT,
+  pk2 INT NOT NULL,
+  partition_by INT,
+  x INT,
+  y INT,
+  INDEX (y)
+) PARTITION BY LIST (partition_by) (
+    PARTITION p1 VALUES IN (1)
+);
+
+statement ok
+INSERT INTO t VALUES (1,2,3,4,5),(11,12,13,14,15)
+
+query IIIII rowsort
+SELECT * FROM t@t_y_idx
+----
+1   2   3   4   5
+11  12  13  14  15
+
+statement ok
+CREATE INDEX new_idx ON t(x)
+
+query IIIII rowsort
+SELECT * FROM t@new_idx
+----
+1   2   3   4   5
+11  12  13  14  15
+
+statement ok
+ALTER TABLE t ALTER PRIMARY KEY USING COLUMNS(pk2)
+
+query IIIII rowsort
+SELECT * FROM t@t_y_idx
+----
+1   2   3   4   5
+11  12  13  14  15
+
+query IIIII rowsort
+SELECT * FROM t@new_idx
+----
+1   2   3   4   5
+11  12  13  14  15
+
+# Tests adding a new UNIQUE index with implicit partitioning.
+statement ok
+DROP TABLE t;
+
+statement ok
+CREATE TABLE t (partition_by INT, v INT);
+
+statement ok
+INSERT INTO t VALUES (1, 1), (2, 1);
+
+statement error could not create unique constraint "uniq_on_t"\nDETAIL: Key \(v\)=\(1\) is duplicated
+CREATE UNIQUE INDEX uniq_on_t ON t(v) PARTITION BY LIST (partition_by) (
+   PARTITION one VALUES IN (1),
+   PARTITION two VALUES IN (2)
+)
+
+statement count 1
+DELETE FROM t WHERE partition_by = 2;
+
+statement ok
+CREATE UNIQUE INDEX uniq_on_t ON t(v) PARTITION BY LIST (partition_by) (
+   PARTITION one VALUES IN (1),
+   PARTITION two VALUES IN (2)
+)
+
+# Tests adding a UNIQUE index with PARTITION ALL BY implicit partitioning.
+statement ok
+DROP TABLE t;
+
+statement ok
+CREATE TABLE t (partition_by INT, v INT) PARTITION ALL BY LIST (partition_by) (
+   PARTITION one VALUES IN (1),
+   PARTITION two VALUES IN (2)
+);
+
+statement ok
+INSERT INTO t VALUES (1, 1), (2, 1);
+
+statement error could not create unique constraint "uniq_on_t"\nDETAIL: Key \(v\)=\(1\) is duplicated
+CREATE UNIQUE INDEX uniq_on_t ON t(v)
+
+statement count 1
+DELETE FROM t WHERE partition_by = 2;
+
+statement ok
+CREATE UNIQUE INDEX uniq_on_t ON t(v)
+
+# Tests adding a new partial UNIQUE index with implicit partitioning.
+statement ok
+DROP TABLE t;
+
+statement ok
+CREATE TABLE t (partition_by INT, a INT, b INT);
+
+statement ok
+INSERT INTO t VALUES (1, 1, 1), (1, 2, 2), (2, 1, 1), (2, 2, -2);
+
+statement error could not create unique constraint "uniq_on_t"\nDETAIL: Key \(a\)=\(1\) is duplicated
+CREATE UNIQUE INDEX uniq_on_t ON t(a) PARTITION BY LIST (partition_by) (
+   PARTITION one VALUES IN (1),
+   PARTITION two VALUES IN (2)
+) WHERE b > 0
+
+statement count 1
+DELETE FROM t WHERE partition_by = 1 AND a = 1;
+
+statement ok
+CREATE UNIQUE INDEX uniq_on_t ON t(a) PARTITION BY LIST (partition_by) (
+   PARTITION one VALUES IN (1),
+   PARTITION two VALUES IN (2)
+) WHERE b > 0
+
+# Tests adding a partial UNIQUE index with PARTITION ALL BY implicit
+# partitioning.
+statement ok
+DROP TABLE t;
+
+statement ok
+CREATE TABLE t (partition_by INT, a INT, b INT) PARTITION ALL BY LIST (partition_by) (
+   PARTITION one VALUES IN (1),
+   PARTITION two VALUES IN (2)
+);
+
+statement ok
+INSERT INTO t VALUES (1, 1, 1), (1, 2, 2), (2, 1, 1), (2, 2, -2);
+
+statement error could not create unique constraint "uniq_on_t"\nDETAIL: Key \(a\)=\(1\) is duplicated
+CREATE UNIQUE INDEX uniq_on_t ON t(a) WHERE b > 0
+
+statement count 1
+DELETE FROM t WHERE partition_by = 1 AND a = 1;
+
+statement ok
+CREATE UNIQUE INDEX uniq_on_t ON t(a) WHERE b > 0
+
+subtest implicit_partitioning_edge_cases
+
+# ==============================================================================
+# Basic case: CREATE INDEX on PARTITION ALL BY table where partition column
+# is explicitly in the primary key.
+# ==============================================================================
+
+statement ok
+CREATE TABLE t1 (
+  region STRING NOT NULL,
+  id INT NOT NULL,
+  data STRING,
+  PRIMARY KEY (region, id),
+  FAMILY (region, id, data)
+) PARTITION ALL BY LIST (region) (
+  PARTITION us VALUES IN ('us'),
+  PARTITION eu VALUES IN ('eu')
+)
+
+# Verify primary index columns - partition column is NOT implicit since it's explicit in PK.
+# Join with pg_index to order by position in index using indkey.
+query TITB colnames
+SELECT
+  c.relname AS index_name,
+  k.ord AS seq,
+  a.attname AS column_name,
+  ic.implicit
+FROM pg_index i
+JOIN pg_class c ON c.oid = i.indexrelid
+JOIN pg_class t ON t.oid = i.indrelid
+CROSS JOIN LATERAL unnest(i.indkey) WITH ORDINALITY AS k(attnum, ord)
+JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum
+JOIN crdb_internal.index_columns ic
+  ON ic.descriptor_name = t.relname
+  AND ic.index_name = c.relname
+  AND ic.column_name = a.attname
+WHERE t.relname = 't1' AND ic.column_type = 'key'
+ORDER BY index_name, seq
+----
+index_name  seq  column_name  implicit
+t1_pkey     1    region       false
+t1_pkey     2    id           false
+
+statement ok
+CREATE INDEX idx1 ON t1 (data)
+
+# After creating secondary index, partition column should be implicitly prepended.
+query TITB colnames
+SELECT
+  c.relname AS index_name,
+  k.ord AS seq,
+  a.attname AS column_name,
+  ic.implicit
+FROM pg_index i
+JOIN pg_class c ON c.oid = i.indexrelid
+JOIN pg_class t ON t.oid = i.indrelid
+CROSS JOIN LATERAL unnest(i.indkey) WITH ORDINALITY AS k(attnum, ord)
+JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum
+JOIN crdb_internal.index_columns ic
+  ON ic.descriptor_name = t.relname
+  AND ic.index_name = c.relname
+  AND ic.column_name = a.attname
+WHERE t.relname = 't1' AND ic.column_type = 'key'
+ORDER BY index_name, seq
+----
+index_name  seq  column_name  implicit
+idx1        1    region       true
+idx1        2    data         false
+t1_pkey     1    region       false
+t1_pkey     2    id           false
+
+# Verify the partitioning descriptor on the primary and secondary indexes using pb_to_json.
+# The secondary index should have the same list partitions as the primary, but with numImplicitColumns=1.
+query T
+SELECT
+  crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'table'->'primaryIndex'->'partitioning'
+FROM system.descriptor
+WHERE id = 't1'::regclass
+----
+{"list": [{"name": "us", "subpartitioning": {}, "values": ["BgJ1cw=="]}, {"name": "eu", "subpartitioning": {}, "values": ["BgJldQ=="]}], "numColumns": 1}
+
+query T
+SELECT
+  crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'table'->'indexes'->0->'partitioning'
+FROM system.descriptor
+WHERE id = 't1'::regclass
+----
+{"list": [{"name": "us", "subpartitioning": {}, "values": ["BgJ1cw=="]}, {"name": "eu", "subpartitioning": {}, "values": ["BgJldQ=="]}], "numColumns": 1, "numImplicitColumns": 1}
+
+statement ok
+DROP TABLE t1
+
+# ==============================================================================
+# User explicitly includes partition column as first column
+# in the index definition.
+# ==============================================================================
+
+statement ok
+CREATE TABLE t2 (
+  region STRING NOT NULL,
+  id INT NOT NULL,
+  data STRING,
+  PRIMARY KEY (region, id),
+  FAMILY (region, id, data)
+) PARTITION ALL BY LIST (region) (
+  PARTITION us VALUES IN ('us'),
+  PARTITION eu VALUES IN ('eu')
+)
+
+# User explicitly puts region first - should still work.
+statement ok
+CREATE INDEX idx2 ON t2 (region, data)
+
+# The partition column is explicitly specified, so it should NOT be implicit.
+query TITB colnames
+SELECT
+  c.relname AS index_name,
+  k.ord AS seq,
+  a.attname AS column_name,
+  ic.implicit
+FROM pg_index i
+JOIN pg_class c ON c.oid = i.indexrelid
+JOIN pg_class t ON t.oid = i.indrelid
+CROSS JOIN LATERAL unnest(i.indkey) WITH ORDINALITY AS k(attnum, ord)
+JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum
+JOIN crdb_internal.index_columns ic
+  ON ic.descriptor_name = t.relname
+  AND ic.index_name = c.relname
+  AND ic.column_name = a.attname
+WHERE t.relname = 't2' AND ic.column_type = 'key'
+ORDER BY index_name, seq
+----
+index_name  seq  column_name  implicit
+idx2        1    region       false
+idx2        2    data         false
+t2_pkey     1    region       false
+t2_pkey     2    id           false
+
+statement ok
+DROP TABLE t2
+
+# ==============================================================================
+# Multi-column PARTITION ALL BY
+# ==============================================================================
+
+statement ok
+CREATE TABLE t3 (
+  region STRING NOT NULL,
+  zone STRING NOT NULL,
+  id INT NOT NULL,
+  data STRING,
+  PRIMARY KEY (region, zone, id),
+  FAMILY (region, zone, id, data)
+) PARTITION ALL BY LIST (region, zone) (
+  PARTITION us_east VALUES IN (('us', 'east')),
+  PARTITION us_west VALUES IN (('us', 'west'))
+)
+
+statement ok
+CREATE INDEX idx3 ON t3 (data)
+
+# Both partition columns should be implicitly prepended.
+query TITB colnames
+SELECT
+  c.relname AS index_name,
+  k.ord AS seq,
+  a.attname AS column_name,
+  ic.implicit
+FROM pg_index i
+JOIN pg_class c ON c.oid = i.indexrelid
+JOIN pg_class t ON t.oid = i.indrelid
+CROSS JOIN LATERAL unnest(i.indkey) WITH ORDINALITY AS k(attnum, ord)
+JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum
+JOIN crdb_internal.index_columns ic
+  ON ic.descriptor_name = t.relname
+  AND ic.index_name = c.relname
+  AND ic.column_name = a.attname
+WHERE t.relname = 't3' AND ic.column_type = 'key'
+ORDER BY index_name, seq
+----
+index_name  seq  column_name  implicit
+idx3        1    region       true
+idx3        2    zone         true
+idx3        3    data         false
+t3_pkey     1    region       false
+t3_pkey     2    zone         false
+t3_pkey     3    id           false
+
+# Verify numImplicitColumns=2 for multi-column partition.
+query T
+SELECT
+  crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', descriptor)->'table'->'indexes'->0->'partitioning'->'numImplicitColumns'
+FROM system.descriptor
+WHERE id = 't3'::regclass
+----
+2
+
+statement ok
+DROP TABLE t3
+
+# ==============================================================================
+# User includes second partition column but not first
+# ==============================================================================
+
+statement ok
+CREATE TABLE t4 (
+  region STRING NOT NULL,
+  zone STRING NOT NULL,
+  id INT NOT NULL,
+  data STRING,
+  PRIMARY KEY (region, zone, id),
+  FAMILY (region, zone, id, data)
+) PARTITION ALL BY LIST (region, zone) (
+  PARTITION us_east VALUES IN (('us', 'east')),
+  PARTITION us_west VALUES IN (('us', 'west'))
+)
+
+# User puts zone (second partition col) first, region should be prepended.
+statement ok
+CREATE INDEX idx4 ON t4 (zone, data)
+
+# region should be implicit (prepended), zone should not be (user-specified).
+query TITB colnames
+SELECT
+  c.relname AS index_name,
+  k.ord AS seq,
+  a.attname AS column_name,
+  ic.implicit
+FROM pg_index i
+JOIN pg_class c ON c.oid = i.indexrelid
+JOIN pg_class t ON t.oid = i.indrelid
+CROSS JOIN LATERAL unnest(i.indkey) WITH ORDINALITY AS k(attnum, ord)
+JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum
+JOIN crdb_internal.index_columns ic
+  ON ic.descriptor_name = t.relname
+  AND ic.index_name = c.relname
+  AND ic.column_name = a.attname
+WHERE t.relname = 't4' AND ic.column_type = 'key'
+ORDER BY index_name, seq
+----
+index_name  seq  column_name  implicit
+idx4        1    region       true
+idx4        2    zone         false
+idx4        3    data         false
+t4_pkey     1    region       false
+t4_pkey     2    zone         false
+t4_pkey     3    id           false
+
+statement ok
+DROP TABLE t4
+
+# ==============================================================================
+# Unique index on PARTITION ALL BY table
+# ==============================================================================
+
+statement ok
+CREATE TABLE t5 (
+  region STRING NOT NULL,
+  id INT NOT NULL,
+  data STRING,
+  PRIMARY KEY (region, id),
+  FAMILY (region, id, data)
+) PARTITION ALL BY LIST (region) (
+  PARTITION us VALUES IN ('us'),
+  PARTITION eu VALUES IN ('eu')
+)
+
+statement ok
+CREATE UNIQUE INDEX idx5 ON t5 (data)
+
+# Unique index should also get partition column prepended.
+query TITB colnames
+SELECT
+  c.relname AS index_name,
+  k.ord AS seq,
+  a.attname AS column_name,
+  ic.implicit
+FROM pg_index i
+JOIN pg_class c ON c.oid = i.indexrelid
+JOIN pg_class t ON t.oid = i.indrelid
+CROSS JOIN LATERAL unnest(i.indkey) WITH ORDINALITY AS k(attnum, ord)
+JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum
+JOIN crdb_internal.index_columns ic
+  ON ic.descriptor_name = t.relname
+  AND ic.index_name = c.relname
+  AND ic.column_name = a.attname
+WHERE t.relname = 't5' AND ic.column_type = 'key'
+ORDER BY index_name, seq
+----
+index_name  seq  column_name  implicit
+idx5        1    region       true
+idx5        2    data         false
+t5_pkey     1    region       false
+t5_pkey     2    id           false
+
+statement ok
+DROP TABLE t5
+
+# ==============================================================================
+# Inverted index on PARTITION ALL BY table
+# ==============================================================================
+
+statement ok
+CREATE TABLE t6 (
+  region STRING NOT NULL,
+  id INT NOT NULL,
+  data JSONB,
+  PRIMARY KEY (region, id),
+  FAMILY (region, id, data)
+) PARTITION ALL BY LIST (region) (
+  PARTITION us VALUES IN ('us'),
+  PARTITION eu VALUES IN ('eu')
+)
+
+statement ok
+CREATE INVERTED INDEX idx6 ON t6 (data)
+
+# Inverted index should get partition column in key columns.
+query TITB colnames
+SELECT
+  c.relname AS index_name,
+  k.ord AS seq,
+  a.attname AS column_name,
+  ic.implicit
+FROM pg_index i
+JOIN pg_class c ON c.oid = i.indexrelid
+JOIN pg_class t ON t.oid = i.indrelid
+CROSS JOIN LATERAL unnest(i.indkey) WITH ORDINALITY AS k(attnum, ord)
+JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum
+JOIN crdb_internal.index_columns ic
+  ON ic.descriptor_name = t.relname
+  AND ic.index_name = c.relname
+  AND ic.column_name = a.attname
+WHERE t.relname = 't6' AND ic.column_type = 'key'
+ORDER BY index_name, seq
+----
+index_name  seq  column_name  implicit
+idx6        1    region       true
+idx6        2    data         false
+t6_pkey     1    region       false
+t6_pkey     2    id           false
+
+statement ok
+DROP TABLE t6
+
+# ==============================================================================
+# Partial index on PARTITION ALL BY table
+# ==============================================================================
+
+statement ok
+CREATE TABLE t7 (
+  region STRING NOT NULL,
+  id INT NOT NULL,
+  data STRING,
+  active BOOL,
+  PRIMARY KEY (region, id),
+  FAMILY (region, id, data, active)
+) PARTITION ALL BY LIST (region) (
+  PARTITION us VALUES IN ('us'),
+  PARTITION eu VALUES IN ('eu')
+)
+
+statement ok
+CREATE INDEX idx7 ON t7 (data) WHERE active = true
+
+query TITB colnames
+SELECT
+  c.relname AS index_name,
+  k.ord AS seq,
+  a.attname AS column_name,
+  ic.implicit
+FROM pg_index i
+JOIN pg_class c ON c.oid = i.indexrelid
+JOIN pg_class t ON t.oid = i.indrelid
+CROSS JOIN LATERAL unnest(i.indkey) WITH ORDINALITY AS k(attnum, ord)
+JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum
+JOIN crdb_internal.index_columns ic
+  ON ic.descriptor_name = t.relname
+  AND ic.index_name = c.relname
+  AND ic.column_name = a.attname
+WHERE t.relname = 't7' AND ic.column_type = 'key'
+ORDER BY index_name, seq
+----
+index_name  seq  column_name  implicit
+idx7        1    region       true
+idx7        2    data         false
+t7_pkey     1    region       false
+t7_pkey     2    id           false
+
+statement ok
+DROP TABLE t7
+
+# ==============================================================================
+# Expression index on PARTITION ALL BY table
+# ==============================================================================
+
+statement ok
+CREATE TABLE t8 (
+  region STRING NOT NULL,
+  id INT NOT NULL,
+  data STRING,
+  PRIMARY KEY (region, id),
+  FAMILY (region, id, data)
+) PARTITION ALL BY LIST (region) (
+  PARTITION us VALUES IN ('us'),
+  PARTITION eu VALUES IN ('eu')
+)
+
+statement ok
+CREATE INDEX idx8 ON t8 (lower(data))
+
+# For expression indexes, use the simpler query since expression columns
+# have attnum=0 and don't join properly with pg_attribute.
+query TTB colnames
+SELECT index_name, column_name, implicit FROM crdb_internal.index_columns
+WHERE descriptor_name = 't8' AND column_type = 'key'
+ORDER BY index_name, column_id
+----
+index_name  column_name             implicit
+idx8        region                  true
+idx8        crdb_internal_idx_expr  false
+t8_pkey     region                  false
+t8_pkey     id                      false
+
+statement ok
+DROP TABLE t8
+
+# ==============================================================================
+# STORING clause on PARTITION ALL BY table
+# ==============================================================================
+
+statement ok
+CREATE TABLE t9 (
+  region STRING NOT NULL,
+  id INT NOT NULL,
+  data STRING,
+  extra STRING,
+  PRIMARY KEY (region, id),
+  FAMILY (region, id, data, extra)
+) PARTITION ALL BY LIST (region) (
+  PARTITION us VALUES IN ('us'),
+  PARTITION eu VALUES IN ('eu')
+)
+
+statement ok
+CREATE INDEX idx9 ON t9 (data) STORING (extra)
+
+query TITB colnames
+SELECT
+  c.relname AS index_name,
+  k.ord AS seq,
+  a.attname AS column_name,
+  ic.implicit
+FROM pg_index i
+JOIN pg_class c ON c.oid = i.indexrelid
+JOIN pg_class t ON t.oid = i.indrelid
+CROSS JOIN LATERAL unnest(i.indkey) WITH ORDINALITY AS k(attnum, ord)
+JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum
+JOIN crdb_internal.index_columns ic
+  ON ic.descriptor_name = t.relname
+  AND ic.index_name = c.relname
+  AND ic.column_name = a.attname
+WHERE t.relname = 't9' AND ic.column_type = 'key'
+ORDER BY index_name, seq
+----
+index_name  seq  column_name  implicit
+idx9        1    region       true
+idx9        2    data         false
+t9_pkey     1    region       false
+t9_pkey     2    id           false
+
+# Verify stored column is present (stored columns aren't in indkey, use simple query).
+query TTB colnames
+SELECT index_name, column_name, implicit FROM crdb_internal.index_columns
+WHERE descriptor_name = 't9' AND column_type = 'storing'
+ORDER BY 1, 2
+----
+index_name  column_name  implicit
+idx9        extra        false
+
+statement ok
+DROP TABLE t9
+
+# ==============================================================================
+# Multiple indexes created on same table
+# ==============================================================================
+
+statement ok
+CREATE TABLE t10 (
+  region STRING NOT NULL,
+  id INT NOT NULL,
+  data1 STRING,
+  data2 STRING,
+  PRIMARY KEY (region, id),
+  FAMILY (region, id, data1, data2)
+) PARTITION ALL BY LIST (region) (
+  PARTITION us VALUES IN ('us'),
+  PARTITION eu VALUES IN ('eu')
+)
+
+statement ok
+CREATE INDEX idx10a ON t10 (data1)
+
+statement ok
+CREATE INDEX idx10b ON t10 (data2)
+
+# Both indexes should have partition column implicitly prepended.
+query TITB colnames
+SELECT
+  c.relname AS index_name,
+  k.ord AS seq,
+  a.attname AS column_name,
+  ic.implicit
+FROM pg_index i
+JOIN pg_class c ON c.oid = i.indexrelid
+JOIN pg_class t ON t.oid = i.indrelid
+CROSS JOIN LATERAL unnest(i.indkey) WITH ORDINALITY AS k(attnum, ord)
+JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum
+JOIN crdb_internal.index_columns ic
+  ON ic.descriptor_name = t.relname
+  AND ic.index_name = c.relname
+  AND ic.column_name = a.attname
+WHERE t.relname = 't10' AND ic.column_type = 'key'
+ORDER BY index_name, seq
+----
+index_name  seq  column_name  implicit
+idx10a      1    region       true
+idx10a      2    data1        false
+idx10b      1    region       true
+idx10b      2    data2        false
+t10_pkey    1    region       false
+t10_pkey    2    id           false
+
+statement ok
+DROP TABLE t10
+
+# ==============================================================================
+# PARTITION ALL BY NOTHING (no partitioning)
+# ==============================================================================
+
+statement ok
+CREATE TABLE t11 (
+  region STRING NOT NULL,
+  id INT NOT NULL,
+  data STRING,
+  PRIMARY KEY (region, id),
+  FAMILY (region, id, data)
+) PARTITION ALL BY NOTHING
+
+statement ok
+CREATE INDEX idx11 ON t11 (data)
+
+# With PARTITION ALL BY NOTHING, no implicit columns should be added.
+query TITB colnames
+SELECT
+  c.relname AS index_name,
+  k.ord AS seq,
+  a.attname AS column_name,
+  ic.implicit
+FROM pg_index i
+JOIN pg_class c ON c.oid = i.indexrelid
+JOIN pg_class t ON t.oid = i.indrelid
+CROSS JOIN LATERAL unnest(i.indkey) WITH ORDINALITY AS k(attnum, ord)
+JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum
+JOIN crdb_internal.index_columns ic
+  ON ic.descriptor_name = t.relname
+  AND ic.index_name = c.relname
+  AND ic.column_name = a.attname
+WHERE t.relname = 't11' AND ic.column_type = 'key'
+ORDER BY index_name, seq
+----
+index_name  seq  column_name  implicit
+idx11       1    data         false
+t11_pkey    1    region       false
+t11_pkey    2    id           false
+
+statement ok
+DROP TABLE t11
+
+# ==============================================================================
+# RANGE partitioning instead of LIST
+# ==============================================================================
+
+statement ok
+CREATE TABLE t12 (
+  bucket INT NOT NULL,
+  id INT NOT NULL,
+  data STRING,
+  PRIMARY KEY (bucket, id),
+  FAMILY (bucket, id, data)
+) PARTITION ALL BY RANGE (bucket) (
+  PARTITION p1 VALUES FROM (MINVALUE) TO (100),
+  PARTITION p2 VALUES FROM (100) TO (MAXVALUE)
+)
+
+statement ok
+CREATE INDEX idx12 ON t12 (data)
+
+query TITB colnames
+SELECT
+  c.relname AS index_name,
+  k.ord AS seq,
+  a.attname AS column_name,
+  ic.implicit
+FROM pg_index i
+JOIN pg_class c ON c.oid = i.indexrelid
+JOIN pg_class t ON t.oid = i.indrelid
+CROSS JOIN LATERAL unnest(i.indkey) WITH ORDINALITY AS k(attnum, ord)
+JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = k.attnum
+JOIN crdb_internal.index_columns ic
+  ON ic.descriptor_name = t.relname
+  AND ic.index_name = c.relname
+  AND ic.column_name = a.attname
+WHERE t.relname = 't12' AND ic.column_type = 'key'
+ORDER BY index_name, seq
+----
+index_name  seq  column_name  implicit
+idx12       1    bucket       true
+idx12       2    data         false
+t12_pkey    1    bucket       false
+t12_pkey    2    id           false
+
+statement ok
+DROP TABLE t12
+
+subtest end
+
+# Validate that ALTER PRIMARY KEY blocks implicit partitioning columns at
+# non-leading positions, matching the CREATE INDEX behavior.
+
+subtest alter_primary_key_implicit_col_validation
+
+statement ok
+CREATE TABLE t_pab (
+  a INT PRIMARY KEY,
+  b STRING NOT NULL,
+  c INT
+) PARTITION ALL BY LIST (b) (
+  PARTITION us_west VALUES IN (('seattle')),
+  PARTITION us_east VALUES IN (('new york'))
+)
+
+# CREATE INDEX with the implicit column at a non-leading position is blocked.
+statement error cannot explicitly include implicit partitioning columns from "PARTITION ALL BY" in index definition
+CREATE INDEX ON t_pab (a, b)
+
+# ALTER PRIMARY KEY with the implicit column at a non-leading position is blocked.
+statement error cannot explicitly include implicit partitioning columns from "PARTITION ALL BY" in index definition
+ALTER TABLE t_pab ALTER PRIMARY KEY USING COLUMNS (a, b)
+
+# Leading position is fine.
+statement ok
+ALTER TABLE t_pab ALTER PRIMARY KEY USING COLUMNS (b, a)
+
+statement ok
+DROP TABLE t_pab
+
+subtest end

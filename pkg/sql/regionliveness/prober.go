@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	clustersettings "github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -29,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlliveness/slbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
@@ -99,13 +99,6 @@ type Prober interface {
 	MarkPhysicalRegionAsAvailable(ctx context.Context, txn *kv.Txn, region string, timestamp *tree.DTimestamp) error
 }
 
-// RegionProvider abstracts the lookup of regions (see regions.Provider).
-type RegionProvider interface {
-	// GetRegions provides access to the set of regions available to the
-	// current tenant.
-	GetRegions(ctx context.Context) (*serverpb.RegionsResponse, error)
-}
-
 type CachedDatabaseRegions interface {
 	IsMultiRegion() bool
 	GetRegionEnumTypeDesc() catalog.RegionEnumTypeDescriptor
@@ -120,13 +113,13 @@ type livenessProber struct {
 	settings        *clustersettings.Settings
 }
 
-var testingProbeQueryCallbackFunc func()
+var testingBeforeProbeLivenessHook func()
 var testingUnavailableAtTTLOverride time.Duration
 
-func TestingSetProbeLivenessTimeout(probeCallbackFn func()) func() {
-	testingProbeQueryCallbackFunc = probeCallbackFn
+func TestingSetBeforeProbeLivenessHook(hook func()) func() {
+	testingBeforeProbeLivenessHook = hook
 	return func() {
-		probeCallbackFn = nil
+		testingBeforeProbeLivenessHook = nil
 	}
 }
 
@@ -156,9 +149,12 @@ func NewLivenessProber(
 
 // ProbeLiveness implements Prober.
 func (l *livenessProber) ProbeLiveness(ctx context.Context, region string) error {
-	// If region liveness is disabled then nothing to do.
+	// If region liveness is disabled or the database is not
+	// multi-region then nothing to do.
 	regionLivenessEnabled, _ := l.GetProbeTimeout()
-	if !regionLivenessEnabled {
+	if !regionLivenessEnabled ||
+		l.cachedDBRegions == nil ||
+		!l.cachedDBRegions.IsMultiRegion() {
 		return nil
 	}
 	// Resolve the physical value for this region.
@@ -190,8 +186,8 @@ func (l *livenessProber) ProbeLivenessWithPhysicalRegion(
 	err := timeutil.RunWithTimeout(ctx, "probe-liveness", tableTimeout,
 		func(ctx context.Context) error {
 			return l.db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
-				if testingProbeQueryCallbackFunc != nil {
-					testingProbeQueryCallbackFunc()
+				if testingBeforeProbeLivenessHook != nil {
+					testingBeforeProbeLivenessHook()
 				}
 				instancesTable := systemschema.SQLInstancesTable()
 				indexPrefix := l.codec.IndexPrefix(uint32(instancesTable.GetID()), uint32(instancesTable.GetPrimaryIndexID()))
@@ -208,6 +204,7 @@ func (l *livenessProber) ProbeLivenessWithPhysicalRegion(
 
 	// Region is alive or we hit some other error.
 	if err == nil || !IsQueryTimeoutErr(err) {
+		log.VEventf(ctx, 2, "region probe completed with error: %v", err)
 		return err
 	}
 
@@ -230,10 +227,12 @@ func (l *livenessProber) ProbeLivenessWithPhysicalRegion(
 		if err != nil {
 			return err
 		}
+		log.VEventf(ctx, 2, "marking region %q as dead at time: %s", string(regionBytes), txnTS.String())
 		if err := txn.Run(ctx, ba); err != nil {
 			// Conditional put failing is fine, since it means someone else
 			// has marked the region as dead.
 			if errors.HasType(err, &kvpb.ConditionFailedError{}) {
+				log.VEventf(ctx, 2, "ignoring condition failed for region: %q", string(regionBytes))
 				return nil
 			}
 			return err
@@ -278,6 +277,11 @@ func (l *livenessProber) QueryLiveness(ctx context.Context, txn *kv.Txn) (LiveRe
 func (l *livenessProber) QueryUnavailablePhysicalRegions(
 	ctx context.Context, txn *kv.Txn, filterAvailable bool,
 ) (UnavailableAtPhysicalRegions, error) {
+	regionLivenessEnabled, _ := l.GetProbeTimeout()
+	if !regionLivenessEnabled {
+		return UnavailableAtPhysicalRegions{}, nil
+	}
+
 	// Scan the entire region liveness table.
 	regionLivenessIndex := l.codec.IndexPrefix(uint32(systemschema.RegionLivenessTable.GetID()), uint32(systemschema.RegionLivenessTable.GetPrimaryIndexID()))
 	keyValues, err := txn.Scan(ctx, regionLivenessIndex, regionLivenessIndex.PrefixEnd(), 0)

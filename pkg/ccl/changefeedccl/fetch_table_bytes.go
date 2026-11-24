@@ -34,8 +34,8 @@ func FetchChangefeedUsageBytes(
 	// Inspired by AllTargets in changefeedccl/changefeed.go.
 	if len(details.TargetSpecifications) > 0 {
 		for _, ts := range details.TargetSpecifications {
-			if ts.TableID > 0 {
-				uniqueTableIDs[ts.TableID] = struct{}{}
+			if ts.DescID > 0 {
+				uniqueTableIDs[ts.DescID] = struct{}{}
 			}
 		}
 	} else {

@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventlog"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/errorspb"
@@ -67,9 +68,9 @@ func TestSchemaChangerJobRunningStatus(t *testing.T) {
 				require.NoError(t, err)
 				switch stageIdx {
 				case 0:
-					runningStatus0.Store(job.Progress().RunningStatus)
+					runningStatus0.Store(job.Progress().StatusMessage)
 				case 1:
-					runningStatus1.Store(job.Progress().RunningStatus)
+					runningStatus1.Store(job.Progress().StatusMessage)
 				}
 				return nil
 			},
@@ -82,6 +83,7 @@ func TestSchemaChangerJobRunningStatus(t *testing.T) {
 	jr = s.ApplicationLayer().JobRegistry().(*jobs.Registry)
 
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	tdb.Exec(t, "SET create_table_with_schema_locked=false")
 	tdb.Exec(t, `SET use_declarative_schema_changer = 'off'`)
 	tdb.Exec(t, `CREATE DATABASE db`)
 	tdb.Exec(t, `CREATE TABLE db.t (a INT PRIMARY KEY)`)
@@ -89,9 +91,11 @@ func TestSchemaChangerJobRunningStatus(t *testing.T) {
 	tdb.Exec(t, `ALTER TABLE db.t ADD COLUMN b INT NOT NULL DEFAULT (123)`)
 
 	require.NotNil(t, runningStatus0.Load())
-	require.Regexp(t, "PostCommit.* pending", runningStatus0.Load().(string))
+	require.Regexp(t, "Pending.*PostCommit", runningStatus0.Load().(string))
+	require.NotRegexp(t, "(‹×›)", runningStatus0.Load())
 	require.NotNil(t, runningStatus1.Load())
-	require.Regexp(t, "PostCommit.* pending", runningStatus1.Load().(string))
+	require.Regexp(t, "Pending.*PostCommit", runningStatus1.Load().(string))
+	require.NotRegexp(t, "(‹×›)", runningStatus1.Load())
 }
 
 func TestSchemaChangerJobErrorDetails(t *testing.T) {
@@ -114,7 +118,7 @@ func TestSchemaChangerJobErrorDetails(t *testing.T) {
 				return nil
 			},
 		},
-		EventLog:         &sql.EventLogTestingKnobs{SyncWrites: true},
+		EventLog:         &eventlog.EventLogTestingKnobs{SyncWrites: true},
 		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 	}
 
@@ -122,17 +126,13 @@ func TestSchemaChangerJobErrorDetails(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	tdb.Exec(t, "SET create_table_with_schema_locked=false")
 	tdb.Exec(t, `SET use_declarative_schema_changer = 'off'`)
 	tdb.Exec(t, `CREATE DATABASE db`)
 	tdb.Exec(t, `CREATE TABLE db.t (a INT PRIMARY KEY)`)
 	tdb.Exec(t, `SET use_declarative_schema_changer = 'unsafe'`)
 	tdb.ExpectErr(t, `boom`, `ALTER TABLE db.t ADD COLUMN b INT NOT NULL DEFAULT (123)`)
 	jobID := jobspb.JobID(atomic.LoadInt64(&jobIDValue))
-
-	// Check that the error is featured in the jobs table.
-	results := tdb.QueryStr(t, `SELECT execution_errors FROM crdb_internal.jobs WHERE job_id = $1`, jobID)
-	require.Len(t, results, 1)
-	require.Regexp(t, `^\{\"reverting execution from .* on 1 failed: boom\"\}$`, results[0][0])
 
 	// Check that the error details are also featured in the jobs table.
 	checkErrWithDetails := func(ee *errorspb.EncodedError) {
@@ -146,7 +146,7 @@ func TestSchemaChangerJobErrorDetails(t *testing.T) {
 		require.Regexp(t, "^stages graphviz: https.*", ed[1])
 		require.Regexp(t, "^dependencies graphviz: https.*", ed[2])
 	}
-	results = tdb.QueryStr(t, `SELECT encode(payload, 'hex') FROM crdb_internal.system_jobs WHERE id = $1`, jobID)
+	results := tdb.QueryStr(t, `SELECT encode(payload, 'hex') FROM crdb_internal.system_jobs WHERE id = $1`, jobID)
 	require.Len(t, results, 1)
 	b, err := hex.DecodeString(results[0][0])
 	require.NoError(t, err)
@@ -154,8 +154,6 @@ func TestSchemaChangerJobErrorDetails(t *testing.T) {
 	err = protoutil.Unmarshal(b, &p)
 	require.NoError(t, err)
 	checkErrWithDetails(p.FinalResumeError)
-	require.LessOrEqual(t, 1, len(p.RetriableExecutionFailureLog))
-	checkErrWithDetails(p.RetriableExecutionFailureLog[0].Error)
 
 	// Check that the error is featured in the event log.
 	const eventLogCountQuery = `SELECT count(*) FROM system.eventlog WHERE "eventType" = $1`
@@ -167,7 +165,9 @@ func TestSchemaChangerJobErrorDetails(t *testing.T) {
 	require.EqualValues(t, [][]string{{"1"}}, results)
 	const eventLogErrorQuery = `SELECT (info::JSONB)->>'Error' FROM system.eventlog WHERE "eventType" = 'reverse_schema_change'`
 	results = tdb.QueryStr(t, eventLogErrorQuery)
-	require.EqualValues(t, [][]string{{"boom"}}, results)
+	require.Equal(t, 1, len(results))
+	require.Equal(t, 1, len(results[0]))
+	require.Regexp(t, `^boom`, results[0][0])
 }
 
 func TestInsertDuringAddColumnNotWritingToCurrentPrimaryIndex(t *testing.T) {
@@ -227,6 +227,7 @@ func TestInsertDuringAddColumnNotWritingToCurrentPrimaryIndex(t *testing.T) {
 	}
 
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	tdb.Exec(t, "SET create_table_with_schema_locked=false")
 	tdb.Exec(t, `CREATE DATABASE db`)
 	tdb.Exec(t, `CREATE TABLE db.t (a INT PRIMARY KEY)`)
 	desc := getTableDescriptor()
@@ -308,17 +309,17 @@ func TestDropJobCancelable(t *testing.T) {
 	}{
 		{
 			"simple drop sequence",
-			"BEGIN;DROP SEQUENCE db.sq1; END;",
+			"BEGIN; SET LOCAL autocommit_before_ddl = false; DROP SEQUENCE db.sq1; END;",
 			false,
 		},
 		{
 			"simple drop view",
-			"BEGIN;DROP VIEW db.v1; END;",
+			"BEGIN; SET LOCAL autocommit_before_ddl = false; DROP VIEW db.v1; END;",
 			false,
 		},
 		{
 			"simple drop table",
-			"BEGIN;DROP TABLE db.t1 CASCADE; END;",
+			"BEGIN; SET LOCAL autocommit_before_ddl = false; DROP TABLE db.t1 CASCADE; END;",
 			false,
 		},
 	}
@@ -356,6 +357,7 @@ func TestDropJobCancelable(t *testing.T) {
 
 			// Setup.
 			_, err := sqlDB.Exec(`
+SET create_table_with_schema_locked=false;
 CREATE DATABASE db;
 CREATE TABLE db.t1 (name VARCHAR(256));
 CREATE TABLE db.t2 (name VARCHAR(256));
@@ -381,7 +383,7 @@ CREATE SEQUENCE db.sq1;
 SELECT job_id FROM [SHOW JOBS]
 WHERE 
 	job_type = 'SCHEMA CHANGE' AND 
-	status = $1`, jobs.StatusRunning)
+	status = $1`, jobs.StateRunning)
 			if err != nil {
 				t.Fatalf("unexpected error querying rows %s", err)
 			}
@@ -456,6 +458,7 @@ func TestSchemaChangeWaitsForConcurrentSchemaChanges(t *testing.T) {
 		defer cancel()
 		tdb := sqlutils.MakeSQLRunner(sqlDB)
 
+		tdb.Exec(t, "SET create_table_with_schema_locked=false;")
 		tdb.Exec(t, "CREATE TABLE t (i INT PRIMARY KEY, j INT NOT NULL);")
 		tdb.Exec(t, "INSERT INTO t SELECT k, k+1 FROM generate_series(1,1000) AS tmp(k);")
 
@@ -629,6 +632,9 @@ func TestConcurrentSchemaChanges(t *testing.T) {
 
 	createSchema := func(conn *gosql.DB) error {
 		return testutils.SucceedsSoonError(func() error {
+			if _, err := conn.Exec("SET create_table_with_schema_locked=false"); err != nil {
+				return err
+			}
 			_, err := conn.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %v;", dbName))
 			if err != nil {
 				return err
@@ -946,12 +952,510 @@ func TestSchemaChangerFailsOnMissingDesc(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	tdb.Exec(t, "SET create_table_with_schema_locked=false")
 	tdb.Exec(t, `SET use_declarative_schema_changer = 'off'`)
 	tdb.Exec(t, `CREATE DATABASE db`)
 	tdb.Exec(t, `CREATE TABLE db.t (a INT PRIMARY KEY)`)
 	tdb.Exec(t, `SET use_declarative_schema_changer = 'unsafe'`)
 	tdb.ExpectErr(t, "descriptor not found", `ALTER TABLE db.t ADD COLUMN b INT NOT NULL DEFAULT (123)`)
 	// Validate the job has hit a terminal state.
-	tdb.CheckQueryResults(t, "SELECT status FROM crdb_internal.jobs WHERE statement LIKE '%ADD COLUMN%'",
+	tdb.CheckQueryResults(t, "SELECT status FROM crdb_internal.jobs WHERE statement LIKE '%ADD COLUMN%' AND job_type='NEW SCHEMA CHANGE'",
 		[][]string{{"failed"}})
+}
+
+// TestCreateObjectConcurrency validates that concurrent create object with
+// independent references never hit txn retry errors. All objects are created
+// under the same schema.
+func TestCreateObjectConcurrency(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Validate concurrency behaviour for objects under a schema
+	tests := []struct {
+		name       string
+		setupStmt  string
+		firstStmt  string
+		secondStmt string
+	}{
+		{
+			name: "create table with function references",
+			setupStmt: `
+CREATE FUNCTION public.fn1 (input INT) RETURNS INT8
+                                LANGUAGE SQL
+                                AS $$
+                                SELECT input::INT8;
+                                $$;
+CREATE FUNCTION public.wrap(input INT) RETURNS INT8
+                                LANGUAGE SQL
+                                AS $$
+                                SELECT public.fn1(input);
+                                $$;
+CREATE FUNCTION public.wrap2(input INT) RETURNS INT8
+                                LANGUAGE SQL
+                                AS $$
+                                SELECT public.fn1(input);
+                                $$;
+`,
+			firstStmt:  "CREATE TABLE t1(n int default public.wrap(10))",
+			secondStmt: "CREATE TABLE t2(n int default public.wrap2(10))",
+		},
+		{
+			name: "create table with type reference",
+			setupStmt: `
+CREATE TYPE status AS ENUM ('open', 'closed', 'inactive');
+CREATE TYPE status1 AS ENUM ('open', 'closed', 'inactive');
+`,
+			firstStmt:  "CREATE TABLE t1(n status)",
+			secondStmt: "CREATE TABLE t2(n status1)",
+		},
+		{
+			name: "create view with type references",
+			setupStmt: `
+CREATE TYPE status AS ENUM ('open', 'closed', 'inactive');
+CREATE TYPE status1 AS ENUM ('open', 'closed', 'inactive');
+CREATE FUNCTION public.fn1 (input INT) RETURNS INT8
+                                LANGUAGE SQL
+                                AS $$
+                                SELECT input::INT8;
+                                $$;
+CREATE FUNCTION public.wrap(input INT) RETURNS INT8
+                                LANGUAGE SQL
+                                AS $$
+                                SELECT public.fn1(input);
+                                $$;
+CREATE FUNCTION public.wrap2(input INT) RETURNS INT8
+                                LANGUAGE SQL
+                                AS $$
+                                SELECT public.fn1(input);
+                                $$;
+CREATE TABLE t1(n int default public.wrap(10));
+CREATE TABLE t2(n int default public.wrap2(10));
+`,
+			// Note: Views cannot invoke UDFs directly yet.
+			firstStmt:  "CREATE VIEW v1 AS (SELECT n, 'open'::status FROM public.t1)",
+			secondStmt: "CREATE VIEW v2 AS (SELECT n, 'open'::status1 FROM public.t2)",
+		},
+		{
+			name: "create sequence with ownership",
+			setupStmt: `
+CREATE TABLE t1(n int);
+CREATE TABLE t2(n int);
+`,
+			firstStmt:  "CREATE SEQUENCE sq1 OWNED BY t1.n",
+			secondStmt: "CREATE SEQUENCE sq2 OWNED BY t2.n",
+		},
+		{
+			name:       "create type",
+			firstStmt:  "CREATE TYPE status AS ENUM ('open', 'closed', 'inactive');",
+			secondStmt: "CREATE TYPE status1 AS ENUM ('open', 'closed', 'inactive');",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			ctx := context.Background()
+			s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+			defer s.Stopper().Stop(ctx)
+
+			runner := sqlutils.MakeSQLRunner(sqlDB)
+
+			// Ensure we don't commit any DDLs in a transaction.
+			runner.Exec(t, `SET CLUSTER SETTING sql.defaults.autocommit_before_ddl.enabled = 'false'`)
+			runner.Exec(t, "SET autocommit_before_ddl = false")
+
+			firstConn, err := sqlDB.Conn(ctx)
+			require.NoError(t, err)
+			defer func() {
+				require.NoError(t, firstConn.Close())
+			}()
+			secondConn, err := sqlDB.Conn(ctx)
+			require.NoError(t, err)
+			defer func() {
+				require.NoError(t, secondConn.Close())
+			}()
+
+			// Under multitenancy, we are likely to encounter retry errors while
+			// the schema changer updates the span_counts table, so we keep running
+			// the test until it succeeds.
+			within := 1 * time.Second
+			if s.StartedDefaultTestTenant() {
+				within = 10 * time.Second
+			}
+			testutils.SucceedsWithin(t, func() error {
+				_, err = sqlDB.ExecContext(ctx, "DROP DATABASE IF EXISTS testdb CASCADE")
+				if err != nil {
+					return err
+				}
+				_, err = sqlDB.ExecContext(ctx, "CREATE DATABASE testdb")
+				if err != nil {
+					return err
+				}
+				_, err = firstConn.ExecContext(ctx, "USE testdb")
+				if err != nil {
+					return err
+				}
+				_, err = secondConn.ExecContext(ctx, "USE testdb")
+				if err != nil {
+					return err
+				}
+				_, err = firstConn.ExecContext(ctx, test.setupStmt)
+				if err != nil {
+					return err
+				}
+
+				firstConnReady := make(chan struct{})
+				secondConnReady := make(chan struct{})
+
+				grp := ctxgroup.WithContext(ctx)
+
+				grp.Go(func() error {
+					defer close(firstConnReady)
+					tx, err := firstConn.BeginTx(ctx, nil)
+					if err != nil {
+						return err
+					}
+					_, err = tx.Exec(test.firstStmt)
+					if err != nil {
+						return err
+					}
+					firstConnReady <- struct{}{}
+					<-secondConnReady
+					return tx.Commit()
+				})
+				grp.Go(func() error {
+					defer close(secondConnReady)
+					tx, err := secondConn.BeginTx(ctx, nil)
+					if err != nil {
+						return err
+					}
+					_, err = tx.Exec(test.secondStmt)
+					if err != nil {
+						return err
+					}
+					<-firstConnReady
+					secondConnReady <- struct{}{}
+					return tx.Commit()
+				})
+				return grp.Wait()
+			}, within)
+		})
+	}
+}
+
+// TestPreventCreateDropConcurrently confirms that objects cannot be
+// created under a schema that is being dropped.
+func TestPreventCreateDropConcurrently(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		// This would work with secondary tenants as well, but the span config
+		// limited logic can hit transaction retries on the span_count table.
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(138733),
+	})
+	defer s.Stopper().Stop(ctx)
+
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+
+	runner.Exec(t, `
+CREATE SCHEMA other_schema;
+CREATE SCHEMA complex_drop_schema;
+CREATE TABLE complex_drop_schema.t1(n int UNIQUE);
+CREATE TABLE other_schema.t1(n int REFERENCES complex_drop_schema.t1(n));
+`)
+
+	runner.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = 'newschemachanger.before.exec';`)
+	runner.ExpectErr(t, " \\d+ was paused before it completed with reason: pause point \"newschemachanger.before.exec\" hit",
+		"DROP SCHEMA complex_drop_schema CASCADE;")
+
+	grp := ctxgroup.WithContext(ctx)
+	grp.GoCtx(func(ctx context.Context) error {
+		_, err := sqlDB.Exec("CREATE SEQUENCE  complex_drop_schema.sc1")
+		return err
+	})
+
+	runner.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints = ''`)
+	runner.Exec(t,
+		`RESUME JOB (SELECT job_id FROM crdb_internal.jobs WHERE description LIKE 'DROP SCHEMA%' AND status='paused' FETCH FIRST 1 ROWS ONLY);`)
+	require.Error(t,
+		grp.Wait(),
+		`cannot create "complex_drop_schema.sc1" because the target database or schema does not exist`)
+}
+
+func testApproxMaxSchemaObjectsImpl(t *testing.T, useDeclarative bool) {
+	defer log.Scope(t).Close(t)
+
+	skip.UnderDuress(t, "slow test, requires polling to wait for auto stats job")
+	skip.UnderShort(t, "slow test, requires polling to wait for auto stats job")
+
+	ctx := context.Background()
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	tdb.Exec(t, "SET CLUSTER SETTING sql.stats.automatic_collection.min_stale_rows = 1")
+
+	// Configure the declarative schema changer mode.
+	if useDeclarative {
+		tdb.Exec(t, `SET sql.defaults.use_declarative_schema_changer = 'on'`)
+		tdb.Exec(t, `SET use_declarative_schema_changer = 'on'`)
+	} else {
+		tdb.Exec(t, `SET sql.defaults.use_declarative_schema_changer = 'off'`)
+		tdb.Exec(t, `SET use_declarative_schema_changer = 'off'`)
+	}
+
+	var maxObjects int
+	updateMaxObjects := func() {
+		// Manually refresh stats.
+		tdb.Exec(t, "ANALYZE system.public.descriptor")
+
+		// Get the current count of descriptors to set a realistic limit.
+		var currentCount int
+		tdb.QueryRow(t, `SELECT count(*) FROM system.descriptor`).Scan(&currentCount)
+
+		// Set the limit to be slightly more than current count.
+		maxObjects = currentCount + 1
+		tdb.Exec(t, fmt.Sprintf(`SET CLUSTER SETTING sql.schema.approx_max_object_count = %d`, maxObjects))
+	}
+	updateMaxObjects()
+
+	// Test that different object types are subject to the limit.
+	objectTypes := []string{"table", "database", "schema", "type", "function"}
+	for _, objectType := range objectTypes {
+		t.Run(objectType, func(t *testing.T) {
+			// Increase the limit before each subtest to avoid interference.
+			updateMaxObjects()
+
+			objNum := 0
+			testutils.SucceedsWithin(t, func() error {
+				var createStmt string
+				switch objectType {
+				case "table":
+					createStmt = fmt.Sprintf(`CREATE TABLE t%d (id INT PRIMARY KEY)`, objNum)
+				case "database":
+					createStmt = fmt.Sprintf(`CREATE DATABASE db%d`, objNum)
+				case "schema":
+					createStmt = fmt.Sprintf(`CREATE SCHEMA sc%d`, objNum)
+				case "type":
+					createStmt = fmt.Sprintf(`CREATE TYPE enum%d AS ENUM ('a', 'b', 'c')`, objNum)
+				case "function":
+					createStmt = fmt.Sprintf(`CREATE FUNCTION f%d() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$`, objNum)
+				}
+
+				_, err := sqlDB.Exec(createStmt)
+				if err != nil {
+					// Check if we got the expected error and message.
+					if pqErr := (*pq.Error)(nil); errors.As(err, &pqErr) {
+						if string(pqErr.Code) == pgcode.ConfigurationLimitExceeded.String() {
+							if testutils.IsError(err, "would exceed approximate maximum") {
+								return nil
+							}
+						}
+					}
+					// Some other error occurred.
+					return err
+				}
+				objNum++
+
+				// Haven't hit the limit yet, keep trying.
+				return errors.Errorf("created %d %ss without hitting limit (max=%d)", objNum, objectType, maxObjects)
+			}, 5*time.Minute)
+		})
+	}
+}
+
+// TestApproxMaxSchemaObjects tests that the approximate max schema objects
+// guardrail works correctly with the declarative schema changer.
+func TestApproxMaxSchemaObjectsDeclarative(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testApproxMaxSchemaObjectsImpl(t, true)
+}
+
+// TestApproxMaxSchemaObjects tests that the approximate max schema objects
+// guardrail works correctly with the legacy schema changer.
+func TestApproxMaxSchemaObjectsLegacy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testApproxMaxSchemaObjectsImpl(t, false)
+}
+
+func TestTTLSchemaChangeFailuresRollsBackSchedule(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	const (
+		createNonTTLTable = `CREATE TABLE test (id TEXT PRIMARY KEY, expire_at TIMESTAMPTZ);`
+		expectNonTTLTable = `CREATE TABLE public.test (
+	id STRING NOT NULL,
+	expire_at TIMESTAMPTZ NULL,
+	CONSTRAINT test_pkey PRIMARY KEY (id ASC)
+);`
+
+		createTTLExpireAfterTable = `CREATE TABLE test (id TEXT PRIMARY KEY, expire_at TIMESTAMPTZ) WITH (ttl_expire_after = '10 hours');`
+		expectTTLExpireAfterTable = `CREATE TABLE public.test (
+	id STRING NOT NULL,
+	expire_at TIMESTAMPTZ NULL,
+	crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '10:00:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '10:00:00':::INTERVAL,
+	CONSTRAINT test_pkey PRIMARY KEY (id ASC)
+) WITH (ttl = 'on', ttl_expire_after = '10:00:00':::INTERVAL);`
+
+		createTTLExpirationExpressionTable = `CREATE TABLE test (id TEXT PRIMARY KEY, expire_at TIMESTAMPTZ) WITH (ttl_expiration_expression = 'expire_at');`
+		expectTTLExpirationExpressionTable = `CREATE TABLE public.test (
+	id STRING NOT NULL,
+	expire_at TIMESTAMPTZ NULL,
+	CONSTRAINT test_pkey PRIMARY KEY (id ASC)
+) WITH (ttl = 'on', ttl_expiration_expression = 'expire_at');`
+
+		createTTLExpireAfterTTLExpirationExpressionTable = `CREATE TABLE test (id TEXT PRIMARY KEY, expire_at TIMESTAMPTZ) WITH (ttl_expire_after = '10 hours', ttl_expiration_expression = 'crdb_internal_expiration');`
+		expectTTLExpireAfterTTLExpirationExpressionTable = `CREATE TABLE public.test (
+	id STRING NOT NULL,
+	expire_at TIMESTAMPTZ NULL,
+	crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '10:00:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '10:00:00':::INTERVAL,
+	CONSTRAINT test_pkey PRIMARY KEY (id ASC)
+) WITH (ttl = 'on', ttl_expire_after = '10:00:00':::INTERVAL, ttl_expiration_expression = 'crdb_internal_expiration');`
+	)
+	verifyTableSchema := func(t *testing.T, sqlDB *gosql.DB, expectedSchema string) {
+		var actualSchema string
+		require.NoError(t, sqlDB.QueryRow(`SELECT create_statement FROM [SHOW CREATE TABLE test]`).Scan(&actualSchema))
+		require.Equal(t, expectedSchema, actualSchema)
+	}
+
+	testCases := []struct {
+		desc                    string
+		setup                   string
+		schemaChange            string
+		injectFailure           func() error
+		expectedShowCreateTable string
+		expectSchedule          bool
+	}{
+		// ttl_expire_after
+		{
+			desc:                    "error in ALTER TABLE x SET ttl_expire_after",
+			setup:                   createNonTTLTable,
+			schemaChange:            `ALTER TABLE test SET (ttl_expire_after = '10 hours')`,
+			expectedShowCreateTable: expectNonTTLTable,
+			expectSchedule:          false,
+		},
+		{
+			desc:                    "error in ALTER TABLE x RESET ttl_expire_after",
+			setup:                   createTTLExpireAfterTable,
+			schemaChange:            `ALTER TABLE test RESET (ttl)`,
+			expectedShowCreateTable: expectTTLExpireAfterTable,
+			expectSchedule:          true,
+		},
+		// ttl_expiration_expression
+		{
+			desc:                    "error in ALTER TABLE x SET ttl_expiration_expression",
+			setup:                   createNonTTLTable,
+			schemaChange:            `ALTER TABLE test SET (ttl_expiration_expression = 'expire_at')`,
+			expectedShowCreateTable: expectNonTTLTable,
+			expectSchedule:          false,
+		},
+		{
+			desc:                    "error in ALTER TABLE x RESET ttl_expiration_expression",
+			setup:                   createTTLExpirationExpressionTable,
+			schemaChange:            `ALTER TABLE test RESET (ttl)`,
+			expectedShowCreateTable: expectTTLExpirationExpressionTable,
+			expectSchedule:          true,
+		},
+		// ttl_expire_after & ttl_expiration_expression
+		{
+			desc:                    "error in ALTER TABLE x SET ttl_expire_after and ttl_expiration_expression",
+			setup:                   createNonTTLTable,
+			schemaChange:            `ALTER TABLE test SET (ttl_expire_after = '10 hours', ttl_expiration_expression = 'crdb_internal_expiration')`,
+			expectedShowCreateTable: expectNonTTLTable,
+			expectSchedule:          false,
+		},
+		{
+			desc:                    "error in ALTER TABLE x RESET ttl_expire_after and ttl_expiration_expression",
+			setup:                   createTTLExpireAfterTTLExpirationExpressionTable,
+			schemaChange:            `ALTER TABLE test RESET (ttl)`,
+			expectedShowCreateTable: expectTTLExpireAfterTTLExpirationExpressionTable,
+			expectSchedule:          true,
+		},
+	}
+
+	for _, tc := range testCases {
+		for phase := scop.EarliestPhase; phase <= scop.LatestPhase; phase++ {
+			for stageType := scop.MutationType; stageType <= scop.ValidationType; stageType++ {
+				t.Run(fmt.Sprintf("%s/phase=%s/stage=%s", tc.desc, phase, stageType), func(t *testing.T) {
+
+					injectedFailure := false
+					var shouldFail atomic.Bool
+					scKnobs := &scexec.TestingKnobs{
+						AfterStage: func(p scplan.Plan, stageIdx int) error {
+							stage := p.Stages[stageIdx]
+
+							// Handle failure hook; trigger it before phase/stage combo.
+							if stage.Phase == phase && stage.Type() == stageType {
+								if shouldFail.CompareAndSwap(true, false) {
+									injectedFailure = true
+									return errors.AssertionFailedf("fail!")
+								}
+							}
+							return nil
+						},
+					}
+
+					var params base.TestServerArgs
+					params.Knobs.SQLDeclarativeSchemaChanger = scKnobs
+					params.UseDatabase = "defaultdb"
+					s, sqlDB, kvDB := serverutils.StartServer(t, params)
+					defer s.Stopper().Stop(ctx)
+
+					_, err := sqlDB.Exec("SET create_table_with_schema_locked = false")
+					require.NoError(t, err)
+					_, err = sqlDB.Exec("SET use_declarative_schema_changer = on")
+					require.NoError(t, err)
+					_, err = sqlDB.Exec("SET sql.defaults.use_declarative_schema_changer = 'on'")
+					require.NoError(t, err)
+					_, err = sqlDB.Exec(tc.setup)
+					require.NoError(t, err)
+
+					shouldFail.Store(true)
+					_, err = sqlDB.Exec(tc.schemaChange)
+					if !injectedFailure {
+						skip.IgnoreLintf(t, "skipping test as failure was not injected for phase %s and stage %s", phase, stageType)
+					}
+					require.Error(t, err)
+
+					// Ensure CREATE TABLE is the same.
+					verifyTableSchema(t, sqlDB, tc.expectedShowCreateTable)
+
+					// Ensure the schedule is still there or not based on test expectation.
+					desc := desctestutils.TestingGetPublicTableDescriptor(
+						kvDB,
+						s.Codec(),
+						"defaultdb",
+						"test",
+					)
+
+					rowLevelTTL := desc.GetRowLevelTTL()
+					if tc.expectSchedule {
+						require.NotNil(t, rowLevelTTL)
+						require.Greater(t, rowLevelTTL.ScheduleID, int64(0))
+
+						// Ensure there is only one schedule and that it belongs to the table.
+						var hasSchedule bool
+						require.NoError(t, sqlDB.QueryRow(`SELECT count(1) = 1 FROM [SHOW SCHEDULES] WHERE id = $1`, rowLevelTTL.ScheduleID).Scan(&hasSchedule))
+						require.True(t, hasSchedule)
+
+						var numSchedules int
+						require.NoError(t, sqlDB.QueryRow(`SELECT count(1) FROM [SHOW SCHEDULES] WHERE label LIKE SOME ('row-level-ttl%', '%' || $1 || '%', '%' || $2 || '%')`, desc.TableDesc().ID, desc.TableDesc().Name).Scan(&numSchedules))
+						require.Equal(t, 1, numSchedules)
+					} else {
+						require.Nil(t, rowLevelTTL)
+
+						// Ensure there are no schedules.
+						var numSchedules int
+						require.NoError(t, sqlDB.QueryRow(`SELECT count(1) FROM [SHOW SCHEDULES] WHERE label LIKE ANY ('row-level-ttl%', '%' || $1 || '%', '%' || $2 || '%')`, desc.TableDesc().ID, desc.TableDesc().Name).Scan(&numSchedules))
+						require.Equal(t, 0, numSchedules)
+					}
+				})
+			}
+		}
+	}
 }

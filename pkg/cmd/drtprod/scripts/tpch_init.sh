@@ -36,18 +36,18 @@ if [ -z "${WORKLOAD_CLUSTER}" ]; then
   exit 1
 fi
 
-absolute_path=$(roachprod run "${WORKLOAD_CLUSTER}":1 -- "realpath ./cockroach")
-pwd=$(roachprod run "${WORKLOAD_CLUSTER}":1 -- "dirname ${absolute_path}")
-PGURLS=$(roachprod pgurl "${CLUSTER}":1)
+absolute_path=$(drtprod run "${WORKLOAD_CLUSTER}":1 -- "realpath ./cockroach")
+pwd=$(drtprod run "${WORKLOAD_CLUSTER}":1 -- "dirname ${absolute_path}")
+PGURLS=$(drtprod pgurl "${CLUSTER}":1)
 
 # script is responsible for importing the tpch database for workload
-roachprod ssh "${WORKLOAD_CLUSTER}":1 -- "tee tpch_init_${suffix}.sh > /dev/null << 'EOF'
+drtprod ssh "${WORKLOAD_CLUSTER}":1 -- "tee tpch_init_${suffix}.sh > /dev/null << 'EOF'
 #!/bin/bash
 
 ${pwd}/cockroach workload init tpch $@ $PGURLS
 EOF"
-roachprod ssh "${WORKLOAD_CLUSTER}":1 -- "chmod +x tpch_init_${suffix}.sh"
+drtprod ssh "${WORKLOAD_CLUSTER}":1 -- "chmod +x tpch_init_${suffix}.sh"
 
 if [ "$execute_script" = "true" ]; then
-  roachprod run "${WORKLOAD_CLUSTER}":1 -- "sudo systemd-run --unit tpch_init_${suffix} --same-dir --uid \$(id -u) --gid \$(id -g) bash ${pwd}/tpch_init_${suffix}.sh"
+  drtprod run "${WORKLOAD_CLUSTER}":1 -- "sudo systemd-run --unit tpch_init_${suffix} --same-dir --uid \$(id -u) --gid \$(id -g) bash ${pwd}/tpch_init_${suffix}.sh"
 fi

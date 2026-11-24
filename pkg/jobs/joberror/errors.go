@@ -6,6 +6,8 @@
 package joberror
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/sql/flowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
@@ -32,5 +34,6 @@ func IsPermanentBulkJobError(err error) bool {
 		!errors.Is(err, circuit.ErrBreakerOpen) &&
 		!sysutil.IsErrConnectionReset(err) &&
 		!sysutil.IsErrConnectionRefused(err) &&
-		!errors.Is(err, sqlinstance.NonExistentInstanceError)
+		!errors.Is(err, sqlinstance.NonExistentInstanceError) &&
+		!errors.Is(err, context.Canceled)
 }

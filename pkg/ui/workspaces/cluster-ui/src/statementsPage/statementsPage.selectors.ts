@@ -5,20 +5,7 @@
 
 import { createSelector } from "reselect";
 
-import { databasesListSelector } from "src/store/databasesList/databasesList.selectors";
-
 import { localStorageSelector } from "../store/utils/selectors";
-
-// selectDatabases returns the array of all databases in the cluster.
-export const selectDatabases = createSelector(databasesListSelector, state => {
-  if (!state?.data) {
-    return [];
-  }
-
-  return state.data.databases
-    .filter((dbName: string) => dbName !== null && dbName.length > 0)
-    .sort();
-});
 
 export const selectColumns = createSelector(
   localStorageSelector,

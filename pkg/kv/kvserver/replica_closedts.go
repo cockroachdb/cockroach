@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/sidetransport"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -17,6 +18,42 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
+
+// getTargetByPolicyRLocked returns a range's closed timestamp policy and target
+// timestamp.
+func (r *Replica) getTargetByPolicyRLocked(
+	targetByPolicy map[ctpb.RangeClosedTimestampPolicy]hlc.Timestamp,
+) (ctpb.RangeClosedTimestampPolicy, hlc.Timestamp) {
+	policy := closedTimestampPolicy(r.descRLocked(), *r.cachedClosedTimestampPolicy.Load())
+	target, ok := targetByPolicy[policy]
+	if ok {
+		return policy, target
+	}
+	// If the range's policy is not found in targetByPolicy, fall back to
+	// LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO.
+	//
+	// This fallback handles race conditions between the policy refresher and side
+	// transport during cluster version upgrades. The race can occur in this
+	// sequence:
+	// 1. Side transport prepares a policy map before cluster upgrade is
+	// complete.
+	// 2. Cluster upgrade completes.
+	// 3. Policy refresher sees the upgrade and quickly updates replica policies
+	// to use latency-based policies.
+	// 4. Replica tries to use a latency-based policy but the policy map from step
+	// 1 doesn't include it yet.
+	//
+	// In this case, we temporarily fall back to the no-latency policy until the
+	// side transport catches up with the new cluster version.
+	// TODO(wenyihu6): remove this fallback once version compatibility with v25.1
+	// is no longer a concern
+	if policy >= ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_LESS_THAN_20MS &&
+		policy <= ctpb.LEAD_FOR_GLOBAL_READS_LATENCY_EQUAL_OR_GREATER_THAN_300MS {
+		return ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO,
+			targetByPolicy[ctpb.LEAD_FOR_GLOBAL_READS_WITH_NO_LATENCY_INFO]
+	}
+	panic("unexpected: policy not found in targetByPolicy")
+}
 
 // BumpSideTransportClosed advances the range's closed timestamp if it can. If
 // the closed timestamp is advanced, the function synchronizes with incoming
@@ -32,7 +69,7 @@ import (
 func (r *Replica) BumpSideTransportClosed(
 	ctx context.Context,
 	now hlc.ClockTimestamp,
-	targetByPolicy [roachpb.MAX_CLOSED_TIMESTAMP_POLICY]hlc.Timestamp,
+	targetByPolicy map[ctpb.RangeClosedTimestampPolicy]hlc.Timestamp,
 ) sidetransport.BumpSideTransportClosedResult {
 	var res sidetransport.BumpSideTransportClosedResult
 	r.mu.Lock()
@@ -50,9 +87,9 @@ func (r *Replica) BumpSideTransportClosed(
 	}
 
 	lai := r.shMu.state.LeaseAppliedIndex
-	policy := r.closedTimestampPolicyRLocked()
-	target := targetByPolicy[policy]
-	st := r.leaseStatusForRequestRLocked(ctx, now, hlc.Timestamp{} /* reqTS */)
+	policy, target := r.getTargetByPolicyRLocked(targetByPolicy)
+	st := r.leaseStatusForRequest(ctx, now, hlc.Timestamp{} /* reqTS */, r.mu.minLeaseProposedTS,
+		r.mu.minValidObservedTimestamp, r.shMu.state.Lease, r.raftBasicStatusRLocked())
 	// We need to own the lease but note that stasis (LeaseState_UNUSABLE) doesn't
 	// matter.
 	valid := st.IsValid() || st.State == kvserverpb.LeaseState_UNUSABLE
@@ -118,7 +155,8 @@ func (r *Replica) closedTimestampTargetRLocked() hlc.Timestamp {
 		closedts.TargetDuration.Get(&r.ClusterSettings().SV),
 		closedts.LeadForGlobalReadsOverride.Get(&r.ClusterSettings().SV),
 		closedts.SideTransportCloseInterval.Get(&r.ClusterSettings().SV),
-		r.closedTimestampPolicyRLocked(),
+		closedts.SideTransportPacingRefreshInterval.Get(&r.ClusterSettings().SV),
+		closedTimestampPolicy(r.descRLocked(), *r.cachedClosedTimestampPolicy.Load()),
 	)
 }
 
@@ -255,7 +293,7 @@ func (st *sidetransportAccess) forward(
 
 func (st *sidetransportAccess) assertNoRegression(ctx context.Context, cur, up closedTimestamp) {
 	if cur.regression(up) {
-		log.Fatalf(ctx, "side-transport update saw closed timestamp regression on r%d: "+
+		log.KvExec.Fatalf(ctx, "side-transport update saw closed timestamp regression on r%d: "+
 			"(lai=%d, ts=%s) -> (lai=%d, ts=%s)", st.rangeID, cur.lai, cur.ts, up.lai, up.ts)
 	}
 }

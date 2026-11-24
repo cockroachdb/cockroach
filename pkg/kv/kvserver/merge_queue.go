@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/split"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
@@ -45,7 +46,6 @@ var MergeQueueInterval = settings.RegisterDurationSetting(
 	"kv.range_merge.queue_interval",
 	"how long the merge queue waits between processing replicas",
 	5*time.Second,
-	settings.NonNegativeDuration,
 )
 
 // SkipMergeQueueForExternalBytes is a setting that controls whether
@@ -125,7 +125,6 @@ func newMergeQueue(store *Store, db *kv.DB) *mergeQueue {
 			acceptsUnsplitRanges:                false,
 			successes:                           store.metrics.MergeQueueSuccesses,
 			failures:                            store.metrics.MergeQueueFailures,
-			storeFailures:                       store.metrics.StoreFailures,
 			pending:                             store.metrics.MergeQueuePending,
 			processingNanos:                     store.metrics.MergeQueueProcessingNanos,
 			purgatory:                           store.metrics.MergeQueuePurgatory,
@@ -148,7 +147,7 @@ func (mq *mergeQueue) shouldQueue(
 
 	needsSplit, err := confReader.NeedsSplit(ctx, desc.StartKey, desc.EndKey.Next())
 	if err != nil {
-		log.Warningf(
+		log.KvDistribution.Warningf(
 			ctx,
 			"could not compute if extending range would result in a split (err=%v); skipping merge for range %s",
 			err,
@@ -201,6 +200,8 @@ func (mq *mergeQueue) requestRangeStats(
 ) {
 
 	ba := &kvpb.BatchRequest{}
+	ba.Header.WorkloadID = uint64(workloadid.WORKLOAD_ID_MERGE_QUEUE)
+	ba.Header.WorkloadType = workloadid.WorkloadTypeSystem.ToUint32()
 	ba.Add(&kvpb.RangeStatsRequest{
 		RequestHeader: kvpb.RequestHeader{Key: key},
 	})
@@ -240,7 +241,7 @@ func (mq *mergeQueue) requestRangeStats(
 }
 
 func (mq *mergeQueue) process(
-	ctx context.Context, lhsRepl *Replica, confReader spanconfig.StoreReader,
+	ctx context.Context, lhsRepl *Replica, confReader spanconfig.StoreReader, _ float64,
 ) (processed bool, err error) {
 
 	lhsDesc := lhsRepl.Desc()
@@ -383,7 +384,7 @@ func (mq *mergeQueue) process(
 	}
 	for i := range rightRepls {
 		if typ := rightRepls[i].Type; !(typ == roachpb.VOTER_FULL || typ == roachpb.NON_VOTER) {
-			log.Infof(ctx, "RHS Type: %s", typ)
+			log.KvDistribution.Infof(ctx, "RHS Type: %s", typ)
 			return false,
 				errors.AssertionFailedf(
 					`cannot merge because rhs is either in a joint state or has learner replicas: %v`,
@@ -408,7 +409,7 @@ func (mq *mergeQueue) process(
 		// attempts because merges can race with other descriptor modifications.
 		// On seeing a ConditionFailedError, don't return an error and enqueue
 		// this replica again in case it still needs to be merged.
-		log.Infof(ctx, "merge saw concurrent descriptor modification; maybe retrying")
+		log.KvDistribution.Infof(ctx, "merge saw concurrent descriptor modification; maybe retrying")
 		mq.MaybeAddAsync(ctx, lhsRepl, now)
 		return false, nil
 	} else if err != nil {
@@ -417,12 +418,12 @@ func (mq *mergeQueue) process(
 		//
 		// TODO(aayush): Merges are indeed stable now, we can be smarter here about
 		// which errors should be marked as purgatory-worthy.
-		log.Warningf(ctx, "%v", err)
+		log.KvDistribution.Warningf(ctx, "%v", err)
 		return false, rangeMergePurgatoryError{err}
 	}
 	if testingAggressiveConsistencyChecks {
-		if _, err := mq.store.consistencyQueue.process(ctx, lhsRepl, confReader); err != nil {
-			log.Warningf(ctx, "%v", err)
+		if _, err := mq.store.consistencyQueue.process(ctx, lhsRepl, confReader, -1 /*priorityAtEnqueue*/); err != nil {
+			log.KvDistribution.Warningf(ctx, "%v", err)
 		}
 	}
 

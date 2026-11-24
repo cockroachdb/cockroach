@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -99,7 +100,7 @@ func TestTenantsStorageMetricsOnSplit(t *testing.T) {
 		})
 		ex := metric.MakePrometheusExporter()
 		scrape := func(ex *metric.PrometheusExporter) {
-			ex.ScrapeRegistry(store.Registry(), true /* includeChildMetrics */)
+			ex.ScrapeRegistry(store.Registry(), metric.WithIncludeChildMetrics(true), metric.WithIncludeAggregateMetrics(true))
 		}
 		var in bytes.Buffer
 		if err := ex.ScrapeAndPrintAsText(&in, expfmt.FmtText, scrape); err != nil {
@@ -404,7 +405,7 @@ func TestTenantCtx(t *testing.T) {
 	tenantID := serverutils.TestTenantID()
 
 	testutils.RunTrueAndFalse(t, "shared-process tenant", func(t *testing.T, sharedProcess bool) {
-		getErr := make(chan error)
+		scanErr := make(chan error)
 		pushErr := make(chan error)
 		s := serverutils.StartServerOnly(t, base.TestServerArgs{
 			// Disable the default test tenant since we're going to create our own.
@@ -416,28 +417,41 @@ func TestTenantCtx(t *testing.T) {
 						// context looks as expected, and signal their channels.
 
 						tenID, isTenantRequest := roachpb.ClientTenantFromContext(ctx)
-						keyRecognized := strings.Contains(ba.Requests[0].GetInner().Header().Key.String(), magicKey)
-						if !keyRecognized {
+						key := ba.Requests[0].GetInner().Header().Key
+
+						// Only match keys in the tenant's keyspace. System table
+						// operations (jobs, schema changes, etc.) can have auto-generated
+						// IDs that coincidentally contain the magic substring, causing
+						// false positives (#167600). This also subsumes the previous
+						// Meta2 prefix check (#158493).
+						tenantPrefix := keys.MakeTenantPrefix(tenantID)
+						if !bytes.HasPrefix(key, tenantPrefix) {
+							return nil
+						}
+						if !strings.Contains(key.String(), magicKey) {
 							return nil
 						}
 
-						var getReq *kvpb.GetRequest
+						var scanReq *kvpb.ScanRequest
 						var pushReq *kvpb.PushTxnRequest
-						if isSingleGet := ba.IsSingleRequest() && ba.Requests[0].GetInner().Method() == kvpb.Get; isSingleGet {
-							getReq = ba.Requests[0].GetInner().(*kvpb.GetRequest)
+						if isSingleScan := ba.IsSingleRequest() && ba.Requests[0].GetInner().Method() == kvpb.Scan; isSingleScan {
+							scanReq = ba.Requests[0].GetInner().(*kvpb.ScanRequest)
 						}
 						if isSinglePushTxn := ba.IsSingleRequest() && ba.Requests[0].GetInner().Method() == kvpb.PushTxn; isSinglePushTxn {
 							pushReq = ba.Requests[0].GetInner().(*kvpb.PushTxnRequest)
 						}
 
+						t.Logf("received request with key: %s, isTenantRequest: %t, tenID: %d",
+							key.String(), isTenantRequest, tenID)
+
 						switch {
-						case getReq != nil:
+						case scanReq != nil:
 							var err error
 							if !isTenantRequest || tenID != tenantID {
-								err = errors.Newf("expected Get to run as the expected tenant (%d), but it isn't. tenant request: %t, tenantID: %d",
+								err = errors.Newf("expected Scan to run as the expected tenant (%d), but it isn't. tenant request: %t, tenantID: %d",
 									tenantID, isTenantRequest, tenID)
 							}
-							getErr <- err
+							scanErr <- err
 							return nil
 						case pushReq != nil:
 							// Check that the Push request no longer has the txn request; RPCs
@@ -475,31 +489,34 @@ func TestTenantCtx(t *testing.T) {
 			defer tsql.Close()
 		}
 
-		_, err := tsql.Exec("create table t (x int primary key)")
+		_, err := tsql.Exec("create table t (x int primary key, y int, family (x), family (y))")
 		require.NoError(t, err)
 		tx1, err := tsql.BeginTx(ctx, nil /* opts */)
 		require.NoError(t, err)
 		_, err = tx1.Exec("insert into t(x) values ($1)", magicKey)
 		require.NoError(t, err)
 
-		var tx2 *gosql.Tx
-		var tx2C = make(chan struct{})
-		go func() {
-			var err error
-			tx2, err = tsql.BeginTx(ctx, nil /* opts */)
-			assert.NoError(t, err)
+		g := ctxgroup.WithContext(ctx)
+		g.Go(func() error {
+			tx2, err := tsql.BeginTx(ctx, nil /* opts */)
+			if err != nil {
+				return err
+			}
+			// This SELECT should be blocked by the insert on tx1.
 			_, err = tx2.Exec("select * from t where x = $1", magicKey)
-			assert.NoError(t, err)
-			close(tx2C)
-		}()
+			if err != nil {
+				return err
+			}
+			return tx2.Rollback()
+		})
 
 		// Wait for tx2 goroutine to send the PushTxn request, and then roll back tx1
 		// to unblock tx2.
 		select {
-		case err := <-getErr:
+		case err := <-scanErr:
 			require.NoError(t, err)
 		case <-time.After(3 * time.Second):
-			t.Fatal("timed out waiting for Get")
+			t.Fatal("timed out waiting for Scan")
 		}
 		select {
 		case err := <-pushErr:
@@ -507,9 +524,7 @@ func TestTenantCtx(t *testing.T) {
 		case <-time.After(3 * time.Second):
 			t.Fatal("timed out waiting for PushTxn")
 		}
-		_ = tx1.Rollback()
-		// Wait for tx2 to be unblocked.
-		<-tx2C
-		_ = tx2.Rollback()
+		require.NoError(t, tx1.Rollback())
+		require.NoError(t, g.Wait())
 	})
 }

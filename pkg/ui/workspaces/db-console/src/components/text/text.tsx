@@ -6,7 +6,7 @@
 import cn from "classnames";
 import * as React from "react";
 
-import "./text.styl";
+import "./text.scss";
 
 export interface TextProps {
   textType?: TextTypes;

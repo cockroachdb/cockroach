@@ -1,0 +1,42 @@
+# Bad API key: session creation returns 401, no subsequent calls.
+upload
+{
+  "create_session": {"status": 401, "body": "invalid api key"}
+}
+----
+ERROR: creating session: session creation failed (401): invalid api key
+[counters] create_session=1 reupload=0 resumable_session=0 complete=0 blob_probe=0 blob_put=0
+
+# Reupload fails on resume: no resumable-session, no upload.
+upload
+{
+  "resume_session": "ses_old",
+  "reupload": {"status": 401, "body": "expired key"}
+}
+----
+ERROR: reopening session: reopening session failed (401): expired key
+[counters] create_session=0 reupload=1 resumable_session=0 complete=0 blob_probe=0 blob_put=0
+
+# Resumable-session URI fetch fails after a clean session create.
+upload
+{
+  "create_session": {"status": 201, "session_id": "ses_x", "upload_token": "tok_x"},
+  "resumable_session": {"status": 500, "body": "internal error"}
+}
+----
+ERROR: fetching resumable session URI: resumable-session request failed (500): internal error
+[counters] create_session=1 reupload=0 resumable_session=1 complete=0 blob_probe=0 blob_put=0
+
+# Bytes land in storage but /complete fails: orchestrator surfaces the
+# "session finalisation failed" wrap with a --resume-session hint.
+upload
+{
+  "create_session": {"status": 201, "session_id": "ses_c", "upload_token": "tok_c"},
+  "resumable_session": {"status": 201, "object_path": "ses_c/debug.zip"},
+  "blob_put": [{"status": 200}],
+  "complete": {"status": 500, "body": "server returned 500"}
+}
+----
+Upload session: ses_c
+ERROR: upload completed but session finalisation failed (re-run with --resume-session=ses_c): session completion failed (500): server returned 500
+[counters] create_session=1 reupload=0 resumable_session=1 complete=1 blob_probe=0 blob_put=1

@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
@@ -23,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -40,12 +42,13 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 	s := srv.ApplicationLayer()
 	db := s.InternalDB().(descs.DB)
 	cache := NewTableStatisticsCache(
-		10, /* cacheSize */
+		ctx,
 		s.ClusterSettings(),
 		db,
 		s.AppStopper(),
+		nil, /* parentMon */
 	)
-	require.NoError(t, cache.Start(ctx, s.Codec(), s.RangeFeedFactory().(*rangefeed.Factory)))
+	require.NoError(t, cache.Start(ctx, s.Codec(), s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
 
 	// The test data must be ordered by CreatedAt DESC so the calculated set of
 	// expected deleted stats is correct.
@@ -259,9 +262,7 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 		}
 
 		return testutils.SucceedsSoonError(func() error {
-			tableStats, err := cache.getTableStatsFromCache(
-				ctx, tableID, nil /* forecast */, nil, /* udtCols */
-			)
+			tableStats, _, _, err := cache.getTableStatsFromCache(ctx, tableID, nil /* forecast */, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
 			if err != nil {
 				return err
 			}
@@ -269,9 +270,7 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 			for i := range testData {
 				stat := &testData[i]
 				if stat.TableID != tableID {
-					stats, err := cache.getTableStatsFromCache(
-						ctx, stat.TableID, nil /* forecast */, nil, /* udtCols */
-					)
+					stats, _, _, err := cache.getTableStatsFromCache(ctx, stat.TableID, nil /* forecast */, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
 					if err != nil {
 						return err
 					}
@@ -341,12 +340,13 @@ func TestDeleteOldStatsForOtherColumns(t *testing.T) {
 	s := srv.ApplicationLayer()
 	db := s.InternalDB().(isql.DB)
 	cache := NewTableStatisticsCache(
-		10, /* cacheSize */
+		ctx,
 		s.ClusterSettings(),
 		s.InternalDB().(descs.DB),
 		s.AppStopper(),
+		nil, /* parentMon */
 	)
-	require.NoError(t, cache.Start(ctx, s.Codec(), s.RangeFeedFactory().(*rangefeed.Factory)))
+	require.NoError(t, cache.Start(ctx, s.Codec(), s.RangeFeedFactory().(*rangefeed.Factory), s.SystemTableIDResolver().(catalog.SystemTableIDResolver)))
 	testData := []TableStatisticProto{
 		{
 			TableID:       descpb.ID(100),
@@ -557,9 +557,7 @@ func TestDeleteOldStatsForOtherColumns(t *testing.T) {
 		}
 
 		return testutils.SucceedsSoonError(func() error {
-			tableStats, err := cache.getTableStatsFromCache(
-				ctx, tableID, nil /* forecast */, nil, /* udtCols */
-			)
+			tableStats, _, _, err := cache.getTableStatsFromCache(ctx, tableID, nil /* forecast */, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
 			if err != nil {
 				return err
 			}
@@ -567,9 +565,7 @@ func TestDeleteOldStatsForOtherColumns(t *testing.T) {
 			for i := range testData {
 				stat := &testData[i]
 				if stat.TableID != tableID {
-					stats, err := cache.getTableStatsFromCache(
-						ctx, stat.TableID, nil /* forecast */, nil, /* udtCols */
-					)
+					stats, _, _, err := cache.getTableStatsFromCache(ctx, stat.TableID, nil /* forecast */, nil /* udtCols */, nil /* typeResolver */, false /* stable */, 0 /* canaryWindowSize */, hlc.Timestamp{} /* statsAsOf */)
 					if err != nil {
 						return err
 					}
@@ -682,7 +678,6 @@ func TestStatsAreDeletedForDroppedTables(t *testing.T) {
 
 	var params base.TestServerArgs
 	params.ScanMaxIdleTime = time.Millisecond // speed up MVCC GC queue scans
-	params.DefaultTestTenant = base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109380)
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.Background())
 	runner := sqlutils.MakeSQLRunner(sqlDB)

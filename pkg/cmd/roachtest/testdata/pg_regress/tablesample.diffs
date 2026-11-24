@@ -1,0 +1,538 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/tablesample.out --label=/mnt/data1/postgres/src/test/regress/results/tablesample.out /mnt/data1/postgres/src/test/regress/expected/tablesample.out /mnt/data1/postgres/src/test/regress/results/tablesample.out
+--- /mnt/data1/postgres/src/test/regress/expected/tablesample.out
++++ /mnt/data1/postgres/src/test/regress/results/tablesample.out
+@@ -1,331 +1,292 @@
+ CREATE TABLE test_tablesample (id int, name text) WITH (fillfactor=10);
++NOTICE:  storage parameter "fillfactor" is ignored
+ -- use fillfactor so we don't have to load too much data to get multiple pages
+ INSERT INTO test_tablesample
+   SELECT i, repeat(i::text, 200) FROM generate_series(0, 9) s(i);
+ SELECT t.id FROM test_tablesample AS t TABLESAMPLE SYSTEM (50) REPEATABLE (0);
+- id 
+-----
+-  3
+-  4
+-  5
+-  6
+-  7
+-  8
+-(6 rows)
+-
++ERROR:  at or near "tablesample": syntax error
++DETAIL:  source SQL:
++SELECT t.id FROM test_tablesample AS t TABLESAMPLE SYSTEM (50) REPEATABLE (0)
++                                       ^
+ SELECT id FROM test_tablesample TABLESAMPLE SYSTEM (100.0/11) REPEATABLE (0);
+- id 
+-----
+-(0 rows)
+-
++ERROR:  at or near "system": syntax error
++DETAIL:  source SQL:
++SELECT id FROM test_tablesample TABLESAMPLE SYSTEM (100.0/11) REPEATABLE (0)
++                                            ^
+ SELECT id FROM test_tablesample TABLESAMPLE SYSTEM (50) REPEATABLE (0);
+- id 
+-----
+-  3
+-  4
+-  5
+-  6
+-  7
+-  8
+-(6 rows)
+-
++ERROR:  at or near "system": syntax error
++DETAIL:  source SQL:
++SELECT id FROM test_tablesample TABLESAMPLE SYSTEM (50) REPEATABLE (0)
++                                            ^
+ SELECT id FROM test_tablesample TABLESAMPLE BERNOULLI (50) REPEATABLE (0);
+- id 
+-----
+-  4
+-  5
+-  6
+-  7
+-  8
+-(5 rows)
+-
++ERROR:  at or near "bernoulli": syntax error
++DETAIL:  source SQL:
++SELECT id FROM test_tablesample TABLESAMPLE BERNOULLI (50) REPEATABLE (0)
++                                            ^
+ SELECT id FROM test_tablesample TABLESAMPLE BERNOULLI (5.5) REPEATABLE (0);
+- id 
+-----
+-  7
+-(1 row)
+-
++ERROR:  at or near "bernoulli": syntax error
++DETAIL:  source SQL:
++SELECT id FROM test_tablesample TABLESAMPLE BERNOULLI (5.5) REPEATABLE (0)
++                                            ^
+ -- 100% should give repeatable count results (ie, all rows) in any case
+ SELECT count(*) FROM test_tablesample TABLESAMPLE SYSTEM (100);
+- count 
+--------
+-    10
+-(1 row)
+-
++ERROR:  at or near "system": syntax error
++DETAIL:  source SQL:
++SELECT count(*) FROM test_tablesample TABLESAMPLE SYSTEM (100)
++                                                  ^
+ SELECT count(*) FROM test_tablesample TABLESAMPLE SYSTEM (100) REPEATABLE (1+2);
+- count 
+--------
+-    10
+-(1 row)
+-
++ERROR:  at or near "system": syntax error
++DETAIL:  source SQL:
++SELECT count(*) FROM test_tablesample TABLESAMPLE SYSTEM (100) REPEATABLE (1+2)
++                                                  ^
+ SELECT count(*) FROM test_tablesample TABLESAMPLE SYSTEM (100) REPEATABLE (0.4);
+- count 
+--------
+-    10
+-(1 row)
+-
++ERROR:  at or near "system": syntax error
++DETAIL:  source SQL:
++SELECT count(*) FROM test_tablesample TABLESAMPLE SYSTEM (100) REPEATABLE (0.4)
++                                                  ^
+ CREATE VIEW test_tablesample_v1 AS
+   SELECT id FROM test_tablesample TABLESAMPLE SYSTEM (10*2) REPEATABLE (2);
++ERROR:  at or near "system": syntax error
++DETAIL:  source SQL:
++CREATE VIEW test_tablesample_v1 AS
++  SELECT id FROM test_tablesample TABLESAMPLE SYSTEM (10*2) REPEATABLE (2)
++                                              ^
+ CREATE VIEW test_tablesample_v2 AS
+   SELECT id FROM test_tablesample TABLESAMPLE SYSTEM (99);
++ERROR:  at or near "system": syntax error
++DETAIL:  source SQL:
++CREATE VIEW test_tablesample_v2 AS
++  SELECT id FROM test_tablesample TABLESAMPLE SYSTEM (99)
++                                              ^
+ \d+ test_tablesample_v1
+-                     View "public.test_tablesample_v1"
+- Column |  Type   | Collation | Nullable | Default | Storage | Description 
+---------+---------+-----------+----------+---------+---------+-------------
+- id     | integer |           |          |         | plain   | 
+-View definition:
+- SELECT id
+-   FROM test_tablesample TABLESAMPLE system ((10 * 2)) REPEATABLE (2);
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(test_tablesample_v1)$' COLLATE pg_catalog.default
++                                                                                   ^
+ \d+ test_tablesample_v2
+-                     View "public.test_tablesample_v2"
+- Column |  Type   | Collation | Nullable | Default | Storage | Description 
+---------+---------+-----------+----------+---------+---------+-------------
+- id     | integer |           |          |         | plain   | 
+-View definition:
+- SELECT id
+-   FROM test_tablesample TABLESAMPLE system (99);
+-
++ERROR:  at or near ".": syntax error
++DETAIL:  source SQL:
++SELECT c.oid,
++  n.nspname,
++  c.relname
++FROM pg_catalog.pg_class c
++     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
++WHERE c.relname OPERATOR(pg_catalog.~) '^(test_tablesample_v2)$' COLLATE pg_catalog.default
++                                                                                   ^
+ -- check a sampled query doesn't affect cursor in progress
+ BEGIN;
+ DECLARE tablesample_cur SCROLL CURSOR FOR
+   SELECT id FROM test_tablesample TABLESAMPLE SYSTEM (50) REPEATABLE (0);
++ERROR:  at or near "system": syntax error
++DETAIL:  source SQL:
++DECLARE tablesample_cur SCROLL CURSOR FOR
++  SELECT id FROM test_tablesample TABLESAMPLE SYSTEM (50) REPEATABLE (0)
++                                              ^
+ FETCH FIRST FROM tablesample_cur;
+- id 
+-----
+-  3
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ FETCH NEXT FROM tablesample_cur;
+- id 
+-----
+-  4
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ FETCH NEXT FROM tablesample_cur;
+- id 
+-----
+-  5
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ SELECT id FROM test_tablesample TABLESAMPLE SYSTEM (50) REPEATABLE (0);
+- id 
+-----
+-  3
+-  4
+-  5
+-  6
+-  7
+-  8
+-(6 rows)
+-
++ERROR:  at or near "system": syntax error
++DETAIL:  source SQL:
++SELECT id FROM test_tablesample TABLESAMPLE SYSTEM (50) REPEATABLE (0)
++                                            ^
+ FETCH NEXT FROM tablesample_cur;
+- id 
+-----
+-  6
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ FETCH NEXT FROM tablesample_cur;
+- id 
+-----
+-  7
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ FETCH NEXT FROM tablesample_cur;
+- id 
+-----
+-  8
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ FETCH FIRST FROM tablesample_cur;
+- id 
+-----
+-  3
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ FETCH NEXT FROM tablesample_cur;
+- id 
+-----
+-  4
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ FETCH NEXT FROM tablesample_cur;
+- id 
+-----
+-  5
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ FETCH NEXT FROM tablesample_cur;
+- id 
+-----
+-  6
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ FETCH NEXT FROM tablesample_cur;
+- id 
+-----
+-  7
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ FETCH NEXT FROM tablesample_cur;
+- id 
+-----
+-  8
+-(1 row)
+-
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ CLOSE tablesample_cur;
++ERROR:  current transaction is aborted, commands ignored until end of transaction block
+ END;
+ EXPLAIN (COSTS OFF)
+   SELECT id FROM test_tablesample TABLESAMPLE SYSTEM (50) REPEATABLE (2);
+-                             QUERY PLAN                             
+---------------------------------------------------------------------
+- Sample Scan on test_tablesample
+-   Sampling: system ('50'::real) REPEATABLE ('2'::double precision)
+-(2 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ EXPLAIN (COSTS OFF)
+   SELECT * FROM test_tablesample_v1;
+-                             QUERY PLAN                             
+---------------------------------------------------------------------
+- Sample Scan on test_tablesample
+-   Sampling: system ('20'::real) REPEATABLE ('2'::double precision)
+-(2 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++EXPLAIN (COSTS OFF)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ -- check inheritance behavior
+ explain (costs off)
+   select count(*) from person tablesample bernoulli (100);
+-                   QUERY PLAN                    
+--------------------------------------------------
+- Aggregate
+-   ->  Append
+-         ->  Sample Scan on person person_1
+-               Sampling: bernoulli ('100'::real)
+-         ->  Sample Scan on emp person_2
+-               Sampling: bernoulli ('100'::real)
+-         ->  Sample Scan on student person_3
+-               Sampling: bernoulli ('100'::real)
+-         ->  Sample Scan on stud_emp person_4
+-               Sampling: bernoulli ('100'::real)
+-(10 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select count(*) from person tablesample bernoulli (100);
+- count 
+--------
+-    58
+-(1 row)
+-
++ERROR:  at or near "bernoulli": syntax error
++DETAIL:  source SQL:
++select count(*) from person tablesample bernoulli (100)
++                                        ^
+ select count(*) from person;
+- count 
+--------
+-    58
+-(1 row)
+-
++ERROR:  relation "person" does not exist
+ -- check that collations get assigned within the tablesample arguments
+ SELECT count(*) FROM test_tablesample TABLESAMPLE bernoulli (('1'::text < '0'::text)::int);
+- count 
+--------
+-     0
+-(1 row)
+-
++ERROR:  at or near "bernoulli": syntax error
++DETAIL:  source SQL:
++SELECT count(*) FROM test_tablesample TABLESAMPLE bernoulli (('1'::text < '0'::text)::int)
++                                                  ^
+ -- check behavior during rescans, as well as correct handling of min/max pct
+ select * from
+   (values (0),(100)) v(pct),
+   lateral (select count(*) from tenk1 tablesample bernoulli (pct)) ss;
+- pct | count 
+------+-------
+-   0 |     0
+- 100 | 10000
+-(2 rows)
+-
++ERROR:  at or near "bernoulli": syntax error
++DETAIL:  source SQL:
++select * from
++  (values (0),(100)) v(pct),
++  lateral (select count(*) from tenk1 tablesample bernoulli (pct)) ss
++                                                  ^
++HINT:  try \h <SOURCE>
+ select * from
+   (values (0),(100)) v(pct),
+   lateral (select count(*) from tenk1 tablesample system (pct)) ss;
+- pct | count 
+------+-------
+-   0 |     0
+- 100 | 10000
+-(2 rows)
+-
++ERROR:  at or near "system": syntax error
++DETAIL:  source SQL:
++select * from
++  (values (0),(100)) v(pct),
++  lateral (select count(*) from tenk1 tablesample system (pct)) ss
++                                                  ^
++HINT:  try \h <SOURCE>
+ explain (costs off)
+ select pct, count(unique1) from
+   (values (0),(100)) v(pct),
+   lateral (select * from tenk1 tablesample bernoulli (pct)) ss
+   group by pct;
+-                       QUERY PLAN                       
+---------------------------------------------------------
+- HashAggregate
+-   Group Key: "*VALUES*".column1
+-   ->  Nested Loop
+-         ->  Values Scan on "*VALUES*"
+-         ->  Sample Scan on tenk1
+-               Sampling: bernoulli ("*VALUES*".column1)
+-(6 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ select pct, count(unique1) from
+   (values (0),(100)) v(pct),
+   lateral (select * from tenk1 tablesample bernoulli (pct)) ss
+   group by pct;
+- pct | count 
+------+-------
+- 100 | 10000
+-(1 row)
+-
++ERROR:  at or near "bernoulli": syntax error
++DETAIL:  source SQL:
++select pct, count(unique1) from
++  (values (0),(100)) v(pct),
++  lateral (select * from tenk1 tablesample bernoulli (pct)) ss
++                                           ^
++HINT:  try \h <SOURCE>
+ select pct, count(unique1) from
+   (values (0),(100)) v(pct),
+   lateral (select * from tenk1 tablesample system (pct)) ss
+   group by pct;
+- pct | count 
+------+-------
+- 100 | 10000
+-(1 row)
+-
++ERROR:  at or near "system": syntax error
++DETAIL:  source SQL:
++select pct, count(unique1) from
++  (values (0),(100)) v(pct),
++  lateral (select * from tenk1 tablesample system (pct)) ss
++                                           ^
++HINT:  try \h <SOURCE>
+ -- errors
+ SELECT id FROM test_tablesample TABLESAMPLE FOOBAR (1);
+-ERROR:  tablesample method foobar does not exist
+-LINE 1: SELECT id FROM test_tablesample TABLESAMPLE FOOBAR (1);
+-                                                    ^
++ERROR:  at or near "foobar": syntax error
++DETAIL:  source SQL:
++SELECT id FROM test_tablesample TABLESAMPLE FOOBAR (1)
++                                            ^
+ SELECT id FROM test_tablesample TABLESAMPLE SYSTEM (NULL);
+-ERROR:  TABLESAMPLE parameter cannot be null
++ERROR:  at or near "system": syntax error
++DETAIL:  source SQL:
++SELECT id FROM test_tablesample TABLESAMPLE SYSTEM (NULL)
++                                            ^
+ SELECT id FROM test_tablesample TABLESAMPLE SYSTEM (50) REPEATABLE (NULL);
+-ERROR:  TABLESAMPLE REPEATABLE parameter cannot be null
++ERROR:  at or near "system": syntax error
++DETAIL:  source SQL:
++SELECT id FROM test_tablesample TABLESAMPLE SYSTEM (50) REPEATABLE (NULL)
++                                            ^
+ SELECT id FROM test_tablesample TABLESAMPLE BERNOULLI (-1);
+-ERROR:  sample percentage must be between 0 and 100
++ERROR:  at or near "bernoulli": syntax error
++DETAIL:  source SQL:
++SELECT id FROM test_tablesample TABLESAMPLE BERNOULLI (-1)
++                                            ^
+ SELECT id FROM test_tablesample TABLESAMPLE BERNOULLI (200);
+-ERROR:  sample percentage must be between 0 and 100
++ERROR:  at or near "bernoulli": syntax error
++DETAIL:  source SQL:
++SELECT id FROM test_tablesample TABLESAMPLE BERNOULLI (200)
++                                            ^
+ SELECT id FROM test_tablesample TABLESAMPLE SYSTEM (-1);
+-ERROR:  sample percentage must be between 0 and 100
++ERROR:  at or near "system": syntax error
++DETAIL:  source SQL:
++SELECT id FROM test_tablesample TABLESAMPLE SYSTEM (-1)
++                                            ^
+ SELECT id FROM test_tablesample TABLESAMPLE SYSTEM (200);
+-ERROR:  sample percentage must be between 0 and 100
++ERROR:  at or near "system": syntax error
++DETAIL:  source SQL:
++SELECT id FROM test_tablesample TABLESAMPLE SYSTEM (200)
++                                            ^
+ SELECT id FROM test_tablesample_v1 TABLESAMPLE BERNOULLI (1);
+-ERROR:  TABLESAMPLE clause can only be applied to tables and materialized views
+-LINE 1: SELECT id FROM test_tablesample_v1 TABLESAMPLE BERNOULLI (1)...
+-                       ^
++ERROR:  at or near "bernoulli": syntax error
++DETAIL:  source SQL:
++SELECT id FROM test_tablesample_v1 TABLESAMPLE BERNOULLI (1)
++                                               ^
+ INSERT INTO test_tablesample_v1 VALUES(1);
+-ERROR:  cannot insert into view "test_tablesample_v1"
+-DETAIL:  Views containing TABLESAMPLE are not automatically updatable.
+-HINT:  To enable inserting into the view, provide an INSTEAD OF INSERT trigger or an unconditional ON INSERT DO INSTEAD rule.
++ERROR:  relation "test_tablesample_v1" does not exist
+ WITH query_select AS (SELECT * FROM test_tablesample)
+ SELECT * FROM query_select TABLESAMPLE BERNOULLI (5.5) REPEATABLE (1);
+-ERROR:  TABLESAMPLE clause can only be applied to tables and materialized views
+-LINE 2: SELECT * FROM query_select TABLESAMPLE BERNOULLI (5.5) REPEA...
+-                      ^
++ERROR:  at or near "bernoulli": syntax error
++DETAIL:  source SQL:
++WITH query_select AS (SELECT * FROM test_tablesample)
++SELECT * FROM query_select TABLESAMPLE BERNOULLI (5.5) REPEATABLE (1)
++                                       ^
+ SELECT q.* FROM (SELECT * FROM test_tablesample) as q TABLESAMPLE BERNOULLI (5);
+-ERROR:  syntax error at or near "TABLESAMPLE"
+-LINE 1: ...CT q.* FROM (SELECT * FROM test_tablesample) as q TABLESAMPL...
+-                                                             ^
++ERROR:  at or near "tablesample": syntax error
++DETAIL:  source SQL:
++SELECT q.* FROM (SELECT * FROM test_tablesample) as q TABLESAMPLE BERNOULLI (5)
++                                                      ^
+ -- check partitioned tables support tablesample
+ create table parted_sample (a int) partition by list (a);
++ERROR:  at or near "EOF": syntax error
++DETAIL:  source SQL:
++create table parted_sample (a int) partition by list (a)
++                                                        ^
++HINT:  try \h CREATE TABLE
+ create table parted_sample_1 partition of parted_sample for values in (1);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table parted_sample_1 partition of parted_sample for values in (1)
++                             ^
++HINT:  try \h CREATE TABLE
+ create table parted_sample_2 partition of parted_sample for values in (2);
++ERROR:  at or near "partition": syntax error
++DETAIL:  source SQL:
++create table parted_sample_2 partition of parted_sample for values in (2)
++                             ^
++HINT:  try \h CREATE TABLE
+ explain (costs off)
+   select * from parted_sample tablesample bernoulli (100);
+-                QUERY PLAN                 
+--------------------------------------------
+- Append
+-   ->  Sample Scan on parted_sample_1
+-         Sampling: bernoulli ('100'::real)
+-   ->  Sample Scan on parted_sample_2
+-         Sampling: bernoulli ('100'::real)
+-(5 rows)
+-
++ERROR:  at or near "off": syntax error
++DETAIL:  source SQL:
++explain (costs off)
++               ^
++HINT:  try \h <SELECTCLAUSE>
+ drop table parted_sample, parted_sample_1, parted_sample_2;
++ERROR:  relation "parted_sample" does not exist

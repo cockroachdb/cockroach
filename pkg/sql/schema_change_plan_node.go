@@ -36,17 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/redact"
 )
-
-// FormatAstAsRedactableString implements scbuild.AstFormatter
-func (p *planner) FormatAstAsRedactableString(
-	statement tree.Statement, annotations *tree.Annotations,
-) redact.RedactableString {
-	return formatStmtKeyAsRedactableString(p.getVirtualTabler(),
-		statement,
-		annotations, tree.FmtSimple, p)
-}
 
 // SchemaChange provides the planNode for the new schema changer.
 func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNode, error) {
@@ -65,11 +55,35 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 		return nil, pgerror.Newf(pgcode.ReadOnlySQLTransaction, "schema changes are not allowed on a reader catalog")
 	}
 	// When new schema changer is on we will not support it for explicit
-	// transaction, since we don't know if subsequent statements don't
-	// support it.
-	if mode == sessiondatapb.UseNewSchemaChangerOff ||
-		((mode == sessiondatapb.UseNewSchemaChangerOn ||
-			mode == sessiondatapb.UseNewSchemaChangerUnsafe) && !p.extendedEvalCtx.TxnIsSingleStmt) {
+	// transaction, since we don't know if subsequent statements don't support it.
+	// If the autocommit_before_ddl setting is enabled, we can use the new schema
+	// changer as long as this is not an internal query (since the internal
+	// executor ignores the autocommit_before_ddl setting).
+	switch {
+	case mode == sessiondatapb.UseNewSchemaChangerOff:
+		return nil, nil
+	case mode == sessiondatapb.UseNewSchemaChangerOn || mode == sessiondatapb.UseNewSchemaChangerUnsafe:
+		if !p.extendedEvalCtx.TxnIsSingleStmt &&
+			(p.SessionData().Internal || !p.SessionData().AutoCommitBeforeDDL) {
+			return nil, nil
+		}
+		if len(p.semaCtx.Placeholders.Types) > 0 {
+			// The declarative schema changer does not have good support for
+			// placeholder arguments. Adding support for placeholders is tracked in
+			// https://github.com/cockroachdb/cockroach/issues/142256.
+			return nil, nil
+		}
+	}
+
+	// Some statements reach this point because tree.CanModifySchema reports
+	// them as schema-modifying (e.g. DISCARD ALL drops temporary tables),
+	// but they do work beyond schema changes (resetting session state,
+	// plan cache, cached sequence values, etc.) that the declarative schema
+	// changer has no vocabulary for. Route them straight to the legacy path:
+	// scbuild.Build would otherwise panic with a NotImplementedError on
+	// every invocation, producing high-volume INFO log spam on busy clusters.
+	switch stmt.(type) {
+	case *tree.Discard:
 		return nil, nil
 	}
 
@@ -93,7 +107,9 @@ func (p *planner) SchemaChange(ctx context.Context, stmt tree.Statement) (planNo
 	// If we successfully planned a schema change here, then update telemetry
 	// to indicate that we used the new schema changer.
 	telemetry.Inc(sqltelemetry.DeclarativeSchemaChangerCounter)
-	p.curPlan.instrumentation.schemaChangerMode = schemaChangerModeDeclarative
+	// The curPlan may not be initialized yet, but will pick up the instrumentation
+	// from the planner.
+	p.instrumentation.schemaChangerMode = schemaChangerModeDeclarative
 
 	return &schemaChangePlanNode{
 		stmt:               stmt,
@@ -141,7 +157,10 @@ func (p *planner) waitForDescriptorSchemaChanges(
 
 	knobs := p.ExecCfg().DeclarativeSchemaChangerTestingKnobs
 	if knobs != nil && knobs.BeforeWaitingForConcurrentSchemaChanges != nil {
-		knobs.BeforeWaitingForConcurrentSchemaChanges(scs.stmts)
+		err := knobs.BeforeWaitingForConcurrentSchemaChanges(scs.stmts)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Drop all leases and locks due to the current transaction, and, in the
@@ -172,7 +191,7 @@ func (p *planner) waitForDescriptorSchemaChanges(
 			blockingJobIDs = desc.ConcurrentSchemaChangeJobIDs()
 			return nil
 		}); err != nil {
-			log.Infof(ctx, "done schema change wait on concurrent jobs due"+
+			log.Dev.Infof(ctx, "done schema change wait on concurrent jobs due"+
 				" to error on descriptor (%d): %s", descID, err)
 			return err
 		}
@@ -180,7 +199,7 @@ func (p *planner) waitForDescriptorSchemaChanges(
 			break
 		}
 		if logEvery.ShouldLog() {
-			log.Infof(ctx,
+			log.Dev.Infof(ctx,
 				"schema change waiting for %v concurrent schema change job(s) %v on descriptor %d,"+
 					" waited %v so far", len(blockingJobIDs), blockingJobIDs, descID, timeutil.Since(start),
 			)
@@ -190,7 +209,7 @@ func (p *planner) waitForDescriptorSchemaChanges(
 		}
 	}
 
-	log.Infof(
+	log.Dev.Infof(
 		ctx,
 		"done waiting for concurrent schema changes on descriptor %d after %v",
 		descID, timeutil.Since(start),
@@ -201,6 +220,7 @@ func (p *planner) waitForDescriptorSchemaChanges(
 // schemaChangePlanNode is the planNode utilized by the new schema changer to
 // perform all schema changes, unified in the new schema changer.
 type schemaChangePlanNode struct {
+	zeroInputPlanNode
 	sql  string
 	stmt tree.Statement
 	// lastState was the state observed so far while planning for the current
@@ -288,6 +308,9 @@ func newSchemaChangerTxnRunDependencies(
 		descriptors,
 		&execCfg.Settings.SV,
 		sessionData,
+		execCfg.Settings,
+		execCfg.JobsKnobs(),
+		execCfg.NodeInfo.LogicalClusterID(),
 	)
 	return scdeps.NewExecutorDependencies(
 		execCfg.Settings,
@@ -310,6 +333,7 @@ func newSchemaChangerTxnRunDependencies(
 		metaDataUpdater,
 		evalContext.Planner,
 		execCfg.StatsRefresher,
+		execCfg.TableStatsCache,
 		execCfg.DeclarativeSchemaChangerTestingKnobs,
 		kvTrace,
 		schemaChangerJobID,

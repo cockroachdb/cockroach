@@ -23,14 +23,21 @@ type astAnnotator struct {
 }
 
 func newAstAnnotator(original tree.Statement) (*astAnnotator, error) {
-	// Clone the original tree by re-parsing the input back into an AST. We need
-	// to keep tagged dollar quotes in case they're necessary to parse the
-	// original statement.
-	formatted := tree.AsStringWithFlags(original, tree.FmtTagDollarQuotes|tree.FmtParsableNumerics)
+	// Clone the original tree by re-parsing the input back into an AST.
+	formatted := tree.AsStringWithFlags(original, tree.FmtParsableNumerics)
 	statement, err := parser.ParseOne(formatted)
 	if err != nil {
 		return nil, err
 	}
+
+	// Preserve fields that are not part of the SQL syntax.
+	// ImportRollback is set programmatically and lost during format/parse.
+	if origTruncate, ok := original.(*tree.Truncate); ok {
+		if newTruncate, ok := statement.AST.(*tree.Truncate); ok {
+			newTruncate.ImportRollback = origTruncate.ImportRollback
+		}
+	}
+
 	return &astAnnotator{
 		nonExistentNames: map[*tree.TableName]struct{}{},
 		statement:        statement.AST,

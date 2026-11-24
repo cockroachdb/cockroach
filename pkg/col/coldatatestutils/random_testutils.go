@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -383,14 +384,14 @@ func (o *randomDataOp) Init(ctx context.Context) {
 }
 
 // Next is part of the colexecop.Operator interface.
-func (o *randomDataOp) Next() coldata.Batch {
+func (o *randomDataOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	if o.numReturned == o.numBatches {
 		// Done.
 		b := coldata.ZeroBatch
 		if o.batchAccumulator != nil {
 			o.batchAccumulator(o.ctx, b, o.typs)
 		}
-		return b
+		return b, nil
 	}
 
 	var (
@@ -422,7 +423,7 @@ func (o *randomDataOp) Next() coldata.Batch {
 		if o.batchAccumulator != nil {
 			o.batchAccumulator(o.ctx, b, o.typs)
 		}
-		return b
+		return b, nil
 	}
 }
 

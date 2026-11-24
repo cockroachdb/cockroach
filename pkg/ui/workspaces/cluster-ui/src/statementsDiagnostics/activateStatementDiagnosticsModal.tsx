@@ -32,7 +32,6 @@ const cx = classNames.bind(styles);
 
 export interface ActivateDiagnosticsModalProps {
   activate: (insertStmtDiagnosticsRequest: InsertStmtDiagnosticRequest) => void;
-  refreshDiagnosticsReports: () => void;
   onOpenModal?: (statement: string, planGists: string[]) => void;
 }
 
@@ -126,7 +125,7 @@ export const ActivateStatementDiagnosticsModal = React.forwardRef<
     };
   });
 
-  if (planGists && selectedPlanGist === "") {
+  if (planGists && selectedPlanGist === "" && !!planGists[0]) {
     setSelectedPlanGist(planGists[0]);
   }
 
@@ -293,8 +292,11 @@ export const ActivateStatementDiagnosticsModal = React.forwardRef<
               disabled={!expires}
               value={expiresAfter}
               onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                if (parseInt(e.target.value) > 0) {
-                  setExpiresAfter(parseInt(e.target.value));
+                const expires = parseInt(e.target.value);
+                if (!isNaN(expires) && expires > -1) {
+                  setExpiresAfter(expires);
+                } else {
+                  setExpiresAfter(0);
                 }
               }}
               rootClassName={cx("compact")}

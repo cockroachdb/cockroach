@@ -8,6 +8,7 @@ package sqlstats
 import (
 	"context"
 	"fmt"
+	"math/rand/v2"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -38,11 +39,17 @@ func TestSqlStatsWorkload(t *testing.T) {
 	statsTable := stats.Tables()[0]
 	sqlDB.Exec(t, fmt.Sprintf(`CREATE TABLE %s %s`, statsTable.Name, statsTable.Schema))
 
-	gen := genPermutations()
+	worker := sqlStatsWorker{
+		db:         db,
+		colNameLen: 1,
+		queryCols:  []int{1},
+		rng:        rand.New(rand.NewPCG(RandomSeed.Seed(), 0)),
+	}
 
 	for i := 0; i < 10; i++ {
-		query := gen.Next()
-		_, err := db.Exec(query, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+		err := worker.query()
+		require.NoError(t, err)
+		err = worker.insert()
 		require.NoError(t, err)
 	}
 }

@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/pretty"
 	"github.com/cockroachdb/errors"
 )
 
@@ -80,6 +81,11 @@ type CreateRoutine struct {
 	Params      RoutineParams
 	ReturnType  *RoutineReturnType
 	Options     RoutineOptions
+	// RoutineBody is set during parsing for routines that use SQL-standard
+	// inline body syntax: either BEGIN ATOMIC ... END or a bare RETURN expr
+	// (as opposed to the dollar-quoted AS $$ ... $$ syntax). The opt builder
+	// rewrites it into a RoutineBodyStr option via
+	// ConvertInlineRoutineBodyToOption and clears this field.
 	RoutineBody *RoutineBody
 	// BodyStatements is not assigned during initial parsing of user input. It's
 	// assigned during opt builder for logging purpose at the moment. It stores
@@ -140,14 +146,13 @@ func (node *CreateRoutine) Format(ctx *FmtCtx) {
 			if i > 0 {
 				ctx.WriteByte(' ')
 			}
-			oldAnn := ctx.ann
-			ctx.ann = node.BodyAnnotations[i]
-			ctx.FormatNode(stmt)
-			if !isPLpgSQL {
-				// PL/pgSQL statements handle printing semicolons themselves.
-				ctx.WriteByte(';')
-			}
-			ctx.ann = oldAnn
+			ctx.WithAnnotations(node.BodyAnnotations[i], func() {
+				ctx.FormatNode(stmt)
+				if !isPLpgSQL {
+					// PL/pgSQL statements handle printing semicolons themselves.
+					ctx.WriteByte(';')
+				}
+			})
 		}
 		ctx.WriteString("$$")
 	} else if node.RoutineBody != nil {
@@ -166,11 +171,196 @@ func (node *CreateRoutine) Format(ctx *FmtCtx) {
 	}
 }
 
+// Doc implements the Docer interface.
+func (node *CreateRoutine) Doc(p *PrettyCfg) pretty.Doc {
+	header := pretty.Keyword("CREATE")
+	if node.Replace {
+		header = pretty.ConcatSpace(header, pretty.Keyword("OR REPLACE"))
+	}
+	if node.IsProcedure {
+		header = pretty.ConcatSpace(header, pretty.Keyword("PROCEDURE"))
+	} else {
+		header = pretty.ConcatSpace(header, pretty.Keyword("FUNCTION"))
+	}
+	header = pretty.ConcatSpace(header, p.Doc(&node.Name))
+	paramDocs := make([]pretty.Doc, len(node.Params))
+	for i := range node.Params {
+		paramDocs[i] = p.Doc(&node.Params[i])
+	}
+	header = pretty.Concat(header, p.bracket("(", p.commaSeparated(paramDocs...), ")"))
+
+	var clauses []pretty.Doc
+	if !node.IsProcedure && node.ReturnType != nil {
+		ret := pretty.Keyword("RETURNS")
+		if node.ReturnType.SetOf {
+			ret = pretty.ConcatSpace(ret, pretty.Keyword("SETOF"))
+		}
+		ret = pretty.ConcatSpace(ret, p.FormatType(node.ReturnType.Type))
+		clauses = append(clauses, ret)
+	}
+
+	// Extract RoutineBodyStr from options; it is formatted separately as the body.
+	var isPLpgSQL bool
+	var funcBody RoutineBodyStr
+	for _, option := range node.Options {
+		switch t := option.(type) {
+		case RoutineBodyStr:
+			funcBody = t
+			continue
+		case RoutineLeakproof, RoutineVolatility, RoutineNullInputBehavior:
+			if node.IsProcedure {
+				continue
+			}
+		case RoutineLanguage:
+			isPLpgSQL = t == RoutineLangPLpgSQL
+		}
+		clauses = append(clauses, p.Doc(option))
+	}
+
+	var bodyDoc pretty.Doc
+	if node.RoutineBody != nil {
+		stmtDocs := make([]pretty.Doc, len(node.RoutineBody.Stmts))
+		for i, stmt := range node.RoutineBody.Stmts {
+			d := p.Doc(stmt)
+			// DoBlock.Doc already includes a trailing semicolon.
+			if _, ok := stmt.(*DoBlock); !ok {
+				d = pretty.Concat(d, pretty.Text(";"))
+			}
+			stmtDocs[i] = d
+		}
+		bodyDoc = pretty.Fold(pretty.Concat,
+			pretty.Keyword("BEGIN ATOMIC"),
+			pretty.NestT(pretty.Concat(pretty.HardLine, pretty.Stack(stmtDocs...))),
+			pretty.HardLine,
+			pretty.Keyword("END"))
+	} else if !isPLpgSQL && ParseSQLForDoc != nil {
+		if stmts := ParseSQLForDoc(string(funcBody)); len(stmts) > 0 {
+			stmtDocs := make([]pretty.Doc, len(stmts))
+			for i, stmt := range stmts {
+				d := p.Doc(stmt)
+				// DoBlock.Doc already includes a trailing semicolon.
+				if _, ok := stmt.(*DoBlock); !ok {
+					d = pretty.Concat(d, pretty.Text(";"))
+				}
+				stmtDocs[i] = d
+			}
+			// Render the body to find a dollar-quote tag that doesn't
+			// collide with nested dollar quotes (e.g. from DO blocks).
+			fmtCtx := p.NewFmtCtx()
+			for _, stmt := range stmts {
+				fmtCtx.FormatNode(stmt)
+			}
+			bodyStr := fmtCtx.CloseAndGetString()
+			tag := "$" + DollarQuoteDelimiter(bodyStr) + "$"
+			bodyDoc = pretty.Fold(pretty.Concat,
+				pretty.ConcatSpace(pretty.Keyword("AS"), pretty.Text(tag)),
+				pretty.NestT(pretty.Concat(pretty.HardLine, pretty.Stack(stmtDocs...))),
+				pretty.HardLine,
+				pretty.Text(tag))
+		}
+	} else if isPLpgSQL && ParsePLpgSQLForDoc != nil {
+		if parsed := ParsePLpgSQLForDoc(string(funcBody)); parsed != nil {
+			bodyCfg := p.WithInPLpgSQL()
+			// Use the formatted output to pick a dollar-quote tag that
+			// doesn't collide with nested dollar quotes (e.g. DO blocks).
+			bodyStr := bodyCfg.AsString(parsed)
+			tag := "$" + DollarQuoteDelimiter(bodyStr) + "$"
+			bodyDoc = pretty.Fold(pretty.Concat,
+				pretty.ConcatSpace(pretty.Keyword("AS"), pretty.Text(tag)),
+				pretty.NestT(pretty.Concat(pretty.HardLine, bodyCfg.Doc(parsed))),
+				pretty.HardLine,
+				pretty.Text(tag))
+		}
+	}
+	if bodyDoc == nil {
+		bodyDoc = p.docAsString(funcBody)
+	}
+	clauses = append(clauses, bodyDoc)
+
+	return p.nestUnder(header, pretty.Stack(clauses...))
+}
+
 // RoutineBody represent a list of statements in a UDF body.
 type RoutineBody struct {
 	// Stmts is populated during parsing. Unlike BodyStatements, we don't need
 	// to create separate Annotations for each statement.
 	Stmts Statements
+}
+
+// ConvertInlineRoutineBodyToOption rewrites a parsed inline routine body
+// (the SQL-standard `BEGIN ATOMIC ... END` or bare `RETURN expr` forms) into
+// the legacy string body form by serializing each statement and appending the
+// result as a RoutineBodyStr option. After this runs, cf.RoutineBody is
+// cleared so downstream code can process the routine as if the user had
+// written `AS $$ ... $$`.
+//
+// CockroachDB already does early binding for SQL routines, so the inline and
+// string forms are semantically equivalent; only the input syntax differs.
+//
+// Clearing cf.RoutineBody makes this idempotent, which matters because the opt
+// builder mutates the CreateRoutine AST in place and that AST may be re-built
+// (e.g. on a transaction retry or a re-executed prepared statement). On the
+// second pass cf.RoutineBody is nil, so the caller skips the conversion and the
+// previously appended RoutineBodyStr carries the body. Without the clear, a
+// second pass would append a duplicate body and then fail the hasStringBody
+// check below.
+func ConvertInlineRoutineBodyToOption(cf *CreateRoutine) error {
+	var hasStringBody, hasLang bool
+	var lang RoutineLanguage
+	for _, opt := range cf.Options {
+		switch t := opt.(type) {
+		case RoutineBodyStr:
+			hasStringBody = true
+		case RoutineLanguage:
+			lang = t
+			hasLang = true
+		}
+	}
+	if hasStringBody {
+		return pgerror.New(pgcode.InvalidFunctionDefinition,
+			"duplicate function body specified")
+	}
+	if hasLang && lang != RoutineLangSQL {
+		return pgerror.New(pgcode.InvalidFunctionDefinition,
+			"inline SQL function body only valid for language SQL")
+	}
+
+	fmtCtx := NewFmtCtx(FmtParsable)
+	for i, stmt := range cf.RoutineBody.Stmts {
+		// Reject DDL and DCL in the inline body. Postgres parses BEGIN ATOMIC
+		// bodies at definition time (early binding), so it forbids schema
+		// changes there; stored procedures support DDL only through the
+		// dollar-quoted AS $$ ... $$ form. Blocking it here keeps us consistent
+		// with Postgres and keeps DDL-in-routine support to a single code path.
+		if t := stmt.StatementType(); t == TypeDDL || t == TypeDCL {
+			return errors.WithHint(
+				pgerror.Newf(pgcode.FeatureNotSupported,
+					"%s is not yet supported in unquoted SQL routine body", stmt.StatementTag()),
+				"Use the dollar-quoted AS $$ ... $$ body form.",
+			)
+		}
+		if i > 0 {
+			fmtCtx.WriteString(" ")
+		}
+		// `RETURN expr` is only valid as a routine-body statement, so it
+		// cannot round-trip through the legacy parser. Emit it as `SELECT
+		// expr` instead — semantically equivalent for SQL routines, since
+		// the result is the value of the final query.
+		if r, ok := stmt.(*RoutineReturn); ok {
+			sel := &Select{
+				Select: &SelectClause{
+					Exprs: SelectExprs{{Expr: r.ReturnVal}},
+				},
+			}
+			fmtCtx.FormatNode(sel)
+		} else {
+			fmtCtx.FormatNode(stmt)
+		}
+		fmtCtx.WriteString(";")
+	}
+	cf.Options = append(cf.Options, RoutineBodyStr(fmtCtx.CloseAndGetString()))
+	cf.RoutineBody = nil
+	return nil
 }
 
 // RoutineReturn represent a RETURN statement in a UDF body.
@@ -339,21 +529,7 @@ type RoutineBodyStr string
 // Format implements the NodeFormatter interface.
 func (node RoutineBodyStr) Format(ctx *FmtCtx) {
 	ctx.WriteString("AS ")
-	if ctx.flags.HasFlags(FmtTagDollarQuotes) {
-		ctx.WriteString("$funcbody$")
-	} else {
-		ctx.WriteString("$$")
-	}
-	if ctx.flags.HasFlags(FmtAnonymize) || ctx.flags.HasFlags(FmtHideConstants) {
-		ctx.WriteString("_")
-	} else {
-		ctx.WriteString(string(node))
-	}
-	if ctx.flags.HasFlags(FmtTagDollarQuotes) {
-		ctx.WriteString("$funcbody$")
-	} else {
-		ctx.WriteString("$$")
-	}
+	ctx.FormatStringDollarQuotes(string(node))
 }
 
 // RoutineParams represents a list of RoutineParam.
@@ -651,6 +827,9 @@ const (
 	TTLExpirationExpr               SchemaExprContext = "TTL EXPIRATION EXPRESSION"
 	TTLDefaultExpr                  SchemaExprContext = "TTL DEFAULT"
 	TTLUpdateExpr                   SchemaExprContext = "TTL UPDATE"
+	PolicyUsingExpr                 SchemaExprContext = "POLICY USING"
+	PolicyWithCheckExpr             SchemaExprContext = "POLICY WITH CHECK"
+	RegionalByRowRegionDefaultExpr  SchemaExprContext = "REGIONAL BY ROW DEFAULT"
 )
 
 func ComputedColumnExprContext(isVirtual bool) SchemaExprContext {

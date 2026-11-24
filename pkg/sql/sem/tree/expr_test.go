@@ -75,10 +75,13 @@ func TestStringConcat(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	rng, _ := randutil.NewTestRand()
+
+	tuple := randgen.RandTupleFromSlice(rng, types.Scalar)
+
 	ctx := context.Background()
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(ctx)
-	for _, typ := range append([]*types.T{types.AnyTuple}, types.Scalar...) {
+	for _, typ := range append([]*types.T{tuple}, types.Scalar...) {
 		// Strings and Bytes are handled specially.
 		if typ.Identical(types.String) || typ.Identical(types.Bytes) {
 			continue
@@ -148,7 +151,7 @@ func TestExprString(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", exprStr, err)
 		}
-		typedExpr, err := tree.TypeCheck(ctx, expr, nil, types.Any)
+		typedExpr, err := tree.TypeCheck(ctx, expr, nil, types.AnyElement)
 		if err != nil {
 			t.Fatalf("%s: %v", expr, err)
 		}
@@ -158,7 +161,7 @@ func TestExprString(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%s: %v", exprStr, err)
 		}
-		typedExpr2, err := tree.TypeCheck(ctx, expr2, nil, types.Any)
+		typedExpr2, err := tree.TypeCheck(ctx, expr2, nil, types.AnyElement)
 		if err != nil {
 			t.Fatalf("%s: %v", expr2, err)
 		}

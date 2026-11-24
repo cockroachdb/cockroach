@@ -66,7 +66,7 @@ func New(
 func (c *Cache) Get(
 	ctx context.Context, txn isql.Txn, col *descs.Collection, spo syntheticprivilege.Object,
 ) (*catpb.PrivilegeDescriptor, error) {
-	_, desc, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).Get(), syntheticprivilege.SystemPrivilegesTableName)
+	_, desc, err := descs.PrefixAndTable(ctx, col.ByNameWithLeased(txn.KV()).WithoutLockedTimestamp().Get(), syntheticprivilege.SystemPrivilegesTableName)
 	if err != nil {
 		return nil, err
 	}
@@ -85,14 +85,18 @@ func (c *Cache) Get(
 	}
 	privDesc, err := c.c.LoadValueOutsideOfCacheSingleFlight(ctx, fmt.Sprintf("%s-%d", spo.GetPath(), desc.GetVersion()),
 		func(loadCtx context.Context) (_ interface{}, retErr error) {
-			return c.readFromStorage(loadCtx, txn, spo)
+			privDesc, err := c.readFromStorage(loadCtx, txn, spo)
+			if err != nil {
+				return nil, err
+			}
+			entrySize := int64(len(spo.GetPath())) + computePrivDescSize(privDesc)
+			// Only write back to the cache if the table version is committed.
+			c.c.MaybeWriteBackToCache(ctx, []descpb.DescriptorVersion{desc.GetVersion()}, spo.GetPath(), *privDesc, entrySize)
+			return privDesc, nil
 		})
 	if err != nil {
 		return nil, err
 	}
-	entrySize := int64(len(spo.GetPath())) + computePrivDescSize(privDesc)
-	// Only write back to the cache if the table version is committed.
-	c.c.MaybeWriteBackToCache(ctx, []descpb.DescriptorVersion{desc.GetVersion()}, spo.GetPath(), *privDesc, entrySize)
 	return privDesc, nil
 }
 
@@ -154,19 +158,21 @@ func (c *Cache) readFromStorage(
 	}
 
 	privDesc := privAccumulator.finish()
-	// To avoid having to insert a row for public for each virtual
-	// table into system.privileges, we assume that if there is
-	// NO entry for public in the PrivilegeDescriptor, Public has
-	// grant. If there is an empty row for Public, then public
-	// does not have grant.
-	if spo.GetObjectType() == privilege.VirtualTable {
+	switch spo.GetObjectType() {
+	case privilege.VirtualTable:
+		// To avoid having to insert a row for public for each virtual
+		// table into system.privileges, we assume that if there is
+		// NO entry for public in the PrivilegeDescriptor, Public has
+		// grant. If there is an empty row for Public, then public
+		// does not have grant.
 		if _, found := privDesc.FindUser(username.PublicRoleName()); !found {
 			privDesc.Grant(username.PublicRoleName(), privilege.List{privilege.SELECT}, false)
 		}
-	}
-
-	// Admin always has ALL global privileges.
-	if spo.GetObjectType() == privilege.Global {
+	case privilege.Global:
+		// Admin always has ALL global privileges.
+		privDesc.Grant(username.AdminRoleName(), privilege.List{privilege.ALL}, true)
+	case privilege.ExternalConnection:
+		// Admins should be able to view/use all external connections.
 		privDesc.Grant(username.AdminRoleName(), privilege.List{privilege.ALL}, true)
 	}
 
@@ -193,9 +199,9 @@ func (c *Cache) Start(ctx context.Context) {
 		defer close(c.warmed)
 		start := timeutil.Now()
 		if err := c.start(ctx); err != nil {
-			log.Warningf(ctx, "failed to warm privileges for virtual tables: %v", err)
+			log.Dev.Warningf(ctx, "failed to warm privileges for virtual tables: %v", err)
 		} else {
-			log.Infof(ctx, "warmed privileges for virtual tables in %v", timeutil.Since(start))
+			log.Dev.Infof(ctx, "warmed privileges for virtual tables in %v", timeutil.Since(start))
 		}
 	}); err != nil {
 		close(c.warmed)

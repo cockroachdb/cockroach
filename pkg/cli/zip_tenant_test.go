@@ -7,6 +7,7 @@ package cli
 
 import (
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -91,13 +92,20 @@ func TestTenantZip(t *testing.T) {
 				tenant.preZip(t, c)
 			}
 
-			out, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=1s " + os.DevNull)
+			out, err := c.RunWithCapture("debug zip --concurrency=1 --cpu-profile-duration=1s --validate-zip-file=false " + os.DevNull)
 			if err != nil {
 				t.Fatal(err)
 			}
 
 			// Strip any non-deterministic messages.
 			out = eraseNonDeterministicZipOutput(out)
+			// Remove all "dumping SQL tables" messages since non-deterministic order in
+			// which the original messages interleave with other messages means the
+			// number of them after each series is collapsed is also non-deterministic.
+			// Also remove orphaned " done" lines that can appear when output interleaving
+			// separates a "retrieving SQL data for..." line from its " done" suffix.
+			out = regexp.MustCompile(`<dumping SQL tables>\n`).ReplaceAllString(out, "")
+			out = regexp.MustCompile(`(?m)^ done\n`).ReplaceAllString(out, "")
 
 			// We use datadriven simply to read the golden output file; we don't actually
 			// run any commands. Using datadriven allows TESTFLAGS=-rewrite.

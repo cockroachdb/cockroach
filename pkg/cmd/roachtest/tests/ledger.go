@@ -38,7 +38,7 @@ func registerLedger(r registry.Registry) {
 			c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), install.MakeClusterSettings(), c.CRDBNodes())
 
 			t.Status("running workload")
-			m := c.NewMonitor(ctx, c.CRDBNodes())
+			m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 			m.Go(func(ctx context.Context) error {
 				concurrency := roachtestutil.IfLocal(c, "", " --concurrency="+fmt.Sprint(nodes*32))
 				duration := " --duration=" + roachtestutil.IfLocal(c, "10s", "10m")

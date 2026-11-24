@@ -28,6 +28,32 @@ const SpheroidErrorFraction = 0.05
 func Distance(
 	a geo.Geography, b geo.Geography, useSphereOrSpheroid UseSphereOrSpheroid,
 ) (float64, error) {
+	return distanceImpl(a, b, nil /* explicitSpheroid */, useSphereOrSpheroid)
+}
+
+// DistanceWithSpheroid returns the distance in meters between geographies a
+// and b using the supplied spheroid for the geodesic computation, mirroring
+// the 3-argument form of PostGIS's ST_DistanceSpheroid. The spheroid derived
+// from the geographies' SRID is ignored; only the caller-supplied spheroid is
+// used. Returns the same errors as Distance, except that no SRID-to-spheroid
+// lookup is performed.
+func DistanceWithSpheroid(
+	a geo.Geography, b geo.Geography, spheroid geoprojbase.Spheroid,
+) (float64, error) {
+	return distanceImpl(a, b, spheroid, UseSpheroid)
+}
+
+// distanceImpl is the shared implementation of Distance and
+// DistanceWithSpheroid. If explicitSpheroid is nil, the spheroid is derived
+// from a's SRID; otherwise it is used as-is. The SRID-to-spheroid lookup is
+// deferred until after the SRID, empty-geometry, and bbox-NaN validation so
+// that callers see those errors in preference to a "no projection for SRID"
+// failure.
+func distanceImpl(
+	a, b geo.Geography,
+	explicitSpheroid geoprojbase.Spheroid,
+	useSphereOrSpheroid UseSphereOrSpheroid,
+) (float64, error) {
 	if a.SRID() != b.SRID() {
 		return 0, geo.NewMismatchingSRIDsError(a.SpatialObject(), b.SpatialObject())
 	}
@@ -40,15 +66,15 @@ func Distance(
 	if err != nil {
 		return 0, err
 	}
-	if BoundingBoxHasNaNCoordinates(a) {
+	if BoundingBoxHasNaNCoordinates(a) || BoundingBoxHasNaNCoordinates(b) {
 		return 0, geo.OutOfRangeError()
 	}
-	if BoundingBoxHasNaNCoordinates(b) {
-		return 0, geo.OutOfRangeError()
-	}
-	spheroid, err := spheroidFromGeography(a)
-	if err != nil {
-		return 0, err
+	spheroid := explicitSpheroid
+	if spheroid == nil {
+		spheroid, err = spheroidFromGeography(a)
+		if err != nil {
+			return 0, err
+		}
 	}
 	return distanceGeographyRegions(
 		spheroid,

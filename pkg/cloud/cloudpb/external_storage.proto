@@ -62,6 +62,9 @@ message ExternalStorage {
     string secret = 4;
     string temp_token = 5;
     string endpoint = 6;
+    bool use_path_style=16;
+    bool skip_checksum=17; 
+    bool skip_tls_verify=18 [(gogoproto.customname) = "SkipTLSVerify"];
     string region = 7;
     string auth = 8;
     string server_enc_mode  = 9;
@@ -90,7 +93,10 @@ message ExternalStorage {
     // role chain. These roles will be assumed in the order they appear in the
     // list so that the role specified in AssumeRoleProvider can be assumed.
     repeated AssumeRoleProvider delegate_role_providers = 15 [(gogoproto.nullable) = false];
+
+    // Next ID: 19;
   }
+  
   message GCS {
     string bucket = 1;
     string prefix = 2;
@@ -172,10 +178,7 @@ message ExternalStorage {
   ExternalConnectionConfig external_connection_config = 9 [(gogoproto.nullable) = false];
 
   // URI is the string URI from which this encoded external storage config was
-  // derived, if known. May be empty in most cases unless set explicitly by the
-  // caller who created the config from a URI.
-  // TODO(dt): It would be nice if this were always set but we would need every
-  // implementation of ExternalStorage to do so in its Conf() method.
+  // derived. May be empty if the storage configuration was not built from a URI.
   string URI = 10;
 }
 

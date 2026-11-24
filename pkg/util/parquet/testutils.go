@@ -310,6 +310,7 @@ func readRowGroup[T parquetDatatypes](
 			// Deflevel 2 represents a null value in an array.
 			if defLevels[0] == 2 {
 				currentArrayDatum.Array = append(currentArrayDatum.Array, tree.DNull)
+				currentArrayDatum.SetHasNulls(true /* hasNulls */)
 				continue
 			}
 			// Deflevel 3 represents a non-null datum in an array.
@@ -318,6 +319,7 @@ func readRowGroup[T parquetDatatypes](
 				return nil, err
 			}
 			currentArrayDatum.Array = append(currentArrayDatum.Array, d)
+			currentArrayDatum.SetHasNonNulls(true /* hasNonNulls */)
 		} else if isTuple {
 			// Deflevel 0 represents a null tuple.
 			// Deflevel 1 represents a null value in a non null tuple.
@@ -362,15 +364,6 @@ func decodeValuesIntoDatumsHelper(
 	}
 }
 
-func unwrapDatum(d tree.Datum) tree.Datum {
-	switch t := d.(type) {
-	case *tree.DOidWrapper:
-		return unwrapDatum(t.Wrapped)
-	default:
-		return d
-	}
-}
-
 // ValidateDatum validates that the "contents" of the expected datum matches the
 // contents of the actual datum. For example, when validating two arrays, we
 // only compare the datums in the arrays. We do not compare CRDB-specific
@@ -384,8 +377,8 @@ func ValidateDatum(t *testing.T, expected tree.Datum, actual tree.Datum) {
 	// The randgen library may generate datums wrapped in a *tree.DOidWrapper, so
 	// we should unwrap them. We unwrap at this stage as opposed to when
 	// generating datums to test that the writer can handle wrapped datums.
-	expected = unwrapDatum(expected)
-	actual = unwrapDatum(actual)
+	expected = tree.UnwrapDOidWrapper(expected)
+	actual = tree.UnwrapDOidWrapper(actual)
 
 	switch expected.ResolvedType().Family() {
 	case types.JsonFamily:
@@ -400,7 +393,7 @@ func ValidateDatum(t *testing.T, expected tree.Datum, actual tree.Datum) {
 			// test does it manually :(
 			// https://github.com/cockroachdb/cockroach/issues/73743
 			e := float32(*expected.(*tree.DFloat))
-			a := float32(*expected.(*tree.DFloat))
+			a := float32(*actual.(*tree.DFloat))
 			require.Equal(t, e, a)
 		} else {
 			require.Equal(t, expected.String(), actual.String())
@@ -426,8 +419,16 @@ func ValidateDatum(t *testing.T, expected tree.Datum, actual tree.Datum) {
 		require.Equal(t, expected.(*tree.DEnum).LogicalRep, actual.(*tree.DEnum).LogicalRep)
 	case types.CollatedStringFamily:
 		require.Equal(t, expected.(*tree.DCollatedString).Contents, actual.(*tree.DCollatedString).Contents)
+	case types.BitFamily:
+		// Compare using string representation to avoid nil vs empty slice
+		// mismatch. BIT(0) produces a BitArray with an empty words slice from
+		// SQL, but the parquet decoder's bitarray.Parse("") returns a nil words
+		// slice. Both are semantically equivalent.
+		require.Equal(t, expected.String(), actual.String())
 	case types.OidFamily:
 		require.Equal(t, expected.(*tree.DOid).Oid, actual.(*tree.DOid).Oid)
+	case types.DecimalFamily:
+		require.Equal(t, expected.String(), actual.String())
 	default:
 		require.Equal(t, expected, actual)
 	}

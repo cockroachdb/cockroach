@@ -1,0 +1,23 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "auth",
+    srcs = ["interface.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/cmd/roachprod-centralized/auth",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/models/auth",
+        "//pkg/util/uuid",
+    ],
+)
+
+go_test(
+    name = "auth_test",
+    srcs = ["principal_test.go"],
+    embed = [":auth"],
+    deps = [
+        "//pkg/cmd/roachprod-centralized/models/auth",
+        "//pkg/util/uuid",
+        "@com_github_stretchr_testify//assert",
+    ],
+)

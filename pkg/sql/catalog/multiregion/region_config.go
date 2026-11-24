@@ -3,8 +3,6 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-// Package multiregion provides functions and structs for interacting with the
-// static multi-region state configured by users on their databases.
 package multiregion
 
 import (
@@ -64,6 +62,22 @@ func (r *RegionConfig) WithRegions(regions catpb.RegionNames) RegionConfig {
 	return cpy
 }
 
+// WithSurvivalGoal returns a copy of the RegionConfig with the given survival
+// goal.
+func (r *RegionConfig) WithSurvivalGoal(goal descpb.SurvivalGoal) RegionConfig {
+	cpy := *r
+	cpy.survivalGoal = goal
+	return cpy
+}
+
+// WithoutSecondaryRegion returns a copy of the RegionConfig with the
+// secondary region cleared.
+func (r *RegionConfig) WithoutSecondaryRegion() RegionConfig {
+	cpy := *r
+	cpy.secondaryRegion = ""
+	return cpy
+}
+
 // WithPrimaryRegion returns a copy of the RegionConfig with the provided
 // primary region.
 func (r *RegionConfig) WithPrimaryRegion(primaryRegion catpb.RegionName) RegionConfig {
@@ -72,9 +86,13 @@ func (r *RegionConfig) WithPrimaryRegion(primaryRegion catpb.RegionName) RegionC
 	return cpy
 }
 
-// IsMemberOfExplicitSuperRegion returns whether t the region is an explicit
-// member of a super region.
-func (r *RegionConfig) IsMemberOfExplicitSuperRegion(region catpb.RegionName) bool {
+// IsMemberOfSuperRegion returns true if the region is either:
+// - an explicit member of a super region; or
+// - the survival goal is SURVIVE_REGION_FAILURE and we have 3 regions configured.
+//
+// The reason for this is to make sure that when using SURVIVE_REGION_FAILURE
+// replicas are not placed outside of the known regions.
+func (r *RegionConfig) IsMemberOfSuperRegion(region catpb.RegionName) bool {
 	for _, superRegion := range r.SuperRegions() {
 		for _, regionOfSuperRegion := range superRegion.Regions {
 			if region == regionOfSuperRegion {
@@ -82,13 +100,24 @@ func (r *RegionConfig) IsMemberOfExplicitSuperRegion(region catpb.RegionName) bo
 			}
 		}
 	}
+	return r.HasImplicitSuperRegion()
+}
+
+// HasImplicitSuperRegion returns true if the survival goal is
+// SURVIVE_REGION_FAILURE and we have 3 regions configured.
+// In this case, tables get explicit zone configs with tighter replica constraints
+// (2+2+1 instead of 1+1+1) to prevent replica leak to other regions.
+func (r *RegionConfig) HasImplicitSuperRegion() bool {
+	if len(r.regions) == 3 && r.survivalGoal == descpb.SurvivalGoal_REGION_FAILURE {
+		return true
+	}
 	return false
 }
 
 // GetSuperRegionRegionsForRegion returns the members of the super region the
-// specified region is part of.
-// If the region is not a member of any super regions, the function returns an
-// error.
+// specified region is part of. Note that if SURVIVE_REGION_FAILURE is being used
+// then we compute an implicit super region. If the region is not a member of any
+// explicit or implicit super regions, the function returns false.
 func (r *RegionConfig) GetSuperRegionRegionsForRegion(
 	region catpb.RegionName,
 ) (catpb.RegionNames, bool) {
@@ -99,7 +128,30 @@ func (r *RegionConfig) GetSuperRegionRegionsForRegion(
 			}
 		}
 	}
+
+	// Compute implicit super region if SURVIVE REGION FAILURE is set and we have 3 regions.
+	if len(r.regions) == 3 && r.survivalGoal == descpb.SurvivalGoal_REGION_FAILURE {
+		return r.regions, true
+	}
+
 	return nil, false
+}
+
+// EffectiveSurvivalGoalForRegion returns the survival goal that applies to a
+// given region. If the region belongs to a super region with an explicit goal,
+// that goal is returned; otherwise, the database-level goal is returned.
+func (r *RegionConfig) EffectiveSurvivalGoalForRegion(region catpb.RegionName) descpb.SurvivalGoal {
+	for _, sr := range r.superRegions {
+		for _, member := range sr.Regions {
+			if member == region {
+				if sr.HasSurvivalGoal {
+					return sr.SurvivalGoal
+				}
+				return r.survivalGoal
+			}
+		}
+	}
+	return r.survivalGoal
 }
 
 // IsValidRegionNameString implements the tree.DatabaseRegionConfig interface.
@@ -168,12 +220,9 @@ func (r *RegionConfig) ZoneConfigExtensions() descpb.ZoneConfigExtensions {
 // extensions to the provided zone configuration, returning the updated config.
 func (r *RegionConfig) ExtendZoneConfigWithGlobal(zc zonepb.ZoneConfig) (zonepb.ZoneConfig, error) {
 	if ext := r.zoneCfgExtensions.Global; ext != nil {
-		var numVoters, numReplicas int32
+		var numVoters int32
 		if zc.NumVoters != nil {
 			numVoters = *zc.NumVoters
-		}
-		if zc.NumReplicas != nil {
-			numReplicas = *zc.NumReplicas
 		}
 		zc = extendZoneCfg(zc, *ext)
 		// TODO(janexing): to ensure that the zone config extension won't break the
@@ -181,14 +230,14 @@ func (r *RegionConfig) ExtendZoneConfigWithGlobal(zc zonepb.ZoneConfig) (zonepb.
 		// replicas. We may want to consider adding constraint to their distribution
 		// across zones/regions as well.
 		if zc.NumVoters != nil && *zc.NumVoters < numVoters {
-			return zonepb.ZoneConfig{}, errors.Newf("zone config extension "+
-				"cannot set num_voters %v that is lower than the one required for the "+
-				"survival goal: %v with goal %v\n", *zc.NumVoters, numVoters, r.SurvivalGoal())
+			return zonepb.ZoneConfig{}, errors.Newf(
+				"cannot set num_voters below %v (num_voters required for survival goal %v), got %v",
+				numVoters, r.SurvivalGoal(), *zc.NumVoters)
 		}
-		if zc.NumReplicas != nil && *zc.NumReplicas < numReplicas {
-			return zonepb.ZoneConfig{}, errors.Newf("zone config extension "+
-				"cannot set num_replicas %v that is lower than the one required for the "+
-				"survival goal: %v with goal %v\n", *zc.NumReplicas, numReplicas, r.SurvivalGoal())
+		if zc.NumReplicas != nil && *zc.NumReplicas < numVoters {
+			return zonepb.ZoneConfig{}, errors.Newf(
+				"cannot set num_replicas below %v (num_voters required for survival goal %v), got %v",
+				numVoters, r.SurvivalGoal(), *zc.NumReplicas)
 		}
 	}
 	return zc, nil
@@ -196,18 +245,17 @@ func (r *RegionConfig) ExtendZoneConfigWithGlobal(zc zonepb.ZoneConfig) (zonepb.
 
 // ExtendZoneConfigWithRegionalIn applies the regional table zone
 // configuration extensions for the provided region to the provided zone
-// configuration, returning the updated config.
+// configuration, returning the updated config. Extensions are applied in
+// the following order: regional → super_region → regional_in.
 func (r *RegionConfig) ExtendZoneConfigWithRegionalIn(
 	zc zonepb.ZoneConfig, region catpb.RegionName,
 ) (zonepb.ZoneConfig, error) {
-	var numVoters, numReplicas int32
+	var numVoters int32
 	if zc.NumVoters != nil {
 		numVoters = *zc.NumVoters
 	}
-	if zc.NumReplicas != nil {
-		numReplicas = *zc.NumReplicas
-	}
 
+	// 1. Apply the regional extension.
 	if ext := r.zoneCfgExtensions.Regional; ext != nil {
 		if ext.LeasePreferences != nil {
 			return zonepb.ZoneConfig{}, errors.New("REGIONAL zone config extensions " +
@@ -215,6 +263,25 @@ func (r *RegionConfig) ExtendZoneConfigWithRegionalIn(
 		}
 		zc = extendZoneCfg(zc, *ext)
 	}
+
+	// 2. Apply the super region extension, if the region belongs to one.
+	if srName, ok := r.GetSuperRegionNameForRegion(region); ok {
+		if ext, ok := r.zoneCfgExtensions.SuperRegion[srName]; ok {
+			if ext.LeasePreferences != nil {
+				return zonepb.ZoneConfig{}, errors.New("SUPER REGION zone config extensions " +
+					"are not allowed to set lease_preferences")
+			}
+			memberRegions := r.getSuperRegionMemberRegions(srName)
+			if err := ValidateSuperRegionConstraintContainment(
+				ext, srName, memberRegions,
+			); err != nil {
+				return zonepb.ZoneConfig{}, err
+			}
+			zc = extendZoneCfg(zc, ext)
+		}
+	}
+
+	// 3. Apply the regional_in extension.
 	if ext, ok := r.zoneCfgExtensions.RegionalIn[region]; ok {
 		if err := validateZoneConfigExtension(ext, zc, region.String()); err != nil {
 			return zonepb.ZoneConfig{}, err
@@ -227,16 +294,75 @@ func (r *RegionConfig) ExtendZoneConfigWithRegionalIn(
 	// replicas. We may want to consider adding constraint to their distribution
 	// across zones/regions as well.
 	if zc.NumVoters != nil && *zc.NumVoters < numVoters {
-		return zonepb.ZoneConfig{}, errors.Newf("zone config extension "+
-			"cannot set num_voters %v that is lower than the one required for the "+
-			"survival goal: %v with goal %v\n", *zc.NumVoters, numVoters, r.SurvivalGoal())
+		return zonepb.ZoneConfig{}, errors.Newf(
+			"cannot set num_voters below %v (num_voters required for survival goal %v), got %v",
+			numVoters, r.SurvivalGoal(), *zc.NumVoters)
 	}
-	if zc.NumReplicas != nil && *zc.NumReplicas < numReplicas {
-		return zonepb.ZoneConfig{}, errors.Newf("zone config extension "+
-			"cannot set num_replica %v that is lower than the one required for the "+
-			"survival goal: %v with goal %v\n", *zc.NumReplicas, numReplicas, r.SurvivalGoal())
+	if zc.NumReplicas != nil && *zc.NumReplicas < numVoters {
+		return zonepb.ZoneConfig{}, errors.Newf(
+			"cannot set num_replicas below %v (num_voters required for survival goal %v), got %v",
+			numVoters, r.SurvivalGoal(), *zc.NumReplicas)
 	}
 	return zc, nil
+}
+
+// GetSuperRegionNameForRegion returns the name of the super region that
+// contains the given region, if any.
+func (r *RegionConfig) GetSuperRegionNameForRegion(region catpb.RegionName) (string, bool) {
+	for _, sr := range r.superRegions {
+		for _, srRegion := range sr.Regions {
+			if srRegion == region {
+				return sr.SuperRegionName, true
+			}
+		}
+	}
+	return "", false
+}
+
+// getSuperRegionMemberRegions returns the member regions of the named
+// super region.
+func (r *RegionConfig) getSuperRegionMemberRegions(srName string) catpb.RegionNames {
+	for _, sr := range r.superRegions {
+		if sr.SuperRegionName == srName {
+			return sr.Regions
+		}
+	}
+	return nil
+}
+
+// ValidateSuperRegionConstraintContainment ensures that constraints and
+// voter_constraints in a zone config extension only reference regions
+// that are members of the specified super region.
+func ValidateSuperRegionConstraintContainment(
+	ext zonepb.ZoneConfig, superRegionName string, memberRegions catpb.RegionNames,
+) error {
+	members := make(map[string]struct{}, len(memberRegions))
+	for _, r := range memberRegions {
+		members[string(r)] = struct{}{}
+	}
+	checkConstraints := func(
+		constraints []zonepb.ConstraintsConjunction, fieldName string,
+	) error {
+		for _, cc := range constraints {
+			for _, c := range cc.Constraints {
+				if c.Key == "region" {
+					if _, ok := members[c.Value]; !ok {
+						return pgerror.Newf(
+							pgcode.InvalidParameterValue,
+							"%s on super region %q zone config extension references "+
+								"region %q which is not a member of the super region",
+							fieldName, superRegionName, c.Value,
+						)
+					}
+				}
+			}
+		}
+		return nil
+	}
+	if err := checkConstraints(ext.Constraints, "constraints"); err != nil {
+		return err
+	}
+	return checkConstraints(ext.VoterConstraints, "voter_constraints")
 }
 
 // "extending" a zone config means having the extension inherit any missing
@@ -270,6 +396,14 @@ func (r *RegionConfig) GlobalTablesInheritDatabaseConstraints() bool {
 		// tables.
 		return false
 	}
+	// If the primary region's super region has a zone config extension, it will
+	// be applied to the database-level zone config but should not apply to
+	// GLOBAL tables.
+	if srName, ok := r.GetSuperRegionNameForRegion(r.primaryRegion); ok {
+		if _, hasExt := r.zoneCfgExtensions.SuperRegion[srName]; hasExt {
+			return false
+		}
+	}
 	return true
 }
 
@@ -283,6 +417,16 @@ func (r *RegionConfig) RegionalInTablesInheritDatabaseConstraints(region catpb.R
 		// will be set at the database level but which should not apply to regional
 		// tables in any other region.
 		return r.primaryRegion == region
+	}
+	// If the primary region's super region has a zone config extension, it will
+	// be applied to the database-level zone config. Regional tables outside that
+	// super region should not inherit these modified constraints. Note: callers
+	// only reach this function when IsMemberOfSuperRegion(region) is false, so
+	// the region is guaranteed to be outside the primary region's super region.
+	if srName, ok := r.GetSuperRegionNameForRegion(r.primaryRegion); ok {
+		if _, hasExt := r.zoneCfgExtensions.SuperRegion[srName]; hasExt {
+			return false
+		}
 	}
 	return true
 }
@@ -393,7 +537,7 @@ func ValidateRegionConfig(config RegionConfig, isSystemDatabase bool) error {
 		return err
 	}
 
-	ValidateZoneConfigExtensions(config.Regions(), config.ZoneConfigExtensions(), func(validateErr error) {
+	ValidateZoneConfigExtensions(config.Regions(), config.ZoneConfigExtensions(), config.SuperRegions(), func(validateErr error) {
 		if err == nil {
 			err = validateErr
 		}
@@ -439,7 +583,11 @@ func ValidateSuperRegions(
 			errorHandler(err)
 		}
 
-		if err := CanSatisfySurvivalGoal(survivalGoal, len(superRegion.Regions)); err != nil {
+		effectiveGoal := survivalGoal
+		if superRegion.HasSurvivalGoal {
+			effectiveGoal = superRegion.SurvivalGoal
+		}
+		if err := CanSatisfySurvivalGoal(effectiveGoal, len(superRegion.Regions)); err != nil {
 			err := errors.HandleAsAssertionFailure(errors.Wrapf(err, "super region %s only has %d regions", superRegion.SuperRegionName, len(superRegion.Regions)))
 			errorHandler(err)
 		}
@@ -492,12 +640,14 @@ func ValidateSuperRegions(
 // ValidateZoneConfigExtensions validates that zone configuration extensions are
 // coherent with the rest of the multi-region configuration. It validates that:
 //  1. All per-region extensions map to a region on the RegionConfig.
-//  2. TODO(nvanbenschoten): add more zone config extension validation in the
+//  2. All super region extensions map to a known super region.
+//  3. TODO(nvanbenschoten): add more zone config extension validation in the
 //     future to ensure zone config extensions do not subvert other portions
 //     of the multi-region config (e.g. like breaking REGION survivability).
 func ValidateZoneConfigExtensions(
 	regionNames catpb.RegionNames,
 	zoneCfgExtensions descpb.ZoneConfigExtensions,
+	superRegions []descpb.SuperRegion,
 	errorHandler func(error),
 ) {
 	// Ensure that all per-region extensions map to a region on the RegionConfig.
@@ -512,6 +662,20 @@ func ValidateZoneConfigExtensions(
 		if !found {
 			errorHandler(errors.AssertionFailedf("region %s has REGIONAL IN "+
 				"zone config extension, but is not a region in the database", regionExt))
+		}
+	}
+	// Ensure that all super region extensions map to a known super region.
+	for srName := range zoneCfgExtensions.SuperRegion {
+		found := false
+		for _, sr := range superRegions {
+			if sr.SuperRegionName == srName {
+				found = true
+				break
+			}
+		}
+		if !found {
+			errorHandler(errors.AssertionFailedf("super region %s has zone config "+
+				"extension, but is not a super region in the database", srName))
 		}
 	}
 }

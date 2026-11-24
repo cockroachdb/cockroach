@@ -27,7 +27,8 @@ root
  │    └── select
  │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         ├── scan parent
- │         │    └── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    └── flags: avoid-full-scan
  │         └── filters
  │              └── p:4 > 1
  └── cascade
@@ -38,7 +39,7 @@ root
                 ├── columns: c:11!null child.p:12!null
                 ├── scan child
                 │    ├── columns: c:11!null child.p:12!null
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      └── child.p:12 > 1
 
@@ -56,7 +57,8 @@ root
  │    └── select
  │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         ├── scan parent
- │         │    └── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    └── flags: avoid-full-scan
  │         └── filters
  │              └── (p:4 > 1) AND (random() < 0.5)
  └── cascade
@@ -67,7 +69,7 @@ root
                 ├── columns: c:11!null child.p:12!null
                 ├── scan child
                 │    ├── columns: c:11!null child.p:12!null
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 ├── with-scan &1
                 │    ├── columns: p:15!null
                 │    └── mapping:
@@ -89,7 +91,8 @@ root
  │    └── select
  │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         ├── scan parent
- │         │    └── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    └── flags: avoid-full-scan
  │         └── filters
  │              └── exists
  │                   └── project
@@ -104,7 +107,7 @@ root
                 ├── columns: c:15!null child.p:16!null
                 ├── scan child
                 │    ├── columns: c:15!null child.p:16!null
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 ├── with-scan &1
                 │    ├── columns: p:19!null
                 │    └── mapping:
@@ -126,7 +129,8 @@ root
  │    └── select
  │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         ├── scan parent
- │         │    └── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    └── flags: avoid-full-scan
  │         └── filters
  │              └── p:4 > one_volatile()
  └── cascade
@@ -137,7 +141,7 @@ root
                 ├── columns: c:12!null child.p:13!null
                 ├── scan child
                 │    ├── columns: c:12!null child.p:13!null
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 ├── with-scan &1
                 │    ├── columns: p:16!null
                 │    └── mapping:
@@ -158,7 +162,8 @@ root
  │    └── select
  │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         ├── scan parent
- │         │    └── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    └── flags: avoid-full-scan
  │         └── filters
  │              └── p:4 > one_immutable()
  └── cascade
@@ -169,7 +174,7 @@ root
                 ├── columns: c:12!null child.p:13!null
                 ├── scan child
                 │    ├── columns: c:12!null child.p:13!null
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      └── child.p:13 > one_immutable()
 
@@ -184,14 +189,15 @@ root
  │    ├── cascades
  │    │    └── child_p_fkey
  │    └── scan parent
- │         └── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         └── flags: avoid-full-scan
  └── cascade
       └── delete child
            ├── columns: <none>
            ├── fetch columns: c:11 child.p:12
            └── scan child
                 ├── columns: c:11!null child.p:12!null
-                └── flags: disabled not visible index feature
+                └── flags: avoid-full-scan disabled not visible index feature
 
 exec-ddl
 CREATE TABLE grandchild (g INT PRIMARY KEY, c INT REFERENCES child(c) ON DELETE CASCADE)
@@ -210,7 +216,8 @@ root
  │    └── select
  │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         ├── scan parent
- │         │    └── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    └── flags: avoid-full-scan
  │         └── filters
  │              └── p:4 > 1
  └── cascade
@@ -224,7 +231,7 @@ root
       │         ├── columns: c:11!null child.p:12!null
       │         ├── scan child
       │         │    ├── columns: c:11!null child.p:12!null
-      │         │    └── flags: disabled not visible index feature
+      │         │    └── flags: avoid-full-scan disabled not visible index feature
       │         └── filters
       │              └── child.p:12 > 1
       └── cascade
@@ -235,7 +242,7 @@ root
                      ├── columns: g:19!null grandchild.c:20
                      ├── scan grandchild
                      │    ├── columns: g:19!null grandchild.c:20
-                     │    └── flags: disabled not visible index feature
+                     │    └── flags: avoid-full-scan disabled not visible index feature
                      ├── with-scan &1
                      │    ├── columns: c:23!null
                      │    └── mapping:
@@ -257,7 +264,8 @@ root
  │    └── select
  │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         ├── scan parent
- │         │    └── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    └── flags: avoid-full-scan
  │         └── filters
  │              └── (p:4 > 1) AND (random() < 0.5)
  └── cascade
@@ -271,7 +279,7 @@ root
       │         ├── columns: c:11!null child.p:12!null
       │         ├── scan child
       │         │    ├── columns: c:11!null child.p:12!null
-      │         │    └── flags: disabled not visible index feature
+      │         │    └── flags: avoid-full-scan disabled not visible index feature
       │         ├── with-scan &1
       │         │    ├── columns: p:15!null
       │         │    └── mapping:
@@ -286,7 +294,7 @@ root
                      ├── columns: g:20!null grandchild.c:21
                      ├── scan grandchild
                      │    ├── columns: g:20!null grandchild.c:21
-                     │    └── flags: disabled not visible index feature
+                     │    └── flags: avoid-full-scan disabled not visible index feature
                      ├── with-scan &2
                      │    ├── columns: c:24!null
                      │    └── mapping:
@@ -305,7 +313,8 @@ root
  │    ├── cascades
  │    │    └── child_p_fkey
  │    └── scan parent
- │         └── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         └── flags: avoid-full-scan
  └── cascade
       ├── delete child
       │    ├── columns: <none>
@@ -314,7 +323,7 @@ root
       │    │    └── grandchild_c_fkey
       │    └── scan child
       │         ├── columns: c:11!null child.p:12!null
-      │         └── flags: disabled not visible index feature
+      │         └── flags: avoid-full-scan disabled not visible index feature
       └── cascade
            └── delete grandchild
                 ├── columns: <none>
@@ -323,7 +332,7 @@ root
                      ├── columns: g:19!null grandchild.c:20!null
                      ├── scan grandchild
                      │    ├── columns: g:19!null grandchild.c:20
-                     │    └── flags: disabled not visible index feature
+                     │    └── flags: avoid-full-scan disabled not visible index feature
                      └── filters
                           └── grandchild.c:20 IS DISTINCT FROM CAST(NULL AS INT8)
 
@@ -348,7 +357,8 @@ root
  │    └── select
  │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         ├── scan parent
- │         │    └── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    └── flags: avoid-full-scan
  │         └── filters
  │              └── p:4 > 1
  └── cascade
@@ -360,7 +370,7 @@ root
            │    ├── columns: child.c:11!null child.p:12!null
            │    ├── scan child
            │    │    ├── columns: child.c:11!null child.p:12!null
-           │    │    └── flags: disabled not visible index feature
+           │    │    └── flags: avoid-full-scan disabled not visible index feature
            │    └── filters
            │         └── child.p:12 > 1
            └── f-k-checks
@@ -373,7 +383,7 @@ root
                           │         └──  child.c:11 => c:15
                           ├── scan grandchild
                           │    ├── columns: grandchild.c:17
-                          │    └── flags: disabled not visible index feature
+                          │    └── flags: avoid-full-scan disabled not visible index feature
                           └── filters
                                └── c:15 = grandchild.c:17
 
@@ -390,7 +400,8 @@ root
  │    └── select
  │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         ├── scan parent
- │         │    └── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    └── flags: avoid-full-scan
  │         └── filters
  │              └── (p:4 > 1) AND (random() < 0.5)
  └── cascade
@@ -402,7 +413,7 @@ root
            │    ├── columns: child.c:11!null child.p:12!null
            │    ├── scan child
            │    │    ├── columns: child.c:11!null child.p:12!null
-           │    │    └── flags: disabled not visible index feature
+           │    │    └── flags: avoid-full-scan disabled not visible index feature
            │    ├── with-scan &1
            │    │    ├── columns: p:15!null
            │    │    └── mapping:
@@ -419,7 +430,7 @@ root
                           │         └──  child.c:11 => c:16
                           ├── scan grandchild
                           │    ├── columns: grandchild.c:18
-                          │    └── flags: disabled not visible index feature
+                          │    └── flags: avoid-full-scan disabled not visible index feature
                           └── filters
                                └── c:16 = grandchild.c:18
 
@@ -441,7 +452,8 @@ root
  │    └── select
  │         ├── columns: a:5!null b:6 crdb_internal_mvcc_timestamp:7 tableoid:8
  │         ├── scan self
- │         │    └── columns: a:5!null b:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+ │         │    ├── columns: a:5!null b:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+ │         │    └── flags: avoid-full-scan
  │         └── filters
  │              └── a:5 = 1
  └── cascade
@@ -455,7 +467,7 @@ root
       │         ├── columns: self.a:13!null b:14
       │         ├── scan self
       │         │    ├── columns: self.a:13!null b:14
-      │         │    └── flags: disabled not visible index feature
+      │         │    └── flags: avoid-full-scan disabled not visible index feature
       │         ├── with-scan &1
       │         │    ├── columns: a:17!null
       │         │    └── mapping:
@@ -473,7 +485,7 @@ root
            │         ├── columns: self.a:22!null b:23
            │         ├── scan self
            │         │    ├── columns: self.a:22!null b:23
-           │         │    └── flags: disabled not visible index feature
+           │         │    └── flags: avoid-full-scan disabled not visible index feature
            │         ├── with-scan &2
            │         │    ├── columns: a:26!null
            │         │    └── mapping:
@@ -491,7 +503,7 @@ root
                           ├── columns: self.a:31!null b:32
                           ├── scan self
                           │    ├── columns: self.a:31!null b:32
-                          │    └── flags: disabled not visible index feature
+                          │    └── flags: avoid-full-scan disabled not visible index feature
                           ├── with-scan &3
                           │    ├── columns: a:35!null
                           │    └── mapping:
@@ -538,7 +550,8 @@ root
  │    └── select
  │         ├── columns: a:5!null b:6 crdb_internal_mvcc_timestamp:7 tableoid:8
  │         ├── scan ab
- │         │    └── columns: a:5!null b:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+ │         │    ├── columns: a:5!null b:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+ │         │    └── flags: avoid-full-scan
  │         └── filters
  │              └── a:5 = 1
  └── cascade
@@ -552,7 +565,7 @@ root
       │         ├── columns: e:13!null f:14
       │         ├── scan ef
       │         │    ├── columns: e:13!null f:14
-      │         │    └── flags: disabled not visible index feature
+      │         │    └── flags: avoid-full-scan disabled not visible index feature
       │         ├── with-scan &1
       │         │    ├── columns: a:17!null
       │         │    └── mapping:
@@ -570,7 +583,7 @@ root
            │         ├── columns: c:22!null d:23
            │         ├── scan cd
            │         │    ├── columns: c:22!null d:23
-           │         │    └── flags: disabled not visible index feature
+           │         │    └── flags: avoid-full-scan disabled not visible index feature
            │         ├── with-scan &2
            │         │    ├── columns: e:26!null
            │         │    └── mapping:
@@ -588,7 +601,7 @@ root
                           ├── columns: ab.a:31!null b:32
                           ├── scan ab
                           │    ├── columns: ab.a:31!null b:32
-                          │    └── flags: disabled not visible index feature
+                          │    └── flags: avoid-full-scan disabled not visible index feature
                           ├── with-scan &3
                           │    ├── columns: c:35!null
                           │    └── mapping:
@@ -632,7 +645,8 @@ root
  │    └── select
  │         ├── columns: a:5!null data:6 crdb_internal_mvcc_timestamp:7 tableoid:8
  │         ├── scan f1
- │         │    └── columns: a:5!null data:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+ │         │    ├── columns: a:5!null data:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+ │         │    └── flags: avoid-full-scan
  │         └── filters
  │              └── (a:5 >= 1) AND (a:5 <= 4)
  └── cascade
@@ -645,7 +659,7 @@ root
       │         ├── columns: f2.a:14!null b:15!null f2.data:16
       │         ├── scan f2
       │         │    ├── columns: f2.a:14!null b:15!null f2.data:16
-      │         │    └── flags: disabled not visible index feature
+      │         │    └── flags: avoid-full-scan disabled not visible index feature
       │         └── filters
       │              └── (f2.a:14 >= 1) AND (f2.a:14 <= 4)
       └── cascade
@@ -656,7 +670,7 @@ root
                      ├── columns: f3.a:25!null f3.b:26!null c:27!null f3.data:28
                      ├── scan f3
                      │    ├── columns: f3.a:25!null f3.b:26!null c:27!null f3.data:28
-                     │    └── flags: disabled not visible index feature
+                     │    └── flags: avoid-full-scan disabled not visible index feature
                      └── filters
                           └── (f3.a:25 >= 1) AND (f3.a:25 <= 4)
 
@@ -674,7 +688,8 @@ root
  │    └── select
  │         ├── columns: a:5!null data:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
  │         ├── scan f1
- │         │    └── columns: a:5!null data:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+ │         │    ├── columns: a:5!null data:6 crdb_internal_mvcc_timestamp:7 tableoid:8
+ │         │    └── flags: avoid-full-scan
  │         └── filters
  │              └── (a:5 = 1) AND (data:6 = 1)
  └── cascade
@@ -688,7 +703,7 @@ root
       │         ├── columns: f2.a:14!null b:15!null f2.data:16
       │         ├── scan f2
       │         │    ├── columns: f2.a:14!null b:15!null f2.data:16
-      │         │    └── flags: disabled not visible index feature
+      │         │    └── flags: avoid-full-scan disabled not visible index feature
       │         ├── with-scan &1
       │         │    ├── columns: a:19!null
       │         │    └── mapping:
@@ -703,7 +718,7 @@ root
                      ├── columns: f3.a:26!null f3.b:27!null c:28!null f3.data:29
                      ├── scan f3
                      │    ├── columns: f3.a:26!null f3.b:27!null c:28!null f3.data:29
-                     │    └── flags: disabled not visible index feature
+                     │    └── flags: avoid-full-scan disabled not visible index feature
                      ├── with-scan &2
                      │    ├── columns: a:32!null b:33!null
                      │    └── mapping:
@@ -740,7 +755,8 @@ root
  │    └── select
  │         ├── columns: a:6!null b:7 rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
  │         ├── scan g1
- │         │    └── columns: a:6 b:7 rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+ │         │    ├── columns: a:6 b:7 rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+ │         │    └── flags: avoid-full-scan
  │         └── filters
  │              └── a:6 = 1
  ├── cascade
@@ -751,7 +767,7 @@ root
  │              ├── columns: g2a.a:16!null data:17 g2a.rowid:18!null
  │              ├── scan g2a
  │              │    ├── columns: g2a.a:16 data:17 g2a.rowid:18!null
- │              │    └── flags: disabled not visible index feature
+ │              │    └── flags: avoid-full-scan disabled not visible index feature
  │              └── filters
  │                   ├── g2a.a:16 = 1
  │                   └── g2a.a:16 IS DISTINCT FROM CAST(NULL AS INT8)
@@ -763,7 +779,7 @@ root
                 ├── columns: g2b.b:26 g2b.data:27 g2b.rowid:28!null
                 ├── scan g2b
                 │    ├── columns: g2b.b:26 g2b.data:27 g2b.rowid:28!null
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 ├── with-scan &1
                 │    ├── columns: b:31
                 │    └── mapping:
@@ -785,7 +801,8 @@ root
  │    └── select
  │         ├── columns: a:6 b:7!null rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
  │         ├── scan g1
- │         │    └── columns: a:6 b:7 rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+ │         │    ├── columns: a:6 b:7 rowid:8!null crdb_internal_mvcc_timestamp:9 tableoid:10
+ │         │    └── flags: avoid-full-scan
  │         └── filters
  │              └── b:7 = 1
  ├── cascade
@@ -796,7 +813,7 @@ root
  │              ├── columns: g2a.a:16 data:17 g2a.rowid:18!null
  │              ├── scan g2a
  │              │    ├── columns: g2a.a:16 data:17 g2a.rowid:18!null
- │              │    └── flags: disabled not visible index feature
+ │              │    └── flags: avoid-full-scan disabled not visible index feature
  │              ├── with-scan &1
  │              │    ├── columns: a:21
  │              │    └── mapping:
@@ -811,7 +828,7 @@ root
                 ├── columns: g2b.b:27!null g2b.data:28 g2b.rowid:29!null
                 ├── scan g2b
                 │    ├── columns: g2b.b:27 g2b.data:28 g2b.rowid:29!null
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      ├── g2b.b:27 = 1
                      └── g2b.b:27 IS DISTINCT FROM CAST(NULL AS INT8)
@@ -840,7 +857,8 @@ root
  │    └── select
  │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         ├── scan h1
- │         │    └── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    └── flags: avoid-full-scan
  │         └── filters
  │              └── p:4::STRING = '1.0'
  └── cascade
@@ -851,7 +869,7 @@ root
                 ├── columns: c:11!null h2.p:12
                 ├── scan h2
                 │    ├── columns: c:11!null h2.p:12
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 ├── with-scan &1
                 │    ├── columns: p:15!null
                 │    └── mapping:
@@ -872,7 +890,8 @@ root
  │    └── select
  │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         ├── scan h1
- │         │    └── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    └── flags: avoid-full-scan
  │         └── filters
  │              └── p:4 = 1
  └── cascade
@@ -883,7 +902,7 @@ root
                 ├── columns: c:11!null h2.p:12!null
                 ├── scan h2
                 │    ├── columns: c:11!null h2.p:12
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      ├── h2.p:12 = 1
                      └── h2.p:12 IS DISTINCT FROM CAST(NULL AS DECIMAL)
@@ -919,7 +938,8 @@ root
  │    └── select
  │         ├── columns: a:7 b:8 c:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
  │         ├── scan m1
- │         │    └── columns: a:7 b:8 c:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+ │         │    ├── columns: a:7 b:8 c:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+ │         │    └── flags: avoid-full-scan
  │         └── filters
  │              └── ((a:7 + b:8) + c:9) = 1
  └── cascade
@@ -930,7 +950,7 @@ root
                 ├── columns: m2.a:19!null m2.b:20!null m2.c:21!null m2.rowid:22!null
                 ├── scan m2
                 │    ├── columns: m2.a:19 m2.b:20!null m2.c:21 m2.rowid:22!null
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      ├── ((m2.a:19 + m2.b:20) + m2.c:21) = 1
                      ├── m2.a:19 IS DISTINCT FROM CAST(NULL AS INT8)
@@ -949,7 +969,8 @@ root
  │    └── select
  │         ├── columns: a:7 b:8 c:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
  │         ├── scan m1
- │         │    └── columns: a:7 b:8 c:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+ │         │    ├── columns: a:7 b:8 c:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
+ │         │    └── flags: avoid-full-scan
  │         └── filters
  │              └── a:7 IS NULL
  └── cascade
@@ -960,7 +981,7 @@ root
                 ├── columns: m2.a:19!null m2.b:20!null m2.c:21!null m2.rowid:22!null
                 ├── scan m2
                 │    ├── columns: m2.a:19 m2.b:20!null m2.c:21 m2.rowid:22!null
-                │    └── flags: disabled not visible index feature
+                │    └── flags: avoid-full-scan disabled not visible index feature
                 └── filters
                      ├── m2.a:19 IS NULL
                      ├── m2.a:19 IS DISTINCT FROM CAST(NULL AS INT8)
@@ -994,7 +1015,8 @@ root
  │    └── select
  │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         ├── scan parent_partial
- │         │    └── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    └── flags: avoid-full-scan
  │         └── filters
  │              └── p:4 > 1
  └── cascade
@@ -1013,7 +1035,7 @@ root
                 │    │    │    │    └── i:14 > 0
                 │    │    │    └── child_partial_i_idx: filters
                 │    │    │         └── child_partial.p:13 > 0
-                │    │    └── flags: disabled not visible index feature
+                │    │    └── flags: avoid-full-scan disabled not visible index feature
                 │    └── filters
                 │         ├── child_partial.p:13 > 1
                 │         └── child_partial.p:13 IS DISTINCT FROM CAST(NULL AS INT8)
@@ -1035,7 +1057,8 @@ root
  │    └── select
  │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         ├── scan parent_partial
- │         │    └── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    └── flags: avoid-full-scan
  │         └── filters
  │              └── (p:4 > 1) AND (random() < 0.5)
  └── cascade
@@ -1054,7 +1077,7 @@ root
                 │    │    │    │    └── i:14 > 0
                 │    │    │    └── child_partial_i_idx: filters
                 │    │    │         └── child_partial.p:13 > 0
-                │    │    └── flags: disabled not visible index feature
+                │    │    └── flags: avoid-full-scan disabled not visible index feature
                 │    ├── with-scan &1
                 │    │    ├── columns: p:17!null
                 │    │    └── mapping:
@@ -1076,7 +1099,8 @@ root
  │    ├── cascades
  │    │    └── child_partial_p_fkey
  │    └── scan parent_partial
- │         └── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         └── flags: avoid-full-scan
  └── cascade
       └── delete child_partial
            ├── columns: <none>
@@ -1093,7 +1117,7 @@ root
                 │    │    │    │    └── i:14 > 0
                 │    │    │    └── child_partial_i_idx: filters
                 │    │    │         └── child_partial.p:13 > 0
-                │    │    └── flags: disabled not visible index feature
+                │    │    └── flags: avoid-full-scan disabled not visible index feature
                 │    └── filters
                 │         └── child_partial.p:13 IS DISTINCT FROM CAST(NULL AS INT8)
                 └── projections
@@ -1127,7 +1151,8 @@ root
  │    └── select
  │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         ├── scan parent_virt
- │         │    └── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    └── flags: avoid-full-scan
  │         └── filters
  │              └── p:4 > 1
  └── cascade
@@ -1145,7 +1170,7 @@ root
                 │    │    │    │    └── child_virt.p:14
                 │    │    │    └── v2:16
                 │    │    │         └── c:13::STRING
-                │    │    └── flags: disabled not visible index feature
+                │    │    └── flags: avoid-full-scan disabled not visible index feature
                 │    └── projections
                 │         ├── child_virt.p:14 [as=v:15]
                 │         └── c:13::STRING [as=v2:16]
@@ -1167,7 +1192,8 @@ root
  │    └── select
  │         ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
  │         ├── scan parent_virt
- │         │    └── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    ├── columns: p:4!null crdb_internal_mvcc_timestamp:5 tableoid:6
+ │         │    └── flags: avoid-full-scan
  │         └── filters
  │              └── (p:4 > 1) AND (random() < 0.5)
  └── cascade
@@ -1185,7 +1211,7 @@ root
                 │    │    │    │    └── child_virt.p:14
                 │    │    │    └── v2:16
                 │    │    │         └── c:13::STRING
-                │    │    └── flags: disabled not visible index feature
+                │    │    └── flags: avoid-full-scan disabled not visible index feature
                 │    └── projections
                 │         ├── child_virt.p:14 [as=v:15]
                 │         └── c:13::STRING [as=v2:16]

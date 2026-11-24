@@ -22,12 +22,16 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -37,6 +41,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/errors"
 )
+
+const defaultTestTenantName = roachpb.TenantName("test-tenant")
 
 // defaultTestTenantMessage is a message that is printed when a test is run
 // under cluster virtualization. This is useful for debugging test failures.
@@ -85,7 +91,9 @@ func ShouldStartDefaultTestTenant(
 	// Explicit case for disabling the default test tenant.
 	if baseArg.TestTenantAlwaysDisabled() {
 		if issueNum, label := baseArg.IssueRef(); issueNum != 0 {
-			t.Logf("cluster virtualization disabled due to issue: #%d (expected label: %s)", issueNum, label)
+			if t != nil {
+				t.Logf("cluster virtualization disabled due to issue: #%d (expected label: %s)", issueNum, label)
+			}
 		}
 		return baseArg
 	}
@@ -100,6 +108,9 @@ func ShouldStartDefaultTestTenant(
 	// If the test tenant is explicitly enabled and a process mode selected, then
 	// we are done.
 	if !baseArg.TestTenantNoDecisionMade() {
+		if t != nil {
+			t.Log("using test tenant configuration from test explicit setting")
+		}
 		return baseArg
 	}
 
@@ -116,32 +127,37 @@ func ShouldStartDefaultTestTenant(
 		shared = rng.Intn(2) == 0
 	}
 
-	// Explicit case for enabling the default test tenant, but with a
-	// probabilistic selection made for running as a shared or external process.
-	if baseArg.TestTenantAlwaysEnabled() {
-		return base.InternalNonDefaultDecision(baseArg, true /* enabled */, shared /* shared */)
-	}
-
+	// Check environment variable override.
 	if decision, override := testTenantDecisionFromEnvironment(baseArg, shared); override {
 		if decision.TestTenantAlwaysEnabled() {
-			t.Log(defaultTestTenantMessage(decision.SharedProcessMode()) + "\n(override via COCKROACH_TEST_TENANT)")
+			if t != nil {
+				t.Log(defaultTestTenantMessage(decision.SharedProcessMode()) + "\n(override via COCKROACH_TEST_TENANT)")
+			}
 		}
 		return decision
 	}
 
-	if globalDefaultSelectionOverride.isSet {
-		override := globalDefaultSelectionOverride.value
-		if override.TestTenantNoDecisionMade() {
-			panic("programming error: global override does not contain a final decision")
-		}
-		if override.TestTenantAlwaysDisabled() {
-			if issueNum, label := override.IssueRef(); issueNum != 0 {
-				t.Logf("cluster virtualization disabled in global scope due to issue: #%d (expected label: %s)", issueNum, label)
+	// Check factory defaults.
+	if factoryDefaultTenant != nil {
+		defaultArg := *factoryDefaultTenant
+		// If factory default made a decision, return it.
+		if !defaultArg.TestTenantNoDecisionMade() {
+			if t != nil {
+				t.Log("using test tenant configuration from testserver factory defaults")
 			}
-		} else {
-			t.Log(defaultTestTenantMessage(shared) + "\n(override via TestingSetDefaultTenantSelectionOverride)")
+			if defaultArg.TestTenantAlwaysDisabled() {
+				if issueNum, label := defaultArg.IssueRef(); issueNum != 0 && t != nil {
+					t.Logf("cluster virtualization disabled due to issue: #%d (expected label: %s)", issueNum, label)
+				}
+			}
+			return defaultArg
 		}
-		return override
+	}
+
+	// Explicit case for enabling the default test tenant, but with a
+	// probabilistic selection made for running as a shared or external process.
+	if baseArg.TestTenantAlwaysEnabled() {
+		return base.InternalNonDefaultDecision(baseArg, true /* enabled */, shared /* shared */)
 	}
 
 	// Note: we ask the metamorphic framework for a "disable" value, instead
@@ -175,6 +191,13 @@ const (
 
 	testTenantModeEnabledShared   = "shared"
 	testTenantModeEnabledExternal = "external"
+
+	// COCKROACH_TEST_DRPC controls the DRPC enablement mode for test servers.
+	//
+	// - disabled: disables DRPC; all inter-node connectivity will use gRPC only
+	//
+	// - enabled: enables DRPC for inter-node connectivity
+	testDRPCEnabledEnvVar = "COCKROACH_TEST_DRPC"
 )
 
 func testTenantDecisionFromEnvironment(
@@ -201,29 +224,33 @@ func testTenantDecisionFromEnvironment(
 	return baseArg, false
 }
 
-// globalDefaultSelectionOverride is used when an entire package needs
-// to override the probabilistic behavior.
-var globalDefaultSelectionOverride struct {
-	isSet bool
-	value base.DefaultTestTenantOptions
-}
+var srvFactoryImpl TestServerFactory
+var factoryDefaultDRPC *base.DefaultTestDRPCOption
+var factoryDefaultTenant *base.DefaultTestTenantOptions
 
-// TestingSetDefaultTenantSelectionOverride changes the global selection override.
-func TestingSetDefaultTenantSelectionOverride(v base.DefaultTestTenantOptions) func() {
-	globalDefaultSelectionOverride.isSet = true
-	globalDefaultSelectionOverride.value = v
+type TestServerFactoryOption func()
+
+func WithTenantOption(opt base.DefaultTestTenantOptions) TestServerFactoryOption {
 	return func() {
-		globalDefaultSelectionOverride.isSet = false
+		factoryDefaultTenant = &opt
+	}
+}
+func WithDRPCOption(opt base.DefaultTestDRPCOption) TestServerFactoryOption {
+	return func() {
+		factoryDefaultDRPC = &opt
 	}
 }
 
-var srvFactoryImpl TestServerFactory
-
 // InitTestServerFactory should be called once to provide the implementation
 // of the service. It will be called from a xx_test package that can import the
-// server package.
-func InitTestServerFactory(impl TestServerFactory) {
+// server package. Optional parameters can be passed to set default options:
+// - WithDRPCOption: Sets the default DRPC mode for test servers
+// - WithTenantOption: Sets the default tenant configuration for test servers
+func InitTestServerFactory(impl TestServerFactory, opts ...TestServerFactoryOption) {
 	srvFactoryImpl = impl
+	for _, opt := range opts {
+		opt()
+	}
 }
 
 // TestLogger is the minimal interface of testing.T that is used by
@@ -250,10 +277,14 @@ type TestFataler interface {
 // The first argument is optional. If non-nil; it is used for logging
 // server configuration messages.
 func StartServerOnlyE(t TestLogger, params base.TestServerArgs) (TestServerInterface, error) {
+	ctx := context.Background()
 	allowAdditionalTenants := params.DefaultTestTenant.AllowAdditionalTenants()
-	// Update the flags with the actual decision as to whether we should
-	// start the service for a default test tenant.
+
+	// Update the flags with the actual decisions for test configuration.
+	// Priority of these Should* functions:
+	// Test explicit value > env vars > factory defaults > metamorphic.
 	params.DefaultTestTenant = ShouldStartDefaultTestTenant(t, params.DefaultTestTenant)
+	params.DefaultDRPCOption = ShouldEnableDRPC(ctx, t, params.DefaultDRPCOption)
 
 	s, err := NewServer(params)
 	if err != nil {
@@ -266,8 +297,6 @@ func StartServerOnlyE(t TestLogger, params base.TestServerArgs) (TestServerInter
 			w.loggerFn = t.Logf
 		}
 	}
-
-	ctx := context.Background()
 
 	if err := s.Start(ctx); err != nil {
 		return nil, err
@@ -289,6 +318,24 @@ func StartServerOnly(t TestFataler, params base.TestServerArgs) TestServerInterf
 		t.Fatal(err)
 	}
 	return s
+}
+
+var ConfigureSlimTestServer func(params base.TestServerArgs) base.TestServerArgs
+
+func StartSlimServerOnly(
+	t TestFataler, params base.TestServerArgs, slimOpts ...base.SlimServerOption,
+) TestServerInterface {
+	params.SlimServerConfig(slimOpts...)
+	return StartServerOnly(t, params)
+}
+
+func StartSlimServer(
+	t TestFataler, params base.TestServerArgs, slimOpts ...base.SlimServerOption,
+) (TestServerInterface, *gosql.DB, *kv.DB) {
+	s := StartSlimServerOnly(t, params, slimOpts...)
+	goDB := s.ApplicationLayer().SQLConn(t, DBName(params.UseDatabase))
+	kvDB := s.ApplicationLayer().DB()
+	return s, goDB, kvDB
 }
 
 // StartServer creates and starts a test server.
@@ -319,10 +366,42 @@ func NewServer(params base.TestServerArgs) (TestServerInterface, error) {
 		return nil, errors.AssertionFailedf("programming error: DefaultTestTenant does not contain a decision\n(maybe call ShouldStartDefaultTestTenant?)")
 	}
 
+	if params.DefaultTenantName == "" {
+		params.DefaultTenantName = defaultTestTenantName
+	}
+
+	// Allow access to unsafe internals for this server.
+	SetUnsafeOverride(&params.Knobs)
+
 	srv, err := srvFactoryImpl.New(params)
 	if err != nil {
 		return nil, err
 	}
+	// TestServers run in CI often are running under sustained overload conditions
+	// causing background work, normally expected to yield until spare capacity is
+	// available, to be starved out indefinitely -- just running the various
+	// system components/rangefeeds/etc of several testservers/tenants is enough
+	// to have a perpetually non-empty runnable queue in CIs for 10+ minutes. As
+	// such, we have to disable yield AC if we want background work to run at all.
+	if params.DisableElasticCPUAdmission {
+		kvadmission.ElasticAdmission.Override(context.Background(), &srv.(TestServerInterfaceRaw).ClusterSettings().SV, false)
+		// Disable elastic CPU control settings that can cause bulk operations and
+		// reads to be throttled. We use Lookup to avoid import cycles.
+		for _, key := range []string{
+			"sqladmission.low_pri_read_response_elastic_control.enabled",
+			"bulkio.index_backfill.elastic_control.enabled",
+			"bulkio.ingest.sst_batcher_elastic_control.enabled",
+			"bulkio.import.elastic_control.enabled",
+			"bulkio.backup.file_sst_sink_elastic_control.enabled",
+		} {
+			if s, ok := settings.LookupForLocalAccessByKey(
+				settings.InternalKey(key), true, /* forSystemTenant */
+			); ok {
+				s.(*settings.BoolSetting).Override(context.Background(), &srv.(TestServerInterfaceRaw).ClusterSettings().SV, false)
+			}
+		}
+	}
+	admission.YieldForElasticCPU.Override(context.Background(), &srv.(TestServerInterfaceRaw).ClusterSettings().SV, false)
 	srv = wrapTestServer(srv.(TestServerInterfaceRaw), tcfg)
 	return srv.(TestServerInterface), nil
 }
@@ -332,7 +411,7 @@ func NewServer(params base.TestServerArgs) (TestServerInterface, error) {
 func OpenDBConnE(
 	sqlAddr string, useDatabase string, insecure bool, stopper *stop.Stopper,
 ) (*gosql.DB, error) {
-	pgURL, cleanupGoDB, err := sqlutils.PGUrlE(
+	pgURL, cleanupGoDB, err := pgurlutils.PGUrlE(
 		sqlAddr, "StartServer" /* prefix */, url.User(username.RootUser))
 	if err != nil {
 		return nil, err
@@ -377,6 +456,7 @@ func OpenDBConn(
 func StartTenant(
 	t TestFataler, ts TestServerInterface, params base.TestTenantArgs,
 ) (ApplicationLayerInterface, *gosql.DB) {
+	SetUnsafeOverride(&params.TestingKnobs)
 	tenant, err := ts.TenantController().StartTenant(context.Background(), params)
 	if err != nil {
 		t.Fatalf("%+v", err)
@@ -389,6 +469,7 @@ func StartTenant(
 func StartSharedProcessTenant(
 	t TestFataler, ts TestServerInterface, params base.TestSharedProcessTenantArgs,
 ) (ApplicationLayerInterface, *gosql.DB) {
+	SetUnsafeOverride(&params.Knobs)
 	tenant, goDB, err := ts.TenantController().StartSharedProcessTenant(context.Background(), params)
 	if err != nil {
 		t.Fatalf("%+v", err)
@@ -434,7 +515,7 @@ func GetJSONProtoWithAdminOption(
 	}
 	u := ts.AdminURL()
 	fullURL := u.WithPath(path).String()
-	log.Infof(context.Background(), "test retrieving protobuf over HTTP: %s", fullURL)
+	log.Dev.Infof(context.Background(), "test retrieving protobuf over HTTP: %s", fullURL)
 	return httputil.GetJSON(httpClient, fullURL, response)
 }
 
@@ -454,8 +535,8 @@ func GetJSONProtoWithAdminAndTimeoutOption(
 	httpClient.Timeout += additionalTimeout
 	u := ts.AdminURL()
 	fullURL := u.WithPath(path).String()
-	log.Infof(context.Background(), "test retrieving protobuf over HTTP: %s", fullURL)
-	log.Infof(context.Background(), "set HTTP client timeout to: %s", httpClient.Timeout)
+	log.Dev.Infof(context.Background(), "test retrieving protobuf over HTTP: %s", fullURL)
+	log.Dev.Infof(context.Background(), "set HTTP client timeout to: %s", httpClient.Timeout)
 	return httputil.GetJSON(httpClient, fullURL, response)
 }
 
@@ -478,7 +559,7 @@ func PostJSONProtoWithAdminOption(
 		return err
 	}
 	fullURL := ts.AdminURL().WithPath(path).String()
-	log.Infof(context.Background(), "test retrieving protobuf over HTTP: %s", fullURL)
+	log.Dev.Infof(context.Background(), "test retrieving protobuf over HTTP: %s", fullURL)
 	return httputil.PostJSON(httpClient, fullURL, request, response)
 }
 
@@ -487,11 +568,94 @@ func WaitForTenantCapabilities(
 	t TestFataler,
 	s TestServerInterface,
 	tenID roachpb.TenantID,
-	targetCaps map[tenantcapabilities.ID]string,
+	targetCaps map[tenantcapabilitiespb.ID]string,
 	errPrefix string,
 ) {
 	err := s.TenantController().WaitForTenantCapabilities(context.Background(), tenID, targetCaps, errPrefix)
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+// parseDefaultTestDRPCOptionFromEnv parses the COCKROACH_TEST_DRPC environment
+// variable and returns the corresponding DefaultTestDRPCOption. If the
+// environment variable is not set it returns TestDRPCUnset. For invalid value,
+// it panic.
+func parseDefaultTestDRPCOptionFromEnv() base.DefaultTestDRPCOption {
+	if str, present := envutil.EnvString(testDRPCEnabledEnvVar, 0); present {
+		switch str {
+		case "disabled", "false":
+			return base.TestDRPCDisabled
+		case "enabled", "true":
+			return base.TestDRPCEnabled
+		default:
+			panic(fmt.Sprintf("invalid value for %s: %s", testDRPCEnabledEnvVar, str))
+		}
+	}
+	return base.TestDRPCUnset
+}
+
+// ShouldEnableDRPC determines the final DRPC enablement decision based on the
+// input option, resolving random choices to a concrete TestDRPCEnabled or
+// TestDRPCDisabled value.
+func ShouldEnableDRPC(
+	ctx context.Context, t TestLogger, option base.DefaultTestDRPCOption,
+) base.DefaultTestDRPCOption {
+	var logSuffix string
+
+	if option == base.TestDRPCUnset {
+		if envOption := parseDefaultTestDRPCOptionFromEnv(); envOption != base.TestDRPCUnset {
+			option = envOption
+			logSuffix = " (via COCKROACH_TEST_DRPC environment variable)"
+		} else if factoryDefaultDRPC != nil {
+			option = *factoryDefaultDRPC
+			logSuffix = " (via testserver factory defaults)"
+		} else {
+			return base.TestDRPCDisabled
+		}
+	} else {
+		logSuffix = " (via test explicit setting)"
+	}
+
+	enableDRPC := false
+	switch option {
+	case base.TestDRPCEnabled:
+		enableDRPC = true
+	case base.TestDRPCEnabledRandomly:
+		if skip.UnderBench() {
+			// Benchmarks need deterministic behavior; skip random DRPC selection.
+			return base.TestDRPCDisabled
+		}
+		rng, _ := randutil.NewTestRand()
+		enableDRPC = rng.Intn(2) == 0
+	case base.TestDRPCUnset:
+		return base.TestDRPCDisabled
+	}
+
+	if enableDRPC {
+		if t != nil {
+			t.Log("DRPC is enabled" + logSuffix)
+		}
+		return base.TestDRPCEnabled
+	}
+	return base.TestDRPCDisabled
+}
+
+// SetUnsafeOverride sets an unsafe override for eval.TestingKnobs.UnsafeOverride on
+// the given TestingKnobs.
+func SetUnsafeOverride(knobs *base.TestingKnobs) {
+	var evalTestingKnobs *eval.TestingKnobs
+	if knobs.SQLEvalContext != nil {
+		evalTestingKnobs = knobs.SQLEvalContext.(*eval.TestingKnobs)
+	} else {
+		evalTestingKnobs = &eval.TestingKnobs{}
+		knobs.SQLEvalContext = evalTestingKnobs
+	}
+
+	if evalTestingKnobs.UnsafeOverride == nil {
+		v := true
+		evalTestingKnobs.UnsafeOverride = func() *bool {
+			return &v
+		}
 	}
 }

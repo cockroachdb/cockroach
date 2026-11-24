@@ -15,12 +15,14 @@ limit
  ├── cardinality: [0 - 10]
  ├── stats: [rows=10]
  ├── cost: 28.63
+ ├── cost-flags: unbounded-cardinality
  ├── prune: (2)
  ├── interesting orderings: (+1,+2)
  ├── scan t.public.abc@ab
  │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int)
  │    ├── stats: [rows=1000]
  │    ├── cost: 28.52
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── ordering: +1
  │    ├── limit hint: 10.00
  │    ├── prune: (1,2)
@@ -40,11 +42,13 @@ limit
  ├── cardinality: [0 - 10]
  ├── stats: [rows=10]
  ├── cost: 1328.21194
+ ├── cost-flags: unbounded-cardinality
  ├── interesting orderings: (+1,+2)
  ├── sort
  │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int)
  │    ├── stats: [rows=1000]
  │    ├── cost: 1328.10194
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── ordering: +1
  │    ├── limit hint: 10.00
  │    ├── interesting orderings: (+1,+2)
@@ -52,5 +56,6 @@ limit
  │         ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int)
  │         ├── stats: [rows=1000]
  │         ├── cost: 1088.62
+ │         ├── cost-flags: unbounded-cardinality
  │         └── interesting orderings: (+1,+2)
  └── const: 10 [type=int]

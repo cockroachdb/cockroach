@@ -290,7 +290,7 @@ func decommissionTsArgs(region string, attrs ...string) base.TestServerArgs {
 			},
 		},
 		StoreSpecs: []base.StoreSpec{
-			{InMemory: true, Attributes: roachpb.Attributes{Attrs: attrs}},
+			{InMemory: true, Attributes: attrs},
 		},
 	}
 }
@@ -319,7 +319,7 @@ func waitForSpanConfig(
 			if err != nil {
 				return errors.Wrapf(err, "missing store on server %d", i)
 			}
-			conf, _, err := store.GetStoreConfig().SpanConfigSubscriber.GetSpanConfigForKey(context.Background(), key)
+			conf, err := store.GetStoreConfig().SpanConfigSubscriber.GetSpanConfigForKey(context.Background(), key)
 			if err != nil {
 				return errors.Wrapf(err, "missing span config for %s on server %d", key, i)
 			}
@@ -702,20 +702,39 @@ func TestDecommissionSelf(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, resp.Status)
 
-	// The nodes should now have been (or soon become) decommissioned.
+	// The nodes should now have been (or soon become) decommissioned. In a cruel
+	// twist of fate, the decommissioned nodes may not find out about that,
+	// however. This is because the other nodes may learn that (say) n4 is
+	// decommissioned before n4 does, and will block all communication with it,
+	// which includes receiving an updated liveness record. So we only verify that
+	// the non-decommissioned nodes see the decommissioned nodes as such, but
+	// don't verify the decommissioned nodes' own view of their (or anyone's, really)
+	// liveness.
 	for i := 0; i < tc.NumServers(); i++ {
 		srv := tc.Server(i)
-		expect := livenesspb.MembershipStatus_ACTIVE
+		var omit bool
 		for _, nodeID := range decomNodeIDs {
 			if srv.NodeID() == nodeID {
-				expect = livenesspb.MembershipStatus_DECOMMISSIONED
-				break
+				omit = true
 			}
 		}
-		require.Eventually(t, func() bool {
-			liveness, ok := srv.NodeLiveness().(*liveness.NodeLiveness).GetLiveness(srv.NodeID())
-			return ok && liveness.Membership == expect
-		}, 5*time.Second, 100*time.Millisecond, "timed out waiting for node %v status %v", i, expect)
+		if omit {
+			continue
+		}
+		nl := srv.NodeLiveness().(*liveness.NodeLiveness)
+		testutils.SucceedsSoon(t, func() error {
+			entry, ok := nl.GetLiveness(srv.NodeID())
+			if !ok || entry.Membership != livenesspb.MembershipStatus_ACTIVE {
+				return errors.Errorf("n%d not ACTIVE: %v", srv.NodeID(), entry.Membership)
+			}
+			for _, nodeID := range decomNodeIDs {
+				entry, ok := nl.GetLiveness(nodeID)
+				if !ok || entry.Membership != livenesspb.MembershipStatus_DECOMMISSIONED {
+					return errors.Errorf("n%d not DECOMMISSIONED: %v", srv.NodeID(), entry.Membership)
+				}
+			}
+			return nil
+		})
 	}
 }
 
@@ -846,94 +865,96 @@ func TestAdminDecommissionedOperations(t *testing.T) {
 	testcases := []struct {
 		name       string
 		expectCode codes.Code
-		op         func(context.Context, serverpb.AdminClient) error
+		op         func(context.Context, serverpb.RPCAdminClient) error
 	}{
-		{"Cluster", codes.OK, func(ctx context.Context, c serverpb.AdminClient) error {
+		{"Cluster", codes.OK, func(ctx context.Context, c serverpb.RPCAdminClient) error {
 			_, err := c.Cluster(ctx, &serverpb.ClusterRequest{})
 			return err
 		}},
-		{"Databases", codes.PermissionDenied, func(ctx context.Context, c serverpb.AdminClient) error {
+		{"Databases", codes.PermissionDenied, func(ctx context.Context, c serverpb.RPCAdminClient) error {
 			_, err := c.Databases(ctx, &serverpb.DatabasesRequest{})
 			return err
 		}},
-		{"DatabaseDetails", codes.PermissionDenied, func(ctx context.Context, c serverpb.AdminClient) error {
+		{"DatabaseDetails", codes.PermissionDenied, func(ctx context.Context, c serverpb.RPCAdminClient) error {
 			_, err := c.DatabaseDetails(ctx, &serverpb.DatabaseDetailsRequest{Database: "foo"})
 			return err
 		}},
-		{"DataDistribution", codes.PermissionDenied, func(ctx context.Context, c serverpb.AdminClient) error {
+		{"DataDistribution", codes.PermissionDenied, func(ctx context.Context, c serverpb.RPCAdminClient) error {
 			_, err := c.DataDistribution(ctx, &serverpb.DataDistributionRequest{})
 			return err
 		}},
-		{"Decommission", codes.Internal, func(ctx context.Context, c serverpb.AdminClient) error {
+		{"Decommission", codes.Internal, func(ctx context.Context, c serverpb.RPCAdminClient) error {
 			_, err := c.Decommission(ctx, &serverpb.DecommissionRequest{
 				NodeIDs:          []roachpb.NodeID{srv.NodeID(), decomSrv.NodeID()},
 				TargetMembership: livenesspb.MembershipStatus_DECOMMISSIONED,
 			})
 			return err
 		}},
-		{"DecommissionStatus", codes.PermissionDenied, func(ctx context.Context, c serverpb.AdminClient) error {
+		{"DecommissionStatus", codes.PermissionDenied, func(ctx context.Context, c serverpb.RPCAdminClient) error {
 			_, err := c.DecommissionStatus(ctx, &serverpb.DecommissionStatusRequest{
 				NodeIDs: []roachpb.NodeID{srv.NodeID(), decomSrv.NodeID()},
 			})
 			return err
 		}},
-		{"EnqueueRange", codes.PermissionDenied, func(ctx context.Context, c serverpb.AdminClient) error {
+		{"EnqueueRange", codes.PermissionDenied, func(ctx context.Context, c serverpb.RPCAdminClient) error {
 			_, err := c.EnqueueRange(ctx, &serverpb.EnqueueRangeRequest{
 				RangeID: scratchRange.RangeID,
 				Queue:   "replicaGC",
 			})
 			return err
 		}},
-		{"Events", codes.PermissionDenied, func(ctx context.Context, c serverpb.AdminClient) error {
+		{"Events", codes.PermissionDenied, func(ctx context.Context, c serverpb.RPCAdminClient) error {
 			_, err := c.Events(ctx, &serverpb.EventsRequest{})
 			return err
 		}},
-		{"Health", codes.OK, func(ctx context.Context, c serverpb.AdminClient) error {
+		{"Health", codes.OK, func(ctx context.Context, c serverpb.RPCAdminClient) error {
 			_, err := c.Health(ctx, &serverpb.HealthRequest{})
 			return err
 		}},
-		{"Jobs", codes.PermissionDenied, func(ctx context.Context, c serverpb.AdminClient) error {
+		{"Jobs", codes.PermissionDenied, func(ctx context.Context, c serverpb.RPCAdminClient) error {
 			_, err := c.Jobs(ctx, &serverpb.JobsRequest{})
 			return err
 		}},
-		{"Liveness", codes.PermissionDenied, func(ctx context.Context, c serverpb.AdminClient) error {
+		// Liveness reads from the local cache and does not require cluster
+		// (KV) access, so it succeeds even on a decommissioned node.
+		{"Liveness", codes.OK, func(ctx context.Context, c serverpb.RPCAdminClient) error {
 			_, err := c.Liveness(ctx, &serverpb.LivenessRequest{})
 			return err
 		}},
-		{"Locations", codes.PermissionDenied, func(ctx context.Context, c serverpb.AdminClient) error {
+		{"Locations", codes.PermissionDenied, func(ctx context.Context, c serverpb.RPCAdminClient) error {
 			_, err := c.Locations(ctx, &serverpb.LocationsRequest{})
 			return err
 		}},
-		{"NonTableStats", codes.PermissionDenied, func(ctx context.Context, c serverpb.AdminClient) error {
+		{"NonTableStats", codes.PermissionDenied, func(ctx context.Context, c serverpb.RPCAdminClient) error {
 			_, err := c.NonTableStats(ctx, &serverpb.NonTableStatsRequest{})
 			return err
 		}},
-		{"QueryPlan", codes.OK, func(ctx context.Context, c serverpb.AdminClient) error {
+		{"QueryPlan", codes.OK, func(ctx context.Context, c serverpb.RPCAdminClient) error {
 			_, err := c.QueryPlan(ctx, &serverpb.QueryPlanRequest{Query: "SELECT 1"})
 			return err
 		}},
-		{"RangeLog", codes.PermissionDenied, func(ctx context.Context, c serverpb.AdminClient) error {
+		{"RangeLog", codes.PermissionDenied, func(ctx context.Context, c serverpb.RPCAdminClient) error {
 			_, err := c.RangeLog(ctx, &serverpb.RangeLogRequest{})
 			return err
 		}},
-		{"Settings", codes.OK, func(ctx context.Context, c serverpb.AdminClient) error {
+		{"Settings", codes.OK, func(ctx context.Context, c serverpb.RPCAdminClient) error {
 			_, err := c.Settings(ctx, &serverpb.SettingsRequest{})
 			return err
 		}},
-		{"TableStats", codes.PermissionDenied, func(ctx context.Context, c serverpb.AdminClient) error {
+		{"TableStats", codes.PermissionDenied, func(ctx context.Context, c serverpb.RPCAdminClient) error {
 			_, err := c.TableStats(ctx, &serverpb.TableStatsRequest{Database: "foo", Table: "bar"})
 			return err
 		}},
-		{"TableDetails", codes.PermissionDenied, func(ctx context.Context, c serverpb.AdminClient) error {
+		{"TableDetails", codes.PermissionDenied, func(ctx context.Context, c serverpb.RPCAdminClient) error {
 			_, err := c.TableDetails(ctx, &serverpb.TableDetailsRequest{Database: "foo", Table: "bar"})
 			return err
 		}},
-		{"Users", codes.PermissionDenied, func(ctx context.Context, c serverpb.AdminClient) error {
+		{"Users", codes.PermissionDenied, func(ctx context.Context, c serverpb.RPCAdminClient) error {
 			_, err := c.Users(ctx, &serverpb.UsersRequest{})
 			return err
 		}},
 		// We drain at the end, since it may evict us.
-		{"Drain", codes.PermissionDenied, func(ctx context.Context, c serverpb.AdminClient) error {
+		{"Drain", codes.PermissionDenied, func(ctx context.Context, c serverpb.RPCAdminClient) error {
 			stream, err := c.Drain(ctx, &serverpb.DrainRequest{DoDrain: true})
 			if err != nil {
 				return err
@@ -964,8 +985,10 @@ func TestAdminDecommissionedOperations(t *testing.T) {
 					// This will cause SuccessWithin to retry.
 					return err
 				}
-				require.Equal(t, tc.expectCode, s.Code(), "%+v", err)
-				return nil
+				if tc.expectCode == s.Code() {
+					return nil
+				}
+				return err
 			})
 		})
 	}

@@ -10,7 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"gopkg.in/yaml.v3"
+	"go.yaml.in/yaml/v4"
 )
 
 const (
@@ -68,7 +68,7 @@ func (re *PrometheusRuleExporter) ScrapeRegistry(ctx context.Context) {
 	re.ruleRegistry.Each(func(rule Rule) {
 		ruleGroupName, ruleNode := rule.ToPrometheusRuleNode()
 		if ruleGroupName != alertRuleGroupName && ruleGroupName != recordingRuleGroupName {
-			log.Warning(ctx, "invalid prometheus group name, skipping rule")
+			log.Dev.Warning(ctx, "invalid prometheus group name, skipping rule")
 			return
 		}
 

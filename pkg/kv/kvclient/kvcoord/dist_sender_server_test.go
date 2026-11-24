@@ -13,12 +13,12 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -26,9 +26,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
@@ -40,11 +41,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -81,15 +84,16 @@ func TestRangeLookupWithOpenTransaction(t *testing.T) {
 	key := testutils.MakeKey(keys.Meta1Prefix, roachpb.KeyMax)
 	now := s.Clock().Now()
 	txn := roachpb.MakeTransaction("txn", roachpb.Key("foobar"), isolation.Serializable, 0, now, 0, int32(s.SQLInstanceID()), 0, false /* omitInRangefeeds */)
-	if err := storage.MVCCPutProto(context.Background(), s.Engines()[0], key, now, &roachpb.RangeDescriptor{}, storage.MVCCWriteOptions{Txn: &txn}); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, storage.MVCCPutProto(
+		context.Background(), s.Engines()[0].StateEngine(), key, now,
+		&roachpb.RangeDescriptor{}, storage.MVCCWriteOptions{Txn: &txn},
+	))
 
 	// Create a new DistSender and client.DB so that the Get below is guaranteed
 	// to not hit in the range descriptor cache forcing a RangeLookup operation.
 	ambient := s.AmbientCtx()
 	gs := s.GossipI().(*gossip.Gossip)
-	ds := kvcoord.NewDistSender(kvcoord.DistSenderConfig{
+	ds := kvcoord.NewDistSender(context.Background(), kvcoord.DistSenderConfig{
 		AmbientCtx:         ambient,
 		Settings:           cluster.MakeTestingClusterSettings(),
 		Clock:              s.Clock(),
@@ -453,56 +457,79 @@ func TestMultiRangeBoundedBatchScan(t *testing.T) {
 		}
 	}
 
-	for _, returnOnRangeBoundary := range []bool{false, true} {
-		for _, reverse := range []bool{false, true} {
-			for bound := 1; bound <= maxBound; bound++ {
-				name := fmt.Sprintf("returnOnRangeBoundary=%t, reverse=%t,bound=%d", returnOnRangeBoundary, reverse, bound)
-				t.Run(name, func(t *testing.T) {
-					b := &kv.Batch{}
-					b.Header.MaxSpanRequestKeys = int64(bound)
-					b.Header.ReturnOnRangeBoundary = returnOnRangeBoundary
+	for _, reverse := range []bool{false, true} {
+		for bound := 1; bound <= maxBound; bound++ {
+			name := fmt.Sprintf("reverse=%t,bound=%d", reverse, bound)
+			t.Run(name, func(t *testing.T) {
+				b := &kv.Batch{}
+				b.Header.MaxSpanRequestKeys = int64(bound)
 
-					for _, span := range scans {
-						if !reverse {
-							b.Scan(span[0], span[1])
-						} else {
-							b.ReverseScan(span[0], span[1])
-						}
+				for _, span := range scans {
+					if !reverse {
+						b.Scan(span[0], span[1])
+					} else {
+						b.ReverseScan(span[0], span[1])
 					}
-					require.NoError(t, db.Run(ctx, b))
+				}
+				require.NoError(t, db.Run(ctx, b))
 
-					// Compute the range boundary.
-					expReason := kvpb.RESUME_KEY_LIMIT
-					expCount := maxExpCount
-					if bound < maxExpCount {
-						expCount = bound
+				// Compute the range boundary.
+				expReason := kvpb.RESUME_KEY_LIMIT
+				expCount := maxExpCount
+				if bound < maxExpCount {
+					expCount = bound
+				}
+				// Compute the satisfied scans.
+				expSatisfied := make(map[int]struct{})
+				for i := range b.Results {
+					var threshold int
+					if !reverse {
+						threshold = satisfiedBoundThreshold[i]
+					} else {
+						threshold = satisfiedBoundThresholdReverse[i]
 					}
-					if returnOnRangeBoundary {
-						var threshold int
-						if !reverse {
-							threshold = rangeBoundaryThreshold
-						} else {
-							threshold = rangeBoundaryThresholdReverse
-						}
-						if threshold < expCount {
-							expCount = threshold
-							expReason = kvpb.RESUME_RANGE_BOUNDARY
+					if expCount >= threshold {
+						expSatisfied[i] = struct{}{}
+					}
+				}
+				opt := checkOptions{mode: AcceptPrefix, expCount: expCount}
+				if !reverse {
+					checkScanResults(
+						t, scans, b.Results, expResults, expSatisfied, expReason, opt)
+				} else {
+					checkReverseScanResults(
+						t, scans, b.Results, expResultsReverse, expSatisfied, expReason, opt)
+				}
+
+				// Re-query using the resume spans that were returned; check that all
+				// spans are read properly.
+				if bound < maxExpCount {
+					newB := &kv.Batch{}
+					for _, res := range b.Results {
+						if res.ResumeSpan != nil {
+							if !reverse {
+								newB.Scan(res.ResumeSpan.Key, res.ResumeSpan.EndKey)
+							} else {
+								newB.ReverseScan(res.ResumeSpan.Key, res.ResumeSpan.EndKey)
+							}
 						}
 					}
-					// Compute the satisfied scans.
-					expSatisfied := make(map[int]struct{})
+					require.NoError(t, db.Run(ctx, newB))
+					// Add the results to the previous results.
+					j := 0
+					for i, res := range b.Results {
+						if res.ResumeSpan != nil {
+							b.Results[i].Rows = append(b.Results[i].Rows, newB.Results[j].Rows...)
+							b.Results[i].ResumeSpan = newB.Results[j].ResumeSpan
+							b.Results[i].ResumeReason = newB.Results[j].ResumeReason
+							j++
+						}
+					}
 					for i := range b.Results {
-						var threshold int
-						if !reverse {
-							threshold = satisfiedBoundThreshold[i]
-						} else {
-							threshold = satisfiedBoundThresholdReverse[i]
-						}
-						if expCount >= threshold {
-							expSatisfied[i] = struct{}{}
-						}
+						expSatisfied[i] = struct{}{}
 					}
-					opt := checkOptions{mode: AcceptPrefix, expCount: expCount}
+					// Check that the scan results contain all the expected results.
+					opt = checkOptions{mode: Strict}
 					if !reverse {
 						checkScanResults(
 							t, scans, b.Results, expResults, expSatisfied, expReason, opt)
@@ -510,46 +537,8 @@ func TestMultiRangeBoundedBatchScan(t *testing.T) {
 						checkReverseScanResults(
 							t, scans, b.Results, expResultsReverse, expSatisfied, expReason, opt)
 					}
-
-					// Re-query using the resume spans that were returned; check that all
-					// spans are read properly.
-					if bound < maxExpCount {
-						newB := &kv.Batch{}
-						for _, res := range b.Results {
-							if res.ResumeSpan != nil {
-								if !reverse {
-									newB.Scan(res.ResumeSpan.Key, res.ResumeSpan.EndKey)
-								} else {
-									newB.ReverseScan(res.ResumeSpan.Key, res.ResumeSpan.EndKey)
-								}
-							}
-						}
-						require.NoError(t, db.Run(ctx, newB))
-						// Add the results to the previous results.
-						j := 0
-						for i, res := range b.Results {
-							if res.ResumeSpan != nil {
-								b.Results[i].Rows = append(b.Results[i].Rows, newB.Results[j].Rows...)
-								b.Results[i].ResumeSpan = newB.Results[j].ResumeSpan
-								b.Results[i].ResumeReason = newB.Results[j].ResumeReason
-								j++
-							}
-						}
-						for i := range b.Results {
-							expSatisfied[i] = struct{}{}
-						}
-						// Check that the scan results contain all the expected results.
-						opt = checkOptions{mode: Strict}
-						if !reverse {
-							checkScanResults(
-								t, scans, b.Results, expResults, expSatisfied, expReason, opt)
-						} else {
-							checkReverseScanResults(
-								t, scans, b.Results, expResultsReverse, expSatisfied, expReason, opt)
-						}
-					}
-				})
-			}
+				}
+			})
 		}
 	}
 }
@@ -570,13 +559,12 @@ func TestMultiRangeBoundedBatchScanPartialResponses(t *testing.T) {
 	}
 
 	for _, tc := range []struct {
-		name                  string
-		bound                 int64
-		spans                 [][]string
-		returnOnRangeBoundary bool
-		expResults            [][]string
-		expSatisfied          []int
-		expReason             kvpb.ResumeReason
+		name         string
+		bound        int64
+		spans        [][]string
+		expResults   [][]string
+		expSatisfied []int
+		expReason    kvpb.ResumeReason
 	}{
 		{
 			name:  "unsorted, non-overlapping, neither satisfied",
@@ -717,197 +705,10 @@ func TestMultiRangeBoundedBatchScanPartialResponses(t *testing.T) {
 				{"b1"}, {}, {"a1", "a2", "a3", "b1", "b2", "b3"},
 			},
 		},
-		{
-			name: "range boundary, overlapping, unbounded",
-			spans: [][]string{
-				{"d", "g"}, {"e2", "g"},
-			},
-			returnOnRangeBoundary: true,
-			expResults: [][]string{
-				{"e1", "e2", "e3"}, {"e2", "e3"},
-			},
-			expReason: kvpb.RESUME_RANGE_BOUNDARY,
-		},
-		{
-			name:  "range boundary, overlapping, neither satisfied",
-			bound: 10,
-			spans: [][]string{
-				{"d", "f2"}, {"e2", "g"},
-			},
-			returnOnRangeBoundary: true,
-			expResults: [][]string{
-				{"e1", "e2", "e3"}, {"e2", "e3"},
-			},
-			expReason: kvpb.RESUME_RANGE_BOUNDARY,
-		},
-		{
-			name:  "range boundary, overlapping, neither satisfied, bounded below boundary",
-			bound: 4,
-			spans: [][]string{
-				{"d", "f2"}, {"e2", "g"},
-			},
-			returnOnRangeBoundary: true,
-			expResults: [][]string{
-				{"e1", "e2", "e3"}, {"e2"},
-			},
-			expReason: kvpb.RESUME_KEY_LIMIT,
-		},
-		{
-			name:  "range boundary, overlapping, neither satisfied, bounded at boundary",
-			bound: 5,
-			spans: [][]string{
-				{"d", "f2"}, {"e2", "g"},
-			},
-			returnOnRangeBoundary: true,
-			expResults: [][]string{
-				{"e1", "e2", "e3"}, {"e2", "e3"},
-			},
-			expReason: kvpb.RESUME_KEY_LIMIT,
-		},
-		{
-			name:  "range boundary, overlapping, neither satisfied, bounded above boundary",
-			bound: 6,
-			spans: [][]string{
-				{"d", "f2"}, {"e2", "g"},
-			},
-			returnOnRangeBoundary: true,
-			expResults: [][]string{
-				{"e1", "e2", "e3"}, {"e2", "e3"},
-			},
-			expReason: kvpb.RESUME_RANGE_BOUNDARY,
-		},
-		{
-			name:  "range boundary, non-overlapping, first satisfied",
-			bound: 10,
-			spans: [][]string{
-				{"d", "e3"}, {"f", "g"},
-			},
-			returnOnRangeBoundary: true,
-			expResults: [][]string{
-				{"e1", "e2"}, {},
-			},
-			expSatisfied: []int{0},
-			expReason:    kvpb.RESUME_RANGE_BOUNDARY,
-		},
-		{
-			name:  "range boundary, non-overlapping, second satisfied",
-			bound: 10,
-			spans: [][]string{
-				{"e3", "g"}, {"e", "e2"},
-			},
-			returnOnRangeBoundary: true,
-			expResults: [][]string{
-				{"e3"}, {"e1"},
-			},
-			expSatisfied: []int{1},
-			expReason:    kvpb.RESUME_RANGE_BOUNDARY,
-		},
-		{
-			name:  "range boundary, non-overlapping, both satisfied",
-			bound: 10,
-			spans: [][]string{
-				{"e2", "f"}, {"d", "e2"},
-			},
-			returnOnRangeBoundary: true,
-			expResults: [][]string{
-				{"e2", "e3"}, {"e1"},
-			},
-			expSatisfied: []int{0, 1},
-		},
-		{
-			name:  "range boundary, separate ranges, none satisfied",
-			bound: 10,
-			spans: [][]string{
-				{"c", "e"}, {"e", "f"},
-			},
-			returnOnRangeBoundary: true,
-			expResults: [][]string{
-				{"c1", "c2", "c3"}, {},
-			},
-			expReason: kvpb.RESUME_RANGE_BOUNDARY,
-		},
-		{
-			name:  "range boundary, separate ranges, first satisfied",
-			bound: 10,
-			spans: [][]string{
-				{"c", "d"}, {"e", "f"},
-			},
-			returnOnRangeBoundary: true,
-			expResults: [][]string{
-				{"c1", "c2", "c3"}, {},
-			},
-			expSatisfied: []int{0},
-			expReason:    kvpb.RESUME_RANGE_BOUNDARY,
-		},
-		{
-			name:  "range boundary, separate ranges, second satisfied",
-			bound: 10,
-			spans: [][]string{
-				{"e", "f"}, {"c2", "d"},
-			},
-			returnOnRangeBoundary: true,
-			expResults: [][]string{
-				{}, {"c2", "c3"},
-			},
-			expSatisfied: []int{1},
-			expReason:    kvpb.RESUME_RANGE_BOUNDARY,
-		},
-		{
-			name:  "range boundary, separate ranges, first empty",
-			bound: 10,
-			spans: [][]string{
-				{"d", "e"}, {"f", "h"},
-			},
-			returnOnRangeBoundary: true,
-			expResults: [][]string{
-				{}, {"f1"},
-			},
-			expSatisfied: []int{0},
-			expReason:    kvpb.RESUME_RANGE_BOUNDARY,
-		},
-		{
-			name:  "range boundary, separate ranges, second empty",
-			bound: 10,
-			spans: [][]string{
-				{"f", "h"}, {"d", "e"},
-			},
-			returnOnRangeBoundary: true,
-			expResults: [][]string{
-				{"f1"}, {},
-			},
-			expSatisfied: []int{1},
-			expReason:    kvpb.RESUME_RANGE_BOUNDARY,
-		},
-		{
-			name:  "range boundary, separate ranges, all empty",
-			bound: 10,
-			spans: [][]string{
-				{"d", "d3"}, {"f3", "h"}, {"a", "a1"}, {"c4", "e"},
-			},
-			returnOnRangeBoundary: true,
-			expResults: [][]string{
-				{}, {}, {}, {},
-			},
-			expSatisfied: []int{0, 1, 2, 3, 4},
-		},
-		{
-			name:  "range boundary, separate ranges, most empty",
-			bound: 10,
-			spans: [][]string{
-				{"d", "d3"}, {"f3", "g"}, {"a", "a1"}, {"c4", "e"}, {"f", "h"}, {"e4", "g"},
-			},
-			returnOnRangeBoundary: true,
-			expResults: [][]string{
-				{}, {}, {}, {}, {"f1"}, {"f1"},
-			},
-			expSatisfied: []int{0, 1, 2, 3, 5},
-			expReason:    kvpb.RESUME_RANGE_BOUNDARY,
-		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			b := &kv.Batch{}
 			b.Header.MaxSpanRequestKeys = tc.bound
-			b.Header.ReturnOnRangeBoundary = tc.returnOnRangeBoundary
 			for _, span := range tc.spans {
 				b.Scan(span[0], span[1])
 			}
@@ -1011,11 +812,10 @@ func TestMultiRequestBatchWithFwdAndReverseRequests(t *testing.T) {
 		t.Fatal(err)
 	}
 	b := &kv.Batch{}
-	b.Header.MaxSpanRequestKeys = 100
 	b.Scan("a", "b")
 	b.ReverseScan("a", "b")
 	if err := db.Run(ctx, b); !testutils.IsError(
-		err, "batch with limit contains both forward and reverse scans",
+		err, "batch contains both forward and reverse requests",
 	) {
 		t.Fatal(err)
 	}
@@ -1125,7 +925,7 @@ func TestMultiRangeScanReverseScanInconsistent(t *testing.T) {
 				gs := s.GossipI().(*gossip.Gossip)
 				testutils.SucceedsSoon(t, func() error {
 					clock := hlc.NewClockForTesting(timeutil.NewManualTime(ts.GoTime().Add(1)))
-					ds := kvcoord.NewDistSender(kvcoord.DistSenderConfig{
+					ds := kvcoord.NewDistSender(ctx, kvcoord.DistSenderConfig{
 						AmbientCtx:         s.AmbientCtx(),
 						Settings:           s.ClusterSettings(),
 						Clock:              clock,
@@ -1362,109 +1162,102 @@ func TestMultiRangeScanWithPagination(t *testing.T) {
 			}
 
 			testutils.RunTrueAndFalse(t, "reverse", func(t *testing.T, reverse bool) {
-				testutils.RunTrueAndFalse(t, "returnOnRangeBoundary", func(t *testing.T, returnOnRangeBoundary bool) {
-					// Iterate through MaxSpanRequestKeys=1..n and TargetBytes=1..m
-					// and (where n and m are chosen to reveal the full result set
-					// in one page). At each(*) combination, paginate both the
-					// forward and reverse scan and make sure we get the right
-					// result.
-					//
-					// (*) we don't increase the limits when there's only one page,
-					// but short circuit to something more interesting instead.
-					msrq := int64(1)
-					for targetBytes := int64(1); ; targetBytes++ {
-						var numPages int
-						t.Run(fmt.Sprintf("targetBytes=%d,maxSpanRequestKeys=%d", targetBytes, msrq), func(t *testing.T) {
+				// Iterate through MaxSpanRequestKeys=1..n and TargetBytes=1..m
+				// and (where n and m are chosen to reveal the full result set
+				// in one page). At each(*) combination, paginate both the
+				// forward and reverse scan and make sure we get the right
+				// result.
+				//
+				// (*) we don't increase the limits when there's only one page,
+				// but short circuit to something more interesting instead.
+				msrq := int64(1)
+				for targetBytes := int64(1); ; targetBytes++ {
+					var numPages int
+					t.Run(fmt.Sprintf("targetBytes=%d,maxSpanRequestKeys=%d", targetBytes, msrq), func(t *testing.T) {
 
-							// Paginate.
-							operations := tc.operations
-							if reverse {
-								operations = make([]roachpb.Span, len(operations))
-								for i := range operations {
-									operations[i] = tc.operations[len(operations)-i-1]
-								}
+						// Paginate.
+						operations := tc.operations
+						if reverse {
+							operations = make([]roachpb.Span, len(operations))
+							for i := range operations {
+								operations[i] = tc.operations[len(operations)-i-1]
 							}
-							var keys []roachpb.Key
-							for {
-								numPages++
-
-								// Build the batch.
-								ba := &kvpb.BatchRequest{}
-								for _, span := range operations {
-									var req kvpb.Request
-									switch {
-									case span.EndKey == nil:
-										req = kvpb.NewGet(span.Key)
-									case reverse:
-										req = kvpb.NewReverseScan(span.Key, span.EndKey)
-									default:
-										req = kvpb.NewScan(span.Key, span.EndKey)
-									}
-									ba.Add(req)
-								}
-
-								ba.Header.TargetBytes = targetBytes
-								ba.Header.MaxSpanRequestKeys = msrq
-								ba.Header.ReturnOnRangeBoundary = returnOnRangeBoundary
-								br, pErr := tds.Send(ctx, ba)
-								require.Nil(t, pErr)
-								for i := range operations {
-									resp := br.Responses[i]
-									if getResp := resp.GetGet(); getResp != nil {
-										if getResp.Value != nil {
-											keys = append(keys, operations[i].Key)
-										}
-										continue
-									}
-									var rows []roachpb.KeyValue
-									if reverse {
-										rows = resp.GetReverseScan().Rows
-									} else {
-										rows = resp.GetScan().Rows
-									}
-									for _, kv := range rows {
-										keys = append(keys, kv.Key)
-									}
-								}
-								operations = nil
-								for _, resp := range br.Responses {
-									if resumeSpan := resp.GetInner().Header().ResumeSpan; resumeSpan != nil {
-										operations = append(operations, *resumeSpan)
-									}
-								}
-								if len(operations) == 0 {
-									// Done with this pagination.
-									break
-								}
-							}
-							if reverse {
-								for i, n := 0, len(keys); i < n-i-1; i++ {
-									keys[i], keys[n-i-1] = keys[n-i-1], keys[i]
-								}
-							}
-							require.Equal(t, tc.keys, keys)
-							if returnOnRangeBoundary {
-								// Definitely more pages than splits.
-								require.Greater(t, numPages, len(tc.splitKeys))
-							}
-							if targetBytes == 1 || msrq < int64(len(tc.keys)) {
-								// Definitely more than one page in this case.
-								require.Greater(t, numPages, 1)
-							}
-							if !returnOnRangeBoundary && targetBytes >= maxTargetBytes && msrq >= int64(len(tc.keys)) {
-								// Definitely one page if limits are larger than result set.
-								require.Equal(t, 1, numPages)
-							}
-						})
-						if targetBytes >= maxTargetBytes || numPages == 1 {
-							if msrq >= int64(len(tc.keys)) {
-								return
-							}
-							targetBytes = 0
-							msrq++
 						}
+						var keys []roachpb.Key
+						for {
+							numPages++
+
+							// Build the batch.
+							ba := &kvpb.BatchRequest{}
+							for _, span := range operations {
+								var req kvpb.Request
+								switch {
+								case span.EndKey == nil:
+									req = kvpb.NewGet(span.Key)
+								case reverse:
+									req = kvpb.NewReverseScan(span.Key, span.EndKey)
+								default:
+									req = kvpb.NewScan(span.Key, span.EndKey)
+								}
+								ba.Add(req)
+							}
+
+							ba.Header.TargetBytes = targetBytes
+							ba.Header.MaxSpanRequestKeys = msrq
+							br, pErr := tds.Send(ctx, ba)
+							require.Nil(t, pErr)
+							for i := range operations {
+								resp := br.Responses[i]
+								if getResp := resp.GetGet(); getResp != nil {
+									if getResp.Value != nil {
+										keys = append(keys, operations[i].Key)
+									}
+									continue
+								}
+								var rows []roachpb.KeyValue
+								if reverse {
+									rows = resp.GetReverseScan().Rows
+								} else {
+									rows = resp.GetScan().Rows
+								}
+								for _, kv := range rows {
+									keys = append(keys, kv.Key)
+								}
+							}
+							operations = nil
+							for _, resp := range br.Responses {
+								if resumeSpan := resp.GetInner().Header().ResumeSpan; resumeSpan != nil {
+									operations = append(operations, *resumeSpan)
+								}
+							}
+							if len(operations) == 0 {
+								// Done with this pagination.
+								break
+							}
+						}
+						if reverse {
+							for i, n := 0, len(keys); i < n-i-1; i++ {
+								keys[i], keys[n-i-1] = keys[n-i-1], keys[i]
+							}
+						}
+						require.Equal(t, tc.keys, keys)
+						if targetBytes == 1 || msrq < int64(len(tc.keys)) {
+							// Definitely more than one page in this case.
+							require.Greater(t, numPages, 1)
+						}
+						if targetBytes >= maxTargetBytes && msrq >= int64(len(tc.keys)) {
+							// Definitely one page if limits are larger than result set.
+							require.Equal(t, 1, numPages)
+						}
+					})
+					if targetBytes >= maxTargetBytes || numPages == 1 {
+						if msrq >= int64(len(tc.keys)) {
+							return
+						}
+						targetBytes = 0
+						msrq++
 					}
-				})
+				}
 			})
 		})
 	}
@@ -1654,7 +1447,7 @@ func TestBatchPutWithConcurrentSplit(t *testing.T) {
 	// Now, split further at the given keys, but use a new dist sender so
 	// we don't update the caches on the default dist sender-backed client.
 	gs := s.GossipI().(*gossip.Gossip)
-	ds := kvcoord.NewDistSender(kvcoord.DistSenderConfig{
+	ds := kvcoord.NewDistSender(context.Background(), kvcoord.DistSenderConfig{
 		AmbientCtx:         s.AmbientCtx(),
 		Clock:              s.Clock(),
 		NodeDescs:          gs,
@@ -2131,30 +1924,6 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 			// Cannot refresh, so must restart the transaction.
 			allIsoLevels: &expect{
 				expClientRestart: true,
-			},
-		},
-		{
-			name: "forwarded timestamp with get and initput",
-			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
-				_, err := db.Get(ctx, "a") // read key to set ts cache
-				return err
-			},
-			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				return txn.InitPut(ctx, "a", "put", false /* failOnTombstones */) // put to advance txn ts
-			},
-			perIsoLevel: map[isolation.Level]*expect{
-				// No retry, preemptive (no-op) refresh before commit.
-				isolation.Serializable: {
-					expClientRefreshSuccess:        true,
-					expClientAutoRetryAfterRefresh: false,
-				},
-				// No retry, preemptive (no-op) refresh before commit.
-				isolation.Snapshot: {
-					expClientRefreshSuccess:        true,
-					expClientAutoRetryAfterRefresh: false,
-				},
-				// No refresh, no retry. New read snapshot established before commit.
-				isolation.ReadCommitted: {},
 			},
 		},
 		{
@@ -2888,158 +2657,6 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				isolation.ReadCommitted: {
 					expServerRefresh: true,
 				},
-			},
-		},
-		{
-			name: "write too old with initput",
-			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
-				return db.Put(ctx, "iput", "put")
-			},
-			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				return txn.InitPut(ctx, "iput", "put", false)
-			},
-			allIsoLevels: &expect{
-				expServerRefresh: true,
-			},
-		},
-		{
-			name: "write too old with initput after prior read",
-			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
-				return db.Put(ctx, "iput", "put")
-			},
-			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				return txn.InitPut(ctx, "iput", "put", false)
-			},
-			priorReads: true,
-			perIsoLevel: map[isolation.Level]*expect{
-				// Client-side refresh of prior reads after write-write conflict.
-				isolation.Serializable: {
-					expClientRefreshSuccess:        true,
-					expClientAutoRetryAfterRefresh: true,
-				},
-				// Client-side refresh of prior reads after write-write conflict.
-				isolation.Snapshot: {
-					expClientRefreshSuccess:        true,
-					expClientAutoRetryAfterRefresh: true,
-				},
-				// Server-side refresh after write-write conflict. Prior reads performed
-				// in earlier batches (from earlier read snapshots) are not refreshed.
-				isolation.ReadCommitted: {
-					expServerRefresh: true,
-				},
-			},
-		},
-		{
-			name: "write too old with initput matching older and newer values",
-			beforeTxnStart: func(ctx context.Context, db *kv.DB) error {
-				return db.Put(ctx, "iput", "put")
-			},
-			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
-				return db.Put(ctx, "iput", "put")
-			},
-			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				return txn.InitPut(ctx, "iput", "put", false)
-			},
-			allIsoLevels: &expect{
-				expServerRefresh: true,
-			},
-		},
-		{
-			name: "write too old with initput matching older and newer values after prior read",
-			beforeTxnStart: func(ctx context.Context, db *kv.DB) error {
-				return db.Put(ctx, "iput", "put")
-			},
-			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
-				return db.Put(ctx, "iput", "put")
-			},
-			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				return txn.InitPut(ctx, "iput", "put", false)
-			},
-			priorReads: true,
-			perIsoLevel: map[isolation.Level]*expect{
-				// Client-side refresh of prior reads after write-write conflict.
-				isolation.Serializable: {
-					expClientRefreshSuccess:        true,
-					expClientAutoRetryAfterRefresh: true,
-				},
-				// Client-side refresh of prior reads after write-write conflict.
-				isolation.Snapshot: {
-					expClientRefreshSuccess:        true,
-					expClientAutoRetryAfterRefresh: true,
-				},
-				// Server-side refresh after write-write conflict. Prior reads performed
-				// in earlier batches (from earlier read snapshots) are not refreshed.
-				isolation.ReadCommitted: {
-					expServerRefresh: true,
-				},
-			},
-		},
-		{
-			name: "write too old with initput matching older value",
-			beforeTxnStart: func(ctx context.Context, db *kv.DB) error {
-				return db.Put(ctx, "iput", "put1")
-			},
-			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
-				return db.Put(ctx, "iput", "put2")
-			},
-			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				return txn.InitPut(ctx, "iput", "put1", false)
-			},
-			allIsoLevels: &expect{
-				expServerRefresh: true,               // non-matching value means we perform server-side refresh but then fail
-				expFailure:       "unexpected value", // the failure we get is a condition failed error
-			},
-		},
-		{
-			name: "write too old with initput matching newer value",
-			beforeTxnStart: func(ctx context.Context, db *kv.DB) error {
-				return db.Put(ctx, "iput", "put1")
-			},
-			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
-				return db.Put(ctx, "iput", "put2")
-			},
-			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				return txn.InitPut(ctx, "iput", "put2", false)
-			},
-			// The transaction performs a server-side refresh due to the write-write
-			// conflict and then succeeds during its InitPut.
-			allIsoLevels: &expect{
-				expServerRefresh: true,
-			},
-		},
-		{
-			name: "write too old with initput failing on tombstone before",
-			beforeTxnStart: func(ctx context.Context, db *kv.DB) error {
-				_, err := db.Del(ctx, "iput")
-				return err
-			},
-			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
-				return db.Put(ctx, "iput", "put2")
-			},
-			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				return txn.InitPut(ctx, "iput", "put2", true)
-			},
-			// The transaction performs a server-side refresh due to the write-write
-			// conflict and then succeeds during its InitPut.
-			allIsoLevels: &expect{
-				expServerRefresh: true,
-			},
-		},
-		{
-			name: "write too old with initput failing on tombstone after",
-			beforeTxnStart: func(ctx context.Context, db *kv.DB) error {
-				return db.Put(ctx, "iput", "put")
-			},
-			afterTxnStart: func(ctx context.Context, db *kv.DB) error {
-				_, err := db.Del(ctx, "iput")
-				return err
-			},
-			retryable: func(ctx context.Context, txn *kv.Txn) error {
-				return txn.InitPut(ctx, "iput", "put", true)
-			},
-			allIsoLevels: &expect{
-				expServerRefresh: true,               // non-matching value means we perform server-side refresh but then fail
-				expFailure:       "unexpected value", // condition failed error when failing on tombstones
 			},
 		},
 		{
@@ -4346,9 +3963,11 @@ func TestTxnCoordSenderRetriesAcrossEndTxn(t *testing.T) {
 			sideRejectedOnSecondAttempt: left,
 			// The first attempt of right side contains a parallel commit (i.e. an
 			// EndTxn), but fails. The 2nd attempt of the right side will no longer
-			// contain an EndTxn, as explained above. So we expect the txn record to
-			// not exist.
-			txnRecExpectation: kvclientutils.ExpectPusheeTxnRecordNotFound,
+			// contain an EndTxn, as explained above. So we expect no STAGING txn
+			// record / no transaction recovery. Note that a PENDING txn record may
+			// or may not exist depending on whether the heartbeat loop managed to
+			// fire before the CommitInBatch completed.
+			txnRecExpectation: kvclientutils.ExpectNoTxnRecovery,
 		},
 		{
 			// On the first attempt, the right side succeed in writing a STAGING txn
@@ -4485,13 +4104,13 @@ func TestRefreshNoFalsePositive(t *testing.T) {
 
 	txn := db.NewTxn(ctx, "test")
 	origTimestamp := txn.ReadTimestamp()
-	log.Infof(ctx, "test txn starting @ %s", origTimestamp)
+	log.Dev.Infof(ctx, "test txn starting @ %s", origTimestamp)
 	require.NoError(t, db.Put(ctx, "a", "test"))
 	// Attempt to overwrite b, which will result in a push.
 	require.NoError(t, txn.Put(ctx, "a", "test2"))
 	afterPush := txn.ReadTimestamp()
 	require.True(t, origTimestamp.Less(afterPush))
-	log.Infof(ctx, "txn pushed to %s", afterPush)
+	log.Dev.Infof(ctx, "txn pushed to %s", afterPush)
 
 	// Read a so that we have to refresh it when we're pushed again.
 	_, err := txn.Get(ctx, "a")
@@ -4501,10 +4120,10 @@ func TestRefreshNoFalsePositive(t *testing.T) {
 
 	// Attempt to overwrite b, which will result in another push. The point of the
 	// test is to check that this push succeeds in refreshing "a".
-	log.Infof(ctx, "test txn writing b")
+	log.Dev.Infof(ctx, "test txn writing b")
 	require.NoError(t, txn.Put(ctx, "b", "test2"))
 	require.True(t, afterPush.Less(txn.ReadTimestamp()))
-	log.Infof(ctx, "txn pushed to %s", txn.ReadTimestamp())
+	log.Dev.Infof(ctx, "txn pushed to %s", txn.ReadTimestamp())
 
 	require.NoError(t, txn.Commit(ctx))
 }
@@ -4540,76 +4159,6 @@ func TestExplicitRangeInfo(t *testing.T) {
 	require.Equal(t, 4, len(b.RawResponse().Responses))
 	require.Equal(t, 0, len(b.RawResponse().BatchResponse_Header.RangeInfos))
 
-}
-
-func BenchmarkReturnOnRangeBoundary(b *testing.B) {
-	const (
-		Ranges                = 10   // number of ranges to create
-		KeysPerRange          = 9    // number of keys to write per range
-		MaxSpanRequestKeys    = 10   // max number of keys in each scan response
-		ReturnOnRangeBoundary = true // if true, enable ReturnOnRangeBoundary
-		Latency               = 0    // RPC request latency
-	)
-
-	b.StopTimer()
-
-	require.Less(b, Ranges, 26) // a-z
-
-	defer leaktest.AfterTest(b)()
-	defer log.Scope(b).Close(b)
-
-	type scanKey struct{}
-	ctx := context.Background()
-	scanCtx := context.WithValue(ctx, scanKey{}, "scan")
-
-	reqFilter := func(ctx context.Context, _ *kvpb.BatchRequest) *kvpb.Error {
-		if ctx.Value(scanKey{}) != nil && Latency > 0 {
-			time.Sleep(Latency)
-		}
-		return nil
-	}
-
-	s, _, db := serverutils.StartServer(b, base.TestServerArgs{
-		Knobs: base.TestingKnobs{
-			Store: &kvserver.StoreTestingKnobs{
-				TestingRequestFilter: reqFilter,
-				DisableSplitQueue:    true,
-				DisableMergeQueue:    true,
-			},
-		},
-	})
-	defer s.Stopper().Stop(ctx)
-
-	for r := 0; r < Ranges; r++ {
-		rangeKey := string(rune('a' + r))
-		require.NoError(b, db.AdminSplit(
-			ctx,
-			rangeKey,
-			hlc.MaxTimestamp, /* expirationTime */
-		))
-
-		for k := 0; k < KeysPerRange; k++ {
-			key := fmt.Sprintf("%s%d", rangeKey, k)
-			require.NoError(b, db.Put(ctx, key, "value"))
-		}
-	}
-
-	b.StartTimer()
-
-	for n := 0; n < b.N; n++ {
-		txn := db.NewTxn(ctx, "scanner")
-		span := &roachpb.Span{Key: roachpb.Key("a"), EndKey: roachpb.Key("z")}
-		for span != nil {
-			ba := &kv.Batch{}
-			ba.Header.MaxSpanRequestKeys = MaxSpanRequestKeys
-			ba.Header.ReturnOnRangeBoundary = ReturnOnRangeBoundary
-			ba.Scan(span.Key, span.EndKey)
-
-			require.NoError(b, txn.Run(scanCtx, ba))
-			span = ba.Results[0].ResumeSpan
-		}
-		require.NoError(b, txn.Commit(ctx))
-	}
 }
 
 func TestRefreshFailureIncludesConflictingTxn(t *testing.T) {
@@ -4676,137 +4225,86 @@ func TestRefreshFailureIncludesConflictingTxn(t *testing.T) {
 	})
 }
 
-// TestPartialPartition verifies various complex success/failure scenarios.
-// The leaseholder is always on n2(idx 1) and the client is on n1(idx 0).
-// Additionally validate that a rangefeed sees the update.
-func TestPartialPartition(t *testing.T) {
+// TestRefreshFailureIncludesConflictKey tests that when a transaction refresh
+// fails, the resulting TransactionRetryWithProtoRefreshError includes the
+// ConflictKey field set to the actual key where the conflict occurred. This is
+// distinct from ConflictingTxn.Key, which is the anchor key of the conflicting
+// transaction (used for transaction record placement).
+func TestRefreshFailureIncludesConflictKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderRace(t, "times out with 5 nodes")
+
 	ctx := context.Background()
+	st := cluster.MakeClusterSettings()
+	// Disable randomized anchor key selection so that the test can rely on
+	// keyA (the first key written by txn2) being the anchor key.
+	kvcoord.RandomizedTxnAnchorKeyEnabled.Override(ctx, &st.SV, false)
 
-	testCases := []struct {
-		useProxy   bool
-		numServers int
-		partition  [][2]roachpb.NodeID
-	}{
-		// --- Success scenarios ---
-		{true, 5, [][2]roachpb.NodeID{{1, 2}}},
-		{true, 3, [][2]roachpb.NodeID{{1, 2}}},
-		// --- Failure scenarios ---
-		{false, 5, [][2]roachpb.NodeID{{1, 2}}},
-		{false, 3, [][2]roachpb.NodeID{{1, 2}}},
-	}
-	for _, test := range testCases {
-		t.Run(fmt.Sprintf("%t-%d", test.useProxy, test.numServers), func(t *testing.T) {
-			testutils.RunValues(t, "lease-type", roachpb.LeaseTypes(), func(t *testing.T, leaseType roachpb.LeaseType) {
-				if leaseType == roachpb.LeaseEpoch {
-					// With epoch leases this test doesn't work reliably. It passes
-					// in cases where it should fail and fails in cases where it
-					// should pass.
-					// TODO(baptist): Attempt to pin the liveness leaseholder to
-					// node 3 to make epoch leases reliable.
-					skip.IgnoreLint(t, "flaky with epoch leases")
-				}
+	s, _, db := serverutils.StartServer(t, base.TestServerArgs{
+		Settings: st,
+	})
+	defer s.Stopper().Stop(ctx)
 
-				st := cluster.MakeTestingClusterSettings()
-				kvcoord.ProxyBatchRequest.Override(ctx, &st.SV, test.useProxy)
-				kvserver.OverrideDefaultLeaseType(ctx, &st.SV, leaseType)
-				kvserver.RangefeedEnabled.Override(ctx, &st.SV, true)
-				kvserver.RangeFeedRefreshInterval.Override(ctx, &st.SV, 10*time.Millisecond)
-				closedts.TargetDuration.Override(ctx, &st.SV, 10*time.Millisecond)
-				closedts.SideTransportCloseInterval.Override(ctx, &st.SV, 10*time.Millisecond)
-				// Configure the number of replicas and voters to have a replica on every node.
-				zoneConfig := zonepb.DefaultZoneConfig()
-				numNodes := int32(test.numServers)
-				zoneConfig.NumReplicas = &numNodes
-				zoneConfig.NumVoters = &numNodes
+	// We use three keys:
+	// - keyA: will be the anchor key for txn2 (first write determines anchor)
+	// - keyB: will be read by txn1, then written by txn2 (conflict location)
+	// - keyC: will be written by txn1 to force timestamp push
+	keyA := "a"
+	keyB := "b"
+	keyC := "c"
 
-				var p rpc.Partitioner
-				tc := testcluster.StartTestCluster(t, test.numServers, base.TestClusterArgs{
-					ServerArgsPerNode: func() map[int]base.TestServerArgs {
-						perNode := make(map[int]base.TestServerArgs)
-						for i := 0; i < test.numServers; i++ {
-							ctk := rpc.ContextTestingKnobs{}
-							p.RegisterTestingKnobs(roachpb.NodeID(i+1), test.partition, &ctk)
-							perNode[i] = base.TestServerArgs{
-								Settings:         st,
-								DisableSQLServer: true,
-								Knobs: base.TestingKnobs{
-									Server: &server.TestingKnobs{
-										DefaultZoneConfigOverride: &zoneConfig,
-										ContextTestingKnobs:       ctk,
-									},
-								},
-							}
-						}
-						return perNode
-					}(),
-				})
+	// Initialize keyB so txn1 can read it.
+	err := db.Put(ctx, keyB, "initial")
+	require.NoError(t, err)
 
-				// Set up the mapping after the nodes have started and we have their
-				// addresses.
-				for i := 0; i < test.numServers; i++ {
-					g := tc.Servers[i].StorageLayer().GossipI().(*gossip.Gossip)
-					addr := g.GetNodeAddr().String()
-					nodeID := g.NodeID.Get()
-					p.RegisterNodeAddr(addr, nodeID)
-				}
+	txn1 := db.NewTxn(ctx, "original txn")
+	txn2 := db.NewTxn(ctx, "contending txn")
 
-				scratchKey := tc.ScratchRange(t)
-				// We want all ranges to have full replication to be available through partitions.
-				require.NoError(t, tc.WaitForFullReplication())
+	// txn1 reads keyB. This will need to be refreshed if txn1's timestamp is
+	// pushed.
+	_, err = txn1.Get(ctx, keyB)
+	require.NoError(t, err)
 
-				desc := tc.LookupRangeOrFatal(t, scratchKey)
-				tc.TransferRangeLeaseOrFatal(t, desc, tc.Target(1))
+	// txn2 writes to keyA first. This establishes keyA as txn2's anchor key
+	// (TxnMeta.Key), since it's the first key written.
+	err = txn2.Put(ctx, keyA, "anchor")
+	require.NoError(t, err)
 
-				// TODO(baptist): This test should work without this block.
-				// After the lease is transferred, the lease might still be on
-				// the n1. Eventually n2 will fail to become leader, and the
-				// lease will expire and n1 will reacquire the lease. DistSender
-				// doesn't correctly handle this case today, but will in the
-				// future. Today, if we partition in a split leader/leaseholder
-				// split, a request will sit waiting for the proposal buffer on
-				// n1 and and never return to DistSender without success or
-				// failure. Without a timeout or other circuit breaker in
-				// DistSender we will never succeed once we partition. Remove
-				// this block once #118943 is fixed.
-				testutils.SucceedsSoon(t, func() error {
-					sl := tc.StorageLayer(1)
-					store, err := sl.GetStores().(*kvserver.Stores).GetStore(sl.GetFirstStoreID())
-					require.NoError(t, err)
-					status := store.LookupReplica(roachpb.RKey(scratchKey)).RaftStatus()
-					if status == nil || status.RaftState != raftpb.StateLeader {
-						return errors.Newf("Leader leaseholder split %v", status)
-					}
-					return nil
-				})
+	// txn2 then writes to keyB. This creates a conflict with txn1's read.
+	err = txn2.Put(ctx, keyB, "conflict")
+	require.NoError(t, err)
 
-				p.EnablePartition(true)
+	// Bump the timestamp cache on keyC so that the next put from txn1
+	// causes its write timestamp to be pushed, thereby forcing a refresh.
+	_, err = txn2.Get(ctx, keyC)
+	require.NoError(t, err)
 
-				txn := tc.ApplicationLayer(0).DB().NewTxn(ctx, "test")
-				// DistSender will retry forever. For the failure cases we want
-				// to fail faster.
-				cancelCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-				defer cancel()
-				err := txn.Put(cancelCtx, scratchKey, "abc")
-				if test.useProxy {
-					require.NoError(t, err)
-					require.NoError(t, txn.Commit(cancelCtx))
-				} else {
-					require.Error(t, err)
-					require.NoError(t, txn.Rollback(cancelCtx))
-				}
+	// txn1 writes to keyC, which will push its timestamp.
+	err = txn1.Put(ctx, keyC, "push")
+	require.NoError(t, err)
 
-				// Stop all the clients first to avoid getting stuck on failing tests.
-				for i := 0; i < test.numServers; i++ {
-					tc.ApplicationLayer(i).AppStopper().Stop(ctx)
-				}
+	// txn1 tries to commit. This triggers a refresh of keyB, which fails
+	// because txn2 wrote to keyB after txn1 read it.
+	err = txn1.Commit(ctx)
+	require.Error(t, err)
 
-				tc.Stopper().Stop(ctx)
-			})
-		})
-	}
+	tErr := (*kvpb.TransactionRetryWithProtoRefreshError)(nil)
+	require.ErrorAs(t, err, &tErr)
+
+	// Verify that ConflictingTxn is set and its Key (anchor key) is keyA.
+	require.NotNil(t, tErr.ConflictingTxn)
+	require.Equal(t, txn2.ID(), tErr.ConflictingTxn.ID)
+	require.Equal(t, roachpb.Key(keyA), roachpb.Key(tErr.ConflictingTxn.Key),
+		"ConflictingTxn.Key should be the anchor key (first key written)")
+
+	// Verify that ConflictKey is set to keyB, where the actual conflict occurred.
+	// This is the key that was read by txn1 and written by txn2.
+	require.Equal(t, roachpb.Key(keyB), tErr.ConflictKey,
+		"ConflictKey should be the actual conflict key, not the anchor key")
+
+	// Verify that ConflictKey differs from the anchor key.
+	require.NotEqual(t, tErr.ConflictingTxn.Key, tErr.ConflictKey,
+		"ConflictKey should differ from the transaction's anchor key")
 }
 
 // TestProxyTracing asserts when enabling a partial partition between two
@@ -4817,11 +4315,8 @@ func TestProxyTracing(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	testutils.RunValues(t, "lease-type", roachpb.LeaseTypes(), func(t *testing.T, leaseType roachpb.LeaseType) {
-		if leaseType == roachpb.LeaseExpiration {
-			skip.UnderRace(t, "too slow")
-			skip.UnderDeadlock(t, "too slow")
-		} else if leaseType == roachpb.LeaseEpoch {
+	testutils.RunValues(t, "lease-type", roachpb.TestingAllLeaseTypes(), func(t *testing.T, leaseType roachpb.LeaseType) {
+		if leaseType == roachpb.LeaseEpoch {
 			// With epoch leases this test doesn't work reliably. It passes
 			// in cases where it should fail and fails in cases where it
 			// should pass.
@@ -4830,23 +4325,31 @@ func TestProxyTracing(t *testing.T) {
 			skip.IgnoreLint(t, "flaky with epoch leases")
 		}
 
+		skip.UnderRace(t, "too slow")
+		skip.UnderDeadlock(t, "too slow")
+
 		const numServers = 3
 		const numRanges = 3
 		st := cluster.MakeTestingClusterSettings()
 		kvserver.OverrideDefaultLeaseType(ctx, &st.SV, leaseType)
 		kvserver.RangefeedEnabled.Override(ctx, &st.SV, true)
 		kvserver.RangeFeedRefreshInterval.Override(ctx, &st.SV, 10*time.Millisecond)
+		// Disable follower reads to ensure that the request is proxied, and not
+		// answered locally due to follower reads.
+		closedts.FollowerReadsEnabled.Override(ctx, &st.SV, false)
 		closedts.TargetDuration.Override(ctx, &st.SV, 10*time.Millisecond)
 		closedts.SideTransportCloseInterval.Override(ctx, &st.SV, 10*time.Millisecond)
 
 		var p rpc.Partitioner
+		// Partition between n1 and n3.
+		require.NoError(t, p.AddPartition(roachpb.NodeID(1), roachpb.NodeID(3)))
+		require.NoError(t, p.AddPartition(roachpb.NodeID(3), roachpb.NodeID(1)))
 		tc := testcluster.StartTestCluster(t, numServers, base.TestClusterArgs{
 			ServerArgsPerNode: func() map[int]base.TestServerArgs {
 				perNode := make(map[int]base.TestServerArgs)
 				for i := 0; i < numServers; i++ {
 					ctk := rpc.ContextTestingKnobs{}
-					// Partition between n1 and n3.
-					p.RegisterTestingKnobs(roachpb.NodeID(i+1), [][2]roachpb.NodeID{{1, 3}}, &ctk)
+					p.RegisterTestingKnobs(roachpb.NodeID(i+1), &ctk)
 					perNode[i] = base.TestServerArgs{
 						Settings: st,
 						Knobs: base.TestingKnobs{
@@ -4897,8 +4400,10 @@ func TestProxyTracing(t *testing.T) {
 
 		checkLeaseCount := func(node, expectedLeaseCount int) error {
 			if count := leaseCount(node); count != expectedLeaseCount {
-				require.NoError(t, tc.GetFirstStoreFromServer(t, 0).
-					ForceLeaseQueueProcess())
+				for i := 0; i < tc.NumServers(); i++ {
+					require.NoError(t, tc.GetFirstStoreFromServer(t, i).
+						ForceLeaseQueueProcess())
+				}
 				return errors.Errorf("expected %d leases on node %d, found %d",
 					expectedLeaseCount, node, count)
 			}
@@ -4926,7 +4431,7 @@ func TestProxyTracing(t *testing.T) {
 			return checkLeaseCount(3, numRanges)
 		})
 
-		p.EnablePartition(true)
+		p.EnablePartitions(true)
 
 		_, err = conn.Exec("SET TRACING = on; SELECT FROM t where i = 987654321; SET TRACING = off")
 		require.NoError(t, err)
@@ -4950,4 +4455,654 @@ func TestProxyTracing(t *testing.T) {
 		}
 		t.Logf("found trace event; msg=%s, tag=%s, loc=%s", msg, tag, loc)
 	})
+}
+
+// TestUnexpectedCommitOnTxnRecovery is a regression test for #145458. It
+// verifies that once QueryIntent has reported a replicated lock as missing on
+// some key, that lock cannot subsequently appear via an unrelated code path
+// (specifically, a lease-transfer-driven durability upgrade of a covering
+// unreplicated lock) and cause a later transaction recovery to incorrectly
+// conclude that the transaction committed.
+//
+// The scenario, in detail:
+//
+// Txn1:
+//   - Writes to keyA (in-flight write).
+//   - Acquires an unreplicated Exclusive lock on keyB (BestEffort durability).
+//   - Acquires a replicated Shared lock on keyB (GuaranteedDurability). This
+//     lock is pipelined and a testing knob forces its raft application to
+//     fail, so the replicated Shared lock is never written.
+//   - Attempts a parallel commit. The pre-commit QueryIntent for the Shared
+//     lock on keyB finds nothing and returns RETRY_ASYNC_WRITE_FAILURE.
+//
+// The lease for keyB is then transferred to n3. With unreplicated lock
+// reliability for lease transfers enabled, this transfer normally exports
+// unreplicated locks held by ongoing transactions and writes them as
+// replicated locks on the new leaseholder. Without the fix from #145458, the
+// unreplicated Exclusive lock on keyB would be exported and a replicated
+// Exclusive lock would appear on keyB after the QueryIntent above had already
+// reported the replicated Shared lock missing.
+//
+// Txn2:
+//   - Reads keyA, which kicks off transaction recovery for Txn1.
+//   - Recovery's QueryIntent for the Shared lock on keyB must NOT find any
+//     lock, so that recovery aborts Txn1 (consistent with the earlier
+//     RETRY_ASYNC_WRITE_FAILURE observed by Txn1).
+//
+// Without the fix, recovery would find the replicated Exclusive lock left
+// behind by the lease transfer (Exclusive >= Shared satisfies the QueryIntent
+// check) and conclude that Txn1 committed, contradicting Txn1's own view that
+// the commit failed. The fix in #145458 marks any lock reported as missing by
+// QueryIntent as ineligible for export, so the lease transfer's durability
+// upgrade skips keyB.
+//
+// Txn1:
+//   - Performs a stateful retry. The Put(keyA) at epoch=1 should observe
+//     ABORT_REASON_ABORT_SPAN, confirming that recovery aborted us.
+func TestUnexpectedCommitOnTxnRecovery(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	keyA := roachpb.Key("a")
+	keyB := roachpb.Key("b")
+
+	var (
+		targetTxnIDString atomic.Value
+		cmdID             atomic.Value
+	)
+	cmdID.Store(kvserverbase.CmdIDKey(""))
+	targetTxnIDString.Store("")
+	ctx := context.Background()
+	st := cluster.MakeTestingClusterSettings()
+
+	// This test relies on unreplicated locks to be replicated on lease transfers.
+	concurrency.UnreplicatedLockReliabilityLeaseTransfer.Override(ctx, &st.SV, true)
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Settings: st,
+			Knobs: base.TestingKnobs{
+				Store: &kvserver.StoreTestingKnobs{
+					// Disable autonomous lease movement so that the only lease
+					// transfer is the one performed explicitly by the test
+					// (via transferLease). Otherwise, an autonomous lease
+					// transfer can run between the failed replicated Shared
+					// lock acquisition and the parallel commit's QueryIntent,
+					// upgrading the unreplicated Exclusive lock on keyB to a
+					// replicated Exclusive lock before QueryIntent runs.
+					// QueryIntent would then find that stronger lock and the
+					// parallel commit would succeed validly (no anomaly, since
+					// any subsequent recovery would observe the same
+					// replicated lock and reach the same conclusion), but that
+					// is not the scenario this test means to exercise. See
+					// #170323.
+					DisableLeaseQueue: true,
+					TestingProposalFilter: func(fArgs kvserverbase.ProposalFilterArgs) *kvpb.Error {
+						if fArgs.Req.Header.Txn == nil ||
+							fArgs.Req.Header.Txn.ID.String() != targetTxnIDString.Load().(string) {
+							return nil // not our txn
+						}
+						if !fArgs.Req.IsSingleRequest() {
+							// Not the request we care about.
+							return nil
+						}
+						getReq, ok := fArgs.Req.Requests[0].GetInner().(*kvpb.GetRequest)
+						// Only fail replication on the first retry.
+						epoch := fArgs.Req.Header.Txn.Epoch
+						if ok && getReq.KeyLockingDurability == lock.Replicated && epoch == 0 {
+							t.Logf("will fail application for txn %s@epoch=%d; req: %+v; raft cmdID: %s",
+								fArgs.Req.Header.Txn.ID.String(), epoch, getReq, fArgs.CmdID)
+							cmdID.Store(fArgs.CmdID)
+						}
+						return nil
+					},
+					TestingApplyCalledTwiceFilter: func(fArgs kvserverbase.ApplyFilterArgs) (int, *kvpb.Error) {
+						if cID := cmdID.Load().(kvserverbase.CmdIDKey); fArgs.CmdID == cID {
+							t.Logf("failing application for raft cmdID: %s", cID)
+							return 0, kvpb.NewErrorf("test injected error")
+						}
+						return 0, nil
+					},
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	transferLease := func(idx int) {
+		desc := tc.LookupRangeOrFatal(t, keyB)
+		tc.TransferRangeLeaseOrFatal(t, desc, tc.Target(idx))
+	}
+	// Make a db with transaction heartbeating disabled. This ensures that we
+	// don't mark Txn1 as PENDING after its first failed parallel commit attempt,
+	// which would otherwise prevent Txn2 from recovering Txn1.
+	s := tc.Server(0)
+	ambient := s.AmbientCtx()
+	tsf := kvcoord.NewTxnCoordSenderFactory(
+		kvcoord.TxnCoordSenderFactoryConfig{
+			AmbientCtx:        ambient,
+			HeartbeatInterval: -1, // disabled
+			Settings:          s.ClusterSettings(),
+			Clock:             s.Clock(),
+			Stopper:           s.Stopper(),
+		},
+		s.DistSenderI().(*kvcoord.DistSender),
+	)
+	db := kv.NewDB(ambient, tsf, s.Clock(), s.Stopper())
+
+	startTxn2Ch := make(chan struct{})
+	var startTxn2Once sync.Once
+	startTxn2 := func() {
+		startTxn2Once.Do(func() { close(startTxn2Ch) })
+	}
+	blockCh := make(chan struct{})
+
+	// Write to keyB so that we can later get a lock on it.
+	valueBytes := []byte("valueB")
+	txn := db.NewTxn(ctx, "txn")
+	err := txn.Put(ctx, keyB, valueBytes)
+	require.NoError(t, err)
+	require.NoError(t, txn.Commit(ctx))
+
+	ctx, cancel := context.WithTimeout(context.Background(), testutils.SucceedsSoonDuration())
+	defer cancel()
+
+	tracer := s.TracerI().(*tracing.Tracer)
+	txn1Ctx, collectAndFinishTxn1 := tracing.ContextWithRecordingSpan(ctx, tracer, "txn1")
+	defer func() {
+		rec := collectAndFinishTxn1()
+		if t.Failed() {
+			t.Logf("TXN 1 TRACE: %s", rec)
+		}
+	}()
+
+	g := ctxgroup.WithContext(txn1Ctx)
+	g.GoCtx(func(ctx context.Context) error {
+		return db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+			// If we exit early, unblock main thread to make sure we observe the error.
+			defer startTxn2()
+			t.Logf("txn 1: id=%s epo=%d", txn.ID(), txn.Epoch())
+			if txnID := targetTxnIDString.Load(); txnID == "" {
+				// Store the txnID for the testing knobs.
+				t.Logf("txn 1: ID set for testing knob")
+				targetTxnIDString.Store(txn.ID().String())
+			} else if txnID != txn.ID() {
+				// Since txn recovery aborted us, we get retried again but with an
+				// entirely new txnID. This time we just return. Writing nothing.
+				return nil
+			}
+
+			expectErrorMatch := func(err error, s string) error {
+				if err == nil {
+					return errors.New("unexpected nil error")
+				} else if !strings.Contains(err.Error(), s) {
+					return errors.Wrapf(err, "unexpected error does not contain %q", s)
+				}
+				return nil
+			}
+			expectResultMatch := func(res kv.KeyValue, value []byte) error {
+				if !bytes.Equal(res.ValueBytes(), valueBytes) {
+					return errors.Errorf("unexpected result: %v != %v", res.ValueBytes(), valueBytes)
+				}
+				return nil
+			}
+
+			switch txn.Epoch() {
+			case 0:
+				err := txn.Put(ctx, keyA, "value")
+				require.NoError(t, err)
+				res, err := txn.GetForUpdate(ctx, keyB, kvpb.BestEffort)
+				if err != nil {
+					return err
+				}
+				if err := expectResultMatch(res, valueBytes); err != nil {
+					return err
+				}
+
+				res, err = txn.GetForShare(ctx, keyB, kvpb.GuaranteedDurability)
+				if err != nil {
+					return err
+
+				}
+				if err := expectResultMatch(res, valueBytes); err != nil {
+					return err
+				}
+
+				err = txn.Commit(ctx)
+				if matchErr := expectErrorMatch(err, "RETRY_ASYNC_WRITE_FAILURE"); matchErr != nil {
+					return matchErr
+				}
+				// Transfer the lease to n3.
+				transferLease(2)
+				t.Logf("txn 1: allowing txn 2 to start")
+				startTxn2()
+				// Block until Txn2 recover (and aborts) us.
+				select {
+				case <-blockCh:
+				case <-ctx.Done():
+					return errors.Wrap(ctx.Err(), "txn1 waiting for unblock from txn2")
+				}
+
+				t.Logf("txn 1: resuming execution")
+				return err
+			case 1:
+				// When retrying the write failure we should discover that txn recovery
+				// has aborted this transaction.
+				err := txn.Put(ctx, keyA, "value")
+				if matchErr := expectErrorMatch(err, "ABORT_REASON_ABORT_SPAN"); matchErr != nil {
+					return matchErr
+				}
+				return err
+			default:
+				return errors.Errorf("unexpected epoch: %d", txn.Epoch())
+			}
+		})
+	})
+
+	// Txn2 just runs on the main goroutine.
+	select {
+	case <-startTxn2Ch:
+	case <-ctx.Done():
+		t.Fatal(errors.Wrap(ctx.Err(), "txn2 waiting for start signal from txn1"))
+	}
+
+	txn2Ctx, collectAndFinishTxn2 := tracing.ContextWithRecordingSpan(context.Background(), tracer, "txn1")
+	defer func() {
+		rec := collectAndFinishTxn2()
+		if t.Failed() {
+			t.Logf("TXN 2 TRACE: %s", rec)
+		}
+	}()
+	txn2 := db.NewTxn(txn2Ctx, "txn2")
+	t.Logf("txn 2: id=%s, epo=%d", txn2.ID(), txn2.Epoch())
+	res, err := txn2.Get(txn2Ctx, keyA)
+	require.NoError(t, err)
+	// NB: Nothing should exist on keyA, because txn1 didn't commit at epoch 1
+	// (or any epoch, for that matter).
+	require.False(t, res.Exists())
+	close(blockCh)
+	// Txn1 should now complete. We return a nil error after observing an abort.
+	require.NoError(t, g.Wait())
+}
+
+// TestUnprocessedWritesHaveResumeSpanSet tests that writes that weren't
+// processed because proceeding requests exhausted a TargetBytes or
+// MaxSpanRequestKeys limit have an appropriate ResumeSpan set.
+func TestUnprocessedWritesHaveResumeSpanSet(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	s, db := startNoSplitMergeServer(t)
+	defer s.Stopper().Stop(ctx)
+
+	var (
+		existingKey = "a"
+		splitPoint  = "b"
+		putKey      = "c"
+	)
+
+	// Set up a split so that our read and write below are in different ranges.
+	_, _, err := s.SplitRange(roachpb.Key(splitPoint))
+	require.NoError(t, err)
+	require.NoError(t, db.Put(ctx, existingKey, "existing-value"))
+
+	err = db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		b := txn.NewBatch()
+		b.Header.MaxSpanRequestKeys = 1
+		// We use a ScanForUpdate here rather than Scan to ensure that the
+		// quota-consuming request is also a write (see #153397)
+		b.ScanForUpdate(existingKey, splitPoint, kvpb.GuaranteedDurability)
+		b.Del(putKey)
+		if err := txn.Run(ctx, b); err != nil {
+			return err
+		}
+		require.Len(t, b.Results, 2)
+		putResult := b.Results[1]
+		require.NotNil(t, putResult.ResumeSpan, "Put response should have a non-nil ResumeSpan")
+		return nil
+	})
+	require.NoError(t, err)
+}
+
+// TestMaxSpanRequestKeysWithMixedReadWriteBatches tests whether
+// MaxSpanRequestKeys is respected for certain read-write batches. This test
+// currently asserts that it _isn't_ respected, demonstrating a bug discovered
+// when writing TestUnprocessedWritesHaveResumeSpanSet and filed as #153397.
+func TestMaxSpanRequestKeysWithMixedReadWriteBatches(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	s, db := startNoSplitMergeServer(t)
+	defer s.Stopper().Stop(ctx)
+
+	var (
+		startKey = "a"
+		endKey   = "b"
+	)
+
+	require.NoError(t, db.Put(ctx, startKey, "existing-value"))
+
+	err := db.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
+		b := txn.NewBatch()
+		b.Header.MaxSpanRequestKeys = 1
+		b.Scan(startKey, endKey)
+		b.ScanForUpdate(startKey, endKey, kvpb.GuaranteedDurability)
+		if err := txn.Run(ctx, b); err != nil {
+			return err
+		}
+		require.Len(t, b.Results, 2)
+		require.Nil(t, b.Results[0].ResumeSpan, "first scan should be fully processed")
+		// TODO(#153397): The second scan here should not have been fully processed.
+		require.Nil(t, b.Results[1].ResumeSpan, "second scan should not be fully processed")
+		return nil
+	})
+	require.NoError(t, err)
+}
+
+// TestRollbackAfterRefreshAndFailedCommit is a regression test for #156698.
+//
+// This test forces the self-recovery of a transaction after a failed parallel
+// commit. It doe this via the following.
+//
+// Setup:
+//
+//	Create a split at key=6 to force batch splitting.
+//	Write to key=8 to be able to observe if the subsequent delete was effective.
+//
+// Txn 1:
+//
+//	Read key=1 to set timestamp and prevent server side refresh.
+//
+// Txn 2:
+//
+//	Read key=8 to bump timestamp cache on key=8.
+//
+// Txn1:
+//
+//	Batch{
+//	  Del key=1
+//	  Del key=8
+//	  EndTxn
+//	}
+//
+// This batch fails its parallel commit because Del(key=8) has its timestamp
+// pushed so its write doesn't satisfy the STAGING record.
+//
+// After a successful refresh, our testing filters have arranged for the
+// second EndTxn to fail. This then results in a Rollback().
+//
+// In the presence of the bug, the Rollback() would also fail. Without the bug,
+// it succeeds. In either case, Txn1 fails so we observe the rollback failure
+// via the trace.
+func TestRollbackAfterRefreshAndFailedCommit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var (
+		targetTxnIDString atomic.Value
+		firstEndTxnSeen   atomic.Bool
+		cmdID             atomic.Value
+	)
+	cmdID.Store(kvserverbase.CmdIDKey(""))
+	targetTxnIDString.Store("")
+	ctx := context.Background()
+	st := cluster.MakeClusterSettings()
+	kvcoord.RandomizedTxnAnchorKeyEnabled.Override(ctx, &st.SV, false)
+
+	s, _, db := serverutils.StartServer(t, base.TestServerArgs{
+		Settings: st,
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				TestingProposalFilter: func(fArgs kvserverbase.ProposalFilterArgs) *kvpb.Error {
+					if fArgs.Req.Header.Txn == nil ||
+						fArgs.Req.Header.Txn.ID.String() != targetTxnIDString.Load().(string) {
+						return nil // not our txn
+					}
+					if cmdID.Load().(kvserverbase.CmdIDKey) != "" {
+						// We already have a command to fail.
+						return nil
+					}
+
+					t.Logf("proposal from our txn: %s", fArgs.Req)
+					endTxnReq := fArgs.Req.Requests[len(fArgs.Req.Requests)-1].GetEndTxn()
+					if endTxnReq != nil {
+						if !firstEndTxnSeen.Load() {
+							firstEndTxnSeen.Store(true)
+						} else {
+							epoch := fArgs.Req.Header.Txn.Epoch
+							t.Logf("will fail application for txn %s@epoch=%d; req: %+v; raft cmdID: %s",
+								fArgs.Req.Header.Txn.ID.String(), epoch, endTxnReq, fArgs.CmdID)
+							cmdID.Store(fArgs.CmdID)
+						}
+					}
+					return nil
+				},
+				TestingApplyCalledTwiceFilter: func(fArgs kvserverbase.ApplyFilterArgs) (int, *kvpb.Error) {
+					if cID := cmdID.Load().(kvserverbase.CmdIDKey); fArgs.CmdID == cID {
+						t.Logf("failing application for raft cmdID: %s", cID)
+						return 0, kvpb.NewErrorf("test injected error")
+					}
+					return 0, nil
+				},
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	scratchStart, err := s.ScratchRange()
+	require.NoError(t, err)
+
+	scratchKey := func(idx int) roachpb.Key {
+		key := scratchStart.Clone()
+		key = append(key, []byte(fmt.Sprintf("key-%03d", idx))...)
+		return key
+	}
+
+	_, _, err = s.SplitRange(scratchKey(6))
+	require.NoError(t, err)
+	require.NoError(t, db.Put(ctx, scratchKey(8), "hello"))
+
+	tracer := s.TracerI().(*tracing.Tracer)
+	txn1Ctx, collectAndFinish := tracing.ContextWithRecordingSpan(context.Background(), tracer, "txn1")
+
+	txn1Err := db.Txn(txn1Ctx, func(txn1Ctx context.Context, txn1 *kv.Txn) error {
+		txn1.SetDebugName("txn1")
+		targetTxnIDString.Store(txn1.ID().String())
+		_ = txn1.ConfigureStepping(txn1Ctx, kv.SteppingEnabled)
+		if _, err = txn1.Get(txn1Ctx, scratchKey(1)); err != nil {
+			return err
+		}
+
+		// Txn2 now executes, bumping the timestamp on key8.
+		if txn1.Epoch() == 0 {
+			txn2Ctx := context.Background()
+			txn2 := db.NewTxn(txn2Ctx, "txn2")
+			require.NoError(t, err)
+			_, err = txn2.Get(txn2Ctx, scratchKey(8))
+			require.NoError(t, err)
+		}
+
+		b := txn1.NewBatch()
+		b.Del(scratchKey(1))
+		b.Del(scratchKey(8)) // Won't satisfy implicit commit.
+		return txn1.CommitInBatch(txn1Ctx, b)
+	})
+
+	require.Error(t, txn1Err)
+	val8, err := db.Get(ctx, scratchKey(8))
+	require.NoError(t, err)
+	require.True(t, val8.Exists())
+	// The actual error returned to the user is the injected error. However, we
+	// want to verify that the transaction's self-recovery did not encounter a
+	// programming error. So, we check the trace for it.
+	recording := collectAndFinish()
+	require.NotContains(t, recording.String(), "failed indeterminate commit recovery: programming error")
+}
+
+// TestUnexpectedCommitOnTxnAbortAfterRefresh is a regression test for #151864.
+// It is similar to TestRollbackAfterRefreshAndFailedCommit but tests a much
+// worse outcome that can be experienced by weak-isolation transactions.
+//
+// This test issues requests across two transactions. In the presence of the
+// bug, Txn 1 ends being committed even though an error is returned to the
+// user.
+//
+// Setup:
+//
+//	Create a split at key=6 to force batch splitting.
+//
+// Txn 1:
+//
+//	Read key=1 to set timestamp and prevent server side refresh
+//
+// Txn 2:
+//
+//	Read key=1 to bump timestamp cache on key 1
+//	Write key=8
+//
+// Txn1:
+//
+//	Batch{
+//	  Del key=1
+//	  Del key=2
+//	  Del key=8
+//	  Del key=9
+//	  EndTxn
+//	}
+//
+// This batch should encounter a write too old error on key=8.
+//
+// After a successful refresh, our testing filters have arranged for the second
+// EndTxn to fail. In the absence of the bug, we expect for this EndTxn failure
+// to result in the transaction never committing and an error being returned to
+// the client. When the bug existed, transaction recovery (either initiated by
+// another transaction or initiated by Txn 1 itself during a rollback issued
+// after the injected error) could result in the transaction being erroneously
+// committed despite the injected error being returned to the client.
+func TestUnexpectedCommitOnTxnAbortAfterRefresh(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var (
+		targetTxnIDString atomic.Value
+		firstEndTxnSeen   atomic.Bool
+		cmdID             atomic.Value
+	)
+	cmdID.Store(kvserverbase.CmdIDKey(""))
+	targetTxnIDString.Store("")
+	ctx := context.Background()
+	st := cluster.MakeClusterSettings()
+	kvcoord.RandomizedTxnAnchorKeyEnabled.Override(ctx, &st.SV, false)
+
+	s, _, db := serverutils.StartServer(t, base.TestServerArgs{
+		Settings: st,
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				TestingProposalFilter: func(fArgs kvserverbase.ProposalFilterArgs) *kvpb.Error {
+					if fArgs.Req.Header.Txn == nil ||
+						fArgs.Req.Header.Txn.ID.String() != targetTxnIDString.Load().(string) {
+						return nil // not our txn
+					}
+
+					t.Logf("proposal from our txn: %s", fArgs.Req)
+					endTxnReq := fArgs.Req.Requests[len(fArgs.Req.Requests)-1].GetEndTxn()
+					if endTxnReq != nil {
+						if !firstEndTxnSeen.Load() {
+							firstEndTxnSeen.Store(true)
+						} else {
+							epoch := fArgs.Req.Header.Txn.Epoch
+							t.Logf("will fail application for txn %s@epoch=%d; req: %+v; raft cmdID: %s",
+								fArgs.Req.Header.Txn.ID.String(), epoch, endTxnReq, fArgs.CmdID)
+							cmdID.Store(fArgs.CmdID)
+						}
+					}
+					return nil
+				},
+				TestingApplyCalledTwiceFilter: func(fArgs kvserverbase.ApplyFilterArgs) (int, *kvpb.Error) {
+					if cID := cmdID.Load().(kvserverbase.CmdIDKey); fArgs.CmdID == cID {
+						t.Logf("failing application for raft cmdID: %s", cID)
+						return 0, kvpb.NewErrorf("test injected error")
+					}
+					return 0, nil
+				},
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	scratchStart, err := s.ScratchRange()
+	require.NoError(t, err)
+
+	scratchKey := func(idx int) roachpb.Key {
+		key := scratchStart.Clone()
+		key = append(key, []byte(fmt.Sprintf("key-%03d", idx))...)
+		return key
+	}
+
+	_, _, err = s.SplitRange(scratchKey(6))
+	require.NoError(t, err)
+
+	tracer := s.TracerI().(*tracing.Tracer)
+	txn1Ctx, collectAndFinish := tracing.ContextWithRecordingSpan(context.Background(), tracer, "txn1")
+
+	txn1Err := db.Txn(txn1Ctx, func(txn1Ctx context.Context, txn1 *kv.Txn) error {
+		txn1.SetDebugName("txn1")
+		targetTxnIDString.Store(txn1.ID().String())
+		// Txn1 must be at either SNAPSHOT or READ COMMITTED with Stepping enabled
+		// for this bug because it both needs to be in an isolation level that
+		// allows committing when wrt != rts and the read needs to produce a read
+		// span that requires a refresh such that we can't do a server-side refresh.
+		_ = txn1.ConfigureStepping(txn1Ctx, kv.SteppingEnabled)
+		if err := txn1.SetIsoLevel(isolation.ReadCommitted); err != nil {
+			return err
+		}
+		if _, err = txn1.Get(txn1Ctx, scratchKey(1)); err != nil {
+			return err
+		}
+
+		// Txn2 now executes, arranging for the WriteTooOld error and the timestamp
+		// cache bump on the txn's anchor key.
+		if txn1.Epoch() == 0 {
+			txn2Ctx := context.Background()
+			txn2 := db.NewTxn(txn2Ctx, "txn2")
+			require.NoError(t, err)
+			_, err = txn2.Get(txn2Ctx, scratchKey(1))
+			require.NoError(t, err)
+
+			err = txn2.Put(txn2Ctx, scratchKey(8), "hello")
+			require.NoError(t, err)
+			err = txn2.Commit(txn2Ctx)
+			require.NoError(t, err)
+		}
+
+		b := txn1.NewBatch()
+		b.Del(scratchKey(1))
+		b.Del(scratchKey(2))
+		b.Del(scratchKey(8))
+		b.Del(scratchKey(9))
+		return txn1.CommitInBatch(txn1Ctx, b)
+	})
+	val8, err := db.Get(ctx, scratchKey(8))
+	require.NoError(t, err)
+
+	defer func() {
+		recording := collectAndFinish()
+		if t.Failed() {
+			t.Logf("TXN 1 TRACE: %s", recording)
+		}
+	}()
+
+	if val8.Exists() {
+		// If val8 _exists_ then it means our transaction did not commit. So really
+		// any error is correct.
+		require.Error(t, txn1Err)
+	} else {
+		// If val8 doesn't exist, then txn1 was committed so we shouldn't have
+		// gotten an error or se should have gotten an ambiguous result error.
+		if txn1Err != nil {
+			ambigErr := &kvpb.AmbiguousResultError{}
+			require.ErrorAs(t, txn1Err, &ambigErr, "transaction committed but non-ambiguous error returned")
+		}
+	}
 }

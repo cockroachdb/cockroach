@@ -43,6 +43,7 @@ go_test(
         "//pkg/sql/catalog",
         "//pkg/sql/isql",
         "//pkg/testutils",
+        "//pkg/testutils/jobutils",
         "//pkg/testutils/serverutils",
         "//pkg/testutils/sqlutils",
         "//pkg/testutils/testcluster",

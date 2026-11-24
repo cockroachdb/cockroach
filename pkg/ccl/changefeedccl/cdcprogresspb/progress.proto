@@ -1,0 +1,28 @@
+// Copyright 2025 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+syntax = "proto3";
+package cockroach.ccl.changefeedccl.cdcprogresspb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcprogresspb";
+
+import "gogoproto/gogo.proto";
+
+// ProtectedTimestampRecords contains the IDs of protected timestamps records
+// for a changefeed.
+message ProtectedTimestampRecords {
+  // UserTables is a map from the ID of a user table to the protected timestamp
+  // record that protects it.
+  map<uint32, bytes> user_tables = 1 [
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb.ID",
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.nullable) = false
+  ];
+  // SystemTables is the ID of PTS record that protects the system tables
+  // back to the changefeed's highwater.
+  bytes system_tables = 2 [
+    (gogoproto.nullable) = false,
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID"
+  ];
+}

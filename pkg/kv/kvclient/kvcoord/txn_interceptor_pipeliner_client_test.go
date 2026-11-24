@@ -103,7 +103,7 @@ func TestTxnPipelinerCondenseLockSpans(t *testing.T) {
 		return resp, nil
 	}
 	ambient := log.MakeTestingAmbientCtxWithNewTracer()
-	ds := kvcoord.NewDistSender(kvcoord.DistSenderConfig{
+	ds := kvcoord.NewDistSender(ctx, kvcoord.DistSenderConfig{
 		AmbientCtx:        ambient,
 		Clock:             s.Clock,
 		NodeDescs:         s.Gossip,

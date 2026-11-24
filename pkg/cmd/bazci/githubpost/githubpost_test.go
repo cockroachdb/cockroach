@@ -14,6 +14,7 @@ import (
 
 	bazelutil "github.com/cockroachdb/cockroach/pkg/build/util"
 	"github.com/cockroachdb/cockroach/pkg/cmd/bazci/githubpost/issues"
+	"github.com/cockroachdb/cockroach/pkg/internal/codeowners"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -30,56 +31,35 @@ type issue struct {
 }
 
 func init() {
-	fileLineForTesting = map[packageAndTest]fileAndLine{
+	codeowners.FileMapForTesting = map[codeowners.PackageAndTest]string{
 		{
-			packageName: "github.com/cockroachdb/cockroach/pkg/util/stop",
-			testName:    "TestStopperWithCancelConcurrent",
-		}: {
-			filename: "pkg/util/stop/stopper_test.go",
-			linenum:  "375",
-		},
+			PackageName: "github.com/cockroachdb/cockroach/pkg/util/stop",
+			TestName:    "TestStopperWithCancelConcurrent",
+		}: "pkg/util/stop/stopper_test.go",
 		{
-			packageName: "github.com/cockroachdb/cockroach/pkg/kv/kvserver",
-			testName:    "TestReplicateQueueRebalance",
-		}: {
-			filename: "pkg/kv/kvserver/replicate_queue_test.go",
-			linenum:  "56",
-		},
+			PackageName: "github.com/cockroachdb/cockroach/pkg/kv/kvserver",
+			TestName:    "TestReplicateQueueRebalance",
+		}: "pkg/kv/kvserver/replicate_queue_test.go",
 		{
-			packageName: "github.com/cockroachdb/cockroach/pkg/kv/kvserver",
-			testName:    "TestGossipHandlesReplacedNode",
-		}: {
-			filename: "pkg/kv/kvserver/gossip_test.go",
-			linenum:  "142",
-		},
+			PackageName: "github.com/cockroachdb/cockroach/pkg/kv/kvserver",
+			TestName:    "TestGossipHandlesReplacedNode",
+		}: "pkg/kv/kvserver/gossip_test.go",
 		{
-			packageName: "github.com/cockroachdb/cockroach/pkg/util/json",
-			testName:    "TestPretty",
-		}: {
-			filename: "pkg/util/json/json_test.go",
-			linenum:  "2234",
-		},
+			PackageName: "github.com/cockroachdb/cockroach/pkg/util/json",
+			TestName:    "TestPretty",
+		}: "pkg/util/json/json_test.go",
 		{
-			packageName: "github.com/cockroachdb/cockroach/pkg/util/json",
-			testName:    "TestJSONErrors",
-		}: {
-			filename: "pkg/util/json/json_test.go",
-			linenum:  "249",
-		},
+			PackageName: "github.com/cockroachdb/cockroach/pkg/util/json",
+			TestName:    "TestJSONErrors",
+		}: "pkg/util/json/json_test.go",
 		{
-			packageName: "github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord",
-			testName:    "TestTxnCoordSenderPipelining",
-		}: {
-			filename: "pkg/kv/kvclient/kvcoord/txn_coord_sender_test.go",
-			linenum:  "2429",
-		},
+			PackageName: "github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord",
+			TestName:    "TestTxnCoordSenderPipelining",
+		}: "pkg/kv/kvclient/kvcoord/txn_coord_sender_test.go",
 		{
-			packageName: "github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord",
-			testName:    "TestAbortReadOnlyTransaction",
-		}: {
-			filename: "pkg/kv/kvclient/kvcoord/txn_coord_sender_test.go",
-			linenum:  "1990",
-		},
+			PackageName: "github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord",
+			TestName:    "TestAbortReadOnlyTransaction",
+		}: "pkg/kv/kvclient/kvcoord/txn_coord_sender_test.go",
 	}
 }
 
@@ -101,7 +81,7 @@ func TestListFailuresFromJSON(t *testing.T) {
 				testName:   "TestStopperWithCancelConcurrent",
 				title:      "util/stop: TestStopperWithCancelConcurrent failed",
 				message:    "this is just a testing issue",
-				mention:    []string{"@cockroachdb/kv"},
+				mention:    []string{"@cockroachdb/kv-triage"},
 				labels:     []string{"C-test-failure", "release-blocker", "T-kv"},
 				hasProject: true,
 			}},
@@ -117,7 +97,7 @@ func TestListFailuresFromJSON(t *testing.T) {
 				testName:   "TestStopperWithCancelConcurrent",
 				title:      "util/stop: TestStopperWithCancelConcurrent failed",
 				message:    "this is just a testing issue",
-				mention:    []string{"@cockroachdb/kv"},
+				mention:    []string{"@cockroachdb/kv-triage"},
 				labels:     []string{"T-kv"},
 				hasProject: true,
 			}},
@@ -131,7 +111,7 @@ func TestListFailuresFromJSON(t *testing.T) {
 				testName:   "TestReplicateQueueRebalance",
 				title:      "kv/kvserver: TestReplicateQueueRebalance failed",
 				message:    "replicate_queue_test.go:88: condition failed to evaluate within 45s: not balanced: [10 1 10 1 8]",
-				mention:    []string{"@cockroachdb/kv"},
+				mention:    []string{"@cockroachdb/kv-triage"},
 				labels:     []string{"C-test-failure", "release-blocker", "T-kv"},
 				hasProject: true,
 			}},
@@ -145,7 +125,7 @@ func TestListFailuresFromJSON(t *testing.T) {
 				testName:   "TestGossipHandlesReplacedNode",
 				title:      "kv/kvserver: TestGossipHandlesReplacedNode failed",
 				message:    "F180711 20:13:15.826193 83 storage/replica.go:1877  [n?,s1,r1/1:/M{in-ax}] on-disk and in-memory state diverged:",
-				mention:    []string{"@cockroachdb/kv"},
+				mention:    []string{"@cockroachdb/kv-triage"},
 				labels:     []string{"C-test-failure", "release-blocker", "T-kv"},
 				hasProject: true,
 			}},
@@ -175,8 +155,7 @@ func TestListFailuresFromJSON(t *testing.T) {
 				message: `=== RUN   TestPretty/["hello",_["world"]]
     --- FAIL: TestPretty/["hello",_["world"]] (0.00s)
     	json_test.go:1656: injected failure`,
-				mention: []string{"@cockroachdb/unowned"},
-				labels:  []string{"C-test-failure", "release-blocker"},
+				labels: []string{"C-test-failure", "release-blocker", "T-sql-queries"},
 			}},
 			formatter: DefaultFormatter,
 		},
@@ -192,7 +171,7 @@ func TestListFailuresFromJSON(t *testing.T) {
 					testName:   "TestTxnCoordSenderPipelining",
 					title:      "kv/kvclient/kvcoord: TestTxnCoordSenderPipelining failed",
 					message:    `injected failure`,
-					mention:    []string{"@cockroachdb/kv"},
+					mention:    []string{"@cockroachdb/kv-triage"},
 					labels:     []string{"C-test-failure", "release-blocker", "T-kv"},
 					hasProject: true,
 				},
@@ -206,7 +185,7 @@ TestTxnCoordSenderPipelining - 1.00s
 Slow passing tests:
 TestAnchorKey - 1.01s
 `,
-					mention:    []string{"@cockroachdb/kv"},
+					mention:    []string{"@cockroachdb/kv-triage"},
 					labels:     []string{"C-test-failure", "release-blocker", "T-kv"},
 					hasProject: true,
 				},
@@ -393,7 +372,6 @@ TestXXA - 1.00s
 					require.Equal(t, expRepro, actRepro)
 				}
 				assert.Equal(t, c.expIssues[curIssue].mention, req.MentionOnCreate)
-				assert.Equal(t, c.expIssues[curIssue].hasProject, req.ProjectColumnID != 0)
 				assert.Equal(t, c.expIssues[curIssue].labels, req.Labels)
 				// On next invocation, we'll check the next expected issue.
 				curIssue++
@@ -414,7 +392,6 @@ func TestListFailuresFromTestXML(t *testing.T) {
 		fileName  string
 		expPkg    string
 		expIssues []issue
-		formatter Formatter
 	}{
 		{
 			fileName: "basic.xml",
@@ -424,12 +401,23 @@ func TestListFailuresFromTestXML(t *testing.T) {
 				title:    "util/json: TestJSONErrors failed",
 				message: `=== RUN   TestJSONErrors
 --- FAIL: TestJSONErrors (0.00s)
-=== RUN   TestJSONErrors/frues
-    json_test.go:278: expected error message to be 'trailing characters after JSON document', but was 'unable to decode JSON: invalid character 'r' in literal false (expecting 'a')'
-    --- FAIL: TestJSONErrors/frues (0.00s)`,
+=== RUN   TestJSONErrors/gostd/frues
+    json_test.go:404: 
+        	Error Trace:	pkg/util/json/json_test.go:404
+        	Error:      	Expect "unable to decode JSON: invalid character 'r' in literal false (expecting 'a')" to match "trailing characters after JSON document"
+        	Test:       	TestJSONErrors/gostd/frues
+--- FAIL: TestJSONErrors/gostd/frues (0.00s)`,
 				mention: []string{"@cockroachdb/unowned"},
 			}},
-			formatter: DefaultFormatter,
+		},
+		{
+			fileName: "test-error-142.xml", // #159708 case
+			expPkg:   "pkg/sql/opt/testutils/testcat/testcat_test_/testcat_test",
+			expIssues: []issue{{
+				testName: "pkg",
+				title:    "pkg/sql/opt/testutils/testcat/testcat_test_/testcat_test: pkg failed",
+				message:  `Test binary potentially failed to execute because of bazel test timeout, init() issue, or some other error.`,
+			}},
 		},
 	}
 
@@ -481,7 +469,6 @@ func TestPostGeneralFailure(t *testing.T) {
 	testCases := []struct {
 		fileName  string
 		expIssues []issue
-		formatter Formatter
 	}{
 		{
 			fileName: "failed-build-output.txt",
@@ -490,7 +477,6 @@ func TestPostGeneralFailure(t *testing.T) {
 				mention: []string{"@cockroachdb/unowned"},
 				labels:  []string{"C-test-failure", "release-blocker", "T-testeng"},
 			}},
-			formatter: DefaultFormatter,
 		},
 	}
 

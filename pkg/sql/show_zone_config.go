@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/zoneconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/errors"
 	yaml "gopkg.in/yaml.v2"
@@ -119,12 +120,12 @@ func getShowZoneConfigRow(
 	}
 
 	subZoneIdx := uint32(0)
-	zoneID, zone, subzone, err := GetZoneConfigInTxn(
+	zoneID, zone, subzone, err := zoneconfig.GetInTxn(
 		ctx, p.txn, p.Descriptors(), targetID, index, partition, false, /* getInheritedDefault */
 	)
 	if errors.Is(err, sqlerrors.ErrNoZoneConfigApplies) {
 		// TODO(benesch): This shouldn't be the caller's responsibility;
-		// GetZoneConfigInTxn should just return the default zone config if no zone
+		// zoneconfig.GetInTxn should just return the default zone config if no zone
 		// config applies.
 		zone = p.execCfg.DefaultZoneConfig
 		zoneID = keys.RootNamespaceID
@@ -158,12 +159,12 @@ func getShowZoneConfigRow(
 }
 
 // zoneConfigToSQL pretty prints a zone configuration as a SQL string.
-func zoneConfigToSQL(zs *tree.ZoneSpecifier, zone *zonepb.ZoneConfig) (string, error) {
+func zoneConfigToSQL(zs *tree.ZoneSpecifier, zone *zonepb.ZoneConfig) (tree.Datum, error) {
 	constraints, err := yamlMarshalFlow(zonepb.ConstraintsList{
 		Constraints: zone.Constraints,
 		Inherited:   zone.InheritedConstraints})
 	if err != nil {
-		return "", err
+		return tree.DNull, err
 	}
 	constraints = strings.TrimSpace(constraints)
 	voterConstraints, err := yamlMarshalFlow(zonepb.ConstraintsList{
@@ -171,21 +172,22 @@ func zoneConfigToSQL(zs *tree.ZoneSpecifier, zone *zonepb.ZoneConfig) (string, e
 		Inherited:   zone.InheritedVoterConstraints(),
 	})
 	if err != nil {
-		return "", err
+		return tree.DNull, err
 	}
 	voterConstraints = strings.TrimSpace(voterConstraints)
 	prefs, err := yamlMarshalFlow(zone.LeasePreferences)
 	if err != nil {
-		return "", err
+		return tree.DNull, err
 	}
 	prefs = strings.TrimSpace(prefs)
 
-	useComma := false
+	first := true
 	maybeWriteComma := func(f *tree.FmtCtx) {
-		if useComma {
+		if !first {
 			f.Printf(",\n")
+		} else {
+			first = false
 		}
-		useComma = true
 	}
 
 	f := tree.NewFmtCtx(tree.FmtParsable)
@@ -228,7 +230,13 @@ func zoneConfigToSQL(zs *tree.ZoneSpecifier, zone *zonepb.ZoneConfig) (string, e
 		maybeWriteComma(f)
 		f.Printf("\tlease_preferences = %s", lexbase.EscapeSQLString(prefs))
 	}
-	return f.String(), nil
+	if first {
+		// We didn't include any zone config parameters, so rather than
+		// returning an invalid 'ALTER ... CONFIGURE ZONE USING;' stmt we'll
+		// return NULL.
+		return tree.DNull, nil
+	}
+	return tree.NewDString(f.String()), nil
 }
 
 // generateZoneConfigIntrospectionValues creates a result row
@@ -293,11 +301,12 @@ func generateZoneConfigIntrospectionValues(
 	if zs == nil {
 		values[rawConfigSQLCol] = tree.DNull
 	} else {
-		sqlStr, err := zoneConfigToSQL(zs, zone)
+		var d tree.Datum
+		d, err = zoneConfigToSQL(zs, zone)
 		if err != nil {
 			return err
 		}
-		values[rawConfigSQLCol] = tree.NewDString(sqlStr)
+		values[rawConfigSQLCol] = d
 	}
 
 	// Populate the protobuf column.
@@ -322,11 +331,12 @@ func generateZoneConfigIntrospectionValues(
 	if zs == nil {
 		values[fullConfigSQLCol] = tree.DNull
 	} else {
-		sqlStr, err := zoneConfigToSQL(zs, inheritedConfig)
+		var d tree.Datum
+		d, err = zoneConfigToSQL(zs, inheritedConfig)
 		if err != nil {
 			return err
 		}
-		values[fullConfigSQLCol] = tree.NewDString(sqlStr)
+		values[fullConfigSQLCol] = d
 	}
 	return nil
 }

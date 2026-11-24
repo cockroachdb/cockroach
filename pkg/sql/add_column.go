@@ -85,7 +85,7 @@ func (p *planner) addColumnImpl(
 			if err := params.p.checkNoRegionChangeUnderway(
 				params.ctx,
 				n.tableDesc.GetParentID(),
-				"add an UNIQUE COLUMN on a REGIONAL BY ROW table",
+				"add a UNIQUE COLUMN on a REGIONAL BY ROW table",
 			); err != nil {
 				return err
 			}
@@ -144,7 +144,8 @@ func (p *planner) addColumnImpl(
 		if err != nil {
 			return err
 		}
-		col.ComputeExpr = &serializedExpr
+		expr := descpb.Expression(serializedExpr)
+		col.ComputeExpr = &expr
 	}
 
 	if !col.Virtual {
@@ -156,9 +157,13 @@ func (p *planner) addColumnImpl(
 	}
 
 	// We need to allocate new ID for the created column in order to correctly
-	// assign sequence ownership.
+	// assign sequence ownership and function dependencies.
 	version := params.ExecCfg().Settings.Version.ActiveVersion(params.ctx)
 	if err := n.tableDesc.AllocateIDs(params.ctx, version); err != nil {
+		return err
+	}
+
+	if err := params.p.maybeUpdateFunctionReferencesForColumn(params.ctx, n.tableDesc, col); err != nil {
 		return err
 	}
 

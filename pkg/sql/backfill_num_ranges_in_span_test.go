@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -79,13 +80,18 @@ func TestNumRangesInSpanContainedBy(t *testing.T) {
 		},
 	}
 
-	s, _, kvDB := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(107376),
-	})
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	ctx := context.Background()
-	defer s.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
 
-	scratchKey, err := s.ScratchRange()
+	// Use a tenant-aware scratch key so this test works in multitenant mode.
+	// The key is prefixed with the tenant prefix so range iteration stays
+	// within the tenant's keyspace.
+	ts := srv.ApplicationLayer()
+	kvDB := ts.DB()
+	scratchKey := append(ts.Codec().TenantPrefix(), keys.ScratchRangeMin...)
+	scratchKey = scratchKey[:len(scratchKey):len(scratchKey)]
+	_, _, err := srv.SplitRange(scratchKey)
 	require.NoError(t, err)
 	mkKey := func(prefix roachpb.Key, k string) roachpb.Key {
 		return append(prefix[:len(prefix):len(prefix)], k...)
@@ -102,7 +108,7 @@ func TestNumRangesInSpanContainedBy(t *testing.T) {
 			EndKey: mkEndKey(prefix, sp[1]),
 		}
 	}
-	dsp := s.ApplicationLayer().ExecutorConfig().(sql.ExecutorConfig).DistSQLPlanner
+	dsp := ts.ExecutorConfig().(sql.ExecutorConfig).DistSQLPlanner
 	spanString := func(sp span) string {
 		return sp[0] + "-" + sp[1]
 	}
@@ -116,10 +122,14 @@ func TestNumRangesInSpanContainedBy(t *testing.T) {
 	run := func(t *testing.T, c testCase) {
 		prefix := encoding.EncodeStringAscending(scratchKey, t.Name())
 		for _, split := range c.splits {
-			_, _, err = s.SplitRange(mkKey(prefix, split))
+			_, _, err = srv.SplitRange(mkKey(prefix, split))
 			require.NoError(t, err)
 		}
 		outerSpan := mkSpan(prefix, c.outer)
+		// Do a scan to populate the tenant's range cache with the new range
+		// descriptors after splitting.
+		_, err = kvDB.Scan(ctx, outerSpan.Key, outerSpan.EndKey, 0)
+		require.NoError(t, err)
 		for _, sc := range c.subtests {
 			t.Run(spanStrings(sc.subSpans), func(t *testing.T) {
 				var spans []roachpb.Span

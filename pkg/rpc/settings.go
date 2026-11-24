@@ -7,14 +7,17 @@ package rpc
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"google.golang.org/grpc"
+	"storj.io/drpc/drpcserver"
 )
 
 func init() {
@@ -46,14 +49,16 @@ var useDialback = settings.RegisterBoolSetting(
 
 var enableRPCCompression = envutil.EnvOrDefaultBool("COCKROACH_ENABLE_RPC_COMPRESSION", true)
 
-func getWindowSize(ctx context.Context, name string, c ConnectionClass, defaultSize int) int32 {
+func getWindowSize(
+	ctx context.Context, name string, c rpcbase.ConnectionClass, defaultSize int,
+) int32 {
 	s := envutil.EnvOrDefaultInt(name, defaultSize)
 	if s > maximumWindowSize {
-		log.Warningf(ctx, "%s value too large; trimmed to %d", name, maximumWindowSize)
+		log.Dev.Warningf(ctx, "%s value too large; trimmed to %d", name, maximumWindowSize)
 		s = maximumWindowSize
 	}
 	if s <= defaultWindowSize {
-		log.Warningf(ctx,
+		log.Dev.Warningf(ctx,
 			"%s RPC will use dynamic window sizes due to %s value lower than %d", c, name, defaultSize)
 	}
 	return int32(s)
@@ -82,7 +87,7 @@ type windowSizeSettings struct {
 func (s *windowSizeSettings) maybeInit(ctx context.Context) {
 	s.values.init.Do(func() {
 		s.values.initialWindowSize = getWindowSize(ctx,
-			"COCKROACH_RPC_INITIAL_WINDOW_SIZE", DefaultClass, defaultInitialWindowSize)
+			"COCKROACH_RPC_INITIAL_WINDOW_SIZE", rpcbase.DefaultClass, defaultInitialWindowSize)
 		s.values.initialConnWindowSize = s.values.initialWindowSize * 16
 		if s.values.initialConnWindowSize > maximumWindowSize {
 			s.values.initialConnWindowSize = maximumWindowSize
@@ -119,7 +124,13 @@ var sourceAddr = func() net.Addr {
 }()
 
 type serverOpts struct {
-	interceptor func(fullMethod string) error
+	interceptor                         func(fullMethod string) error
+	metricsInterceptor                  RequestMetricsInterceptor
+	tlsConfig                           *tls.Config
+	tlsCipherRestrict                   func(conn net.Conn) error
+	drpcUnaryRequestMetricsInterceptor  DRPCUnaryServerRequestMetricsInterceptor
+	drpcStreamRequestMetricsInterceptor DRPCStreamServerRequestMetricsInterceptor
+	drpcServerMetrics                   drpcserver.ServerMetrics
 }
 
 // ServerOption is a configuration option passed to NewServer.
@@ -140,5 +151,56 @@ func WithInterceptor(f func(fullMethod string) error) ServerOption {
 				return f(fullMethod)
 			}
 		}
+	}
+}
+
+// WithMetricsServerInterceptor adds a RequestMetricsInterceptor to the grpc server.
+func WithMetricsServerInterceptor(interceptor RequestMetricsInterceptor) ServerOption {
+	return func(opts *serverOpts) {
+		opts.metricsInterceptor = interceptor
+	}
+}
+
+// WithDRPCMetricsUnaryServerInterceptor adds a DRPCUnaryServerRequestMetricsInterceptor to the DRPC server.
+func WithDRPCMetricsUnaryServerInterceptor(
+	interceptor DRPCUnaryServerRequestMetricsInterceptor,
+) ServerOption {
+	return func(opts *serverOpts) {
+		opts.drpcUnaryRequestMetricsInterceptor = interceptor
+	}
+}
+
+// WithDRPCMetricsStreamServerInterceptor adds a DRPCMetricsStreamServerInterceptor to the DRPC server.
+func WithDRPCMetricsStreamServerInterceptor(
+	interceptor DRPCStreamServerRequestMetricsInterceptor,
+) ServerOption {
+	return func(opts *serverOpts) {
+		opts.drpcStreamRequestMetricsInterceptor = interceptor
+	}
+}
+
+// WithTLSConfig sets the TLS configuration for the DRPC server. When set, the
+// server wraps its listener with tls.NewListener in Serve() and performs the
+// TLS handshake explicitly in ServeOne before processing requests.
+func WithTLSConfig(cfg *tls.Config) ServerOption {
+	return func(opts *serverOpts) {
+		opts.tlsConfig = cfg
+	}
+}
+
+// WithTLSCipherRestrict sets a callback that is invoked immediately after
+// a successful TLS handshake in the DRPC server. The callback receives the
+// net.Conn (a *tls.Conn) and may inspect ConnectionState to enforce cipher
+// suite restrictions. If it returns a non-nil error, the connection is rejected.
+func WithTLSCipherRestrict(f func(conn net.Conn) error) ServerOption {
+	return func(opts *serverOpts) {
+		opts.tlsCipherRestrict = f
+	}
+}
+
+// WithDRPCServerMetrics sets the server-level metrics that the DRPC server reports into.
+func WithDRPCServerMetrics(m drpcserver.ServerMetrics) ServerOption {
+	return func(opts *serverOpts) {
+		opts.drpcServerMetrics = m
 	}
 }

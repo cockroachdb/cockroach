@@ -16,12 +16,10 @@ need to update the image.
 ## Updating the `acceptance` image
 
 - (One-time setup) Depending on how your Docker instance is configured, you may have to run `docker run --privileged --rm tonistiigi/binfmt --install all`. This will install `qemu` emulators on your system for platforms besides your native one.
-- Build the image for both platforms and publish the cross-platform manifest. Note that the non-native build for your image will be very slow since it will have to emulate.
-```
-    TAG=$(date +%Y%m%d-%H%M%S)
-    docker buildx create --use
-    docker buildx build --push --platform linux/amd64,linux/arm64 -t us-east1-docker.pkg.dev/crl-ci-images/cockroach/acceptance:$TAG .
-```
+- Ask someone from the Engineering Productivity team to build the image for
+  both platforms and publish the cross-platform manifest by running
+  `build-push-acceptance.sh`. Note that the non-native build for your image will
+  be very slow since it will have to emulate.
 
 No need to have your changes reviewed before you push an image, as we pin the
 container version to use in `../util_docker.go`. Once your changes are ready for

@@ -49,11 +49,6 @@ storiesOf("StatementDetails", module)
   .add("Overview tab", () => (
     <StatementDetails {...getStatementDetailsPropsFixture()} />
   ))
-  .add("with VIEWACTIVITYREDACTED", () => {
-    const props = getStatementDetailsPropsFixture();
-    props.hasViewActivityRedactedRole = true;
-    return <StatementDetails {...props} />;
-  })
   .add("Diagnostics tab", () => {
     const props = getStatementDetailsPropsFixture();
     props.history.location.search = new URLSearchParams([
@@ -61,42 +56,10 @@ storiesOf("StatementDetails", module)
     ]).toString();
     return <StatementDetails {...props} />;
   })
-  .add("Diagnostics tab with hidden Statement Diagnostics link", () => {
-    const props = getStatementDetailsPropsFixture();
-    props.history.location.search = new URLSearchParams([
-      ["tab", "diagnostics"],
-    ]).toString();
-    props.uiConfig.showStatementDiagnosticsLink = false;
-    return <StatementDetails {...props} />;
-  })
   .add("Explain Plan tab", () => {
     const props = getStatementDetailsPropsFixture();
     props.history.location.search = new URLSearchParams([
       ["tab", "explain-plan"],
     ]).toString();
-    return <StatementDetails {...props} />;
-  })
-  .add("Execution Stats tab", () => {
-    const props = getStatementDetailsPropsFixture();
-    props.history.location.search = new URLSearchParams([
-      ["tab", "execution-stats"],
-    ]).toString();
-    return <StatementDetails {...props} />;
-  })
-  .add("Loading", () => {
-    const props = getStatementDetailsPropsFixture();
-    props.statementDetails = null;
-    props.isLoading = true;
-    return <StatementDetails {...props} />;
-  })
-  .add(
-    "No data for this time frame; has statement cached from previous time frame",
-    () => {
-      const props = getStatementDetailsPropsFixture(false);
-      return <StatementDetails {...props} />;
-    },
-  )
-  .add("No data for this time frame; no cached statement", () => {
-    const props = getStatementDetailsPropsFixture(false);
     return <StatementDetails {...props} />;
   });

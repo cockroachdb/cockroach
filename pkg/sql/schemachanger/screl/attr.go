@@ -6,6 +6,7 @@
 package screl
 
 import (
+	"fmt"
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/rel"
@@ -55,8 +56,15 @@ const (
 	Name
 	// ReferencedDescID is the descriptor ID to which this element refers.
 	ReferencedDescID
-	// Comment is the comment metadata on descriptors.
-	Comment
+	// Value is a string attribute that can be used in different elements.
+	// Fields referring to the Value attribute cannot be used in rules and
+	// are only used as a part of the key to make an element unique. Current
+	// use includes:
+	//   1. comment metadata on descriptors.
+	//   2. string representation of column generated as identity sequence options
+	//   3. region name for TableLocalitySecondaryRegion.
+	//   4. regional by row AS
+	Value
 	// TemporaryIndexID is the index ID of the temporary index being populated
 	// during this index's backfill.
 	TemporaryIndexID
@@ -66,6 +74,9 @@ const (
 	// RecreateSourceIndexID is the index ID that we are replacing with
 	// this new index.
 	RecreateSourceIndexID
+	// RecreateTargetIndexID is the index ID that needs to be public before
+	// this index.
+	RecreateTargetIndexID
 	// SeqNum is a number given to different elements of the same conceptual
 	// object. It is used so we can differentiate those elements in the graph.
 	//
@@ -108,16 +119,28 @@ const (
 	// Usage is an attribute for column compute expression to identify why it's
 	// being added.
 	Usage
+	// PolicyID is an attribute for row-level security policies to uniquely
+	// identify a policy within a table.
+	PolicyID
+	// GeneratedAsIdentityType is the type for a generated as identity column.
+	// It's value must be in catpb.GeneratedAsIdentityType.
+	GeneratedAsIdentityType
+
+	// IntValue A int64 used only for element uniqueness, and this can map out
+	// to any int64 attribute. It is currently used for:
+	// 1) SchemaID in the namespace element.
+	IntValue
 
 	// AttrMax is the largest possible Attr value.
-	// Note: add any new enum values before TargetStatus, leave these at the end.
+	// Note: add any new enum values before IntValue, leave these at the end.
 	AttrMax = iota - 1
 )
 
 var t = reflect.TypeOf
 
+// elementSchemaOptions maps attributes to the elements' fields.
 var elementSchemaOptions = []rel.SchemaOption{
-	// We need this `Element` attribute to be of type `protoulti.Message`
+	// We need this `Element` attribute to be of type `protoutil.Message`
 	// interface and better have it as the first in the schema option list. This
 	// is because the schema needs to know a type of each attribute, and it
 	// creates a mapping between attribute and the type. If you're trying to add a
@@ -130,6 +153,7 @@ var elementSchemaOptions = []rel.SchemaOption{
 	// concrete type underneath an interface value, so we won't have a problem
 	// evaluating field values within a concrete Element struct.
 	rel.AttrType(Element, t((*protoutil.Message)(nil)).Elem()),
+
 	// Top-level elements.
 	rel.EntityMapping(t((*scpb.Database)(nil)),
 		rel.EntityAttr(DescID, "DatabaseID"),
@@ -149,6 +173,9 @@ var elementSchemaOptions = []rel.SchemaOption{
 		rel.EntityAttr(Name, "LogicalRepresentation"),
 	),
 	rel.EntityMapping(t((*scpb.CompositeType)(nil)),
+		rel.EntityAttr(DescID, "TypeID"),
+	),
+	rel.EntityMapping(t((*scpb.DomainType)(nil)),
 		rel.EntityAttr(DescID, "TypeID"),
 	),
 	rel.EntityMapping(t((*scpb.CompositeTypeAttrName)(nil)),
@@ -192,6 +219,7 @@ var elementSchemaOptions = []rel.SchemaOption{
 		rel.EntityAttr(TemporaryIndexID, "TemporaryIndexID"),
 		rel.EntityAttr(SourceIndexID, "SourceIndexID"),
 		rel.EntityAttr(RecreateSourceIndexID, "RecreateSourceIndexID"),
+		rel.EntityAttr(RecreateTargetIndexID, "RecreateTargetIndexID"),
 	),
 	rel.EntityMapping(t((*scpb.TemporaryIndex)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
@@ -240,6 +268,7 @@ var elementSchemaOptions = []rel.SchemaOption{
 	),
 	rel.EntityMapping(t((*scpb.RowLevelTTL)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(SeqNum, "SeqNum"),
 	),
 	rel.EntityMapping(t((*scpb.Trigger)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
@@ -255,9 +284,15 @@ var elementSchemaOptions = []rel.SchemaOption{
 	rel.EntityMapping(t((*scpb.TableLocalitySecondaryRegion)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(ReferencedDescID, "RegionEnumTypeID"),
+		rel.EntityAttr(Value, "RegionName"),
 	),
 	rel.EntityMapping(t((*scpb.TableLocalityRegionalByRow)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(Value, "As"),
+	),
+	rel.EntityMapping(t((*scpb.TableLocalityRegionalByRowUsingConstraint)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(ConstraintID, "ConstraintID"),
 	),
 	// Column elements.
 	rel.EntityMapping(t((*scpb.ColumnName)(nil)),
@@ -275,6 +310,10 @@ var elementSchemaOptions = []rel.SchemaOption{
 	rel.EntityMapping(t((*scpb.SequenceOption)(nil)),
 		rel.EntityAttr(DescID, "SequenceID"),
 		rel.EntityAttr(Name, "Key"),
+		rel.EntityAttr(Value, "Value"),
+	),
+	rel.EntityMapping(t((*scpb.SequenceValue)(nil)),
+		rel.EntityAttr(DescID, "SequenceID"),
 	),
 	rel.EntityMapping(t((*scpb.SequenceOwner)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
@@ -292,20 +331,34 @@ var elementSchemaOptions = []rel.SchemaOption{
 	rel.EntityMapping(t((*scpb.ColumnOnUpdateExpression)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(ColumnID, "ColumnID"),
+		rel.EntityAttr(Expr, "Expr"),
 		rel.EntityAttr(ReferencedSequenceIDs, "UsesSequenceIDs"),
 		rel.EntityAttr(ReferencedTypeIDs, "UsesTypeIDs"),
+		rel.EntityAttr(ReferencedFunctionIDs, "UsesFunctionIDs"),
 	),
 	rel.EntityMapping(t((*scpb.ColumnComputeExpression)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(ColumnID, "ColumnID"),
 		rel.EntityAttr(ReferencedSequenceIDs, "UsesSequenceIDs"),
 		rel.EntityAttr(ReferencedTypeIDs, "UsesTypeIDs"),
+		rel.EntityAttr(ReferencedFunctionIDs, "UsesFunctionIDs"),
+		rel.EntityAttr(ReferencedColumnIDs, "ReferencedColumnIDs"),
 		rel.EntityAttr(Usage, "Usage"),
 	),
 	rel.EntityMapping(t((*scpb.ColumnNotNull)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(ColumnID, "ColumnID"),
 		rel.EntityAttr(IndexID, "IndexIDForValidation"),
+	),
+	rel.EntityMapping(t((*scpb.ColumnGeneratedAsIdentity)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(ColumnID, "ColumnID"),
+		rel.EntityAttr(GeneratedAsIdentityType, "Type"),
+		rel.EntityAttr(Value, "SequenceOption"),
+	),
+	rel.EntityMapping(t((*scpb.ColumnHidden)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(ColumnID, "ColumnID"),
 	),
 	// Index elements.
 	rel.EntityMapping(t((*scpb.IndexName)(nil)),
@@ -314,10 +367,6 @@ var elementSchemaOptions = []rel.SchemaOption{
 		rel.EntityAttr(Name, "Name"),
 	),
 	rel.EntityMapping(t((*scpb.IndexPartitioning)(nil)),
-		rel.EntityAttr(DescID, "TableID"),
-		rel.EntityAttr(IndexID, "IndexID"),
-	),
-	rel.EntityMapping(t((*scpb.SecondaryIndexPartial)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(IndexID, "IndexID"),
 	),
@@ -359,11 +408,46 @@ var elementSchemaOptions = []rel.SchemaOption{
 	rel.EntityMapping(t((*scpb.TriggerDeps)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(TriggerID, "TriggerID"),
+		rel.EntityAttr(ReferencedFunctionIDs, "UsesRoutineIDs"),
+		rel.EntityAttr(ReferencedTypeIDs, "UsesTypeIDs"),
+	),
+	// Policy elements
+	rel.EntityMapping(t((*scpb.Policy)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(PolicyID, "PolicyID"),
+	),
+	rel.EntityMapping(t((*scpb.PolicyName)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(PolicyID, "PolicyID"),
+		rel.EntityAttr(Name, "Name"),
+	),
+	rel.EntityMapping(t((*scpb.PolicyRole)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(PolicyID, "PolicyID"),
+		rel.EntityAttr(Name, "RoleName"),
+	),
+	rel.EntityMapping(t((*scpb.PolicyUsingExpr)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(PolicyID, "PolicyID"),
+		rel.EntityAttr(Expr, "Expr"),
+	),
+	rel.EntityMapping(t((*scpb.PolicyWithCheckExpr)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(PolicyID, "PolicyID"),
+		rel.EntityAttr(Expr, "Expr"),
+	),
+	rel.EntityMapping(t((*scpb.PolicyDeps)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(PolicyID, "PolicyID"),
+		rel.EntityAttr(ReferencedTypeIDs, "UsesTypeIDs"),
+		rel.EntityAttr(ReferencedSequenceIDs, "UsesRelationIDs"),
+		rel.EntityAttr(ReferencedFunctionIDs, "UsesFunctionIDs"),
 	),
 	// Common elements.
 	rel.EntityMapping(t((*scpb.Namespace)(nil)),
 		rel.EntityAttr(DescID, "DescriptorID"),
 		rel.EntityAttr(ReferencedDescID, "DatabaseID"),
+		rel.EntityAttr(IntValue, "SchemaID"),
 		rel.EntityAttr(Name, "Name"),
 	),
 	rel.EntityMapping(t((*scpb.Owner)(nil)),
@@ -394,34 +478,34 @@ var elementSchemaOptions = []rel.SchemaOption{
 	// Comment elements.
 	rel.EntityMapping(t((*scpb.TableComment)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
-		rel.EntityAttr(Comment, "Comment"),
+		rel.EntityAttr(Value, "Comment"),
 	),
 	rel.EntityMapping(t((*scpb.TypeComment)(nil)),
 		rel.EntityAttr(DescID, "TypeID"),
-		rel.EntityAttr(Comment, "Comment"),
+		rel.EntityAttr(Value, "Comment"),
 	),
 	rel.EntityMapping(t((*scpb.DatabaseComment)(nil)),
 		rel.EntityAttr(DescID, "DatabaseID"),
-		rel.EntityAttr(Comment, "Comment"),
+		rel.EntityAttr(Value, "Comment"),
 	),
 	rel.EntityMapping(t((*scpb.SchemaComment)(nil)),
 		rel.EntityAttr(DescID, "SchemaID"),
-		rel.EntityAttr(Comment, "Comment"),
+		rel.EntityAttr(Value, "Comment"),
 	),
 	rel.EntityMapping(t((*scpb.ColumnComment)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(ColumnID, "ColumnID"),
-		rel.EntityAttr(Comment, "Comment"),
+		rel.EntityAttr(Value, "Comment"),
 	),
 	rel.EntityMapping(t((*scpb.IndexComment)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(IndexID, "IndexID"),
-		rel.EntityAttr(Comment, "Comment"),
+		rel.EntityAttr(Value, "Comment"),
 	),
 	rel.EntityMapping(t((*scpb.ConstraintComment)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 		rel.EntityAttr(ConstraintID, "ConstraintID"),
-		rel.EntityAttr(Comment, "Comment"),
+		rel.EntityAttr(Value, "Comment"),
 	),
 	rel.EntityMapping(t((*scpb.IndexColumn)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
@@ -468,6 +552,17 @@ var elementSchemaOptions = []rel.SchemaOption{
 	rel.EntityMapping(t((*scpb.TableSchemaLocked)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 	),
+	rel.EntityMapping(t((*scpb.TableStorageParam)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+		rel.EntityAttr(Name, "Name"),
+		rel.EntityAttr(Value, "Value"),
+	),
+	rel.EntityMapping(t((*scpb.RowLevelSecurityEnabled)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+	),
+	rel.EntityMapping(t((*scpb.RowLevelSecurityForced)(nil)),
+		rel.EntityAttr(DescID, "TableID"),
+	),
 	rel.EntityMapping(t((*scpb.LDRJobIDs)(nil)),
 		rel.EntityAttr(DescID, "TableID"),
 	),
@@ -491,6 +586,48 @@ var elementSchemaOptions = []rel.SchemaOption{
 	),
 	rel.EntityMapping(t((*scpb.FunctionSecurity)(nil)),
 		rel.EntityAttr(DescID, "FunctionID"),
+	),
+	rel.EntityMapping(t((*scpb.FunctionParams)(nil)),
+		rel.EntityAttr(DescID, "FunctionID"),
+	),
+	rel.EntityMapping(t((*scpb.FunctionComment)(nil)),
+		rel.EntityAttr(DescID, "FunctionID"),
+		rel.EntityAttr(Value, "Comment"),
+	),
+	// Domain constraint elements are placed at the end to avoid introducing
+	// new attribute ordinals before existing ones, which would change the
+	// field order in element string formatting across all golden files.
+	rel.EntityMapping(t((*scpb.DomainDefault)(nil)),
+		rel.EntityAttr(DescID, "TypeID"),
+		rel.EntityAttr(Expr, "Expr"),
+		rel.EntityAttr(ReferencedSequenceIDs, "UsesSequenceIDs"),
+		rel.EntityAttr(ReferencedTypeIDs, "UsesTypeIDs"),
+		rel.EntityAttr(ReferencedFunctionIDs, "UsesFunctionIDs"),
+	),
+	rel.EntityMapping(t((*scpb.DomainNotNull)(nil)),
+		rel.EntityAttr(DescID, "TypeID"),
+		rel.EntityAttr(ConstraintID, "ConstraintID"),
+	),
+	rel.EntityMapping(t((*scpb.DomainCheckConstraint)(nil)),
+		rel.EntityAttr(DescID, "TypeID"),
+		rel.EntityAttr(ConstraintID, "ConstraintID"),
+		rel.EntityAttr(Expr, "Expr"),
+		rel.EntityAttr(ReferencedSequenceIDs, "UsesSequenceIDs"),
+		rel.EntityAttr(ReferencedTypeIDs, "UsesTypeIDs"),
+		rel.EntityAttr(ReferencedFunctionIDs, "UsesFunctionIDs"),
+	),
+	rel.EntityMapping(t((*scpb.DomainCheckConstraintUnvalidated)(nil)),
+		rel.EntityAttr(DescID, "TypeID"),
+		rel.EntityAttr(ConstraintID, "ConstraintID"),
+		rel.EntityAttr(Expr, "Expr"),
+		rel.EntityAttr(ReferencedSequenceIDs, "UsesSequenceIDs"),
+		rel.EntityAttr(ReferencedTypeIDs, "UsesTypeIDs"),
+		rel.EntityAttr(ReferencedFunctionIDs, "UsesFunctionIDs"),
+	),
+	rel.EntityMapping(t((*scpb.DomainConstraintName)(nil)),
+		rel.EntityAttr(DescID, "TypeID"),
+		rel.EntityAttr(ConstraintID, "ConstraintID"),
+		rel.EntityAttr(Name, "Name"),
 	),
 }
 
@@ -534,3 +671,14 @@ var (
 			}
 		})
 )
+
+func init() {
+	// Ensure that the element schema options are updated when new element
+	// protos are added.
+	// The options are one longer because of the `Element` attribute at the
+	// start.
+	if len(elementSchemaOptions)-1 != len(scpb.GetElementOneOfProtos()) {
+		panic(fmt.Sprintf("mismatched element schema options length %d and element protos length %d",
+			len(elementSchemaOptions), len(scpb.GetElementOneOfProtos())))
+	}
+}

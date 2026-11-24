@@ -13,30 +13,58 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobsprotectedts"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
-// createProtectedTimestampRecord will create a record to protect the spans for
-// this changefeed at the resolved timestamp.
-func createProtectedTimestampRecord(
-	ctx context.Context,
-	codec keys.SQLCodec,
-	jobID jobspb.JobID,
-	targets changefeedbase.Targets,
-	resolved hlc.Timestamp,
+// createCombinedProtectedTimestampRecord will create a record to
+// protect the spans for this changefeed at the resolved timestamp. It will
+// protect both the system tables and the user tables. This is the legacy style
+// protected timestamp record that was used before per-table protected timestamps
+// were introduced where we protect system tables in their own record.
+func createCombinedProtectedTimestampRecord(
+	ctx context.Context, jobID jobspb.JobID, targets changefeedbase.Targets, resolved hlc.Timestamp,
 ) *ptpb.Record {
 	ptsID := uuid.MakeV4()
-	deprecatedSpansToProtect := makeSpansToProtect(codec, targets)
-	targetToProtect := makeTargetToProtect(targets)
+	targetToProtect := makeCombinedTargetToProtect(targets)
 
 	log.VEventf(ctx, 2, "creating protected timestamp %v at %v", ptsID, resolved)
 	return jobsprotectedts.MakeRecord(
-		ptsID, int64(jobID), resolved, deprecatedSpansToProtect,
-		jobsprotectedts.Jobs, targetToProtect)
+		ptsID, int64(jobID), resolved, jobsprotectedts.Jobs, targetToProtect)
+}
+
+// createSystemTablesProtectedTimestampRecord will create a record to
+// protect the system tables at the resolved timestamp. We use this to protect
+// system tables separately from the user tables when per-table protected
+// timestamps are enabled to avoid duplicating the system tables protections
+// in each of the user tables' protected timestamp records.
+func createSystemTablesProtectedTimestampRecord(
+	ctx context.Context, jobID jobspb.JobID, resolved hlc.Timestamp,
+) *ptpb.Record {
+	ptsID := uuid.MakeV4()
+
+	log.VEventf(ctx, 2, "creating protected timestamp for system tables %v at %v", ptsID, resolved)
+	return jobsprotectedts.MakeRecord(
+		ptsID, int64(jobID), resolved, jobsprotectedts.Jobs, makeSystemTablesTargetToProtect(),
+	)
+}
+
+// createUserTablesProtectedTimestampRecord will create a record to protect the
+// user tables at the resolved timestamp. We use this to protect user tables
+// separately from the system tables when per-table protected timestamps are
+// enabled.
+func createUserTablesProtectedTimestampRecord(
+	ctx context.Context, jobID jobspb.JobID, targets changefeedbase.Targets, resolved hlc.Timestamp,
+) *ptpb.Record {
+	ptsID := uuid.MakeV4()
+
+	log.VEventf(ctx, 2, "creating protected timestamp for user tables %v at %v", ptsID, resolved)
+	return jobsprotectedts.MakeRecord(
+		ptsID, int64(jobID), resolved, jobsprotectedts.Jobs,
+		makeUserTablesTargetToProtect(targets),
+	)
 }
 
 // systemTablesToProtect holds the descriptor IDs of the system tables
@@ -44,15 +72,19 @@ func createProtectedTimestampRecord(
 // historical read of a table descriptor.
 var systemTablesToProtect = []descpb.ID{
 	keys.DescriptorTableID,
-	keys.CommentsTableID,
-	keys.ZonesTableID,
-	// Required for CDC Queries.
-	keys.RoleMembersTableID,
 	keys.UsersTableID,
-	// TODO(#128806, #133566): identify and add any more required tables
+	keys.ZonesTableID,
+	keys.RoleMembersTableID,
+	keys.CommentsTableID,
+	keys.NamespaceTableID,
+	keys.RoleOptionsTableID,
+	// These can be identified by the TestChangefeedIdentifyDependentTablesForProtecting test.
 }
 
-func makeTargetToProtect(targets changefeedbase.Targets) *ptpb.Target {
+// makeCombinedTargetToProtect will create a target to protect the spans for the given
+// targets. It adds the system tables to the specified targets. Note that this
+// is only used for the legacy style (non-per-table) protected timestamp record.
+func makeCombinedTargetToProtect(targets changefeedbase.Targets) *ptpb.Target {
 	tablesToProtect := make(descpb.IDs, 0, targets.NumUniqueTables()+len(systemTablesToProtect))
 	_ = targets.EachTableID(func(id descpb.ID) error {
 		tablesToProtect = append(tablesToProtect, id)
@@ -62,21 +94,22 @@ func makeTargetToProtect(targets changefeedbase.Targets) *ptpb.Target {
 	return ptpb.MakeSchemaObjectsTarget(tablesToProtect)
 }
 
-func makeSpansToProtect(codec keys.SQLCodec, targets changefeedbase.Targets) []roachpb.Span {
-	spansToProtect := make([]roachpb.Span, 0, targets.NumUniqueTables()+len(systemTablesToProtect))
-	addTablePrefix := func(id uint32) {
-		tablePrefix := codec.TablePrefix(id)
-		spansToProtect = append(spansToProtect, roachpb.Span{
-			Key:    tablePrefix,
-			EndKey: tablePrefix.PrefixEnd(),
-		})
-	}
+// makeUserTablesTargetToProtect will create a target to protect the spans for
+// the given targets. It does not add the system tables to the specified targets.
+// This is used when per-table protected timestamps are enabled to protect only
+// the user tables.
+func makeUserTablesTargetToProtect(targets changefeedbase.Targets) *ptpb.Target {
+	tablesToProtect := make(descpb.IDs, 0, targets.NumUniqueTables())
 	_ = targets.EachTableID(func(id descpb.ID) error {
-		addTablePrefix(uint32(id))
+		tablesToProtect = append(tablesToProtect, id)
 		return nil
 	})
-	for _, id := range systemTablesToProtect {
-		addTablePrefix(uint32(id))
-	}
-	return spansToProtect
+	return ptpb.MakeSchemaObjectsTarget(tablesToProtect)
+}
+
+// makeSystemTablesTargetToProtect will create a target to protect the spans for
+// the system tables. It is used when per-table protected timestamps are enabled.
+// In that case we protect the system tables separately from the user tables.
+func makeSystemTablesTargetToProtect() *ptpb.Target {
+	return ptpb.MakeSchemaObjectsTarget(systemTablesToProtect)
 }

@@ -227,6 +227,18 @@ func LookupCast(src, tgt *types.T) (Cast, bool) {
 		}, true
 	}
 
+	// Domain types have dynamic OIDs, so they can't be populated in castMap.
+	// A domain type is castable from any type that can cast to the base type,
+	// and castable to any type the base type can cast to.
+	if src.TypeMeta.DomainData != nil {
+		// Cast from a domain type: look up the cast from the base type.
+		return LookupCast(src.TypeMeta.DomainData.BaseType, tgt)
+	}
+	if tgt.TypeMeta.DomainData != nil {
+		// Cast to a domain type: look up the cast to the base type.
+		return LookupCast(src, tgt.TypeMeta.DomainData.BaseType)
+	}
+
 	// Enums have dynamic OIDs, so they can't be populated in castMap. Instead,
 	// we dynamically create cast structs for valid enum casts.
 	if srcFamily == types.EnumFamily && tgtFamily == types.StringFamily {

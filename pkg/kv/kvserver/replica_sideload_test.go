@@ -66,7 +66,7 @@ func TestRaftSSTableSideloadingProposal(t *testing.T) {
 		ba.Add(&get)
 		ba.Header.RangeID = tc.repl.RangeID
 
-		br, pErr := tc.store.Send(ctx, ba)
+		br, pErr := ToSenderForTesting(tc.store).Send(ctx, ba)
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
@@ -160,7 +160,7 @@ func TestRaftSSTableSideloading(t *testing.T) {
 		addReq.EndKey = addReq.Key.Next()
 		ba.Add(&addReq)
 
-		_, pErr := tc.store.Send(ctx, ba)
+		_, pErr := ToSenderForTesting(tc.store).Send(ctx, ba)
 		if pErr != nil {
 			t.Fatal(pErr)
 		}
@@ -173,21 +173,20 @@ func TestRaftSSTableSideloading(t *testing.T) {
 	tc.repl.mu.Lock()
 	defer tc.repl.mu.Unlock()
 
-	rsl := logstore.NewStateLoader(tc.repl.RangeID)
-	lo := tc.repl.shMu.state.TruncatedState.Index + 1
-	hi := tc.repl.shMu.lastIndexNotDurable + 1
+	comp := tc.repl.asLogStorage().shMu.trunc.Index
+	last := tc.repl.asLogStorage().shMu.last.Index
 
-	tc.store.raftEntryCache.Clear(tc.repl.RangeID, hi)
+	tc.store.raftEntryCache.Clear(tc.repl.RangeID, last)
 	ents, cachedBytes, _, err := logstore.LoadEntries(
-		ctx, rsl, tc.store.TODOEngine(), tc.repl.RangeID, tc.store.raftEntryCache,
-		tc.repl.raftMu.sideloaded, lo, hi, math.MaxUint64, nil /* account */)
+		ctx, tc.store.LogEngine(), tc.repl.RangeID, tc.store.raftEntryCache,
+		tc.repl.logStorage.ls.Sideload, comp+1, last+1, math.MaxUint64, nil /* account */)
 	require.NoError(t, err)
-	require.Len(t, ents, int(hi-lo))
+	require.Len(t, ents, int(last-comp))
 	require.Zero(t, cachedBytes)
 
 	// Check that the Raft entry cache was populated.
-	_, okLo := tc.store.raftEntryCache.Get(tc.repl.RangeID, lo)
-	_, okHi := tc.store.raftEntryCache.Get(tc.repl.RangeID, hi-1)
+	_, okLo := tc.store.raftEntryCache.Get(tc.repl.RangeID, comp+1)
+	_, okHi := tc.store.raftEntryCache.Get(tc.repl.RangeID, last)
 	require.True(t, okLo)
 	require.True(t, okHi)
 
@@ -198,9 +197,10 @@ func TestRaftSSTableSideloading(t *testing.T) {
 		if typ, _, _ := raftlog.EncodingOf(ents[idx]); !typ.IsSideloaded() {
 			continue
 		}
-		ent, err := logstore.MaybeInlineSideloadedRaftCommand(ctx, tc.repl.RangeID, ents[idx], tc.repl.raftMu.sideloaded, tc.store.raftEntryCache)
+		ent, err := logstore.MaybeInlineSideloadedRaftCommand(ctx, tc.repl.RangeID, ents[idx],
+			tc.repl.logStorage.ls.Sideload, tc.store.raftEntryCache)
 		require.NoError(t, err)
-		sst, err := tc.repl.raftMu.sideloaded.Get(ctx, kvpb.RaftIndex(ent.Index), kvpb.RaftTerm(ent.Term))
+		sst, err := tc.repl.logStorage.ls.Sideload.Get(ctx, kvpb.RaftIndex(ent.Index), kvpb.RaftTerm(ent.Term))
 		require.NoError(t, err)
 		require.Equal(t, origSSTData, sst)
 		break
@@ -245,7 +245,8 @@ func TestRaftSSTableSideloadingTruncation(t *testing.T) {
 		fmtSideloaded := func() []string {
 			tc.repl.raftMu.Lock()
 			defer tc.repl.raftMu.Unlock()
-			fs, _ := tc.repl.store.TODOEngine().Env().List(tc.repl.raftMu.sideloaded.Dir())
+			// NB: sideloaded entries are in the StateEngine filesystem.
+			fs, _ := tc.repl.store.StateEngine().Env().List(tc.repl.logStorage.ls.Sideload.Dir())
 			sort.Strings(fs)
 			return fs
 		}

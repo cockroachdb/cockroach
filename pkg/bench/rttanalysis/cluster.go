@@ -16,7 +16,7 @@ import (
 )
 
 // ClusterConstructor is used to construct a Cluster for an individual case run.
-type ClusterConstructor func(testing.TB) *Cluster
+type ClusterConstructor func(tb testing.TB, measureRoundtrips bool) *Cluster
 
 // MakeClusterConstructor creates a new ClusterConstructor using the provided
 // function. The intention is that the caller will use the provided knobs when
@@ -24,16 +24,18 @@ type ClusterConstructor func(testing.TB) *Cluster
 func MakeClusterConstructor(
 	f func(testing.TB, base.TestingKnobs) (_, _ *gosql.DB, cleanup func()),
 ) ClusterConstructor {
-	return func(t testing.TB) *Cluster {
+	return func(t testing.TB, measureRoundtrips bool) *Cluster {
 		c := &Cluster{}
 		beforePlan := func(trace tracingpb.Recording, stmt string) {
 			c.stmtToKVBatchRequests.Store(stmt, &trace)
 		}
-		c.adminSQLConn, c.nonAdminSQLConn, c.cleanup = f(t, base.TestingKnobs{
-			SQLExecutor: &sql.ExecutorTestingKnobs{
+		knobs := base.TestingKnobs{}
+		if measureRoundtrips {
+			knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
 				WithStatementTrace: beforePlan,
-			},
-		})
+			}
+		}
+		c.adminSQLConn, c.nonAdminSQLConn, c.cleanup = f(t, knobs)
 		return c
 	}
 }

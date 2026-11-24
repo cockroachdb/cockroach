@@ -14,14 +14,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/errors"
 )
 
 func constructPlan(
-	planner *planner,
 	root exec.Node,
 	subqueries []exec.Subquery,
 	cascades, triggers []exec.PostQuery,
@@ -57,6 +58,8 @@ func constructPlan(
 				out.execMode = rowexec.SubqueryExecModeAllRowsNormalized
 			case exec.SubqueryAllRows:
 				out.execMode = rowexec.SubqueryExecModeAllRows
+			case exec.SubqueryDiscardAllRows:
+				out.execMode = rowexec.SubqueryExecModeDiscardAllRows
 			default:
 				return nil, errors.Errorf("invalid SubqueryMode %d", in.Mode)
 			}
@@ -106,6 +109,24 @@ func constructPlan(
 	}
 	if flags.IsSet(exec.PlanFlagCheckContainsLocking) {
 		res.flags.Set(planFlagCheckContainsLocking)
+	}
+	if flags.IsSet(exec.PlanFlagContainsDelete) {
+		res.flags.Set(planFlagContainsDelete)
+	}
+	if flags.IsSet(exec.PlanFlagContainsInsert) {
+		res.flags.Set(planFlagContainsInsert)
+	}
+	if flags.IsSet(exec.PlanFlagContainsUpdate) {
+		res.flags.Set(planFlagContainsUpdate)
+	}
+	if flags.IsSet(exec.PlanFlagContainsUpsert) {
+		res.flags.Set(planFlagContainsUpsert)
+	}
+	if flags.IsSet(exec.PlanFlagUsesRLS) {
+		res.flags.Set(planFlagUsesRLS)
+	}
+	if flags.IsSet(exec.PlanFlagCanaryAndStableStatsDiffer) {
+		res.flags.Set(planFlagCanaryAndStableStatsDiffer)
 	}
 
 	return res, nil
@@ -246,7 +267,7 @@ func constructVirtualScan(
 	delayedNodeCallback func(*delayedNode) (exec.Node, error),
 ) (exec.Node, error) {
 	tn := &table.(*optVirtualTable).name
-	virtual, err := p.getVirtualTabler().getVirtualTableEntry(tn, p)
+	virtual, err := p.getVirtualTabler().getVirtualTableEntry(tn)
 	if err != nil {
 		return nil, err
 	}
@@ -255,7 +276,7 @@ func constructVirtualScan(
 	}
 	idx := index.(*optVirtualIndex).idx
 	columns, constructor := virtual.getPlanInfo(
-		table.(*optVirtualTable).desc, idx, params.IndexConstraint, p.execCfg.Stopper,
+		table.(*optVirtualTable).desc, idx, params, p.execCfg.Stopper,
 	)
 
 	n, err := delayedNodeCallback(&delayedNode{
@@ -277,13 +298,51 @@ func constructVirtualScan(
 		// We shouldn't have allowed SELECT FOR UPDATE for a virtual table.
 		return nil, errors.AssertionFailedf("locking cannot be used with virtual table")
 	}
-	if needed := params.NeededCols; needed.Len() != len(columns) {
+
+	// Check if the tableoid system column is needed. The tableoid ordinal is
+	// after all public columns + the dummy PK column. Since the virtual table
+	// generator doesn't produce system columns, we handle tableoid separately
+	// by rendering it as a constant after the scan.
+	tableoidOrd := len(columns) + 1 // +1 for dummy PK
+	needTableoid := params.NeededCols.Contains(tableoidOrd)
+	needed := params.NeededCols.Copy()
+	needed.Remove(tableoidOrd)
+
+	if needed.Len() != len(columns) {
 		// We are selecting a subset of columns; we need a projection.
 		cols := make([]exec.NodeColumnOrdinal, 0, needed.Len())
 		for ord, ok := needed.Next(0); ok; ord, ok = needed.Next(ord + 1) {
 			cols = append(cols, exec.NodeColumnOrdinal(ord-1))
 		}
 		n, err = ef.ConstructSimpleProject(n, cols, nil /* reqOrdering */)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if needTableoid {
+		// Add the tableoid system column as a constant render. The tableoid
+		// has the highest ordinal, so it always appears last in the output.
+		inputCols := planColumns(n.(planNode))
+		renderCols := make(colinfo.ResultColumns, len(inputCols)+1)
+		copy(renderCols, inputCols)
+		renderCols[len(inputCols)] = colinfo.ResultColumn{
+			Name:    colinfo.TableOIDColumnName,
+			Typ:     types.Oid,
+			Hidden:  true,
+			TableID: table.(*optVirtualTable).desc.GetID(),
+		}
+		exprs := make(tree.TypedExprs, len(inputCols)+1)
+		for i := range inputCols {
+			exprs[i] = tree.NewTypedOrdinalReference(i, inputCols[i].Typ)
+		}
+		tableID := table.(*optVirtualTable).desc.GetID()
+		tableOidValue := catconstants.RemapPgCatalogOid(
+			tn.Schema(),
+			uint32(tableID),
+			sessiondatapb.IsPgDumpCompatibilityEnabled(p.SessionData().PgDumpCompatibility),
+		)
+		exprs[len(inputCols)] = tree.NewDOid(tableOidValue)
+		n, err = ef.ConstructRender(n, renderCols, exprs, nil /* reqOrdering */)
 		if err != nil {
 			return nil, err
 		}
@@ -299,21 +358,12 @@ func constructVirtualScan(
 	// Virtual indexes never provide a legitimate ordering, so we have to make
 	// sure to sort if we have a required ordering.
 	if len(reqOrdering) != 0 {
-		n, err = ef.ConstructSort(n, reqOrdering, 0)
+		n, err = ef.ConstructSort(n, reqOrdering, 0 /* alreadyOrderedPrefix */, 0 /* estimatedInputRowCount */)
 		if err != nil {
 			return nil, err
 		}
 	}
 	return n, nil
-}
-
-func scanContainsSystemColumns(colCfg *scanColumnsConfig) bool {
-	for _, id := range colCfg.wantedColumns {
-		if colinfo.IsColIDSystemColumn(id) {
-			return true
-		}
-	}
-	return false
 }
 
 func constructOpaque(metadata opt.OpaqueMetadata) (planNode, error) {

@@ -1,7 +1,8 @@
+# LogicTest: !local-prepared
 statement ok
 SET CLUSTER SETTING sql.log.slow_query.latency_threshold = '1ms'
 
-statement error pq: invalid value for sql.log.slow_query.latency_threshold: cannot be set to a negative duration
+statement error pq: cannot be set to a negative duration
 SET CLUSTER SETTING sql.log.slow_query.latency_threshold = '-1ms'
 
 statement error pq: invalid cluster setting argument type
@@ -358,7 +359,7 @@ SHOW CLUSTER SETTING server.mem_profile.total_dump_size_limit FOR TENANT "cluste
 ----
 NULL
 
-onlyif config 3snode-tenant-default-config
+onlyif config 3node-tenant-default-configs
 query error SHOW CLUSTER SETTINGS FOR TENANT can only be called by system operators
 SHOW CLUSTER SETTINGS FOR TENANT [10]
 
@@ -448,3 +449,41 @@ query B
 SHOW CLUSTER SETTING sql.explain_analyze.include_ru_estimation.enabled FOR TENANT "cluster-10"
 ----
 false
+
+subtest notice_on_ttl_default_rate_limit
+
+query T noticetrace
+SET CLUSTER SETTING sql.ttl.default_delete_rate_limit = 90;
+----
+NOTICE: The TTL rate limit is per node per table.
+DETAIL: See the documentation for additional details: https://www.cockroachlabs.com/docs/.../row-level-ttl#ttl-storage-parameters
+
+statement ok
+SET CLUSTER SETTING sql.ttl.default_delete_rate_limit = 100;
+
+query T noticetrace
+SET CLUSTER SETTING sql.ttl.default_select_rate_limit = 100;
+----
+NOTICE: The TTL rate limit is per node per table.
+DETAIL: See the documentation for additional details: https://www.cockroachlabs.com/docs/.../row-level-ttl#ttl-storage-parameters
+
+statement ok
+SET CLUSTER SETTING sql.ttl.default_select_rate_limit = 0;
+
+subtest end
+
+subtest internal_executor_session_overrides_validation
+
+statement ok
+SET CLUSTER SETTING sql.internal_executor.session_overrides = 'Database=foo'
+
+statement error unknown or unsupported session variable "bogus"
+SET CLUSTER SETTING sql.internal_executor.session_overrides = 'bogus=bar'
+
+statement error invalid override format
+SET CLUSTER SETTING sql.internal_executor.session_overrides = 'no_equals_sign'
+
+statement ok
+SET CLUSTER SETTING sql.internal_executor.session_overrides = ''
+
+subtest end

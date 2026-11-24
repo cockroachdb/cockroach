@@ -8,7 +8,6 @@ package clisqlclient
 import (
 	"context"
 	"database/sql/driver"
-	"fmt"
 	"io"
 	"os"
 	"strconv"
@@ -129,38 +128,9 @@ func StmtDiagListOutstandingRequests(
 	return result, nil
 }
 
-func isAtLeast24dot2ClusterVersion(ctx context.Context, conn Conn) (bool, error) {
-	// Check whether the upgrade to add the redacted column to the
-	// statement_diagnostics_requests system table has already been run.
-	row, err := conn.QueryRow(ctx, `
- SELECT
-   count(*)
- FROM
-   [SHOW COLUMNS FROM system.statement_diagnostics_requests]
- WHERE
-   column_name = 'redacted';`)
-	if err != nil {
-		return false, err
-	}
-	c, ok := row[0].(int64)
-	if !ok {
-		return false, nil
-	}
-	return c == 1, nil
-}
-
 func stmtDiagListOutstandingRequestsInternal(
 	ctx context.Context, conn Conn,
 ) ([]StmtDiagActivationRequest, error) {
-	var extraColumns string
-	atLeast24dot2, err := isAtLeast24dot2ClusterVersion(ctx, conn)
-	if err != nil {
-		return nil, err
-	}
-	if atLeast24dot2 {
-		extraColumns = ", redacted"
-	}
-
 	// Converting an INTERVAL to a number of milliseconds within that interval
 	// is a pain - we extract the number of seconds and multiply it by 1000,
 	// then we extract the number of milliseconds and add that up to the
@@ -170,11 +140,11 @@ func stmtDiagListOutstandingRequestsInternal(
                         EXTRACT(millisecond FROM min_execution_latency)::INT8 -
                         EXTRACT(second FROM min_execution_latency)::INT8 * 1000`
 	rows, err := conn.Query(ctx,
-		fmt.Sprintf("SELECT id, statement_fingerprint, requested_at, "+getMilliseconds+`,
-                                   expires_at, sampling_probability, plan_gist, anti_plan_gist%s
+		"SELECT id, statement_fingerprint, requested_at, "+getMilliseconds+`,
+                                   expires_at, sampling_probability, plan_gist, anti_plan_gist, redacted
 			FROM system.statement_diagnostics_requests
 			WHERE NOT completed
-			ORDER BY requested_at DESC`, extraColumns),
+			ORDER BY requested_at DESC`,
 	)
 	if err != nil {
 		return nil, err
@@ -208,10 +178,8 @@ func stmtDiagListOutstandingRequestsInternal(
 		if antiGist, ok := vals[7].(bool); ok {
 			antiPlanGist = antiGist
 		}
-		if atLeast24dot2 {
-			if b, ok := vals[8].(bool); ok {
-				redacted = b
-			}
+		if b, ok := vals[8].(bool); ok {
+			redacted = b
 		}
 		info := StmtDiagActivationRequest{
 			ID:                  vals[0].(int64),

@@ -1,0 +1,118 @@
+# -------------------------------------------------------------
+# This test is a regression test for an issue in which a
+# series of acquires resulted in the lock table holding an unreplicated
+# lock belonging to an older epoch.
+#
+# The actual test failure involved a longer and more complicated
+# sequence of acquisition, here we've reduce it the following
+# operations on a single key:
+#
+# Req0: Put@epo=0 (not included below since it has no lock table side effects)
+# Req1: Get(Exclusive, Unreplicated)@epo=0
+# Req2: Get(Shared, Replicated)@epo=0
+# Req3: Put@epo=0
+#
+# Then we bump the transaction Epoch to 1 but leave the WriteTimestamp
+# the same -- simulating an IntentMissingError on some unrelated
+# key.
+#
+# Finally, we send what would be the first request in the retrying
+# transaction:
+#
+# Req4: Put@epo=1
+#
+# Previously, this sequence would leave the unreplicated lock from
+# epoch=0 in our lock table. In most cases this does not cause
+# problems, but if we want to flush the lock table to disk, we would
+# fail with an error.
+# -------------------------------------------------------------
+
+new-lock-table maxlocks=10000
+----
+
+new-txn txn=txn1 ts=10,1 epoch=0 seq=1
+----
+
+new-request r=req1 txn=txn1 ts=10,1 spans=intent@a
+----
+
+scan r=req1
+----
+start-waiting: false
+
+acquire r=req1 k=a durability=u strength=exclusive
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 1)]
+
+dequeue r=req1
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: unrepl [(str: Exclusive seq: 1)]
+
+
+new-request r=req2 txn=txn1 ts=10,1 spans=shared@a
+----
+
+scan r=req2
+----
+start-waiting: false
+
+acquire r=req2 k=a durability=r strength=shared
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Shared], unrepl [(str: Exclusive seq: 1)]
+
+dequeue r=req2
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Shared], unrepl [(str: Exclusive seq: 1)]
+
+
+new-request r=req3 txn=txn1 ts=10,1 spans=intent@a
+----
+
+scan r=req3
+----
+start-waiting: false
+
+acquire r=req3 k=a durability=r strength=intent
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent, Shared], unrepl [(str: Exclusive seq: 1)]
+   queued locking requests:
+    active: false req: 3 promoting: true, strength: Intent, txn: 00000000-0000-0000-0000-000000000001
+
+dequeue r=req3
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 0, iso: Serializable, ts: 10.000000000,1, info: repl [Intent, Shared], unrepl [(str: Exclusive seq: 1)]
+
+# Update Epoch but not the WriteTimestamp like an IntentMissingError.
+update-txn-not-observed txn=txn1 ts=10,1 epoch=1 seq=1
+----
+
+new-request r=req4 txn=txn1 ts=10,1 spans=intent@a
+----
+
+scan r=req4
+----
+start-waiting: false
+
+acquire r=req4 k=a durability=r strength=intent
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,1, info: repl [Intent, Shared]
+
+dequeue r=req4
+----
+num=1
+ lock: "a"
+  holder: txn: 00000000-0000-0000-0000-000000000001 epoch: 1, iso: Serializable, ts: 10.000000000,1, info: repl [Intent, Shared]

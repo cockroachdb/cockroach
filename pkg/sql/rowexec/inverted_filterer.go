@@ -9,6 +9,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
@@ -42,8 +43,9 @@ type invertedFilterer struct {
 	input          execinfra.RowSource
 	invertedColIdx uint32
 
-	diskMonitor *mon.BytesMonitor
-	rc          *rowcontainer.DiskBackedNumberedRowContainer
+	unlimitedMemMonitor *mon.BytesMonitor
+	diskMonitor         *mon.BytesMonitor
+	rc                  *rowcontainer.DiskBackedNumberedRowContainer
 
 	invertedEval batchedInvertedExprEvaluator
 	// The invertedEval result.
@@ -93,7 +95,7 @@ func newInvertedFilterer(
 	evalCtx := flowCtx.EvalCtx
 	if spec.PreFiltererSpec != nil {
 		// Only make a copy of the eval context if we're going to pass it to the
-		// ExprHelper later.
+		// execexpr.Helper later.
 		evalCtx = flowCtx.NewEvalCtx()
 	}
 	if err := ifr.ProcessorBase.InitWithEvalCtx(
@@ -110,14 +112,17 @@ func newInvertedFilterer(
 	}
 
 	// Initialize memory monitor and row container for input rows.
-	ifr.MemMonitor = execinfra.NewLimitedMonitor(ctx, flowCtx.Mon, flowCtx, "inverted-filterer-limited")
-	ifr.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.DiskMonitor, "inverted-filterer-disk")
+	mn := mon.MakeName("inverted-filterer")
+	ifr.MemMonitor = execinfra.NewLimitedMonitor(ctx, flowCtx.Mon, flowCtx, mn.Limited())
+	ifr.unlimitedMemMonitor = execinfra.NewMonitor(ctx, flowCtx.Mon, mn.Unlimited())
+	ifr.diskMonitor = execinfra.NewMonitor(ctx, flowCtx.DiskMonitor, mn.Disk())
 	ifr.rc = rowcontainer.NewDiskBackedNumberedRowContainer(
 		true, /* deDup */
 		rcColTypes,
 		ifr.FlowCtx.EvalCtx,
 		ifr.FlowCtx.Cfg.TempStorage,
 		ifr.MemMonitor,
+		ifr.unlimitedMemMonitor,
 		ifr.diskMonitor,
 	)
 
@@ -128,7 +133,7 @@ func newInvertedFilterer(
 
 	if spec.PreFiltererSpec != nil {
 		semaCtx := flowCtx.NewSemaContext(flowCtx.Txn)
-		var exprHelper execinfrapb.ExprHelper
+		var exprHelper execexpr.Helper
 		colTypes := []*types.T{spec.PreFiltererSpec.Type}
 		if err := exprHelper.Init(ctx, spec.PreFiltererSpec.Expression, colTypes, semaCtx, evalCtx); err != nil {
 			return nil, err
@@ -169,7 +174,7 @@ func (ifr *invertedFilterer) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerMe
 		case ifrEmittingRows:
 			ifr.runningState, row, meta = ifr.emitRow()
 		default:
-			log.Fatalf(ifr.Ctx(), "unsupported state: %d", ifr.runningState)
+			log.Dev.Fatalf(ifr.Ctx(), "unsupported state: %d", ifr.runningState)
 		}
 		if row == nil && meta == nil {
 			continue
@@ -305,6 +310,9 @@ func (ifr *invertedFilterer) close() {
 		if ifr.MemMonitor != nil {
 			ifr.MemMonitor.Stop(ifr.Ctx())
 		}
+		if ifr.unlimitedMemMonitor != nil {
+			ifr.unlimitedMemMonitor.Stop(ifr.Ctx())
+		}
 		if ifr.diskMonitor != nil {
 			ifr.diskMonitor.Stop(ifr.Ctx())
 		}
@@ -320,7 +328,7 @@ func (ifr *invertedFilterer) execStatsForTrace() *execinfrapb.ComponentStats {
 	return &execinfrapb.ComponentStats{
 		Inputs: []execinfrapb.InputStats{is},
 		Exec: execinfrapb.ExecStats{
-			MaxAllocatedMem:  optional.MakeUint(uint64(ifr.MemMonitor.MaximumBytes())),
+			MaxAllocatedMem:  optional.MakeUint(uint64(ifr.MemMonitor.MaximumBytes() + ifr.unlimitedMemMonitor.MaximumBytes())),
 			MaxAllocatedDisk: optional.MakeUint(uint64(ifr.diskMonitor.MaximumBytes())),
 		},
 		Output: ifr.OutputHelper.Stats(),

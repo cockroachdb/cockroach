@@ -12,6 +12,7 @@ import (
 	"math"
 	"math/rand"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -26,6 +27,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/echotest"
+	"github.com/cockroachdb/cockroach/pkg/testutils/zerofields"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -33,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/stretchr/testify/require"
 )
 
@@ -148,9 +153,9 @@ func TestLockAgeThresholdSetting(t *testing.T) {
 		require.NoError(t, err)
 		// Acquire some shared and exclusive locks as well.
 		for _, txn := range []*roachpb.Transaction{&txn1, &txn2} {
-			require.NoError(t, storage.MVCCAcquireLock(ctx, eng, txn, lock.Shared, makeKey(local, lock.Shared), nil, 0, 0))
+			require.NoError(t, storage.MVCCAcquireLock(ctx, eng, &txn.TxnMeta, txn.IgnoredSeqNums, lock.Shared, makeKey(local, lock.Shared), nil, 0, 0, false))
 		}
-		require.NoError(t, storage.MVCCAcquireLock(ctx, eng, &txn1, lock.Exclusive, makeKey(local, lock.Exclusive), nil, 0, 0))
+		require.NoError(t, storage.MVCCAcquireLock(ctx, eng, &txn1.TxnMeta, txn1.IgnoredSeqNums, lock.Exclusive, makeKey(local, lock.Exclusive), nil, 0, 0, false))
 	}
 	require.NoError(t, eng.Flush())
 
@@ -217,9 +222,9 @@ func TestIntentCleanupBatching(t *testing.T) {
 			idx := i*len(objectKeys) + j
 			switch idx % 3 {
 			case 0:
-				require.NoError(t, storage.MVCCAcquireLock(ctx, eng, &txn, lock.Shared, key, nil, 0, 0))
+				require.NoError(t, storage.MVCCAcquireLock(ctx, eng, &txn.TxnMeta, txn.IgnoredSeqNums, lock.Shared, key, nil, 0, 0, false))
 			case 1:
-				require.NoError(t, storage.MVCCAcquireLock(ctx, eng, &txn, lock.Exclusive, key, nil, 0, 0))
+				require.NoError(t, storage.MVCCAcquireLock(ctx, eng, &txn.TxnMeta, txn.IgnoredSeqNums, lock.Exclusive, key, nil, 0, 0, false))
 			case 2:
 				_, err := storage.MVCCPut(ctx, eng, key, intentHlc, value, storage.MVCCWriteOptions{Txn: &txn})
 				require.NoError(t, err)
@@ -1145,14 +1150,14 @@ func runTest(t *testing.T, data testRunData, verify gcVerifier) {
 	expectedStats := dataItems.liveDistribution().setupTest(t, ctrlEng, desc)
 
 	if log.V(1) {
-		log.Info(ctx, "Expected data:")
+		log.KvExec.Info(ctx, "Expected data:")
 		for _, l := range formatTable(engineData(t, ctrlEng, desc), tablePrefix) {
-			log.Infof(ctx, "%s", l)
+			log.KvExec.Infof(ctx, "%s", l)
 		}
 
-		log.Info(ctx, "Actual data:")
+		log.KvExec.Info(ctx, "Actual data:")
 		for _, l := range formatTable(engineData(t, eng, desc), tablePrefix) {
-			log.Infof(ctx, "%s", l)
+			log.KvExec.Infof(ctx, "%s", l)
 		}
 	}
 
@@ -1495,7 +1500,7 @@ func engineData(t *testing.T, r storage.Reader, desc roachpb.RangeDescriptor) []
 		_, r := rangeIt.HasPointAndRange()
 		if r {
 			span := rangeIt.RangeBounds()
-			newKeys := rangeIt.RangeKeys().AsRangeKeys()
+			newKeys := slices.Collect(rangeIt.RangeKeys().All())
 			if lastEnd.Equal(span.Key) {
 				// Try merging keys by timestamp.
 				var newPartial []storage.MVCCRangeKey
@@ -2351,4 +2356,43 @@ func keySeq(keyHistory ...[]gcData) (res []gcData) {
 		res = append(res, h...)
 	}
 	return res
+}
+
+func TestInfoSafeFormat(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	info := Info{
+		Now:                           hlc.Timestamp{WallTime: 1e9, Logical: 1},
+		GCTTL:                         4 * time.Hour,
+		Threshold:                     hlc.Timestamp{WallTime: 1e9 - int64(4*time.Hour), Logical: 1},
+		NumKeysAffected:               250,
+		NumRangeKeysAffected:          10,
+		AffectedVersionsKeyBytes:      16384,
+		AffectedVersionsValBytes:      131072,
+		AffectedVersionsRangeKeyBytes: 1024,
+		AffectedVersionsRangeValBytes: 4096,
+		LocksConsidered:               50,
+		LockTxns:                      8,
+		PushTxn:                       10,
+		ResolveTotal:                  50,
+		TransactionSpanTotal:          20,
+		TransactionSpanGCAborted:      5,
+		TransactionSpanGCCommitted:    12,
+		TransactionSpanGCStaging:      1,
+		TransactionSpanGCPending:      2,
+		TransactionSpanGCPrepared:     3,
+		AbortSpanTotal:                10,
+		AbortSpanConsidered:           7,
+		AbortSpanGCNum:                5,
+		ClearRangeSpanOperations:      3,
+		ClearRangeSpanFailures:        1,
+	}
+	require.NoError(t, zerofields.NoZeroField(info),
+		"update test and SafeFormat for the new field")
+	redacted := string(redact.Sprint(info))
+	unredacted := info.String()
+	require.Equal(t, unredacted, redacted,
+		"redacted and unredacted output should be identical (all fields are safe)")
+	echotest.Require(t, redacted,
+		datapathutils.TestDataPath(t, t.Name()))
 }

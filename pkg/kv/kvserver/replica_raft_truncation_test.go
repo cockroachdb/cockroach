@@ -15,11 +15,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/dd"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -38,7 +39,7 @@ func TestHandleTruncatedStateBelowRaft(t *testing.T) {
 	ctx := context.Background()
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "truncated_state"), func(t *testing.T, path string) {
 		const rangeID = 12
-		loader := stateloader.Make(rangeID)
+		loader := logstore.NewStateLoader(rangeID)
 		prefixBuf := &loader.RangeIDPrefixBuf
 		eng := storage.NewDefaultInMemForTesting()
 		defer eng.Close()
@@ -47,35 +48,23 @@ func TestHandleTruncatedStateBelowRaft(t *testing.T) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "prev":
-				var v uint64
-				d.ScanArgs(t, "index", &v)
-				prevTruncatedState.Index = kvpb.RaftIndex(v)
-				d.ScanArgs(t, "term", &v)
-				prevTruncatedState.Term = kvpb.RaftTerm(v)
+				prevTruncatedState.Index = dd.ScanArg[kvpb.RaftIndex](t, d, "index")
+				prevTruncatedState.Term = dd.ScanArg[kvpb.RaftTerm](t, d, "term")
 				return ""
 
 			case "put":
-				var index, term uint64
-				d.ScanArgs(t, "index", &index)
-				d.ScanArgs(t, "term", &term)
-
-				truncState := &kvserverpb.RaftTruncatedState{
-					Index: kvpb.RaftIndex(index),
-					Term:  kvpb.RaftTerm(term),
-				}
-
-				require.NoError(t, loader.SetRaftTruncatedState(ctx, eng, truncState))
+				require.NoError(t, loader.SetRaftTruncatedState(ctx, eng,
+					&kvserverpb.RaftTruncatedState{
+						Index: dd.ScanArg[kvpb.RaftIndex](t, d, "index"),
+						Term:  dd.ScanArg[kvpb.RaftTerm](t, d, "term"),
+					}))
 				return ""
 
 			case "handle":
 				var buf bytes.Buffer
-				var index, term uint64
-				d.ScanArgs(t, "index", &index)
-				d.ScanArgs(t, "term", &term)
-
-				suggestedTruncatedState := &kvserverpb.RaftTruncatedState{
-					Index: kvpb.RaftIndex(index),
-					Term:  kvpb.RaftTerm(term),
+				suggestedTruncatedState := kvserverpb.RaftTruncatedState{
+					Index: dd.ScanArg[kvpb.RaftIndex](t, d, "index"),
+					Term:  dd.ScanArg[kvpb.RaftTerm](t, d, "term"),
 				}
 				currentTruncatedState, err := loader.LoadRaftTruncatedState(ctx, eng)
 				require.NoError(t, err)
@@ -98,9 +87,10 @@ func TestHandleTruncatedStateBelowRaft(t *testing.T) {
 				}
 
 				// Apply truncation.
-				apply, err := handleTruncatedStateBelowRaftPreApply(ctx, &currentTruncatedState, suggestedTruncatedState, loader, eng)
-				require.NoError(t, err)
-				fmt.Fprintf(&buf, "apply: %t\n", apply)
+				require.NoError(t, handleTruncatedStateBelowRaftPreApply(
+					ctx, currentTruncatedState, suggestedTruncatedState, loader, eng,
+					false, /* enginesSeparated */
+				))
 
 				// Check the truncated state.
 				key := keys.RaftTruncatedStateKey(rangeID)

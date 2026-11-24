@@ -1,0 +1,9 @@
+/* setup */
+CREATE DOMAIN salmon AS INT DEFAULT 0;
+CREATE TYPE _trout AS ENUM ('rainbow');
+
+/* test */
+EXPLAIN (DDL, SHAPE) ALTER DOMAIN salmon RENAME TO trout;
+----
+Schema change plan for ALTER DOMAIN ‹defaultdb›.‹public›.‹salmon› RENAME TO ‹trout›;
+ └── execute 1 system table mutations transaction

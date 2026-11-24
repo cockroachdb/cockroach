@@ -9,19 +9,30 @@ import (
 	"context"
 	gosql "database/sql"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 )
+
+// TestServer is a test cluster and associated test database.
+type TestServer struct {
+	Server  serverutils.TestServerInterface
+	DB      *gosql.DB
+	Stopper func(t *testing.T)
+}
 
 // TestServerFactory constructs test clusters for declarative schema changer
 // end-to-end tests.
@@ -36,19 +47,30 @@ type TestServerFactory interface {
 	// will be the minimum supported binary version.
 	WithMixedVersion() TestServerFactory
 
+	// WithSchemaLockDisabled prevents new objects from having
+	// schema locked set.
+	WithSchemaLockDisabled() TestServerFactory
+
 	// Run creates a test cluster and applies fn to it.
 	Run(
 		ctx context.Context,
 		t *testing.T,
 		fn func(s serverutils.TestServerInterface, tdb *gosql.DB),
 	)
+
+	// Start creates a test cluster and returns a TestServer.
+	Start(
+		ctx context.Context,
+		t *testing.T,
+	) TestServer
 }
 
 // SingleNodeTestClusterFactory is the vanilla implementation of
 // the TestServerFactory interface.
 type SingleNodeTestClusterFactory struct {
-	server *server.TestingKnobs
-	scexec *scexec.TestingKnobs
+	server               *server.TestingKnobs
+	scexec               *scexec.TestingKnobs
+	schemaLockedDisabled bool
 }
 
 var _ TestServerFactory = SingleNodeTestClusterFactory{}
@@ -70,19 +92,34 @@ func (f SingleNodeTestClusterFactory) WithMixedVersion() TestServerFactory {
 	return f
 }
 
+// WithSchemaLockDisabled implements the sctest.TestServerFactory interface.
+func (f SingleNodeTestClusterFactory) WithSchemaLockDisabled() TestServerFactory {
+	f.schemaLockedDisabled = true
+	return f
+}
+
 // Run implements the TestServerFactory interface.
 func (f SingleNodeTestClusterFactory) Run(
-	ctx context.Context, t *testing.T, fn func(_ serverutils.TestServerInterface, _ *gosql.DB),
+	ctx context.Context, t *testing.T, fn func(s serverutils.TestServerInterface, tdb *gosql.DB),
 ) {
+	s := f.Start(ctx, t)
+	defer s.Stopper(t)
+	fn(s.Server, s.DB)
+}
+
+// Start implements the TestServerFactory interface.
+func (f SingleNodeTestClusterFactory) Start(ctx context.Context, t *testing.T) TestServer {
 	args := base.TestServerArgs{
+		ExternalIODir: t.TempDir(),
 		Knobs: base.TestingKnobs{
+			SQLEvalContext: &eval.TestingKnobs{
+				ForceProductionValues: true,
+			},
 			JobsTestingKnobs: newJobsKnobs(),
 			SQLExecutor: &sql.ExecutorTestingKnobs{
 				UseTransactionalDescIDGenerator: true,
 			},
 		},
-		// TODO(postamar): remove this
-		DefaultTestTenant: base.TODOTestTenantDisabled,
 	}
 	if f.server != nil {
 		args.Knobs.Server = f.server
@@ -90,11 +127,23 @@ func (f SingleNodeTestClusterFactory) Run(
 	if f.scexec != nil {
 		args.Knobs.SQLDeclarativeSchemaChanger = f.scexec
 	}
+	// Always run this test with schema_locked by default.
+	args.Settings = cluster.MakeTestingClusterSettings()
+	if f.server != nil && f.server.ClusterVersionOverride.Major != 0 {
+		args.Settings = cluster.MakeClusterSettingsWithVersions(clusterversion.Latest.Version(), f.server.ClusterVersionOverride)
+	}
+	sql.CreateTableWithSchemaLocked.Override(ctx, &args.Settings.SV, !f.schemaLockedDisabled)
+	closedts.TargetDuration.Override(ctx, &args.Settings.SV, 20*time.Millisecond)
+	closedts.SideTransportCloseInterval.Override(ctx, &args.Settings.SV, 20*time.Millisecond)
 	s, db, _ := serverutils.StartServer(t, args)
-	defer func() {
-		s.Stopper().Stop(ctx)
-	}()
-	fn(s, db)
+
+	return TestServer{
+		Server: s,
+		DB:     db,
+		Stopper: func(t *testing.T) {
+			s.Stopper().Stop(ctx)
+		},
+	}
 }
 
 // OldVersionKey is the version key used by the WithMixedVersion method
@@ -114,19 +163,19 @@ func newJobsKnobs() *jobs.TestingKnobs {
 	}{
 		m: make(map[jobspb.JobID]struct{}),
 	}
-	jobKnobs.BeforeUpdate = func(orig, updated jobs.JobMetadata) error {
+	jobKnobs.BeforeUpdate = func(orig, updated jobs.DeprecatedJobMetadata) error {
 		sc := orig.Payload.GetNewSchemaChange()
 		if sc == nil {
 			return nil
 		}
-		if orig.Status != jobs.StatusRunning || updated.Status != jobs.StatusSucceeded {
+		if orig.State != jobs.StateRunning || updated.State != jobs.StateSucceeded {
 			return nil
 		}
 		injectedFailures.Lock()
 		defer injectedFailures.Unlock()
 		if _, ok := injectedFailures.m[orig.ID]; !ok {
 			injectedFailures.m[orig.ID] = struct{}{}
-			log.Infof(context.Background(), "injecting failure while marking job succeeded")
+			log.Dev.Infof(context.Background(), "injecting failure while marking job succeeded")
 			return errors.New("injected failure when marking succeeded")
 		}
 		return nil

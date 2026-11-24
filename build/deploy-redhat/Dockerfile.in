@@ -6,6 +6,7 @@ RUN microdnf install -y yum && \
   rm -rf /var/cache/yum
 
 LABEL name="CockroachDB"
+LABEL maintainer="Cockroach Labs"
 LABEL vendor="Cockroach Labs"
 LABEL summary="CockroachDB is a distributed SQL database."
 LABEL description="CockroachDB is a PostgreSQL wire-compatable distributed SQL database."

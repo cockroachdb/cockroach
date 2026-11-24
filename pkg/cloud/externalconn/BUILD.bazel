@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "externalconn",
@@ -27,5 +27,41 @@ go_library(
         "//pkg/util/protoutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_lib_pq//oid",
+    ],
+)
+
+go_test(
+    name = "externalconn_test",
+    size = "large",
+    srcs = [
+        "datadriven_test.go",
+        "main_test.go",
+    ],
+    data = glob(["testdata/**"]),
+    exec_properties = {
+        "dockerNetwork": "standard",
+    },
+    deps = [
+        ":externalconn",
+        "//pkg/backup",
+        "//pkg/base",
+        "//pkg/ccl/changefeedccl",
+        "//pkg/cloud/externalconn/providers",
+        "//pkg/cloud/externalconn/testutils",
+        "//pkg/jobs",
+        "//pkg/roachpb",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/server",
+        "//pkg/testutils",
+        "//pkg/testutils/datapathutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+        "@com_github_stretchr_testify//require",
     ],
 )

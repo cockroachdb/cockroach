@@ -122,7 +122,7 @@ CREATE TABLE uniontest (
   v INT
 )
 
-statement OK
+statement ok
 INSERT INTO uniontest VALUES
 (1, 1),
 (1, 1),
@@ -564,9 +564,24 @@ SELECT a FROM ab UNION ALL SELECT x AS a FROM xy
 
 # If the ordering is only required on a subset of the columns, ensure that we
 # still produce the correct ordering.
+
+statement ok
+ALTER TABLE ab SET (schema_locked=false)
+
 statement ok
 TRUNCATE ab;
+
+statement ok
+ALTER TABLE ab RESET (schema_locked)
+
+statement ok
+ALTER TABLE xy SET (schema_locked=false)
+
+statement ok
 TRUNCATE xy;
+
+statement ok
+ALTER TABLE xy RESET (schema_locked)
 
 statement ok
 INSERT INTO ab VALUES (1, 1), (2, 2), (3, 3), (4, 4), (5, 5);
@@ -735,3 +750,52 @@ query II
 SELECT k, v FROM v127043_2 INNER JOIN t127043_3 ON k = k3 WHERE k = 1 LIMIT 1;
 ----
 1  1
+
+# Regression tests for #130593 (set operations with empty column sets).
+statement ok
+CREATE TABLE t130591_1 AS SELECT ALL;
+CREATE TABLE t130591_2 AS SELECT ALL
+
+statement count 0
+TABLE t130591_1 EXCEPT DISTINCT TABLE t130591_1;
+
+statement count 1
+TABLE t130591_1 INTERSECT DISTINCT TABLE t130591_1;
+
+statement count 1
+TABLE t130591_1 UNION DISTINCT TABLE t130591_1;
+
+statement count 0
+TABLE t130591_1 EXCEPT DISTINCT TABLE t130591_2;
+
+statement count 1
+TABLE t130591_1 INTERSECT DISTINCT TABLE t130591_2;
+
+statement count 1
+TABLE t130591_1 UNION DISTINCT TABLE t130591_2;
+
+statement ok
+INSERT INTO t130591_1 DEFAULT VALUES;
+
+query I
+SELECT count(*) FROM t130591_1;
+----
+2
+
+statement count 0
+TABLE t130591_1 EXCEPT DISTINCT TABLE t130591_1;
+
+statement count 1
+TABLE t130591_1 INTERSECT DISTINCT TABLE t130591_1;
+
+statement count 1
+TABLE t130591_1 UNION DISTINCT TABLE t130591_1;
+
+statement count 0
+TABLE t130591_1 EXCEPT TABLE t130591_1;
+
+statement count 1
+TABLE t130591_1 INTERSECT TABLE t130591_1;
+
+statement count 1
+TABLE t130591_1 UNION TABLE t130591_1;

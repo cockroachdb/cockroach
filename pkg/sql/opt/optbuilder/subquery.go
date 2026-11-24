@@ -406,10 +406,27 @@ func (b *Builder) buildMultiRowSubquery(
 	}
 
 	if b.insideUDF {
-		// Any expressions cannot be built by the optimizer within a UDF, so
-		// build them as subqueries with ScalarGroupBy expressions instead.
-		sub := b.factory.CustomFuncs().ConstructGroupByAny(scalar, cmp, input)
-		out = b.factory.ConstructSubquery(sub, &memo.SubqueryPrivate{OriginalExpr: s.Subquery})
+		// ANY subqueries cannot be executed as subqueries within a UDF.
+		// Instead, we build them as either scalar ANY expression (if the
+		// subquery is an uncorrelated Values) or subqueries with ScalarGroupBy
+		// expressions (otherwise).
+		if v, ok := input.(*memo.ValuesExpr); ok && v.Relational().OuterCols.Empty() {
+			var tup opt.ScalarExpr = memo.EmptyTuple
+			if len(v.Rows) > 0 {
+				typs := make([]*types.T, len(v.Rows))
+				elems := make(memo.ScalarListExpr, len(v.Rows))
+				for i := range v.Rows {
+					val := v.Rows[i].(*memo.TupleExpr).Elems[0]
+					elems[i] = val
+					typs[i] = val.DataType()
+				}
+				tup = b.factory.ConstructTuple(elems, types.MakeTuple(typs))
+			}
+			out = b.factory.ConstructAnyScalar(scalar, tup, cmp)
+		} else {
+			sub := b.factory.CustomFuncs().ConstructGroupByAny(scalar, cmp, input)
+			out = b.factory.ConstructSubquery(sub, &memo.SubqueryPrivate{OriginalExpr: s.Subquery})
+		}
 	} else {
 		// Construct the outer Any(...) operator.
 		out = b.factory.ConstructAny(input, scalar, &memo.SubqueryPrivate{

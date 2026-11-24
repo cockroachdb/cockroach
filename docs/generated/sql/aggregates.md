@@ -73,6 +73,10 @@
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_agg"></a><code>array_agg(arg1: jsonb[]) &rarr; jsonb[][]</code></td><td><span class="funcdesc"><p>Aggregates the selected values into an array.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="array_agg"></a><code>array_agg(arg1: ltree) &rarr; ltree[]</code></td><td><span class="funcdesc"><p>Aggregates the selected values into an array.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="array_agg"></a><code>array_agg(arg1: ltree[]) &rarr; ltree[][]</code></td><td><span class="funcdesc"><p>Aggregates the selected values into an array.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="array_agg"></a><code>array_agg(arg1: oid) &rarr; oid[]</code></td><td><span class="funcdesc"><p>Aggregates the selected values into an array.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_agg"></a><code>array_agg(arg1: oid[]) &rarr; oid[][]</code></td><td><span class="funcdesc"><p>Aggregates the selected values into an array.</p>
@@ -132,6 +136,8 @@
 <tr><td><a name="array_cat_agg"></a><code>array_cat_agg(arg1: geometry[]) &rarr; geometry[]</code></td><td><span class="funcdesc"><p>Unnests the selected arrays into elements that are then aggregated into a single array.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_cat_agg"></a><code>array_cat_agg(arg1: jsonb[]) &rarr; jsonb[]</code></td><td><span class="funcdesc"><p>Unnests the selected arrays into elements that are then aggregated into a single array.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="array_cat_agg"></a><code>array_cat_agg(arg1: ltree[]) &rarr; ltree[]</code></td><td><span class="funcdesc"><p>Unnests the selected arrays into elements that are then aggregated into a single array.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="array_cat_agg"></a><code>array_cat_agg(arg1: oid[]) &rarr; oid[]</code></td><td><span class="funcdesc"><p>Unnests the selected arrays into elements that are then aggregated into a single array.</p>
 </span></td><td>Immutable</td></tr>
@@ -275,6 +281,8 @@
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="max"></a><code>max(arg1: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="max"></a><code>max(arg1: ltree) &rarr; ltree</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="max"></a><code>max(arg1: oid) &rarr; oid</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="max"></a><code>max(arg1: pg_lsn) &rarr; pg_lsn</code></td><td><span class="funcdesc"><p>Identifies the maximum selected value.</p>
@@ -320,6 +328,8 @@
 <tr><td><a name="min"></a><code>min(arg1: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="min"></a><code>min(arg1: jsonb) &rarr; jsonb</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="min"></a><code>min(arg1: ltree) &rarr; ltree</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="min"></a><code>min(arg1: oid) &rarr; oid</code></td><td><span class="funcdesc"><p>Identifies the minimum selected value.</p>
 </span></td><td>Immutable</td></tr>
@@ -508,6 +518,16 @@
 <tr><td><a name="sqrdiff"></a><code>sqrdiff(arg1: <a href="float.html">float</a>) &rarr; <a href="float.html">float</a></code></td><td><span class="funcdesc"><p>Calculates the sum of squared differences from the mean of the selected values.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="sqrdiff"></a><code>sqrdiff(arg1: <a href="int.html">int</a>) &rarr; <a href="decimal.html">decimal</a></code></td><td><span class="funcdesc"><p>Calculates the sum of squared differences from the mean of the selected values.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="st_asmvt"></a><code>st_asmvt(arg1: tuple) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Generates a Mapbox Vector Tile (MVT) representation of a set of rows. Uses default layer name ‘default’ and extent 4096. Expects a geometry column named ‘geom’ in the input rows.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="st_asmvt"></a><code>st_asmvt(arg1: tuple, arg2: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Generates a Mapbox Vector Tile (MVT) representation of a set of rows with the specified layer name. Uses extent 4096 and expects a geometry column named ‘geom’ in the input rows.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="st_asmvt"></a><code>st_asmvt(arg1: tuple, arg2: <a href="string.html">string</a>, arg3: <a href="int.html">int</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Generates a Mapbox Vector Tile (MVT) representation of a set of rows with the specified layer name and extent. Expects a geometry column named ‘geom’ in the input rows.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="st_asmvt"></a><code>st_asmvt(arg1: tuple, arg2: <a href="string.html">string</a>, arg3: <a href="int.html">int</a>, arg4: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Generates a Mapbox Vector Tile (MVT) representation of a set of rows with the specified layer name, extent, and geometry column name.</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="st_asmvt"></a><code>st_asmvt(arg1: tuple, arg2: <a href="string.html">string</a>, arg3: <a href="int.html">int</a>, arg4: <a href="string.html">string</a>, arg5: <a href="string.html">string</a>) &rarr; <a href="bytes.html">bytes</a></code></td><td><span class="funcdesc"><p>Generates a Mapbox Vector Tile (MVT) representation of a set of rows with the specified layer name, extent, geometry column name, and feature ID column name.</p>
 </span></td><td>Immutable</td></tr>
 <tr><td><a name="st_collect"></a><code>st_collect(arg1: geometry) &rarr; geometry</code></td><td><span class="funcdesc"><p>Collects geometries into a GeometryCollection or multi-type as appropriate.</p>
 </span></td><td>Immutable</td></tr>

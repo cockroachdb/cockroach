@@ -21,10 +21,28 @@ type Options struct {
 	InitialBackoff time.Duration // Default retry backoff interval
 	MaxBackoff     time.Duration // Maximum retry backoff interval
 	Multiplier     float64       // Default backoff constant
-	// Maximum number of retries; attempts = MaxRetries + 1. (0 for infinite)
-	MaxRetries          int
-	RandomizationFactor float64         // Randomize the backoff interval by constant
+	// Randomize the backoff interval by constant. Set to -1 to disable.
+	RandomizationFactor float64
 	Closer              <-chan struct{} // Optionally end retry loop channel close
+	// Maximum number of retries; attempts = MaxRetries + 1. (0 for infinite)
+	//
+	// If both MaxRetries and MaxDuration are set, the loop will stop when the
+	// first of the two conditions is met.
+	MaxRetries int
+	// MaxDuration is the maximum duration for which the retry loop will make
+	// attempts. Once the deadline has elapsed, the loop will stop attempting
+	// retries.
+	// The loop will run for at least one iteration. (0 for infinite)
+	//
+	// If both MaxRetries and MaxDuration are set, the loop will stop when the
+	// first of the two conditions is met.
+	MaxDuration time.Duration
+	// PreemptivelyCancel indicates whether the retry loop should cancel itself if
+	// it determines that the next backoff would exceed the MaxDuration.
+	PreemptivelyCancel bool
+	// Clock is used to control the time source for the retry loop. Intended for
+	// testing purposes. Should be nil in production code.
+	Clock timeutil.TimeSource
 }
 
 // Retry implements the public methods necessary to control an exponential-
@@ -34,6 +52,13 @@ type Retry struct {
 	ctx            context.Context
 	currentAttempt int
 	isReset        bool
+	deadline       time.Time // Deadline for the retry loop if MaxDuration is set.
+
+	// Testing hook that is called when the retry loop is waiting for the backoff.
+	// If no max duration is set, deadline will be zero. Passes in the actual wait
+	// time between each retry attempt (accounting for max duration).
+	// Set here instead of options to allow Options to be compared.
+	backingOffHook func(backoff time.Duration)
 }
 
 // Start returns a new Retry initialized to some default values. The Retry can
@@ -55,9 +80,14 @@ func StartWithCtx(ctx context.Context, opts Options) Retry {
 	}
 	if opts.RandomizationFactor == 0 {
 		opts.RandomizationFactor = 0.15
+	} else if opts.RandomizationFactor < 0 {
+		opts.RandomizationFactor = 0 // Disable randomization.
 	}
 	if opts.Multiplier == 0 {
 		opts.Multiplier = 2
+	}
+	if opts.Clock == nil {
+		opts.Clock = timeutil.DefaultTimeSource{}
 	}
 
 	var r Retry
@@ -87,19 +117,49 @@ func (r *Retry) Reset() {
 func (r *Retry) mustReset() {
 	r.currentAttempt = 0
 	r.isReset = true
+	if r.opts.MaxDuration != 0 {
+		r.deadline = r.opts.Clock.Now().Add(r.opts.MaxDuration)
+	} else {
+		r.deadline = time.Time{}
+	}
 }
 
-func (r Retry) retryIn() time.Duration {
+// retryIn returns the duration to wait before the next retry attempt.
+func (r Retry) retryIn(randomizationFactor float64) time.Duration {
 	backoff := float64(r.opts.InitialBackoff) * math.Pow(r.opts.Multiplier, float64(r.currentAttempt))
 	if maxBackoff := float64(r.opts.MaxBackoff); backoff > maxBackoff {
 		backoff = maxBackoff
 	}
 
-	var delta = r.opts.RandomizationFactor * backoff
+	var delta = randomizationFactor * backoff
 	// Get a random value from the range [backoff - delta, backoff + delta].
 	// The formula used below has a +1 because time.Duration is an int64, and the
 	// conversion floors the float64.
 	return time.Duration(backoff - delta + rand.Float64()*(2*delta+1))
+}
+
+// NextBackoff returns the average duration to wait before the next retry attempt.
+// This is different from retryIn() because it does not take into account the
+// randomization factor. Use this for logging purposes only.
+func (r *Retry) NextBackoff() time.Duration {
+	return r.retryIn(0)
+}
+
+// calcDurationScopedBackoff calculates the duration to wait before the next
+// attempt, taking into account the MaxDuration option. It returns the computed
+// backoff duration, the actual wait duration (if the backoff exceeds the max
+// duration), and a boolean indicating whether the retry should be attempted.
+func (r Retry) calcDurationScopedBackoff() (time.Duration, time.Duration, bool) {
+	backoff := r.retryIn(r.opts.RandomizationFactor)
+	actualWait := backoff
+	shouldAttempt := true
+	if r.opts.MaxDuration != 0 && !r.opts.Clock.Now().Add(backoff).Before(r.deadline) {
+		// If the backoff would exceed the deadline, we return the remaining time
+		// until the deadline instead.
+		shouldAttempt = false
+		actualWait = max(r.deadline.Sub(r.opts.Clock.Now()), 0)
+	}
+	return backoff, actualWait, shouldAttempt
 }
 
 // Next returns whether the retry loop should continue, and blocks for the
@@ -115,50 +175,116 @@ func (r *Retry) Next() bool {
 		r.isReset = false
 		return true
 	}
-
-	if r.opts.MaxRetries > 0 && r.currentAttempt >= r.opts.MaxRetries {
+	if r.retryLimitReached() {
 		return false
 	}
 
-	// Wait before retry.
-	d := r.retryIn()
-	if d > 0 {
-		log.VEventfDepth(r.ctx, 1 /* depth */, 2 /* level */, "will retry after %s", d)
-	}
+	// Check for cancellation first to prioritize over timer.
 	select {
-	case <-time.After(d):
-		r.currentAttempt++
-		return true
 	case <-r.opts.Closer:
 		return false
 	case <-r.ctx.Done():
 		return false
+	default:
+	}
+
+	backoff, actualWait, shouldAttempt := r.calcDurationScopedBackoff()
+
+	if !shouldAttempt && r.opts.PreemptivelyCancel {
+		log.VEventf(
+			r.ctx, 2 /* level */, "preemptively canceling retry loop as backoff would exceed MaxDuration",
+		)
+		return false
+	}
+
+	timer := r.opts.Clock.NewTimer()
+	timer.Reset(actualWait)
+	timerCh := timer.Ch()
+	defer timer.Stop()
+
+	log.VEventfDepth(r.ctx, 1 /* depth */, 2 /* level */, "will retry after %s", backoff)
+
+	if r.backingOffHook != nil {
+		r.backingOffHook(actualWait)
+	}
+
+	select {
+	case <-r.opts.Closer:
+		return false
+	case <-r.ctx.Done():
+		return false
+	case <-timerCh:
+		if shouldAttempt {
+			r.currentAttempt++
+		}
+		return shouldAttempt
 	}
 }
 
-// closedC is returned from Retry.NextCh whenever a retry
-// can begin immediately.
-var closedC = func() chan time.Time {
-	c := make(chan time.Time)
+func (r *Retry) retryLimitReached() bool {
+	return (r.opts.MaxRetries > 0 && r.currentAttempt >= r.opts.MaxRetries) ||
+		(r.opts.MaxDuration > 0 && !r.opts.Clock.Now().Before(r.deadline))
+}
+
+// immediateCh creates a channel that is immediately written to with the
+// provided value and then closed.
+func immediateCh(v bool) chan bool {
+	c := make(chan bool, 1)
+	c <- v
 	close(c)
 	return c
-}()
-
-// NextCh returns a channel which will receive when the next retry
-// interval has expired.
-func (r *Retry) NextCh() <-chan time.Time {
-	if r.isReset {
-		r.isReset = false
-		return closedC
-	}
-	r.currentAttempt++
-	if r.opts.MaxRetries > 0 && r.currentAttempt > r.opts.MaxRetries {
-		return nil
-	}
-	return time.After(r.retryIn())
 }
 
-// CurrentAttempt returns the current attempt
+var closedCh = immediateCh(false)
+
+// NextCh returns a channel which will receive when the next retry
+// interval has expired. If the received value is true, it indicates a retry
+// should be made. If the received value is false, it indicates that no retry
+// should be made.
+// Note: This does not respect the Closer or context cancellation and it is the
+// caller's responsibility to manage the lifecycle.
+func (r *Retry) NextCh() <-chan bool {
+	if r.isReset {
+		r.isReset = false
+		return immediateCh(true)
+	}
+	if r.retryLimitReached() {
+		return closedCh
+	}
+
+	backoff, actualWait, shouldAttempt := r.calcDurationScopedBackoff()
+
+	if !shouldAttempt && r.opts.PreemptivelyCancel {
+		log.VEventf(
+			r.ctx, 2 /* level */, "preemptively canceling retry loop as backoff would exceed MaxDuration",
+		)
+		return closedCh
+	}
+
+	timer := r.opts.Clock.NewTimer()
+	timer.Reset(actualWait)
+	timerCh := timer.Ch()
+
+	if r.backingOffHook != nil {
+		r.backingOffHook(actualWait)
+	}
+
+	log.VEventfDepth(r.ctx, 1 /* depth */, 2 /* level */, "will retry after %s", backoff)
+
+	ch := make(chan bool, 1)
+	if shouldAttempt {
+		r.currentAttempt++
+	}
+	go func() {
+		defer timer.Stop()
+		<-timerCh
+		ch <- shouldAttempt
+	}()
+
+	return ch
+}
+
+// CurrentAttempt returns the current attempt (0-based index)
 func (r *Retry) CurrentAttempt() int {
 	return r.currentAttempt
 }
@@ -176,6 +302,29 @@ func (opts Options) Do(ctx context.Context, fn func(ctx context.Context) error) 
 	}
 	if err == nil {
 		return errors.AssertionFailedf("never invoked function in Do")
+	}
+	return err
+}
+
+// DoWithRetryable invokes the closure according to the retry options until it
+// returns success or a non-retryable error. Always returns an error unless the
+// return is prompted by a successful invocation of `fn`.
+func (opts Options) DoWithRetryable(
+	ctx context.Context, fn func(ctx context.Context) (retryable bool, err error),
+) error {
+	var err error
+	for r := StartWithCtx(ctx, opts); r.Next(); {
+		var retryable bool
+		retryable, err = fn(ctx)
+		if err == nil {
+			return nil
+		}
+		if !retryable {
+			return err
+		}
+	}
+	if err == nil {
+		return errors.AssertionFailedf("never invoked function in DoWithRetryable")
 	}
 	return err
 }

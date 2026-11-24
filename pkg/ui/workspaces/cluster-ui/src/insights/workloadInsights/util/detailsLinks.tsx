@@ -36,7 +36,6 @@ export function StatementDetailsLink(
       insightDetails?.statementFingerprintID,
     ),
     appNames: [insightDetails?.application],
-    implicitTxn: insightDetails?.implicitTxn,
   };
 
   return (

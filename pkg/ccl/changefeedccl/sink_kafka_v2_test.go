@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/mocks"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -99,7 +100,7 @@ func TestKafkaSinkClientV2_Basic(t *testing.T) {
 	buf := fx.sink.MakeBatchBuffer("t")
 	keys := []string{"k1", "k2", "k3"}
 	for i, key := range keys {
-		buf.Append([]byte(key), []byte(strconv.Itoa(i)), attributes{})
+		buf.Append(context.Background(), []byte(key), []byte(strconv.Itoa(i)), attributes{})
 	}
 	payload, err := buf.Close()
 	require.NoError(t, err)
@@ -123,7 +124,13 @@ func TestKafkaSinkClientV2_Resize(t *testing.T) {
 
 		buf := fx.sink.MakeBatchBuffer("t")
 		for i := range 100 {
-			buf.Append([]byte("k1"), []byte(strconv.Itoa(i)), attributes{})
+			buf.Append(context.Background(),
+				[]byte("k1"),
+				[]byte(strconv.Itoa(i)),
+				attributes{
+					mvcc: hlc.Timestamp{WallTime: timeutil.Now().UnixNano()},
+				},
+			)
 		}
 		payload, err := buf.Close()
 		require.NoError(t, err)
@@ -157,7 +164,15 @@ func TestKafkaSinkClientV2_Resize(t *testing.T) {
 			fx.kc.EXPECT().ProduceSync(fx.ctx, payloadAnys[:3]...).Times(1).Return(pr),
 			fx.kc.EXPECT().ProduceSync(fx.ctx, payloadAnys[:1]...).Times(1).Return(pr),
 		)
-		require.Error(t, fx.sink.Flush(fx.ctx, payload))
+
+		err := fx.sink.Flush(fx.ctx, payload)
+		require.Error(t, err)
+
+		// Validate that error includes key, size, and mvcc
+		errStr := err.Error()
+		require.Contains(t, errStr, "k1", "error should include key")
+		require.Regexp(t, `size=\d+`, errStr, "error should include size")
+		require.Regexp(t, `mvcc=\d+`, errStr, "error should include mvcc timestamp")
 	})
 
 	t.Run("resize enabled and it gets everything", func(t *testing.T) {
@@ -199,7 +214,7 @@ func TestKafkaSinkClientV2_Naming(t *testing.T) {
 			return rec.Topic == `_u2603_` && string(rec.Key) == `k☃` && string(rec.Value) == `v☃`
 		})).Times(1).Return(nil)
 
-		require.NoError(t, fx.bs.EmitRow(fx.ctx, topic(`☃`), []byte(`k☃`), []byte(`v☃`), zeroTS, zeroTS, zeroAlloc))
+		require.NoError(t, fx.bs.EmitRow(fx.ctx, topic(`☃`), []byte(`k☃`), []byte(`v☃`), nil, zeroTS, zeroTS, zeroAlloc, nil))
 
 		testutils.SucceedsSoon(t, func() error {
 			select {
@@ -222,7 +237,7 @@ func TestKafkaSinkClientV2_Naming(t *testing.T) {
 			return rec.Topic == `general` && string(rec.Key) == `k☃` && string(rec.Value) == `v☃`
 		})).Times(1).Return(nil)
 
-		require.NoError(t, fx.bs.EmitRow(fx.ctx, topic(`t1`), []byte(`k☃`), []byte(`v☃`), zeroTS, zeroTS, zeroAlloc))
+		require.NoError(t, fx.bs.EmitRow(fx.ctx, topic(`t1`), []byte(`k☃`), []byte(`v☃`), nil, zeroTS, zeroTS, zeroAlloc, nil))
 
 		testutils.SucceedsSoon(t, func() error {
 			select {
@@ -245,7 +260,7 @@ func TestKafkaSinkClientV2_Naming(t *testing.T) {
 			return rec.Topic == `prefix-_u2603_` && string(rec.Key) == `k☃` && string(rec.Value) == `v☃`
 		})).Times(1).Return(nil)
 
-		require.NoError(t, fx.bs.EmitRow(fx.ctx, topic(`t1`), []byte(`k☃`), []byte(`v☃`), zeroTS, zeroTS, zeroAlloc))
+		require.NoError(t, fx.bs.EmitRow(fx.ctx, topic(`t1`), []byte(`k☃`), []byte(`v☃`), nil, zeroTS, zeroTS, zeroAlloc, nil))
 
 		testutils.SucceedsSoon(t, func() error {
 			select {
@@ -258,19 +273,33 @@ func TestKafkaSinkClientV2_Naming(t *testing.T) {
 	})
 }
 
+func TestKafkaSinkClientV2_MultipleBrokers(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	fx := newKafkaSinkV2Fx(t, withRealClient(), withSinkURI("kafka://localhost:9092,localhost:9093"))
+	defer fx.close()
+
+	client := fx.bs.client.(*kafkaSinkClientV2).client.(*kgo.Client)
+	brokers := client.OptValue("SeedBrokers").([]string)
+	require.Equal(t, []string{"localhost:9092", "localhost:9093"}, brokers)
+
+}
+
 func TestKafkaSinkClientV2_Opts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	baseExpectedOpts := map[string]any{
-		"ClientID":                 "CockroachDB",
-		"ProducerBatchCompression": []kgo.CompressionCodec{kgo.NoCompression()},
-		"RequiredAcks":             kgo.LeaderAck(),
-		"MaxVersions":              kversion.Stable(), // We don't set this but it's kgo's default.
-		"DialTLSConfig":            (*tls.Config)(nil),
-		"SASL":                     ([]sasl.Mechanism)(nil),
-		"DisableIdempotentWrite":   true,
-		"MaxBufferedRecords":       int64(1000), // This is the default that we set.
+		"ClientID":                            "CockroachDB",
+		"ProducerBatchCompression":            []kgo.CompressionCodec{kgo.NoCompression()},
+		"RequiredAcks":                        kgo.LeaderAck(),
+		"MaxVersions":                         kversion.Stable(), // We don't set this but it's kgo's default.
+		"DialTLSConfig":                       (*tls.Config)(nil),
+		"SASL":                                ([]sasl.Mechanism)(nil),
+		"DisableIdempotentWrite":              true,
+		"MaxProduceRequestsInflightPerBroker": 5,
+		"MaxBufferedRecords":                  int64(1000), // This is the default that we set.
 	}
 	baseBatchCfg := sinkBatchConfig{}
 
@@ -436,6 +465,18 @@ func TestKafkaSinkClientV2_CompressionOpts(t *testing.T) {
 			expected: kgo.GzipCompression().WithLevel(9),
 		},
 		{
+			name:     "gzip level -1",
+			codec:    "GZIP",
+			level:    "-1",
+			expected: kgo.GzipCompression().WithLevel(-1),
+		},
+		{
+			name:     "gzip level -2",
+			codec:    "GZIP",
+			level:    "-2",
+			expected: kgo.GzipCompression().WithLevel(-2),
+		},
+		{
 			name:     "snappy no level",
 			codec:    "SNAPPY",
 			expected: kgo.SnappyCompression(),
@@ -466,6 +507,12 @@ func TestKafkaSinkClientV2_CompressionOpts(t *testing.T) {
 			name:      "invalid gzip level",
 			codec:     "GZIP",
 			level:     "100",
+			shouldErr: true,
+		},
+		{
+			name:      "invalid gzip level '-3'",
+			codec:     "GZIP",
+			level:     "-3",
 			shouldErr: true,
 		},
 		{
@@ -525,7 +572,7 @@ func TestKafkaSinkClientV2_ErrorsEventually(t *testing.T) {
 	defer fx.close()
 
 	buf := fx.sink.MakeBatchBuffer("t")
-	buf.Append([]byte("k1"), []byte("v1"), attributes{})
+	buf.Append(context.Background(), []byte("k1"), []byte("v1"), attributes{})
 	payload, err := buf.Close()
 	require.NoError(t, err)
 
@@ -536,7 +583,7 @@ func TestKafkaSinkClientV2_PartitionsSameAsV1(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	kp := newKgoChangefeedPartitioner().ForTopic("t")
+	kp := newKgoChangefeedPartitioner("").ForTopic("t")
 	sp := newChangefeedPartitioner("t")
 
 	rng, _ := randutil.NewTestRand()
@@ -563,6 +610,39 @@ func TestKafkaSinkClientV2_PartitionsSameAsV1(t *testing.T) {
 	}
 }
 
+// TestPartitionAlg tests that different hash methods map to the
+// expected partitions for the same keys. This could fail if the kgo
+// default hash algorithm changes.
+func TestPartitionAlg(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	defaultPartitioner := newKgoChangefeedPartitioner("").ForTopic("test-topic")
+	fnvPartitioner := newKgoChangefeedPartitioner("fnv-1a").ForTopic("test-topic")
+	murmur2Partitioner := newKgoChangefeedPartitioner("murmur2").ForTopic("test-topic")
+
+	// Test 2 keys for better odds of catching a change in behavior.
+	key1 := []byte(strconv.Itoa(42))
+	key2 := []byte(strconv.Itoa(43))
+	numPartitions := 100
+
+	fnvPart1 := fnvPartitioner.Partition(&kgo.Record{Key: key1}, numPartitions)
+	fnvPart2 := fnvPartitioner.Partition(&kgo.Record{Key: key2}, numPartitions)
+	require.Equal(t, 85, fnvPart1)
+	require.Equal(t, 4, fnvPart2)
+
+	// Default is fnv-1a.
+	defaultPart1 := defaultPartitioner.Partition(&kgo.Record{Key: key1}, numPartitions)
+	defaultPart2 := defaultPartitioner.Partition(&kgo.Record{Key: key2}, numPartitions)
+	require.Equal(t, 85, defaultPart1)
+	require.Equal(t, 4, defaultPart2)
+
+	murmur2Part1 := murmur2Partitioner.Partition(&kgo.Record{Key: key1}, numPartitions)
+	murmur2Part2 := murmur2Partitioner.Partition(&kgo.Record{Key: key2}, numPartitions)
+	require.Equal(t, 72, murmur2Part1)
+	require.Equal(t, 94, murmur2Part2)
+}
+
 // kafkaSinkV2Fx is a test fixture for testing the v2 kafka sink. It supports a
 // variety of options via `fxOpt`s passed into its constructor.
 type kafkaSinkV2Fx struct {
@@ -582,6 +662,7 @@ type kafkaSinkV2Fx struct {
 	realClient          bool
 	additionalKOpts     []kgo.Opt
 	createClientErrorCb func(error)
+	uri                 string
 
 	sink *kafkaSinkClientV2
 	bs   *batchingSink
@@ -622,6 +703,12 @@ func withJSONConfig(cfg string) fxOpt {
 func withRealClient() fxOpt {
 	return func(fx *kafkaSinkV2Fx) {
 		fx.realClient = true
+	}
+}
+
+func withSinkURI(uri string) fxOpt {
+	return func(fx *kafkaSinkV2Fx) {
+		fx.uri = uri
 	}
 }
 
@@ -667,8 +754,15 @@ func newKafkaSinkV2Fx(t *testing.T, opts ...fxOpt) *kafkaSinkV2Fx {
 		}
 	}
 
+	uri := "kafka://localhost:9092"
+	if fx.uri != "" {
+		uri = fx.uri
+	}
+
 	var err error
-	fx.sink, err = newKafkaSinkClientV2(ctx, fx.additionalKOpts, fx.batchConfig, "no addrs", settings, knobs, nilMetricsRecorderBuilder, nil)
+	fx.sink, err = newKafkaSinkClientV2(ctx, fx.additionalKOpts,
+		fx.batchConfig, uri, settings, knobs, nilMetricsRecorderBuilder,
+		nil, nil, "" /* partitionAlg */)
 	if err != nil && fx.createClientErrorCb != nil {
 		fx.createClientErrorCb(err)
 		return fx
@@ -677,7 +771,7 @@ func newKafkaSinkV2Fx(t *testing.T, opts ...fxOpt) *kafkaSinkV2Fx {
 
 	targets := makeChangefeedTargets(fx.targetNames...)
 
-	u, err := url.Parse("kafka://localhost:9092")
+	u, err := url.Parse(uri)
 	require.NoError(t, err)
 
 	q := u.Query()
@@ -689,7 +783,7 @@ func newKafkaSinkV2Fx(t *testing.T, opts ...fxOpt) *kafkaSinkV2Fx {
 	}
 	u.RawQuery = q.Encode()
 
-	bs, err := makeKafkaSinkV2(ctx, sinkURL{URL: u}, targets, fx.sinkJSONConfig, 1, nilPacerFactory, timeutil.DefaultTimeSource{}, settings, nilMetricsRecorderBuilder, knobs)
+	bs, err := makeKafkaSinkV2(ctx, &changefeedbase.SinkURL{URL: u}, targets, changefeedbase.KafkaSinkOptions{JSONConfig: fx.sinkJSONConfig}, 1, nilPacerFactory, timeutil.DefaultTimeSource{}, settings, nilMetricsRecorderBuilder, knobs)
 	if err != nil && fx.createClientErrorCb != nil {
 		fx.createClientErrorCb(err)
 		return fx
@@ -723,3 +817,114 @@ func (f fnMatcher) String() string {
 }
 
 var _ gomock.Matcher = fnMatcher(nil)
+
+func TestMaxRequestSize(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	tests := []struct {
+		name           string
+		clusterSetting int64
+		// perChangefeed is the value set in the config option on the changefeed
+		// as MaxBytes in the json.
+		perChangefeed int
+
+		// wantValue is the expected value of the kgo "ProducerBatchMaxBytes"
+		// option. If we expect the setting to be valid we assert that the
+		// client gets configured with the expected value.
+		wantValue int32
+		// wantErrContains is a substring that we expect to be contained in
+		// the error message if we expect client creation to fail.
+		wantErrContains string
+	}{
+		{
+			name:      "default",
+			wantValue: int32(changefeedbase.KafkaMaxRequestSizeLimit),
+		},
+		{
+			name:           "cluster_setting",
+			clusterSetting: 1 << 20,
+			wantValue:      int32(1 << 20),
+		},
+		{
+			name:          "per_changefeed_override",
+			perChangefeed: 2 << 20,
+			wantValue:     int32(2 << 20),
+		},
+		{
+			name:           "per_changefeed_overrides_cluster_setting",
+			clusterSetting: 1 << 20,
+			perChangefeed:  4 << 20,
+			wantValue:      int32(4 << 20),
+		},
+		{
+			name:           "falls_back_to_cluster_setting",
+			clusterSetting: 3 << 20,
+			wantValue:      int32(3 << 20),
+		},
+		{
+			name:          "boundary_minimum_accepted",
+			perChangefeed: changefeedbase.KafkaMaxRequestSizeMin,
+			wantValue:     int32(changefeedbase.KafkaMaxRequestSizeMin),
+		},
+		{
+			name:          "boundary_maximum_accepted",
+			perChangefeed: changefeedbase.KafkaMaxRequestSizeLimit,
+			wantValue:     int32(changefeedbase.KafkaMaxRequestSizeLimit),
+		},
+		{
+			name:            "validation_too_small",
+			perChangefeed:   100,
+			wantErrContains: "at least 512",
+		},
+		{
+			name:            "validation_too_large",
+			perChangefeed:   256<<20 + 1,
+			wantErrContains: fmt.Sprintf("at most %d", changefeedbase.KafkaMaxRequestSizeLimit),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var opts []fxOpt
+			opts = append(opts, withRealClient())
+
+			if tc.clusterSetting != 0 {
+				v := tc.clusterSetting
+				opts = append(opts, withSettings(func(s *cluster.Settings) {
+					changefeedbase.KafkaMaxRequestSize.Override(
+						context.Background(), &s.SV, v,
+					)
+				}))
+			}
+			if tc.perChangefeed != 0 {
+				jsonBs, err := json.Marshal(map[string]any{
+					"Flush": map[string]any{
+						"MaxBytes": tc.perChangefeed,
+					},
+				})
+				require.NoError(t, err)
+				opts = append(opts, withJSONConfig(string(jsonBs)))
+			}
+
+			var createErr error
+			opts = append(opts, withCreateClientErrorCb(func(err error) {
+				createErr = err
+			}))
+
+			fx := newKafkaSinkV2Fx(t, opts...)
+			defer fx.close()
+
+			if tc.wantErrContains != "" {
+				require.Error(t, createErr)
+				require.Contains(t, createErr.Error(), tc.wantErrContains)
+				return
+			}
+			require.NoError(t, createErr)
+
+			client := fx.bs.client.(*kafkaSinkClientV2).client.(*kgo.Client)
+			actual := client.OptValue("ProducerBatchMaxBytes").(int32)
+			require.Equal(t, tc.wantValue, actual)
+		})
+	}
+}

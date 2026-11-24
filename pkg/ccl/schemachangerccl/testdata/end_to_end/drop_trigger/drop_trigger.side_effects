@@ -9,13 +9,32 @@ DROP TRIGGER tr ON defaultdb.t;
 begin transaction #1
 # begin StatementPhase
 checking for feature: DROP TRIGGER
-## StatementPhase stage 1 of 1 with 2 MutationType ops
+write *eventpb.DropTrigger to event log:
+  sql:
+    descriptorId: 104
+    statement: DROP TRIGGER ‹tr› ON ‹defaultdb›.‹t›
+    tag: DROP TRIGGER
+    user: root
+  tableName: defaultdb.public.t
+  triggerName: tr
+## StatementPhase stage 1 of 1 with 3 MutationType ops
 upsert descriptor #104
   ...
-     replacementOf:
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  dependedOnBy:
+  -  - id: 104
+  -    triggerId: 1
+  +  dependedOnBy: []
+     families:
+     - columnIds:
+  ...
        time: {}
+     schemaLocked: true
   -  triggers:
   -  - actionTime: BEFORE
+  -    dependsOn:
+  -    - 104
   -    dependsOnRoutines:
   -    - 105
   -    enabled: true
@@ -34,8 +53,8 @@ upsert descriptor #104
   -    name: tr
   +  triggers: []
      unexposedParentSchemaId: 101
-  -  version: "2"
-  +  version: "3"
+  -  version: "3"
+  +  version: "4"
 upsert descriptor #105
    function:
   -  dependedOnBy:
@@ -47,21 +66,32 @@ upsert descriptor #105
   ...
          family: TriggerFamily
          oid: 2279
-  -  version: "2"
-  +  version: "3"
+  -  version: "3"
+  +  version: "4"
      volatility: VOLATILE
 # end StatementPhase
 # begin PreCommitPhase
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 2 MutationType ops
+## PreCommitPhase stage 2 of 2 with 3 MutationType ops
 upsert descriptor #104
   ...
-     replacementOf:
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  dependedOnBy:
+  -  - id: 104
+  -    triggerId: 1
+  +  dependedOnBy: []
+     families:
+     - columnIds:
+  ...
        time: {}
+     schemaLocked: true
   -  triggers:
   -  - actionTime: BEFORE
+  -    dependsOn:
+  -    - 104
   -    dependsOnRoutines:
   -    - 105
   -    enabled: true
@@ -80,8 +110,8 @@ upsert descriptor #104
   -    name: tr
   +  triggers: []
      unexposedParentSchemaId: 101
-  -  version: "2"
-  +  version: "3"
+  -  version: "3"
+  +  version: "4"
 upsert descriptor #105
    function:
   -  dependedOnBy:
@@ -93,8 +123,8 @@ upsert descriptor #105
   ...
          family: TriggerFamily
          oid: 2279
-  -  version: "2"
-  +  version: "3"
+  -  version: "3"
+  +  version: "4"
      volatility: VOLATILE
 persist all catalog changes to storage
 # end PreCommitPhase

@@ -18,4 +18,4 @@ ALTER PARTITION p1 OF INDEX t@idx CONFIGURE ZONE USING gc.ttlseconds = 12000;
 EXPLAIN (DDL, SHAPE) ALTER PARTITION p3 OF INDEX t@t_pkey CONFIGURE ZONE USING num_replicas = 10;
 ----
 Schema change plan for ALTER PARTITION ‹p3› OF INDEX ‹defaultdb›.‹public›.‹t›@‹t_pkey› CONFIGURE ZONE USING ‹num_replicas› = ‹10›; following ALTER PARTITION ‹p3› OF INDEX ‹defaultdb›.‹public›.‹t›@‹t_pkey› CONFIGURE ZONE USING ‹num_replicas› = ‹7›; ALTER PARTITION ‹p3› OF INDEX ‹defaultdb›.‹public›.‹t›@‹t_pkey› CONFIGURE ZONE USING ‹"gc.ttlseconds"› = ‹10000›; ALTER PARTITION ‹p1› OF INDEX ‹defaultdb›.‹public›.‹t›@‹idx› CONFIGURE ZONE USING ‹"gc.ttlseconds"› = ‹12000›;
- └── execute 1 system table mutations transaction
+ └── execute 2 system table mutations transactions

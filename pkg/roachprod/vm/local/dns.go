@@ -15,6 +15,7 @@ import (
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/roachprod/lock"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/oserror"
@@ -39,6 +40,28 @@ func (n *dnsProvider) Domain() string {
 	return n.zone
 }
 
+// PublicDomain returns the public domain name (zone) of the DNS provider.
+// The local provider assumes only one zone, so this is the same as Domain().
+func (n *dnsProvider) PublicDomain() string {
+	return n.Domain()
+}
+
+// Name returns the name of the DNS provider.
+func (n *dnsProvider) ProviderName() string {
+	return "local"
+}
+
+// SyncDNS is unimplemented for the local DNS provider.
+func (n *dnsProvider) SyncDNS(l *logger.Logger, vms vm.List) error {
+	return n.SyncDNSWithContext(context.Background(), l, vms)
+}
+
+// SyncDNSWithContext is unimplemented for the local DNS provider.
+func (n *dnsProvider) SyncDNSWithContext(ctx context.Context, l *logger.Logger, vms vm.List) error {
+	// No-op for local DNS provider.
+	return nil
+}
+
 // CreateRecords is part of the vm.DNSProvider interface.
 func (n *dnsProvider) CreateRecords(_ context.Context, records ...vm.DNSRecord) error {
 	unlock, err := lock.AcquireFilesystemLock(n.lockFilePath)
@@ -58,15 +81,17 @@ func (n *dnsProvider) CreateRecords(_ context.Context, records ...vm.DNSRecord) 
 	return n.saveRecords(entries)
 }
 
-// LookupSRVRecords is part of the vm.DNSProvider interface.
-func (n *dnsProvider) LookupSRVRecords(_ context.Context, name string) ([]vm.DNSRecord, error) {
+// LookupRecords is part of the vm.DNSProvider interface.
+func (n *dnsProvider) LookupRecords(
+	_ context.Context, recordType vm.DNSType, name string,
+) ([]vm.DNSRecord, error) {
 	records, err := n.loadRecords()
 	if err != nil {
 		return nil, err
 	}
 	var matchingRecords []vm.DNSRecord
 	for _, record := range records {
-		if record.Name == name && record.Type == vm.SRV {
+		if record.Name == name && record.Type == recordType {
 			matchingRecords = append(matchingRecords, record)
 		}
 	}
@@ -82,8 +107,12 @@ func (n *dnsProvider) ListRecords(_ context.Context) ([]vm.DNSRecord, error) {
 	return maps.Values(records), nil
 }
 
+func (n *dnsProvider) DeletePublicRecordsByName(ctx context.Context, names ...string) error {
+	return n.DeleteSRVRecordsByName(ctx, names...)
+}
+
 // DeleteRecordsByName is part of the vm.DNSProvider interface.
-func (n *dnsProvider) DeleteRecordsByName(_ context.Context, names ...string) error {
+func (n *dnsProvider) DeleteSRVRecordsByName(_ context.Context, names ...string) error {
 	unlock, err := lock.AcquireFilesystemLock(n.lockFilePath)
 	if err != nil {
 		return err
@@ -100,8 +129,8 @@ func (n *dnsProvider) DeleteRecordsByName(_ context.Context, names ...string) er
 	return n.saveRecords(entries)
 }
 
-// DeleteRecordsBySubdomain is part of the vm.DNSProvider interface.
-func (n *dnsProvider) DeleteRecordsBySubdomain(_ context.Context, subdomain string) error {
+// DeleteSRVRecordsBySubdomain is part of the vm.DNSProvider interface.
+func (n *dnsProvider) DeleteSRVRecordsBySubdomain(_ context.Context, subdomain string) error {
 	unlock, err := lock.AcquireFilesystemLock(n.lockFilePath)
 	if err != nil {
 		return err

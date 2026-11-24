@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlinit"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -48,7 +49,7 @@ func validateCheckExpr(
 	semaCtx *tree.SemaContext,
 	txn isql.Txn,
 	sessionData *sessiondata.SessionData,
-	exprStr string,
+	exprStr catpb.Expression,
 	tableDesc *tabledesc.Mutable,
 	indexIDForValidation descpb.IndexID,
 ) (violatingRow tree.Datums, formattedCkExpr string, err error) {
@@ -62,12 +63,20 @@ func validateCheckExpr(
 	if indexIDForValidation != 0 {
 		queryStr = fmt.Sprintf(`SELECT %s FROM [%d AS t]@[%d] WHERE NOT (%s) LIMIT 1`, columns, tableDesc.GetID(), indexIDForValidation, exprStr)
 	}
-	log.Infof(ctx, "validating check constraint %q with query %q", formattedCkExpr, queryStr)
+	log.Dev.Infof(ctx, "validating check constraint %q with query %q", formattedCkExpr, queryStr)
+
+	// Validation queries use full table scans which we always want to distribute
+	// and partition across nodes.
+	// See https://github.com/cockroachdb/cockroach/issues/152859.
+	execOverride := sessiondata.NodeUserSessionDataOverride
+	execOverride.AlwaysDistributeFullScans = true
+	execOverride.PreventPartitioningSoftLimitedScans = &sessiondata.False
+
 	violatingRow, err = txn.QueryRowEx(
 		ctx,
 		"validate check constraint",
 		txn.KV(),
-		sessiondata.NodeUserSessionDataOverride,
+		execOverride,
 		queryStr)
 	if err != nil {
 		return nil, formattedCkExpr, err
@@ -297,7 +306,7 @@ func validateForeignKey(
 			return err
 		}
 
-		log.Infof(ctx, "validating MATCH FULL FK %q (%q [%v] -> %q [%v]) with query %q",
+		log.Dev.Infof(ctx, "validating MATCH FULL FK %q (%q [%v] -> %q [%v]) with query %q",
 			fk.Name,
 			srcTable.Name, colNames,
 			targetTable.GetName(), referencedColumnNames,
@@ -322,7 +331,7 @@ func validateForeignKey(
 		return err
 	}
 
-	log.Infof(ctx, "validating FK %q (%q [%v] -> %q [%v]) with query %q",
+	log.Dev.Infof(ctx, "validating FK %q (%q [%v] -> %q [%v]) with query %q",
 		fk.Name,
 		srcTable.Name, colNames, targetTable.GetName(), referencedColumnNames,
 		query,
@@ -421,7 +430,7 @@ func duplicateRowQuery(
 // constraint defined on the table.
 func (p *planner) RevalidateUniqueConstraintsInCurrentDB(ctx context.Context) error {
 	dbName := p.CurrentDatabase()
-	log.Infof(ctx, "validating unique constraints in database %s", dbName)
+	log.Dev.Infof(ctx, "validating unique constraints in database %s", dbName)
 	db, err := p.Descriptors().ByNameWithLeased(p.Txn()).Get().Database(ctx, dbName)
 	if err != nil {
 		return err
@@ -485,7 +494,7 @@ func (p *planner) RevalidateUniqueConstraint(
 					tableDesc,
 					index.GetName(),
 					index.IndexDesc().KeyColumnIDs[index.ImplicitPartitioningColumnCount():],
-					index.GetPredicate(),
+					string(index.GetPredicate()),
 					0, /* indexIDForValidation */
 					p.InternalSQLTxn(),
 					p.User(),
@@ -505,7 +514,7 @@ func (p *planner) RevalidateUniqueConstraint(
 				tableDesc,
 				uc.GetName(),
 				uc.CollectKeyColumnIDs().Ordered(),
-				uc.GetPredicate(),
+				string(uc.GetPredicate()),
 				0, /* indexIDForValidation */
 				p.InternalSQLTxn(),
 				p.User(),
@@ -565,13 +574,13 @@ func RevalidateUniqueConstraintsInTable(
 				tableDesc,
 				index.GetName(),
 				index.IndexDesc().KeyColumnIDs[index.ImplicitPartitioningColumnCount():],
-				index.GetPredicate(),
+				string(index.GetPredicate()),
 				0, /* indexIDForValidation */
 				txn,
 				user,
 				true, /* preExisting */
 			); err != nil {
-				log.Errorf(ctx, "validation of unique constraints failed for table %s: %s", tableDesc.GetName(), err)
+				log.Dev.Errorf(ctx, "validation of unique constraints failed for table %s: %s", tableDesc.GetName(), err)
 				return errors.Wrapf(err, "for table %s", tableDesc.GetName())
 			}
 		}
@@ -585,19 +594,19 @@ func RevalidateUniqueConstraintsInTable(
 				tableDesc,
 				uc.GetName(),
 				uc.CollectKeyColumnIDs().Ordered(),
-				uc.GetPredicate(),
+				string(uc.GetPredicate()),
 				0, /* indexIDForValidation */
 				txn,
 				user,
 				true, /* preExisting */
 			); err != nil {
-				log.Errorf(ctx, "validation of unique constraints failed for table %s: %s", tableDesc.GetName(), err)
+				log.Dev.Errorf(ctx, "validation of unique constraints failed for table %s: %s", tableDesc.GetName(), err)
 				return errors.Wrapf(err, "for table %s", tableDesc.GetName())
 			}
 		}
 	}
 
-	log.Infof(ctx, "validated all unique constraints in table %s", tableDesc.GetName())
+	log.Dev.Infof(ctx, "validated all unique constraints in table %s", tableDesc.GetName())
 	return nil
 }
 
@@ -632,7 +641,7 @@ func validateUniqueConstraint(
 		return err
 	}
 
-	log.Infof(ctx, "validating unique constraint %q (%q [%v]) with query %q",
+	log.Dev.Infof(ctx, "validating unique constraint %q (%q [%v]) with query %q",
 		constraintName,
 		srcTable.GetName(),
 		colNames,
@@ -666,7 +675,7 @@ func validateUniqueConstraint(
 			// An example error that we want to retry is "no inbound stream"
 			// connection error which can occur if the node that is used for the
 			// distributed query goes down.
-			log.Infof(ctx, "retrying the validation query because of %v", err)
+			log.Dev.Infof(ctx, "retrying the validation query because of %v", err)
 			continue
 		}
 		return err
@@ -700,7 +709,7 @@ func validateUniqueConstraint(
 // ValidateTTLScheduledJobsInCurrentDB is part of the EvalPlanner interface.
 func (p *planner) ValidateTTLScheduledJobsInCurrentDB(ctx context.Context) error {
 	dbName := p.CurrentDatabase()
-	log.Infof(ctx, "validating scheduled jobs in database %s", dbName)
+	log.Dev.Infof(ctx, "validating scheduled jobs in database %s", dbName)
 	db, err := p.Descriptors().ByNameWithLeased(p.Txn()).Get().Database(ctx, dbName)
 	if err != nil {
 		return err
@@ -730,7 +739,7 @@ func (p *planner) validateTTLScheduledJobInTable(
 	ttl := tableDesc.GetRowLevelTTL()
 
 	execCfg := p.ExecCfg()
-	env := JobSchedulerEnv(execCfg.JobsKnobs())
+	env := jobs.JobSchedulerEnv(execCfg.JobsKnobs())
 
 	wrapError := func(origErr error) error {
 		return errors.WithHintf(
@@ -796,7 +805,7 @@ func (p *planner) RepairTTLScheduledJobForTable(ctx context.Context, tableID int
 	if !errors.HasType(validateErr, invalidTableTTLScheduledJobError) {
 		return errors.Wrap(validateErr, "error validating TTL on table")
 	}
-	sj, err := CreateRowLevelTTLScheduledJob(
+	sj, err := ttlinit.CreateRowLevelTTLScheduledJob(
 		ctx,
 		p.ExecCfg().JobsKnobs(),
 		jobs.ScheduledJobTxn(p.InternalSQLTxn()),
@@ -858,7 +867,7 @@ func checkMutationInput(
 			"mismatched check constraint columns: expected %d, got %d", checkOrds.Len(), len(checkVals))
 	}
 
-	checks := tabDesc.EnforcedCheckConstraints()
+	checks := tabDesc.EnforcedCheckValidators()
 	colIdx := 0
 	for i := range checks {
 		if !checkOrds.Contains(i) {
@@ -867,7 +876,7 @@ func checkMutationInput(
 
 		if res, err := tree.GetBool(checkVals[colIdx]); err != nil {
 			return err
-		} else if !res && checkVals[colIdx] != tree.DNull {
+		} else if checks[i].IsCheckFailed(res == tree.DBool(true), checkVals[colIdx] == tree.DNull) {
 			return row.CheckFailed(ctx, evalCtx, semaCtx, sessionData, tabDesc, checks[i])
 		}
 		colIdx++

@@ -20,11 +20,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/uncertainty"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
@@ -75,13 +76,12 @@ var migrateApplicationTimeout = settings.RegisterDurationSetting(
 // as this method makes the assumption that it operates on a shallow copy (see
 // call to applyTimestampCache).
 func (r *Replica) executeWriteBatch(
-	ctx context.Context, ba *kvpb.BatchRequest, g *concurrency.Guard,
-) (
-	br *kvpb.BatchResponse,
-	_ *concurrency.Guard,
-	_ *kvadmission.StoreWriteBytes,
-	pErr *kvpb.Error,
-) {
+	ctx context.Context,
+	ba *kvpb.BatchRequest,
+	g concurrency.Guard,
+	stats *StoreWorkStats,
+	admissionInfo kvadmission.AdmissionInfo,
+) (br *kvpb.BatchResponse, _ concurrency.Guard, pErr *kvpb.Error) {
 	startTime := timeutil.Now()
 
 	spanName := "executeWriteBatch"
@@ -116,14 +116,14 @@ func (r *Replica) executeWriteBatch(
 	// Verify that the batch can be executed.
 	st, err := r.checkExecutionCanProceedRWOrAdmin(ctx, ba, g)
 	if err != nil {
-		return nil, g, nil, kvpb.NewError(err)
+		return nil, g, kvpb.NewError(err)
 	}
 
 	// Check the breaker. Note that we do this after
 	// checkExecutionCanProceedBeforeStorageSnapshot, so that NotLeaseholderError
 	// has precedence.
 	if err := r.signallerForBatch(ba).Err(); err != nil {
-		return nil, g, nil, kvpb.NewError(err)
+		return nil, g, kvpb.NewError(err)
 	}
 
 	// Compute the transaction's local uncertainty limit using observed
@@ -178,26 +178,16 @@ func (r *Replica) executeWriteBatch(
 	// Checking the context just before proposing can help avoid ambiguous errors.
 	if err := ctx.Err(); err != nil {
 		log.VEventf(ctx, 2, "%s before proposing: %s", err, ba.Summary())
-		return nil, g, nil, kvpb.NewError(errors.Wrapf(err, "aborted before proposing"))
+		return nil, g, kvpb.NewError(errors.Wrapf(err, "aborted before proposing"))
 	}
 
 	// If the command is proposed to Raft, ownership of and responsibility for
 	// the concurrency guard will be assumed by Raft, so provide the guard to
 	// evalAndPropose. If we return with an error from executeWriteBatch, we
 	// also return the guard which the caller reassumes ownership of.
-	ch, abandon, _, writeBytes, pErr := r.evalAndPropose(ctx, ba, g, &st, ui, tok.Move(ctx))
+	ch, abandonTok, _, pErr := r.evalAndPropose(ctx, ba, g, &st, ui, tok.Move(ctx), stats, admissionInfo)
 	if pErr != nil {
-		if cErr, ok := pErr.GetDetail().(*kvpb.ReplicaCorruptionError); ok {
-			// Need to unlock here because setCorruptRaftMuLock needs readOnlyCmdMu not held.
-			readOnlyCmdMu.RUnlock()
-			readOnlyCmdMu = nil
-
-			r.raftMu.Lock()
-			defer r.raftMu.Unlock()
-			// This exits with a fatal error, but returns in tests.
-			return nil, g, nil, r.setCorruptRaftMuLocked(ctx, cErr)
-		}
-		return nil, g, nil, pErr
+		return nil, g, pErr
 	}
 	g = nil // ownership passed to Raft, prevent misuse
 
@@ -209,6 +199,17 @@ func (r *Replica) executeWriteBatch(
 	// If the command was accepted by raft, wait for the range to apply it.
 	ctxDone := ctx.Done()
 	shouldQuiesce := r.store.stopper.ShouldQuiesce()
+
+	tenantIDOrZero, _ := roachpb.ClientTenantFromContext(ctx)
+	raftCleanup := ash.SetWorkState(
+		tenantIDOrZero, ash.WorkloadInfo{
+			WorkloadID:    ba.WorkloadID,
+			AppNameID:     ba.AppNameID,
+			GatewayNodeID: ba.GatewayNodeID,
+			WorkloadType:  workloadid.WorkloadType(ba.WorkloadType),
+		},
+		ash.WorkOther, "RaftProposalWait")
+	defer raftCleanup()
 
 	for {
 		select {
@@ -226,14 +227,14 @@ func (r *Replica) executeWriteBatch(
 				if err := r.store.intentResolver.CleanupTxnIntentsAsync(
 					ctx, r.RangeID, propResult.EndTxns, true, /* allowSync */
 				); err != nil {
-					log.Warningf(ctx, "transaction cleanup failed: %v", err)
+					log.KvExec.Warningf(ctx, "transaction cleanup failed: %v", err)
 				}
 			}
 			if len(propResult.EncounteredIntents) > 0 {
 				if err := r.store.intentResolver.CleanupIntentsAsync(
 					ctx, ba.AdmissionHeader, propResult.EncounteredIntents, true, /* allowSync */
 				); err != nil {
-					log.Warningf(ctx, "intent cleanup failed: %v", err)
+					log.KvExec.Warningf(ctx, "intent cleanup failed: %v", err)
 				}
 			}
 			if ba.Requests[0].GetMigrate() != nil && propResult.Err == nil {
@@ -304,7 +305,7 @@ func (r *Replica) executeWriteBatch(
 				propResult.Reply, propResult.Err = ba.CreateReply(), nil
 			}
 
-			return propResult.Reply, nil, writeBytes, propResult.Err
+			return propResult.Reply, nil, propResult.Err
 
 		case <-ctxDone:
 			// If our context was canceled, return an AmbiguousResultError,
@@ -335,26 +336,26 @@ func (r *Replica) executeWriteBatch(
 								return ctx.Err()
 							})
 						if err != nil {
-							log.Warningf(ctx, "transaction cleanup failed: %v", err)
+							log.KvExec.Warningf(ctx, "transaction cleanup failed: %v", err)
 							r.store.intentResolver.Metrics.FinalizedTxnCleanupFailed.Inc(1)
 						}
 					})
 			}
-			abandon()
+			r.abandon(abandonTok)
 			dur := timeutil.Since(startTime)
 			log.VEventf(ctx, 2, "context cancellation after %.2fs of attempting command %s",
 				dur.Seconds(), ba)
-			return nil, nil, nil, kvpb.NewError(kvpb.NewAmbiguousResultError(
+			return nil, nil, kvpb.NewError(kvpb.NewAmbiguousResultError(
 				errors.Wrapf(ctx.Err(), "after %.2fs of attempting command", dur.Seconds()),
 			))
 
 		case <-shouldQuiesce:
 			// If shutting down, return an AmbiguousResultError, which indicates
 			// to the caller that the command may have executed.
-			abandon()
+			r.abandon(abandonTok)
 			log.VEventf(ctx, 2, "shutdown cancellation after %0.1fs of attempting command %s",
 				timeutil.Since(startTime).Seconds(), ba)
-			return nil, nil, nil, kvpb.NewError(kvpb.NewAmbiguousResultErrorf(
+			return nil, nil, kvpb.NewError(kvpb.NewAmbiguousResultErrorf(
 				"server shutdown"))
 		}
 	}
@@ -367,7 +368,7 @@ func (r *Replica) executeWriteBatch(
 // possible to evaluate the batch as 1PC. If it does so, it will return the
 // updated batch request, which is shallow-copied on write.
 func (r *Replica) canAttempt1PCEvaluation(
-	ctx context.Context, ba *kvpb.BatchRequest, g *concurrency.Guard,
+	ctx context.Context, ba *kvpb.BatchRequest, g concurrency.Guard,
 ) (*kvpb.BatchRequest, bool) {
 	if !isOnePhaseCommit(ba) {
 		return ba, false
@@ -377,7 +378,7 @@ func (r *Replica) canAttempt1PCEvaluation(
 	// timestamp, even for isolation levels that can commit with such skew. Sanity
 	// check that this timestamp is equal to the batch timestamp.
 	if ba.Timestamp != ba.Txn.ReadTimestamp || ba.Timestamp != ba.Txn.WriteTimestamp {
-		log.Fatalf(ctx, "unexpected 1PC execution with diverged read or write timestamps; "+
+		log.KvExec.Fatalf(ctx, "unexpected 1PC execution with diverged read or write timestamps; "+
 			"ba.Timestamp: %s, ba.Txn.ReadTimestamp: %s, ba.Txn.WriteTimestamp: %s",
 			ba.Timestamp, ba.Txn.ReadTimestamp, ba.Txn.WriteTimestamp)
 	}
@@ -417,8 +418,9 @@ func (r *Replica) canAttempt1PCEvaluation(
 func (r *Replica) evaluateWriteBatch(
 	ctx context.Context,
 	idKey kvserverbase.CmdIDKey,
+	ss *kvpb.ScanStats,
 	ba *kvpb.BatchRequest,
-	g *concurrency.Guard,
+	g concurrency.Guard,
 	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
 ) (
@@ -440,13 +442,13 @@ func (r *Replica) evaluateWriteBatch(
 	// Attempt 1PC execution, if applicable. If not transactional or there are
 	// indications that the batch's txn will require retry, execute as normal.
 	if ba, ok = r.canAttempt1PCEvaluation(ctx, ba, g); ok {
-		res := r.evaluate1PC(ctx, idKey, ba, g, st)
+		res := r.evaluate1PC(ctx, idKey, ss, ba, g, st)
 		switch res.success {
 		case onePCSucceeded:
 			return ba, res.batch, res.stats, res.br, res.res, nil
 		case onePCFailed:
 			if res.pErr == nil {
-				log.Fatalf(ctx, "1PC failed but no err. ba: %s", ba.String())
+				log.KvExec.Fatalf(ctx, "1PC failed but no err. ba: %s", ba.String())
 			}
 			return ba, nil, enginepb.MVCCStats{}, nil, result.Result{}, res.pErr
 		case onePCFallbackToTransactionalEvaluation:
@@ -464,7 +466,7 @@ func (r *Replica) evaluateWriteBatch(
 	}
 
 	if ba.Require1PC() {
-		log.Fatalf(ctx,
+		log.KvExec.Fatalf(ctx,
 			"Require1PC should not have gotten to transactional evaluation. ba: %s", ba.String())
 	}
 
@@ -477,7 +479,7 @@ func (r *Replica) evaluateWriteBatch(
 	// For transactional writes, we propagate the flag from the txn.
 	omitInRangefeeds := ba.Txn != nil && ba.Txn.OmitInRangefeeds
 	ba, batch, br, res, pErr := r.evaluateWriteBatchWithServersideRefreshes(
-		ctx, idKey, rec, ms, ba, g, st, ui, hlc.Timestamp{} /* deadline */, omitInRangefeeds)
+		ctx, idKey, rec, ms, ss, ba, g, st, ui, hlc.Timestamp{} /* deadline */, omitInRangefeeds)
 	return ba, batch, *ms, br, res, pErr
 }
 
@@ -519,8 +521,9 @@ type onePCResult struct {
 func (r *Replica) evaluate1PC(
 	ctx context.Context,
 	idKey kvserverbase.CmdIDKey,
+	ss *kvpb.ScanStats,
 	ba *kvpb.BatchRequest,
-	g *concurrency.Guard,
+	g concurrency.Guard,
 	st *kvserverpb.LeaseStatus,
 ) (onePCRes onePCResult) {
 	log.VEventf(ctx, 2, "attempting 1PC execution")
@@ -562,10 +565,10 @@ func (r *Replica) evaluate1PC(
 	defer releaseMVCCStats(ms)
 	if ba.CanForwardReadTimestamp {
 		_, batch, br, res, pErr = r.evaluateWriteBatchWithServersideRefreshes(
-			ctx, idKey, rec, ms, &strippedBa, g, st, ui, etArg.Deadline, ba.Txn.OmitInRangefeeds)
+			ctx, idKey, rec, ms, ss, &strippedBa, g, st, ui, etArg.Deadline, ba.Txn.OmitInRangefeeds)
 	} else {
 		batch, br, res, pErr = r.evaluateWriteBatchWrapper(
-			ctx, idKey, rec, ms, &strippedBa, g, st, ui, ba.Txn.OmitInRangefeeds)
+			ctx, idKey, rec, ms, ss, &strippedBa, g, st, ui, ba.Txn.OmitInRangefeeds)
 	}
 
 	if pErr != nil || (!ba.CanForwardReadTimestamp && ba.Timestamp != br.Timestamp) {
@@ -597,7 +600,7 @@ func (r *Replica) evaluate1PC(
 	if !etArg.Commit {
 		clonedTxn.Status = roachpb.ABORTED
 		batch.Close()
-		batch = r.store.TODOEngine().NewBatch()
+		batch = r.store.StateEngine().NewBatch()
 		ms.Reset()
 	} else {
 		// Run commit trigger manually.
@@ -689,8 +692,9 @@ func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
 	idKey kvserverbase.CmdIDKey,
 	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
+	ss *kvpb.ScanStats,
 	ba *kvpb.BatchRequest,
-	g *concurrency.Guard,
+	g concurrency.Guard,
 	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
 	deadline hlc.Timestamp,
@@ -713,7 +717,7 @@ func (r *Replica) evaluateWriteBatchWithServersideRefreshes(
 			batch.Close()
 		}
 
-		batch, br, res, pErr = r.evaluateWriteBatchWrapper(ctx, idKey, rec, ms, ba, g, st, ui, omitInRangefeeds)
+		batch, br, res, pErr = r.evaluateWriteBatchWrapper(ctx, idKey, rec, ms, ss, ba, g, st, ui, omitInRangefeeds)
 
 		// Allow one retry only; a non-txn batch containing overlapping
 		// spans will always experience WriteTooOldError.
@@ -740,15 +744,16 @@ func (r *Replica) evaluateWriteBatchWrapper(
 	idKey kvserverbase.CmdIDKey,
 	rec batcheval.EvalContext,
 	ms *enginepb.MVCCStats,
+	ss *kvpb.ScanStats,
 	ba *kvpb.BatchRequest,
-	g *concurrency.Guard,
+	g concurrency.Guard,
 	st *kvserverpb.LeaseStatus,
 	ui uncertainty.Interval,
 	omitInRangefeeds bool,
 ) (storage.Batch, *kvpb.BatchResponse, result.Result, *kvpb.Error) {
-	batch, opLogger := r.newBatchedEngine(ba, g)
+	batch, opLogger := r.newBatchedEngine(g)
 	now := timeutil.Now()
-	br, res, pErr := evaluateBatch(ctx, idKey, batch, rec, ms, ba, g, st, ui, readWrite, omitInRangefeeds)
+	br, res, pErr := evaluateBatch(ctx, idKey, batch, rec, ms, ss, ba, g, st, ui, readWrite, omitInRangefeeds)
 	r.store.metrics.ReplicaWriteBatchEvaluationLatency.RecordValue(timeutil.Since(now).Nanoseconds())
 	if pErr == nil {
 		if opLogger != nil {
@@ -764,10 +769,8 @@ func (r *Replica) evaluateWriteBatchWrapper(
 // are enabled, it also returns an engine.OpLoggerBatch. If non-nil, then this
 // OpLogger is attached to the returned engine.Batch, recording all operations.
 // Its recording should be attached to the Result of request evaluation.
-func (r *Replica) newBatchedEngine(
-	ba *kvpb.BatchRequest, g *concurrency.Guard,
-) (storage.Batch, *storage.OpLoggerBatch) {
-	batch := r.store.TODOEngine().NewBatch()
+func (r *Replica) newBatchedEngine(g concurrency.Guard) (storage.Batch, *storage.OpLoggerBatch) {
+	batch := r.store.StateEngine().NewBatch()
 	if !batch.ConsistentIterators() {
 		// This is not currently needed for correctness, but future optimizations
 		// may start relying on this, so we assert here.
@@ -810,7 +813,7 @@ func (r *Replica) newBatchedEngine(
 		opLogger = storage.NewOpLoggerBatch(batch)
 		batch = opLogger
 	}
-	if util.RaceEnabled {
+	if spanset.EnableAssertions {
 		// During writes we may encounter a versioned value newer than the request
 		// timestamp, and may have to retry at a higher timestamp. This is still
 		// safe as we're only ever writing at timestamps higher than the timestamp
@@ -818,6 +821,7 @@ func (r *Replica) newBatchedEngine(
 		// assert on access timestamps using spanset.NewBatchAt.
 		batch = spanset.NewBatch(batch, g.LatchSpans())
 	}
+
 	return batch, opLogger
 }
 

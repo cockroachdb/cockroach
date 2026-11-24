@@ -36,7 +36,7 @@ func (c *connector) runTenantSettingsSubscription(ctx context.Context, startupCh
 			TenantID: c.tenantID,
 		})
 		if err != nil {
-			log.Warningf(ctx, "error issuing TenantSettings RPC: %v", err)
+			log.Dev.Warningf(ctx, "error issuing TenantSettings RPC: %v", err)
 			c.tryForgetClient(ctx, client)
 			continue
 		}
@@ -62,14 +62,14 @@ func (c *connector) runTenantSettingsSubscription(ctx context.Context, startupCh
 					break
 				}
 				// Soft RPC error. Drop client and retry.
-				log.Warningf(ctx, "error consuming TenantSettings RPC: %v", err)
+				log.Dev.Warningf(ctx, "error consuming TenantSettings RPC: %v", err)
 				c.tryForgetClient(ctx, client)
 				break
 			}
 			if e.Error != (errorspb.EncodedError{}) {
 				// Hard logical error.
 				err := errors.DecodeError(ctx, e.Error)
-				log.Errorf(ctx, "error consuming TenantSettings RPC: %v", err)
+				log.Dev.Errorf(ctx, "error consuming TenantSettings RPC: %v", err)
 				if startupCh != nil && errors.Is(err, &kvpb.MissingRecordError{}) && c.earlyShutdownIfMissingTenantRecord {
 					select {
 					case startupCh <- err:
@@ -111,14 +111,14 @@ func (c *connector) runTenantSettingsSubscription(ctx context.Context, startupCh
 			case kvpb.TenantSettingsEvent_METADATA_EVENT:
 				err := c.processMetadataEvent(ctx, e)
 				if err != nil {
-					log.Errorf(ctx, "error processing tenant settings event: %v", err)
+					log.Dev.Errorf(ctx, "error processing tenant settings event: %v", err)
 					reconnect = true
 				}
 
 			case kvpb.TenantSettingsEvent_SETTING_EVENT:
 				settingsReady, err := c.processSettingsEvent(ctx, e)
 				if err != nil {
-					log.Errorf(ctx, "error processing tenant settings event: %v", err)
+					log.Dev.Errorf(ctx, "error processing tenant settings event: %v", err)
 					reconnect = true
 					break
 				}
@@ -134,7 +134,7 @@ func (c *connector) runTenantSettingsSubscription(ctx context.Context, startupCh
 				// servers that send it) because when it is sent it is always
 				// sent prior to the setting overrides.
 				if settingsReady {
-					log.Infof(ctx, "received initial tenant settings")
+					log.Dev.Infof(ctx, "received initial tenant settings")
 
 					if startupCh != nil {
 						select {
@@ -173,7 +173,7 @@ func (c *connector) processMetadataEvent(ctx context.Context, e *kvpb.TenantSett
 	c.metadataMu.serviceMode = mtinfopb.TenantServiceMode(e.ServiceMode)
 	c.metadataMu.clusterInitGracePeriodTS = e.ClusterInitGracePeriodEndTS
 
-	log.Infof(ctx, "received tenant metadata: name=%q dataState=%v serviceMode=%v clusterInitGracePeriodTS=%s\ncapabilities=%+v",
+	log.Dev.Infof(ctx, "received tenant metadata: name=%q dataState=%v serviceMode=%v clusterInitGracePeriodTS=%s\ncapabilities=%+v",
 		c.metadataMu.tenantName, c.metadataMu.dataState, c.metadataMu.serviceMode,
 		timeutil.Unix(c.metadataMu.clusterInitGracePeriodTS, 0), c.metadataMu.capabilities)
 
@@ -253,7 +253,7 @@ func (c *connector) processSettingsEvent(
 		return false, errors.Newf("unknown precedence value %d", e.Precedence)
 	}
 
-	log.Infof(ctx, "received %d setting overrides with precedence %v (incremental=%v)", len(e.Overrides), e.Precedence, e.Incremental)
+	log.Dev.Infof(ctx, "received %d setting overrides with precedence %v (incremental=%v)", len(e.Overrides), e.Precedence, e.Incremental)
 
 	// If the event is not incremental, clear the map.
 	if !e.Incremental {

@@ -1,0 +1,163 @@
+exec-ddl
+CREATE TABLE t (
+    k INT PRIMARY KEY,
+    i INT,
+    s STRING,
+    j JSONB,
+    INVERTED INDEX isj (i, s, j)
+)
+----
+
+exec-ddl
+ALTER TABLE t INJECT STATISTICS '[
+  {
+    "columns": ["i"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 41,
+    "null_count": 0
+  },
+  {
+    "columns": ["s"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 40,
+    "null_count": 100,
+    "histo_col_type": "string",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "apple"},
+      {"num_eq": 100, "num_range": 200, "distinct_range": 9, "upper_bound": "banana"},
+      {"num_eq": 100, "num_range": 300, "distinct_range": 9, "upper_bound": "cherry"},
+      {"num_eq": 200, "num_range": 400, "distinct_range": 9, "upper_bound": "mango"},
+      {"num_eq": 200, "num_range": 400, "distinct_range": 9, "upper_bound": "pineapple"}
+    ]
+  },
+  {
+    "columns": ["j"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 10,
+    "null_count": 0,
+    "histo_col_type": "BYTES",
+    "histo_buckets": [
+      {"distinct_range": 0, "num_eq": 10, "num_range": 0, "upper_bound": "\\x37000138"},
+      {"distinct_range": 0, "num_eq": 10, "num_range": 0, "upper_bound": "\\x37000139"},
+      {"distinct_range": 0, "num_eq": 990, "num_range": 0, "upper_bound": "\\x37000300012a0200"},
+      {"distinct_range": 0, "num_eq": 100, "num_range": 0, "upper_bound": "\\x37000300012a0400"},
+      {"distinct_range": 0, "num_eq": 10, "num_range": 0, "upper_bound": "\\x37000300012a0600"},
+      {"distinct_range": 0, "num_eq": 990, "num_range": 0, "upper_bound": "\\x3761000112620001"},
+      {"distinct_range": 0, "num_eq": 100, "num_range": 0, "upper_bound": "\\x3763000112640001"},
+      {"distinct_range": 0, "num_eq": 10, "num_range": 0, "upper_bound": "\\x3765000112660001"}
+    ]
+  }
+]'
+----
+
+# Test a multi-column inverted index scan where the leading prefix column i
+# spans multiple values but the second prefix column s is held to a single
+# value. s's histogram should be used even though s is outside the exact prefix.
+opt
+SELECT k FROM t@isj WHERE i IN (200, 300) AND s = 'banana' AND j @> '{"a": "b"}'
+----
+project
+ ├── columns: k:1(int!null)
+ ├── immutable
+ ├── stats: [rows=1]
+ ├── key: (1)
+ └── scan t@isj,inverted
+      ├── columns: k:1(int!null)
+      ├── constraint: /2/3
+      │    ├── [/200/'banana' - /200/'banana']
+      │    └── [/300/'banana' - /300/'banana']
+      ├── inverted constraint: /7/1
+      │    └── spans: ["a"/"b", "a"/"b"]
+      ├── flags: force-index=isj
+      ├── stats: [rows=2.41463, distinct(2)=2, null(2)=0, distinct(3)=1, null(3)=0, distinct(7)=1, null(7)=0, distinct(3,7)=1, null(3,7)=0, distinct(2,3,7)=2, null(2,3,7)=0]
+      │   histogram(3)=  0   2.4146
+      │                <--- 'banana'
+      │   histogram(7)=  0         2.4146         0           0
+      │                <--- '\x3761000112620001' --- '\x3761000112620002'
+      └── key: (1)
+
+exec-ddl
+CREATE TABLE rbr (
+    k INT PRIMARY KEY,
+    s STRING,
+    j JSONB,
+    INVERTED INDEX sj (s, j)
+) LOCALITY REGIONAL BY ROW
+----
+
+exec-ddl
+ALTER TABLE rbr INJECT STATISTICS '[
+  {
+    "columns": ["crdb_region"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 3,
+    "null_count": 0
+  },
+  {
+    "columns": ["s"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 40,
+    "null_count": 100,
+    "histo_col_type": "string",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "apple"},
+      {"num_eq": 100, "num_range": 200, "distinct_range": 9, "upper_bound": "banana"},
+      {"num_eq": 100, "num_range": 300, "distinct_range": 9, "upper_bound": "cherry"},
+      {"num_eq": 200, "num_range": 400, "distinct_range": 9, "upper_bound": "mango"},
+      {"num_eq": 200, "num_range": 400, "distinct_range": 9, "upper_bound": "pineapple"}
+    ]
+  },
+  {
+    "columns": ["j"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 2000,
+    "distinct_count": 10,
+    "null_count": 0,
+    "histo_col_type": "BYTES",
+    "histo_buckets": [
+      {"distinct_range": 0, "num_eq": 10, "num_range": 0, "upper_bound": "\\x37000138"},
+      {"distinct_range": 0, "num_eq": 10, "num_range": 0, "upper_bound": "\\x37000139"},
+      {"distinct_range": 0, "num_eq": 990, "num_range": 0, "upper_bound": "\\x37000300012a0200"},
+      {"distinct_range": 0, "num_eq": 100, "num_range": 0, "upper_bound": "\\x37000300012a0400"},
+      {"distinct_range": 0, "num_eq": 10, "num_range": 0, "upper_bound": "\\x37000300012a0600"},
+      {"distinct_range": 0, "num_eq": 990, "num_range": 0, "upper_bound": "\\x3761000112620001"},
+      {"distinct_range": 0, "num_eq": 100, "num_range": 0, "upper_bound": "\\x3763000112640001"},
+      {"distinct_range": 0, "num_eq": 10, "num_range": 0, "upper_bound": "\\x3765000112660001"}
+    ]
+  }
+]'
+----
+
+# Same scenario on a REGIONAL BY ROW table where the query does not constrain
+# crdb_region. The optimizer enumerates crdb_region into one span per region, all
+# pinning s='banana', so crdb_region varies while s is a constant column outside
+# the exact prefix.
+opt
+SELECT k FROM rbr@sj WHERE s = 'banana' AND j @> '{"a": "b"}'
+----
+project
+ ├── columns: k:1(int!null)
+ ├── immutable
+ ├── stats: [rows=11.1111]
+ ├── key: (1)
+ └── scan rbr@sj,inverted
+      ├── columns: k:1(int!null) crdb_region:4(string!null)
+      ├── constraint: /4/2
+      │    ├── [/'central'/'banana' - /'central'/'banana']
+      │    ├── [/'east'/'banana' - /'east'/'banana']
+      │    └── [/'west'/'banana' - /'west'/'banana']
+      ├── inverted constraint: /7/1
+      │    └── spans: ["a"/"b", "a"/"b"]
+      ├── flags: force-index=sj
+      ├── stats: [rows=49.5, distinct(2)=1, null(2)=0, distinct(4)=3, null(4)=0, distinct(7)=1, null(7)=0, distinct(2,4,7)=3, null(2,4,7)=0]
+      │   histogram(2)=  0    49.5
+      │                <--- 'banana'
+      │   histogram(7)=  0          49.5          0           0
+      │                <--- '\x3761000112620001' --- '\x3761000112620002'
+      ├── key: (1)
+      └── fd: (1)-->(4)

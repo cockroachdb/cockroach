@@ -1,10 +1,16 @@
 # LogicTest: !metamorphic-batch-sizes
 
+skip under race
+
 # Regression test for UPSERT batching logic not respecting footprint-based
 # limiting (#102472).
 statement ok
 CREATE TABLE src (s STRING);
+
+statement ok
 CREATE TABLE dest (s STRING);
+
+statement ok
 INSERT INTO src SELECT repeat('a', 100000) FROM generate_series(1, 60)
 
 user host-cluster-root
@@ -36,6 +42,8 @@ user root
 
 statement ok
 DROP TABLE src;
+
+statement ok
 DROP TABLE dest
 
 # Regression test for UPSERT batching logic (#51391).
@@ -46,9 +54,23 @@ SET CLUSTER SETTING kv.raft.command.max_size='4MiB';
 
 user root
 
+# We lowered max raft command size. If we were to keep the default value of
+# max buffer size of write buffering, we would hit an error when attempting to
+# flush the buffer along with the BatchRequest that would put it above the limit.
+# To prevent that, we reduce the max buffer size to be "in sync" with the max
+# raft command size.
 statement ok
+SET CLUSTER SETTING kv.transaction.write_buffering.max_buffer_size = '1MiB';
+
+# Disable CF mutator since we would exceed the raft command size with multiple
+# column families.
+statement disable-cf-mutator ok
 CREATE TABLE src (s STRING);
+
+statement disable-cf-mutator ok
 CREATE TABLE dest (s STRING);
+
+statement ok
 INSERT INTO src
 SELECT
 	'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
@@ -69,11 +91,15 @@ user root
 
 statement ok
 DROP TABLE src;
+
+statement ok
 DROP TABLE dest
 
 # Regression test for finishing UPSERT too early (#54456).
 statement ok
 CREATE TABLE t54456 (c INT PRIMARY KEY);
+
+statement ok
 UPSERT INTO t54456 SELECT i FROM generate_series(1, 25000) AS i
 
 query I

@@ -7,6 +7,7 @@ package descpb
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/protoreflect"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -72,6 +73,9 @@ type ConstraintID = catid.ConstraintID
 // TriggerID is a custom type for TableDescriptor trigger IDs.
 type TriggerID = catid.TriggerID
 
+// PolicyID is a custom type for TableDescriptor policy IDs.
+type PolicyID = catid.PolicyID
+
 // DescriptorVersion is a custom type for TableDescriptor Versions.
 type DescriptorVersion uint64
 
@@ -116,6 +120,15 @@ const (
 
 // PGAttributeNum is a custom type for ColumnDescriptor's PGAttributeNum field.
 type PGAttributeNum = catid.PGAttributeNum
+
+// Expression is a SQL expression encoded as a string.
+type Expression = catpb.Expression
+
+// Statement is a SQL statement encoded as a string.
+type Statement = catpb.Statement
+
+// RoutineBody is a PL/pgSQL routine body encoded as a string.
+type RoutineBody = catpb.RoutineBody
 
 // ColumnID is a custom type for ColumnDescriptor IDs.
 type ColumnID = catid.ColumnID
@@ -179,6 +192,24 @@ func (c ColumnIDs) Contains(i ColumnID) bool {
 	return false
 }
 
+// IsNonEmptySubsetOf returns true if every column ID in this list also appears
+// in input, and this list is non-empty. Duplicate ColumnIDs have no effect.
+func (c ColumnIDs) IsNonEmptySubsetOf(input ColumnIDs) bool {
+	if len(c) == 0 {
+		return false
+	}
+	inputColsSet := intsets.MakeFast()
+	for _, inputCol := range input {
+		inputColsSet.Add(int(inputCol))
+	}
+	for _, col := range c {
+		if !inputColsSet.Contains(int(col)) {
+			return false
+		}
+	}
+	return true
+}
+
 // MutationID is a custom type for TableDescriptor mutations.
 type MutationID uint32
 
@@ -226,6 +257,11 @@ func (desc *TableDescriptor) IsView() bool {
 // MaterializedView implements the TableDescriptor interface.
 func (desc *TableDescriptor) MaterializedView() bool {
 	return desc.IsMaterializedView
+}
+
+// IsSecurityInvoker implements the TableDescriptor interface.
+func (desc *TableDescriptor) IsSecurityInvoker() bool {
+	return desc.SecurityInvoker != nil && *desc.SecurityInvoker
 }
 
 // IsReadOnly implements the TableDescriptor interface.
@@ -293,24 +329,25 @@ func (opts *TableDescriptor_SequenceOpts) HasOwner() bool {
 	return !opts.SequenceOwner.Equal(TableDescriptor_SequenceOpts_SequenceOwner{})
 }
 
-// EffectiveCacheSize returns the CacheSize or NodeCacheSize field of a sequence option with
-// the exception that it will return 1 if both fields are set to 0.
-// A cache size of 1 indicates that there is no caching. A node cache size of 0 indicates there is no
-// node-level caching. The returned value
-// will always be greater than or equal to 1.
+// EffectiveCacheSize evaluates the cache size fields of a sequence option.
+// A cache size of 1 indicates that the cache is disabled.
+// The session cache size takes precedence: If set and enabled, it will be the one used.
 //
-// Prior to #51259, sequence caching was unimplemented and cache sizes were
-// left uninitialized (ie. to have a value of 0). If a sequence has a cache
-// size of 0, it should be treated in the same was as sequences with cache
-// sizes of 1.
+// Note: An unset cache size is considered disabled.
 func (opts *TableDescriptor_SequenceOpts) EffectiveCacheSize() int64 {
-	if opts.CacheSize == 0 && opts.NodeCacheSize == 0 {
-		return 1
+	switch sessionCacheSize := opts.SessionCacheSize; sessionCacheSize {
+	case 0, 1:
+	default:
+		return sessionCacheSize
 	}
-	if opts.CacheSize == 1 && opts.NodeCacheSize != 0 {
-		return opts.NodeCacheSize
+
+	switch nodeCacheSize := opts.NodeCacheSize; nodeCacheSize {
+	case 0, 1:
+	default:
+		return nodeCacheSize
 	}
-	return opts.CacheSize
+
+	return 1 // caches disabled
 }
 
 // SafeValue implements the redact.SafeValue interface.

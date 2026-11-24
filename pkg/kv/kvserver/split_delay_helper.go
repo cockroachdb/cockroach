@@ -180,7 +180,7 @@ func maybeDelaySplitToAvoidSnapshot(
 		slept += sleepDur
 
 		if err := ctx.Err(); err != nil {
-			problems = append(problems, redact.Sprintf("error: %s", err.Error()))
+			problems = append(problems, redact.Sprintf("error: %v", err))
 			break
 		}
 	}

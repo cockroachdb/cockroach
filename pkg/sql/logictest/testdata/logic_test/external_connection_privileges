@@ -15,20 +15,24 @@ GRANT USAGE ON EXTERNAL CONNECTION foo TO testuser
 statement error pq: failed to resolve External Connection: external connection with name foo does not exist
 GRANT DROP ON EXTERNAL CONNECTION foo TO testuser
 
+
+statement error pq: failed to resolve External Connection: external connection with name foo does not exist
+GRANT UPDATE ON EXTERNAL CONNECTION foo TO testuser
+
 statement ok
 CREATE EXTERNAL CONNECTION foo AS 'nodelocal://1/foo'
 
 statement ok
-GRANT USAGE,DROP ON EXTERNAL CONNECTION foo TO testuser
+GRANT USAGE,DROP,UPDATE ON EXTERNAL CONNECTION foo TO testuser
 
 query TTTT
 SELECT username, path, privileges, grant_options FROM system.privileges ORDER by username
 ----
 root      /externalconn/foo  {ALL}         {}
-testuser  /externalconn/foo  {DROP,USAGE}  {}
+testuser  /externalconn/foo  {DROP,UPDATE,USAGE}  {}
 
 statement ok
-REVOKE USAGE,DROP ON EXTERNAL CONNECTION foo FROM testuser
+REVOKE USAGE,DROP,UPDATE ON EXTERNAL CONNECTION foo FROM testuser
 
 query TTTT
 SELECT username, path, privileges, grant_options FROM system.privileges ORDER by username
@@ -36,7 +40,7 @@ SELECT username, path, privileges, grant_options FROM system.privileges ORDER by
 root  /externalconn/foo  {ALL}  {}
 
 statement ok
-GRANT USAGE,DROP ON EXTERNAL CONNECTION foo TO testuser
+GRANT USAGE,DROP,UPDATE ON EXTERNAL CONNECTION foo TO testuser
 
 statement ok
 CREATE USER bar
@@ -44,28 +48,28 @@ CREATE USER bar
 # Attempt to grant usage as testuser, this should fail since we did not specify WITH GRANT OPTION
 user testuser
 
-statement error pq: user testuser missing WITH GRANT OPTION privilege on one or more of USAGE, DROP
-GRANT USAGE,DROP ON EXTERNAL CONNECTION foo TO bar
+statement error pq: user testuser missing WITH GRANT OPTION privilege on one or more of USAGE, DROP, UPDATE
+GRANT USAGE,DROP,UPDATE ON EXTERNAL CONNECTION foo TO bar
 
 user root
 
 statement ok
-GRANT USAGE,DROP ON EXTERNAL CONNECTION foo TO testuser WITH GRANT OPTION
+GRANT USAGE,DROP,UPDATE ON EXTERNAL CONNECTION foo TO testuser WITH GRANT OPTION
 
 # Attempt to grant usage as testuser, this should succeed since we did specify WITH GRANT OPTION
 user testuser
 
 statement ok
-GRANT USAGE,DROP ON EXTERNAL CONNECTION foo TO bar
+GRANT USAGE,DROP,UPDATE ON EXTERNAL CONNECTION foo TO bar
 
 user root
 
 query TTTT
 SELECT username, path, privileges, grant_options FROM system.privileges ORDER BY username
 ----
-bar       /externalconn/foo  {DROP,USAGE}  {}
+bar       /externalconn/foo  {DROP,UPDATE,USAGE}  {}
 root      /externalconn/foo  {ALL}         {}
-testuser  /externalconn/foo  {DROP,USAGE}  {DROP,USAGE}
+testuser  /externalconn/foo  {DROP,UPDATE,USAGE}  {DROP,UPDATE,USAGE}
 
 # Invalid grants on external connections.
 
@@ -79,18 +83,21 @@ statement ok
 CREATE ROLE testuser2
 
 statement ok
-GRANT DROP, USAGE ON EXTERNAL CONNECTION foo TO testuser2 WITH GRANT OPTION
+GRANT DROP,UPDATE,USAGE ON EXTERNAL CONNECTION foo TO testuser2 WITH GRANT OPTION
 
 query TTTB colnames,rowsort
 SHOW GRANTS ON EXTERNAL CONNECTION foo
 ----
 connection_name  grantee    privilege_type  is_grantable
 foo              bar        DROP            false
+foo              bar        UPDATE          false
 foo              bar        USAGE           false
 foo              root       ALL             false
 foo              testuser   DROP            true
+foo              testuser   UPDATE          true
 foo              testuser   USAGE           true
 foo              testuser2  DROP            true
+foo              testuser2  UPDATE          true
 foo              testuser2  USAGE           true
 
 query TTTB colnames,rowsort
@@ -98,6 +105,8 @@ SHOW GRANTS ON EXTERNAL CONNECTION foo FOR testuser, testuser2
 ----
 connection_name  grantee    privilege_type  is_grantable
 foo              testuser   DROP            true
+foo              testuser   UPDATE          true
 foo              testuser   USAGE           true
 foo              testuser2  DROP            true
+foo              testuser2  UPDATE          true
 foo              testuser2  USAGE           true

@@ -8,7 +8,6 @@ package rangefeed
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -53,9 +52,9 @@ func (f *RangeFeed) runInitialScan(
 		f.onValue(ctx, &v)
 	}
 
-	var onValues func(kvs []kv.KeyValue)
+	var onValues func(kvs []kvpb.RangeFeedValue)
 	if f.onValues != nil {
-		onValues = func(kvs []kv.KeyValue) {
+		onValues = func(kvs []kvpb.RangeFeedValue) {
 			f.onValues(ctx, kvs)
 		}
 	}
@@ -74,12 +73,12 @@ func (f *RangeFeed) runInitialScan(
 				return err
 			}
 		}
-		advanced, err := frontier.Forward(sp, f.initialTimestamp)
+		result, err := frontier.Forward(sp, f.initialTimestamp)
 		if err != nil {
 			return err
 		}
 		if f.frontierVisitor != nil {
-			f.frontierVisitor(ctx, advanced, frontier)
+			f.frontierVisitor(ctx, result.FrontierForwarded(), frontier)
 		}
 		return nil
 	}
@@ -93,12 +92,11 @@ func (f *RangeFeed) runInitialScan(
 	for r.Next() {
 		// Figure out what spans are left to scan.
 		toScan = toScan[:0]
-		frontier.Entries(func(sp roachpb.Span, ts hlc.Timestamp) (done span.OpResult) {
+		for sp, ts := range frontier.Entries() {
 			if ts.IsEmpty() || ts.Less(f.initialTimestamp) {
 				toScan = append(toScan, sp)
 			}
-			return span.ContinueMatch
-		})
+		}
 
 		// Scan the spans.
 		if len(toScan) > 0 {
@@ -110,7 +108,7 @@ func (f *RangeFeed) runInitialScan(
 					}
 				}
 				if n.ShouldLog() {
-					log.Warningf(ctx, "failed to perform initial scan: %v", err)
+					log.Dev.Warningf(ctx, "failed to perform initial scan: %v", err)
 				}
 				continue
 			}

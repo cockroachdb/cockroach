@@ -31,9 +31,9 @@ func TestStoreReplicaBTree_VisitKeyRange(t *testing.T) {
 	ef := makeMockPH("e", "f")
 
 	b := newStoreReplicaBTree()
-	require.Nil(t, b.ReplaceOrInsertPlaceholder(ctx, ac).item)
-	require.Nil(t, b.ReplaceOrInsertPlaceholder(ctx, cd).item)
-	require.Nil(t, b.ReplaceOrInsertPlaceholder(ctx, ef).item)
+	require.Nil(t, b.ReplaceOrInsertPlaceholder(ctx, ac).item())
+	require.Nil(t, b.ReplaceOrInsertPlaceholder(ctx, cd).item())
+	require.Nil(t, b.ReplaceOrInsertPlaceholder(ctx, ef).item())
 
 	collect := func(from, to string, order IterationOrder) []*ReplicaPlaceholder {
 		t.Helper()
@@ -153,7 +153,7 @@ func TestStoreReplicaBTree_ReplicaCanBeLockedDuringInsert(t *testing.T) {
 	defer repl.mu.Unlock()
 
 	br := newStoreReplicaBTree()
-	require.Nil(t, br.ReplaceOrInsertReplica(ctx, repl).item)
+	require.Nil(t, br.ReplaceOrInsertReplica(ctx, repl).item())
 	require.Equal(t, repl, br.ReplaceOrInsertReplica(ctx, repl).repl)
 	require.Equal(t, repl, br.DeleteReplica(ctx, repl).repl)
 }

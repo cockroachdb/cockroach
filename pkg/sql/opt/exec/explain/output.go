@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
+	"github.com/cockroachdb/cockroach/pkg/sql/hints"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
@@ -300,10 +301,22 @@ func (ob *OutputBuilder) AddDistribution(value string) {
 // AddVectorized adds a top-level vectorized field. Cannot be called
 // while inside a node.
 func (ob *OutputBuilder) AddVectorized(value bool) {
-	ob.AddFlakyTopLevelField(DeflakeVectorized, "vectorized", fmt.Sprintf("%t", value))
+	if ob.flags.Verbose || !value {
+		ob.AddFlakyTopLevelField(DeflakeVectorized, "vectorized", fmt.Sprintf("%t", value))
+	}
 }
 
-// AddGeneric adds a top-level generic field, if value is true. Cannot be called
+// AddTableStatsMode adds a top-level field indicating which table
+// statistics rollout path was used for planning. Only emitted when the
+// canary experiment is active (mode is "canary" or "stable"). Cannot
+// be called while inside a node.
+func (ob *OutputBuilder) AddTableStatsMode(mode string) {
+	if mode != "default" {
+		ob.AddTopLevelField("table stats mode", mode)
+	}
+}
+
+// AddPlanType adds a top-level generic field, if value is true. Cannot be called
 // while inside a node.
 func (ob *OutputBuilder) AddPlanType(generic, optimized bool) {
 	switch {
@@ -313,6 +326,33 @@ func (ob *OutputBuilder) AddPlanType(generic, optimized bool) {
 		ob.AddTopLevelField("plan type", "generic, reused")
 	default:
 		ob.AddTopLevelField("plan type", "custom")
+	}
+}
+
+// AddStmtHintCount adds a top-level field displaying a summary of the
+// statement hints loaded for the query (applied and skipped). Cannot be called
+// while inside a node.
+func (ob *OutputBuilder) AddStmtHintCount(hints []hints.Hint, runtimeErrors map[int]error) {
+	if len(hints) == 0 {
+		return
+	}
+	total := uint64(len(hints))
+	applied := uint64(0)
+	for i := range hints {
+		if hints[i].Enabled() && runtimeErrors[i] == nil {
+			applied++
+		}
+	}
+	if total == applied {
+		ob.AddTopLevelField("statement hints", string(humanizeutil.Count(total)))
+	} else {
+		skipped := total - applied
+		ob.AddTopLevelField("statement hints", fmt.Sprintf(
+			"%s (%s applied, %s skipped)",
+			humanizeutil.Count(total),
+			humanizeutil.Count(applied),
+			humanizeutil.Count(skipped),
+		))
 	}
 }
 
@@ -360,8 +400,10 @@ func (ob *OutputBuilder) AddKVReadStats(rows, bytes, kvPairs, batchRequests int6
 
 // AddKVTime adds a top-level field for the cumulative time spent in KV.
 func (ob *OutputBuilder) AddKVTime(kvTime time.Duration) {
-	ob.AddFlakyTopLevelField(
-		DeflakeVolatile, "cumulative time spent in KV", string(humanizeutil.Duration(kvTime)))
+	if ob.flags.Verbose {
+		ob.AddFlakyTopLevelField(
+			DeflakeVolatile, "cumulative time spent in KV", string(humanizeutil.Duration(kvTime)))
+	}
 }
 
 // AddContentionTime adds a top-level field for the cumulative contention time.
@@ -373,20 +415,70 @@ func (ob *OutputBuilder) AddContentionTime(contentionTime time.Duration) {
 	)
 }
 
-// AddMaxMemUsage adds a top-level field for the memory used by the query.
-func (ob *OutputBuilder) AddMaxMemUsage(bytes int64) {
+// AddRetryCount adds a top-level retry-count field. Cannot be called while
+// inside a node.
+func (ob *OutputBuilder) AddRetryCount(retryScope string, count uint64) {
+	if !ob.flags.Deflake.HasAny(DeflakeVolatile) && count > 0 {
+		ob.AddTopLevelField("number of "+retryScope+" retries", string(humanizeutil.Count(count)))
+	}
+}
+
+// AddRetryTime adds a top-level statement retry time field. Cannot be called
+// while inside a node.
+func (ob *OutputBuilder) AddRetryTime(retryScope string, delta time.Duration) {
+	if !ob.flags.Deflake.HasAny(DeflakeVolatile) && delta > 0 {
+		ob.AddTopLevelField("time spent retrying the "+retryScope, string(humanizeutil.Duration(delta)))
+	}
+}
+
+// AddLockWaitTime adds a top-level field for the cumulative time spent waiting
+// in the lock table.
+func (ob *OutputBuilder) AddLockWaitTime(lockWaitTime time.Duration) {
 	ob.AddFlakyTopLevelField(
-		DeflakeVolatile, "maximum memory usage", string(humanizeutil.IBytes(bytes)),
+		DeflakeVolatile,
+		"cumulative time spent in the lock table",
+		string(humanizeutil.Duration(lockWaitTime)),
 	)
 }
 
-// AddNetworkStats adds a top-level field for network statistics.
-func (ob *OutputBuilder) AddNetworkStats(messages, bytes int64) {
+// AddLatchWaitTime adds a top-level field for the cumulative time spent waiting
+// to acquire latches.
+func (ob *OutputBuilder) AddLatchWaitTime(latchWaitTime time.Duration) {
 	ob.AddFlakyTopLevelField(
 		DeflakeVolatile,
-		"network usage",
-		fmt.Sprintf("%s (%s messages)", humanizeutil.IBytes(bytes), humanizeutil.Count(uint64(messages))),
+		"cumulative time spent waiting to acquire latches",
+		string(humanizeutil.Duration(latchWaitTime)),
 	)
+}
+
+// AddAdmissionWaitTime adds a top-level field for the cumulative time spent waiting
+// in admission control.
+func (ob *OutputBuilder) AddAdmissionWaitTime(admissionWaitTime time.Duration) {
+	ob.AddFlakyTopLevelField(
+		DeflakeVolatile,
+		"cumulative time spent waiting in admission control",
+		string(humanizeutil.Duration(admissionWaitTime)),
+	)
+}
+
+// AddMaxMemUsage adds a top-level field for the memory used by the query.
+func (ob *OutputBuilder) AddMaxMemUsage(bytes int64) {
+	if ob.flags.Verbose {
+		ob.AddFlakyTopLevelField(
+			DeflakeVolatile, "maximum memory usage", string(humanizeutil.IBytes(bytes)),
+		)
+	}
+}
+
+// AddDistSQLNetworkStats adds a top-level field for DistSQL network statistics.
+func (ob *OutputBuilder) AddDistSQLNetworkStats(messages, bytes int64) {
+	if ob.flags.Verbose || bytes > 0 {
+		ob.AddFlakyTopLevelField(
+			DeflakeVolatile,
+			"DistSQL network usage",
+			fmt.Sprintf("%s (%s messages)", humanizeutil.IBytes(bytes), humanizeutil.Count(uint64(messages))),
+		)
+	}
 }
 
 // AddMaxDiskUsage adds a top-level field for the sql temporary disk space used
@@ -402,13 +494,20 @@ func (ob *OutputBuilder) AddMaxDiskUsage(bytes int64) {
 	}
 }
 
-// AddCPUTime adds a top-level field for the cumulative cpu time spent by SQL
+// AddSQLCPUTime adds a top-level field for the cumulative cpu time spent by SQL
 // execution. If we're redacting, we leave this out to keep test outputs
 // independent of platform because the grunning library isn't currently
 // supported on all platforms.
-func (ob *OutputBuilder) AddCPUTime(cpuTime time.Duration) {
-	if !ob.flags.Deflake.HasAny(DeflakeVolatile) {
+func (ob *OutputBuilder) AddSQLCPUTime(cpuTime time.Duration) {
+	if ob.flags.Verbose && !ob.flags.Deflake.HasAny(DeflakeVolatile) {
 		ob.AddTopLevelField("sql cpu time", string(humanizeutil.Duration(cpuTime)))
+	}
+}
+
+// AddKVCPUTime adds a top-level field for the cumulative CPU time spent in KV.
+func (ob *OutputBuilder) AddKVCPUTime(kvCPUTime time.Duration) {
+	if ob.flags.Verbose && !ob.flags.Deflake.HasAny(DeflakeVolatile) {
+		ob.AddTopLevelField("kv cpu time", string(humanizeutil.Duration(kvCPUTime)))
 	}
 }
 
@@ -439,9 +538,15 @@ func (ob *OutputBuilder) AddTxnInfo(
 	txnQoSLevel sessiondatapb.QoSLevel,
 	asOfSystemTime *eval.AsOfSystemTime,
 ) {
-	ob.AddTopLevelField("isolation level", txnIsoLevel.StringLower())
-	ob.AddTopLevelField("priority", txnPriority.String())
-	ob.AddTopLevelField("quality of service", txnQoSLevel.String())
+	if ob.flags.Verbose || txnIsoLevel != isolation.Serializable {
+		ob.AddTopLevelField("isolation level", txnIsoLevel.StringLower())
+	}
+	if ob.flags.Verbose || txnPriority != roachpb.NormalUserPriority {
+		ob.AddTopLevelField("priority", txnPriority.String())
+	}
+	if ob.flags.Verbose || txnQoSLevel != sessiondatapb.Normal {
+		ob.AddTopLevelField("quality of service", txnQoSLevel.String())
+	}
 	if asOfSystemTime != nil {
 		var boundedStaleness string
 		if asOfSystemTime.BoundedStaleness {

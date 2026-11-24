@@ -6,7 +6,7 @@ CREATE TYPE defaultdb.ctyp AS (a INT, b INT)
 build
 DROP TYPE defaultdb.typ
 ----
-- [[Namespace:{DescID: 104, Name: typ, ReferencedDescID: 100}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 104, Name: typ, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC]
   {databaseId: 100, descriptorId: 104, name: typ, schemaId: 101}
 - [[Owner:{DescID: 104}, ABSENT], PUBLIC]
   {descriptorId: 104, owner: root}
@@ -22,7 +22,7 @@ DROP TYPE defaultdb.typ
   {logicalRepresentation: a, physicalRepresentation: gA==, typeId: 104}
 - [[SchemaChild:{DescID: 104, ReferencedDescID: 101}, ABSENT], PUBLIC]
   {childObjectId: 104, schemaId: 101}
-- [[Namespace:{DescID: 105, Name: _typ, ReferencedDescID: 100}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 105, Name: _typ, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC]
   {databaseId: 100, descriptorId: 105, name: _typ, schemaId: 101}
 - [[Owner:{DescID: 105}, ABSENT], PUBLIC]
   {descriptorId: 105, owner: root}
@@ -33,14 +33,14 @@ DROP TYPE defaultdb.typ
 - [[UserPrivileges:{DescID: 105, Name: root}, ABSENT], PUBLIC]
   {descriptorId: 105, privileges: "2", userName: root, withGrantOption: "2"}
 - [[AliasType:{DescID: 105, ReferencedTypeIDs: [104 105]}, ABSENT], PUBLIC]
-  {closedTypeIds: [104, 105], type: {arrayContents: {family: EnumFamily, oid: 100104, udtMetadata: {arrayTypeOid: 100105}}, arrayElemType: EnumFamily, family: ArrayFamily, oid: 100105}, typeId: 105, typeName: 'public.typ[]'}
+  {closedTypeIds: [104, 105], type: {arrayContents: {family: EnumFamily, oid: 100104, udtMetadata: {arrayTypeOid: 100105}}, family: ArrayFamily, oid: 100105}, typeId: 105, typeName: 'public.typ[]'}
 - [[SchemaChild:{DescID: 105, ReferencedDescID: 101}, ABSENT], PUBLIC]
   {childObjectId: 105, schemaId: 101}
 
 build
 DROP TYPE defaultdb.ctyp
 ----
-- [[Namespace:{DescID: 106, Name: ctyp, ReferencedDescID: 100}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 106, Name: ctyp, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC]
   {databaseId: 100, descriptorId: 106, name: ctyp, schemaId: 101}
 - [[Owner:{DescID: 106}, ABSENT], PUBLIC]
   {descriptorId: 106, owner: root}
@@ -60,7 +60,7 @@ DROP TYPE defaultdb.ctyp
   {compositeTypeId: 106, name: b}
 - [[SchemaChild:{DescID: 106, ReferencedDescID: 101}, ABSENT], PUBLIC]
   {childObjectId: 106, schemaId: 101}
-- [[Namespace:{DescID: 107, Name: _ctyp, ReferencedDescID: 100}, ABSENT], PUBLIC]
+- [[Namespace:{DescID: 107, Name: _ctyp, ReferencedDescID: 100, IntValue: 101}, ABSENT], PUBLIC]
   {databaseId: 100, descriptorId: 107, name: _ctyp, schemaId: 101}
 - [[Owner:{DescID: 107}, ABSENT], PUBLIC]
   {descriptorId: 107, owner: root}
@@ -71,6 +71,6 @@ DROP TYPE defaultdb.ctyp
 - [[UserPrivileges:{DescID: 107, Name: root}, ABSENT], PUBLIC]
   {descriptorId: 107, privileges: "2", userName: root, withGrantOption: "2"}
 - [[AliasType:{DescID: 107, ReferencedTypeIDs: [106 107]}, ABSENT], PUBLIC]
-  {closedTypeIds: [106, 107], type: {arrayContents: {family: TupleFamily, oid: 100106, tupleContents: [{family: IntFamily, oid: 20, width: 64}, {family: IntFamily, oid: 20, width: 64}], tupleLabels: [a, b], udtMetadata: {arrayTypeOid: 100107}}, arrayElemType: TupleFamily, family: ArrayFamily, oid: 100107}, typeId: 107, typeName: 'public.ctyp[]'}
+  {closedTypeIds: [106, 107], type: {arrayContents: {family: TupleFamily, oid: 100106, tupleContents: [{family: IntFamily, oid: 20, width: 64}, {family: IntFamily, oid: 20, width: 64}], tupleLabels: [a, b], udtMetadata: {arrayTypeOid: 100107}}, family: ArrayFamily, oid: 100107}, typeId: 107, typeName: 'public.ctyp[]'}
 - [[SchemaChild:{DescID: 107, ReferencedDescID: 101}, ABSENT], PUBLIC]
   {childObjectId: 107, schemaId: 101}

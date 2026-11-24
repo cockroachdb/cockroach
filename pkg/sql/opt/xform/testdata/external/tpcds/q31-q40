@@ -1,0 +1,2037 @@
+import file=tpcds_schema
+----
+
+import file=tpcds_stats
+----
+
+# --------------------------------------------------
+# Q31
+opt
+	WITH
+		ss
+			AS (
+				SELECT
+					ca_county,
+					d_qoy,
+					d_year,
+					sum(ss_ext_sales_price) AS store_sales
+				FROM
+					store_sales, date_dim, customer_address
+				WHERE
+					ss_sold_date_sk = d_date_sk
+					AND ss_addr_sk = ca_address_sk
+				GROUP BY
+					ca_county, d_qoy, d_year
+			),
+		ws
+			AS (
+				SELECT
+					ca_county,
+					d_qoy,
+					d_year,
+					sum(ws_ext_sales_price) AS web_sales
+				FROM
+					web_sales, date_dim, customer_address
+				WHERE
+					ws_sold_date_sk = d_date_sk
+					AND ws_bill_addr_sk = ca_address_sk
+				GROUP BY
+					ca_county, d_qoy, d_year
+			)
+	SELECT
+		ss1.ca_county,
+		ss1.d_year,
+		ws2.web_sales / ws1.web_sales AS web_q1_q2_increase,
+		ss2.store_sales / ss1.store_sales
+			AS store_q1_q2_increase,
+		ws3.web_sales / ws2.web_sales AS web_q2_q3_increase,
+		ss3.store_sales / ss2.store_sales
+			AS store_q2_q3_increase
+	FROM
+		ss AS ss1,
+		ss AS ss2,
+		ss AS ss3,
+		ws AS ws1,
+		ws AS ws2,
+		ws AS ws3
+	WHERE
+		ss1.d_qoy = 1
+		AND ss1.d_year = 1999
+		AND ss1.ca_county = ss2.ca_county
+		AND ss2.d_qoy = 2
+		AND ss2.d_year = 1999
+		AND ss2.ca_county = ss3.ca_county
+		AND ss3.d_qoy = 3
+		AND ss3.d_year = 1999
+		AND ss1.ca_county = ws1.ca_county
+		AND ws1.d_qoy = 1
+		AND ws1.d_year = 1999
+		AND ws1.ca_county = ws2.ca_county
+		AND ws2.d_qoy = 2
+		AND ws2.d_year = 1999
+		AND ws1.ca_county = ws3.ca_county
+		AND ws3.d_qoy = 3
+		AND ws3.d_year = 1999
+		AND CASE
+			WHEN ws1.web_sales > 0
+			THEN ws2.web_sales / ws1.web_sales
+			ELSE NULL
+			END
+			> CASE
+				WHEN ss1.store_sales > 0
+				THEN ss2.store_sales / ss1.store_sales
+				ELSE NULL
+				END
+		AND CASE
+			WHEN ws2.web_sales > 0
+			THEN ws3.web_sales / ws2.web_sales
+			ELSE NULL
+			END
+			> CASE
+				WHEN ss2.store_sales > 0
+				THEN ss3.store_sales / ss2.store_sales
+				ELSE NULL
+				END
+	ORDER BY
+		store_q2_q3_increase;
+----
+sort
+ ├── columns: ca_county:154!null d_year:156!null web_q1_q2_increase:178 store_q1_q2_increase:179 web_q2_q3_increase:180 store_q2_q3_increase:181
+ ├── immutable
+ ├── key: (154)
+ ├── fd: ()-->(156), (154)-->(178-181)
+ ├── ordering: +181 opt(156) [actual: +181]
+ └── with &1 (ss)
+      ├── columns: ca_county:154!null d_year:156!null web_q1_q2_increase:178 store_q1_q2_increase:179 web_q2_q3_increase:180 store_q2_q3_increase:181
+      ├── immutable
+      ├── key: (154)
+      ├── fd: ()-->(156), (154)-->(178-181)
+      ├── group-by (hash)
+      │    ├── columns: date_dim.d_year:32 date_dim.d_qoy:36 customer_address.ca_county:63 sum:71
+      │    ├── grouping columns: date_dim.d_year:32 date_dim.d_qoy:36 customer_address.ca_county:63
+      │    ├── key: (32,36,63)
+      │    ├── fd: (32,36,63)-->(71)
+      │    ├── inner-join (hash)
+      │    │    ├── columns: ss_sold_date_sk:1!null ss_addr_sk:7!null ss_ext_sales_price:16 d_date_sk:26!null date_dim.d_year:32 date_dim.d_qoy:36 ca_address_sk:56!null customer_address.ca_county:63
+      │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+      │    │    ├── fd: (26)-->(32,36), (56)-->(63), (1)==(26), (26)==(1), (7)==(56), (56)==(7)
+      │    │    ├── inner-join (hash)
+      │    │    │    ├── columns: ss_sold_date_sk:1 ss_addr_sk:7!null ss_ext_sales_price:16 ca_address_sk:56!null customer_address.ca_county:63
+      │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+      │    │    │    ├── fd: (56)-->(63), (7)==(56), (56)==(7)
+      │    │    │    ├── scan store_sales
+      │    │    │    │    └── columns: ss_sold_date_sk:1 ss_addr_sk:7 ss_ext_sales_price:16
+      │    │    │    ├── scan customer_address
+      │    │    │    │    ├── columns: ca_address_sk:56!null customer_address.ca_county:63
+      │    │    │    │    ├── key: (56)
+      │    │    │    │    └── fd: (56)-->(63)
+      │    │    │    └── filters
+      │    │    │         └── ss_addr_sk:7 = ca_address_sk:56 [outer=(7,56), constraints=(/7: (/NULL - ]; /56: (/NULL - ]), fd=(7)==(56), (56)==(7)]
+      │    │    ├── scan date_dim
+      │    │    │    ├── columns: d_date_sk:26!null date_dim.d_year:32 date_dim.d_qoy:36
+      │    │    │    ├── key: (26)
+      │    │    │    └── fd: (26)-->(32,36)
+      │    │    └── filters
+      │    │         └── ss_sold_date_sk:1 = d_date_sk:26 [outer=(1,26), constraints=(/1: (/NULL - ]; /26: (/NULL - ]), fd=(1)==(26), (26)==(1)]
+      │    └── aggregations
+      │         └── sum [as=sum:71, outer=(16)]
+      │              └── ss_ext_sales_price:16
+      └── with &2 (ws)
+           ├── columns: ca_county:154!null d_year:156!null web_q1_q2_increase:178 store_q1_q2_increase:179 web_q2_q3_increase:180 store_q2_q3_increase:181
+           ├── immutable
+           ├── key: (154)
+           ├── fd: ()-->(156), (154)-->(178-181)
+           ├── group-by (hash)
+           │    ├── columns: date_dim.d_year:114 date_dim.d_qoy:118 customer_address.ca_county:145 sum:153
+           │    ├── grouping columns: date_dim.d_year:114 date_dim.d_qoy:118 customer_address.ca_county:145
+           │    ├── key: (114,118,145)
+           │    ├── fd: (114,118,145)-->(153)
+           │    ├── inner-join (hash)
+           │    │    ├── columns: ws_sold_date_sk:72!null ws_bill_addr_sk:79!null ws_ext_sales_price:95 d_date_sk:108!null date_dim.d_year:114 date_dim.d_qoy:118 ca_address_sk:138!null customer_address.ca_county:145
+           │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+           │    │    ├── fd: (108)-->(114,118), (138)-->(145), (72)==(108), (108)==(72), (79)==(138), (138)==(79)
+           │    │    ├── inner-join (hash)
+           │    │    │    ├── columns: ws_sold_date_sk:72 ws_bill_addr_sk:79!null ws_ext_sales_price:95 ca_address_sk:138!null customer_address.ca_county:145
+           │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+           │    │    │    ├── fd: (138)-->(145), (79)==(138), (138)==(79)
+           │    │    │    ├── scan web_sales
+           │    │    │    │    └── columns: ws_sold_date_sk:72 ws_bill_addr_sk:79 ws_ext_sales_price:95
+           │    │    │    ├── scan customer_address
+           │    │    │    │    ├── columns: ca_address_sk:138!null customer_address.ca_county:145
+           │    │    │    │    ├── key: (138)
+           │    │    │    │    └── fd: (138)-->(145)
+           │    │    │    └── filters
+           │    │    │         └── ws_bill_addr_sk:79 = ca_address_sk:138 [outer=(79,138), constraints=(/79: (/NULL - ]; /138: (/NULL - ]), fd=(79)==(138), (138)==(79)]
+           │    │    ├── scan date_dim
+           │    │    │    ├── columns: d_date_sk:108!null date_dim.d_year:114 date_dim.d_qoy:118
+           │    │    │    ├── key: (108)
+           │    │    │    └── fd: (108)-->(114,118)
+           │    │    └── filters
+           │    │         └── ws_sold_date_sk:72 = d_date_sk:108 [outer=(72,108), constraints=(/72: (/NULL - ]; /108: (/NULL - ]), fd=(72)==(108), (108)==(72)]
+           │    └── aggregations
+           │         └── sum [as=sum:153, outer=(95)]
+           │              └── ws_ext_sales_price:95
+           └── project
+                ├── columns: web_q1_q2_increase:178 store_q1_q2_increase:179 web_q2_q3_increase:180 store_q2_q3_increase:181 ca_county:154!null d_year:156!null
+                ├── immutable
+                ├── key: (154)
+                ├── fd: ()-->(156), (154)-->(178-181)
+                ├── inner-join (hash)
+                │    ├── columns: ca_county:154!null d_qoy:155!null d_year:156!null store_sales:157 ca_county:158!null d_qoy:159!null d_year:160!null store_sales:161 ca_county:162!null d_qoy:163!null d_year:164!null store_sales:165 ca_county:166!null d_qoy:167!null d_year:168!null web_sales:169 ca_county:170!null d_qoy:171!null d_year:172!null web_sales:173 ca_county:174!null d_qoy:175!null d_year:176!null web_sales:177
+                │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+                │    ├── immutable
+                │    ├── key: (174)
+                │    ├── fd: ()-->(155,156,159,160,163,164,167,168,171,172,175,176), (154)-->(157), (158)-->(161), (162)-->(165), (166)-->(169), (170)-->(173), (174)-->(177), (154)==(158,162,166,170,174), (158)==(154,162,166,170,174), (162)==(154,158,166,170,174), (166)==(154,158,162,170,174), (170)==(154,158,162,166,174), (174)==(154,158,162,166,170)
+                │    ├── inner-join (hash)
+                │    │    ├── columns: ca_county:154!null d_qoy:155!null d_year:156!null store_sales:157 ca_county:166!null d_qoy:167!null d_year:168!null web_sales:169
+                │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+                │    │    ├── key: (166)
+                │    │    ├── fd: ()-->(155,156,167,168), (154)-->(157), (166)-->(169), (154)==(166), (166)==(154)
+                │    │    ├── select
+                │    │    │    ├── columns: ca_county:154 d_qoy:155!null d_year:156!null store_sales:157
+                │    │    │    ├── key: (154)
+                │    │    │    ├── fd: ()-->(155,156), (154)-->(157)
+                │    │    │    ├── with-scan &1 (ss)
+                │    │    │    │    ├── columns: ca_county:154 d_qoy:155 d_year:156 store_sales:157
+                │    │    │    │    ├── mapping:
+                │    │    │    │    │    ├──  customer_address.ca_county:63 => ca_county:154
+                │    │    │    │    │    ├──  date_dim.d_qoy:36 => d_qoy:155
+                │    │    │    │    │    ├──  date_dim.d_year:32 => d_year:156
+                │    │    │    │    │    └──  sum:71 => store_sales:157
+                │    │    │    │    ├── key: (154-156)
+                │    │    │    │    └── fd: (154-156)-->(157)
+                │    │    │    └── filters
+                │    │    │         ├── d_qoy:155 = 1 [outer=(155), constraints=(/155: [/1 - /1]; tight), fd=()-->(155)]
+                │    │    │         └── d_year:156 = 1999 [outer=(156), constraints=(/156: [/1999 - /1999]; tight), fd=()-->(156)]
+                │    │    ├── select
+                │    │    │    ├── columns: ca_county:166 d_qoy:167!null d_year:168!null web_sales:169
+                │    │    │    ├── key: (166)
+                │    │    │    ├── fd: ()-->(167,168), (166)-->(169)
+                │    │    │    ├── with-scan &2 (ws)
+                │    │    │    │    ├── columns: ca_county:166 d_qoy:167 d_year:168 web_sales:169
+                │    │    │    │    ├── mapping:
+                │    │    │    │    │    ├──  customer_address.ca_county:145 => ca_county:166
+                │    │    │    │    │    ├──  date_dim.d_qoy:118 => d_qoy:167
+                │    │    │    │    │    ├──  date_dim.d_year:114 => d_year:168
+                │    │    │    │    │    └──  sum:153 => web_sales:169
+                │    │    │    │    ├── key: (166-168)
+                │    │    │    │    └── fd: (166-168)-->(169)
+                │    │    │    └── filters
+                │    │    │         ├── d_qoy:167 = 1 [outer=(167), constraints=(/167: [/1 - /1]; tight), fd=()-->(167)]
+                │    │    │         └── d_year:168 = 1999 [outer=(168), constraints=(/168: [/1999 - /1999]; tight), fd=()-->(168)]
+                │    │    └── filters
+                │    │         └── ca_county:154 = ca_county:166 [outer=(154,166), constraints=(/154: (/NULL - ]; /166: (/NULL - ]), fd=(154)==(166), (166)==(154)]
+                │    ├── inner-join (hash)
+                │    │    ├── columns: ca_county:158!null d_qoy:159!null d_year:160!null store_sales:161 ca_county:162!null d_qoy:163!null d_year:164!null store_sales:165 ca_county:170!null d_qoy:171!null d_year:172!null web_sales:173 ca_county:174!null d_qoy:175!null d_year:176!null web_sales:177
+                │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+                │    │    ├── immutable
+                │    │    ├── key: (174)
+                │    │    ├── fd: ()-->(159,160,163,164,171,172,175,176), (158)-->(161), (162)-->(165), (170)-->(173), (174)-->(177), (158)==(162,170,174), (162)==(158,170,174), (170)==(158,162,174), (174)==(158,162,170)
+                │    │    ├── inner-join (hash)
+                │    │    │    ├── columns: ca_county:158!null d_qoy:159!null d_year:160!null store_sales:161 ca_county:162!null d_qoy:163!null d_year:164!null store_sales:165
+                │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+                │    │    │    ├── key: (162)
+                │    │    │    ├── fd: ()-->(159,160,163,164), (158)-->(161), (162)-->(165), (158)==(162), (162)==(158)
+                │    │    │    ├── select
+                │    │    │    │    ├── columns: ca_county:158 d_qoy:159!null d_year:160!null store_sales:161
+                │    │    │    │    ├── key: (158)
+                │    │    │    │    ├── fd: ()-->(159,160), (158)-->(161)
+                │    │    │    │    ├── with-scan &1 (ss)
+                │    │    │    │    │    ├── columns: ca_county:158 d_qoy:159 d_year:160 store_sales:161
+                │    │    │    │    │    ├── mapping:
+                │    │    │    │    │    │    ├──  customer_address.ca_county:63 => ca_county:158
+                │    │    │    │    │    │    ├──  date_dim.d_qoy:36 => d_qoy:159
+                │    │    │    │    │    │    ├──  date_dim.d_year:32 => d_year:160
+                │    │    │    │    │    │    └──  sum:71 => store_sales:161
+                │    │    │    │    │    ├── key: (158-160)
+                │    │    │    │    │    └── fd: (158-160)-->(161)
+                │    │    │    │    └── filters
+                │    │    │    │         ├── d_qoy:159 = 2 [outer=(159), constraints=(/159: [/2 - /2]; tight), fd=()-->(159)]
+                │    │    │    │         └── d_year:160 = 1999 [outer=(160), constraints=(/160: [/1999 - /1999]; tight), fd=()-->(160)]
+                │    │    │    ├── select
+                │    │    │    │    ├── columns: ca_county:162 d_qoy:163!null d_year:164!null store_sales:165
+                │    │    │    │    ├── key: (162)
+                │    │    │    │    ├── fd: ()-->(163,164), (162)-->(165)
+                │    │    │    │    ├── with-scan &1 (ss)
+                │    │    │    │    │    ├── columns: ca_county:162 d_qoy:163 d_year:164 store_sales:165
+                │    │    │    │    │    ├── mapping:
+                │    │    │    │    │    │    ├──  customer_address.ca_county:63 => ca_county:162
+                │    │    │    │    │    │    ├──  date_dim.d_qoy:36 => d_qoy:163
+                │    │    │    │    │    │    ├──  date_dim.d_year:32 => d_year:164
+                │    │    │    │    │    │    └──  sum:71 => store_sales:165
+                │    │    │    │    │    ├── key: (162-164)
+                │    │    │    │    │    └── fd: (162-164)-->(165)
+                │    │    │    │    └── filters
+                │    │    │    │         ├── d_qoy:163 = 3 [outer=(163), constraints=(/163: [/3 - /3]; tight), fd=()-->(163)]
+                │    │    │    │         └── d_year:164 = 1999 [outer=(164), constraints=(/164: [/1999 - /1999]; tight), fd=()-->(164)]
+                │    │    │    └── filters
+                │    │    │         └── ca_county:158 = ca_county:162 [outer=(158,162), constraints=(/158: (/NULL - ]; /162: (/NULL - ]), fd=(158)==(162), (162)==(158)]
+                │    │    ├── inner-join (hash)
+                │    │    │    ├── columns: ca_county:170!null d_qoy:171!null d_year:172!null web_sales:173 ca_county:174!null d_qoy:175!null d_year:176!null web_sales:177
+                │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+                │    │    │    ├── key: (174)
+                │    │    │    ├── fd: ()-->(171,172,175,176), (170)-->(173), (174)-->(177), (170)==(174), (174)==(170)
+                │    │    │    ├── select
+                │    │    │    │    ├── columns: ca_county:170 d_qoy:171!null d_year:172!null web_sales:173
+                │    │    │    │    ├── key: (170)
+                │    │    │    │    ├── fd: ()-->(171,172), (170)-->(173)
+                │    │    │    │    ├── with-scan &2 (ws)
+                │    │    │    │    │    ├── columns: ca_county:170 d_qoy:171 d_year:172 web_sales:173
+                │    │    │    │    │    ├── mapping:
+                │    │    │    │    │    │    ├──  customer_address.ca_county:145 => ca_county:170
+                │    │    │    │    │    │    ├──  date_dim.d_qoy:118 => d_qoy:171
+                │    │    │    │    │    │    ├──  date_dim.d_year:114 => d_year:172
+                │    │    │    │    │    │    └──  sum:153 => web_sales:173
+                │    │    │    │    │    ├── key: (170-172)
+                │    │    │    │    │    └── fd: (170-172)-->(173)
+                │    │    │    │    └── filters
+                │    │    │    │         ├── d_qoy:171 = 2 [outer=(171), constraints=(/171: [/2 - /2]; tight), fd=()-->(171)]
+                │    │    │    │         └── d_year:172 = 1999 [outer=(172), constraints=(/172: [/1999 - /1999]; tight), fd=()-->(172)]
+                │    │    │    ├── select
+                │    │    │    │    ├── columns: ca_county:174 d_qoy:175!null d_year:176!null web_sales:177
+                │    │    │    │    ├── key: (174)
+                │    │    │    │    ├── fd: ()-->(175,176), (174)-->(177)
+                │    │    │    │    ├── with-scan &2 (ws)
+                │    │    │    │    │    ├── columns: ca_county:174 d_qoy:175 d_year:176 web_sales:177
+                │    │    │    │    │    ├── mapping:
+                │    │    │    │    │    │    ├──  customer_address.ca_county:145 => ca_county:174
+                │    │    │    │    │    │    ├──  date_dim.d_qoy:118 => d_qoy:175
+                │    │    │    │    │    │    ├──  date_dim.d_year:114 => d_year:176
+                │    │    │    │    │    │    └──  sum:153 => web_sales:177
+                │    │    │    │    │    ├── key: (174-176)
+                │    │    │    │    │    └── fd: (174-176)-->(177)
+                │    │    │    │    └── filters
+                │    │    │    │         ├── d_qoy:175 = 3 [outer=(175), constraints=(/175: [/3 - /3]; tight), fd=()-->(175)]
+                │    │    │    │         └── d_year:176 = 1999 [outer=(176), constraints=(/176: [/1999 - /1999]; tight), fd=()-->(176)]
+                │    │    │    └── filters
+                │    │    │         └── ca_county:170 = ca_county:174 [outer=(170,174), constraints=(/170: (/NULL - ]; /174: (/NULL - ]), fd=(170)==(174), (174)==(170)]
+                │    │    └── filters
+                │    │         ├── CASE WHEN web_sales:173 > 0 THEN web_sales:177 / web_sales:173 ELSE CAST(NULL AS DECIMAL) END > CASE WHEN store_sales:161 > 0 THEN store_sales:165 / store_sales:161 ELSE CAST(NULL AS DECIMAL) END [outer=(161,165,173,177), immutable]
+                │    │         └── ca_county:158 = ca_county:170 [outer=(158,170), constraints=(/158: (/NULL - ]; /170: (/NULL - ]), fd=(158)==(170), (170)==(158)]
+                │    └── filters
+                │         ├── ca_county:166 = ca_county:170 [outer=(166,170), constraints=(/166: (/NULL - ]; /170: (/NULL - ]), fd=(166)==(170), (170)==(166)]
+                │         └── CASE WHEN web_sales:169 > 0 THEN web_sales:173 / web_sales:169 ELSE CAST(NULL AS DECIMAL) END > CASE WHEN store_sales:157 > 0 THEN store_sales:161 / store_sales:157 ELSE CAST(NULL AS DECIMAL) END [outer=(157,161,169,173), immutable]
+                └── projections
+                     ├── web_sales:173 / web_sales:169 [as=web_q1_q2_increase:178, outer=(169,173), immutable]
+                     ├── store_sales:161 / store_sales:157 [as=store_q1_q2_increase:179, outer=(157,161), immutable]
+                     ├── web_sales:177 / web_sales:173 [as=web_q2_q3_increase:180, outer=(173,177), immutable]
+                     └── store_sales:165 / store_sales:161 [as=store_q2_q3_increase:181, outer=(161,165), immutable]
+
+# --------------------------------------------------
+# Q32
+# NOTE: Added conversion of 90 days to an interval.
+opt
+	SELECT
+		sum(cs_ext_discount_amt) AS "excess discount amount"
+	FROM
+		catalog_sales, item, date_dim
+	WHERE
+		i_manufact_id = 722
+		AND i_item_sk = cs_item_sk
+		AND d_date BETWEEN '2001-03-09' AND (CAST('2001-03-09' AS DATE) + '90 days'::INTERVAL)
+		AND d_date_sk = cs_sold_date_sk
+		AND cs_ext_discount_amt
+			> (
+					SELECT
+						1.3 * avg(cs_ext_discount_amt)
+					FROM
+						catalog_sales, date_dim
+					WHERE
+						cs_item_sk = i_item_sk
+						AND d_date BETWEEN '2001-03-09' AND (CAST('2001-03-09' AS DATE) + '90 days'::INTERVAL)
+						AND d_date_sk = cs_sold_date_sk
+				)
+	LIMIT
+		100;
+----
+scalar-group-by
+ ├── columns: "excess discount amount":159
+ ├── cardinality: [1 - 1]
+ ├── immutable
+ ├── key: ()
+ ├── fd: ()-->(159)
+ ├── inner-join (lookup catalog_sales)
+ │    ├── columns: cs_sold_date_sk:1!null cs_item_sk:16!null cs_ext_discount_amt:23!null i_item_sk:37!null d_date_sk:61!null "?column?":158!null
+ │    ├── key columns: [37] = [16]
+ │    ├── immutable
+ │    ├── fd: (37,61)-->(158), (16)==(37), (37)==(16), (1)==(61), (61)==(1)
+ │    ├── project
+ │    │    ├── columns: "?column?":158!null i_item_sk:37!null d_date_sk:61!null
+ │    │    ├── immutable
+ │    │    ├── key: (37,61)
+ │    │    ├── fd: (37,61)-->(158)
+ │    │    ├── group-by (hash)
+ │    │    │    ├── columns: i_item_sk:37!null d_date_sk:61!null avg:157!null
+ │    │    │    ├── grouping columns: i_item_sk:37!null d_date_sk:61!null
+ │    │    │    ├── immutable
+ │    │    │    ├── key: (37,61)
+ │    │    │    ├── fd: (37,61)-->(157)
+ │    │    │    ├── inner-join (cross)
+ │    │    │    │    ├── columns: i_item_sk:37!null i_manufact_id:50!null d_date_sk:61!null d_date:63!null cs_sold_date_sk:91!null cs_item_sk:106!null cs_ext_discount_amt:113!null d_date_sk:127!null d_date:129!null
+ │    │    │    │    ├── immutable
+ │    │    │    │    ├── fd: ()-->(50), (61)-->(63), (127)-->(129), (91)==(127), (127)==(91), (37)==(106), (106)==(37)
+ │    │    │    │    ├── inner-join (lookup date_dim)
+ │    │    │    │    │    ├── columns: i_item_sk:37!null i_manufact_id:50!null cs_sold_date_sk:91!null cs_item_sk:106!null cs_ext_discount_amt:113!null d_date_sk:127!null d_date:129!null
+ │    │    │    │    │    ├── key columns: [91] = [127]
+ │    │    │    │    │    ├── lookup columns are key
+ │    │    │    │    │    ├── immutable
+ │    │    │    │    │    ├── fd: ()-->(50), (127)-->(129), (91)==(127), (127)==(91), (37)==(106), (106)==(37)
+ │    │    │    │    │    ├── inner-join (lookup catalog_sales)
+ │    │    │    │    │    │    ├── columns: i_item_sk:37!null i_manufact_id:50!null cs_sold_date_sk:91 cs_item_sk:106!null cs_ext_discount_amt:113!null
+ │    │    │    │    │    │    ├── key columns: [37] = [106]
+ │    │    │    │    │    │    ├── immutable
+ │    │    │    │    │    │    ├── fd: ()-->(50), (37)==(106), (106)==(37)
+ │    │    │    │    │    │    ├── select
+ │    │    │    │    │    │    │    ├── columns: i_item_sk:37!null i_manufact_id:50!null
+ │    │    │    │    │    │    │    ├── key: (37)
+ │    │    │    │    │    │    │    ├── fd: ()-->(50)
+ │    │    │    │    │    │    │    ├── scan item
+ │    │    │    │    │    │    │    │    ├── columns: i_item_sk:37!null i_manufact_id:50
+ │    │    │    │    │    │    │    │    ├── key: (37)
+ │    │    │    │    │    │    │    │    └── fd: (37)-->(50)
+ │    │    │    │    │    │    │    └── filters
+ │    │    │    │    │    │    │         └── i_manufact_id:50 = 722 [outer=(50), constraints=(/50: [/722 - /722]; tight), fd=()-->(50)]
+ │    │    │    │    │    │    └── filters
+ │    │    │    │    │    │         └── cs_ext_discount_amt:113 IS NOT NULL [outer=(113), immutable, constraints=(/113: (/NULL - ]; tight)]
+ │    │    │    │    │    └── filters
+ │    │    │    │    │         └── (d_date:129 >= '2001-03-09') AND (d_date:129 <= '2001-06-07') [outer=(129), constraints=(/129: [/'2001-03-09' - /'2001-06-07']; tight)]
+ │    │    │    │    ├── select
+ │    │    │    │    │    ├── columns: d_date_sk:61!null d_date:63!null
+ │    │    │    │    │    ├── key: (61)
+ │    │    │    │    │    ├── fd: (61)-->(63)
+ │    │    │    │    │    ├── scan date_dim
+ │    │    │    │    │    │    ├── columns: d_date_sk:61!null d_date:63
+ │    │    │    │    │    │    ├── key: (61)
+ │    │    │    │    │    │    └── fd: (61)-->(63)
+ │    │    │    │    │    └── filters
+ │    │    │    │    │         └── (d_date:63 >= '2001-03-09') AND (d_date:63 <= '2001-06-07') [outer=(63), constraints=(/63: [/'2001-03-09' - /'2001-06-07']; tight)]
+ │    │    │    │    └── filters (true)
+ │    │    │    └── aggregations
+ │    │    │         └── avg [as=avg:157, outer=(113)]
+ │    │    │              └── cs_ext_discount_amt:113
+ │    │    └── projections
+ │    │         └── avg:157 * 1.3 [as="?column?":158, outer=(157), immutable]
+ │    └── filters
+ │         ├── d_date_sk:61 = cs_sold_date_sk:1 [outer=(1,61), constraints=(/1: (/NULL - ]; /61: (/NULL - ]), fd=(1)==(61), (61)==(1)]
+ │         └── cs_ext_discount_amt:23 > "?column?":158 [outer=(23,158), immutable, constraints=(/23: (/NULL - ]; /158: (/NULL - ])]
+ └── aggregations
+      └── sum [as=sum:159, outer=(23)]
+           └── cs_ext_discount_amt:23
+
+# --------------------------------------------------
+# Q33
+opt
+	WITH
+		ss
+			AS (
+				SELECT
+					i_manufact_id,
+					sum(ss_ext_sales_price) AS total_sales
+				FROM
+					store_sales,
+					date_dim,
+					customer_address,
+					item
+				WHERE
+					i_manufact_id
+					IN (
+							SELECT
+								i_manufact_id
+							FROM
+								item
+							WHERE
+								i_category IN ('Books',)
+						)
+					AND ss_item_sk = i_item_sk
+					AND ss_sold_date_sk = d_date_sk
+					AND d_year = 2001
+					AND d_moy = 3
+					AND ss_addr_sk = ca_address_sk
+					AND ca_gmt_offset = -5
+				GROUP BY
+					i_manufact_id
+			),
+		cs
+			AS (
+				SELECT
+					i_manufact_id,
+					sum(cs_ext_sales_price) AS total_sales
+				FROM
+					catalog_sales,
+					date_dim,
+					customer_address,
+					item
+				WHERE
+					i_manufact_id
+					IN (
+							SELECT
+								i_manufact_id
+							FROM
+								item
+							WHERE
+								i_category IN ('Books',)
+						)
+					AND cs_item_sk = i_item_sk
+					AND cs_sold_date_sk = d_date_sk
+					AND d_year = 2001
+					AND d_moy = 3
+					AND cs_bill_addr_sk = ca_address_sk
+					AND ca_gmt_offset = -5
+				GROUP BY
+					i_manufact_id
+			),
+		ws
+			AS (
+				SELECT
+					i_manufact_id,
+					sum(ws_ext_sales_price) AS total_sales
+				FROM
+					web_sales, date_dim, customer_address, item
+				WHERE
+					i_manufact_id
+					IN (
+							SELECT
+								i_manufact_id
+							FROM
+								item
+							WHERE
+								i_category IN ('Books',)
+						)
+					AND ws_item_sk = i_item_sk
+					AND ws_sold_date_sk = d_date_sk
+					AND d_year = 2001
+					AND d_moy = 3
+					AND ws_bill_addr_sk = ca_address_sk
+					AND ca_gmt_offset = -5
+				GROUP BY
+					i_manufact_id
+			)
+	SELECT
+		i_manufact_id, sum(total_sales) AS total_sales
+	FROM
+		(
+			SELECT * FROM ss UNION ALL SELECT * FROM cs
+			UNION ALL SELECT * FROM ws
+		)
+			AS tmp1
+	GROUP BY
+		i_manufact_id
+	ORDER BY
+		total_sales
+	LIMIT
+		100;
+----
+top-k
+ ├── columns: i_manufact_id:391 total_sales:393
+ ├── internal-ordering: +393
+ ├── k: 100
+ ├── cardinality: [0 - 100]
+ ├── immutable
+ ├── key: (391)
+ ├── fd: (391)-->(393)
+ ├── ordering: +393
+ └── group-by (hash)
+      ├── columns: i_manufact_id:391 sum:393
+      ├── grouping columns: i_manufact_id:391
+      ├── immutable
+      ├── key: (391)
+      ├── fd: (391)-->(393)
+      ├── union-all
+      │    ├── columns: i_manufact_id:391 total_sales:392
+      │    ├── left columns: i_manufact_id:387 total_sales:388
+      │    ├── right columns: i_manufact_id:389 total_sales:390
+      │    ├── immutable
+      │    ├── union-all
+      │    │    ├── columns: i_manufact_id:387 total_sales:388
+      │    │    ├── left columns: i_manufact_id:383 total_sales:384
+      │    │    ├── right columns: i_manufact_id:385 total_sales:386
+      │    │    ├── immutable
+      │    │    ├── project
+      │    │    │    ├── columns: i_manufact_id:383 total_sales:384
+      │    │    │    ├── immutable
+      │    │    │    ├── key: (383)
+      │    │    │    ├── fd: (383)-->(384)
+      │    │    │    ├── group-by (hash)
+      │    │    │    │    ├── columns: item.i_manufact_id:84 sum:120
+      │    │    │    │    ├── grouping columns: item.i_manufact_id:84
+      │    │    │    │    ├── immutable
+      │    │    │    │    ├── key: (84)
+      │    │    │    │    ├── fd: (84)-->(120)
+      │    │    │    │    ├── inner-join (hash)
+      │    │    │    │    │    ├── columns: ss_sold_date_sk:1!null ss_item_sk:3!null ss_addr_sk:7!null ss_ext_sales_price:16 d_date_sk:26!null d_year:32!null d_moy:34!null ca_address_sk:56!null ca_gmt_offset:67!null i_item_sk:71!null item.i_manufact_id:84!null item.i_manufact_id:108!null
+      │    │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+      │    │    │    │    │    ├── immutable
+      │    │    │    │    │    ├── fd: ()-->(32,34,67), (71)-->(84), (3)==(71), (71)==(3), (7)==(56), (56)==(7), (1)==(26), (26)==(1), (84)==(108), (108)==(84)
+      │    │    │    │    │    ├── inner-join (hash)
+      │    │    │    │    │    │    ├── columns: ss_sold_date_sk:1!null ss_item_sk:3!null ss_addr_sk:7!null ss_ext_sales_price:16 d_date_sk:26!null d_year:32!null d_moy:34!null ca_address_sk:56!null ca_gmt_offset:67!null i_item_sk:71!null item.i_manufact_id:84
+      │    │    │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+      │    │    │    │    │    │    ├── immutable
+      │    │    │    │    │    │    ├── fd: ()-->(32,34,67), (71)-->(84), (3)==(71), (71)==(3), (7)==(56), (56)==(7), (1)==(26), (26)==(1)
+      │    │    │    │    │    │    ├── inner-join (hash)
+      │    │    │    │    │    │    │    ├── columns: ss_sold_date_sk:1!null ss_item_sk:3!null ss_addr_sk:7!null ss_ext_sales_price:16 d_date_sk:26!null d_year:32!null d_moy:34!null ca_address_sk:56!null ca_gmt_offset:67!null
+      │    │    │    │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+      │    │    │    │    │    │    │    ├── immutable
+      │    │    │    │    │    │    │    ├── fd: ()-->(32,34,67), (1)==(26), (26)==(1), (7)==(56), (56)==(7)
+      │    │    │    │    │    │    │    ├── inner-join (hash)
+      │    │    │    │    │    │    │    │    ├── columns: ss_sold_date_sk:1!null ss_item_sk:3!null ss_addr_sk:7 ss_ext_sales_price:16 d_date_sk:26!null d_year:32!null d_moy:34!null
+      │    │    │    │    │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+      │    │    │    │    │    │    │    │    ├── fd: ()-->(32,34), (1)==(26), (26)==(1)
+      │    │    │    │    │    │    │    │    ├── scan store_sales
+      │    │    │    │    │    │    │    │    │    └── columns: ss_sold_date_sk:1 ss_item_sk:3!null ss_addr_sk:7 ss_ext_sales_price:16
+      │    │    │    │    │    │    │    │    ├── select
+      │    │    │    │    │    │    │    │    │    ├── columns: d_date_sk:26!null d_year:32!null d_moy:34!null
+      │    │    │    │    │    │    │    │    │    ├── key: (26)
+      │    │    │    │    │    │    │    │    │    ├── fd: ()-->(32,34)
+      │    │    │    │    │    │    │    │    │    ├── scan date_dim
+      │    │    │    │    │    │    │    │    │    │    ├── columns: d_date_sk:26!null d_year:32 d_moy:34
+      │    │    │    │    │    │    │    │    │    │    ├── key: (26)
+      │    │    │    │    │    │    │    │    │    │    └── fd: (26)-->(32,34)
+      │    │    │    │    │    │    │    │    │    └── filters
+      │    │    │    │    │    │    │    │    │         ├── d_year:32 = 2001 [outer=(32), constraints=(/32: [/2001 - /2001]; tight), fd=()-->(32)]
+      │    │    │    │    │    │    │    │    │         └── d_moy:34 = 3 [outer=(34), constraints=(/34: [/3 - /3]; tight), fd=()-->(34)]
+      │    │    │    │    │    │    │    │    └── filters
+      │    │    │    │    │    │    │    │         └── ss_sold_date_sk:1 = d_date_sk:26 [outer=(1,26), constraints=(/1: (/NULL - ]; /26: (/NULL - ]), fd=(1)==(26), (26)==(1)]
+      │    │    │    │    │    │    │    ├── select
+      │    │    │    │    │    │    │    │    ├── columns: ca_address_sk:56!null ca_gmt_offset:67!null
+      │    │    │    │    │    │    │    │    ├── immutable
+      │    │    │    │    │    │    │    │    ├── key: (56)
+      │    │    │    │    │    │    │    │    ├── fd: ()-->(67)
+      │    │    │    │    │    │    │    │    ├── scan customer_address
+      │    │    │    │    │    │    │    │    │    ├── columns: ca_address_sk:56!null ca_gmt_offset:67
+      │    │    │    │    │    │    │    │    │    ├── key: (56)
+      │    │    │    │    │    │    │    │    │    └── fd: (56)-->(67)
+      │    │    │    │    │    │    │    │    └── filters
+      │    │    │    │    │    │    │    │         └── ca_gmt_offset:67 = -5 [outer=(67), immutable, constraints=(/67: [/-5 - /-5]; tight), fd=()-->(67)]
+      │    │    │    │    │    │    │    └── filters
+      │    │    │    │    │    │    │         └── ss_addr_sk:7 = ca_address_sk:56 [outer=(7,56), constraints=(/7: (/NULL - ]; /56: (/NULL - ]), fd=(7)==(56), (56)==(7)]
+      │    │    │    │    │    │    ├── scan item
+      │    │    │    │    │    │    │    ├── columns: i_item_sk:71!null item.i_manufact_id:84
+      │    │    │    │    │    │    │    ├── key: (71)
+      │    │    │    │    │    │    │    └── fd: (71)-->(84)
+      │    │    │    │    │    │    └── filters
+      │    │    │    │    │    │         └── ss_item_sk:3 = i_item_sk:71 [outer=(3,71), constraints=(/3: (/NULL - ]; /71: (/NULL - ]), fd=(3)==(71), (71)==(3)]
+      │    │    │    │    │    ├── distinct-on
+      │    │    │    │    │    │    ├── columns: item.i_manufact_id:108
+      │    │    │    │    │    │    ├── grouping columns: item.i_manufact_id:108
+      │    │    │    │    │    │    ├── key: (108)
+      │    │    │    │    │    │    └── select
+      │    │    │    │    │    │         ├── columns: i_category:107!null item.i_manufact_id:108
+      │    │    │    │    │    │         ├── fd: ()-->(107)
+      │    │    │    │    │    │         ├── scan item
+      │    │    │    │    │    │         │    └── columns: i_category:107 item.i_manufact_id:108
+      │    │    │    │    │    │         └── filters
+      │    │    │    │    │    │              └── i_category:107 = 'Books' [outer=(107), constraints=(/107: [/'Books' - /'Books']; tight), fd=()-->(107)]
+      │    │    │    │    │    └── filters
+      │    │    │    │    │         └── item.i_manufact_id:84 = item.i_manufact_id:108 [outer=(84,108), constraints=(/84: (/NULL - ]; /108: (/NULL - ]), fd=(84)==(108), (108)==(84)]
+      │    │    │    │    └── aggregations
+      │    │    │    │         └── sum [as=sum:120, outer=(16)]
+      │    │    │    │              └── ss_ext_sales_price:16
+      │    │    │    └── projections
+      │    │    │         ├── item.i_manufact_id:84 [as=i_manufact_id:383, outer=(84)]
+      │    │    │         └── sum:120 [as=total_sales:384, outer=(120)]
+      │    │    └── project
+      │    │         ├── columns: i_manufact_id:385 total_sales:386
+      │    │         ├── immutable
+      │    │         ├── key: (385)
+      │    │         ├── fd: (385)-->(386)
+      │    │         ├── group-by (hash)
+      │    │         │    ├── columns: item.i_manufact_id:215 sum:251
+      │    │         │    ├── grouping columns: item.i_manufact_id:215
+      │    │         │    ├── immutable
+      │    │         │    ├── key: (215)
+      │    │         │    ├── fd: (215)-->(251)
+      │    │         │    ├── inner-join (hash)
+      │    │         │    │    ├── columns: cs_sold_date_sk:121!null cs_bill_addr_sk:127!null cs_item_sk:136!null cs_ext_sales_price:144 d_date_sk:157!null d_year:163!null d_moy:165!null ca_address_sk:187!null ca_gmt_offset:198!null i_item_sk:202!null item.i_manufact_id:215!null item.i_manufact_id:239!null
+      │    │         │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+      │    │         │    │    ├── immutable
+      │    │         │    │    ├── fd: ()-->(163,165,198), (202)-->(215), (136)==(202), (202)==(136), (127)==(187), (187)==(127), (121)==(157), (157)==(121), (215)==(239), (239)==(215)
+      │    │         │    │    ├── inner-join (hash)
+      │    │         │    │    │    ├── columns: cs_sold_date_sk:121!null cs_bill_addr_sk:127!null cs_item_sk:136!null cs_ext_sales_price:144 d_date_sk:157!null d_year:163!null d_moy:165!null ca_address_sk:187!null ca_gmt_offset:198!null i_item_sk:202!null item.i_manufact_id:215
+      │    │         │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+      │    │         │    │    │    ├── immutable
+      │    │         │    │    │    ├── fd: ()-->(163,165,198), (202)-->(215), (136)==(202), (202)==(136), (127)==(187), (187)==(127), (121)==(157), (157)==(121)
+      │    │         │    │    │    ├── inner-join (hash)
+      │    │         │    │    │    │    ├── columns: cs_sold_date_sk:121!null cs_bill_addr_sk:127!null cs_item_sk:136!null cs_ext_sales_price:144 d_date_sk:157!null d_year:163!null d_moy:165!null ca_address_sk:187!null ca_gmt_offset:198!null
+      │    │         │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+      │    │         │    │    │    │    ├── immutable
+      │    │         │    │    │    │    ├── fd: ()-->(163,165,198), (121)==(157), (157)==(121), (127)==(187), (187)==(127)
+      │    │         │    │    │    │    ├── inner-join (hash)
+      │    │         │    │    │    │    │    ├── columns: cs_sold_date_sk:121!null cs_bill_addr_sk:127 cs_item_sk:136!null cs_ext_sales_price:144 d_date_sk:157!null d_year:163!null d_moy:165!null
+      │    │         │    │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+      │    │         │    │    │    │    │    ├── fd: ()-->(163,165), (121)==(157), (157)==(121)
+      │    │         │    │    │    │    │    ├── scan catalog_sales
+      │    │         │    │    │    │    │    │    └── columns: cs_sold_date_sk:121 cs_bill_addr_sk:127 cs_item_sk:136!null cs_ext_sales_price:144
+      │    │         │    │    │    │    │    ├── select
+      │    │         │    │    │    │    │    │    ├── columns: d_date_sk:157!null d_year:163!null d_moy:165!null
+      │    │         │    │    │    │    │    │    ├── key: (157)
+      │    │         │    │    │    │    │    │    ├── fd: ()-->(163,165)
+      │    │         │    │    │    │    │    │    ├── scan date_dim
+      │    │         │    │    │    │    │    │    │    ├── columns: d_date_sk:157!null d_year:163 d_moy:165
+      │    │         │    │    │    │    │    │    │    ├── key: (157)
+      │    │         │    │    │    │    │    │    │    └── fd: (157)-->(163,165)
+      │    │         │    │    │    │    │    │    └── filters
+      │    │         │    │    │    │    │    │         ├── d_year:163 = 2001 [outer=(163), constraints=(/163: [/2001 - /2001]; tight), fd=()-->(163)]
+      │    │         │    │    │    │    │    │         └── d_moy:165 = 3 [outer=(165), constraints=(/165: [/3 - /3]; tight), fd=()-->(165)]
+      │    │         │    │    │    │    │    └── filters
+      │    │         │    │    │    │    │         └── cs_sold_date_sk:121 = d_date_sk:157 [outer=(121,157), constraints=(/121: (/NULL - ]; /157: (/NULL - ]), fd=(121)==(157), (157)==(121)]
+      │    │         │    │    │    │    ├── select
+      │    │         │    │    │    │    │    ├── columns: ca_address_sk:187!null ca_gmt_offset:198!null
+      │    │         │    │    │    │    │    ├── immutable
+      │    │         │    │    │    │    │    ├── key: (187)
+      │    │         │    │    │    │    │    ├── fd: ()-->(198)
+      │    │         │    │    │    │    │    ├── scan customer_address
+      │    │         │    │    │    │    │    │    ├── columns: ca_address_sk:187!null ca_gmt_offset:198
+      │    │         │    │    │    │    │    │    ├── key: (187)
+      │    │         │    │    │    │    │    │    └── fd: (187)-->(198)
+      │    │         │    │    │    │    │    └── filters
+      │    │         │    │    │    │    │         └── ca_gmt_offset:198 = -5 [outer=(198), immutable, constraints=(/198: [/-5 - /-5]; tight), fd=()-->(198)]
+      │    │         │    │    │    │    └── filters
+      │    │         │    │    │    │         └── cs_bill_addr_sk:127 = ca_address_sk:187 [outer=(127,187), constraints=(/127: (/NULL - ]; /187: (/NULL - ]), fd=(127)==(187), (187)==(127)]
+      │    │         │    │    │    ├── scan item
+      │    │         │    │    │    │    ├── columns: i_item_sk:202!null item.i_manufact_id:215
+      │    │         │    │    │    │    ├── key: (202)
+      │    │         │    │    │    │    └── fd: (202)-->(215)
+      │    │         │    │    │    └── filters
+      │    │         │    │    │         └── cs_item_sk:136 = i_item_sk:202 [outer=(136,202), constraints=(/136: (/NULL - ]; /202: (/NULL - ]), fd=(136)==(202), (202)==(136)]
+      │    │         │    │    ├── distinct-on
+      │    │         │    │    │    ├── columns: item.i_manufact_id:239
+      │    │         │    │    │    ├── grouping columns: item.i_manufact_id:239
+      │    │         │    │    │    ├── key: (239)
+      │    │         │    │    │    └── select
+      │    │         │    │    │         ├── columns: i_category:238!null item.i_manufact_id:239
+      │    │         │    │    │         ├── fd: ()-->(238)
+      │    │         │    │    │         ├── scan item
+      │    │         │    │    │         │    └── columns: i_category:238 item.i_manufact_id:239
+      │    │         │    │    │         └── filters
+      │    │         │    │    │              └── i_category:238 = 'Books' [outer=(238), constraints=(/238: [/'Books' - /'Books']; tight), fd=()-->(238)]
+      │    │         │    │    └── filters
+      │    │         │    │         └── item.i_manufact_id:215 = item.i_manufact_id:239 [outer=(215,239), constraints=(/215: (/NULL - ]; /239: (/NULL - ]), fd=(215)==(239), (239)==(215)]
+      │    │         │    └── aggregations
+      │    │         │         └── sum [as=sum:251, outer=(144)]
+      │    │         │              └── cs_ext_sales_price:144
+      │    │         └── projections
+      │    │              ├── item.i_manufact_id:215 [as=i_manufact_id:385, outer=(215)]
+      │    │              └── sum:251 [as=total_sales:386, outer=(251)]
+      │    └── project
+      │         ├── columns: i_manufact_id:389 total_sales:390
+      │         ├── immutable
+      │         ├── key: (389)
+      │         ├── fd: (389)-->(390)
+      │         ├── group-by (hash)
+      │         │    ├── columns: item.i_manufact_id:346 sum:382
+      │         │    ├── grouping columns: item.i_manufact_id:346
+      │         │    ├── immutable
+      │         │    ├── key: (346)
+      │         │    ├── fd: (346)-->(382)
+      │         │    ├── inner-join (hash)
+      │         │    │    ├── columns: ws_sold_date_sk:252!null ws_item_sk:255!null ws_bill_addr_sk:259!null ws_ext_sales_price:275 d_date_sk:288!null d_year:294!null d_moy:296!null ca_address_sk:318!null ca_gmt_offset:329!null i_item_sk:333!null item.i_manufact_id:346!null item.i_manufact_id:370!null
+      │         │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+      │         │    │    ├── immutable
+      │         │    │    ├── fd: ()-->(294,296,329), (333)-->(346), (255)==(333), (333)==(255), (259)==(318), (318)==(259), (252)==(288), (288)==(252), (346)==(370), (370)==(346)
+      │         │    │    ├── inner-join (hash)
+      │         │    │    │    ├── columns: ws_sold_date_sk:252!null ws_item_sk:255!null ws_bill_addr_sk:259!null ws_ext_sales_price:275 d_date_sk:288!null d_year:294!null d_moy:296!null ca_address_sk:318!null ca_gmt_offset:329!null i_item_sk:333!null item.i_manufact_id:346
+      │         │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+      │         │    │    │    ├── immutable
+      │         │    │    │    ├── fd: ()-->(294,296,329), (333)-->(346), (255)==(333), (333)==(255), (259)==(318), (318)==(259), (252)==(288), (288)==(252)
+      │         │    │    │    ├── inner-join (hash)
+      │         │    │    │    │    ├── columns: ws_sold_date_sk:252!null ws_item_sk:255!null ws_bill_addr_sk:259!null ws_ext_sales_price:275 d_date_sk:288!null d_year:294!null d_moy:296!null ca_address_sk:318!null ca_gmt_offset:329!null
+      │         │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+      │         │    │    │    │    ├── immutable
+      │         │    │    │    │    ├── fd: ()-->(294,296,329), (252)==(288), (288)==(252), (259)==(318), (318)==(259)
+      │         │    │    │    │    ├── inner-join (hash)
+      │         │    │    │    │    │    ├── columns: ws_sold_date_sk:252!null ws_item_sk:255!null ws_bill_addr_sk:259 ws_ext_sales_price:275 d_date_sk:288!null d_year:294!null d_moy:296!null
+      │         │    │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+      │         │    │    │    │    │    ├── fd: ()-->(294,296), (252)==(288), (288)==(252)
+      │         │    │    │    │    │    ├── scan web_sales
+      │         │    │    │    │    │    │    └── columns: ws_sold_date_sk:252 ws_item_sk:255!null ws_bill_addr_sk:259 ws_ext_sales_price:275
+      │         │    │    │    │    │    ├── select
+      │         │    │    │    │    │    │    ├── columns: d_date_sk:288!null d_year:294!null d_moy:296!null
+      │         │    │    │    │    │    │    ├── key: (288)
+      │         │    │    │    │    │    │    ├── fd: ()-->(294,296)
+      │         │    │    │    │    │    │    ├── scan date_dim
+      │         │    │    │    │    │    │    │    ├── columns: d_date_sk:288!null d_year:294 d_moy:296
+      │         │    │    │    │    │    │    │    ├── key: (288)
+      │         │    │    │    │    │    │    │    └── fd: (288)-->(294,296)
+      │         │    │    │    │    │    │    └── filters
+      │         │    │    │    │    │    │         ├── d_year:294 = 2001 [outer=(294), constraints=(/294: [/2001 - /2001]; tight), fd=()-->(294)]
+      │         │    │    │    │    │    │         └── d_moy:296 = 3 [outer=(296), constraints=(/296: [/3 - /3]; tight), fd=()-->(296)]
+      │         │    │    │    │    │    └── filters
+      │         │    │    │    │    │         └── ws_sold_date_sk:252 = d_date_sk:288 [outer=(252,288), constraints=(/252: (/NULL - ]; /288: (/NULL - ]), fd=(252)==(288), (288)==(252)]
+      │         │    │    │    │    ├── select
+      │         │    │    │    │    │    ├── columns: ca_address_sk:318!null ca_gmt_offset:329!null
+      │         │    │    │    │    │    ├── immutable
+      │         │    │    │    │    │    ├── key: (318)
+      │         │    │    │    │    │    ├── fd: ()-->(329)
+      │         │    │    │    │    │    ├── scan customer_address
+      │         │    │    │    │    │    │    ├── columns: ca_address_sk:318!null ca_gmt_offset:329
+      │         │    │    │    │    │    │    ├── key: (318)
+      │         │    │    │    │    │    │    └── fd: (318)-->(329)
+      │         │    │    │    │    │    └── filters
+      │         │    │    │    │    │         └── ca_gmt_offset:329 = -5 [outer=(329), immutable, constraints=(/329: [/-5 - /-5]; tight), fd=()-->(329)]
+      │         │    │    │    │    └── filters
+      │         │    │    │    │         └── ws_bill_addr_sk:259 = ca_address_sk:318 [outer=(259,318), constraints=(/259: (/NULL - ]; /318: (/NULL - ]), fd=(259)==(318), (318)==(259)]
+      │         │    │    │    ├── scan item
+      │         │    │    │    │    ├── columns: i_item_sk:333!null item.i_manufact_id:346
+      │         │    │    │    │    ├── key: (333)
+      │         │    │    │    │    └── fd: (333)-->(346)
+      │         │    │    │    └── filters
+      │         │    │    │         └── ws_item_sk:255 = i_item_sk:333 [outer=(255,333), constraints=(/255: (/NULL - ]; /333: (/NULL - ]), fd=(255)==(333), (333)==(255)]
+      │         │    │    ├── distinct-on
+      │         │    │    │    ├── columns: item.i_manufact_id:370
+      │         │    │    │    ├── grouping columns: item.i_manufact_id:370
+      │         │    │    │    ├── key: (370)
+      │         │    │    │    └── select
+      │         │    │    │         ├── columns: i_category:369!null item.i_manufact_id:370
+      │         │    │    │         ├── fd: ()-->(369)
+      │         │    │    │         ├── scan item
+      │         │    │    │         │    └── columns: i_category:369 item.i_manufact_id:370
+      │         │    │    │         └── filters
+      │         │    │    │              └── i_category:369 = 'Books' [outer=(369), constraints=(/369: [/'Books' - /'Books']; tight), fd=()-->(369)]
+      │         │    │    └── filters
+      │         │    │         └── item.i_manufact_id:346 = item.i_manufact_id:370 [outer=(346,370), constraints=(/346: (/NULL - ]; /370: (/NULL - ]), fd=(346)==(370), (370)==(346)]
+      │         │    └── aggregations
+      │         │         └── sum [as=sum:382, outer=(275)]
+      │         │              └── ws_ext_sales_price:275
+      │         └── projections
+      │              ├── item.i_manufact_id:346 [as=i_manufact_id:389, outer=(346)]
+      │              └── sum:382 [as=total_sales:390, outer=(382)]
+      └── aggregations
+           └── sum [as=sum:393, outer=(392)]
+                └── total_sales:392
+
+# --------------------------------------------------
+# Q34
+opt
+	SELECT
+		c_last_name,
+		c_first_name,
+		c_salutation,
+		c_preferred_cust_flag,
+		ss_ticket_number,
+		cnt
+	FROM
+		(
+			SELECT
+				ss_ticket_number,
+				ss_customer_sk,
+				count(*) AS cnt
+			FROM
+				store_sales,
+				date_dim,
+				store,
+				household_demographics
+			WHERE
+				store_sales.ss_sold_date_sk = date_dim.d_date_sk
+				AND store_sales.ss_store_sk = store.s_store_sk
+				AND store_sales.ss_hdemo_sk
+					= household_demographics.hd_demo_sk
+				AND (
+						date_dim.d_dom BETWEEN 1 AND 3
+						OR date_dim.d_dom BETWEEN 25 AND 28
+					)
+				AND (
+						household_demographics.hd_buy_potential
+						= '1001-5000'
+						OR household_demographics.hd_buy_potential
+							= '0-500'
+					)
+				AND household_demographics.hd_vehicle_count > 0
+				AND (
+						CASE
+						WHEN household_demographics.hd_vehicle_count
+						> 0
+						THEN household_demographics.hd_dep_count
+						/ household_demographics.hd_vehicle_count
+						ELSE NULL
+						END
+					)
+					> 1.2
+				AND date_dim.d_year
+					IN (2000, 2000 + 1, 2000 + 2)
+				AND store.s_county
+					IN (
+							'Williamson County',
+							'Williamson County',
+							'Williamson County',
+							'Williamson County',
+							'Williamson County',
+							'Williamson County',
+							'Williamson County',
+							'Williamson County'
+						)
+			GROUP BY
+				ss_ticket_number, ss_customer_sk
+		)
+			AS dn,
+		customer
+	WHERE
+		ss_customer_sk = c_customer_sk AND cnt BETWEEN 15 AND 20
+	ORDER BY
+		c_last_name,
+		c_first_name,
+		c_salutation,
+		c_preferred_cust_flag DESC,
+		ss_ticket_number;
+----
+sort
+ ├── columns: c_last_name:104 c_first_name:103 c_salutation:102 c_preferred_cust_flag:105 ss_ticket_number:10!null cnt:94!null
+ ├── immutable
+ ├── ordering: +104,+103,+102,-105,+10
+ └── project
+      ├── columns: ss_ticket_number:10!null count_rows:94!null c_salutation:102 c_first_name:103 c_last_name:104 c_preferred_cust_flag:105
+      ├── immutable
+      └── inner-join (lookup customer)
+           ├── columns: ss_customer_sk:4!null ss_ticket_number:10!null count_rows:94!null c_customer_sk:95!null c_salutation:102 c_first_name:103 c_last_name:104 c_preferred_cust_flag:105
+           ├── key columns: [4] = [95]
+           ├── lookup columns are key
+           ├── immutable
+           ├── key: (10,95)
+           ├── fd: (4,10)-->(94), (95)-->(102-105), (4)==(95), (95)==(4)
+           ├── select
+           │    ├── columns: ss_customer_sk:4 ss_ticket_number:10!null count_rows:94!null
+           │    ├── immutable
+           │    ├── key: (4,10)
+           │    ├── fd: (4,10)-->(94)
+           │    ├── group-by (hash)
+           │    │    ├── columns: ss_customer_sk:4 ss_ticket_number:10!null count_rows:94!null
+           │    │    ├── grouping columns: ss_customer_sk:4 ss_ticket_number:10!null
+           │    │    ├── immutable
+           │    │    ├── key: (4,10)
+           │    │    ├── fd: (4,10)-->(94)
+           │    │    ├── inner-join (hash)
+           │    │    │    ├── columns: ss_sold_date_sk:1!null ss_customer_sk:4 ss_hdemo_sk:6!null ss_store_sk:8!null ss_ticket_number:10!null d_date_sk:26!null d_year:32!null d_dom:35!null s_store_sk:56!null s_county:79!null hd_demo_sk:87!null hd_buy_potential:89!null hd_dep_count:90 hd_vehicle_count:91!null
+           │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+           │    │    │    ├── immutable
+           │    │    │    ├── fd: ()-->(79), (26)-->(32,35), (87)-->(89-91), (1)==(26), (26)==(1), (8)==(56), (56)==(8), (6)==(87), (87)==(6)
+           │    │    │    ├── inner-join (hash)
+           │    │    │    │    ├── columns: ss_sold_date_sk:1!null ss_customer_sk:4 ss_hdemo_sk:6!null ss_store_sk:8 ss_ticket_number:10!null d_date_sk:26!null d_year:32!null d_dom:35!null hd_demo_sk:87!null hd_buy_potential:89!null hd_dep_count:90 hd_vehicle_count:91!null
+           │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+           │    │    │    │    ├── immutable
+           │    │    │    │    ├── fd: (26)-->(32,35), (87)-->(89-91), (6)==(87), (87)==(6), (1)==(26), (26)==(1)
+           │    │    │    │    ├── inner-join (hash)
+           │    │    │    │    │    ├── columns: ss_sold_date_sk:1 ss_customer_sk:4 ss_hdemo_sk:6!null ss_store_sk:8 ss_ticket_number:10!null hd_demo_sk:87!null hd_buy_potential:89!null hd_dep_count:90 hd_vehicle_count:91!null
+           │    │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+           │    │    │    │    │    ├── immutable
+           │    │    │    │    │    ├── fd: (87)-->(89-91), (6)==(87), (87)==(6)
+           │    │    │    │    │    ├── scan store_sales
+           │    │    │    │    │    │    └── columns: ss_sold_date_sk:1 ss_customer_sk:4 ss_hdemo_sk:6 ss_store_sk:8 ss_ticket_number:10!null
+           │    │    │    │    │    ├── select
+           │    │    │    │    │    │    ├── columns: hd_demo_sk:87!null hd_buy_potential:89!null hd_dep_count:90 hd_vehicle_count:91!null
+           │    │    │    │    │    │    ├── immutable
+           │    │    │    │    │    │    ├── key: (87)
+           │    │    │    │    │    │    ├── fd: (87)-->(89-91)
+           │    │    │    │    │    │    ├── scan household_demographics
+           │    │    │    │    │    │    │    ├── columns: hd_demo_sk:87!null hd_buy_potential:89 hd_dep_count:90 hd_vehicle_count:91
+           │    │    │    │    │    │    │    ├── key: (87)
+           │    │    │    │    │    │    │    └── fd: (87)-->(89-91)
+           │    │    │    │    │    │    └── filters
+           │    │    │    │    │    │         ├── (hd_buy_potential:89 = '1001-5000') OR (hd_buy_potential:89 = '0-500') [outer=(89), constraints=(/89: [/'0-500' - /'0-500'] [/'1001-5000' - /'1001-5000']; tight)]
+           │    │    │    │    │    │         ├── hd_vehicle_count:91 > 0 [outer=(91), constraints=(/91: [/1 - ]; tight)]
+           │    │    │    │    │    │         └── CASE WHEN hd_vehicle_count:91 > 0 THEN hd_dep_count:90 / hd_vehicle_count:91 ELSE CAST(NULL AS DECIMAL) END > 1.2 [outer=(90,91), immutable]
+           │    │    │    │    │    └── filters
+           │    │    │    │    │         └── ss_hdemo_sk:6 = hd_demo_sk:87 [outer=(6,87), constraints=(/6: (/NULL - ]; /87: (/NULL - ]), fd=(6)==(87), (87)==(6)]
+           │    │    │    │    ├── select
+           │    │    │    │    │    ├── columns: d_date_sk:26!null d_year:32!null d_dom:35!null
+           │    │    │    │    │    ├── key: (26)
+           │    │    │    │    │    ├── fd: (26)-->(32,35)
+           │    │    │    │    │    ├── scan date_dim
+           │    │    │    │    │    │    ├── columns: d_date_sk:26!null d_year:32 d_dom:35
+           │    │    │    │    │    │    ├── key: (26)
+           │    │    │    │    │    │    └── fd: (26)-->(32,35)
+           │    │    │    │    │    └── filters
+           │    │    │    │    │         ├── ((d_dom:35 >= 1) AND (d_dom:35 <= 3)) OR ((d_dom:35 >= 25) AND (d_dom:35 <= 28)) [outer=(35), constraints=(/35: [/1 - /3] [/25 - /28]; tight)]
+           │    │    │    │    │         └── d_year:32 IN (2000, 2001, 2002) [outer=(32), constraints=(/32: [/2000 - /2000] [/2001 - /2001] [/2002 - /2002]; tight)]
+           │    │    │    │    └── filters
+           │    │    │    │         └── ss_sold_date_sk:1 = d_date_sk:26 [outer=(1,26), constraints=(/1: (/NULL - ]; /26: (/NULL - ]), fd=(1)==(26), (26)==(1)]
+           │    │    │    ├── select
+           │    │    │    │    ├── columns: s_store_sk:56!null s_county:79!null
+           │    │    │    │    ├── key: (56)
+           │    │    │    │    ├── fd: ()-->(79)
+           │    │    │    │    ├── scan store
+           │    │    │    │    │    ├── columns: s_store_sk:56!null s_county:79
+           │    │    │    │    │    ├── key: (56)
+           │    │    │    │    │    └── fd: (56)-->(79)
+           │    │    │    │    └── filters
+           │    │    │    │         └── s_county:79 = 'Williamson County' [outer=(79), constraints=(/79: [/'Williamson County' - /'Williamson County']; tight), fd=()-->(79)]
+           │    │    │    └── filters
+           │    │    │         └── ss_store_sk:8 = s_store_sk:56 [outer=(8,56), constraints=(/8: (/NULL - ]; /56: (/NULL - ]), fd=(8)==(56), (56)==(8)]
+           │    │    └── aggregations
+           │    │         └── count-rows [as=count_rows:94]
+           │    └── filters
+           │         └── (count_rows:94 >= 15) AND (count_rows:94 <= 20) [outer=(94), constraints=(/94: [/15 - /20]; tight)]
+           └── filters (true)
+
+# --------------------------------------------------
+# Q35
+opt
+	SELECT
+		ca_state,
+		cd_gender,
+		cd_marital_status,
+		cd_dep_count,
+		count(*) AS cnt1,
+		avg(cd_dep_count),
+		stddev_samp(cd_dep_count),
+		sum(cd_dep_count),
+		cd_dep_employed_count,
+		count(*) AS cnt2,
+		avg(cd_dep_employed_count),
+		stddev_samp(cd_dep_employed_count),
+		sum(cd_dep_employed_count),
+		cd_dep_college_count,
+		count(*) AS cnt3,
+		avg(cd_dep_college_count),
+		stddev_samp(cd_dep_college_count),
+		sum(cd_dep_college_count)
+	FROM
+		customer AS c,
+		customer_address AS ca,
+		customer_demographics
+	WHERE
+		c.c_current_addr_sk = ca.ca_address_sk
+		AND cd_demo_sk = c.c_current_cdemo_sk
+		AND EXISTS(
+				SELECT
+					*
+				FROM
+					store_sales, date_dim
+				WHERE
+					c.c_customer_sk = ss_customer_sk
+					AND ss_sold_date_sk = d_date_sk
+					AND d_year = 1999
+					AND d_qoy < 4
+			)
+		AND (
+				EXISTS(
+					SELECT
+						*
+					FROM
+						web_sales, date_dim
+					WHERE
+						c.c_customer_sk = ws_bill_customer_sk
+						AND ws_sold_date_sk = d_date_sk
+						AND d_year = 1999
+						AND d_qoy < 4
+				)
+				OR EXISTS(
+						SELECT
+							*
+						FROM
+							catalog_sales, date_dim
+						WHERE
+							c.c_customer_sk
+							= cs_ship_customer_sk
+							AND cs_sold_date_sk = d_date_sk
+							AND d_year = 1999
+							AND d_qoy < 4
+					)
+			)
+	GROUP BY
+		ca_state,
+		cd_gender,
+		cd_marital_status,
+		cd_dep_count,
+		cd_dep_employed_count,
+		cd_dep_college_count
+	ORDER BY
+		ca_state,
+		cd_gender,
+		cd_marital_status,
+		cd_dep_count,
+		cd_dep_employed_count,
+		cd_dep_college_count
+	LIMIT
+		100;
+----
+top-k
+ ├── columns: ca_state:29 cd_gender:37 cd_marital_status:38 cd_dep_count:42 cnt1:241!null avg:242 stddev_samp:243 sum:244 cd_dep_employed_count:43 cnt2:241!null avg:245 stddev_samp:246 sum:247 cd_dep_college_count:44 cnt3:241!null avg:248 stddev_samp:249 sum:250
+ ├── internal-ordering: +29,+37,+38,+42,+43,+44
+ ├── k: 100
+ ├── cardinality: [0 - 100]
+ ├── key: (29,37,38,42-44)
+ ├── fd: (29,37,38,42-44)-->(241-250)
+ ├── ordering: +29,+37,+38,+42,+43,+44
+ └── group-by (hash)
+      ├── columns: ca_state:29 cd_gender:37 cd_marital_status:38 cd_dep_count:42 cd_dep_employed_count:43 cd_dep_college_count:44 count_rows:241!null avg:242 stddev_samp:243 sum:244 avg:245 stddev_samp:246 sum:247 avg:248 stddev_samp:249 sum:250
+      ├── grouping columns: ca_state:29 cd_gender:37 cd_marital_status:38 cd_dep_count:42 cd_dep_employed_count:43 cd_dep_college_count:44
+      ├── key: (29,37,38,42-44)
+      ├── fd: (29,37,38,42-44)-->(241-250)
+      ├── inner-join (lookup customer_demographics)
+      │    ├── columns: c_customer_sk:1!null c_current_cdemo_sk:3!null c_current_addr_sk:5!null ca_address_sk:21!null ca_state:29 cd_demo_sk:36!null cd_gender:37 cd_marital_status:38 cd_dep_count:42 cd_dep_employed_count:43 cd_dep_college_count:44
+      │    ├── key columns: [3] = [36]
+      │    ├── lookup columns are key
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(3,5), (21)-->(29), (36)-->(37,38,42-44), (5)==(21), (21)==(5), (3)==(36), (36)==(3)
+      │    ├── semi-join (hash)
+      │    │    ├── columns: c_customer_sk:1!null c_current_cdemo_sk:3 c_current_addr_sk:5!null ca_address_sk:21!null ca_state:29
+      │    │    ├── key: (1)
+      │    │    ├── fd: (1)-->(3,5), (21)-->(29), (5)==(21), (21)==(5)
+      │    │    ├── inner-join (hash)
+      │    │    │    ├── columns: c_customer_sk:1!null c_current_cdemo_sk:3 c_current_addr_sk:5!null ca_address_sk:21!null ca_state:29
+      │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+      │    │    │    ├── key: (1)
+      │    │    │    ├── fd: (1)-->(3,5), (21)-->(29), (5)==(21), (21)==(5)
+      │    │    │    ├── project
+      │    │    │    │    ├── columns: c_customer_sk:1!null c_current_cdemo_sk:3 c_current_addr_sk:5
+      │    │    │    │    ├── key: (1)
+      │    │    │    │    ├── fd: (1)-->(3,5)
+      │    │    │    │    └── select
+      │    │    │    │         ├── columns: c_customer_sk:1!null c_current_cdemo_sk:3 c_current_addr_sk:5 exists:238!null canary_agg:239
+      │    │    │    │         ├── key: (1)
+      │    │    │    │         ├── fd: (1)-->(3,5,238,239)
+      │    │    │    │         ├── group-by (hash)
+      │    │    │    │         │    ├── columns: c_customer_sk:1!null c_current_cdemo_sk:3 c_current_addr_sk:5 exists:238!null canary_agg:239
+      │    │    │    │         │    ├── grouping columns: c_customer_sk:1!null
+      │    │    │    │         │    ├── key: (1)
+      │    │    │    │         │    ├── fd: (1)-->(3,5,238,239)
+      │    │    │    │         │    ├── right-join (hash)
+      │    │    │    │         │    │    ├── columns: c_customer_sk:1!null c_current_cdemo_sk:3 c_current_addr_sk:5 cs_sold_date_sk:168 cs_ship_customer_sk:175 d_date_sk:204 d_year:210 d_qoy:214 exists:238!null
+      │    │    │    │         │    │    ├── fd: (1)-->(3,5,238), (204)-->(214), (168)==(204), (204)==(168)
+      │    │    │    │         │    │    ├── inner-join (hash)
+      │    │    │    │         │    │    │    ├── columns: cs_sold_date_sk:168!null cs_ship_customer_sk:175 d_date_sk:204!null d_year:210!null d_qoy:214!null
+      │    │    │    │         │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+      │    │    │    │         │    │    │    ├── fd: ()-->(210), (204)-->(214), (168)==(204), (204)==(168)
+      │    │    │    │         │    │    │    ├── scan catalog_sales
+      │    │    │    │         │    │    │    │    └── columns: cs_sold_date_sk:168 cs_ship_customer_sk:175
+      │    │    │    │         │    │    │    ├── select
+      │    │    │    │         │    │    │    │    ├── columns: d_date_sk:204!null d_year:210!null d_qoy:214!null
+      │    │    │    │         │    │    │    │    ├── key: (204)
+      │    │    │    │         │    │    │    │    ├── fd: ()-->(210), (204)-->(214)
+      │    │    │    │         │    │    │    │    ├── scan date_dim
+      │    │    │    │         │    │    │    │    │    ├── columns: d_date_sk:204!null d_year:210 d_qoy:214
+      │    │    │    │         │    │    │    │    │    ├── key: (204)
+      │    │    │    │         │    │    │    │    │    └── fd: (204)-->(210,214)
+      │    │    │    │         │    │    │    │    └── filters
+      │    │    │    │         │    │    │    │         ├── d_year:210 = 1999 [outer=(210), constraints=(/210: [/1999 - /1999]; tight), fd=()-->(210)]
+      │    │    │    │         │    │    │    │         └── d_qoy:214 < 4 [outer=(214), constraints=(/214: (/NULL - /3]; tight)]
+      │    │    │    │         │    │    │    └── filters
+      │    │    │    │         │    │    │         └── cs_sold_date_sk:168 = d_date_sk:204 [outer=(168,204), constraints=(/168: (/NULL - ]; /204: (/NULL - ]), fd=(168)==(204), (204)==(168)]
+      │    │    │    │         │    │    ├── project
+      │    │    │    │         │    │    │    ├── columns: exists:238!null c_customer_sk:1!null c_current_cdemo_sk:3 c_current_addr_sk:5
+      │    │    │    │         │    │    │    ├── key: (1)
+      │    │    │    │         │    │    │    ├── fd: (1)-->(3,5,238)
+      │    │    │    │         │    │    │    ├── group-by (hash)
+      │    │    │    │         │    │    │    │    ├── columns: c_customer_sk:1!null c_current_cdemo_sk:3 c_current_addr_sk:5 canary_agg:237
+      │    │    │    │         │    │    │    │    ├── grouping columns: c_customer_sk:1!null
+      │    │    │    │         │    │    │    │    ├── key: (1)
+      │    │    │    │         │    │    │    │    ├── fd: (1)-->(3,5,237)
+      │    │    │    │         │    │    │    │    ├── right-join (hash)
+      │    │    │    │         │    │    │    │    │    ├── columns: c_customer_sk:1!null c_current_cdemo_sk:3 c_current_addr_sk:5 ws_sold_date_sk:102 ws_bill_customer_sk:106 d_date_sk:138 d_year:144 d_qoy:148
+      │    │    │    │         │    │    │    │    │    ├── fd: (1)-->(3,5), (138)-->(148), (102)==(138), (138)==(102)
+      │    │    │    │         │    │    │    │    │    ├── inner-join (hash)
+      │    │    │    │         │    │    │    │    │    │    ├── columns: ws_sold_date_sk:102!null ws_bill_customer_sk:106 d_date_sk:138!null d_year:144!null d_qoy:148!null
+      │    │    │    │         │    │    │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+      │    │    │    │         │    │    │    │    │    │    ├── fd: ()-->(144), (138)-->(148), (102)==(138), (138)==(102)
+      │    │    │    │         │    │    │    │    │    │    ├── scan web_sales
+      │    │    │    │         │    │    │    │    │    │    │    └── columns: ws_sold_date_sk:102 ws_bill_customer_sk:106
+      │    │    │    │         │    │    │    │    │    │    ├── select
+      │    │    │    │         │    │    │    │    │    │    │    ├── columns: d_date_sk:138!null d_year:144!null d_qoy:148!null
+      │    │    │    │         │    │    │    │    │    │    │    ├── key: (138)
+      │    │    │    │         │    │    │    │    │    │    │    ├── fd: ()-->(144), (138)-->(148)
+      │    │    │    │         │    │    │    │    │    │    │    ├── scan date_dim
+      │    │    │    │         │    │    │    │    │    │    │    │    ├── columns: d_date_sk:138!null d_year:144 d_qoy:148
+      │    │    │    │         │    │    │    │    │    │    │    │    ├── key: (138)
+      │    │    │    │         │    │    │    │    │    │    │    │    └── fd: (138)-->(144,148)
+      │    │    │    │         │    │    │    │    │    │    │    └── filters
+      │    │    │    │         │    │    │    │    │    │    │         ├── d_year:144 = 1999 [outer=(144), constraints=(/144: [/1999 - /1999]; tight), fd=()-->(144)]
+      │    │    │    │         │    │    │    │    │    │    │         └── d_qoy:148 < 4 [outer=(148), constraints=(/148: (/NULL - /3]; tight)]
+      │    │    │    │         │    │    │    │    │    │    └── filters
+      │    │    │    │         │    │    │    │    │    │         └── ws_sold_date_sk:102 = d_date_sk:138 [outer=(102,138), constraints=(/102: (/NULL - ]; /138: (/NULL - ]), fd=(102)==(138), (138)==(102)]
+      │    │    │    │         │    │    │    │    │    ├── scan customer [as=c]
+      │    │    │    │         │    │    │    │    │    │    ├── columns: c_customer_sk:1!null c_current_cdemo_sk:3 c_current_addr_sk:5
+      │    │    │    │         │    │    │    │    │    │    ├── key: (1)
+      │    │    │    │         │    │    │    │    │    │    └── fd: (1)-->(3,5)
+      │    │    │    │         │    │    │    │    │    └── filters
+      │    │    │    │         │    │    │    │    │         └── c_customer_sk:1 = ws_bill_customer_sk:106 [outer=(1,106), constraints=(/1: (/NULL - ]; /106: (/NULL - ]), fd=(1)==(106), (106)==(1)]
+      │    │    │    │         │    │    │    │    └── aggregations
+      │    │    │    │         │    │    │    │         ├── const-not-null-agg [as=canary_agg:237, outer=(102)]
+      │    │    │    │         │    │    │    │         │    └── ws_sold_date_sk:102
+      │    │    │    │         │    │    │    │         ├── const-agg [as=c_current_cdemo_sk:3, outer=(3)]
+      │    │    │    │         │    │    │    │         │    └── c_current_cdemo_sk:3
+      │    │    │    │         │    │    │    │         └── const-agg [as=c_current_addr_sk:5, outer=(5)]
+      │    │    │    │         │    │    │    │              └── c_current_addr_sk:5
+      │    │    │    │         │    │    │    └── projections
+      │    │    │    │         │    │    │         └── canary_agg:237 IS NOT NULL [as=exists:238, outer=(237)]
+      │    │    │    │         │    │    └── filters
+      │    │    │    │         │    │         └── c_customer_sk:1 = cs_ship_customer_sk:175 [outer=(1,175), constraints=(/1: (/NULL - ]; /175: (/NULL - ]), fd=(1)==(175), (175)==(1)]
+      │    │    │    │         │    └── aggregations
+      │    │    │    │         │         ├── const-not-null-agg [as=canary_agg:239, outer=(168)]
+      │    │    │    │         │         │    └── cs_sold_date_sk:168
+      │    │    │    │         │         ├── const-agg [as=c_current_cdemo_sk:3, outer=(3)]
+      │    │    │    │         │         │    └── c_current_cdemo_sk:3
+      │    │    │    │         │         ├── const-agg [as=c_current_addr_sk:5, outer=(5)]
+      │    │    │    │         │         │    └── c_current_addr_sk:5
+      │    │    │    │         │         └── const-agg [as=exists:238, outer=(238)]
+      │    │    │    │         │              └── exists:238
+      │    │    │    │         └── filters
+      │    │    │    │              └── exists:238 OR (canary_agg:239 IS NOT NULL) [outer=(238,239)]
+      │    │    │    ├── scan customer_address [as=ca]
+      │    │    │    │    ├── columns: ca_address_sk:21!null ca_state:29
+      │    │    │    │    ├── key: (21)
+      │    │    │    │    └── fd: (21)-->(29)
+      │    │    │    └── filters
+      │    │    │         └── c_current_addr_sk:5 = ca_address_sk:21 [outer=(5,21), constraints=(/5: (/NULL - ]; /21: (/NULL - ]), fd=(5)==(21), (21)==(5)]
+      │    │    ├── inner-join (hash)
+      │    │    │    ├── columns: ss_sold_date_sk:47!null ss_customer_sk:50 d_date_sk:72!null d_year:78!null d_qoy:82!null
+      │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+      │    │    │    ├── fd: ()-->(78), (72)-->(82), (47)==(72), (72)==(47)
+      │    │    │    ├── scan store_sales
+      │    │    │    │    └── columns: ss_sold_date_sk:47 ss_customer_sk:50
+      │    │    │    ├── select
+      │    │    │    │    ├── columns: d_date_sk:72!null d_year:78!null d_qoy:82!null
+      │    │    │    │    ├── key: (72)
+      │    │    │    │    ├── fd: ()-->(78), (72)-->(82)
+      │    │    │    │    ├── scan date_dim
+      │    │    │    │    │    ├── columns: d_date_sk:72!null d_year:78 d_qoy:82
+      │    │    │    │    │    ├── key: (72)
+      │    │    │    │    │    └── fd: (72)-->(78,82)
+      │    │    │    │    └── filters
+      │    │    │    │         ├── d_year:78 = 1999 [outer=(78), constraints=(/78: [/1999 - /1999]; tight), fd=()-->(78)]
+      │    │    │    │         └── d_qoy:82 < 4 [outer=(82), constraints=(/82: (/NULL - /3]; tight)]
+      │    │    │    └── filters
+      │    │    │         └── ss_sold_date_sk:47 = d_date_sk:72 [outer=(47,72), constraints=(/47: (/NULL - ]; /72: (/NULL - ]), fd=(47)==(72), (72)==(47)]
+      │    │    └── filters
+      │    │         └── c_customer_sk:1 = ss_customer_sk:50 [outer=(1,50), constraints=(/1: (/NULL - ]; /50: (/NULL - ]), fd=(1)==(50), (50)==(1)]
+      │    └── filters (true)
+      └── aggregations
+           ├── count-rows [as=count_rows:241]
+           ├── avg [as=avg:242, outer=(42)]
+           │    └── cd_dep_count:42
+           ├── std-dev [as=stddev_samp:243, outer=(42)]
+           │    └── cd_dep_count:42
+           ├── sum [as=sum:244, outer=(42)]
+           │    └── cd_dep_count:42
+           ├── avg [as=avg:245, outer=(43)]
+           │    └── cd_dep_employed_count:43
+           ├── std-dev [as=stddev_samp:246, outer=(43)]
+           │    └── cd_dep_employed_count:43
+           ├── sum [as=sum:247, outer=(43)]
+           │    └── cd_dep_employed_count:43
+           ├── avg [as=avg:248, outer=(44)]
+           │    └── cd_dep_college_count:44
+           ├── std-dev [as=stddev_samp:249, outer=(44)]
+           │    └── cd_dep_college_count:44
+           └── sum [as=sum:250, outer=(44)]
+                └── cd_dep_college_count:44
+
+# --------------------------------------------------
+# Q36
+# TODO(#46280): adjust the query to work with CRDB.
+# opt
+# select  
+#     sum(ss_net_profit)/sum(ss_ext_sales_price) as gross_margin
+#    ,i_category
+#    ,i_class
+#    ,grouping(i_category)+grouping(i_class) as lochierarchy
+#    ,rank() over (
+#  	partition by grouping(i_category)+grouping(i_class),
+#  	case when grouping(i_class) = 0 then i_category end 
+#  	order by sum(ss_net_profit)/sum(ss_ext_sales_price) asc) as rank_within_parent
+#  from
+#     store_sales
+#    ,date_dim       d1
+#    ,item
+#    ,store
+#  where
+#     d1.d_year = 2000 
+#  and d1.d_date_sk = ss_sold_date_sk
+#  and i_item_sk  = ss_item_sk 
+#  and s_store_sk  = ss_store_sk
+#  and s_state in ('TN','TN','TN','TN',
+#                  'TN','TN','TN','TN')
+#  group by rollup(i_category,i_class)
+#  order by
+#    lochierarchy desc
+#   ,case when lochierarchy = 0 then i_category end
+#   ,rank_within_parent
+#   limit 100;
+# ----
+
+# --------------------------------------------------
+# Q37
+# NOTE: Added conversion of 90 days to an interval.
+opt
+	SELECT
+		i_item_id, i_item_desc, i_current_price
+	FROM
+		item, inventory, date_dim, catalog_sales
+	WHERE
+		i_current_price BETWEEN 29 AND (29 + 30)
+		AND inv_item_sk = i_item_sk
+		AND d_date_sk = inv_date_sk
+		AND d_date BETWEEN CAST('2002-03-29' AS DATE) AND (CAST('2002-03-29' AS DATE) + '60 days'::INTERVAL)
+		AND i_manufact_id IN (705, 742, 777, 944)
+		AND inv_quantity_on_hand BETWEEN 100 AND 500
+		AND cs_item_sk = i_item_sk
+	GROUP BY
+		i_item_id, i_item_desc, i_current_price
+	ORDER BY
+		i_item_id
+	LIMIT
+		100;
+----
+limit
+ ├── columns: i_item_id:2!null i_item_desc:5 i_current_price:6!null
+ ├── internal-ordering: +2
+ ├── cardinality: [0 - 100]
+ ├── immutable
+ ├── key: (2,5,6)
+ ├── ordering: +2
+ ├── distinct-on
+ │    ├── columns: i_item_id:2!null i_item_desc:5 i_current_price:6!null
+ │    ├── grouping columns: i_item_id:2!null i_item_desc:5 i_current_price:6!null
+ │    ├── immutable
+ │    ├── key: (2,5,6)
+ │    ├── ordering: +2
+ │    ├── limit hint: 100.00
+ │    └── inner-join (lookup catalog_sales)
+ │         ├── columns: i_item_sk:1!null i_item_id:2!null i_item_desc:5 i_current_price:6!null i_manufact_id:14!null inv_date_sk:25!null inv_item_sk:26!null inv_quantity_on_hand:28!null d_date_sk:31!null d_date:33!null cs_item_sk:76!null
+ │         ├── key columns: [26] = [76]
+ │         ├── immutable
+ │         ├── fd: (1)-->(2,5,6,14), (31)-->(33), (25)==(31), (31)==(25), (1)==(26,76), (26)==(1,76), (76)==(1,26)
+ │         ├── ordering: +2
+ │         ├── limit hint: 385.21
+ │         ├── sort
+ │         │    ├── columns: i_item_sk:1!null i_item_id:2!null i_item_desc:5 i_current_price:6!null i_manufact_id:14!null inv_date_sk:25!null inv_item_sk:26!null inv_quantity_on_hand:28!null d_date_sk:31!null d_date:33!null
+ │         │    ├── immutable
+ │         │    ├── fd: (1)-->(2,5,6,14), (31)-->(33), (25)==(31), (31)==(25), (1)==(26), (26)==(1)
+ │         │    ├── ordering: +2
+ │         │    ├── limit hint: 100.00
+ │         │    └── inner-join (hash)
+ │         │         ├── columns: i_item_sk:1!null i_item_id:2!null i_item_desc:5 i_current_price:6!null i_manufact_id:14!null inv_date_sk:25!null inv_item_sk:26!null inv_quantity_on_hand:28!null d_date_sk:31!null d_date:33!null
+ │         │         ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ │         │         ├── immutable
+ │         │         ├── fd: (1)-->(2,5,6,14), (31)-->(33), (25)==(31), (31)==(25), (1)==(26), (26)==(1)
+ │         │         ├── inner-join (lookup inventory)
+ │         │         │    ├── columns: inv_date_sk:25!null inv_item_sk:26!null inv_quantity_on_hand:28!null d_date_sk:31!null d_date:33!null
+ │         │         │    ├── key columns: [31] = [25]
+ │         │         │    ├── fd: (31)-->(33), (25)==(31), (31)==(25)
+ │         │         │    ├── select
+ │         │         │    │    ├── columns: d_date_sk:31!null d_date:33!null
+ │         │         │    │    ├── key: (31)
+ │         │         │    │    ├── fd: (31)-->(33)
+ │         │         │    │    ├── scan date_dim
+ │         │         │    │    │    ├── columns: d_date_sk:31!null d_date:33
+ │         │         │    │    │    ├── key: (31)
+ │         │         │    │    │    └── fd: (31)-->(33)
+ │         │         │    │    └── filters
+ │         │         │    │         └── (d_date:33 >= '2002-03-29') AND (d_date:33 <= '2002-05-28') [outer=(33), constraints=(/33: [/'2002-03-29' - /'2002-05-28']; tight)]
+ │         │         │    └── filters
+ │         │         │         └── (inv_quantity_on_hand:28 >= 100) AND (inv_quantity_on_hand:28 <= 500) [outer=(28), constraints=(/28: [/100 - /500]; tight)]
+ │         │         ├── select
+ │         │         │    ├── columns: i_item_sk:1!null i_item_id:2!null i_item_desc:5 i_current_price:6!null i_manufact_id:14!null
+ │         │         │    ├── immutable
+ │         │         │    ├── key: (1)
+ │         │         │    ├── fd: (1)-->(2,5,6,14)
+ │         │         │    ├── scan item
+ │         │         │    │    ├── columns: i_item_sk:1!null i_item_id:2!null i_item_desc:5 i_current_price:6 i_manufact_id:14
+ │         │         │    │    ├── key: (1)
+ │         │         │    │    └── fd: (1)-->(2,5,6,14)
+ │         │         │    └── filters
+ │         │         │         ├── (i_current_price:6 >= 29) AND (i_current_price:6 <= 59.00) [outer=(6), immutable, constraints=(/6: [/29 - /59.00]; tight)]
+ │         │         │         └── i_manufact_id:14 IN (705, 742, 777, 944) [outer=(14), constraints=(/14: [/705 - /705] [/742 - /742] [/777 - /777] [/944 - /944]; tight)]
+ │         │         └── filters
+ │         │              └── i_item_sk:1 = inv_item_sk:26 [outer=(1,26), constraints=(/1: (/NULL - ]; /26: (/NULL - ]), fd=(1)==(26), (26)==(1)]
+ │         └── filters (true)
+ └── 100
+
+# --------------------------------------------------
+# Q38
+opt
+	SELECT
+		count(*)
+	FROM
+		(
+			SELECT
+				DISTINCT c_last_name, c_first_name, d_date
+			FROM
+				store_sales, date_dim, customer
+			WHERE
+				store_sales.ss_sold_date_sk = date_dim.d_date_sk
+				AND store_sales.ss_customer_sk
+					= customer.c_customer_sk
+				AND d_month_seq BETWEEN 1189 AND (1189 + 11)
+			INTERSECT
+				SELECT
+					DISTINCT c_last_name, c_first_name, d_date
+				FROM
+					catalog_sales, date_dim, customer
+				WHERE
+					catalog_sales.cs_sold_date_sk
+					= date_dim.d_date_sk
+					AND catalog_sales.cs_bill_customer_sk
+						= customer.c_customer_sk
+					AND d_month_seq BETWEEN 1189 AND (1189 + 11)
+			INTERSECT
+				SELECT
+					DISTINCT c_last_name, c_first_name, d_date
+				FROM
+					web_sales, date_dim, customer
+				WHERE
+					web_sales.ws_sold_date_sk
+					= date_dim.d_date_sk
+					AND web_sales.ws_bill_customer_sk
+						= customer.c_customer_sk
+					AND d_month_seq BETWEEN 1189 AND (1189 + 11)
+		)
+			AS hot_cust
+	LIMIT
+		100;
+----
+scalar-group-by
+ ├── columns: count:248!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(248)
+ ├── intersect-all
+ │    ├── columns: c_last_name:65 c_first_name:64 d_date:28
+ │    ├── left columns: c_last_name:65 c_first_name:64 d_date:28
+ │    ├── right columns: c_last_name:237 c_first_name:236 d_date:200
+ │    ├── key: (28,64,65)
+ │    ├── intersect-all
+ │    │    ├── columns: c_last_name:65 c_first_name:64 d_date:28
+ │    │    ├── left columns: c_last_name:65 c_first_name:64 d_date:28
+ │    │    ├── right columns: c_last_name:151 c_first_name:150 d_date:114
+ │    │    ├── key: (28,64,65)
+ │    │    ├── distinct-on
+ │    │    │    ├── columns: d_date:28 c_first_name:64 c_last_name:65
+ │    │    │    ├── grouping columns: d_date:28 c_first_name:64 c_last_name:65
+ │    │    │    ├── key: (28,64,65)
+ │    │    │    └── inner-join (hash)
+ │    │    │         ├── columns: ss_sold_date_sk:1!null ss_customer_sk:4!null d_date_sk:26!null d_date:28 d_month_seq:29!null c_customer_sk:56!null c_first_name:64 c_last_name:65
+ │    │    │         ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ │    │    │         ├── fd: (26)-->(28,29), (56)-->(64,65), (1)==(26), (26)==(1), (4)==(56), (56)==(4)
+ │    │    │         ├── inner-join (hash)
+ │    │    │         │    ├── columns: ss_sold_date_sk:1!null ss_customer_sk:4 d_date_sk:26!null d_date:28 d_month_seq:29!null
+ │    │    │         │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ │    │    │         │    ├── fd: (26)-->(28,29), (1)==(26), (26)==(1)
+ │    │    │         │    ├── scan store_sales
+ │    │    │         │    │    └── columns: ss_sold_date_sk:1 ss_customer_sk:4
+ │    │    │         │    ├── select
+ │    │    │         │    │    ├── columns: d_date_sk:26!null d_date:28 d_month_seq:29!null
+ │    │    │         │    │    ├── key: (26)
+ │    │    │         │    │    ├── fd: (26)-->(28,29)
+ │    │    │         │    │    ├── scan date_dim
+ │    │    │         │    │    │    ├── columns: d_date_sk:26!null d_date:28 d_month_seq:29
+ │    │    │         │    │    │    ├── key: (26)
+ │    │    │         │    │    │    └── fd: (26)-->(28,29)
+ │    │    │         │    │    └── filters
+ │    │    │         │    │         └── (d_month_seq:29 >= 1189) AND (d_month_seq:29 <= 1200) [outer=(29), constraints=(/29: [/1189 - /1200]; tight)]
+ │    │    │         │    └── filters
+ │    │    │         │         └── ss_sold_date_sk:1 = d_date_sk:26 [outer=(1,26), constraints=(/1: (/NULL - ]; /26: (/NULL - ]), fd=(1)==(26), (26)==(1)]
+ │    │    │         ├── scan customer
+ │    │    │         │    ├── columns: c_customer_sk:56!null c_first_name:64 c_last_name:65
+ │    │    │         │    ├── key: (56)
+ │    │    │         │    └── fd: (56)-->(64,65)
+ │    │    │         └── filters
+ │    │    │              └── ss_customer_sk:4 = c_customer_sk:56 [outer=(4,56), constraints=(/4: (/NULL - ]; /56: (/NULL - ]), fd=(4)==(56), (56)==(4)]
+ │    │    └── distinct-on
+ │    │         ├── columns: d_date:114 c_first_name:150 c_last_name:151
+ │    │         ├── grouping columns: d_date:114 c_first_name:150 c_last_name:151
+ │    │         ├── key: (114,150,151)
+ │    │         └── inner-join (hash)
+ │    │              ├── columns: cs_sold_date_sk:76!null cs_bill_customer_sk:79!null d_date_sk:112!null d_date:114 d_month_seq:115!null c_customer_sk:142!null c_first_name:150 c_last_name:151
+ │    │              ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ │    │              ├── fd: (112)-->(114,115), (142)-->(150,151), (76)==(112), (112)==(76), (79)==(142), (142)==(79)
+ │    │              ├── inner-join (hash)
+ │    │              │    ├── columns: cs_sold_date_sk:76!null cs_bill_customer_sk:79 d_date_sk:112!null d_date:114 d_month_seq:115!null
+ │    │              │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ │    │              │    ├── fd: (112)-->(114,115), (76)==(112), (112)==(76)
+ │    │              │    ├── scan catalog_sales
+ │    │              │    │    └── columns: cs_sold_date_sk:76 cs_bill_customer_sk:79
+ │    │              │    ├── select
+ │    │              │    │    ├── columns: d_date_sk:112!null d_date:114 d_month_seq:115!null
+ │    │              │    │    ├── key: (112)
+ │    │              │    │    ├── fd: (112)-->(114,115)
+ │    │              │    │    ├── scan date_dim
+ │    │              │    │    │    ├── columns: d_date_sk:112!null d_date:114 d_month_seq:115
+ │    │              │    │    │    ├── key: (112)
+ │    │              │    │    │    └── fd: (112)-->(114,115)
+ │    │              │    │    └── filters
+ │    │              │    │         └── (d_month_seq:115 >= 1189) AND (d_month_seq:115 <= 1200) [outer=(115), constraints=(/115: [/1189 - /1200]; tight)]
+ │    │              │    └── filters
+ │    │              │         └── cs_sold_date_sk:76 = d_date_sk:112 [outer=(76,112), constraints=(/76: (/NULL - ]; /112: (/NULL - ]), fd=(76)==(112), (112)==(76)]
+ │    │              ├── scan customer
+ │    │              │    ├── columns: c_customer_sk:142!null c_first_name:150 c_last_name:151
+ │    │              │    ├── key: (142)
+ │    │              │    └── fd: (142)-->(150,151)
+ │    │              └── filters
+ │    │                   └── cs_bill_customer_sk:79 = c_customer_sk:142 [outer=(79,142), constraints=(/79: (/NULL - ]; /142: (/NULL - ]), fd=(79)==(142), (142)==(79)]
+ │    └── distinct-on
+ │         ├── columns: d_date:200 c_first_name:236 c_last_name:237
+ │         ├── grouping columns: d_date:200 c_first_name:236 c_last_name:237
+ │         ├── key: (200,236,237)
+ │         └── inner-join (hash)
+ │              ├── columns: ws_sold_date_sk:162!null ws_bill_customer_sk:166!null d_date_sk:198!null d_date:200 d_month_seq:201!null c_customer_sk:228!null c_first_name:236 c_last_name:237
+ │              ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ │              ├── fd: (198)-->(200,201), (228)-->(236,237), (162)==(198), (198)==(162), (166)==(228), (228)==(166)
+ │              ├── inner-join (hash)
+ │              │    ├── columns: ws_sold_date_sk:162!null ws_bill_customer_sk:166 d_date_sk:198!null d_date:200 d_month_seq:201!null
+ │              │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ │              │    ├── fd: (198)-->(200,201), (162)==(198), (198)==(162)
+ │              │    ├── scan web_sales
+ │              │    │    └── columns: ws_sold_date_sk:162 ws_bill_customer_sk:166
+ │              │    ├── select
+ │              │    │    ├── columns: d_date_sk:198!null d_date:200 d_month_seq:201!null
+ │              │    │    ├── key: (198)
+ │              │    │    ├── fd: (198)-->(200,201)
+ │              │    │    ├── scan date_dim
+ │              │    │    │    ├── columns: d_date_sk:198!null d_date:200 d_month_seq:201
+ │              │    │    │    ├── key: (198)
+ │              │    │    │    └── fd: (198)-->(200,201)
+ │              │    │    └── filters
+ │              │    │         └── (d_month_seq:201 >= 1189) AND (d_month_seq:201 <= 1200) [outer=(201), constraints=(/201: [/1189 - /1200]; tight)]
+ │              │    └── filters
+ │              │         └── ws_sold_date_sk:162 = d_date_sk:198 [outer=(162,198), constraints=(/162: (/NULL - ]; /198: (/NULL - ]), fd=(162)==(198), (198)==(162)]
+ │              ├── scan customer
+ │              │    ├── columns: c_customer_sk:228!null c_first_name:236 c_last_name:237
+ │              │    ├── key: (228)
+ │              │    └── fd: (228)-->(236,237)
+ │              └── filters
+ │                   └── ws_bill_customer_sk:166 = c_customer_sk:228 [outer=(166,228), constraints=(/166: (/NULL - ]; /228: (/NULL - ]), fd=(166)==(228), (228)==(166)]
+ └── aggregations
+      └── count-rows [as=count_rows:248]
+
+# --------------------------------------------------
+# Q39
+# NOTE: Q39 has two queries.
+opt
+	WITH
+		inv
+			AS (
+				SELECT
+					w_warehouse_name,
+					w_warehouse_sk,
+					i_item_sk,
+					d_moy,
+					stdev,
+					mean,
+					CASE mean
+					WHEN 0 THEN NULL
+					ELSE stdev / mean
+					END
+						AS cov
+				FROM
+					(
+						SELECT
+							w_warehouse_name,
+							w_warehouse_sk,
+							i_item_sk,
+							d_moy,
+							stddev_samp(inv_quantity_on_hand)
+								AS stdev,
+							avg(inv_quantity_on_hand) AS mean
+						FROM
+							inventory, item, warehouse, date_dim
+						WHERE
+							inv_item_sk = i_item_sk
+							AND inv_warehouse_sk
+								= w_warehouse_sk
+							AND inv_date_sk = d_date_sk
+							AND d_year = 2000
+						GROUP BY
+							w_warehouse_name,
+							w_warehouse_sk,
+							i_item_sk,
+							d_moy
+					)
+						AS foo
+				WHERE
+					CASE mean
+					WHEN 0 THEN 0
+					ELSE stdev / mean
+					END
+					> 1
+			)
+	SELECT
+		inv1.w_warehouse_sk,
+		inv1.i_item_sk,
+		inv1.d_moy,
+		inv1.mean,
+		inv1.cov,
+		inv2.w_warehouse_sk,
+		inv2.i_item_sk,
+		inv2.d_moy,
+		inv2.mean,
+		inv2.cov
+	FROM
+		inv AS inv1, inv AS inv2
+	WHERE
+		inv1.i_item_sk = inv2.i_item_sk
+		AND inv1.w_warehouse_sk = inv2.w_warehouse_sk
+		AND inv1.d_moy = 1
+		AND inv2.d_moy = 1 + 1
+	ORDER BY
+		inv1.w_warehouse_sk,
+		inv1.i_item_sk,
+		inv1.d_moy,
+		inv1.mean,
+		inv1.cov,
+		inv2.d_moy,
+		inv2.mean,
+		inv2.cov;
+----
+sort
+ ├── columns: w_warehouse_sk:81!null i_item_sk:82!null d_moy:83!null mean:85 cov:86 w_warehouse_sk:88!null i_item_sk:89!null d_moy:90!null mean:92 cov:93
+ ├── immutable
+ ├── key: (88,89)
+ ├── fd: ()-->(83,90), (81,82)-->(85,86), (88,89)-->(92,93), (82)==(89), (89)==(82), (81)==(88), (88)==(81)
+ ├── ordering: +(81|88),+(82|89) opt(83,90) [actual: +81,+82]
+ └── with &1 (inv)
+      ├── columns: w_warehouse_sk:81!null i_item_sk:82!null d_moy:83!null mean:85 cov:86 w_warehouse_sk:88!null i_item_sk:89!null d_moy:90!null mean:92 cov:93
+      ├── immutable
+      ├── key: (88,89)
+      ├── fd: ()-->(83,90), (81,82)-->(85,86), (88,89)-->(92,93), (82)==(89), (89)==(82), (81)==(88), (88)==(81)
+      ├── project
+      │    ├── columns: cov:79 item.i_item_sk:7!null warehouse.w_warehouse_sk:31!null warehouse.w_warehouse_name:33 date_dim.d_moy:55 stddev_samp:77 avg:78
+      │    ├── immutable
+      │    ├── key: (7,31,55)
+      │    ├── fd: (31)-->(33), (7,31,55)-->(33,77-79)
+      │    ├── select
+      │    │    ├── columns: item.i_item_sk:7!null warehouse.w_warehouse_sk:31!null warehouse.w_warehouse_name:33 date_dim.d_moy:55 stddev_samp:77 avg:78
+      │    │    ├── immutable
+      │    │    ├── key: (7,31,55)
+      │    │    ├── fd: (31)-->(33), (7,31,55)-->(33,77,78)
+      │    │    ├── group-by (hash)
+      │    │    │    ├── columns: item.i_item_sk:7!null warehouse.w_warehouse_sk:31!null warehouse.w_warehouse_name:33 date_dim.d_moy:55 stddev_samp:77 avg:78
+      │    │    │    ├── grouping columns: item.i_item_sk:7!null warehouse.w_warehouse_sk:31!null date_dim.d_moy:55
+      │    │    │    ├── key: (7,31,55)
+      │    │    │    ├── fd: (31)-->(33), (7,31,55)-->(33,77,78)
+      │    │    │    ├── inner-join (hash)
+      │    │    │    │    ├── columns: inv_date_sk:1!null inv_item_sk:2!null inv_warehouse_sk:3!null inv_quantity_on_hand:4 item.i_item_sk:7!null warehouse.w_warehouse_sk:31!null warehouse.w_warehouse_name:33 d_date_sk:47!null d_year:53!null date_dim.d_moy:55
+      │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+      │    │    │    │    ├── key: (7,31,47)
+      │    │    │    │    ├── fd: ()-->(53), (1-3)-->(4), (31)-->(33), (47)-->(55), (2)==(7), (7)==(2), (3)==(31), (31)==(3), (1)==(47), (47)==(1)
+      │    │    │    │    ├── inner-join (hash)
+      │    │    │    │    │    ├── columns: inv_date_sk:1!null inv_item_sk:2!null inv_warehouse_sk:3!null inv_quantity_on_hand:4 item.i_item_sk:7!null d_date_sk:47!null d_year:53!null date_dim.d_moy:55
+      │    │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+      │    │    │    │    │    ├── key: (3,7,47)
+      │    │    │    │    │    ├── fd: ()-->(53), (1-3)-->(4), (47)-->(55), (1)==(47), (47)==(1), (2)==(7), (7)==(2)
+      │    │    │    │    │    ├── inner-join (merge)
+      │    │    │    │    │    │    ├── columns: inv_date_sk:1!null inv_item_sk:2!null inv_warehouse_sk:3!null inv_quantity_on_hand:4 d_date_sk:47!null d_year:53!null date_dim.d_moy:55
+      │    │    │    │    │    │    ├── left ordering: +1
+      │    │    │    │    │    │    ├── right ordering: +47
+      │    │    │    │    │    │    ├── key: (2,3,47)
+      │    │    │    │    │    │    ├── fd: ()-->(53), (1-3)-->(4), (47)-->(55), (1)==(47), (47)==(1)
+      │    │    │    │    │    │    ├── scan inventory
+      │    │    │    │    │    │    │    ├── columns: inv_date_sk:1!null inv_item_sk:2!null inv_warehouse_sk:3!null inv_quantity_on_hand:4
+      │    │    │    │    │    │    │    ├── key: (1-3)
+      │    │    │    │    │    │    │    ├── fd: (1-3)-->(4)
+      │    │    │    │    │    │    │    └── ordering: +1
+      │    │    │    │    │    │    ├── select
+      │    │    │    │    │    │    │    ├── columns: d_date_sk:47!null d_year:53!null date_dim.d_moy:55
+      │    │    │    │    │    │    │    ├── key: (47)
+      │    │    │    │    │    │    │    ├── fd: ()-->(53), (47)-->(55)
+      │    │    │    │    │    │    │    ├── ordering: +47 opt(53) [actual: +47]
+      │    │    │    │    │    │    │    ├── scan date_dim
+      │    │    │    │    │    │    │    │    ├── columns: d_date_sk:47!null d_year:53 date_dim.d_moy:55
+      │    │    │    │    │    │    │    │    ├── key: (47)
+      │    │    │    │    │    │    │    │    ├── fd: (47)-->(53,55)
+      │    │    │    │    │    │    │    │    └── ordering: +47
+      │    │    │    │    │    │    │    └── filters
+      │    │    │    │    │    │    │         └── d_year:53 = 2000 [outer=(53), constraints=(/53: [/2000 - /2000]; tight), fd=()-->(53)]
+      │    │    │    │    │    │    └── filters (true)
+      │    │    │    │    │    ├── scan item
+      │    │    │    │    │    │    ├── columns: item.i_item_sk:7!null
+      │    │    │    │    │    │    └── key: (7)
+      │    │    │    │    │    └── filters
+      │    │    │    │    │         └── inv_item_sk:2 = item.i_item_sk:7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+      │    │    │    │    ├── scan warehouse
+      │    │    │    │    │    ├── columns: warehouse.w_warehouse_sk:31!null warehouse.w_warehouse_name:33
+      │    │    │    │    │    ├── key: (31)
+      │    │    │    │    │    └── fd: (31)-->(33)
+      │    │    │    │    └── filters
+      │    │    │    │         └── inv_warehouse_sk:3 = warehouse.w_warehouse_sk:31 [outer=(3,31), constraints=(/3: (/NULL - ]; /31: (/NULL - ]), fd=(3)==(31), (31)==(3)]
+      │    │    │    └── aggregations
+      │    │    │         ├── std-dev [as=stddev_samp:77, outer=(4)]
+      │    │    │         │    └── inv_quantity_on_hand:4
+      │    │    │         ├── avg [as=avg:78, outer=(4)]
+      │    │    │         │    └── inv_quantity_on_hand:4
+      │    │    │         └── const-agg [as=warehouse.w_warehouse_name:33, outer=(33)]
+      │    │    │              └── warehouse.w_warehouse_name:33
+      │    │    └── filters
+      │    │         └── CASE avg:78 WHEN 0 THEN 0 ELSE stddev_samp:77 / avg:78 END > 1 [outer=(77,78), immutable]
+      │    └── projections
+      │         └── CASE avg:78 WHEN 0 THEN CAST(NULL AS DECIMAL) ELSE stddev_samp:77 / avg:78 END [as=cov:79, outer=(77,78), immutable]
+      └── inner-join (hash)
+           ├── columns: w_warehouse_sk:81!null i_item_sk:82!null d_moy:83!null mean:85 cov:86 w_warehouse_sk:88!null i_item_sk:89!null d_moy:90!null mean:92 cov:93
+           ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+           ├── key: (88,89)
+           ├── fd: ()-->(83,90), (81,82)-->(85,86), (88,89)-->(92,93), (82)==(89), (89)==(82), (81)==(88), (88)==(81)
+           ├── select
+           │    ├── columns: w_warehouse_sk:81!null i_item_sk:82!null d_moy:83!null mean:85 cov:86
+           │    ├── key: (81,82)
+           │    ├── fd: ()-->(83), (81,82)-->(85,86)
+           │    ├── with-scan &1 (inv)
+           │    │    ├── columns: w_warehouse_sk:81!null i_item_sk:82!null d_moy:83 mean:85 cov:86
+           │    │    ├── mapping:
+           │    │    │    ├──  warehouse.w_warehouse_sk:31 => w_warehouse_sk:81
+           │    │    │    ├──  item.i_item_sk:7 => i_item_sk:82
+           │    │    │    ├──  date_dim.d_moy:55 => d_moy:83
+           │    │    │    ├──  avg:78 => mean:85
+           │    │    │    └──  cov:79 => cov:86
+           │    │    ├── key: (81-83)
+           │    │    └── fd: (81-83)-->(85,86)
+           │    └── filters
+           │         └── d_moy:83 = 1 [outer=(83), constraints=(/83: [/1 - /1]; tight), fd=()-->(83)]
+           ├── select
+           │    ├── columns: w_warehouse_sk:88!null i_item_sk:89!null d_moy:90!null mean:92 cov:93
+           │    ├── key: (88,89)
+           │    ├── fd: ()-->(90), (88,89)-->(92,93)
+           │    ├── with-scan &1 (inv)
+           │    │    ├── columns: w_warehouse_sk:88!null i_item_sk:89!null d_moy:90 mean:92 cov:93
+           │    │    ├── mapping:
+           │    │    │    ├──  warehouse.w_warehouse_sk:31 => w_warehouse_sk:88
+           │    │    │    ├──  item.i_item_sk:7 => i_item_sk:89
+           │    │    │    ├──  date_dim.d_moy:55 => d_moy:90
+           │    │    │    ├──  avg:78 => mean:92
+           │    │    │    └──  cov:79 => cov:93
+           │    │    ├── key: (88-90)
+           │    │    └── fd: (88-90)-->(92,93)
+           │    └── filters
+           │         └── d_moy:90 = 2 [outer=(90), constraints=(/90: [/2 - /2]; tight), fd=()-->(90)]
+           └── filters
+                ├── i_item_sk:82 = i_item_sk:89 [outer=(82,89), constraints=(/82: (/NULL - ]; /89: (/NULL - ]), fd=(82)==(89), (89)==(82)]
+                └── w_warehouse_sk:81 = w_warehouse_sk:88 [outer=(81,88), constraints=(/81: (/NULL - ]; /88: (/NULL - ]), fd=(81)==(88), (88)==(81)]
+
+opt
+	WITH
+		inv
+			AS (
+				SELECT
+					w_warehouse_name,
+					w_warehouse_sk,
+					i_item_sk,
+					d_moy,
+					stdev,
+					mean,
+					CASE mean
+					WHEN 0 THEN NULL
+					ELSE stdev / mean
+					END
+						AS cov
+				FROM
+					(
+						SELECT
+							w_warehouse_name,
+							w_warehouse_sk,
+							i_item_sk,
+							d_moy,
+							stddev_samp(inv_quantity_on_hand)
+								AS stdev,
+							avg(inv_quantity_on_hand) AS mean
+						FROM
+							inventory, item, warehouse, date_dim
+						WHERE
+							inv_item_sk = i_item_sk
+							AND inv_warehouse_sk
+								= w_warehouse_sk
+							AND inv_date_sk = d_date_sk
+							AND d_year = 2000
+						GROUP BY
+							w_warehouse_name,
+							w_warehouse_sk,
+							i_item_sk,
+							d_moy
+					)
+						AS foo
+				WHERE
+					CASE mean
+					WHEN 0 THEN 0
+					ELSE stdev / mean
+					END
+					> 1
+			)
+	SELECT
+		inv1.w_warehouse_sk,
+		inv1.i_item_sk,
+		inv1.d_moy,
+		inv1.mean,
+		inv1.cov,
+		inv2.w_warehouse_sk,
+		inv2.i_item_sk,
+		inv2.d_moy,
+		inv2.mean,
+		inv2.cov
+	FROM
+		inv AS inv1, inv AS inv2
+	WHERE
+		inv1.i_item_sk = inv2.i_item_sk
+		AND inv1.w_warehouse_sk = inv2.w_warehouse_sk
+		AND inv1.d_moy = 1
+		AND inv2.d_moy = 1 + 1
+		AND inv1.cov > 1.5
+	ORDER BY
+		inv1.w_warehouse_sk,
+		inv1.i_item_sk,
+		inv1.d_moy,
+		inv1.mean,
+		inv1.cov,
+		inv2.d_moy,
+		inv2.mean,
+		inv2.cov;
+----
+sort
+ ├── columns: w_warehouse_sk:81!null i_item_sk:82!null d_moy:83!null mean:85 cov:86!null w_warehouse_sk:88!null i_item_sk:89!null d_moy:90!null mean:92 cov:93
+ ├── immutable
+ ├── key: (88,89)
+ ├── fd: ()-->(83,90), (81,82)-->(85,86), (88,89)-->(92,93), (82)==(89), (89)==(82), (81)==(88), (88)==(81)
+ ├── ordering: +(81|88),+(82|89) opt(83,90) [actual: +81,+82]
+ └── with &1 (inv)
+      ├── columns: w_warehouse_sk:81!null i_item_sk:82!null d_moy:83!null mean:85 cov:86!null w_warehouse_sk:88!null i_item_sk:89!null d_moy:90!null mean:92 cov:93
+      ├── immutable
+      ├── key: (88,89)
+      ├── fd: ()-->(83,90), (81,82)-->(85,86), (88,89)-->(92,93), (82)==(89), (89)==(82), (81)==(88), (88)==(81)
+      ├── project
+      │    ├── columns: cov:79 item.i_item_sk:7!null warehouse.w_warehouse_sk:31!null warehouse.w_warehouse_name:33 date_dim.d_moy:55 stddev_samp:77 avg:78
+      │    ├── immutable
+      │    ├── key: (7,31,55)
+      │    ├── fd: (31)-->(33), (7,31,55)-->(33,77-79)
+      │    ├── select
+      │    │    ├── columns: item.i_item_sk:7!null warehouse.w_warehouse_sk:31!null warehouse.w_warehouse_name:33 date_dim.d_moy:55 stddev_samp:77 avg:78
+      │    │    ├── immutable
+      │    │    ├── key: (7,31,55)
+      │    │    ├── fd: (31)-->(33), (7,31,55)-->(33,77,78)
+      │    │    ├── group-by (hash)
+      │    │    │    ├── columns: item.i_item_sk:7!null warehouse.w_warehouse_sk:31!null warehouse.w_warehouse_name:33 date_dim.d_moy:55 stddev_samp:77 avg:78
+      │    │    │    ├── grouping columns: item.i_item_sk:7!null warehouse.w_warehouse_sk:31!null date_dim.d_moy:55
+      │    │    │    ├── key: (7,31,55)
+      │    │    │    ├── fd: (31)-->(33), (7,31,55)-->(33,77,78)
+      │    │    │    ├── inner-join (hash)
+      │    │    │    │    ├── columns: inv_date_sk:1!null inv_item_sk:2!null inv_warehouse_sk:3!null inv_quantity_on_hand:4 item.i_item_sk:7!null warehouse.w_warehouse_sk:31!null warehouse.w_warehouse_name:33 d_date_sk:47!null d_year:53!null date_dim.d_moy:55
+      │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+      │    │    │    │    ├── key: (7,31,47)
+      │    │    │    │    ├── fd: ()-->(53), (1-3)-->(4), (31)-->(33), (47)-->(55), (2)==(7), (7)==(2), (3)==(31), (31)==(3), (1)==(47), (47)==(1)
+      │    │    │    │    ├── inner-join (hash)
+      │    │    │    │    │    ├── columns: inv_date_sk:1!null inv_item_sk:2!null inv_warehouse_sk:3!null inv_quantity_on_hand:4 item.i_item_sk:7!null d_date_sk:47!null d_year:53!null date_dim.d_moy:55
+      │    │    │    │    │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+      │    │    │    │    │    ├── key: (3,7,47)
+      │    │    │    │    │    ├── fd: ()-->(53), (1-3)-->(4), (47)-->(55), (1)==(47), (47)==(1), (2)==(7), (7)==(2)
+      │    │    │    │    │    ├── inner-join (merge)
+      │    │    │    │    │    │    ├── columns: inv_date_sk:1!null inv_item_sk:2!null inv_warehouse_sk:3!null inv_quantity_on_hand:4 d_date_sk:47!null d_year:53!null date_dim.d_moy:55
+      │    │    │    │    │    │    ├── left ordering: +1
+      │    │    │    │    │    │    ├── right ordering: +47
+      │    │    │    │    │    │    ├── key: (2,3,47)
+      │    │    │    │    │    │    ├── fd: ()-->(53), (1-3)-->(4), (47)-->(55), (1)==(47), (47)==(1)
+      │    │    │    │    │    │    ├── scan inventory
+      │    │    │    │    │    │    │    ├── columns: inv_date_sk:1!null inv_item_sk:2!null inv_warehouse_sk:3!null inv_quantity_on_hand:4
+      │    │    │    │    │    │    │    ├── key: (1-3)
+      │    │    │    │    │    │    │    ├── fd: (1-3)-->(4)
+      │    │    │    │    │    │    │    └── ordering: +1
+      │    │    │    │    │    │    ├── select
+      │    │    │    │    │    │    │    ├── columns: d_date_sk:47!null d_year:53!null date_dim.d_moy:55
+      │    │    │    │    │    │    │    ├── key: (47)
+      │    │    │    │    │    │    │    ├── fd: ()-->(53), (47)-->(55)
+      │    │    │    │    │    │    │    ├── ordering: +47 opt(53) [actual: +47]
+      │    │    │    │    │    │    │    ├── scan date_dim
+      │    │    │    │    │    │    │    │    ├── columns: d_date_sk:47!null d_year:53 date_dim.d_moy:55
+      │    │    │    │    │    │    │    │    ├── key: (47)
+      │    │    │    │    │    │    │    │    ├── fd: (47)-->(53,55)
+      │    │    │    │    │    │    │    │    └── ordering: +47
+      │    │    │    │    │    │    │    └── filters
+      │    │    │    │    │    │    │         └── d_year:53 = 2000 [outer=(53), constraints=(/53: [/2000 - /2000]; tight), fd=()-->(53)]
+      │    │    │    │    │    │    └── filters (true)
+      │    │    │    │    │    ├── scan item
+      │    │    │    │    │    │    ├── columns: item.i_item_sk:7!null
+      │    │    │    │    │    │    └── key: (7)
+      │    │    │    │    │    └── filters
+      │    │    │    │    │         └── inv_item_sk:2 = item.i_item_sk:7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ]), fd=(2)==(7), (7)==(2)]
+      │    │    │    │    ├── scan warehouse
+      │    │    │    │    │    ├── columns: warehouse.w_warehouse_sk:31!null warehouse.w_warehouse_name:33
+      │    │    │    │    │    ├── key: (31)
+      │    │    │    │    │    └── fd: (31)-->(33)
+      │    │    │    │    └── filters
+      │    │    │    │         └── inv_warehouse_sk:3 = warehouse.w_warehouse_sk:31 [outer=(3,31), constraints=(/3: (/NULL - ]; /31: (/NULL - ]), fd=(3)==(31), (31)==(3)]
+      │    │    │    └── aggregations
+      │    │    │         ├── std-dev [as=stddev_samp:77, outer=(4)]
+      │    │    │         │    └── inv_quantity_on_hand:4
+      │    │    │         ├── avg [as=avg:78, outer=(4)]
+      │    │    │         │    └── inv_quantity_on_hand:4
+      │    │    │         └── const-agg [as=warehouse.w_warehouse_name:33, outer=(33)]
+      │    │    │              └── warehouse.w_warehouse_name:33
+      │    │    └── filters
+      │    │         └── CASE avg:78 WHEN 0 THEN 0 ELSE stddev_samp:77 / avg:78 END > 1 [outer=(77,78), immutable]
+      │    └── projections
+      │         └── CASE avg:78 WHEN 0 THEN CAST(NULL AS DECIMAL) ELSE stddev_samp:77 / avg:78 END [as=cov:79, outer=(77,78), immutable]
+      └── inner-join (hash)
+           ├── columns: w_warehouse_sk:81!null i_item_sk:82!null d_moy:83!null mean:85 cov:86!null w_warehouse_sk:88!null i_item_sk:89!null d_moy:90!null mean:92 cov:93
+           ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+           ├── immutable
+           ├── key: (88,89)
+           ├── fd: ()-->(83,90), (81,82)-->(85,86), (88,89)-->(92,93), (82)==(89), (89)==(82), (81)==(88), (88)==(81)
+           ├── select
+           │    ├── columns: w_warehouse_sk:88!null i_item_sk:89!null d_moy:90!null mean:92 cov:93
+           │    ├── key: (88,89)
+           │    ├── fd: ()-->(90), (88,89)-->(92,93)
+           │    ├── with-scan &1 (inv)
+           │    │    ├── columns: w_warehouse_sk:88!null i_item_sk:89!null d_moy:90 mean:92 cov:93
+           │    │    ├── mapping:
+           │    │    │    ├──  warehouse.w_warehouse_sk:31 => w_warehouse_sk:88
+           │    │    │    ├──  item.i_item_sk:7 => i_item_sk:89
+           │    │    │    ├──  date_dim.d_moy:55 => d_moy:90
+           │    │    │    ├──  avg:78 => mean:92
+           │    │    │    └──  cov:79 => cov:93
+           │    │    ├── key: (88-90)
+           │    │    └── fd: (88-90)-->(92,93)
+           │    └── filters
+           │         └── d_moy:90 = 2 [outer=(90), constraints=(/90: [/2 - /2]; tight), fd=()-->(90)]
+           ├── select
+           │    ├── columns: w_warehouse_sk:81!null i_item_sk:82!null d_moy:83!null mean:85 cov:86!null
+           │    ├── immutable
+           │    ├── key: (81,82)
+           │    ├── fd: ()-->(83), (81,82)-->(85,86)
+           │    ├── with-scan &1 (inv)
+           │    │    ├── columns: w_warehouse_sk:81!null i_item_sk:82!null d_moy:83 mean:85 cov:86
+           │    │    ├── mapping:
+           │    │    │    ├──  warehouse.w_warehouse_sk:31 => w_warehouse_sk:81
+           │    │    │    ├──  item.i_item_sk:7 => i_item_sk:82
+           │    │    │    ├──  date_dim.d_moy:55 => d_moy:83
+           │    │    │    ├──  avg:78 => mean:85
+           │    │    │    └──  cov:79 => cov:86
+           │    │    ├── key: (81-83)
+           │    │    └── fd: (81-83)-->(85,86)
+           │    └── filters
+           │         ├── d_moy:83 = 1 [outer=(83), constraints=(/83: [/1 - /1]; tight), fd=()-->(83)]
+           │         └── cov:86 > 1.5 [outer=(86), immutable, constraints=(/86: (/1.5 - ]; tight)]
+           └── filters
+                ├── i_item_sk:82 = i_item_sk:89 [outer=(82,89), constraints=(/82: (/NULL - ]; /89: (/NULL - ]), fd=(82)==(89), (89)==(82)]
+                └── w_warehouse_sk:81 = w_warehouse_sk:88 [outer=(81,88), constraints=(/81: (/NULL - ]; /88: (/NULL - ]), fd=(81)==(88), (88)==(81)]
+
+# --------------------------------------------------
+# Q40
+# NOTE: Added conversion of 30 days to an interval.
+opt
+	SELECT
+		w_state,
+		i_item_id,
+		sum(
+			CASE
+			WHEN (
+				CAST(d_date AS DATE)
+				< CAST('2001-05-02' AS DATE)
+			)
+			THEN cs_sales_price - COALESCE(cr_refunded_cash, 0)
+			ELSE 0
+			END
+		)
+			AS sales_before,
+		sum(
+			CASE
+			WHEN (
+				CAST(d_date AS DATE)
+				>= CAST('2001-05-02' AS DATE)
+			)
+			THEN cs_sales_price - COALESCE(cr_refunded_cash, 0)
+			ELSE 0
+			END
+		)
+			AS sales_after
+	FROM
+		catalog_sales
+		LEFT JOIN catalog_returns ON
+				cs_order_number = cr_order_number
+				AND cs_item_sk = cr_item_sk,
+		warehouse,
+		item,
+		date_dim
+	WHERE
+		i_current_price BETWEEN 0.99 AND 1.49
+		AND i_item_sk = cs_item_sk
+		AND cs_warehouse_sk = w_warehouse_sk
+		AND cs_sold_date_sk = d_date_sk
+		AND d_date BETWEEN (CAST('2001-05-02' AS DATE) - '30 days'::INTERVAL) AND (CAST('2001-05-02' AS DATE) + '30 days'::INTERVAL)
+	GROUP BY
+		w_state, i_item_id
+	ORDER BY
+		w_state, i_item_id
+	LIMIT
+		100;
+----
+limit
+ ├── columns: w_state:76 i_item_id:83!null sales_before:137 sales_after:139
+ ├── internal-ordering: +76,+83
+ ├── cardinality: [0 - 100]
+ ├── immutable
+ ├── key: (76,83)
+ ├── fd: (76,83)-->(137,139)
+ ├── ordering: +76,+83
+ ├── group-by (streaming)
+ │    ├── columns: w_state:76 i_item_id:83!null sum:137 sum:139
+ │    ├── grouping columns: w_state:76 i_item_id:83!null
+ │    ├── immutable
+ │    ├── key: (76,83)
+ │    ├── fd: (76,83)-->(137,139)
+ │    ├── ordering: +76,+83
+ │    ├── limit hint: 100.00
+ │    ├── project
+ │    │    ├── columns: column136:136 column138:138 w_state:76 i_item_id:83!null
+ │    │    ├── immutable
+ │    │    ├── ordering: +76,+83
+ │    │    ├── limit hint: 238.98
+ │    │    ├── left-join (lookup catalog_returns)
+ │    │    │    ├── columns: cs_sold_date_sk:1!null cs_warehouse_sk:15!null cs_item_sk:16!null cs_order_number:18!null cs_sales_price:22 cr_item_sk:39 cr_order_number:53 cr_refunded_cash:60 w_warehouse_sk:66!null w_state:76 i_item_sk:82!null i_item_id:83!null i_current_price:87!null d_date_sk:106!null d_date:108!null
+ │    │    │    ├── key columns: [16 18] = [39 53]
+ │    │    │    ├── lookup columns are key
+ │    │    │    ├── immutable
+ │    │    │    ├── key: (18,82)
+ │    │    │    ├── fd: (16,18)-->(1,15,22,39,53,60), (39,53)-->(60), (66)-->(76), (82)-->(83,87), (106)-->(108), (15)==(66), (66)==(15), (16)==(82), (82)==(16), (1)==(106), (106)==(1)
+ │    │    │    ├── ordering: +76,+83
+ │    │    │    ├── limit hint: 238.98
+ │    │    │    ├── inner-join (lookup date_dim)
+ │    │    │    │    ├── columns: cs_sold_date_sk:1!null cs_warehouse_sk:15!null cs_item_sk:16!null cs_order_number:18!null cs_sales_price:22 w_warehouse_sk:66!null w_state:76 i_item_sk:82!null i_item_id:83!null i_current_price:87!null d_date_sk:106!null d_date:108!null
+ │    │    │    │    ├── key columns: [1] = [106]
+ │    │    │    │    ├── lookup columns are key
+ │    │    │    │    ├── immutable
+ │    │    │    │    ├── key: (18,82)
+ │    │    │    │    ├── fd: (66)-->(76), (82)-->(83,87), (16,18)-->(1,15,22), (106)-->(108), (1)==(106), (106)==(1), (16)==(82), (82)==(16), (15)==(66), (66)==(15)
+ │    │    │    │    ├── ordering: +76,+83
+ │    │    │    │    ├── limit hint: 300.00
+ │    │    │    │    ├── sort
+ │    │    │    │    │    ├── columns: cs_sold_date_sk:1 cs_warehouse_sk:15!null cs_item_sk:16!null cs_order_number:18!null cs_sales_price:22 w_warehouse_sk:66!null w_state:76 i_item_sk:82!null i_item_id:83!null i_current_price:87!null
+ │    │    │    │    │    ├── immutable
+ │    │    │    │    │    ├── key: (18,82)
+ │    │    │    │    │    ├── fd: (66)-->(76), (16,18)-->(1,15,22), (82)-->(83,87), (16)==(82), (82)==(16), (15)==(66), (66)==(15)
+ │    │    │    │    │    ├── ordering: +76,+83
+ │    │    │    │    │    ├── limit hint: 9000.00
+ │    │    │    │    │    └── inner-join (hash)
+ │    │    │    │    │         ├── columns: cs_sold_date_sk:1 cs_warehouse_sk:15!null cs_item_sk:16!null cs_order_number:18!null cs_sales_price:22 w_warehouse_sk:66!null w_state:76 i_item_sk:82!null i_item_id:83!null i_current_price:87!null
+ │    │    │    │    │         ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-more)
+ │    │    │    │    │         ├── immutable
+ │    │    │    │    │         ├── key: (18,82)
+ │    │    │    │    │         ├── fd: (66)-->(76), (16,18)-->(1,15,22), (82)-->(83,87), (16)==(82), (82)==(16), (15)==(66), (66)==(15)
+ │    │    │    │    │         ├── inner-join (lookup catalog_sales)
+ │    │    │    │    │         │    ├── columns: cs_sold_date_sk:1 cs_warehouse_sk:15 cs_item_sk:16!null cs_order_number:18!null cs_sales_price:22 i_item_sk:82!null i_item_id:83!null i_current_price:87!null
+ │    │    │    │    │         │    ├── key columns: [82] = [16]
+ │    │    │    │    │         │    ├── immutable
+ │    │    │    │    │         │    ├── key: (18,82)
+ │    │    │    │    │         │    ├── fd: (16,18)-->(1,15,22), (82)-->(83,87), (16)==(82), (82)==(16)
+ │    │    │    │    │         │    ├── select
+ │    │    │    │    │         │    │    ├── columns: i_item_sk:82!null i_item_id:83!null i_current_price:87!null
+ │    │    │    │    │         │    │    ├── immutable
+ │    │    │    │    │         │    │    ├── key: (82)
+ │    │    │    │    │         │    │    ├── fd: (82)-->(83,87)
+ │    │    │    │    │         │    │    ├── scan item
+ │    │    │    │    │         │    │    │    ├── columns: i_item_sk:82!null i_item_id:83!null i_current_price:87
+ │    │    │    │    │         │    │    │    ├── key: (82)
+ │    │    │    │    │         │    │    │    └── fd: (82)-->(83,87)
+ │    │    │    │    │         │    │    └── filters
+ │    │    │    │    │         │    │         └── (i_current_price:87 >= 0.99) AND (i_current_price:87 <= 1.49) [outer=(87), immutable, constraints=(/87: [/0.99 - /1.49]; tight)]
+ │    │    │    │    │         │    └── filters (true)
+ │    │    │    │    │         ├── scan warehouse
+ │    │    │    │    │         │    ├── columns: w_warehouse_sk:66!null w_state:76
+ │    │    │    │    │         │    ├── key: (66)
+ │    │    │    │    │         │    └── fd: (66)-->(76)
+ │    │    │    │    │         └── filters
+ │    │    │    │    │              └── cs_warehouse_sk:15 = w_warehouse_sk:66 [outer=(15,66), constraints=(/15: (/NULL - ]; /66: (/NULL - ]), fd=(15)==(66), (66)==(15)]
+ │    │    │    │    └── filters
+ │    │    │    │         └── (d_date:108 >= '2001-04-02') AND (d_date:108 <= '2001-06-01') [outer=(108), constraints=(/108: [/'2001-04-02' - /'2001-06-01']; tight)]
+ │    │    │    └── filters (true)
+ │    │    └── projections
+ │    │         ├── CASE WHEN d_date:108 < '2001-05-02' THEN cs_sales_price:22 - COALESCE(cr_refunded_cash:60::DECIMAL, 0) ELSE 0 END [as=column136:136, outer=(22,60,108), immutable]
+ │    │         └── CASE WHEN d_date:108 >= '2001-05-02' THEN cs_sales_price:22 - COALESCE(cr_refunded_cash:60::DECIMAL, 0) ELSE 0 END [as=column138:138, outer=(22,60,108), immutable]
+ │    └── aggregations
+ │         ├── sum [as=sum:137, outer=(136)]
+ │         │    └── column136:136
+ │         └── sum [as=sum:139, outer=(138)]
+ │              └── column138:138
+ └── 100

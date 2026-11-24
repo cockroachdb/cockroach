@@ -17,8 +17,8 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/version"
 	"github.com/google/go-github/github"
 	"golang.org/x/oauth2"
 )
@@ -66,7 +66,7 @@ func (p *poster) getProbableMilestone(ctx *postCtx) *int {
 		ctx.Printf("unable to parse version from binary version to determine milestone: %s", err)
 		return nil
 	}
-	vstring := fmt.Sprintf("%d.%d", v.Major(), v.Minor())
+	vstring := v.Format("%X.%Y")
 
 	milestones, _, err := p.listMilestones(ctx, p.Org, p.Repo, &github.MilestoneListOptions{
 		State: "open",
@@ -99,20 +99,17 @@ type poster struct {
 		opts *github.CommitsListOptions) ([]*github.RepositoryCommit, *github.Response, error)
 	listMilestones func(ctx context.Context, owner string, repo string,
 		opt *github.MilestoneListOptions) ([]*github.Milestone, *github.Response, error)
-	createProjectCard func(ctx context.Context, columnID int64,
-		opt *github.ProjectCardOptions) (*github.ProjectCard, *github.Response, error)
 }
 
 func newPoster(l Logger, client *github.Client, opts *Options) *poster {
 	return &poster{
-		Options:           opts,
-		l:                 l,
-		createIssue:       client.Issues.Create,
-		searchIssues:      client.Search.Issues,
-		createComment:     client.Issues.CreateComment,
-		listCommits:       client.Repositories.ListCommits,
-		listMilestones:    client.Issues.ListMilestones,
-		createProjectCard: client.Projects.CreateProjectCard,
+		Options:        opts,
+		l:              l,
+		createIssue:    client.Issues.Create,
+		searchIssues:   client.Search.Issues,
+		createComment:  client.Issues.CreateComment,
+		listCommits:    client.Repositories.ListCommits,
+		listMilestones: client.Issues.ListMilestones,
 	}
 }
 
@@ -160,11 +157,13 @@ type Options struct {
 	Token            string // GitHub API token
 	Org              string
 	Repo             string
-	SHA              string
+	SHA              string // optional; if empty, commit info is omitted from issue body
 	Branch           string
 	GetBinaryVersion func() string
-	// One of the following sub-structs is expected to be populated. Post()
-	// will fail if one is not.
+	// At most one of the following sub-structs is expected to be populated.
+	// When neither is set, no build URL is included in the issue. The
+	// IssueFormatter is responsible for providing any necessary links in
+	// this case.
 	TeamCityOptions *TeamCityOptions
 	EngFlowOptions  *EngFlowOptions
 }
@@ -188,6 +187,7 @@ func DefaultOptionsFromEnv() *Options {
 		goFlagsEnv             = "GOFLAGS"
 	)
 
+	branch := strings.TrimPrefix(maybeEnv(teamcityBuildBranchEnv, "branch-not-found-in-env"), "refs/heads/")
 	return &Options{
 		Token: maybeEnv(githubAPITokenEnv, ""),
 		Org:   maybeEnv(githubOrgEnv, "cockroachdb"),
@@ -197,7 +197,7 @@ func DefaultOptionsFromEnv() *Options {
 		// at least it'll be obvious that something went wrong (as an
 		// issue will be posted pointing at that SHA).
 		SHA:              maybeEnv(teamcityVCSNumberEnv, "8548987813ff9e1b8a9878023d3abfc6911c16db"),
-		Branch:           maybeEnv(teamcityBuildBranchEnv, "branch-not-found-in-env"),
+		Branch:           branch,
 		GetBinaryVersion: build.BinaryVersion,
 		TeamCityOptions: &TeamCityOptions{
 			BuildTypeID: maybeEnv(teamcityBuildTypeIDEnv, "BUILDTYPE_ID-not-found-in-env"),
@@ -218,9 +218,15 @@ func maybeEnv(envKey, defaultValue string) string {
 }
 
 // CanPost returns true if the github API token environment variable is set to
-// a nontrivial value.
+// a nontrivial value and if the GITHUB_REPOSITORY environment variable is set
+// to an appropriate value.
 func (o *Options) CanPost() bool {
-	return o.Token != ""
+	const cockroach = "cockroachdb/cockroach"
+	// NB: GitHub Actions sets the GITHUB_REPOSITORY environment variable.
+	// We don't want issue posting to run on forks, so this will keep that
+	// from happening. Note we check the GITHUB_REPO env var below, which is
+	// different. It's manually set in TeamCity in various places.
+	return maybeEnv("GITHUB_REPOSITORY", cockroach) == cockroach && o.Token != ""
 }
 
 // IsReleaseBranch returns true for branches that we want to treat as
@@ -252,12 +258,6 @@ type TemplateData struct {
 	ArtifactsURL string
 	// URL is the link to the failing build.
 	URL string
-	// SideEyeSnapshotURL is the URL for accessing a Side-Eye snapshot associated
-	// with this test failure. Empty if no such snapshot exists.
-	SideEyeSnapshotURL string
-	// SideEyeSnapshotMsg is a message to prepend to the link to the SideEye
-	// snapshot. Empty if SideEyeSnapshotURL is empty.
-	SideEyeSnapshotMsg string
 	// Issues that match this one, except they're on other branches.
 	RelatedIssues []github.Issue
 	// InternalLog contains information about non-critical issues encountered
@@ -272,19 +272,25 @@ func (p *poster) templateData(
 	if req.Artifacts != "" {
 		artifactsURL = p.teamcityArtifactsURL(req.Artifacts).String()
 	}
+	var commitURL string
+	if p.SHA != "" {
+		commitURL = fmt.Sprintf("https://github.com/%s/%s/commits/%s", p.Org, p.Repo, p.SHA)
+	}
+	var buildURL string
+	if u := p.buildURL(); u != nil {
+		buildURL = u.String()
+	}
 	return TemplateData{
-		PostRequest:        req,
-		PackageNameShort:   strings.TrimPrefix(req.PackageName, CockroachPkgPrefix),
-		Parameters:         p.parameters(req.ExtraParams),
-		CondensedMessage:   CondensedMessage(req.Message),
-		Commit:             p.SHA,
-		CommitURL:          fmt.Sprintf("https://github.com/%s/%s/commits/%s", p.Org, p.Repo, p.SHA),
-		Branch:             p.Branch,
-		ArtifactsURL:       artifactsURL,
-		URL:                p.buildURL().String(),
-		SideEyeSnapshotURL: req.SideEyeSnapshotURL,
-		SideEyeSnapshotMsg: req.SideEyeSnapshotMsg,
-		RelatedIssues:      relatedIssues,
+		PostRequest:      req,
+		PackageNameShort: strings.TrimPrefix(req.PackageName, CockroachPkgPrefix),
+		Parameters:       p.parameters(req.ExtraParams),
+		CondensedMessage: CondensedMessage(req.Message),
+		Commit:           p.SHA,
+		CommitURL:        commitURL,
+		Branch:           p.Branch,
+		ArtifactsURL:     artifactsURL,
+		URL:              buildURL,
+		RelatedIssues:    relatedIssues,
 	}
 }
 
@@ -365,6 +371,15 @@ func (tfi TestFailureIssue) String() string {
 	}
 }
 
+// branchTitlePrefix returns a prefix for issue titles on non-master branches
+// so that issues are visually distinguishable when scanning issue lists.
+func branchTitlePrefix(branch string) string {
+	if branch == "master" || branch == "" {
+		return ""
+	}
+	return branch + ": "
+}
+
 func (p *poster) post(
 	origCtx context.Context, formatter IssueFormatter, req PostRequest,
 ) (*TestFailureIssue, error) {
@@ -377,7 +392,7 @@ func (p *poster) post(
 
 	// We just want the title this time around, as we're going to use
 	// it to figure out if an issue already exists.
-	title := formatter.Title(data)
+	title := branchTitlePrefix(p.Branch) + formatter.Title(data)
 
 	// We carry out two searches below, one attempting to find an issue that we
 	// adopt (i.e. add a comment to) and one finding "related issues", i.e. those
@@ -449,19 +464,6 @@ func (p *poster) post(
 		result.Type = TestFailureNewIssue
 		result.ID = *issue.Number
 		p.l.Printf("%s", result)
-		if req.ProjectColumnID != 0 {
-			_, _, err := p.createProjectCard(ctx, int64(req.ProjectColumnID), &github.ProjectCardOptions{
-				ContentID:   *issue.ID,
-				ContentType: "Issue",
-			})
-			if err != nil {
-				// Tough luck, keep going.
-				//
-				// TODO(tbg): retrieve the project column ID before posting, so that if
-				// it can't be found we can mention that in the issue we'll file anyway.
-				p.l.Printf("could not create GitHub project card: %v", err)
-			}
-		}
 	} else {
 		comment := github.IssueComment{Body: github.String(body)}
 		if _, _, err := p.createComment(
@@ -559,12 +561,6 @@ type PostRequest struct {
 	// A path to the test artifacts relative to the artifacts root. If nonempty,
 	// allows the poster formatter to construct a direct URL to this directory.
 	Artifacts string
-	// SideEyeSnapshotURL is the URL for accessing a Side-Eye snapshot associated
-	// with this test failure. Empty if no such snapshot exists.
-	SideEyeSnapshotURL string
-	// SideEyeSnapshotMsg is a message to prepend to the link to the SideEye
-	// snapshot. Empty if SideEyeSnapshotURL is empty.
-	SideEyeSnapshotMsg string
 	// MentionOnCreate is a slice of GitHub handles (@foo, @cockroachdb/some-team, etc)
 	// that should be mentioned in the message when creating a new issue. These are
 	// *not* mentioned when posting to an existing issue.
@@ -572,10 +568,6 @@ type PostRequest struct {
 	// A help section of the issue, for example with links to documentation or
 	// instructions on how to reproduce the issue.
 	HelpCommand func(*Renderer)
-
-	// ProjectColumnID is the id of the GitHub project column to add the issue to,
-	// or 0 if none.
-	ProjectColumnID int
 }
 
 func (r PostRequest) labels() []string {

@@ -27,11 +27,7 @@ storiesOf("ActivateStatementDiagnosticsModal", module).add("default", () => {
       <Button type="primary" onClick={onClick}>
         Open
       </Button>
-      <ActivateStatementDiagnosticsModal
-        activate={noop}
-        refreshDiagnosticsReports={noop}
-        ref={ref}
-      />
+      <ActivateStatementDiagnosticsModal activate={noop} ref={ref} />
     </>
   );
 });

@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/gc"
@@ -21,11 +22,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/spanset"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
@@ -99,7 +100,6 @@ var mvccGCQueueInterval = settings.RegisterDurationSetting(
 	"kv.mvcc_gc.queue_interval",
 	"how long the mvcc gc queue waits between processing replicas",
 	mvccGCQueueDefaultTimerDuration,
-	settings.NonNegativeDuration,
 )
 
 // mvccGCQueueHighPriInterval
@@ -108,7 +108,6 @@ var mvccGCQueueHighPriInterval = settings.RegisterDurationSetting(
 	"kv.mvcc_gc.queue_high_priority_interval",
 	"how long the mvcc gc queue waits between processing high priority replicas (e.g. after table drops)",
 	mvccHiPriGCQueueDefaultTimerDuration,
-	settings.NonNegativeDuration,
 )
 
 // EnqueueInMvccGCQueueOnSpanConfigUpdateEnabled controls whether replicas
@@ -199,7 +198,6 @@ func newMVCCGCQueue(store *Store) *mvccGCQueue {
 			},
 			successes:       store.metrics.MVCCGCQueueSuccesses,
 			failures:        store.metrics.MVCCGCQueueFailures,
-			storeFailures:   store.metrics.StoreFailures,
 			pending:         store.metrics.MVCCGCQueuePending,
 			processingNanos: store.metrics.MVCCGCQueueProcessingNanos,
 			disabledConfig:  kvserverbase.MVCCGCQueueEnabled,
@@ -263,7 +261,7 @@ func (mgcq *mvccGCQueue) shouldQueue(
 		log.VErrEventf(ctx, 2, "failed to load span config: %v", err)
 		return false, 0
 	}
-	canGC, _, gcTimestamp, oldThreshold, newThreshold, err := repl.checkProtectedTimestampsForGC(ctx, conf.TTL())
+	canGC, gcTimestamp, oldThreshold, newThreshold, err := repl.checkProtectedTimestampsForGC(ctx, conf.TTL())
 	if err != nil {
 		log.VErrEventf(ctx, 2, "failed to check protected timestamp for gc: %v", err)
 		return false, 0
@@ -488,7 +486,7 @@ func makeMVCCGCQueueScoreImpl(
 	isGCScoreMet := func(score float64, minThreshold, maxThreshold float64, cooldown time.Duration) bool {
 		if minThreshold > maxThreshold {
 			if util.RaceEnabled {
-				log.Fatalf(ctx,
+				log.KvExec.Fatalf(ctx,
 					"invalid cooldown score thresholds. min (%f) must be less or equal to max (%f)",
 					minThreshold, maxThreshold)
 			}
@@ -586,6 +584,11 @@ func (r *replicaGCer) template() kvpb.GCRequest {
 	desc := r.repl.Desc()
 	var template kvpb.GCRequest
 	template.Key = desc.StartKey.AsRawKey()
+	if r.repl.RangeID == 1 {
+		// r1 should really start at LocalMax but it starts "officially" at KeyMin
+		// which is not addressable.
+		template.Key = keys.LocalMax
+	}
 	template.EndKey = desc.EndKey.AsRawKey()
 
 	return template
@@ -595,31 +598,15 @@ func (r *replicaGCer) send(ctx context.Context, req kvpb.GCRequest) error {
 	n := atomic.AddInt32(&r.count, 1)
 	log.Eventf(ctx, "sending batch %d (%d keys, %d rangekeys)", n, len(req.Keys), len(req.RangeKeys))
 
-	ba := &kvpb.BatchRequest{}
-	// Technically not needed since we're talking directly to the Replica.
-	ba.RangeID = r.repl.Desc().RangeID
-	ba.Timestamp = r.repl.Clock().Now()
-	ba.Add(&req)
-	// Since we are talking directly to the replica, we need to explicitly do
-	// admission control here, as we are bypassing server.Node.
-	var admissionHandle kvadmission.Handle
-	if r.admissionController != nil {
-		ba.AdmissionHeader = gcAdmissionHeader(r.repl.ClusterSettings())
-		ba.Replica.StoreID = r.storeID
-		var err error
-		admissionHandle, err = r.admissionController.AdmitKVWork(ctx, roachpb.SystemTenantID, ba)
-		if err != nil {
-			return err
-		}
-	}
-	_, writeBytes, pErr := r.repl.SendWithWriteBytes(ctx, ba)
-	defer writeBytes.Release()
-	if r.admissionController != nil {
-		r.admissionController.AdmittedKVWorkDone(admissionHandle, writeBytes)
-	}
-	if pErr != nil {
-		log.VErrEventf(ctx, 2, "%v", pErr.String())
-		return pErr.GoError()
+	var b kv.Batch
+	b.AddRawRequest(&req)
+	b.AdmissionHeader = gcAdmissionHeader(r.repl.ClusterSettings())
+	b.Header.WorkloadID = uint64(workloadid.WORKLOAD_ID_GC)
+	b.Header.WorkloadType = workloadid.WorkloadTypeSystem.ToUint32()
+
+	if err := r.repl.store.cfg.DB.Run(ctx, &b); err != nil {
+		log.KvExec.Infof(ctx, "%s", err)
+		return err
 	}
 	return nil
 }
@@ -676,11 +663,11 @@ func (r *replicaGCer) GC(
 //  7. push these transactions (again, recreating txn entries).
 //  8. send a GCRequest.
 func (mgcq *mvccGCQueue) process(
-	ctx context.Context, repl *Replica, _ spanconfig.StoreReader,
+	ctx context.Context, repl *Replica, _ spanconfig.StoreReader, _ float64,
 ) (processed bool, err error) {
 	// Record the CPU time processing the request for this replica. This is
 	// recorded regardless of errors that are encountered.
-	defer repl.MeasureReqCPUNanos(grunning.Time())
+	defer repl.MeasureReqCPUNanos(ctx, grunning.Time())
 
 	// Lookup the descriptor and GC policy for the zone containing this key range.
 	desc, conf := repl.DescAndSpanConfig()
@@ -688,7 +675,7 @@ func (mgcq *mvccGCQueue) process(
 	// Consult the protected timestamp state to determine whether we can GC and
 	// the timestamp which can be used to calculate the score and updated GC
 	// threshold.
-	canGC, cacheTimestamp, gcTimestamp, oldThreshold, newThreshold, err := repl.checkProtectedTimestampsForGC(ctx, conf.TTL())
+	canGC, gcTimestamp, oldThreshold, newThreshold, err := repl.checkProtectedTimestampsForGC(ctx, conf.TTL())
 	if err != nil {
 		return false, err
 	}
@@ -704,30 +691,19 @@ func (mgcq *mvccGCQueue) process(
 		log.VErrEventf(ctx, 2, "failed to fetch last processed time: %v", err)
 	}
 	r := makeMVCCGCQueueScore(ctx, repl, gcTimestamp, lastGC, conf.TTL(), canAdvanceGCThreshold)
-	log.VEventf(ctx, 2, "processing replica %s with score %s", repl.String(), r)
-	// Synchronize the new GC threshold decision with concurrent
-	// AdminVerifyProtectedTimestamp requests.
-	if err := repl.markPendingGC(cacheTimestamp, newThreshold); err != nil {
-		log.VEventf(ctx, 1, "not gc'ing replica %v due to pending protection: %v", repl, err)
-		return false, nil
-	}
+	log.KvExec.Infof(ctx,
+		"GC processing; score %s; gcTimestamp=%s, oldThreshold=%s, newThreshold=%s",
+		r, gcTimestamp, oldThreshold, newThreshold)
 	// Update the last processed timestamp.
 	if err := repl.setQueueLastProcessed(ctx, mgcq.name, repl.store.Clock().Now()); err != nil {
 		log.VErrEventf(ctx, 2, "failed to update last processed time: %v", err)
 	}
 
-	var snap storage.Reader
-	if repl.store.cfg.SharedStorageEnabled || storage.ShouldUseEFOS(&repl.ClusterSettings().SV) {
-		efos := repl.store.TODOEngine().NewEventuallyFileOnlySnapshot(rditer.MakeReplicatedKeySpans(desc))
-		if util.RaceEnabled {
-			ss := rditer.MakeReplicatedKeySpanSet(desc)
-			defer ss.Release()
-			snap = spanset.NewEventuallyFileOnlySnapshot(efos, ss)
-		} else {
-			snap = efos
-		}
-	} else {
-		snap = repl.store.TODOEngine().NewSnapshot()
+	snap := repl.store.StateEngine().NewSnapshot(rditer.MakeReplicatedKeySpans(desc)...)
+	if spanset.EnableAssertions {
+		ss := rditer.MakeReplicatedKeySpanSet(desc)
+		defer ss.Release()
+		snap = spanset.NewReader(snap, ss, hlc.Timestamp{})
 	}
 	defer snap.Close()
 
@@ -773,18 +749,16 @@ func (mgcq *mvccGCQueue) process(
 		},
 		func(ctx context.Context, txn *roachpb.Transaction) error {
 			err := repl.store.intentResolver.
-				CleanupTxnIntentsOnGCAsync(
-					ctx, gcAdmissionHeader(repl.store.ClusterSettings()), repl.RangeID, txn, gcTimestamp,
-					func(pushed, succeeded bool) {
-						if pushed {
-							mgcq.store.metrics.GCPushTxn.Inc(1)
-						}
-						if succeeded {
-							mgcq.store.metrics.GCResolveSuccess.Inc(int64(len(txn.LockSpans)))
-						} else {
-							mgcq.store.metrics.GCTxnIntentsResolveFailed.Inc(int64(len(txn.LockSpans)))
-						}
-					})
+				CleanupTxnIntentsOnGCAsync(gcAdmissionHeader(repl.store.ClusterSettings()), repl.RangeID, txn, gcTimestamp, func(pushed, succeeded bool) {
+					if pushed {
+						mgcq.store.metrics.GCPushTxn.Inc(1)
+					}
+					if succeeded {
+						mgcq.store.metrics.GCResolveSuccess.Inc(int64(len(txn.LockSpans)))
+					} else {
+						mgcq.store.metrics.GCTxnIntentsResolveFailed.Inc(int64(len(txn.LockSpans)))
+					}
+				})
 			if errors.Is(err, stop.ErrThrottled) {
 				log.Eventf(ctx, "processing txn %s: %s; skipping for future GC", txn.ID.Short(), err)
 				return nil
@@ -797,8 +771,7 @@ func (mgcq *mvccGCQueue) process(
 
 	scoreAfter := makeMVCCGCQueueScore(
 		ctx, repl, repl.store.Clock().Now(), lastGC, conf.TTL(), canAdvanceGCThreshold)
-	log.VEventf(ctx, 2, "MVCC stats after GC: %+v", repl.GetMVCCStats())
-	log.VEventf(ctx, 2, "GC score after GC: %s", scoreAfter)
+	log.KvExec.Infof(ctx, "GC complete; %s", info)
 	updateStoreMetricsWithGCInfo(mgcq.store.metrics, info)
 	// If the score after running through the queue indicates that this
 	// replica should be re-queued for GC it most likely means that there
@@ -814,9 +787,15 @@ func (mgcq *mvccGCQueue) process(
 	if scoreAfter.ShouldQueue {
 		// The scores are very long, so splitting into multiple lines manually for
 		// readability.
-		log.Infof(ctx, "GC still needed following GC, recomputing MVCC stats")
-		log.Infof(ctx, "old score %s", r)
-		log.Infof(ctx, "new score %s", scoreAfter)
+		//
+		// NB: there are likely situations in which this check triggers incorrectly,
+		// for example when the GC hint triggers GC but a protected timestamp
+		// prevents the GC threshold from advancing. In that case, not only did we
+		// run a GC cycle without improving anything, but we also pile up a stats
+		// recomputation. This is hopefully too rare to matter.
+		log.KvExec.Infof(ctx, "GC still needed following GC, recomputing MVCC stats")
+		log.KvExec.Infof(ctx, "old score %s", r)
+		log.KvExec.Infof(ctx, "new score %s", scoreAfter)
 		req := kvpb.RecomputeStatsRequest{
 			RequestHeader: kvpb.RequestHeader{Key: desc.StartKey.AsRawKey()},
 		}
@@ -824,7 +803,7 @@ func (mgcq *mvccGCQueue) process(
 		b.AddRawRequest(&req)
 		err := repl.store.db.Run(ctx, &b)
 		if err != nil {
-			log.Errorf(ctx, "failed to recompute stats with error=%s", err)
+			log.KvExec.Errorf(ctx, "failed to recompute stats with error=%s", err)
 		}
 	}
 
@@ -841,6 +820,7 @@ func updateStoreMetricsWithGCInfo(metrics *StoreMetrics, info gc.Info) {
 	metrics.GCTransactionSpanGCCommitted.Inc(int64(info.TransactionSpanGCCommitted))
 	metrics.GCTransactionSpanGCStaging.Inc(int64(info.TransactionSpanGCStaging))
 	metrics.GCTransactionSpanGCPending.Inc(int64(info.TransactionSpanGCPending))
+	metrics.GCTransactionSpanGCPrepared.Inc(int64(info.TransactionSpanGCPrepared))
 	metrics.GCAbortSpanScanned.Inc(int64(info.AbortSpanTotal))
 	metrics.GCAbortSpanConsidered.Inc(int64(info.AbortSpanConsidered))
 	metrics.GCAbortSpanGCNum.Inc(int64(info.AbortSpanGCNum))
@@ -865,7 +845,7 @@ func (mgcq *mvccGCQueue) postProcessScheduled(
 			mgcq.scanReplicasForHiPriGCHints(ctx, processedReplica.GetRangeID())
 			return ctx.Err()
 		}); err != nil {
-			log.Infof(ctx, "failed to start mvcc gc scan for range delete hints, error: %s", err)
+			log.KvExec.Infof(ctx, "failed to start mvcc gc scan for range delete hints, error: %s", err)
 		}
 		// Set flag indicating that we are already collecting high priority to avoid
 		// rescanning and re-enqueueing ranges multiple times.
@@ -908,7 +888,7 @@ func (mgcq *mvccGCQueue) scanReplicasForHiPriGCHints(
 				if !isLeaseHolder {
 					return true
 				}
-				added, _ := mgcq.addInternal(ctx, desc, replica.ReplicaID(), deleteRangePriority)
+				added, _ := mgcq.addInternal(ctx, desc, replica.ReplicaID(), deleteRangePriority, noopProcessCallback)
 				if added {
 					mgcq.store.metrics.GCEnqueueHighPriority.Inc(1)
 					foundReplicas++
@@ -917,7 +897,7 @@ func (mgcq *mvccGCQueue) scanReplicasForHiPriGCHints(
 		}
 		return true
 	})
-	log.Infof(ctx, "mvcc gc scan for range delete hints found %d replicas", foundReplicas)
+	log.KvExec.Infof(ctx, "mvcc gc scan for range delete hints found %d replicas", foundReplicas)
 }
 
 // timer returns a constant duration to space out GC processing

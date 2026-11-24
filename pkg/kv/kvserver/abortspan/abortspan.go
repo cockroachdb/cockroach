@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -87,7 +88,9 @@ func (sc *AbortSpan) Get(
 ) (bool, error) {
 	// Pull response from disk and read into reply if available.
 	key := keys.AbortSpanKey(sc.rangeID, txnID)
-	ok, err := storage.MVCCGetProto(ctx, reader, key, hlc.Timestamp{}, entry, storage.MVCCGetOptions{})
+	ok, err := storage.MVCCGetProto(ctx, reader, key, hlc.Timestamp{}, entry, storage.MVCCGetOptions{
+		ReadCategory: fs.AbortSpanReadCategory,
+	})
 	return ok, err
 }
 

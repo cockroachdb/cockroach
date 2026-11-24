@@ -116,3 +116,27 @@ BEGIN
   CALL p 1 2;
             ^
 HINT: try \h SET SESSION
+
+pretty
+BEGIN
+CALL p();
+END
+----
+BEGIN
+	CALL p();
+END;
+
+pretty
+BEGIN
+CALL some_long_procedure_name(first_argument, second_argument, third_argument, fourth_argument);
+END
+----
+BEGIN
+	CALL
+		some_long_procedure_name(
+			first_argument,
+			second_argument,
+			third_argument,
+			fourth_argument
+		);
+END;

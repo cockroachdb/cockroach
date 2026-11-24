@@ -23,11 +23,11 @@ import (
 	"reflect"
 	"regexp"
 	"runtime"
-	"runtime/debug"
 	"runtime/trace"
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"text/tabwriter"
 	"time"
@@ -42,7 +42,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
+	"github.com/cockroachdb/cockroach/pkg/security/provisioning"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -64,15 +67,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/floatcmp"
+	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/physicalplanutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventlog"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/system"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -221,6 +228,14 @@ import (
 //      statement ok
 //      CREATE TABLE kv (k INT PRIMARY KEY, v INT)
 //
+//    Usage of 'statement count N' is preferred whenever applicable (e.g. for
+//    DML statements) and in some cases is actually required by the framework.
+//    Use 'statement nocount ok' to explicitly opt out of the count check (e.g.
+//    because the count is non-determinstic).
+//
+//  - statement disable-cf-mutator ok
+//    Like "statement ok" but disables the column family mutator if applicable.
+//
 //  - statement notice <regexp>
 //    Like "statement ok" but expects a notice that matches the given regexp.
 //
@@ -249,19 +264,6 @@ import (
 //    Completes a pending statement with the provided name, validating its
 //    results as expected per the given options to "statement async <name>...".
 //
-//  - copy,copy-error
-//    Runs a COPY FROM STDIN statement, because of the separate data chunk it requires
-//    special logictest support. Format is:
-//      copy
-//      COPY <table> FROM STDIN;
-//      <blankline>
-//      COPY DATA
-//      ----
-//      <NUMROWS>
-//
-//    copy-error is just like copy but an error is expected and results should be error
-//    string.
-//
 //  - query <typestring> <options> <label>
 //    Runs the query that follows and verifies the results (specified after the
 //    query and a ---- separator). Example:
@@ -286,6 +288,9 @@ import (
 //        place of actual results.
 //
 //    Options are comma separated strings from the following:
+//      - match(<regexp>): returned rows with string representations that do not
+//            satisfy the given regexp are excluded from the test output. This
+//            is useful for condensing the output of EXPLAIN ANALYZE queries.
 //      - nosort: sorts neither the returned or expected rows. Skips the
 //            flakiness check that forces either rowsort, valuesort,
 //            partialsort, or an ORDER BY clause to be present.
@@ -317,19 +322,27 @@ import (
 //            asynchronously, subsequent queries that depend on the state of
 //            the query should be run with the "retry" option to ensure
 //            deterministic test results.
-//      - kvtrace: runs the query and compares against the results of the
-//            kv operations trace of the query. kvtrace optionally accepts
-//            arguments of the form kvtrace(op,op,...). Op is one of
-//            the accepted k/v arguments such as 'CPut', 'Scan' etc. It
-//            also accepts arguments of the form 'prefix=...'. For example,
-//            if kvtrace(CPut,Del,prefix=/Table/54,prefix=/Table/55), the
-//            results will be filtered to contain messages starting with
-//            CPut /Table/54, CPut /Table/55, Del /Table/54, Del /Table/55.
-//            Tenant IDs do not need to be included in prefixes and will be
-//            removed from results. Cannot be combined with noticetrace.
+//      - kvtrace: runs the query and compares against the results of the kv
+//            operations trace of the query. kvtrace optionally accepts arguments of the
+//            form kvtrace(op,op,...). Op is one of the accepted k/v arguments such as
+//            'CPut', 'Scan' etc. It also accepts arguments of the form 'prefix=...'. For
+//            example, if kvtrace(CPut,Del,prefix=/Table/54,prefix=/Table/55), the results
+//            will be filtered to contain messages starting with CPut /Table/54, CPut
+//            /Table/55, Del /Table/54, Del /Table/55. The 'redactbytes' will redact the
+//            contents of /BYTES/ values to prevent test flakiness in the presence of
+//            nondeterminism and/or processor architecture differences. Tenant IDs do not
+//            need to be included in prefixes and will be removed from results. Cannot be
+//            combined with noticetrace.
 //      - noticetrace: runs the query and compares only the notices that
 //						appear. Cannot be combined with kvtrace.
 //      - nodeidx=N: runs the query on node N of the cluster.
+//      - allowunsafe: allows access to unsafe internals during execution.
+//      - scrub-row-counts: removes lines containing "row count" from results
+//            to avoid test brittleness when virtual tables are added/removed.
+//      - strip-oids: replaces virtual table OIDs (9+ digit numbers) with
+//            "__OID__" placeholders. Automatically enabled for queries containing
+//            "pg_" references. To test specific OID values when enabled, adjust the
+// 						query projection to prefix, e.g 'oid='||t.oid.
 //
 //    The label is optional. If specified, the test runner stores a hash
 //    of the results of the query under the given label. If the label is
@@ -409,6 +422,8 @@ import (
 //    Skips the following `statement` or `query` if the argument is postgresql,
 //    cockroachdb, or a config matching the currently running
 //    configuration. Note that this is different from `skip`.
+//    - skipif bigendian/littleendian will skip the following `statement` or
+//      `query` if the system is big endian / little endian, respectively.
 //
 //  - onlyif <mysql/mssql/postgresql/cockroachdb/config [#ISSUE] CONFIG [CONFIG...]
 //    Skips the following `statement` or `query` if the argument is not
@@ -527,13 +542,19 @@ import (
 // - For troubleshooting / analysis: add -v -show-sql -error-summary.
 
 var (
-	resultsRE   = regexp.MustCompile(`^(\d+)\s+values?\s+hashing\s+to\s+([0-9A-Fa-f]+)$`)
-	noticeRE    = regexp.MustCompile(`^statement\s+(?:async\s+[[:alnum:]]+\s+)?notice\s+(.*)$`)
-	errorRE     = regexp.MustCompile(`^(?:statement|query)\s+(?:async\s+[[:alnum:]]+\s+)?error\s+(?:pgcode\s+([[:alnum:]]+)\s+)?(.*)$`)
-	varRE       = regexp.MustCompile(`\$[a-zA-Z][a-zA-Z_0-9]*`)
-	orderRE     = regexp.MustCompile(`(?i)ORDER\s+BY`)
-	explainRE   = regexp.MustCompile(`(?i)EXPLAIN\W+`)
-	showTraceRE = regexp.MustCompile(`(?i)SHOW\s+(KV\s+)?TRACE`)
+	resultsRE      = regexp.MustCompile(`^(\d+)\s+values?\s+hashing\s+to\s+([0-9A-Fa-f]+)$`)
+	noticeRE       = regexp.MustCompile(`^statement\s+(?:async\s+[[:alnum:]]+\s+)?notice\s+(.*)$`)
+	errorRE        = regexp.MustCompile(`^(?:statement|query)\s+(?:async\s+[[:alnum:]]+\s+)?error\s+(?:pgcode\s+([[:alnum:]]+)\s+)?(.*)$`)
+	varRE          = regexp.MustCompile(`\$[a-zA-Z][a-zA-Z_0-9]*`)
+	orderRE        = regexp.MustCompile(`(?i)ORDER\s+BY`)
+	explainRE      = regexp.MustCompile(`(?i)EXPLAIN\W+`)
+	showTraceRE    = regexp.MustCompile(`(?i)SHOW\s+(KV\s+)?TRACE`)
+	sendingBatchRE = regexp.MustCompile(`r\d+: (sending batch .*)`)
+	beforeTableRE  = regexp.MustCompile(`(<before:/Table/)\d+(>)`)
+	afterTableRE   = regexp.MustCompile(`(<after:/Table/)\d+(/.*>)`)
+	// virtualOidRE matches large OIDs (9+ digits) to strip them for test stability.
+	// These OIDs shift when virtual tables or other objects are added/removed.
+	virtualOidRE = regexp.MustCompile(`\b[1-9]\d{8,9}\b`)
 
 	// Bigtest is a flag which should be set if the long-running sqlite logic tests should be run.
 	Bigtest = flag.Bool("bigtest", false, "enable the long-running SqlLiteLogic test")
@@ -579,6 +600,24 @@ var (
 	)
 	sqlfmtLen = flag.Int("line-length", tree.DefaultPrettyCfg().LineWidth,
 		"target line length when using -rewrite-sql")
+
+	// metamorphicDisableOptRuleProbability and metamorphicOptimizerCostPerturbation
+	// mirror the testing_optimizer_cost_perturbation and
+	// testing_optimizer_disable_rule_probability session settings used by costfuzz and
+	// unoptimized-query-oracle. They are only applied when
+	// COCKROACH_LOGIC_TEST_OPTIMIZER_METAMORPHIC=true so that logictest files with
+	// fixed query plans are not perturbed during normal CI runs.
+	metamorphicDisableOptRuleProbability = metamorphic.ConstantWithTestChoice(
+		"logictest-disable-opt-rule-probability", float64(0), float64(0.5), float64(1.0))
+	// metamorphicOptimizerCostPerturbation mirrors the range used by costfuzz
+	// (see testing_optimizer_cost_perturbation). 0.1 exercises mild plan
+	// variation while 1.0 stress-tests extreme perturbations.
+	metamorphicOptimizerCostPerturbation = metamorphic.ConstantWithTestChoice(
+		"logictest-optimizer-cost-perturbation", float64(0), float64(0.1), float64(1.0))
+
+	logicTestOptimizerMetamorphicEnabled = envutil.EnvOrDefaultBool(
+		"COCKROACH_LOGIC_TEST_OPTIMIZER_METAMORPHIC", false)
+
 	disableOptRuleProbability = flag.Float64(
 		"disable-opt-rule-probability", 0,
 		"disable transformation rules in the cost-based optimizer with the given probability.")
@@ -592,6 +631,9 @@ var (
 	)
 	defaultWorkmem = flag.Bool("default-workmem", false,
 		"disable randomization of sql.distsql.temp_storage.workmem",
+	)
+	traceOnError = flag.Bool("trace-on-error", false,
+		"enable SQL session tracing for each statement/query and dump the trace to a file on failure",
 	)
 	// globalMVCCRangeTombstone will write a global MVCC range tombstone across
 	// the entire user keyspace during cluster bootstrapping. This should not
@@ -905,6 +947,9 @@ type logicQuery struct {
 	colNames bool
 	// some tests require the output to match modulo sorting.
 	sorter logicSorter
+	// match filters result rows such that only rows that have at least one
+	// column matching the regexp are included.
+	match *regexp.Regexp
 	// noSort is true if the nosort option was explicitly provided in the test.
 	noSort bool
 	// empty indicates whether the result is expected to be empty (i.e. 0 rows
@@ -942,6 +987,10 @@ type logicQuery struct {
 	// the particular operation types to filter on, such as CPut or Del.
 	kvOpTypes        []string
 	keyPrefixFilters []string
+	// kvtraceRedactBytes can only be used when kvtrace is true. When active, BYTES
+	// values in keys are expunged from output (to prevent test failures where the
+	// BYTES value is nondeterministic or architecture dependent).
+	kvtraceRedactBytes bool
 
 	// nodeIdx determines which node on the cluster to execute a query on for the given query.
 	nodeIdx int
@@ -960,12 +1009,25 @@ type logicQuery struct {
 	// roundFloatsInStringsSigFigs specifies the number of significant figures
 	// to round floats embedded in strings to where zero means do not round.
 	roundFloatsInStringsSigFigs int
+
+	// allowUnsafe indicates whether unsafe operations are allowed during execution.
+	allowUnsafe bool
+
+	// scrubRowCounts indicates whether to remove lines containing "row count"
+	// from results to avoid brittleness when virtual tables are added/removed.
+	scrubRowCounts bool
+
+	// stripOids indicates whether to replace virtual table OIDs (matching
+	// 429\d{7}) with a placeholder to avoid test brittleness. This is
+	// automatically enabled for queries containing "pg_" unless explicitly
+	// disabled with no-strip-oids. If you need to test actual OID values,
+	// offset them below the detection range or use no-strip-oids.
+	stripOids bool
 }
 
 var allowedKVOpTypes = []string{
 	"CPut",
 	"Put",
-	"InitPut",
 	"Del",
 	"DelRange",
 	"ClearRange",
@@ -1060,6 +1122,10 @@ type logicTest struct {
 	// traceFile holds the current trace file between "traceon"
 	// and "traceoff" directives.
 	traceFile *os.File
+	// traceDir holds the directory for --trace-on-error output files. It
+	// points to the test's log scope directory so that traces are written
+	// alongside CockroachDB logs and survive test failure.
+	traceDir string
 	// verbose indicate whether -v was passed.
 	verbose bool
 	// perErrorSummary retains the per-error list of failing queries
@@ -1093,6 +1159,13 @@ type logicTest struct {
 	skipOnRetry    bool
 	skippedOnRetry bool
 
+	// skippedDueToSnappy is sticky once set: it indicates that the
+	// "Can't find decompressor for snappy" infra flake was detected
+	// (#124966), the testserver cluster has been stopped, and the
+	// remainder of the test should be skipped rather than run further
+	// directives against the dead cluster.
+	skippedDueToSnappy bool
+
 	// declarativeCorpusCollector used to save declarative schema changer state
 	// to disk.
 	declarativeCorpusCollector *corpus.Collector
@@ -1111,6 +1184,10 @@ type logicTest struct {
 	// retryDuration is the maximum duration to retry a statement when using
 	// the retry directive.
 	retryDuration time.Duration
+
+	// allowUnsafe is a variable which controls whether the test can access
+	// unsafe internals.
+	allowUnsafe atomic.Bool
 }
 
 func (t *logicTest) t() *testing.T {
@@ -1140,6 +1217,97 @@ func (t *logicTest) traceStop() {
 		t.traceFile.Close()
 		t.traceFile = nil
 	}
+}
+
+// enableSessionTracing enables SQL session tracing if --trace-on-error is set.
+// It should be called before executing a statement or query. The caller must
+// call disableSessionTracing after execution completes to stop recording.
+func (t *logicTest) enableSessionTracing() {
+	if !*traceOnError {
+		return
+	}
+	if _, err := t.db.Exec("SET TRACING = on"); err != nil {
+		t.t().Logf("warning: could not enable session tracing: %v", err)
+	}
+}
+
+// disableSessionTracing disables SQL session tracing if --trace-on-error is
+// set. It should be called after a statement or query has completed execution,
+// including after all result rows have been consumed and closed. The recorded
+// trace remains available via SHOW TRACE FOR SESSION until the next SET TRACING
+// = on.
+func (t *logicTest) disableSessionTracing() {
+	if !*traceOnError {
+		return
+	}
+	if _, err := t.db.Exec("SET TRACING = off"); err != nil {
+		t.t().Logf("warning: could not disable session tracing: %v", err)
+	}
+}
+
+// dumpSessionTrace retrieves the most recent session trace and writes it to a
+// file. pos is the file:line of the failing directive and sql is the SQL text
+// that was executed. The trace file is written to the test's log scope
+// directory so that it survives test failure.
+func (t *logicTest) dumpSessionTrace(pos, sql string) {
+	if !*traceOnError {
+		return
+	}
+	rows, err := t.db.Query(
+		"SELECT age, message, tag, location, operation FROM [SHOW TRACE FOR SESSION]",
+	)
+	if err != nil {
+		t.t().Logf("warning: could not retrieve session trace: %v", err)
+		return
+	}
+	defer rows.Close()
+
+	var buf bytes.Buffer
+	fmt.Fprintf(&buf, "Session trace for failed statement at %s\n", pos)
+	fmt.Fprintf(&buf, "SQL: %s\n", sql)
+	fmt.Fprintf(&buf, "%s\n", strings.Repeat("-", 80))
+
+	tw := tabwriter.NewWriter(&buf, 0, 1, 2, ' ', 0)
+	fmt.Fprintf(tw, "AGE\tMESSAGE\tTAG\tLOCATION\tOPERATION\n")
+	for rows.Next() {
+		var age, message, tag, location, operation string
+		if err := rows.Scan(&age, &message, &tag, &location, &operation); err != nil {
+			t.t().Logf("warning: error scanning trace row: %v", err)
+			return
+		}
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", age, message, tag, location, operation)
+	}
+	if err := tw.Flush(); err != nil {
+		t.t().Logf("warning: error flushing trace writer: %v", err)
+		return
+	}
+	if err := rows.Err(); err != nil {
+		t.t().Logf("warning: error reading trace rows: %v", err)
+		return
+	}
+
+	// Build a short, filesystem-safe name from pos (e.g. "\n/long/path/to/jobs:30").
+	// Use only the base filename and line number to avoid exceeding the OS
+	// filename length limit (255 bytes) with long Bazel sandbox paths.
+	cleanPos := strings.TrimLeft(pos, "\n")
+	if i := strings.LastIndex(cleanPos, "/"); i >= 0 {
+		cleanPos = cleanPos[i+1:]
+	}
+	cleanPos = strings.ReplaceAll(cleanPos, ":", "_")
+
+	// Write to the test's log scope directory so that traces appear
+	// alongside CockroachDB logs and survive test failure.
+	if t.traceDir == "" {
+		t.t().Logf("warning: no trace directory configured; skipping trace dump")
+		return
+	}
+	filename := filepath.Join(t.traceDir, fmt.Sprintf("trace_%s.txt", cleanPos))
+
+	if err := os.WriteFile(filename, buf.Bytes(), 0644); err != nil {
+		t.t().Logf("warning: could not write trace file: %v", err)
+		return
+	}
+	t.t().Logf("session trace written to %s", filename)
 }
 
 // substituteVars replaces all occurrences of "$abc", where "abc" is a variable
@@ -1200,7 +1368,7 @@ func (t *logicTest) outf(format string, args ...interface{}) {
 	if !t.verbose {
 		return
 	}
-	log.Infof(context.Background(), format, args...)
+	log.Dev.Infof(context.Background(), format, args...)
 	msg := fmt.Sprintf(format, args...)
 	now := timeutil.Now().Format("15:04:05")
 	fmt.Printf("[%s] %s\n", now, msg)
@@ -1248,7 +1416,7 @@ func (t *logicTest) getOrOpenClient(user string, nodeIdx int, newSession bool) *
 			addr = t.tenantAddrs[nodeIdx]
 		}
 		var cleanupFunc func()
-		pgURL, cleanupFunc = sqlutils.PGUrl(t.rootT, addr, "TestLogic", url.User(pgUser))
+		pgURL, cleanupFunc = pgurlutils.PGUrl(t.rootT, addr, "TestLogic", url.User(pgUser))
 		t.clusterCleanupFuncs = append(t.clusterCleanupFuncs, cleanupFunc)
 	}
 	pgURL.Path = "test"
@@ -1295,6 +1463,11 @@ func (t *logicTest) openDB(pgURL url.URL) *gosql.DB {
 	}
 
 	connector := pq.ConnectorWithNoticeHandler(base, func(notice *pq.Error) {
+		// Skip all "waiting for job(s) to complete" notices, since they include
+		// non-deterministic jobIDs.
+		if strings.HasPrefix(notice.Message, "waiting for job") {
+			return
+		}
 		t.noticeBuffer = append(t.noticeBuffer, notice.Severity+": "+notice.Message)
 		if notice.Detail != "" {
 			t.noticeBuffer = append(t.noticeBuffer, "DETAIL: "+notice.Detail)
@@ -1333,6 +1506,11 @@ func (t *logicTest) newTestServerCluster(bootstrapBinaryPath, upgradeBinaryPath 
 	t.logsDir = logsDir
 
 	var envVars []string
+	// Set crash reporting URL to the empty string to disable Sentry crash reports.
+	envVars = append(envVars, "COCKROACH_CRASH_REPORTS=")
+	// Allow access to crdb_internal for mixed-version tests that need to check versions
+	// and for the framework's object validation queries.
+	envVars = append(envVars, "COCKROACH_OVERRIDE_ALLOW_UNSAFE_INTERNALS=true")
 	if strings.Contains(upgradeBinaryPath, "cockroach-short") {
 		// If we're using a cockroach-short binary, that means it was
 		// locally built, so we need to opt-out of version offsetting to
@@ -1428,6 +1606,8 @@ func (t *logicTest) handleWaitForInitErr(ts testserver.TestServer, err error) {
 			if ts != nil {
 				ts.Stop()
 			}
+			t.skippedDueToSnappy = true
+			t.testserverCluster = nil
 			t.t().Skip("ignoring init did not finish for node error due to snappy error")
 		}
 	}
@@ -1459,6 +1639,11 @@ func (t *logicTest) newCluster(
 		// disable stats collection on system tables in order to have
 		// deterministic tests.
 		stats.AutomaticStatisticsOnSystemTables.Override(context.Background(), &st.SV, false)
+		for _, opt := range clusterOpts {
+			if so, ok := opt.(settingsOpt); ok {
+				so.applySettings(st)
+			}
+		}
 		if t.cfg.UseFakeSpanResolver {
 			// We will need to update the DistSQL span resolver with the fake
 			// resolver, but this can only be done while DistSQL is disabled.
@@ -1471,13 +1656,20 @@ func (t *logicTest) newCluster(
 		return st
 	}
 	setSQLTestingKnobs := func(knobs *base.TestingKnobs) {
+		disableProb, costPerturb := optimizerTestingKnobValues(
+			serverArgs, *disableOptRuleProbability, *optimizerCostPerturbation,
+		)
 		knobs.SQLEvalContext = &eval.TestingKnobs{
 			AssertBinaryExprReturnTypes:     true,
 			AssertUnaryExprReturnTypes:      true,
 			AssertFuncExprReturnTypes:       true,
-			DisableOptimizerRuleProbability: *disableOptRuleProbability,
-			OptimizerCostPerturbation:       *optimizerCostPerturbation,
+			DisableOptimizerRuleProbability: disableProb,
+			OptimizerCostPerturbation:       costPerturb,
 			ForceProductionValues:           serverArgs.ForceProductionValues,
+			UnsafeOverride: func() *bool {
+				v := t.allowUnsafe.Load()
+				return &v
+			},
 		}
 		knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
 			DeterministicExplain:            true,
@@ -1502,7 +1694,6 @@ func (t *logicTest) newCluster(
 	// when run with fakedist-disk config, so we'll use a larger limit here.
 	// There isn't really a downside to doing so.
 	tempStorageDiskLimit := int64(512 << 20) /* 512 MiB */
-	// MVCC range tombstones are only available in 22.2 or newer.
 	shouldUseMVCCRangeTombstonesForPointDeletes := useMVCCRangeTombstonesForPointDeletes && !serverArgs.DisableUseMVCCRangeTombstonesForPointDeletes
 	ignoreMVCCRangeTombstoneErrors := globalMVCCRangeTombstone || shouldUseMVCCRangeTombstonesForPointDeletes
 
@@ -1536,7 +1727,6 @@ func (t *logicTest) newCluster(
 					DisableConsistencyQueue:  true,
 					GlobalMVCCRangeTombstone: globalMVCCRangeTombstone,
 					EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
-						DisableInitPutFailOnTombstones:    ignoreMVCCRangeTombstoneErrors,
 						UseRangeTombstonesForPointDeletes: shouldUseMVCCRangeTombstonesForPointDeletes,
 					},
 				},
@@ -1544,7 +1734,6 @@ func (t *logicTest) newCluster(
 					IgnoreOnDeleteRangeError: ignoreMVCCRangeTombstoneErrors,
 				},
 			},
-			ClusterName:   "testclustername",
 			ExternalIODir: t.sharedIODir,
 		},
 		// For distributed SQL tests, we use the fake span resolver; it doesn't
@@ -1601,9 +1790,8 @@ func (t *logicTest) newCluster(
 	// Update the defaults for automatic statistics to avoid delays in testing.
 	// Avoid making the DefaultAsOfTime too small to avoid interacting with
 	// schema changes and causing transaction retries.
-	// TODO(radu): replace these with testing knobs.
-	stats.DefaultAsOfTime = 10 * time.Millisecond
-	stats.DefaultRefreshInterval = time.Millisecond
+	stats.DefaultRefreshInterval = time.Second
+	stats.DefaultAsOfTime = 100 * time.Millisecond
 
 	t.cluster = serverutils.StartCluster(t.rootT, cfg.NumNodes, params)
 	t.purgeZoneConfig()
@@ -1709,17 +1897,26 @@ func (t *logicTest) newCluster(
 					t.Fatal(err)
 				}
 			}
+			if _, err := conn.Exec(
+				"RESET CLUSTER SETTING kv.closed_timestamp.target_duration",
+			); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := conn.Exec(
+				"RESET CLUSTER SETTING kv.closed_timestamp.side_transport_interval",
+			); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := conn.Exec(
+				"RESET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval",
+			); err != nil {
+				t.Fatal(err)
+			}
 		}
 
 		capabilities := toa.capabilities
 		if len(capabilities) > 0 {
-			for name, value := range capabilities {
-				query := fmt.Sprintf("ALTER TENANT [$1] GRANT CAPABILITY %s = $2", name)
-				if _, err := conn.Exec(query, tenantID.ToUint64(), value); err != nil {
-					t.Fatal(err)
-				}
-			}
-			capabilityMap := make(map[tenantcapabilities.ID]string, len(capabilities))
+			capabilityMap := make(map[tenantcapabilitiespb.ID]string, len(capabilities))
 			for k, v := range capabilities {
 				capability, ok := tenantcapabilities.FromName(k)
 				if !ok {
@@ -1727,7 +1924,7 @@ func (t *logicTest) newCluster(
 				}
 				capabilityMap[capability.ID()] = v
 			}
-			t.cluster.WaitForTenantCapabilities(t.t(), tenantID, capabilityMap)
+			t.cluster.GrantTenantCapabilities(context.Background(), t.t(), tenantID, capabilityMap)
 		}
 	}
 
@@ -1790,6 +1987,19 @@ func (t *logicTest) newCluster(
 			}
 		}
 
+		if cfg.DisableSchemaLockedByDefault {
+			if _, err := conn.Exec(
+				"SET CLUSTER SETTING sql.defaults.create_table_with_schema_locked = false",
+			); err != nil {
+				t.Fatal(err)
+			}
+		} else {
+			if _, err := conn.Exec(
+				"SET CLUSTER SETTING sql.defaults.create_table_with_schema_locked = true",
+			); err != nil {
+				t.Fatal(err)
+			}
+		}
 		// We disable the automatic stats collection in order to have
 		// deterministic tests.
 		//
@@ -1844,6 +2054,14 @@ func (t *logicTest) newCluster(
 			); err != nil {
 				t.Fatal(err)
 			}
+		}
+
+		// Ensure that vector index background operations are deterministic, so
+		// that tests don't flake.
+		if _, err := conn.Exec(
+			"SET CLUSTER SETTING sql.vecindex.deterministic_fixups.enabled = true",
+		); err != nil {
+			t.Fatal(err)
 		}
 	}
 
@@ -1975,7 +2193,10 @@ func (t *logicTest) setup(
 		skip.UnderRace(t.t(), "test uses a different binary, so the race detector doesn't work")
 		skip.UnderStress(t.t(), "test takes a long time and downloads release artifacts")
 		if !bazel.BuiltWithBazel() {
-			skip.IgnoreLint(t.t(), "cockroach-go/testserver can only be uzed in bazel builds")
+			skip.IgnoreLint(t.t(), "cockroach-go/testserver can only be used in bazel builds")
+		}
+		if runtime.GOARCH == "s390x" {
+			skip.IgnoreLint(t.t(), "cockroach-go/testserver is not operational on s390x")
 		}
 		if cfg.NumNodes != 3 {
 			t.Fatal("cockroach-go testserver tests must use 3 nodes")
@@ -2038,6 +2259,14 @@ type clusterOpt interface {
 	apply(args *base.TestServerArgs)
 }
 
+// settingsOpt is an optional interface that clusterOpts can implement to
+// apply settings overrides to the cluster settings object. This is useful for
+// overriding unsafe settings that cannot be set via SET CLUSTER SETTING
+// without the interlock.
+type settingsOpt interface {
+	applySettings(st *cluster.Settings)
+}
+
 // clusterOptTracingOff corresponds to the tracing-off directive.
 type clusterOptTracingOff struct{}
 
@@ -2062,11 +2291,23 @@ var _ knobOpt = knobOptSynchronousEventLog{}
 
 // apply implements the clusterOpt interface.
 func (c knobOptSynchronousEventLog) apply(args *base.TestingKnobs) {
-	_, ok := args.EventLog.(*sql.EventLogTestingKnobs)
+	_, ok := args.EventLog.(*eventlog.EventLogTestingKnobs)
 	if !ok {
-		args.EventLog = &sql.EventLogTestingKnobs{}
+		args.EventLog = &eventlog.EventLogTestingKnobs{}
 	}
-	args.EventLog.(*sql.EventLogTestingKnobs).SyncWrites = true
+	args.EventLog.(*eventlog.EventLogTestingKnobs).SyncWrites = true
+}
+
+// knobOptAllowUnsafe always allows access to the unsafe internals.
+type knobOptAllowUnsafe struct{}
+
+var _ knobOpt = knobOptAllowUnsafe{}
+
+// apply implements the clusterOpt interface.
+func (c knobOptAllowUnsafe) apply(args *base.TestingKnobs) {
+	e := args.SQLEvalContext.(*eval.TestingKnobs)
+	v := true
+	e.UnsafeOverride = func() *bool { return &v }
 }
 
 // clusterOptIgnoreStrictGCForTenants corresponds to the
@@ -2082,6 +2323,34 @@ func (c clusterOptIgnoreStrictGCForTenants) apply(args *base.TestServerArgs) {
 		args.Knobs.Store = &kvserver.StoreTestingKnobs{}
 	}
 	args.Knobs.Store.(*kvserver.StoreTestingKnobs).IgnoreStrictGCEnforcement = true
+}
+
+// clusterOptDisableUseMVCCRangeTombstonesForPointDeletes corresponds
+// to the disable-mvcc-range-tombstones-for-point-deletes directive.
+type clusterOptDisableUseMVCCRangeTombstonesForPointDeletes struct{}
+
+var _ clusterOpt = clusterOptDisableUseMVCCRangeTombstonesForPointDeletes{}
+
+// apply implements the clusterOpt interface.
+func (c clusterOptDisableUseMVCCRangeTombstonesForPointDeletes) apply(args *base.TestServerArgs) {
+	_, ok := args.Knobs.Store.(*kvserver.StoreTestingKnobs)
+	if !ok {
+		args.Knobs.Store = &kvserver.StoreTestingKnobs{}
+	}
+	args.Knobs.Store.(*kvserver.StoreTestingKnobs).EvalKnobs.UseRangeTombstonesForPointDeletes = false
+}
+
+// clusterOptEnablePreparedTransactions enables the unsafe prepared transactions
+// cluster setting via Override, bypassing the unsafe setting interlock.
+type clusterOptEnablePreparedTransactions struct{}
+
+var _ clusterOpt = clusterOptEnablePreparedTransactions{}
+var _ settingsOpt = clusterOptEnablePreparedTransactions{}
+
+func (c clusterOptEnablePreparedTransactions) apply(args *base.TestServerArgs) {}
+
+func (c clusterOptEnablePreparedTransactions) applySettings(st *cluster.Settings) {
+	sql.PreparedTransactionsEnabled.Override(context.Background(), &st.SV, true)
 }
 
 // knobOptDisableCorpusGeneration disables corpus generation for declarative
@@ -2207,6 +2476,8 @@ func readKnobOptions(t *testing.T, path string) []knobOpt {
 			res = append(res, knobOptDisableCorpusGeneration{})
 		case "sync-event-log":
 			res = append(res, knobOptSynchronousEventLog{})
+		case "allow-unsafe":
+			res = append(res, knobOptAllowUnsafe{})
 		default:
 			t.Fatalf("unrecognized knob option: %s", opt)
 		}
@@ -2228,6 +2499,10 @@ func readClusterOptions(t *testing.T, path string) []clusterOpt {
 			res = append(res, clusterOptTracingOff{})
 		case "ignore-tenant-strict-gc-enforcement":
 			res = append(res, clusterOptIgnoreStrictGCForTenants{})
+		case "disable-mvcc-range-tombstones-for-point-deletes":
+			res = append(res, clusterOptDisableUseMVCCRangeTombstonesForPointDeletes{})
+		case "enable-prepared-transactions-unsafe":
+			res = append(res, clusterOptEnablePreparedTransactions{})
 		default:
 			t.Fatalf("unrecognized cluster option: %s", opt)
 		}
@@ -2256,6 +2531,9 @@ func (t *logicTest) processTestFile(path string, config logictestbase.TestCluste
 		if *maxErrs > 0 && t.failures >= *maxErrs {
 			break
 		}
+		if t.skippedDueToSnappy {
+			break
+		}
 		// If subtest has no name, then it is not a subtest, so just run the lines
 		// in the overall test. Note that this can only happen in the first subtest.
 		if len(subtest.name) == 0 {
@@ -2275,6 +2553,10 @@ func (t *logicTest) processTestFile(path string, config logictestbase.TestCluste
 			})
 			t.maybeSkipOnRetry(nil)
 		}
+	}
+	if t.skippedDueToSnappy && !t.rootT.Failed() {
+		skip.IgnoreLintf(t.rootT,
+			"skipping remainder of test due to snappy infra flake; see #124966")
 	}
 
 	if (*rewriteResultsInTestfiles || *rewriteSQL) && !t.rootT.Failed() {
@@ -2303,14 +2585,14 @@ func (t *logicTest) hasOpenTxns(ctx context.Context) bool {
 			if err != nil {
 				// If we are unable to see transaction priority assume we're in the middle
 				// of an explicit txn.
-				log.Warningf(ctx, "failed to check txn priority with %v", err)
+				log.Dev.Warningf(ctx, "failed to check txn priority with %v", err)
 				return true
 			}
 			if _, err := user.Exec("SET TRANSACTION PRIORITY NORMAL;"); !testutils.IsError(err, "there is no transaction in progress") {
 				// Reset the txn priority to what it was before we checked for open txns.
 				_, err := user.Exec(fmt.Sprintf(`SET TRANSACTION PRIORITY %s`, existingTxnPriority))
 				if err != nil {
-					log.Warningf(ctx, "failed to reset txn priority with %v", err)
+					log.Dev.Warningf(ctx, "failed to reset txn priority with %v", err)
 				}
 				return true
 			}
@@ -2352,7 +2634,7 @@ func (t *logicTest) maybeBackupRestore(
 		t.setSessionUser(oldUser, oldNodeIdx, false /* newSession */)
 	}()
 
-	log.Info(context.Background(), "Running cluster backup and restore")
+	log.Dev.Info(context.Background(), "Running cluster backup and restore")
 
 	// To restore the same state in for the logic test, we need to restore the
 	// data and the session state. The session state includes things like session
@@ -2378,7 +2660,7 @@ func (t *logicTest) maybeBackupRestore(
 				userToHexSession[user][nodeIdx] = userSession
 				continue
 			}
-			log.Warningf(context.Background(), "failed to serialize session: %+v", err)
+			log.Dev.Warningf(context.Background(), "failed to serialize session: %+v", err)
 
 			// If we failed to serialize the session variables, lets save the output of
 			// `SHOW ALL`. This usually happens if the session contains prepared
@@ -2448,12 +2730,12 @@ func (t *logicTest) maybeBackupRestore(
 					// First try setting the cluster setting as a string.
 					if _, err := t.db.Exec(fmt.Sprintf("SET %s='%s'", key, value)); err != nil {
 						// If it fails, try setting the value as an int.
-						log.Infof(context.Background(), "setting session variable as string failed (err: %v), trying as int", pretty.Formatter(err))
+						log.Dev.Infof(context.Background(), "setting session variable as string failed (err: %v), trying as int", pretty.Formatter(err))
 						if _, err := t.db.Exec(fmt.Sprintf("SET %s=%s", key, value)); err != nil {
 							// Some cluster settings can't be set at all, so ignore these errors.
 							// If a setting that we needed could not be restored, we expect the
 							// logic test to fail and let us know.
-							log.Infof(context.Background(), "setting session variable as int failed: %v (continuing anyway)", pretty.Formatter(err))
+							log.Dev.Infof(context.Background(), "setting session variable as int failed: %v (continuing anyway)", pretty.Formatter(err))
 							continue
 						}
 					}
@@ -2651,16 +2933,10 @@ func (t *logicTest) processSubtest(
 				pos:         fmt.Sprintf("\n%s:%d", path, s.Line+subtest.lineLineIndexIntoFile),
 				expectCount: -1,
 			}
-			// Parse "statement (notice|error) <regexp>"
-			if m := noticeRE.FindStringSubmatch(s.Text()); m != nil {
-				stmt.expectNotice = m[1]
-			} else if m := errorRE.FindStringSubmatch(s.Text()); m != nil {
-				stmt.expectErrCode = m[1]
-				stmt.expectErr = m[2]
-			}
 			if len(fields) >= 3 && fields[1] == "async" {
 				stmt.expectAsync = true
 				stmt.statementName = fields[2]
+				// Consume 'async <name>'.
 				copy(fields[1:], fields[3:])
 				fields = fields[:len(fields)-2]
 			}
@@ -2670,25 +2946,74 @@ func (t *logicTest) processSubtest(
 					return err
 				}
 				stmt.expectCount = n
+				// Consume 'count <count>'.
+				copy(fields[1:], fields[3:])
+				fields = fields[:len(fields)-2]
+			}
+			fullyConsumed := len(fields) == 1
+			var disableCFMutator bool
+			var matchedStatementOK bool
+			// Parse "statement (notice|error) <regexp>"
+			if m := noticeRE.FindStringSubmatch(s.Text()); m != nil {
+				stmt.expectNotice = m[1]
+				fullyConsumed = true
+			} else if m := errorRE.FindStringSubmatch(s.Text()); m != nil {
+				stmt.expectErrCode = m[1]
+				stmt.expectErr = m[2]
+				fullyConsumed = true
+			} else if len(fields) == 3 && fields[1] == "disable-cf-mutator" && fields[2] == "ok" {
+				disableCFMutator = true
+				fullyConsumed = true
+			} else if len(fields) == 3 && fields[1] == "nocount" && fields[2] == "ok" {
+				fullyConsumed = true
+			} else if len(fields) == 2 && fields[1] == "ok" {
+				// Match 'ok' only if there are no options after it.
+				fullyConsumed = true
+				matchedStatementOK = true
+			}
+			if !fullyConsumed {
+				return errors.Newf("unexpected options for 'statement' command: %s", line)
 			}
 			if _, err := stmt.readSQL(t, s, false /* allowSeparator */); err != nil {
 				return err
 			}
+			isSQLite := strings.Contains(path, "sqllogictest")
+			if matchedStatementOK && !isSQLite {
+				// Require that DML stmts use 'statement count N', currently we
+				// only do this for "simple" DELETEs.
+				//
+				// We don't apply this to SQLite suite since we haven't adjusted
+				// it yet.
+				// TODO(yuzefovich): expand this to other DML statements.
+				// TODO(yuzefovich): apply this to more complex stmts with CTEs,
+				// etc.
+				// TODO(yuzefovich): expand this to sqllogictest too.
+				if strings.HasPrefix(strings.TrimSpace(strings.ToUpper(stmt.sql)), "DELETE") {
+					return errors.New("DELETE should use 'statement count N' directive instead of 'statement ok'")
+				}
+			}
 			if !s.Skip {
 				for i := 0; i < repeat; i++ {
+					if !stmt.expectAsync {
+						t.enableSessionTracing()
+					}
 					var cont bool
 					var err error
 					if t.retry {
 						err = testutils.SucceedsWithinError(func() error {
 							t.purgeZoneConfig()
 							var tempErr error
-							cont, tempErr = t.execStatement(stmt)
+							cont, tempErr = t.execStatement(stmt, disableCFMutator)
 							return tempErr
 						}, t.retryDuration)
 					} else {
-						cont, err = t.execStatement(stmt)
+						cont, err = t.execStatement(stmt, disableCFMutator)
+					}
+					if !stmt.expectAsync {
+						t.disableSessionTracing()
 					}
 					if err != nil {
+						t.dumpSessionTrace(stmt.pos, stmt.sql)
 						if !cont {
 							return err
 						}
@@ -2715,7 +3040,7 @@ func (t *logicTest) processSubtest(
 			}
 
 			execRes := <-pending.resultChan
-			err := t.finishExecQuery(pending.logicQuery, execRes.rows, execRes.err)
+			err := t.finishExecQuery(pending.logicQuery, []*gosql.Rows{execRes.rows}, execRes.err)
 			if err != nil {
 				t.Error(err)
 			}
@@ -2735,8 +3060,8 @@ func (t *logicTest) processSubtest(
 			} else if len(fields) < 2 {
 				return errors.Errorf("%s: invalid test statement: %s", query.pos, s.Text())
 			} else {
-				// Parse "query empty"
-				if len(fields) == 2 && fields[1] == "empty" {
+				// Parse "query empty <options>"
+				if fields[1] == "empty" {
 					query.empty = true
 				} else {
 					// Parse "query <type-string> <options> <label>"
@@ -2812,6 +3137,8 @@ func (t *logicTest) processSubtest(
 										matched = "/Tenant/%" + matched
 									}
 									query.keyPrefixFilters = append(query.keyPrefixFilters, matched)
+								} else if c == "redactbytes" {
+									query.kvtraceRedactBytes = true
 								} else if isAllowedKVOp(c) {
 									query.kvOpTypes = append(query.kvOpTypes, c)
 								} else {
@@ -2821,6 +3148,18 @@ func (t *logicTest) processSubtest(
 										allowedKVOpTypes,
 									)
 								}
+							}
+							continue
+						}
+
+						if strings.HasPrefix(opt, "match(") && strings.HasSuffix(opt, ")") {
+							s := opt
+							s = strings.TrimPrefix(s, "match(")
+							s = strings.TrimSuffix(s, ")")
+							var err error
+							query.match, err = regexp.Compile(s)
+							if err != nil {
+								return errors.Errorf("%s: invalid match regexp: %s", query.pos, opt)
 							}
 							continue
 						}
@@ -2849,6 +3188,7 @@ func (t *logicTest) processSubtest(
 							query.kvtrace = true
 							query.kvOpTypes = nil
 							query.keyPrefixFilters = nil
+							query.kvtraceRedactBytes = false
 
 						case "noticetrace":
 							query.noticetrace = true
@@ -2858,6 +3198,15 @@ func (t *logicTest) processSubtest(
 
 						case "async":
 							query.expectAsync = true
+
+						case "allowunsafe":
+							query.allowUnsafe = true
+
+						case "scrub-row-counts":
+							query.scrubRowCounts = true
+
+						case "strip-oids":
+							query.stripOids = true
 
 						default:
 							if strings.HasPrefix(opt, "round-in-strings") {
@@ -2978,6 +3327,11 @@ func (t *logicTest) processSubtest(
 			}
 
 			if !s.Skip {
+				// Save the original SQL before kvtrace rewrites it to
+				// a filtering SELECT. We use this for trace-on-error so
+				// the trace dump labels the original statement.
+				origSQL := query.sql
+
 				if query.kvtrace {
 					_, err := t.db.Exec("SET TRACING=on,kv")
 					if err != nil {
@@ -2994,7 +3348,13 @@ func (t *logicTest) processSubtest(
 
 					projection := `message`
 					if len(t.tenantApps) != 0 || t.cluster.StartedDefaultTestTenant() {
-						projection = `regexp_replace(message, '/Tenant/\d+', '')`
+						projection = `regexp_replace(message, '/Tenant/\d+', '', 'g')`
+					}
+					if query.kvtraceRedactBytes {
+						projection = fmt.Sprintf(
+							`regexp_replace(%s, '/BYTES/0x[abcdef\d]+', '/BYTES/:redacted:', 'g')`,
+							projection,
+						)
 					}
 					queryPrefix := fmt.Sprintf(`SELECT %s FROM [SHOW KV TRACE FOR SESSION] `, projection)
 					buildQuery := func(ops []string, keyFilters []string) string {
@@ -3010,7 +3370,9 @@ func (t *logicTest) processSubtest(
 								} else {
 									sb.WriteString("OR ")
 								}
-								sb.WriteString(fmt.Sprintf("message like '%s %s%%' ", c, f))
+								// % wildcard between command and prefix is for
+								// optional '(locking)' substring.
+								sb.WriteString(fmt.Sprintf("message LIKE '%s %%%s%%' ", c, f))
 							}
 						}
 						return sb.String()
@@ -3029,12 +3391,19 @@ func (t *logicTest) processSubtest(
 				}
 
 				for i := 0; i < repeat; i++ {
+					// Enable session tracing unless the query already manages
+					// its own tracing (kvtrace, noticetrace) or runs async.
+					traceThis := !query.kvtrace && !query.noticetrace && !query.expectAsync
+					if traceThis {
+						t.enableSessionTracing()
+					}
+					var queryErr error
 					if t.retry && !*rewriteResultsInTestfiles {
 						if err := testutils.SucceedsWithinError(func() error {
 							t.purgeZoneConfig()
 							return t.execQuery(query)
 						}, t.retryDuration); err != nil {
-							t.Error(err)
+							queryErr = err
 						}
 					} else {
 						if t.retry && *rewriteResultsInTestfiles {
@@ -3046,8 +3415,19 @@ func (t *logicTest) processSubtest(
 							time.Sleep(time.Second * 2)
 						}
 						if err := t.execQuery(query); err != nil {
-							t.Error(err)
+							queryErr = err
 						}
+					}
+					if traceThis {
+						t.disableSessionTracing()
+					}
+					if queryErr != nil {
+						// For kvtrace queries, the session trace from the
+						// original statement is still available because the
+						// filtering SELECT doesn't start a new trace. Pass
+						// origSQL so the dump labels the actual statement.
+						t.dumpSessionTrace(query.pos, origSQL)
+						t.Error(queryErr)
 					}
 				}
 			} else {
@@ -3078,22 +3458,27 @@ func (t *logicTest) processSubtest(
 			if _, err := stmt.readSQL(t, s, false /* allowSeparator */); err != nil {
 				return err
 			}
-			rows, err := t.db.Query(stmt.sql)
-			if err != nil {
-				return errors.Wrapf(err, "%s: error running query %s", stmt.pos, stmt.sql)
+
+			if s.Skip {
+				s.LogAndResetSkip(t.t())
+			} else {
+				rows, err := t.db.Query(stmt.sql)
+				if err != nil {
+					return errors.Wrapf(err, "%s: error running query %s", stmt.pos, stmt.sql)
+				}
+				if !rows.Next() {
+					return errors.Errorf("%s: no rows returned by query %s", stmt.pos, stmt.sql)
+				}
+				var val string
+				if err := rows.Scan(&val); err != nil {
+					return errors.Wrapf(err, "%s: error getting result from query %s", stmt.pos, stmt.sql)
+				}
+				if rows.Next() {
+					return errors.Errorf("%s: more than one row returned by query  %s", stmt.pos, stmt.sql)
+				}
+				t.t().Logf("let %s = %s\n", varName, val)
+				t.varMap[varName] = val
 			}
-			if !rows.Next() {
-				return errors.Errorf("%s: no rows returned by query %s", stmt.pos, stmt.sql)
-			}
-			var val string
-			if err := rows.Scan(&val); err != nil {
-				return errors.Wrapf(err, "%s: error getting result from query %s", stmt.pos, stmt.sql)
-			}
-			if rows.Next() {
-				return errors.Errorf("%s: more than one row returned by query  %s", stmt.pos, stmt.sql)
-			}
-			t.t().Logf("let %s = %s\n", varName, val)
-			t.varMap[varName] = val
 
 		case "halt", "hash-threshold":
 
@@ -3120,12 +3505,13 @@ func (t *logicTest) processSubtest(
 					return errors.Errorf("unknown user option: %s", fields[3])
 				}
 				newSession = true
+				provisioning.Testing.Supported = true
 			}
 			t.setSessionUser(fields[1], nodeIdx, newSession)
 			// In multi-tenant tests, we may need to also create database test when
 			// we switch to a different tenant.
 			//
-			// TODO(#76378): It seems the conditional should include `||
+			// TODO(#156124): It seems the conditional should include `||
 			// t.cluster.StartedDefaultTestTenant()` here, to cover the case
 			// where the config specified "Random" and a test tenant was
 			// effectively created.
@@ -3223,7 +3609,9 @@ func (t *logicTest) processSubtest(
 				for _, configName := range args {
 					if t.cfg.Name == configName || logictestbase.ConfigIsInDefaultList(t.cfg.Name, configName) {
 						s.SetSkip(fmt.Sprintf("unsupported configuration %s (%s)", configName, githubIssueStr(githubIssueID)))
-						break
+					}
+					if !logictestbase.ConfigExists(configName) {
+						return errors.Newf("logic test config %s doesn't exist", configName)
 					}
 				}
 			case "backup-restore":
@@ -3236,6 +3624,16 @@ func (t *logicTest) processSubtest(
 					"should be skip command instead of skipif: %s:%d",
 					path, s.Line+subtest.lineLineIndexIntoFile,
 				)
+			case "bigendian":
+				if system.BigEndian {
+					s.SetSkip("big endian system")
+					continue
+				}
+			case "littleendian":
+				if !system.BigEndian {
+					s.SetSkip("little endian system")
+					continue
+				}
 			default:
 				return errors.Errorf("unimplemented test statement: %s", s.Text())
 			}
@@ -3266,7 +3664,9 @@ func (t *logicTest) processSubtest(
 					if t.cfg.Name == configName || logictestbase.ConfigIsInDefaultList(t.cfg.Name, configName) {
 						// Our config matches one item in the list.
 						shouldSkip = false
-						break
+					}
+					if !logictestbase.ConfigExists(configName) {
+						return errors.Newf("logic test config %s doesn't exist", configName)
 					}
 				}
 				if shouldSkip {
@@ -3477,17 +3877,29 @@ func (t *logicTest) unexpectedError(sql string, pos string, err error) (bool, er
 	return false, fmt.Errorf("%s: %s\nexpected success, but found\n%s", pos, sql, formatErr(err))
 }
 
-func (t *logicTest) execStatement(stmt logicStatement) (bool, error) {
+var uniqueHashPattern = regexp.MustCompile(`UNIQUE.*USING\s+HASH`)
+
+func (t *logicTest) execStatement(stmt logicStatement, disableCFMutator bool) (bool, error) {
+	defer t.setSafetyGate(stmt.sql, false)()
 	db := t.db
 	t.noticeBuffer = nil
 	if *showSQL {
 		t.outf("%s;", stmt.sql)
 	}
-	execSQL, changed := randgen.ApplyString(t.rng, stmt.sql, randgen.ColumnFamilyMutator)
-	if changed {
-		log.Infof(context.Background(), "Rewrote test statement:\n%s", execSQL)
-		if *showSQL {
-			t.outf("rewrote:\n%s\n", execSQL)
+	execSQL := stmt.sql
+	// TODO(#65929, #107398): Don't mutate column families for CREATE TABLE
+	// statements with unique, hash-sharded indexes. The altered AST will be
+	// reserialized with a UNIQUE constraint, not a UNIQUE INDEX, which may not
+	// be parsable because constraints do not support all the options that
+	// indexes do.
+	if !uniqueHashPattern.MatchString(stmt.sql) && !disableCFMutator {
+		var changed bool
+		execSQL, changed = randgen.ApplyString(t.rng, execSQL, randgen.ColumnFamilyMutator)
+		if changed {
+			log.Dev.Infof(context.Background(), "Rewrote test statement:\n%s", execSQL)
+			if *showSQL {
+				t.outf("rewrote:\n%s\n", execSQL)
+			}
 		}
 	}
 
@@ -3513,16 +3925,40 @@ func (t *logicTest) execStatement(stmt logicStatement) (bool, error) {
 		return true, nil
 	}
 
-	res, err := db.Exec(execSQL)
-	return t.finishExecStatement(stmt, execSQL, res, err)
+	var res gosql.Result
+	var execErr error
+	if t.cfg.PrepareQueries {
+		// It's not possible to prepare a compound statement, so prepare and execute
+		// all of the queries separately.
+		parsed, err := parser.Parse(stmt.sql)
+		if err != nil {
+			// In this case, just give up and send the whole statement to the server
+			// as normal. Probably, the test is expecting a parse error.
+			res, execErr = t.db.Exec(stmt.sql)
+		} else {
+			for _, p := range parsed {
+				var prep *gosql.Stmt
+				prep, execErr = t.db.Prepare(p.SQL)
+				if execErr == nil {
+					res, execErr = prep.Exec()
+				}
+				if execErr != nil {
+					// As soon as a non-nil error is encountered, leave the loop and let
+					// the error handling below take care of the rest.
+					break
+				}
+			}
+		}
+	} else {
+		res, execErr = t.db.Exec(execSQL)
+	}
+	return t.finishExecStatement(stmt, execSQL, res, execErr)
 }
 
-var uniqueHashPattern = regexp.MustCompile(`UNIQUE.*USING\s+HASH`)
-
 func (t *logicTest) finishExecStatement(
-	stmt logicStatement, execSQL string, res gosql.Result, err error,
+	stmt logicStatement, execSQL string, res gosql.Result, execErr error,
 ) (bool, error) {
-	if err == nil {
+	if execErr == nil {
 		// TODO(#65929, #107398): Roundtrips for unique, hash-sharded indexes do
 		// not work because only unique hash-sharded indexes are allowed, yet we
 		// format them as unique constraints.
@@ -3530,13 +3966,13 @@ func (t *logicTest) finishExecStatement(
 			sqlutils.VerifyStatementPrettyRoundtrip(t.t(), stmt.sql)
 		}
 	}
-	if err == nil && stmt.expectCount >= 0 {
+	if execErr == nil && stmt.expectCount >= 0 {
 		var count int64
-		count, err = res.RowsAffected()
+		count, execErr = res.RowsAffected()
 
 		// If err becomes non-nil here, we'll catch it below.
 
-		if err == nil && count != stmt.expectCount {
+		if execErr == nil && count != stmt.expectCount {
 			t.Errorf("%s: %s\nexpected %d rows affected, got %d", stmt.pos, execSQL, stmt.expectCount, count)
 		}
 	}
@@ -3548,11 +3984,11 @@ func (t *logicTest) finishExecStatement(
 	//   the database in an improper state, so we stop there;
 	// - error on expected error is worth going further, even
 	//   if the obtained error does not match the expected error.
-	cont, err := t.verifyError("", stmt.pos, stmt.expectNotice, stmt.expectErr, stmt.expectErrCode, err)
-	if err != nil {
+	cont, execErr := t.verifyError("", stmt.pos, stmt.expectNotice, stmt.expectErr, stmt.expectErrCode, execErr)
+	if execErr != nil {
 		t.finishOne("OK")
 	}
-	return cont, err
+	return cont, execErr
 }
 
 func (t *logicTest) hashResults(results []string) (string, error) {
@@ -3568,6 +4004,7 @@ func (t *logicTest) hashResults(results []string) (string, error) {
 }
 
 func (t *logicTest) execQuery(query logicQuery) error {
+	defer t.setSafetyGate(query.sql, query.allowUnsafe)()
 	if *showSQL {
 		t.outf("%s;", query.sql)
 	}
@@ -3605,12 +4042,101 @@ func (t *logicTest) execQuery(query logicQuery) error {
 		return nil
 	}
 
-	rows, err := db.Query(query.sql)
-	return t.finishExecQuery(query, rows, err)
+	var rowses []*gosql.Rows
+	var execErr error
+	if t.cfg.PrepareQueries {
+		// It's not possible to prepare a compound statement, so prepare and execute
+		// all of the queries separately.
+		parsed, err := parser.Parse(query.sql)
+		if err != nil {
+			// In this case, just give up and send the whole statement to the server
+			// as normal. Probably, the test is expecting a parse error.
+			var rows *gosql.Rows
+			rows, execErr = db.Query(query.sql)
+			rowses = []*gosql.Rows{rows}
+		}
+		for _, p := range parsed {
+			var prep *gosql.Stmt
+			var rows *gosql.Rows
+
+			// Replace all scalar values in the query with placeholders. Then, send
+			// the scalar values that we replaced to Query().
+			ast, scalars := tree.TestingReplaceScalarsWithPlaceholders(p.AST)
+			args := make([]interface{}, len(scalars))
+			for i := range scalars {
+				if scalars[i] == tree.DNull {
+					args[i] = gosql.NullString{}
+				} else if sv, ok := scalars[i].(*tree.StrVal); ok {
+					// Use the raw string directly to avoid FmtBareStrings
+					// escaping non-ASCII characters (e.g. ü → \u00FC).
+					args[i] = sv.RawString()
+				} else {
+					args[i] = strings.Trim(tree.AsStringWithFlags(scalars[i], tree.FmtBareStrings), "'")
+				}
+			}
+
+			prep, execErr = t.db.Prepare(tree.AsStringWithFlags(ast, tree.FmtShowFullURIs))
+
+			if execErr != nil {
+				// Sometimes, it's impossible to prepare/execute a query with scalars
+				// replaced as placeholders because there is insufficient information
+				// in the text of the query to infer which types the placeholders
+				// should be. In this case, we'll just fall back on an ordinary
+				// PREPARE/EXECUTE without placeholders.
+
+				// Unfortunately, there's not a consistent error code returned for this
+				// situation. Sometimes, it's "indeterminate datatype", which is most
+				// correct, but sometimes the indeterminate datatype error is wrapped
+				// by a different function and given a slightly different error code.
+				// As a result, we choose to check the string of the error rather than
+				// the code.
+				if strings.Contains(execErr.Error(), "could not determine data type of placeholder") {
+					prep, execErr = t.db.Prepare(p.SQL)
+					args = []interface{}{}
+				} else if pgErr := (*pq.Error)(nil); errors.As(execErr, &pgErr) &&
+					(pgcode.MakeCode(string(pgErr.Code)) == pgcode.Syntax ||
+						pgcode.MakeCode(string(pgErr.Code)) == pgcode.InvalidParameterValue ||
+						pgcode.MakeCode(string(pgErr.Code)) == pgcode.InvalidTextRepresentation ||
+						pgcode.MakeCode(string(pgErr.Code)) == pgcode.DatatypeMismatch) {
+					prep, execErr = t.db.Prepare(p.SQL)
+					args = []interface{}{}
+				}
+
+			}
+
+			if execErr == nil {
+				rows, execErr = prep.Query(args...)
+				rowses = append(rowses, rows)
+			}
+			if execErr != nil {
+				// As soon as a non-nil error is encountered, leave the loop and let
+				// the error handling below take care of the rest.
+				break
+			}
+		}
+	} else {
+		var res *gosql.Rows
+		res, execErr = db.Query(query.sql)
+		rowses = []*gosql.Rows{res}
+	}
+	return t.finishExecQuery(query, rowses, execErr)
 }
 
-func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, err error) error {
-	if err == nil {
+var docsRE = regexp.MustCompile(`(https://www\.cockroachlabs\.com/docs/)([^/]+)(/.*)?`)
+
+// Replace all binary versions except for stable.
+func sanitizeDocsURL(input string) string {
+	return docsRE.ReplaceAllStringFunc(input, func(match string) string {
+		parts := docsRE.FindStringSubmatch(match)
+		if parts[2] == "stable" {
+			return match
+		}
+		return parts[1] + "..." + parts[3]
+	})
+}
+
+func (t *logicTest) finishExecQuery(query logicQuery, rowses []*gosql.Rows, execErr error) error {
+	if execErr == nil {
 		// TODO(#65929, #107398): Roundtrips for unique, hash-sharded indexes do
 		// not work because only unique hash-sharded indexes are allowed, yet we
 		// format them as unique constraints.
@@ -3621,161 +4147,247 @@ func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, err erro
 		// If expecting an error, then read all result rows, since some errors are
 		// only triggered after initial rows are returned.
 		if query.expectErr != "" {
-			// Break early if error is detected, and be sure to test for error in case
-			// where Next returns false.
-			for rows.Next() {
-				if rows.Err() != nil {
+			for _, rows := range rowses {
+				// Break early if error is detected, and be sure to test for error in case
+				// where Next returns false.
+				for rows.Next() {
+					if rows.Err() != nil {
+						break
+					}
+				}
+				execErr = rows.Err()
+				if execErr != nil {
 					break
 				}
 			}
-			err = rows.Err()
 		}
 	}
-	if _, err := t.verifyError(query.sql, query.pos, "", query.expectErr, query.expectErrCode, err); err != nil {
+	if _, err := t.verifyError(query.sql, query.pos, "", query.expectErr, query.expectErrCode, execErr); err != nil {
 		return err
 	}
-	if err != nil {
+	if execErr != nil {
 		// An error occurred, but it was expected.
 		t.finishOne("XFAIL")
 		//nolint:returnerrcheck
 		return nil
 	}
-	defer rows.Close()
+	defer func() {
+		for _, rows := range rowses {
+			_ = rows.Close()
+		}
+	}()
 
 	var actualResultsRaw []string
 	rowCount := 0
 	if query.noticetrace {
 		// We have to force close the results for the notice handler from lib/pq
-		// returns results.
-		if err := rows.Err(); err != nil {
-			return err
+		// to return results.
+		for _, rows := range rowses {
+			if err := rows.Err(); err != nil {
+				return err
+			}
+			_ = rows.Close()
 		}
-		rows.Close()
 		actualResultsRaw = t.noticeBuffer
+		// Sanitize the output a bit to delete the binary version from the docs
+		// link.
+		for i, row := range actualResultsRaw {
+			actualResultsRaw[i] = sanitizeDocsURL(row)
+		}
 	} else {
-		cols, err := rows.Columns()
-		if err != nil {
-			return err
-		}
-		if len(query.colTypes) != len(cols) && !query.empty {
-			return fmt.Errorf("%s: expected %d columns, but found %d",
-				query.pos, len(query.colTypes), len(cols))
-		}
-		vals := make([]interface{}, len(cols))
-		for i := range vals {
-			vals[i] = new(interface{})
-		}
-
-		if query.colNames {
-			actualResultsRaw = append(actualResultsRaw, cols...)
-		}
-		for nextResultSet := true; nextResultSet; nextResultSet = rows.NextResultSet() {
-			for rows.Next() {
-				if err := rows.Scan(vals...); err != nil {
-					return err
+		// foundCols is set to true once we've found the first statement that
+		// actually returns columns.
+		foundCols := false
+		for i, rows := range rowses {
+			cols, err := rows.Columns()
+			if err != nil {
+				return err
+			}
+			if len(cols) > 0 {
+				foundCols = true
+			}
+			if len(cols) > 0 || (!foundCols && i == len(rowses)-1) {
+				// If we have more than 0 cols, or we've made it to the end of our
+				// result sets without finding a non-0 column result, we might need to
+				// return an error about mismatched columns.
+				if len(query.colTypes) != len(cols) && !query.empty {
+					return fmt.Errorf("%s: expected %d columns, but found %d",
+						query.pos, len(query.colTypes), len(cols))
 				}
-				rowCount++
-				for i, v := range vals {
-					colT := query.colTypes[i]
-					// Ignore column - useful for non-deterministic output.
-					if colT == '_' {
-						actualResultsRaw = append(actualResultsRaw, "_")
-						continue
-					}
-					val := *v.(*interface{})
-					if val == nil {
-						actualResultsRaw = append(actualResultsRaw, "NULL")
-						continue
-					}
-					valT := reflect.TypeOf(val).Kind()
-					colPos := i + 1
-					switch colT {
-					case 'T':
-						if valT != reflect.String && valT != reflect.Slice && valT != reflect.Struct {
-							return fmt.Errorf("%s: expected text value for column %d, but found %T: %#v",
-								query.pos, colPos, val, val,
-							)
-						}
-					case 'I':
-						if valT != reflect.Int64 {
-							if *flexTypes && (valT == reflect.Float64 || valT == reflect.Slice) {
-								t.signalIgnoredError(
-									fmt.Errorf("result type mismatch: expected I, got %T", val), query.pos, query.sql,
-								)
-								return nil
-							}
-							return fmt.Errorf("%s: expected int value for column %d, but found %T: %#v",
-								query.pos, colPos, val, val,
-							)
-						}
-					case 'F', 'R':
-						if valT != reflect.Float64 && valT != reflect.Slice {
-							if *flexTypes && (valT == reflect.Int64) {
-								t.signalIgnoredError(
-									fmt.Errorf("result type mismatch: expected F or R, got %T", val), query.pos, query.sql,
-								)
-								return nil
-							}
-							return fmt.Errorf("%s: expected float/decimal value for column %d, but found %T: %#v",
-								query.pos, colPos, val, val,
-							)
-						}
-					case 'B':
-						if valT != reflect.Bool {
-							return fmt.Errorf("%s: expected boolean value for column %d, but found %T: %#v",
-								query.pos, colPos, val, val,
-							)
-						}
-					case 'O':
-						if valT != reflect.Slice {
-							return fmt.Errorf("%s: expected oid value for column %d, but found %T: %#v",
-								query.pos, colPos, val, val,
-							)
-						}
-					default:
-						return fmt.Errorf("%s: unknown type in type string: %c in %s",
-							query.pos, colT, query.colTypes,
-						)
+			}
+			vals := make([]interface{}, len(cols))
+			for i := range vals {
+				vals[i] = new(interface{})
+			}
+
+			if query.colNames {
+				actualResultsRaw = append(actualResultsRaw, cols...)
+			}
+			for nextResultSet := true; nextResultSet; nextResultSet = rows.NextResultSet() {
+				for rows.Next() {
+					if err := rows.Scan(vals...); err != nil {
+						return err
 					}
 
-					if byteArray, ok := val.([]byte); ok {
-						// The postgres wire protocol does not distinguish between
-						// strings and byte arrays, but our tests do. In order to do
-						// The Right Thing™, we replace byte arrays which are valid
-						// UTF-8 with strings. This allows byte arrays which are not
-						// valid UTF-8 to print as a list of bytes (e.g. `[124 107]`)
-						// while printing valid strings naturally.
-						if str := string(byteArray); utf8.ValidString(str) {
-							val = str
+					if query.match != nil {
+						// Exclude rows that don't match the regexp.
+						match := false
+						for _, v := range vals {
+							val := *v.(*interface{})
+							if val != nil && query.match.MatchString(fmt.Sprint(val)) {
+								match = true
+								break
+							}
+						}
+						if !match {
+							continue
 						}
 					}
-					// Empty strings are rendered as "·" (middle dot).
-					if val == "" {
-						val = "·"
+
+					rowCount++
+
+					if query.empty {
+						// Skip column assertions if we are expecting an empty
+						// result.
+						continue
 					}
-					s := fmt.Sprint(val)
-					if query.roundFloatsInStringsSigFigs > 0 {
-						s = floatcmp.RoundFloatsInString(s, query.roundFloatsInStringsSigFigs)
+
+					for i, v := range vals {
+						colT := query.colTypes[i]
+						// Ignore column - useful for non-deterministic output.
+						if colT == '_' {
+							actualResultsRaw = append(actualResultsRaw, "_")
+							continue
+						}
+						val := *v.(*interface{})
+						if val == nil {
+							actualResultsRaw = append(actualResultsRaw, "NULL")
+							continue
+						}
+						valT := reflect.TypeOf(val).Kind()
+						colPos := i + 1
+						switch colT {
+						case 'T':
+							if valT != reflect.String && valT != reflect.Slice && valT != reflect.Struct {
+								return fmt.Errorf("%s: expected text value for column %d, but found %T: %#v",
+									query.pos, colPos, val, val,
+								)
+							}
+						case 'I':
+							if valT != reflect.Int64 {
+								if *flexTypes && (valT == reflect.Float64 || valT == reflect.Slice) {
+									t.signalIgnoredError(
+										fmt.Errorf("result type mismatch: expected I, got %T", val), query.pos, query.sql,
+									)
+									return nil
+								}
+								return fmt.Errorf("%s: expected int value for column %d, but found %T: %#v",
+									query.pos, colPos, val, val,
+								)
+							}
+						case 'F', 'R':
+							if valT != reflect.Float64 && valT != reflect.Slice {
+								if *flexTypes && (valT == reflect.Int64) {
+									t.signalIgnoredError(
+										fmt.Errorf("result type mismatch: expected F or R, got %T", val), query.pos, query.sql,
+									)
+									return nil
+								}
+								return fmt.Errorf("%s: expected float/decimal value for column %d, but found %T: %#v",
+									query.pos, colPos, val, val,
+								)
+							}
+						case 'B':
+							if valT != reflect.Bool {
+								return fmt.Errorf("%s: expected boolean value for column %d, but found %T: %#v",
+									query.pos, colPos, val, val,
+								)
+							}
+						case 'O':
+							if valT != reflect.Slice {
+								return fmt.Errorf("%s: expected oid value for column %d, but found %T: %#v",
+									query.pos, colPos, val, val,
+								)
+							}
+						default:
+							return fmt.Errorf("%s: unknown type in type string: %c in %s",
+								query.pos, colT, query.colTypes,
+							)
+						}
+
+						if byteArray, ok := val.([]byte); ok {
+							// The postgres wire protocol does not distinguish between
+							// strings and byte arrays, but our tests do. In order to do
+							// The Right Thing™, we replace byte arrays which are valid
+							// UTF-8 with strings. This allows byte arrays which are not
+							// valid UTF-8 to print as a list of bytes (e.g. `[124 107]`)
+							// while printing valid strings naturally.
+							if str := string(byteArray); utf8.ValidString(str) {
+								val = str
+							}
+						}
+						// Empty strings are rendered as "·" (middle dot).
+						if val == "" {
+							val = "·"
+						}
+						s := fmt.Sprint(val)
+						if query.roundFloatsInStringsSigFigs > 0 {
+							s = floatcmp.RoundFloatsInString(s, query.roundFloatsInStringsSigFigs)
+						}
+						if colT == 'T' {
+							// Remove the rangeID prefix from 'sending batch ...'
+							// message in the trace to reduce test churn when
+							// adding new system tables.
+							//
+							// Also replace tableIDs with a constant in messages like
+							// '<before:/Table/77>' and '<after:/Table/107/1>'.
+							if matches := sendingBatchRE.FindStringSubmatch(s); len(matches) > 1 {
+								s = matches[1]
+							} else if matches = beforeTableRE.FindStringSubmatch(s); len(matches) > 2 {
+								s = matches[1] + "XX" + matches[2]
+							} else if matches = afterTableRE.FindStringSubmatch(s); len(matches) > 2 {
+								s = matches[1] + "XX" + matches[2]
+							}
+						}
+						// Replace any \n character with an escaped new line. This will ensure that
+						// tests pass and the output remains relatively well formatted. This will
+						// happen unless:
+						//	1. There is only 1 column being queried
+						//	2. The value is the last column in the row
+						colCount := len(cols)
+						if colCount == 1 || i%colCount == colCount-1 {
+							actualResultsRaw = append(actualResultsRaw, s)
+						} else {
+							actualResultsRaw = append(actualResultsRaw, strings.ReplaceAll(s, "\n", "\\n"))
+						}
 					}
-					// Replace any \n character with an escaped new line. This will ensure that
-					// tests pass and the output remains relatively well formatted. This will
-					// happen unless:
-					//	1. There is only 1 column being queried
-					//	2. The value is the last column in the row
-					colCount := len(cols)
-					if colCount == 1 || i%colCount == colCount-1 {
-						actualResultsRaw = append(actualResultsRaw, s)
-					} else {
-						actualResultsRaw = append(actualResultsRaw, strings.ReplaceAll(s, "\n", "\\n"))
-					}
+				}
+				if err := rows.Err(); err != nil {
+					return err
 				}
 			}
 			if err := rows.Err(); err != nil {
 				return err
 			}
 		}
-		if err := rows.Err(); err != nil {
-			return err
+	}
+
+	// Filter out lines containing "row count" if scrub-row-counts is enabled.
+	if query.scrubRowCounts {
+		filtered := actualResultsRaw[:0]
+		for _, result := range actualResultsRaw {
+			if !strings.Contains(result, "row count") {
+				filtered = append(filtered, result)
+			}
+		}
+		actualResultsRaw = filtered
+	}
+
+	// Replace virtual table OIDs with placeholders if strip-oids is enabled.
+	// Test files should use "oidX" placeholders in expected results.
+	if query.stripOids {
+		for i, result := range actualResultsRaw {
+			actualResultsRaw[i] = virtualOidRE.ReplaceAllString(result, "__OID__")
 		}
 	}
 
@@ -3818,9 +4430,9 @@ func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, err erro
 		query.sorter(len(query.colTypes), query.expectedResults)
 	}
 
-	hash, err := t.hashResults(actualResults)
-	if err != nil {
-		return err
+	hash, execErr := t.hashResults(actualResults)
+	if execErr != nil {
+		return execErr
 	}
 
 	if query.expectedHash != "" {
@@ -3883,6 +4495,7 @@ func (t *logicTest) finishExecQuery(query logicQuery, rows *gosql.Rows, err erro
 		for i := range query.expectedResults {
 			expected, actual := query.expectedResults[i], actualResults[i]
 			var resultMatches bool
+			var err error
 			if query.regexp {
 				resultMatches, err = regexp.MatchString(expected, actual)
 				if err != nil {
@@ -4217,7 +4830,7 @@ func (t *logicTest) runFile(path string, config logictestbase.TestClusterConfig)
 	defer func() {
 		if r := recover(); r != nil {
 			// Translate panics during the test to test errors.
-			t.Fatalf("panic: %v\n%s", r, string(debug.Stack()))
+			t.Fatalf("panic: %v\n%s", r, debugutil.Stack())
 		}
 	}()
 
@@ -4258,6 +4871,35 @@ type TestServerArgs struct {
 	BatchBytesLimitLowerBound int64
 	// If set, sql.distsql.direct_columnar_scans.enabled is set to false.
 	DisableDirectColumnarScans bool
+	// If set, testing optimizer perturbation knobs are forced to 0. This is
+	// needed for tests with fixed query plans in expected output (e.g. EXPLAIN
+	// tests and SQLite logic tests).
+	DisableOptimizerPerturbations bool
+}
+
+func optimizerTestingKnobValues(
+	serverArgs TestServerArgs, disableFlag, costFlag float64,
+) (disableProb, costPerturb float64) {
+	disableProb = disableFlag
+	costPerturb = costFlag
+	if serverArgs.ForceProductionValues || serverArgs.DisableOptimizerPerturbations {
+		return 0, 0
+	}
+	if logicTestOptimizerMetamorphicEnabled {
+		// Only apply the metamorphic constant when no explicit non-zero value
+		// was passed via the command-line flag. This lets callers override the
+		// metamorphic behaviour (e.g. -disable-opt-rule-probability=0.3) while
+		// still getting metamorphic defaults in unattended runs. Note: the
+		// metamorphic constant itself may be 0 (one of its valid choices), in
+		// which case the assignment is a no-op.
+		if disableProb == 0 {
+			disableProb = metamorphicDisableOptRuleProbability
+		}
+		if costPerturb == 0 {
+			costPerturb = metamorphicOptimizerCostPerturbation
+		}
+	}
+	return disableProb, costPerturb
 }
 
 // RunLogicTests runs logic tests for all files matching the given glob.
@@ -4343,9 +4985,23 @@ func RunLogicTest(
 		perErrorSummary:            make(map[string][]string),
 		rng:                        rng,
 		declarativeCorpusCollector: cc,
+		traceDir:                   logScope.GetDirectory(),
 	}
+	lt.allowUnsafe.Store(true)
 	if *printErrorSummary {
 		defer lt.printErrorSummary()
+	}
+	if config.UseSecondaryTenant == logictestbase.Always {
+		// Under multitenant configs running in EngFlow, we have seen that logic
+		// tests can be flaky due to an overload condition where schema change
+		// transactions do not heartbeat quickly enough. This prevents background
+		// jobs such as the spanconfig reconciler or the job registry "remove claims
+		// from dead sessions" loop from aborting the queries under test.
+		// See https://github.com/cockroachdb/cockroach/pull/140400#issuecomment-2634346278
+		// and https://github.com/cockroachdb/cockroach/issues/140494#issuecomment-2640208187
+		// for a detailed analysis of this issue.
+		cleanup := txnwait.TestingOverrideTxnLivenessThreshold(10 * time.Second)
+		defer cleanup()
 	}
 	// Each test needs a copy because of Parallel
 	serverArgsCopy := serverArgs
@@ -4519,7 +5175,7 @@ func (t *logicTest) Error(args ...interface{}) {
 	if *showSQL {
 		t.outf("\t-- FAIL")
 	}
-	log.Errorf(context.Background(), "\n%s", fmt.Sprint(args...))
+	log.Dev.Errorf(context.Background(), "\n%s", fmt.Sprint(args...))
 	t.t().Error("\n", fmt.Sprint(args...))
 	t.failures++
 }
@@ -4532,7 +5188,7 @@ func (t *logicTest) Errorf(format string, args ...interface{}) {
 	if *showSQL {
 		t.outf("\t-- FAIL")
 	}
-	log.Errorf(context.Background(), format, args...)
+	log.Dev.Errorf(context.Background(), format, args...)
 	t.t().Errorf("\n"+format, args...)
 	t.failures++
 }
@@ -4544,7 +5200,7 @@ func (t *logicTest) Fatal(args ...interface{}) {
 	if *showSQL {
 		fmt.Println()
 	}
-	log.Errorf(context.Background(), "%s", fmt.Sprint(args...))
+	log.Dev.Errorf(context.Background(), "%s", fmt.Sprint(args...))
 	t.t().Logf("\n%s:%d: error while processing", t.curPath, t.curLineNo)
 	t.t().Fatal(args...)
 }
@@ -4555,7 +5211,7 @@ func (t *logicTest) Fatalf(format string, args ...interface{}) {
 	if *showSQL {
 		fmt.Println()
 	}
-	log.Errorf(context.Background(), format, args...)
+	log.Dev.Errorf(context.Background(), format, args...)
 	t.t().Logf("\n%s:%d: error while processing", t.curPath, t.curLineNo)
 	t.t().Fatalf(format, args...)
 }
@@ -4605,4 +5261,24 @@ func locateCockroachPredecessor(version string) (string, error) {
 		return "", err
 	}
 	return path, nil
+}
+
+// setSafetyGate is a utility function which controls whether access to the unsafe
+// internals is allowed by the contained sql statement. The reasoning behind it is
+// as follows. We want queries which explicitly access unsafe internals to have
+// access to them, but we want to prevent indirect access wherever possible.
+// Indirect access can be described as any query which doesn't reference an unsafe
+// object, but still accesses it under the hood. We want to flush out these cases
+// so that users can never execute statements which look safe, but block when executed.
+func (t *logicTest) setSafetyGate(sql string, skip bool) func() {
+	sql = strings.ToLower(sql)
+	explicitlyUnsafe := strings.Contains(sql, "crdb_internal.") || strings.Contains(sql, "system.")
+	if skip || explicitlyUnsafe {
+		return func() {}
+	}
+
+	t.allowUnsafe.Store(false)
+	return func() {
+		t.allowUnsafe.Store(true)
+	}
 }

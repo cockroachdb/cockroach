@@ -80,6 +80,63 @@ func TestStack(t *testing.T) {
 	require.Equal(t, s.Base(), initialElem)
 }
 
+func TestStmtLevel(t *testing.T) {
+	sd := &SessionData{
+		SessionData: sessiondatapb.SessionData{ApplicationName: "base"},
+	}
+	s := NewStack(sd)
+
+	// Initially no stmtLevel.
+	require.False(t, s.HasStmtLevel())
+	require.Nil(t, s.StmtLevel())
+	require.Equal(t, "base", s.Top().ApplicationName)
+
+	// Push a txn frame, then push stmt level.
+	s.PushTopClone()
+	s.Top().ApplicationName = "txn"
+	s.PushStmtLevel()
+	require.True(t, s.HasStmtLevel())
+	require.Equal(t, "txn", s.Top().ApplicationName) // cloned from txn frame
+
+	// Modifying the stmt level does not affect the stack top.
+	s.Top().ApplicationName = "stmt"
+	require.Equal(t, "stmt", s.StmtLevel().ApplicationName)
+	require.Equal(t, "txn", s.Elems()[1].ApplicationName) // stack top unchanged
+
+	// Pop stmt level.
+	s.PopStmtLevel()
+	require.False(t, s.HasStmtLevel())
+	require.Equal(t, "txn", s.Top().ApplicationName) // back to stack top
+
+	// Double push panics.
+	s.PushStmtLevel()
+	require.Panics(t, func() { s.PushStmtLevel() })
+	s.PopStmtLevel()
+
+	// Pop without push panics.
+	require.Panics(t, func() { s.PopStmtLevel() })
+
+	// Stack ops while stmtLevel is set panic.
+	s.PushStmtLevel()
+	require.Panics(t, func() { s.Push(sd.Clone()) })
+	require.Panics(t, func() { s.PushTopClone() })
+	require.Panics(t, func() { _ = s.Pop() })
+	require.Panics(t, func() { _ = s.PopN(1) })
+	require.Panics(t, func() { s.PopAll() })
+	s.PopStmtLevel()
+
+	// Clone preserves stmtLevel.
+	s.PushStmtLevel()
+	s.Top().ApplicationName = "cloned-stmt"
+	c := s.Clone()
+	require.True(t, c.HasStmtLevel())
+	require.Equal(t, "cloned-stmt", c.Top().ApplicationName)
+	// Cloned stmtLevel is independent.
+	c.Top().ApplicationName = "modified"
+	require.Equal(t, "cloned-stmt", s.Top().ApplicationName)
+	s.PopStmtLevel()
+}
+
 func TestUpdateSessionData(t *testing.T) {
 	var sd SessionData
 	unchangedLocal := sd.LocalOnlySessionData.String()
@@ -93,9 +150,8 @@ func TestUpdateSessionData(t *testing.T) {
 	}{
 		// string type.
 		{variable: "Database", value: "foo", localOnly: false, expectedSubstring: `database:"foo"`},
-		// This variable uses string type under the hood but has the custom
-		// cast type which isn't handled, so the update should be a no-op.
-		{variable: "UserProto", value: "foo", localOnly: false},
+		// SQLUsernameProto custom type.
+		{variable: "UserProto", value: "foo", localOnly: false, expectedSubstring: `user_proto:"foo"`},
 		// This variable has a custom type that isn't handled, so the update
 		// should be a no-op.
 		{variable: "DataConversionConfig", value: "foo", localOnly: false},
@@ -113,6 +169,10 @@ func TestUpdateSessionData(t *testing.T) {
 		{variable: "LargeFullScanRows", value: "12.34", localOnly: true, expectedSubstring: `large_full_scan_rows:12.34`},
 		// int32 type.
 		{variable: "OptSplitScanLimit", value: "123", localOnly: true, expectedSubstring: `opt_split_scan_limit:123`},
+		// DistSQLExecMode custom type.
+		{variable: "DistSQLMode", value: "on", localOnly: true, expectedSubstring: `dist_sql_mode:2`},
+		// NewSchemaChangerMode custom type.
+		{variable: "NewSchemaChangerMode", value: "unsafe_always", localOnly: true, expectedSubstring: `new_schema_changer_mode:3`},
 	} {
 		sd = SessionData{}
 		ok := sd.Update(tc.variable, tc.value)
@@ -131,5 +191,49 @@ func TestUpdateSessionData(t *testing.T) {
 			require.Equal(t, unchangedLocal, local)
 			require.Equal(t, unchangedRemote, remote)
 		}
+	}
+}
+
+func TestValidateMultiOverride(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		input       string
+		expectedErr string
+	}{
+		{name: "empty", input: ""},
+		{name: "valid bool", input: "DefaultTxnReadOnly=true"},
+		{name: "valid string", input: "Database=foo"},
+		{name: "valid multiple", input: "Database=foo,DefaultTxnReadOnly=true"},
+		{name: "valid DistSQLMode", input: "DistSQLMode=off"},
+		{name: "valid NewSchemaChangerMode", input: "NewSchemaChangerMode=unsafe_always"},
+		{
+			name:        "bad format",
+			input:       "no_equals_sign",
+			expectedErr: "invalid override format",
+		},
+		{
+			name:        "unknown field name",
+			input:       "distsql=off",
+			expectedErr: `unknown or unsupported session variable "distsql"`,
+		},
+		{
+			name:        "bad value for type",
+			input:       "DefaultTxnReadOnly=notabool",
+			expectedErr: `unknown or unsupported session variable "DefaultTxnReadOnly"`,
+		},
+		{
+			name:        "second override invalid",
+			input:       "Database=foo,bogus=bar",
+			expectedErr: `unknown or unsupported session variable "bogus"`,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := ValidateMultiOverride(tc.input)
+			if tc.expectedErr != "" {
+				require.ErrorContains(t, err, tc.expectedErr)
+			} else {
+				require.NoError(t, err)
+			}
+		})
 	}
 }

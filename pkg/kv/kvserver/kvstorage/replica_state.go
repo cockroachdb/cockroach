@@ -8,14 +8,13 @@ package kvstorage
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 )
 
@@ -23,9 +22,10 @@ import (
 // is used to initialize the in-memory Replica instance.
 // TODO(pavelkalinnikov): integrate with kvstorage.Replica.
 type LoadedReplicaState struct {
-	ReplicaID roachpb.ReplicaID
-	LastIndex kvpb.RaftIndex
-	ReplState kvserverpb.ReplicaState
+	ReplicaID   roachpb.ReplicaID
+	LastEntryID logstore.EntryID
+	ReplState   kvserverpb.ReplicaState
+	TruncState  kvserverpb.RaftTruncatedState
 
 	hardState raftpb.HardState
 }
@@ -36,29 +36,32 @@ type LoadedReplicaState struct {
 // TODO(pavelkalinnikov): integrate with stateloader.
 func LoadReplicaState(
 	ctx context.Context,
-	eng storage.Reader,
+	stateRO StateRO,
+	raftRO RaftRO,
 	storeID roachpb.StoreID,
 	desc *roachpb.RangeDescriptor,
 	replicaID roachpb.ReplicaID,
 ) (LoadedReplicaState, error) {
-	sl := stateloader.Make(desc.RangeID)
-	id, err := sl.LoadRaftReplicaID(ctx, eng)
-	if err != nil {
+	sl := MakeStateLoader(desc.RangeID)
+	if mark, err := sl.LoadReplicaMark(ctx, stateRO); err != nil {
 		return LoadedReplicaState{}, err
-	}
-	if loaded := id.ReplicaID; loaded != replicaID {
+	} else if !mark.Is(replicaID) {
 		return LoadedReplicaState{}, errors.AssertionFailedf(
-			"r%d: loaded RaftReplicaID %d does not match %d", desc.RangeID, loaded, replicaID)
+			"r%d: loaded ReplicaMark %+v does not match ReplicaID %d", desc.RangeID, mark, replicaID)
 	}
 
 	ls := LoadedReplicaState{ReplicaID: replicaID}
-	if ls.hardState, err = sl.LoadHardState(ctx, eng); err != nil {
+	var err error
+	if ls.hardState, err = sl.LoadHardState(ctx, raftRO); err != nil {
 		return LoadedReplicaState{}, err
 	}
-	if ls.LastIndex, err = sl.LoadLastIndex(ctx, eng); err != nil {
+	if ls.TruncState, err = sl.LoadRaftTruncatedState(ctx, raftRO); err != nil {
 		return LoadedReplicaState{}, err
 	}
-	if ls.ReplState, err = sl.Load(ctx, eng, desc); err != nil {
+	if ls.LastEntryID, err = sl.LoadLastEntryID(ctx, raftRO, ls.TruncState); err != nil {
+		return LoadedReplicaState{}, err
+	}
+	if ls.ReplState, err = sl.Load(ctx, stateRO, desc); err != nil {
 		return LoadedReplicaState{}, err
 	}
 
@@ -66,6 +69,10 @@ func LoadReplicaState(
 		return LoadedReplicaState{}, err
 	}
 	return ls, nil
+}
+
+func (r LoadedReplicaState) FullReplicaID() roachpb.FullReplicaID {
+	return roachpb.FullReplicaID{RangeID: r.ReplState.Desc.RangeID, ReplicaID: r.ReplicaID}
 }
 
 // check makes sure that the replica invariants hold for the loaded state.
@@ -103,42 +110,43 @@ func (r LoadedReplicaState) check(storeID roachpb.StoreID) error {
 // because it has been deleted.
 func CreateUninitializedReplica(
 	ctx context.Context,
-	eng storage.Engine,
+	stateRW State,
+	raftRO RaftRO,
+	w *wag.Writer,
 	storeID roachpb.StoreID,
-	rangeID roachpb.RangeID,
-	replicaID roachpb.ReplicaID,
+	id roachpb.FullReplicaID,
 ) error {
-	// Before creating the replica, see if there is a tombstone which would
-	// indicate that this replica has been removed.
-	tombstoneKey := keys.RangeTombstoneKey(rangeID)
-	var tombstone kvserverpb.RangeTombstone
-	if ok, err := storage.MVCCGetProto(
-		ctx, eng, tombstoneKey, hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
-	); err != nil {
+	sl := MakeStateLoader(id.RangeID)
+	// Before creating the replica, see if there is a tombstone or an existing
+	// replica which would indicate that our ReplicaID is stale and can not come
+	// back to this Store again.
+	if mark, err := sl.LoadReplicaMark(ctx, stateRW.RO); err != nil {
 		return err
-	} else if ok && replicaID < tombstone.NextReplicaID {
+	} else if mark.Destroyed(id.ReplicaID) {
 		return &kvpb.RaftGroupDeletedError{}
+	} else if mark.Is(id.ReplicaID) {
+		return nil // the replica already exists
+	} else if mark.Exists() {
+		// TODO(pav-kv): there is a replica with an older ReplicaID. We must destroy
+		// it, and create a new one. Right now, the code falls through and writes
+		// the new RaftReplicaID, but this replica can already have a non-empty
+		// HardState. This is a bug.
+		_ = 0 // make linter happy
 	}
 
 	// Write the RaftReplicaID for this replica. This is the only place in the
 	// CockroachDB code that we are creating a new *uninitialized* replica.
-	// Note that it is possible that we have already created the HardState for
-	// an uninitialized replica, then crashed, and on recovery are receiving a
-	// raft message for the same or later replica.
-	// - Same replica: we are overwriting the RaftReplicaID with the same
-	//   value, which is harmless.
-	// - Later replica: there may be an existing HardState for the older
-	//   uninitialized replica with Commit=0 and non-zero Term and Vote. Using
-	//   the Term and Vote values for that older replica in the context of
-	//   this newer replica is harmless since it just limits the votes for
-	//   this replica.
-	sl := stateloader.Make(rangeID)
-	if err := sl.SetRaftReplicaID(ctx, eng, replicaID); err != nil {
+	//
+	// Before this point, raft and state machine state of this replica are
+	// non-existent. The only RangeID-specific key that can be present is the
+	// RangeTombstone inspected above.
+	w.AddEvent(wagpb.MakeAddr(id, 0), wagpb.EventCreate, nil /* startKey */)
+	if err := sl.SetRaftReplicaID(ctx, stateRW.WO, id.ReplicaID); err != nil {
 		return err
 	}
 
 	// Make sure that storage invariants for this uninitialized replica hold.
-	uninitDesc := roachpb.RangeDescriptor{RangeID: rangeID}
-	_, err := LoadReplicaState(ctx, eng, storeID, &uninitDesc, replicaID)
+	uninitDesc := roachpb.RangeDescriptor{RangeID: id.RangeID}
+	_, err := LoadReplicaState(ctx, stateRW.RO, raftRO, storeID, &uninitDesc, id.ReplicaID)
 	return err
 }

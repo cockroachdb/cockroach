@@ -28,11 +28,14 @@ with &1 (cte)
            │    │    │    ├── columns: t.c:9(int2) a:7(int2) b:8(int2) rowid:10(int!null) crdb_internal_mvcc_timestamp:11(decimal) tableoid:12(oid)
            │    │    │    ├── scan t
            │    │    │    │    ├── columns: a:7(int2) b:8(int2) rowid:10(int!null) crdb_internal_mvcc_timestamp:11(decimal) tableoid:12(oid)
-           │    │    │    │    └── computed column expressions
-           │    │    │    │         └── t.c:9
-           │    │    │    │              └── (a:7 + b:8)::INT2 [type=int2]
+           │    │    │    │    ├── computed column expressions
+           │    │    │    │    │    └── t.c:9
+           │    │    │    │    │         └── assignment-cast: INT2 [type=int2]
+           │    │    │    │    │              └── a:7 + b:8 [type=int]
+           │    │    │    │    └── flags: avoid-full-scan
            │    │    │    └── projections
-           │    │    │         └── (a:7 + b:8)::INT2 [as=t.c:9, type=int2]
+           │    │    │         └── assignment-cast: INT2 [as=t.c:9, type=int2]
+           │    │    │              └── a:7 + b:8 [type=int]
            │    │    └── projections
            │    │         └── subquery [as=a_new:16, type=int2]
            │    │              └── max1-row

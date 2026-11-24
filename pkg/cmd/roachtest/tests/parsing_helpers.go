@@ -12,7 +12,9 @@ import (
 	"regexp"
 )
 
-var rustUnitTestOutputRegex = regexp.MustCompile(`(?P<type>.*) (?P<class>.*)::(?P<name>.*) \.\.\. (?P<result>.*)`)
+var rustUnitTestOutputRegex = regexp.MustCompile(
+	`(?P<type>test) (?:(?P<class>\S+)::)?(?P<name>\S+) \.\.\. (?P<result>.+)`,
+)
 var pythonUnitTestOutputRegex = regexp.MustCompile(`(?P<name>.*) \((?P<class>.*)\) \.\.\. (?P<result>[^'"]*?)(?: u?['"](?P<reason>.*)['"])?$`)
 
 func (r *ormTestsResults) parsePythonUnitTestOutput(

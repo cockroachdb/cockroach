@@ -77,7 +77,7 @@ func runBenchmarkExpectationTests(t *testing.T, r *Registry) {
 
 	var results resultSet
 	var wg sync.WaitGroup
-	concurrency := ((system.NumCPU() - 1) / r.numNodes) + 1 // arbitrary
+	concurrency := min(4, ((system.NumCPU()-1)/r.numNodes)+1) //arbitrary
 	limiter := quotapool.NewIntPool("rttanalysis", uint64(concurrency))
 	isRewrite := *rewriteFlag
 	for b, cases := range r.r {
@@ -153,10 +153,12 @@ func mergeExpectations(existing, new benchmarkExpectations) (merged benchmarkExp
 // always run with metamorphic testing enabled in CI.
 func execTestSubprocess(t *testing.T) {
 	var args []string
+	testRunPassed := false
 	flag.CommandLine.Visit(func(f *flag.Flag) {
 		vs := f.Value.String()
 		switch f.Name {
 		case "test.run":
+			testRunPassed = true
 			// Only run the current outermost test in the subprocess.
 			prefix := "^" + regexp.QuoteMeta(t.Name()) + "$"
 			if idx := strings.Index(vs, "/"); idx >= 0 {
@@ -176,6 +178,9 @@ func execTestSubprocess(t *testing.T) {
 		}
 		args = append(args, "--"+f.Name+"="+vs)
 	})
+	if !testRunPassed {
+		args = append(args, "--test.run=^"+regexp.QuoteMeta(t.Name())+"$")
+	}
 	args = append(args, "--test.bench=^$") // disable benchmarks
 	args = append(args, flag.CommandLine.Args()...)
 	cmd := exec.Command(os.Args[0], args...)

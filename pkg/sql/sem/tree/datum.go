@@ -25,17 +25,23 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgrepl/lsn"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/collatedstring"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/jsonpath"
+	"github.com/cockroachdb/cockroach/pkg/util/ltree"
 	"github.com/cockroachdb/cockroach/pkg/util/stringencoding"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
@@ -93,6 +99,12 @@ var (
 	// deriving the arguments to construct a specific time.Time.
 	MinSupportedTime    = timeutil.Unix(-210866803200, 0) // 4714-11-24 00:00:00+00 BC
 	MinSupportedTimeSec = float64(MinSupportedTime.Unix())
+
+	// ValidateJSONPath is injected from pkg/util/jsonpath/parser/parse.go.
+	ValidateJSONPath func(string) (*jsonpath.Jsonpath, error)
+
+	// EmptyDJSON is an empty JSON object.
+	EmptyDJSON = *NewDJSON(json.EmptyJSONValue)
 )
 
 // CompareContext represents the dependencies used to evaluate comparisons
@@ -250,22 +262,11 @@ func MakeDBool(d DBool) *DBool {
 // MustBeDBool attempts to retrieve a DBool from an Expr, panicking if the
 // assertion fails.
 func MustBeDBool(e Expr) DBool {
-	b, ok := AsDBool(e)
+	b, ok := e.(*DBool)
 	if !ok {
 		panic(errors.AssertionFailedf("expected *DBool, found %T", e))
 	}
-	return b
-}
-
-// AsDBool attempts to retrieve a *DBool from an Expr, returning a *DBool and
-// a flag signifying whether the assertion was successful. The function should
-// be used instead of direct type assertions.
-func AsDBool(e Expr) (DBool, bool) {
-	switch t := e.(type) {
-	case *DBool:
-		return *t, true
-	}
-	return false, false
+	return *b
 }
 
 // MakeParseError returns a parse error using the provided string and type. An
@@ -526,22 +527,11 @@ func MakeDBitArray(bitLen uint) DBitArray {
 // MustBeDBitArray attempts to retrieve a DBitArray from an Expr, panicking if the
 // assertion fails.
 func MustBeDBitArray(e Expr) *DBitArray {
-	b, ok := AsDBitArray(e)
+	b, ok := e.(*DBitArray)
 	if !ok {
 		panic(errors.AssertionFailedf("expected *DBitArray, found %T", e))
 	}
 	return b
-}
-
-// AsDBitArray attempts to retrieve a *DBitArray from an Expr, returning a *DBitArray and
-// a flag signifying whether the assertion was successful. The function should
-// be used instead of direct type assertions.
-func AsDBitArray(e Expr) (*DBitArray, bool) {
-	switch t := e.(type) {
-	case *DBitArray:
-		return t, true
-	}
-	return nil, false
 }
 
 var errCannotCastNegativeIntToBitArray = pgerror.Newf(pgcode.CannotCoerce,
@@ -669,28 +659,14 @@ func ParseDInt(s string) (*DInt, error) {
 	return NewDInt(DInt(i)), nil
 }
 
-// AsDInt attempts to retrieve a DInt from an Expr, returning a DInt and
-// a flag signifying whether the assertion was successful. The function should
-// be used instead of direct type assertions wherever a *DInt wrapped by a
-// *DOidWrapper is possible.
-func AsDInt(e Expr) (DInt, bool) {
-	switch t := e.(type) {
-	case *DInt:
-		return *t, true
-	case *DOidWrapper:
-		return AsDInt(t.Wrapped)
-	}
-	return 0, false
-}
-
 // MustBeDInt attempts to retrieve a DInt from an Expr, panicking if the
 // assertion fails.
 func MustBeDInt(e Expr) DInt {
-	i, ok := AsDInt(e)
+	i, ok := e.(*DInt)
 	if !ok {
 		panic(errors.AssertionFailedf("expected *DInt, found %T", e))
 	}
-	return i
+	return *i
 }
 
 // ResolvedType implements the TypedExpr interface.
@@ -805,20 +781,6 @@ func MustBeDFloat(e Expr) DFloat {
 		return *t
 	}
 	panic(errors.AssertionFailedf("expected *DFloat, found %T", e))
-}
-
-// AsDFloat attempts to retrieve a DFloat from an Expr, returning a DFloat and
-// a flag signifying whether the assertion was successful. The function should
-// be used instead of direct type assertions wherever a *DFloat wrapped by a
-// *DOidWrapper is possible.
-func AsDFloat(e Expr) (*DFloat, bool) {
-	switch t := e.(type) {
-	case *DFloat:
-		return t, true
-	case *DOidWrapper:
-		return AsDFloat(t.Wrapped)
-	}
-	return nil, false
 }
 
 // NewDFloat is a helper routine to create a *DFloat initialized from its
@@ -1001,16 +963,6 @@ func MustBeDDecimal(e Expr) DDecimal {
 		return *t
 	}
 	panic(errors.AssertionFailedf("expected *DDecimal, found %T", e))
-}
-
-// AsDDecimal attempts to retrieve a DDecimal from an Expr, returning a DDecimal and
-// a flag signifying whether the assertion was successful.
-func AsDDecimal(e Expr) (*DDecimal, bool) {
-	switch t := e.(type) {
-	case *DDecimal:
-		return t, true
-	}
-	return nil, false
 }
 
 // ParseDDecimal parses and returns the *DDecimal Datum value represented by the
@@ -1315,7 +1267,8 @@ type DCollatedString struct {
 	Contents string
 	Locale   string
 	// Key is the collation key.
-	Key []byte
+	Key           []byte
+	Deterministic bool
 }
 
 // CollationEnvironment stores the state needed by NewDCollatedString to
@@ -1329,7 +1282,8 @@ type collationEnvironmentCacheEntry struct {
 	// locale is interned.
 	locale string
 	// collator is an expensive factory.
-	collator *collate.Collator
+	collator      *collate.Collator
+	deterministic bool
 }
 
 func (env *CollationEnvironment) getCacheEntry(
@@ -1346,7 +1300,7 @@ func (env *CollationEnvironment) getCacheEntry(
 			return collationEnvironmentCacheEntry{}, err
 		}
 
-		entry = collationEnvironmentCacheEntry{locale, collate.New(tag)}
+		entry = collationEnvironmentCacheEntry{locale, collate.New(tag), collatedstring.IsDeterministicCollation(tag)}
 		env.cache[locale] = entry
 	}
 	return entry, nil
@@ -1365,7 +1319,7 @@ func NewDCollatedString(
 		env.buffer = &collate.Buffer{}
 	}
 	key := entry.collator.KeyFromString(env.buffer, contents)
-	d := DCollatedString{contents, entry.locale, make([]byte, len(key))}
+	d := DCollatedString{contents, entry.locale, make([]byte, len(key)), entry.deterministic}
 	copy(d.Key, key)
 	env.buffer.Reset()
 	return &d, nil
@@ -1438,7 +1392,7 @@ func (d *DCollatedString) IsMin(ctx context.Context, cmpCtx CompareContext) bool
 
 // Min implements the Datum interface.
 func (d *DCollatedString) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
-	return &DCollatedString{"", d.Locale, nil}, true
+	return &DCollatedString{"", d.Locale, nil, false}, true
 }
 
 // Max implements the Datum interface.
@@ -1475,21 +1429,11 @@ func NewDBytes(d DBytes) *DBytes {
 
 // MustBeDBytes attempts to convert an Expr into a DBytes, panicking if unsuccessful.
 func MustBeDBytes(e Expr) DBytes {
-	i, ok := AsDBytes(e)
+	i, ok := e.(*DBytes)
 	if !ok {
 		panic(errors.AssertionFailedf("expected *DBytes, found %T", e))
 	}
-	return i
-}
-
-// AsDBytes attempts to convert an Expr into a DBytes, returning a flag indicating
-// whether it was successful.
-func AsDBytes(e Expr) (DBytes, bool) {
-	switch t := e.(type) {
-	case *DBytes:
-		return *t, true
-	}
-	return "", false
+	return *i
 }
 
 // ResolvedType implements the TypedExpr interface.
@@ -1718,24 +1662,14 @@ func NewDUuid(d DUuid) *DUuid {
 	return &d
 }
 
-// AsDUuid attempts to retrieve a DUuid from an Expr, returning a DUuid and
-// a flag signifying whether the assertion was successful.
-func AsDUuid(e Expr) (DUuid, bool) {
-	switch t := e.(type) {
-	case *DUuid:
-		return *t, true
-	}
-	return DUuid{}, false
-}
-
 // MustBeDUuid attempts to retrieve a DUuid from an Expr, panicking if the
 // assertion fails.
 func MustBeDUuid(e Expr) DUuid {
-	i, ok := AsDUuid(e)
+	i, ok := e.(*DUuid)
 	if !ok {
 		panic(errors.AssertionFailedf("expected *DUuid, found %T", e))
 	}
-	return i
+	return *i
 }
 
 // ResolvedType implements the TypedExpr interface.
@@ -1838,28 +1772,14 @@ func NewDIPAddr(d DIPAddr) *DIPAddr {
 	return &d
 }
 
-// AsDIPAddr attempts to retrieve a *DIPAddr from an Expr, returning a *DIPAddr and
-// a flag signifying whether the assertion was successful. The function should
-// be used instead of direct type assertions wherever a *DIPAddr wrapped by a
-// *DOidWrapper is possible.
-func AsDIPAddr(e Expr) (DIPAddr, bool) {
-	switch t := e.(type) {
-	case *DIPAddr:
-		return *t, true
-	case *DOidWrapper:
-		return AsDIPAddr(t.Wrapped)
-	}
-	return DIPAddr{}, false
-}
-
 // MustBeDIPAddr attempts to retrieve a DIPAddr from an Expr, panicking if the
 // assertion fails.
 func MustBeDIPAddr(e Expr) DIPAddr {
-	i, ok := AsDIPAddr(e)
+	i, ok := e.(*DIPAddr)
 	if !ok {
 		panic(errors.AssertionFailedf("expected *DIPAddr, found %T", e))
 	}
-	return i
+	return *i
 }
 
 // ResolvedType implements the TypedExpr interface.
@@ -2131,28 +2051,14 @@ func ParseDDate(ctx ParseContext, s string) (_ *DDate, dependsOnContext bool, _ 
 	return NewDDate(t), dependsOnContext, err
 }
 
-// AsDDate attempts to retrieve a DDate from an Expr, returning a DDate and
-// a flag signifying whether the assertion was successful. The function should
-// be used instead of direct type assertions wherever a *DDate wrapped by a
-// *DOidWrapper is possible.
-func AsDDate(e Expr) (DDate, bool) {
-	switch t := e.(type) {
-	case *DDate:
-		return *t, true
-	case *DOidWrapper:
-		return AsDDate(t.Wrapped)
-	}
-	return DDate{}, false
-}
-
 // MustBeDDate attempts to retrieve a DDate from an Expr, panicking if the
 // assertion fails.
 func MustBeDDate(e Expr) DDate {
-	t, ok := AsDDate(e)
+	t, ok := e.(*DDate)
 	if !ok {
 		panic(errors.AssertionFailedf("expected *DDate, found %T", e))
 	}
-	return t
+	return *t
 }
 
 // ResolvedType implements the TypedExpr interface.
@@ -2275,20 +2181,6 @@ type DTime timeofday.TimeOfDay
 func MakeDTime(t timeofday.TimeOfDay) *DTime {
 	d := DTime(t)
 	return &d
-}
-
-// AsDTime attempts to retrieve a DTime from an Expr, returning a DTimestamp and
-// a flag signifying whether the assertion was successful. The function should
-// be used instead of direct type assertions wherever a *DTime wrapped by a
-// *DOidWrapper is possible.
-func AsDTime(e Expr) (DTime, bool) {
-	switch t := e.(type) {
-	case *DTime:
-		return *t, true
-	case *DOidWrapper:
-		return AsDTime(t.Wrapped)
-	}
-	return DTime(timeofday.FromInt(0)), false
 }
 
 // ParseDTime parses and returns the *DTime Datum value represented by the
@@ -2428,20 +2320,6 @@ func NewDTimeTZFromOffset(t timeofday.TimeOfDay, offsetSecs int32) *DTimeTZ {
 // NewDTimeTZFromLocation creates a DTimeTZ from a TimeOfDay and time.Location.
 func NewDTimeTZFromLocation(t timeofday.TimeOfDay, loc *time.Location) *DTimeTZ {
 	return &DTimeTZ{timetz.MakeTimeTZFromLocation(t, loc)}
-}
-
-// AsDTimeTZ attempts to retrieve a DTimeTZ from an Expr, returning a DTimeTZ and
-// a flag signifying whether the assertion was successful. The function should
-// be used instead of direct type assertions wherever a *DTimeTZ wrapped by a
-// *DOidWrapper is possible.
-func AsDTimeTZ(e Expr) (DTimeTZ, bool) {
-	switch t := e.(type) {
-	case *DTimeTZ:
-		return *t, true
-	case *DOidWrapper:
-		return AsDTimeTZ(t.Wrapped)
-	}
-	return DTimeTZ{}, false
 }
 
 // ParseDTimeTZ parses and returns the *DTime Datum value represented by the
@@ -2589,6 +2467,7 @@ func NewTimestampExceedsBoundsError(t time.Time) error {
 }
 
 // DTimestamp is the timestamp Datum.
+// See docs/tech-notes/timestamp-types.md for details on timestamp types.
 type DTimestamp struct {
 	// DTimestamp represents a timezoneless date and time value. It is stored in
 	// the time.Time as if it had UTC location, regardless of what timezone it
@@ -2638,28 +2517,14 @@ func ParseDTimestamp(
 	return d, dependsOnContext, err
 }
 
-// AsDTimestamp attempts to retrieve a DTimestamp from an Expr, returning a DTimestamp and
-// a flag signifying whether the assertion was successful. The function should
-// be used instead of direct type assertions wherever a *DTimestamp wrapped by a
-// *DOidWrapper is possible.
-func AsDTimestamp(e Expr) (DTimestamp, bool) {
-	switch t := e.(type) {
-	case *DTimestamp:
-		return *t, true
-	case *DOidWrapper:
-		return AsDTimestamp(t.Wrapped)
-	}
-	return DTimestamp{}, false
-}
-
 // MustBeDTimestamp attempts to retrieve a DTimestamp from an Expr, panicking if the
 // assertion fails.
 func MustBeDTimestamp(e Expr) DTimestamp {
-	t, ok := AsDTimestamp(e)
+	t, ok := e.(*DTimestamp)
 	if !ok {
 		panic(errors.AssertionFailedf("expected *DTimestamp, found %T", e))
 	}
-	return t
+	return *t
 }
 
 // Round returns a new DTimestamp to the specified precision.
@@ -2863,6 +2728,7 @@ func (d *DTimestamp) Size() uintptr {
 }
 
 // DTimestampTZ is the timestamp Datum that is rendered with session offset.
+// See docs/tech-notes/timestamp-types.md for details on timestamp types.
 type DTimestampTZ struct {
 	// Just like time.Time, DTimestampTZ represents an instant in global time that
 	// is stored internally in UTC and converted to local time when rendering.
@@ -2961,28 +2827,14 @@ func ParseDTimestampTZ(
 // DZeroTimestampTZ is the zero-valued DTimestampTZ.
 var DZeroTimestampTZ = &DTimestampTZ{}
 
-// AsDTimestampTZ attempts to retrieve a DTimestampTZ from an Expr, returning a
-// DTimestampTZ and a flag signifying whether the assertion was successful. The
-// function should be used instead of direct type assertions wherever a
-// *DTimestamp wrapped by a *DOidWrapper is possible.
-func AsDTimestampTZ(e Expr) (DTimestampTZ, bool) {
-	switch t := e.(type) {
-	case *DTimestampTZ:
-		return *t, true
-	case *DOidWrapper:
-		return AsDTimestampTZ(t.Wrapped)
-	}
-	return DTimestampTZ{}, false
-}
-
 // MustBeDTimestampTZ attempts to retrieve a DTimestampTZ from an Expr,
 // panicking if the assertion fails.
 func MustBeDTimestampTZ(e Expr) DTimestampTZ {
-	t, ok := AsDTimestampTZ(e)
+	t, ok := e.(*DTimestampTZ)
 	if !ok {
 		panic(errors.AssertionFailedf("expected *DTimestampTZ, found %T", e))
 	}
-	return t
+	return *t
 }
 
 // Round returns a new DTimestampTZ to the specified precision.
@@ -3108,28 +2960,14 @@ type DInterval struct {
 	duration.Duration
 }
 
-// AsDInterval attempts to retrieve a DInterval from an Expr, returning a DInterval and
-// a flag signifying whether the assertion was successful. The function should
-// be used instead of direct type assertions wherever a *DInterval wrapped by a
-// *DOidWrapper is possible.
-func AsDInterval(e Expr) (*DInterval, bool) {
-	switch t := e.(type) {
-	case *DInterval:
-		return t, true
-	case *DOidWrapper:
-		return AsDInterval(t.Wrapped)
-	}
-	return nil, false
-}
-
 // MustBeDInterval attempts to retrieve a DInterval from an Expr, panicking if the
 // assertion fails.
 func MustBeDInterval(e Expr) *DInterval {
-	t, ok := AsDInterval(e)
-	if ok {
-		return t
+	t, ok := e.(*DInterval)
+	if !ok {
+		panic(errors.AssertionFailedf("expected *DInterval, found %T", e))
 	}
-	panic(errors.AssertionFailedf("expected *DInterval, found %T", e))
+	return t
 }
 
 // NewDInterval creates a new DInterval.
@@ -3292,24 +3130,10 @@ func NewDGeography(g geo.Geography) *DGeography {
 	return &DGeography{Geography: g}
 }
 
-// AsDGeography attempts to retrieve a *DGeography from an Expr, returning a
-// *DGeography and a flag signifying whether the assertion was successful. The
-// function should be used instead of direct type assertions wherever a
-// *DGeography wrapped by a *DOidWrapper is possible.
-func AsDGeography(e Expr) (*DGeography, bool) {
-	switch t := e.(type) {
-	case *DGeography:
-		return t, true
-	case *DOidWrapper:
-		return AsDGeography(t.Wrapped)
-	}
-	return nil, false
-}
-
 // MustBeDGeography attempts to retrieve a *DGeography from an Expr, panicking
 // if the assertion fails.
 func MustBeDGeography(e Expr) *DGeography {
-	i, ok := AsDGeography(e)
+	i, ok := e.(*DGeography)
 	if !ok {
 		panic(errors.AssertionFailedf("expected *DGeography, found %T", e))
 	}
@@ -3417,24 +3241,10 @@ func NewDGeometry(g geo.Geometry) *DGeometry {
 	return &DGeometry{Geometry: g}
 }
 
-// AsDGeometry attempts to retrieve a *DGeometry from an Expr, returning a
-// *DGeometry and a flag signifying whether the assertion was successful. The
-// function should be used instead of direct type assertions wherever a
-// *DGeometry wrapped by a *DOidWrapper is possible.
-func AsDGeometry(e Expr) (*DGeometry, bool) {
-	switch t := e.(type) {
-	case *DGeometry:
-		return t, true
-	case *DOidWrapper:
-		return AsDGeometry(t.Wrapped)
-	}
-	return nil, false
-}
-
 // MustBeDGeometry attempts to retrieve a *DGeometry from an Expr, panicking
 // if the assertion fails.
 func MustBeDGeometry(e Expr) *DGeometry {
-	i, ok := AsDGeometry(e)
+	i, ok := e.(*DGeometry)
 	if !ok {
 		panic(errors.AssertionFailedf("expected *DGeometry, found %T", e))
 	}
@@ -3552,24 +3362,10 @@ func ParseDPGLSN(str string) (*DPGLSN, error) {
 	return NewDPGLSN(v), nil
 }
 
-// AsDPGLSN attempts to retrieve a *DPGLSN from an Expr, returning a
-// *DPGLSN and a flag signifying whether the assertion was successful. The
-// function should be used instead of direct type assertions wherever a
-// *DPGLSN wrapped by a *DOidWrapper is possible.
-func AsDPGLSN(e Expr) (*DPGLSN, bool) {
-	switch t := e.(type) {
-	case *DPGLSN:
-		return t, true
-	case *DOidWrapper:
-		return AsDPGLSN(t.Wrapped)
-	}
-	return nil, false
-}
-
 // MustBeDPGLSN attempts to retrieve a *DPGLSN from an Expr, panicking
 // if the assertion fails.
 func MustBeDPGLSN(e Expr) *DPGLSN {
-	i, ok := AsDPGLSN(e)
+	i, ok := e.(*DPGLSN)
 	if !ok {
 		panic(errors.AssertionFailedf("expected *DPGLSN, found %T", e))
 	}
@@ -3659,24 +3455,10 @@ type DPGVector struct {
 // NewDPGVector returns a new PGVector Datum.
 func NewDPGVector(vector vector.T) *DPGVector { return &DPGVector{vector} }
 
-// AsDPGVector attempts to retrieve a DPGVector from an Expr, returning a
-// DPGVector and a flag signifying whether the assertion was successful. The
-// function should be used instead of direct type assertions wherever a
-// *DPGVector wrapped by a *DOidWrapper is possible.
-func AsDPGVector(e Expr) (*DPGVector, bool) {
-	switch t := e.(type) {
-	case *DPGVector:
-		return t, true
-	case *DOidWrapper:
-		return AsDPGVector(t.Wrapped)
-	}
-	return nil, false
-}
-
 // MustBeDPGVector attempts to retrieve a DPGVector from an Expr, panicking if the
 // assertion fails.
 func MustBeDPGVector(e Expr) *DPGVector {
-	v, ok := AsDPGVector(e)
+	v, ok := e.(*DPGVector)
 	if !ok {
 		panic(errors.AssertionFailedf("expected *DPGVector, found %T", e))
 	}
@@ -3776,24 +3558,10 @@ func ParseDBox2D(str string) (*DBox2D, error) {
 	return &DBox2D{CartesianBoundingBox: b}, nil
 }
 
-// AsDBox2D attempts to retrieve a *DBox2D from an Expr, returning a
-// *DBox2D and a flag signifying whether the assertion was successful. The
-// function should be used instead of direct type assertions wherever a
-// *DBox2D wrapped by a *DOidWrapper is possible.
-func AsDBox2D(e Expr) (*DBox2D, bool) {
-	switch t := e.(type) {
-	case *DBox2D:
-		return t, true
-	case *DOidWrapper:
-		return AsDBox2D(t.Wrapped)
-	}
-	return nil, false
-}
-
 // MustBeDBox2D attempts to retrieve a *DBox2D from an Expr, panicking
 // if the assertion fails.
 func MustBeDBox2D(e Expr) *DBox2D {
-	i, ok := AsDBox2D(e)
+	i, ok := e.(*DBox2D)
 	if !ok {
 		panic(errors.AssertionFailedf("expected *DBox2D, found %T", e))
 	}
@@ -3870,6 +3638,101 @@ func (d *DBox2D) Size() uintptr {
 	return unsafe.Sizeof(*d) + unsafe.Sizeof(d.CartesianBoundingBox)
 }
 
+// DJsonpath is the Datum representation of the Jsonpath type.
+type DJsonpath struct {
+	jsonpath.Jsonpath
+}
+
+func NewDJsonpath(d jsonpath.Jsonpath) *DJsonpath {
+	return &DJsonpath{Jsonpath: d}
+}
+
+// ResolvedType implements the TypedExpr interface.
+func (d *DJsonpath) ResolvedType() *types.T {
+	return types.Jsonpath
+}
+
+// Compare implements the Datum interface. While we don't support external
+// comparisons between Jsonpath types, we still need to implement Compare
+// because many internal tests rely on it.
+func (d *DJsonpath) Compare(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
+	if other == DNull {
+		return 1, nil
+	}
+	v, ok := cmpCtx.UnwrapDatum(ctx, other).(*DJsonpath)
+	if !ok {
+		return 0, makeUnsupportedComparisonMessage(d, other)
+	}
+	return strings.Compare(d.String(), v.String()), nil
+}
+
+// Prev implements the Datum interface.
+func (d *DJsonpath) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	return nil, false
+}
+
+// Next implements the Datum interface.
+func (d *DJsonpath) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	return nil, false
+}
+
+// IsMax implements the Datum interface.
+func (d *DJsonpath) IsMax(ctx context.Context, cmpCtx CompareContext) bool {
+	return false
+}
+
+// IsMin implements the Datum interface.
+func (d *DJsonpath) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
+	return false
+}
+
+// Max implements the Datum interface.
+func (d *DJsonpath) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	return nil, false
+}
+
+// Min implements the Datum interface.
+func (d *DJsonpath) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	return nil, false
+}
+
+// AmbiguousFormat implements the Datum interface.
+func (*DJsonpath) AmbiguousFormat() bool { return true }
+
+// Size implements the Datum interface.
+func (d *DJsonpath) Size() uintptr {
+	// TODO(#22513): add size method for JSONPath
+	return unsafe.Sizeof(*d)
+}
+
+// Format implements the NodeFormatter interface.
+func (d *DJsonpath) Format(ctx *FmtCtx) {
+	buf, f := &ctx.Buffer, ctx.flags
+	if f.HasFlags(fmtRawStrings) || f.HasFlags(fmtPgwireFormat) {
+		buf.WriteString(d.Jsonpath.String())
+	} else {
+		lexbase.EncodeSQLStringWithFlags(buf, d.Jsonpath.String(), f.EncodeFlags())
+	}
+}
+
+func ParseDJsonpath(s string) (Datum, error) {
+	jp, err := ValidateJSONPath(s)
+	if err != nil {
+		return nil, MakeParseError(s, types.Jsonpath, err)
+	}
+	return NewDJsonpath(*jp), nil
+}
+
+// MustBeDJsonpath attempts to retrieve a DJsonpath from an Expr, panicking if the
+// assertion fails.
+func MustBeDJsonpath(e Expr) DJsonpath {
+	i, ok := e.(*DJsonpath)
+	if !ok {
+		panic(errors.AssertionFailedf("expected *DJsonpath, found %T", e))
+	}
+	return *i
+}
+
 // DJSON is the JSON Datum.
 type DJSON struct{ json.JSON }
 
@@ -3944,24 +3807,10 @@ func MakeDJSON(d interface{}) (Datum, error) {
 
 var dNullJSON = NewDJSON(json.NullJSONValue)
 
-// AsDJSON attempts to retrieve a *DJSON from an Expr, returning a *DJSON and
-// a flag signifying whether the assertion was successful. The function should
-// be used instead of direct type assertions wherever a *DJSON wrapped by a
-// *DOidWrapper is possible.
-func AsDJSON(e Expr) (*DJSON, bool) {
-	switch t := e.(type) {
-	case *DJSON:
-		return t, true
-	case *DOidWrapper:
-		return AsDJSON(t.Wrapped)
-	}
-	return nil, false
-}
-
 // MustBeDJSON attempts to retrieve a DJSON from an Expr, panicking if the
 // assertion fails.
 func MustBeDJSON(e Expr) DJSON {
-	i, ok := AsDJSON(e)
+	i, ok := e.(*DJSON)
 	if !ok {
 		panic(errors.AssertionFailedf("expected *DJSON, found %T", e))
 	}
@@ -4031,7 +3880,7 @@ func AsJSON(
 		// This is RFC3339Nano, but without the TZ fields.
 		return json.FromString(formatTime(t.UTC(), "2006-01-02T15:04:05.999999999")), nil
 	case *DDate, *DUuid, *DOid, *DInterval, *DBytes, *DIPAddr, *DTime, *DTimeTZ, *DBitArray, *DBox2D,
-		*DTSVector, *DTSQuery, *DPGLSN, *DPGVector:
+		*DTSVector, *DTSQuery, *DPGLSN, *DPGVector, *DJsonpath, *DLTree:
 		return json.FromString(
 			AsStringWithFlags(t, FmtBareStrings, FmtDataConversionConfig(dcc), FmtLocation(loc)),
 		), nil
@@ -4226,24 +4075,10 @@ func (d *DTSQuery) Size() uintptr {
 	return uintptr(len(d.TSQuery.String()))
 }
 
-// AsDTSQuery attempts to retrieve a DTSQuery from an Expr, returning a
-// DTSQuery and a flag signifying whether the assertion was successful. The
-// function should be used instead of direct type assertions wherever a
-// *DTSQuery wrapped by a *DOidWrapper is possible.
-func AsDTSQuery(e Expr) (*DTSQuery, bool) {
-	switch t := e.(type) {
-	case *DTSQuery:
-		return t, true
-	case *DOidWrapper:
-		return AsDTSQuery(t.Wrapped)
-	}
-	return nil, false
-}
-
 // MustBeDTSQuery attempts to retrieve a DTSQuery from an Expr, panicking if the
 // assertion fails.
 func MustBeDTSQuery(e Expr) *DTSQuery {
-	v, ok := AsDTSQuery(e)
+	v, ok := e.(*DTSQuery)
 	if !ok {
 		panic(errors.AssertionFailedf("expected *DTSQuery, found %T", e))
 	}
@@ -4348,24 +4183,10 @@ func (d *DTSVector) Size() uintptr {
 	return uintptr(d.TSVector.StringSize())
 }
 
-// AsDTSVector attempts to retrieve a DTSVector from an Expr, returning a
-// DTSVector and a flag signifying whether the assertion was successful. The
-// function should be used instead of direct type assertions wherever a
-// *DTSVector wrapped by a *DOidWrapper is possible.
-func AsDTSVector(e Expr) (*DTSVector, bool) {
-	switch t := e.(type) {
-	case *DTSVector:
-		return t, true
-	case *DOidWrapper:
-		return AsDTSVector(t.Wrapped)
-	}
-	return nil, false
-}
-
 // MustBeDTSVector attempts to retrieve a DTSVector from an Expr, panicking if the
 // assertion fails.
 func MustBeDTSVector(e Expr) *DTSVector {
-	v, ok := AsDTSVector(e)
+	v, ok := e.(*DTSVector)
 	if !ok {
 		panic(errors.AssertionFailedf("expected *DTSVector, found %T", e))
 	}
@@ -4385,6 +4206,103 @@ func ParseDTSVector(s string) (Datum, error) {
 		return nil, pgerror.Wrapf(err, pgcode.Syntax, "could not parse tsvector")
 	}
 	return NewDTSVector(v), nil
+}
+
+// DLTree is the LTree Datum.
+type DLTree struct {
+	LTree ltree.T
+}
+
+// NewDLTree returns a DLTree from an existing ltree.T.
+func NewDLTree(l ltree.T) *DLTree {
+	return &DLTree{LTree: l}
+}
+
+// ParseDLTree parses a string representation of a ltree.
+func ParseDLTree(pathStr string) (Datum, error) {
+	l, err := ltree.ParseLTree(pathStr)
+	if err != nil {
+		return nil, pgerror.Wrapf(err, pgcode.Syntax, "could not parse ltree")
+	}
+	return NewDLTree(l), nil
+}
+
+// ResolvedType implements the TypedExpr interface.
+func (*DLTree) ResolvedType() *types.T {
+	return types.LTree
+}
+
+// Compare implements the Datum interface.
+func (d *DLTree) Compare(ctx context.Context, cmpCtx CompareContext, other Datum) (int, error) {
+	if other == DNull {
+		// NULL is less than any non-NULL value.
+		return 1, nil
+	}
+	v, ok := cmpCtx.UnwrapDatum(ctx, other).(*DLTree)
+	if !ok {
+		return 0, makeUnsupportedComparisonMessage(d, other)
+	}
+	return d.LTree.Compare(v.LTree), nil
+}
+
+// Prev implements the Datum interface.
+func (d *DLTree) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	return nil, false
+}
+
+// Next implements the Datum interface.
+func (d *DLTree) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	return nil, false
+}
+
+// IsMax implements the Datum interface.
+func (*DLTree) IsMax(ctx context.Context, cmpCtx CompareContext) bool {
+	return false
+}
+
+// IsMin implements the Datum interface.
+func (d *DLTree) IsMin(ctx context.Context, cmpCtx CompareContext) bool {
+	return d.LTree.Len() == 0
+}
+
+// Min implements the Datum interface.
+func (d *DLTree) Min(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	return NewDLTree(ltree.Empty), true
+}
+
+// Max implements the Datum interface.
+func (d *DLTree) Max(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
+	return nil, false
+}
+
+// AmbiguousFormat implements the Datum interface.
+func (*DLTree) AmbiguousFormat() bool { return true }
+
+// Format implements the NodeFormatter interface.
+func (d *DLTree) Format(ctx *FmtCtx) {
+	buf, f := &ctx.Buffer, ctx.flags
+
+	if f.HasFlags(fmtRawStrings) || f.HasFlags(fmtPgwireFormat) {
+		d.LTree.FormatToBuffer(buf)
+	} else {
+		pathStr := d.LTree.String()
+		lexbase.EncodeSQLStringWithFlags(buf, pathStr, f.EncodeFlags())
+	}
+}
+
+// Size implements the Datum interface.
+func (d *DLTree) Size() uintptr {
+	return uintptr(d.LTree.ByteSize())
+}
+
+// MustBeDLTree attempts to retrieve a DLTree from an Expr, panicking if the
+// assertion fails.
+func MustBeDLTree(e Expr) *DLTree {
+	b, ok := e.(*DLTree)
+	if !ok {
+		panic(errors.AssertionFailedf("expected *DLTree, found %T", e))
+	}
+	return b
 }
 
 // DTuple is the tuple Datum.
@@ -4423,24 +4341,10 @@ func MakeDTuple(typ *types.T, d ...Datum) DTuple {
 	return DTuple{D: d, typ: typ}
 }
 
-// AsDTuple attempts to retrieve a *DTuple from an Expr, returning a *DTuple and
-// a flag signifying whether the assertion was successful. The function should
-// be used instead of direct type assertions wherever a *DTuple wrapped by a
-// *DOidWrapper is possible.
-func AsDTuple(e Expr) (*DTuple, bool) {
-	switch t := e.(type) {
-	case *DTuple:
-		return t, true
-	case *DOidWrapper:
-		return AsDTuple(t.Wrapped)
-	}
-	return nil, false
-}
-
 // MustBeDTuple attempts to retrieve a *DTuple from an Expr, panicking if the
 // assertion fails.
 func MustBeDTuple(e Expr) *DTuple {
-	i, ok := AsDTuple(e)
+	i, ok := e.(*DTuple)
 	if !ok {
 		panic(errors.AssertionFailedf("expected *DTuple, found %T", e))
 	}
@@ -4855,20 +4759,25 @@ func (d dNull) Size() uintptr {
 	return unsafe.Sizeof(d)
 }
 
-// DArray is the array Datum. Any Datum inserted into a DArray are treated as
-// text during serialization.
+// DArray is the array Datum.
 type DArray struct {
 	ParamTyp *types.T
-	Array    Datums
-	// HasNulls is set to true if any of the datums within the array are null.
-	// This is used in the binary array serialization format.
-	HasNulls bool
-	// HasNonNulls is set to true if any of the datums within the are non-null.
-	// This is used in expression serialization (FmtParsable).
-	HasNonNulls bool
+	// Array gives access to the underlying array. Using NewDArrayFromDatums or
+	// Append is preferrable for constructing the contents, but modifying the
+	// slice is also allowed - just be sure to update NULL-related flags via
+	// Set* methods accordingly.
+	Array Datums
+	// hasNulls is set to true if any of the datums within the array are null.
+	hasNulls bool
+	// hasNonNulls is set to true if any of the datums within the are non-null.
+	hasNonNulls bool
 
 	// customOid, if non-0, is the oid of this array datum.
 	customOid oid.Oid
+
+	// zeroIndexed, if true, makes FirstIndex() return 0 instead of 1.
+	// This is used for TG_ARGV to match PostgreSQL's 0-indexed behavior.
+	zeroIndexed bool
 }
 
 // NewDArray returns a DArray containing elements of the specified type.
@@ -4876,28 +4785,67 @@ func NewDArray(paramTyp *types.T) *DArray {
 	return &DArray{ParamTyp: paramTyp}
 }
 
-// AsDArray attempts to retrieve a *DArray from an Expr, returning a *DArray and
-// a flag signifying whether the assertion was successful. The function should
-// be used instead of direct type assertions wherever a *DArray wrapped by a
-// *DOidWrapper is possible.
-func AsDArray(e Expr) (*DArray, bool) {
-	switch t := e.(type) {
-	case *DArray:
-		return t, true
-	case *DOidWrapper:
-		return AsDArray(t.Wrapped)
+// NewDArrayFromDatums returns a DArray containing the given datums that are
+// assumed to be of the specified type. It'll populate NULL-related fields
+// accordingly.
+func NewDArrayFromDatums(paramTyp *types.T, datums Datums) *DArray {
+	if buildutil.CrdbTestBuild {
+		for _, d := range datums {
+			if !d.ResolvedType().EquivalentOrNull(paramTyp, true /* allowNullTupleEquivalence */) {
+				panic(errors.AssertionFailedf(
+					"cannot include %s into array containing %s",
+					d.ResolvedType().SQLStringForError(), paramTyp.SQLStringForError(),
+				))
+			}
+		}
 	}
-	return nil, false
+	d := &DArray{ParamTyp: paramTyp, Array: datums}
+	for _, elem := range d.Array {
+		if elem == DNull {
+			d.hasNulls = true
+		} else {
+			d.hasNonNulls = true
+		}
+	}
+	return d
 }
 
 // MustBeDArray attempts to retrieve a *DArray from an Expr, panicking if the
 // assertion fails.
 func MustBeDArray(e Expr) *DArray {
-	i, ok := AsDArray(e)
+	i, ok := e.(*DArray)
 	if !ok {
 		panic(errors.AssertionFailedf("expected *DArray, found %T", e))
 	}
 	return i
+}
+
+func (d *DArray) testOnlyValidation() {
+	if buildutil.CrdbTestBuild {
+		if err := d.Validate(); err != nil {
+			panic(err)
+		}
+	}
+}
+
+func (d *DArray) HasNulls() bool {
+	d.testOnlyValidation()
+	return d.hasNulls
+}
+
+func (d *DArray) SetHasNulls(hasNulls bool) {
+	d.hasNulls = hasNulls
+	d.testOnlyValidation()
+}
+
+func (d *DArray) HasNonNulls() bool {
+	d.testOnlyValidation()
+	return d.hasNonNulls
+}
+
+func (d *DArray) SetHasNonNulls(hasNonNulls bool) {
+	d.hasNonNulls = hasNonNulls
+	d.testOnlyValidation()
 }
 
 // MaybeSetCustomOid checks whether t has a special oid that we want to set into
@@ -4942,11 +4890,20 @@ func (d *DArray) IsComposite() bool {
 // which are 1-indexed, and 0 for the special Postgers vector types which are
 // 0-indexed.
 func (d *DArray) FirstIndex() int {
+	if d.zeroIndexed {
+		return 0
+	}
 	switch d.customOid {
 	case oid.T_int2vector, oid.T_oidvector:
 		return 0
 	}
 	return 1
+}
+
+// SetZeroIndexed marks this array as 0-indexed. This is used for TG_ARGV
+// to match PostgreSQL's 0-indexed behavior.
+func (d *DArray) SetZeroIndexed() {
+	d.zeroIndexed = true
 }
 
 // Compare implements the Datum interface.
@@ -4988,10 +4945,10 @@ func (d *DArray) Prev(ctx context.Context, cmpCtx CompareContext) (Datum, bool) 
 
 // Next implements the Datum interface.
 func (d *DArray) Next(ctx context.Context, cmpCtx CompareContext) (Datum, bool) {
-	a := DArray{ParamTyp: d.ParamTyp, Array: make(Datums, d.Len()+1)}
-	copy(a.Array, d.Array)
-	a.Array[len(a.Array)-1] = DNull
-	return &a, true
+	elements := make(Datums, d.Len()+1)
+	copy(elements, d.Array)
+	elements[d.Len()] = DNull
+	return NewDArrayFromDatums(d.ParamTyp, elements), true
 }
 
 // Max implements the Datum interface.
@@ -5024,7 +4981,7 @@ func (d *DArray) AmbiguousFormat() bool {
 		// a valid type. So an array of unknown type is (paradoxically) unambiguous.
 		return false
 	}
-	return !d.HasNonNulls
+	return !d.HasNonNulls()
 }
 
 // Format implements the NodeFormatter interface.
@@ -5059,11 +5016,33 @@ const maxArrayLength = math.MaxInt32
 
 var errArrayTooLongError = errors.New("ARRAYs can be at most 2^31-1 elements long")
 
-// Validate checks that the given array is valid,
-// for example, that it's not too big.
+// Validate checks that the given array is valid, for example, that it's not too
+// big.
 func (d *DArray) Validate() error {
 	if d.Len() > maxArrayLength {
 		return errors.WithStack(errArrayTooLongError)
+	}
+	if buildutil.CrdbTestBuild {
+		// Additionally, in test builds ensure that NULL-related flags are set
+		// correctly.
+		var hasNulls, hasNonNulls bool
+		for _, elem := range d.Array {
+			if elem == DNull {
+				hasNulls = true
+			} else {
+				hasNonNulls = true
+			}
+		}
+		if hasNulls != d.hasNulls {
+			return errors.AssertionFailedf(
+				"found DArray with incorrect HasNulls (expected %t)", hasNulls,
+			)
+		}
+		if hasNonNulls != d.hasNonNulls {
+			return errors.AssertionFailedf(
+				"found DArray with incorrect HasNonNulls (expected %t)", hasNonNulls,
+			)
+		}
 	}
 	return nil
 }
@@ -5115,9 +5094,9 @@ func (d *DArray) Append(v Datum) error {
 		}
 	}
 	if v == DNull {
-		d.HasNulls = true
+		d.hasNulls = true
 	} else {
-		d.HasNonNulls = true
+		d.hasNonNulls = true
 	}
 	d.Array = append(d.Array, v)
 	return d.Validate()
@@ -5247,20 +5226,6 @@ func NewDEnum(e DEnum) *DEnum {
 	return &e
 }
 
-// AsDEnum attempts to retrieve a DEnum from an Expr, returning a DEnum and
-// a flag signifying whether the assertion was successful. The function should
-// // be used instead of direct type assertions wherever a *DEnum wrapped by a
-// // *DOidWrapper is possible.
-func AsDEnum(e Expr) (*DEnum, bool) {
-	switch t := e.(type) {
-	case *DEnum:
-		return t, true
-	case *DOidWrapper:
-		return AsDEnum(t.Wrapped)
-	}
-	return nil, false
-}
-
 // MakeDEnumFromPhysicalRepresentation creates a DEnum of the input type
 // and the input physical representation.
 func MakeDEnumFromPhysicalRepresentation(typ *types.T, rep []byte) (DEnum, error) {
@@ -5361,11 +5326,11 @@ func (d *DEnum) Compare(ctx context.Context, cmpCtx CompareContext, other Datum)
 
 	// We should never be comparing two different versions of the same enum.
 	if v.EnumTyp.TypeMeta.Version != d.EnumTyp.TypeMeta.Version {
-		panic(errors.AssertionFailedf(
+		return 0, errors.AssertionFailedf(
 			"comparison of two different versions of enum %s oid %d: versions %d and %d",
-			errors.Safe(d.EnumTyp.SQLString), d.EnumTyp.Oid(), d.EnumTyp.TypeMeta.Version,
-			v.EnumTyp.TypeMeta.Version,
-		))
+			d.EnumTyp.SQLStringForError(), errors.Safe(d.EnumTyp.Oid()),
+			d.EnumTyp.TypeMeta.Version, v.EnumTyp.TypeMeta.Version,
+		)
 	}
 
 	res := bytes.Compare(d.PhysicalRep, v.PhysicalRep)
@@ -5554,24 +5519,10 @@ func NewDOid(d oid.Oid) *DOid {
 	return &oidDatum
 }
 
-// AsDOid attempts to retrieve a DOid from an Expr, returning a DOid and
-// a flag signifying whether the assertion was successful. The function should
-// be used instead of direct type assertions wherever a *DOid wrapped by a
-// *DOidWrapper is possible.
-func AsDOid(e Expr) (*DOid, bool) {
-	switch t := e.(type) {
-	case *DOid:
-		return t, true
-	case *DOidWrapper:
-		return AsDOid(t.Wrapped)
-	}
-	return NewDOid(0), false
-}
-
 // MustBeDOid attempts to retrieve a DOid from an Expr, panicking if the
 // assertion fails.
 func MustBeDOid(e Expr) *DOid {
-	i, ok := AsDOid(e)
+	i, ok := e.(*DOid)
 	if !ok {
 		panic(errors.AssertionFailedf("expected *DOid, found %T", e))
 	}
@@ -5636,6 +5587,11 @@ func (d *DOid) Format(ctx *FmtCtx) {
 		ctx.WriteByte(',')
 		lexbase.EncodeSQLStringWithFlags(&ctx.Buffer, d.name, lexbase.EncNoFlags)
 		ctx.WriteByte(')')
+	} else if ctx.HasFlags(FmtPgwireText) {
+		// Pgwire text output: emit the name verbatim, matching Postgres's
+		// reg*out behavior (the name is already in qualified-identifier form
+		// when produced by resolveOID / castStringToRegClassTableName).
+		ctx.WriteString(d.name)
 	} else {
 		// This is used to print the name of pseudo-procedures in e.g.
 		// pg_catalog.pg_type.typinput
@@ -5705,6 +5661,8 @@ func (d *DOid) Name() string {
 // Types that currently benefit from DOidWrapper are:
 // - DName => DOidWrapper(*DString, oid.T_name)
 // - DRefCursor => DOidWrapper(*DString, oid.T_refcursor)
+// - DACLItem => DOidWrapper(*DString, oid.T_aclitem)
+// - DCIText => DOidWrapper(*DCollatedString, oidext.T_citext)
 type DOidWrapper struct {
 	Wrapped Datum
 	Oid     oid.Oid
@@ -5715,16 +5673,15 @@ func wrapWithOid(d Datum, oid oid.Oid) Datum {
 	switch v := d.(type) {
 	case nil:
 		return nil
-	case *DInt:
 	case *DString:
-	case *DArray:
+	case *DCollatedString:
 	case dNull, *DOidWrapper:
 		panic(errors.AssertionFailedf("cannot wrap %T with an Oid", v))
 	default:
-		// Currently only *DInt, *DString, *DArray are hooked up to work with
-		// *DOidWrapper. To support another base Datum type, replace all type
-		// assertions to that type with calls to functions like AsDInt and
-		// MustBeDInt.
+		// Currently only *DString and *DCollatedString are hooked up to work
+		// with *DOidWrapper. To support another base Datum type, replace all
+		// type assertions to that type with calls to functions like AsDString
+		// and MustBeDString.
 		panic(errors.AssertionFailedf("unsupported Datum type passed to wrapWithOid: %T", d))
 	}
 	return &DOidWrapper{
@@ -5803,7 +5760,13 @@ func (d *DOidWrapper) AmbiguousFormat() bool {
 func (d *DOidWrapper) Format(ctx *FmtCtx) {
 	if d.Oid == oid.T_refcursor {
 		wrapped := MustBeDString(d.Wrapped)
+		if ctx.flags.HasFlags(FmtMarkRedactionNode) {
+			ctx.WriteString(string(redact.StartMarker()))
+		}
 		wrapped.Format(ctx)
+		if ctx.flags.HasFlags(FmtMarkRedactionNode) {
+			ctx.WriteString(string(redact.EndMarker()))
+		}
 		return
 	}
 	ctx.FormatNode(d.Wrapped)
@@ -5812,6 +5775,14 @@ func (d *DOidWrapper) Format(ctx *FmtCtx) {
 // Size implements the Datum interface.
 func (d *DOidWrapper) Size() uintptr {
 	return unsafe.Sizeof(*d) + d.Wrapped.Size()
+}
+
+// IsComposite implements the CompositeDatum interface.
+func (d *DOidWrapper) IsComposite() bool {
+	if cdatum, ok := d.Wrapped.(CompositeDatum); ok {
+		return cdatum.IsComposite()
+	}
+	return false
 }
 
 // AmbiguousFormat implements the Datum interface.
@@ -5871,6 +5842,34 @@ func NewDNameFromDString(d *DString) Datum {
 // initialized from a string.
 func NewDName(d string) Datum {
 	return NewDNameFromDString(NewDString(d))
+}
+
+// NewDACLItemFromDString is a helper routine to create a *DOidWrapper with
+// aclitem OID, initialized from an existing *DString. It validates the format
+// and returns an error if the string is not a valid aclitem.
+func NewDACLItemFromDString(d *DString) (Datum, error) {
+	if _, err := privilege.ParseACLItem(string(*d)); err != nil {
+		return nil, err
+	}
+	return wrapWithOid(d, oid.T_aclitem), nil
+}
+
+// NewDACLItem creates a *DOidWrapper with aclitem OID from a structured
+// privilege.ACLItem. No validation is performed since the ACLItem is
+// already well-formed.
+func NewDACLItem(item privilege.ACLItem) Datum {
+	s := DString(item.String())
+	return wrapWithOid(&s, oid.T_aclitem)
+}
+
+// NewDCIText is a helper routine to create a *DCIText (implemented as a *DOidWrapper)
+// initialized from a string.
+func NewDCIText(contents string, env *CollationEnvironment) (Datum, error) {
+	d, err := NewDCollatedString(contents, collatedstring.CaseInsensitiveLocale, env)
+	if err != nil {
+		return nil, err
+	}
+	return wrapWithOid(d, oidext.T_citext), nil
 }
 
 // NewDRefCursorFromDString is a helper routine to create a *DRefCursor
@@ -5969,7 +5968,15 @@ func NewDefaultDatum(collationEnv *CollationEnvironment, t *types.T) (d Datum, e
 		}
 		return NewDTuple(t, datums...), nil
 	case types.BitFamily:
-		return bitArrayZero, nil
+		// For fixed-width BIT columns, we need the width to create the
+		// default value. Otherwise, we end up getting an error like:
+		// "bit string length 0 does not match type length 5"
+		var w uint
+		switch t.Oid() {
+		case oid.T_bit:
+			w = uint(t.Width())
+		}
+		return NewDBitArray(w), nil
 	case types.EnumFamily:
 		// The scenario in which this arises is when the column is being dropped and
 		// is NOT NULL. If there are no values for this enum, there's nothing that
@@ -5989,6 +5996,9 @@ func NewDefaultDatum(collationEnv *CollationEnvironment, t *types.T) (d Datum, e
 		}
 		return NewDEnum(e), nil
 	default:
+		// TODO(yuzefovich): think through whether we want to explicitly return
+		// FeatureNotSupported error for types like TSQuery, TSVector, PGVector,
+		// Jsonpath, etc that don't have a minimum value.
 		return nil, errors.AssertionFailedf("unhandled type %s", t.SQLStringForError())
 	}
 }
@@ -6075,7 +6085,7 @@ var baseDatumTypeSizes = map[types.Family]struct {
 	types.FloatFamily:          {unsafe.Sizeof(DFloat(0.0)), fixedSize},
 	types.DecimalFamily:        {unsafe.Sizeof(DDecimal{}), variableSize},
 	types.StringFamily:         {unsafe.Sizeof(DString("")), variableSize},
-	types.CollatedStringFamily: {unsafe.Sizeof(DCollatedString{"", "", nil}), variableSize},
+	types.CollatedStringFamily: {unsafe.Sizeof(DCollatedString{"", "", nil, false}), variableSize},
 	types.BytesFamily:          {unsafe.Sizeof(DBytes("")), variableSize},
 	types.EncodedKeyFamily:     {unsafe.Sizeof(DBytes("")), variableSize},
 	types.DateFamily:           {unsafe.Sizeof(DDate{}), fixedSize},
@@ -6092,10 +6102,12 @@ var baseDatumTypeSizes = map[types.Family]struct {
 	types.TSVectorFamily:       {unsafe.Sizeof(DTSVector{}), variableSize},
 	types.IntervalFamily:       {unsafe.Sizeof(DInterval{}), fixedSize},
 	types.JsonFamily:           {unsafe.Sizeof(DJSON{}), variableSize},
+	types.JsonpathFamily:       {unsafe.Sizeof(DJsonpath{}), variableSize},
 	types.UuidFamily:           {unsafe.Sizeof(DUuid{}), fixedSize},
 	types.INetFamily:           {unsafe.Sizeof(DIPAddr{}), fixedSize},
 	types.OidFamily:            {unsafe.Sizeof(DOid{}.Oid), fixedSize},
 	types.EnumFamily:           {unsafe.Sizeof(DEnum{}), variableSize},
+	types.LTreeFamily:          {unsafe.Sizeof(DLTree{}), variableSize},
 
 	types.VoidFamily: {sz: unsafe.Sizeof(DVoid{}), variable: fixedSize},
 	// TODO(jordan,justin): This seems suspicious.
@@ -6133,14 +6145,14 @@ func MaxDistinctCount(
 
 	switch t := first.(type) {
 	case *DInt:
-		otherDInt, otherOk := AsDInt(last)
+		otherDInt, otherOk := last.(*DInt)
 		if otherOk {
 			start = int64(*t)
-			end = int64(otherDInt)
+			end = int64(*otherDInt)
 		}
 
 	case *DOid:
-		otherDOid, otherOk := AsDOid(last)
+		otherDOid, otherOk := last.(*DOid)
 		if otherOk {
 			start = int64(t.Oid)
 			end = int64(otherDOid.Oid)
@@ -6260,11 +6272,15 @@ func AdjustValueToType(typ *types.T, inVal Datum) (outVal Datum, err error) {
 	switch typ.Family() {
 	case types.StringFamily, types.CollatedStringFamily:
 		var sv string
+		var isString, isCollatedString bool
 		if v, ok := AsDString(inVal); ok {
 			sv = string(v)
-		} else if v, ok := inVal.(*DCollatedString); ok {
+			isString = true
+		} else if v, ok := AsDCollatedString(inVal); ok {
 			sv = v.Contents
+			isCollatedString = true
 		}
+		origLen := len(sv)
 		switch typ.Oid() {
 		case oid.T_char:
 			// "char" is supposed to truncate long values.
@@ -6299,14 +6315,21 @@ func AdjustValueToType(typ *types.T, inVal Datum) (outVal Datum, err error) {
 		}
 
 		if typ.Oid() == oid.T_bpchar || typ.Oid() == oid.T_char || typ.Oid() == oid.T_varchar {
-			if _, ok := AsDString(inVal); ok {
+			if isString {
+				if len(sv) == origLen {
+					// The string wasn't modified, so we can just return the
+					// original datum.
+					return inVal, nil
+				}
 				return NewDString(sv), nil
-			} else if _, ok := inVal.(*DCollatedString); ok {
+			} else if isCollatedString {
+				// Note that we cannot have CITEXT here (because of Oid check
+				// above).
 				return NewDCollatedString(sv, typ.Locale(), &CollationEnvironment{})
 			}
 		}
 	case types.IntFamily:
-		if v, ok := AsDInt(inVal); ok {
+		if v, ok := inVal.(*DInt); ok {
 			if typ.Width() == 32 || typ.Width() == 16 {
 				// Width is defined in bits.
 				width := uint(typ.Width() - 1)
@@ -6316,8 +6339,8 @@ func AdjustValueToType(typ *types.T, inVal Datum) (outVal Datum, err error) {
 				// the boundaries of the allowed range.
 				// NOTE: when updating the code below, make sure to update
 				// execgen/cast_gen_util.go as well.
-				shifted := v >> width
-				if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
+				shifted := *v >> width
+				if (*v >= 0 && shifted > 0) || (*v < 0 && shifted < -1) {
 					if typ.Width() == 16 {
 						return nil, ErrInt2OutOfRange
 					}
@@ -6326,7 +6349,7 @@ func AdjustValueToType(typ *types.T, inVal Datum) (outVal Datum, err error) {
 			}
 		}
 	case types.BitFamily:
-		if v, ok := AsDBitArray(inVal); ok {
+		if v, ok := inVal.(*DBitArray); ok {
 			if typ.Width() > 0 {
 				bitLen := v.BitLen()
 				switch typ.Oid() {
@@ -6384,6 +6407,11 @@ func AdjustValueToType(typ *types.T, inVal Datum) (outVal Datum, err error) {
 				}
 			}
 			if outArr != nil {
+				if buildutil.CrdbTestBuild {
+					if err := outArr.Validate(); err != nil {
+						return nil, err
+					}
+				}
 				return outArr, nil
 			}
 		}

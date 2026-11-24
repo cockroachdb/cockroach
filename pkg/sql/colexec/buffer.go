@@ -8,6 +8,7 @@ package colexec
 import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 )
 
 // bufferOp is an operator that buffers a single batch at a time from an input,
@@ -39,15 +40,20 @@ func (b *bufferOp) rewind() {
 
 // advance reads the next batch from the input into the buffer, preparing itself
 // for reads.
-func (b *bufferOp) advance() {
-	b.batch = b.Input.Next()
+func (b *bufferOp) advance() *execinfrapb.ProducerMetadata {
+	var meta *execinfrapb.ProducerMetadata
+	b.batch, meta = b.Input.Next()
+	if meta != nil {
+		return meta
+	}
 	b.rewind()
+	return nil
 }
 
-func (b *bufferOp) Next() coldata.Batch {
+func (b *bufferOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	if b.read {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 	b.read = true
-	return b.batch
+	return b.batch, nil
 }

@@ -70,17 +70,21 @@ const (
 	// ExplainGist generates a plan "gist".
 	ExplainGist
 
+	// ExplainFingerprint returns the statement fingerprint.
+	ExplainFingerprint
+
 	numExplainModes = iota
 )
 
 var explainModeStrings = [...]string{
-	ExplainPlan:    "PLAN",
-	ExplainDistSQL: "DISTSQL",
-	ExplainOpt:     "OPT",
-	ExplainVec:     "VEC",
-	ExplainDebug:   "DEBUG",
-	ExplainDDL:     "DDL",
-	ExplainGist:    "GIST",
+	ExplainPlan:        "PLAN",
+	ExplainDistSQL:     "DISTSQL",
+	ExplainOpt:         "OPT",
+	ExplainVec:         "VEC",
+	ExplainDebug:       "DEBUG",
+	ExplainDDL:         "DDL",
+	ExplainGist:        "GIST",
+	ExplainFingerprint: "FINGERPRINT",
 }
 
 var explainModeStringMap = func() map[string]ExplainMode {
@@ -169,8 +173,8 @@ func (node *Explain) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.Statement)
 }
 
-// doc is part of the docer interface.
-func (node *Explain) doc(p *PrettyCfg) pretty.Doc {
+// Doc is part of the Docer interface.
+func (node *Explain) Doc(p *PrettyCfg) pretty.Doc {
 	d := pretty.Keyword("EXPLAIN")
 	var opts []pretty.Doc
 	if node.Mode != ExplainPlan {
@@ -207,8 +211,8 @@ func (node *ExplainAnalyze) Format(ctx *FmtCtx) {
 	ctx.FormatNode(node.Statement)
 }
 
-// doc is part of the docer interface.
-func (node *ExplainAnalyze) doc(p *PrettyCfg) pretty.Doc {
+// Doc is part of the Docer interface.
+func (node *ExplainAnalyze) Doc(p *PrettyCfg) pretty.Doc {
 	d := pretty.Keyword("EXPLAIN ANALYZE")
 	var opts []pretty.Doc
 	if node.Mode != ExplainPlan {
@@ -302,6 +306,15 @@ func MakeExplain(options []string, stmt Statement) (Statement, error) {
 			ExplainOptions: opts,
 			Statement:      stmt,
 		}, nil
+	}
+
+	if opts.Mode == ExplainFingerprint {
+		// FINGERPRINT mode doesn't support any flags
+		for f := ExplainFlag(1); f <= numExplainFlags; f++ {
+			if opts.Flags[f] {
+				return nil, pgerror.Newf(pgcode.Syntax, "EXPLAIN (FINGERPRINT) cannot be used with %s", f)
+			}
+		}
 	}
 
 	if opts.Mode == ExplainDebug {

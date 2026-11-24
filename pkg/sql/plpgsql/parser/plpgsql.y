@@ -4,12 +4,12 @@ package parser
 import (
   "strings"
 
-  "github.com/cockroachdb/cockroach/pkg/build"
   "github.com/cockroachdb/cockroach/pkg/sql/parser"
   "github.com/cockroachdb/cockroach/pkg/sql/scanner"
   "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
   "github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
   "github.com/cockroachdb/cockroach/pkg/sql/types"
+  unimp "github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
   "github.com/cockroachdb/errors"
   "github.com/cockroachdb/redact"
 )
@@ -21,8 +21,13 @@ func setErr(plpgsqllex plpgsqlLexer, err error) int {
     return 1
 }
 
-func unimplemented(plpgsqllex plpgsqlLexer, feature string) int {
-    plpgsqllex.(*lexer).Unimplemented(feature)
+func setErrNoDetails(plpgsqllex plpgsqlLexer, err error) int {
+    plpgsqllex.(*lexer).setErrNoDetails(err)
+    return 1
+}
+
+func unimplementedWithIssue(plpgsqllex plpgsqlLexer, issue int) int {
+    plpgsqllex.(*lexer).UnimplementedWithIssue(issue)
     return 1
 }
 
@@ -179,6 +184,14 @@ func (u *plpgsqlSymUnion) forLoopControl() plpgsqltree.ForLoopControl {
 		return u.val.(plpgsqltree.ForLoopControl)
 }
 
+func (u *plpgsqlSymUnion) doBlockOptions() tree.DoBlockOptions {
+    return u.val.(tree.DoBlockOptions)
+}
+
+func (u *plpgsqlSymUnion) doBlockOption() tree.DoBlockOption {
+    return u.val.(tree.DoBlockOption)
+}
+
 %}
 /*
  * Basic non-keyword token types.  These are hard-wired into the core lexer.
@@ -259,6 +272,7 @@ func (u *plpgsqlSymUnion) forLoopControl() plpgsqltree.ForLoopControl {
 %token <str>  INSERT
 %token <str>  INTO
 %token <str>  IS
+%token <str>  LANGUAGE
 %token <str>  LAST
 %token <str>  LOG
 %token <str>  LOOP
@@ -324,21 +338,24 @@ func (u *plpgsqlSymUnion) forLoopControl() plpgsqltree.ForLoopControl {
 }
 
 %type <str> decl_varname decl_defkey
-%type <bool>	decl_const decl_notnull
+%type <bool> decl_const decl_notnull
 %type <plpgsqltree.Expr>	decl_defval decl_cursor_query
 %type <tree.ResolvableTypeReference>	decl_datatype
-%type <str>		decl_collate
+%type <str>	decl_collate
 
-%type <str>	expr_until_semi expr_until_paren stmt_until_semi return_expr
+%type <str>	expr_until_semi expr_until_paren stmt_until_semi
 %type <str>	expr_until_then expr_until_loop opt_expr_until_when
-%type <plpgsqltree.Expr>	opt_exitcond
+%type <plpgsqltree.Expr> return_expr opt_exitcond
 
 %type <[]plpgsqltree.Variable> for_target
 %type <*tree.NumVal> foreach_slice
 %type <plpgsqltree.ForLoopControl> for_control
 
-%type <str> any_identifier opt_block_label opt_loop_label opt_label query_options
+%type <str> any_identifier opt_block_label opt_loop_label opt_label
 %type <str> opt_error_level option_type
+
+%type <tree.DoBlockOptions> do_stmt_opt_list
+%type <tree.DoBlockOption> do_stmt_opt_item
 
 %type <[]plpgsqltree.Statement> proc_sect
 %type <[]plpgsqltree.ElseIf> stmt_elsifs
@@ -351,6 +368,7 @@ func (u *plpgsqlSymUnion) forLoopControl() plpgsqltree.ForLoopControl {
 %type <plpgsqltree.Statement>	stmt_open stmt_fetch stmt_move stmt_close stmt_null
 %type <plpgsqltree.Statement>	stmt_commit stmt_rollback
 %type <plpgsqltree.Statement>	stmt_case stmt_foreach_a
+%type <plpgsqltree.Statement> return_query
 
 %type <plpgsqltree.Statement> decl_statement
 %type <[]plpgsqltree.Statement> decl_sect opt_decl_stmts decl_stmts
@@ -457,7 +475,7 @@ decl_statement: decl_varname decl_const decl_datatype decl_collate decl_notnull 
   }
 | decl_varname ALIAS FOR decl_aliasitem ';'
   {
-    return unimplemented(plpgsqllex, "alias for")
+    return unimplementedWithIssue(plpgsqllex, 169572)
   }
 | decl_varname opt_scrollable CURSOR decl_cursor_args decl_is_for decl_cursor_query
   {
@@ -498,7 +516,7 @@ decl_cursor_query: stmt_until_semi ';'
 
 decl_cursor_args: '('
   {
-    return unimplemented(plpgsqllex, "cursor arguments")
+    return unimplementedWithIssue(plpgsqllex, 117746)
   }
 | /* EMPTY */
   {
@@ -566,13 +584,12 @@ decl_datatype:
     case *tree.CastExpr:
       $$.val = t.Type
     default:
-      err := errors.New("unable to parse type of variable declaration")
       if strings.Contains(sqlStr, "%") {
-        err = errors.WithIssueLink(errors.WithHint(err,
-          "you may have attempted to use %TYPE or %ROWTYPE syntax, which is unsupported.",
-        ), errors.IssueLink{IssueURL: build.MakeIssueURL(114676)})
+        return setErr(plpgsqllex, unimp.NewWithIssue(114676,
+          "%TYPE and %ROWTYPE syntax",
+        ))
       }
-      return setErr(plpgsqllex, err)
+      return setErr(plpgsqllex, errors.New("unable to parse type of variable declaration"))
     }
   }
 ;
@@ -754,7 +771,7 @@ proc_stmt:pl_block ';'
 
 stmt_perform: PERFORM stmt_until_semi ';'
   {
-    return unimplemented(plpgsqllex, "perform")
+    return unimplementedWithIssue(plpgsqllex, 108416)
   }
 ;
 
@@ -776,9 +793,40 @@ stmt_call: CALL expr_until_semi ';'
   }
 ;
 
-stmt_do: DO expr_until_semi ';'
+stmt_do:
+  DO do_stmt_opt_list ';'
   {
-    return unimplemented(plpgsqllex, "do")
+    doBlock, err := makeDoStmt($2.doBlockOptions())
+    if err != nil {
+      return setErrNoDetails(plpgsqllex, err)
+    }
+    $$.val = doBlock
+  }
+;
+
+do_stmt_opt_list:
+  do_stmt_opt_item
+  {
+    $$.val = tree.DoBlockOptions{$1.doBlockOption()}
+  }
+| do_stmt_opt_list do_stmt_opt_item
+  {
+    $$.val = append($1.doBlockOptions(), $2.doBlockOption())
+  }
+;
+
+do_stmt_opt_item:
+  SCONST
+  {
+    $$.val = tree.RoutineBodyStr($1)
+  }
+| LANGUAGE any_identifier
+  {
+    lang, err := tree.AsRoutineLanguage($2)
+    if err != nil {
+      return setErr(plpgsqllex, err)
+    }
+    $$.val = lang
   }
 ;
 
@@ -1058,7 +1106,7 @@ for_control:
 	    }
 	    $$.val = forLoopControl
 	  case LOOP:
-	    return unimplemented(plpgsqllex, "for loop over query or cursor")
+	    return unimplementedWithIssue(plpgsqllex, 105246)
 	  default:
 	    return setErr(plpgsqllex, errors.New("unterminated FOR loop definition"))
 	  }
@@ -1077,7 +1125,7 @@ for_target:
 
 stmt_foreach_a: opt_loop_label FOREACH
   {
-    return unimplemented(plpgsqllex, "for each loop")
+    return unimplementedWithIssue(plpgsqllex, 163147)
   }
 ;
 
@@ -1109,56 +1157,48 @@ stmt_continue: CONTINUE opt_label opt_exitcond
 
 stmt_return: RETURN return_expr ';'
   {
-    var expr plpgsqltree.Expr
-    if $2 != "" {
-      var err error
-      expr, err = plpgsqllex.(*lexer).ParseExpr($2)
-      if err != nil {
-        return setErr(plpgsqllex, err)
-      }
-    }
-    $$.val = &plpgsqltree.Return{Expr: expr}
+    $$.val = &plpgsqltree.Return{Expr: $2.expr()}
   }
-| RETURN_NEXT NEXT
+| RETURN_NEXT NEXT return_expr ';'
   {
-    return unimplemented(plpgsqllex, "return next")
+    $$.val = &plpgsqltree.ReturnNext{Expr: $3.expr()}
   }
-| RETURN_QUERY QUERY
- {
-   return unimplemented (plpgsqllex, "return query")
- }
+| RETURN_QUERY QUERY return_query ';'
+  {
+    $$.val = $3.statement()
+  }
 ;
 
 return_expr:
   {
-    sqlStr, err := plpgsqllex.(*lexer).ReadReturnExpr()
+    retExpr, err := plpgsqllex.(*lexer).ParseReturnExpr()
     if err != nil {
       return setErr(plpgsqllex, err)
     }
-    $$ = sqlStr
+    $$.val = retExpr
   }
 ;
 
-query_options:
+return_query:
   {
-    _, terminator, err := plpgsqllex.(*lexer).ReadSqlExpr(EXECUTE, ';')
+    if plpgsqllex.(*lexer).peekForExecute() {
+      // Advance the lexer by one token so that the error correctly points to
+      // the EXECUTE keyword.
+      plpgsqllex.(*lexer).Advance(1)
+      return unimplementedWithIssue(plpgsqllex, 169571)
+    }
+    retQuery, err := plpgsqllex.(*lexer).ParseReturnQuery()
     if err != nil {
       return setErr(plpgsqllex, err)
     }
-    if terminator == EXECUTE {
-      return unimplemented (plpgsqllex, "return dynamic sql query")
-    }
-    _, _, err = plpgsqllex.(*lexer).ReadSqlExpr(';')
-    if err != nil {
-      return setErr(plpgsqllex, err)
-    }
+    $$.val = retQuery
   }
 ;
 
 stmt_raise:
   RAISE ';'
   {
-    return unimplemented(plpgsqllex, "empty RAISE statement")
+    return unimplementedWithIssue(plpgsqllex, 169573)
   }
 | RAISE opt_error_level SCONST opt_format_exprs opt_option_exprs ';'
   {
@@ -1358,9 +1398,9 @@ stmt_open: OPEN IDENT ';'
   {
     $$.val = &plpgsqltree.Open{CurVar: plpgsqltree.Variable($2)}
   }
-| OPEN IDENT opt_scrollable FOR EXECUTE 
+| OPEN IDENT opt_scrollable FOR EXECUTE
   {
-    return unimplemented(plpgsqllex, "cursor for execute")
+    return unimplementedWithIssue(plpgsqllex, 169574)
   }
 | OPEN IDENT opt_scrollable FOR stmt_until_semi ';'
   {
@@ -1582,11 +1622,8 @@ opt_exitcond: ';'
   }
 ;
 
-/*
- * need to allow DATUM because scanner will have tried to resolve as variable
- */
 any_identifier:
-IDENT
+  IDENT
 | unreserved_keyword
 ;
 
@@ -1631,6 +1668,7 @@ unreserved_keyword:
 | INFO
 | INSERT
 | IS
+| LANGUAGE
 | LAST
 | LOG
 | MERGE

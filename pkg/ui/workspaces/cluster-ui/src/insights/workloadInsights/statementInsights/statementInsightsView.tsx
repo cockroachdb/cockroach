@@ -5,16 +5,14 @@
 
 import { InlineAlert } from "@cockroachlabs/ui-components";
 import classNames from "classnames/bind";
-import moment from "moment-timezone";
 import React, { useEffect, useState, useCallback } from "react";
 import { useHistory } from "react-router-dom";
 
 import { Anchor } from "src/anchor";
-import { StmtInsightsReq } from "src/api/stmtInsightsApi";
+import { useStmtInsights } from "src/api/stmtInsightsApi";
 import { isSelectedColumn } from "src/columnsSelector/utils";
 import {
   filterStatementInsights,
-  StmtInsightEvent,
   getAppsFromStatementInsights,
   makeStatementInsightsColumns,
   WorkloadInsightEventFilters,
@@ -32,15 +30,11 @@ import {
 import { getWorkloadInsightEventFiltersFromURL } from "src/queryFilter/utils";
 import { Search } from "src/search/search";
 import { getTableSortFromURL } from "src/sortedtable/getTableSortFromURL";
-import {
-  ISortedTablePagination,
-  SortSetting,
-} from "src/sortedtable/sortedtable";
+import { SortSetting } from "src/sortedtable/sortedtable";
 import sortableTableStyles from "src/sortedtable/sortedtable.module.scss";
 import styles from "src/statementsPage/statementsPage.module.scss";
 import { TableStatistics } from "src/tableStatistics";
-import { insights } from "src/util";
-import { useScheduleFunction } from "src/util/hooks";
+import { insights, usePagination } from "src/util";
 import { queryByName, syncHistory } from "src/util/query";
 
 import ColumnsSelector from "../../../columnsSelector/columnsSelector";
@@ -50,7 +44,6 @@ import {
   defaultTimeScaleOptions,
   TimeScale,
   TimeScaleDropdown,
-  timeScaleRangeToObj,
 } from "../../../timeScaleDropdown";
 import { InsightsError } from "../../insightsErrorComponent";
 import { EmptyInsightsTablePlaceholder } from "../util";
@@ -63,22 +56,15 @@ const sortableTableCx = classNames.bind(sortableTableStyles);
 export type StatementInsightsViewStateProps = {
   filters: WorkloadInsightEventFilters;
   insightTypes: string[];
-  isDataValid: boolean;
-  lastUpdated: moment.Moment;
   selectedColumnNames: string[];
   sortSetting: SortSetting;
-  statements: StmtInsightEvent[];
-  statementsError: Error | null;
   dropDownSelect?: React.ReactElement;
-  isLoading?: boolean;
-  maxSizeApiReached?: boolean;
   timeScale?: TimeScale;
 };
 
 export type StatementInsightsViewDispatchProps = {
   onFiltersChange: (filters: WorkloadInsightEventFilters) => void;
   onSortChange: (ss: SortSetting) => void;
-  refreshStatementInsights: (req: StmtInsightsReq) => void;
   onColumnsChange: (selectedColumns: string[]) => void;
   setTimeScale: (ts: TimeScale) => void;
 };
@@ -90,53 +76,31 @@ const INSIGHT_STMT_SEARCH_PARAM = "q";
 const INTERNAL_APP_NAME_PREFIX = "$ internal";
 
 export const StatementInsightsView: React.FC<StatementInsightsViewProps> = ({
-  isDataValid,
-  lastUpdated,
   sortSetting,
-  statements,
-  statementsError,
   insightTypes,
   filters,
   timeScale,
-  isLoading,
-  refreshStatementInsights,
   onFiltersChange,
   onSortChange,
   onColumnsChange,
   setTimeScale,
   selectedColumnNames,
   dropDownSelect,
-  maxSizeApiReached,
 }: StatementInsightsViewProps) => {
-  const [pagination, setPagination] = useState<ISortedTablePagination>({
-    current: 1,
-    pageSize: 10,
-  });
+  const {
+    data: stmtInsightsResp,
+    error: statementsError,
+    isLoading,
+  } = useStmtInsights(timeScale);
+
+  const statements = stmtInsightsResp?.results;
+  const maxSizeApiReached = stmtInsightsResp?.maxSizeReached;
+
+  const [pagination, updatePagination, resetPagination] = usePagination(1, 10);
   const history = useHistory();
   const [search, setSearch] = useState<string>(
     queryByName(history.location, INSIGHT_STMT_SEARCH_PARAM),
   );
-
-  const refresh = useCallback(() => {
-    const ts = timeScaleRangeToObj(timeScale);
-    const req = {
-      start: ts.start,
-      end: ts.end,
-    };
-    refreshStatementInsights(req);
-  }, [refreshStatementInsights, timeScale]);
-
-  const shouldPoll = timeScale.key !== "Custom";
-  const [refetch, clearPolling] = useScheduleFunction(
-    refresh,
-    shouldPoll, // Don't reschedule refresh if we have a custom time interval.
-    10 * 1000, // 10s polling interval
-    lastUpdated,
-  );
-
-  useEffect(() => {
-    if (!isDataValid) refetch();
-  }, [isDataValid, refetch]);
 
   useEffect(() => {
     // We use this effect to sync settings defined on the URL (sort, filters),
@@ -177,20 +141,6 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = ({
     search,
   ]);
 
-  const onChangePage = (current: number): void => {
-    setPagination({
-      current: current,
-      pageSize: 10,
-    });
-  };
-
-  const resetPagination = () => {
-    setPagination({
-      current: 1,
-      pageSize: 10,
-    });
-  };
-
   const onChangeSortSetting = (ss: SortSetting): void => {
     onSortChange(ss);
     resetPagination();
@@ -213,10 +163,9 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = ({
 
   const onSetTimeScale = useCallback(
     (ts: TimeScale) => {
-      clearPolling();
       setTimeScale(ts);
     },
-    [setTimeScale, clearPolling],
+    [setTimeScale],
   );
 
   const visibleColumns = defaultColumns.filter(x =>
@@ -330,7 +279,8 @@ export const StatementInsightsView: React.FC<StatementInsightsViewProps> = ({
               pageSize={pagination.pageSize}
               current={pagination.current}
               total={filteredStatements?.length}
-              onChange={onChangePage}
+              onChange={updatePagination}
+              onShowSizeChange={updatePagination}
             />
             {maxSizeApiReached && (
               <InlineAlert

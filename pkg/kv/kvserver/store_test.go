@@ -10,7 +10,6 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"math/rand"
 	"reflect"
 	"sort"
 	"strings"
@@ -32,16 +31,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	aload "github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowdispatch"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/node_rac2"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities/tenantcapabilitiesauthorizer"
@@ -55,6 +55,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/gossiputil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -67,12 +68,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
-	"github.com/kr/pretty"
+	"github.com/cockroachdb/errors/oserror"
+	"github.com/cockroachdb/redact"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/slices"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -83,7 +88,7 @@ var testIdent = roachpb.StoreIdent{
 }
 
 func (s *Store) TestSender() kv.Sender {
-	return kv.Wrap(s, func(ba *kvpb.BatchRequest) *kvpb.BatchRequest {
+	return kv.Wrap(ToSenderForTesting(s), func(ba *kvpb.BatchRequest) *kvpb.BatchRequest {
 		if ba.RangeID != 0 {
 			return ba
 		}
@@ -96,7 +101,7 @@ func (s *Store) TestSender() kv.Sender {
 		// that.
 		key, err := keys.Addr(ba.Requests[0].GetInner().Header().Key)
 		if err != nil {
-			log.Fatalf(context.Background(), "%v", err)
+			log.KvExec.Fatalf(context.Background(), "%v", err)
 		}
 
 		ba.RangeID = roachpb.RangeID(1)
@@ -120,13 +125,14 @@ type testStoreOpts struct {
 	// If createSystemRanges is not set, the store will have a single range. If
 	// set, the store will have all the system ranges that are generally created
 	// for a cluster at boostrap.
-	createSystemRanges bool
-	bootstrapVersion   roachpb.Version // defaults to TestingClusterVersion
+	createSystemRanges  bool
+	bootstrapVersion    roachpb.Version // defaults to TestingClusterVersion
+	useSeparatedEngines bool
 }
 
 func (opts *testStoreOpts) splits() (_kvs []roachpb.KeyValue, _splits []roachpb.RKey) {
 	kvs, splits := bootstrap.MakeMetadataSchema(
-		keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(),
+		keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(), bootstrap.NoOffset,
 	).GetInitialValues()
 	if !opts.createSystemRanges {
 		return kvs, nil
@@ -187,7 +193,9 @@ func createTestStoreWithoutStart(
 	}
 	rpcContext := rpc.NewContext(ctx, rpcOpts)
 	stopper.SetTracer(cfg.AmbientCtx.Tracer)
-	server, err := rpc.NewServer(ctx, rpcContext) // never started
+	grpcServer, err := rpc.NewServer(ctx, rpcContext) // never started
+	require.NoError(t, err)
+	drpcServer, err := rpc.NewDRPCServer(ctx, rpcContext) // never started
 	require.NoError(t, err)
 
 	// Some tests inject their own Gossip and StorePool, via
@@ -220,8 +228,15 @@ func createTestStoreWithoutStart(
 	// to do the same (with some effort). That's unlikely to happen soon, so
 	// let's continue to use the system config span.
 	cfg.SpanConfigsDisabled = true
-	eng := storage.NewDefaultInMemForTesting()
-	stopper.AddCloser(eng)
+	var eng kvstorage.Engines
+	if opts.useSeparatedEngines {
+		eng = kvstorage.MakeSeparatedEnginesForTesting(
+			storage.NewDefaultInMemForTesting(), storage.NewDefaultInMemForTesting(),
+		)
+	} else {
+		eng = kvstorage.MakeEngines(storage.NewDefaultInMemForTesting())
+	}
+	stopper.AddCloser(&eng)
 	require.Nil(t, cfg.Transport)
 
 	require.NotNil(t, cfg.Gossip) // was set above already
@@ -236,24 +251,33 @@ func createTestStoreWithoutStart(
 		stopper,
 		cfg.Clock,
 		cfg.NodeDialer,
-		server,
-		kvflowdispatch.NewDummyDispatch(),
-		NoopStoresFlowControlIntegration{},
-		NoopRaftTransportDisconnectListener{},
+		grpcServer,
+		drpcServer,
 		(*node_rac2.AdmittedPiggybacker)(nil),
 		nil, /* PiggybackedAdmittedResponseScheduler */
 		nil, /* knobs */
 	)
-	cfg.StoreLivenessTransport = storeliveness.NewTransport(
-		cfg.AmbientCtx, stopper, cfg.Clock, cfg.NodeDialer, server, nil, /* knobs */
-	)
+
+	nodeIDContainer := &base.NodeIDContainer{}
+	nodeIDContainer.Set(ctx, 1)
+	{
+		livenessInterval, heartbeatInterval := cfg.StoreLivenessDurations()
+		supportGracePeriod := rpcContext.StoreLivenessWithdrawalGracePeriod()
+		options := storeliveness.NewOptions(livenessInterval, heartbeatInterval, supportGracePeriod)
+		transport, err := storeliveness.NewTransport(
+			cfg.AmbientCtx, stopper, cfg.Clock, cfg.NodeDialer, grpcServer, drpcServer, cfg.Settings, nil, /* knobs */
+		)
+		require.NoError(t, err)
+		knobs := cfg.TestingKnobs.StoreLivenessKnobs
+		cfg.StoreLiveness = storeliveness.NewNodeContainer(stopper, nodeIDContainer, options, transport, knobs)
+	}
 
 	stores := NewStores(cfg.AmbientCtx, cfg.Clock)
 	nodeDesc := &roachpb.NodeDescriptor{NodeID: 1}
 
 	rangeProv := &dummyFirstRangeProvider{}
 	var storeSender struct{ kv.Sender }
-	ds := kvcoord.NewDistSender(kvcoord.DistSenderConfig{
+	ds := kvcoord.NewDistSender(ctx, kvcoord.DistSenderConfig{
 		AmbientCtx:         cfg.AmbientCtx,
 		Settings:           cfg.Settings,
 		Clock:              cfg.Clock,
@@ -273,20 +297,24 @@ func createTestStoreWithoutStart(
 	}, ds)
 	require.Nil(t, cfg.DB)
 	cfg.DB = kv.NewDB(cfg.AmbientCtx, txnCoordSenderFactory, cfg.Clock, stopper)
+	if cfg.NodeCapacityProvider == nil {
+		// Faster refresh intervals for testing.
+		cfg.NodeCapacityProvider = load.NewNodeCapacityProvider(stopper, stores, cfg.DB.SQLCPUProvider, load.NodeCapacityProviderConfig{
+			CPUUsageRefreshInterval:    10 * time.Millisecond,
+			CPUCapacityRefreshInterval: 10 * time.Millisecond,
+			CPUUsageMovingAverageAge:   20,
+		})
+	}
 	store := NewStore(ctx, *cfg, eng, nodeDesc)
-	storeSender.Sender = store
+	storeSender.Sender = ToSenderForTesting(store)
 
 	storeIdent := roachpb.StoreIdent{NodeID: 1, StoreID: 1}
 	cv := clusterversion.TestingClusterVersion
 	if opts.bootstrapVersion != (roachpb.Version{}) {
 		cv = clusterversion.ClusterVersion{Version: opts.bootstrapVersion}
 	}
-	require.NoError(t, kvstorage.WriteClusterVersion(ctx, eng, cv))
-	if err := kvstorage.InitEngine(
-		ctx, eng, storeIdent,
-	); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, eng.SetMinVersion(cv))
+	require.NoError(t, kvstorage.InitEngine(ctx, eng, storeIdent))
 	rangeProv.store = store
 	store.Ident = &storeIdent // would usually be set during Store.Start, but can't call that yet
 	stores.AddStore(store)
@@ -318,148 +346,11 @@ func createTestStoreWithConfig(
 	ctx context.Context, t testing.TB, stopper *stop.Stopper, opts testStoreOpts, cfg *StoreConfig,
 ) *Store {
 	store := createTestStoreWithoutStart(ctx, t, stopper, opts, cfg)
-	// Put an empty system config into gossip.
-	//
-	// TODO(ajwerner): Remove this in 22.2. It's possible it can be removed
-	// already.
-	if err := store.Gossip().AddInfoProto(gossip.KeyDeprecatedSystemConfig,
-		&config.SystemConfigEntries{}, 0); err != nil {
-		t.Fatal(err)
-	}
 	if err := store.Start(ctx, stopper); err != nil {
 		t.Fatal(err)
 	}
 	store.WaitForInit()
 	return store
-}
-
-// TestIterateIDPrefixKeys lays down a number of tombstones (at keys.RangeTombstoneKey) interspersed
-// with other irrelevant keys (both chosen randomly). It then verifies that IterateIDPrefixKeys
-// correctly returns only the relevant keys and values.
-func TestIterateIDPrefixKeys(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	ctx := context.Background()
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-
-	eng := storage.NewDefaultInMemForTesting()
-	stopper.AddCloser(eng)
-
-	seed := randutil.NewPseudoSeed()
-	// const seed = -1666367124291055473
-	t.Logf("seed is %d", seed)
-	rng := rand.New(rand.NewSource(seed))
-
-	ops := []func(rangeID roachpb.RangeID) roachpb.Key{
-		keys.RaftHardStateKey, // unreplicated; sorts after tombstone
-		// Replicated key-anchored local key (i.e. not one we should care about).
-		// Will be written at zero timestamp, but that's ok.
-		func(rangeID roachpb.RangeID) roachpb.Key {
-			return keys.RangeDescriptorKey([]byte(fmt.Sprintf("fakerange%d", rangeID)))
-		},
-		func(rangeID roachpb.RangeID) roachpb.Key {
-			return roachpb.Key(fmt.Sprintf("fakeuserkey%d", rangeID))
-		},
-	}
-
-	const rangeCount = 10
-	rangeIDFn := func() roachpb.RangeID {
-		return 1 + roachpb.RangeID(rng.Intn(10*rangeCount)) // spread rangeIDs out
-	}
-
-	// Write a number of keys that should be irrelevant to the iteration in this test.
-	for i := 0; i < rangeCount; i++ {
-		rangeID := rangeIDFn()
-
-		// Grab between one and all ops, randomly.
-		for _, opIdx := range rng.Perm(len(ops))[:rng.Intn(1+len(ops))] {
-			key := ops[opIdx](rangeID)
-			t.Logf("writing op=%d rangeID=%d", opIdx, rangeID)
-			if _, err := storage.MVCCPut(
-				ctx,
-				eng,
-				key,
-				hlc.Timestamp{},
-				roachpb.MakeValueFromString("fake value for "+key.String()),
-				storage.MVCCWriteOptions{},
-			); err != nil {
-				t.Fatal(err)
-			}
-		}
-	}
-
-	type seenT struct {
-		rangeID   roachpb.RangeID
-		tombstone kvserverpb.RangeTombstone
-	}
-
-	// Next, write the keys we're planning to see again.
-	var wanted []seenT
-	{
-		used := make(map[roachpb.RangeID]struct{})
-		for {
-			rangeID := rangeIDFn()
-			if _, ok := used[rangeID]; ok {
-				// We already wrote this key, so roll the dice again.
-				continue
-			}
-
-			tombstone := kvserverpb.RangeTombstone{
-				NextReplicaID: roachpb.ReplicaID(rng.Int31n(100)),
-			}
-
-			used[rangeID] = struct{}{}
-			wanted = append(wanted, seenT{rangeID: rangeID, tombstone: tombstone})
-
-			t.Logf("writing tombstone at rangeID=%d", rangeID)
-			if err := storage.MVCCPutProto(
-				ctx, eng, keys.RangeTombstoneKey(rangeID), hlc.Timestamp{}, &tombstone, storage.MVCCWriteOptions{},
-			); err != nil {
-				t.Fatal(err)
-			}
-
-			if len(wanted) >= rangeCount {
-				break
-			}
-		}
-	}
-
-	sort.Slice(wanted, func(i, j int) bool {
-		return wanted[i].rangeID < wanted[j].rangeID
-	})
-
-	var seen []seenT
-	var tombstone kvserverpb.RangeTombstone
-
-	handleTombstone := func(rangeID roachpb.RangeID) error {
-		seen = append(seen, seenT{rangeID: rangeID, tombstone: tombstone})
-		return nil
-	}
-
-	if err := kvstorage.IterateIDPrefixKeys(ctx, eng, keys.RangeTombstoneKey, &tombstone, handleTombstone); err != nil {
-		t.Fatal(err)
-	}
-	placeholder := seenT{
-		rangeID: roachpb.RangeID(9999),
-	}
-
-	if len(wanted) != len(seen) {
-		t.Errorf("wanted %d results, got %d", len(wanted), len(seen))
-	}
-
-	for len(wanted) < len(seen) {
-		wanted = append(wanted, placeholder)
-	}
-	for len(seen) < len(wanted) {
-		seen = append(seen, placeholder)
-	}
-
-	if diff := pretty.Diff(wanted, seen); len(diff) > 0 {
-		pretty.Ldiff(t, wanted, seen)
-		t.Fatal("diff(wanted, seen) is nonempty")
-	}
 }
 
 // TestStoreConfigSetDefaults checks that StoreConfig.SetDefaults() sets proper
@@ -512,9 +403,8 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	store := createTestStoreWithConfig(ctx, t, stopper, testStoreOpts{}, &cfg)
 	defer stopper.Stop(ctx)
 
-	if _, err := kvstorage.ReadStoreIdent(ctx, store.TODOEngine()); err != nil {
-		t.Fatalf("unable to read store ident: %+v", err)
-	}
+	_, err := kvstorage.ReadStoreIdent(ctx, store.LogEngine())
+	require.NoError(t, err)
 
 	store.VisitReplicas(func(repl *Replica) (more bool) {
 		// Stats should agree with recomputation. Hold raftMu to avoid
@@ -525,11 +415,93 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 		memMS := repl.GetMVCCStats()
 		// Stats should agree with a recomputation.
 		now := store.Clock().Now()
-		diskMS, err := rditer.ComputeStatsForRange(ctx, repl.Desc(), store.TODOEngine(), now.WallTime)
+		diskMS, err := rditer.ComputeStatsForRange(
+			ctx, repl.Desc(), store.StateEngine(),
+			fs.UnknownReadCategory, now.WallTime)
 		require.NoError(t, err)
 		memMS.AgeTo(diskMS.LastUpdateNanos)
 		require.Equal(t, memMS, diskMS)
 		return true // more
+	})
+}
+
+// TestStoreStartClearsSnapshotStorageScratch verifies the scratch directory's
+// lifecycle across Store.Start, for both single and separated engines:
+//
+//  1. Leftover scratch files (simulating a crash mid-snapshot) survive past
+//     the point where WAG replay would consume them. This is checked via the
+//     BeforeClearSnapshotScratchOnStart knob.
+//  2. The same files are then removed by Clear before Start returns.
+//
+// TODO(sep-raft-log): Ensure that the test still passes after introducing WAG
+// replay. It is essential to have a flush after finishing WAG replay to avoid
+// deleting files that would be needed in case of a crash.
+func TestStoreStartClearsSnapshotStorageScratch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testutils.RunTrueAndFalse(t, "separated", func(t *testing.T, sepEng bool) {
+		ctx := context.Background()
+		stopper := stop.NewStopper()
+		defer stopper.Stop(ctx)
+		cfg := TestStoreConfig(nil)
+
+		// The knob fires during Start, by which point env and ssts (assigned
+		// below after the store is built) are populated. The closure captures
+		// them by reference.
+		var env *fs.Env
+		var ssts []string
+		var preClearCalls int
+		var preClearErrs []error
+		cfg.TestingKnobs.BeforeClearSnapshotScratchOnStart = func() {
+			preClearCalls++
+			for _, p := range ssts {
+				if _, statErr := env.Stat(p); statErr != nil {
+					preClearErrs = append(preClearErrs,
+						errors.Wrapf(statErr, "scratch file %s missing at pre-clear hook", p))
+				}
+			}
+		}
+
+		store := createTestStoreWithoutStart(
+			ctx, t, stopper, testStoreOpts{useSeparatedEngines: sepEng}, &cfg,
+		)
+
+		// Seed a leftover scratch file under the snapshot storage directory.
+		// We deliberately skip scratch.Close() to simulate a node that crashed
+		// mid-snapshot and never ran the per-snapshot cleanup.
+		scratch := store.sstSnapshotStorage.NewScratchSpace(
+			roachpb.RangeID(42), uuid.MakeV4(), cfg.Settings,
+		)
+		f, err := scratch.NewFile(ctx, 0)
+		require.NoError(t, err)
+		require.NoError(t, f.Write([]byte("leftover sst")))
+		require.NoError(t, f.Finish())
+
+		env = store.StateEngine().Env()
+		ssts = scratch.SSTs()
+		require.NotEmpty(t, ssts)
+
+		// Sanity check: the leftover file exists before Start.
+		for _, p := range ssts {
+			_, statErr := env.Stat(p)
+			require.NoError(t, statErr, "scratch file %s should exist before Start", p)
+		}
+
+		require.NoError(t, store.Start(ctx, stopper))
+		store.WaitForInit()
+
+		// (1) The pre-clear hook ran exactly once, with all leftover files
+		// still on disk. This is where WAG replay would consume them.
+		require.Equal(t, 1, preClearCalls, "pre-clear knob should fire exactly once")
+		require.Empty(t, preClearErrs, "leftover scratch files should survive past WAG replay")
+
+		// (2) Scratch file should have been removed by Start.
+		for _, p := range ssts {
+			_, statErr := env.Stat(p)
+			require.True(t, oserror.IsNotExist(statErr),
+				"scratch file %s should be removed by Start, got err=%v", p, statErr)
+		}
 	})
 }
 
@@ -541,11 +513,11 @@ func TestInitializeEngineErrors(t *testing.T) {
 	stopper := stop.NewStopper()
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
-	eng := storage.NewDefaultInMemForTesting()
-	stopper.AddCloser(eng)
+	eng := kvstorage.MakeEngines(storage.NewDefaultInMemForTesting())
+	stopper.AddCloser(&eng)
 
 	// Put some random garbage into the engine.
-	require.NoError(t, eng.PutUnversioned(roachpb.Key("foo"), []byte("bar")))
+	require.NoError(t, eng.StateEngine().PutUnversioned(roachpb.Key("foo"), []byte("bar")))
 
 	cfg := TestStoreConfig(nil)
 	cfg.Transport = NewDummyRaftTransport(cfg.AmbientCtx, cfg.Settings, cfg.Clock)
@@ -560,7 +532,7 @@ func TestInitializeEngineErrors(t *testing.T) {
 	require.ErrorContains(t, err, "cannot be bootstrapped")
 
 	// Bootstrap should fail on MVCC range key in engine.
-	require.NoError(t, eng.PutMVCCRangeKey(storage.MVCCRangeKey{
+	require.NoError(t, eng.StateEngine().PutMVCCRangeKey(storage.MVCCRangeKey{
 		StartKey:  roachpb.Key("a"),
 		EndKey:    roachpb.Key("b"),
 		Timestamp: hlc.MinTimestamp,
@@ -589,8 +561,9 @@ func createReplica(s *Store, rangeID roachpb.RangeID, start, end roachpb.RKey) *
 		NextReplicaID: 2,
 	}
 	const replicaID = 1
-	if err := stateloader.WriteInitialRangeState(
-		ctx, s.TODOEngine(), *desc, replicaID, clusterversion.TestingClusterVersion.Version,
+	if err := kvstorage.WriteInitialRangeState(
+		ctx, s.StateEngine(), s.LogEngine(),
+		*desc, replicaID, clusterversion.TestingClusterVersion.Version,
 	); err != nil {
 		panic(err)
 	}
@@ -623,11 +596,7 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 		t.Error(err)
 	}
 	// Remove range 1.
-	if err := store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, RemoveOptions{
-		DestroyData: true,
-	}); err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, redact.SafeString(t.Name())))
 	// Create a new range (id=2).
 	repl2 := createReplica(store, 2, roachpb.RKey("a"), roachpb.RKey("b"))
 	if err := store.AddReplica(repl2); err != nil {
@@ -639,16 +608,12 @@ func TestStoreAddRemoveRanges(t *testing.T) {
 		t.Fatal("expected error re-adding same range")
 	}
 	// Try to remove range 1 again.
-	if err := store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, RemoveOptions{
-		DestroyData: true,
-	}); err != nil {
-		t.Fatalf("didn't expect error re-removing same range: %v", err)
-	}
-	// Try to add a range with previously-used (but now removed) ID.
-	repl2Dup := createReplica(store, 1, roachpb.RKey("a"), roachpb.RKey("b"))
-	if err := store.AddReplica(repl2Dup); err == nil {
-		t.Fatal("expected error inserting a duplicated range")
-	}
+	require.NoError(t, store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, redact.SafeString(t.Name())))
+	// Try to create a replica with a previously-used (but now removed) ID. It must
+	// trip on the ReplicaMark assertion.
+	require.Panics(t, func() {
+		createReplica(store, 1, roachpb.RKey("a"), roachpb.RKey("b"))
+	})
 	// Add another range with different key range and then test lookup.
 	repl3 := createReplica(store, 3, roachpb.RKey("c"), roachpb.RKey("d"))
 	if err := store.AddReplica(repl3); err != nil {
@@ -745,26 +710,29 @@ func TestStoreRemoveReplicaDestroy(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Can't remove Replica with DestroyData false because this requires the destroyStatus
-	// to already have been set by the caller (but we didn't).
-	require.ErrorContains(t, store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, RemoveOptions{
-		DestroyData: false,
-	}), `replica not marked as destroyed`)
+	rmWithoutData := func() error {
+		repl1.raftMu.Lock()
+		defer repl1.raftMu.Unlock()
+		_, err := store.removeInitializedReplicaRaftMuLocked(
+			ctx, repl1, repl1.Desc().NextReplicaID, redact.SafeString(t.Name()),
+			RemoveOptions{DestroyData: false},
+		)
+		return err
+	}
+	// Can't remove Replica with DestroyData false because this requires the
+	// destroyStatus to already have been set by the caller (but we didn't).
+	require.ErrorContains(t, rmWithoutData(), `replica not marked as destroyed`)
 
 	// Remove the Replica twice, as this should be idempotent.
 	// NB: we rely on this idempotency today (as @tbg found out when he accidentally
 	// removed it).
 	for i := 0; i < 2; i++ {
-		require.NoError(t, store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, RemoveOptions{
-			DestroyData: true,
-		}), "%d", i)
+		require.NoError(t, store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, redact.SafeString(t.Name())), "%d", i)
 	}
 
-	// However, if we have DestroyData=false, caller is expected to be the unique first "destroyer"
-	// of the Replica.
-	require.ErrorContains(t, store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, RemoveOptions{
-		DestroyData: false,
-	}), `does not exist`)
+	// However, if we have DestroyData=false, caller is expected to be the unique
+	// first "destroyer" of the Replica.
+	require.ErrorContains(t, rmWithoutData(), `does not exist`)
 
 	// Verify that removal of a replica marks it as destroyed so that future raft
 	// commands on the Replica will silently be dropped.
@@ -774,7 +742,7 @@ func TestStoreRemoveReplicaDestroy(t *testing.T) {
 	require.Equal(t, errRemoved, err)
 
 	repl1.mu.RLock()
-	expErr := repl1.mu.destroyStatus.err
+	expErr := repl1.shMu.destroyStatus.err
 	repl1.mu.RUnlock()
 
 	if expErr == nil {
@@ -800,20 +768,15 @@ func TestStoreReplicaVisitor(t *testing.T) {
 		},
 		stopper)
 
-	// Remove range 1.
+	// Remove range 1, so that it doesn't span the entire keyspace.
 	repl1, err := store.GetReplica(1)
-	if err != nil {
-		t.Error(err)
-	}
-	if err := store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, RemoveOptions{
-		DestroyData: true,
-	}); err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, err)
+	require.NoError(t, store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, "test"))
 
-	// Add 10 new ranges.
+	// Add 10 new ranges. Don't reuse range ID 1, since it's illegal to create a replica with
+	// ReplicaID below the RangeTombstone.
 	const newCount = 10
-	for i := 0; i < newCount; i++ {
+	for i := 1; i <= newCount; i++ {
 		repl := createReplica(store, roachpb.RangeID(i+1), roachpb.RKey(fmt.Sprintf("a%02d", i)), roachpb.RKey(fmt.Sprintf("a%02d", i+1)))
 		if err := store.AddReplica(repl); err != nil {
 			t.Fatal(err)
@@ -823,7 +786,7 @@ func TestStoreReplicaVisitor(t *testing.T) {
 	// Verify two passes of the visit, the second one in-order.
 	visitor := newStoreReplicaVisitor(store)
 	exp := make(map[roachpb.RangeID]struct{})
-	for i := 0; i < newCount; i++ {
+	for i := 1; i <= newCount; i++ {
 		exp[roachpb.RangeID(i+1)] = struct{}{}
 	}
 
@@ -886,26 +849,19 @@ func TestMarkReplicaInitialized(t *testing.T) {
 
 	// Clobber the existing range so we can test overlaps that aren't KeyMin or KeyMax.
 	repl1, err := store.GetReplica(1)
-	if err != nil {
-		t.Error(err)
-	}
-	if err := store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, RemoveOptions{
-		DestroyData: true,
-	}); err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, err)
+	assert.NoError(t, store.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, redact.SafeString(t.Name())))
 
 	repl := createReplica(store, roachpb.RangeID(2), roachpb.RKey("a"), roachpb.RKey("c"))
 	if err := store.AddReplica(repl); err != nil {
 		t.Fatal(err)
 	}
 
-	newRangeID := roachpb.RangeID(3)
-	const replicaID = 1
-	require.NoError(t,
-		logstore.NewStateLoader(newRangeID).SetRaftReplicaID(ctx, store.TODOEngine(), replicaID))
+	newID := roachpb.FullReplicaID{RangeID: 3, ReplicaID: 1}
+	require.NoError(t, kvstorage.MakeStateLoader(newID.RangeID).SetRaftReplicaID(
+		ctx, store.StateEngine(), newID.ReplicaID))
 
-	r, err := newUninitializedReplica(store, newRangeID, replicaID)
+	r, err := newUninitializedReplica(store, newID)
 	require.NoError(t, err)
 
 	store.mu.Lock()
@@ -936,6 +892,9 @@ func TestMarkReplicaInitialized(t *testing.T) {
 		defer r.raftMu.Unlock()
 		r.setDescRaftMuLocked(ctx, desc)
 	}()
+	// markReplicaInitializedLockedReplLocked expects the replica to be
+	// initialized.
+	r.isInitialized.Store(true)
 	expectedResult = "not in uninitReplicas"
 	func() {
 		r.mu.Lock()
@@ -945,7 +904,7 @@ func TestMarkReplicaInitialized(t *testing.T) {
 		}
 	}()
 
-	store.mu.uninitReplicas[newRangeID] = r
+	store.mu.uninitReplicas[newID.RangeID] = r
 	require.NoError(t, store.addToReplicasByRangeIDLocked(r))
 
 	expectedResult = "overlaps with"
@@ -1445,7 +1404,7 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 			txnKey := keys.TransactionKey(pushee.Key, pushee.ID)
 			var txn roachpb.Transaction
 			if ok, err := storage.MVCCGetProto(
-				ctx, store.TODOEngine(), txnKey, hlc.Timestamp{}, &txn, storage.MVCCGetOptions{},
+				ctx, store.StateEngine(), txnKey, hlc.Timestamp{}, &txn, storage.MVCCGetOptions{},
 			); err != nil {
 				t.Fatal(err)
 			} else if ok {
@@ -1756,7 +1715,7 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	txnKey := keys.TransactionKey(pushee.Key, pushee.ID)
 	var txn roachpb.Transaction
 	if ok, err := storage.MVCCGetProto(
-		ctx, store.TODOEngine(), txnKey, hlc.Timestamp{}, &txn, storage.MVCCGetOptions{},
+		ctx, store.StateEngine(), txnKey, hlc.Timestamp{}, &txn, storage.MVCCGetOptions{},
 	); !ok || err != nil {
 		t.Fatalf("not found or err: %+v", err)
 	}
@@ -1764,12 +1723,18 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 		t.Errorf("expected pushee to be aborted; got %s", txn.Status)
 	}
 
-	// Verify that the pushee's timestamp was moved forward on
-	// former read, since we have it available in lock conflict error.
-	minExpTS := getTS
-	minExpTS.Logical++
-	if txn.WriteTimestamp.Less(minExpTS) {
-		t.Errorf("expected pushee timestamp pushed to %s; got %s", minExpTS, txn.WriteTimestamp)
+	// Verify that the pushee's timestamp was moved forward on the former read.
+	// With physical intent resolution, the pushed timestamp propagates through
+	// the resolved intent's TxnMeta to the subsequent PUSH_ABORT. With virtual
+	// intent resolution, the engine intent stays at the original timestamp, so
+	// the PUSH_ABORT never observes the higher timestamp (the timestamp cache
+	// still prevents the pushee from committing below getTS+1).
+	if !concurrency.VirtualIntentResolution.Get(&store.cfg.Settings.SV) {
+		minExpTS := getTS
+		minExpTS.Logical++
+		if txn.WriteTimestamp.Less(minExpTS) {
+			t.Errorf("expected pushee timestamp pushed to %s; got %s", minExpTS, txn.WriteTimestamp)
+		}
 	}
 	// Similarly, verify that pushee's priority was moved from 0
 	// to MaxTxnPriority-1 during push.
@@ -1788,6 +1753,67 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	if _, ok := pErr.GetDetail().(*kvpb.TransactionAbortedError); !ok {
 		t.Errorf("expected transaction aborted error; got %s", pErr)
 	}
+}
+
+// TestNonTxnReadUncertaintyIntentResolution verifies that when a
+// non-transactional read pushes a PENDING transaction's timestamp and resolves
+// its intents, the ClockWhilePending field is correctly propagated on the
+// LockUpdate. Without this, the resolved intent's local timestamp would not be
+// forwarded, causing an infinite ReadWithinUncertaintyIntervalError server-side
+// retry loop (and a timeout).
+func TestNonTxnReadUncertaintyIntentResolution(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	// Use a non-zero max offset so that non-transactional requests with a
+	// server-assigned timestamp get an uncertainty interval. Without this, pushed
+	// values fall outside the global uncertainty limit and can never trigger
+	// ReadWithinUncertaintyIntervalError.
+	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
+	clock := hlc.NewClock(manual, 500*time.Millisecond, 500*time.Millisecond, hlc.PanicLogger)
+	cfg := TestStoreConfig(clock)
+	store := createTestStoreWithConfig(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
+
+	keyA := roachpb.Key("a")
+	keyB := roachpb.Key("b")
+	pushee := newTransaction("test", keyA, 1, store.cfg.Clock)
+
+	// Write intents on both keys.
+	putA := putArgs(keyA, []byte("valueA"))
+	putB := putArgs(keyB, []byte("valueB"))
+	assignSeqNumsForReqs(pushee, &putA, &putB)
+	ba := &kvpb.BatchRequest{}
+	ba.Header = kvpb.Header{Txn: pushee}
+	ba.Add(&putA, &putB)
+	if _, pErr := store.TestSender().Send(ctx, ba); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	rwuieBefore := store.Metrics().ReadWithinUncertaintyIntervalErrorServerSideRetrySuccess.Count()
+
+	// Scan both keys outside a transaction with high priority. We omit the
+	// Timestamp field so the server allocates one and sets
+	// TimestampFromServerClock, which enables the uncertainty interval for this
+	// non-transactional request.
+	//
+	// The scan pushes the pushee and resolves both intents: the first via
+	// pushLockTxn (with ClockWhilePending), the second via the lock table's
+	// deferred resolution path during the re-scan. If ClockWhilePending is
+	// missing on the intent resolutions, the scan enters an infinite RWUIE
+	// retry loop and times out.
+	sArgs := scanArgs(keyA, keyB.Next())
+	_, pErr := kv.SendWrappedWith(
+		ctx, store.TestSender(), kvpb.Header{UserPriority: roachpb.MaxUserPriority}, sArgs,
+	)
+	require.NoError(t, pErr.GoError())
+
+	// With ClockWhilePending correctly set on deferred resolutions, no RWUIE
+	// retries should occur.
+	rwuieAfter := store.Metrics().ReadWithinUncertaintyIntervalErrorServerSideRetrySuccess.Count()
+	require.Equal(t, int64(0), rwuieAfter-rwuieBefore)
 }
 
 // TestStoreReadInconsistent verifies that gets and scans with read
@@ -2174,7 +2200,7 @@ func TestStoreSkipLockedTSCache(t *testing.T) {
 				req, resp := ba.Requests[i].GetInner(), ru.GetInner()
 				require.NoError(t, kvpb.ResponseKeyIterate(req, resp, func(k roachpb.Key) {
 					respKeys = append(respKeys, string(k))
-				}))
+				}, false /* includeLockedNonExisting */))
 			}
 			sort.Strings(respKeys) // normalize reverse scan
 			require.Equal(t, []string{"a", "c"}, respKeys)
@@ -2216,6 +2242,14 @@ func TestStoreScanIntents(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	store := createTestStoreWithConfig(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
+
+	// Metamorphically lower the max conflicts per lock conflict error to exercise
+	// VIR intent condensing with fewer intents.
+	rng, _ := randutil.NewTestRand()
+	maxConflicts := []int64{1, 3, 5, 20, storage.MaxConflictsPerLockConflictErrorDefault}
+	storage.MaxConflictsPerLockConflictError.Override(
+		ctx, &store.cfg.Settings.SV, maxConflicts[rng.Intn(len(maxConflicts))],
+	)
 
 	testCases := []struct {
 		consistent bool
@@ -2417,6 +2451,274 @@ func TestStoreScanIntentsRespectsLimit(t *testing.T) {
 	wg.Wait()
 }
 
+// TestVirtualIntentResolutionLivelock demonstrates that virtual intent
+// resolution (VIR) can livelock under lock table memory pressure when a reader
+// must discover intents across multiple evaluation rounds (#163924).
+//
+// # Test Setup
+//
+// - VIR is enabled, Low lock table size limit (4), and a low MaxConflictsPerLockConflictError (3) is set.
+// - A writer creates 6 intents.
+// - High-priority reader scans the range.
+//
+// Hazard before the fix:
+//
+//  1. Reader discovers intents 0-2 (truncated at MaxConflicts=3), adds to lock
+//     table, pushes writer, proceeds with VIR.
+//  2. VIR resolves 0-2 on ephemeral batch (discarded). Scan discovers intents
+//     3-5. Added to lock table (now 6 > max 4), evicting intents 0-2.
+//  3. Re-sequence clears toResolve, repopulates from lock table (only 3-5).
+//     VIR resolves 3-5, rediscovers evicted 0-2. Cycle repeats.
+func TestVirtualIntentResolutionReentryAfterEvaluationLiveLock(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	var lockConflictCount atomic.Int32
+	var readerTxnID atomic.Value // uuid.UUID
+	readerTxnID.Store(uuid.Nil)
+
+	tc := serverutils.StartCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Store: &StoreTestingKnobs{
+					TestingConcurrencyRetryFilter: func(
+						_ context.Context, ba *kvpb.BatchRequest, pErr *kvpb.Error,
+					) {
+						if ba.Txn == nil || ba.Txn.ID != readerTxnID.Load().(uuid.UUID) {
+							return // not our reader
+						}
+						if errors.HasType(pErr.GoError(), (*kvpb.LockConflictError)(nil)) {
+							lockConflictCount.Add(1)
+						}
+					},
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	// Enable VIR, set low lock table size, and low max conflicts per error to
+	// force multi-round intent discovery with frequent lock table eviction.
+	// Setting DiscoveredLocksThresholdToConsultTxnStatusCache to 1 causes
+	// intents to bypass the lock table and go directly to toResolve when the
+	// txn is in the status cache. For VIR, this previously caused a livelock:
+	// toResolve was cleared on re-entry to ScanAndEnqueue, and without the
+	// lock in the lock table, the same intents were rediscovered every round.
+	st := tc.Server(0).ClusterSettings()
+	concurrency.VirtualIntentResolution.Override(ctx, &st.SV, true)
+	concurrency.DefaultLockTableSize.Override(ctx, &st.SV, 4)
+	storage.MaxConflictsPerLockConflictError.Override(ctx, &st.SV, 3)
+	concurrency.DiscoveredLocksThresholdToConsultTxnStatusCache.Override(ctx, &st.SV, 1)
+
+	store, err := tc.Server(0).GetStores().(*Stores).GetStore(tc.Server(0).GetFirstStoreID())
+	require.NoError(t, err)
+
+	// Writer creates 6 intents (more than MaxConflictsPerLockConflictError but
+	// more than the lock table can hold simultaneously).
+	const numIntents = 6
+	writerTxn := newTransaction(
+		"writer", keys.ScratchRangeMin, roachpb.NormalUserPriority, tc.Server(0).Clock(),
+	)
+	for i := 0; i < numIntents; i++ {
+		key := append(keys.ScratchRangeMin.Clone(), []byte(fmt.Sprintf("%04d", i))...)
+		args := putArgs(key, []byte(fmt.Sprintf("value%d", i)))
+		assignSeqNumsForReqs(writerTxn, &args)
+		_, pErr := kv.SendWrappedWith(ctx, store.TestSender(), kvpb.Header{Txn: writerTxn}, &args)
+		require.Nil(t, pErr)
+	}
+
+	// High-priority scan to push the writer.
+	startKey := keys.ScratchRangeMin
+	endKey := keys.ScratchRangeMax
+
+	readerTxn := newTransaction(
+		"reader", startKey, roachpb.MaxUserPriority, tc.Server(0).Clock(),
+	)
+	readerTxnID.Store(readerTxn.ID)
+
+	readerCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+
+	tracer := tc.Server(0).TracerI().(*tracing.Tracer)
+	traceCtx, finishAndGetRecording := tracing.ContextWithRecordingSpan(
+		readerCtx, tracer, "test-vir-livelock",
+	)
+	defer func() {
+		recording := finishAndGetRecording()
+		if t.Failed() {
+			t.Logf("full trace:\n%s", recording)
+		}
+	}()
+
+	defer cancel()
+	_, pErr := kv.SendWrappedWith(traceCtx, store.TestSender(), kvpb.Header{
+		Txn: readerTxn,
+	}, scanArgs(startKey, endKey))
+	require.NoError(t, pErr.GoError(), "reader failed (%d lock conflicts observed)", lockConflictCount.Load())
+}
+
+// TestVirtualIntentResolutionReentryBeforeEvaluationLiveLock demonstrates that
+// we don't livelock in the ScanAndEnqueue -> WaitOn -> re-ScanAndEnqueue cycle
+// for VIR-enabled requests when the pending txn cache loses entries between
+// re-scans.
+//
+// Test Setup:
+//
+//  1. Two writers (low priority) each create an intent on separate keys.
+//  2. Reader 1 (high priority) scans, discovering both intents and adding them
+//     as contended entries in the lock table.
+//  3. Reader 2 (high priority, VIR enabled) scans. Its first ScanAndEnqueue
+//     finds both locks already in the lock table and enters WaitOn.
+//  4. While reader 2 is pushing the second writer, the shared txnStatusCache
+//     overflows.
+//
+// Currently, we prevent this from livelocking by maintaining a per-request
+// cache of resolvable txns that survives ScanAndEnqueue Reentry.
+func TestVirtualIntentResolutionReentryBeforeEvaluationLiveLock(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	// Track push count for our writers from reader 2.
+	var pushCount atomic.Int32
+	var reader2TxnID atomic.Value
+	reader2TxnID.Store(uuid.Nil)
+
+	// writerIDs tracks the two writer txn IDs so we can identify pushes
+	// targeting them.
+	exists := &struct{}{}
+	var writerIDs syncutil.Map[uuid.UUID, struct{}]
+
+	// repl will be set after cluster start so the response filter can access
+	// the concurrency manager.
+	var repl atomic.Pointer[Replica]
+
+	tc := serverutils.StartCluster(t, 1, base.TestClusterArgs{
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Store: &StoreTestingKnobs{
+					TestingResponseFilter: func(
+						ctx context.Context, ba *kvpb.BatchRequest, br *kvpb.BatchResponse,
+					) *kvpb.Error {
+						if br == nil || len(ba.Requests) != 1 {
+							return nil
+						}
+						pushReq, ok := ba.Requests[0].GetInner().(*kvpb.PushTxnRequest)
+						if !ok {
+							return nil
+						}
+						// Only intercept pushes from reader 2 targeting our writers.
+						if pushReq.PusherTxn.ID != reader2TxnID.Load().(uuid.UUID) {
+							return nil
+						}
+						if _, isOurWriter := writerIDs.Load(pushReq.PusheeTxn.ID); !isOurWriter {
+							return nil
+						}
+
+						pushCount.Add(1)
+
+						// Flood the pending txn cache with dummy entries to evict
+						// whatever was there before this push's result is recorded.
+						r := repl.Load()
+						if r == nil {
+							return nil
+						}
+						cm := r.GetConcurrencyManager()
+						ts := pushReq.PusherTxn.WriteTimestamp
+						for i := 0; i < 8; i++ {
+							cm.TestingPushedTransactionUpdated(&roachpb.Transaction{
+								TxnMeta: enginepb.TxnMeta{ID: uuid.MakeV4(), WriteTimestamp: ts},
+								Status:  roachpb.PENDING,
+							}, roachpb.ObservedTimestamp{NodeID: 1, Timestamp: hlc.ClockTimestamp(ts)})
+						}
+
+						return nil
+					},
+				},
+			},
+		},
+	})
+	defer tc.Stopper().Stop(ctx)
+
+	st := tc.Server(0).ClusterSettings()
+	concurrency.VirtualIntentResolution.Override(ctx, &st.SV, true)
+
+	store, err := tc.Server(0).GetStores().(*Stores).GetStore(tc.Server(0).GetFirstStoreID())
+	require.NoError(t, err)
+
+	// Look up the replica for the scratch range and stash it for the filter.
+	r := store.LookupReplica(keys.MustAddr(keys.ScratchRangeMin))
+	require.NotNil(t, r)
+	repl.Store(r)
+
+	// Two writers create intents on separate keys.
+	keyA := append(keys.ScratchRangeMin.Clone(), 'a')
+	keyB := append(keys.ScratchRangeMin.Clone(), 'b')
+
+	writerTxn1 := newTransaction(
+		"writer1", keys.ScratchRangeMin, roachpb.NormalUserPriority, tc.Server(0).Clock(),
+	)
+	writerIDs.Store(writerTxn1.ID, exists)
+	putReq := putArgs(keyA, []byte("val-a"))
+	assignSeqNumsForReqs(writerTxn1, &putReq)
+	_, pErr := kv.SendWrappedWith(
+		ctx, store.TestSender(), kvpb.Header{Txn: writerTxn1}, &putReq,
+	)
+	require.Nil(t, pErr)
+
+	writerTxn2 := newTransaction(
+		"writer2", keys.ScratchRangeMin, roachpb.NormalUserPriority, tc.Server(0).Clock(),
+	)
+	writerIDs.Store(writerTxn2.ID, exists)
+	putReq = putArgs(keyB, []byte("val-b"))
+	assignSeqNumsForReqs(writerTxn2, &putReq)
+	_, pErr = kv.SendWrappedWith(
+		ctx, store.TestSender(), kvpb.Header{Txn: writerTxn2}, &putReq,
+	)
+	require.Nil(t, pErr)
+
+	// Reader 1 scans to discover both intents and create contended lock table
+	// entries.
+	readerTxn1 := newTransaction(
+		"reader1", keys.ScratchRangeMin, roachpb.MaxUserPriority, tc.Server(0).Clock(),
+	)
+	scanReq := scanArgs(keys.ScratchRangeMin, keys.ScratchRangeMax)
+	_, pErr = kv.SendWrappedWith(
+		ctx, store.TestSender(), kvpb.Header{Txn: readerTxn1}, scanReq,
+	)
+	require.Nil(t, pErr)
+
+	// Reader 2 scans with VIR. The response filter will sabotage the pending
+	// txn cache on every push, causing a livelock.
+	readerTxn2 := newTransaction(
+		"reader2", keys.ScratchRangeMin, roachpb.MaxUserPriority, tc.Server(0).Clock(),
+	)
+	reader2TxnID.Store(readerTxn2.ID)
+
+	readCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
+
+	tracer := tc.Server(0).TracerI().(*tracing.Tracer)
+	traceCtx, finishAndGetRecording := tracing.ContextWithRecordingSpan(
+		readCtx, tracer, "test-vir-livelock",
+	)
+
+	scanReq = scanArgs(keys.ScratchRangeMin, keys.ScratchRangeMax)
+	_, pErr = kv.SendWrappedWith(
+		traceCtx, store.TestSender(), kvpb.Header{Txn: readerTxn2}, scanReq,
+	)
+
+	defer func() {
+		recording := finishAndGetRecording()
+		if t.Failed() {
+			t.Logf("full trace:\n%s", recording)
+		}
+	}()
+
+	require.NoError(t, pErr.GoError())
+	require.Equal(t, pushCount.Load(), int32(2), "unexpected number of txn pushes")
+}
+
 // TestStoreScanInconsistentResolvesIntents lays down 10 intents,
 // commits the txn without resolving intents, then does repeated
 // inconsistent reads until the data shows up, showing that the
@@ -2547,6 +2849,14 @@ func TestStoreScanMultipleIntents(t *testing.T) {
 	defer stopper.Stop(ctx)
 	store := createTestStoreWithConfig(ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 
+	// Metamorphically lower the max conflicts per lock conflict error to exercise
+	// VIR intent condensing with fewer intents.
+	rng, _ := randutil.NewTestRand()
+	maxConflicts := []int64{1, 3, 5, 20, storage.MaxConflictsPerLockConflictErrorDefault}
+	storage.MaxConflictsPerLockConflictError.Override(
+		ctx, &store.cfg.Settings.SV, maxConflicts[rng.Intn(len(maxConflicts))],
+	)
+
 	// Lay down ten intents from a single txn.
 	key1 := roachpb.Key("key00")
 	key10 := roachpb.Key("key09")
@@ -2574,13 +2884,95 @@ func TestStoreScanMultipleIntents(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	// Verify all ten intents are resolved from the single inconsistent scan.
-	testutils.SucceedsSoon(t, func() error {
-		if a, e := atomic.LoadInt32(&resolveCount), int32(10); a != e {
-			return fmt.Errorf("expected %d; got %d resolves", e, a)
-		}
-		return nil
-	})
+	// Verify all ten intents are resolved from the single scan. With virtual
+	// intent resolution, the intents are resolved on a temporary batch during
+	// evaluation and no physical ResolveIntentRequests are sent, so the eval
+	// filter won't observe them.
+	if !concurrency.VirtualIntentResolution.Get(&store.cfg.Settings.SV) {
+		testutils.SucceedsSoon(t, func() error {
+			if a, e := atomic.LoadInt32(&resolveCount), int32(10); a != e {
+				return fmt.Errorf("expected %d; got %d resolves", e, a)
+			}
+			return nil
+		})
+	}
+}
+
+// TestStoreScanVirtualIntentResolutionWithRangeResolves verifies that when VIR
+// accumulates enough conflicting intents, they are merged into ranged
+// ResolveIntent requests that span the entire read, allowing a scan to
+// complete even when there are many more intents than maxLockConflicts.
+func TestStoreScanVirtualIntentResolutionWithRangeResolves(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
+	cfg := TestStoreConfig(hlc.NewClockForTesting(manual))
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	store := createTestStoreWithConfig(
+		ctx, t, stopper, testStoreOpts{createSystemRanges: true}, &cfg,
+	)
+
+	// Force VIR on and set maxLockConflicts=1 so the pre-evaluation scan
+	// discovers at most one intent per attempt. This also sets the threshold
+	// at which accumulated per-key resolves are merged into ranged resolves.
+	concurrency.VirtualIntentResolution.Override(ctx, &store.cfg.Settings.SV, true)
+	storage.MaxConflictsPerLockConflictError.Override(ctx, &store.cfg.Settings.SV, 1)
+
+	// Write ten intents from a single txn, then expire it.
+	key1 := roachpb.Key("key00")
+	key10 := roachpb.Key("key09")
+	txn := newTransaction("test", key1, 1, store.cfg.Clock)
+	ba := &kvpb.BatchRequest{}
+	for i := 0; i < 10; i++ {
+		pArgs := putArgs(roachpb.Key(fmt.Sprintf("key%02d", i)), []byte("value"))
+		ba.Add(&pArgs)
+		assignSeqNumsForReqs(txn, &pArgs)
+	}
+	ba.Header = kvpb.Header{Txn: txn}
+	_, pErr := store.TestSender().Send(ctx, ba)
+	require.Nil(t, pErr)
+	manual.Advance(time.Duration(txnwait.TxnLivenessThreshold.Load()) + 1)
+
+	m := store.Metrics()
+	pointBefore := m.VirtualResolveIntentCount.Count()
+	rangeBefore := m.VirtualResolveIntentRangeCount.Count()
+	batchesBefore := m.VirtualResolveBatches.Count()
+	condenseBefore := m.VirtualResolveCondenseCount.Count()
+
+	sArgs := scanArgs(key1, key10.Next())
+	_, pErr = kv.SendWrapped(ctx, store.TestSender(), sArgs)
+	require.Nil(t, pErr)
+
+	// The scan completes in 3 evaluation attempts:
+	//
+	// Attempt 1: pre-scan discovers key00 → LockConflictError. Txn gets
+	//   pushed. key00 queued for per-key virtual resolution (1 entry, does
+	//   not exceed threshold).
+	//
+	// Attempt 2: key00 resolved virtually (point). Pre-scan discovers key01
+	//   → LockConflictError. key00 (persisted) + key00 + key01 (re-scanned
+	//   from lock table) = 3 entries, exceeds threshold → merged into a
+	//   single ranged resolve [key00, key01.Next()).
+	//
+	// Attempt 3: ranged resolve is expanded to cover the full scan span
+	//   [key00, key09.Next()), clearing all 10 intents. Pre-scan finds
+	//   nothing. Scan succeeds.
+	// The scan completes in 2 evaluation attempts:
+	//
+	// Attempt 1: pre-scan discovers key00 → LockConflictError. Txn gets
+	//   pushed. key00 queued for per-key virtual resolution (1 entry,
+	//   meets threshold of 1 → condensed into a ranged resolve).
+	//
+	// Attempt 2: ranged resolve is expanded to cover the full scan span
+	//   [key00, key09.Next()), clearing all 10 intents. Pre-scan finds
+	//   nothing. Scan succeeds.
+	require.Equal(t, int64(0), m.VirtualResolveIntentCount.Count()-pointBefore)
+	require.Equal(t, int64(1), m.VirtualResolveIntentRangeCount.Count()-rangeBefore)
+	require.Equal(t, int64(1), m.VirtualResolveBatches.Count()-batchesBefore)
+	require.Equal(t, int64(1), m.VirtualResolveCondenseCount.Count()-condenseBefore)
 }
 
 // TestStoreBadRequests verifies that Send returns errors for
@@ -2668,7 +3060,7 @@ func TestStore_HottestReplicasByTenant(t *testing.T) {
 	}
 
 	td := []testData{{1, 2}, {1, 3}, {1, 4}, {1, 5},
-		{2, 1}, {2, 2}, {2, 3}, {2, 4}}
+		{3, 1}, {3, 2}, {3, 3}, {3, 4}}
 
 	acc := NewTenantReplicaAccumulator(aload.Queries)
 
@@ -2694,7 +3086,7 @@ func TestStore_HottestReplicasByTenant(t *testing.T) {
 	for i := 0; i < iterationsNum; i++ {
 		go func() {
 			require.NotNil(t, store.HottestReplicasByTenant(roachpb.MustMakeTenantID(1)))
-			require.NotNil(t, store.HottestReplicasByTenant(roachpb.MustMakeTenantID(2)))
+			require.NotNil(t, store.HottestReplicasByTenant(roachpb.MustMakeTenantID(3)))
 			wg.Done()
 		}()
 	}
@@ -2758,14 +3150,8 @@ func TestMaybeRemove(t *testing.T) {
 	store.WaitForInit()
 
 	repl, err := store.GetReplica(1)
-	if err != nil {
-		t.Error(err)
-	}
-	if err := store.RemoveReplica(ctx, repl, repl.Desc().NextReplicaID, RemoveOptions{
-		DestroyData: true,
-	}); err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, err)
+	assert.NoError(t, store.RemoveReplica(ctx, repl, repl.Desc().NextReplicaID, redact.SafeString(t.Name())))
 	// MaybeRemove is called.
 	removedRng := <-fq.maybeRemovedRngs
 	if removedRng != repl.RangeID {
@@ -2790,7 +3176,8 @@ func TestStoreGCThreshold(t *testing.T) {
 		}
 		repl.mu.Lock()
 		gcThreshold := *repl.shMu.state.GCThreshold
-		pgcThreshold, err := repl.mu.stateLoader.LoadGCThreshold(context.Background(), store.TODOEngine())
+		pgcThreshold, err := kvstorage.MakeStateLoader(repl.RangeID).LoadGCThreshold(
+			context.Background(), store.StateEngine())
 		repl.mu.Unlock()
 		if err != nil {
 			t.Fatal(err)
@@ -2842,12 +3229,13 @@ func TestRaceOnTryGetOrCreateReplicas(t *testing.T) {
 		wg.Add(1)
 		go func(rid roachpb.ReplicaID) {
 			defer wg.Done()
-			r, _, _ := s.getOrCreateReplica(ctx, 42, rid, &roachpb.ReplicaDescriptor{
+			if r, _, _ := s.getOrCreateReplica(ctx, roachpb.FullReplicaID{
+				RangeID: 42, ReplicaID: rid,
+			}, &roachpb.ReplicaDescriptor{
 				NodeID:    2,
 				StoreID:   2,
 				ReplicaID: 2,
-			})
-			if r != nil {
+			}); r != nil {
 				r.raftMu.Unlock()
 			}
 		}(roachpb.ReplicaID(i))
@@ -2875,14 +3263,8 @@ func TestStoreRangePlaceholders(t *testing.T) {
 
 	// Clobber the existing range so we can test non-overlapping placeholders.
 	repl1, err := s.GetReplica(1)
-	if err != nil {
-		t.Error(err)
-	}
-	if err := s.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, RemoveOptions{
-		DestroyData: true,
-	}); err != nil {
-		t.Error(err)
-	}
+	assert.NoError(t, err)
+	assert.NoError(t, s.RemoveReplica(ctx, repl1, repl1.Desc().NextReplicaID, redact.SafeString(t.Name())))
 
 	repID := roachpb.RangeID(2)
 	rep := createReplica(s, repID, roachpb.RKeyMin, roachpb.RKey("c"))
@@ -3014,9 +3396,7 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 	repl1, err := s.GetReplica(1)
 	desc := repl1.Desc()
 	require.NoError(t, err)
-	require.NoError(t, s.RemoveReplica(ctx, repl1, desc.NextReplicaID, RemoveOptions{
-		DestroyData: true,
-	}))
+	require.NoError(t, s.RemoveReplica(ctx, repl1, desc.NextReplicaID, redact.SafeString(t.Name())))
 
 	// Wrap the snapshot in a minimal header. The request will be dropped because
 	// replica 2 is not in the ConfState.
@@ -3385,9 +3765,10 @@ func TestReserveSnapshotFullnessLimit(t *testing.T) {
 	desc.Capacity.Available = 1
 	desc.Capacity.Used = desc.Capacity.Capacity - desc.Capacity.Available
 
-	s.cfg.StorePool.DetailsMu.Lock()
-	s.cfg.StorePool.GetStoreDetailLocked(desc.StoreID).Desc = desc
-	s.cfg.StorePool.DetailsMu.Unlock()
+	sd := s.cfg.StorePool.GetStoreDetail(desc.StoreID)
+	sd.Lock()
+	sd.Desc = desc
+	sd.Unlock()
 
 	if n := s.ReservationCount(); n != 0 {
 		t.Fatalf("expected 0 reservations, but found %d", n)
@@ -3409,9 +3790,10 @@ func TestReserveSnapshotFullnessLimit(t *testing.T) {
 	// available disk space should be rejected.
 	desc.Capacity.Available = desc.Capacity.Capacity / 2
 	desc.Capacity.Used = desc.Capacity.Capacity - desc.Capacity.Available
-	s.cfg.StorePool.DetailsMu.Lock()
-	s.cfg.StorePool.GetStoreDetailLocked(desc.StoreID).Desc = desc
-	s.cfg.StorePool.DetailsMu.Unlock()
+	sd = s.cfg.StorePool.GetStoreDetail(desc.StoreID)
+	sd.Lock()
+	sd.Desc = desc
+	sd.Unlock()
 
 	if n := s.ReservationCount(); n != 0 {
 		t.Fatalf("expected 0 reservations, but found %d", n)
@@ -3539,11 +3921,17 @@ func (m *mockSpanConfigReader) ComputeSplitKey(
 
 func (m *mockSpanConfigReader) GetSpanConfigForKey(
 	ctx context.Context, key roachpb.RKey,
-) (roachpb.SpanConfig, roachpb.Span, error) {
+) (roachpb.SpanConfig, error) {
 	if e, ok := m.overrides[string(key)]; ok {
-		return e.conf, roachpb.Span{}, nil
+		return e.conf, nil
 	}
 	return m.GetSpanConfigForKey(ctx, key)
+}
+
+func (m *mockSpanConfigReader) ForEachOverlappingSpanConfig(
+	context.Context, roachpb.Span, func(roachpb.Span, roachpb.SpanConfig) error,
+) error {
+	panic("unimplemented")
 }
 
 var _ spanconfig.StoreReader = &mockSpanConfigReader{}
@@ -4092,7 +4480,9 @@ func TestManuallyEnqueueUninitializedReplica(t *testing.T) {
 	tc := testContext{}
 	tc.Start(ctx, t, stopper)
 
-	repl, _, _ := tc.store.getOrCreateReplica(ctx, 42, 7, &roachpb.ReplicaDescriptor{
+	repl, _, _ := tc.store.getOrCreateReplica(ctx, roachpb.FullReplicaID{
+		RangeID: 42, ReplicaID: 7,
+	}, &roachpb.ReplicaDescriptor{
 		NodeID:    tc.store.NodeID(),
 		StoreID:   tc.store.StoreID(),
 		ReplicaID: 7,
@@ -4116,17 +4506,188 @@ func TestStoreGetOrCreateReplicaWritesRaftReplicaID(t *testing.T) {
 	tc := testContext{}
 	tc.Start(ctx, t, stopper)
 
-	repl, created, err := tc.store.getOrCreateReplica(
-		ctx, 42, 7, &roachpb.ReplicaDescriptor{
-			NodeID:    tc.store.NodeID(),
-			StoreID:   tc.store.StoreID(),
-			ReplicaID: 7,
-		})
+	repl, created, err := tc.store.getOrCreateReplica(ctx, roachpb.FullReplicaID{
+		RangeID: 42, ReplicaID: 7,
+	}, &roachpb.ReplicaDescriptor{
+		NodeID:    tc.store.NodeID(),
+		StoreID:   tc.store.StoreID(),
+		ReplicaID: 7,
+	})
 	require.NoError(t, err)
 	require.True(t, created)
-	replicaID, err := repl.mu.stateLoader.LoadRaftReplicaID(ctx, tc.store.TODOEngine())
+	mark, err := kvstorage.MakeStateLoader(repl.RangeID).LoadReplicaMark(
+		ctx, tc.store.StateEngine())
 	require.NoError(t, err)
-	require.Equal(t, &kvserverpb.RaftReplicaID{ReplicaID: 7}, replicaID)
+	require.True(t, mark.Is(7))
+}
+
+// TestStoreGetOrCreateReplicaWritesWAGNode tests that creating an uninitialized
+// replica via getOrCreateReplica writes a WAG EventCreate node to the log
+// engine.
+func TestStoreGetOrCreateReplicaWritesWAGNode(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	manual := timeutil.NewManualTime(timeutil.Unix(0, 123))
+	cfg := TestStoreConfig(hlc.NewClockForTesting(manual))
+	cfg.TestingKnobs.DontCloseTimestamps = true
+	cfg.TestingKnobs.DisableMergeWaitForReplicasInit = true
+	store := createTestStoreWithConfig(
+		ctx, t, stopper, testStoreOpts{useSeparatedEngines: true}, &cfg,
+	)
+
+	id := roachpb.FullReplicaID{RangeID: 42, ReplicaID: 7}
+	repl, created, err := store.getOrCreateReplica(ctx, id, &roachpb.ReplicaDescriptor{
+		NodeID:    store.NodeID(),
+		StoreID:   store.StoreID(),
+		ReplicaID: id.ReplicaID,
+	})
+	require.NoError(t, err)
+	require.True(t, created)
+	repl.raftMu.Unlock()
+
+	// Scan the log engine for WAG nodes and verify an EventCreate was written
+	// for the replica we just created.
+	var it wag.Iterator
+	var found bool
+	for _, node := range it.Iter(ctx, store.LogEngine()) {
+		for _, ev := range node.Events {
+			if ev.Addr.RangeID == id.RangeID {
+				require.Equal(t, wagpb.EventCreate, ev.Type)
+				require.Equal(t, id.ReplicaID, ev.Addr.ReplicaID)
+				require.EqualValues(t, 0, ev.Addr.Index)
+				found = true
+			}
+		}
+	}
+	require.NoError(t, it.Error())
+	require.True(t, found, "expected to find an EventCreate WAG node for r%d", id.RangeID)
+}
+
+// TestSplitPreApplyInitializesTruncatedState ensures that the Raft truncated
+// state for the RHS is correctly initialized when calling splitPreApply.
+func TestSplitPreApplyInitializesTruncatedState(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	manual := timeutil.NewManualTime(timeutil.Unix(0, 10))
+	clock := hlc.NewClockForTesting(manual)
+
+	db := storage.NewDefaultInMemForTesting()
+	defer db.Close()
+	batch := db.NewBatch()
+	defer batch.Close()
+
+	startKey := roachpb.Key("0000")
+	endKey := roachpb.Key("9999")
+	desc := roachpb.RangeDescriptor{
+		RangeID:  99,
+		StartKey: roachpb.RKey(startKey),
+		EndKey:   roachpb.RKey(endKey),
+	}
+	desc.AddReplica(1, 1, roachpb.VOTER_FULL)
+
+	sl := kvstorage.MakeStateLoader(desc.RangeID)
+	// Write the range state that will be consulted and copied during the split.
+	lease := roachpb.Lease{
+		Replica:       desc.InternalReplicas[0],
+		Term:          10,
+		MinExpiration: hlc.Timestamp{WallTime: 100},
+	}
+	err := sl.SetLease(ctx, batch, nil, lease)
+	require.NoError(t, err)
+
+	// Set up the store and LHS replica.
+	cfg := TestStoreConfig(clock)
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	store := createTestStoreWithConfig(ctx, t, stopper, testStoreOpts{}, &cfg)
+	lhsRepl := createReplica(store, desc.RangeID, desc.StartKey, desc.EndKey)
+
+	// Construct the split trigger.
+	splitKey := roachpb.RKey("5555")
+	leftDesc, rightDesc := desc, desc
+	leftDesc.EndKey = splitKey
+	rightDesc.RangeID++
+	rightDesc.StartKey = splitKey
+	rightDesc.InternalReplicas = slices.Clone(leftDesc.InternalReplicas)
+	rightDesc.InternalReplicas[0].ReplicaID++
+
+	// Create an uninitialized replica for the RHS. splitPreApply expects this.
+	_, _, err = store.getOrCreateReplica(ctx, roachpb.FullReplicaID{
+		RangeID:   rightDesc.RangeID,
+		ReplicaID: rightDesc.InternalReplicas[0].ReplicaID,
+	}, &rightDesc.InternalReplicas[0])
+	require.NoError(t, err)
+
+	in, err := validateAndPrepareSplit(ctx, lhsRepl, roachpb.SplitTrigger{LeftDesc: leftDesc, RightDesc: rightDesc}, 11 /* raftIndex */, nil)
+	require.NoError(t, err)
+
+	splitPreApply(ctx, kvstorage.StateRW(batch), kvstorage.TODORaft(batch), &wag.Writer{}, in)
+
+	// Verify that the RHS truncated state is initialized as expected.
+	rsl := kvstorage.MakeStateLoader(rightDesc.RangeID)
+	truncState, err := rsl.LoadRaftTruncatedState(ctx, batch)
+	require.NoError(t, err)
+	require.Equal(t, kvstorage.RaftInitialLogIndex, int(truncState.Index))
+	require.Equal(t, kvstorage.RaftInitialLogTerm, int(truncState.Term))
+}
+
+// TestSplitPreApplyWithSeparatedEngines ensures that splitPreApply writes
+// Raft state to the correct engine when running with separated engines.
+func TestSplitPreApplyWithSeparatedEngines(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	stateEng := storage.NewDefaultInMemForTesting()
+	raftEng := storage.NewDefaultInMemForTesting()
+	e := kvstorage.MakeSeparatedEnginesForTesting(stateEng, raftEng)
+	defer e.Close()
+
+	rhsRangeID := roachpb.RangeID(123)
+	rhsDesc := roachpb.RangeDescriptor{
+		RangeID:  rhsRangeID,
+		StartKey: roachpb.RKey("b"),
+		EndKey:   roachpb.RKey("c"),
+	}
+	rhsDesc.AddReplica(1, 1, roachpb.VOTER_FULL)
+
+	in := splitPreApplyInput{
+		rhsID:               roachpb.FullReplicaID{RangeID: rhsDesc.RangeID, ReplicaID: 1},
+		rhsSpan:             rhsDesc.RSpan(),
+		rhsDestroyed:        false,
+		initClosedTimestamp: hlc.Timestamp{WallTime: 100},
+	}
+
+	stateBatch := e.StateEngine().NewBatch()
+	defer stateBatch.Close()
+	raftBatch := e.LogEngine().NewBatch()
+	defer raftBatch.Close()
+
+	splitPreApply(ctx, kvstorage.StateRW(stateBatch), kvstorage.WrapRaft(raftBatch), &wag.Writer{}, in)
+
+	require.NoError(t, stateBatch.Commit(false /* sync */))
+	require.NoError(t, raftBatch.Commit(false /* sync */))
+
+	rsl := kvstorage.MakeStateLoader(rhsRangeID)
+
+	// Check that the RaftTruncatedState is written to the raft engine.
+	truncState, err := rsl.LoadRaftTruncatedState(ctx, raftEng)
+	require.NoError(t, err)
+	require.Equal(t, kvstorage.RaftInitialLogIndex, int(truncState.Index))
+	require.Equal(t, kvstorage.RaftInitialLogTerm, int(truncState.Term))
+
+	// Sanity check that the RaftTruncatedState is not written to the state
+	// engine.
+	truncStateFromState, err := rsl.LoadRaftTruncatedState(ctx, stateEng)
+	require.NoError(t, err)
+	require.Equal(t, kvserverpb.RaftTruncatedState{}, truncStateFromState)
 }
 
 func BenchmarkStoreGetReplica(b *testing.B) {
@@ -4142,5 +4703,54 @@ func BenchmarkStoreGetReplica(b *testing.B) {
 				b.Fatal(err)
 			}
 		}
+	})
+}
+
+// TestNewNodeCapacityProviderCluster tests the basic functionality of the
+// NodeCapacityProvider with a real cluster.
+func TestNewNodeCapacityProviderCluster(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	numNodes := 3
+	numStoresPerNode := 2
+	var storeSpecs []base.StoreSpec
+	for i := 0; i < numStoresPerNode; i++ {
+		storeSpecs = append(storeSpecs, base.StoreSpec{InMemory: true})
+	}
+	serverArgs := base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			NodeCapacityProviderKnobs: &load.NodeCapacityProviderTestingKnobs{
+				CpuUsageRefreshInterval:    1 * time.Millisecond,
+				CpuCapacityRefreshInterval: 1 * time.Millisecond,
+			},
+		}, StoreSpecs: storeSpecs}
+	tcArgs := base.TestClusterArgs{
+		ParallelStart:   true,
+		ReplicationMode: base.ReplicationManual, // saves time
+		ServerArgsPerNode: map[int]base.TestServerArgs{
+			0: serverArgs,
+			1: serverArgs,
+		},
+	}
+
+	ctx := context.Background()
+	tc := serverutils.StartCluster(t, numNodes, tcArgs)
+	defer tc.Stopper().Stop(ctx)
+	store, err := tc.Server(0).GetStores().(*Stores).GetStore(tc.Server(0).GetFirstStoreID())
+	require.NoError(t, err)
+	testutils.SucceedsSoon(t, func() error {
+		storeDesc, err := store.Descriptor(ctx, false /*useCached*/)
+		require.NoError(t, err)
+		nc := storeDesc.NodeCapacity
+		require.Equal(t, int32(numStoresPerNode), nc.NumStores)
+		if nc.NodeCPURateUsage == 0 || nc.NodeCPURateCapacity == 0 || nc.StoresCPURate == 0 {
+			return errors.Newf(
+				"CPU usage or capacity is 0: node cpu rate usage %v, node cpu rate capacity %v, stores cpu rate %v",
+				nc.NodeCPURateUsage, nc.NodeCPURateCapacity, nc.StoresCPURate)
+		}
+		// TODO(wenyihu6): NodeCPURateCapacity <= NodeCPURateUsage fails on CI and
+		// requires more investigation.
+		return nil
 	})
 }

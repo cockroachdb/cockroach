@@ -114,3 +114,10 @@ eval
 true OR (3 = 1)
 ----
 true
+
+# Regression test for incorrect typing of NULL column in the vectorized engine
+# (#151020).
+eval
+('foo' LIKE NULL) OR true
+----
+true

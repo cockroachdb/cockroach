@@ -8,6 +8,7 @@ package integration
 import (
 	"context"
 	gosql "database/sql"
+	"encoding/json"
 	"fmt"
 	"os"
 	"regexp"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/contention"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insights"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -36,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -89,7 +92,7 @@ func TestInsightsIntegration(t *testing.T) {
 	require.NoError(t, err)
 
 	// Eventually see one recorded insight.
-	testutils.SucceedsWithin(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		row = conn.QueryRowContext(ctx, "SELECT count(*), coalesce(string_agg(query, ';'),'') "+
 			"FROM crdb_internal.cluster_execution_insights where app_name = $1 ", appName)
 		if err = row.Scan(&count, &queryText); err != nil {
@@ -99,10 +102,10 @@ func TestInsightsIntegration(t *testing.T) {
 			return fmt.Errorf("expected 1, but was %d, queryText:%s", count, queryText)
 		}
 		return nil
-	}, 1*time.Second)
+	})
 
 	// Verify the table content is valid.
-	testutils.SucceedsWithin(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		row = conn.QueryRowContext(ctx, "SELECT "+
 			"query, "+
 			"status, "+
@@ -147,12 +150,12 @@ func TestInsightsIntegration(t *testing.T) {
 		}
 
 		return nil
-	}, 1*time.Second)
+	})
 
 	// TODO (xzhang) Turn this into a datadriven test
 	// https://github.com/cockroachdb/cockroach/issues/95010
 	// Verify the txn table content is valid.
-	testutils.SucceedsWithin(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		row = conn.QueryRowContext(ctx, "SELECT "+
 			"query, "+
 			"start_time, "+
@@ -194,7 +197,78 @@ func TestInsightsIntegration(t *testing.T) {
 		}
 
 		return nil
-	}, 1*time.Second)
+	})
+}
+
+// TestRetainCommentsInInsights tests that when the sql.sqlcommenter.enabled
+// setting is enabled / disabled, querying crdb_internal.cluster_execution_insights and
+// crdb_internal.node_execution_insights will / won't return query tags, respectively.
+func TestRetainCommentsInInsights(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Start the server.
+	ctx := context.Background()
+	srv, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	sv := &srv.ApplicationLayer().ClusterSettings().SV
+
+	// Set a low latency threshold to ensure our queries are captured
+	insights.LatencyThreshold.Override(ctx, sv, 10*time.Millisecond)
+
+	const queryWithComments = `SELECT pg_sleep(0.02)/* key='This is a test comment' */`
+
+	type Comment struct {
+		Name  string `json:"name"`
+		Value string `json:"value"`
+	}
+
+	testutils.RunTrueAndFalse(t, "withComments", func(t *testing.T, withComments bool) {
+		appName := fmt.Sprintf("TestRetainCommentsInInsights_%t", withComments)
+		// Set the application name for our test
+		_, err := conn.ExecContext(ctx, "SET SESSION application_name=$1", appName)
+		require.NoError(t, err)
+
+		_, err = conn.ExecContext(ctx, fmt.Sprintf("SET CLUSTER SETTING sql.sqlcommenter.enabled = %t", withComments))
+		require.NoError(t, err)
+
+		_, err = conn.ExecContext(ctx, queryWithComments)
+		require.NoError(t, err)
+
+		// Verify that the comments are present in the cluster_execution_insights table
+		testutils.RunValues(t, "table", []string{"cluster_execution_insights", "node_execution_insights"}, func(t *testing.T, table string) {
+			query := fmt.Sprintf(`
+			SELECT query_tags
+			FROM crdb_internal.%s
+			WHERE query = 'SELECT pg_sleep(_)' AND app_name = $1
+		`, table)
+			testutils.SucceedsSoon(t, func() error {
+				var comments []Comment
+				var commentsRaw []byte
+				row := conn.QueryRowContext(ctx, query, appName)
+
+				if err := row.Scan(&commentsRaw); err != nil {
+					return err
+				}
+
+				if err := json.Unmarshal(commentsRaw, &comments); err != nil {
+					return err
+				}
+				if withComments {
+					if len(comments) != 1 || comments[0].Value != "This is a test comment" || comments[0].Name != "key" {
+						return fmt.Errorf("expected comment to contain `key='This is a test comment'`, but got: %s", comments)
+					}
+
+					return nil
+				} else {
+					if len(comments) == 1 {
+						return fmt.Errorf("expected no comments, but got: %s", comments)
+					}
+					return nil
+				}
+			})
+		})
+	})
 }
 
 func TestFailedInsights(t *testing.T) {
@@ -226,8 +300,10 @@ func TestFailedInsights(t *testing.T) {
 		if testRedacted {
 			conn = s.SQLConn(t, serverutils.User("testuser"))
 		}
-
-		_, err := conn.Exec("SET SESSION application_name=$1", appName)
+		conn.SetMaxOpenConns(1)
+		_, err := conn.Exec("SET autocommit_before_ddl = false")
+		require.NoError(t, err)
+		_, err = conn.Exec("SET SESSION application_name=$1", appName)
 		require.NoError(t, err)
 
 		testCases := []struct {
@@ -273,8 +349,7 @@ func TestFailedInsights(t *testing.T) {
 			_, _ = conn.ExecContext(ctx, tc.stmt)
 
 			var query, status, problem, errorCode, errorMsg string
-			testutils.SucceedsWithin(t, func() error {
-
+			testutils.SucceedsSoon(t, func() error {
 				// Query the node execution insights table.
 				row := conn.QueryRowContext(ctx, `
 SELECT query, 
@@ -287,7 +362,7 @@ WHERE query = $1 AND app_name = $2 `,
 					tc.fingerprint, appName)
 
 				return row.Scan(&query, &status, &problem, &errorCode, &errorMsg)
-			}, 1*time.Second)
+			})
 
 			require.Equal(t, tc.status, status)
 			require.Equal(t, tc.problem, problem)
@@ -360,7 +435,7 @@ WHERE query = $1 AND app_name = $2 `,
 			}
 
 			var query, problems, status, errorCode, errorMsg string
-			testutils.SucceedsWithin(t, func() error {
+			testutils.SucceedsSoon(t, func() error {
 
 				// Query the node txn execution insights table.
 				row := conn.QueryRowContext(ctx, `
@@ -373,7 +448,7 @@ FROM crdb_internal.node_txn_execution_insights
 WHERE query = $1 AND app_name = $2`, tc.fingerprint, appName)
 
 				return row.Scan(&query, &problems, &status, &errorCode, &errorMsg)
-			}, 1*time.Second)
+			})
 
 			require.Equal(t, tc.txnStatus, status)
 			require.Equal(t, tc.errorCode, errorCode)
@@ -393,7 +468,6 @@ WHERE query = $1 AND app_name = $2`, tc.fingerprint, appName)
 			require.Equal(t, tc.problems, replacedSlowProblems, "received: %s, used to compare: %s", problems, replacedSlowProblems)
 
 		}
-
 	})
 }
 
@@ -414,7 +488,7 @@ func TestTransactionInsightsFailOnCommit(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	conflictingTxns := make([]txnInConflict, 0, 4)
+	var conflictingTxns []txnInConflict
 
 	// Start the server. (One node is sufficient; the outliers system is
 	// currently in-memory only.)
@@ -442,19 +516,34 @@ func TestTransactionInsightsFailOnCommit(t *testing.T) {
 	conn2 := sqlutils.MakeSQLRunner(srv.ApplicationLayer().SQLConn(t))
 
 	connDefault.Exec(t, "SET CLUSTER SETTING sql.contention.event_store.resolution_interval = '100ms'")
+	// Disable write buffering since this test assumes that
+	// kvpb.TransactionRetryWithProtoRefreshError.ConflictingTxn
+	// is populated which is only the case for some retry reasons
+	// (like REASON_INTENT during a refresh) that doesn't happen
+	// with write buffering.
+	//
+	// Write buffering produces a different error than the
+	// non-buffered case because of #146732.
+	//
+	// Despite #146732, however, we should be able to annotate the
+	// error received in this test with conflicting txn
+	// information.
+	//
+	// TODO(#146732, #146734): Allow write buffering in this test
+	// once one of the two bugs are fixed.
+	connDefault.Exec(t, "SET CLUSTER SETTING kv.transaction.write_buffering.enabled = false")
 
 	// Set up myUsers table with 2 users.
-	connDefault.Exec(t, "CREATE TABLE myUsers (name STRING, city STRING)")
-	connDefault.Exec(t, "INSERT INTO myUsers VALUES ('WENDY', 'NYC'), ('NOVI', 'TORONTO')")
+	connDefault.Exec(t, "CREATE TABLE myUsers (k INT PRIMARY KEY, name STRING, city STRING)")
+	connDefault.Exec(t, "INSERT INTO myUsers VALUES (1, 'WENDY', 'NYC'), (2, 'NOVI', 'TORONTO')")
 
 	conn1.Exec(t, "SET SESSION application_name=$1", appName)
 	conn2.Exec(t, "SET SESSION application_name=$1", appName)
 
-	// The first 2 recorded txns are setting the session name.
-	conflictingTxns = conflictingTxns[2:]
-
 	testutils.RunTrueAndFalse(t, "enable recording SERIALIZATION_CONFLICT events", func(t *testing.T, enabled bool) {
 		contention.EnableSerializationConflictEvents.Override(ctx, &srv.ApplicationLayer().ClusterSettings().SV, enabled)
+		// Ignore any recorded txns before the test begins.
+		conflictingTxns = conflictingTxns[:0]
 		// We will simulate a 40001 transaction retry error due to conflicting locks.
 		// Transaction 1 will fail on COMMIT.
 		tx1 := conn1.Begin(t)
@@ -517,6 +606,7 @@ AND query = 'SELECT * FROM myusers WHERE city = _ ; UPDATE myusers SET name = _ 
 		var txRetryErr *kvpb.TransactionRetryWithProtoRefreshError
 		require.Error(t, conflictingTxns[0].err)
 		require.ErrorAs(t, conflictingTxns[0].err, &txRetryErr)
+		require.NotNil(t, txRetryErr.ConflictingTxn)
 		conflictingTxnID := txRetryErr.ConflictingTxn.ID
 
 		if enabled {
@@ -556,8 +646,6 @@ WHERE contention_type = 'SERIALIZATION_CONFLICT'`)
 			require.NoError(t, err)
 			require.False(t, rows.Next())
 		}
-
-		conflictingTxns = make([]txnInConflict, 0, 2)
 	})
 }
 
@@ -586,7 +674,7 @@ func TestInsightsPriorityIntegration(t *testing.T) {
 	_, err = conn.ExecContext(ctx, "SELECT pg_sleep(.11)")
 	require.NoError(t, err)
 
-	testutils.SucceedsWithin(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		row := conn.QueryRowContext(ctx, "SELECT "+
 			"implicit_txn "+
 			"FROM crdb_internal.node_execution_insights where "+
@@ -603,7 +691,7 @@ func TestInsightsPriorityIntegration(t *testing.T) {
 		}
 
 		return nil
-	}, 2*time.Second)
+	})
 
 	var priorities = []struct {
 		setPriorityQuery      string
@@ -638,24 +726,41 @@ func TestInsightsPriorityIntegration(t *testing.T) {
 	}
 
 	for _, p := range priorities {
+		// We combine running the transaction and querying for the insight into a
+		// single retry loop. This handles the case where the transaction
+		// experiences accidental contention, causing the insight to be filtered
+		// out (contention insights require resolved blocking txn fingerprints).
+		// By retrying both together, we get a fresh transaction that hopefully
+		// won't experience contention.
 		testutils.SucceedsWithin(t, func() error {
 			tx, errTxn := conn.BeginTx(ctx, &gosql.TxOptions{})
-			require.NoError(t, errTxn)
+			if errTxn != nil {
+				return errTxn
+			}
 
 			_, errTxn = tx.ExecContext(ctx, p.setPriorityQuery)
-			require.NoError(t, errTxn)
+			if errTxn != nil {
+				_ = tx.Rollback()
+				return errTxn
+			}
 
 			_, errTxn = tx.ExecContext(ctx, p.query)
-			require.NoError(t, errTxn)
+			if errTxn != nil {
+				_ = tx.Rollback()
+				return errTxn
+			}
 
 			_, errTxn = tx.ExecContext(ctx, "select pg_sleep(.1);")
-			require.NoError(t, errTxn)
-			errTxn = tx.Commit()
-			require.NoError(t, errTxn)
-			return nil
-		}, 2*time.Second)
+			if errTxn != nil {
+				_ = tx.Rollback()
+				return errTxn
+			}
 
-		testutils.SucceedsWithin(t, func() error {
+			errTxn = tx.Commit()
+			if errTxn != nil {
+				return errTxn
+			}
+
 			row := conn.QueryRowContext(ctx, "SELECT "+
 				"query, "+
 				"priority, "+
@@ -684,13 +789,15 @@ func TestInsightsPriorityIntegration(t *testing.T) {
 			}
 
 			return nil
-		}, 2*time.Second)
+		}, time.Minute)
 	}
 }
 
 func TestInsightsIntegrationForContention(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+
+	skip.UnderDuress(t)
 
 	// Start the cluster. (One node is sufficient; the outliers system is currently in-memory only.)
 	ctx := context.Background()
@@ -716,7 +823,6 @@ func TestInsightsIntegrationForContention(t *testing.T) {
 	// Chan to wait for the txn to complete to avoid checking for insights before the txn is committed.
 	txnDoneChan := make(chan struct{})
 
-	observerConn := sqlutils.MakeSQLRunner(tc.ApplicationLayer(0).SQLConn(t))
 	txConn := sqlutils.MakeSQLRunner(tc.ApplicationLayer(0).SQLConn(t))
 	tx := txConn.Begin(t)
 
@@ -741,10 +847,20 @@ func TestInsightsIntegrationForContention(t *testing.T) {
 	require.NoError(t, errTxn)
 
 	var waitingTxnID uuid.UUID
-	observerConn.QueryRow(t,
-		`SELECT id
+	testutils.SucceedsSoon(t, func() error {
+		r, err := tc.ApplicationLayer(0).SQLConn(t).Query(`SELECT id
          FROM crdb_internal.node_transactions
-         WHERE application_name = 'waiting_txn'`).Scan(&waitingTxnID)
+         WHERE application_name = 'waiting_txn'`)
+		require.NoError(t, err)
+		defer r.Close()
+
+		if !r.Next() {
+			return errors.New("waiting_txn not found")
+		}
+		err = r.Scan(&waitingTxnID)
+		require.NoError(t, err)
+		return nil
+	})
 
 	require.NoError(t, tx.Commit())
 
@@ -910,7 +1026,7 @@ func TestInsightsIndexRecommendationIntegration(t *testing.T) {
 	}
 
 	// Verify the table content is valid.
-	testutils.SucceedsWithin(t, func() error {
+	testutils.SucceedsSoon(t, func() error {
 		rows, err := sqlConn.QueryContext(ctx, "SELECT "+
 			"query, "+
 			"array_to_string(index_recommendations, ';') as cmb_index_recommendations "+
@@ -951,7 +1067,7 @@ func TestInsightsIndexRecommendationIntegration(t *testing.T) {
 		}
 
 		return nil
-	}, 1*time.Second)
+	})
 }
 
 // TestInsightsClearsPerSessionMemory ensures that memory allocated
@@ -965,8 +1081,8 @@ func TestInsightsClearsPerSessionMemory(t *testing.T) {
 	clearedSessionID := clusterunique.ID{}
 	ts := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
-			Insights: &insights.TestingKnobs{
-				OnSessionClear: func(sessionID clusterunique.ID) {
+			SQLStatsKnobs: &sqlstats.TestingKnobs{
+				OnIngesterSessionClear: func(sessionID clusterunique.ID) {
 					defer close(sessionClosedCh)
 					clearedSessionID = sessionID
 				},

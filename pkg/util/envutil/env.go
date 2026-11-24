@@ -164,7 +164,7 @@ func GetEnvVarsUsed() (result []redact.RedactableString) {
 		_, crdbVar := envVarRegistry.cache[string(varName)]
 		_, safeVar := safeVarRegistry[varName]
 		if crdbVar || safeVar {
-			result = append(result, redact.Sprintf("%s=%s", varName, redact.Safe(allVarsValues[varName])))
+			result = append(result, redact.Sprintf("%s=%s", varName, redact.SafeString(allVarsValues[varName])))
 		} else if _, reportable := valueReportableUnsafeVarRegistry[varName]; reportable {
 			result = append(result, redact.Sprintf("%s=%s", varName, allVarsValues[varName]))
 		} else if _, reportable := nameReportableUnsafeVarRegistry[varName]; reportable {
@@ -187,9 +187,14 @@ var safeVarRegistry = map[redact.SafeString]struct{}{
 	"GOMAXPROCS":  {},
 	"GOTRACEBACK": {},
 	"GOMEMLIMIT":  {},
+	// Jemalloc configuration override.
+	"MALLOC_CONF": {},
 	// gRPC.
 	"GRPC_GO_LOG_SEVERITY_LEVEL":  {},
 	"GRPC_GO_LOG_VERBOSITY_LEVEL": {},
+	// general
+	"LANG": {},
+	"TERM": {},
 }
 
 // valueReportableUnsafeVarRegistry is the list of variables where we can

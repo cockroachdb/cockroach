@@ -29,6 +29,7 @@ go_library(
         "//pkg/sql/sem/tree",
         "//pkg/sql/sqlerrors",
         "//pkg/sql/types",
+        "//pkg/util/admission",
         "//pkg/util/cancelchecker",
         "//pkg/util/log",
         "//pkg/util/metamorphic",

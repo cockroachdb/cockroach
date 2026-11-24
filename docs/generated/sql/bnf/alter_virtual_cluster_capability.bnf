@@ -1,0 +1,3 @@
+alter_virtual_cluster_capability_stmt ::=
+	'ALTER' virtual_cluster virtual_cluster_spec 'GRANT' 'ALL' 'CAPABILITIES'
+	| 'ALTER' virtual_cluster virtual_cluster_spec 'REVOKE' 'ALL' 'CAPABILITIES'

@@ -42,6 +42,21 @@ func AllWindowBuiltinNames() []string {
 	return allWindowBuiltinNames.Ordered()
 }
 
+// GetBuiltinFunctionProperties returns the FunctionProperties common to all
+// overloads of the builtin function with the given name. It returns nil if no
+// such builtin function was found.
+//
+// Callers that need access to builtin function properties at init-time can use
+// this function to ensure the builtin function definitions have been
+// initialized first.
+func GetBuiltinFunctionProperties(name string) *tree.FunctionProperties {
+	def, ok := tree.FunDefs[name]
+	if !ok {
+		return nil
+	}
+	return &def.FunctionProperties
+}
+
 func init() {
 	tree.FunDefs = make(map[string]*tree.FunctionDefinition)
 	tree.ResolvedBuiltinFuncDefs = make(map[string]*tree.ResolvedFunctionDefinition)
@@ -109,6 +124,33 @@ func addResolvedFuncDef(
 	}
 }
 
+// safeBuiltinsWithAnyArrayParamType contains all builtins that use
+// types.AnyArray as a param type and have been examined to use
+// checkIfDArrayErrOnDString instead of tree.MustBeDArray to handle the special
+// case.
+var safeBuiltinsWithAnyArrayParamType = map[string]struct{}{
+	"anyarray_in":     {},
+	"anyarray_recv":   {},
+	"anyarray_out":    {},
+	"anyarray_send":   {},
+	"array_in":        {},
+	"array_length":    {},
+	"array_lower":     {},
+	"array_recv":      {},
+	"array_out":       {},
+	"array_send":      {},
+	"array_to_json":   {},
+	"array_to_string": {},
+	"array_upper":     {},
+	"cardinality":     {},
+	"crdb_internal.num_inverted_index_entries": {},
+	"generate_subscripts":                      {},
+	"information_schema._pg_expandarray":       {},
+	"st_makepolygon":                           {},
+	"unnest":                                   {},
+	"width_bucket":                             {},
+}
+
 // registerBuiltin adds the given builtin to the builtins registry. All
 // overloads of the Generator class are updated to have Fn and FnWithExprs
 // fields to be functions that return assertion errors upon execution (to
@@ -132,6 +174,16 @@ func registerBuiltin(
 		if overload.Class == tree.GeneratorClass {
 			overload.Fn = unsuitableUseOfGeneratorFn
 			overload.FnWithExprs = unsuitableUseOfGeneratorFnWithExprs
+		}
+		for j := range overload.Types.Length() {
+			paramTyp := overload.Types.GetAt(j)
+			_, safe := safeBuiltinsWithAnyArrayParamType[name]
+			if paramTyp.Identical(types.AnyArray) && !safe {
+				panic(errors.AssertionFailedf(
+					"'%s' should be examined to use checkIfDArrayErrOnDString "+
+						"and then included into safeBuiltinsWithAnyArrayParamType", name,
+				))
+			}
 		}
 	}
 	if def.props.ShouldDocument() && def.props.Category == "" {

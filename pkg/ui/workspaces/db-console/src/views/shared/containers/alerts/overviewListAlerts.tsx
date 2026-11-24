@@ -3,58 +3,89 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import map from "lodash/map";
-import React from "react";
-import { connect } from "react-redux";
-import { Dispatch, Action, bindActionCreators } from "redux";
+import { useNodesSummary, useClusterSettings } from "@cockroachlabs/cluster-ui";
+import without from "lodash/without";
+import React, { useMemo } from "react";
+import { useSelector, useStore } from "react-redux";
 
-import { Alert, overviewListAlertsSelector } from "src/redux/alerts";
+import {
+  Alert,
+  getStaggeredVersionWarning,
+  getClusterPreserveDowngradeOptionOvertime,
+  getUpgradeNotFinalizedWarning,
+  staggeredVersionDismissedSetting,
+  clusterPreserveDowngradeOptionDismissedSetting,
+  upgradeNotFinalizedDismissedSetting,
+} from "src/redux/alerts";
+import {
+  getValidatedNodes,
+  getNumNodesByVersionsTag,
+  getNumNodesByVersions,
+} from "src/redux/nodes";
 import { AdminUIState } from "src/redux/state";
 import { AlertBox } from "src/views/shared/components/alertBox";
 
-interface AlertSectionProps {
-  /**
-   * List of alerts to display in the alert section.
-   */
-  alerts: Alert[];
-  /**
-   * Raw dispatch method for the current store, will be used to dispatch
-   * alert dismissal callbacks.
-   */
-  dispatch: Dispatch<Action>;
-}
+function OverviewAlertListSection(): React.ReactElement {
+  const store = useStore<AdminUIState>();
 
-class OverviewAlertListSection extends React.Component<AlertSectionProps, {}> {
-  render() {
-    const { alerts, dispatch } = this.props;
-    if (alerts.length === 0) {
-      return null;
-    }
-    return (
-      <section className="section">
-        {map(alerts, (a, i) => {
-          // Extract values we don't want.
-          // eslint-disable-next-line @typescript-eslint/no-unused-vars
-          const { dismiss, ...alertProps } = a;
-          const boundDismiss = bindActionCreators(() => a.dismiss, dispatch);
-          return <AlertBox key={i} dismiss={boundDismiss} {...alertProps} />;
-        })}
-      </section>
+  const { nodeStatuses, livenessByNodeID } = useNodesSummary();
+  const { settingValues } = useClusterSettings();
+
+  const versionMismatchDismissed = useSelector(
+    staggeredVersionDismissedSetting.selector,
+  );
+  const preserveDowngradeDismissed = useSelector(
+    clusterPreserveDowngradeOptionDismissedSetting.selector,
+  );
+  const upgradeNotFinalizedDismissed = useSelector(
+    upgradeNotFinalizedDismissedSetting.selector,
+  );
+
+  const alerts: Alert[] = useMemo(() => {
+    const validNodes = getValidatedNodes(nodeStatuses, livenessByNodeID);
+    const versionsTagMap = getNumNodesByVersionsTag(validNodes);
+    const versionsMap = getNumNodesByVersions(validNodes);
+    const clusterVersion = settingValues?.["version"]?.value ?? "";
+
+    return without(
+      [
+        getStaggeredVersionWarning(versionsTagMap, versionMismatchDismissed),
+        getClusterPreserveDowngradeOptionOvertime(
+          settingValues,
+          preserveDowngradeDismissed,
+        ),
+        getUpgradeNotFinalizedWarning(
+          settingValues,
+          versionsMap,
+          clusterVersion,
+          upgradeNotFinalizedDismissed,
+        ),
+      ],
+      null,
+      undefined,
     );
+  }, [
+    nodeStatuses,
+    livenessByNodeID,
+    settingValues,
+    versionMismatchDismissed,
+    preserveDowngradeDismissed,
+    upgradeNotFinalizedDismissed,
+  ]);
+
+  if (alerts.length === 0) {
+    return null;
   }
+
+  return (
+    <section className="section">
+      {alerts.map((a, i) => {
+        const { dismiss, ...alertProps } = a;
+        const boundDismiss = () => dismiss(store.dispatch, store.getState);
+        return <AlertBox key={i} dismiss={boundDismiss} {...alertProps} />;
+      })}
+    </section>
+  );
 }
 
-const overviewAlertListSectionConnected = connect(
-  (state: AdminUIState) => {
-    return {
-      alerts: overviewListAlertsSelector(state),
-    };
-  },
-  dispatch => {
-    return {
-      dispatch: dispatch,
-    };
-  },
-)(OverviewAlertListSection);
-
-export default overviewAlertListSectionConnected;
+export default OverviewAlertListSection;

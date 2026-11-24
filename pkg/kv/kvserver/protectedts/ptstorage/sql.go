@@ -7,15 +7,27 @@ package ptstorage
 
 const (
 
-	// currentMetaCTE is used by all queries which access the meta row.
-	// The query returns a default row if there currently is no meta row.
-	// At the time of writing, there will never be a physical row in the meta
-	// table with version zero.
-	currentMetaCTE = `
+	// currentMetaCTEForUpdate reads the singleton meta row with FOR UPDATE,
+	// returning a default zero row if none exists yet. At the time of writing,
+	// there will never be a physical row in the meta table with version zero.
+	//
+	// It is used by the protect and release queries. Both are read-modify-
+	// writes against the singleton meta row: every concurrent caller reads the
+	// same row, then upserts a new version. Without serialization the writers
+	// race, producing a storm of WriteTooOld retries on the shared key.
+	// Acquiring an exclusive lock on the real meta row during the read forces
+	// those callers to queue rather than collide. The FOR UPDATE clause is
+	// bound to the real-table leg only; the synthetic zero-row fallback (used
+	// when no meta row exists yet) does not lock anything.
+	currentMetaCTEForUpdate = `
 SELECT
     version, num_records, num_spans, total_bytes
 FROM
-    system.protected_ts_meta
+    (
+        SELECT version, num_records, num_spans, total_bytes
+        FROM system.protected_ts_meta
+        FOR UPDATE
+    )
 UNION ALL
     SELECT 0 AS version, 0 AS num_records, 0 AS num_spans, 0 AS total_bytes
 ORDER BY
@@ -26,33 +38,12 @@ LIMIT
 
 	protectQuery = `
 WITH
-    current_meta AS (` + currentMetaCTE + `),
+    current_meta AS (` + currentMetaCTEForUpdate + `),
     checks AS (` + protectChecksCTE + `),
     updated_meta AS (` + protectUpsertMetaCTE + `),
     new_record AS (` + protectInsertRecordCTEWithChecks + `)
 SELECT
     failed,
-    total_bytes AS prev_total_bytes,
-    version AS prev_version
-FROM
-    checks, current_meta;`
-
-	// The `target` column was added to `system.protected_ts_records` as part of
-	// the tenant migration `AlterSystemProtectedTimestampAddColumn` necessitating
-	// queries that write to the table with and without the column. In a
-	// mixed-version state (prior to the migration) we use the queries without tha
-	// target column.
-	//
-	// TODO(adityamaru): Delete this in 22.2.
-	protectQueryWithoutTarget = `
-WITH
-    current_meta AS (` + currentMetaCTE + `),
-    checks AS (` + protectChecksCTE + `),
-    updated_meta AS (` + protectUpsertMetaCTE + `),
-    new_record AS (` + protectInsertRecordWithoutTargetCTE + `)
-SELECT
-    failed,
-    num_spans AS prev_spans,
     total_bytes AS prev_total_bytes,
     version AS prev_version
 FROM
@@ -97,23 +88,6 @@ RETURNING
     version, num_records, num_spans, total_bytes
 `
 
-	protectInsertRecordCTE = `
-WITH
-checks AS (SELECT EXISTS(SELECT * FROM system.protected_ts_records WHERE id = $1) as failed),
-new_record AS (
-	INSERT INTO
-   		system.protected_ts_records (id, ts, meta_type, meta, num_spans, spans, target)
- 	(
-		SELECT $1, $2, $3, $4, $5, $6, $7
-		WHERE NOT EXISTS(SELECT * FROM checks WHERE failed)
-	)
-	RETURNING id
-)
-SELECT
-	failed
-FROM checks;
-`
-
 	protectInsertRecordCTEWithChecks = `
 INSERT
 INTO
@@ -127,38 +101,6 @@ INTO
 RETURNING
     id
 `
-
-	protectInsertRecordWithoutTargetCTE = `
-INSERT
-INTO
-    system.protected_ts_records (id, ts, meta_type, meta, num_spans, spans)
-(
-    SELECT
-        $4, $5, $6, $7, $8, $9
-    WHERE
-        NOT EXISTS(SELECT * FROM checks WHERE failed)
-)
-RETURNING
-    id
-`
-
-	// The `target` column was added to `system.protected_ts_records` as part of
-	// the tenant migration `AlterSystemProtectedTimestampAddColumn` necessitating
-	// queries that read from the table with and without the column. In a
-	// mixed-version state (prior to the migration) we use the queries without tha
-	// target column.
-	//
-	// TODO(adityamaru): Delete this in 22.2.
-	getRecordsWithoutTargetQueryBase = `
-SELECT
-    id, ts, meta_type, meta, spans, verified
-FROM
-    system.protected_ts_records`
-
-	getRecordsWithoutTargetQuery = getRecordsWithoutTargetQueryBase + ";"
-	getRecordWithoutTargetQuery  = getRecordsWithoutTargetQueryBase + `
-WHERE
-    id = $1;`
 
 	getRecordsQueryBase = `
 SELECT
@@ -184,7 +126,7 @@ RETURNING
 
 	releaseQueryWithMeta = `
 WITH
-    current_meta AS (` + currentMetaCTE + `),
+    current_meta AS (` + currentMetaCTEForUpdate + `),
     record AS (` + releaseSelectRecordCTE + `),
     updated_meta AS (` + releaseUpsertMetaCTE + `)
 DELETE FROM
@@ -193,14 +135,6 @@ WHERE
     EXISTS(SELECT NULL FROM record WHERE r.id = record.id)
 RETURNING
     NULL;`
-
-	releaseQuery = `
-DELETE FROM
-    system.protected_ts_records AS r
-WHERE
-    r.id = $1 
-RETURNING
-    r.id;`
 
 	// Collect the number of spans for the record identified by $1.
 	releaseSelectRecordCTE = `
@@ -237,33 +171,6 @@ RETURNING
     1
 `
 
-	updateTimestampQuery = `
-WITH
-    current_meta AS (` + currentMetaCTE + `),
-    updated_meta AS (` + updateTimestampUpsertMetaCTE + `),
-    updated_record AS (` + updateTimestampUpsertRecordCTE + `)
-SELECT
-    id
-FROM
-    updated_record;`
-
-	updateTimestampUpsertMetaCTE = `
-UPSERT
-INTO
-    system.protected_ts_meta (version, num_records, num_spans, total_bytes)
-(
-    SELECT
-        version + 1,
-        num_records,
-        num_spans,
-        total_bytes
-    FROM
-        current_meta
-)
-RETURNING
-    NULL
-`
-
 	updateTimestampUpsertRecordCTE = `
 UPDATE
     system.protected_ts_records
@@ -274,12 +181,4 @@ WHERE
 RETURNING
     id
 `
-
-	getMetadataQuery = `
-WITH
-    current_meta AS (` + currentMetaCTE + `)
-SELECT
-    version, num_records, num_spans, total_bytes
-FROM
-    current_meta;`
 )

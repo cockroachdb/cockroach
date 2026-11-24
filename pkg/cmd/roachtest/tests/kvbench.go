@@ -63,7 +63,13 @@ func registerKVBenchSpec(r registry.Registry, b kvBenchSpec) {
 	if b.NumShards > 0 {
 		nameParts = append(nameParts, fmt.Sprintf("shards=%d", b.NumShards))
 	}
-	opts := []spec.Option{spec.CPU(b.CPUs), spec.WorkloadNode(), spec.WorkloadNodeCPU(b.CPUs)}
+	opts := []spec.Option{
+		spec.CPU(b.CPUs),
+		spec.WorkloadNode(),
+		spec.WorkloadNodeCPU(b.CPUs),
+		spec.RandomizeVolumeType(),
+		spec.RandomlyUseXfs(),
+	}
 	switch b.KeyDistribution {
 	case sequential:
 		nameParts = append(nameParts, "sequential")
@@ -203,7 +209,7 @@ func runKVBench(ctx context.Context, t test.Test, c cluster.Cluster, b kvBenchSp
 	}
 	s := search.NewLineSearcher(100 /* min */, 10000000 /* max */, b.EstimatedMaxThroughput, initStepSize, precision)
 	searchPredicate := func(maxrate int) (bool, error) {
-		m := c.NewMonitor(ctx, c.CRDBNodes())
+		m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 		// Restart
 		m.ExpectDeaths(int32(len(c.CRDBNodes())))
 		// Wipe cluster before starting a new run because factors like load-based

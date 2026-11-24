@@ -1,0 +1,145 @@
+feature-list
+sql.multiregion.*
+----
+
+exec
+CREATE DATABASE d PRIMARY REGION "ca-central-1" REGION "ap-southeast-2"
+----
+
+exec
+CREATE DATABASE survive_region PRIMARY REGION "us-east-1" REGIONS "ap-southeast-2", "ca-central-1" SURVIVE REGION FAILURE
+----
+
+exec
+SET enable_multiregion_placement_policy = true;
+----
+
+exec
+USE survive_region;
+CREATE TABLE t7 (a INT);
+INSERT INTO t7 VALUES (1),(2),(3);
+----
+
+exec
+EXPORT INTO CSV 'nodelocal://1/t7' FROM TABLE t7;
+----
+
+feature-usage
+IMPORT INTO t7 CSV DATA ('nodelocal://1/t7/export*.csv')
+----
+sql.multiregion.import
+
+# Test for locality optimized search counter.
+
+# Lower the closed timestamp subsystem so system config info is transmitted
+# rapidly.
+exec
+SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '10ms';
+----
+
+exec
+SET CLUSTER SETTING kv.closed_timestamp.target_duration = '5ms';
+----
+
+exec
+SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = '10ms';
+----
+
+feature-list
+sql.plan.opt.locality-optimized-search
+----
+
+exec
+USE survive_region;
+CREATE TABLE t8 (a INT PRIMARY KEY) LOCALITY REGIONAL BY ROW
+----
+
+# Sleep a large multiple of the closed timestamp target duration to ensure
+# that a fresh system config has made its way to the optimizer.
+exec
+SELECT pg_sleep(.05);
+----
+
+feature-usage
+SELECT * FROM t8 WHERE a = 1
+----
+sql.plan.opt.locality-optimized-search
+
+exec
+USE survive_region;
+CREATE TABLE t9 (a INT PRIMARY KEY) LOCALITY REGIONAL BY ROW
+----
+
+feature-list
+sql.multiregion.zone_configuration.override.*
+----
+
+feature-usage
+SET override_multi_region_zone_config = true;
+ALTER TABLE t9 CONFIGURE ZONE USING num_replicas=10;
+SET override_multi_region_zone_config = false
+----
+sql.multiregion.zone_configuration.override.user
+
+# Note that this case illustrates that once the session variable is set, we'll
+# count all instances where a zone configuration is modified, even if that
+# modification didn't strictly require overriding.
+feature-usage
+SET override_multi_region_zone_config = true;
+ALTER TABLE t9 CONFIGURE ZONE USING gc.ttlseconds=10;
+SET override_multi_region_zone_config = false
+----
+sql.multiregion.zone_configuration.override.user
+
+feature-usage
+ALTER TABLE t9 CONFIGURE ZONE USING gc.ttlseconds=5
+----
+
+exec
+ALTER TABLE t9 SET (schema_locked = false);
+----
+
+feature-usage
+SET override_multi_region_zone_config = true;
+ALTER TABLE t9 SET LOCALITY GLOBAL;
+SET override_multi_region_zone_config = false
+----
+sql.multiregion.zone_configuration.override.system.table
+
+# Ensure that no counters are set in the case where we're not overriding
+feature-usage
+ALTER TABLE t9 SET LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;
+----
+
+# Note that this case illustrates that once the session variable is set, we'll
+# count all instances where a table's zone configuration is modified, even if
+# that modification didn't strictly require overriding.
+feature-usage
+SET override_multi_region_zone_config = true;
+ALTER TABLE t9 SET LOCALITY GLOBAL;
+SET override_multi_region_zone_config = false
+----
+sql.multiregion.zone_configuration.override.system.table
+
+
+exec
+ALTER TABLE t9 SET (schema_locked = true);
+----
+
+feature-usage
+SET override_multi_region_zone_config = true;
+ALTER DATABASE d CONFIGURE ZONE USING num_replicas=10;
+SET override_multi_region_zone_config = false
+----
+sql.multiregion.zone_configuration.override.user
+
+feature-usage
+ALTER DATABASE d CONFIGURE ZONE USING gc.ttlseconds=5;
+----
+
+feature-usage
+SET override_multi_region_zone_config = true;
+ALTER DATABASE d ADD REGION "us-east-1";
+SET override_multi_region_zone_config = false
+----
+sql.multiregion.zone_configuration.override.system.database

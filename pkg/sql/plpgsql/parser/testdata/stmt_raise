@@ -4,7 +4,6 @@ BEGIN
   RAISE;
 END
 ----
-----
 at or near ";": syntax error: unimplemented: this syntax
 DETAIL: source SQL:
 DECLARE
@@ -12,17 +11,7 @@ BEGIN
   RAISE;
        ^
 HINT: You have attempted to use a feature that is not yet implemented.
-
-Please check the public issue tracker to check whether this problem is
-already tracked. If you cannot find it there, please report the error
-with details by creating a new issue.
-
-If you would rather not post publicly, please contact us directly
-using the support form.
-
-We appreciate your feedback.
-----
-----
+See: https://go.crdb.dev/issue-v/169573/
 
 parse
 DECLARE
@@ -362,3 +351,64 @@ USING MESSAGE = 'blah blah blah',
 COLUMN = 'foo';
 END;
  -- identifiers removed
+
+pretty
+DECLARE
+BEGIN
+RAISE EXCEPTION USING MESSAGE = "why is this so involved?";
+END
+----
+DECLARE
+BEGIN
+	RAISE EXCEPTION
+		USING MESSAGE = "why is this so involved?";
+END;
+
+pretty
+DECLARE
+BEGIN
+RAISE EXCEPTION USING MESSAGE = 'something went wrong with the operation', DETAIL = 'the value was out of range', HINT = 'try a smaller value';
+END
+----
+DECLARE
+BEGIN
+	RAISE EXCEPTION
+		USING
+			MESSAGE = 'something went wrong with the operation',
+			DETAIL = 'the value was out of range',
+			HINT = 'try a smaller value';
+END;
+
+pretty
+DECLARE
+BEGIN
+RAISE NOTICE 'the value of x is %, y is %, and z is %', x, y, z;
+END
+----
+DECLARE
+BEGIN
+	RAISE NOTICE
+		'the value of x is %, y is %, and z is %', x, y, z;
+END;
+
+pretty
+DECLARE
+BEGIN
+RAISE EXCEPTION SQLSTATE '22012';
+END
+----
+DECLARE
+BEGIN
+	RAISE EXCEPTION SQLSTATE '22012';
+END;
+
+pretty
+DECLARE
+BEGIN
+RAISE division_by_zero;
+END
+----
+DECLARE
+BEGIN
+	RAISE division_by_zero;
+END;

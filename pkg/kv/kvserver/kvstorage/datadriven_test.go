@@ -8,17 +8,19 @@ package kvstorage
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/logstore"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/dd"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -28,46 +30,55 @@ import (
 )
 
 type env struct {
-	eng storage.Engine
+	eng Engines
 	tr  *tracing.Tracer
 }
 
-func newEnv(t *testing.T) *env {
-	ctx := context.Background()
+func newEnv() *env {
+	tr := tracing.NewTracer()
+	tr.SetRedactable(true)
+	return &env{tr: tr}
+}
+
+func (e *env) maybeInit(t *testing.T, separated bool) {
+	if e.eng.StateEngine() != nil { // initialized
+		return
+	}
 	eng := storage.NewDefaultInMemForTesting()
+	if separated {
+		e.eng = MakeSeparatedEnginesForTesting(eng, eng)
+	} else {
+		e.eng = MakeEngines(eng)
+	}
 	// TODO(tbg): ideally this would do full bootstrap, which requires
 	// moving a lot more code from kvserver. But then we could unit test
 	// all of it with the datadriven harness!
-	require.NoError(t, WriteClusterVersion(ctx, eng, clusterversion.TestingClusterVersion))
-	require.NoError(t, InitEngine(ctx, eng, roachpb.StoreIdent{
+	require.NoError(t, e.eng.SetMinVersion(clusterversion.TestingClusterVersion))
+	require.NoError(t, InitEngine(context.Background(), e.eng, roachpb.StoreIdent{
 		ClusterID: uuid.MakeV4(),
 		NodeID:    1,
 		StoreID:   1,
 	}))
-	tr := tracing.NewTracer()
-	tr.SetRedactable(true)
-	return &env{
-		eng: eng,
-		tr:  tr,
-	}
 }
 
 func (e *env) close() {
-	e.eng.Close()
+	if e.eng.StateEngine() != nil { // initialized
+		e.eng.Close()
+	}
 	e.tr.Close()
 }
 
 func (e *env) handleNewReplica(
 	t *testing.T,
 	ctx context.Context,
-	id storage.FullReplicaID,
+	id roachpb.FullReplicaID,
 	skipRaftReplicaID bool,
 	k, ek roachpb.RKey,
 ) *roachpb.RangeDescriptor {
-	sl := logstore.NewStateLoader(id.RangeID)
-	require.NoError(t, sl.SetHardState(ctx, e.eng, raftpb.HardState{}))
+	sl := MakeStateLoader(id.RangeID)
+	require.NoError(t, sl.SetHardState(ctx, e.eng.LogEngine(), raftpb.HardState{}))
 	if !skipRaftReplicaID && id.ReplicaID != 0 {
-		require.NoError(t, sl.SetRaftReplicaID(ctx, e.eng, id.ReplicaID))
+		require.NoError(t, sl.SetRaftReplicaID(ctx, e.eng.StateEngine(), id.ReplicaID))
 	}
 	if len(ek) == 0 {
 		return nil
@@ -86,11 +97,19 @@ func (e *env) handleNewReplica(
 	var v roachpb.Value
 	require.NoError(t, v.SetProto(desc))
 	ts := hlc.Timestamp{WallTime: 123}
-	require.NoError(t, e.eng.PutMVCC(storage.MVCCKey{
+	require.NoError(t, e.eng.StateEngine().PutMVCC(storage.MVCCKey{
 		Key:       keys.RangeDescriptorKey(desc.StartKey),
 		Timestamp: ts,
 	}, storage.MVCCValue{Value: v}))
 	return desc
+}
+
+func (e *env) handleRangeTombstone(
+	t *testing.T, ctx context.Context, rangeID roachpb.RangeID, next roachpb.ReplicaID,
+) {
+	require.NoError(t, MakeStateLoader(rangeID).SetRangeTombstone(
+		ctx, e.eng.StateEngine(), kvserverpb.RangeTombstone{NextReplicaID: next},
+	))
 }
 
 func TestDataDriven(t *testing.T) {
@@ -100,17 +119,15 @@ func TestDataDriven(t *testing.T) {
 	// Scan stats (shown after loading the range descriptors) can be non-deterministic.
 	reStripScanStats := regexp.MustCompile(`stats: .*$`)
 
-	datadriven.Walk(t, datapathutils.TestDataPath(t), func(t *testing.T, path string) {
-		e := newEnv(t)
+	dir := filepath.Join(datapathutils.TestDataPath(t), t.Name())
+	datadriven.Walk(t, dir, func(t *testing.T, path string) {
+		e := newEnv()
 		defer e.close()
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) (output string) {
 			ctx, finishAndGet := tracing.ContextWithRecordingSpan(context.Background(), e.tr, path)
 			// This method prints all output to `buf`.
 			var buf strings.Builder
-			var printTrace bool // if true, trace printed to buf on return
-			if d.HasArg("trace") {
-				d.ScanArgs(t, "trace", &printTrace)
-			}
+			printTrace := dd.ScanArgOr(t, d, "trace", false) // if true, print trace to buf
 
 			defer func() {
 				if r := recover(); r != nil {
@@ -134,32 +151,33 @@ func TestDataDriven(t *testing.T) {
 			}()
 
 			switch d.Cmd {
+			case "init":
+				separated := dd.ScanArgOr(t, d, "separated", false)
+				e.maybeInit(t, separated)
+
 			case "new-replica":
-				var rangeID int
-				d.ScanArgs(t, "range-id", &rangeID)
-				var replicaID int
-				if d.HasArg("replica-id") { // optional to allow making incomplete state
-					d.ScanArgs(t, "replica-id", &replicaID)
-				}
-				var k string
-				if d.HasArg("k") {
-					d.ScanArgs(t, "k", &k)
-				}
-				var ek string
-				if d.HasArg("ek") {
-					d.ScanArgs(t, "ek", &ek)
-				}
-				var skipRaftReplicaID bool
-				if d.HasArg("skip-raft-replica-id") {
-					d.ScanArgs(t, "skip-raft-replica-id", &skipRaftReplicaID)
-				}
+				e.maybeInit(t, false /* separated */)
+				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
+				replicaID := dd.ScanArgOr[roachpb.ReplicaID](t, d, "replica-id", 0)
+				k := dd.ScanArgOr(t, d, "k", "")
+				ek := dd.ScanArgOr(t, d, "ek", "")
+				skipRaftReplicaID := dd.ScanArgOr(t, d, "skip-raft-replica-id", false)
+
 				if desc := e.handleNewReplica(t, ctx,
-					storage.FullReplicaID{RangeID: roachpb.RangeID(rangeID), ReplicaID: roachpb.ReplicaID(replicaID)},
+					roachpb.FullReplicaID{RangeID: rangeID, ReplicaID: replicaID},
 					skipRaftReplicaID, keys.MustAddr(roachpb.Key(k)), keys.MustAddr(roachpb.Key(ek)),
 				); desc != nil {
 					fmt.Fprintln(&buf, desc)
 				}
+
+			case "range-tombstone":
+				e.maybeInit(t, false /* separated */)
+				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "range-id")
+				nextID := dd.ScanArg[roachpb.ReplicaID](t, d, "next-replica-id")
+				e.handleRangeTombstone(t, ctx, rangeID, nextID)
+
 			case "load-and-reconcile":
+				e.maybeInit(t, false /* separated */)
 				replicas, err := LoadAndReconcileReplicas(ctx, e.eng)
 				if err != nil {
 					fmt.Fprintln(&buf, err)

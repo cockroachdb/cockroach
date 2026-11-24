@@ -34,6 +34,11 @@ declare global {
        */
       login(username: string, password: string): Chainable<void>;
       getUserWithExactPrivileges(privs: SQLPrivilege[]): Chainable<User>;
+      measureRender(
+        renderName: string,
+        actionFn: () => Chainable<any>,
+        assertionChain: (result: any) => Chainable<any>,
+      ): Chainable<any>;
     }
   }
 }

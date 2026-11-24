@@ -3,55 +3,35 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import React from "react";
-import { connect } from "react-redux";
-import { RouteComponentProps, withRouter } from "react-router-dom";
+import React, { useEffect } from "react";
+import { useSelector } from "react-redux";
+import { useHistory, useLocation } from "react-router-dom";
 
-import { selectLoginState, LoginState, getLoginPage } from "src/redux/login";
+import { selectLoginState, getLoginPage } from "src/redux/login";
 import { AdminUIState } from "src/redux/state";
 
-interface RequireLoginProps {
-  loginState: LoginState;
-}
+const RequireLogin: React.FC<{ children?: React.ReactNode }> = ({
+  children,
+}) => {
+  const loginState = useSelector((state: AdminUIState) =>
+    selectLoginState(state),
+  );
+  const history = useHistory();
+  const location = useLocation();
 
-class RequireLogin extends React.Component<
-  RouteComponentProps & RequireLoginProps
-> {
-  componentDidMount() {
-    this.checkLogin();
-  }
+  const shouldHideLoginPage = loginState.hideLoginPage();
 
-  componentDidUpdate() {
-    this.checkLogin();
-  }
-
-  checkLogin() {
-    const { location, history } = this.props;
-
-    if (!this.hideLoginPage()) {
+  useEffect(() => {
+    if (!shouldHideLoginPage) {
       history.push(getLoginPage(location));
     }
+  }, [shouldHideLoginPage, history, location]);
+
+  if (!shouldHideLoginPage) {
+    return null;
   }
 
-  hideLoginPage() {
-    return this.props.loginState.hideLoginPage();
-  }
+  return <>{children}</>;
+};
 
-  render() {
-    if (!this.hideLoginPage()) {
-      return null;
-    }
-
-    return this.props.children;
-  }
-}
-
-const RequireLoginConnected = withRouter(
-  connect((state: AdminUIState) => {
-    return {
-      loginState: selectLoginState(state),
-    };
-  })(RequireLogin),
-);
-
-export default RequireLoginConnected;
+export default RequireLogin;

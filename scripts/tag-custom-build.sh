@@ -16,15 +16,26 @@
 #
 # How to use this script:
 #
+# The --repo flag is required and specifies the destination GitHub
+# repository to push the tag to, for example:
+#
+#   --repo=git@github.com:cockroachdb/cockroach.git
+#
 # 1) To tag the checked out SHA (the script is not available for releases
 #    v20.1.5, v19.2.10 and older; use option 2 for those releases) run it
 #    with no arguments from the root of the repo.
+#
+#      ./scripts/tag-custom-build.sh --repo=git@github.com:cockroachdb/cockroach.git
 #
 # 2) To tag a non-checked out SHA including any SHAs on releases (or branches)
 #    older than v20.1.5 and v19.2.10, run it from the root of the repo with
 #    the SHA that you want to tag as the single argument.
 #
-#      ./scripts/tag-custom-build.sh "$SHA"
+#      ./scripts/tag-custom-build.sh --repo=git@github.com:cockroachdb/cockroach.git "$SHA"
+#
+#    Use the --jj flag to get the current SHA from jj instead of git:
+#
+#      ./scripts/tag-custom-build.sh --repo=git@github.com:cockroachdb/cockroach.git --jj
 #
 # Note the Tag Name and Build ID (printed at the end of the script output).
 #
@@ -40,10 +51,57 @@
 
 set -euo pipefail
 
+use_jj=false
+repo=""
+
+# Parse command line options
+while getopts ":j-:" opt; do
+  case $opt in
+    j)
+      use_jj=true
+      ;;
+    -)
+      case "${OPTARG}" in
+        jj)
+          use_jj=true
+          ;;
+        repo=*)
+          repo="${OPTARG#repo=}"
+          ;;
+        repo)
+          repo="${!OPTIND}"
+          OPTIND=$((OPTIND+1))
+          ;;
+        *)
+          echo "Invalid option: --${OPTARG}" >&2
+          exit 1
+          ;;
+      esac
+      ;;
+    \?)
+      echo "Invalid option: -$OPTARG" >&2
+      exit 1
+      ;;
+  esac
+done
+
+# Shift past the processed options
+shift $((OPTIND-1))
+
+if [ -z "$repo" ] ; then
+    echo "Error: --repo is required, for example: --repo=git@github.com:cockroachdb/cockroach.git" >&2
+    exit 1
+fi
+
+# Get SHA from positional parameter if provided
 SHA="${1-}"
 
 if [ -z "$SHA" ] ; then
-    SHA="$(git rev-parse HEAD)"
+    if [ "$use_jj" = true ] ; then
+        SHA="$(jj log -r@ -n1 --template commit_id --no-graph)"
+    else
+        SHA="$(git rev-parse HEAD)"
+    fi
 fi
 
 # Ensure all the latest tags are downloaded locally
@@ -52,8 +110,7 @@ git fetch -t
 ID="$(git describe --tags --match=v[0-9]* "$SHA")"
 TAG="custombuild-$ID"
 
-git tag "$TAG" "$SHA"
-git push git@github.com:cockroachdb/cockroach.git "$TAG"
+git push "$repo" "$SHA:refs/tags/$TAG"
 
 TAG_URL="https://github.com/cockroachdb/cockroach/releases/tag/${TAG}"
 TEAMCITY_URL="https://teamcity.cockroachdb.com/buildConfiguration/Internal_Cockroach_Release_Customized_MakeAndPublishCustomizedBuild?mode=builds&branch=${TAG}"
@@ -86,6 +143,8 @@ The binaries will be available at:
   https://storage.googleapis.com/cockroach-customized-builds-artifacts-prod/cockroach-$ID.linux-amd64.tgz
   https://storage.googleapis.com/cockroach-customized-builds-artifacts-prod/cockroach-$ID.linux-amd64-fips.tgz
   https://storage.googleapis.com/cockroach-customized-builds-artifacts-prod/cockroach-$ID.linux-arm64.tgz
+  https://storage.googleapis.com/cockroach-customized-builds-artifacts-prod/cockroach-$ID.linux-s390x.tgz
+  https://storage.googleapis.com/cockroach-customized-builds-artifacts-prod/cockroach-$ID.darwin-11.0-arm64.tgz
   https://storage.googleapis.com/cockroach-customized-builds-artifacts-prod/cockroach-$ID.darwin-10.9-amd64.tgz
   https://storage.googleapis.com/cockroach-customized-builds-artifacts-prod/cockroach-$ID.windows-6.2-amd64.zip
 

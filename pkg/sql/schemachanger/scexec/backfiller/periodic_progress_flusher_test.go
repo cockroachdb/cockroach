@@ -52,8 +52,12 @@ func TestPeriodicBackfillProgressFlusher(t *testing.T) {
 		fractionInterval:   getDuration(&fractionInterval),
 	}
 	var checkpointFlushes, fractionFlushes int64
+	injectFlushError := atomic.Bool{}
 	incrementFunc := func(p *int64) func(context.Context) error {
 		return func(ctx context.Context) error {
+			if injectFlushError.Load() {
+				return errors.New("injected error")
+			}
 			atomic.AddInt64(p, 1)
 			return nil
 		}
@@ -106,12 +110,25 @@ func TestPeriodicBackfillProgressFlusher(t *testing.T) {
 		waitForTimersStep(61*time.Second, 61*time.Second),
 		checkCountsStep(1, 2),
 
+		// Inject errors into the flush callbacks. The periodic flusher should
+		// not stop.
+		func(t *testing.T) { injectFlushError.Store(true) },
+		advanceStep(time.Minute + 5*time.Second),
+		waitForTimersStep(66*time.Second, 66*time.Second),
+		checkCountsStep(1, 2),
+
+		// Stop injecting errors and make sure the progress gets updated again.
+		func(t *testing.T) { injectFlushError.Store(false) },
+		advanceStep(time.Minute + 10*time.Second),
+		waitForTimersStep(71*time.Second, 71*time.Second),
+		checkCountsStep(2, 3),
+
 		// Ensure stopping works.
-		func(t *testing.T) { require.NoError(t, stop()) },
+		func(t *testing.T) { stop() },
 		waitForTimersStep(),
 
 		// Ensure stopping is idempotent.
-		func(t *testing.T) { require.NoError(t, stop()) },
+		func(t *testing.T) { stop() },
 	} {
 		t.Run("", s)
 	}

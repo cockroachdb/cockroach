@@ -33,10 +33,15 @@ type LogMetrics interface {
 type Metric int
 
 const (
-	FluentSinkConnectionAttempt Metric = iota
+	BufferedSinkMessagesDropped Metric = iota
+	LogMessageCount
+	// fluent sink metrics
+	FluentSinkConnectionAttempt
 	FluentSinkConnectionError
 	FluentSinkWriteAttempt
 	FluentSinkWriteError
-	BufferedSinkMessagesDropped
-	LogMessageCount
+	// otlp sink metrics
+	OTLPSinkWriteAttempt
+	OTLPSinkWriteError
+	OTLPSinkGRPCTransparentRetries
 )

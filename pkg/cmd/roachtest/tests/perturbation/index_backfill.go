@@ -27,7 +27,9 @@ type backfill struct{}
 var _ perturbation = backfill{}
 
 func (b backfill) setup() variations {
-	v := setup(b, 40.0)
+	// TODO(#139262): Track down why this test causes stalls and drop the value
+	// to something more reasonable (like 5) once this is done.
+	v := setup(b, defaultThresholds())
 	return v
 }
 
@@ -38,6 +40,19 @@ func (b backfill) setupMetamorphic(rng *rand.Rand) variations {
 	v = v.randomize(rng)
 	if v.mem == spec.Low {
 		v.mem = spec.Standard
+	}
+
+	// TODO(#139319): This can be removed once we stop testing the non "full"
+	// mode. Without full AC, these tests can OOM.
+	if v.numNodes >= 30 && (v.acMode == elasticOnlyBoth || v.acMode == fullNormalElasticRepl) {
+		v.acMode = fullBoth
+	}
+
+	// TODO(#136848): The backfill test will cause WAL failover resulting in
+	// OOMs even with high memory configurations. This test passes without WAL
+	// failover enabled or with more vCPUs per node.
+	if v.disks > 1 && v.numNodes >= 30 && v.vcpu <= 8 {
+		v.vcpu = 16
 	}
 	return v
 }
@@ -66,8 +81,8 @@ func (b backfill) startTargetNode(ctx context.Context, t test.Test, v variations
 	// want the fill to impact the test throughput. We use a larger block size
 	// to create a lot of SSTables and ranges in a short amount of time.
 	runCmd := fmt.Sprintf(
-		"./cockroach workload run kv --db backfill --duration=%s --max-block-bytes=%d --min-block-bytes=%d --concurrency=100 {pgurl%s}",
-		v.perturbationDuration, 10_000, 10_000, v.stableNodes())
+		"./cockroach workload run kv --db backfill --max-ops=11000000 --max-rate=8000 --max-block-bytes=10000 --min-block-bytes=10000 --concurrency=100 {pgurl%s}",
+		v.stableNodes())
 	v.Run(ctx, option.WithNodes(v.workloadNodes()), runCmd)
 
 	t.L().Printf("waiting for io overload to end")

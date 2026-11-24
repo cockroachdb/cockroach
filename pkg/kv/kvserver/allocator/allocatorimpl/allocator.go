@@ -20,6 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/constraint"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/rac2"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/mmaintegration"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftutil"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
@@ -27,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -76,12 +79,17 @@ var MinLeaseTransferStatsDuration = 30 * time.Second
 // EnableLoadBasedLeaseRebalancing controls whether lease rebalancing is done
 // via the new heuristic based on request load and latency or via the simpler
 // approach that purely seeks to balance the number of leases per node evenly.
+//
+// This setting is retired and can be removed once the multi-metric allocator
+// cannot be disabled (as having the multi-metric allocator enabled already
+// implicitly disables this setting).
 var EnableLoadBasedLeaseRebalancing = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kv.allocator.load_based_lease_rebalancing.enabled",
-	"set to enable rebalancing of range leases based on load and latency",
-	true,
-	settings.WithPublic)
+	"set to enable rebalancing of range leases based on load and latency;"+
+		" has no effect when kv.allocator.load_based_rebalancing is set"+
+		" to 'multi-metric only', 'multi-metric and count', or 'auto'",
+	false, settings.Retired)
 
 // leaseRebalancingAggressiveness enables users to tweak how aggressive their
 // cluster is at moving leases towards the localities where the most requests
@@ -138,6 +146,7 @@ const (
 	AllocatorConsiderRebalance
 	AllocatorRangeUnavailable
 	AllocatorFinalizeAtomicReplicationChange
+	AllocatorMaxPriority
 )
 
 // Add indicates an action adding a replica.
@@ -161,6 +170,15 @@ func (a AllocatorAction) Remove() bool {
 		a == AllocatorRemoveDeadNonVoter ||
 		a == AllocatorRemoveDecommissioningVoter ||
 		a == AllocatorRemoveDecommissioningNonVoter
+}
+
+// Decommissioning indicates an action replacing or removing a decommissioning
+// replicas.
+func (a AllocatorAction) Decommissioning() bool {
+	return a == AllocatorRemoveDecommissioningVoter ||
+		a == AllocatorRemoveDecommissioningNonVoter ||
+		a == AllocatorReplaceDecommissioningVoter ||
+		a == AllocatorReplaceDecommissioningNonVoter
 }
 
 // TargetReplicaType returns that the action is for a voter or non-voter replica.
@@ -242,10 +260,27 @@ func (a AllocatorAction) SafeValue() {}
 // range. Within a given range, the ordering of the various checks inside
 // `Allocator.computeAction` determines which repair/rebalancing actions are
 // taken before the others.
+//
+// NB: Priorities should be non-negative and should be spaced in multiples of
+// 100 unless you believe they should belong to the same priority category.
+// AllocatorNoop should have the lowest priority. CheckPriorityInversion depends
+// on this contract. In most cases, the allocator returns a priority that
+// matches the definitions below. For AllocatorAddVoter,
+// AllocatorRemoveDeadVoter, and AllocatorRemoveVoter, the priority may be
+// adjusted (see ComputeAction for details), but the adjustment is expected to
+// be small (<49).
+//
+// Exceptions: AllocatorFinalizeAtomicReplicationChange, AllocatorRemoveLearner,
+// and AllocatorReplaceDeadVoter violates the spacing of 100. These cases
+// predate this comment, so we allow them as they belong to the same general
+// priority category.
 func (a AllocatorAction) Priority() float64 {
+	const maxPriority = 12002
 	switch a {
+	case AllocatorMaxPriority:
+		return maxPriority
 	case AllocatorFinalizeAtomicReplicationChange:
-		return 12002
+		return maxPriority
 	case AllocatorRemoveLearner:
 		return 12001
 	case AllocatorReplaceDeadVoter:
@@ -590,6 +625,7 @@ type AllocatorMetrics struct {
 // in the cluster.
 type Allocator struct {
 	st            *cluster.Settings
+	as            *mmaintegration.AllocatorSync
 	deterministic bool
 	nodeLatencyFn func(nodeID roachpb.NodeID) (time.Duration, bool)
 	// TODO(aayush): Let's replace this with a *rand.Rand that has a rand.Source
@@ -629,6 +665,7 @@ func makeAllocatorMetrics() AllocatorMetrics {
 // close coupling with the StorePool.
 func MakeAllocator(
 	st *cluster.Settings,
+	as *mmaintegration.AllocatorSync,
 	deterministic bool,
 	nodeLatencyFn func(nodeID roachpb.NodeID) (time.Duration, bool),
 	knobs *allocator.TestingKnobs,
@@ -641,6 +678,7 @@ func MakeAllocator(
 	}
 	allocator := Allocator{
 		st:            st,
+		as:            as,
 		deterministic: deterministic,
 		nodeLatencyFn: nodeLatencyFn,
 		randGen:       makeAllocatorRand(randSource),
@@ -946,10 +984,68 @@ func (a *Allocator) ComputeAction(
 		return action, action.Priority()
 	}
 
-	return a.computeAction(ctx, storePool, conf, desc.Replicas().VoterDescriptors(),
+	action, priority = a.computeAction(ctx, storePool, conf, desc.Replicas().VoterDescriptors(),
 		desc.Replicas().NonVoterDescriptors())
+	// Ensure that priority is never -1. Typically, computeAction return
+	// action.Priority(), but we sometimes modify the priority for specific
+	// actions like AllocatorAddVoter, AllocatorRemoveDeadVoter, and
+	// AllocatorRemoveVoter. A priority of -1 is a special case, indicating that
+	// the caller expects the processing logic to be invoked even if there's a
+	// priority inversion. If the priority is not -1, the range might be re-queued
+	// to be processed with the correct priority.
+	if priority == -1 {
+		if buildutil.CrdbTestBuild {
+			log.KvDistribution.Fatalf(ctx, "allocator returned -1 priority for range %s: %v", desc, action)
+		} else {
+			log.KvDistribution.Warningf(ctx, "allocator returned -1 priority for range %s: %v", desc, action)
+		}
+	}
+	return action, priority
 }
 
+// computeAction determines the action to take on a range along with its
+// priority.
+//
+// NB: The returned priority may include a small adjustment and therefore might
+// not exactly match action.Priority(). See AllocatorAddVoter,
+// AllocatorRemoveDeadVoter, AllocatorRemoveVoter below. The adjustment should
+// be <49 with two assumptions below. New uses on this contract should be
+// avoided since the assumptions are not strong guarantees (especially the
+// second one).
+//
+// The claim that the adjustment is < 49 has two assumptions:
+// 1. min(num_replicas,total_nodes) in zone configuration is < 98.
+// 2. when ranges are not under-replicated, the difference between
+// min(num_replicas,total_nodes)/2-1 and existing_replicas is < 49.
+//
+// neededVoters <= min(num_replicas,total_nodes)
+// desiredQuorum = neededVoters/2-1
+// quorum = haveVoters/2-1
+//
+// For AllocatorAddVoter, we know haveVoters < neededVoters
+// adjustment = desiredQuorum-haveVoters = neededVoters/2-1-haveVoters
+// To find the worst case (largest adjustment),
+//  1. haveVoters = neededVoters-1,
+//     adjustment = neededVoters/2-1-(neededVoters-1)
+//     = neededVoters/2-neededVoters = -neededVoters/2
+//  2. haveVoters = 0
+//     adjustement = neededVoters/2-1
+//
+// In order for adjustment to be <49, neededVoters/2<49 => neededVoters<98.
+// Hence the first assumption.
+//
+// For AllocatorRemoveDeadVoter, we know haveVoters >= neededVoters
+// adjustment = desiredQuorum-haveVoters = neededVoters/2-1-haveVoters
+// To find the worst case (largest adjustment),
+// 1. neededVoters/2-1 is much larger than haveVoters: given haveVoters >=
+// neededVoters, haveVoters/2-1 >= neededVoters/2-1. So this case is impossible.
+// 2. neededVoters/2-1 is much smaller than haveVoters: since ranges could be
+// over-replicated, theoretically speaking, there may be no upper bounds on
+// haveVoters. In order for adjustment to be < 49, we can only make an
+// assumption here that the difference between neededVoters/2-1 and haveVoters
+// cannot be >= 49 in this case.
+//
+// For AllocatorRemoveVoter, adjustment is haveVoters%2 = 0 or 1 < 49.
 func (a *Allocator) computeAction(
 	ctx context.Context,
 	storePool storepool.AllocatorStorePool,
@@ -1494,14 +1590,24 @@ func (a *Allocator) allocateTargetFromList(
 	return roachpb.ReplicationTarget{}, ""
 }
 
+// simulateRemoveTarget chooses which existing replica of the rebalance set
+// (voters for VoterTarget, non-voters for NonVoterTarget) to remove given
+// that a new replica is about to be added on targetStore.
+//
+// rebalanceSet is the existing replicas of the rebalance type PLUS the
+// to-be-added replica on targetStore (the caller appends it before
+// invoking; see RebalanceTarget). otherReplicas is the existing replicas
+// of the other type (untouched by this rebalance). candidates is the
+// subset of rebalanceSet that is eligible for removal (already filtered
+// for raft removability — notably excludes the just-appended target).
 func (a Allocator) simulateRemoveTarget(
 	ctx context.Context,
 	storePool storepool.AllocatorStorePool,
 	targetStore roachpb.StoreID,
 	conf *roachpb.SpanConfig,
 	candidates []roachpb.ReplicaDescriptor,
-	existingVoters []roachpb.ReplicaDescriptor,
-	existingNonVoters []roachpb.ReplicaDescriptor,
+	rebalanceSet []roachpb.ReplicaDescriptor,
+	otherReplicas []roachpb.ReplicaDescriptor,
 	sl storepool.StoreList,
 	rangeUsageInfo allocator.RangeUsageInfo,
 	targetType TargetReplicaType,
@@ -1515,6 +1621,26 @@ func (a Allocator) simulateRemoveTarget(
 			}
 		}
 	}
+
+	// If the to-be-added target lands on a node that already holds another
+	// replica of this range (i.e. the rebalance is logically a same-node
+	// store-to-store swap), narrow the remove candidates to that same node.
+	// See narrowRemoveCandidatesToSameNode for why.
+	narrowed, abort := narrowRemoveCandidatesToSameNode(
+		candidateStores, targetStore, rebalanceSet, otherReplicas)
+	if abort {
+		log.KvDistribution.VEventf(ctx, 2,
+			"refusing rebalance to s%d: target node already holds a replica "+
+				"but its same-node sibling is not a removable candidate", targetStore)
+		// Returning a removeReplica with the same StoreID as the add
+		// target signals the outer RebalanceTarget loop to skip this
+		// (add, remove) pair and try the next one from
+		// bestRebalanceTarget (the loop's check is `target.store.StoreID
+		// != removeReplica.StoreID`). The NodeID is unused by that
+		// check; zero is fine.
+		return roachpb.ReplicationTarget{StoreID: targetStore}, "", nil
+	}
+	candidateStores = narrowed
 
 	// Update statistics first
 	switch t := targetType; t {
@@ -1530,7 +1656,7 @@ func (a Allocator) simulateRemoveTarget(
 
 		return a.RemoveTarget(
 			ctx, storePool, conf, storepool.MakeStoreList(candidateStores),
-			existingVoters, existingNonVoters, VoterTarget, options,
+			rebalanceSet, otherReplicas, VoterTarget, options,
 		)
 	case NonVoterTarget:
 		storePool.UpdateLocalStoreAfterRebalance(targetStore, rangeUsageInfo, roachpb.ADD_NON_VOTER)
@@ -1543,11 +1669,82 @@ func (a Allocator) simulateRemoveTarget(
 			targetStore)
 		return a.RemoveTarget(
 			ctx, storePool, conf, storepool.MakeStoreList(candidateStores),
-			existingVoters, existingNonVoters, NonVoterTarget, options,
+			rebalanceSet, otherReplicas, NonVoterTarget, options,
 		)
 	default:
 		panic(fmt.Sprintf("unknown targetReplicaType: %s", t))
 	}
+}
+
+// rebalanceSetNodeFor returns the NodeID for storeID by scanning the
+// rebalance set. Returns 0 if not found.
+func rebalanceSetNodeFor(
+	rebalanceSet []roachpb.ReplicaDescriptor, storeID roachpb.StoreID,
+) roachpb.NodeID {
+	for _, repl := range rebalanceSet {
+		if repl.StoreID == storeID {
+			return repl.NodeID
+		}
+	}
+	return 0
+}
+
+// narrowRemoveCandidatesToSameNode implements the
+// same-node-swap-on-conflict policy used by simulateRemoveTarget.
+//
+// The contract: if the to-be-added rebalance target (identified by
+// targetStore, with its NodeID resolved from rebalanceSet) lands on a
+// node that already holds another replica of this range (counting both
+// the rebalanceSet and otherReplicas, since validateOneReplicaPerNode is
+// type-agnostic — an ADD_VOTER on a node already holding a non-voter,
+// paired with a cross-node REMOVE, is rejected just as readily as the
+// same-type case), the returned candidate slice is narrowed to
+// candidates on that same node. Otherwise the original slice is returned
+// unchanged. If the same-node sibling exists but is not among the
+// removable candidates (e.g. it was filtered out by
+// simulateFilterUnremovableReplicas because it is the leaseholder), the
+// function returns abort=true to signal that the caller should reject
+// this (add, remove) pair entirely; the rebalance loop will then try
+// the next one from bestRebalanceTarget.
+//
+// Without this narrowing, the RemoveTarget call that simulateRemoveTarget
+// makes downstream scores removal candidates against the existing replica
+// set without modelling the simultaneous ADD. With per-store
+// voter_constraints that none of the existing voters individually
+// satisfy, all candidates score "constraint check fail" equally, and
+// locality-collapsed diversity scores then leave the tie-break to pick
+// an arbitrary cross-node remove — which the production validator throws
+// away, leaving the range stuck forever. See cockroach issue #170471.
+func narrowRemoveCandidatesToSameNode(
+	candidateStores []roachpb.StoreDescriptor,
+	targetStore roachpb.StoreID,
+	rebalanceSet, otherReplicas []roachpb.ReplicaDescriptor,
+) (narrowed []roachpb.StoreDescriptor, abort bool) {
+	targetNodeID := rebalanceSetNodeFor(rebalanceSet, targetStore)
+	if targetNodeID == 0 {
+		return candidateStores, false
+	}
+	hasOnNode := func(repls []roachpb.ReplicaDescriptor) bool {
+		for _, repl := range repls {
+			if repl.StoreID != targetStore && repl.NodeID == targetNodeID {
+				return true
+			}
+		}
+		return false
+	}
+	if !hasOnNode(rebalanceSet) && !hasOnNode(otherReplicas) {
+		return candidateStores, false
+	}
+	sameNode := candidateStores[:0]
+	for _, c := range candidateStores {
+		if c.Node.NodeID == targetNodeID {
+			sameNode = append(sameNode, c)
+		}
+	}
+	if len(sameNode) == 0 {
+		return nil, true
+	}
+	return sameNode, false
 }
 
 // RemoveTarget returns a suitable replica (of the given type) to remove from
@@ -1781,10 +1978,75 @@ func (a Allocator) RebalanceTarget(
 	// would, we don't want to actually rebalance to that target.
 	var target, existingCandidate *candidate
 	var removeReplica roachpb.ReplicationTarget
+
+	// The loop below can iterate multiple times. This is because the
+	// (source,target) pair chosen by bestRebalanceTarget may be rejected either
+	// by the multi-metric allocator or by the check that a moved replica wouldn't
+	// immediately be removable. bestRebalanceTarget mutates the candidate slice
+	// for the given option (=source) to exclude each considered candidate. For
+	// example, the loop may proceed as follows:
+	// - initially, we may consider rebalancing from s1 to either of s2, s3, or
+	// s5, or rebalancing from s6 to either of s2 or s4: options = [s1 ->
+	// [s2,s3,s5], s6 -> [s2,s4]]. Each option here is considered as an
+	// equivalence class.
+	// - bestRebalanceTarget might pick s6->s4, and removes this choice from
+	// `options`. options now becomes [s1->[s2,s3,s5], s6 -> [s2]].
+	// - mma might reject s6->s4, so we loop around.
+	// - next, s1->s3 might be chosen, but fail the removable replica check.
+	// - so we'll begin a third loop with: options is now [s1->[s2,s5], s6 ->
+	// [s2]].
+	// - s6->s2 might be chosen and might succeed, terminating the loop and
+	// proceeding to make the change.
+	//
+	// Note that in general (and in the example) a source store can be considered
+	// multiple times (s6 is considered twice), so we cache the corresponding MMA
+	// advisor to avoid potentially expensive O(store) recomputations. The
+	// corresponding advisor is constructed only once and cached in
+	// results[bestIdx].advisor when the the source store is selected as the best
+	// rebalance target for the first time. After that, bestRebalanceTarget is
+	// free to mutate the cands set of the option. However, MMARebalancerAdvisor
+	// should use the original candidate set union the existing store to compute
+	// the load summary when calling IsInConflictWithMMA. It does so by using the
+	// computed meansLoad summary cached when this option was selected as the best
+	// rebalance target for the first time.
+	var bestIdx int
+
+	// NB: bestRebalanceTarget may modify the candidate set (cands) within each
+	// option in results. However, for each option, the associated source store,
+	// MMARebalanceAdvisor, and their index in results must remain unchanged
+	// throughout the process. This ensures that any cached MMARebalanceAdvisor
+	// continues to correspond to the original candidate set and source store,
+	// even as candidates are removed.
 	for {
-		target, existingCandidate = bestRebalanceTarget(a.randGen, results)
+		target, existingCandidate, bestIdx = bestRebalanceTarget(ctx, a.randGen, results, a.as)
 		if target == nil {
 			return zero, zero, "", false
+		}
+		if bestIdx == -1 {
+			log.KvDistribution.Fatalf(ctx, "programmer error: bestIdx is -1 when target is not nil")
+		}
+
+		// Skip mma conflict checks for critical rebalances, which repairs a bad
+		// state such as constraint violation, disk-fullness, and diversity
+		// improvements.
+		if !existingCandidate.isCriticalRebalance(target) {
+			// If the rebalance is not critical, we check if it conflicts with mma's
+			// goal. advisor for bestIdx should always be cached by
+			// bestRebalanceTarget. If mma rejects the rebalance, we will continue to
+			// the next target. Note that bestRebalanceTarget would delete this target
+			// from the candidates set when being selected, so this target will not be
+			// selected again.
+			if advisor := results[bestIdx].advisor; advisor != nil {
+				if a.as.IsInConflictWithMMA(ctx, target.store.StoreID, advisor, false) {
+					continue
+				}
+			} else {
+				if buildutil.CrdbTestBuild {
+					log.KvDistribution.Fatalf(ctx, "expected to find MMA handle for idx %d", bestIdx)
+				} else {
+					log.KvDistribution.Errorf(ctx, "expected to find MMA handle for idx %d", bestIdx)
+				}
+			}
 		}
 
 		// Add a fake new replica to our copy of the replica descriptor so that we can
@@ -1969,10 +2231,24 @@ func (a Allocator) RebalanceNonVoter(
 // machinery to achieve range count convergence.
 func (a *Allocator) ScorerOptions(ctx context.Context) *RangeCountScorerOptions {
 	return &RangeCountScorerOptions{
-		IOOverloadOptions:       a.IOOverloadOptions(),
-		DiskCapacityOptions:     a.DiskOptions(),
-		deterministic:           a.deterministic,
+		BaseScorerOptions: BaseScorerOptions{
+			IOOverload:    a.IOOverloadOptions(),
+			DiskCapacity:  a.DiskOptions(),
+			Deterministic: a.deterministic,
+		},
 		rangeRebalanceThreshold: RangeRebalanceThreshold.Get(&a.st.SV),
+	}
+}
+
+// BaseScorerOptionsWithNoConvergence returns the base scorer options with no
+// convergence heuristics.
+func (a *Allocator) BaseScorerOptionsWithNoConvergence() BaseScorerOptionsNoConvergence {
+	return BaseScorerOptionsNoConvergence{
+		BaseScorerOptions: BaseScorerOptions{
+			IOOverload:    a.IOOverloadOptions(),
+			DiskCapacity:  a.DiskOptions(),
+			Deterministic: a.deterministic,
+		},
 	}
 }
 
@@ -1980,9 +2256,11 @@ func (a *Allocator) ScorerOptions(ctx context.Context) *RangeCountScorerOptions 
 func (a *Allocator) ScorerOptionsForScatter(ctx context.Context) *ScatterScorerOptions {
 	return &ScatterScorerOptions{
 		RangeCountScorerOptions: RangeCountScorerOptions{
-			IOOverloadOptions:       a.IOOverloadOptions(),
-			DiskCapacityOptions:     a.DiskOptions(),
-			deterministic:           a.deterministic,
+			BaseScorerOptions: BaseScorerOptions{
+				IOOverload:    a.IOOverloadOptions(),
+				DiskCapacity:  a.DiskOptions(),
+				Deterministic: a.deterministic,
+			},
 			rangeRebalanceThreshold: 0,
 		},
 		// We set jitter to be equal to the padding around replica-count rebalancing
@@ -2015,7 +2293,7 @@ func (a *Allocator) ValidLeaseTargets(
 	leaseRepl interface {
 		StoreID() roachpb.StoreID
 		RaftStatus() *raft.Status
-		GetFirstIndex() kvpb.RaftIndex
+		GetCompactedIndex() kvpb.RaftIndex
 		SendStreamStats(*rac2.RangeSendStreamStats)
 	},
 	opts allocator.TransferLeaseOptions,
@@ -2079,7 +2357,7 @@ func (a *Allocator) ValidLeaseTargets(
 		}
 
 		candidates = append(validSnapshotCandidates, excludeReplicasInNeedOfSnapshots(
-			ctx, status, leaseRepl.GetFirstIndex(), candidates)...)
+			ctx, status, leaseRepl.GetCompactedIndex(), candidates)...)
 		candidates = excludeReplicasInNeedOfCatchup(
 			ctx, leaseRepl.SendStreamStats, candidates)
 	}
@@ -2189,14 +2467,17 @@ func (a *Allocator) LeaseholderShouldMoveDueToPreferences(
 	leaseRepl interface {
 		StoreID() roachpb.StoreID
 		RaftStatus() *raft.Status
-		GetFirstIndex() kvpb.RaftIndex
+		GetCompactedIndex() kvpb.RaftIndex
 		SendStreamStats(*rac2.RangeSendStreamStats)
 	},
 	allExistingReplicas []roachpb.ReplicaDescriptor,
 	exclReplsInNeedOfSnapshots bool,
 ) bool {
-	// Defensive check to ensure that this is never called with a replica set that
-	// does not contain the leaseholder.
+	// Callers pass VoterDescriptors(), which excludes demoting voters,
+	// non-voters, and learners - none of which can hold a lease. The
+	// leaseholder should always be present, but the descriptor and lease are
+	// not loaded under a consistent lock, so they may drift. As defense in
+	// depth, we verify that the leaseholder is in the provided replica set.
 	var leaseholderInExisting bool
 	for _, repl := range allExistingReplicas {
 		if repl.StoreID == leaseRepl.StoreID() {
@@ -2204,12 +2485,10 @@ func (a *Allocator) LeaseholderShouldMoveDueToPreferences(
 			break
 		}
 	}
-	// If the leaseholder is not in the descriptor, then we should not move the
-	// lease since we don't know who the leaseholder is. This normally doesn't
-	// happen, but can occasionally since the loading of the leaseholder and of
-	// the existing replicas aren't always under a consistent lock.
 	if !leaseholderInExisting {
-		log.KvDistribution.Info(ctx, "expected leaseholder store to be in the slice of existing replicas")
+		log.KvDistribution.VEventf(ctx, 2,
+			"expected leaseholder s%d to be in the slice of existing replicas %s",
+			leaseRepl.StoreID(), roachpb.MakeReplicaSet(allExistingReplicas))
 		return false
 	}
 
@@ -2222,7 +2501,7 @@ func (a *Allocator) LeaseholderShouldMoveDueToPreferences(
 	preferred := a.PreferredLeaseholders(storePool, conf, candidates)
 	if exclReplsInNeedOfSnapshots {
 		preferred = excludeReplicasInNeedOfSnapshots(
-			ctx, leaseRepl.RaftStatus(), leaseRepl.GetFirstIndex(), preferred)
+			ctx, leaseRepl.RaftStatus(), leaseRepl.GetCompactedIndex(), preferred)
 		preferred = excludeReplicasInNeedOfCatchup(
 			ctx, leaseRepl.SendStreamStats, preferred)
 	}
@@ -2241,7 +2520,7 @@ func (a *Allocator) LeaseholderShouldMoveDueToPreferences(
 // whether a store has disk capacity for additional replicas; or whether the
 // disk is over capacity and should shed replicas.
 func (a *Allocator) DiskOptions() DiskCapacityOptions {
-	return makeDiskCapacityOptions(&a.st.SV)
+	return MakeDiskCapacityOptions(&a.st.SV)
 }
 
 // IOOverloadOptions returns the store IO overload options. It is used to
@@ -2255,6 +2534,7 @@ func (a *Allocator) IOOverloadOptions() IOOverloadOptions {
 		ReplicaIOOverloadThreshold:   ReplicaIOOverloadThreshold.Get(&a.st.SV),
 		LeaseIOOverloadThreshold:     LeaseIOOverloadThreshold.Get(&a.st.SV),
 		LeaseIOOverloadShedThreshold: LeaseIOOverloadShedThreshold.Get(&a.st.SV),
+		DiskUnhealthyScore:           DiskUnhealthyIOOverloadScore.Get(&a.st.SV),
 	}
 }
 
@@ -2282,11 +2562,10 @@ func (a *Allocator) TransferLeaseTarget(
 		StoreID() roachpb.StoreID
 		GetRangeID() roachpb.RangeID
 		RaftStatus() *raft.Status
-		GetFirstIndex() kvpb.RaftIndex
+		GetCompactedIndex() kvpb.RaftIndex
 		SendStreamStats(*rac2.RangeSendStreamStats)
 	},
 	usageInfo allocator.RangeUsageInfo,
-	forceDecisionWithoutStats bool,
 	opts allocator.TransferLeaseOptions,
 ) roachpb.ReplicaDescriptor {
 	if a.knobs != nil {
@@ -2340,10 +2619,7 @@ func (a *Allocator) TransferLeaseTarget(
 		if !excludeLeaseRepl {
 			switch transferDec {
 			case shouldNotTransfer:
-				if !forceDecisionWithoutStats {
-					return roachpb.ReplicaDescriptor{}
-				}
-				fallthrough
+				return roachpb.ReplicaDescriptor{}
 			case decideWithoutStats:
 				if !a.shouldTransferLeaseForLeaseCountConvergence(ctx, storePool, sl, source, validTargets) {
 					return roachpb.ReplicaDescriptor{}
@@ -2374,9 +2650,22 @@ func (a *Allocator) TransferLeaseTarget(
 			return validTargets[a.randGen.Intn(len(validTargets))]
 		}
 
+		// Construct targetStores from sl.Stores (all constraint-satisfying
+		// stores) so that MMA computes its load summary over the same set used
+		// to compute candidateLeasesMean above. This ensures both the allocator
+		// and MMA reason about the same baseline when validating lease transfer
+		// targets. See the detailed explanation in mmaintegration/thrashing.go.
+		targetStores := make([]roachpb.StoreID, 0, len(sl.Stores))
+		for _, s := range sl.Stores {
+			targetStores = append(targetStores, s.StoreID)
+		}
+		handle := a.as.BuildMMARebalanceAdvisor(ctx, source.StoreID, targetStores)
 		var bestOption roachpb.ReplicaDescriptor
 		candidates := make([]roachpb.ReplicaDescriptor, 0, len(validTargets))
 		bestOptionLeaseCount := int32(math.MaxInt32)
+		// Similar to replicate queue, lease queue only filters out overloaded
+		// stores at the final target selection step. See comments on top of
+		// allocatorSync.BuildMMARebalanceAdvisor for more details.
 		for _, repl := range validTargets {
 			if leaseRepl.StoreID() == repl.StoreID {
 				continue
@@ -2386,7 +2675,13 @@ func (a *Allocator) TransferLeaseTarget(
 				continue
 			}
 			if float64(storeDesc.Capacity.LeaseCount) < candidateLeasesMean-0.5 {
-				candidates = append(candidates, repl)
+				// Only include the candidate if it is not in conflict with mma's goals.
+				// Note that even if all candidates are excluded, the len(candidates) ==
+				// 0 branch below will still return the replica with the lowest lease
+				// count if we are required to shed the lease (excludeLeaseRepl==true).
+				if !a.as.IsInConflictWithMMA(ctx, repl.StoreID, handle, true /*cpuOnly*/) {
+					candidates = append(candidates, repl)
+				}
 			}
 			if storeDesc.Capacity.LeaseCount < bestOptionLeaseCount {
 				bestOption = repl
@@ -2431,9 +2726,11 @@ func (a *Allocator) TransferLeaseTarget(
 			candidates,
 			storeDescMap,
 			&LoadScorerOptions{
-				IOOverloadOptions:            a.IOOverloadOptions(),
-				DiskOptions:                  a.DiskOptions(),
-				Deterministic:                a.deterministic,
+				BaseScorerOptions: BaseScorerOptions{
+					IOOverload:    a.IOOverloadOptions(),
+					DiskCapacity:  a.DiskOptions(),
+					Deterministic: a.deterministic,
+				},
 				LoadDims:                     opts.LoadDimensions,
 				LoadThreshold:                LoadThresholds(&a.st.SV, opts.LoadDimensions...),
 				MinLoadThreshold:             LoadMinThresholds(opts.LoadDimensions...),
@@ -2639,6 +2936,14 @@ func (t TransferLeaseDecision) String() string {
 	}
 }
 
+// CountBasedRebalancingDisabled returns true if count-based rebalancing should
+// be disabled. Count-based rebalancing is disabled only when
+// LBRebalancingMultiMetricOnly mode is active. To enable both multi-metric and
+// count-based rebalancing, use LBRebalancingMultiMetricAndCount mode instead.
+func (a *Allocator) CountBasedRebalancingDisabled(ctx context.Context) bool {
+	return kvserverbase.GetLoadBasedRebalancingMode(ctx, a.st) == kvserverbase.LBRebalancingMultiMetricOnly
+}
+
 // ShouldTransferLease returns true if the specified store is overfull in terms
 // of leases with respect to the other stores matching the specified
 // attributes.
@@ -2651,7 +2956,7 @@ func (a *Allocator) ShouldTransferLease(
 	leaseRepl interface {
 		StoreID() roachpb.StoreID
 		RaftStatus() *raft.Status
-		GetFirstIndex() kvpb.RaftIndex
+		GetCompactedIndex() kvpb.RaftIndex
 		SendStreamStats(*rac2.RangeSendStreamStats)
 	},
 	usageInfo allocator.RangeUsageInfo,
@@ -2756,6 +3061,13 @@ func (a Allocator) shouldTransferLeaseForAccessLocality(
 	rebalanceAdjustments map[roachpb.StoreID]float64,
 	candidateLeasesMean float64,
 ) (accessLocalityTransferDecision, roachpb.ReplicaDescriptor) {
+	// When the multi-metric allocator (MMA) is active, follow-the-workload
+	// lease transfers are disabled. The MMA handles load-based rebalancing
+	// directly, so locality-driven lease transfers would conflict with its
+	// decisions.
+	if kvserverbase.LoadBasedRebalancingModeIsMMA(ctx, a.st) {
+		return decideWithoutStats, roachpb.ReplicaDescriptor{}
+	}
 	// Only use load-based rebalancing if it's enabled and we have both
 	// stats and locality information to base our decision on.
 	if usageInfo.RequestLocality == nil ||
@@ -2938,6 +3250,10 @@ func (a Allocator) shouldTransferLeaseForLeaseCountConvergence(
 	source roachpb.StoreDescriptor,
 	existing []roachpb.ReplicaDescriptor,
 ) bool {
+	// Return false early if count based rebalancing is disabled.
+	if a.CountBasedRebalancingDisabled(ctx) {
+		return false
+	}
 	// TODO(a-robinson): Should we disable this behavior when load-based lease
 	// rebalancing is enabled? In happy cases it's nice to keep this working
 	// to even out the number of leases in addition to the number of replicas,
@@ -3033,12 +3349,12 @@ func FilterBehindReplicas(
 func excludeReplicasInNeedOfSnapshots(
 	ctx context.Context,
 	st *raft.Status,
-	firstIndex kvpb.RaftIndex,
+	compacted kvpb.RaftIndex,
 	replicas []roachpb.ReplicaDescriptor,
 ) []roachpb.ReplicaDescriptor {
 	filled := 0
 	for _, repl := range replicas {
-		snapStatus := raftutil.ReplicaMayNeedSnapshot(st, firstIndex, repl.ReplicaID)
+		snapStatus := raftutil.ReplicaMayNeedSnapshot(st, compacted, repl.ReplicaID)
 		if snapStatus != raftutil.NoSnapshotNeeded {
 			log.KvDistribution.VEventf(
 				ctx,
@@ -3219,4 +3535,66 @@ func replDescsToStoreIDs(descs []roachpb.ReplicaDescriptor) []roachpb.StoreID {
 		ret[i] = desc.StoreID
 	}
 	return ret
+}
+
+// roundToNearestPriorityCategory rounds a priority to the nearest 100. n should
+// be non-negative.
+func roundToNearestPriorityCategory(n float64) float64 {
+	return math.Round(n/100.0) * 100
+}
+
+// CheckPriorityInversion returns whether there was a priority inversion (and
+// the range should not be processed at this time, since doing so could starve
+// higher-priority items), and whether the caller should re-add the range to the
+// queue (presumably under its new priority). A priority inversion happens if
+// the priority at enqueue time is higher than the priority corresponding to the
+// action computed at processing time. Caller should re-add the range to the
+// queue if it has gone from a repair action to lowest priority
+// (AllocatorConsiderRebalance).
+//
+// Note: Changing from AllocatorRangeUnavailable/AllocatorNoop to
+// AllocatorConsiderRebalance is not treated as a priority inversion. Going from
+// a repair action to AllocatorRangeUnavailable/AllocatorNoop is considered a
+// priority inversion but shouldRequeue = false.
+//
+// INVARIANT: shouldRequeue => isInversion
+func CheckPriorityInversion(
+	priorityAtEnqueue float64, actionAtProcessing AllocatorAction,
+) (isInversion bool, shouldRequeue bool) {
+	// NB: priorityAtEnqueue is -1 for callers such as scatter, dry runs, and
+	// manual queue runs. Priority inversion does not apply to these calls.
+	if priorityAtEnqueue == -1 {
+		return false, false
+	}
+
+	// NB: we need to check for when priorityAtEnqueue falls within the range
+	// of the allocator actions because store.Enqueue might enqueue things with
+	// a very high priority (1e5). In those cases, we do not want to requeue
+	// these actions or count it as an inversion.
+	withinPriorityRange := func(priority float64) bool {
+		return AllocatorNoop.Priority() <= priority && priority <= AllocatorMaxPriority.Priority()
+	}
+	if !withinPriorityRange(priorityAtEnqueue) {
+		return false, false
+	}
+
+	if priorityAtEnqueue > AllocatorConsiderRebalance.Priority() && actionAtProcessing == AllocatorConsiderRebalance {
+		return true, true
+	}
+
+	// NB: Usually, the priority at enqueue time should correspond to
+	// action.Priority(). However, for AllocatorAddVoter,
+	// AllocatorRemoveDeadVoter, AllocatorRemoveVoter, the priority can be
+	// adjusted at enqueue time (See ComputeAction for more details). However, we
+	// expect the adjustment to be relatively small (<49). So we round the
+	// priority to the nearest 100 to compare against
+	// actionAtProcessing.Priority(). Without this rounding, we might treat going
+	// from 10000 to 999 as an inversion, but it was just due to the adjustment.
+	// Note that priorities at AllocatorFinalizeAtomicReplicationChange,
+	// AllocatorRemoveLearner, and AllocatorReplaceDeadVoter will be rounded to
+	// the same priority. They are so close to each other, so we don't really
+	// count it as an inversion among them.
+	normPriorityAtEnqueue := roundToNearestPriorityCategory(priorityAtEnqueue)
+	isInversion = normPriorityAtEnqueue > actionAtProcessing.Priority()
+	return isInversion, false
 }

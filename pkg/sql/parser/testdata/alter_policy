@@ -1,0 +1,138 @@
+parse
+ALTER POLICY p1 ON t1 RENAME TO p2
+----
+ALTER POLICY p1 ON t1 RENAME TO p2
+ALTER POLICY p1 ON t1 RENAME TO p2 -- fully parenthesized
+ALTER POLICY p1 ON t1 RENAME TO p2 -- literals removed
+ALTER POLICY _ ON _ RENAME TO _ -- identifiers removed
+
+parse
+ALTER POLICY p1 ON db.schema.t1 RENAME to "p2"
+----
+ALTER POLICY p1 ON db.schema.t1 RENAME TO p2 -- normalized!
+ALTER POLICY p1 ON db.schema.t1 RENAME TO p2 -- fully parenthesized
+ALTER POLICY p1 ON db.schema.t1 RENAME TO p2 -- literals removed
+ALTER POLICY _ ON _._._ RENAME TO _ -- identifiers removed
+
+parse
+ALTER POLICY p1 ON db.schema.t1 TO PUBLIC, "rg1", CURRENT_USER
+----
+ALTER POLICY p1 ON db.schema.t1 TO public, rg1, CURRENT_USER -- normalized!
+ALTER POLICY p1 ON db.schema.t1 TO public, rg1, CURRENT_USER -- fully parenthesized
+ALTER POLICY p1 ON db.schema.t1 TO public, rg1, CURRENT_USER -- literals removed
+ALTER POLICY _ ON _._._ TO _, _, _ -- identifiers removed
+
+parse
+ALTER POLICY p1 ON db.schema.t1 TO "rg1", public USING (true)
+----
+ALTER POLICY p1 ON db.schema.t1 TO rg1, public USING (true) -- normalized!
+ALTER POLICY p1 ON db.schema.t1 TO rg1, public USING ((true)) -- fully parenthesized
+ALTER POLICY p1 ON db.schema.t1 TO rg1, public USING (_) -- literals removed
+ALTER POLICY _ ON _._._ TO _, _ USING (true) -- identifiers removed
+
+parse
+ALTER POLICY p1 ON db.schema.t1 WITH CHECK (tenant_id = current_user);
+----
+ALTER POLICY p1 ON db.schema.t1 WITH CHECK (tenant_id = current_user()) -- normalized!
+ALTER POLICY p1 ON db.schema.t1 WITH CHECK (((tenant_id) = (current_user()))) -- fully parenthesized
+ALTER POLICY p1 ON db.schema.t1 WITH CHECK (tenant_id = current_user()) -- literals removed
+ALTER POLICY _ ON _._._ WITH CHECK (_ = current_user()) -- identifiers removed
+
+parse
+ALTER POLICY p1 ON db.schema.t1 USING (tenant_id = current_user) WITH CHECK (tenant_id::TEXT = current_user);
+----
+ALTER POLICY p1 ON db.schema.t1 USING (tenant_id = current_user()) WITH CHECK (tenant_id::STRING = current_user()) -- normalized!
+ALTER POLICY p1 ON db.schema.t1 USING (((tenant_id) = (current_user()))) WITH CHECK ((((tenant_id)::STRING) = (current_user()))) -- fully parenthesized
+ALTER POLICY p1 ON db.schema.t1 USING (tenant_id = current_user()) WITH CHECK (tenant_id::STRING = current_user()) -- literals removed
+ALTER POLICY _ ON _._._ USING (_ = current_user()) WITH CHECK (_::STRING = current_user()) -- identifiers removed
+
+parse
+ALTER POLICY p1 ON db.schema.t1 TO "r1","r2" USING (tenant_id = current_user) WITH CHECK (tenant_id::TEXT = current_user);
+----
+ALTER POLICY p1 ON db.schema.t1 TO r1, r2 USING (tenant_id = current_user()) WITH CHECK (tenant_id::STRING = current_user()) -- normalized!
+ALTER POLICY p1 ON db.schema.t1 TO r1, r2 USING (((tenant_id) = (current_user()))) WITH CHECK ((((tenant_id)::STRING) = (current_user()))) -- fully parenthesized
+ALTER POLICY p1 ON db.schema.t1 TO r1, r2 USING (tenant_id = current_user()) WITH CHECK (tenant_id::STRING = current_user()) -- literals removed
+ALTER POLICY _ ON _._._ TO _, _ USING (_ = current_user()) WITH CHECK (_::STRING = current_user()) -- identifiers removed
+
+# Empty policy
+parse
+ALTER POLICY p1 on t1
+----
+ALTER POLICY p1 ON t1 -- normalized!
+ALTER POLICY p1 ON t1 -- fully parenthesized
+ALTER POLICY p1 ON t1 -- literals removed
+ALTER POLICY _ ON _ -- identifiers removed
+
+# USING and WITH CHECK can be declared in any order
+parse
+ALTER POLICY p1 ON db.schema.t1 TO "r1","r2" WITH CHECK (insert_row = current_user) USING (read_row = current_user);
+----
+ALTER POLICY p1 ON db.schema.t1 TO r1, r2 USING (read_row = current_user()) WITH CHECK (insert_row = current_user()) -- normalized!
+ALTER POLICY p1 ON db.schema.t1 TO r1, r2 USING (((read_row) = (current_user()))) WITH CHECK (((insert_row) = (current_user()))) -- fully parenthesized
+ALTER POLICY p1 ON db.schema.t1 TO r1, r2 USING (read_row = current_user()) WITH CHECK (insert_row = current_user()) -- literals removed
+ALTER POLICY _ ON _._._ TO _, _ USING (_ = current_user()) WITH CHECK (_ = current_user()) -- identifiers removed
+
+# Verify policy name can be mixed case
+parse
+ALTER POLICY "StartWithCap" on "tAblE1" USING (true);
+----
+ALTER POLICY "StartWithCap" ON "tAblE1" USING (true) -- normalized!
+ALTER POLICY "StartWithCap" ON "tAblE1" USING ((true)) -- fully parenthesized
+ALTER POLICY "StartWithCap" ON "tAblE1" USING (_) -- literals removed
+ALTER POLICY _ ON _ USING (true) -- identifiers removed
+
+# Must include the table name
+error
+ALTER POLICY p1
+----
+at or near "EOF": syntax error
+DETAIL: source SQL:
+ALTER POLICY p1
+               ^
+HINT: try \h ALTER POLICY
+
+# Do not allow multi-part names for policy
+error
+ALTER POLICY schema.p1 on schema.t1
+----
+at or near ".": syntax error
+DETAIL: source SQL:
+ALTER POLICY schema.p1 on schema.t1
+                   ^
+HINT: try \h ALTER POLICY
+
+# Do not allow rename in same statement with role modification
+error
+ALTER POLICY p1 on t1 RENAME to p2 TO public
+----
+at or near "to": syntax error
+DETAIL: source SQL:
+ALTER POLICY p1 on t1 RENAME to p2 TO public
+                                   ^
+
+# Do not allow rename in same statement with using expression modification
+error
+ALTER POLICY p1 on t1 RENAME to p2 USING (true)
+----
+at or near "using": syntax error
+DETAIL: source SQL:
+ALTER POLICY p1 on t1 RENAME to p2 USING (true)
+                                   ^
+
+# Do not allow rename in same statement with check expression modification
+error
+ALTER POLICY p1 on t1 RENAME to p2 WITH CHECK (true)
+----
+at or near "with": syntax error
+DETAIL: source SQL:
+ALTER POLICY p1 on t1 RENAME to p2 WITH CHECK (true)
+                                   ^
+
+# Ensure proper order of TO roles
+error
+ALTER POLICY p1 on t1 WITH CHECK (true) USING (true) TO public;
+----
+at or near "to": syntax error
+DETAIL: source SQL:
+ALTER POLICY p1 on t1 WITH CHECK (true) USING (true) TO public
+                                                     ^

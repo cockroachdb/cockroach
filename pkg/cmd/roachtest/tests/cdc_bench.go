@@ -70,40 +70,93 @@ var (
 
 func registerCDCBench(r registry.Registry) {
 
+	postProcessScanPerfMetrics := func(testName string, histograms *roachtestutil.HistogramMetric) (roachtestutil.AggregatedPerfMetrics, error) {
+		metrics := roachtestutil.AggregatedPerfMetrics{}
+
+		// Find the scan-rate summary
+		var scanRate float64
+		if len(histograms.Summaries) != 1 {
+			return nil, errors.Errorf("expected exactly 1 histogram summary, got %d", len(histograms.Summaries))
+		}
+		// CDC scan tests export the scan rate (rows per second) as a single
+		// duration value in nanoseconds, set as the upper bound of the histogram.
+		// This convoluted scheme was cargo-culted from the restore test.
+		scanRate = float64(histograms.Summaries[0].HighestTrackableValue) / float64(time.Second)
+
+		// Add scan rate metric (higher is better)
+		metrics = append(metrics, &roachtestutil.AggregatedMetric{
+			Name:           "scan_rate",
+			Value:          roachtestutil.MetricPoint(scanRate),
+			Unit:           "rows/s",
+			IsHigherBetter: true,
+		})
+
+		return metrics, nil
+	}
+
 	// Initial/catchup scan benchmarks.
 	for _, scanType := range cdcBenchScanTypes {
 		for _, ranges := range []int64{100, 100000} {
 			const (
-				nodes  = 5 // excluding coordinator/workload node
-				cpus   = 16
-				rows   = 1_000_000_000 // 19 GB
-				format = "json"
+				nodes = 5 // excluding coordinator/workload node
+				cpus  = 16
+				rows  = 1_000_000_000 // 19 GB
 			)
-			r.Add(registry.TestSpec{
-				Name: fmt.Sprintf(
-					"cdc/scan/%s/nodes=%d/cpu=%d/rows=%s/ranges=%s/protocol=mux/format=%s/sink=null",
-					scanType, nodes, cpus, formatSI(rows), formatSI(ranges), format),
-				Owner:            registry.OwnerCDC,
-				Benchmark:        true,
-				Cluster:          r.MakeClusterSpec(nodes+1, spec.CPU(cpus)),
-				CompatibleClouds: registry.AllExceptAWS,
-				Suites:           registry.Suites(registry.Weekly),
-				RequiresLicense:  true,
-				Timeout:          4 * time.Hour, // Allow for the initial import and catchup scans with 100k ranges.
-				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-					runCDCBenchScan(ctx, t, c, scanType, rows, ranges, format)
-				},
-			})
+
+			for _, format := range []string{"json", "protobuf"} {
+
+				r.Add(registry.TestSpec{
+					Name: fmt.Sprintf(
+						"cdc/scan/%s/nodes=%d/cpu=%d/rows=%s/ranges=%s/protocol=mux/format=%s/sink=null",
+						scanType, nodes, cpus, formatSI(rows), formatSI(ranges), format),
+					Owner:            registry.OwnerCDC,
+					Benchmark:        true,
+					Cluster:          r.MakeClusterSpec(nodes+1, spec.CPU(cpus)),
+					CompatibleClouds: registry.AllExceptAWS,
+					Suites:           registry.Suites(registry.Weekly),
+					Timeout:          4 * time.Hour, // Allow for the initial import and catchup scans with 100k ranges.
+					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+						runCDCBenchScan(ctx, t, c, scanType, rows, ranges, format)
+					},
+					PostProcessPerfMetrics: postProcessScanPerfMetrics,
+				})
+
+				// Enriched envelope benchmarks, using the same parameters.
+				if format == "json" { // Skip protobuf as enriched envelopes are not supported yet.
+					for _, enrichedProperties := range []string{"none", "source", "source,schema"} {
+						r.Add(registry.TestSpec{
+							Name: fmt.Sprintf("cdc/scan/%s/ranges=%s/envelope=enriched/enriched_properties=%s",
+								scanType, formatSI(ranges), enrichedProperties),
+							Owner:            registry.OwnerCDC,
+							Benchmark:        true,
+							Cluster:          r.MakeClusterSpec(nodes+1, spec.CPU(cpus)),
+							CompatibleClouds: registry.AllExceptAWS,
+							Suites:           registry.Suites(registry.Weekly),
+							Timeout:          4 * time.Hour,
+							Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+								otherOpts := []kv{{"envelope", "enriched"}}
+								if enrichedProperties != "none" {
+									otherOpts = append(otherOpts, kv{"enriched_properties", enrichedProperties})
+								}
+								runCDCBenchScan(ctx, t, c, scanType, rows, ranges, format, otherOpts...)
+							},
+							PostProcessPerfMetrics: postProcessScanPerfMetrics,
+						})
+					}
+				}
+			}
 		}
 	}
 
 	// Workload impact benchmarks.
-	for _, readPercent := range []int{0, 100} {
+	// TODO(#135952): Reenable readPercent 100. This benchmark historically tested
+	// kv100, but it was disabled because cdc bench can be flaky and kv100 does
+	// not provide enough value for the noise.
+	for _, readPercent := range []int{0} {
 		for _, ranges := range []int64{100, 100000} {
 			const (
-				nodes  = 5 // excluding coordinator and workload nodes
-				cpus   = 16
-				format = "json"
+				nodes = 5 // excluding coordinator and workload nodes
+				cpus  = 16
 			)
 
 			// Control run that only runs the workload, with no changefeed.
@@ -116,46 +169,46 @@ func registerCDCBench(r registry.Registry) {
 				Cluster:          r.MakeClusterSpec(nodes+2, spec.CPU(cpus)),
 				CompatibleClouds: registry.AllExceptAWS,
 				Suites:           registry.Suites(registry.Weekly),
-				RequiresLicense:  true,
 				Timeout:          time.Hour,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runCDCBenchWorkload(ctx, t, c, ranges, readPercent, "", "", nullSink)
 				},
 			})
 
-			// Workloads with a concurrent changefeed running.
-			for _, server := range cdcBenchServers {
-				r.Add(registry.TestSpec{
-					Name: fmt.Sprintf(
-						"cdc/workload/kv%d/nodes=%d/cpu=%d/ranges=%s/server=%s/protocol=mux/format=%s/sink=null",
-						readPercent, nodes, cpus, formatSI(ranges), server, format),
-					Owner:            registry.OwnerCDC,
-					Benchmark:        true,
-					Cluster:          r.MakeClusterSpec(nodes+2, spec.CPU(cpus)),
-					CompatibleClouds: registry.AllExceptAWS,
-					Suites:           registry.Suites(registry.Weekly),
-					RequiresLicense:  true,
-					Timeout:          time.Hour,
-					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-						runCDCBenchWorkload(ctx, t, c, ranges, readPercent, server, format, nullSink)
-					},
-				})
+			for _, format := range []string{"json", "protobuf"} {
 
-				r.Add(registry.TestSpec{
-					Name: fmt.Sprintf(
-						"cdc/workload/kv%d/nodes=%d/cpu=%d/ranges=%s/server=%s/protocol=mux/format=%s/sink=kafka",
-						readPercent, nodes, cpus, formatSI(ranges), server, format),
-					Owner:            registry.OwnerCDC,
-					Benchmark:        true,
-					Cluster:          r.MakeClusterSpec(nodes+3, spec.CPU(cpus)),
-					CompatibleClouds: registry.AllExceptAWS,
-					Suites:           registry.Suites(registry.Weekly),
-					RequiresLicense:  true,
-					Timeout:          time.Hour,
-					Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-						runCDCBenchWorkload(ctx, t, c, ranges, readPercent, server, format, kafkaSink)
-					},
-				})
+				// Workloads with a concurrent changefeed running.
+				for _, server := range cdcBenchServers {
+					r.Add(registry.TestSpec{
+						Name: fmt.Sprintf(
+							"cdc/workload/kv%d/nodes=%d/cpu=%d/ranges=%s/server=%s/protocol=mux/format=%s/sink=null",
+							readPercent, nodes, cpus, formatSI(ranges), server, format),
+						Owner:            registry.OwnerCDC,
+						Benchmark:        true,
+						Cluster:          r.MakeClusterSpec(nodes+2, spec.CPU(cpus)),
+						CompatibleClouds: registry.AllExceptAWS,
+						Suites:           registry.Suites(registry.Weekly),
+						Timeout:          time.Hour,
+						Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+							runCDCBenchWorkload(ctx, t, c, ranges, readPercent, server, format, nullSink)
+						},
+					})
+
+					r.Add(registry.TestSpec{
+						Name: fmt.Sprintf(
+							"cdc/workload/kv%d/nodes=%d/cpu=%d/ranges=%s/server=%s/protocol=mux/format=%s/sink=kafka",
+							readPercent, nodes, cpus, formatSI(ranges), server, format),
+						Owner:            registry.OwnerCDC,
+						Benchmark:        true,
+						Cluster:          r.MakeClusterSpec(nodes+3, spec.CPU(cpus)),
+						CompatibleClouds: registry.AllExceptAWS,
+						Suites:           registry.Suites(registry.Weekly),
+						Timeout:          time.Hour,
+						Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+							runCDCBenchWorkload(ctx, t, c, ranges, readPercent, server, format, kafkaSink)
+						},
+					})
+				}
 			}
 		}
 	}
@@ -166,41 +219,21 @@ func formatSI(num int64) string {
 	return fmt.Sprintf("%d%s", int64(numSI), suffix)
 }
 
-// makeCDCBenchOptions creates common cluster options for CDC benchmarks.
-func makeCDCBenchOptions(c cluster.Cluster) (option.StartOpts, install.ClusterSettings) {
+// makeCDCDefaultTestOptions creates common cluster options for CDC tests.
+// This provides baseline settings without benchmark-specific tuning.
+func makeCDCDefaultTestOptions(c cluster.Cluster) (option.StartOpts, install.ClusterSettings) {
 	opts := option.DefaultStartOpts()
 	settings := install.MakeClusterSettings()
 	settings.ClusterSettings["kv.rangefeed.enabled"] = "true"
 
-	// Checkpoint frequently.  Some of the larger benchmarks might overload the
-	// cluster.  Producing frequent span-level checkpoints helps with recovery.
-	settings.ClusterSettings["changefeed.frontier_checkpoint_frequency"] = "60s"
-	settings.ClusterSettings["changefeed.frontier_highwater_lag_checkpoint_threshold"] = "30s"
+	// Checkpoint frequently. Some of the larger benchmarks might overload the
+	// cluster. Producing frequent span-level checkpoints helps with recovery.
+	settings.ClusterSettings["changefeed.span_checkpoint.interval"] = "60s"
+	settings.ClusterSettings["changefeed.span_checkpoint.lag_threshold"] = "30s"
 
-	// Bump up the number of allowed catchup scans.  Doing catchup for 100k ranges with default
+	// Bump up the number of allowed catchup scans. Doing catchup for 100k ranges with default
 	// configuration (8 client side, 16 per store) takes a while (~1500-2000 ranges per min minutes).
 	settings.ClusterSettings["kv.rangefeed.concurrent_catchup_iterators"] = "16"
-
-	// Give changefeed more memory and slow down rangefeed checkpoints.
-	// When running large catchup scan benchmarks (100k ranges), as the benchmark
-	// nears completion, more and more ranges generate checkpoint events.  When
-	// the rate of checkpoints high (default used to be 200ms), the changefeed
-	// begins to block on memory acquisition since the fan in factor (~20k
-	// ranges/node) greatly exceeds processing loop speed (1 goroutine).
-	// The current pipeline looks like this:
-	//    rangefeed ->
-	//       1 goroutine physicalKVFeed (acquire Memory) ->
-	//       1 goroutine copyFromSourceToDestination (filter events) ->
-	//       1 goroutine changeAggregator.Next ->
-	//       N goroutines rest of the pipeline (encode and emit)
-	// The memory for the checkpoint events (even ones after end_time) must be allocated
-	// first; then these events are thrown away (many inefficiencies here -- but
-	// it's the only thing we can do w/out having to add "end time" support to the rangefeed library).
-	// The rate of incoming events greatly exceeds the rate with which we consume these events
-	// (and release allocations), resulting in significant drop in completed ranges throughput.
-	// Current default is 3s, but if needed increase this time out:
-	//    settings.ClusterSettings["kv.rangefeed.closed_timestamp_refresh_interval"] = "5s"
-	settings.ClusterSettings["changefeed.memory.per_changefeed_limit"] = "4G"
 
 	// Scheduled backups may interfere with performance, disable them.
 	opts.RoachprodOpts.ScheduleBackups = false
@@ -223,6 +256,40 @@ func makeCDCBenchOptions(c cluster.Cluster) (option.StartOpts, install.ClusterSe
 	return opts, settings
 }
 
+// makeCDCBenchOptions creates common cluster options for CDC benchmarks.
+// Builds on makeCDCDefaultTestOptions with benchmark-specific tuning.
+func makeCDCBenchOptions(c cluster.Cluster) (option.StartOpts, install.ClusterSettings) {
+	opts, settings := makeCDCDefaultTestOptions(c)
+
+	// Give changefeed more memory.
+	settings.ClusterSettings["changefeed.memory.per_changefeed_limit"] = "4G"
+
+	// When running large catchup scan benchmarks (100k ranges), as the benchmark
+	// nears completion, more and more ranges generate checkpoint events.  When
+	// the rate of checkpoints high (default used to be 200ms), the changefeed
+	// begins to block on memory acquisition since the fan in factor (~20k
+	// ranges/node) greatly exceeds processing loop speed (1 goroutine).
+	// The current pipeline looks like this:
+	//    rangefeed ->
+	//       1 goroutine physicalKVFeed (acquire Memory) ->
+	//       1 goroutine copyFromSourceToDestination (filter events) ->
+	//       1 goroutine changeAggregator.Next ->
+	//       N goroutines rest of the pipeline (encode and emit)
+	// The memory for the checkpoint events (even ones after end_time) must be allocated
+	// first; then these events are thrown away (many inefficiencies here -- but
+	// it's the only thing we can do w/out having to add "end time" support to the rangefeed library).
+	// The rate of incoming events greatly exceeds the rate with which we consume these events
+	// (and release allocations), resulting in significant drop in completed ranges throughput.
+	// Current default is 3s, but if needed increase this time out:
+	//    settings.ClusterSettings["kv.rangefeed.closed_timestamp_refresh_interval"] = "5s"
+
+	return opts, settings
+}
+
+type kv struct {
+	k, v string
+}
+
 // runCDCBenchScan benchmarks throughput for a changefeed initial or catchup
 // scan as rows scanned per second.
 //
@@ -236,6 +303,7 @@ func runCDCBenchScan(
 	scanType cdcBenchScanType,
 	numRows, numRanges int64,
 	format string,
+	otherOpts ...kv,
 ) {
 	const sink = "null://"
 	var (
@@ -249,7 +317,7 @@ func runCDCBenchScan(
 	opts, settings := makeCDCBenchOptions(c)
 
 	c.Start(ctx, t.L(), opts, settings, nData)
-	m := c.NewMonitor(ctx, nData.Merge(nCoord))
+	m := c.NewDeprecatedMonitor(ctx, nData.Merge(nCoord))
 
 	conn := c.Conn(ctx, t.L(), nData[0])
 	defer conn.Close()
@@ -275,6 +343,7 @@ func runCDCBenchScan(
 		`./cockroach workload init kv --splits %d {pgurl:%d}`, numRanges, nData[0]))
 	require.NoError(t, roachtestutil.WaitFor3XReplication(ctx, t.L(), conn))
 
+	time.Sleep(1 * time.Second)
 	cursor := timeutil.Now() // before data is ingested
 
 	// Ingest data. init allows us to import into the existing table. However,
@@ -305,6 +374,13 @@ func runCDCBenchScan(
 	t.L().Printf("running changefeed %s scan", scanType)
 	with := fmt.Sprintf(`format = '%s', end_time = '%s'`,
 		format, timeutil.Now().Add(30*time.Second).Format(time.RFC3339))
+	for _, opt := range otherOpts {
+		if opt.v != "" {
+			with += fmt.Sprintf(", %s = '%s'", opt.k, opt.v)
+		} else {
+			with += fmt.Sprintf(", %s", opt.k)
+		}
+	}
 	switch scanType {
 	case cdcBenchInitialScan:
 		with += ", initial_scan = 'yes'"
@@ -327,10 +403,10 @@ func runCDCBenchScan(
 	m.Go(func(ctx context.Context) error {
 		t.L().Printf("waiting for changefeed to finish")
 		info, err := waitForChangefeed(ctx, conn, jobID, t.L(), func(info changefeedInfo) (bool, error) {
-			switch jobs.Status(info.status) {
-			case jobs.StatusSucceeded:
+			switch jobs.State(info.status) {
+			case jobs.StateSucceeded:
 				return true, nil
-			case jobs.StatusPending, jobs.StatusRunning:
+			case jobs.StatePending, jobs.StateRunning:
 				return false, nil
 			default:
 				return false, errors.Errorf("unexpected changefeed status %q", info.status)
@@ -425,7 +501,7 @@ func runCDCBenchWorkload(
 	}
 
 	c.Start(ctx, t.L(), opts, settings, nData)
-	m := c.NewMonitor(ctx, nData.Merge(nCoord))
+	m := c.NewDeprecatedMonitor(ctx, nData.Merge(nCoord))
 
 	conn := c.Conn(ctx, t.L(), nData[0])
 	defer conn.Close()
@@ -497,8 +573,8 @@ func runCDCBenchWorkload(
 		// ranges it was found to sometimes lag by over 8 minutes.
 		m.Go(func(ctx context.Context) error {
 			info, err := waitForChangefeed(ctx, conn, jobID, t.L(), func(info changefeedInfo) (bool, error) {
-				switch jobs.Status(info.status) {
-				case jobs.StatusPending, jobs.StatusRunning:
+				switch jobs.State(info.status) {
+				case jobs.StatePending, jobs.StateRunning:
 					doneValue := done.Load()
 					return doneValue != nil && info.GetHighWater().After(doneValue.(time.Time)), nil
 				default:
@@ -518,8 +594,8 @@ func runCDCBenchWorkload(
 		t.L().Printf("waiting for changefeed watermark to reach current time (%s)",
 			now.Format(time.RFC3339))
 		info, err := waitForChangefeed(ctx, conn, jobID, t.L(), func(info changefeedInfo) (bool, error) {
-			switch jobs.Status(info.status) {
-			case jobs.StatusPending, jobs.StatusRunning:
+			switch jobs.State(info.status) {
+			case jobs.StatePending, jobs.StateRunning:
 				return info.GetHighWater().After(now), nil
 			default:
 				return false, errors.Errorf("unexpected changefeed status %s", info.status)

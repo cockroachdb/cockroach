@@ -18,9 +18,11 @@ go_library(
     deps = [
         "//pkg/base",
         "//pkg/build",
+        "//pkg/server/license",
         "//pkg/server/serverpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
+        "//pkg/ui/settings",
         "//pkg/util/httputil",
         "//pkg/util/log",
         "//pkg/util/timeutil",
@@ -49,6 +51,7 @@ go_test(
     embed = [":ui"],
     deps = [
         "//pkg/base",
+        "//pkg/settings/cluster",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "@com_github_stretchr_testify//require",

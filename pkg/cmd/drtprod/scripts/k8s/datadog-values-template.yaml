@@ -1,0 +1,37 @@
+# Copyright 2025 The Cockroach Authors.
+#
+# Use of this software is governed by the CockroachDB Software License
+# included in the /LICENSE file.
+
+datadog:
+  apiKeyExistingSecret: datadog-secret
+  site: us5.datadoghq.com
+  # Required as of Agent 7.35. See Kubelet Certificate note below.
+  kubelet:
+    tlsVerify: false
+
+  logs:
+    enabled: true
+
+  confd:
+    cockroachdb.yaml: |-
+      ad_identifiers:
+        - cockroachdb/cockroach:${COCKROACH_VERSION}
+      init_config: {}
+      instances:
+      - tls_verify: false
+        openmetrics_endpoint: "http://%%host%%:8080/_status/vars"
+        tags: ["cluster:$CLUSTER_NAME"]
+        histogram_buckets_as_distributions: true
+        collect_counters_with_distributions: true
+#      logs:
+#      - source: cockroach
+#        service: cockroach
+#        log_processing_rules:
+#        - type: multi_line
+#          name: new_log_start_with_status_and_date
+#          pattern: '[A-Z]\d{6}\s\d+\:\d+\:\d+\.\d+'
+
+providers:
+  gke:
+    enabled: true

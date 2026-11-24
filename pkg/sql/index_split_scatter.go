@@ -6,10 +6,13 @@
 package sql
 
 import (
+	"bytes"
 	"context"
-	"math/rand"
+	"sort"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient"
@@ -19,50 +22,295 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
+	"github.com/cockroachdb/errors"
 )
 
 type indexSplitAndScatter struct {
-	db        *kv.DB
-	codec     keys.SQLCodec
-	sv        *settings.Values
-	rangeIter rangedesc.IteratorFactory
-	nodeDescs kvclient.NodeDescStore
+	db           *kv.DB
+	codec        keys.SQLCodec
+	sv           *settings.Values
+	rangeIter    rangedesc.IteratorFactory
+	nodeDescs    kvclient.NodeDescStore
+	statsCache   *stats.TableStatisticsCache
+	systemConfig config.SystemConfigProvider
+	testingKnobs *ExecutorTestingKnobs
 }
+
+var SplitAndScatterWithStats = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"schemachanger.backfiller.split_with_stats.enabled",
+	"when enabled the index backfiller will generate split and "+
+		"scatter points based table statistics",
+	true,
+)
+
+// SkipBackfillSplitsForSmallTables controls whether index backfill splits
+// are skipped for tables whose estimated size fits within a single range.
+var SkipBackfillSplitsForSmallTables = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"schemachanger.backfiller.skip_splits_for_small_tables.enabled",
+	"when enabled, index backfill operations skip creating range splits "+
+		"for tables whose estimated size fits within a single range",
+	true,
+	settings.WithVisibility(settings.Reserved),
+)
 
 // NewIndexSplitAndScatter creates a new scexec.IndexSpanSplitter implementation.
 func NewIndexSplitAndScatter(execCfg *ExecutorConfig) scexec.IndexSpanSplitter {
-
 	return &indexSplitAndScatter{
-		db:        execCfg.DB,
-		codec:     execCfg.Codec,
-		sv:        &execCfg.Settings.SV,
-		rangeIter: execCfg.RangeDescIteratorFactory,
-		nodeDescs: execCfg.NodeDescs,
+		db:           execCfg.DB,
+		codec:        execCfg.Codec,
+		sv:           &execCfg.Settings.SV,
+		rangeIter:    execCfg.RangeDescIteratorFactory,
+		nodeDescs:    execCfg.NodeDescs,
+		statsCache:   execCfg.TableStatsCache,
+		systemConfig: execCfg.SystemConfig,
+		testingKnobs: &execCfg.TestingKnobs,
 	}
+}
+
+func (is *indexSplitAndScatter) getSplitPointsWithStats(
+	ctx context.Context, table catalog.TableDescriptor, indexToBackfill catalog.Index, nSplits int,
+) ([][]byte, error) {
+	// Split and scatter with statistics is disabled.
+	if !SplitAndScatterWithStats.Get(is.sv) {
+		return nil, nil
+	}
+	// Fetch the current statistics for this table.
+	tableStats, err := is.statsCache.GetFreshTableStats(ctx, table, nil /* typeResolver */)
+	if err != nil {
+		return nil, err
+	}
+	// Nothing can be done since no stats exist.
+	if len(tableStats) == 0 {
+		return nil, errors.New("no stats exist for this table")
+	}
+	// Gather the latest stats for each column.
+	keyCols := indexToBackfill.CollectKeyColumnIDs()
+	statsForColumns := make(map[descpb.ColumnID]*stats.TableStatistic)
+	keyCols.ForEach(func(col descpb.ColumnID) {
+		for _, stat := range tableStats {
+			// Skip stats that:
+			// 1) Do not contain this column.
+			// 2) Consist of multiple columns.
+			// 3) Have no histogram information.
+			if stat.Histogram == nil || len(stat.ColumnIDs) != 1 || stat.ColumnIDs[0] != col {
+				continue
+			}
+			statsForColumns[col] = stat
+			break
+		}
+	})
+	rowsPerRange := tableStats[0].RowCount / uint64(nSplits)
+	// Helper function that will append split points, and if necessary, downsample
+	// them if they get too big.
+	var splitPoints [][]byte
+	appendAndShrinkSplitPoint := func(existing [][]byte, add []byte) [][]byte {
+		maxSplitPoints := nSplits * 2
+		if len(existing) < maxSplitPoints {
+			return append(existing, add)
+		}
+		// Otherwise, we can sample these split points.
+		sort.Slice(existing, func(i, j int) bool {
+			return bytes.Compare(existing[i], existing[j]) < 0
+		})
+		// Next get this down to capacity again by taking a uniform sample of the
+		// existing split points.
+		newSplitPoints := make([][]byte, 0, nSplits+1)
+		step := float64(len(existing)) / float64(nSplits)
+		for i := 0; i < nSplits; i++ {
+			newSplitPoints = append(newSplitPoints, existing[int(float64(i)*step)])
+		}
+		newSplitPoints = append(newSplitPoints, add)
+		return newSplitPoints
+	}
+	// The following code generates split points for an index by iterating through
+	// each column of the index. For each column, it uses histogram statistics to
+	// identify points where the data can be divided into chunks of a target size
+	// (`rowsPerRange`).
+	//
+	// For the first column, it creates initial split points. For each subsequent
+	// column, it expands on the previously generated split points. It does this by
+	// appending the new column's split values to each of the existing split points from
+	// prior columns. This causes us to iterate combinatorially over all possible split points,
+	// so the `appendAndShrinkSplitPoint` function is used to downsample and keep the total number
+	// of points controlled.
+
+	// Note: Sadly, only the primary key or columns in indexes will have
+	// detailed information that we can use. All other columns will have
+	// limited splits.
+	for colIdx := 0; colIdx < indexToBackfill.NumKeyColumns(); colIdx++ {
+		lastSplitPoints := append([][]byte{}, splitPoints...)
+		splitPoints = splitPoints[:0]
+		keyColID := indexToBackfill.GetKeyColumnID(colIdx)
+		// Look up the stats and skip if they are missing.
+		stat, ok := statsForColumns[keyColID]
+		if !ok {
+			break
+		}
+		numInBucket := uint64(0)
+		for bucketIdx, bucket := range stat.Histogram {
+			numInBucket += uint64(bucket.NumRange) + uint64(bucket.NumEq)
+			// If we have hit the target rows, then emit a split point. Or
+			// if we are on the last bucket, we should always emit one.
+			if numInBucket >= rowsPerRange || bucketIdx == len(stat.Histogram)-1 {
+				var prevKeys [][]byte
+				// For the first column, we are going to start fresh with the base index prefix.
+				if colIdx == 0 {
+					prevKeys = [][]byte{is.codec.IndexPrefix(uint32(table.GetID()), uint32(indexToBackfill.GetID()))}
+				} else {
+					// For later columns we are going to start with the previous sets of splits.
+					prevKeys = lastSplitPoints
+				}
+				// We don't know where later columns fall, so we will encode these
+				// against all the previous split points (sadly, this will have an exponential
+				// cost). Our limit on the number of split points will resample these if they
+				// become excessive.
+				for _, prevKey := range prevKeys {
+					// Copy the base value before appending the next part of the key.
+					if colIdx > 0 {
+						tempKey := make([]byte, len(prevKey), cap(prevKey))
+						copy(tempKey, prevKey)
+						prevKey = tempKey
+					}
+					newSplit, err := keyside.Encode(prevKey, bucket.UpperBound, encoding.Direction(indexToBackfill.GetKeyColumnDirection(colIdx)+1))
+					if err != nil {
+						return nil, err
+					}
+					splitPoints = appendAndShrinkSplitPoint(splitPoints, newSplit)
+				}
+				numInBucket = 0
+				continue
+			}
+		}
+		// Stop once enough partitions have been created. Or if no partitions exist,
+		// then there is insufficient data for an educated guess. As we process later
+		// columns, we end up creating all possible permutations of the previous split
+		// points we selected, which means the statistical likelihood of a valid split
+		// point getting selected only gets lower.
+		if len(splitPoints) >= nSplits || len(splitPoints) == 0 {
+			break
+		}
+	}
+	// Always emit a split point at the start of the index span if
+	// we generated any split points above
+	if len(splitPoints) > 0 {
+		splitPoints = append(splitPoints, is.codec.IndexPrefix(uint32(table.GetID()), uint32(indexToBackfill.GetID())))
+		log.Dev.Infof(ctx, "generated %d split points from statistics for tableId=%d index=%d", len(splitPoints), table.GetID(), indexToBackfill.GetID())
+	}
+	return splitPoints, nil
+}
+
+// estimatedTableSize returns the estimated total data size of the table in
+// bytes, based on cached table statistics. It sums AvgSize across
+// single-column stats from the most recent collection and multiplies by
+// RowCount. Returns 0 if stats are unavailable or insufficient, since a
+// table without stats is most likely newly created and small.
+func (is *indexSplitAndScatter) estimatedTableSize(
+	ctx context.Context, table catalog.TableDescriptor,
+) int64 {
+	tableStats, err := is.statsCache.GetFreshTableStats(
+		ctx, table, nil, /* typeResolver */
+	)
+	if err != nil || len(tableStats) == 0 {
+		return 0
+	}
+	rowCount := tableStats[0].RowCount
+	if rowCount == 0 {
+		return 0
+	}
+	// Sum AvgSize across single-column stats from the latest collection to
+	// estimate total row width.
+	latestCreatedAt := tableStats[0].CreatedAt
+	var totalAvgRowSize uint64
+	for _, s := range tableStats {
+		if s.CreatedAt != latestCreatedAt {
+			break
+		}
+		if len(s.ColumnIDs) == 1 {
+			totalAvgRowSize += s.AvgSize
+		}
+	}
+	if totalAvgRowSize == 0 {
+		return 0
+	}
+	return int64(rowCount * totalAvgRowSize)
+}
+
+// rangeMaxBytesForTable returns the effective RangeMaxBytes for the given
+// table from its zone config. Falls back to the default (512 MB) if the
+// zone config is unavailable.
+func (is *indexSplitAndScatter) rangeMaxBytesForTable(table catalog.TableDescriptor) int64 {
+	if !SkipBackfillSplitsForSmallTables.Get(is.sv) {
+		return 0
+	}
+	if is.systemConfig != nil {
+		if sysCfg := is.systemConfig.GetSystemConfig(); sysCfg != nil {
+			if zc, err := sysCfg.GetZoneConfigForObject(
+				is.codec, config.ObjectID(table.GetID()),
+			); err == nil && zc != nil && zc.RangeMaxBytes != nil {
+				return *zc.RangeMaxBytes
+			}
+		}
+	}
+	return *zonepb.DefaultZoneConfig().RangeMaxBytes
+}
+
+// ShouldSkipSplitForSmallTable implements the scexec.IndexSpanSplitter interface.
+func (is *indexSplitAndScatter) ShouldSkipSplitForSmallTable(
+	ctx context.Context, table catalog.TableDescriptor,
+) bool {
+	return is.estimatedTableSize(ctx, table) < is.rangeMaxBytesForTable(table)
 }
 
 // MaybeSplitIndexSpans implements the scexec.IndexSpanSplitter interface.
 func (is *indexSplitAndScatter) MaybeSplitIndexSpans(
-	ctx context.Context, table catalog.TableDescriptor, indexToBackfill catalog.Index,
+	ctx context.Context,
+	table catalog.TableDescriptor,
+	indexToBackfill catalog.Index,
+	copyIndexSource catalog.Index,
 ) error {
-	// We will always pre-split index spans if there is partitioning.
-	err := is.MaybeSplitIndexSpansForPartitioning(ctx, table, indexToBackfill)
-	if err != nil {
-		return err
+	// Skip splitting if table stats indicate the table fits within a single
+	// range. Splits exist to distribute write load during index backfills,
+	// which is unnecessary when there is little or no data. This avoids range
+	// count bloat on clusters running many schema changes on small tables.
+	if is.ShouldSkipSplitForSmallTable(ctx, table) {
+		log.Dev.Infof(ctx, "skipping index split for tableId=%d index=%d",
+			table.GetID(), indexToBackfill.GetID())
+		return nil
+	}
+	// If we are asked to copy a source indexes splits, then there is
+	// no need split along partitioning.
+	if copyIndexSource == nil {
+		// We will always pre-split index spans if there is partitioning.
+		err := is.MaybeSplitIndexSpansForPartitioning(ctx, table, indexToBackfill)
+		if err != nil {
+			return err
+		}
 	}
 
 	const backfillSplitExpiration = time.Hour
 	tableID := table.GetID()
 	preservedSplitsMultiple := int(PreservedSplitCountMultiple.Get(is.sv))
+	if preservedSplitsMultiple == 0 {
+		return nil
+	}
 	nNodes := is.nodeDescs.GetNodeDescriptorCount()
 	nSplits := preservedSplitsMultiple * nNodes
 	var copySplitsFromIndexID descpb.IndexID
-	for _, idx := range table.ActiveIndexes() {
+	indexesToConsider := table.ActiveIndexes()
+	if copyIndexSource != nil {
+		indexesToConsider = []catalog.Index{copyIndexSource}
+	}
+	for _, idx := range indexesToConsider {
 		if idx.GetID() != indexToBackfill.GetID() &&
 			idx.CollectKeyColumnIDs().Equals(indexToBackfill.CollectKeyColumnIDs()) {
 			copySplitsFromIndexID = idx.GetID()
@@ -122,13 +370,24 @@ func (is *indexSplitAndScatter) MaybeSplitIndexSpans(
 	}
 
 	if len(splitPoints) == 0 {
+		splitPoints, err = is.getSplitPointsWithStats(ctx, table, indexToBackfill, nSplits)
+		if err != nil {
+			log.Dev.Warningf(ctx, "unable to get split points for stats for tableID=%d index=%d due to %v", tableID, indexToBackfill.GetID(), err)
+		}
+	}
+
+	if len(splitPoints) == 0 {
 		// If we can't sample splits from another index, just add one split.
-		log.Infof(ctx, "making a single split point in tableId=%d index=%d", tableID, indexToBackfill.GetID())
+		log.Dev.Infof(ctx, "making a single split point in tableId=%d index=%d", tableID, indexToBackfill.GetID())
 		span := table.IndexSpan(is.codec, indexToBackfill.GetID())
 		expirationTime := is.db.Clock().Now().Add(backfillSplitExpiration.Nanoseconds(), 0)
 		splitKey, err := keys.EnsureSafeSplitKey(span.Key)
 		if err != nil {
 			return err
+		}
+		// Execute the testing knob before adding a split.
+		if is.testingKnobs.BeforeIndexSplitAndScatter != nil {
+			is.testingKnobs.BeforeIndexSplitAndScatter([][]byte{splitKey})
 		}
 		// We split without scattering here because there is only one split point,
 		// so scattering wouldn't spread that much load.
@@ -137,12 +396,17 @@ func (is *indexSplitAndScatter) MaybeSplitIndexSpans(
 
 	// Finally, downsample the split points - choose just nSplits of them to keep.
 	actualSplits := min(nSplits, len(splitPoints))
-	log.Infof(ctx, "making %d split points in index=%d sampled from (table=%d index=%d)",
+	log.Dev.Infof(ctx, "making %d split points in index=%d sampled from (table=%d index=%d)",
 		actualSplits, indexToBackfill.GetID(), tableID, copySplitsFromIndexID)
 	step := float64(len(splitPoints)) / float64(nSplits)
 	if step < 1 {
 		step = 1
 	}
+	// Execute the testing knob before the split and scatter.
+	if is.testingKnobs.BeforeIndexSplitAndScatter != nil {
+		is.testingKnobs.BeforeIndexSplitAndScatter(splitPoints)
+	}
+	rng, _ := randutil.NewPseudoRand()
 	for i := 0; i < nSplits; i++ {
 		// Evenly space out the ranges that we select from the ranges that are
 		// returned.
@@ -154,7 +418,7 @@ func (is *indexSplitAndScatter) MaybeSplitIndexSpans(
 
 		// Jitter the expiration time by 20% up or down from the default.
 		maxJitter := backfillSplitExpiration.Nanoseconds() / 5
-		jitter := rand.Int63n(maxJitter*2) - maxJitter
+		jitter := rng.Int63n(maxJitter*2) - maxJitter
 		expirationTime := backfillSplitExpiration.Nanoseconds() + jitter
 
 		b.AddRawRequest(&kvpb.AdminSplitRequest{
@@ -172,7 +436,7 @@ func (is *indexSplitAndScatter) MaybeSplitIndexSpans(
 	// If there were a non-trivial number of splits, then scatter the ranges
 	// after we've finished splitting them.
 	if actualSplits > nNodes {
-		log.Infof(ctx, "scattering %d split points in index=%d sampled from (table=%d index=%d)",
+		log.Dev.Infof(ctx, "scattering %d split points in index=%d sampled from (table=%d index=%d)",
 			actualSplits, indexToBackfill.GetID(), tableID, copySplitsFromIndexID)
 		b = is.db.NewBatch()
 		b.AddRawRequest(&kvpb.AdminScatterRequest{
@@ -204,6 +468,11 @@ func (is *indexSplitAndScatter) MaybeSplitIndexSpansForPartitioning(
 	ctx context.Context, tableDesc catalog.TableDescriptor, idx catalog.Index,
 ) error {
 	if !is.shouldSplitAndScatter(idx) {
+		return nil
+	}
+	if is.ShouldSkipSplitForSmallTable(ctx, tableDesc) {
+		log.Dev.Infof(ctx, "skipping hash shard pre-split for tableId=%d index=%d",
+			tableDesc.GetID(), idx.GetID())
 		return nil
 	}
 	const backfillSplitExpiration = time.Hour

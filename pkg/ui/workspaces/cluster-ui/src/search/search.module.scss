@@ -14,7 +14,7 @@
   margin: 2px;
 }
 
-:global(.crl-ant-input-affix-wrapper:not(.crl-ant-input-affix-wrapper-disabled):focus-within) {
+:global(.crdb-ant-input-affix-wrapper:not(.crdb-ant-input-affix-wrapper-disabled):focus-within) {
   outline: 2px solid $colors--primary-blue-3;
 }
 

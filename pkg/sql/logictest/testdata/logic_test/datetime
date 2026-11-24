@@ -1,3 +1,4 @@
+# LogicTest: !local-prepared
 statement ok
 CREATE TABLE t (
   a TIMESTAMP PRIMARY KEY,
@@ -228,6 +229,9 @@ statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE
 
 statement ok
+SET LOCAL autocommit_before_ddl=off;
+
+statement ok
 CREATE TABLE kv (
   k CHAR PRIMARY KEY,
   v TIMESTAMPTZ
@@ -332,7 +336,7 @@ SELECT count(DISTINCT (v)) FROM kv
 
 # Test that transaction_timestamp() is consistent in transaction
 # spanning multiple batches of statements.
-statement ok
+statement count 9
 DELETE FROM kv
 
 statement ok
@@ -388,7 +392,7 @@ SELECT count(DISTINCT (v)) FROM kv
 ----
 2
 
-statement ok
+statement count 3
 DELETE FROM kv
 
 let $old_default_transaction_isolation
@@ -564,7 +568,7 @@ SELECT k, extract(element, input::timestamp) = extract_result, date_part(element
 51  true  true  0
 52  true  true  2.457429823996599e+06
 
-query error extract\(\): unsupported timespan: nansecond
+query error unsupported timespan: nansecond
 SELECT extract(nansecond from '2001-04-10 12:04:59.34565423'::timestamp)
 
 query error unknown unit "nanosecond"
@@ -629,7 +633,7 @@ SELECT k, extract(element, input::timestamptz) = extract_result, extract(element
 51  true  0
 52  true  2.457429823996599e+06
 
-query error extract\(\): unsupported timespan: nansecond
+query error unsupported timespan: nansecond
 SELECT extract(nansecond from '2001-04-10 12:04:59.34565423'::timestamptz)
 
 query R
@@ -825,14 +829,21 @@ SELECT '2015-08-25 05:45:45.53453'::timestamp
 statement ok
 SET TIME ZONE 'Europe/Rome'
 
-query error unimplemented: timestamp abbreviations not supported
-SELECT '2015-08-25 05:45:45.53453 CET'::timestamptz WHERE false
+# Timezone abbreviations (e.g. CET) parse to a fixed offset via
+# pg_catalog.pg_timezone_abbrevs. Display uses the session timezone, which is
+# Europe/Rome here, so the +01:00 input renders as +02:00 (CEST) on Aug 25.
+query T
+SELECT '2015-08-25 05:45:45.53453 CET'::timestamptz
+----
+2015-08-25 06:45:45.53453 +0200 CEST
 
 statement ok
 SET TIME ZONE +1
 
-query error unimplemented: timestamp abbreviations not supported
-SELECT '2015-08-25 05:45:45.53453 CET'::timestamptz WHERE false
+query T
+SELECT '2015-08-25 05:45:45.53453 CET'::timestamptz
+----
+2015-08-25 05:45:45.53453 +0100 +0100
 
 query T
 SELECT '2015-08-25 05:45:45.53453'::timestamp
@@ -868,8 +879,10 @@ SELECT '2015-08-25 05:45:45-01:00'::timestamptz
 statement ok
 SET TIMEZONE = +2
 
-query error unimplemented: timestamp abbreviations not supported
-SELECT '2015-08-25 05:45:45.53453 CET'::timestamptz WHERE false
+query T
+SELECT '2015-08-25 05:45:45.53453 CET'::timestamptz
+----
+2015-08-25 06:45:45.53453 +0200 +0200
 
 query T
 SELECT '2015-08-25 05:45:45.53453'::timestamp
@@ -1716,7 +1729,7 @@ infinity  -infinity
 statement ok
 CREATE TABLE timestamps (s STRING, ts TIMESTAMP AS (parse_timestamp(s)) STORED)
 
-query error parse_timestamp\(\): relative timestamps are not supported
+query error relative timestamps are not supported
 INSERT INTO timestamps VALUES ('tomorrow')
 
 statement ok
@@ -1884,13 +1897,13 @@ SELECT parse_timestamp('01-02-2020 01:02:03', 'postgres')
 query error could not parse
 SELECT parse_timestamp('foo')
 
-query error parse_timestamp\(\): relative timestamps are not supported
+query error relative timestamps are not supported
 SELECT parse_timestamp('now')
 
-query error parse_timestamp\(\): relative timestamps are not supported
+query error relative timestamps are not supported
 SELECT parse_timestamp('tomorrow')
 
-query error parse_timestamp\(\): relative timestamps are not supported
+query error relative timestamps are not supported
 SELECT parse_timestamp('now', 'mdy')
 
 statement error only ISO style is supported
@@ -1926,10 +1939,10 @@ ORDER BY pk
 statement error only ISO style is supported
 SELECT parse_date('01-02-2020 01:02:03', 'postgres')
 
-query error parse_date\(\): relative dates are not supported
+query error relative dates are not supported
 SELECT parse_date('now')
 
-query error parse_date\(\): relative dates are not supported
+query error relative dates are not supported
 SELECT parse_date('tomorrow', 'iso,mdy')
 
 query TTTT
@@ -2012,7 +2025,7 @@ WHERE a.attrelid = 'table_71776'::regclass
     AND NOT a.attisdropped
 ORDER BY a.attnum
 ----
-interval_col  interval  'P3Y'::INTERVAL
+interval_col  interval  'P3Y'::interval
 rowid         bigint    unique_rowid()
 
 statement error pq: unsupported comparison operator: <tuple> < <string>
@@ -2033,13 +2046,22 @@ SELECT make_date(2013, 7, 15)::string
 make_date
 2013-07-15
 
+# Cast to text on the server so the assertion exercises the postgres-style
+# BC wire format and matches what real postgres outputs. See #149950.
 query T colnames,rowsort
-SELECT make_date(-2013, 7, 15)
+SELECT make_date(-2013, 7, 15)::string
 ----
 make_date
--2013-07-15 00:00:00 +0000 +0000
+2013-07-15 BC
 
-statement error pgcode 22008 pq: make_date\(\): year value of 0 is not valid
+# Boundary: -1 maps to 1 BC, matching postgres (no year zero in SQL semantics).
+query T colnames,rowsort
+SELECT make_date(-1, 1, 1)::string
+----
+make_date
+0001-01-01 BC
+
+statement error pgcode 22008 pq: year value of 0 is not valid
 SELECT make_date(0, 11, 11)
 
 subtest end
@@ -2053,10 +2075,17 @@ make_timestamp
 2013-07-15 08:15:23.5
 
 query T colnames,rowsort
-SELECT make_timestamp(-2013, 7, 15, 8, 15, 23.5)
+SELECT make_timestamp(-2013, 7, 15, 8, 15, 23.5)::string
 ----
 make_timestamp
--2013-07-15 08:15:23.5 +0000 +0000
+2013-07-15 08:15:23.5 BC
+
+# Boundary: -1 maps to 1 BC.
+query T colnames,rowsort
+SELECT make_timestamp(-1, 1, 1, 0, 0, 0)::string
+----
+make_timestamp
+0001-01-01 00:00:00 BC
 
 query T colnames,rowsort
 SELECT make_timestamp(2013, 7, 15, 8, 15, 23.5231231244234)::string
@@ -2064,7 +2093,19 @@ SELECT make_timestamp(2013, 7, 15, 8, 15, 23.5231231244234)::string
 make_timestamp
 2013-07-15 08:15:23.523123
 
-statement error pgcode 22008 pq: make_timestamp\(\): year value of 0 is not valid
+# Test with seconds < 1.
+
+query T
+select make_timestamp(1, 1, 1, 0, 0, 0);
+----
+0001-01-01 00:00:00 +0000 +0000
+
+query T
+select make_timestamp(1, 1, 1, 0, 0, 0.1234);
+----
+0001-01-01 00:00:00.1234 +0000 +0000
+
+statement error pgcode 22008 pq: year value of 0 is not valid
 SELECT make_timestamp(0, 7, 15, 8, 15, 23.5);
 
 subtest end
@@ -2080,11 +2121,15 @@ SELECT make_timestamptz(2013, 7, 15, 8, 15, 23.5)
 make_timestamptz
 2013-07-15 08:15:23.5 -0500 EST
 
+# Cast to text on the server so the result doesn't depend on the client's
+# tzdata: lib/pq cannot preserve a named timezone (e.g. EST) when scanning
+# BCE timestamptz values into Go's time.Time on systems where the local
+# tzdata reports an LMT offset for the BCE instant.
 query T colnames,rowsort
-SELECT make_timestamptz(-2013, 7, 15, 8, 15, 23.5)
+SELECT make_timestamptz(-2013, 7, 15, 8, 15, 23.5)::text
 ----
 make_timestamptz
--2013-07-15 08:15:23.5 -0500 EST
+2013-07-15 08:15:23.5-05 BC
 
 query T colnames,rowsort
 SELECT make_timestamptz(2013, 7, 15, 8, 15, 23.5231231244234)
@@ -2098,14 +2143,57 @@ SELECT make_timestamptz(2013, 7, 15, 8, 15, 23.5, 'America/New_York')
 make_timestamptz
 2013-07-15 07:15:23.5 -0500 EST
 
-statement error pgcode 22008 pq: make_timestamptz\(\): year value of 0 is not valid
+# Test with seconds < 1.
+
+query T
+select make_timestamptz(2020, 1, 1, 0, 0, 0, 'America/New_York');
+----
+2020-01-01 00:00:00 -0500 EST
+
+query T
+select make_timestamptz(2020, 1, 1, 0, 0, 0.1234, 'America/New_York');
+----
+2020-01-01 00:00:00.1234 -0500 EST
+
+statement error pgcode 22008 pq: year value of 0 is not valid
 SELECT make_timestamptz(0, 7, 15, 8, 15, 23.5);
 
-statement error pgcode 22008 pq: make_timestamptz\(\): year value of 0 is not valid
+statement error pgcode 22008 pq: year value of 0 is not valid
 SELECT make_timestamptz(0, 7, 15, 8, 15, 23.5, 'America/New_York');
 
-statement error pgcode 22023 pq: make_timestamptz\(\): could not parse "No" as time zone
+statement error pgcode 22023 pq: could not parse "No" as time zone
 SELECT make_timestamptz(0, 7, 15, 8, 15, 23.5, 'No');
+
+subtest end
+
+subtest timezone_abbreviation_parsing
+
+# Timestamp literals with PostgreSQL-recognized timezone abbreviations resolve
+# to a fixed offset via pg_catalog.pg_timezone_abbrevs, regardless of the host
+# system's IANA tzdata. Previously these returned unimplemented (#31710).
+
+query T
+SELECT '2014-07-15 08:15:23 EST'::timestamptz::text;
+----
+2014-07-15 08:15:23-05
+
+query T
+SELECT '2014-07-15 08:15:23 PST'::timestamptz::text;
+----
+2014-07-15 11:15:23-05
+
+# Abbreviations that have no IANA zone counterpart still resolve. EAT (East
+# Africa Time) is +03:00.
+query T
+SELECT '2014-07-15 08:15:23 EAT'::timestamptz::text;
+----
+2014-07-15 00:15:23-05
+
+# Lowercase input is accepted.
+query T
+SELECT '2014-07-15 08:15:23 est'::timestamptz::text;
+----
+2014-07-15 08:15:23-05
 
 subtest end
 
@@ -2119,7 +2207,7 @@ SELECT date_trunc('day', '2001-02-16 20:38:40+00'::timestamptz, 'Australia/Sydne
 statement error pgcode 22008 pq: date_trunc\(\): parsing as type timestamp: field month value 0 is out of range
 SELECT date_trunc('day', '0-02-16 20:38:40+00'::timestamptz, 'Australia/Sydney');
 
-statement error pgcode 22023 pq: date_trunc\(\): could not parse "No" as time zone
+statement error pgcode 22023 pq: could not parse "No" as time zone
 SELECT date_trunc('day', '4-02-16 20:38:40+00'::timestamptz, 'No');
 
 subtest end
@@ -2133,4 +2221,39 @@ query T rowsort
 SELECT details FROM [SHOW CONSTRAINTS FROM t97643];
 ----
 PRIMARY KEY (rowid ASC)
-CHECK ((parse_time('abc'::STRING) = parse_time('abc'::STRING)))
+CHECK ((parse_time('abc'::text) = parse_time('abc'::text)))
+NOT NULL
+
+subtest experimental_strftime_year_padding
+
+# Regression test for #45884: %Y must zero-pad to at least 4 digits, matching
+# POSIX/glibc/BSD strftime and Postgres's to_char(YYYY).
+query TTTTT
+SELECT
+  experimental_strftime('0001-01-01 00:00:00'::timestamp, '%Y-%m-%d'),
+  experimental_strftime('0099-06-15 00:00:00'::timestamp, '%Y-%m-%d'),
+  experimental_strftime('0999-12-31 00:00:00'::timestamp, '%Y-%m-%d'),
+  experimental_strftime('2024-01-02 00:00:00'::timestamp, '%Y-%m-%d'),
+  experimental_strftime('10001-01-01 00:00:00'::timestamp, '%Y-%m-%d')
+----
+0001-01-01  0099-06-15  0999-12-31  2024-01-02  10001-01-01
+
+# %y should still print only the last two digits, zero-padded.
+query TTT
+SELECT
+  experimental_strftime('0001-01-01 00:00:00'::timestamp, '%y'),
+  experimental_strftime('0099-01-01 00:00:00'::timestamp, '%y'),
+  experimental_strftime('2024-01-01 00:00:00'::timestamp, '%y')
+----
+01  99  24
+
+# %C%y should keep producing the same output it did before the fix.
+query TTT
+SELECT
+  experimental_strftime('0001-01-01 00:00:00'::timestamp, '%C%y-%m-%d'),
+  experimental_strftime('0099-01-01 00:00:00'::timestamp, '%C%y-%m-%d'),
+  experimental_strftime('2024-01-02 00:00:00'::timestamp, '%C%y-%m-%d')
+----
+0001-01-01  0099-01-01  2024-01-02
+
+subtest end

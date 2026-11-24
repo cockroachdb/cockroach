@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cmux"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -41,13 +42,15 @@ func startListenRPCAndSQL(
 	cfg BaseConfig,
 	stopper *stop.Stopper,
 	grpc *grpcServer,
+	drpc *drpcServer,
 	rpcListenerFactory RPCListenerFactory,
 	enableSQLListener bool,
 	acceptProxyProtocolHeaders bool,
 ) (
 	sqlListener net.Listener,
 	pgLoopbackListener *netutil.LoopbackListener,
-	rpcLoopbackDial func(context.Context) (net.Conn, error),
+	grpcLoopbackDial func(context.Context) (net.Conn, error),
+	drpcLoopbackDial func(context.Context) (net.Conn, error),
 	startRPCServer func(ctx context.Context),
 	err error,
 ) {
@@ -64,7 +67,7 @@ func startListenRPCAndSQL(
 		var err error
 		ln, err = rpcListenerFactory(ctx, &cfg.Addr, &cfg.AdvertiseAddr, rpcChanName, acceptProxyProtocolHeaders)
 		if err != nil {
-			return nil, nil, nil, nil, err
+			return nil, nil, nil, nil, nil, err
 		}
 		log.Eventf(ctx, "listening on port %s", cfg.Addr)
 	}
@@ -77,7 +80,7 @@ func startListenRPCAndSQL(
 			pgL = cfg.SQLAddrListener
 		}
 		if err != nil {
-			return nil, nil, nil, nil, err
+			return nil, nil, nil, nil, nil, err
 		}
 		// The SQL listener shutdown worker, which closes everything under
 		// the SQL port when the stopper indicates we are shutting down.
@@ -93,7 +96,7 @@ func startListenRPCAndSQL(
 		}
 		if err := stopper.RunAsyncTask(workersCtx, "wait-quiesce", waitQuiesce); err != nil {
 			waitQuiesce(workersCtx)
-			return nil, nil, nil, nil, err
+			return nil, nil, nil, nil, nil, err
 		}
 		log.Eventf(ctx, "listening on sql port %s", cfg.SQLAddr)
 	}
@@ -102,13 +105,13 @@ func startListenRPCAndSQL(
 	// either via the returned startRPCServer() or upon stopping.
 	var serveOnMux sync.Once
 
-	m := cmux.New(ln)
+	m := cmux.NewWithTimeout(ln, time.Minute)
 	// cmux auto-retries Accept() by default. Tell it
 	// to stop doing work if we see a request to shut down.
 	m.HandleError(func(err error) bool {
 		select {
 		case <-stopper.ShouldQuiesce():
-			log.Infof(workersCtx, "server shutting down: instructing cmux to stop accepting")
+			log.Dev.Infof(workersCtx, "server shutting down: instructing cmux to stop accepting")
 			return false
 		default:
 			return true
@@ -127,26 +130,38 @@ func startListenRPCAndSQL(
 		// Then we update the advertised addr with the right port, if
 		// the port had been auto-allocated.
 		if err := UpdateAddrs(ctx, &cfg.SQLAddr, &cfg.SQLAdvertiseAddr, ln.Addr()); err != nil {
-			return nil, nil, nil, nil, errors.Wrapf(err, "internal error")
+			return nil, nil, nil, nil, nil, errors.Wrapf(err, "internal error")
 		}
 	}
 
-	anyL := m.Match(cmux.Any())
+	// dropDRPCHeaderListener discards the header before passing the connection
+	// to the drpc server. This would not be required if we used
+	// `drpcmigrate.ListenMux`, but cmux keeps the prefix.
+	var drpcL net.Listener = &dropDRPCHeaderListener{wrapped: m.Match(drpcMatcher)}
+
+	grpcL := m.Match(cmux.Any())
 	if serverTestKnobs, ok := cfg.TestingKnobs.Server.(*TestingKnobs); ok {
 		if serverTestKnobs.ContextTestingKnobs.InjectedLatencyOracle != nil {
-			anyL = rpc.NewDelayingListener(anyL, serverTestKnobs.ContextTestingKnobs.InjectedLatencyEnabled)
+			grpcL = rpc.NewDelayingListener(grpcL, serverTestKnobs.ContextTestingKnobs.InjectedLatencyEnabled)
+			drpcL = rpc.NewDelayingListener(drpcL, serverTestKnobs.ContextTestingKnobs.InjectedLatencyEnabled)
 		}
 	}
 
-	rpcLoopbackL := netutil.NewLoopbackListener(ctx, stopper)
+	grpcLoopbackL := netutil.NewLoopbackListener(ctx, stopper)
 	sqlLoopbackL := netutil.NewLoopbackListener(ctx, stopper)
+	drpcCtx, drpcCancel := context.WithCancel(workersCtx)
+	// Create a dedicated DRPC loopback listener. Since this listener is exclusively for DRPC,
+	// no protocol header inspection is needed.
+	drpcLoopbackL := netutil.NewLoopbackListener(ctx, stopper)
 
 	// The remainder shutdown worker.
 	waitForQuiesce := func(context.Context) {
 		<-stopper.ShouldQuiesce()
-		// TODO(bdarnell): Do we need to also close the other listeners?
-		netutil.FatalIfUnexpected(anyL.Close())
-		netutil.FatalIfUnexpected(rpcLoopbackL.Close())
+		drpcCancel()
+		netutil.FatalIfUnexpected(grpcL.Close())
+		netutil.FatalIfUnexpected(grpcLoopbackL.Close())
+		netutil.FatalIfUnexpected(drpcL.Close())         // Closing this listener is as good as closing drpcTLSL
+		netutil.FatalIfUnexpected(drpcLoopbackL.Close()) // Closing this listener is as good as closing drpcLoopbackTLSL
 		netutil.FatalIfUnexpected(sqlLoopbackL.Close())
 		netutil.FatalIfUnexpected(ln.Close())
 	}
@@ -160,13 +175,15 @@ func startListenRPCAndSQL(
 			netutil.FatalIfUnexpected(m.Serve())
 		})
 	}
+	stopper.AddCloser(stop.CloserFn(stopGRPC))
 
 	if err := stopper.RunAsyncTask(
-		workersCtx, "grpc-quiesce", waitForQuiesce,
+		workersCtx, "grpc-drpc-quiesce", waitForQuiesce,
 	); err != nil {
 		waitForQuiesce(ctx)
 		stopGRPC()
-		return nil, nil, nil, nil, err
+		drpcCancel()
+		return nil, nil, nil, nil, nil, err
 	}
 	stopper.AddCloser(stop.CloserFn(stopGRPC))
 
@@ -177,10 +194,16 @@ func startListenRPCAndSQL(
 	startRPCServer = func(ctx context.Context) {
 		// Serve the gRPC endpoint.
 		_ = stopper.RunAsyncTask(workersCtx, "serve-grpc", func(context.Context) {
-			netutil.FatalIfUnexpected(grpc.Serve(anyL))
+			netutil.FatalIfUnexpected(grpc.Serve(grpcL))
+		})
+		_ = stopper.RunAsyncTask(drpcCtx, "serve-drpc", func(ctx context.Context) {
+			netutil.FatalIfUnexpected(drpc.Serve(ctx, drpcL))
 		})
 		_ = stopper.RunAsyncTask(workersCtx, "serve-loopback-grpc", func(context.Context) {
-			netutil.FatalIfUnexpected(grpc.Serve(rpcLoopbackL))
+			netutil.FatalIfUnexpected(grpc.Serve(grpcLoopbackL))
+		})
+		_ = stopper.RunAsyncTask(drpcCtx, "serve-loopback-drpc", func(ctx context.Context) {
+			netutil.FatalIfUnexpected(drpc.Serve(ctx, drpcLoopbackL))
 		})
 
 		_ = stopper.RunAsyncTask(ctx, "serve-mux", func(context.Context) {
@@ -190,5 +213,5 @@ func startListenRPCAndSQL(
 		})
 	}
 
-	return pgL, sqlLoopbackL, rpcLoopbackL.Connect, startRPCServer, nil
+	return pgL, sqlLoopbackL, grpcLoopbackL.Connect, drpcLoopbackL.Connect, startRPCServer, nil
 }

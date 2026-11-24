@@ -7,17 +7,16 @@ import {
   TimeScale,
   TimeScaleDropdown,
   TimeScaleOptions,
+  useClusterSettings,
   util,
 } from "@cockroachlabs/cluster-ui";
 import moment from "moment-timezone";
-import React from "react";
-import { connect } from "react-redux";
+import React, { useCallback, useEffect, useState } from "react";
+import { useDispatch, useSelector } from "react-redux";
 import { RouteComponentProps } from "react-router-dom";
 
 import { cockroach } from "src/js/protos";
-import { refreshSettings } from "src/redux/apiReducers";
-import { selectClusterSettings } from "src/redux/clusterSettings";
-import { AdminUIState } from "src/redux/state";
+import { AppDispatch } from "src/redux/state";
 import { selectTimeScale, setTimeScale } from "src/redux/timeScale";
 import { getKeyVisualizerSamples } from "src/util/api";
 import {
@@ -103,23 +102,6 @@ function encodeToHexString(bytes: Uint8Array): string {
 
 // buildYAxis returns a mapping of pretty keys to the y coordinate of the key.
 function buildYAxis(sortedPrettyKeys: string[]): Record<string, number> {
-  // TODO(zachlite): make this faster
-  // const sortedPrettyKeysInWindow = state.response.sorted_pretty_keys.filter((prettyKey) => {
-  //   // is this key in the time window?
-  //   for (const sample of samples) {
-  //     for (const bucket of sample.buckets) {
-  //
-  //       const startPretty = state.response.pretty_key_for_uuid[bucket.start_key_id]
-  //       const endPretty = state.response.pretty_key_for_uuid[bucket.end_key_id]
-  //
-  //       if (startPretty === prettyKey || endPretty === prettyKey) {
-  //         return true
-  //       }
-  //     }
-  //   }
-  //   return false;
-  // })
-
   // compute y offset for each key
   const yOffsetsForKey = {} as Record<string, number>;
   sortedPrettyKeys.forEach((key, i) => {
@@ -130,12 +112,8 @@ function buildYAxis(sortedPrettyKeys: string[]): Record<string, number> {
   return yOffsetsForKey;
 }
 
-interface KeyVisualizerContainerState {
-  response: KeyVisSamplesResponse;
-}
-
 function buildKeyVisualizerProps(
-  state: KeyVisualizerContainerState,
+  response: KeyVisSamplesResponse,
   timeScale: TimeScale,
 ): KeyVisualizerProps {
   // The time window is in units of seconds.
@@ -148,7 +126,7 @@ function buildKeyVisualizerProps(
     windowEndSeconds - timeScale.windowSize.asSeconds();
 
   // Filter out samples that fall outside the selected time window.
-  const samples = state.response.samples
+  const samples = response.samples
     .filter(sample => {
       const sampleTime = sample.timestamp.seconds.toNumber();
       return sampleTime >= windowStartSeconds && sampleTime <= windowEndSeconds;
@@ -168,9 +146,9 @@ function buildKeyVisualizerProps(
   }));
 
   return {
-    keys: state.response.pretty_key_for_uuid,
+    keys: response.pretty_key_for_uuid,
     samples: keySamples,
-    yOffsetsForKey: buildYAxis(state.response.sorted_pretty_keys),
+    yOffsetsForKey: buildYAxis(response.sorted_pretty_keys),
     hottestBucket: hottestBucket(samples),
   };
 }
@@ -181,88 +159,84 @@ interface KeyVisualizerContainerProps {
   setTimeScale: typeof setTimeScale;
 }
 
-class KeyVisualizerContainer extends React.Component<
-  KeyVisualizerContainerProps & RouteComponentProps,
-  KeyVisualizerContainerState
-> {
-  interval: any;
+const KeyVisualizerContainer: React.FC<
+  KeyVisualizerContainerProps & RouteComponentProps
+> = ({
+  refreshInterval,
+  timeScale,
+  setTimeScale: setTimeScaleProp,
+  history,
+}) => {
+  const [response, setResponse] = useState(new KeyVisSamplesResponse());
 
-  state = { response: new KeyVisSamplesResponse() };
-
-  fetchSamples() {
+  const fetchSamples = useCallback(() => {
     const req = new KeyVisSamplesRequest({});
-    getKeyVisualizerSamples(req).then(res => this.setState({ response: res }));
-  }
+    getKeyVisualizerSamples(req).then(res => setResponse(res));
+  }, []);
 
-  componentDidMount() {
-    // set up a recurring sample refresh
-    this.interval = setInterval(() => {
-      this.fetchSamples();
-    }, this.props.refreshInterval);
-
+  useEffect(() => {
     // do an initial fetch
-    this.fetchSamples();
-  }
+    fetchSamples();
 
-  componentWillUnmount() {
-    clearInterval(this.interval);
-  }
+    // set up a recurring sample refresh
+    const interval = setInterval(fetchSamples, refreshInterval);
+    return () => clearInterval(interval);
+  }, [fetchSamples, refreshInterval]);
 
-  render() {
-    const { samples, yOffsetsForKey, hottestBucket, keys } =
-      buildKeyVisualizerProps(this.state, this.props.timeScale);
+  const { samples, yOffsetsForKey, hottestBucket, keys } =
+    buildKeyVisualizerProps(response, timeScale);
 
-    if (
-      this.state.response.samples.length === 0 ||
-      Object.keys(this.state.response.pretty_key_for_uuid).length === 0
-    ) {
-      return (
-        <>
-          <BackToAdvanceDebug history={this.props.history} />
-          <div>Waiting for samples...</div>
-        </>
-      );
-    }
-
+  if (
+    response.samples.length === 0 ||
+    Object.keys(response.pretty_key_for_uuid).length === 0
+  ) {
     return (
       <>
-        <BackToAdvanceDebug history={this.props.history} />
-        <div style={{ position: "relative" }}>
-          <TimeScaleDropdown
-            options={timeScaleOptions}
-            currentScale={this.props.timeScale}
-            setTimeScale={this.props.setTimeScale}
-          />
-          <KeyVisualizer
-            samples={samples}
-            yOffsetsForKey={yOffsetsForKey}
-            hottestBucket={hottestBucket}
-            keys={keys}
-          />
-        </div>
+        <BackToAdvanceDebug history={history} />
+        <div>Waiting for samples...</div>
       </>
     );
   }
-}
 
-interface KeyVisualizerPageProps {
-  clusterSettings?: {
-    [key: string]: cockroach.server.serverpb.SettingsResponse.IValue;
-  };
-  refreshSettings: typeof refreshSettings;
-  setTimeScale: typeof setTimeScale;
-  timeScale: TimeScale;
-}
+  return (
+    <>
+      <BackToAdvanceDebug history={history} />
+      <div style={{ position: "relative" }}>
+        <TimeScaleDropdown
+          options={timeScaleOptions}
+          currentScale={timeScale}
+          setTimeScale={setTimeScaleProp}
+        />
+        <KeyVisualizer
+          samples={samples}
+          yOffsetsForKey={yOffsetsForKey}
+          hottestBucket={hottestBucket}
+          keys={keys}
+        />
+      </div>
+    </>
+  );
+};
 
 const KeyVisualizerPage: React.FunctionComponent<
-  KeyVisualizerPageProps & RouteComponentProps
+  RouteComponentProps
 > = props => {
-  if (props.clusterSettings === undefined) {
-    props.refreshSettings();
+  const dispatch = useDispatch<AppDispatch>();
+  const timeScale = useSelector(selectTimeScale);
+  const dispatchSetTimeScale = useCallback(
+    (ts: TimeScale) => dispatch(setTimeScale(ts)),
+    [dispatch],
+  );
+
+  const { settingValues, isLoading } = useClusterSettings({
+    names: [EnabledSetting, IntervalSetting],
+  });
+
+  if (isLoading) {
     return null;
   }
 
-  const enabled = props.clusterSettings[EnabledSetting].value === "true";
+  const enabled = settingValues[EnabledSetting]?.value === "true";
 
   if (!enabled) {
     return (
@@ -274,26 +248,19 @@ const KeyVisualizerPage: React.FunctionComponent<
     );
   }
 
-  const refreshInterval = util
-    .durationFromISO8601String(props.clusterSettings[IntervalSetting].value)
-    .asMilliseconds();
+  const intervalValue = settingValues[IntervalSetting]?.value;
+  const refreshInterval = intervalValue
+    ? util.durationFromISO8601String(intervalValue).asMilliseconds()
+    : 60_000;
 
   return (
     <KeyVisualizerContainer
       {...props}
-      timeScale={props.timeScale}
+      timeScale={timeScale}
+      setTimeScale={dispatchSetTimeScale}
       refreshInterval={refreshInterval}
     />
   );
 };
 
-export default connect(
-  (state: AdminUIState) => ({
-    clusterSettings: selectClusterSettings(state),
-    timeScale: selectTimeScale(state),
-  }),
-  {
-    refreshSettings,
-    setTimeScale,
-  },
-)(KeyVisualizerPage);
+export default KeyVisualizerPage;

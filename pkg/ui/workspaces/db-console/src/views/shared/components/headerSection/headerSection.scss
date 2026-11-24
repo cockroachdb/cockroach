@@ -1,0 +1,33 @@
+// Copyright 2026 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+@import 'src/components/core/index.scss';
+
+$icon-size: 9px;
+
+.header-section {
+  margin-top: $spacing-medium-small;
+  display: flex;
+  flex-direction: column;
+
+  &__back-link {
+    display: flex;
+    flex-direction: row;
+  }
+
+  &__back-icon {
+    height: $icon-size;
+    width: $icon-size;
+    margin-right: $spacing-x-small;
+  }
+
+  &__back-link {
+    @extend %text--body;
+    margin-bottom: $spacing-small;
+    & * {
+      color: $colors--primary-text;
+    }
+  }
+}

@@ -24,12 +24,13 @@ import (
 )
 
 const (
-	crossFlag          = "cross"
-	cockroachTargetOss = "//pkg/cmd/cockroach-oss:cockroach-oss"
-	cockroachTarget    = "//pkg/cmd/cockroach:cockroach"
-	nogoDisableFlag    = "--norun_validations"
-	geosTarget         = "//c-deps:libgeos"
-	devTarget          = "//pkg/cmd/dev:dev"
+	crossFlag       = "cross"
+	lintFlag        = "lint"
+	cockroachTarget = "//pkg/cmd/cockroach:cockroach"
+	nogoEnableFlag  = "--run_validations"
+	nogoDisableFlag = "--norun_validations"
+	geosTarget      = "//c-deps:libgeos"
+	devTarget       = "//pkg/cmd/dev:dev"
 )
 
 type buildTarget struct {
@@ -54,12 +55,13 @@ func makeBuildCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Com
 		// TODO(irfansharif): Flesh out the example usage patterns.
 		Example: `
 	dev build cockroach
-	dev build cockroach-{short,oss}
+	dev build cockroach-short
 	dev build {opt,exec}gen`,
 		Args: cobra.MinimumNArgs(0),
 		RunE: runE,
 	}
 	buildCmd.Flags().String(volumeFlag, "bzlhome", "the Docker volume to use as the container home directory (only used for cross builds)")
+	buildCmd.Flags().BoolP(lintFlag, "l", false, "perform linting (nogo) as part of the build process (i.e. override nolintonbuild config)")
 	buildCmd.Flags().String(crossFlag, "", "cross-compiles using the builder image (options: linux, linuxarm, macos, macosarm, windows)")
 	buildCmd.Flags().Lookup(crossFlag).NoOptDefVal = "linux"
 	buildCmd.Flags().StringArray(dockerArgsFlag, []string{}, "additional arguments to pass to Docker (only used for cross builds)")
@@ -71,43 +73,43 @@ func makeBuildCmd(runE func(cmd *cobra.Command, args []string) error) *cobra.Com
 
 // buildTargetMapping maintains shorthands that map 1:1 with bazel targets.
 var buildTargetMapping = map[string]string{
-	"bazel-remote":         bazelRemoteTarget,
-	"buildifier":           "@com_github_bazelbuild_buildtools//buildifier:buildifier",
-	"buildozer":            "@com_github_bazelbuild_buildtools//buildozer:buildozer",
-	"cloudupload":          "//pkg/cmd/cloudupload:cloudupload",
-	"cockroach":            cockroachTarget,
-	"cockroach-sql":        "//pkg/cmd/cockroach-sql:cockroach-sql",
-	"cockroach-oss":        cockroachTargetOss,
-	"cockroach-short":      "//pkg/cmd/cockroach-short:cockroach-short",
-	"crlfmt":               "@com_github_cockroachdb_crlfmt//:crlfmt",
-	"dev":                  devTarget,
-	"docgen":               "//pkg/cmd/docgen:docgen",
-	"docs-issue-gen":       "//pkg/cmd/docs-issue-generation:docs-issue-generation",
-	"drt-run":              "//pkg/cmd/drt-run:drt-run",
-	"execgen":              "//pkg/sql/colexec/execgen/cmd/execgen:execgen",
-	"gofmt":                "@com_github_cockroachdb_gostdlib//cmd/gofmt:gofmt",
-	"goimports":            "@com_github_cockroachdb_gostdlib//x/tools/cmd/goimports:goimports",
-	"label-merged-pr":      "//pkg/cmd/label-merged-pr:label-merged-pr",
-	"geos":                 geosTarget,
-	"langgen":              "//pkg/sql/opt/optgen/cmd/langgen:langgen",
-	"libgeos":              geosTarget,
-	"optgen":               "//pkg/sql/opt/optgen/cmd/optgen:optgen",
-	"optfmt":               "//pkg/sql/opt/optgen/cmd/optfmt:optfmt",
-	"oss":                  cockroachTargetOss,
-	"reduce":               "//pkg/cmd/reduce:reduce",
-	"drtprod":              "//pkg/cmd/drtprod:drtprod",
-	"roachprod":            "//pkg/cmd/roachprod:roachprod",
-	"roachprod-stress":     "//pkg/cmd/roachprod-stress:roachprod-stress",
-	"roachprod-microbench": "//pkg/cmd/roachprod-microbench:roachprod-microbench",
-	"roachtest":            "//pkg/cmd/roachtest:roachtest",
-	"short":                "//pkg/cmd/cockroach-short:cockroach-short",
-	"smith":                "//pkg/cmd/smith:smith",
-	"smithcmp":             "//pkg/cmd/smithcmp:smithcmp",
-	"smithtest":            "//pkg/cmd/smithtest:smithtest",
-	"sql-bootstrap-data":   "//pkg/cmd/sql-bootstrap-data:sql-bootstrap-data",
-	"staticcheck":          "@co_honnef_go_tools//cmd/staticcheck:staticcheck",
-	"tests":                "//pkg:all_tests",
-	"workload":             "//pkg/cmd/workload:workload",
+	"bazel-remote":          bazelRemoteTarget,
+	"buildifier":            "@com_github_bazelbuild_buildtools//buildifier:buildifier",
+	"buildozer":             "@com_github_bazelbuild_buildtools//buildozer:buildozer",
+	"cockroach":             cockroachTarget,
+	"cockroach-sql":         "//pkg/cmd/cockroach-sql:cockroach-sql",
+	"cockroach-short":       "//pkg/cmd/cockroach-short:cockroach-short",
+	"crlfmt":                "@com_github_cockroachdb_crlfmt//:crlfmt",
+	"dev":                   devTarget,
+	"docgen":                "//pkg/cmd/docgen:docgen",
+	"drt-run":               "//pkg/cmd/drt-run:drt-run",
+	"execgen":               "//pkg/sql/colexec/execgen/cmd/execgen:execgen",
+	"gofmt":                 "@com_github_cockroachdb_gostdlib//cmd/gofmt:gofmt",
+	"goimports":             "@com_github_cockroachdb_gostdlib//x/tools/cmd/goimports:goimports",
+	"geos":                  geosTarget,
+	"langgen":               "//pkg/sql/opt/optgen/cmd/langgen:langgen",
+	"libgeos":               geosTarget,
+	"microbench-ci":         "//pkg/cmd/microbench-ci:microbench-ci",
+	"optgen":                "//pkg/sql/opt/optgen/cmd/optgen:optgen",
+	"optfmt":                "//pkg/sql/opt/optgen/cmd/optfmt:optfmt",
+	"reduce":                "//pkg/cmd/reduce:reduce",
+	"drtprod":               "//pkg/cmd/drtprod:drtprod",
+	"roachprod":             "//pkg/cmd/roachprod:roachprod",
+	"roachprod-centralized": "//pkg/cmd/roachprod-centralized:roachprod-centralized",
+	"roachprod-stress":      "//pkg/cmd/roachprod-stress:roachprod-stress",
+	"roachprod-microbench":  "//pkg/cmd/roachprod-microbench:roachprod-microbench",
+	"roachtest":             "//pkg/cmd/roachtest:roachtest",
+	"short":                 "//pkg/cmd/cockroach-short:cockroach-short",
+	"smith":                 "//pkg/cmd/smith:smith",
+	"smithcmp":              "//pkg/cmd/smithcmp:smithcmp",
+	"smithtest":             "//pkg/cmd/smithtest:smithtest",
+	"sql-bootstrap-data":    "//pkg/cmd/sql-bootstrap-data:sql-bootstrap-data",
+	"staticcheck":           "@co_honnef_go_tools//cmd/staticcheck:staticcheck",
+	"tef":                   "//pkg/cmd/tef:tef",
+	"tests":                 "//pkg:all_tests",
+	"vecbench":              "//pkg/cmd/vecbench:vecbench",
+	"whoownsit":             "//pkg/cmd/whoownsit:whoownsit",
+	"workload":              "//pkg/cmd/workload:workload",
 }
 
 // allBuildTargets is a sorted list of all the available build targets.
@@ -144,11 +146,15 @@ func (d *dev) build(cmd *cobra.Command, commandLine []string) error {
 	targets, additionalBazelArgs := splitArgsAtDash(cmd, commandLine)
 	ctx := cmd.Context()
 	cross := mustGetFlagString(cmd, crossFlag)
+	lint := mustGetFlagBool(cmd, lintFlag)
 	dockerArgs := mustGetFlagStringArray(cmd, dockerArgsFlag)
 
 	args, buildTargets, err := d.getBasicBuildArgs(ctx, targets)
 	if err != nil {
 		return err
+	}
+	if lint {
+		args = append(args, nogoEnableFlag)
 	}
 	args = append(args, additionalBazelArgs...)
 	configArgs := getConfigArgs(args)
@@ -184,8 +190,23 @@ func (d *dev) crossBuild(
 	volume string,
 	dockerArgs []string,
 ) error {
-	bazelArgs = append(bazelArgs, fmt.Sprintf("--config=%s", crossConfig), "--config=nolintonbuild", "-c", "opt")
+	bazelArgs = append(bazelArgs, fmt.Sprintf("--config=%s", crossConfig), "--config=nolintonbuild", "-c", "opt", "--config=pgo")
 	configArgs := getConfigArgs(bazelArgs)
+
+	// When using a local pebble checkout, mount it into the container
+	// and rewrite the override_repository arg that was added to bazelArgs
+	// by addCommonBazelArguments to use the container path instead.
+	if localPebble != "" {
+		const containerPebblePath = "/pebble"
+		dockerArgs = append(dockerArgs, "-v", localPebble+":"+containerPebblePath)
+		overridePrefix := "--override_repository=" + pebbleOverrideRepo + "="
+		for i, arg := range bazelArgs {
+			if strings.HasPrefix(arg, overridePrefix) {
+				bazelArgs[i] = overridePrefix + containerPebblePath
+			}
+		}
+	}
+
 	dockerArgs, err := d.getDockerRunArgs(ctx, volume, false, dockerArgs)
 	if err != nil {
 		return err
@@ -373,9 +394,7 @@ func (d *dev) getBasicBuildArgs(
 	}
 
 	args = append(args, "build")
-	if numCPUs != 0 {
-		args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
-	}
+	addCommonBazelArguments(&args)
 
 	canDisableNogo := true
 	shouldBuildWithTestConfig := false

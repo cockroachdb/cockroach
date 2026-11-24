@@ -97,6 +97,7 @@ func TestTruncateWithConcurrentMutations(t *testing.T) {
 
 		tdb := sqlutils.MakeSQLRunner(db)
 		tdb.ExecMultiple(t, strings.Split(`
+SET create_table_with_schema_locked=false;
 SET use_declarative_schema_changer = 'off';
 SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';
 `, `;`)...)
@@ -119,6 +120,11 @@ SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';
 			}
 			tx, err := db.BeginTx(ctx, nil)
 			if err != nil {
+				return err
+			}
+			_, err = tx.Exec("SET LOCAL autocommit_before_ddl = false")
+			if err != nil {
+				_ = tx.Rollback()
 				return err
 			}
 			for _, stmt := range testC.stmts {
@@ -341,19 +347,6 @@ SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer = 'off';
 			},
 			validations: commonValidations,
 		},
-		{
-			name: "alter column type",
-			setupStmts: []string{
-				commonCreateTable,
-				commonPopulateData,
-				`SET enable_experimental_alter_column_type_general = true`,
-			},
-			truncateStmt: "TRUNCATE TABLE t",
-			stmts: []string{
-				`ALTER TABLE t ALTER COLUMN j TYPE STRING`,
-			},
-			expErrRE: `pq: unimplemented: cannot perform TRUNCATE on "t" which has an ongoing column type change`,
-		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) { run(t, tc) })
@@ -392,7 +385,6 @@ func TestTruncatePreservesSplitPoints(t *testing.T) {
 			})
 			defer tc.Stopper().Stop(ctx)
 			s := tc.ApplicationLayer(0)
-			tenantSettings := s.ClusterSettings()
 			conn := s.SQLConn(t, serverutils.DBName("defaultdb"))
 
 			{
@@ -407,7 +399,7 @@ func TestTruncatePreservesSplitPoints(t *testing.T) {
 
 			var err error
 			_, err = conn.ExecContext(ctx, `
-CREATE TABLE a(a INT PRIMARY KEY, b INT, INDEX(b));
+CREATE TABLE a(a INT PRIMARY KEY, b INT, INDEX(b)) WITH (schema_locked=false);
 INSERT INTO a SELECT g,g FROM generate_series(1,10000) g(g);
 ALTER TABLE a SPLIT AT VALUES(1000), (2000), (3000), (4000), (5000), (6000), (7000), (8000), (9000);
 ALTER INDEX a_b_idx SPLIT AT VALUES(1000), (2000), (3000), (4000), (5000), (6000), (7000), (8000), (9000);
@@ -434,11 +426,9 @@ SELECT count(*) FROM [SHOW RANGES FROM TABLE a]`)
 			_, err = conn.ExecContext(ctx, `TRUNCATE a`)
 			assert.NoError(t, err)
 
-			// We subtract 1 from the original n ranges because the first range
-			// can't be migrated to the new keyspace, as its prefix doesn't
-			// include an index ID.
-			expRanges := origNRanges + testCase.nodes*int(sql.PreservedSplitCountMultiple.Get(
-				&tenantSettings.SV))
+			// Since the table is too small, we don't expect additional split points
+			// created during the truncate.
+			expRanges := origNRanges
 
 			testutils.SucceedsSoon(t, func() error {
 				row := conn.QueryRowContext(ctx, `

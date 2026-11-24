@@ -8,6 +8,7 @@ package schemafeed
 import (
 	"context"
 	"slices"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -35,6 +36,16 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// testingInitSchemaFeed sets up the heldLeases map and staleLeases boolean.
+func (tf *schemaFeed) testingInitSchemaFeed() {
+	tf.mu.heldLeases = make(map[descpb.ID]*heldLeaseInfo)
+	_ = tf.targets.EachTableID(func(id descpb.ID) error {
+		tf.mu.heldLeases[id] = &heldLeaseInfo{}
+		return nil
+	})
+	tf.mu.staleLeases = true
+}
+
 func TestTableHistoryIngestionTracking(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -56,6 +67,7 @@ func TestTableHistoryIngestionTracking(t *testing.T) {
 	}
 
 	m := schemaFeed{}
+	m.testingInitSchemaFeed()
 	frontier := func() hlc.Timestamp {
 		m.mu.Lock()
 		defer m.mu.Unlock()
@@ -194,31 +206,40 @@ func TestFetchDescriptorVersionsCPULimiterPagination(t *testing.T) {
 	ctx := context.Background()
 	var numRequests int
 	first := true
+	var sqlCodec atomic.Pointer[keys.SQLCodec]
 	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Knobs: base.TestingKnobs{Store: &kvserver.StoreTestingKnobs{
-			TestingRequestFilter: func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error {
-				for _, ru := range request.Requests {
-					if _, ok := ru.GetInner().(*kvpb.ExportRequest); ok {
-						numRequests++
-						h := admission.ElasticCPUWorkHandleFromContext(ctx)
-						if h == nil {
-							t.Fatalf("expected context to have CPU work handle")
-						}
-						h.TestingOverrideOverLimit(func() (bool, time.Duration) {
-							if first {
-								first = false
-								return true, 0
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				TestingRequestFilter: func(ctx context.Context, request *kvpb.BatchRequest) *kvpb.Error {
+					for _, ru := range request.Requests {
+						if exportRequest, ok := ru.GetInner().(*kvpb.ExportRequest); ok {
+							// Lease manager also uses exports after schema changes, so start
+							// intercepting exports when necessary.
+							if lease.TestIsLeasingTxnExportRequest(sqlCodec.Load(), request, exportRequest) {
+								return nil
 							}
-							return false, 0
-						})
+							numRequests++
+							h := admission.ElasticCPUWorkHandleFromContext(ctx)
+							if h == nil {
+								t.Fatalf("expected context to have CPU work handle")
+							}
+							h.TestingOverrideOverLimit(func() (bool, time.Duration) {
+								if first {
+									first = false
+									return true, 0
+								}
+								return false, 0
+							})
+						}
 					}
-				}
-				return nil
-			},
-		}},
+					return nil
+				},
+			}},
 	})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
+	codec := s.Codec()
+	sqlCodec.Store(&codec)
 	sqlServer := s.SQLServer().(*sql.Server)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -235,7 +256,7 @@ func TestFetchDescriptorVersionsCPULimiterPagination(t *testing.T) {
 		&tableID, &statementTimeName)
 	targets.Add(changefeedbase.Target{
 		Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
-		TableID:           tableID,
+		DescID:            tableID,
 		FamilyName:        "primary",
 		StatementTimeName: statementTimeName,
 	})
@@ -243,7 +264,7 @@ func TestFetchDescriptorVersionsCPULimiterPagination(t *testing.T) {
 		&tableID, &statementTimeName)
 	targets.Add(changefeedbase.Target{
 		Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
-		TableID:           tableID,
+		DescID:            tableID,
 		FamilyName:        "primary",
 		StatementTimeName: statementTimeName,
 	})
@@ -252,7 +273,7 @@ func TestFetchDescriptorVersionsCPULimiterPagination(t *testing.T) {
 		TestingAllEventFilter, targets, now, nil, changefeedbase.CanHandle{
 			MultipleColumnFamilies: true,
 			VirtualColumns:         true,
-		})
+		}, false)
 	scf := sf.(*schemaFeed)
 	desc, err := scf.fetchDescriptorVersions(ctx, beforeCreate, afterCreate)
 	require.NoError(t, err)
@@ -288,7 +309,7 @@ func TestSchemaFeedHandlesCascadeDatabaseDrop(t *testing.T) {
 	sqlDB.QueryRow(t, "SELECT 'test.foo'::regclass::int").Scan(&tableID)
 	targets.Add(changefeedbase.Target{
 		Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
-		TableID:           tableID,
+		DescID:            tableID,
 		FamilyName:        "primary",
 		StatementTimeName: "foo",
 	})
@@ -296,7 +317,7 @@ func TestSchemaFeedHandlesCascadeDatabaseDrop(t *testing.T) {
 		TestingAllEventFilter, targets, s.Clock().Now(), nil, changefeedbase.CanHandle{
 			MultipleColumnFamilies: true,
 			VirtualColumns:         true,
-		}).(*schemaFeed)
+		}, false).(*schemaFeed)
 
 	// initialize type dependencies in schema feed.
 	require.NoError(t, sf.primeInitialTableDescs(ctx))
@@ -318,19 +339,21 @@ func TestSchemaFeedHandlesCascadeDatabaseDrop(t *testing.T) {
 // It contains an ordered time map of descriptors for a single ID.
 // TODO(yang): Extend this for multiple IDs.
 type testLeaseAcquirer struct {
-	id    descpb.ID
-	descs []*testLeasedDescriptor
+	id             descpb.ID
+	descs          []*testLeasedDescriptor
+	eventsExecuted []bool
+	observers      []lease.Observer
 }
 
 func (t *testLeaseAcquirer) Acquire(
-	ctx context.Context, timestamp hlc.Timestamp, id descpb.ID,
+	ctx context.Context, timestamp lease.ReadTimestamp, id descpb.ID,
 ) (lease.LeasedDescriptor, error) {
 	if id != t.id {
 		return nil, errors.Newf("unknown id: %d", id)
 	}
 
-	i, ok := slices.BinarySearchFunc(t.descs, timestamp, func(desc *testLeasedDescriptor, timestamp hlc.Timestamp) int {
-		return desc.timestamp.Compare(timestamp)
+	i, ok := slices.BinarySearchFunc(t.descs, timestamp, func(desc *testLeasedDescriptor, timestamp lease.ReadTimestamp) int {
+		return desc.timestamp.Compare(timestamp.GetTimestamp())
 	})
 	if ok {
 		return t.descs[i], nil
@@ -350,6 +373,49 @@ func (t *testLeaseAcquirer) AcquireFreshestFromStore(ctx context.Context, id des
 
 func (t *testLeaseAcquirer) Codec() keys.SQLCodec {
 	panic("should not be called")
+}
+
+func (t *testLeaseAcquirer) RegisterLeaseObserver(observer lease.Observer) (unregisterFn func()) {
+	t.observers = append(t.observers, observer)
+	return func() {
+		t.unregisterLeaseObserver(observer)
+	}
+}
+
+func (t *testLeaseAcquirer) unregisterLeaseObserver(observer lease.Observer) {
+	for i, o := range t.observers {
+		if o == observer {
+			t.observers = append(t.observers[:i], t.observers[i+1:]...)
+			return
+		}
+	}
+}
+
+// advanceTimestamp advances the timestamp forward, and emits any events.
+func (t *testLeaseAcquirer) advanceTimestamp(timestamp hlc.Timestamp) {
+	if t.eventsExecuted == nil {
+		t.eventsExecuted = make([]bool, len(t.descs))
+	}
+	// Determine if a new event should fire.
+	i, _ := slices.BinarySearchFunc(t.descs, timestamp, func(desc *testLeasedDescriptor, timestamp hlc.Timestamp) int {
+		return desc.timestamp.Compare(timestamp)
+	})
+	// If timestmap is greater then our entire array,
+	// return the last value.
+	if i > len(t.descs)-1 {
+		i = len(t.descs) - 1
+	}
+	// Timestamp is already visible
+	if t.eventsExecuted[i] {
+		return
+	}
+	// Otherwise, check if the event would fire.
+	if t.descs[i].timestamp.LessEq(timestamp) {
+		t.eventsExecuted[i] = true
+		for _, observer := range t.observers {
+			observer.OnNewVersion(context.Background(), t.descs[i].Underlying().GetID(), t.descs[i].Underlying().GetVersion(), t.descs[i].timestamp)
+		}
+	}
 }
 
 type testLeasedDescriptor struct {
@@ -419,13 +485,21 @@ func TestPauseOrResumePolling(t *testing.T) {
 		newTestLeasedDescriptor(tableID, v3, notSchemaLocked, hlc.Timestamp{WallTime: 60}),
 	}
 
-	sf := schemaFeed{
-		leaseMgr: &testLeaseAcquirer{
-			id:    tableID,
-			descs: tableDescs,
-		},
-		targets: CreateChangefeedTargets(tableID),
+	// Use a clock set to time 0, before any test timestamps.
+	clock := hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(0, 0)))
+
+	lm := &testLeaseAcquirer{
+		id:    tableID,
+		descs: tableDescs,
 	}
+	sf := schemaFeed{
+		clock:    clock,
+		leaseMgr: lm,
+		targets:  CreateChangefeedTargets(tableID),
+	}
+	sf.testingInitSchemaFeed()
+	unregisterFn := lm.RegisterLeaseObserver(&sf)
+	defer unregisterFn()
 
 	getFrontier := func() hlc.Timestamp {
 		sf.mu.Lock()
@@ -433,6 +507,16 @@ func TestPauseOrResumePolling(t *testing.T) {
 		return sf.mu.ts.frontier
 	}
 	setFrontier := func(ts hlc.Timestamp) error {
+		lm.advanceTimestamp(ts)
+		leasedDesc, err := lm.Acquire(ctx, lease.TimestampToReadTimestamp(ts), tableID)
+		if err == nil {
+			sf.mu.Lock()
+			if sf.mu.previousTableVersion == nil {
+				sf.mu.previousTableVersion = make(map[descpb.ID]catalog.TableDescriptor)
+			}
+			sf.mu.previousTableVersion[tableID] = leasedDesc.Underlying().(catalog.TableDescriptor)
+			sf.mu.Unlock()
+		}
 		sf.mu.Lock()
 		defer sf.mu.Unlock()
 		return sf.mu.ts.advanceFrontier(ts)
@@ -472,10 +556,13 @@ func TestPauseOrResumePolling(t *testing.T) {
 	require.Equal(t, hlc.Timestamp{WallTime: 40}, getFrontier())
 
 	// We expect polling to be paused for time 40 now that the highwater has
-	// caught up to the schema-locked version.
+	// caught up to the schema-locked version. However, polling will be enabled
+	// until the next advance after.
 	require.NoError(t, sf.pauseOrResumePolling(ctx, hlc.Timestamp{WallTime: 40}))
+	require.False(t, sf.pollingPaused())
+	require.NoError(t, sf.pauseOrResumePolling(ctx, hlc.Timestamp{WallTime: 41}))
 	require.True(t, sf.pollingPaused())
-	require.Equal(t, hlc.Timestamp{WallTime: 40}, getFrontier())
+	require.Equal(t, hlc.Timestamp{WallTime: 41}, getFrontier())
 
 	// We expect polling continue to be paused for time 50 and to see the
 	// highwater bumped up.
@@ -491,9 +578,81 @@ func TestPauseOrResumePolling(t *testing.T) {
 
 	// We expect polling to be resumed for time 60 and to not see the highwater
 	// bumped up.
+	lm.advanceTimestamp(hlc.Timestamp{WallTime: 60})
 	require.NoError(t, sf.pauseOrResumePolling(ctx, hlc.Timestamp{WallTime: 60}))
 	require.False(t, sf.pollingPaused())
 	require.Equal(t, hlc.Timestamp{WallTime: 50}, getFrontier())
+}
+
+// TestPauseOrResumePollingAdvancesToNow verifies that when pauseOrResumePolling
+// is called with a timestamp in the past, it advances atOrBefore to the current
+// clock time.
+func TestPauseOrResumePollingAdvancesToNow(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	const tableID = 123
+	tableDescs := []*testLeasedDescriptor{
+		newTestLeasedDescriptor(tableID, 1, true, hlc.Timestamp{WallTime: 10}),
+	}
+
+	// Set clock to time 100.
+	manualClock := timeutil.NewManualTime(timeutil.Unix(0, 100))
+	clock := hlc.NewClockForTesting(manualClock)
+
+	lm := &testLeaseAcquirer{
+		id:    tableID,
+		descs: tableDescs,
+	}
+	sf := schemaFeed{
+		clock:    clock,
+		leaseMgr: lm,
+		targets:  CreateChangefeedTargets(tableID),
+	}
+	sf.testingInitSchemaFeed()
+	unregisterFn := lm.RegisterLeaseObserver(&sf)
+	defer unregisterFn()
+
+	getFrontier := func() hlc.Timestamp {
+		sf.mu.Lock()
+		defer sf.mu.Unlock()
+		return sf.mu.ts.frontier
+	}
+	setFrontier := func(ts hlc.Timestamp) error {
+		lm.advanceTimestamp(ts)
+		leasedDesc, err := lm.Acquire(ctx, lease.TimestampToReadTimestamp(ts), tableID)
+		if err == nil {
+			sf.mu.Lock()
+			if sf.mu.previousTableVersion == nil {
+				sf.mu.previousTableVersion = make(map[descpb.ID]catalog.TableDescriptor)
+			}
+			sf.mu.previousTableVersion[tableID] = leasedDesc.Underlying().(catalog.TableDescriptor)
+			sf.mu.Unlock()
+		}
+		sf.mu.Lock()
+		defer sf.mu.Unlock()
+		return sf.mu.ts.advanceFrontier(ts)
+	}
+
+	// Set the initial frontier to 10.
+	require.NoError(t, setFrontier(hlc.Timestamp{WallTime: 10}))
+
+	// Call with a timestamp in the past (20). Since the clock is at 100,
+	// the frontier should advance to 100.However, polling will be enabled
+	// until the next advance after.
+	require.NoError(t, sf.pauseOrResumePolling(ctx, hlc.Timestamp{WallTime: 20}))
+	require.False(t, sf.pollingPaused())
+	require.NoError(t, sf.pauseOrResumePolling(ctx, hlc.Timestamp{WallTime: 21}))
+	require.True(t, sf.pollingPaused())
+	require.Equal(t, int64(100), getFrontier().WallTime)
+
+	// Call with a timestamp in the future (120). Since the clock is at 100,
+	// the frontier should advance to the event timestamp of 120.
+	require.NoError(t, sf.pauseOrResumePolling(ctx, hlc.Timestamp{WallTime: 120}))
+	require.True(t, sf.pollingPaused())
+	require.Equal(t, int64(120), getFrontier().WallTime)
 }
 
 // BenchmarkPauseOrResumePolling benchmarks pauseOrResumePolling in cases where
@@ -506,17 +665,35 @@ func BenchmarkPauseOrResumePolling(b *testing.B) {
 	ctx := context.Background()
 
 	const tableID = 123
-	sf := schemaFeed{
-		leaseMgr: &testLeaseAcquirer{
-			id: tableID,
-			descs: []*testLeasedDescriptor{
-				newTestLeasedDescriptor(tableID, 1, false, hlc.Timestamp{WallTime: 30}),
-				newTestLeasedDescriptor(tableID, 2, true, hlc.Timestamp{WallTime: 40}),
-			},
+	// Use a clock set to time 0, matching test timestamps.
+	manualClock := timeutil.NewManualTime(timeutil.Unix(0, 0))
+	lm := &testLeaseAcquirer{
+		id: tableID,
+		descs: []*testLeasedDescriptor{
+			newTestLeasedDescriptor(tableID, 1, false, hlc.Timestamp{WallTime: 30}),
+			newTestLeasedDescriptor(tableID, 2, true, hlc.Timestamp{WallTime: 40}),
 		},
-		targets: CreateChangefeedTargets(tableID),
 	}
+	sf := schemaFeed{
+		clock:    hlc.NewClockForTesting(manualClock),
+		leaseMgr: lm,
+		targets:  CreateChangefeedTargets(tableID),
+	}
+	sf.testingInitSchemaFeed()
+	unregisterFn := lm.RegisterLeaseObserver(&sf)
+	defer unregisterFn()
+
 	setFrontier := func(ts hlc.Timestamp) error {
+		lm.advanceTimestamp(ts)
+		leasedDesc, err := lm.Acquire(ctx, lease.TimestampToReadTimestamp(ts), tableID)
+		if err == nil {
+			sf.mu.Lock()
+			if sf.mu.previousTableVersion == nil {
+				sf.mu.previousTableVersion = make(map[descpb.ID]catalog.TableDescriptor)
+			}
+			sf.mu.previousTableVersion[tableID] = leasedDesc.Underlying().(catalog.TableDescriptor)
+			sf.mu.Unlock()
+		}
 		sf.mu.Lock()
 		defer sf.mu.Unlock()
 		return sf.mu.ts.advanceFrontier(ts)
@@ -539,6 +716,8 @@ func BenchmarkPauseOrResumePolling(b *testing.B) {
 	b.Run("not schema locked", func(b *testing.B) {
 		// We bump the highwater up to reflect a descriptor being read at time 30.
 		require.NoError(b, setFrontier(hlc.Timestamp{WallTime: 30}))
+		// Prime the leasedDescriptor.
+		require.NoError(b, sf.pauseOrResumePolling(ctx, hlc.Timestamp{WallTime: 30}))
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			// We do not expect polling to be paused for time 30 since the descriptor
@@ -550,9 +729,14 @@ func BenchmarkPauseOrResumePolling(b *testing.B) {
 	b.Run("schema locked", func(b *testing.B) {
 		// We bump the highwater up to reflect a descriptor being read at time 50.
 		require.NoError(b, setFrontier(hlc.Timestamp{WallTime: 50}))
+		// We expect polling to be paused for time 50 now that the highwater on a
+		// schema-locked version. It takes two iterations to pause: one to
+		// acquire the descriptor and one to confirm it's still current and locked.
+		for !sf.pollingPaused() {
+			require.NoError(b, sf.pauseOrResumePolling(ctx, hlc.Timestamp{WallTime: 50}))
+		}
+		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
-			// We expect polling to be paused for time 50 now that the highwater on a
-			// schema-locked version.
 			require.NoError(b, sf.pauseOrResumePolling(ctx, hlc.Timestamp{WallTime: 50}))
 		}
 		require.True(b, sf.pollingPaused())

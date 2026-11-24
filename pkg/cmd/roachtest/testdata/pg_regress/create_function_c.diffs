@@ -1,0 +1,48 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/create_function_c.out --label=/mnt/data1/postgres/src/test/regress/results/create_function_c.out /mnt/data1/postgres/src/test/regress/expected/create_function_c.out /mnt/data1/postgres/src/test/regress/results/create_function_c.out
+--- /mnt/data1/postgres/src/test/regress/expected/create_function_c.out
++++ /mnt/data1/postgres/src/test/regress/results/create_function_c.out
+@@ -7,30 +7,38 @@
+ -- test script that needs them.  All that remains here is error cases.
+ -- directory path and dlsuffix are passed to us in environment variables
+ \getenv libdir PG_LIBDIR
++invalid command \getenv
+ \getenv dlsuffix PG_DLSUFFIX
++invalid command \getenv
+ \set regresslib :libdir '/regress' :dlsuffix
+ --
+ -- Check LOAD command.  (The alternative of implicitly loading the library
+ -- is checked in many other test scripts.)
+ --
+ LOAD :'regresslib';
++ERROR:  at or near "load": syntax error
++DETAIL:  source SQL:
++LOAD ':libdir/regress:dlsuffix'
++^
+ -- Things that shouldn't work:
+ CREATE FUNCTION test1 (int) RETURNS int LANGUAGE C
+     AS 'nosuchfile';
+-ERROR:  could not access file "nosuchfile": No such file or directory
++ERROR:  unimplemented: C is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/102201/_version_
+ -- To produce stable regression test output, we have to filter the name
+ -- of the regresslib file out of the error message in this test.
+ \set VERBOSITY sqlstate
+ CREATE FUNCTION test1 (int) RETURNS int LANGUAGE C
+     AS :'regresslib', 'nosuchsymbol';
+-ERROR:  42883
++ERROR:  0A000
+ \set VERBOSITY default
+ SELECT regexp_replace(:'LAST_ERROR_MESSAGE', 'file ".*"', 'file "..."');
+-                    regexp_replace                    
+-------------------------------------------------------
+- could not find function "nosuchsymbol" in file "..."
++            regexp_replace             
++---------------------------------------
++ unimplemented: C is not yet supported
+ (1 row)
+ 
+ CREATE FUNCTION test1 (int) RETURNS int LANGUAGE internal
+     AS 'nosuch';
+-ERROR:  there is no built-in function named "nosuch"
++ERROR:  language "internal" does not exist

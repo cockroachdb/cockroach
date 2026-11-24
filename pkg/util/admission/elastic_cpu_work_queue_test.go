@@ -60,7 +60,8 @@ func TestElasticCPUWorkQueue(t *testing.T) {
 					d.ScanArgs(t, "disabled", &elasticCPUInternalWorkQueue.disabled)
 				}
 
-				handle, err := elasticWorkQ.Admit(ctx, duration, WorkInfo{TenantID: roachpb.SystemTenantID})
+				handle, err := elasticWorkQ.Admit(
+					ctx, duration, WorkInfo{TenantID: roachpb.SystemTenantID}, false)
 				require.NoError(t, err)
 
 				var buf strings.Builder
@@ -124,13 +125,9 @@ type testElasticCPUGranter struct {
 	buf strings.Builder
 }
 
-var _ granter = &testElasticCPUGranter{}
+var _ granterAndYieldDelayRecorder = &testElasticCPUGranter{}
 
-func (t *testElasticCPUGranter) grantKind() grantKind {
-	return token
-}
-
-func (t *testElasticCPUGranter) tryGet(count int64) (granted bool) {
+func (t *testElasticCPUGranter) tryGet(_ burstQualification, count int64) (granted bool) {
 	panic("unimplemented")
 }
 
@@ -146,6 +143,10 @@ func (t *testElasticCPUGranter) continueGrantChain(grantChainID grantChainID) {
 	panic("unimplemented")
 }
 
+func (t *testElasticCPUGranter) RecordYieldDelay(d time.Duration) {
+	// No-op for tests.
+}
+
 type testElasticCPUInternalWorkQueue struct {
 	buf      strings.Builder
 	disabled bool
@@ -155,27 +156,21 @@ var _ elasticCPUInternalWorkQueue = &testElasticCPUInternalWorkQueue{}
 
 func (t *testElasticCPUInternalWorkQueue) Admit(
 	_ context.Context, info WorkInfo,
-) (enabled bool, err error) {
+) (AdmitResponse, error) {
 	if !t.disabled {
 		t.buf.WriteString(fmt.Sprintf("admitted=%s ", time.Duration(info.RequestedCount)))
 	}
-	return !t.disabled, nil
+	return AdmitResponse{Enabled: !t.disabled}, nil
 }
 
-func (t *testElasticCPUInternalWorkQueue) SetTenantWeights(tenantWeights map[uint64]uint32) {
-	panic("unimplemented")
-}
-
-func (t *testElasticCPUInternalWorkQueue) adjustTenantUsed(
-	tenantID roachpb.TenantID, additionalUsed int64,
-) {
+func (t *testElasticCPUInternalWorkQueue) adjustGroupUsed(gKey groupKey, additionalUsed int64) {
 	if !t.disabled {
-		fmt.Fprintf(&t.buf, "adjust-tenant-used: tenant=%s additional-used=%s",
-			tenantID.String(), time.Duration(additionalUsed).String())
+		fmt.Fprintf(&t.buf, "adjust-group-used: group=%s additional-used=%s",
+			gKey, time.Duration(additionalUsed))
 	}
 }
 
-func (t *testElasticCPUInternalWorkQueue) hasWaitingRequests() bool {
+func (t *testElasticCPUInternalWorkQueue) hasWaitingRequests() (bool, burstQualification) {
 	panic("unimplemented")
 }
 

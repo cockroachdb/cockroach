@@ -16,6 +16,11 @@ INSERT INTO comp VALUES (ROW(1, 2)), (ROW(3, 4));
 # ANY/SOME with arrays.
 
 query B
+SELECT 1 = ANY(NULL::INT[])
+----
+NULL
+
+query B
 SELECT 1 = ANY(ARRAY[1, 2])
 ----
 true
@@ -144,6 +149,11 @@ true
 
 query B
 SELECT 1 < ANY(SELECT * FROM generate_series(0,1))
+----
+false
+
+query B
+SELECT 1 = ANY(SELECT * FROM unnest(NULL::INT[]))
 ----
 false
 

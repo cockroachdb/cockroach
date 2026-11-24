@@ -1,0 +1,13 @@
+setup
+CREATE DATABASE multiregion_db PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3";
+CREATE TABLE multiregion_db.public.t (  
+  pk INT PRIMARY KEY,
+  i INT NOT NULL,
+  j STRING,
+  INDEX(i)
+) LOCALITY REGIONAL BY TABLE;
+----
+
+test
+ALTER TABLE multiregion_db.t SET LOCALITY GLOBAL;
+----

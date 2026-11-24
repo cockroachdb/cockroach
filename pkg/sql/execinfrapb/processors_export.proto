@@ -1,0 +1,45 @@
+// Copyright 2025 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+//
+// Processor definitions for distributed SQL APIs. See
+// docs/RFCS/distributed_sql.md.
+// All the concepts here are "physical plan" concepts.
+
+syntax = "proto2";
+// Beware! This package name must not be changed, even though it doesn't match
+// the Go package name, because it defines the Protobuf message names which
+// can't be changed without breaking backward compatibility.
+package cockroach.sql.distsqlrun;
+option go_package = "github.com/cockroachdb/cockroach/pkg/sql/execinfrapb";
+
+// import "roachpb/data.proto";
+import "roachpb/io-formats.proto";
+import "gogoproto/gogo.proto";
+
+// ExporterSpec is the specification for a processor that consumes rows and
+// writes them to Parquet or CSV files at uri. It outputs a row per file written with
+// the file name, row count and byte size.
+message ExportSpec {
+  // destination as a cloud.ExternalStorage URI pointing to an export store
+  // location (directory).
+  optional string destination = 1 [(gogoproto.nullable) = false];
+  optional string name_pattern = 2 [(gogoproto.nullable) = false];
+  optional roachpb.IOFileFormat format = 3 [(gogoproto.nullable) = false];
+
+  // chunk_rows is num rows to write per file. 0 = no limit.
+  optional int64 chunk_rows = 4 [(gogoproto.nullable) = false];
+  // chunk_size is the target byte size per file.
+  optional int64 chunk_size = 5 [(gogoproto.nullable) = false];
+
+  // User who initiated the export. This is used to check access privileges
+  // when using FileTable ExternalStorage.
+  optional string user_proto = 6 [(gogoproto.nullable) = false, (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/security/username.SQLUsernameProto"];
+
+  // col_names specifies the logical column names for the exported parquet file.
+  repeated string col_names = 7 ;
+
+  // header_row specifies if a csv file should include header rows
+  optional bool header_row = 8 [(gogoproto.nullable) = false];
+}

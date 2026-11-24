@@ -116,11 +116,11 @@ data: "k"/2.000000000,0 -> /BYTES/k2
 data: "p"/6.000000000,0 -> /BYTES/p6
 stats: key_count=11 key_bytes=226 val_count=17 val_bytes=98 range_key_count=8 range_key_bytes=158 range_val_count=14 live_count=5 live_bytes=105 gc_bytes_age=36216
 
-# Delete the entire span, using both point and range tombstones.
+# Delete the entire span, using point tombstones.
 run stats ok log-ops
-del_range_pred k=a end=z ts=10 startTime=0 rangeThreshold=10
+del_range_pred k=a end=z ts=10 startTime=0
 ----
->> del_range_pred k=a end=z ts=10 startTime=0 rangeThreshold=10
+>> del_range_pred k=a end=z ts=10 startTime=0
 stats: key_bytes=+60 val_count=+5 live_count=-5 live_bytes=-105 gc_bytes_age=+14850
 >> at end:
 rangekey: {a-b}/[1.000000000,0=/<empty>]
@@ -194,45 +194,48 @@ data: "p"/6.000000000,0 -> /BYTES/p6
 stats: key_count=11 key_bytes=226 val_count=17 val_bytes=98 range_key_count=8 range_key_bytes=158 range_val_count=14 live_count=5 live_bytes=105 gc_bytes_age=36216
 
 run stats ok
-del_range_pred k=a end=z ts=10 startTime=0 rangeThreshold=1
+del_range_pred k=a end=z ts=10 startTime=0
 ----
->> del_range_pred k=a end=z ts=10 startTime=0 rangeThreshold=1
-stats: range_key_count=+2 range_key_bytes=+63 range_val_count=+6 live_count=-5 live_bytes=-105 gc_bytes_age=+15024
+>> del_range_pred k=a end=z ts=10 startTime=0
+stats: key_bytes=+60 val_count=+5 live_count=-5 live_bytes=-105 gc_bytes_age=+14850
 >> at end:
 rangekey: {a-b}/[1.000000000,0=/<empty>]
 rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 rangekey: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 rangekey: {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
-rangekey: {f-h}/[10.000000000,0=/<empty> 5.000000000,0=/<empty> 3.000000000,0=/<empty>]
-rangekey: {h-k}/[10.000000000,0=/<empty> 1.000000000,0=/<empty>]
-rangekey: {k-l}/[10.000000000,0=/<empty>]
-rangekey: {l-n}/[10.000000000,0=/<empty> 5.000000000,0=/<empty>]
-rangekey: {n-o}/[10.000000000,0=/<empty> 5.000000000,0=/<empty> 3.000000000,0=/<empty>]
-rangekey: {o-p\x00}/[10.000000000,0=/<empty>]
+rangekey: {f-h}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: {h-k}/[1.000000000,0=/<empty>]
+rangekey: {l-n}/[5.000000000,0=/<empty>]
+rangekey: {n-o}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
 data: "b"/4.000000000,0 -> /<empty>
 data: "d"/4.000000000,0 -> /BYTES/d4
 data: "d"/2.000000000,0 -> /BYTES/d2
 data: "e"/3.000000000,0 -> /BYTES/e3
+data: "f"/10.000000000,0 -> /<empty>
 data: "f"/6.000000000,0 -> /BYTES/f6
 data: "f"/4.000000000,0 -> /BYTES/f4
 data: "f"/2.000000000,0 -> /BYTES/f2
 data: "g"/4.000000000,0 -> /BYTES/g4
 data: "g"/2.000000000,0 -> /BYTES/g2
+data: "h"/10.000000000,0 -> /<empty>
 data: "h"/3.000000000,0 -> /BYTES/h3
+data: "i"/10.000000000,0 -> /<empty>
 data: "i"/5.000000000,0 -> /BYTES/i5
 data: "j"/6.000000000,0 -> /<empty>
 data: "j"/2.000000000,0 -> /BYTES/j2
+data: "k"/10.000000000,0 -> /<empty>
 data: "k"/2.000000000,0 -> /BYTES/k2
+data: "p"/10.000000000,0 -> /<empty>
 data: "p"/6.000000000,0 -> /BYTES/p6
-stats: key_count=11 key_bytes=226 val_count=17 val_bytes=98 range_key_count=10 range_key_bytes=221 range_val_count=20 gc_bytes_age=51240
+stats: key_count=11 key_bytes=286 val_count=22 val_bytes=98 range_key_count=8 range_key_bytes=158 range_val_count=14 gc_bytes_age=51066
 
 run stats ok
 clear_time_range k=a end=z ts=10 targetTs=6
 ----
 >> clear_time_range k=a end=z ts=10 targetTs=6
-stats: range_key_count=-2 range_key_bytes=-63 range_val_count=-6 live_count=+5 live_bytes=+105 gc_bytes_age=-15024
+stats: key_bytes=-60 val_count=-5 live_count=+5 live_bytes=+105 gc_bytes_age=-14850
 >> at end:
 rangekey: {a-b}/[1.000000000,0=/<empty>]
 rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
@@ -262,50 +265,49 @@ data: "p"/6.000000000,0 -> /BYTES/p6
 stats: key_count=11 key_bytes=226 val_count=17 val_bytes=98 range_key_count=8 range_key_bytes=158 range_val_count=14 live_count=5 live_bytes=105 gc_bytes_age=36216
 
 run stats ok log-ops
-del_range_pred k=a end=z ts=7 startTime=3 rangeThreshold=1
+del_range_pred k=a end=z ts=7 startTime=3
 ----
->> del_range_pred k=a end=z ts=7 startTime=3 rangeThreshold=1
-stats: range_key_count=+4 range_key_bytes=+84 range_val_count=+7 live_count=-3 live_bytes=-63 gc_bytes_age=+13865
+>> del_range_pred k=a end=z ts=7 startTime=3
+stats: key_bytes=+36 val_count=+3 live_count=-3 live_bytes=-63 gc_bytes_age=+9207
 >> at end:
 rangekey: {a-b}/[1.000000000,0=/<empty>]
 rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 rangekey: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 rangekey: {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
-rangekey: f{-\x00}/[7.000000000,0=/<empty> 5.000000000,0=/<empty> 3.000000000,0=/<empty>]
-rangekey: {f\x00-h}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
-rangekey: {h-i}/[1.000000000,0=/<empty>]
-rangekey: i{-\x00}/[7.000000000,0=/<empty> 1.000000000,0=/<empty>]
-rangekey: {i\x00-k}/[1.000000000,0=/<empty>]
+rangekey: {f-h}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: {h-k}/[1.000000000,0=/<empty>]
 rangekey: {l-n}/[5.000000000,0=/<empty>]
 rangekey: {n-o}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
-rangekey: p{-\x00}/[7.000000000,0=/<empty>]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
 data: "b"/4.000000000,0 -> /<empty>
 data: "d"/4.000000000,0 -> /BYTES/d4
 data: "d"/2.000000000,0 -> /BYTES/d2
 data: "e"/3.000000000,0 -> /BYTES/e3
+data: "f"/7.000000000,0 -> /<empty>
 data: "f"/6.000000000,0 -> /BYTES/f6
 data: "f"/4.000000000,0 -> /BYTES/f4
 data: "f"/2.000000000,0 -> /BYTES/f2
 data: "g"/4.000000000,0 -> /BYTES/g4
 data: "g"/2.000000000,0 -> /BYTES/g2
 data: "h"/3.000000000,0 -> /BYTES/h3
+data: "i"/7.000000000,0 -> /<empty>
 data: "i"/5.000000000,0 -> /BYTES/i5
 data: "j"/6.000000000,0 -> /<empty>
 data: "j"/2.000000000,0 -> /BYTES/j2
 data: "k"/2.000000000,0 -> /BYTES/k2
+data: "p"/7.000000000,0 -> /<empty>
 data: "p"/6.000000000,0 -> /BYTES/p6
-logical op: delete_range: startKey="f" endKey="f\x00" ts=7.000000000,0
-logical op: delete_range: startKey="i" endKey="i\x00" ts=7.000000000,0
-logical op: delete_range: startKey="p" endKey="p\x00" ts=7.000000000,0
-stats: key_count=11 key_bytes=226 val_count=17 val_bytes=98 range_key_count=12 range_key_bytes=242 range_val_count=21 live_count=2 live_bytes=42 gc_bytes_age=50081
+logical op: write_value: key="f", ts=7.000000000,0
+logical op: write_value: key="i", ts=7.000000000,0
+logical op: write_value: key="p", ts=7.000000000,0
+stats: key_count=11 key_bytes=262 val_count=20 val_bytes=98 range_key_count=8 range_key_bytes=158 range_val_count=14 live_count=2 live_bytes=42 gc_bytes_age=45423
 
 run stats ok
 clear_time_range k=a end=z ts=10 targetTs=6
 ----
 >> clear_time_range k=a end=z ts=10 targetTs=6
-stats: range_key_count=-4 range_key_bytes=-84 range_val_count=-7 live_count=+3 live_bytes=+63 gc_bytes_age=-13865
+stats: key_bytes=-36 val_count=-3 live_count=+3 live_bytes=+63 gc_bytes_age=-9207
 >> at end:
 rangekey: {a-b}/[1.000000000,0=/<empty>]
 rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
@@ -337,27 +339,26 @@ stats: key_count=11 key_bytes=226 val_count=17 val_bytes=98 range_key_count=8 ra
 
 # Range tombstone deletion of times (5-10].
 run stats ok
-del_range_pred k=a end=z ts=10 startTime=5 rangeThreshold=1
+del_range_pred k=a end=z ts=10 startTime=5
 ----
->> del_range_pred k=a end=z ts=10 startTime=5 rangeThreshold=1
-stats: range_key_count=+2 range_key_bytes=+47 range_val_count=+4 live_count=-2 live_bytes=-42 gc_bytes_age=+8123
+>> del_range_pred k=a end=z ts=10 startTime=5
+stats: key_bytes=+24 val_count=+2 live_count=-2 live_bytes=-42 gc_bytes_age=+5940
 >> at end:
 rangekey: {a-b}/[1.000000000,0=/<empty>]
 rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 rangekey: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 rangekey: {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
-rangekey: f{-\x00}/[10.000000000,0=/<empty> 5.000000000,0=/<empty> 3.000000000,0=/<empty>]
-rangekey: {f\x00-h}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: {f-h}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
 rangekey: {h-k}/[1.000000000,0=/<empty>]
 rangekey: {l-n}/[5.000000000,0=/<empty>]
 rangekey: {n-o}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
-rangekey: p{-\x00}/[10.000000000,0=/<empty>]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
 data: "b"/4.000000000,0 -> /<empty>
 data: "d"/4.000000000,0 -> /BYTES/d4
 data: "d"/2.000000000,0 -> /BYTES/d2
 data: "e"/3.000000000,0 -> /BYTES/e3
+data: "f"/10.000000000,0 -> /<empty>
 data: "f"/6.000000000,0 -> /BYTES/f6
 data: "f"/4.000000000,0 -> /BYTES/f4
 data: "f"/2.000000000,0 -> /BYTES/f2
@@ -368,14 +369,15 @@ data: "i"/5.000000000,0 -> /BYTES/i5
 data: "j"/6.000000000,0 -> /<empty>
 data: "j"/2.000000000,0 -> /BYTES/j2
 data: "k"/2.000000000,0 -> /BYTES/k2
+data: "p"/10.000000000,0 -> /<empty>
 data: "p"/6.000000000,0 -> /BYTES/p6
-stats: key_count=11 key_bytes=226 val_count=17 val_bytes=98 range_key_count=10 range_key_bytes=205 range_val_count=18 live_count=3 live_bytes=63 gc_bytes_age=44339
+stats: key_count=11 key_bytes=250 val_count=19 val_bytes=98 range_key_count=8 range_key_bytes=158 range_val_count=14 live_count=3 live_bytes=63 gc_bytes_age=42156
 
 run stats ok
 clear_time_range k=a end=z ts=10 targetTs=6
 ----
 >> clear_time_range k=a end=z ts=10 targetTs=6
-stats: range_key_count=-2 range_key_bytes=-47 range_val_count=-4 live_count=+2 live_bytes=+42 gc_bytes_age=-8123
+stats: key_bytes=-24 val_count=-2 live_count=+2 live_bytes=+42 gc_bytes_age=-5940
 >> at end:
 rangekey: {a-b}/[1.000000000,0=/<empty>]
 rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
@@ -406,27 +408,26 @@ stats: key_count=11 key_bytes=226 val_count=17 val_bytes=98 range_key_count=8 ra
 
 # Range tombstone deletion of times (5-10].
 run stats ok
-del_range_pred k=a end=z ts=10 startTime=5 rangeThreshold=1
+del_range_pred k=a end=z ts=10 startTime=5
 ----
->> del_range_pred k=a end=z ts=10 startTime=5 rangeThreshold=1
-stats: range_key_count=+2 range_key_bytes=+47 range_val_count=+4 live_count=-2 live_bytes=-42 gc_bytes_age=+8123
+>> del_range_pred k=a end=z ts=10 startTime=5
+stats: key_bytes=+24 val_count=+2 live_count=-2 live_bytes=-42 gc_bytes_age=+5940
 >> at end:
 rangekey: {a-b}/[1.000000000,0=/<empty>]
 rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 rangekey: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 rangekey: {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
-rangekey: f{-\x00}/[10.000000000,0=/<empty> 5.000000000,0=/<empty> 3.000000000,0=/<empty>]
-rangekey: {f\x00-h}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: {f-h}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
 rangekey: {h-k}/[1.000000000,0=/<empty>]
 rangekey: {l-n}/[5.000000000,0=/<empty>]
 rangekey: {n-o}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
-rangekey: p{-\x00}/[10.000000000,0=/<empty>]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
 data: "b"/4.000000000,0 -> /<empty>
 data: "d"/4.000000000,0 -> /BYTES/d4
 data: "d"/2.000000000,0 -> /BYTES/d2
 data: "e"/3.000000000,0 -> /BYTES/e3
+data: "f"/10.000000000,0 -> /<empty>
 data: "f"/6.000000000,0 -> /BYTES/f6
 data: "f"/4.000000000,0 -> /BYTES/f4
 data: "f"/2.000000000,0 -> /BYTES/f2
@@ -437,14 +438,15 @@ data: "i"/5.000000000,0 -> /BYTES/i5
 data: "j"/6.000000000,0 -> /<empty>
 data: "j"/2.000000000,0 -> /BYTES/j2
 data: "k"/2.000000000,0 -> /BYTES/k2
+data: "p"/10.000000000,0 -> /<empty>
 data: "p"/6.000000000,0 -> /BYTES/p6
-stats: key_count=11 key_bytes=226 val_count=17 val_bytes=98 range_key_count=10 range_key_bytes=205 range_val_count=18 live_count=3 live_bytes=63 gc_bytes_age=44339
+stats: key_count=11 key_bytes=250 val_count=19 val_bytes=98 range_key_count=8 range_key_bytes=158 range_val_count=14 live_count=3 live_bytes=63 gc_bytes_age=42156
 
 run stats ok
 clear_time_range k=a end=z ts=10 targetTs=6
 ----
 >> clear_time_range k=a end=z ts=10 targetTs=6
-stats: range_key_count=-2 range_key_bytes=-47 range_val_count=-4 live_count=+2 live_bytes=+42 gc_bytes_age=-8123
+stats: key_bytes=-24 val_count=-2 live_count=+2 live_bytes=+42 gc_bytes_age=-5940
 >> at end:
 rangekey: {a-b}/[1.000000000,0=/<empty>]
 rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
@@ -475,47 +477,46 @@ stats: key_count=11 key_bytes=226 val_count=17 val_bytes=98 range_key_count=8 ra
 
 # Range tombstone deletion of times (4-10].
 run stats ok
-del_range_pred k=a end=z ts=10 startTime=4 rangeThreshold=1
+del_range_pred k=a end=z ts=10 startTime=4
 ----
->> del_range_pred k=a end=z ts=10 startTime=4 rangeThreshold=1
-stats: range_key_count=+4 range_key_bytes=+84 range_val_count=+7 live_count=-3 live_bytes=-63 gc_bytes_age=+13550
+>> del_range_pred k=a end=z ts=10 startTime=4
+stats: key_bytes=+36 val_count=+3 live_count=-3 live_bytes=-63 gc_bytes_age=+8910
 >> at end:
 rangekey: {a-b}/[1.000000000,0=/<empty>]
 rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 rangekey: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 rangekey: {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
-rangekey: f{-\x00}/[10.000000000,0=/<empty> 5.000000000,0=/<empty> 3.000000000,0=/<empty>]
-rangekey: {f\x00-h}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
-rangekey: {h-i}/[1.000000000,0=/<empty>]
-rangekey: i{-\x00}/[10.000000000,0=/<empty> 1.000000000,0=/<empty>]
-rangekey: {i\x00-k}/[1.000000000,0=/<empty>]
+rangekey: {f-h}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: {h-k}/[1.000000000,0=/<empty>]
 rangekey: {l-n}/[5.000000000,0=/<empty>]
 rangekey: {n-o}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
-rangekey: p{-\x00}/[10.000000000,0=/<empty>]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
 data: "b"/4.000000000,0 -> /<empty>
 data: "d"/4.000000000,0 -> /BYTES/d4
 data: "d"/2.000000000,0 -> /BYTES/d2
 data: "e"/3.000000000,0 -> /BYTES/e3
+data: "f"/10.000000000,0 -> /<empty>
 data: "f"/6.000000000,0 -> /BYTES/f6
 data: "f"/4.000000000,0 -> /BYTES/f4
 data: "f"/2.000000000,0 -> /BYTES/f2
 data: "g"/4.000000000,0 -> /BYTES/g4
 data: "g"/2.000000000,0 -> /BYTES/g2
 data: "h"/3.000000000,0 -> /BYTES/h3
+data: "i"/10.000000000,0 -> /<empty>
 data: "i"/5.000000000,0 -> /BYTES/i5
 data: "j"/6.000000000,0 -> /<empty>
 data: "j"/2.000000000,0 -> /BYTES/j2
 data: "k"/2.000000000,0 -> /BYTES/k2
+data: "p"/10.000000000,0 -> /<empty>
 data: "p"/6.000000000,0 -> /BYTES/p6
-stats: key_count=11 key_bytes=226 val_count=17 val_bytes=98 range_key_count=12 range_key_bytes=242 range_val_count=21 live_count=2 live_bytes=42 gc_bytes_age=49766
+stats: key_count=11 key_bytes=262 val_count=20 val_bytes=98 range_key_count=8 range_key_bytes=158 range_val_count=14 live_count=2 live_bytes=42 gc_bytes_age=45126
 
 run stats ok
 clear_time_range k=a end=z ts=10 targetTs=6
 ----
 >> clear_time_range k=a end=z ts=10 targetTs=6
-stats: range_key_count=-4 range_key_bytes=-84 range_val_count=-7 live_count=+3 live_bytes=+63 gc_bytes_age=-13550
+stats: key_bytes=-36 val_count=-3 live_count=+3 live_bytes=+63 gc_bytes_age=-8910
 >> at end:
 rangekey: {a-b}/[1.000000000,0=/<empty>]
 rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
@@ -546,47 +547,46 @@ stats: key_count=11 key_bytes=226 val_count=17 val_bytes=98 range_key_count=8 ra
 
 # Range tombstone deletion of times (3-10].
 run stats ok
-del_range_pred k=a end=z ts=10 startTime=3 rangeThreshold=1
+del_range_pred k=a end=z ts=10 startTime=3
 ----
->> del_range_pred k=a end=z ts=10 startTime=3 rangeThreshold=1
-stats: range_key_count=+4 range_key_bytes=+84 range_val_count=+7 live_count=-3 live_bytes=-63 gc_bytes_age=+13550
+>> del_range_pred k=a end=z ts=10 startTime=3
+stats: key_bytes=+36 val_count=+3 live_count=-3 live_bytes=-63 gc_bytes_age=+8910
 >> at end:
 rangekey: {a-b}/[1.000000000,0=/<empty>]
 rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 rangekey: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 rangekey: {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
-rangekey: f{-\x00}/[10.000000000,0=/<empty> 5.000000000,0=/<empty> 3.000000000,0=/<empty>]
-rangekey: {f\x00-h}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
-rangekey: {h-i}/[1.000000000,0=/<empty>]
-rangekey: i{-\x00}/[10.000000000,0=/<empty> 1.000000000,0=/<empty>]
-rangekey: {i\x00-k}/[1.000000000,0=/<empty>]
+rangekey: {f-h}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: {h-k}/[1.000000000,0=/<empty>]
 rangekey: {l-n}/[5.000000000,0=/<empty>]
 rangekey: {n-o}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
-rangekey: p{-\x00}/[10.000000000,0=/<empty>]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
 data: "b"/4.000000000,0 -> /<empty>
 data: "d"/4.000000000,0 -> /BYTES/d4
 data: "d"/2.000000000,0 -> /BYTES/d2
 data: "e"/3.000000000,0 -> /BYTES/e3
+data: "f"/10.000000000,0 -> /<empty>
 data: "f"/6.000000000,0 -> /BYTES/f6
 data: "f"/4.000000000,0 -> /BYTES/f4
 data: "f"/2.000000000,0 -> /BYTES/f2
 data: "g"/4.000000000,0 -> /BYTES/g4
 data: "g"/2.000000000,0 -> /BYTES/g2
 data: "h"/3.000000000,0 -> /BYTES/h3
+data: "i"/10.000000000,0 -> /<empty>
 data: "i"/5.000000000,0 -> /BYTES/i5
 data: "j"/6.000000000,0 -> /<empty>
 data: "j"/2.000000000,0 -> /BYTES/j2
 data: "k"/2.000000000,0 -> /BYTES/k2
+data: "p"/10.000000000,0 -> /<empty>
 data: "p"/6.000000000,0 -> /BYTES/p6
-stats: key_count=11 key_bytes=226 val_count=17 val_bytes=98 range_key_count=12 range_key_bytes=242 range_val_count=21 live_count=2 live_bytes=42 gc_bytes_age=49766
+stats: key_count=11 key_bytes=262 val_count=20 val_bytes=98 range_key_count=8 range_key_bytes=158 range_val_count=14 live_count=2 live_bytes=42 gc_bytes_age=45126
 
 run stats ok
 clear_time_range k=a end=z ts=10 targetTs=6
 ----
 >> clear_time_range k=a end=z ts=10 targetTs=6
-stats: range_key_count=-4 range_key_bytes=-84 range_val_count=-7 live_count=+3 live_bytes=+63 gc_bytes_age=-13550
+stats: key_bytes=-36 val_count=-3 live_count=+3 live_bytes=+63 gc_bytes_age=-8910
 >> at end:
 rangekey: {a-b}/[1.000000000,0=/<empty>]
 rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
@@ -617,45 +617,47 @@ stats: key_count=11 key_bytes=226 val_count=17 val_bytes=98 range_key_count=8 ra
 
 # Range tombstone deletion of times (2-10].
 run stats ok
-del_range_pred k=a end=z ts=10 startTime=2 rangeThreshold=1
+del_range_pred k=a end=z ts=10 startTime=2
 ----
->> del_range_pred k=a end=z ts=10 startTime=2 rangeThreshold=1
-stats: range_key_count=+2 range_key_bytes=+47 range_val_count=+4 live_count=-4 live_bytes=-84 gc_bytes_age=+11860
+>> del_range_pred k=a end=z ts=10 startTime=2
+stats: key_bytes=+48 val_count=+4 live_count=-4 live_bytes=-84 gc_bytes_age=+11880
 >> at end:
 rangekey: {a-b}/[1.000000000,0=/<empty>]
 rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 rangekey: {c-d}/[5.000000000,0=/<empty> 3.000000000,0=/<empty> 1.000000000,0=/<empty>]
 rangekey: {d-f}/[5.000000000,0=/<empty> 1.000000000,0=/<empty>]
-rangekey: {f-h}/[10.000000000,0=/<empty> 5.000000000,0=/<empty> 3.000000000,0=/<empty>]
-rangekey: {h-i\x00}/[10.000000000,0=/<empty> 1.000000000,0=/<empty>]
-rangekey: {i\x00-k}/[1.000000000,0=/<empty>]
+rangekey: {f-h}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
+rangekey: {h-k}/[1.000000000,0=/<empty>]
 rangekey: {l-n}/[5.000000000,0=/<empty>]
 rangekey: {n-o}/[5.000000000,0=/<empty> 3.000000000,0=/<empty>]
-rangekey: p{-\x00}/[10.000000000,0=/<empty>]
 data: "a"/4.000000000,0 -> /<empty>
 data: "a"/2.000000000,0 -> /BYTES/a2
 data: "b"/4.000000000,0 -> /<empty>
 data: "d"/4.000000000,0 -> /BYTES/d4
 data: "d"/2.000000000,0 -> /BYTES/d2
 data: "e"/3.000000000,0 -> /BYTES/e3
+data: "f"/10.000000000,0 -> /<empty>
 data: "f"/6.000000000,0 -> /BYTES/f6
 data: "f"/4.000000000,0 -> /BYTES/f4
 data: "f"/2.000000000,0 -> /BYTES/f2
 data: "g"/4.000000000,0 -> /BYTES/g4
 data: "g"/2.000000000,0 -> /BYTES/g2
+data: "h"/10.000000000,0 -> /<empty>
 data: "h"/3.000000000,0 -> /BYTES/h3
+data: "i"/10.000000000,0 -> /<empty>
 data: "i"/5.000000000,0 -> /BYTES/i5
 data: "j"/6.000000000,0 -> /<empty>
 data: "j"/2.000000000,0 -> /BYTES/j2
 data: "k"/2.000000000,0 -> /BYTES/k2
+data: "p"/10.000000000,0 -> /<empty>
 data: "p"/6.000000000,0 -> /BYTES/p6
-stats: key_count=11 key_bytes=226 val_count=17 val_bytes=98 range_key_count=10 range_key_bytes=205 range_val_count=18 live_count=1 live_bytes=21 gc_bytes_age=48076
+stats: key_count=11 key_bytes=274 val_count=21 val_bytes=98 range_key_count=8 range_key_bytes=158 range_val_count=14 live_count=1 live_bytes=21 gc_bytes_age=48096
 
 run stats ok
 clear_time_range k=a end=z ts=10 targetTs=6
 ----
 >> clear_time_range k=a end=z ts=10 targetTs=6
-stats: range_key_count=-2 range_key_bytes=-47 range_val_count=-4 live_count=+4 live_bytes=+84 gc_bytes_age=-11860
+stats: key_bytes=-48 val_count=-4 live_count=+4 live_bytes=+84 gc_bytes_age=-11880
 >> at end:
 rangekey: {a-b}/[1.000000000,0=/<empty>]
 rangekey: {b-c}/[3.000000000,0=/<empty> 1.000000000,0=/<empty>]

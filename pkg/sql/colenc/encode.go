@@ -23,7 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -42,7 +44,13 @@ type BatchEncoder struct {
 	b coldata.Batch
 	// The destination for KVs.
 	p row.Putter
-	// The map of columns in the input batch to column ids on the table.
+	// insCols are the columns being inserted, in the same order as the vectors
+	// in the input batch. This may include write-only mutation columns that are
+	// not in desc.PublicColumns(), so encodePK must look up column metadata via
+	// insCols rather than PublicColumns when indexing by an insCols ordinal.
+	insCols []catalog.Column
+	// colMap maps a table column ID to its position in insCols (which is also
+	// its vector index in the input batch).
 	colMap catalog.TableColMap
 	// Map of index id to a slice of bools that contain partial index predicates.
 	partialIndexes map[descpb.IndexID][]bool
@@ -50,6 +58,8 @@ type BatchEncoder struct {
 	compositeColumnIDs intsets.Fast
 	// Cache of lastColID to support column delta encoding.
 	lastColIDs []catid.ColumnID
+
+	useCPutsOnNonUniqueIndexes bool
 
 	// Slice of keys we can reuse across each call to Prepare and between each
 	// column family.
@@ -75,6 +85,7 @@ type BatchEncoder struct {
 func MakeEncoder(
 	codec keys.SQLCodec,
 	desc catalog.TableDescriptor,
+	sd *sessiondata.SessionData,
 	sv *settings.Values,
 	b coldata.Batch,
 	insCols []catalog.Column,
@@ -82,11 +93,18 @@ func MakeEncoder(
 	partialIndexes map[descpb.IndexID][]bool,
 	memoryUsageCheck func() error,
 ) BatchEncoder {
-	rh := row.NewRowHelper(codec, desc, desc.WritableNonPrimaryIndexes(), nil /* uniqueWithTombstoneIndexes */, sv, false /*internal*/, metrics)
+	rh := row.NewRowHelper(codec, desc, desc.WritableNonPrimaryIndexes(), nil /* uniqueWithTombstoneIndexes */, sd, sv, metrics)
 	rh.Init()
 	colMap := row.ColIDtoRowIndexFromCols(insCols)
-	return BatchEncoder{rh: &rh, b: b, colMap: colMap,
-		partialIndexes: partialIndexes, memoryUsageCheck: memoryUsageCheck}
+	return BatchEncoder{
+		rh:                         &rh,
+		b:                          b,
+		insCols:                    insCols,
+		colMap:                     colMap,
+		partialIndexes:             partialIndexes,
+		useCPutsOnNonUniqueIndexes: sd.UseCPutsOnNonUniqueIndexes,
+		memoryUsageCheck:           memoryUsageCheck,
+	}
 }
 
 // PrepareBatch encodes a subset of rows from the batch to the given row.Putter.
@@ -114,11 +132,6 @@ func (b *BatchEncoder) PrepareBatch(ctx context.Context, p row.Putter, start, en
 	}
 	for _, ind := range b.rh.TableDesc.WritableNonPrimaryIndexes() {
 		b.resetBuffers()
-		// TODO(cucaroach): COPY doesn't need ForcePut support but the encoder
-		// will need to support it eventually.
-		if ind.ForcePut() {
-			colexecerror.InternalError(errors.AssertionFailedf("vector encoder doesn't support ForcePut yet"))
-		}
 		if err := b.encodeSecondaryIndex(ctx, ind); err != nil {
 			return err
 		}
@@ -236,7 +249,11 @@ func (b *BatchEncoder) encodePK(ctx context.Context, ind catalog.Index) error {
 	keyAndSuffixCols := desc.IndexFetchSpecKeyAndSuffixColumns(ind)
 	keyCols := keyAndSuffixCols[:ind.NumKeyColumns()]
 	families := desc.GetFamilies()
-	fetchedCols := desc.PublicColumns()
+	// fetchedCols must use the same ordinal space as colMap (which is built from
+	// insCols), since we index it with values returned by colMap.Get below. Using
+	// desc.PublicColumns() here would crash whenever insCols includes a
+	// write-only mutation column not present in PublicColumns. See #169583.
+	fetchedCols := b.insCols
 
 	b.setupPrefixes(ind, b.rh.PrimaryIndexKeyPrefix)
 	kys := b.keys
@@ -427,10 +444,15 @@ func (b *BatchEncoder) encodeSecondaryIndex(ctx context.Context, ind catalog.Ind
 
 	// Store nulls we encounter so we can properly make the key unique below.
 	var nulls coldata.Nulls
-	if ind.GetType() == descpb.IndexDescriptor_INVERTED {
+	if ind.GetType() == idxtype.INVERTED {
 		// Since the inverted indexes generate multiple keys per row just handle them
 		// separately.
 		return b.encodeInvertedSecondaryIndex(ctx, ind, kys, b.extraKeys)
+	} else if ind.GetType() == idxtype.VECTOR {
+		// TODO(mw5h, drewk): Implement encoding for vector indexes. This is complicated
+		// by vector indexes needing output from the mutation search operator, which will
+		// need to be plumbed through to the encoder.
+		return errors.AssertionFailedf("vector indexes not supported")
 	} else {
 		keyAndSuffixCols := b.rh.TableDesc.IndexFetchSpecKeyAndSuffixColumns(ind)
 		keyCols := keyAndSuffixCols[:ind.NumKeyColumns()]
@@ -468,6 +490,13 @@ func (b *BatchEncoder) encodeSecondaryIndex(ctx context.Context, ind catalog.Ind
 	return b.checkMemory()
 }
 
+func (b *BatchEncoder) useCPutForSecondary(ind catalog.Index) bool {
+	if ind.ForcePut() {
+		return false
+	}
+	return ind.IsUnique() || b.useCPutsOnNonUniqueIndexes
+}
+
 func (b *BatchEncoder) encodeSecondaryIndexNoFamilies(ind catalog.Index, kys []roachpb.Key) error {
 	for row := 0; row < b.count; row++ {
 		// Elided partial index keys will be empty.
@@ -494,7 +523,11 @@ func (b *BatchEncoder) encodeSecondaryIndexNoFamilies(ind catalog.Index, kys []r
 	if err := b.writeColumnValues(kys, values, ind, cols); err != nil {
 		return err
 	}
-	b.p.InitPutBytes(kys, values)
+	if b.useCPutForSecondary(ind) {
+		b.p.CPutBytesEmpty(kys, values)
+	} else {
+		b.p.PutBytes(kys, values)
+	}
 	return nil
 }
 
@@ -556,9 +589,17 @@ func (b *BatchEncoder) encodeSecondaryIndexWithFamilies(
 		// include encoded primary key columns. For other families,
 		// use the tuple encoding for the value.
 		if familyID == 0 {
-			b.p.InitPutBytes(kys, values)
+			if b.useCPutForSecondary(ind) {
+				b.p.CPutBytesEmpty(kys, values)
+			} else {
+				b.p.PutBytes(kys, values)
+			}
 		} else {
-			b.p.InitPutTuples(kys, values)
+			if b.useCPutForSecondary(ind) {
+				b.p.CPutTuplesEmpty(kys, values)
+			} else {
+				b.p.PutTuples(kys, values)
+			}
 		}
 		if err := b.checkMemory(); err != nil {
 			return err

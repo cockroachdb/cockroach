@@ -1,0 +1,55 @@
+name: "Microbenchmark Build"
+description: "Builds microbenchmarks for a given package and revision."
+inputs:
+  ref:
+    description: "head or base"
+    required: true
+  pkg:
+    description: "test package to build"
+    required: true
+outputs:
+  merge_base:
+    description: "merge base"
+    value: ${{ steps.determine-merge-base.outputs.merge_base }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Copy build script
+      run: cp build/github/microbenchmarks/build.sh ${RUNNER_TEMP}/
+      shell: bash
+    - run: ./build/github/get-engflow-keys.sh
+      shell: bash
+    - run: |
+        echo "FETCH_DEPTH=$(( ${{ github.event.pull_request.commits }} + 1 ))" >> "${GITHUB_ENV}"
+      shell: bash
+    - name: Checkout revision with required depth
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.event.pull_request.head.sha }}
+        fetch-depth: ${{ env.FETCH_DEPTH }}
+    - name: Determine merge base
+      id: determine-merge-base
+      if: inputs.ref == 'base'
+      run: |
+        set -e
+        NUM_COMMITS=${{ github.event.pull_request.commits }}          
+        MERGE_BASE=$(git rev-parse HEAD~${NUM_COMMITS})
+        echo "merge_base=$MERGE_BASE" >> "$GITHUB_OUTPUT"
+      shell: bash
+    - name: Checkout base if needed
+      if: inputs.ref == 'base'
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ steps.determine-merge-base.outputs.merge_base }}
+    - name: Build tests
+      run: ${RUNNER_TEMP}/build.sh
+      shell: bash
+      env:
+        TEST_PKG: ${{ inputs.pkg }}
+    - name: Checkout # required for post job cleanup
+      uses: actions/checkout@v4
+    - name: Clean up
+      run: ./build/github/cleanup-engflow-keys.sh
+      shell: bash
+      if: always()

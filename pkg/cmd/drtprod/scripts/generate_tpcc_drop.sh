@@ -29,8 +29,10 @@ if [ -z "${WORKLOAD_NODES}" ]; then
   exit 1
 fi
 
-PG_URL_N1=$(roachprod pgurl $CLUSTER:1  --external | sed s/\'//g)
-PGURLS=$(roachprod pgurl $CLUSTER --external  | sed s/\'//g)
+export ROACHPROD_DISABLED_PROVIDERS=IBM
+
+PG_URL_N1=$(drtprod pgurl $CLUSTER:1  --external | sed s/\'//g)
+PGURLS=$(drtprod pgurl $CLUSTER --external  | sed s/\'//g)
 
 # Loop through each node
 for NODE in $(seq 1 $WORKLOAD_NODES)
@@ -38,6 +40,7 @@ do
   # Create the workload script
   cat <<EOF >/tmp/tpcc_drop.sh
 #!/usr/bin/env bash
+set -o pipefail
 
 read -r -a PGURLS_ARR <<< "$PGURLS"
 
@@ -63,24 +66,35 @@ while true; do
     ./cockroach workload init tpcc \
         --warehouses=3000 \
         --secure \
-  --concurrency 4 \
+        --concurrency 4 \
         --db cct_tpcc_drop \
-        \$PG_URL_N1 | tee "\$INIT_LOG"
+        "$PG_URL_N1" | tee "\$INIT_LOG"
+    if [ \$? -ne 0 ]; then
+        sleep 20
+        echo ">> tpcc import failed, skipping workload run and retrying"
+        ./cockroach sql --url "${PG_URL_N1}" -e "DROP DATABASE IF EXISTS cct_tpcc_drop CASCADE;"
+        sleep 3600
+        continue
+    fi
+    rm "\$INIT_LOG"
     echo ">> Dropping cct_tpcc_drop_old if it exists"
     ./cockroach sql --url "${PG_URL_N1}" -e "DROP DATABASE cct_tpcc_drop_old CASCADE;"
     sleep 5
-    echo ">> Starting tpcc workload for 1h"
+    echo ">> Starting tpcc workload for 24h"
     ./cockroach workload run tpcc \
         --warehouses 3000 \
         --active-warehouses 1000 \
         --db cct_tpcc_drop \
         --secure \
-  --prometheus-port 2113 \
+        --prometheus-port 2113 \
         --ramp 5m \
         --display-every 5s \
-        --duration 60m \
-  --tolerate-errors \
-   "\${PGURLS_ARR[@]}" | tee "\$RUN_LOG"
+        --duration 24h \
+        --tolerate-errors \
+        "\${PGURLS_ARR[@]}" | tee "\$RUN_LOG"
+    if [ \$? -eq 0 ]; then
+        rm "\$RUN_LOG"
+    fi
 
     echo ">> Renaming to cct_tpcc_drop_old"
     ./cockroach sql --url "${PG_URL_N1}" -e "ALTER DATABASE cct_tpcc_drop RENAME TO cct_tpcc_drop_old;"
@@ -90,9 +104,9 @@ done
 EOF
 
   # Upload the script to the workload cluster
-  roachprod put $WORKLOAD_CLUSTER:$NODE /tmp/tpcc_drop.sh
-  roachprod ssh $WORKLOAD_CLUSTER:$NODE -- "chmod +x tpcc_drop.sh"
+  drtprod put $WORKLOAD_CLUSTER:$NODE /tmp/tpcc_drop.sh
+  drtprod ssh $WORKLOAD_CLUSTER:$NODE -- "chmod +x tpcc_drop.sh"
   if [ "$execute_script" = "true" ]; then
-    roachprod run "${WORKLOAD_CLUSTER}":1 -- "sudo systemd-run --unit tpcc_drop --same-dir --uid \$(id -u) --gid \$(id -g) bash ${pwd}/tpcc_drop.sh"
+    drtprod run "${WORKLOAD_CLUSTER}":1 -- "sudo systemd-run --unit tpcc_drop --same-dir --uid \$(id -u) --gid \$(id -g) bash ${pwd}/tpcc_drop.sh"
   fi
 done

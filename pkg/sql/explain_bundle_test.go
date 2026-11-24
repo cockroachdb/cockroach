@@ -23,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/pgtest"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -49,6 +51,7 @@ func TestExplainAnalyzeDebugWithTxnRetries(t *testing.T) {
 				TestingRequestFilter: retryFilter,
 			},
 		},
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(155944),
 	})
 	defer srv.Stopper().Stop(ctx)
 	r := sqlutils.MakeSQLRunner(godb)
@@ -56,7 +59,7 @@ func TestExplainAnalyzeDebugWithTxnRetries(t *testing.T) {
 CREATE SCHEMA s;
 CREATE TABLE s.a (a INT PRIMARY KEY);`)
 
-	base := "statement.sql trace.json trace.txt trace-jaeger.json env.sql"
+	base := "statement.sql trace.json trace.txt trace-jaeger.json env.sql descriptors.json schema_changes.txt"
 	plans := "schema.sql opt.txt opt-v.txt opt-vv.txt plan.txt"
 
 	// Set a small chunk size to test splitting into chunks. The bundle files are
@@ -76,14 +79,20 @@ func TestExplainAnalyzeDebug(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	srv, godb, _ := serverutils.StartServer(t, base.TestServerArgs{Insecure: true})
+	srv, godb, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Insecure:          true,
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(155944),
+	})
 	defer srv.Stopper().Stop(ctx)
 	r := sqlutils.MakeSQLRunner(godb)
 	r.Exec(t, `CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT UNIQUE);
 CREATE SCHEMA s;
-CREATE TABLE s.a (a INT PRIMARY KEY);`)
+CREATE TABLE s.a (a INT PRIMARY KEY);
+CREATE USER testuser;
+GRANT ALL ON abc TO testuser;`)
+	testuserR := sqlutils.MakeSQLRunner(srv.ApplicationLayer().SQLConn(t, serverutils.User("testuser")))
 
-	base := "statement.sql trace.json trace.txt trace-jaeger.json env.sql"
+	base := "statement.sql trace.json trace.txt trace-jaeger.json env.sql descriptors.json schema_changes.txt"
 	plans := "schema.sql opt.txt opt-v.txt opt-vv.txt plan.txt"
 
 	// Set a small chunk size to test splitting into chunks. The bundle files are
@@ -106,6 +115,42 @@ CREATE TABLE s.a (a INT PRIMARY KEY);`)
 		checkBundle(
 			t, fmt.Sprint(rows), "public.abc", nil, false, /* expectErrors */
 			base, plans, "stats-defaultdb.public.abc.sql", "distsql.html vec.txt vec-v.txt",
+		)
+	})
+
+	// descriptors.json should contain the descriptor JSON for each schema
+	// object used by the statement, and schema_changes.txt should list
+	// recent schema-change jobs against those descriptors. ALTER TABLE
+	// and CREATE INDEX both go through the declarative schema changer,
+	// which drains payload.DescriptorIDs on completion - so this test
+	// also exercises PrintSchemaChanges's description-text fallback.
+	t.Run("descriptors and schema changes", func(t *testing.T) {
+		r.Exec(t, `CREATE TABLE abc_descs (a INT PRIMARY KEY, b INT);
+ALTER TABLE abc_descs ADD COLUMN c STRING DEFAULT 'x';
+CREATE INDEX abc_descs_c_idx ON abc_descs (c);`)
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM abc_descs WHERE c = 'x'")
+		contentCheck := func(name, contents string) error {
+			switch name {
+			case "descriptors.json":
+				if !strings.Contains(contents, `"name": "abc_descs"`) {
+					return errors.Errorf(
+						"descriptors.json missing abc_descs descriptor, got:\n%s", contents)
+				}
+			case "schema_changes.txt":
+				if !strings.Contains(contents, "ADD COLUMN") {
+					return errors.Errorf(
+						"schema_changes.txt missing ADD COLUMN entry, got:\n%s", contents)
+				}
+				if !strings.Contains(contents, "abc_descs_c_idx") {
+					return errors.Errorf(
+						"schema_changes.txt missing CREATE INDEX entry, got:\n%s", contents)
+				}
+			}
+			return nil
+		}
+		checkBundle(
+			t, fmt.Sprint(rows), "public.abc_descs", contentCheck, false, /* expectErrors */
+			base, plans, "stats-defaultdb.public.abc_descs.sql", "distsql.html vec.txt vec-v.txt",
 		)
 	})
 
@@ -174,7 +219,9 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 
 	t.Run("basic when tracing already enabled", func(t *testing.T) {
 		r.Exec(t, "SET CLUSTER SETTING sql.trace.txn.enable_threshold='100ms';")
+		r.Exec(t, "SET CLUSTER SETTING sql.trace.txn.sample_rate='1.0';")
 		defer r.Exec(t, "SET CLUSTER SETTING sql.trace.txn.enable_threshold='0ms';")
+		defer r.Exec(t, "SET CLUSTER SETTING sql.trace.txn.sample_rate='0.0';")
 		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM abc WHERE c=1")
 		checkBundle(
 			t, fmt.Sprint(rows), "public.abc", nil, false, /* expectErrors */
@@ -204,9 +251,7 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 			{"intervalstyle", "iso_8601"},
 			{"large_full_scan_rows", "2000"},
 			{"locality_optimized_partitioned_index_scan", "off"},
-			// TODO(#129956): Enable this once non-default NULLS ordering with
-			// subqueries is allowed in tests.
-			// {"null_ordered_last", "on"},
+			{"null_ordered_last", "on"},
 			{"on_update_rehome_row_enabled", "off"},
 			{"opt_split_scan_limit", "1000"},
 			{"optimizer_use_histograms", "off"},
@@ -222,6 +267,7 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 			{"testing_optimizer_random_seed", "123"},
 			{"timezone", "+8"},
 			{"unconstrained_non_covering_index_scan_enabled", "on"},
+			{"default_transaction_isolation", "'read committed'"},
 		}
 		for _, tc := range testcases {
 			t.Run(tc.sessionVar, func(t *testing.T) {
@@ -234,6 +280,9 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 							reg := regexp.MustCompile(fmt.Sprintf("SET %s.*-- default value", tc.sessionVar))
 							if reg.FindString(contents) == "" {
 								return errors.Errorf("could not find 'SET %s' in env.sql", tc.sessionVar)
+							}
+							if _, err := parser.Parse(contents); err != nil {
+								return errors.Wrap(err, "could not parse env.sql")
 							}
 						}
 						return nil
@@ -275,34 +324,377 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 		}
 	})
 
-	t.Run("foreign keys", func(t *testing.T) {
+	t.Run("foreign keys, mutations", func(t *testing.T) {
+		// Use the following hierarchy of tables:
+		//
+		//               parent
+		//            ?/       \
+		//         child1     child2
+		//          /            \
+		//     grandchild1     grandchild2
+		//         /
+		//   greatgrandchild1
+		//
+		// Presence of and type of the FK from 'child1' to 'parent' changes
+		// between test cases.
 		r.Exec(t, "CREATE TABLE parent (pk INT PRIMARY KEY, v INT);")
-		r.Exec(t, "CREATE TABLE child (pk INT PRIMARY KEY, fk INT REFERENCES parent(pk));")
-		contentCheck := func(name, contents string) error {
-			if name == "schema.sql" {
-				for _, tableName := range []string{"parent", "child"} {
-					if regexp.MustCompile("CREATE TABLE defaultdb.public."+tableName).FindString(contents) == "" {
+		r.Exec(t, "CREATE TABLE child1 (pk INT PRIMARY KEY, fk INT);")
+		r.Exec(t, "CREATE TABLE child2 (pk INT PRIMARY KEY, fk INT REFERENCES parent(pk));")
+		r.Exec(t, "CREATE TABLE grandchild1 (pk INT PRIMARY KEY, fk INT REFERENCES child1(pk));")
+		r.Exec(t, "CREATE TABLE grandchild2 (pk INT PRIMARY KEY, fk INT REFERENCES child2(pk));")
+		r.Exec(t, "CREATE TABLE greatgrandchild1 (pk INT PRIMARY KEY, fk INT REFERENCES grandchild1(pk));")
+		addChildFKDefault := "ALTER TABLE child1 ADD CONSTRAINT fk FOREIGN KEY(fk) REFERENCES parent(pk);"
+		addChildFKCascade := "ALTER TABLE child1 ADD CONSTRAINT fk FOREIGN KEY(fk) REFERENCES parent(pk) ON DELETE CASCADE ON UPDATE CASCADE;"
+		dropChildFK := "ALTER TABLE child1 DROP CONSTRAINT fk;"
+		insertIntoParent := "INSERT INTO parent VALUES (1, 1)"
+		getExpectedFiles := func(tables []string, numPostqueries int) string {
+			var sb strings.Builder
+			// We always have the main query.
+			if numPostqueries > 0 {
+				sb.WriteString("distsql-1-main-query.html vec-1-main-query-v.txt vec-1-main-query.txt")
+			} else {
+				sb.WriteString("distsql.html vec-v.txt vec.txt")
+			}
+			// Each postquery gets these files too.
+			for i := 0; i < numPostqueries; i++ {
+				sb.WriteString(fmt.Sprintf(" distsql-%[1]d-postquery.html vec-%[1]d-postquery-v.txt vec-%[1]d-postquery.txt", i+2))
+			}
+			// Every table gets a stats file.
+			for _, table := range tables {
+				sb.WriteString(fmt.Sprintf(" stats-defaultdb.public.%s.sql", table))
+			}
+			return sb.String()
+		}
+
+		for _, tc := range []struct {
+			name          string
+			query         string
+			setup         []string
+			cleanup       []string
+			tableName     string
+			expectedFiles string
+		}{
+			// Modifying 'child1', i.e. the origin table. Main focus in these
+			// test cases is on whether the referenced table 'parent' is
+			// included or not. We also make sure to not pull in 'child2' which
+			// is a "sibling".
+			{
+				// Need to perform FK check only on 'grandchild1'. Because
+				// 'grandchild1' is directly referenced by the metadata, we also
+				// pull in 'greatgrandchild1' which isn't actually needed.
+				name:          "DELETE FROM child",
+				query:         "DELETE FROM child1 WHERE true",
+				setup:         []string{addChildFKDefault},
+				cleanup:       []string{dropChildFK},
+				tableName:     "child1",
+				expectedFiles: getExpectedFiles([]string{"child1", "grandchild1", "greatgrandchild1"}, 1 /* numPostqueries */),
+			},
+			{
+				// With no FK, inserting into 'child1' shouldn't pull in
+				// 'parent'.
+				name:          "INSERT INTO child, no FK",
+				query:         "INSERT INTO child1 VALUES (1, 1)",
+				setup:         []string{insertIntoParent},
+				cleanup:       []string{"DELETE FROM child1 WHERE true", "DELETE FROM parent WHERE true"},
+				tableName:     "child1",
+				expectedFiles: getExpectedFiles([]string{"child1"}, 0 /* numPostqueries */),
+			},
+			{
+				// With FK, inserting into 'child1' should pull in 'parent'.
+				name:  "INSERT INTO child",
+				query: "INSERT INTO child1 VALUES (1, 1)",
+				// Disable insert fast path so that the FK check got planned as
+				// a postquery.
+				setup:         []string{addChildFKDefault, insertIntoParent, "SET enable_insert_fast_path = false;"},
+				cleanup:       []string{dropChildFK, "DELETE FROM child1 WHERE true", "DELETE FROM parent WHERE true"},
+				tableName:     "child1",
+				expectedFiles: getExpectedFiles([]string{"parent", "child1"}, 1 /* numPostqueries */),
+			},
+			{
+				// 'child1' and 'grandchild1' are directly referenced by the
+				// metadata. We also pull in 'greatgrandchild1' which isn't
+				// actually needed. Additionally, even though this particular
+				// UPDATE doesn't modify 'child1.fk', we still pull in 'parent'.
+				name:          "UPDATE child",
+				query:         "UPDATE child1 SET pk = pk + 1 WHERE true",
+				setup:         []string{addChildFKDefault},
+				cleanup:       []string{dropChildFK},
+				tableName:     "child1",
+				expectedFiles: getExpectedFiles([]string{"parent", "child1", "grandchild1", "greatgrandchild1"}, 1 /* numPostqueries */),
+			},
+
+			// Modifying 'parent', i.e. the referenced table.
+			{
+				// Need to perform FK check only on 'child2'. Because 'child2'
+				// is directly referenced by the metadata, we also pull in
+				// 'grandchild2' which isn't actually needed.
+				name:          "DELETE FROM parent, no FK",
+				query:         "DELETE FROM parent WHERE true",
+				setup:         []string{},
+				cleanup:       []string{},
+				tableName:     "parent",
+				expectedFiles: getExpectedFiles([]string{"parent", "child2", "grandchild2"}, 1 /* numPostqueries */),
+			},
+			{
+				// Need to perform FK check on 'child1' and 'child2'. Because
+				// both tables are directly referenced by the metadata, we also
+				// pull in 'grandchild1' and 'grandchild2' which aren't actually
+				// needed.
+				name:          "DELETE FROM parent, default FK",
+				query:         "DELETE FROM parent WHERE true",
+				setup:         []string{addChildFKDefault},
+				cleanup:       []string{dropChildFK},
+				tableName:     "parent",
+				expectedFiles: getExpectedFiles([]string{"parent", "child1", "child2", "grandchild1", "grandchild2"}, 2 /* numPostqueries */),
+			},
+			{
+				// Need to perform FK check on 'child1' and 'child2'. Because
+				// 'child2' is directly referenced by the metadata, we also pull
+				// in 'grandchild2' which isn't actually needed.
+				name:      "DELETE FROM parent, short-circuited CASCADE FK",
+				query:     "DELETE FROM parent WHERE true",
+				setup:     []string{addChildFKCascade},
+				cleanup:   []string{dropChildFK},
+				tableName: "parent",
+				// Note that here the CASCADE is short-circuited, so we omit its
+				// postquery.
+				expectedFiles: getExpectedFiles([]string{"parent", "child1", "child2", "grandchild1", "grandchild2"}, 1 /* numPostqueries */),
+			},
+			{
+				// Same as above but the CASCADE is actually executed, so we get
+				// a CASCADE postquery as well as the FK check for
+				// 'grandchild1'.
+				name:          "DELETE FROM parent, CASCADE FK",
+				query:         "DELETE FROM parent WHERE true",
+				setup:         []string{addChildFKCascade, insertIntoParent},
+				cleanup:       []string{dropChildFK},
+				tableName:     "parent",
+				expectedFiles: getExpectedFiles([]string{"parent", "child1", "child2", "grandchild1", "grandchild2"}, 3 /* numPostqueries */),
+			},
+			{
+				// Inserting into 'parent' shouldn't pull in any other tables.
+				name:          "INSERT INTO parent",
+				query:         "INSERT INTO parent VALUES (1, 1)",
+				setup:         []string{addChildFKDefault},
+				cleanup:       []string{dropChildFK, "DELETE FROM parent WHERE true"},
+				tableName:     "parent",
+				expectedFiles: getExpectedFiles([]string{"parent"}, 0 /* numPostqueries */),
+			},
+			{
+				// Need to perform FK check only on 'child2'. Because 'child2'
+				// is directly referenced by the metadata, we also pull in
+				// 'grandchild2' which isn't actually needed.
+				name:          "UPDATE parent, no FK",
+				query:         "UPDATE parent SET pk = pk + 1 WHERE true",
+				setup:         []string{},
+				cleanup:       []string{},
+				tableName:     "parent",
+				expectedFiles: getExpectedFiles([]string{"parent", "child2", "grandchild2"}, 1 /* numPostqueries */),
+			},
+			{
+				// Need to perform FK check on 'child1' and 'child2'. Because
+				// both tables are directly referenced by the metadata, we also
+				// pull in 'grandchild1' and 'grandchild2' which aren't actually
+				// needed.
+				name:          "UPDATE parent, default FK",
+				query:         "UPDATE parent SET pk = pk + 1 WHERE true",
+				setup:         []string{addChildFKDefault},
+				cleanup:       []string{dropChildFK},
+				tableName:     "parent",
+				expectedFiles: getExpectedFiles([]string{"parent", "child1", "child2", "grandchild1", "grandchild2"}, 2 /* numPostqueries */),
+			},
+			{
+				// Need to perform FK check on 'child1' and 'child2'. Because
+				// 'child2' is directly referenced by the metadata, we also pull
+				// in 'grandchild2' which isn't actually needed.
+				name:      "UPDATE parent, short-circuited CASCADE FK",
+				query:     "UPDATE parent SET pk = pk + 1 WHERE true",
+				setup:     []string{addChildFKCascade},
+				cleanup:   []string{dropChildFK},
+				tableName: "parent",
+				// Note that here the CASCADE is short-circuited, so we omit its
+				// postquery.
+				expectedFiles: getExpectedFiles([]string{"parent", "child1", "child2", "grandchild1", "grandchild2"}, 1 /* numPostqueries */),
+			},
+			{
+				// Same as above but the CASCADE is actually executed, so we get
+				// a CASCADE postquery as well as the FK check for
+				// 'grandchild1'.
+				name:          "UPDATE parent, CASCADE FK",
+				query:         "UPDATE parent SET pk = pk + 1 WHERE true",
+				setup:         []string{addChildFKCascade, insertIntoParent},
+				cleanup:       []string{dropChildFK, "DELETE FROM parent WHERE true"},
+				tableName:     "parent",
+				expectedFiles: getExpectedFiles([]string{"parent", "child1", "child2", "grandchild1", "grandchild2"}, 3 /* numPostqueries */),
+			},
+			{
+				// When we have an FK cycle, we still want to pull in most
+				// tables.
+				name:      "DELETE FROM parent, FK cycle",
+				query:     "DELETE FROM parent WHERE true",
+				setup:     []string{addChildFKCascade, "ALTER TABLE parent ADD CONSTRAINT fk FOREIGN KEY (v) REFERENCES child1(pk) ON DELETE CASCADE"},
+				cleanup:   []string{dropChildFK, "ALTER TABLE parent DROP CONSTRAINT fk"},
+				tableName: "parent",
+				// Note that here the CASCADE is short-circuited, so we omit its
+				// postquery.
+				expectedFiles: getExpectedFiles([]string{"parent", "child1", "child2", "grandchild1", "grandchild2"}, 1 /* numPostqueries */),
+			},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				defer func() {
+					for _, q := range tc.cleanup {
+						r.Exec(t, q)
+					}
+				}()
+				for _, q := range tc.setup {
+					r.Exec(t, q)
+				}
+				rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) "+tc.query)
+				// Note that in this subtest we have nil contentCheck because we
+				// rely on the presence of stats files to indicate which tables
+				// are included. We also assume that necessary FKs are included
+				// in the schema.sql file too.
+				checkBundle(
+					t, fmt.Sprint(rows), tc.tableName, nil /* contentCheck */, false, /* expectErrors */
+					base, plans, tc.expectedFiles,
+				)
+			})
+		}
+	})
+
+	t.Run("foreign keys, read-only", func(t *testing.T) {
+		tableNames := []string{"parent", "child1", "child2", "grandchild1", "grandchild2"}
+		r.Exec(t, "DROP TABLE IF EXISTS greatgrandchild1;")
+		r.Exec(t, "DROP TABLE IF EXISTS grandchild2;")
+		r.Exec(t, "DROP TABLE IF EXISTS grandchild1;")
+		r.Exec(t, "DROP TABLE IF EXISTS child2;")
+		r.Exec(t, "DROP TABLE IF EXISTS child1;")
+		r.Exec(t, "DROP TABLE IF EXISTS parent;")
+		r.Exec(t, "CREATE TABLE parent (pk INT PRIMARY KEY, v INT);")
+		r.Exec(t, "CREATE TABLE child1 (pk INT PRIMARY KEY, fk INT REFERENCES parent(pk));")
+		r.Exec(t, "CREATE TABLE child2 (pk INT PRIMARY KEY, fk INT REFERENCES parent(pk));")
+		r.Exec(t, "CREATE TABLE grandchild1 (pk INT PRIMARY KEY, fk INT REFERENCES child1(pk));")
+		r.Exec(t, "CREATE TABLE grandchild2 (pk INT PRIMARY KEY, fk INT REFERENCES child2(pk));")
+		getFK := func(table string) string {
+			if table == "parent" {
+				return ""
+			}
+			return fmt.Sprintf("ALTER TABLE defaultdb.public.%s ADD CONSTRAINT", table)
+		}
+		// Only the target tables should be included since we perform a
+		// read-only stmt.
+		getContentCheckFn := func(targetTableNames, addFKs, skipFKs []string) func(name, contents string) error {
+			return func(name, contents string) error {
+				if name == "schema.sql" {
+					for _, targetTableName := range targetTableNames {
+						if regexp.MustCompile("USE defaultdb;\nCREATE TABLE public."+targetTableName).FindString(contents) == "" {
+							return errors.Newf(
+								"could not find target table 'USE defaultdb;\nCREATE TABLE public.%s' in schema.sql:\n%s", targetTableName, contents)
+						}
+					}
+					for _, tableName := range tableNames {
+						var isTarget bool
+						for _, targetTableName := range targetTableNames {
+							if targetTableName == tableName {
+								isTarget = true
+								break
+							}
+						}
+						if isTarget {
+							continue
+						}
+						if regexp.MustCompile("USE defaultdb;\nCREATE TABLE public."+tableName).FindString(contents) != "" {
+							return errors.Newf(
+								"unexpectedly found non-target table 'USE defaultdb;\nCREATE TABLE public.%s' in schema.sql:\n%s", tableName, contents)
+						}
+					}
+					// Sanity-check that all FKs in the output are either in the
+					// "added" or "skipped" set.
+					numFoundFKs := strings.Count(contents, "FOREIGN KEY")
+					if numFoundFKs != len(addFKs)+len(skipFKs) {
 						return errors.Newf(
-							"could not find 'CREATE TABLE defaultdb.public.%s' in schema.sql:\n%s", tableName, contents)
+							"found %d FKs total whereas %d added and %d skipped were passed\n%s",
+							numFoundFKs, len(addFKs), len(skipFKs), contents,
+						)
+					}
+					// Now check that all expected added and skipped FKs are
+					// present.
+					for _, addFK := range addFKs {
+						if !strings.Contains(contents, addFK) {
+							return errors.Newf("didn't find added FK: %s\n%s", addFK, contents)
+						} else if strings.Contains(contents, "-- "+addFK) {
+							return errors.Newf("added FK shouldn't be commented out: %s\n%s", addFK, contents)
+						}
+					}
+					for _, skipFK := range skipFKs {
+						if !strings.Contains(contents, "-- "+skipFK) {
+							return errors.Newf("didn't find skipped FK in commented out form: %s\n%s", skipFK, contents)
+						}
 					}
 				}
+				return nil
 			}
-			return nil
 		}
-		for _, tableName := range []string{"parent", "child"} {
-			rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM "+tableName)
+		// First read each table separately.
+		for _, tableName := range tableNames {
+			targetTableName := tableName
+			// No FKs should be added, but 1 FK might be skipped.
+			var skipFKs []string
+			if skipFK := getFK(tableName); skipFK != "" {
+				skipFKs = []string{skipFK}
+			}
+			contentCheck := getContentCheckFn([]string{targetTableName}, nil /* addFKS */, skipFKs)
+			rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM "+targetTableName)
 			checkBundle(
-				t, fmt.Sprint(rows), "child", contentCheck, false, /* expectErrors */
-				base, plans, "stats-defaultdb.public.parent.sql", "stats-defaultdb.public.child.sql",
+				t, fmt.Sprint(rows), targetTableName, contentCheck, false, /* expectErrors */
+				base, plans, fmt.Sprintf("stats-defaultdb.public.%s.sql", targetTableName),
 				"distsql.html vec.txt vec-v.txt",
 			)
 		}
+		// Now read different combinations of tables which will influence
+		// whether ADD CONSTRAINT ... FOREIGN KEY statements are added or
+		// skipped.
+		contentCheck := getContentCheckFn([]string{"parent", "child1"}, []string{getFK("child1")}, nil)
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM parent, child1")
+		checkBundle(
+			t, fmt.Sprint(rows), "parent", contentCheck, false, /* expectErrors */
+			base, plans, "stats-defaultdb.public.parent.sql stats-defaultdb.public.child1.sql distsql.html vec.txt vec-v.txt",
+		)
+
+		// There should be no added FKs since there isn't a direct link between
+		// the tables.
+		contentCheck = getContentCheckFn([]string{"parent", "grandchild1"}, nil /* addFKS */, []string{getFK("grandchild1")})
+		rows = r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM parent, grandchild1")
+		checkBundle(
+			t, fmt.Sprint(rows), "parent", contentCheck, false, /* expectErrors */
+			base, plans, "stats-defaultdb.public.parent.sql stats-defaultdb.public.grandchild1.sql distsql.html vec.txt vec-v.txt",
+		)
+
+		// Note that we skip the FK from grandchild1 since the FK referenced
+		// table isn't being read.
+		contentCheck = getContentCheckFn([]string{"parent", "child2", "grandchild1"}, []string{getFK("child2")}, []string{getFK("grandchild1")})
+		rows = r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM parent, child2, grandchild1")
+		checkBundle(
+			t, fmt.Sprint(rows), "parent", contentCheck, false, /* expectErrors */
+			base, plans, "stats-defaultdb.public.parent.sql stats-defaultdb.public.child2.sql stats-defaultdb.public.grandchild1.sql distsql.html vec.txt vec-v.txt",
+		)
+
+		contentCheck = getContentCheckFn(
+			[]string{"parent", "child1", "grandchild1"},
+			[]string{getFK("child1"), getFK("grandchild1")},
+			nil, /* skipFKs */
+		)
+		rows = r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM parent, child1, grandchild1")
+		checkBundle(
+			t, fmt.Sprint(rows), "parent", contentCheck, false, /* expectErrors */
+			base, plans, "stats-defaultdb.public.parent.sql stats-defaultdb.public.child1.sql stats-defaultdb.public.grandchild1.sql distsql.html vec.txt vec-v.txt",
+		)
 	})
 
 	// getBundleThroughBuiltin is a helper function that returns an url to
 	// download a stmt bundle that was collected in response to a diagnostics
 	// request inserted by the builtin.
-	getBundleThroughBuiltin := func(fprint, query, planGist string, redacted bool) string {
+	getBundleThroughBuiltin := func(fprint, query, planGist string, redacted, underTestUser bool) string {
 		// Delete all old diagnostics to make this test easier.
 		r.Exec(t, "DELETE FROM system.statement_diagnostics WHERE true")
 
@@ -313,7 +705,11 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 		require.True(t, inserted)
 
 		// Now actually execute the query so that the bundle is collected.
-		r.Exec(t, query)
+		if underTestUser {
+			testuserR.Exec(t, query)
+		} else {
+			r.Exec(t, query)
+		}
 
 		// Get ID of our bundle.
 		var id int
@@ -340,7 +736,7 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 					query := "SELECT max(cardno), test_redact() FROM pterosaur WHERE cardholder = 'pterodactyl';"
 					// Collect a bundle in response to a diagnostics request
 					// inserted by the builtin.
-					url = getBundleThroughBuiltin(fprint, query, "" /* planGist */, true /* redacted */)
+					url = getBundleThroughBuiltin(fprint, query, "" /* planGist */, true /* redacted */, false /* underTestUser */)
 				} else {
 					rows := r.QueryStr(t,
 						"EXPLAIN ANALYZE (DEBUG, REDACT) SELECT max(cardno), test_redact() FROM pterosaur WHERE cardholder = 'pterodactyl'",
@@ -358,7 +754,7 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 						}
 						return nil
 					}, false, /* expectErrors */
-					plans, "statement.sql stats-defaultdb.public.pterosaur.sql env.sql vec.txt vec-v.txt",
+					plans, "statement.sql stats-defaultdb.public.pterosaur.sql env.sql vec.txt vec-v.txt descriptors.json schema_changes.txt",
 				)
 			})
 		}
@@ -383,6 +779,29 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 				return nil
 			}, false, /* expectErrors */
 			base, plans, "distsql.html vec.txt vec-v.txt",
+		)
+	})
+
+	t.Run("types_arr", func(t *testing.T) {
+		r.Exec(t, "CREATE TYPE test_type3 AS ENUM ('hello','world');")
+		r.Exec(t, "CREATE TYPE test_type4 AS (x INT, y INT);")
+		r.Exec(t, "CREATE TABLE arrtypt (k INT PRIMARY KEY, c test_type3[], d test_type4[]);")
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM arrtypt;")
+		checkBundle(
+			t, fmt.Sprint(rows), "test_type3", func(name, contents string) error {
+				if name == "schema.sql" {
+					reg := regexp.MustCompile(`CREATE TYPE .*\.test_type3`)
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find definition for 'test_type3' type in schema.sql")
+					}
+					reg = regexp.MustCompile(`CREATE TYPE .*\.test_type4`)
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find definition for 'test_type4' type in schema.sql")
+					}
+				}
+				return nil
+			}, false, /* expectErrors */
+			base, plans, "distsql.html vec.txt vec-v.txt stats-defaultdb.public.arrtypt.sql",
 		)
 	})
 
@@ -428,6 +847,139 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 			"distsql.html vec-v.txt vec.txt")
 	})
 
+	// Regression test for #142041: triggers, their functions, and tables they
+	// modify should be included in the statement bundle.
+	t.Run("triggers", func(t *testing.T) {
+		r.Exec(t, "CREATE TABLE trigger_t1 (k INT PRIMARY KEY, v INT);")
+		r.Exec(t, "CREATE TABLE trigger_t2 (k INT PRIMARY KEY, v INT);")
+		r.Exec(t, `CREATE FUNCTION trigger_f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+			BEGIN
+				INSERT INTO trigger_t2 VALUES ((NEW).k, (NEW).v);
+				RETURN NEW;
+			END
+		$$;`)
+		r.Exec(t, "CREATE TRIGGER trigger_foo AFTER INSERT ON trigger_t1 FOR EACH ROW EXECUTE FUNCTION trigger_f();")
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) INSERT INTO trigger_t1 VALUES (1, 10);")
+		checkBundle(
+			t, fmt.Sprint(rows), "trigger_t1", func(name, contents string) error {
+				if name == "schema.sql" {
+					for _, expected := range []string{
+						"CREATE FUNCTION public.trigger_f()",
+						"CREATE TABLE public.trigger_t1",
+						"CREATE TABLE public.trigger_t2",
+						"CREATE TRIGGER trigger_foo AFTER INSERT ON public.trigger_t1"} {
+						if !strings.Contains(contents, expected) {
+							return errors.Errorf("could not find %q in schema.sql:\n%s", expected, contents)
+						}
+					}
+				}
+				return nil
+			}, false /* expectErrors */, base, plans,
+			"distsql-1-main-query.html distsql-2-postquery.html vec-1-main-query-v.txt vec-1-main-query.txt vec-2-postquery-v.txt vec-2-postquery.txt stats-defaultdb.public.trigger_t1.sql stats-defaultdb.public.trigger_t2.sql",
+		)
+	})
+
+	// Test that trigger function bodies are redacted in bundles.
+	t.Run("triggers_redact", func(t *testing.T) {
+		r.Exec(t, "CREATE TABLE trigger_redact_t1 (k INT PRIMARY KEY, v INT);")
+		r.Exec(t, "CREATE TABLE trigger_redact_t2 (k INT PRIMARY KEY, v INT);")
+		r.Exec(t, `CREATE FUNCTION trigger_redact_f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+			BEGIN
+				INSERT INTO trigger_redact_t2 VALUES ((NEW).k, 5555555555554444);
+				RETURN NEW;
+			END
+		$$;`)
+		r.Exec(t, "CREATE TRIGGER trigger_redact_foo AFTER INSERT ON trigger_redact_t1 FOR EACH ROW EXECUTE FUNCTION trigger_redact_f();")
+		rows := r.QueryStr(t,
+			"EXPLAIN ANALYZE (DEBUG, REDACT) INSERT INTO trigger_redact_t1 VALUES (1, 10)",
+		)
+		url := getBundleDownloadURL(t, fmt.Sprint(rows))
+		verboten := []string{"5555555555554444", fmt.Sprintf("%x", 5555555555554444)}
+		checkBundleContents(
+			t, url, "", func(name, contents string) error {
+				lowerContents := strings.ToLower(contents)
+				for _, pii := range verboten {
+					if strings.Contains(lowerContents, pii) {
+						return errors.Newf("file %s contained %q:\n%s\n", name, pii, contents)
+					}
+				}
+				return nil
+			}, false, /* expectErrors */
+			plans, "statement.sql stats-defaultdb.public.trigger_redact_t1.sql stats-defaultdb.public.trigger_redact_t2.sql env.sql vec-1-main-query-v.txt vec-1-main-query.txt vec-2-postquery-v.txt vec-2-postquery.txt descriptors.json schema_changes.txt",
+		)
+	})
+
+	// Test that UDTs referenced by trigger functions are included in bundles.
+	t.Run("triggers_udt_deps", func(t *testing.T) {
+		r.Exec(t, "CREATE TYPE trigger_color AS ENUM ('red', 'blue');")
+		r.Exec(t, "CREATE TABLE trigger_udt_t1 (k INT PRIMARY KEY, v trigger_color);")
+		r.Exec(t, "CREATE TABLE trigger_udt_t2 (k INT PRIMARY KEY, v trigger_color);")
+		r.Exec(t, `CREATE FUNCTION trigger_udt_f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+			BEGIN
+				INSERT INTO trigger_udt_t2 VALUES ((NEW).k, (NEW).v);
+				RETURN NEW;
+			END
+		$$;`)
+		r.Exec(t, "CREATE TRIGGER trigger_udt_foo AFTER INSERT ON trigger_udt_t1 FOR EACH ROW EXECUTE FUNCTION trigger_udt_f();")
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) INSERT INTO trigger_udt_t1 VALUES (1, 'red');")
+		checkBundle(
+			t, fmt.Sprint(rows), "trigger_udt_t1", func(name, contents string) error {
+				if name == "schema.sql" {
+					for _, expected := range []string{
+						"CREATE TYPE public.trigger_color",
+						"CREATE FUNCTION public.trigger_udt_f()",
+						"CREATE TABLE public.trigger_udt_t1",
+						"CREATE TABLE public.trigger_udt_t2",
+					} {
+						if !strings.Contains(contents, expected) {
+							return errors.Errorf("could not find %q in schema.sql:\n%s", expected, contents)
+						}
+					}
+				}
+				return nil
+			}, false /* expectErrors */, base, plans,
+			"distsql-1-main-query.html distsql-2-postquery.html vec-1-main-query-v.txt vec-1-main-query.txt vec-2-postquery-v.txt vec-2-postquery.txt stats-defaultdb.public.trigger_udt_t1.sql stats-defaultdb.public.trigger_udt_t2.sql",
+		)
+	})
+
+	// Test that routines called by trigger functions (via DependsOnRoutines)
+	// are included in bundles.
+	t.Run("triggers_routine_deps", func(t *testing.T) {
+		r.Exec(t, "CREATE TABLE trigger_rdep_t1 (k INT PRIMARY KEY, v INT);")
+		r.Exec(t, "CREATE TABLE trigger_rdep_t2 (k INT PRIMARY KEY, v INT);")
+		r.Exec(t, `CREATE FUNCTION trigger_helper(a INT, b INT) RETURNS INT LANGUAGE SQL AS $$
+			INSERT INTO trigger_rdep_t2 VALUES (a, b);
+			SELECT a;
+		$$;`)
+		r.Exec(t, `CREATE FUNCTION trigger_rdep_f() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
+			DECLARE
+				unused INT;
+			BEGIN
+				SELECT trigger_helper((NEW).k, (NEW).v) INTO unused;
+				RETURN NEW;
+			END
+		$$;`)
+		r.Exec(t, "CREATE TRIGGER trigger_rdep_foo AFTER INSERT ON trigger_rdep_t1 FOR EACH ROW EXECUTE FUNCTION trigger_rdep_f();")
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) INSERT INTO trigger_rdep_t1 VALUES (1, 10);")
+		checkBundle(
+			t, fmt.Sprint(rows), "trigger_rdep_t1", func(name, contents string) error {
+				if name == "schema.sql" {
+					for _, expected := range []string{
+						"CREATE FUNCTION public.trigger_helper",
+						"CREATE FUNCTION public.trigger_rdep_f()",
+						"CREATE TABLE public.trigger_rdep_t1",
+					} {
+						if !strings.Contains(contents, expected) {
+							return errors.Errorf("could not find %q in schema.sql:\n%s", expected, contents)
+						}
+					}
+				}
+				return nil
+			}, false /* expectErrors */, base, plans,
+			"distsql-1-main-query.html distsql-2-postquery.html vec-1-main-query-v.txt vec-1-main-query.txt vec-2-postquery-v.txt vec-2-postquery.txt stats-defaultdb.public.trigger_rdep_t1.sql",
+		)
+	})
+
 	t.Run("different schema UDF", func(t *testing.T) {
 		r.Exec(t, "CREATE FUNCTION foo() RETURNS INT LANGUAGE SQL AS 'SELECT count(*) FROM abc, s.a';")
 		r.Exec(t, "CREATE FUNCTION s.foo() RETURNS INT LANGUAGE SQL AS 'SELECT count(*) FROM abc, s.a';")
@@ -435,15 +987,15 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 		checkBundle(
 			t, fmt.Sprint(rows), "s.foo", func(name, contents string) error {
 				if name == "schema.sql" {
-					reg := regexp.MustCompile("s.foo")
+					reg := regexp.MustCompile(`s\.foo`)
 					if reg.FindString(contents) == "" {
 						return errors.Errorf("could not find definition for 's.foo' function in schema.sql")
 					}
-					reg = regexp.MustCompile("^foo")
+					reg = regexp.MustCompile(`^CREATE FUNCTION public\.foo`)
 					if reg.FindString(contents) != "" {
 						return errors.Errorf("found irrelevant function 'foo' in schema.sql")
 					}
-					reg = regexp.MustCompile("s.a")
+					reg = regexp.MustCompile(`s\.a`)
 					if reg.FindString(contents) == "" {
 						return errors.Errorf("could not find definition for relation 's.a' in schema.sql")
 					}
@@ -466,15 +1018,15 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 		checkBundle(
 			t, fmt.Sprint(rows), "s.bar", func(name, contents string) error {
 				if name == "schema.sql" {
-					reg := regexp.MustCompile("s.bar")
+					reg := regexp.MustCompile(`s\.bar`)
 					if reg.FindString(contents) == "" {
 						return errors.Errorf("could not find definition for 's.bar' procedure in schema.sql")
 					}
-					reg = regexp.MustCompile("^bar")
+					reg = regexp.MustCompile(`^CREATE PROCEDURE public\.bar`)
 					if reg.FindString(contents) != "" {
 						return errors.Errorf("Found irrelevant procedure 'bar' in schema.sql")
 					}
-					reg = regexp.MustCompile("s.a")
+					reg = regexp.MustCompile(`s\.a`)
 					if reg.FindString(contents) == "" {
 						return errors.Errorf("could not find definition for relation 's.a' in schema.sql")
 					}
@@ -556,17 +1108,36 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 		r.Exec(t, "CREATE TABLE db2.s2.t2 (pk INT PRIMARY KEY);")
 		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM db1.t1, db2.s2.t2;")
 		checkBundle(
-			t, fmt.Sprint(rows), "db1.public.t1", nil, false, /* expectErrors */
+			t, fmt.Sprint(rows), "public.t1", nil, false, /* expectErrors */
 			base, plans, "distsql.html vec.txt vec-v.txt stats-db1.public.t1.sql stats-db2.s2.t2.sql",
 		)
 		checkBundle(
-			t, fmt.Sprint(rows), "db2.s2.t2", nil, false, /* expectErrors */
+			t, fmt.Sprint(rows), "s2.t2", nil, false, /* expectErrors */
 			base, plans, "distsql.html vec.txt vec-v.txt stats-db1.public.t1.sql stats-db2.s2.t2.sql",
+		)
+	})
+
+	t.Run("multiple databases and special characters", func(t *testing.T) {
+		r.Exec(t, `CREATE DATABASE "db""name";`)
+		r.Exec(t, `CREATE DATABASE "db''Name";`)
+		r.Exec(t, `CREATE SCHEMA "db""name"."sc""name"`)
+		r.Exec(t, `CREATE SCHEMA "db''Name"."sc''name"`)
+		r.Exec(t, `CREATE TABLE "db""name"."sc""name".t (pk INT PRIMARY KEY);`)
+		r.Exec(t, `CREATE TABLE "db''Name"."sc''name".t (pk INT PRIMARY KEY);`)
+		rows := r.QueryStr(t, `EXPLAIN ANALYZE (DEBUG) SELECT * FROM "db""name"."sc""name".t, "db''Name"."sc''name".t;`)
+		checkBundle(
+			t, fmt.Sprint(rows), `"sc""name".t`, nil, false, /* expectErrors */
+			base, plans, `distsql.html vec.txt vec-v.txt stats-_db__name_._sc__name_.t.sql stats-_db__name_._sc__name_.t_2.sql`,
+		)
+		checkBundle(
+			t, fmt.Sprint(rows), `"sc''name".t`, nil, false, /* expectErrors */
+			base, plans, `distsql.html vec.txt vec-v.txt stats-_db__name_._sc__name_.t.sql stats-_db__name_._sc__name_.t_2.sql`,
 		)
 	})
 
 	t.Run("plan-gist matching", func(t *testing.T) {
 		r.Exec(t, "CREATE TABLE gist (k INT PRIMARY KEY);")
+		r.Exec(t, "INSERT INTO gist SELECT generate_series(1, 10)")
 		const fprint = `SELECT * FROM gist`
 
 		// Come up with a target gist.
@@ -574,32 +1145,228 @@ CREATE TABLE users(id UUID DEFAULT gen_random_uuid() PRIMARY KEY, promo_id INT R
 		var gist string
 		row.Scan(&gist)
 
-		url := getBundleThroughBuiltin(fprint, fprint, gist, false /* redacted */)
+		url := getBundleThroughBuiltin(fprint, fprint, gist, false /* redacted */, false /* underTestUser */)
 		checkBundleContents(
 			t, url, "gist", func(name, contents string) error {
 				if name != "plan.txt" {
 					return nil
 				}
-				// Add a new line at the beginning for cleaner formatting in the
-				// test.
-				contents = "\n" + contents
-				// The gist appears to be somewhat non-deterministic (but its
-				// decoding stays the same), so we populate the expected
-				// contents based on the particular gist.
-				expected := fmt.Sprintf(`
--- plan is incomplete due to gist matching: %s
-
-• scan
-  table: gist@gist_pkey
-  spans: FULL SCAN`, gist)
-				if contents != expected {
-					return errors.Newf("unexpected contents of plan.txn\nexpected:\n%s\ngot:\n%s", expected, contents)
+				// We don't hard-code the full expected output here so that it
+				// doesn't need an update every time we change EXPLAIN ANALYZE
+				// output format. Instead, we only assert that a few lines are
+				// present in the output.
+				for _, expectedLine := range []string{
+					"• scan",
+					"  sql nodes: n1",
+					"  actual row count: 10",
+					"  table: gist@gist_pkey",
+					"  spans: FULL SCAN",
+				} {
+					if !strings.Contains(contents, expectedLine) {
+						return errors.Newf("didn't find %q in the output: %v", expectedLine, contents)
+					}
 				}
 				return nil
 			}, false, /* expectErrors */
 			base, plans, "distsql.html vec.txt vec-v.txt stats-defaultdb.public.gist.sql",
 		)
 	})
+
+	t.Run("row-level security", func(t *testing.T) {
+		r.Exec(t, "CREATE TABLE rls1 (pk INT PRIMARY KEY, u TEXT, val SMALLINT)")
+		alterTableDDL := "ALTER TABLE public.rls1 ENABLE ROW LEVEL SECURITY, FORCE ROW LEVEL SECURITY"
+		r.Exec(t, alterTableDDL)
+		r.Exec(t, "CREATE POLICY policy1 ON rls1 USING (u = 'hal')")
+		r.Exec(t, "CREATE USER rls_user")
+		r.Exec(t, "GRANT SYSTEM VIEWCLUSTERSETTING TO rls_user")
+		r.Exec(t, "GRANT SYSTEM VIEWSYSTEMTABLE TO rls_user")
+		r.Exec(t, "ALTER TABLE rls1 OWNER TO rls_user")
+		r.Exec(t, "SET ROLE rls_user")
+		defer r.Exec(t, "SET ROLE root")
+
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG,VERBOSE) SELECT * FROM rls1")
+		checkBundle(
+			t, fmt.Sprint(rows), "public.rls1", func(name, contents string) error {
+				if name == "env.sql" {
+					if !strings.Contains(contents, `-- User: rls_user`) {
+						return errors.Errorf("could not find user 'rls_user' in env.sql:\n%s", contents)
+					}
+				}
+				if name == "plan.txt" {
+					if !strings.Contains(contents, `policies: policy1`) {
+						return errors.Errorf("could not find policy information in the plan.txt:\n%s", contents)
+					}
+					if !strings.Contains(contents, "filter: ((u)[string] = ('hal')[string])[bool]") {
+						return errors.Errorf("could not find injected filter from policy in the plan.txt:\n%s", contents)
+					}
+				}
+				if name == "schema.sql" {
+					for _, ddl := range []string{alterTableDDL, "CREATE POLICY policy1 ON public.rls1"} {
+						if !strings.Contains(contents, ddl) {
+							return errors.Errorf("could not find ddl %q in schema.sql:\n%s", ddl, contents)
+						}
+					}
+				}
+				return nil
+			}, false, /* expectErrors */
+			base, plans, "stats-defaultdb.public.rls1.sql", "distsql.html vec.txt vec-v.txt",
+		)
+	})
+
+	t.Run("schema for udt", func(t *testing.T) {
+		r.Exec(t, `CREATE SCHEMA "schema.1"`)
+		r.Exec(t, `CREATE TYPE "schema.1".test_type1 AS ENUM ('hello','world')`)
+		r.Exec(t, `CREATE TABLE udt_schema_t (x INT PRIMARY KEY, y "schema.1".test_type1)`)
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM udt_schema_t")
+		checkBundle(
+			t, fmt.Sprint(rows), "udt_schema_t", func(name, contents string) error {
+				if name == "schema.sql" {
+					reg := regexp.MustCompile(`CREATE SCHEMA IF NOT EXISTS \"schema.1\"`)
+					if reg.FindString(contents) == "" {
+						return errors.Errorf(`could not find CREATE SCHEMA for \"schema.1\" in schema.sql`)
+					}
+				}
+				return nil
+			}, false, /* expectErrors */
+			base, plans, "distsql.html vec.txt vec-v.txt stats-defaultdb.public.udt_schema_t.sql",
+		)
+	})
+
+	t.Run("schema for udf", func(t *testing.T) {
+		r.Exec(t, `CREATE SCHEMA "schema.2"`)
+		r.Exec(t, `CREATE FUNCTION "schema.2".r1() RETURNS INT LANGUAGE SQL AS 'SELECT 1'`)
+		rows := r.QueryStr(t, `EXPLAIN ANALYZE (DEBUG) SELECT "schema.2".r1()`)
+		checkBundle(
+			t, fmt.Sprint(rows), "t", func(name, contents string) error {
+				if name == "schema.sql" {
+					reg := regexp.MustCompile(`CREATE SCHEMA IF NOT EXISTS \"schema.2\"`)
+					if reg.FindString(contents) == "" {
+						return errors.Errorf(`could not find CREATE SCHEMA for \"schema.2\" in schema.sql`)
+					}
+				}
+				return nil
+			}, false, /* expectErrors */
+			base, plans, "distsql.html vec.txt vec-v.txt",
+		)
+	})
+
+	t.Run("schema with unique chars", func(t *testing.T) {
+		r.Exec(t, `CREATE SCHEMA "schema.3"`)
+		r.Exec(t, `CREATE TABLE "schema.3"."op.81" (X INT)`)
+		rows := r.QueryStr(t, `EXPLAIN ANALYZE (DEBUG) SELECT * FROM "schema.3"."op.81"`)
+		checkBundle(
+			t, fmt.Sprint(rows), `"op.81"`, func(name, contents string) error {
+				if name == "schema.sql" {
+					reg := regexp.MustCompile(`CREATE SCHEMA "schema.3"`)
+					if reg.FindString(contents) == "" {
+						return errors.Errorf(`could not find CREATE SCHEMA for \"schema.3\" in schema.sql`)
+					}
+				}
+				return nil
+			}, false, /* expectErrors */
+			base, plans, "distsql.html vec.txt vec-v.txt stats-defaultdb._schema.3_._op.81_.sql",
+		)
+	})
+
+	t.Run("statement hints", func(t *testing.T) {
+		r.Exec(t, "CREATE TABLE table161829(x INT PRIMARY KEY, y INT, z STRING)")
+		r.Exec(t, "CREATE INDEX xy161829 ON table161829 (x, y)")
+		r.Exec(t, "CREATE INDEX y161829 ON table161829 (y)")
+		r.Exec(t, "CREATE INDEX xz161829 ON table161829 (x, z)")
+		r.Exec(t, `SELECT information_schema.crdb_rewrite_inline_hints('SELECT * FROM table161829 WHERE y = 10', 'SELECT * FROM table161829@primary WHERE y = 10')`)
+		r.Exec(t, `SELECT information_schema.crdb_rewrite_inline_hints('SELECT * FROM table161829 WHERE y = 10', 'SELECT * FROM table161829@xy161829 WHERE y = 10')`)
+		r.Exec(t, `SELECT information_schema.crdb_rewrite_inline_hints('SELECT * FROM table161829 WHERE y = 10', 'SELECT * FROM table161829@y161829 WHERE y = 10')`)
+
+		rows := r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM table161829 WHERE y = 10")
+		checkBundle(
+			t, fmt.Sprint(rows), "table161829", func(name, contents string) error {
+				if name == "schema.sql" {
+					reg := regexp.MustCompile(`crdb_rewrite_inline_hints\(.*\@primary.*\n.*crdb_rewrite_inline_hints.*\@xy161829.*\n.*crdb_rewrite_inline_hints.*\@y161829`)
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find full crdb_rewrite_inline_hints in schema.sql")
+					}
+				}
+				return nil
+			}, false, /* expectErrors */
+			base, plans, "distsql.html vec.txt vec-v.txt stats-defaultdb.public.table161829.sql",
+		)
+
+		// Bundle for statements that share the same fingerprint should all see the same hints.
+		rows = r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM table161829 WHERE y = 100")
+		checkBundle(
+			t, fmt.Sprint(rows), "table161829", func(name, contents string) error {
+				if name == "schema.sql" {
+					reg := regexp.MustCompile(`crdb_rewrite_inline_hints\(.*\@primary.*\n.*crdb_rewrite_inline_hints.*\@xy161829.*\n.*crdb_rewrite_inline_hints.*\@y161829`)
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find full crdb_rewrite_inline_hints in schema.sql")
+					}
+				}
+				return nil
+			}, false, /* expectErrors */
+			base, plans, "distsql.html vec.txt vec-v.txt stats-defaultdb.public.table161829.sql",
+		)
+
+		// Test that the stmt argument must have its single quotes escaped.
+		r.Exec(t, `SELECT information_schema.crdb_rewrite_inline_hints('SELECT * FROM table161829 WHERE z = ''hello''', 'SELECT * FROM table161829@xz161829 WHERE z = ''hello''')`)
+		rows = r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM table161829 WHERE z = 'hello'")
+		checkBundle(
+			t, fmt.Sprint(rows), "table161829", func(name, contents string) error {
+				if name == "schema.sql" {
+					reg := regexp.MustCompile(`crdb_rewrite_inline_hints\(e\'SELECT \* FROM table161829 WHERE z = \\'hello\\'\'`)
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find full crdb_rewrite_inline_hints in schema.sql")
+					}
+				}
+				return nil
+			}, false, /* expectErrors */
+			base, plans, "distsql.html vec.txt vec-v.txt stats-defaultdb.public.table161829.sql",
+		)
+
+		// Test session variable hints appear in the bundle's schema.sql.
+		r.Exec(t, `SELECT information_schema.crdb_set_session_variable_hint('SELECT * FROM table161829 WHERE y = 10', 'distsql', 'on')`)
+		rows = r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM table161829 WHERE y = 10")
+		checkBundle(
+			t, fmt.Sprint(rows), "table161829", func(name, contents string) error {
+				if name == "schema.sql" {
+					reg := regexp.MustCompile(`crdb_set_session_variable_hint\(`)
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find crdb_set_session_variable_hint in schema.sql")
+					}
+				}
+				return nil
+			}, false, /* expectErrors */
+			base, plans, "distsql.html vec.txt vec-v.txt stats-defaultdb.public.table161829.sql",
+		)
+
+		// Test database-scoped hints include the database arg in the bundle.
+		r.Exec(t, `SELECT information_schema.crdb_set_session_variable_hint('SELECT * FROM table161829 WHERE y = 10', 'distsql', 'on', 'defaultdb')`)
+		rows = r.QueryStr(t, "EXPLAIN ANALYZE (DEBUG) SELECT * FROM table161829 WHERE y = 10")
+		checkBundle(
+			t, fmt.Sprint(rows), "table161829", func(name, contents string) error {
+				if name == "schema.sql" {
+					reg := regexp.MustCompile(`crdb_set_session_variable_hint\(.*'distsql'.*'defaultdb'\)`)
+					if reg.FindString(contents) == "" {
+						return errors.Errorf("could not find database-scoped crdb_set_session_variable_hint in schema.sql")
+					}
+				}
+				return nil
+			}, false, /* expectErrors */
+			base, plans, "distsql.html vec-v.txt vec.txt stats-defaultdb.public.table161829.sql",
+		)
+	})
+
+	// TODO(yuzefovich): figure out why this test occasionally fails under
+	// stress (i.e. it seems that no bundle is collected altogether).
+	//t.Run("under different users", func(t *testing.T) {
+	//	const fprint = `SELECT * FROM abc`
+	//	for _, underTestUser := range []bool{false, true} {
+	//		url := getBundleThroughBuiltin(fprint, fprint, "" /* planGist */, false /* redacted */, underTestUser)
+	//		checkBundleContents(
+	//			t, url, "public.abc", nil, false, /* expectErrors */
+	//			base, plans, "stats-defaultdb.public.abc.sql", "distsql.html vec.txt vec-v.txt",
+	//		)
+	//	}
+	//})
 }
 
 func getBundleDownloadURL(t *testing.T, text string) string {
@@ -624,7 +1391,9 @@ func findBundleDownloadURL(t *testing.T, runner *sqlutils.SQLRunner, id int) str
 	return urlTemplate[:prefixLength] + "/" + strconv.Itoa(id)
 }
 
-func downloadBundle(t *testing.T, url string, dest io.Writer) {
+func downloadAndUnzipBundle(t *testing.T, url string) *zip.Reader {
+
+	// Download the zip to a BytesBuffer.
 	httpClient := httputil.NewClientWithTimeout(30 * time.Second)
 	// Download the zip to a BytesBuffer.
 	resp, err := httpClient.Get(context.Background(), url)
@@ -632,13 +1401,8 @@ func downloadBundle(t *testing.T, url string, dest io.Writer) {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
-	_, _ = io.Copy(dest, resp.Body)
-}
-
-func downloadAndUnzipBundle(t *testing.T, url string) *zip.Reader {
-	// Download the zip to a BytesBuffer.
 	var buf bytes.Buffer
-	downloadBundle(t, url, &buf)
+	_, _ = io.Copy(&buf, resp.Body)
 
 	unzip, err := zip.NewReader(bytes.NewReader(buf.Bytes()), int64(buf.Len()))
 	if err != nil {
@@ -666,8 +1430,8 @@ func readUnzippedFile(t *testing.T, f *zip.File) string {
 // arbitrary number of strings; each string contains one or more filenames
 // separated by a space.
 // - tableName: if non-empty, checkBundle asserts that the substring equal to
-// tableName is present in schema.sql. It doesn't have to be a fully qualified
-// name, but that is encouraged.
+// tableName is present in schema.sql. It is expected to be either
+// schema-qualified or just the table name.
 // - expectErrors: if set, indicates that non-critical errors might have
 // occurred during the bundle collection and shouldn't fail the test.
 func checkBundle(
@@ -695,7 +1459,6 @@ func checkBundleContents(
 	var files []string
 	foundSchema := false
 	for _, f := range unzip.File {
-		t.Logf("found file: %s", f.Name)
 		if f.UncompressedSize64 == 0 {
 			t.Fatalf("file %s is empty", f.Name)
 		}
@@ -751,7 +1514,8 @@ func TestExplainClientTime(t *testing.T) {
 
 	ctx := context.Background()
 	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-		Insecure: true,
+		Insecure:          true,
+		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(155944),
 	})
 	defer srv.Stopper().Stop(ctx)
 
@@ -913,7 +1677,7 @@ func TestExplainBundleEnv(t *testing.T) {
 	)
 	defer cleanup()
 	p := internalPlanner.(*planner)
-	c := makeStmtEnvCollector(ctx, p, s.InternalExecutor().(*InternalExecutor))
+	c := makeStmtEnvCollector(ctx, p, s.InternalExecutor().(*InternalExecutor), "" /* requesterUsername */)
 
 	var sb strings.Builder
 	require.NoError(t, c.PrintSessionSettings(&sb, &s.ClusterSettings().SV, true /* all */))
@@ -922,7 +1686,7 @@ func TestExplainBundleEnv(t *testing.T) {
 		_, err := sqlDB.ExecContext(ctx, line)
 		if err != nil {
 			words := strings.Split(line, " ")
-			t.Fatalf("%v: probably need to add %q into 'sessionVarNeedsQuotes' map", err, words[1])
+			t.Fatalf("%s\n%v: probably need to add %q into 'sessionVarNeedsEscaping' map", line, err, words[1])
 		}
 	}
 
@@ -930,6 +1694,21 @@ func TestExplainBundleEnv(t *testing.T) {
 	require.NoError(t, c.PrintClusterSettings(&sb, true /* all */))
 	vars = strings.Split(sb.String(), "\n")
 	for _, line := range vars {
+		if strings.Contains(line, "unsafe") {
+			continue
+		}
+		if srv.StartedDefaultTestTenant() {
+			if strings.HasPrefix(line, "SET CLUSTER SETTING") {
+				name := strings.Split(strings.TrimPrefix(line, "SET CLUSTER SETTING "), " = ")[0]
+				sv, ok, _ := settings.LookupForLocalAccess(settings.SettingName(name), false /* forSystemTenant */)
+				require.True(t, ok)
+				if sv.Class() != settings.ApplicationLevel {
+					// Ignore cluster settings that cannot be set within the
+					// tenant.
+					continue
+				}
+			}
+		}
 		_, err := sqlDB.ExecContext(ctx, line)
 		if err != nil {
 			t.Fatalf("unexpectedly couldn't execute %s: %v", line, err)

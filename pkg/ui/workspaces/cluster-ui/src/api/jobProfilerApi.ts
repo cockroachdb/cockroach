@@ -80,7 +80,7 @@ export function collectExecutionDetails(
   };
 
   return executeInternalSql<CollectExecutionDetailsResponse>(req).then(res => {
-    // If request succeeded but query failed, throw error (caught by saga/cacheDataReducer).
+    // If request succeeded but query failed, throw error.
     if (res.error) {
       throw res.error;
     }

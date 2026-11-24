@@ -44,7 +44,7 @@ export interface SessionInfo {
   session: ISession;
 }
 
-export class SessionsSortedTable extends SortedTable<SessionInfo> {}
+export const SessionsSortedTable = SortedTable<SessionInfo>;
 
 export function byteArrayToUuid(array: Uint8Array): string {
   const hexDigits: string[] = [];
@@ -253,6 +253,13 @@ export function makeSessionsColumns(
       className: cx("cl-table__col-session"),
       cell: session => session.session.application_name,
       sort: session => session.session.application_name,
+    },
+    {
+      name: "isolationLevel",
+      title: statisticsTableTitles.isolationLevel(statType),
+      className: cx("cl-table__col-session"),
+      cell: session => session.session.default_isolation_level || "N/A",
+      sort: session => session.session.default_isolation_level,
     },
     {
       name: "actions",

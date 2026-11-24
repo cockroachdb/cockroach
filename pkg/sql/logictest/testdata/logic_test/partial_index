@@ -1,3 +1,4 @@
+# LogicTest: !local-prepared
 #### Partial Indexes
 
 statement ok
@@ -94,7 +95,7 @@ CREATE INDEX error ON t5 (a) WHERE t4.a = 1
 
 # Dequalify table references.
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE t6 (
     a INT,
     INDEX (a) WHERE a > 0,
@@ -110,6 +111,7 @@ CREATE INDEX t6i1 ON t6 (a) WHERE a > 6;
 CREATE INDEX t6i2 ON t6 (a) WHERE t6.a > 7;
 CREATE INDEX t6i3 ON t6 (a DESC) WHERE test.t6.a > 8;
 
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t6
 ----
@@ -126,8 +128,28 @@ t6  CREATE TABLE public.t6 (
       INDEX t6i1 (a ASC) WHERE a > 6:::INT8,
       INDEX t6i2 (a ASC) WHERE a > 7:::INT8,
       INDEX t6i3 (a DESC) WHERE a > 8:::INT8
-    )
+    );
 
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE t6
+----
+t6  CREATE TABLE public.t6 (
+      a INT8 NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT t6_pkey PRIMARY KEY (rowid ASC),
+      INDEX t6_a_idx (a ASC) WHERE a > 0:::INT8,
+      INDEX t6_a_idx1 (a ASC) WHERE a > 1:::INT8,
+      INDEX t6_a_idx2 (a DESC) WHERE a > 2:::INT8,
+      UNIQUE INDEX t6_a_key (a ASC) WHERE a > 3:::INT8,
+      UNIQUE INDEX t6_a_key1 (a ASC) WHERE a > 4:::INT8,
+      UNIQUE INDEX t6_a_key2 (a DESC) WHERE a > 5:::INT8,
+      INDEX t6i1 (a ASC) WHERE a > 6:::INT8,
+      INDEX t6i2 (a ASC) WHERE a > 7:::INT8,
+      INDEX t6i3 (a DESC) WHERE a > 8:::INT8
+    ) WITH (schema_locked = true);
+
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t6 WITH REDACT
 ----
@@ -144,13 +166,33 @@ t6  CREATE TABLE public.t6 (
       INDEX t6i1 (a ASC) WHERE a > ‹×›:::INT8,
       INDEX t6i2 (a ASC) WHERE a > ‹×›:::INT8,
       INDEX t6i3 (a DESC) WHERE a > ‹×›:::INT8
-    )
+    );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE t6 WITH REDACT
+----
+t6  CREATE TABLE public.t6 (
+      a INT8 NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT t6_pkey PRIMARY KEY (rowid ASC),
+      INDEX t6_a_idx (a ASC) WHERE a > ‹×›:::INT8,
+      INDEX t6_a_idx1 (a ASC) WHERE a > ‹×›:::INT8,
+      INDEX t6_a_idx2 (a DESC) WHERE a > ‹×›:::INT8,
+      UNIQUE INDEX t6_a_key (a ASC) WHERE a > ‹×›:::INT8,
+      UNIQUE INDEX t6_a_key1 (a ASC) WHERE a > ‹×›:::INT8,
+      UNIQUE INDEX t6_a_key2 (a DESC) WHERE a > ‹×›:::INT8,
+      INDEX t6i1 (a ASC) WHERE a > ‹×›:::INT8,
+      INDEX t6i2 (a ASC) WHERE a > ‹×›:::INT8,
+      INDEX t6i3 (a DESC) WHERE a > ‹×›:::INT8
+    ) WITH (schema_locked = true);
 
 # Renaming a column updates the index predicates.
 
 statement ok
 ALTER TABLE t6 RENAME COLUMN a TO b
 
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t6
 ----
@@ -167,13 +209,33 @@ t6  CREATE TABLE public.t6 (
       INDEX t6i1 (b ASC) WHERE b > 6:::INT8,
       INDEX t6i2 (b ASC) WHERE b > 7:::INT8,
       INDEX t6i3 (b DESC) WHERE b > 8:::INT8
-    )
+    );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE t6
+----
+t6  CREATE TABLE public.t6 (
+      b INT8 NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT t6_pkey PRIMARY KEY (rowid ASC),
+      INDEX t6_a_idx (b ASC) WHERE b > 0:::INT8,
+      INDEX t6_a_idx1 (b ASC) WHERE b > 1:::INT8,
+      INDEX t6_a_idx2 (b DESC) WHERE b > 2:::INT8,
+      UNIQUE INDEX t6_a_key (b ASC) WHERE b > 3:::INT8,
+      UNIQUE INDEX t6_a_key1 (b ASC) WHERE b > 4:::INT8,
+      UNIQUE INDEX t6_a_key2 (b DESC) WHERE b > 5:::INT8,
+      INDEX t6i1 (b ASC) WHERE b > 6:::INT8,
+      INDEX t6i2 (b ASC) WHERE b > 7:::INT8,
+      INDEX t6i3 (b DESC) WHERE b > 8:::INT8
+    ) WITH (schema_locked = true);
 
 # Renaming a table keeps the index predicates intact.
 
 statement ok
 ALTER TABLE t6 RENAME TO t7
 
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t7
 ----
@@ -190,7 +252,26 @@ t7  CREATE TABLE public.t7 (
       INDEX t6i1 (b ASC) WHERE b > 6:::INT8,
       INDEX t6i2 (b ASC) WHERE b > 7:::INT8,
       INDEX t6i3 (b DESC) WHERE b > 8:::INT8
-    )
+    );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE t7
+----
+t7  CREATE TABLE public.t7 (
+      b INT8 NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT t6_pkey PRIMARY KEY (rowid ASC),
+      INDEX t6_a_idx (b ASC) WHERE b > 0:::INT8,
+      INDEX t6_a_idx1 (b ASC) WHERE b > 1:::INT8,
+      INDEX t6_a_idx2 (b DESC) WHERE b > 2:::INT8,
+      UNIQUE INDEX t6_a_key (b ASC) WHERE b > 3:::INT8,
+      UNIQUE INDEX t6_a_key1 (b ASC) WHERE b > 4:::INT8,
+      UNIQUE INDEX t6_a_key2 (b DESC) WHERE b > 5:::INT8,
+      INDEX t6i1 (b ASC) WHERE b > 6:::INT8,
+      INDEX t6i2 (b ASC) WHERE b > 7:::INT8,
+      INDEX t6i3 (b DESC) WHERE b > 8:::INT8
+    ) WITH (schema_locked = true);
 
 # Dropping a column referenced in the predicate drops the index.
 
@@ -208,6 +289,7 @@ CREATE TABLE t8 (
 statement error cannot drop column "c" because it is referenced by partial index "t8_a_idx1"\nHINT: drop the partial index first, then drop the column
 ALTER TABLE t8 DROP COLUMN c
 
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t8
 ----
@@ -220,7 +302,22 @@ t8  CREATE TABLE public.t8 (
       INDEX t8_a_idx (a ASC) WHERE b > 0:::INT8,
       INDEX t8_a_idx1 (a ASC) WHERE c = 'foo':::STRING,
       FAMILY fam_0_a_b_c_rowid (a, b, c, rowid)
-    )
+    );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE t8
+----
+t8  CREATE TABLE public.t8 (
+      a INT8 NULL,
+      b INT8 NULL,
+      c STRING NULL,
+      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+      CONSTRAINT t8_pkey PRIMARY KEY (rowid ASC),
+      INDEX t8_a_idx (a ASC) WHERE b > 0:::INT8,
+      INDEX t8_a_idx1 (a ASC) WHERE c = 'foo':::STRING,
+      FAMILY fam_0_a_b_c_rowid (a, b, c, rowid)
+    ) WITH (schema_locked = true);
 
 # CREATE TABLE LIKE ... INCLUDING INDEXES copies partial index predicate
 # expressions to the new table.
@@ -231,6 +328,7 @@ CREATE TABLE t9 (a INT, b INT, INDEX (a) WHERE b > 1)
 statement ok
 CREATE TABLE t10 (LIKE t9 INCLUDING INDEXES)
 
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE t10
 ----
@@ -240,7 +338,20 @@ t10  CREATE TABLE public.t10 (
        rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
        CONSTRAINT t10_pkey PRIMARY KEY (rowid ASC),
        INDEX t9_a_idx (a ASC) WHERE b > 1:::INT8
-     )
+     );
+
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE t10
+----
+t10  CREATE TABLE public.t10 (
+       a INT8 NULL,
+       b INT8 NULL,
+       rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+       CONSTRAINT t10_pkey PRIMARY KEY (rowid ASC),
+       INDEX t9_a_idx (a ASC) WHERE b > 1:::INT8
+     ) WITH (schema_locked = true);
 
 # SHOW CONSTRAINTS includes partial index predicate of UNIQUE partial indexes.
 
@@ -253,10 +364,11 @@ CREATE UNIQUE INDEX t11_b_key ON t11 (b) WHERE a > 0
 query TTTTB colnames,nosort
 SHOW CONSTRAINTS FROM t11
 ----
-table_name  constraint_name  constraint_type  details                       validated
-t11         t11_a_key        UNIQUE           UNIQUE (a ASC) WHERE (b > 0)  true
-t11         t11_b_key        UNIQUE           UNIQUE (b ASC) WHERE (a > 0)  true
-t11         t11_pkey         PRIMARY KEY      PRIMARY KEY (rowid ASC)       true
+table_name  constraint_name     constraint_type  details                       validated
+t11         t11_a_key           UNIQUE           UNIQUE (a ASC) WHERE (b > 0)  true
+t11         t11_b_key           UNIQUE           UNIQUE (b ASC) WHERE (a > 0)  true
+t11         t11_pkey            PRIMARY KEY      PRIMARY KEY (rowid ASC)       true
+t11         t11_rowid_not_null  NOT NULL         NOT NULL                      true
 
 # Update a non-indexed column referenced by the predicate.
 
@@ -442,7 +554,7 @@ SELECT * FROM d@f_b_s_foo_idx WHERE b AND s = 'foo'
 
 # Delete a row in both partial indexes.
 
-statement ok
+statement count 1
 DELETE FROM d WHERE k = 1
 
 query IIRTB rowsort
@@ -461,7 +573,7 @@ SELECT * FROM d@f_b_s_foo_idx WHERE b AND s = 'foo'
 
 # Delete a row in one partial index.
 
-statement ok
+statement count 1
 DELETE FROM d WHERE k = 2
 
 query IIRTB rowsort
@@ -479,7 +591,7 @@ SELECT * FROM d@f_b_s_foo_idx WHERE b AND s = 'foo'
 
 # Delete a row not in either partial index.
 
-statement ok
+statement count 1
 DELETE FROM d WHERE k = 200
 
 query IIRTB rowsort
@@ -567,21 +679,29 @@ SELECT * FROM h@a_b_foo_idx WHERE b = 'foo'
 # in the same transaction. Use a high priority to make it less likely for the
 # transaction to be aborted.
 
+# Skip 3node-tenant config since it's prone to hitting a txn retry error
+# (#126763).
+skipif config 3node-tenant
 statement ok
 BEGIN PRIORITY HIGH
 
+skipif config 3node-tenant
 statement ok
 CREATE TABLE i (a INT, b enum)
 
+skipif config 3node-tenant
 statement ok
 INSERT INTO i VALUES (1, 'foo'), (2, 'bar')
 
+skipif config 3node-tenant
 statement ok
 CREATE INDEX a_b_foo_idx ON i (a) WHERE b = 'foo'
 
+skipif config 3node-tenant
 statement ok
 COMMIT
 
+skipif config 3node-tenant
 query IT rowsort
 SELECT * FROM i@a_b_foo_idx WHERE b = 'foo'
 ----
@@ -638,8 +758,15 @@ CREATE TABLE l (
 statement ok
 INSERT INTO l VALUES (1, 1), (6, 6)
 
+
+statement ok
+ALTER TABLE l SET (schema_locked=false)
+
 statement ok
 TRUNCATE l
+
+statement ok
+ALTER TABLE l RESET (schema_locked)
 
 query II rowsort
 SELECT * FROM l@a_b_gt_5 WHERE b > 5
@@ -683,8 +810,10 @@ SELECT * FROM u
 1  -1
 
 # Deleting and re-inserting a conflicting row is successful.
-statement ok
+statement count 1
 DELETE FROM u WHERE a = 2;
+
+statement ok
 INSERT INTO u VALUES (2, 2);
 
 # Updating a row in the unique partial index to conflict with another row fails.
@@ -713,7 +842,7 @@ SELECT * FROM u
 3  3
 2  -2
 
-statement ok
+statement count 3
 DELETE FROM u
 
 # Tests for ON CONFLICT DO NOTHING.
@@ -751,7 +880,7 @@ SELECT * FROM u
 1  -100
 1  -1000
 
-statement ok
+statement count 3
 DELETE FROM u WHERE b IN (-10, -100, -1000)
 
 # Inserting multiple rows that conflict with each other inserts some of the
@@ -842,7 +971,7 @@ SELECT * FROM u
 statement ok
 DROP INDEX i2
 
-statement ok
+statement count 8
 DELETE from u
 
 # Tests for ON CONFLICT (a) [WHERE ...] DO NOTHING.
@@ -865,7 +994,7 @@ CREATE UNIQUE INDEX i2 ON u (b) WHERE 1 = 1;
 statement ok
 INSERT INTO u VALUES (1, 1) ON CONFLICT (b) DO NOTHING;
 
-statement ok
+statement count 1
 DELETE FROM u;
 
 statement ok
@@ -929,7 +1058,7 @@ ON CONFLICT (a) WHERE b < (CASE WHEN now() > '1980-01-01' THEN 0 ELSE 100 END) D
 statement ok
 DROP INDEX i2
 
-statement ok
+statement count 2
 DELETE FROM u
 
 # Tests for ON CONFLICT DO UPDATE.
@@ -985,7 +1114,7 @@ SELECT * FROM u
 1  -100
 1  -1000
 
-statement ok
+statement count 3
 DELETE FROM u WHERE b IN (-10, -100, -1000)
 
 # Inserting one row conflicting and one non-conflicting row updates the first
@@ -1027,7 +1156,7 @@ INSERT INTO u VALUES (1, -1) ON CONFLICT (a) WHERE b > 0 DO UPDATE SET a = 100
 statement ok
 DROP INDEX i2
 
-statement ok
+statement count 3
 DELETE from u
 
 # Test partial indexes with lookup joins.
@@ -1126,7 +1255,7 @@ SELECT * FROM enum_table@i WHERE b IN ('foo', 'bar')
 2  bar
 3  foo
 
-statement ok
+statement count 1
 DELETE FROM enum_table WHERE a = 2
 
 query IT rowsort
@@ -1156,6 +1285,7 @@ CREATE TABLE enum_table_show (
     FAMILY (a, b)
 )
 
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE enum_table_show
 ----
@@ -1166,7 +1296,20 @@ enum_table_show  CREATE TABLE public.enum_table_show (
                    CONSTRAINT enum_table_show_pkey PRIMARY KEY (rowid ASC),
                    INDEX i (a ASC) WHERE b IN ('foo':::public.enum_type, 'bar':::public.enum_type),
                    FAMILY fam_0_a_b_rowid (a, b, rowid)
-                 )
+                 );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE enum_table_show
+----
+enum_table_show  CREATE TABLE public.enum_table_show (
+                   a INT8 NULL,
+                   b public.enum_type NULL,
+                   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+                   CONSTRAINT enum_table_show_pkey PRIMARY KEY (rowid ASC),
+                   INDEX i (a ASC) WHERE b IN ('foo':::public.enum_type, 'bar':::public.enum_type),
+                   FAMILY fam_0_a_b_rowid (a, b, rowid)
+                 ) WITH (schema_locked = true);
 
 # Inverted partial indexes.
 subtest inverted
@@ -1201,7 +1344,7 @@ SELECT * FROM inv@i WHERE j @> '{"x": "y"}' AND s IN ('foo', 'bar') ORDER BY k
 1  {"num": 1, "x": "y"}  foo
 3  {"num": 3, "x": "y"}  bar
 
-statement ok
+statement count 1
 DELETE FROM inv WHERE k = 3
 
 query ITT
@@ -1352,6 +1495,250 @@ SELECT * FROM prune@idx WHERE c > 0
 ----
 1  2  3  7
 
+# Vector partial indexes.
+subtest vector
+
+statement ok
+CREATE TABLE vec (id INT PRIMARY KEY, v VECTOR(3), VECTOR INDEX (v) WHERE id > 0);
+
+statement ok
+INSERT INTO vec VALUES
+    (1, '[1,2,3]'),
+    (2, '[4,5,6]'),
+    (3, '[7,8,9]'),
+    (4, '[10,11,12]')
+
+query IT
+SELECT * FROM vec@vec_v_idx WHERE id > 0 ORDER BY v <-> '[3,1,2]' LIMIT 2
+----
+1  [1,2,3]
+2  [4,5,6]
+
+query IT
+SELECT * FROM vec@primary WHERE id > 0 ORDER BY v <-> '[3,1,2]' LIMIT 2
+----
+1  [1,2,3]
+2  [4,5,6]
+
+statement ok
+DROP TABLE vec;
+
+statement ok
+CREATE TABLE vec (
+  id INT PRIMARY KEY,
+  v VECTOR(3),
+  VECTOR INDEX (v) WHERE v <-> '[3,1,2]' >= 3,
+  FAMILY (id, v)
+);
+
+onlyif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE vec
+----
+vec  CREATE TABLE public.vec (
+       id INT8 NOT NULL,
+       v VECTOR(3) NULL,
+       CONSTRAINT vec_pkey PRIMARY KEY (id ASC),
+       VECTOR INDEX vec_v_idx (v vector_l2_ops) WHERE (v <-> '[3,1,2]':::VECTOR) >= 3.0:::FLOAT8,
+       FAMILY fam_0_id_v (id, v)
+     );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE vec
+----
+vec  CREATE TABLE public.vec (
+       id INT8 NOT NULL,
+       v VECTOR(3) NULL,
+       CONSTRAINT vec_pkey PRIMARY KEY (id ASC),
+       VECTOR INDEX vec_v_idx (v vector_l2_ops) WHERE (v <-> '[3,1,2]':::VECTOR) >= 3.0:::FLOAT8,
+       FAMILY fam_0_id_v (id, v)
+     ) WITH (schema_locked = true);
+
+statement ok
+INSERT INTO vec VALUES
+    (1, '[1,2,3]'),
+    (2, '[4,5,6]'),
+    (3, '[7,8,9]'),
+    (4, '[10,11,12]')
+
+query IT
+SELECT * FROM vec@vec_v_idx WHERE v <-> '[3,1,2]' >= 3 ORDER BY v <-> '[3,1,2]' LIMIT 2
+----
+2  [4,5,6]
+3  [7,8,9]
+
+query IT
+SELECT * FROM vec@primary WHERE v <-> '[3,1,2]' >= 3 ORDER BY v <-> '[3,1,2]' LIMIT 2
+----
+2  [4,5,6]
+3  [7,8,9]
+
+statement ok
+DROP TABLE vec;
+
+statement ok
+CREATE TABLE vec (id INT PRIMARY KEY, s STRING, v VECTOR(3));
+CREATE VECTOR INDEX ON vec (v) WHERE s IN ('foo', 'bar');
+
+statement ok
+INSERT INTO vec VALUES
+    (1, 'foo', '[1,2,3]'),
+    (2, 'bar', '[4,5,6]'),
+    (3, 'baz', '[7,8,9]'),
+    (4, 'bar', '[10,11,12]')
+
+query ITT
+SELECT * FROM vec@vec_v_idx WHERE s IN ('foo', 'bar') ORDER BY v <-> '[3,1,2]' LIMIT 2
+----
+1  foo  [1,2,3]
+2  bar  [4,5,6]
+
+query ITT
+SELECT * FROM vec@primary WHERE s IN ('foo', 'bar') ORDER BY v <-> '[3,1,2]' LIMIT 2
+----
+1  foo  [1,2,3]
+2  bar  [4,5,6]
+
+statement ok
+DROP TABLE vec;
+
+statement ok
+CREATE TABLE vec (k INT PRIMARY KEY, v VECTOR(2), s STRING);
+CREATE VECTOR INDEX i ON vec (s, v) WHERE s IN ('foo', 'bar');
+
+statement ok
+INSERT INTO vec VALUES
+    (1, '[1,2]', 'foo'),
+    (2, '[3,4]', 'foo'),
+    (3, '[5,6]', 'baz'),
+    (4, '[5,6]', 'bar')
+
+# Only consider foo rows.
+query ITT
+SELECT * FROM vec@i WHERE s = 'foo' ORDER BY v <-> '[5,5]' LIMIT 1
+----
+2  [3,4]  foo
+
+# Consider both foo and bar rows.
+query ITT
+SELECT * FROM vec@i WHERE s IN ('foo', 'bar') ORDER BY v <-> '[5,5]' LIMIT 1
+----
+4  [5,6]  bar
+
+# Delete bar row and ensure it is not returned.
+statement count 1
+DELETE FROM vec WHERE k = 4
+
+query ITT
+SELECT * FROM vec@i WHERE s IN ('foo', 'bar') ORDER BY v <-> '[5,5]' LIMIT 1
+----
+2  [3,4]  foo
+
+# Update vector and ensure it is now returned.
+statement ok
+UPDATE vec SET v = '[6,6]' WHERE k = 1
+
+query ITT
+SELECT * FROM vec@i WHERE s = 'foo' ORDER BY v <-> '[5,5]' LIMIT 1
+----
+1  [6,6]  foo
+
+# Update primary key and move row into partial index (baz => bar).
+statement ok
+UPDATE vec SET k = 10 WHERE k = 1
+
+statement ok
+UPDATE vec SET s = 'bar' WHERE k = 3
+
+query ITT
+SELECT * FROM vec@i WHERE s IN ('foo', 'bar') ORDER BY v <-> '[5,5]' LIMIT 3
+----
+3   [5,6]  bar
+10  [6,6]  foo
+2   [3,4]  foo
+
+# Move row out of partial index (foo => baz).
+statement ok
+UPDATE vec SET s = 'baz' WHERE k = 10
+
+query ITT
+SELECT * FROM vec@i WHERE s IN ('foo', 'bar') ORDER BY v <-> '[5,5]' LIMIT 3
+----
+3  [5,6]  bar
+2  [3,4]  foo
+
+# Overwrite value of row in partial index.
+statement ok
+UPSERT INTO vec VALUES (3, '[7, 8]', 'bar')
+
+query ITT
+SELECT * FROM vec@i WHERE s = 'bar' ORDER BY v <-> '[5,5]' LIMIT 3
+----
+3  [7,8]  bar
+
+statement error index "i" is a partial index that does not contain all the rows needed to execute this query
+SELECT * FROM vec@i WHERE s = 'baz' ORDER BY v <-> '[5,5]' LIMIT 3
+
+statement ok
+DROP TABLE vec
+
+# Backfill a partial vector index.
+statement ok
+CREATE TABLE vec_b (k INT PRIMARY KEY, v VECTOR(2), s STRING)
+
+statement ok
+INSERT INTO vec_b VALUES
+    (1, '[1,2]', 'foo'),
+    (2, '[3,4]', 'foo'),
+    (3, '[5,6]', 'baz'),
+    (4, '[5,6]', 'bar')
+
+statement ok
+CREATE VECTOR INDEX i ON vec_b (s, v) WHERE s IN ('foo', 'bar')
+
+query ITT
+SELECT * FROM vec_b@i WHERE s IN ('foo', 'bar') ORDER BY v <-> '[5,5]' LIMIT 3
+----
+4  [5,6]  bar
+2  [3,4]  foo
+1  [1,2]  foo
+
+statement ok
+DROP TABLE vec_b
+
+# Backfill a partial vector index when a new table is created in the same
+# transaction.
+
+statement ok
+BEGIN
+
+statement ok
+CREATE TABLE vec_c (k INT PRIMARY KEY, v VECTOR(2), s STRING)
+
+statement ok
+INSERT INTO vec_c VALUES
+    (1, '[1,2]', 'foo'),
+    (2, '[3,4]', 'foo'),
+    (3, '[5,6]', 'baz'),
+    (4, '[5,6]', 'bar')
+
+statement ok
+CREATE VECTOR INDEX i ON vec_c (s, v) WHERE s IN ('foo', 'bar')
+
+query ITT
+SELECT * FROM vec_c@i WHERE s IN ('foo', 'bar') ORDER BY v <-> '[5,5]' LIMIT 3
+----
+4  [5,6]  bar
+2  [3,4]  foo
+1  [1,2]  foo
+
+statement ok
+COMMIT
+
+statement ok
+DROP TABLE vec_c
+
 # Tests for partial indexes with predicates that reference virtual computed
 # columns.
 subtest virtual
@@ -1376,7 +1763,7 @@ SELECT * FROM virt@idx WHERE c = 10
 1  0  10
 3  0  10
 
-statement ok
+statement count 1
 DELETE FROM virt WHERE a = 1
 
 query III rowsort
@@ -1438,7 +1825,7 @@ SELECT * FROM virt@idx WHERE c = 10
 
 # Tests for unique partial indexes with predicates that reference virtual
 # computed columns.
-statement ok
+statement count 8
 DELETE FROM virt;
 
 statement ok
@@ -1519,7 +1906,7 @@ SELECT * FROM t52318 WHERE b > 5
 ----
 6  7
 
-statement ok
+statement count 2
 DELETE FROM t52318
 
 statement ok
@@ -1810,7 +2197,7 @@ CREATE TABLE t61414_c (
   FAMILY (k, a, c)
 )
 
-skipif config #110873 weak-iso-level-configs
+skipif config #126592 weak-iso-level-configs
 statement ok
 UPSERT INTO t61414_c (k, a, b, d) VALUES (1, 2, 3, 4)
 
@@ -1867,7 +2254,10 @@ SELECT k, (j->'b' = '1') IS NULL FROM t75907@t75907_partial_idx WHERE (j->'b' = 
 subtest column_added_in_same_transaction
 
 statement ok
-CREATE TABLE t79613 (i INT PRIMARY KEY);
+SET autocommit_before_ddl = false
+
+statement ok
+CREATE TABLE t79613 (i INT PRIMARY KEY) WITH (schema_locked=false);
 
 statement error pgcode 0A000 cannot create partial index on column "k" \(2\) which is not public
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
@@ -1943,6 +2333,9 @@ SELECT * FROM t79613;
 
 statement ok
 DROP TABLE t79613;
+
+statement ok
+RESET autocommit_before_ddl
 
 # Regression test for #96924 to disallow dropping a column that is referenced in
 # a partial index predicate.
@@ -2107,3 +2500,97 @@ DROP INDEX idx97551;
 statement ok
 DROP TABLE t97551;
 DROP TYPE enum97551;
+
+subtest end
+
+# Regression test for #158154. Don't add transitive column dependencies to
+# routines that build partial index predicate expressions.
+subtest regression_158154
+
+# Simple case with INSERT and UPDATE into a table with a partial index.
+statement ok
+CREATE TABLE t158154 (a INT, b INT, INDEX b_idx (b) WHERE (b > 0));
+
+statement ok
+CREATE PROCEDURE p158154() LANGUAGE SQL AS $$
+  INSERT INTO t158154 (a) VALUES (1);
+  UPDATE t158154 SET a = a + 1;
+$$;
+
+statement ok
+CALL p158154();
+
+statement ok
+DROP INDEX t158154@b_idx;
+
+statement ok
+ALTER TABLE t158154 DROP COLUMN b;
+
+statement ok
+CALL p158154();
+
+statement ok
+DROP PROCEDURE p158154;
+DROP TABLE t158154;
+
+# Case with a partial index used as an arbiter.
+statement ok
+CREATE TABLE t158154 (a INT, b INT);
+
+statement ok
+CREATE UNIQUE INDEX a_idx ON t158154 (a) WHERE (b > 0);
+
+# WHERE false implies any partial index predicate.
+statement ok
+CREATE PROCEDURE p158154() LANGUAGE SQL AS $$
+  INSERT INTO t158154 (a) VALUES (1) ON CONFLICT (a) WHERE (false) DO NOTHING;
+  INSERT INTO t158154 (a) VALUES (2) ON CONFLICT (a) WHERE (false) DO UPDATE SET a = EXCLUDED.a + 1;
+$$;
+
+statement ok
+CALL p158154();
+
+statement ok
+DROP INDEX t158154@a_idx;
+
+statement ok
+ALTER TABLE t158154 DROP COLUMN b;
+
+statement ok
+CREATE UNIQUE INDEX a_idx ON t158154 (a);
+
+statement ok
+CALL p158154();
+
+statement ok
+DROP PROCEDURE p158154;
+DROP TABLE t158154;
+
+# Verify that a SELECT statement inside a procedure does not add transitive
+# dependencies from the partial index predicate.
+statement ok
+CREATE TABLE t158154 (a INT, b INT, INDEX b_idx (b) WHERE (b > 0));
+
+statement ok
+CREATE PROCEDURE p158154() LANGUAGE SQL AS $$
+  SELECT a FROM t158154;
+  SELECT count(*) FROM t158154 WHERE a > 5;
+$$;
+
+statement ok
+CALL p158154();
+
+statement ok
+DROP INDEX t158154@b_idx;
+
+statement ok
+ALTER TABLE t158154 DROP COLUMN b;
+
+statement ok
+CALL p158154();
+
+statement ok
+DROP PROCEDURE p158154;
+DROP TABLE t158154;
+
+subtest end

@@ -7,13 +7,16 @@ package eval
 
 import (
 	"context"
+	"iter"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/hintpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -24,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/rangedesc"
 	"github.com/cockroachdb/redact"
@@ -81,6 +85,9 @@ type CastFunc = func(context.Context, tree.Datum, *types.T) (tree.Datum, error)
 // of the Planner interface as we subsume its privilege checking into an
 // intermediate layer.
 type CatalogBuiltins interface {
+	// SetTxn updates the kv.Txn used by the builtins.
+	SetTxn(txn *kv.Txn)
+
 	// EncodeTableIndexKey constructs a deterministic and immutable encoding of
 	// a table index key from a tuple of datums. It is leveraged as the
 	// input to a hash function for hash-sharded indexes.
@@ -91,6 +98,12 @@ type CatalogBuiltins interface {
 		rowDatums *tree.DTuple,
 		performCast CastFunc,
 	) ([]byte, error)
+
+	// DecodeTableIndexKey decodes an encoded key and resolves it to
+	// table, index, and column information, returning the result as JSON.
+	// Returns an error if the key cannot be decoded.
+	// Returns a partial result if descriptors cannot be found.
+	DecodeTableIndexKey(ctx context.Context, key []byte) (json.JSON, error)
 
 	// NumGeometryInvertedIndexEntries computes the number of inverted index
 	// entries we'd expect to generate from a given geometry value given the
@@ -167,6 +180,10 @@ type HasPrivilegeSpecifier struct {
 	// This needs to be a user-defined function OID. Builtin function OIDs won't
 	// work since they're not descriptors based.
 	FunctionOID *oid.Oid
+
+	// Global privilege
+	// When true, this specifier is for checking global/system privileges.
+	IsGlobalPrivilege bool
 }
 
 // TypeResolver is an interface for resolving types and type OIDs.
@@ -200,12 +217,20 @@ type Planner interface {
 	TypeResolver
 	tree.FunctionReferenceResolver
 
-	// Mon returns the Planner's monitor.
+	// TxnMon returns the monitor bound to the txn. It should be used whenever
+	// the memory allocation outlives the scope of a single query planning and
+	// execution step.
 	//
-	// TODO(yuzefovich): memory usage against this monitor doesn't count against
-	// sql.mem.distsql.current metric, audit the callers to see whether this is
-	// undesirable in some places.
-	Mon() *mon.BytesMonitor
+	// Usage against this monitor is tracked by sql.mem.txn.current metric.
+	TxnMon() *mon.BytesMonitor
+
+	// ExecMon returns the monitor bound to the scope of a single query planning
+	// and execution step, and it (or its child) should be used for all planning
+	// and execution allocations.
+	//
+	// Usage against this monitor is tracked by sql.mem.distsql.current metric
+	// and is also reported on EXPLAIN ANALYZE.
+	ExecMon() *mon.BytesMonitor
 
 	// ExecutorConfig returns *ExecutorConfig
 	ExecutorConfig() interface{}
@@ -281,6 +306,21 @@ type Planner interface {
 		force bool,
 	) error
 
+	// ResetLeaseTimestamp is used to release the locked lease timestamp.
+	// Note: This should only be used if we have a deadlock between the current txn
+	// and another txn conducting a schema change on our behalf. The correct way
+	// to achieve this is to execute the schema change on the same transaction,
+	// which also reduces the risk of waiting for leases to expire.
+	ResetLeaseTimestamp(ctx context.Context)
+
+	// UnsafeDeleteComment is used to delete comments for a non-existent object.
+	UnsafeDeleteComment(ctx context.Context, objectID int64) error
+
+	// MaybeResolveSystemRoleOID returns the role name for the given OID, if it is a
+	// known system role. It returns a boolean indicating if the resolution was
+	// successful. This is an optimization to avoid expensive virtual table joins.
+	MaybeResolveSystemRoleOID(ctx context.Context, roleOID oid.Oid) (string, bool)
+
 	// UserHasAdminRole returns tuple of bool and error:
 	// (true, nil) means that the user has an admin role (i.e. root or node)
 	// (false, nil) means that the user has NO admin role
@@ -304,6 +344,11 @@ type Planner interface {
 
 	// DecodeGist exposes gist functionality to the builtin functions.
 	DecodeGist(ctx context.Context, gist string, external bool) ([]string, error)
+
+	// TimeSeriesQuerier returns the TSDB bridge wired into ExecutorConfig
+	// at server startup, or nil in test configurations that do not bring
+	// up a TSDB server.
+	TimeSeriesQuerier() TimeSeriesQuerier
 
 	// SerializeSessionState serializes the variables in the current session
 	// and returns a state, in bytes form.
@@ -448,6 +493,80 @@ type Planner interface {
 
 	// ClearTableStatsCache removes all entries from the node's table stats cache.
 	ClearTableStatsCache()
+
+	// ClearStatementHintsCache removes all entries from the node's statement
+	// hints cache.
+	ClearStatementHintsCache()
+
+	// AwaitStatementHintsCache waits for the node's statement hints cache to
+	// catch up with recent hint injections.
+	AwaitStatementHintsCache(ctx context.Context)
+
+	// RetryCounter is the number of times this statement has been retried.
+	RetryCounter() int
+
+	// ProcessVectorIndexFixups waits until all outstanding fixups for the vector
+	// index with the given ID have been processed.
+	ProcessVectorIndexFixups(ctx context.Context, tableID descpb.ID, indexID descpb.IndexID) error
+
+	// InsertStatementHint adds a new hint for the given statement fingerprint to
+	// the system.statement_hints table. It returns the hint ID of the newly
+	// created hint and a count of existing enabled hints that the new hint
+	// conflicts with. If optDatabase is non-empty, the hint is scoped to the
+	// given database.
+	InsertStatementHint(ctx context.Context, statementFingerprint string, hint hintpb.StatementHintUnion, optDatabase string) (hintID int64, numOverridden int64, retErr error)
+
+	// DeleteStatementHint deletes statement hints from
+	// system.statement_hints, filtered by the row ID, fingerprint, and/or
+	// database. If the provided rowID is zero, we don't filter on row ID.
+	// If the fingerprint is empty string, we don't filter on fingerprint.
+	// If the database is empty string, we don't filter on database.
+	// Returns the row_id, fingerprint, and raw hint protobuf bytes of all
+	// deleted rows.
+	DeleteStatementHint(ctx context.Context, rowID int64, statementFingerprint string, optDatabase string) (rowIDs []int64, fingerprints []string, hintBytes [][]byte, err error)
+
+	// SetStatementHintEnabled updates the enabled status of statement hints
+	// in system.statement_hints, filtered by row ID, fingerprint, and/or
+	// database. If the provided rowID is zero, we don't filter on row ID.
+	// If the fingerprint is empty string, we don't filter on fingerprint.
+	// If the database is empty string, we don't filter on database.
+	// Returns the number of affected rows.
+	SetStatementHintEnabled(ctx context.Context, rowID int64, statementFingerprint string, enabled bool, optDatabase string) (int64, error)
+
+	// ValidateSessionVariableHint checks that a session variable with the given
+	// name exists, is writable, and is allowed to be overridden via statement
+	// hints. It also validates the value by attempting a dry-run set. Variables
+	// not marked as safe to hint require safeUpdates to be true.
+	ValidateSessionVariableHint(ctx context.Context, varName, varValue string, safeUpdates bool) error
+
+	// UsingHintInjection returns whether we are planning with externally-injected
+	// hints.
+	UsingHintInjection() bool
+
+	// GetHintIDs returns the external statement hints we're using for this
+	// statement.
+	GetHintIDs() []int64
+
+	// LogEvent logs an event to both the system.eventlog table and external
+	// structured logs. This is exposed on the Planner interface to allow builtins
+	// to log events.
+	LogEvent(ctx context.Context, event interface{}) error
+
+	// AdvisoryXactLock acquires a transaction-scoped advisory lock on a single
+	// 64-bit key in the current database (PostgreSQL pg_advisory_xact_lock(bigint)).
+	// shared selects pg_advisory_xact_lock_shared behavior when true.
+	AdvisoryXactLock(ctx context.Context, key int64, shared bool) error
+
+	// AdvisoryXactLockInt4 acquires a transaction-scoped advisory lock from two
+	// 32-bit keys (PostgreSQL's two-integer advisory lock form).
+	AdvisoryXactLockInt4(ctx context.Context, key1, key2 int32, shared bool) error
+
+	// AdvisoryTryXactLock attempts to acquire an exclusive or shared transaction-level
+	// advisory lock without waiting (pg_try_advisory_xact_lock).
+	AdvisoryTryXactLock(ctx context.Context, key int64, shared bool) (bool, error)
+
+	// AdvisoryTryXactLockInt4 is the two-int32-key variant of AdvisoryTryXactLock.
+	AdvisoryTryXactLockInt4(ctx context.Context, key1, key2 int32, shared bool) (bool, error)
 }
 
 // InternalRows is an iterator interface that's exposed by the internal
@@ -524,9 +643,17 @@ type SessionAccessor interface {
 	// CheckPrivilege verifies that the current user has `privilege` on `descriptor`.
 	CheckPrivilege(ctx context.Context, privilegeObject privilege.Object, privilege privilege.Kind) error
 
+	// HasViewAccessToJob checks if the current user has access to a job owned by the specified owner.
+	HasViewAccessToJob(ctx context.Context, owner username.SQLUsername) bool
+
 	// HasViewActivityOrViewActivityRedactedRole returns true iff the current session user has the
 	// VIEWACTIVITY or VIEWACTIVITYREDACTED permission.
 	HasViewActivityOrViewActivityRedactedRole(ctx context.Context) (bool, bool, error)
+
+	// ForEachSessionPendingJob calls the provided function for each pending job
+	// created in the session (hidden behind the generic interface{} to avoid
+	// circular dependencies, but the caller can cast it to jobs.Record).
+	ForEachSessionPendingJob(fn func(record jobspb.PendingJob) error) error
 }
 
 // PreparedStatementState is a limited interface that exposes metadata about
@@ -535,7 +662,7 @@ type PreparedStatementState interface {
 	// HasActivePortals returns true if there are portals in the session.
 	HasActivePortals() bool
 	// MigratablePreparedStatements returns a mapping of all prepared statements.
-	MigratablePreparedStatements() []sessiondatapb.MigratableSession_PreparedStatement
+	MigratablePreparedStatements() ([]sessiondatapb.MigratableSession_PreparedStatement, error)
 	// HasPortal returns true if there exists a given named portal in the session.
 	HasPortal(s string) bool
 }
@@ -547,13 +674,16 @@ type PreparedStatementState interface {
 // interface only work on the gateway node (i.e. not from
 // distributed processors).
 type ClientNoticeSender interface {
-	// BufferClientNotice buffers the notice to send to the client.
-	// This is flushed before the connection is closed.
+	// BufferClientNotice buffers the notice in the command result to send to the
+	// client. This is flushed before the connection is closed.
 	BufferClientNotice(ctx context.Context, notice pgnotice.Notice)
-	// SendClientNotice immediately flushes the notice to the client. This is used
-	// to implement PLpgSQL RAISE statements; most cases should use
+	// SendClientNotice immediately flushes the notice to the client.
+	// SendNotice sends the given notice to the client. The notice will be in
+	// the client communication buffer until it is flushed. Flushing can be forced
+	// to occur immediately by setting immediateFlush to true.
+	// This is used to implement PLpgSQL RAISE statements; most cases should use
 	// BufferClientNotice.
-	SendClientNotice(ctx context.Context, notice pgnotice.Notice) error
+	SendClientNotice(ctx context.Context, notice pgnotice.Notice, immediateFlush bool) error
 }
 
 // DeferredRoutineSender allows a nested routine to send the information needed
@@ -589,6 +719,17 @@ type PrivilegedAccessor interface {
 
 	// IsSystemTable returns if a given descriptor ID is a system table.s
 	IsSystemTable(ctx context.Context, id int64) (bool, error)
+
+	// ResolvedZoneConfigForKey returns the fully resolved (inheritance-applied)
+	// zone configuration for the given range start key, as JSONB.
+	ResolvedZoneConfigForKey(ctx context.Context, key roachpb.Key) (tree.Datum, error)
+
+	// ZoneConfigSpanEnd returns the end key of the zone config span that
+	// the given key belongs to. For named zones this is the next static
+	// split point. For table zones this is the next subzone
+	// (index/partition) boundary within the table, or the table's key
+	// span end if no subzone boundary follows the given key.
+	ZoneConfigSpanEnd(ctx context.Context, key roachpb.Key) (roachpb.Key, error)
 }
 
 // RegionOperator gives access to the current region, validation for all
@@ -646,15 +787,16 @@ type SequenceOperators interface {
 	GetLastSequenceValueByID(ctx context.Context, seqID uint32) (value int64, wasCalled bool, err error)
 }
 
-// ChangefeedState is used to track progress and checkpointing for sinkless/core changefeeds.
-// Because a CREATE CHANGEFEED statement for a sinkless changefeed will hang and return data
-// over the SQL connection, this state belongs in the EvalCtx.
-type ChangefeedState interface {
+// CoreChangefeedState is used to track progress for core (sinkless) changefeeds.
+// Because a CREATE CHANGEFEED statement for a sinkless changefeed will hang
+// and return data over the SQL connection, this state is stored in the EvalCtx
+// so the changeFrontier processor can write to it.
+type CoreChangefeedState interface {
 	// SetHighwater sets the frontier timestamp for the changefeed.
 	SetHighwater(frontier hlc.Timestamp)
 
-	// SetCheckpoint sets the checkpoint for the changefeed.
-	SetCheckpoint(spans []roachpb.Span, timestamp hlc.Timestamp)
+	// SetFrontier saves a snapshot of the frontier spans.
+	SetFrontier(frontier iter.Seq[jobspb.ResolvedSpan])
 }
 
 // TenantOperator is capable of interacting with tenant state, allowing SQL
@@ -708,7 +850,6 @@ type GossipOperator interface {
 type SQLStatsController interface {
 	ResetClusterSQLStats(ctx context.Context) error
 	ResetActivityTables(ctx context.Context) error
-	ResetInsightsTables(ctx context.Context) error
 	CreateSQLStatsCompactionSchedule(ctx context.Context) error
 }
 
@@ -736,9 +877,25 @@ type StmtDiagnosticsRequestInsertFunc func(
 	antiPlanGist bool,
 	samplingProbability float64,
 	minExecutionLatency time.Duration,
+	maxExecutionLatency time.Duration,
 	expiresAfter time.Duration,
 	redacted bool,
+	username string,
 ) error
+
+// TxnDiagnosticsRequestInsertFunc is an interface embedded in EvalCtx that can
+// be used by the builtins to insert a transaction diagnostics request. This
+// interface is introduced to avoid circular dependency.
+type TxnDiagnosticsRequestInsertFunc func(
+	ctx context.Context,
+	txnFingerprintId uint64,
+	stmtFingerprintIds []uint64,
+	username string,
+	samplingProbability float64,
+	minExecutionLatency time.Duration,
+	expiresAfter time.Duration,
+	redacted bool,
+) (int, error)
 
 // AsOfSystemTime represents the result from the evaluation of AS OF SYSTEM TIME
 // clause.
@@ -759,4 +916,8 @@ type AsOfSystemTime struct {
 	// This is be zero if there is no maximum bound.
 	// In non-zero, we want a read t where Timestamp <= t < MaxTimestampBound.
 	MaxTimestampBound hlc.Timestamp
+
+	// ForBackfill indicates if this AOST expression was added to an operation
+	// that requires a backfill, like CREATE TABLE AS.
+	ForBackfill bool
 }

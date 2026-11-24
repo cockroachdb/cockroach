@@ -25,3 +25,5 @@ index_def ::=
 	| 'UNIQUE' 'INDEX' opt_index_name '(' index_elem ( ( ',' index_elem ) )* ')'   ( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | ) opt_with_storage_parameter_list opt_where_clause opt_index_visible
 	| 'INVERTED' 'INDEX' '(' index_elem ( ( ',' index_elem ) )* ')' ( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | ) opt_with_storage_parameter_list opt_where_clause opt_index_visible
 	| 'INVERTED' 'INDEX' name '(' index_elem ( ( ',' index_elem ) )* ')' ( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | ) opt_with_storage_parameter_list opt_where_clause opt_index_visible
+	| 'VECTOR' 'INDEX' '(' index_elem ( ( ',' index_elem ) )* ')' ( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | ) opt_with_storage_parameter_list opt_where_clause opt_index_visible
+	| 'VECTOR' 'INDEX' name '(' index_elem ( ( ',' index_elem ) )* ')' ( 'PARTITION' ( 'ALL' | ) 'BY' partition_by_inner | ) opt_with_storage_parameter_list opt_where_clause opt_index_visible

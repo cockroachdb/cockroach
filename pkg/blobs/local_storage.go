@@ -8,6 +8,7 @@ package blobs
 import (
 	"context"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -83,7 +84,7 @@ func (l localWriter) Close() error {
 
 	syncErr := l.f.Sync()
 	closeErr := l.f.Close()
-	if err := errors.CombineErrors(closeErr, syncErr); err != nil {
+	if err := errors.CombineErrors(syncErr, closeErr); err != nil {
 		return err
 	}
 	// Finally put the file to its final location.
@@ -186,11 +187,11 @@ func (l *LocalStorage) List(pattern string) ([]string, error) {
 			}
 		}
 
-		if err := filepath.Walk(walkRoot, func(p string, f os.FileInfo, err error) error {
+		if err := filepath.WalkDir(walkRoot, func(p string, d fs.DirEntry, err error) error {
 			if err != nil {
 				return err
 			}
-			if f.IsDir() {
+			if d.IsDir() {
 				return nil
 			}
 			if listingParent && !strings.HasPrefix(p, fullPath) {

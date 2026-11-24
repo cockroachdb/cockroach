@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlinstance/instancestorage"
@@ -24,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	"google.golang.org/grpc"
 )
 
 // TenantCluster represents the set of sql nodes running in a secondary tenant.
@@ -129,16 +129,17 @@ import (
 //     again in the next release.
 type TenantCluster struct {
 	// Dialer allows for the construction of connections to other SQL pods.
-	Dialer          NodeDialer
+	Dialer          rpcbase.NodeDialer
 	InstanceReader  *instancestorage.Reader
 	instancesAtBump []sqlinstance.InstanceInfo
 	DB              *kv.DB
+	UseDRPC         bool
 }
 
 // TenantClusterConfig configures a TenantCluster.
 type TenantClusterConfig struct {
 	// Dialer allows for the construction of connections to other SQL pods.
-	Dialer NodeDialer
+	Dialer rpcbase.NodeDialer
 
 	// InstanceReader is used to retrieve all SQL pods for a given tenant.
 	InstanceReader *instancestorage.Reader
@@ -146,6 +147,9 @@ type TenantClusterConfig struct {
 	// DB is used to generate transactions for consistent reads of the set of
 	// instances.
 	DB *kv.DB
+
+	// UseDRPC indicates whether to use DRPC for inter-node communication.
+	UseDRPC bool
 }
 
 // NewTenantCluster returns a new TenantCluster.
@@ -155,6 +159,7 @@ func NewTenantCluster(cfg TenantClusterConfig) *TenantCluster {
 		InstanceReader:  cfg.InstanceReader,
 		instancesAtBump: make([]sqlinstance.InstanceInfo, 0),
 		DB:              cfg.DB,
+		UseDRPC:         cfg.UseDRPC,
 	}
 }
 
@@ -188,7 +193,7 @@ const BumpClusterVersionOpName = "bump-cluster-version"
 // ForEveryNodeOrServer is part of the upgrade.Cluster interface.
 // TODO(ajstorm): Make the op here more structured.
 func (t *TenantCluster) ForEveryNodeOrServer(
-	ctx context.Context, op string, fn func(context.Context, serverpb.MigrationClient) error,
+	ctx context.Context, op string, fn func(context.Context, serverpb.RPCMigrationClient) error,
 ) error {
 	// Get the list of all SQL instances running. We must do this using the
 	// "NoCache" method, as the upgrade interlock requires a consistent view of
@@ -211,7 +216,7 @@ func (t *TenantCluster) ForEveryNodeOrServer(
 	// nodes at the storage cluster level.
 	const quotaCapacity = 25
 	qp := quotapool.NewIntPool("every-sql-server", quotaCapacity)
-	log.Infof(ctx, "executing %s on nodes %v", redact.Safe(op), instances)
+	log.Dev.Infof(ctx, "executing %s on nodes %v", redact.Safe(op), instances)
 	grp := ctxgroup.WithContext(ctx)
 
 	for i := range instances {
@@ -224,7 +229,7 @@ func (t *TenantCluster) ForEveryNodeOrServer(
 		grp.GoCtx(func(ctx context.Context) error {
 			defer alloc.Release()
 
-			var conn *grpc.ClientConn
+			var client serverpb.RPCMigrationClient
 			retryOpts := retry.Options{
 				InitialBackoff: 1 * time.Millisecond,
 				MaxRetries:     20,
@@ -234,12 +239,11 @@ func (t *TenantCluster) ForEveryNodeOrServer(
 			// test flakes due to network issues.
 			if err := retry.WithMaxAttempts(ctx, retryOpts, retryOpts.MaxRetries+1, func() error {
 				var err error
-				conn, err = t.Dialer.Dial(ctx, roachpb.NodeID(instance.InstanceID), rpc.DefaultClass)
+				client, err = serverpb.DialMigrationClient(t.Dialer, ctx, roachpb.NodeID(instance.InstanceID), rpcbase.DefaultClass, t.UseDRPC)
 				return err
 			}); err != nil {
 				return annotateDialError(err)
 			}
-			client := serverpb.NewMigrationClient(conn)
 			return fn(ctx, client)
 		})
 	}
@@ -296,11 +300,11 @@ func (t *TenantCluster) UntilClusterStable(
 			return nil
 		}
 		if len(instances) != len(curInstances) {
-			log.Infof(ctx,
+			log.Dev.Infof(ctx,
 				"number of SQL servers has changed (pre: %d, post: %d), retrying",
 				len(instances), len(curInstances))
 		} else {
-			log.Infof(ctx, "different set of SQL servers running (pre: %v, post: %v), retrying", instances, curInstances)
+			log.Dev.Infof(ctx, "different set of SQL servers running (pre: %v, post: %v), retrying", instances, curInstances)
 		}
 		instances = curInstances
 	}

@@ -1,0 +1,364 @@
+# LogicTest: multiregion-9node-3region-3azs multiregion-9node-3region-3azs-no-los
+
+statement ok
+CREATE DATABASE multi_region_test_db PRIMARY REGION "ca-central-1" REGIONS "ap-southeast-2", "us-east-1" SURVIVE REGION FAILURE
+
+statement ok
+USE multi_region_test_db
+
+statement ok
+CREATE TABLE t_regional (
+  pk INT PRIMARY KEY,
+  b INT
+) LOCALITY REGIONAL BY ROW;
+
+statement error cannot explicitly include implicit partitioning columns from "LOCALITY REGIONAL BY ROW" in index definition
+CREATE INDEX ON t_regional (crdb_region, b) USING HASH;
+
+# Creating an index with crdb_region as the leading key column is allowed.
+statement ok
+CREATE INDEX ON t_regional USING btree(crdb_region, b);
+
+statement error cannot explicitly include implicit partitioning columns from "LOCALITY REGIONAL BY ROW" in index definition
+CREATE UNIQUE INDEX ON t_regional (crdb_region, b) USING HASH;
+
+# Creating a unique index with crdb_region as the leading key column is allowed.
+statement ok
+CREATE UNIQUE INDEX ON t_regional USING btree(crdb_region, b);
+
+# Creating an index with crdb_region as a stored column is allowed;
+# the column is silently dropped from the STORING clause since it is
+# already part of the index key as an implicit partitioning column.
+statement ok
+CREATE INDEX ON t_regional (b) STORING (crdb_region);
+
+# crdb_region as a non-leading key column is still disallowed.
+statement error cannot explicitly include implicit partitioning columns from "LOCALITY REGIONAL BY ROW" in index definition
+CREATE INDEX ON t_regional (b, crdb_region);
+
+statement error hash sharded indexes cannot include implicit partitioning columns from "LOCALITY REGIONAL BY ROW"
+ALTER TABLE t_regional ALTER PRIMARY KEY USING COLUMNS (crdb_region, pk) USING HASH;
+
+statement error hash sharded indexes cannot include implicit partitioning columns from "LOCALITY REGIONAL BY ROW"
+CREATE TABLE t_regional_bad (
+  pk INT PRIMARY KEY,
+  b INT,
+  INDEX (crdb_region, b) USING HASH
+) LOCALITY REGIONAL BY ROW;
+
+statement error hash sharded indexes cannot include implicit partitioning columns from "LOCALITY REGIONAL BY ROW"
+CREATE TABLE t_regional_bad (
+  pk INT,
+  b INT,
+  PRIMARY KEY (crdb_region, pk) USING HASH
+) LOCALITY REGIONAL BY ROW;
+
+statement ok
+CREATE TABLE t_to_be_hashed (
+  pk INT PRIMARY KEY,
+  b INT,
+  FAMILY fam_0_b_pk_crdb_region (b, pk, crdb_region)
+) LOCALITY REGIONAL BY ROW;
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_to_be_hashed];
+----
+CREATE TABLE public.t_to_be_hashed (
+  pk INT8 NOT NULL,
+  b INT8 NULL,
+  crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+  CONSTRAINT t_to_be_hashed_pkey PRIMARY KEY (pk ASC),
+  FAMILY fam_0_b_pk_crdb_region (b, pk, crdb_region)
+) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW;
+
+statement ok
+CREATE INDEX ON t_to_be_hashed (b) USING HASH;
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_to_be_hashed];
+----
+CREATE TABLE public.t_to_be_hashed (
+  pk INT8 NOT NULL,
+  b INT8 NULL,
+  crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+  crdb_internal_b_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(b))), 16:::INT8)) VIRTUAL,
+  CONSTRAINT t_to_be_hashed_pkey PRIMARY KEY (pk ASC),
+  INDEX t_to_be_hashed_b_idx (b ASC) USING HASH WITH (bucket_count=16),
+  FAMILY fam_0_b_pk_crdb_region (b, pk, crdb_region)
+) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW;
+
+statement ok
+CREATE UNIQUE INDEX ON t_to_be_hashed (b) USING HASH;
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_to_be_hashed];
+----
+CREATE TABLE public.t_to_be_hashed (
+  pk INT8 NOT NULL,
+  b INT8 NULL,
+  crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+  crdb_internal_b_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(b))), 16:::INT8)) VIRTUAL,
+  CONSTRAINT t_to_be_hashed_pkey PRIMARY KEY (pk ASC),
+  INDEX t_to_be_hashed_b_idx (b ASC) USING HASH WITH (bucket_count=16),
+  UNIQUE INDEX t_to_be_hashed_b_key (b ASC) USING HASH WITH (bucket_count=16),
+  FAMILY fam_0_b_pk_crdb_region (b, pk, crdb_region)
+) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW;
+
+statement ok
+ALTER TABLE t_to_be_hashed ALTER PRIMARY KEY USING COLUMNS (pk) USING HASH;
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_to_be_hashed];
+----
+CREATE TABLE public.t_to_be_hashed (
+  pk INT8 NOT NULL,
+  b INT8 NULL,
+  crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+  crdb_internal_b_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(b))), 16:::INT8)) VIRTUAL,
+  crdb_internal_pk_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(pk))), 16:::INT8)) VIRTUAL,
+  CONSTRAINT t_to_be_hashed_pkey PRIMARY KEY (pk ASC) USING HASH WITH (bucket_count=16),
+  INDEX t_to_be_hashed_b_idx (b ASC) USING HASH WITH (bucket_count=16),
+  UNIQUE INDEX t_to_be_hashed_b_key (b ASC) USING HASH WITH (bucket_count=16),
+  FAMILY fam_0_b_pk_crdb_region (b, pk, crdb_region)
+) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW;
+
+statement ok
+CREATE TABLE t_regional_pk_hashed_1 (
+  pk INT PRIMARY KEY USING HASH,
+  b INT,
+  INDEX (b) USING HASH,
+  FAMILY fam_0_b_pk_crdb_region (b, pk, crdb_region)
+) LOCALITY REGIONAL BY ROW;
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_regional_pk_hashed_1];
+----
+CREATE TABLE public.t_regional_pk_hashed_1 (
+  crdb_internal_pk_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(pk))), 16:::INT8)) VIRTUAL,
+  pk INT8 NOT NULL,
+  b INT8 NULL,
+  crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+  crdb_internal_b_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(b))), 16:::INT8)) VIRTUAL,
+  CONSTRAINT t_regional_pk_hashed_1_pkey PRIMARY KEY (pk ASC) USING HASH WITH (bucket_count=16),
+  INDEX t_regional_pk_hashed_1_b_idx (b ASC) USING HASH WITH (bucket_count=16),
+  FAMILY fam_0_b_pk_crdb_region (b, pk, crdb_region)
+) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW;
+
+statement ok
+CREATE TABLE t_regional_pk_hashed_2 (
+  pk INT,
+  b INT,
+  PRIMARY KEY (pk) USING HASH,
+  INDEX (b) USING HASH,
+  FAMILY fam_0_b_pk_crdb_region (b, pk, crdb_region)
+) LOCALITY REGIONAL BY ROW;
+
+query T
+SELECT create_statement FROM [SHOW CREATE TABLE t_regional_pk_hashed_2];
+----
+CREATE TABLE public.t_regional_pk_hashed_2 (
+  pk INT8 NOT NULL,
+  b INT8 NULL,
+  crdb_region public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region,
+  crdb_internal_pk_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(pk))), 16:::INT8)) VIRTUAL,
+  crdb_internal_b_shard_16 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(b))), 16:::INT8)) VIRTUAL,
+  CONSTRAINT t_regional_pk_hashed_2_pkey PRIMARY KEY (pk ASC) USING HASH WITH (bucket_count=16),
+  INDEX t_regional_pk_hashed_2_b_idx (b ASC) USING HASH WITH (bucket_count=16),
+  FAMILY fam_0_b_pk_crdb_region (b, pk, crdb_region)
+) WITH (schema_locked = true) LOCALITY REGIONAL BY ROW;
+
+# Permit foreign key constraint on full primary index of RBR table excluding
+# hash column (See #74244).
+statement ok
+CREATE TABLE users (
+    id         UUID   NOT NULL DEFAULT gen_random_uuid(),
+    username   STRING NOT NULL,
+    PRIMARY KEY (id) USING HASH
+) LOCALITY REGIONAL BY ROW
+
+statement error virtual column "crdb_internal_user_id_shard_16" cannot reference a foreign key
+CREATE TABLE user_settings (
+    id      UUID   PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID   NOT NULL,
+    value   STRING NOT NULL,
+    INDEX (user_id) USING HASH,
+    FOREIGN KEY (crdb_internal_user_id_shard_16, user_id, crdb_region) REFERENCES users (crdb_internal_id_shard_16, id, crdb_region) ON DELETE CASCADE ON UPDATE CASCADE
+) LOCALITY REGIONAL BY ROW
+
+statement ok
+CREATE TABLE user_settings (
+    id      UUID   PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID   NOT NULL,
+    value   STRING NOT NULL,
+    INDEX (user_id) USING HASH,
+    FOREIGN KEY (user_id, crdb_region) REFERENCES users (id, crdb_region) ON DELETE CASCADE ON UPDATE CASCADE
+) LOCALITY REGIONAL BY ROW
+
+statement error virtual column "crdb_internal_user_id_shard_16" cannot reference a foreign key
+ALTER TABLE user_settings ADD FOREIGN KEY (crdb_internal_user_id_shard_16, user_id, crdb_region)
+  REFERENCES users (crdb_internal_id_shard_16, id, crdb_region) ON DELETE CASCADE ON UPDATE CASCADE
+
+statement ok
+ALTER TABLE user_settings ADD FOREIGN KEY (user_id, crdb_region)
+  REFERENCES users (id, crdb_region) ON DELETE CASCADE ON UPDATE CASCADE
+
+# Validate that indexes on an existing table with the region column are checked
+# when converting to REGIONAL BY ROW.
+
+subtest validate_indexes_on_locality_change
+
+statement ok
+CREATE TABLE t_rbr (
+  pk INT PRIMARY KEY,
+  i INT,
+  j INT
+) LOCALITY REGIONAL BY ROW
+
+# On an RBR table, creating indexes with the region column as the leading key
+# column or as a stored column is allowed.
+statement ok
+CREATE INDEX dsc_idx_1 ON t_rbr (i) STORING (j, crdb_region)
+
+statement ok
+CREATE INDEX dsc_idx_2 ON t_rbr (crdb_region, i) STORING (j)
+
+statement error cannot explicitly include implicit partitioning columns from "LOCALITY REGIONAL BY ROW" in index definition
+CREATE INDEX dsc_idx_3 ON t_rbr (i, crdb_region) STORING (j)
+
+statement ok
+CREATE INDEX dsc_idx_4 ON t_rbr (i) USING HASH STORING (j, crdb_region)
+
+statement error cannot explicitly include implicit partitioning columns from "LOCALITY REGIONAL BY ROW" in index definition
+CREATE INDEX dsc_idx_5 ON t_rbr (crdb_region, i) USING HASH STORING (j)
+
+statement error cannot explicitly include implicit partitioning columns from "LOCALITY REGIONAL BY ROW" in index definition
+CREATE INDEX dsc_idx_6 ON t_rbr (i, crdb_region) USING HASH STORING (j)
+
+
+statement error cannot explicitly include implicit partitioning columns from "LOCALITY REGIONAL BY ROW" in index definition
+ALTER TABLE t_rbr ALTER PRIMARY KEY USING COLUMNS (pk, crdb_region);
+
+statement error hash sharded indexes cannot include implicit partitioning columns from "LOCALITY REGIONAL BY ROW"
+ALTER TABLE t_rbr ALTER PRIMARY KEY USING COLUMNS (crdb_region, pk) USING HASH;
+
+statement ok
+ALTER TABLE t_rbr ALTER PRIMARY KEY USING COLUMNS (crdb_region, pk);
+
+query TTBITTTBBBF colnames,rowsort
+SHOW INDEXES FROM t_rbr
+----
+table_name  index_name  non_unique  seq_in_index  column_name               definition                direction  storing  implicit  visible  visibility
+t_rbr       dsc_idx_1   true        1             crdb_region               crdb_region               ASC        false    true      true     1
+t_rbr       dsc_idx_1   true        2             i                         i                         ASC        false    false     true     1
+t_rbr       dsc_idx_1   true        3             j                         j                         N/A        true     false     true     1
+t_rbr       dsc_idx_1   true        4             pk                        pk                        ASC        false    true      true     1
+t_rbr       dsc_idx_2   true        1             crdb_region               crdb_region               ASC        false    false     true     1
+t_rbr       dsc_idx_2   true        2             i                         i                         ASC        false    false     true     1
+t_rbr       dsc_idx_2   true        3             j                         j                         N/A        true     false     true     1
+t_rbr       dsc_idx_2   true        4             pk                        pk                        ASC        false    true      true     1
+t_rbr       dsc_idx_4   true        1             crdb_region               crdb_region               ASC        false    true      true     1
+t_rbr       dsc_idx_4   true        2             crdb_internal_i_shard_16  crdb_internal_i_shard_16  ASC        false    true      true     1
+t_rbr       dsc_idx_4   true        3             i                         i                         ASC        false    false     true     1
+t_rbr       dsc_idx_4   true        4             j                         j                         N/A        true     false     true     1
+t_rbr       dsc_idx_4   true        5             pk                        pk                        ASC        false    true      true     1
+t_rbr       t_rbr_pkey  false       1             crdb_region               crdb_region               ASC        false    true      true     1
+t_rbr       t_rbr_pkey  false       2             pk                        pk                        ASC        false    false     true     1
+t_rbr       t_rbr_pkey  false       3             i                         i                         N/A        true     false     true     1
+t_rbr       t_rbr_pkey  false       4             j                         j                         N/A        true     false     true     1
+
+statement ok
+DROP INDEX dsc_idx_1, dsc_idx_2, dsc_idx_4
+
+# Ensure ALTER LOCALITY REGIONAL BY ROW is blocked when table has invalid indexes on crdb_region.
+statement ok
+ALTER TABLE t_rbr SET LOCALITY REGIONAL BY TABLE
+
+statement ok
+CREATE INDEX dsc_idx_1 ON t_rbr (i) STORING (j, crdb_region)
+
+statement error cannot explicitly include implicit partitioning columns from "LOCALITY REGIONAL BY ROW" in index definition
+ALTER TABLE t_rbr SET LOCALITY REGIONAL BY ROW
+
+statement ok
+DROP INDEX dsc_idx_1
+
+statement ok
+CREATE INDEX dsc_idx_3 ON t_rbr (i, crdb_region) STORING (j);
+
+statement error cannot explicitly include implicit partitioning columns from "LOCALITY REGIONAL BY ROW" in index definition
+ALTER TABLE t_rbr SET LOCALITY REGIONAL BY ROW
+
+statement ok
+DROP INDEX dsc_idx_3
+
+statement ok
+CREATE INDEX dsc_idx_5 ON t_rbr (crdb_region, i) USING HASH STORING (j)
+
+statement error hash sharded indexes cannot include implicit partitioning columns from "LOCALITY REGIONAL BY ROW"
+ALTER TABLE t_rbr SET LOCALITY REGIONAL BY ROW
+
+statement ok
+DROP INDEX dsc_idx_5
+
+statement ok
+CREATE INDEX dsc_idx_6 ON t_rbr (i, crdb_region) USING HASH STORING (j)
+
+statement error hash sharded indexes cannot include implicit partitioning columns from "LOCALITY REGIONAL BY ROW"
+ALTER TABLE t_rbr SET LOCALITY REGIONAL BY ROW
+
+statement ok
+DROP INDEX dsc_idx_6
+
+statement ok
+ALTER TABLE t_rbr ALTER PRIMARY KEY USING COLUMNS (pk, crdb_region);
+
+statement error cannot explicitly include implicit partitioning columns from "LOCALITY REGIONAL BY ROW" in index definition
+ALTER TABLE t_rbr SET LOCALITY REGIONAL BY ROW
+
+statement ok
+ALTER TABLE t_rbr ALTER PRIMARY KEY USING COLUMNS (crdb_region, pk) USING HASH;
+
+statement error hash sharded indexes cannot include implicit partitioning columns from "LOCALITY REGIONAL BY ROW"
+ALTER TABLE t_rbr SET LOCALITY REGIONAL BY ROW
+
+statement ok
+ALTER TABLE t_rbr ALTER PRIMARY KEY USING COLUMNS (crdb_region, pk);
+CREATE INDEX dsc_idx_2 ON t_rbr (crdb_region, i) STORING (j);
+
+query TTBITTTBBBF colnames,rowsort
+SHOW INDEXES FROM t_rbr
+----
+table_name  index_name                non_unique  seq_in_index  column_name  definition   direction  storing  implicit  visible  visibility
+t_rbr       dsc_idx_2                 true        1             crdb_region  crdb_region  ASC        false    false     true     1
+t_rbr       dsc_idx_2                 true        2             i            i            ASC        false    false     true     1
+t_rbr       dsc_idx_2                 true        3             j            j            N/A        true     false     true     1
+t_rbr       dsc_idx_2                 true        4             pk           pk           ASC        false    true      true     1
+t_rbr       t_rbr_pk_crdb_region_key  false       1             pk           pk           ASC        false    false     true     1
+t_rbr       t_rbr_pk_crdb_region_key  false       2             crdb_region  crdb_region  ASC        false    false     true     1
+t_rbr       t_rbr_pk_key              false       1             pk           pk           ASC        false    false     true     1
+t_rbr       t_rbr_pk_key              false       2             crdb_region  crdb_region  ASC        true     true      true     1
+t_rbr       t_rbr_pkey                false       1             crdb_region  crdb_region  ASC        false    false     true     1
+t_rbr       t_rbr_pkey                false       2             pk           pk           ASC        false    false     true     1
+t_rbr       t_rbr_pkey                false       3             i            i            N/A        true     false     true     1
+t_rbr       t_rbr_pkey                false       4             j            j            N/A        true     false     true     1
+
+
+# Drop problematic indexes.
+statement ok
+DROP INDEX t_rbr_pk_crdb_region_key, t_rbr_pk_key;
+
+statement ok
+ALTER TABLE t_rbr SET LOCALITY REGIONAL BY ROW;
+
+query TTBITTTBBBF colnames,rowsort
+SHOW INDEXES FROM t_rbr
+----
+table_name  index_name  non_unique  seq_in_index  column_name  definition   direction  storing  implicit  visible  visibility
+t_rbr       dsc_idx_2   true        1             crdb_region  crdb_region  ASC        false    false     true     1
+t_rbr       dsc_idx_2   true        2             i            i            ASC        false    false     true     1
+t_rbr       dsc_idx_2   true        3             j            j            N/A        true     false     true     1
+t_rbr       dsc_idx_2   true        4             pk           pk           ASC        false    true      true     1
+t_rbr       t_rbr_pkey  false       1             crdb_region  crdb_region  ASC        false    false     true     1
+t_rbr       t_rbr_pkey  false       2             pk           pk           ASC        false    false     true     1
+t_rbr       t_rbr_pkey  false       3             i            i            N/A        true     false     true     1
+t_rbr       t_rbr_pkey  false       4             j            j            N/A        true     false     true     1

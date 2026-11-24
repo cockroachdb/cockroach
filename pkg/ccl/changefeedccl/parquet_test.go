@@ -7,6 +7,7 @@ package changefeedccl
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"os"
 	"slices"
@@ -19,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
@@ -47,17 +49,17 @@ func TestParquetRows(t *testing.T) {
 	skip.UnderStress(t)
 
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		// TODO(#98816): cdctest.GetHydratedTableDescriptor does not work with tenant dbs.
-		// Once it is fixed, this flag can be removed.
-		DefaultTestTenant: base.TODOTestTenantDisabled,
-	})
-	defer s.Stopper().Stop(ctx)
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	for _, l := range []serverutils.ApplicationLayerInterface{s, srv.SystemLayer()} {
+		kvserver.RangefeedEnabled.Override(ctx, &l.ClusterSettings().SV, true)
+	}
 
 	maxRowGroupSize := int64(4)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
-	sqlDB.Exec(t, "SET CLUSTER SETTING kv.rangefeed.enabled = true")
 
 	newDecimal := func(s string) *tree.DDecimal {
 		d, _, _ := apd.NewFromString(s)
@@ -205,13 +207,15 @@ func TestParquetRows(t *testing.T) {
 			for i := 0; i < numRows; i++ {
 				v := popRow(t)
 
-				updatedRow, err := decoder.DecodeKV(
+				updatedRow, status, err := decoder.DecodeKV(
 					ctx, roachpb.KeyValue{Key: v.Key, Value: v.Value}, cdcevent.CurrentRow, v.Timestamp(), false)
 				require.NoError(t, err)
+				require.Equal(t, cdcevent.DecodeOK, status)
 
-				prevRow, err := decoder.DecodeKV(
+				prevRow, prevStatus, err := decoder.DecodeKV(
 					ctx, roachpb.KeyValue{Key: v.Key, Value: v.PrevValue}, cdcevent.PrevRow, v.Timestamp(), false)
 				require.NoError(t, err)
+				require.Equal(t, cdcevent.DecodeOK, prevStatus)
 
 				encodingOpts := changefeedbase.EncodingOptions{}
 
@@ -263,19 +267,19 @@ func TestParquetRows(t *testing.T) {
 }
 
 func makeRangefeedReaderAndDecoder(
-	t *testing.T, s serverutils.TestServerInterface,
+	t *testing.T, s serverutils.ApplicationLayerInterface,
 ) (func(t testing.TB) *kvpb.RangeFeedValue, func(), cdcevent.Decoder) {
 	tableDesc := cdctest.GetHydratedTableDescriptor(t, s.ExecutorConfig(), "foo")
 	popRow, cleanup := cdctest.MakeRangeFeedValueReader(t, s.ExecutorConfig(), tableDesc)
 	targets := changefeedbase.Targets{}
 	targets.Add(changefeedbase.Target{
 		Type:       jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
-		TableID:    tableDesc.GetID(),
+		DescID:     tableDesc.GetID(),
 		FamilyName: "primary",
 	})
 	sqlExecCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	ctx := context.Background()
-	decoder, err := cdcevent.NewEventDecoder(ctx, &sqlExecCfg, targets, false, false)
+	decoder, err := cdcevent.NewEventDecoder(ctx, &sqlExecCfg, targets, false, false, cdcevent.DecoderOptions{})
 	require.NoError(t, err)
 	return popRow, cleanup, decoder
 }
@@ -302,6 +306,71 @@ func TestParquetResolvedTimestamps(t *testing.T) {
 					nextResolved, firstResolved)
 			}
 			return nil
+		})
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("cloudstorage"))
+}
+
+func TestParquetDuplicateColumns(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE t (id INT8 PRIMARY KEY)`)
+		sqlDB.Exec(t, `INSERT INTO t VALUES (1)`)
+		foo := feed(t, f, `CREATE CHANGEFEED WITH format=parquet,initial_scan='only' AS SELECT id FROM t`)
+		defer closeFeed(t, foo)
+
+		// Test that this should not fail with this error:
+		// `Number of datums in parquet output row doesn't match number of distinct
+		// columns, Expected: %d, Recieved: %d`.
+		assertPayloads(t, foo, []string{
+			`t: [1]->{"id": 1}`,
+		})
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("cloudstorage"))
+}
+
+func TestParquetSpecifiedDuplicateQueryColumns(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE t (id INT8 PRIMARY KEY, a INT8)`)
+		sqlDB.Exec(t, `INSERT INTO t VALUES (1, 9)`)
+		foo := feed(t, f, `CREATE CHANGEFEED WITH format=parquet,initial_scan='only' AS SELECT a, a, id, id FROM t`)
+		defer closeFeed(t, foo)
+
+		// Test that this should not fail with this error:
+		// `Number of datums in parquet output row doesn't match number of distinct
+		// columns, Expected: %d, Recieved: %d`.
+		assertPayloads(t, foo, []string{
+			`t: [1]->{"a": 9, "a_1": 9, "id": 1, "id_1": 1}`,
+		})
+	}
+
+	cdcTest(t, testFn, feedTestForceSink("cloudstorage"))
+}
+
+func TestParquetNoUserDefinedPrimaryKey(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+		sqlDB := sqlutils.MakeSQLRunner(s.DB)
+		sqlDB.Exec(t, `CREATE TABLE t (id INT8)`)
+		var rowId int
+		sqlDB.QueryRow(t, `INSERT INTO t VALUES (0) RETURNING rowid`).Scan(&rowId)
+		foo := feed(t, f, `CREATE CHANGEFEED WITH format=parquet,initial_scan='only' AS SELECT id FROM t`)
+		defer closeFeed(t, foo)
+
+		// The parquet output always includes the primary key.
+		assertPayloads(t, foo, []string{
+			fmt.Sprintf(`t: [%d]->{"id": 0}`, rowId),
 		})
 	}
 

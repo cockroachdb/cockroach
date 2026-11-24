@@ -1,0 +1,86 @@
+# Test that we are able to generate test plans with same-series upgrades
+# (patch-level upgrades within the same major.minor release series).
+#
+# Same-series upgrades test upgrading between patch releases, e.g.,
+# v24.1.2 -> v24.1.5, which is a common customer scenario that we want
+# to ensure works correctly.
+
+# With same_series_upgrade_probability=1.0, same-series upgrades are always
+# enabled. numUpgrades() then picks majorUpgrades from [1, max_upgrades] and
+# sameSeriesUpgrades from [0, max_upgrades - major]. With max_upgrades=3,
+# this allows up to 2 same-series insertions alongside the cross-series
+# upgrades, bounded by the total max_upgrades.
+mixed-version-test predecessors=(22.1.0, 22.2.0, 23.1.4, 23.2.0, 24.1.1, 24.2.1) max_upgrades=3 same_series_upgrade_probability=1.0
+----
+ok
+
+in-mixed-version name=(mixed-version 1)
+----
+ok
+
+workload name=bank
+----
+ok
+
+after-upgrade-finalized name=(validate upgrade)
+----
+ok
+
+plan
+----
+Seed:               12345
+Upgrades:           v24.1.0 → v24.1.1 → v24.2.1 → v24.3.0 (<current>)
+Deployment mode:    system-only
+Hooks:              bank workload, initialize bank workload, mixed-version 1, validate upgrade
+Plan:
+├── install fixtures for version "v24.1.0" (1)
+├── start cluster at version "v24.1.0" (2)
+├── wait for all nodes (:1-4) to acknowledge cluster version '24.1' on system tenant (3)
+├── run "initialize bank workload" (4)
+├── run "bank workload" (5)
+├── upgrade cluster from "v24.1.0" to "v24.1.1"
+│   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (6)
+│   ├── upgrade nodes :1-4 from "v24.1.0" to "v24.1.1"
+│   │   ├── restart node 2 with binary version v24.1.1 (7)
+│   │   ├── restart node 4 with binary version v24.1.1 (8)
+│   │   ├── run "mixed-version 1" (9)
+│   │   ├── restart node 1 with binary version v24.1.1 (10)
+│   │   └── restart node 3 with binary version v24.1.1 (11)
+│   ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (12)
+│   ├── wait for all nodes (:1-4) to acknowledge cluster version '24.1' on system tenant (13)
+│   └── run "validate upgrade" (14)
+├── upgrade cluster from "v24.1.1" to "v24.2.1"
+│   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (15)
+│   ├── upgrade nodes :1-4 from "v24.1.1" to "v24.2.1"
+│   │   ├── restart node 4 with binary version v24.2.1 (16)
+│   │   ├── restart node 1 with binary version v24.2.1 (17)
+│   │   ├── run "mixed-version 1" (18)
+│   │   ├── restart node 2 with binary version v24.2.1 (19)
+│   │   └── restart node 3 with binary version v24.2.1 (20)
+│   ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (21)
+│   ├── wait for all nodes (:1-4) to acknowledge cluster version '24.2' on system tenant (22)
+│   └── run "validate upgrade" (23)
+└── upgrade cluster from "v24.2.1" to "v24.3.0 (<current>)"
+   ├── prevent auto-upgrades on system tenant by setting `preserve_downgrade_option` (24)
+   ├── upgrade nodes :1-4 from "v24.2.1" to "v24.3.0 (<current>)"
+   │   ├── restart node 3 with binary version v24.3.0 (<current>) (25)
+   │   ├── restart node 1 with binary version v24.3.0 (<current>) (26)
+   │   ├── restart node 4 with binary version v24.3.0 (<current>) (27)
+   │   ├── restart node 2 with binary version v24.3.0 (<current>) (28)
+   │   └── run "mixed-version 1" (29)
+   ├── downgrade nodes :1-4 from "v24.3.0 (<current>)" to "v24.2.1"
+   │   ├── restart node 1 with binary version v24.2.1 (30)
+   │   ├── restart node 4 with binary version v24.2.1 (31)
+   │   ├── restart node 2 with binary version v24.2.1 (32)
+   │   ├── run "mixed-version 1" (33)
+   │   └── restart node 3 with binary version v24.2.1 (34)
+   ├── upgrade nodes :1-4 from "v24.2.1" to "v24.3.0 (<current>)"
+   │   ├── restart node 3 with binary version v24.3.0 (<current>) (35)
+   │   ├── run "mixed-version 1" (36)
+   │   ├── restart node 2 with binary version v24.3.0 (<current>) (37)
+   │   ├── restart node 1 with binary version v24.3.0 (<current>) (38)
+   │   └── restart node 4 with binary version v24.3.0 (<current>) (39)
+   ├── allow upgrade to happen on system tenant by resetting `preserve_downgrade_option` (40)
+   ├── run "mixed-version 1" (41)
+   ├── wait for all nodes (:1-4) to acknowledge cluster version <current> on system tenant (42)
+   └── run "validate upgrade" (43)

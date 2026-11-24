@@ -8,16 +8,18 @@ if [ -z "${WORKLOAD_CLUSTER}" ]; then
   exit 1
 fi
 
-dd_api_key="$(gcloud --project=cockroach-drt secrets versions access latest --secret datadog-api-key)"
+if [ -z "${DD_API_KEY}" ]; then
+  DD_API_KEY="$(gcloud --project=cockroach-drt secrets versions access latest --secret datadog-api-key)"
+fi
 
-if [ -z "${dd_api_key}" ]; then
+if [ -z "${DD_API_KEY}" ]; then
   echo "Missing Datadog API key!"
   exit 1
 fi
 
 dd_site="us5.datadoghq.com"
 
-roachprod ssh $WORKLOAD_CLUSTER -- "sudo mkdir -p /etc/otelcol-contrib && sudo tee /etc/otelcol-contrib/config-override.yaml > /dev/null << EOF
+drtprod ssh $WORKLOAD_CLUSTER -- "sudo mkdir -p /etc/otelcol-contrib && sudo tee /etc/otelcol-contrib/config-override.yaml > /dev/null << EOF
 ---
 receivers:
   prometheus/workload:
@@ -67,6 +69,26 @@ receivers:
         - action: replace
           replacement: 3
           target_label: workload
+      - job_name: roachtest_operations
+        honor_timestamps: false
+        metrics_path: /metrics
+        tls_config:
+          insecure_skip_verify: true
+        follow_redirects: true
+        enable_http2: true
+        static_configs:
+        - targets:
+          - "localhost:2115"
+        relabel_configs:
+        - action: replace
+          replacement: operations
+          target_label: component
+        - action: replace
+          replacement: ${WORKLOAD_CLUSTER}
+          target_label: workload
+        - action: replace
+          replacement: ${CLUSTER}
+          target_label: cluster
 
 processors:
   filter/workload:
@@ -77,6 +99,7 @@ processors:
         - workload_tpcc.*
         - workload_kv_.*
         - workload_tpch.*
+        - roachtest_operation_.*
 
 # The */datadog elements are defined in the primary configuration file.
 service:
@@ -93,18 +116,18 @@ service:
       - datadog
 EOF"
 
-roachprod ssh $WORKLOAD_CLUSTER -- "sudo tee /etc/profile.d/99-datadog.sh > /dev/null << EOF
+drtprod ssh $WORKLOAD_CLUSTER -- "sudo tee /etc/profile.d/99-datadog.sh > /dev/null << EOF
 export DD_SITE=${dd_site}
-export DD_API_KEY=${dd_api_key}
-export DD_TAGS=env:development,cluster${CLUSTER%:*},team:drt,service:drt-cockroachdb
+export DD_API_KEY=${DD_API_KEY}
+export DD_TAGS=env:development,cluster:${CLUSTER},team:drt,service:drt-cockroachdb
 EOF"
 
-roachprod opentelemetry-start $WORKLOAD_CLUSTER \
-  --datadog-api-key "${dd_api_key}" \
+drtprod opentelemetry-start $WORKLOAD_CLUSTER \
+  --datadog-api-key "${DD_API_KEY}" \
   --datadog-tags 'service:drt-cockroachdb,team:drt'
 
-roachprod fluent-bit-start $WORKLOAD_CLUSTER \
-  --datadog-api-key "${dd_api_key}" \
+drtprod fluent-bit-start $WORKLOAD_CLUSTER \
+  --datadog-api-key "${DD_API_KEY}" \
   --datadog-service drt-cockroachdb \
   --datadog-tags 'service:drt-cockroachdb,team:drt'
 

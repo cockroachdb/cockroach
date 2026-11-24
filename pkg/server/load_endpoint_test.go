@@ -46,7 +46,8 @@ func newTestMetricSource(clock hlc.WallClock) metricMarshaler {
 	appReg := metric.NewRegistry()
 	logReg := metric.NewRegistry()
 	sysReg := metric.NewRegistry()
-	metricSource.AddNode(reg1, appReg, logReg, sysReg, nodeDesc, 50, "foo:26257", "foo:26258", "foo:5432")
+	clusterReg := metric.NewRegistry()
+	metricSource.AddNode(reg1, appReg, logReg, sysReg, clusterReg, nodeDesc, 50, "foo:26257", "foo:26258", "foo:5432")
 
 	m := struct {
 		// Metrics that we need.
@@ -67,7 +68,7 @@ func newTestMetricSource(clock hlc.WallClock) metricMarshaler {
 	}
 	regTenant := metric.NewRegistry()
 	regTenant.AddMetricStruct(&m)
-	metricSource.AddTenantRegistry(roachpb.SystemTenantID, regTenant)
+	metricSource.AddTenantRegistry(roachpb.SystemTenantID, metric.NewTenantRegistries(regTenant, metric.NewRegistry()))
 	return metricSource
 }
 
@@ -127,7 +128,7 @@ func Test_loadEndpoint(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
 
-	clock := timeutil.NewTestTimeSource()
+	clock := timeutil.NewManualTime(timeutil.Now())
 	rss := status.NewRuntimeStatSampler(ctx, clock)
 	metricSource := newTestMetricSource(clock)
 	le, err := newLoadEndpoint(rss, metricSource)

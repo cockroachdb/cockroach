@@ -7,6 +7,7 @@ package kvpb
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"reflect"
 	"slices"
@@ -21,7 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/errorspb"
 	_ "github.com/cockroachdb/errors/extgrpc" // register EncodeError support for gRPC Status
+	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/redact"
 	"github.com/gogo/protobuf/proto"
 )
@@ -260,22 +263,22 @@ type ErrorDetailType int
 //
 //go:generate stringer -type=ErrorDetailType
 const (
-	NotLeaseHolderErrType                   ErrorDetailType = 1
-	RangeNotFoundErrType                    ErrorDetailType = 2
-	RangeKeyMismatchErrType                 ErrorDetailType = 3
-	ReadWithinUncertaintyIntervalErrType    ErrorDetailType = 4
-	TransactionAbortedErrType               ErrorDetailType = 5
-	TransactionPushErrType                  ErrorDetailType = 6
-	TransactionRetryErrType                 ErrorDetailType = 7
-	TransactionStatusErrType                ErrorDetailType = 8
-	WriteIntentErrType                      ErrorDetailType = 9
-	WriteTooOldErrType                      ErrorDetailType = 10
-	OpRequiresTxnErrType                    ErrorDetailType = 11
-	ConditionFailedErrType                  ErrorDetailType = 12
-	LeaseRejectedErrType                    ErrorDetailType = 13
-	NodeUnavailableErrType                  ErrorDetailType = 14
-	RaftGroupDeletedErrType                 ErrorDetailType = 16
-	ReplicaCorruptionErrType                ErrorDetailType = 17
+	NotLeaseHolderErrType                ErrorDetailType = 1
+	RangeNotFoundErrType                 ErrorDetailType = 2
+	RangeKeyMismatchErrType              ErrorDetailType = 3
+	ReadWithinUncertaintyIntervalErrType ErrorDetailType = 4
+	TransactionAbortedErrType            ErrorDetailType = 5
+	TransactionPushErrType               ErrorDetailType = 6
+	TransactionRetryErrType              ErrorDetailType = 7
+	TransactionStatusErrType             ErrorDetailType = 8
+	WriteIntentErrType                   ErrorDetailType = 9
+	WriteTooOldErrType                   ErrorDetailType = 10
+	OpRequiresTxnErrType                 ErrorDetailType = 11
+	ConditionFailedErrType               ErrorDetailType = 12
+	LeaseRejectedErrType                 ErrorDetailType = 13
+	NodeUnavailableErrType               ErrorDetailType = 14
+	RaftGroupDeletedErrType              ErrorDetailType = 16
+	// 17 was ReplicaCorruptionErrType, removed in #165558.
 	ReplicaTooOldErrType                    ErrorDetailType = 18
 	AmbiguousResultErrType                  ErrorDetailType = 26
 	StoreNotFoundErrType                    ErrorDetailType = 27
@@ -296,6 +299,8 @@ const (
 	LockConflictErrType                     ErrorDetailType = 45
 	ReplicaUnavailableErrType               ErrorDetailType = 46
 	ProxyFailedErrType                      ErrorDetailType = 47
+	ExclusionViolationErrType               ErrorDetailType = 48
+
 	// When adding new error types, don't forget to update NumErrors below.
 
 	// CommunicationErrType indicates a gRPC error; this is not an ErrorDetail.
@@ -305,7 +310,7 @@ const (
 	// detail. The value 25 is chosen because it's reserved in the errors proto.
 	InternalErrType ErrorDetailType = 25
 
-	NumErrors int = 48
+	NumErrors int = 49
 )
 
 // Register the migration of all errors that used to be in the roachpb package
@@ -329,7 +334,6 @@ func init() {
 	errors.RegisterTypeMigration(roachpbPath, "*roachpb.LeaseRejectedError", &LeaseRejectedError{})
 	errors.RegisterTypeMigration(roachpbPath, "*roachpb.NodeUnavailableError", &NodeUnavailableError{})
 	errors.RegisterTypeMigration(roachpbPath, "*roachpb.RaftGroupDeletedError", &RaftGroupDeletedError{})
-	errors.RegisterTypeMigration(roachpbPath, "*roachpb.ReplicaCorruptionError", &ReplicaCorruptionError{})
 	errors.RegisterTypeMigration(roachpbPath, "*roachpb.ReplicaTooOldError", &ReplicaTooOldError{})
 	errors.RegisterTypeMigration(roachpbPath, "*roachpb.StoreNotFoundError", &StoreNotFoundError{})
 	errors.RegisterTypeMigration(roachpbPath, "*roachpb.TransactionRetryWithProtoRefreshError", &TransactionRetryWithProtoRefreshError{})
@@ -347,6 +351,7 @@ func init() {
 	errors.RegisterTypeMigration(roachpbPath, "*roachpb.RefreshFailedError", &RefreshFailedError{})
 	errors.RegisterTypeMigration(roachpbPath, "*roachpb.MVCCHistoryMutationError", &MVCCHistoryMutationError{})
 	errors.RegisterTypeMigration(roachpbPath, "*roachpb.InsufficientSpaceError", &InsufficientSpaceError{})
+	errors.RegisterTypeMigration(roachpbPath, "*roachpb.PebbleCorruptionError", &PebbleCorruptionError{})
 }
 
 // GoError returns a Go error converted from Error. If the error is a transaction
@@ -430,7 +435,7 @@ func (e *Error) checkTxnStatusValid() {
 		return
 	}
 	if txn.Status.IsFinalized() {
-		log.Fatalf(context.TODO(), "transaction unexpectedly finalized in (%T): %v", err, e)
+		log.Dev.Fatalf(context.TODO(), "transaction unexpectedly finalized in (%T): %v", err, e)
 	}
 }
 
@@ -654,7 +659,7 @@ func (e *RangeKeyMismatchError) AppendRangeInfo(ctx context.Context, ris ...roac
 	for _, ri := range ris {
 		if !ri.Lease.Empty() {
 			if _, ok := ri.Desc.GetReplicaDescriptorByID(ri.Lease.Replica.ReplicaID); !ok {
-				log.Fatalf(ctx, "lease names missing replica; lease: %s, desc: %s", ri.Lease, ri.Desc)
+				log.Dev.Fatalf(ctx, "lease names missing replica; lease: %s, desc: %s", ri.Lease, ri.Desc)
 			}
 		}
 		e.Ranges = append(e.Ranges, ri)
@@ -714,6 +719,7 @@ func (e *TransactionAbortedError) SafeFormatError(p errors.Printer) (next error)
 
 type retryErrOptions struct {
 	conflictingTxn *enginepb.TxnMeta
+	conflictKey    roachpb.Key
 }
 
 // RetryErrOption is used to annotate optional fields in retry related errors.
@@ -733,6 +739,15 @@ func (f retryErrOptionFunc) apply(o *retryErrOptions) {
 func WithConflictingTxn(txn *enginepb.TxnMeta) RetryErrOption {
 	return retryErrOptionFunc(func(o *retryErrOptions) {
 		o.conflictingTxn = txn
+	})
+}
+
+// WithConflictKey is used to annotate a retry error with the key that the
+// transaction conflicted on. This is distinct from the conflicting transaction's
+// anchor key (TxnMeta.Key), which is used for transaction record placement.
+func WithConflictKey(key roachpb.Key) RetryErrOption {
+	return retryErrOptionFunc(func(o *retryErrOptions) {
+		o.conflictKey = key
 	})
 }
 
@@ -765,6 +780,7 @@ func NewTransactionRetryWithProtoRefreshError(
 		PrevTxnEpoch:    prevTxnEpoch,
 		NextTransaction: nextTxn,
 		ConflictingTxn:  options.conflictingTxn,
+		ConflictKey:     options.conflictKey,
 	}
 }
 
@@ -847,6 +863,7 @@ func NewTransactionRetryError(
 		ExtraMsg:           extraMsg.StripMarkers(),
 		ExtraMsgRedactable: extraMsg,
 		ConflictingTxn:     options.conflictingTxn,
+		ConflictKey:        options.conflictKey,
 	}
 }
 
@@ -1214,48 +1231,6 @@ func (e *RaftGroupDeletedError) Type() ErrorDetailType {
 
 var _ ErrorDetailInterface = &RaftGroupDeletedError{}
 
-// NewReplicaCorruptionError creates a new error indicating a corrupt replica.
-// The supplied error is used to provide additional detail in the error message.
-// NB: Take caution when marking errors as replica corruption errors to be sure
-// that they are actually indicative of replica corruption and should be treated
-// as such; for example while in general a failures to apply a command might be,
-// a timeout or context cancellation error may not be, especially if a user
-// request controls that cancellation/timeout. See the helper below in
-// MaybeWrapReplicaCorruptionError.
-func NewReplicaCorruptionError(err error) *ReplicaCorruptionError {
-	return &ReplicaCorruptionError{ErrorMsg: err.Error()}
-}
-
-// MaybeWrapReplicaCorruptionError wraps a passed error as a replica corruption
-// error unless it matches the error in the passed context, which would suggest
-// the whole operation was cancelled due to the latter rather than indicating a
-// fault which implies replica corruption.
-func MaybeWrapReplicaCorruptionError(ctx context.Context, err error) error {
-	if errors.Is(err, ctx.Err()) {
-		return err
-	}
-	return NewReplicaCorruptionError(err)
-}
-
-func (e *ReplicaCorruptionError) Error() string {
-	return redact.Sprint(e).StripMarkers()
-}
-
-func (e *ReplicaCorruptionError) SafeFormatError(p errors.Printer) (next error) {
-	p.Printf("replica corruption (processed=%t)", e.Processed)
-	if e.ErrorMsg != "" {
-		p.Printf(": %s", e.ErrorMsg)
-	}
-	return nil
-}
-
-// Type is part of the ErrorDetailInterface.
-func (e *ReplicaCorruptionError) Type() ErrorDetailType {
-	return ReplicaCorruptionErrType
-}
-
-var _ ErrorDetailInterface = &ReplicaCorruptionError{}
-
 // NewReplicaTooOldError initializes a new ReplicaTooOldError.
 func NewReplicaTooOldError(replicaID roachpb.ReplicaID) *ReplicaTooOldError {
 	return &ReplicaTooOldError{
@@ -1565,10 +1540,10 @@ func NewRefreshFailedError(
 		o.apply(&options)
 	}
 	if reason == RefreshFailedError_REASON_INTENT && options.conflictingTxn == nil {
-		log.Fatal(ctx, "conflictingTxn should be set if refresh failed with REASON_INTENT")
+		log.Dev.Fatal(ctx, "conflictingTxn should be set if refresh failed with REASON_INTENT")
 	}
 	if reason != RefreshFailedError_REASON_INTENT && options.conflictingTxn != nil {
-		log.Fatal(ctx, "conflictingTxn should not be set if refresh failed without REASON_INTENT")
+		log.Dev.Fatal(ctx, "conflictingTxn should not be set if refresh failed without REASON_INTENT")
 	}
 	return &RefreshFailedError{
 		Reason:         reason,
@@ -1621,6 +1596,35 @@ func (e *InsufficientSpaceError) Format(s fmt.State, verb rune) {
 func (e *InsufficientSpaceError) SafeFormatError(p errors.Printer) (next error) {
 	p.Printf("store %d has insufficient remaining capacity to %s (remaining: %s / %.1f%%, min required: %.1f%%)",
 		e.StoreID, redact.SafeString(e.Op), humanizeutil.IBytes(e.Available), float64(e.Available)/float64(e.Capacity)*100, e.Required*100)
+	return nil
+}
+
+// NewPebbleCorruptionError creates a new PebbleCorruptionError.
+func NewPebbleCorruptionError(
+	storeID roachpb.StoreID, info *pebble.DataCorruptionInfo,
+) *PebbleCorruptionError {
+	err := &PebbleCorruptionError{
+		StoreID:  storeID,
+		Path:     info.Path,
+		IsRemote: info.IsRemote,
+		ExtraMsg: info.Details.Error(),
+	}
+	return err
+}
+
+func (e *PebbleCorruptionError) Error() string {
+	return fmt.Sprint(e)
+}
+
+// Format implements fmt.Formatter.
+func (e *PebbleCorruptionError) Format(s fmt.State, verb rune) {
+	errors.FormatError(e, s, verb)
+}
+
+// SafeFormatError implements errors.SafeFormatter.
+func (e *PebbleCorruptionError) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf("pebble corruption error on store id:%d, path:%s, remote:%t, extra message: %s",
+		e.StoreID, e.Path, e.IsRemote, e.ExtraMsg)
 	return nil
 }
 
@@ -1795,6 +1799,51 @@ func NewKeyCollisionError(key roachpb.Key, value []byte) error {
 	return ret
 }
 
+// NewExclusionViolationError creates a new ExclusionViolationError. This error
+// is returned by requests that encounter an existing value written at a
+// timestamp at which they expected to have an exclusive lock on the key. This
+// error implies that the lock was lost, which is possible for unreplicated locks.
+func NewExclusionViolationError(
+	exclusionTS, actualTS hlc.Timestamp, key roachpb.Key,
+) *ExclusionViolationError {
+	return &ExclusionViolationError{
+		ExpectedExclusionSinceTimestamp: exclusionTS,
+		ViolationTimestamp:              actualTS,
+		Key:                             key.Clone(),
+	}
+}
+
+func (e *ExclusionViolationError) SafeFormatError(p errors.Printer) (next error) {
+	p.Printf("write exclusion on key %s expected since %s but found write at %s",
+		e.Key,
+		e.ExpectedExclusionSinceTimestamp,
+		e.ViolationTimestamp,
+	)
+	return nil
+}
+
+func (e *ExclusionViolationError) Error() string {
+	return redact.Sprint(e).StripMarkers()
+}
+
+func (*ExclusionViolationError) canRestartTransaction() TransactionRestart {
+	return TransactionRestart_IMMEDIATE
+}
+
+// Type is part of the ErrorDetailInterface.
+func (e *ExclusionViolationError) Type() ErrorDetailType {
+	return ExclusionViolationErrType
+}
+
+// RetryTimestamp returns the timestamp that should be used to retry an
+// operation after encountering a ExclusionViolationError.
+func (e *ExclusionViolationError) RetryTimestamp() hlc.Timestamp {
+	return e.ViolationTimestamp.Next()
+}
+
+var _ ErrorDetailInterface = &ExclusionViolationError{}
+var _ transactionRestartError = &ExclusionViolationError{}
+
 func init() {
 	encode := func(ctx context.Context, err error) (msgPrefix string, safeDetails []string, payload proto.Message) {
 		errors.As(err, &payload) // payload = err.(proto.Message)
@@ -1808,10 +1857,50 @@ func init() {
 	errors.RegisterWrapperDecoder(typeName, decode)
 }
 
+func encodeKeyCollisionError(
+	_ context.Context, err error,
+) (msgPrefix string, safe []string, details proto.Message) {
+	t := err.(*KeyCollisionError)
+	details = &errorspb.StringsPayload{
+		Details: []string{
+			base64.StdEncoding.EncodeToString(t.Key),
+			base64.StdEncoding.EncodeToString(t.Value),
+		},
+	}
+	msgPrefix = "ingested key collides with an existing one"
+	return msgPrefix, nil, details
+}
+
+func decodeKeyCollisionError(_ context.Context, _ string, _ []string, payload proto.Message) error {
+	m, ok := payload.(*errorspb.StringsPayload)
+	if !ok || len(m.Details) < 2 {
+		// If this ever happens, this means some version of the library
+		// (presumably future) changed the payload type, and we're
+		// receiving this here. In this case, give up and let
+		// DecodeError use the opaque type.
+		return nil
+	}
+	key, decodeErr := base64.StdEncoding.DecodeString(m.Details[0])
+	if decodeErr != nil {
+		return nil //nolint:returnerrcheck
+	}
+	value, decodeErr := base64.StdEncoding.DecodeString(m.Details[1])
+	if decodeErr != nil {
+		return nil //nolint:returnerrcheck
+	}
+	return &KeyCollisionError{
+		Key:   key,
+		Value: value,
+	}
+}
+
 func init() {
 	errors.RegisterLeafDecoder(errors.GetTypeKey((*MissingRecordError)(nil)), func(_ context.Context, _ string, _ []string, _ proto.Message) error {
 		return &MissingRecordError{}
 	})
+	collisionErrorKey := errors.GetTypeKey((*KeyCollisionError)(nil))
+	errors.RegisterLeafEncoder(collisionErrorKey, encodeKeyCollisionError)
+	errors.RegisterLeafDecoder(collisionErrorKey, decodeKeyCollisionError)
 	errorutilpath := reflect.TypeOf(errorutil.TempSentinel{}).PkgPath()
 	errors.RegisterTypeMigration(errorutilpath, "*errorutil.descriptorNotFound", &DescNotFoundError{})
 }
@@ -1832,7 +1921,6 @@ var _ errors.SafeFormatter = &ConditionFailedError{}
 var _ errors.SafeFormatter = &LeaseRejectedError{}
 var _ errors.SafeFormatter = &NodeUnavailableError{}
 var _ errors.SafeFormatter = &RaftGroupDeletedError{}
-var _ errors.SafeFormatter = &ReplicaCorruptionError{}
 var _ errors.SafeFormatter = &ReplicaTooOldError{}
 var _ errors.SafeFormatter = &AmbiguousResultError{}
 var _ errors.SafeFormatter = &StoreNotFoundError{}
@@ -1854,3 +1942,4 @@ var _ errors.SafeFormatter = &UnhandledRetryableError{}
 var _ errors.SafeFormatter = &ReplicaUnavailableError{}
 var _ errors.SafeFormatter = &ProxyFailedError{}
 var _ errors.SafeFormatter = &KeyCollisionError{}
+var _ errors.SafeFormatter = &ExclusionViolationError{}

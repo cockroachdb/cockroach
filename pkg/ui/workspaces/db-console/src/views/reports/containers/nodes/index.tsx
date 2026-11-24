@@ -3,13 +3,12 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { util } from "@cockroachlabs/cluster-ui";
+import { useNodesSummary, util } from "@cockroachlabs/cluster-ui";
 import classNames from "classnames";
 import flow from "lodash/flow";
 import get from "lodash/get";
 import has from "lodash/has";
 import isEmpty from "lodash/isEmpty";
-import isEqual from "lodash/isEqual";
 import isNil from "lodash/isNil";
 import join from "lodash/join";
 import map from "lodash/map";
@@ -17,22 +16,13 @@ import orderBy from "lodash/orderBy";
 import uniq from "lodash/uniq";
 import Long from "long";
 import moment from "moment-timezone";
-import React from "react";
+import React, { useState } from "react";
 import { Helmet } from "react-helmet";
-import { connect } from "react-redux";
 import { withRouter, RouteComponentProps } from "react-router-dom";
 
 import { InlineAlert } from "src/components";
 import * as protos from "src/js/protos";
-import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
-import {
-  LivenessStatus,
-  nodeIDsStringifiedSelector,
-  selectNodesLastError,
-  nodeStatusByIDSelector,
-  livenessStatusByNodeIDSelector,
-} from "src/redux/nodes";
-import { AdminUIState } from "src/redux/state";
+import { LivenessStatus } from "src/redux/nodes";
 import { FixLong } from "src/util/fixLong";
 import {
   getFilters,
@@ -47,17 +37,6 @@ import {
 
 import { BackToAdvanceDebug } from "../util";
 
-interface NodesOwnProps {
-  nodeIds: ReturnType<typeof nodeIDsStringifiedSelector.resultFunc>;
-  nodeLastError: ReturnType<typeof selectNodesLastError.resultFunc>;
-  nodeStatusByID: ReturnType<typeof nodeStatusByIDSelector.resultFunc>;
-  livenessStatusByNodeID: ReturnType<
-    typeof livenessStatusByNodeIDSelector.resultFunc
-  >;
-  refreshNodes: typeof refreshNodes;
-  refreshLiveness: typeof refreshLiveness;
-}
-
 interface NodesTableRowParams {
   title: string;
   extract: (
@@ -70,8 +49,6 @@ interface NodesTableRowParams {
     ns: protos.cockroach.server.status.statuspb.INodeStatus,
   ) => string;
 }
-
-type NodesProps = NodesOwnProps & RouteComponentProps;
 
 const dateFormat = "Y-MM-DD HH:mm:ss";
 const detailTimeFormat = "Y/MM/DD HH:mm:ss";
@@ -300,37 +277,25 @@ const nodesTableRows: NodesTableRowParams[] = [
   },
 ];
 
-type LocalNodeState = { selectFilter: number | null };
 /**
  * Renders the Nodes Diagnostics Report page.
  */
-export class Nodes extends React.Component<NodesProps, LocalNodeState> {
-  constructor(props: NodesProps) {
-    super(props);
+export function Nodes({
+  location,
+  history,
+}: RouteComponentProps): React.ReactElement {
+  const {
+    nodeIDs: nodeIds,
+    nodeStatusByID,
+    livenessStatusByNodeID,
+    error: nodeLastError,
+  } = useNodesSummary();
 
-    this.state = {
-      selectFilter: isEmpty(getFilters(this.props.location))
-        ? LivenessStatus.NODE_STATUS_LIVE
-        : null,
-    };
-  }
-  refresh(props = this.props) {
-    props.refreshLiveness();
-    props.refreshNodes();
-  }
+  const [selectFilter, setSelectFilter] = useState<number | null>(
+    isEmpty(getFilters(location)) ? LivenessStatus.NODE_STATUS_LIVE : null,
+  );
 
-  componentDidMount() {
-    // Refresh nodes status query when mounting.
-    this.refresh();
-  }
-
-  componentDidUpdate(prevProps: NodesProps) {
-    if (!isEqual(this.props.location, prevProps.location)) {
-      this.refresh(this.props);
-    }
-  }
-
-  renderNodesTableRow(
+  const renderNodesTableRow = (
     orderedNodeIDs: string[],
     key: number,
     title: string,
@@ -343,12 +308,12 @@ export class Nodes extends React.Component<NodesProps, LocalNodeState> {
     cellTitle?: (
       ns: protos.cockroach.server.status.statuspb.INodeStatus,
     ) => string,
-  ) {
+  ) => {
     const inconsistent =
       !isNil(equality) &&
       flow(
-        (nodeIds: string[]) =>
-          map(nodeIds, nodeID => this.props.nodeStatusByID[nodeID]),
+        (nodeIdsList: string[]) =>
+          map(nodeIdsList, nodeID => nodeStatusByID[nodeID]),
         statuses => map(statuses, status => equality(status)),
         uniq,
       )(orderedNodeIDs).length > 1;
@@ -362,7 +327,7 @@ export class Nodes extends React.Component<NodesProps, LocalNodeState> {
       <tr className="nodes-table__row" key={key}>
         <th className={headerClassName}>{title}</th>
         {map(orderedNodeIDs, nodeID => {
-          const status = this.props.nodeStatusByID[nodeID];
+          const status = nodeStatusByID[nodeID];
           return (
             <NodeTableCell
               key={nodeID}
@@ -373,150 +338,123 @@ export class Nodes extends React.Component<NodesProps, LocalNodeState> {
         })}
       </tr>
     );
-  }
+  };
 
-  requiresAdmin() {
+  if (nodeLastError?.message === "this operation requires admin privilege") {
     return (
-      this.props.nodeLastError?.message ===
-      "this operation requires admin privilege"
+      <InlineAlert title="" message="This page requires admin privileges." />
     );
   }
 
-  render() {
-    const { nodeStatusByID, livenessStatusByNodeID, nodeIds } = this.props;
-    if (this.requiresAdmin()) {
+  if (isEmpty(nodeIds)) {
+    return loading;
+  }
+
+  const filters = getFilters(location);
+
+  let nodeIDsContext = nodeIds.map((nodeID: string) =>
+    Number.parseInt(nodeID, 10),
+  );
+  if (!isNil(filters.nodeIDs) && filters.nodeIDs.size > 0) {
+    nodeIDsContext = nodeIDsContext.filter(nodeID =>
+      filters.nodeIDs.has(nodeID),
+    );
+  }
+  if (!isNil(filters.localityRegex)) {
+    nodeIDsContext = nodeIDsContext.filter(nodeID =>
+      filters.localityRegex.test(
+        localityToString(nodeStatusByID[nodeID.toString()].desc.locality),
+      ),
+    );
+  }
+  if (selectFilter !== null) {
+    nodeIDsContext = nodeIDsContext.filter(nodeID => {
+      // For this context, if the user chooses active nodes,
+      // only include nodes with a liveness status of DEAD, LIVE
+      // or UNAVAILABLE (suspect).
+      if (selectFilter === LivenessStatus.NODE_STATUS_LIVE) {
+        return [
+          LivenessStatus.NODE_STATUS_DEAD,
+          LivenessStatus.NODE_STATUS_LIVE,
+          LivenessStatus.NODE_STATUS_UNAVAILABLE,
+        ].includes(livenessStatusByNodeID[nodeID]);
+      }
       return (
-        <InlineAlert title="" message="This page requires admin privileges." />
+        livenessStatusByNodeID[nodeID] ===
+        LivenessStatus.NODE_STATUS_DECOMMISSIONED
       );
-    }
-
-    if (isEmpty(nodeIds)) {
-      return loading;
-    }
-
-    const filters = getFilters(this.props.location);
-
-    let nodeIDsContext = nodeIds.map((nodeID: string) =>
-      Number.parseInt(nodeID, 10),
-    );
-    if (!isNil(filters.nodeIDs) && filters.nodeIDs.size > 0) {
-      nodeIDsContext = nodeIDsContext.filter(nodeID =>
-        filters.nodeIDs.has(nodeID),
-      );
-    }
-    if (!isNil(filters.localityRegex)) {
-      nodeIDsContext = nodeIDsContext.filter(nodeID =>
-        filters.localityRegex.test(
-          localityToString(nodeStatusByID[nodeID.toString()].desc.locality),
-        ),
-      );
-    }
-    if (this.state.selectFilter !== null) {
-      nodeIDsContext = nodeIDsContext.filter(nodeID => {
-        // For this context, if the user chooses active nodes,
-        // only include nodes with a liveness status of DEAD, LIVE
-        // or UNAVAILABLE (suspect).
-        if (this.state.selectFilter === LivenessStatus.NODE_STATUS_LIVE) {
-          return [
-            LivenessStatus.NODE_STATUS_DEAD,
-            LivenessStatus.NODE_STATUS_LIVE,
-            LivenessStatus.NODE_STATUS_UNAVAILABLE,
-          ].includes(livenessStatusByNodeID[nodeID]);
-        }
-        return (
-          livenessStatusByNodeID[nodeID] ===
-          LivenessStatus.NODE_STATUS_DECOMMISSIONED
-        );
-      });
-    }
-
-    // Sort the node IDs and then convert them back to string for lookups.
-    const orderedNodeIDs = orderBy(nodeIDsContext, nodeID => nodeID).map(
-      nodeID => nodeID.toString(),
-    );
-
-    const dropdownOptions: DropdownOption[] = [
-      {
-        value: LivenessStatus.NODE_STATUS_LIVE.toString(),
-        label: "Active Nodes",
-      },
-      {
-        value: LivenessStatus.NODE_STATUS_DECOMMISSIONED.toString(),
-        label: "Decomissioned Nodes",
-      },
-      { value: "", label: "All Nodes" },
-    ];
-
-    return (
-      <section className="section">
-        <Helmet title="Node Diagnostics | Debug" />
-        <BackToAdvanceDebug history={this.props.history} />
-        <h1 className="base-heading">Node Diagnostics</h1>
-        <NodeFilterList
-          nodeIDs={filters.nodeIDs}
-          localityRegex={filters.localityRegex}
-        />
-        {!isEmpty(orderedNodeIDs) && <h2 className="base-heading">Nodes</h2>}
-        {isEmpty(filters) && (
-          <PageConfig>
-            <PageConfigItem>
-              <Dropdown
-                title="Node Selection"
-                options={dropdownOptions}
-                selected={
-                  this.state.selectFilter === null
-                    ? ""
-                    : this.state.selectFilter.toString()
-                }
-                onChange={selected =>
-                  this.setState({
-                    selectFilter:
-                      selected.value === "" ? null : parseInt(selected.value),
-                  })
-                }
-              />
-            </PageConfigItem>
-          </PageConfig>
-        )}
-        {isEmpty(orderedNodeIDs) ? (
-          <section className="section">
-            <NodeFilterList
-              nodeIDs={filters.nodeIDs}
-              localityRegex={filters.localityRegex}
-            />
-            <h2 className="base-heading">No nodes match the filters</h2>
-          </section>
-        ) : (
-          <table className="nodes-table">
-            <tbody>
-              {map(nodesTableRows, (row, key) => {
-                return this.renderNodesTableRow(
-                  orderedNodeIDs,
-                  key,
-                  row.title,
-                  row.extract,
-                  row.equality,
-                  row.cellTitle,
-                );
-              })}
-            </tbody>
-          </table>
-        )}
-      </section>
-    );
+    });
   }
+
+  // Sort the node IDs and then convert them back to string for lookups.
+  const orderedNodeIDs = orderBy(nodeIDsContext, nodeID => nodeID).map(nodeID =>
+    nodeID.toString(),
+  );
+
+  const dropdownOptions: DropdownOption[] = [
+    {
+      value: LivenessStatus.NODE_STATUS_LIVE.toString(),
+      label: "Active Nodes",
+    },
+    {
+      value: LivenessStatus.NODE_STATUS_DECOMMISSIONED.toString(),
+      label: "Decomissioned Nodes",
+    },
+    { value: "", label: "All Nodes" },
+  ];
+
+  return (
+    <section className="section">
+      <Helmet title="Node Diagnostics | Debug" />
+      <BackToAdvanceDebug history={history} />
+      <h1 className="base-heading">Node Diagnostics</h1>
+      <NodeFilterList
+        nodeIDs={filters.nodeIDs}
+        localityRegex={filters.localityRegex}
+      />
+      {!isEmpty(orderedNodeIDs) && <h2 className="base-heading">Nodes</h2>}
+      {isEmpty(filters) && (
+        <PageConfig>
+          <PageConfigItem>
+            <Dropdown
+              title="Node Selection"
+              options={dropdownOptions}
+              selected={selectFilter === null ? "" : selectFilter.toString()}
+              onChange={selected =>
+                setSelectFilter(
+                  selected.value === "" ? null : parseInt(selected.value),
+                )
+              }
+            />
+          </PageConfigItem>
+        </PageConfig>
+      )}
+      {isEmpty(orderedNodeIDs) ? (
+        <section className="section">
+          <NodeFilterList
+            nodeIDs={filters.nodeIDs}
+            localityRegex={filters.localityRegex}
+          />
+          <h2 className="base-heading">No nodes match the filters</h2>
+        </section>
+      ) : (
+        <table className="nodes-table">
+          <tbody>
+            {map(nodesTableRows, (row, key) => {
+              return renderNodesTableRow(
+                orderedNodeIDs,
+                key,
+                row.title,
+                row.extract,
+                row.equality,
+                row.cellTitle,
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+    </section>
+  );
 }
 
-const mapStateToProps = (state: AdminUIState) => ({
-  nodeIds: nodeIDsStringifiedSelector(state),
-  nodeLastError: selectNodesLastError(state),
-  nodeStatusByID: nodeStatusByIDSelector(state),
-  livenessStatusByNodeID: livenessStatusByNodeIDSelector(state),
-});
-
-const mapDispatchToProps = {
-  refreshNodes,
-  refreshLiveness,
-};
-
-export default withRouter(connect(mapStateToProps, mapDispatchToProps)(Nodes));
+export default withRouter(Nodes);

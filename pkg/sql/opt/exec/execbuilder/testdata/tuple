@@ -140,6 +140,7 @@ vectorized: true
     │ estimated row count: 80 (missing stats)
     │ table: abc@abc_pkey
     │ key columns: rowid
+    │ parallel
     │
     └── • scan
           columns: (a, b, rowid)

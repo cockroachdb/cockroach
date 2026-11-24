@@ -41,6 +41,16 @@ type TestingKnobs struct {
 	// We use clusterversion.Key rather than a roachpb.Version because it will be used
 	// to get initial values to use during bootstrap.
 	TenantLogicalVersionKeyOverride clusterversion.Key
+
+	// This knob needs to be used in the following ways:
+	// 1. In tests, there should be a way to override the allow unsafe variable.
+	// 2. If a test is not setup with a value, true should be the default.
+	// 3. There should be a way to setup a test so that there is no override.
+	//
+	// Conditions 2 and 3 remove the possibility for just a pointer to a boolean.
+	// If the value were nil, should the system set the override to true, or leave it nil?
+	// To fix the ambiguity, a function which returns nil can be used to indicate no override.
+	UnsafeOverride func() *bool
 }
 
 var _ base.ModuleTestingKnobs = &TestingKnobs{}

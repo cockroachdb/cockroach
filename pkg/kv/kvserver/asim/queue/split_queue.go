@@ -42,6 +42,11 @@ func NewSplitQueue(
 // MaybeAdd proposes a range for being split. If it meets the criteria it is
 // enqueued.
 func (sq *splitQueue) MaybeAdd(ctx context.Context, replica state.Replica, state state.State) bool {
+	if !sq.settings.SplitQueueEnabled {
+		// Nothing to do, disabled.
+		return false
+	}
+
 	priority := sq.shouldSplit(sq.lastTick, replica.Range(), state)
 	if priority < 1 {
 		return false
@@ -63,6 +68,8 @@ func (sq *splitQueue) MaybeAdd(ctx context.Context, replica state.Replica, state
 // FIFO order on ties. The tick currently only considers size based range
 // splitting.
 func (sq *splitQueue) Tick(ctx context.Context, tick time.Time, s state.State) {
+	// TODO(wenyihu6): it is unclear why next tick is forwarded to last tick
+	// here (see #149904 for more details).
 	if sq.lastTick.After(sq.next) {
 		sq.next = sq.lastTick
 	}

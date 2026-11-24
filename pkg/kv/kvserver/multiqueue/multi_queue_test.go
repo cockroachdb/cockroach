@@ -146,7 +146,7 @@ func TestMultiQueueCancelInProgress(t *testing.T) {
 
 	started := 0
 	completed := 0
-	startTask := func(task *Task) (*Permit, bool) {
+	startTask := func(task *Task[Permit]) (*Permit, bool) {
 		select {
 		case permit, ok := <-task.GetWaitChan():
 			if ok {
@@ -161,7 +161,7 @@ func TestMultiQueueCancelInProgress(t *testing.T) {
 		return nil, false
 	}
 
-	completeTask := func(task *Task, permit *Permit) {
+	completeTask := func(task *Task[Permit], permit *Permit) {
 		releaseStarted := make(chan struct{})
 		releaseFinished := make(chan struct{})
 		go func() {
@@ -360,7 +360,7 @@ func TestMultiQueueFull(t *testing.T) {
 }
 
 // verifyOrder makes sure that the chans are called in the specified order.
-func verifyOrder(t *testing.T, queue *MultiQueue, tasks ...*Task) {
+func verifyOrder(t *testing.T, queue *MultiQueue, tasks ...*Task[Permit]) {
 	// each time, verify that the only available channel is the "next" one in order
 	for i, task := range tasks {
 		if task == nil {

@@ -151,7 +151,7 @@ enum Family {
     // for various character-based operations such as sorting, pattern matching,
     // and builtin functions like lower and upper.
     //
-    //   Oid      : T_text, T_varchar, T_bpchar, T_char
+    //   Oid      : T_text, T_varchar, T_bpchar, T_char, T_citext
     //   Width    : max # characters (0 = no specified limit)
     //   Locale   : name of locale (e.g. EN or DE)
     //
@@ -407,6 +407,18 @@ enum Family {
     //   Oid      : T_trigger
     TriggerFamily = 33;
 
+    // JsonpathFamily is a type family for the jsonpath type, which is the type
+    // representing JSON path expressions.
+    //  Canonical: types.Jsonpath
+    //  Oid: T_jsonpath
+    JsonpathFamily = 34;
+
+    // LTreeFamily is a type family for the ltree type, which is the type
+    // representing ltree expressions.
+    //  Canonical: types.LTree
+    //  Oid: T_ltree
+    LTreeFamily = 35;
+
     // AnyFamily is a special type family used during static analysis as a
     // wildcard type that matches any other type, including scalar, array, and
     // tuple types. Execution-time values should never have this type. As an
@@ -524,11 +536,9 @@ message InternalType {
     // more details.
     optional string locale = 5;
 
-    // VisibleType is deprecated in 19.2, since it is now superseded by the Oid
-    // field. It previously contained an alias for any types where our internal
-    // representation is different than the user specification. Examples are INT4,
-    // FLOAT4, etc. Mostly for Postgres compatibility.
-    optional int32 visible_type = 6 [(gogoproto.nullable) = false];
+    // VisibleType was deprecated in 19.2 and removed in 25.4. It was superseded
+    // by the Oid field. Field number 6 is reserved to prevent reuse.
+    reserved 6;
 
     // ArrayElemType is deprecated in 19.2, since it is now superseded by the
     // ArrayContents field. It previously contained the type family of array

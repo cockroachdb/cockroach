@@ -1,0 +1,4475 @@
+diff -U3 --label=/mnt/data1/postgres/src/test/regress/expected/multirangetypes.out --label=/mnt/data1/postgres/src/test/regress/results/multirangetypes.out /mnt/data1/postgres/src/test/regress/expected/multirangetypes.out /mnt/data1/postgres/src/test/regress/results/multirangetypes.out
+--- /mnt/data1/postgres/src/test/regress/expected/multirangetypes.out
++++ /mnt/data1/postgres/src/test/regress/results/multirangetypes.out
+@@ -4,2763 +4,1272 @@
+ --
+ -- negative tests; should fail
+ select ''::textmultirange;
+-ERROR:  malformed multirange literal: ""
+-LINE 1: select ''::textmultirange;
+-               ^
+-DETAIL:  Missing left brace.
++ERROR:  type "textmultirange" does not exist
+ select '{,}'::textmultirange;
+-ERROR:  malformed multirange literal: "{,}"
+-LINE 1: select '{,}'::textmultirange;
+-               ^
+-DETAIL:  Expected range start.
++ERROR:  type "textmultirange" does not exist
+ select '{(,)}.'::textmultirange;
+-ERROR:  malformed multirange literal: "{(,)}."
+-LINE 1: select '{(,)}.'::textmultirange;
+-               ^
+-DETAIL:  Junk after closing right brace.
++ERROR:  type "textmultirange" does not exist
+ select '{[a,c),}'::textmultirange;
+-ERROR:  malformed multirange literal: "{[a,c),}"
+-LINE 1: select '{[a,c),}'::textmultirange;
+-               ^
+-DETAIL:  Expected range start.
++ERROR:  type "textmultirange" does not exist
+ select '{,[a,c)}'::textmultirange;
+-ERROR:  malformed multirange literal: "{,[a,c)}"
+-LINE 1: select '{,[a,c)}'::textmultirange;
+-               ^
+-DETAIL:  Expected range start.
++ERROR:  type "textmultirange" does not exist
+ select '{-[a,z)}'::textmultirange;
+-ERROR:  malformed multirange literal: "{-[a,z)}"
+-LINE 1: select '{-[a,z)}'::textmultirange;
+-               ^
+-DETAIL:  Expected range start.
++ERROR:  type "textmultirange" does not exist
+ select '{[a,z) - }'::textmultirange;
+-ERROR:  malformed multirange literal: "{[a,z) - }"
+-LINE 1: select '{[a,z) - }'::textmultirange;
+-               ^
+-DETAIL:  Expected comma or end of multirange.
++ERROR:  type "textmultirange" does not exist
+ select '{(",a)}'::textmultirange;
+-ERROR:  malformed multirange literal: "{(",a)}"
+-LINE 1: select '{(",a)}'::textmultirange;
+-               ^
+-DETAIL:  Unexpected end of input.
++ERROR:  type "textmultirange" does not exist
+ select '{(,,a)}'::textmultirange;
+-ERROR:  malformed range literal: "(,,a)"
+-LINE 1: select '{(,,a)}'::textmultirange;
+-               ^
+-DETAIL:  Too many commas.
++ERROR:  type "textmultirange" does not exist
+ select '{(),a)}'::textmultirange;
+-ERROR:  malformed range literal: "()"
+-LINE 1: select '{(),a)}'::textmultirange;
+-               ^
+-DETAIL:  Missing comma after lower bound.
++ERROR:  type "textmultirange" does not exist
+ select '{(a,))}'::textmultirange;
+-ERROR:  malformed multirange literal: "{(a,))}"
+-LINE 1: select '{(a,))}'::textmultirange;
+-               ^
+-DETAIL:  Expected comma or end of multirange.
++ERROR:  type "textmultirange" does not exist
+ select '{(],a)}'::textmultirange;
+-ERROR:  malformed range literal: "(]"
+-LINE 1: select '{(],a)}'::textmultirange;
+-               ^
+-DETAIL:  Missing comma after lower bound.
++ERROR:  type "textmultirange" does not exist
+ select '{(a,])}'::textmultirange;
+-ERROR:  malformed multirange literal: "{(a,])}"
+-LINE 1: select '{(a,])}'::textmultirange;
+-               ^
+-DETAIL:  Expected comma or end of multirange.
++ERROR:  type "textmultirange" does not exist
+ select '{[z,a]}'::textmultirange;
+-ERROR:  range lower bound must be less than or equal to range upper bound
+-LINE 1: select '{[z,a]}'::textmultirange;
+-               ^
++ERROR:  type "textmultirange" does not exist
+ -- should succeed
+ select '{}'::textmultirange;
+- textmultirange 
+-----------------
+- {}
+-(1 row)
+-
++ERROR:  type "textmultirange" does not exist
+ select '  {}  '::textmultirange;
+- textmultirange 
+-----------------
+- {}
+-(1 row)
+-
++ERROR:  type "textmultirange" does not exist
+ select ' { empty, empty }  '::textmultirange;
+- textmultirange 
+-----------------
+- {}
+-(1 row)
+-
++ERROR:  type "textmultirange" does not exist
+ select ' {( " a " " a ", " z " " z " )  }'::textmultirange;
+-       textmultirange       
+-----------------------------
+- {("  a   a ","  z   z  ")}
+-(1 row)
+-
++ERROR:  type "textmultirange" does not exist
+ select textrange('\\\\', repeat('a', 200))::textmultirange;
+-                                                                                                        textrange                                                                                                        
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+- {["\\\\\\\\",aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa)}
+-(1 row)
+-
++ERROR:  unknown function: textrange()
+ select '{(,z)}'::textmultirange;
+- textmultirange 
+-----------------
+- {(,z)}
+-(1 row)
+-
++ERROR:  type "textmultirange" does not exist
+ select '{(a,)}'::textmultirange;
+- textmultirange 
+-----------------
+- {(a,)}
+-(1 row)
+-
++ERROR:  type "textmultirange" does not exist
+ select '{[,z]}'::textmultirange;
+- textmultirange 
+-----------------
+- {(,z]}
+-(1 row)
+-
++ERROR:  type "textmultirange" does not exist
+ select '{[a,]}'::textmultirange;
+- textmultirange 
+-----------------
+- {[a,)}
+-(1 row)
+-
++ERROR:  type "textmultirange" does not exist
+ select '{(,)}'::textmultirange;
+- textmultirange 
+-----------------
+- {(,)}
+-(1 row)
+-
++ERROR:  type "textmultirange" does not exist
+ select '{[ , ]}'::textmultirange;
+- textmultirange 
+-----------------
+- {[" "," "]}
+-(1 row)
+-
++ERROR:  type "textmultirange" does not exist
+ select '{["",""]}'::textmultirange;
+- textmultirange 
+-----------------
+- {["",""]}
+-(1 row)
+-
++ERROR:  type "textmultirange" does not exist
+ select '{[",",","]}'::textmultirange;
+- textmultirange 
+-----------------
+- {[",",","]}
+-(1 row)
+-
++ERROR:  type "textmultirange" does not exist
+ select '{["\\","\\"]}'::textmultirange;
+- textmultirange 
+-----------------
+- {["\\","\\"]}
+-(1 row)
+-
++ERROR:  type "textmultirange" does not exist
+ select '{["""","\""]}'::textmultirange;
+- textmultirange 
+-----------------
+- {["""",""""]}
+-(1 row)
+-
++ERROR:  type "textmultirange" does not exist
+ select '{(\\,a)}'::textmultirange;
+- textmultirange 
+-----------------
+- {("\\",a)}
+-(1 row)
+-
++ERROR:  type "textmultirange" does not exist
+ select '{((,z)}'::textmultirange;
+- textmultirange 
+-----------------
+- {("(",z)}
+-(1 row)
+-
++ERROR:  type "textmultirange" does not exist
+ select '{([,z)}'::textmultirange;
+- textmultirange 
+-----------------
+- {("[",z)}
+-(1 row)
+-
++ERROR:  type "textmultirange" does not exist
+ select '{(!,()}'::textmultirange;
+- textmultirange 
+-----------------
+- {(!,"(")}
+-(1 row)
+-
++ERROR:  type "textmultirange" does not exist
+ select '{(!,[)}'::textmultirange;
+- textmultirange 
+-----------------
+- {(!,"[")}
+-(1 row)
+-
++ERROR:  type "textmultirange" does not exist
+ select '{[a,a]}'::textmultirange;
+- textmultirange 
+-----------------
+- {[a,a]}
+-(1 row)
+-
++ERROR:  type "textmultirange" does not exist
+ select '{[a,a],[a,b]}'::textmultirange;
+- textmultirange 
+-----------------
+- {[a,b]}
+-(1 row)
+-
++ERROR:  type "textmultirange" does not exist
+ select '{[a,b), [b,e]}'::textmultirange;
+- textmultirange 
+-----------------
+- {[a,e]}
+-(1 row)
+-
++ERROR:  type "textmultirange" does not exist
+ select '{[a,d), [b,f]}'::textmultirange;
+- textmultirange 
+-----------------
+- {[a,f]}
+-(1 row)
+-
++ERROR:  type "textmultirange" does not exist
+ select '{[a,a],[b,b]}'::textmultirange;
+- textmultirange 
+-----------------
+- {[a,a],[b,b]}
+-(1 row)
+-
++ERROR:  type "textmultirange" does not exist
+ -- without canonicalization, we can't join these:
+ select '{[a,a], [b,b]}'::textmultirange;
+- textmultirange 
+-----------------
+- {[a,a],[b,b]}
+-(1 row)
+-
++ERROR:  type "textmultirange" does not exist
+ -- with canonicalization, we can join these:
+ select '{[1,2], [3,4]}'::int4multirange;
+- int4multirange 
+-----------------
+- {[1,5)}
+-(1 row)
+-
++ERROR:  type "int4multirange" does not exist
+ select '{[a,a], [b,b], [c,c]}'::textmultirange;
+-   textmultirange    
+----------------------
+- {[a,a],[b,b],[c,c]}
+-(1 row)
+-
++ERROR:  type "textmultirange" does not exist
+ select '{[a,d], [b,e]}'::textmultirange;
+- textmultirange 
+-----------------
+- {[a,e]}
+-(1 row)
+-
++ERROR:  type "textmultirange" does not exist
+ select '{[a,d), [d,e)}'::textmultirange;
+- textmultirange 
+-----------------
+- {[a,e)}
+-(1 row)
+-
++ERROR:  type "textmultirange" does not exist
+ -- these are allowed but normalize to empty:
+ select '{[a,a)}'::textmultirange;
+- textmultirange 
+-----------------
+- {}
+-(1 row)
+-
++ERROR:  type "textmultirange" does not exist
+ select '{(a,a]}'::textmultirange;
+- textmultirange 
+-----------------
+- {}
+-(1 row)
+-
++ERROR:  type "textmultirange" does not exist
+ select '{(a,a)}'::textmultirange;
+- textmultirange 
+-----------------
+- {}
+-(1 row)
+-
++ERROR:  type "textmultirange" does not exist
+ -- Also try it with non-error-throwing API
+ select pg_input_is_valid('{[1,2], [4,5]}', 'int4multirange');
+- pg_input_is_valid 
+--------------------
+- t
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ select pg_input_is_valid('{[1,2], [4,5]', 'int4multirange');
+- pg_input_is_valid 
+--------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ select * from pg_input_error_info('{[1,2], [4,5]', 'int4multirange');
+-                    message                    |          detail          | hint | sql_error_code 
+------------------------------------------------+--------------------------+------+----------------
+- malformed multirange literal: "{[1,2], [4,5]" | Unexpected end of input. |      | 22P02
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ select pg_input_is_valid('{[1,2], [4,zed]}', 'int4multirange');
+- pg_input_is_valid 
+--------------------
+- f
+-(1 row)
+-
++ERROR:  unknown function: pg_input_is_valid()
+ select * from pg_input_error_info('{[1,2], [4,zed]}', 'int4multirange');
+-                   message                    | detail | hint | sql_error_code 
+-----------------------------------------------+--------+------+----------------
+- invalid input syntax for type integer: "zed" |        |      | 22P02
+-(1 row)
+-
++ERROR:  unknown function: pg_input_error_info()
+ --
+ -- test the constructor
+ ---
+ select textmultirange();
+- textmultirange 
+-----------------
+- {}
+-(1 row)
+-
++ERROR:  unknown function: textmultirange()
+ select textmultirange(textrange('a', 'c'));
+- textmultirange 
+-----------------
+- {[a,c)}
+-(1 row)
+-
++ERROR:  unknown function: textmultirange()
+ select textmultirange(textrange('a', 'c'), textrange('f', 'g'));
+- textmultirange 
+-----------------
+- {[a,c),[f,g)}
+-(1 row)
+-
++ERROR:  unknown function: textmultirange()
+ select textmultirange(textrange('\\\\', repeat('a', 200)), textrange('c', 'd'));
+-                                                                                                        textmultirange                                                                                                         
+--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+- {["\\\\\\\\",aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa),[c,d)}
+-(1 row)
+-
++ERROR:  unknown function: textmultirange()
+ --
+ -- test casts, both a built-in range type and a user-defined one:
+ --
+ select 'empty'::int4range::int4multirange;
+- int4multirange 
+-----------------
+- {}
+-(1 row)
+-
++ERROR:  type "int4multirange" does not exist
+ select int4range(1, 3)::int4multirange;
+- int4range 
+------------
+- {[1,3)}
+-(1 row)
+-
++ERROR:  unknown function: int4range()
+ select int4range(1, null)::int4multirange;
+- int4range 
+------------
+- {[1,)}
+-(1 row)
+-
++ERROR:  unknown function: int4range()
+ select int4range(null, null)::int4multirange;
+- int4range 
+------------
+- {(,)}
+-(1 row)
+-
++ERROR:  unknown function: int4range()
+ select 'empty'::textrange::textmultirange;
+- textmultirange 
+-----------------
+- {}
+-(1 row)
+-
++ERROR:  type "textmultirange" does not exist
+ select textrange('a', 'c')::textmultirange;
+- textrange 
+------------
+- {[a,c)}
+-(1 row)
+-
++ERROR:  unknown function: textrange()
+ select textrange('a', null)::textmultirange;
+- textrange 
+------------
+- {[a,)}
+-(1 row)
+-
++ERROR:  unknown function: textrange()
+ select textrange(null, null)::textmultirange;
+- textrange 
+------------
+- {(,)}
+-(1 row)
+-
++ERROR:  unknown function: textrange()
+ --
+ -- test unnest(multirange) function
+ --
+ select unnest(int4multirange(int4range('5', '6'), int4range('1', '2')));
+- unnest 
+---------
+- [1,2)
+- [5,6)
+-(2 rows)
+-
++ERROR:  unknown function: int4multirange()
+ select unnest(textmultirange(textrange('a', 'b'), textrange('d', 'e')));
+- unnest 
+---------
+- [a,b)
+- [d,e)
+-(2 rows)
+-
++ERROR:  unknown function: textmultirange()
+ select unnest(textmultirange(textrange('\\\\', repeat('a', 200)), textrange('c', 'd')));
+-                                                                                                        unnest                                                                                                         
+------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+- ["\\\\\\\\",aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa)
+- [c,d)
+-(2 rows)
+-
++ERROR:  unknown function: textmultirange()
+ --
+ -- create some test data and test the operators
+ --
+ CREATE TABLE nummultirange_test (nmr NUMMULTIRANGE);
++ERROR:  type "nummultirange" does not exist
+ CREATE INDEX nummultirange_test_btree ON nummultirange_test(nmr);
++ERROR:  relation "nummultirange_test" does not exist
+ INSERT INTO nummultirange_test VALUES('{}');
++ERROR:  relation "nummultirange_test" does not exist
+ INSERT INTO nummultirange_test VALUES('{[,)}');
++ERROR:  relation "nummultirange_test" does not exist
+ INSERT INTO nummultirange_test VALUES('{[3,]}');
++ERROR:  relation "nummultirange_test" does not exist
+ INSERT INTO nummultirange_test VALUES('{[,), [3,]}');
++ERROR:  relation "nummultirange_test" does not exist
+ INSERT INTO nummultirange_test VALUES('{[, 5)}');
++ERROR:  relation "nummultirange_test" does not exist
+ INSERT INTO nummultirange_test VALUES(nummultirange());
++ERROR:  relation "nummultirange_test" does not exist
+ INSERT INTO nummultirange_test VALUES(nummultirange(variadic '{}'::numrange[]));
++ERROR:  at or near ")": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++INSERT INTO nummultirange_test VALUES(nummultirange(variadic '{}'::numrange[]))
++                                                                             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ INSERT INTO nummultirange_test VALUES(nummultirange(numrange(1.1, 2.2)));
++ERROR:  relation "nummultirange_test" does not exist
+ INSERT INTO nummultirange_test VALUES('{empty}');
++ERROR:  relation "nummultirange_test" does not exist
+ INSERT INTO nummultirange_test VALUES(nummultirange(numrange(1.7, 1.7, '[]'), numrange(1.7, 1.9)));
++ERROR:  relation "nummultirange_test" does not exist
+ INSERT INTO nummultirange_test VALUES(nummultirange(numrange(1.7, 1.7, '[]'), numrange(1.9, 2.1)));
++ERROR:  relation "nummultirange_test" does not exist
+ SELECT nmr, isempty(nmr), lower(nmr), upper(nmr) FROM nummultirange_test ORDER BY nmr;
+-          nmr          | isempty | lower | upper 
+------------------------+---------+-------+-------
+- {}                    | t       |       |      
+- {}                    | t       |       |      
+- {}                    | t       |       |      
+- {}                    | t       |       |      
+- {(,5)}                | f       |       |     5
+- {(,)}                 | f       |       |      
+- {(,)}                 | f       |       |      
+- {[1.1,2.2)}           | f       |   1.1 |   2.2
+- {[1.7,1.7],[1.9,2.1)} | f       |   1.7 |   2.1
+- {[1.7,1.9)}           | f       |   1.7 |   1.9
+- {[3,)}                | f       |     3 |      
+-(11 rows)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ SELECT nmr, lower_inc(nmr), lower_inf(nmr), upper_inc(nmr), upper_inf(nmr) FROM nummultirange_test ORDER BY nmr;
+-          nmr          | lower_inc | lower_inf | upper_inc | upper_inf 
+------------------------+-----------+-----------+-----------+-----------
+- {}                    | f         | f         | f         | f
+- {}                    | f         | f         | f         | f
+- {}                    | f         | f         | f         | f
+- {}                    | f         | f         | f         | f
+- {(,5)}                | f         | t         | f         | f
+- {(,)}                 | f         | t         | f         | t
+- {(,)}                 | f         | t         | f         | t
+- {[1.1,2.2)}           | t         | f         | f         | f
+- {[1.7,1.7],[1.9,2.1)} | t         | f         | f         | f
+- {[1.7,1.9)}           | t         | f         | f         | f
+- {[3,)}                | t         | f         | f         | t
+-(11 rows)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ SELECT * FROM nummultirange_test WHERE nmr = '{}';
+- nmr 
+------
+- {}
+- {}
+- {}
+- {}
+-(4 rows)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ SELECT * FROM nummultirange_test WHERE nmr = '{(,5)}';
+-  nmr   
+---------
+- {(,5)}
+-(1 row)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ SELECT * FROM nummultirange_test WHERE nmr = '{[3,)}';
+-  nmr   
+---------
+- {[3,)}
+-(1 row)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ SELECT * FROM nummultirange_test WHERE nmr = '{[1.7,1.7]}';
+- nmr 
+------
+-(0 rows)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ SELECT * FROM nummultirange_test WHERE nmr = '{[1.7,1.7],[1.9,2.1)}';
+-          nmr          
+------------------------
+- {[1.7,1.7],[1.9,2.1)}
+-(1 row)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ SELECT * FROM nummultirange_test WHERE nmr < '{}';
+- nmr 
+------
+-(0 rows)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ SELECT * FROM nummultirange_test WHERE nmr < '{[-1000.0, -1000.0]}';
+-  nmr   
+---------
+- {}
+- {(,)}
+- {(,)}
+- {(,5)}
+- {}
+- {}
+- {}
+-(7 rows)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ SELECT * FROM nummultirange_test WHERE nmr < '{[0.0, 1.0]}';
+-  nmr   
+---------
+- {}
+- {(,)}
+- {(,)}
+- {(,5)}
+- {}
+- {}
+- {}
+-(7 rows)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ SELECT * FROM nummultirange_test WHERE nmr < '{[1000.0, 1001.0]}';
+-          nmr          
+------------------------
+- {}
+- {(,)}
+- {[3,)}
+- {(,)}
+- {(,5)}
+- {}
+- {}
+- {[1.1,2.2)}
+- {}
+- {[1.7,1.9)}
+- {[1.7,1.7],[1.9,2.1)}
+-(11 rows)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ SELECT * FROM nummultirange_test WHERE nmr <= '{}';
+- nmr 
+------
+- {}
+- {}
+- {}
+- {}
+-(4 rows)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ SELECT * FROM nummultirange_test WHERE nmr <= '{[3,)}';
+-          nmr          
+------------------------
+- {}
+- {(,)}
+- {[3,)}
+- {(,)}
+- {(,5)}
+- {}
+- {}
+- {[1.1,2.2)}
+- {}
+- {[1.7,1.9)}
+- {[1.7,1.7],[1.9,2.1)}
+-(11 rows)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ SELECT * FROM nummultirange_test WHERE nmr >= '{}';
+-          nmr          
+------------------------
+- {}
+- {(,)}
+- {[3,)}
+- {(,)}
+- {(,5)}
+- {}
+- {}
+- {[1.1,2.2)}
+- {}
+- {[1.7,1.9)}
+- {[1.7,1.7],[1.9,2.1)}
+-(11 rows)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ SELECT * FROM nummultirange_test WHERE nmr >= '{[3,)}';
+-  nmr   
+---------
+- {[3,)}
+-(1 row)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ SELECT * FROM nummultirange_test WHERE nmr > '{}';
+-          nmr          
+------------------------
+- {(,)}
+- {[3,)}
+- {(,)}
+- {(,5)}
+- {[1.1,2.2)}
+- {[1.7,1.9)}
+- {[1.7,1.7],[1.9,2.1)}
+-(7 rows)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ SELECT * FROM nummultirange_test WHERE nmr > '{[-1000.0, -1000.0]}';
+-          nmr          
+------------------------
+- {[3,)}
+- {[1.1,2.2)}
+- {[1.7,1.9)}
+- {[1.7,1.7],[1.9,2.1)}
+-(4 rows)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ SELECT * FROM nummultirange_test WHERE nmr > '{[0.0, 1.0]}';
+-          nmr          
+------------------------
+- {[3,)}
+- {[1.1,2.2)}
+- {[1.7,1.9)}
+- {[1.7,1.7],[1.9,2.1)}
+-(4 rows)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ SELECT * FROM nummultirange_test WHERE nmr > '{[1000.0, 1001.0]}';
+- nmr 
+------
+-(0 rows)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ SELECT * FROM nummultirange_test WHERE nmr <> '{}';
+-          nmr          
+------------------------
+- {(,)}
+- {[3,)}
+- {(,)}
+- {(,5)}
+- {[1.1,2.2)}
+- {[1.7,1.9)}
+- {[1.7,1.7],[1.9,2.1)}
+-(7 rows)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ SELECT * FROM nummultirange_test WHERE nmr <> '{(,5)}';
+-          nmr          
+------------------------
+- {}
+- {(,)}
+- {[3,)}
+- {(,)}
+- {}
+- {}
+- {[1.1,2.2)}
+- {}
+- {[1.7,1.9)}
+- {[1.7,1.7],[1.9,2.1)}
+-(10 rows)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ select nummultirange(numrange(2.0, 1.0));
+-ERROR:  range lower bound must be less than or equal to range upper bound
++ERROR:  unknown function: nummultirange()
+ select nummultirange(numrange(5.0, 6.0), numrange(1.0, 2.0));
+-     nummultirange     
+------------------------
+- {[1.0,2.0),[5.0,6.0)}
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ analyze nummultirange_test;
++ERROR:  relation "nummultirange_test" does not exist
+ -- overlaps
+ SELECT * FROM nummultirange_test WHERE range_overlaps_multirange(numrange(4.0, 4.2), nmr);
+-  nmr   
+---------
+- {(,)}
+- {[3,)}
+- {(,)}
+- {(,5)}
+-(4 rows)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ SELECT * FROM nummultirange_test WHERE numrange(4.0, 4.2) && nmr;
+-  nmr   
+---------
+- {(,)}
+- {[3,)}
+- {(,)}
+- {(,5)}
+-(4 rows)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ SELECT * FROM nummultirange_test WHERE multirange_overlaps_range(nmr, numrange(4.0, 4.2));
+-  nmr   
+---------
+- {(,)}
+- {[3,)}
+- {(,)}
+- {(,5)}
+-(4 rows)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ SELECT * FROM nummultirange_test WHERE nmr && numrange(4.0, 4.2);
+-  nmr   
+---------
+- {(,)}
+- {[3,)}
+- {(,)}
+- {(,5)}
+-(4 rows)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ SELECT * FROM nummultirange_test WHERE multirange_overlaps_multirange(nmr, nummultirange(numrange(4.0, 4.2), numrange(6.0, 7.0)));
+-  nmr   
+---------
+- {(,)}
+- {[3,)}
+- {(,)}
+- {(,5)}
+-(4 rows)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ SELECT * FROM nummultirange_test WHERE nmr && nummultirange(numrange(4.0, 4.2), numrange(6.0, 7.0));
+-  nmr   
+---------
+- {(,)}
+- {[3,)}
+- {(,)}
+- {(,5)}
+-(4 rows)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ SELECT * FROM nummultirange_test WHERE nmr && nummultirange(numrange(6.0, 7.0));
+-  nmr   
+---------
+- {(,)}
+- {[3,)}
+- {(,)}
+-(3 rows)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ SELECT * FROM nummultirange_test WHERE nmr && nummultirange(numrange(6.0, 7.0), numrange(8.0, 9.0));
+-  nmr   
+---------
+- {(,)}
+- {[3,)}
+- {(,)}
+-(3 rows)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ -- mr contains x
+ SELECT * FROM nummultirange_test WHERE multirange_contains_elem(nmr, 4.0);
+-  nmr   
+---------
+- {(,)}
+- {[3,)}
+- {(,)}
+- {(,5)}
+-(4 rows)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ SELECT * FROM nummultirange_test WHERE nmr @> 4.0;
+-  nmr   
+---------
+- {(,)}
+- {[3,)}
+- {(,)}
+- {(,5)}
+-(4 rows)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ SELECT * FROM nummultirange_test WHERE multirange_contains_range(nmr, numrange(4.0, 4.2));
+-  nmr   
+---------
+- {(,)}
+- {[3,)}
+- {(,)}
+- {(,5)}
+-(4 rows)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ SELECT * FROM nummultirange_test WHERE nmr @> numrange(4.0, 4.2);
+-  nmr   
+---------
+- {(,)}
+- {[3,)}
+- {(,)}
+- {(,5)}
+-(4 rows)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ SELECT * FROM nummultirange_test WHERE multirange_contains_multirange(nmr, '{[4.0,4.2), [6.0, 8.0)}');
+-  nmr   
+---------
+- {(,)}
+- {[3,)}
+- {(,)}
+-(3 rows)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ SELECT * FROM nummultirange_test WHERE nmr @> '{[4.0,4.2), [6.0, 8.0)}'::nummultirange;
+-  nmr   
+---------
+- {(,)}
+- {[3,)}
+- {(,)}
+-(3 rows)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ -- x is contained by mr
+ SELECT * FROM nummultirange_test WHERE elem_contained_by_multirange(4.0, nmr);
+-  nmr   
+---------
+- {(,)}
+- {[3,)}
+- {(,)}
+- {(,5)}
+-(4 rows)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ SELECT * FROM nummultirange_test WHERE 4.0 <@ nmr;
+-  nmr   
+---------
+- {(,)}
+- {[3,)}
+- {(,)}
+- {(,5)}
+-(4 rows)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ SELECT * FROM nummultirange_test WHERE range_contained_by_multirange(numrange(4.0, 4.2), nmr);
+-  nmr   
+---------
+- {(,)}
+- {[3,)}
+- {(,)}
+- {(,5)}
+-(4 rows)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ SELECT * FROM nummultirange_test WHERE numrange(4.0, 4.2) <@ nmr;
+-  nmr   
+---------
+- {(,)}
+- {[3,)}
+- {(,)}
+- {(,5)}
+-(4 rows)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ SELECT * FROM nummultirange_test WHERE multirange_contained_by_multirange('{[4.0,4.2), [6.0, 8.0)}', nmr);
+-  nmr   
+---------
+- {(,)}
+- {[3,)}
+- {(,)}
+-(3 rows)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ SELECT * FROM nummultirange_test WHERE '{[4.0,4.2), [6.0, 8.0)}'::nummultirange <@ nmr;
+-  nmr   
+---------
+- {(,)}
+- {[3,)}
+- {(,)}
+-(3 rows)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ -- overlaps
+ SELECT 'empty'::numrange && nummultirange();
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT 'empty'::numrange && nummultirange(numrange(1,2));
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange() && 'empty'::numrange;
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(1,2)) && 'empty'::numrange;
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange() && nummultirange();
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange() && nummultirange(numrange(1,2));
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(1,2)) && nummultirange();
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(3,4)) && nummultirange(numrange(1,2), numrange(7,8));
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(1,2), numrange(7,8)) && nummultirange(numrange(3,4));
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(3,4)) && nummultirange(numrange(1,2), numrange(3.5,8));
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(1,2), numrange(3.5,8)) && numrange(3,4);
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(1,2), numrange(3.5,8)) && nummultirange(numrange(3,4));
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ select '{(10,20),(30,40),(50,60)}'::nummultirange && '(42,92)'::numrange;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  type "nummultirange" does not exist
+ -- contains
+ SELECT nummultirange() @> nummultirange();
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange() @> 'empty'::numrange;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(null,null)) @> numrange(1,2);
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(null,null)) @> numrange(null,2);
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(null,null)) @> numrange(2,null);
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(null,5)) @> numrange(null,3);
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(null,5)) @> numrange(null,8);
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(5,null)) @> numrange(8,null);
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(5,null)) @> numrange(3,null);
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(1,5)) @> numrange(8,9);
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(1,5)) @> numrange(3,9);
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(1,5)) @> numrange(1,4);
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(1,5)) @> numrange(1,5);
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(-4,-2), numrange(1,5)) @> numrange(1,5);
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(1,5), numrange(8,9)) @> numrange(1,5);
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(1,5), numrange(8,9)) @> numrange(6,7);
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(1,5), numrange(6,9)) @> numrange(6,7);
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT '{[1,5)}'::nummultirange @> '{[1,5)}';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  type "nummultirange" does not exist
+ SELECT '{[-4,-2), [1,5)}'::nummultirange @> '{[1,5)}';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  type "nummultirange" does not exist
+ SELECT '{[1,5), [8,9)}'::nummultirange @> '{[1,5)}';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  type "nummultirange" does not exist
+ SELECT '{[1,5), [8,9)}'::nummultirange @> '{[6,7)}';
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  type "nummultirange" does not exist
+ SELECT '{[1,5), [6,9)}'::nummultirange @> '{[6,7)}';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  type "nummultirange" does not exist
+ select '{(10,20),(30,40),(50,60)}'::nummultirange @> '(52,56)'::numrange;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  type "nummultirange" does not exist
+ SELECT numrange(null,null) @> nummultirange(numrange(1,2));
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ SELECT numrange(null,null) @> nummultirange(numrange(null,2));
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ SELECT numrange(null,null) @> nummultirange(numrange(2,null));
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ SELECT numrange(null,5) @> nummultirange(numrange(null,3));
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ SELECT numrange(null,5) @> nummultirange(numrange(null,8));
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ SELECT numrange(5,null) @> nummultirange(numrange(8,null));
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ SELECT numrange(5,null) @> nummultirange(numrange(3,null));
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ SELECT numrange(1,5) @> nummultirange(numrange(8,9));
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ SELECT numrange(1,5) @> nummultirange(numrange(3,9));
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ SELECT numrange(1,5) @> nummultirange(numrange(1,4));
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ SELECT numrange(1,5) @> nummultirange(numrange(1,5));
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ SELECT numrange(1,9) @> nummultirange(numrange(-4,-2), numrange(1,5));
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ SELECT numrange(1,9) @> nummultirange(numrange(1,5), numrange(8,9));
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ SELECT numrange(1,9) @> nummultirange(numrange(1,5), numrange(6,9));
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ SELECT numrange(1,9) @> nummultirange(numrange(1,5), numrange(6,10));
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ SELECT '{[1,9)}' @> '{[1,5)}'::nummultirange;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  type "nummultirange" does not exist
+ SELECT '{[1,9)}' @> '{[-4,-2), [1,5)}'::nummultirange;
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  type "nummultirange" does not exist
+ SELECT '{[1,9)}' @> '{[1,5), [8,9)}'::nummultirange;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  type "nummultirange" does not exist
+ SELECT '{[1,9)}' @> '{[1,5), [6,9)}'::nummultirange;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  type "nummultirange" does not exist
+ SELECT '{[1,9)}' @> '{[1,5), [6,10)}'::nummultirange;
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  type "nummultirange" does not exist
+ -- is contained by
+ SELECT nummultirange() <@ nummultirange();
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT 'empty'::numrange <@ nummultirange();
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT numrange(1,2) <@ nummultirange(numrange(null,null));
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ SELECT numrange(null,2) <@ nummultirange(numrange(null,null));
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ SELECT numrange(2,null) <@ nummultirange(numrange(null,null));
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ SELECT numrange(null,3) <@ nummultirange(numrange(null,5));
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ SELECT numrange(null,8) <@ nummultirange(numrange(null,5));
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ SELECT numrange(8,null) <@ nummultirange(numrange(5,null));
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ SELECT numrange(3,null) <@ nummultirange(numrange(5,null));
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ SELECT numrange(8,9) <@ nummultirange(numrange(1,5));
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ SELECT numrange(3,9) <@ nummultirange(numrange(1,5));
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ SELECT numrange(1,4) <@ nummultirange(numrange(1,5));
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ SELECT numrange(1,5) <@ nummultirange(numrange(1,5));
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ SELECT numrange(1,5) <@ nummultirange(numrange(-4,-2), numrange(1,5));
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ SELECT numrange(1,5) <@ nummultirange(numrange(1,5), numrange(8,9));
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ SELECT numrange(6,7) <@ nummultirange(numrange(1,5), numrange(8,9));
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ SELECT numrange(6,7) <@ nummultirange(numrange(1,5), numrange(6,9));
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ SELECT '{[1,5)}' <@ '{[1,5)}'::nummultirange;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  type "nummultirange" does not exist
+ SELECT '{[1,5)}' <@ '{[-4,-2), [1,5)}'::nummultirange;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  type "nummultirange" does not exist
+ SELECT '{[1,5)}' <@ '{[1,5), [8,9)}'::nummultirange;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  type "nummultirange" does not exist
+ SELECT '{[6,7)}' <@ '{[1,5), [8,9)}'::nummultirange;
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  type "nummultirange" does not exist
+ SELECT '{[6,7)}' <@ '{[1,5), [6,9)}'::nummultirange;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  type "nummultirange" does not exist
+ SELECT nummultirange(numrange(1,2)) <@ numrange(null,null);
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(null,2)) <@ numrange(null,null);
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(2,null)) <@ numrange(null,null);
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(null,3)) <@ numrange(null,5);
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(null,8)) <@ numrange(null,5);
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(8,null)) <@ numrange(5,null);
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(3,null)) <@ numrange(5,null);
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(8,9)) <@ numrange(1,5);
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(3,9)) <@ numrange(1,5);
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(1,4)) <@ numrange(1,5);
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(1,5)) <@ numrange(1,5);
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(-4,-2), numrange(1,5)) <@ numrange(1,9);
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(1,5), numrange(8,9)) <@ numrange(1,9);
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(1,5), numrange(6,9)) <@ numrange(1,9);
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(1,5), numrange(6,10)) <@ numrange(1,9);
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT '{[1,5)}'::nummultirange <@ '{[1,9)}';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  type "nummultirange" does not exist
+ SELECT '{[-4,-2), [1,5)}'::nummultirange <@ '{[1,9)}';
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  type "nummultirange" does not exist
+ SELECT '{[1,5), [8,9)}'::nummultirange <@ '{[1,9)}';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  type "nummultirange" does not exist
+ SELECT '{[1,5), [6,9)}'::nummultirange <@ '{[1,9)}';
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  type "nummultirange" does not exist
+ SELECT '{[1,5), [6,10)}'::nummultirange <@ '{[1,9)}';
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  type "nummultirange" does not exist
+ -- overleft
+ SELECT 'empty'::numrange &< nummultirange();
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++SELECT 'empty'::numrange &< nummultirange()
++                          ^
+ SELECT 'empty'::numrange &< nummultirange(numrange(1,2));
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++SELECT 'empty'::numrange &< nummultirange(numrange(1,2))
++                          ^
+ SELECT nummultirange() &< 'empty'::numrange;
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++SELECT nummultirange() &< 'empty'::numrange
++                        ^
+ SELECT nummultirange(numrange(1,2)) &< 'empty'::numrange;
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++SELECT nummultirange(numrange(1,2)) &< 'empty'::numrange
++                                     ^
+ SELECT nummultirange() &< nummultirange();
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++SELECT nummultirange() &< nummultirange()
++                        ^
+ SELECT nummultirange(numrange(1,2)) &< nummultirange();
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++SELECT nummultirange(numrange(1,2)) &< nummultirange()
++                                     ^
+ SELECT nummultirange() &< nummultirange(numrange(1,2));
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++SELECT nummultirange() &< nummultirange(numrange(1,2))
++                        ^
+ SELECT numrange(6,7) &< nummultirange(numrange(3,4));
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++SELECT numrange(6,7) &< nummultirange(numrange(3,4))
++                      ^
+ SELECT numrange(1,2) &< nummultirange(numrange(3,4));
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++SELECT numrange(1,2) &< nummultirange(numrange(3,4))
++                      ^
+ SELECT numrange(1,4) &< nummultirange(numrange(3,4));
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++SELECT numrange(1,4) &< nummultirange(numrange(3,4))
++                      ^
+ SELECT numrange(1,6) &< nummultirange(numrange(3,4));
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++SELECT numrange(1,6) &< nummultirange(numrange(3,4))
++                      ^
+ SELECT numrange(3.5,6) &< nummultirange(numrange(3,4));
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++SELECT numrange(3.5,6) &< nummultirange(numrange(3,4))
++                        ^
+ SELECT nummultirange(numrange(6,7)) &< numrange(3,4);
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++SELECT nummultirange(numrange(6,7)) &< numrange(3,4)
++                                     ^
+ SELECT nummultirange(numrange(1,2)) &< numrange(3,4);
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++SELECT nummultirange(numrange(1,2)) &< numrange(3,4)
++                                     ^
+ SELECT nummultirange(numrange(1,4)) &< numrange(3,4);
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++SELECT nummultirange(numrange(1,4)) &< numrange(3,4)
++                                     ^
+ SELECT nummultirange(numrange(1,6)) &< numrange(3,4);
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++SELECT nummultirange(numrange(1,6)) &< numrange(3,4)
++                                     ^
+ SELECT nummultirange(numrange(3.5,6)) &< numrange(3,4);
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++SELECT nummultirange(numrange(3.5,6)) &< numrange(3,4)
++                                       ^
+ SELECT nummultirange(numrange(6,7)) &< nummultirange(numrange(3,4));
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++SELECT nummultirange(numrange(6,7)) &< nummultirange(numrange(3,4))
++                                     ^
+ SELECT nummultirange(numrange(1,2)) &< nummultirange(numrange(3,4));
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++SELECT nummultirange(numrange(1,2)) &< nummultirange(numrange(3,4))
++                                     ^
+ SELECT nummultirange(numrange(1,4)) &< nummultirange(numrange(3,4));
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++SELECT nummultirange(numrange(1,4)) &< nummultirange(numrange(3,4))
++                                     ^
+ SELECT nummultirange(numrange(1,6)) &< nummultirange(numrange(3,4));
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++SELECT nummultirange(numrange(1,6)) &< nummultirange(numrange(3,4))
++                                     ^
+ SELECT nummultirange(numrange(3.5,6)) &< nummultirange(numrange(3,4));
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++SELECT nummultirange(numrange(3.5,6)) &< nummultirange(numrange(3,4))
++                                       ^
+ -- overright
+ SELECT nummultirange() &> 'empty'::numrange;
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++SELECT nummultirange() &> 'empty'::numrange
++                        ^
+ SELECT nummultirange(numrange(1,2)) &> 'empty'::numrange;
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++SELECT nummultirange(numrange(1,2)) &> 'empty'::numrange
++                                     ^
+ SELECT 'empty'::numrange &> nummultirange();
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++SELECT 'empty'::numrange &> nummultirange()
++                          ^
+ SELECT 'empty'::numrange &> nummultirange(numrange(1,2));
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++SELECT 'empty'::numrange &> nummultirange(numrange(1,2))
++                          ^
+ SELECT nummultirange() &> nummultirange();
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++SELECT nummultirange() &> nummultirange()
++                        ^
+ SELECT nummultirange() &> nummultirange(numrange(1,2));
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++SELECT nummultirange() &> nummultirange(numrange(1,2))
++                        ^
+ SELECT nummultirange(numrange(1,2)) &> nummultirange();
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++SELECT nummultirange(numrange(1,2)) &> nummultirange()
++                                     ^
+ SELECT nummultirange(numrange(3,4)) &> numrange(6,7);
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++SELECT nummultirange(numrange(3,4)) &> numrange(6,7)
++                                     ^
+ SELECT nummultirange(numrange(3,4)) &> numrange(1,2);
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++SELECT nummultirange(numrange(3,4)) &> numrange(1,2)
++                                     ^
+ SELECT nummultirange(numrange(3,4)) &> numrange(1,4);
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++SELECT nummultirange(numrange(3,4)) &> numrange(1,4)
++                                     ^
+ SELECT nummultirange(numrange(3,4)) &> numrange(1,6);
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++SELECT nummultirange(numrange(3,4)) &> numrange(1,6)
++                                     ^
+ SELECT nummultirange(numrange(3,4)) &> numrange(3.5,6);
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++SELECT nummultirange(numrange(3,4)) &> numrange(3.5,6)
++                                     ^
+ SELECT numrange(3,4) &> nummultirange(numrange(6,7));
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++SELECT numrange(3,4) &> nummultirange(numrange(6,7))
++                      ^
+ SELECT numrange(3,4) &> nummultirange(numrange(1,2));
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++SELECT numrange(3,4) &> nummultirange(numrange(1,2))
++                      ^
+ SELECT numrange(3,4) &> nummultirange(numrange(1,4));
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++SELECT numrange(3,4) &> nummultirange(numrange(1,4))
++                      ^
+ SELECT numrange(3,4) &> nummultirange(numrange(1,6));
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++SELECT numrange(3,4) &> nummultirange(numrange(1,6))
++                      ^
+ SELECT numrange(3,4) &> nummultirange(numrange(3.5,6));
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++SELECT numrange(3,4) &> nummultirange(numrange(3.5,6))
++                      ^
+ SELECT nummultirange(numrange(3,4)) &> nummultirange(numrange(6,7));
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++SELECT nummultirange(numrange(3,4)) &> nummultirange(numrange(6,7))
++                                     ^
+ SELECT nummultirange(numrange(3,4)) &> nummultirange(numrange(1,2));
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++SELECT nummultirange(numrange(3,4)) &> nummultirange(numrange(1,2))
++                                     ^
+ SELECT nummultirange(numrange(3,4)) &> nummultirange(numrange(1,4));
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++SELECT nummultirange(numrange(3,4)) &> nummultirange(numrange(1,4))
++                                     ^
+ SELECT nummultirange(numrange(3,4)) &> nummultirange(numrange(1,6));
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++SELECT nummultirange(numrange(3,4)) &> nummultirange(numrange(1,6))
++                                     ^
+ SELECT nummultirange(numrange(3,4)) &> nummultirange(numrange(3.5,6));
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++SELECT nummultirange(numrange(3,4)) &> nummultirange(numrange(3.5,6))
++                                     ^
+ -- meets
+ SELECT 'empty'::numrange -|- nummultirange();
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "|": syntax error
++DETAIL:  source SQL:
++SELECT 'empty'::numrange -|- nummultirange()
++                          ^
+ SELECT 'empty'::numrange -|- nummultirange(numrange(1,2));
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "|": syntax error
++DETAIL:  source SQL:
++SELECT 'empty'::numrange -|- nummultirange(numrange(1,2))
++                          ^
+ SELECT nummultirange() -|- 'empty'::numrange;
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "|": syntax error
++DETAIL:  source SQL:
++SELECT nummultirange() -|- 'empty'::numrange
++                        ^
+ SELECT nummultirange(numrange(1,2)) -|- 'empty'::numrange;
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "|": syntax error
++DETAIL:  source SQL:
++SELECT nummultirange(numrange(1,2)) -|- 'empty'::numrange
++                                     ^
+ SELECT nummultirange() -|- nummultirange();
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "|": syntax error
++DETAIL:  source SQL:
++SELECT nummultirange() -|- nummultirange()
++                        ^
+ SELECT nummultirange(numrange(1,2)) -|- nummultirange();
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "|": syntax error
++DETAIL:  source SQL:
++SELECT nummultirange(numrange(1,2)) -|- nummultirange()
++                                     ^
+ SELECT nummultirange() -|- nummultirange(numrange(1,2));
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "|": syntax error
++DETAIL:  source SQL:
++SELECT nummultirange() -|- nummultirange(numrange(1,2))
++                        ^
+ SELECT numrange(1,2) -|- nummultirange(numrange(2,4));
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "|": syntax error
++DETAIL:  source SQL:
++SELECT numrange(1,2) -|- nummultirange(numrange(2,4))
++                      ^
+ SELECT numrange(1,2) -|- nummultirange(numrange(3,4));
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "|": syntax error
++DETAIL:  source SQL:
++SELECT numrange(1,2) -|- nummultirange(numrange(3,4))
++                      ^
+ SELECT nummultirange(numrange(1,2)) -|- numrange(2,4);
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "|": syntax error
++DETAIL:  source SQL:
++SELECT nummultirange(numrange(1,2)) -|- numrange(2,4)
++                                     ^
+ SELECT nummultirange(numrange(1,2)) -|- numrange(3,4);
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "|": syntax error
++DETAIL:  source SQL:
++SELECT nummultirange(numrange(1,2)) -|- numrange(3,4)
++                                     ^
+ SELECT nummultirange(numrange(1,2)) -|- nummultirange(numrange(2,4));
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "|": syntax error
++DETAIL:  source SQL:
++SELECT nummultirange(numrange(1,2)) -|- nummultirange(numrange(2,4))
++                                     ^
+ SELECT nummultirange(numrange(1,2)) -|- nummultirange(numrange(3,4));
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "|": syntax error
++DETAIL:  source SQL:
++SELECT nummultirange(numrange(1,2)) -|- nummultirange(numrange(3,4))
++                                     ^
+ SELECT nummultirange(numrange(1,2), numrange(5,6)) -|- nummultirange(numrange(3,4));
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "|": syntax error
++DETAIL:  source SQL:
++SELECT nummultirange(numrange(1,2), numrange(5,6)) -|- nummultirange(numrange(3,4))
++                                                    ^
+ SELECT nummultirange(numrange(1,2), numrange(5,6)) -|- nummultirange(numrange(6,7));
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "|": syntax error
++DETAIL:  source SQL:
++SELECT nummultirange(numrange(1,2), numrange(5,6)) -|- nummultirange(numrange(6,7))
++                                                    ^
+ SELECT nummultirange(numrange(1,2), numrange(5,6)) -|- nummultirange(numrange(8,9));
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  at or near "|": syntax error
++DETAIL:  source SQL:
++SELECT nummultirange(numrange(1,2), numrange(5,6)) -|- nummultirange(numrange(8,9))
++                                                    ^
+ SELECT nummultirange(numrange(1,2)) -|- nummultirange(numrange(2,4), numrange(6,7));
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  at or near "|": syntax error
++DETAIL:  source SQL:
++SELECT nummultirange(numrange(1,2)) -|- nummultirange(numrange(2,4), numrange(6,7))
++                                     ^
+ -- strictly left
+ select 'empty'::numrange << nummultirange();
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ select numrange(1,2) << nummultirange();
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ select numrange(1,2) << nummultirange(numrange(3,4));
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ select numrange(1,2) << nummultirange(numrange(0,4));
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ select numrange(1,2) << nummultirange(numrange(0,4), numrange(7,8));
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ select nummultirange() << 'empty'::numrange;
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ select nummultirange() << numrange(1,2);
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ select nummultirange(numrange(3,4)) << numrange(3,6);
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ select nummultirange(numrange(0,2)) << numrange(3,6);
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ select nummultirange(numrange(0,2), numrange(7,8)) << numrange(3,6);
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ select nummultirange(numrange(-4,-2), numrange(0,2)) << numrange(3,6);
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ select nummultirange() << nummultirange();
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ select nummultirange() << nummultirange(numrange(1,2));
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ select nummultirange(numrange(1,2)) << nummultirange();
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ select nummultirange(numrange(1,2)) << nummultirange(numrange(1,2));
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ select nummultirange(numrange(1,2)) << nummultirange(numrange(3,4));
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ select nummultirange(numrange(1,2)) << nummultirange(numrange(3,4), numrange(7,8));
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ select nummultirange(numrange(1,2), numrange(4,5)) << nummultirange(numrange(3,4), numrange(7,8));
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ -- strictly right
+ select nummultirange() >> 'empty'::numrange;
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ select nummultirange() >> numrange(1,2);
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ select nummultirange(numrange(3,4)) >> numrange(1,2);
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ select nummultirange(numrange(0,4)) >> numrange(1,2);
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ select nummultirange(numrange(0,4), numrange(7,8)) >> numrange(1,2);
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ select 'empty'::numrange >> nummultirange();
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ select numrange(1,2) >> nummultirange();
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ select numrange(3,6) >> nummultirange(numrange(3,4));
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ select numrange(3,6) >> nummultirange(numrange(0,2));
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ select numrange(3,6) >> nummultirange(numrange(0,2), numrange(7,8));
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ select numrange(3,6) >> nummultirange(numrange(-4,-2), numrange(0,2));
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: numrange()
+ select nummultirange() >> nummultirange();
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ select nummultirange(numrange(1,2)) >> nummultirange();
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ select nummultirange() >> nummultirange(numrange(1,2));
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ select nummultirange(numrange(1,2)) >> nummultirange(numrange(1,2));
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ select nummultirange(numrange(3,4)) >> nummultirange(numrange(1,2));
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ select nummultirange(numrange(3,4), numrange(7,8)) >> nummultirange(numrange(1,2));
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ select nummultirange(numrange(3,4), numrange(7,8)) >> nummultirange(numrange(1,2), numrange(4,5));
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ -- union
+ SELECT nummultirange() + nummultirange();
+- ?column? 
+-----------
+- {}
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange() + nummultirange(numrange(1,2));
+- ?column? 
+-----------
+- {[1,2)}
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(1,2)) + nummultirange();
+- ?column? 
+-----------
+- {[1,2)}
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(1,2)) + nummultirange(numrange(1,2));
+- ?column? 
+-----------
+- {[1,2)}
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(1,2)) + nummultirange(numrange(2,4));
+- ?column? 
+-----------
+- {[1,4)}
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(1,2)) + nummultirange(numrange(3,4));
+-   ?column?    
+----------------
+- {[1,2),[3,4)}
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(1,2), numrange(4,5)) + nummultirange(numrange(2,4));
+- ?column? 
+-----------
+- {[1,5)}
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(1,2), numrange(4,5)) + nummultirange(numrange(3,4));
+-   ?column?    
+----------------
+- {[1,2),[3,5)}
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(1,2), numrange(4,5)) + nummultirange(numrange(0,9));
+- ?column? 
+-----------
+- {[0,9)}
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ -- merge
+ SELECT range_merge(nummultirange());
+- range_merge 
+--------------
+- empty
+-(1 row)
+-
++ERROR:  unknown function: range_merge()
+ SELECT range_merge(nummultirange(numrange(1,2)));
+- range_merge 
+--------------
+- [1,2)
+-(1 row)
+-
++ERROR:  unknown function: range_merge()
+ SELECT range_merge(nummultirange(numrange(1,2), numrange(7,8)));
+- range_merge 
+--------------
+- [1,8)
+-(1 row)
+-
++ERROR:  unknown function: range_merge()
+ -- minus
+ SELECT nummultirange() - nummultirange();
+- ?column? 
+-----------
+- {}
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange() - nummultirange(numrange(1,2));
+- ?column? 
+-----------
+- {}
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(1,2)) - nummultirange();
+- ?column? 
+-----------
+- {[1,2)}
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(1,2), numrange(3,4)) - nummultirange();
+-   ?column?    
+----------------
+- {[1,2),[3,4)}
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(1,2)) - nummultirange(numrange(1,2));
+- ?column? 
+-----------
+- {}
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(1,2)) - nummultirange(numrange(2,4));
+- ?column? 
+-----------
+- {[1,2)}
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(1,2)) - nummultirange(numrange(3,4));
+- ?column? 
+-----------
+- {[1,2)}
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(1,4)) - nummultirange(numrange(1,2));
+- ?column? 
+-----------
+- {[2,4)}
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(1,4)) - nummultirange(numrange(2,3));
+-   ?column?    
+----------------
+- {[1,2),[3,4)}
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(1,4)) - nummultirange(numrange(0,8));
+- ?column? 
+-----------
+- {}
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(1,4)) - nummultirange(numrange(0,2));
+- ?column? 
+-----------
+- {[2,4)}
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(1,8)) - nummultirange(numrange(0,2), numrange(3,4));
+-   ?column?    
+----------------
+- {[2,3),[4,8)}
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(1,8)) - nummultirange(numrange(2,3), numrange(5,null));
+-   ?column?    
+----------------
+- {[1,2),[3,5)}
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(1,2), numrange(4,5)) - nummultirange(numrange(-2,0));
+-   ?column?    
+----------------
+- {[1,2),[4,5)}
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(1,2), numrange(4,5)) - nummultirange(numrange(2,4));
+-   ?column?    
+----------------
+- {[1,2),[4,5)}
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(1,2), numrange(4,5)) - nummultirange(numrange(3,5));
+- ?column? 
+-----------
+- {[1,2)}
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(1,2), numrange(4,5)) - nummultirange(numrange(0,9));
+- ?column? 
+-----------
+- {}
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(1,3), numrange(4,5)) - nummultirange(numrange(2,9));
+- ?column? 
+-----------
+- {[1,2)}
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(1,2), numrange(4,5)) - nummultirange(numrange(8,9));
+-   ?column?    
+----------------
+- {[1,2),[4,5)}
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(1,2), numrange(4,5)) - nummultirange(numrange(-2,0), numrange(8,9));
+-   ?column?    
+----------------
+- {[1,2),[4,5)}
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ -- intersection
+ SELECT nummultirange() * nummultirange();
+- ?column? 
+-----------
+- {}
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange() * nummultirange(numrange(1,2));
+- ?column? 
+-----------
+- {}
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT nummultirange(numrange(1,2)) * nummultirange();
+- ?column? 
+-----------
+- {}
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ SELECT '{[1,3)}'::nummultirange * '{[1,5)}'::nummultirange;
+- ?column? 
+-----------
+- {[1,3)}
+-(1 row)
+-
++ERROR:  type "nummultirange" does not exist
+ SELECT '{[1,3)}'::nummultirange * '{[0,5)}'::nummultirange;
+- ?column? 
+-----------
+- {[1,3)}
+-(1 row)
+-
++ERROR:  type "nummultirange" does not exist
+ SELECT '{[1,3)}'::nummultirange * '{[0,2)}'::nummultirange;
+- ?column? 
+-----------
+- {[1,2)}
+-(1 row)
+-
++ERROR:  type "nummultirange" does not exist
+ SELECT '{[1,3)}'::nummultirange * '{[2,5)}'::nummultirange;
+- ?column? 
+-----------
+- {[2,3)}
+-(1 row)
+-
++ERROR:  type "nummultirange" does not exist
+ SELECT '{[1,4)}'::nummultirange * '{[2,3)}'::nummultirange;
+- ?column? 
+-----------
+- {[2,3)}
+-(1 row)
+-
++ERROR:  type "nummultirange" does not exist
+ SELECT '{[1,4)}'::nummultirange * '{[0,2), [3,5)}'::nummultirange;
+-   ?column?    
+----------------
+- {[1,2),[3,4)}
+-(1 row)
+-
++ERROR:  type "nummultirange" does not exist
+ SELECT '{[1,4), [7,10)}'::nummultirange * '{[0,8), [9,12)}'::nummultirange;
+-       ?column?       
+-----------------------
+- {[1,4),[7,8),[9,10)}
+-(1 row)
+-
++ERROR:  type "nummultirange" does not exist
+ SELECT '{[1,4), [7,10)}'::nummultirange * '{[9,12)}'::nummultirange;
+- ?column? 
+-----------
+- {[9,10)}
+-(1 row)
+-
++ERROR:  type "nummultirange" does not exist
+ SELECT '{[1,4), [7,10)}'::nummultirange * '{[-5,-4), [5,6), [9,12)}'::nummultirange;
+- ?column? 
+-----------
+- {[9,10)}
+-(1 row)
+-
++ERROR:  type "nummultirange" does not exist
+ SELECT '{[1,4), [7,10)}'::nummultirange * '{[0,2), [3,8), [9,12)}'::nummultirange;
+-          ?column?          
+-----------------------------
+- {[1,2),[3,4),[7,8),[9,10)}
+-(1 row)
+-
++ERROR:  type "nummultirange" does not exist
+ SELECT '{[1,4), [7,10)}'::nummultirange * '{[0,2), [3,8), [9,12)}'::nummultirange;
+-          ?column?          
+-----------------------------
+- {[1,2),[3,4),[7,8),[9,10)}
+-(1 row)
+-
++ERROR:  type "nummultirange" does not exist
+ -- test GiST index
+ create table test_multirange_gist(mr int4multirange);
++ERROR:  type "int4multirange" does not exist
+ insert into test_multirange_gist select int4multirange(int4range(g, g+10),int4range(g+20, g+30),int4range(g+40, g+50)) from generate_series(1,2000) g;
++ERROR:  relation "test_multirange_gist" does not exist
+ insert into test_multirange_gist select '{}'::int4multirange from generate_series(1,500) g;
++ERROR:  relation "test_multirange_gist" does not exist
+ insert into test_multirange_gist select int4multirange(int4range(g, g+10000)) from generate_series(1,1000) g;
++ERROR:  relation "test_multirange_gist" does not exist
+ insert into test_multirange_gist select int4multirange(int4range(NULL, g*10, '(]'), int4range(g*10, g*20, '(]')) from generate_series(1,100) g;
++ERROR:  relation "test_multirange_gist" does not exist
+ insert into test_multirange_gist select int4multirange(int4range(g*10, g*20, '(]'), int4range(g*20, NULL, '(]')) from generate_series(1,100) g;
++ERROR:  relation "test_multirange_gist" does not exist
+ create index test_mulrirange_gist_idx on test_multirange_gist using gist (mr);
++ERROR:  relation "test_multirange_gist" does not exist
+ -- test statistics and selectivity estimation as well
+ --
+ -- We don't check the accuracy of selectivity estimation, but at least check
+ -- it doesn't fall.
+ analyze test_multirange_gist;
++ERROR:  relation "test_multirange_gist" does not exist
+ -- first, verify non-indexed results
+ SET enable_seqscan    = t;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ SET enable_indexscan  = f;
++ERROR:  unimplemented: the configuration setting "enable_indexscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SET enable_bitmapscan = f;
+-select count(*) from test_multirange_gist where mr = '{}'::int4multirange;
+- count 
+--------
+-   500
+-(1 row)
++ERROR:  unimplemented: the configuration setting "enable_bitmapscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
+ 
+-select count(*) from test_multirange_gist where mr @> 'empty'::int4range;
+- count 
+--------
+-  3700
+-(1 row)
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
+ 
+-select count(*) from test_multirange_gist where mr && 'empty'::int4range;
+- count 
+--------
+-     0
+-(1 row)
++If you would rather not post publicly, please contact us directly
++using the support form.
+ 
+-select count(*) from test_multirange_gist where mr <@ 'empty'::int4range;
+- count 
+--------
+-   500
+-(1 row)
++We appreciate your feedback.
+ 
++select count(*) from test_multirange_gist where mr = '{}'::int4multirange;
++ERROR:  relation "test_multirange_gist" does not exist
++select count(*) from test_multirange_gist where mr @> 'empty'::int4range;
++ERROR:  relation "test_multirange_gist" does not exist
++select count(*) from test_multirange_gist where mr && 'empty'::int4range;
++ERROR:  relation "test_multirange_gist" does not exist
++select count(*) from test_multirange_gist where mr <@ 'empty'::int4range;
++ERROR:  relation "test_multirange_gist" does not exist
+ select count(*) from test_multirange_gist where mr << 'empty'::int4range;
+- count 
+--------
+-     0
+-(1 row)
+-
++ERROR:  relation "test_multirange_gist" does not exist
+ select count(*) from test_multirange_gist where mr >> 'empty'::int4range;
+- count 
+--------
+-     0
+-(1 row)
+-
++ERROR:  relation "test_multirange_gist" does not exist
+ select count(*) from test_multirange_gist where mr &< 'empty'::int4range;
+- count 
+--------
+-     0
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++select count(*) from test_multirange_gist where mr &< 'empty'::int4range
++                                                    ^
+ select count(*) from test_multirange_gist where mr &> 'empty'::int4range;
+- count 
+--------
+-     0
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select count(*) from test_multirange_gist where mr &> 'empty'::int4range
++                                                    ^
+ select count(*) from test_multirange_gist where mr -|- 'empty'::int4range;
+- count 
+--------
+-     0
+-(1 row)
+-
++ERROR:  at or near "|": syntax error
++DETAIL:  source SQL:
++select count(*) from test_multirange_gist where mr -|- 'empty'::int4range
++                                                    ^
+ select count(*) from test_multirange_gist where mr @> '{}'::int4multirange;
+- count 
+--------
+-  3700
+-(1 row)
+-
++ERROR:  relation "test_multirange_gist" does not exist
+ select count(*) from test_multirange_gist where mr @> '{}'::int4multirange;
+- count 
+--------
+-  3700
+-(1 row)
+-
++ERROR:  relation "test_multirange_gist" does not exist
+ select count(*) from test_multirange_gist where mr && '{}'::int4multirange;
+- count 
+--------
+-     0
+-(1 row)
+-
++ERROR:  relation "test_multirange_gist" does not exist
+ select count(*) from test_multirange_gist where mr <@ '{}'::int4multirange;
+- count 
+--------
+-   500
+-(1 row)
+-
++ERROR:  relation "test_multirange_gist" does not exist
+ select count(*) from test_multirange_gist where mr << '{}'::int4multirange;
+- count 
+--------
+-     0
+-(1 row)
+-
++ERROR:  relation "test_multirange_gist" does not exist
+ select count(*) from test_multirange_gist where mr >> '{}'::int4multirange;
+- count 
+--------
+-     0
+-(1 row)
+-
++ERROR:  relation "test_multirange_gist" does not exist
+ select count(*) from test_multirange_gist where mr &< '{}'::int4multirange;
+- count 
+--------
+-     0
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++select count(*) from test_multirange_gist where mr &< '{}'::int4multirange
++                                                    ^
+ select count(*) from test_multirange_gist where mr &> '{}'::int4multirange;
+- count 
+--------
+-     0
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select count(*) from test_multirange_gist where mr &> '{}'::int4multirange
++                                                    ^
+ select count(*) from test_multirange_gist where mr -|- '{}'::int4multirange;
+- count 
+--------
+-     0
+-(1 row)
+-
++ERROR:  at or near "|": syntax error
++DETAIL:  source SQL:
++select count(*) from test_multirange_gist where mr -|- '{}'::int4multirange
++                                                    ^
+ select count(*) from test_multirange_gist where mr = int4multirange(int4range(10,20), int4range(30,40), int4range(50,60));
+- count 
+--------
+-     1
+-(1 row)
+-
++ERROR:  relation "test_multirange_gist" does not exist
+ select count(*) from test_multirange_gist where mr @> 10;
+- count 
+--------
+-   120
+-(1 row)
+-
++ERROR:  relation "test_multirange_gist" does not exist
+ select count(*) from test_multirange_gist where mr @> int4range(10,20);
+- count 
+--------
+-   111
+-(1 row)
+-
++ERROR:  relation "test_multirange_gist" does not exist
+ select count(*) from test_multirange_gist where mr && int4range(10,20);
+- count 
+--------
+-   139
+-(1 row)
+-
++ERROR:  relation "test_multirange_gist" does not exist
+ select count(*) from test_multirange_gist where mr <@ int4range(10,50);
+- count 
+--------
+-   500
+-(1 row)
+-
++ERROR:  relation "test_multirange_gist" does not exist
+ select count(*) from test_multirange_gist where mr << int4range(100,500);
+- count 
+--------
+-    54
+-(1 row)
+-
++ERROR:  relation "test_multirange_gist" does not exist
+ select count(*) from test_multirange_gist where mr >> int4range(100,500);
+- count 
+--------
+-  2053
+-(1 row)
+-
++ERROR:  relation "test_multirange_gist" does not exist
+ select count(*) from test_multirange_gist where mr &< int4range(100,500);
+- count 
+--------
+-   474
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++select count(*) from test_multirange_gist where mr &< int4range(100,500)
++                                                    ^
+ select count(*) from test_multirange_gist where mr &> int4range(100,500);
+- count 
+--------
+-  2893
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select count(*) from test_multirange_gist where mr &> int4range(100,500)
++                                                    ^
+ select count(*) from test_multirange_gist where mr -|- int4range(100,500);
+- count 
+--------
+-     3
+-(1 row)
+-
++ERROR:  at or near "|": syntax error
++DETAIL:  source SQL:
++select count(*) from test_multirange_gist where mr -|- int4range(100,500)
++                                                    ^
+ select count(*) from test_multirange_gist where mr @> '{}'::int4multirange;
+- count 
+--------
+-  3700
+-(1 row)
+-
++ERROR:  relation "test_multirange_gist" does not exist
+ select count(*) from test_multirange_gist where mr @> int4multirange(int4range(10,20), int4range(30,40));
+- count 
+--------
+-   110
+-(1 row)
+-
++ERROR:  relation "test_multirange_gist" does not exist
+ select count(*) from test_multirange_gist where mr && '{(10,20),(30,40),(50,60)}'::int4multirange;
+- count 
+--------
+-   218
+-(1 row)
+-
++ERROR:  relation "test_multirange_gist" does not exist
+ select count(*) from test_multirange_gist where mr <@ '{(10,30),(40,60),(70,90)}'::int4multirange;
+- count 
+--------
+-   500
+-(1 row)
+-
++ERROR:  relation "test_multirange_gist" does not exist
+ select count(*) from test_multirange_gist where mr << int4multirange(int4range(100,200), int4range(400,500));
+- count 
+--------
+-    54
+-(1 row)
+-
++ERROR:  relation "test_multirange_gist" does not exist
+ select count(*) from test_multirange_gist where mr >> int4multirange(int4range(100,200), int4range(400,500));
+- count 
+--------
+-  2053
+-(1 row)
+-
++ERROR:  relation "test_multirange_gist" does not exist
+ select count(*) from test_multirange_gist where mr &< int4multirange(int4range(100,200), int4range(400,500));
+- count 
+--------
+-   474
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++select count(*) from test_multirange_gist where mr &< int4multirange(int4range(100,200), int4range(400,500))
++                                                    ^
+ select count(*) from test_multirange_gist where mr &> int4multirange(int4range(100,200), int4range(400,500));
+- count 
+--------
+-  2893
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select count(*) from test_multirange_gist where mr &> int4multirange(int4range(100,200), int4range(400,500))
++                                                    ^
+ select count(*) from test_multirange_gist where mr -|- int4multirange(int4range(100,200), int4range(400,500));
+- count 
+--------
+-     3
+-(1 row)
+-
++ERROR:  at or near "|": syntax error
++DETAIL:  source SQL:
++select count(*) from test_multirange_gist where mr -|- int4multirange(int4range(100,200), int4range(400,500))
++                                                    ^
+ -- now check same queries using index
+ SET enable_seqscan    = f;
++WARNING:  setting session var "enable_seqscan" is a no-op
+ SET enable_indexscan  = t;
++ERROR:  unimplemented: the configuration setting "enable_indexscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ SET enable_bitmapscan = f;
+-select count(*) from test_multirange_gist where mr = '{}'::int4multirange;
+- count 
+--------
+-   500
+-(1 row)
++ERROR:  unimplemented: the configuration setting "enable_bitmapscan" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
+ 
+-select count(*) from test_multirange_gist where mr @> 'empty'::int4range;
+- count 
+--------
+-  3700
+-(1 row)
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
+ 
+-select count(*) from test_multirange_gist where mr && 'empty'::int4range;
+- count 
+--------
+-     0
+-(1 row)
++If you would rather not post publicly, please contact us directly
++using the support form.
+ 
+-select count(*) from test_multirange_gist where mr <@ 'empty'::int4range;
+- count 
+--------
+-   500
+-(1 row)
++We appreciate your feedback.
+ 
++select count(*) from test_multirange_gist where mr = '{}'::int4multirange;
++ERROR:  relation "test_multirange_gist" does not exist
++select count(*) from test_multirange_gist where mr @> 'empty'::int4range;
++ERROR:  relation "test_multirange_gist" does not exist
++select count(*) from test_multirange_gist where mr && 'empty'::int4range;
++ERROR:  relation "test_multirange_gist" does not exist
++select count(*) from test_multirange_gist where mr <@ 'empty'::int4range;
++ERROR:  relation "test_multirange_gist" does not exist
+ select count(*) from test_multirange_gist where mr << 'empty'::int4range;
+- count 
+--------
+-     0
+-(1 row)
+-
++ERROR:  relation "test_multirange_gist" does not exist
+ select count(*) from test_multirange_gist where mr >> 'empty'::int4range;
+- count 
+--------
+-     0
+-(1 row)
+-
++ERROR:  relation "test_multirange_gist" does not exist
+ select count(*) from test_multirange_gist where mr &< 'empty'::int4range;
+- count 
+--------
+-     0
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++select count(*) from test_multirange_gist where mr &< 'empty'::int4range
++                                                    ^
+ select count(*) from test_multirange_gist where mr &> 'empty'::int4range;
+- count 
+--------
+-     0
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select count(*) from test_multirange_gist where mr &> 'empty'::int4range
++                                                    ^
+ select count(*) from test_multirange_gist where mr -|- 'empty'::int4range;
+- count 
+--------
+-     0
+-(1 row)
+-
++ERROR:  at or near "|": syntax error
++DETAIL:  source SQL:
++select count(*) from test_multirange_gist where mr -|- 'empty'::int4range
++                                                    ^
+ select count(*) from test_multirange_gist where mr @> '{}'::int4multirange;
+- count 
+--------
+-  3700
+-(1 row)
+-
++ERROR:  relation "test_multirange_gist" does not exist
+ select count(*) from test_multirange_gist where mr @> '{}'::int4multirange;
+- count 
+--------
+-  3700
+-(1 row)
+-
++ERROR:  relation "test_multirange_gist" does not exist
+ select count(*) from test_multirange_gist where mr && '{}'::int4multirange;
+- count 
+--------
+-     0
+-(1 row)
+-
++ERROR:  relation "test_multirange_gist" does not exist
+ select count(*) from test_multirange_gist where mr <@ '{}'::int4multirange;
+- count 
+--------
+-   500
+-(1 row)
+-
++ERROR:  relation "test_multirange_gist" does not exist
+ select count(*) from test_multirange_gist where mr << '{}'::int4multirange;
+- count 
+--------
+-     0
+-(1 row)
+-
++ERROR:  relation "test_multirange_gist" does not exist
+ select count(*) from test_multirange_gist where mr >> '{}'::int4multirange;
+- count 
+--------
+-     0
+-(1 row)
+-
++ERROR:  relation "test_multirange_gist" does not exist
+ select count(*) from test_multirange_gist where mr &< '{}'::int4multirange;
+- count 
+--------
+-     0
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++select count(*) from test_multirange_gist where mr &< '{}'::int4multirange
++                                                    ^
+ select count(*) from test_multirange_gist where mr &> '{}'::int4multirange;
+- count 
+--------
+-     0
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select count(*) from test_multirange_gist where mr &> '{}'::int4multirange
++                                                    ^
+ select count(*) from test_multirange_gist where mr -|- '{}'::int4multirange;
+- count 
+--------
+-     0
+-(1 row)
+-
++ERROR:  at or near "|": syntax error
++DETAIL:  source SQL:
++select count(*) from test_multirange_gist where mr -|- '{}'::int4multirange
++                                                    ^
+ select count(*) from test_multirange_gist where mr @> 'empty'::int4range;
+- count 
+--------
+-  3700
+-(1 row)
+-
++ERROR:  relation "test_multirange_gist" does not exist
+ select count(*) from test_multirange_gist where mr = int4multirange(int4range(10,20), int4range(30,40), int4range(50,60));
+- count 
+--------
+-     1
+-(1 row)
+-
++ERROR:  relation "test_multirange_gist" does not exist
+ select count(*) from test_multirange_gist where mr @> 10;
+- count 
+--------
+-   120
+-(1 row)
+-
++ERROR:  relation "test_multirange_gist" does not exist
+ select count(*) from test_multirange_gist where mr @> int4range(10,20);
+- count 
+--------
+-   111
+-(1 row)
+-
++ERROR:  relation "test_multirange_gist" does not exist
+ select count(*) from test_multirange_gist where mr && int4range(10,20);
+- count 
+--------
+-   139
+-(1 row)
+-
++ERROR:  relation "test_multirange_gist" does not exist
+ select count(*) from test_multirange_gist where mr <@ int4range(10,50);
+- count 
+--------
+-   500
+-(1 row)
+-
++ERROR:  relation "test_multirange_gist" does not exist
+ select count(*) from test_multirange_gist where mr << int4range(100,500);
+- count 
+--------
+-    54
+-(1 row)
+-
++ERROR:  relation "test_multirange_gist" does not exist
+ select count(*) from test_multirange_gist where mr >> int4range(100,500);
+- count 
+--------
+-  2053
+-(1 row)
+-
++ERROR:  relation "test_multirange_gist" does not exist
+ select count(*) from test_multirange_gist where mr &< int4range(100,500);
+- count 
+--------
+-   474
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++select count(*) from test_multirange_gist where mr &< int4range(100,500)
++                                                    ^
+ select count(*) from test_multirange_gist where mr &> int4range(100,500);
+- count 
+--------
+-  2893
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select count(*) from test_multirange_gist where mr &> int4range(100,500)
++                                                    ^
+ select count(*) from test_multirange_gist where mr -|- int4range(100,500);
+- count 
+--------
+-     3
+-(1 row)
+-
++ERROR:  at or near "|": syntax error
++DETAIL:  source SQL:
++select count(*) from test_multirange_gist where mr -|- int4range(100,500)
++                                                    ^
+ select count(*) from test_multirange_gist where mr @> '{}'::int4multirange;
+- count 
+--------
+-  3700
+-(1 row)
+-
++ERROR:  relation "test_multirange_gist" does not exist
+ select count(*) from test_multirange_gist where mr @> int4multirange(int4range(10,20), int4range(30,40));
+- count 
+--------
+-   110
+-(1 row)
+-
++ERROR:  relation "test_multirange_gist" does not exist
+ select count(*) from test_multirange_gist where mr && '{(10,20),(30,40),(50,60)}'::int4multirange;
+- count 
+--------
+-   218
+-(1 row)
+-
++ERROR:  relation "test_multirange_gist" does not exist
+ select count(*) from test_multirange_gist where mr <@ '{(10,30),(40,60),(70,90)}'::int4multirange;
+- count 
+--------
+-   500
+-(1 row)
+-
++ERROR:  relation "test_multirange_gist" does not exist
+ select count(*) from test_multirange_gist where mr << int4multirange(int4range(100,200), int4range(400,500));
+- count 
+--------
+-    54
+-(1 row)
+-
++ERROR:  relation "test_multirange_gist" does not exist
+ select count(*) from test_multirange_gist where mr >> int4multirange(int4range(100,200), int4range(400,500));
+- count 
+--------
+-  2053
+-(1 row)
+-
++ERROR:  relation "test_multirange_gist" does not exist
+ select count(*) from test_multirange_gist where mr &< int4multirange(int4range(100,200), int4range(400,500));
+- count 
+--------
+-   474
+-(1 row)
+-
++ERROR:  at or near "<": syntax error
++DETAIL:  source SQL:
++select count(*) from test_multirange_gist where mr &< int4multirange(int4range(100,200), int4range(400,500))
++                                                    ^
+ select count(*) from test_multirange_gist where mr &> int4multirange(int4range(100,200), int4range(400,500));
+- count 
+--------
+-  2893
+-(1 row)
+-
++ERROR:  at or near ">": syntax error
++DETAIL:  source SQL:
++select count(*) from test_multirange_gist where mr &> int4multirange(int4range(100,200), int4range(400,500))
++                                                    ^
+ select count(*) from test_multirange_gist where mr -|- int4multirange(int4range(100,200), int4range(400,500));
+- count 
+--------
+-     3
+-(1 row)
+-
++ERROR:  at or near "|": syntax error
++DETAIL:  source SQL:
++select count(*) from test_multirange_gist where mr -|- int4multirange(int4range(100,200), int4range(400,500))
++                                                    ^
+ drop table test_multirange_gist;
++ERROR:  relation "test_multirange_gist" does not exist
+ --
+ -- range_agg function
+ --
+ create table reservations ( room_id integer not null, booked_during daterange );
++ERROR:  type "daterange" does not exist
+ insert into reservations values
+ -- 1: has a meets and a gap
+ (1, daterange('2018-07-01', '2018-07-07')),
+@@ -2785,22 +1294,12 @@
+ -- 8: an empty range
+ (8, 'empty'::daterange)
+ ;
++ERROR:  relation "reservations" does not exist
+ SELECT   room_id, range_agg(booked_during)
+ FROM     reservations
+ GROUP BY room_id
+ ORDER BY room_id;
+- room_id |                     range_agg                     
+----------+---------------------------------------------------
+-       1 | {[07-01-2018,07-14-2018),[07-20-2018,07-22-2018)}
+-       2 | {[07-01-2018,07-03-2018)}
+-       3 | 
+-       4 | 
+-       5 | {[07-01-2018,07-03-2018)}
+-       6 | {[07-01-2018,07-10-2018)}
+-       7 | {[07-01-2018,07-14-2018)}
+-       8 | {}
+-(8 rows)
+-
++ERROR:  relation "reservations" does not exist
+ -- range_agg on a custom range type too
+ SELECT  range_agg(r)
+ FROM    (VALUES
+@@ -2810,276 +1309,341 @@
+           ('[g,h)'::textrange),
+           ('[h,j)'::textrange)
+         ) t(r);
+-   range_agg   
+----------------
+- {[a,f],[g,j)}
+-(1 row)
+-
++ERROR:  type "textrange" does not exist
+ -- range_agg with multirange inputs
+ select range_agg(nmr) from nummultirange_test;
+- range_agg 
+------------
+- {(,)}
+-(1 row)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ select range_agg(nmr) from nummultirange_test where false;
+- range_agg 
+------------
+- 
+-(1 row)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ select range_agg(null::nummultirange) from nummultirange_test;
+- range_agg 
+------------
+- 
+-(1 row)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ select range_agg(nmr) from (values ('{}'::nummultirange)) t(nmr);
+- range_agg 
+------------
+- {}
+-(1 row)
+-
++ERROR:  type "nummultirange" does not exist
+ select range_agg(nmr) from (values ('{}'::nummultirange), ('{}'::nummultirange)) t(nmr);
+- range_agg 
+------------
+- {}
+-(1 row)
+-
++ERROR:  type "nummultirange" does not exist
+ select range_agg(nmr) from (values ('{[1,2]}'::nummultirange)) t(nmr);
+- range_agg 
+------------
+- {[1,2]}
+-(1 row)
+-
++ERROR:  type "nummultirange" does not exist
+ select range_agg(nmr) from (values ('{[1,2], [5,6]}'::nummultirange)) t(nmr);
+-   range_agg   
+----------------
+- {[1,2],[5,6]}
+-(1 row)
+-
++ERROR:  type "nummultirange" does not exist
+ select range_agg(nmr) from (values ('{[1,2], [2,3]}'::nummultirange)) t(nmr);
+- range_agg 
+------------
+- {[1,3]}
+-(1 row)
+-
++ERROR:  type "nummultirange" does not exist
+ select range_agg(nmr) from (values ('{[1,2]}'::nummultirange), ('{[5,6]}'::nummultirange)) t(nmr);
+-   range_agg   
+----------------
+- {[1,2],[5,6]}
+-(1 row)
+-
++ERROR:  type "nummultirange" does not exist
+ select range_agg(nmr) from (values ('{[1,2]}'::nummultirange), ('{[2,3]}'::nummultirange)) t(nmr);
+- range_agg 
+------------
+- {[1,3]}
+-(1 row)
+-
++ERROR:  type "nummultirange" does not exist
+ --
+ -- range_intersect_agg function
+ --
+ select range_intersect_agg(nmr) from nummultirange_test;
+- range_intersect_agg 
+----------------------
+- {}
+-(1 row)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ select range_intersect_agg(nmr) from nummultirange_test where false;
+- range_intersect_agg 
+----------------------
+- 
+-(1 row)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ select range_intersect_agg(null::nummultirange) from nummultirange_test;
+- range_intersect_agg 
+----------------------
+- 
+-(1 row)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ select range_intersect_agg(nmr) from (values ('{[1,3]}'::nummultirange), ('{[6,12]}'::nummultirange)) t(nmr);
+- range_intersect_agg 
+----------------------
+- {}
+-(1 row)
+-
++ERROR:  type "nummultirange" does not exist
+ select range_intersect_agg(nmr) from (values ('{[1,6]}'::nummultirange), ('{[3,12]}'::nummultirange)) t(nmr);
+- range_intersect_agg 
+----------------------
+- {[3,6]}
+-(1 row)
+-
++ERROR:  type "nummultirange" does not exist
+ select range_intersect_agg(nmr) from (values ('{[1,6], [10,12]}'::nummultirange), ('{[4,14]}'::nummultirange)) t(nmr);
+- range_intersect_agg 
+----------------------
+- {[4,6],[10,12]}
+-(1 row)
+-
++ERROR:  type "nummultirange" does not exist
+ -- test with just one input:
+ select range_intersect_agg(nmr) from (values ('{}'::nummultirange)) t(nmr);
+- range_intersect_agg 
+----------------------
+- {}
+-(1 row)
+-
++ERROR:  type "nummultirange" does not exist
+ select range_intersect_agg(nmr) from (values ('{[1,2]}'::nummultirange)) t(nmr);
+- range_intersect_agg 
+----------------------
+- {[1,2]}
+-(1 row)
+-
++ERROR:  type "nummultirange" does not exist
+ select range_intersect_agg(nmr) from (values ('{[1,6], [10,12]}'::nummultirange)) t(nmr);
+- range_intersect_agg 
+----------------------
+- {[1,6],[10,12]}
+-(1 row)
+-
++ERROR:  type "nummultirange" does not exist
+ select range_intersect_agg(nmr) from nummultirange_test where nmr @> 4.0;
+- range_intersect_agg 
+----------------------
+- {[3,5)}
+-(1 row)
+-
++ERROR:  relation "nummultirange_test" does not exist
+ create table nummultirange_test2(nmr nummultirange);
++ERROR:  type "nummultirange" does not exist
+ create index nummultirange_test2_hash_idx on nummultirange_test2 using hash (nmr);
++ERROR:  at or near "hash": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create index nummultirange_test2_hash_idx on nummultirange_test2 using hash (nmr)
++                                                                       ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ INSERT INTO nummultirange_test2 VALUES('{[, 5)}');
++ERROR:  relation "nummultirange_test2" does not exist
+ INSERT INTO nummultirange_test2 VALUES(nummultirange(numrange(1.1, 2.2)));
++ERROR:  relation "nummultirange_test2" does not exist
+ INSERT INTO nummultirange_test2 VALUES(nummultirange(numrange(1.1, 2.2)));
++ERROR:  relation "nummultirange_test2" does not exist
+ INSERT INTO nummultirange_test2 VALUES(nummultirange(numrange(1.1, 2.2,'()')));
++ERROR:  relation "nummultirange_test2" does not exist
+ INSERT INTO nummultirange_test2 VALUES('{}');
++ERROR:  relation "nummultirange_test2" does not exist
+ select * from nummultirange_test2 where nmr = '{}';
+- nmr 
+------
+- {}
+-(1 row)
+-
++ERROR:  relation "nummultirange_test2" does not exist
+ select * from nummultirange_test2 where nmr = nummultirange(numrange(1.1, 2.2));
+-     nmr     
+--------------
+- {[1.1,2.2)}
+- {[1.1,2.2)}
+-(2 rows)
+-
++ERROR:  relation "nummultirange_test2" does not exist
+ select * from nummultirange_test2 where nmr = nummultirange(numrange(1.1, 2.3));
+- nmr 
+------
+-(0 rows)
+-
++ERROR:  relation "nummultirange_test2" does not exist
+ set enable_nestloop=t;
++ERROR:  unimplemented: the configuration setting "enable_nestloop" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ set enable_hashjoin=f;
++ERROR:  unimplemented: the configuration setting "enable_hashjoin" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ set enable_mergejoin=f;
+-select * from nummultirange_test natural join nummultirange_test2 order by nmr;
+-     nmr     
+--------------
+- {}
+- {}
+- {}
+- {}
+- {(,5)}
+- {[1.1,2.2)}
+- {[1.1,2.2)}
+-(7 rows)
++ERROR:  unimplemented: the configuration setting "enable_mergejoin" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
+ 
++We appreciate your feedback.
++
++select * from nummultirange_test natural join nummultirange_test2 order by nmr;
++ERROR:  relation "nummultirange_test" does not exist
+ set enable_nestloop=f;
++ERROR:  unimplemented: the configuration setting "enable_nestloop" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ set enable_hashjoin=t;
++ERROR:  unimplemented: the configuration setting "enable_hashjoin" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ set enable_mergejoin=f;
+-select * from nummultirange_test natural join nummultirange_test2 order by nmr;
+-     nmr     
+--------------
+- {}
+- {}
+- {}
+- {}
+- {(,5)}
+- {[1.1,2.2)}
+- {[1.1,2.2)}
+-(7 rows)
++ERROR:  unimplemented: the configuration setting "enable_mergejoin" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
+ 
++We appreciate your feedback.
++
++select * from nummultirange_test natural join nummultirange_test2 order by nmr;
++ERROR:  relation "nummultirange_test" does not exist
+ set enable_nestloop=f;
++ERROR:  unimplemented: the configuration setting "enable_nestloop" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ set enable_hashjoin=f;
++ERROR:  unimplemented: the configuration setting "enable_hashjoin" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ set enable_mergejoin=t;
+-select * from nummultirange_test natural join nummultirange_test2 order by nmr;
+-     nmr     
+--------------
+- {}
+- {}
+- {}
+- {}
+- {(,5)}
+- {[1.1,2.2)}
+- {[1.1,2.2)}
+-(7 rows)
++ERROR:  unimplemented: the configuration setting "enable_mergejoin" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
+ 
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
++select * from nummultirange_test natural join nummultirange_test2 order by nmr;
++ERROR:  relation "nummultirange_test" does not exist
+ set enable_nestloop to default;
++ERROR:  unimplemented: the configuration setting "enable_nestloop" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ set enable_hashjoin to default;
++ERROR:  unimplemented: the configuration setting "enable_hashjoin" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ set enable_mergejoin to default;
++ERROR:  unimplemented: the configuration setting "enable_mergejoin" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ DROP TABLE nummultirange_test2;
++ERROR:  relation "nummultirange_test2" does not exist
+ --
+ -- Test user-defined multirange of floats
+ --
+ select '{[123.001, 5.e9)}'::float8multirange @> 888.882::float8;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  type "float8multirange" does not exist
+ create table float8multirange_test(f8mr float8multirange, i int);
++ERROR:  type "float8multirange" does not exist
+ insert into float8multirange_test values(float8multirange(float8range(-100.00007, '1.111113e9')), 42);
++ERROR:  relation "float8multirange_test" does not exist
+ select * from float8multirange_test;
+-           f8mr            | i  
+----------------------------+----
+- {[-100.00007,1111113000)} | 42
+-(1 row)
+-
++ERROR:  relation "float8multirange_test" does not exist
+ drop table float8multirange_test;
++ERROR:  relation "float8multirange_test" does not exist
+ --
+ -- Test multirange types over domains
+ --
+ create domain mydomain as int4;
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain mydomain as int4
++                       ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ create type mydomainrange as range(subtype=mydomain);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create type mydomainrange as range(subtype=mydomain)
++                                  ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27791/_version_
+ select '{[4,50)}'::mydomainmultirange @> 7::mydomain;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  type "mydomainmultirange" does not exist
+ drop domain mydomain cascade;
+-NOTICE:  drop cascades to type mydomainrange
++ERROR:  at or near "mydomain": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop domain mydomain cascade
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ --
+ -- Test domains over multirange types
+ --
+ create domain restrictedmultirange as int4multirange check (upper(value) < 10);
++ERROR:  at or near "as": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create domain restrictedmultirange as int4multirange check (upper(value) < 10)
++                                   ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ select '{[4,5)}'::restrictedmultirange @> 7;
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  type "restrictedmultirange" does not exist
+ select '{[4,50)}'::restrictedmultirange @> 7; -- should fail
+-ERROR:  value for domain restrictedmultirange violates check constraint "restrictedmultirange_check"
++ERROR:  type "restrictedmultirange" does not exist
+ drop domain restrictedmultirange;
++ERROR:  at or near "restrictedmultirange": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++drop domain restrictedmultirange
++            ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27796/_version_
+ ---
+ -- Check automatic naming of multiranges
+ ---
+ create type intr as range(subtype=int);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create type intr as range(subtype=int)
++                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27791/_version_
+ select intr_multirange(intr(1,10));
+- intr_multirange 
+------------------
+- {[1,10)}
+-(1 row)
+-
++ERROR:  unknown function: intr_multirange()
+ drop type intr;
++ERROR:  type "intr" does not exist
+ create type intmultirange as (x int, y int);
+ create type intrange as range(subtype=int); -- should fail
+-ERROR:  type "intmultirange" already exists
+-DETAIL:  Failed while creating a multirange type for type "intrange".
+-HINT:  You can manually specify a multirange type name using the "multirange_type_name" attribute.
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create type intrange as range(subtype=int)
++                             ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27791/_version_
+ drop type intmultirange;
+ create type intr_multirange as (x int, y int);
+ create type intr as range(subtype=int); -- should fail
+-ERROR:  type "intr_multirange" already exists
+-DETAIL:  Failed while creating a multirange type for type "intr".
+-HINT:  You can manually specify a multirange type name using the "multirange_type_name" attribute.
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create type intr as range(subtype=int)
++                         ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27791/_version_
+ drop type intr_multirange;
+ --
+ -- Test multiple multirange types over the same subtype and manual naming of
+@@ -3087,277 +1651,232 @@
+ --
+ -- should fail
+ create type textrange1 as range(subtype=text, multirange_type_name=int, collation="C");
+-ERROR:  type "int4" already exists
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create type textrange1 as range(subtype=text, multirange_type_name=int, collation="C")
++                               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27791/_version_
+ -- should pass
+ create type textrange1 as range(subtype=text, multirange_type_name=multirange_of_text, collation="C");
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create type textrange1 as range(subtype=text, multirange_type_name=multirange_of_text, collation="C")
++                               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27791/_version_
+ -- should pass, because existing _textrange1 is automatically renamed
+ create type textrange2 as range(subtype=text, multirange_type_name=_textrange1, collation="C");
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create type textrange2 as range(subtype=text, multirange_type_name=_textrange1, collation="C")
++                               ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27791/_version_
+ select multirange_of_text(textrange2('a','Z'));  -- should fail
+-ERROR:  function multirange_of_text(textrange2) does not exist
+-LINE 1: select multirange_of_text(textrange2('a','Z'));
+-               ^
+-HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++ERROR:  unknown function: multirange_of_text()
+ select multirange_of_text(textrange1('a','Z')) @> 'b'::text;
+-ERROR:  range lower bound must be less than or equal to range upper bound
++ERROR:  unknown function: multirange_of_text()
+ select unnest(multirange_of_text(textrange1('a','b'), textrange1('d','e')));
+- unnest 
+---------
+- [a,b)
+- [d,e)
+-(2 rows)
+-
++ERROR:  unknown function: multirange_of_text()
+ select _textrange1(textrange2('a','z')) @> 'b'::text;
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: _textrange1()
+ drop type textrange1;
++ERROR:  type "textrange1" does not exist
+ drop type textrange2;
++ERROR:  type "textrange2" does not exist
+ --
+ -- Test polymorphic type system
+ --
+ create function anyarray_anymultirange_func(a anyarray, r anymultirange)
+   returns anyelement as 'select $1[1] + lower($2);' language sql;
++ERROR:  type "anymultirange" does not exist
+ select anyarray_anymultirange_func(ARRAY[1,2], int4multirange(int4range(10,20)));
+- anyarray_anymultirange_func 
+------------------------------
+-                          11
+-(1 row)
+-
++ERROR:  unknown function: anyarray_anymultirange_func()
+ -- should fail
+ select anyarray_anymultirange_func(ARRAY[1,2], nummultirange(numrange(10,20)));
+-ERROR:  function anyarray_anymultirange_func(integer[], nummultirange) does not exist
+-LINE 1: select anyarray_anymultirange_func(ARRAY[1,2], nummultirange...
+-               ^
+-HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++ERROR:  unknown function: anyarray_anymultirange_func()
+ drop function anyarray_anymultirange_func(anyarray, anymultirange);
++ERROR:  unknown function: anyarray_anymultirange_func()
+ -- should fail
+ create function bogus_func(anyelement)
+   returns anymultirange as 'select int4multirange(int4range(1,10))' language sql;
+-ERROR:  cannot determine result data type
+-DETAIL:  A result of type anymultirange requires at least one input of type anyrange or anymultirange.
++ERROR:  type "anymultirange" does not exist
+ -- should fail
+ create function bogus_func(int)
+   returns anymultirange as 'select int4multirange(int4range(1,10))' language sql;
+-ERROR:  cannot determine result data type
+-DETAIL:  A result of type anymultirange requires at least one input of type anyrange or anymultirange.
++ERROR:  type "anymultirange" does not exist
+ create function range_add_bounds(anymultirange)
+   returns anyelement as 'select lower($1) + upper($1)' language sql;
++ERROR:  type "anymultirange" does not exist
+ select range_add_bounds(int4multirange(int4range(1, 17)));
+- range_add_bounds 
+-------------------
+-               18
+-(1 row)
+-
++ERROR:  unknown function: range_add_bounds()
+ select range_add_bounds(nummultirange(numrange(1.0001, 123.123)));
+- range_add_bounds 
+-------------------
+-         124.1231
+-(1 row)
+-
++ERROR:  unknown function: range_add_bounds()
+ create function multirangetypes_sql(q anymultirange, b anyarray, out c anyelement)
+   as $$ select upper($1) + $2[1] $$
+   language sql;
++ERROR:  type "anymultirange" does not exist
+ select multirangetypes_sql(int4multirange(int4range(1,10)), ARRAY[2,20]);
+- multirangetypes_sql 
+----------------------
+-                  12
+-(1 row)
+-
++ERROR:  unknown function: multirangetypes_sql()
+ select multirangetypes_sql(nummultirange(numrange(1,10)), ARRAY[2,20]);  -- match failure
+-ERROR:  function multirangetypes_sql(nummultirange, integer[]) does not exist
+-LINE 1: select multirangetypes_sql(nummultirange(numrange(1,10)), AR...
+-               ^
+-HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++ERROR:  unknown function: multirangetypes_sql()
+ create function anycompatiblearray_anycompatiblemultirange_func(a anycompatiblearray, mr anycompatiblemultirange)
+   returns anycompatible as 'select $1[1] + lower($2);' language sql;
++ERROR:  type "anycompatiblearray" does not exist
+ select anycompatiblearray_anycompatiblemultirange_func(ARRAY[1,2], multirange(int4range(10,20)));
+- anycompatiblearray_anycompatiblemultirange_func 
+--------------------------------------------------
+-                                              11
+-(1 row)
+-
++ERROR:  unknown function: anycompatiblearray_anycompatiblemultirange_func()
+ select anycompatiblearray_anycompatiblemultirange_func(ARRAY[1,2], multirange(numrange(10,20)));
+- anycompatiblearray_anycompatiblemultirange_func 
+--------------------------------------------------
+-                                              11
+-(1 row)
+-
++ERROR:  unknown function: anycompatiblearray_anycompatiblemultirange_func()
+ -- should fail
+ select anycompatiblearray_anycompatiblemultirange_func(ARRAY[1.1,2], multirange(int4range(10,20)));
+-ERROR:  function anycompatiblearray_anycompatiblemultirange_func(numeric[], int4multirange) does not exist
+-LINE 1: select anycompatiblearray_anycompatiblemultirange_func(ARRAY...
+-               ^
+-HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++ERROR:  unknown function: anycompatiblearray_anycompatiblemultirange_func()
+ drop function anycompatiblearray_anycompatiblemultirange_func(anycompatiblearray, anycompatiblemultirange);
++ERROR:  unknown function: anycompatiblearray_anycompatiblemultirange_func()
+ create function anycompatiblerange_anycompatiblemultirange_func(r anycompatiblerange, mr anycompatiblemultirange)
+   returns anycompatible as 'select lower($1) + lower($2);' language sql;
++ERROR:  type "anycompatiblerange" does not exist
+ select anycompatiblerange_anycompatiblemultirange_func(int4range(1,2), multirange(int4range(10,20)));
+- anycompatiblerange_anycompatiblemultirange_func 
+--------------------------------------------------
+-                                              11
+-(1 row)
+-
++ERROR:  unknown function: anycompatiblerange_anycompatiblemultirange_func()
+ -- should fail
+ select anycompatiblerange_anycompatiblemultirange_func(numrange(1,2), multirange(int4range(10,20)));
+-ERROR:  function anycompatiblerange_anycompatiblemultirange_func(numrange, int4multirange) does not exist
+-LINE 1: select anycompatiblerange_anycompatiblemultirange_func(numra...
+-               ^
+-HINT:  No function matches the given name and argument types. You might need to add explicit type casts.
++ERROR:  unknown function: anycompatiblerange_anycompatiblemultirange_func()
+ drop function anycompatiblerange_anycompatiblemultirange_func(anycompatiblerange, anycompatiblemultirange);
++ERROR:  unknown function: anycompatiblerange_anycompatiblemultirange_func()
+ -- should fail
+ create function bogus_func(anycompatible)
+   returns anycompatiblerange as 'select int4range(1,10)' language sql;
+-ERROR:  cannot determine result data type
+-DETAIL:  A result of type anycompatiblerange requires at least one input of type anycompatiblerange or anycompatiblemultirange.
++ERROR:  type "anycompatible" does not exist
+ --
+ -- Arrays of multiranges
+ --
+ select ARRAY[nummultirange(numrange(1.1, 1.2)), nummultirange(numrange(12.3, 155.5))];
+-              array               
+-----------------------------------
+- {"{[1.1,1.2)}","{[12.3,155.5)}"}
+-(1 row)
+-
++ERROR:  unknown function: nummultirange()
+ create table i8mr_array (f1 int, f2 int8multirange[]);
++ERROR:  type "int8multirange" does not exist
+ insert into i8mr_array values (42, array[int8multirange(int8range(1,10)), int8multirange(int8range(2,20))]);
++ERROR:  relation "i8mr_array" does not exist
+ select * from i8mr_array;
+- f1 |           f2            
+-----+-------------------------
+- 42 | {"{[1,10)}","{[2,20)}"}
+-(1 row)
+-
++ERROR:  relation "i8mr_array" does not exist
+ drop table i8mr_array;
++ERROR:  relation "i8mr_array" does not exist
+ --
+ -- Multiranges of arrays
+ --
+ select arraymultirange(arrayrange(ARRAY[1,2], ARRAY[2,1]));
+-   arraymultirange   
+----------------------
+- {["{1,2}","{2,1}")}
+-(1 row)
+-
++ERROR:  unknown function: arraymultirange()
+ select arraymultirange(arrayrange(ARRAY[2,1], ARRAY[1,2]));  -- fail
+-ERROR:  range lower bound must be less than or equal to range upper bound
++ERROR:  unknown function: arraymultirange()
+ select array[1,1] <@ arraymultirange(arrayrange(array[1,2], array[2,1]));
+- ?column? 
+-----------
+- f
+-(1 row)
+-
++ERROR:  unknown function: arraymultirange()
+ select array[1,3] <@ arraymultirange(arrayrange(array[1,2], array[2,1]));
+- ?column? 
+-----------
+- t
+-(1 row)
+-
++ERROR:  unknown function: arraymultirange()
+ --
+ -- Ranges of composites
+ --
+ create type two_ints as (a int, b int);
++ERROR:  type "root.public.two_ints" already exists
+ create type two_ints_range as range (subtype = two_ints);
++ERROR:  at or near "(": syntax error: unimplemented: this syntax
++DETAIL:  source SQL:
++create type two_ints_range as range (subtype = two_ints)
++                                    ^
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/27791/_version_
+ -- with debug_parallel_query on, this exercises tqueue.c's range remapping
+ select *, row_to_json(upper(t)) as u from
+   (values (two_ints_multirange(two_ints_range(row(1,2), row(3,4)))),
+           (two_ints_multirange(two_ints_range(row(5,6), row(7,8))))) v(t);
+-          t          |       u       
+----------------------+---------------
+- {["(1,2)","(3,4)")} | {"a":3,"b":4}
+- {["(5,6)","(7,8)")} | {"a":7,"b":8}
+-(2 rows)
+-
++ERROR:  unknown function: two_ints_multirange()
+ drop type two_ints cascade;
+-NOTICE:  drop cascades to type two_ints_range
++ERROR:  unimplemented: DROP TYPE CASCADE is not yet supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++See: https://go.crdb.dev/issue-v/51480/_version_
+ --
+ -- Check behavior when subtype lacks a hash function
+ --
+ set enable_sort = off;  -- try to make it pick a hash setop implementation
+-select '{(2,5)}'::cashmultirange except select '{(5,6)}'::cashmultirange;
+- cashmultirange  
+------------------
+- {($2.00,$5.00)}
+-(1 row)
++ERROR:  unimplemented: the configuration setting "enable_sort" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
+ 
++select '{(2,5)}'::cashmultirange except select '{(5,6)}'::cashmultirange;
++ERROR:  type "cashmultirange" does not exist
+ reset enable_sort;
++ERROR:  unimplemented: the configuration setting "enable_sort" is not supported
++HINT:  You have attempted to use a feature that is not yet implemented.
++
++Please check the public issue tracker to check whether this problem is
++already tracked. If you cannot find it there, please report the error
++with details by creating a new issue.
++
++If you would rather not post publicly, please contact us directly
++using the support form.
++
++We appreciate your feedback.
++
+ --
+ -- OUT/INOUT/TABLE functions
+ --
+ -- infer anymultirange from anymultirange
+ create function mr_outparam_succeed(i anymultirange, out r anymultirange, out t text)
+   as $$ select $1, 'foo'::text $$ language sql;
++ERROR:  type "anymultirange" does not exist
+ select * from mr_outparam_succeed(int4multirange(int4range(1,2)));
+-    r    |  t  
+----------+-----
+- {[1,2)} | foo
+-(1 row)
+-
++ERROR:  unknown function: mr_outparam_succeed()
+ -- infer anyarray from anymultirange
+ create function mr_outparam_succeed2(i anymultirange, out r anyarray, out t text)
+   as $$ select ARRAY[upper($1)], 'foo'::text $$ language sql;
++ERROR:  type "anymultirange" does not exist
+ select * from mr_outparam_succeed2(int4multirange(int4range(1,2)));
+-  r  |  t  
+------+-----
+- {2} | foo
+-(1 row)
+-
++ERROR:  unknown function: mr_outparam_succeed2()
+ -- infer anyrange from anymultirange
+ create function mr_outparam_succeed3(i anymultirange, out r anyrange, out t text)
+   as $$ select range_merge($1), 'foo'::text $$ language sql;
++ERROR:  type "anymultirange" does not exist
+ select * from mr_outparam_succeed3(int4multirange(int4range(1,2)));
+-   r   |  t  
+--------+-----
+- [1,2) | foo
+-(1 row)
+-
++ERROR:  unknown function: mr_outparam_succeed3()
+ -- infer anymultirange from anyrange
+ create function mr_outparam_succeed4(i anyrange, out r anymultirange, out t text)
+   as $$ select multirange($1), 'foo'::text $$ language sql;
++ERROR:  type "anyrange" does not exist
+ select * from mr_outparam_succeed4(int4range(1,2));
+-    r    |  t  
+----------+-----
+- {[1,2)} | foo
+-(1 row)
+-
++ERROR:  unknown function: mr_outparam_succeed4()
+ -- infer anyelement from anymultirange
+ create function mr_inoutparam_succeed(out i anyelement, inout r anymultirange)
+   as $$ select upper($1), $1 $$ language sql;
++ERROR:  type "anymultirange" does not exist
+ select * from mr_inoutparam_succeed(int4multirange(int4range(1,2)));
+- i |    r    
+----+---------
+- 2 | {[1,2)}
+-(1 row)
+-
++ERROR:  unknown function: mr_inoutparam_succeed()
+ -- infer anyelement+anymultirange from anyelement+anymultirange
+ create function mr_table_succeed(i anyelement, r anymultirange) returns table(i anyelement, r anymultirange)
+   as $$ select $1, $2 $$ language sql;
++ERROR:  type "anymultirange" does not exist
+ select * from mr_table_succeed(123, int4multirange(int4range(1,11)));
+-  i  |    r     
+------+----------
+- 123 | {[1,11)}
+-(1 row)
+-
++ERROR:  unknown function: mr_table_succeed()
+ -- use anymultirange in plpgsql
+ create function mr_polymorphic(i anyrange) returns anymultirange
+   as $$ begin return multirange($1); end; $$ language plpgsql;
++ERROR:  type "anyrange" does not exist
+ select mr_polymorphic(int4range(1, 4));
+- mr_polymorphic 
+-----------------
+- {[1,4)}
+-(1 row)
+-
++ERROR:  unknown function: mr_polymorphic()
+ -- should fail
+ create function mr_outparam_fail(i anyelement, out r anymultirange, out t text)
+   as $$ select '[1,10]', 'foo' $$ language sql;
+-ERROR:  cannot determine result data type
+-DETAIL:  A result of type anymultirange requires at least one input of type anyrange or anymultirange.
++ERROR:  type "anymultirange" does not exist
+ --should fail
+ create function mr_inoutparam_fail(inout i anyelement, out r anymultirange)
+   as $$ select $1, '[1,10]' $$ language sql;
+-ERROR:  cannot determine result data type
+-DETAIL:  A result of type anymultirange requires at least one input of type anyrange or anymultirange.
++ERROR:  type "anymultirange" does not exist
+ --should fail
+ create function mr_table_fail(i anyelement) returns table(i anyelement, r anymultirange)
+   as $$ select $1, '[1,10]' $$ language sql;
+-ERROR:  cannot determine result data type
+-DETAIL:  A result of type anymultirange requires at least one input of type anyrange or anymultirange.
++ERROR:  type "anymultirange" does not exist

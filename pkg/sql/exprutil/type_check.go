@@ -65,15 +65,6 @@ var (
 	_ ToTypeCheck = TenantSpec{}
 )
 
-// MakeStringArraysFromOptList makes a StringArrays by casting the members of in.
-func MakeStringArraysFromOptList(in []tree.StringOrPlaceholderOptList) StringArrays {
-	ret := make([]tree.Exprs, len(in))
-	for i, exprs := range in {
-		ret[i] = tree.Exprs(exprs)
-	}
-	return ret
-}
-
 func (s StringArrays) typeCheck(ctx context.Context, op string, semaCtx *tree.SemaContext) error {
 	for _, exprs := range s {
 		if err := Strings(exprs).typeCheck(ctx, op, semaCtx); err != nil {

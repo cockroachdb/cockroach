@@ -67,7 +67,7 @@ func CheckEmittedEvents(
 				require.Equal(t, expectedJobType, ev.JobType)
 				require.Equal(t, jobID, ev.JobID)
 				if matchingEntryIndex >= len(expectedStatus) {
-					return errors.New("more events fround in log than expected")
+					return errors.New("more events found in log than expected")
 				}
 				require.Equal(t, expectedStatus[matchingEntryIndex], ev.Status)
 				matchingEntryIndex++

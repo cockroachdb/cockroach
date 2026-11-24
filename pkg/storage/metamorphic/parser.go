@@ -15,7 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/pebble"
-	"github.com/cockroachdb/pebble/bloom"
+	"github.com/cockroachdb/pebble/sstable/tablefilters/bloom"
 )
 
 // parseOutputPreamble reads the commented preamble of an output.meta file,
@@ -63,12 +63,9 @@ func parseOutputPreamble(f io.Reader) (cfg engineConfig, seed int64, err error) 
 }
 
 var parseHooks = &pebble.ParseHooks{
-	NewFilterPolicy: func(name string) (pebble.FilterPolicy, error) {
-		switch name {
-		case "none":
-			return nil, nil
-		case "rocksdb.BuiltinBloomFilter":
-			return bloom.FilterPolicy(10), nil
+	NewFilterPolicy: func(name string) (pebble.TableFilterPolicy, error) {
+		if p, ok := bloom.PolicyFromName(name); ok {
+			return p, nil
 		}
 		return nil, nil
 	},

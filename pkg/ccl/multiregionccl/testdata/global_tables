@@ -32,7 +32,7 @@ SELECT * FROM db.global WHERE k = 2
 ----
 LEAD_FOR_GLOBAL_READS
 
-trace-sql idx=1
+trace-sql idx=1 retry
 SELECT * FROM db.global WHERE k = 1
 ----
 served locally: true
@@ -43,7 +43,7 @@ SELECT * FROM db.global WHERE k = 2
 ----
 LEAD_FOR_GLOBAL_READS
 
-trace-sql idx=2
+trace-sql idx=2 retry
 SELECT * FROM db.global WHERE k = 1
 ----
 served locally: true
@@ -54,7 +54,7 @@ SELECT * FROM db.global WHERE k = 2
 ----
 LEAD_FOR_GLOBAL_READS
 
-trace-sql idx=3
+trace-sql idx=3 retry
 SELECT * FROM db.global WHERE k = 1
 ----
 served locally: true
@@ -65,7 +65,7 @@ SELECT * FROM db.global WHERE k = 2
 ----
 LEAD_FOR_GLOBAL_READS
 
-trace-sql idx=4
+trace-sql idx=4 retry
 SELECT * FROM db.global WHERE k = 1
 ----
 served locally: true
@@ -95,7 +95,7 @@ SELECT * FROM db.global WHERE k = 2
 ----
 LEAD_FOR_GLOBAL_READS
 
-trace-sql idx=5
+trace-sql idx=5 retry
 SELECT * FROM db.global WHERE k = 1
 ----
 served locally: true

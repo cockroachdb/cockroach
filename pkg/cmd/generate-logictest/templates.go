@@ -8,28 +8,15 @@ package main
 import "text/template"
 
 const templateText = `
-{{- define "cclHeader" -}}
+{{- define "header" -}}
 // Copyright 2022 The Cockroach Authors.
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
-{{- end }}
-
-{{- define "bslHeader" -}}
-// Copyright 2022 The Cockroach Authors.
-//
-// Use of this software is governed by the CockroachDB Software License
-// included in the /LICENSE file.
-{{- end }}
-
-{{- define "header" }}
-{{- if .Ccl }}{{ template "cclHeader" }}
-{{- else }}{{ template "bslHeader" }}{{ end }}
 {{- end }}
 
 {{- define "declareTestdataPaths" }}
 {{- if .LogicTest }}var logicTestDir string
-{{ end }}{{ if .CclLogicTest }}var cclLogicTestDir string
 {{ end }}{{ if .ExecBuildLogicTest }}var execBuildLogicTestDir string
 {{ end }}{{ if .SqliteLogicTest }}var sqliteLogicTestDir string
 {{ end }}
@@ -38,19 +25,9 @@ const templateText = `
 {{- define "runLogicTest" }}
 {{- if .LogicTest -}}
 func runLogicTest(t *testing.T, file string) {
-	{{if and .SkipCclUnderRace .Ccl}}skip.UnderRace(t, "times out and/or hangs")
+	{{if .SkipUnderRace}}skip.UnderRace(t, "times out and/or hangs")
 	{{end}}skip.UnderDeadlock(t, "times out and/or hangs")
 	logictest.RunLogicTest(t, logictest.TestServerArgs{}, configIdx, filepath.Join(logicTestDir, file))
-}
-{{ end }}
-{{- end }}
-
-{{- define "runCCLLogicTest" }}
-{{- if .CclLogicTest -}}
-func runCCLLogicTest(t *testing.T, file string) {
-	{{if .SkipCclUnderRace}}skip.UnderRace(t, "times out and/or hangs")
-	{{end}}skip.UnderDeadlock(t, "times out and/or hangs")
-	logictest.RunLogicTest(t, logictest.TestServerArgs{}, configIdx, filepath.Join(cclLogicTestDir, file))
 }
 {{ end }}
 {{- end }}
@@ -65,7 +42,11 @@ func runExecBuildLogicTest(t *testing.T, file string) {
 		ForceProductionValues:       true,{{end}}
 		// Disable the direct scans in order to keep the output of EXPLAIN (VEC)
 		// deterministic.
-		DisableDirectColumnarScans: true,
+		DisableDirectColumnarScans: true,{{ if not .ForceProductionValues }}
+		// ForceProductionValues is not set for this config, so we must
+		// explicitly disable optimizer perturbations to keep EXPLAIN output
+		// deterministic when COCKROACH_LOGIC_TEST_OPTIMIZER_METAMORPHIC is set.
+		DisableOptimizerPerturbations: true,{{end}}
 	}
 	logictest.RunLogicTest(t, serverArgs, configIdx, filepath.Join(execBuildLogicTestDir, file))
 }
@@ -88,7 +69,8 @@ func runSqliteLogicTest(t *testing.T, file string) {
 		DisableUseMVCCRangeTombstonesForPointDeletes: true,
 		// Some sqlite tests with very low bytes limit value are too slow, so
 		// ensure 3 KiB lower bound.
-		BatchBytesLimitLowerBound: 3 << 10, // 3 KiB
+		BatchBytesLimitLowerBound:     3 << 10, // 3 KiB
+		DisableOptimizerPerturbations: true,
 	}
 	logictest.RunLogicTest(t, serverArgs, configIdx, filepath.Join(sqliteLogicTestDir, file))
 }
@@ -97,7 +79,6 @@ func runSqliteLogicTest(t *testing.T, file string) {
 
 {{- define "declareTestdataSetupFunctions" }}
 {{- template "runLogicTest" . }}
-{{- template "runCCLLogicTest" . }}
 {{- template "runExecBuildLogicTest" . }}
 {{- template "runSqliteLogicTest" . }}
 {{- end }}
@@ -111,19 +92,6 @@ func runSqliteLogicTest(t *testing.T, file string) {
 		}
 	} else {
 		logicTestDir = "{{ .RelDir }}/sql/logictest/testdata/logic_test"
-	}
-{{ end }}
-{{- end }}
-
-{{- define "initCCLLogicTest" }}
-{{- if .CclLogicTest }}	if bazel.BuiltWithBazel() {
-		var err error
-		cclLogicTestDir, err = bazel.Runfile("pkg/ccl/logictestccl/testdata/logic_test")
-		if err != nil {
-			panic(err)
-		}
-	} else {
-		cclLogicTestDir = "{{ .RelDir }}/ccl/logictestccl/testdata/logic_test"
 	}
 {{ end }}
 {{- end }}
@@ -144,7 +112,6 @@ func runSqliteLogicTest(t *testing.T, file string) {
 {{- define "initFunc" }}
 func init() {
 {{- template "initLogicTest" . -}}
-{{- template "initCCLLogicTest" . -}}
 {{- template "initExecBuildLogicTest" . -}}
 }
 {{- end }}
@@ -162,8 +129,8 @@ import ({{ if .SqliteLogicTest }}
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/build/bazel"{{ if .Ccl }}
-	"github.com/cockroachdb/cockroach/pkg/ccl"{{ end }}
+	"github.com/cockroachdb/cockroach/pkg/build/bazel"
+	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"{{ if .ExecBuildLogicTest }}
@@ -199,16 +166,12 @@ func TestMain(m *testing.M) {
 			}
 		}
 	}
-{{ end }}{{ if .Ccl }}	defer ccl.TestingEnableEnterprise()()
-{{ end }}	securityassets.SetLoader(securitytest.EmbeddedAssets)
+{{ end }}	defer ccl.TestingEnableEnterprise()()
+	securityassets.SetLoader(securitytest.EmbeddedAssets)
 	randutil.SeedForTests()
-	serverutils.InitTestServerFactory(server.TestServerFactory)
+	serverutils.InitTestServerFactory(server.TestServerFactory,
+		serverutils.WithTenantOption(base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(156124)))
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
-
-	defer serverutils.TestingSetDefaultTenantSelectionOverride(
-		base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(76378),
-	)()
-
 	os.Exit(m.Run())
 }
 
@@ -227,14 +190,11 @@ func TestLogic_tmp(t *testing.T) {
 	glob = filepath.Join(logicTestDir, "_*")
 	logictest.RunLogicTests(t, logictest.TestServerArgs{}, configIdx, glob)
 	{{- end}}
-	{{- if .CclLogicTest }}
-	glob = filepath.Join(cclLogicTestDir, "_*")
-	logictest.RunLogicTests(t, logictest.TestServerArgs{}, configIdx, glob)
-	{{- end }}
 	{{- if .ExecBuildLogicTest }}
 	glob = filepath.Join(execBuildLogicTestDir, "_*")
 	serverArgs := logictest.TestServerArgs{
-		DisableWorkmemRandomization: true,
+		DisableWorkmemRandomization:   true,
+		DisableOptimizerPerturbations: true,
 	}
 	logictest.RunLogicTests(t, serverArgs, configIdx, glob)
 	{{- end }}
@@ -252,14 +212,13 @@ go_test(
     srcs = ["generated_test.go"],
     data = [
         "//c-deps:libgeos",  # keep{{ if .SqliteLogicTest }}
-        "@com_github_cockroachdb_sqllogictest//:testfiles",  # keep{{ end }}{{ if .CclLogicTest }}
-        "//pkg/ccl/logictestccl:testdata",  # keep{{ end }}{{ if .CockroachGoTestserverTest }}
+        "@com_github_cockroachdb_sqllogictest//:testfiles",  # keep{{ end }}{{ if .CockroachGoTestserverTest }}
         "//pkg/cmd/cockroach-short",  # keep
         "//pkg/sql/logictest:cockroach_predecessor_version",  # keep{{ end }}{{ if .LogicTest }}
         "//pkg/sql/logictest:testdata",  # keep{{ end }}{{ if .ExecBuildLogicTest }}
         "//pkg/sql/opt/exec/execbuilder:testdata",  # keep{{ end }}
     ],
-    exec_properties = {{ if .SqliteLogicTest }}{"test.Pool": "default"},{{ else if .UseHeavyPool }}select({
+    exec_properties = {{ if .SqliteLogicTest }}{"test.Pool": "default"},{{ else if eq .UseHeavyPool 2 }}{"test.Pool": "heavy"},{{ else if eq .UseHeavyPool 1 }}select({
         "//build/toolchains:is_heavy": {"test.Pool": "heavy"},
         "//conditions:default": {"test.Pool": "large"},
     }),{{ else }}{"test.Pool": "large"},{{ end }}
@@ -267,8 +226,8 @@ go_test(
     tags = ["cpu:{{ if gt .NumCPU 4 }}4{{ else }}{{ .NumCPU }}{{ end }}"],
     deps = [
         "//pkg/base",
-        "//pkg/build/bazel",{{ if .Ccl }}
-        "//pkg/ccl",{{ end }}
+        "//pkg/build/bazel",
+        "//pkg/ccl",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/server",{{ if .ExecBuildLogicTest }}

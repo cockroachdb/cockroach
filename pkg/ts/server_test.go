@@ -6,19 +6,23 @@
 package ts_test
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"reflect"
 	"sort"
+	"strings"
+	"sync/atomic"
 	"testing"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -26,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/errors"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
@@ -176,7 +181,7 @@ func TestServerQuery(t *testing.T) {
 	}
 
 	conn := s.RPCClientConn(t, username.RootUserName())
-	client := tspb.NewTimeSeriesClient(conn)
+	client := conn.NewTimeSeriesClient()
 	response, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
 		StartNanos: 500 * 1e9,
 		EndNanos:   526 * 1e9,
@@ -251,6 +256,522 @@ func TestServerQuery(t *testing.T) {
 	}
 }
 
+// TestServerQueryCombinedBatchReducesKVRPCs verifies that the combined-batch
+// optimization actually reduces the number of KV BatchRequests compared to
+// querying each metric individually. This is the core performance property of
+// the optimization.
+func TestServerQueryCombinedBatchReducesKVRPCs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var tsBatchCount atomic.Int64
+	// isTSRead reports whether the request reads from the timeseries keyspace.
+	// The background ts poller writes metrics via Merge requests on the same
+	// keyspace; filtering by request type prevents a poll inflating the count.
+	isTSRead := func(ru kvpb.RequestUnion) bool {
+		inner := ru.GetInner()
+		switch inner.(type) {
+		case *kvpb.GetRequest, *kvpb.ScanRequest:
+			return bytes.HasPrefix(inner.Header().Key, keys.TimeseriesPrefix)
+		}
+		return false
+	}
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				DisableTimeSeriesMaintenanceQueue: true,
+				TestingRequestFilter: func(
+					_ context.Context, req *kvpb.BatchRequest,
+				) *kvpb.Error {
+					for _, ru := range req.Requests {
+						if isTSRead(ru) {
+							tsBatchCount.Add(1)
+							break
+						}
+					}
+					return nil
+				},
+			},
+		},
+	})
+	defer s.Stopper().Stop(context.Background())
+
+	tsdb := s.TsDB().(*ts.DB)
+
+	// Store data for 5 metrics across 2 sources.
+	metricCount := 5
+	for i := 0; i < metricCount; i++ {
+		require.NoError(t, tsdb.StoreData(
+			context.Background(), ts.Resolution10s, []tspb.TimeSeriesData{
+				{
+					Name:   fmt.Sprintf("metric.%d", i),
+					Source: "node1",
+					Datapoints: []tspb.TimeSeriesDatapoint{
+						{TimestampNanos: 400 * 1e9, Value: float64(i * 10)},
+						{TimestampNanos: 500 * 1e9, Value: float64(i*10 + 1)},
+					},
+				},
+				{
+					Name:   fmt.Sprintf("metric.%d", i),
+					Source: "node2",
+					Datapoints: []tspb.TimeSeriesDatapoint{
+						{TimestampNanos: 400 * 1e9, Value: float64(i * 20)},
+						{TimestampNanos: 500 * 1e9, Value: float64(i*20 + 1)},
+					},
+				},
+			},
+		))
+	}
+
+	conn := s.RPCClientConn(t, username.RootUserName())
+	client := conn.NewTimeSeriesClient()
+
+	queries := make([]tspb.Query, metricCount)
+	for i := 0; i < metricCount; i++ {
+		queries[i] = tspb.Query{
+			Name:    fmt.Sprintf("metric.%d", i),
+			Sources: []string{"node1", "node2"},
+		}
+	}
+
+	// Measure individual queries: send each metric as a separate request.
+	tsBatchCount.Store(0)
+	for _, q := range queries {
+		_, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+			StartNanos: 400 * 1e9,
+			EndNanos:   500 * 1e9,
+			Queries:    []tspb.Query{q},
+		})
+		require.NoError(t, err)
+	}
+	individualBatches := tsBatchCount.Load()
+
+	// Measure combined query: send all metrics in a single request.
+	tsBatchCount.Store(0)
+	resp, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+		StartNanos: 400 * 1e9,
+		EndNanos:   500 * 1e9,
+		Queries:    queries,
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.Results, metricCount)
+	combinedBatches := tsBatchCount.Load()
+
+	t.Logf("individual requests: %d KV batches, combined request: %d KV batches",
+		individualBatches, combinedBatches)
+
+	// On a single-node test server all TS data is on one range, so:
+	// - Individual: each request produces its own BatchRequest = metricCount.
+	// - Combined: all queries share a single BatchRequest = 1.
+	require.Equal(t, int64(metricCount), individualBatches,
+		"each individual query should produce one KV BatchRequest")
+	require.Equal(t, int64(1), combinedBatches,
+		"combined query should produce exactly one KV BatchRequest")
+
+	// Disable the combined-batch optimization and verify that a multi-query
+	// request falls back to per-query reads, producing the same number of
+	// KV batches as individual requests.
+	ts.CombinedBatchEnabled.Override(context.Background(), &s.ClusterSettings().SV, false)
+
+	tsBatchCount.Store(0)
+	resp, err = client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+		StartNanos: 400 * 1e9,
+		EndNanos:   500 * 1e9,
+		Queries:    queries,
+	})
+	require.NoError(t, err)
+	require.Len(t, resp.Results, metricCount)
+	disabledBatches := tsBatchCount.Load()
+
+	t.Logf("combined request with setting disabled: %d KV batches", disabledBatches)
+	require.Equal(t, int64(metricCount), disabledBatches,
+		"with combined batch disabled, each query should produce its own KV BatchRequest")
+}
+
+// TestServerQueryCombinedBatch verifies that the combined-batch optimization
+// in Server.Query works correctly: multiple queries in a single request share
+// one KV batch, and the results are equivalent to querying each metric
+// individually.
+func TestServerQueryCombinedBatch(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				DisableTimeSeriesMaintenanceQueue: true,
+			},
+		},
+	})
+	defer s.Stopper().Stop(context.Background())
+
+	tsdb := s.TsDB().(*ts.DB)
+
+	// Store data for three different metrics across two sources.
+	require.NoError(t, tsdb.StoreData(context.Background(), ts.Resolution10s, []tspb.TimeSeriesData{
+		// metric.cpu: node1 and node2
+		{
+			Name:   "metric.cpu",
+			Source: "node1",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{TimestampNanos: 400 * 1e9, Value: 10.0},
+				{TimestampNanos: 500 * 1e9, Value: 20.0},
+			},
+		},
+		{
+			Name:   "metric.cpu",
+			Source: "node2",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{TimestampNanos: 400 * 1e9, Value: 30.0},
+				{TimestampNanos: 500 * 1e9, Value: 40.0},
+			},
+		},
+		// metric.mem: node1 and node2
+		{
+			Name:   "metric.mem",
+			Source: "node1",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{TimestampNanos: 400 * 1e9, Value: 100.0},
+				{TimestampNanos: 500 * 1e9, Value: 200.0},
+			},
+		},
+		{
+			Name:   "metric.mem",
+			Source: "node2",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{TimestampNanos: 400 * 1e9, Value: 300.0},
+				{TimestampNanos: 500 * 1e9, Value: 400.0},
+			},
+		},
+		// metric.disk: no explicit source stored, uses empty source
+		// so it will be read via Scan when sources are not specified.
+		{
+			Name: "metric.disk",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{TimestampNanos: 400 * 1e9, Value: 1000.0},
+				{TimestampNanos: 500 * 1e9, Value: 2000.0},
+			},
+		},
+	}))
+
+	conn := s.RPCClientConn(t, username.RootUserName())
+	client := conn.NewTimeSeriesClient()
+
+	// First, query each metric individually to establish expected results.
+	individual := make([]*tspb.TimeSeriesQueryResponse, 3)
+	for i, q := range []tspb.Query{
+		{Name: "metric.cpu", Sources: []string{"node1", "node2"}},
+		{Name: "metric.mem", Sources: []string{"node1", "node2"}},
+		{Name: "metric.disk"}, // no sources -> Scan path
+	} {
+		resp, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+			StartNanos: 400 * 1e9,
+			EndNanos:   500 * 1e9,
+			Queries:    []tspb.Query{q},
+		})
+		require.NoError(t, err)
+		individual[i] = resp
+	}
+
+	// Now send all three queries in a single request. The combined batch
+	// should produce identical results.
+	combined, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+		StartNanos: 400 * 1e9,
+		EndNanos:   500 * 1e9,
+		Queries: []tspb.Query{
+			{Name: "metric.cpu", Sources: []string{"node1", "node2"}},
+			{Name: "metric.mem", Sources: []string{"node1", "node2"}},
+			{Name: "metric.disk"}, // no sources -> Scan path
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, combined.Results, 3)
+
+	// Verify each combined result matches the corresponding individual result.
+	for i := 0; i < 3; i++ {
+		sort.Strings(individual[i].Results[0].Sources)
+		sort.Strings(combined.Results[i].Sources)
+		require.Equal(t, individual[i].Results[0].Datapoints, combined.Results[i].Datapoints,
+			"metric %d datapoints mismatch", i)
+		require.Equal(t, individual[i].Results[0].Sources, combined.Results[i].Sources,
+			"metric %d sources mismatch", i)
+	}
+
+	// Verify actual values.
+	// metric.cpu: SUM(node1, node2) at each timestamp.
+	require.Len(t, combined.Results[0].Datapoints, 2)
+	require.Equal(t, 40.0, combined.Results[0].Datapoints[0].Value) // 10+30
+	require.Equal(t, 60.0, combined.Results[0].Datapoints[1].Value) // 20+40
+
+	// metric.mem: SUM(node1, node2).
+	require.Len(t, combined.Results[1].Datapoints, 2)
+	require.Equal(t, 400.0, combined.Results[1].Datapoints[0].Value) // 100+300
+	require.Equal(t, 600.0, combined.Results[1].Datapoints[1].Value) // 200+400
+
+	// metric.disk: single source (Scan path).
+	require.Len(t, combined.Results[2].Datapoints, 2)
+	require.Equal(t, 1000.0, combined.Results[2].Datapoints[0].Value)
+	require.Equal(t, 2000.0, combined.Results[2].Datapoints[1].Value)
+}
+
+// TestServerQueryMixedCombinedAndFallback verifies that when a single request
+// contains queries that take the combined-batch path and queries that require
+// the per-query chunked read fallback, both produce correct results.
+func TestServerQueryMixedCombinedAndFallback(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	workerCount := 8
+	// Compute budget using columnar slab sizes (the default format).
+	samplesPerSlab := ts.Resolution10s.SlabDuration() / ts.Resolution10s.SampleDuration()
+	sizeOfTimeSeriesData := int64(unsafe.Sizeof(roachpb.InternalTimeSeriesData{}))
+	// Columnar format: each sample is int32 (offset) + float64 (value).
+	sizeOfSlab := sizeOfTimeSeriesData +
+		(int64(unsafe.Sizeof(int32(0)))+int64(unsafe.Sizeof(float64(0))))*samplesPerSlab
+
+	// Set budget so that queries with few sources are combinable but queries
+	// with many sources exceed the per-worker budget for the query timespan.
+	//
+	// Per-worker budget = 300 * sizeOfSlab.
+	// For 2 sources: maxWidth ≈ (150 - 2) hours >> 3 hours → combinable.
+	// For 100 sources: maxWidth ≈ (3 - 2) hours = 1 hour < 3 hours → fallback.
+	budget := 300 * sizeOfSlab * int64(workerCount)
+
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant:           base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		TimeSeriesQueryWorkerMax:    workerCount,
+		TimeSeriesQueryMemoryBudget: budget,
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				DisableTimeSeriesMaintenanceQueue: true,
+			},
+		},
+	})
+	defer s.Stopper().Stop(context.Background())
+
+	tsdb := s.TsDB().(*ts.DB)
+
+	// Store 4 hours of data for two metrics. The query timespan will be 3 hours.
+	var data []tspb.TimeSeriesData
+	for hour := 0; hour < 4; hour++ {
+		baseTs := int64(hour) * 3600 * 1e9
+		for _, src := range []string{"node1", "node2"} {
+			data = append(data,
+				tspb.TimeSeriesData{
+					Name:   "metric.small",
+					Source: src,
+					Datapoints: []tspb.TimeSeriesDatapoint{
+						{TimestampNanos: baseTs + 100*1e9, Value: float64(hour*10 + 1)},
+					},
+				},
+				tspb.TimeSeriesData{
+					Name:   "metric.large",
+					Source: src,
+					Datapoints: []tspb.TimeSeriesDatapoint{
+						{TimestampNanos: baseTs + 100*1e9, Value: float64(hour*100 + 1)},
+					},
+				},
+			)
+		}
+	}
+	require.NoError(t, tsdb.StoreData(context.Background(), ts.Resolution10s, data))
+
+	conn := s.RPCClientConn(t, username.RootUserName())
+	client := conn.NewTimeSeriesClient()
+
+	// Build a list of 100 sources for the large query. Only node1 and node2
+	// have data; the rest produce empty Gets but inflate EstimatedSources
+	// enough to force the query into the chunked fallback path.
+	largeSources := make([]string, 100)
+	largeSources[0] = "node1"
+	largeSources[1] = "node2"
+	for i := 2; i < 100; i++ {
+		largeSources[i] = fmt.Sprintf("node%d", i+1)
+	}
+
+	startNanos := int64(0)
+	endNanos := int64(3 * 3600 * 1e9)
+
+	// Query individually to establish expected results.
+	smallResp, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+		StartNanos: startNanos,
+		EndNanos:   endNanos,
+		Queries:    []tspb.Query{{Name: "metric.small", Sources: []string{"node1", "node2"}}},
+	})
+	require.NoError(t, err)
+
+	largeResp, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+		StartNanos: startNanos,
+		EndNanos:   endNanos,
+		Queries:    []tspb.Query{{Name: "metric.large", Sources: largeSources}},
+	})
+	require.NoError(t, err)
+
+	// Combined request: small query (combinable) + large query (fallback).
+	combined, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+		StartNanos: startNanos,
+		EndNanos:   endNanos,
+		Queries: []tspb.Query{
+			{Name: "metric.small", Sources: []string{"node1", "node2"}},
+			{Name: "metric.large", Sources: largeSources},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, combined.Results, 2)
+
+	require.Equal(t, smallResp.Results[0].Datapoints, combined.Results[0].Datapoints,
+		"small metric (combined path) datapoints mismatch")
+	require.Equal(t, largeResp.Results[0].Datapoints, combined.Results[1].Datapoints,
+		"large metric (fallback path) datapoints mismatch")
+}
+
+// TestServerQueryRollupFallback verifies that queries with a sample duration
+// compatible with the rollup resolution (Resolution30m) correctly fall back to
+// the per-query read path. The combined batch only reads Resolution10s and
+// would miss rolled-up data at coarser resolutions.
+func TestServerQueryRollupFallback(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				DisableTimeSeriesMaintenanceQueue: true,
+			},
+		},
+	})
+	defer s.Stopper().Stop(context.Background())
+
+	tsdb := s.TsDB().(*ts.DB)
+
+	// Store data at Resolution10s spanning multiple hours.
+	var data []tspb.TimeSeriesData
+	for hour := 0; hour < 3; hour++ {
+		baseTs := int64(hour) * 3600 * 1e9
+		data = append(data, tspb.TimeSeriesData{
+			Name:   "metric.rollup",
+			Source: "node1",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{TimestampNanos: baseTs + 100*1e9, Value: float64(hour*10 + 1)},
+			},
+		})
+	}
+	require.NoError(t, tsdb.StoreData(context.Background(), ts.Resolution10s, data))
+
+	conn := s.RPCClientConn(t, username.RootUserName())
+	client := conn.NewTimeSeriesClient()
+
+	// Query with 30-minute sample duration, which triggers needsRollup=true
+	// because SampleDurationNanos is compatible with Resolution30m. This forces
+	// the query through the per-query fallback path (db.Query), which tries
+	// Resolution30m first then falls back to Resolution10s data.
+	resp, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+		StartNanos:  0,
+		EndNanos:    3 * 3600 * 1e9,
+		SampleNanos: 30 * 60 * 1e9, // 30 minutes
+		Queries: []tspb.Query{
+			{Name: "metric.rollup", Sources: []string{"node1"}},
+		},
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, resp.Results[0].Datapoints,
+		"rollup fallback should return data from Resolution10s")
+}
+
+// TestServerQueryCombinedBatchTenant verifies that tenant-scoped queries
+// correctly filter data when going through the combined-batch path. Both the
+// scan path (no explicit sources) and the get path (explicit sources) in
+// extractReadResults must respect tenant boundaries.
+func TestServerQueryCombinedBatchTenant(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				DisableTimeSeriesMaintenanceQueue: true,
+			},
+		},
+	})
+	defer s.Stopper().Stop(context.Background())
+
+	tsdb := s.TsDB().(*ts.DB)
+
+	// Store aggregate data (no tenant prefix) and per-tenant data (tenant 2).
+	require.NoError(t, tsdb.StoreData(context.Background(), ts.Resolution10s, []tspb.TimeSeriesData{
+		// Aggregate source "1" contains the sum across all tenants.
+		{
+			Name:   "sql.query.count",
+			Source: "1",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{TimestampNanos: 400 * 1e9, Value: 100.0},
+				{TimestampNanos: 500 * 1e9, Value: 200.0},
+			},
+		},
+		// Tenant 2's individual contribution, stored with source "1-2".
+		{
+			Name:   "sql.query.count",
+			Source: "1-2",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{TimestampNanos: 400 * 1e9, Value: 10.0},
+				{TimestampNanos: 500 * 1e9, Value: 20.0},
+			},
+		},
+	}))
+
+	conn := s.RPCClientConn(t, username.RootUserName())
+	client := conn.NewTimeSeriesClient()
+
+	tenantID := roachpb.MustMakeTenantID(2)
+
+	// Query with tenant ID set and no explicit sources (scan path through
+	// extractReadResults). The scan returns all rows; extractReadResults
+	// filters to only tenant 2's data.
+	scanResp, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+		StartNanos: 400 * 1e9,
+		EndNanos:   500 * 1e9,
+		Queries: []tspb.Query{
+			{Name: "sql.query.count", TenantID: tenantID},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, scanResp.Results[0].Datapoints, 2)
+	require.Equal(t, 10.0, scanResp.Results[0].Datapoints[0].Value)
+	require.Equal(t, 20.0, scanResp.Results[0].Datapoints[1].Value)
+
+	// Query with tenant ID and explicit sources (get path through
+	// addQueryReadOps, which formats keys with MakeTenantSource).
+	getResp, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+		StartNanos: 400 * 1e9,
+		EndNanos:   500 * 1e9,
+		Queries: []tspb.Query{
+			{Name: "sql.query.count", TenantID: tenantID, Sources: []string{"1"}},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, getResp.Results[0].Datapoints, 2)
+	require.Equal(t, 10.0, getResp.Results[0].Datapoints[0].Value)
+	require.Equal(t, 20.0, getResp.Results[0].Datapoints[1].Value)
+
+	// System tenant should see the aggregate data, not double-counted.
+	systemID := roachpb.MustMakeTenantID(1)
+	sysResp, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+		StartNanos: 400 * 1e9,
+		EndNanos:   500 * 1e9,
+		Queries: []tspb.Query{
+			{Name: "sql.query.count", TenantID: systemID},
+		},
+	})
+	require.NoError(t, err)
+	require.Len(t, sysResp.Results[0].Datapoints, 2)
+	require.Equal(t, 100.0, sysResp.Results[0].Datapoints[0].Value)
+	require.Equal(t, 200.0, sysResp.Results[0].Datapoints[1].Value)
+}
+
 // TestServerQueryStarvation tests a very specific scenario, wherein a single
 // query request has more queries than the server's MaxWorkers count.
 func TestServerQueryStarvation(t *testing.T) {
@@ -272,7 +793,7 @@ func TestServerQueryStarvation(t *testing.T) {
 	}
 
 	conn := s.RPCClientConn(t, username.RootUserName())
-	client := tspb.NewTimeSeriesClient(conn)
+	client := conn.NewTimeSeriesClient()
 
 	queries := make([]tspb.Query, 0, seriesCount)
 	for i := 0; i < seriesCount; i++ {
@@ -305,14 +826,24 @@ func TestServerQueryTenant(t *testing.T) {
 	})
 	defer s.Stopper().Stop(context.Background())
 
-	systemDB := s.SystemLayer().SQLConn(t)
-
 	// This metric exists in the tenant registry since it's SQL-specific.
 	tenantMetricName := "sql.insert.count"
 	// This metric exists only in the host/system registry since it's process-level.
 	hostMetricName := "sys.rss"
+	// This is a store-level metric identified by isStoreTenantMetric.
+	storeMetricName := "cr.store.livebytes"
+	// Histogram metrics are stored in TSDB with quantile suffixes (e.g. "-p99")
+	// but registered under their base name. This tests that TenantServer.Query
+	// correctly strips the suffix before the registry lookup.
+	histogramBaseName := "sql.service.latency"
+	histogramSuffixedName := histogramBaseName + "-p99"
 
-	// Populate data directly.
+	// Populate data directly. Aggregate sources ("1", "10") contain the sum
+	// of all tenants' data. Per-tenant sources ("1-2", "10-2") track tenant 2's
+	// individual contribution. The aggregate values are set to be the obvious
+	// sum so that the test clearly demonstrates no double-counting occurs:
+	//   node 1 aggregate (101) = tenant 2 (1) + other tenants (100)
+	//   node 10 aggregate (204) = tenant 2 (4) + other tenants (200)
 	tsdb := s.TsDB().(*ts.DB)
 	if err := tsdb.StoreData(context.Background(), ts.Resolution10s, []tspb.TimeSeriesData{
 		{
@@ -321,11 +852,11 @@ func TestServerQueryTenant(t *testing.T) {
 			Datapoints: []tspb.TimeSeriesDatapoint{
 				{
 					TimestampNanos: 400 * 1e9,
-					Value:          100.0,
+					Value:          101.0,
 				},
 				{
 					TimestampNanos: 500 * 1e9,
-					Value:          200.0,
+					Value:          202.0,
 				},
 			},
 		},
@@ -349,11 +880,11 @@ func TestServerQueryTenant(t *testing.T) {
 			Datapoints: []tspb.TimeSeriesDatapoint{
 				{
 					TimestampNanos: 400 * 1e9,
-					Value:          200.0,
+					Value:          204.0,
 				},
 				{
 					TimestampNanos: 500 * 1e9,
-					Value:          400.0,
+					Value:          405.0,
 				},
 			},
 		},
@@ -399,11 +930,74 @@ func TestServerQueryTenant(t *testing.T) {
 				},
 			},
 		},
+		// Store-level tenant metric data follows the same aggregate/per-tenant
+		// pattern. Aggregate "1" = 50 (includes tenant 2's 10), "1-2" = 10.
+		{
+			Name:   storeMetricName,
+			Source: "1",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{
+					TimestampNanos: 400 * 1e9,
+					Value:          50.0,
+				},
+				{
+					TimestampNanos: 500 * 1e9,
+					Value:          70.0,
+				},
+			},
+		},
+		{
+			Name:   storeMetricName,
+			Source: "1-2",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{
+					TimestampNanos: 400 * 1e9,
+					Value:          10.0,
+				},
+				{
+					TimestampNanos: 500 * 1e9,
+					Value:          20.0,
+				},
+			},
+		},
+		// Histogram metric with quantile suffix. Same aggregate/per-tenant
+		// pattern: aggregate "1" = 500, per-tenant "1-2" = 50.
+		{
+			Name:   histogramSuffixedName,
+			Source: "1",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{
+					TimestampNanos: 400 * 1e9,
+					Value:          500.0,
+				},
+				{
+					TimestampNanos: 500 * 1e9,
+					Value:          600.0,
+				},
+			},
+		},
+		{
+			Name:   histogramSuffixedName,
+			Source: "1-2",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{
+					TimestampNanos: 400 * 1e9,
+					Value:          50.0,
+				},
+				{
+					TimestampNanos: 500 * 1e9,
+					Value:          60.0,
+				},
+			},
+		},
 	}); err != nil {
 		t.Fatal(err)
 	}
 
-	// Undefined tenant ID should aggregate across all tenants.
+	// Undefined tenant ID should return aggregate values only (no double-counting).
+	// The aggregate source "1" has values 101.0 and 202.0, and source "10" has 204.0 and 405.0.
+	// Note these are the aggregate values, NOT aggregate + per-tenant (which would be
+	// 102.0 and 204.0 for source "1" if double-counting occurred).
 	expectedAggregatedResult := &tspb.TimeSeriesQueryResponse{
 		Results: []tspb.TimeSeriesQueryResponse_Result{
 			{
@@ -442,7 +1036,7 @@ func TestServerQueryTenant(t *testing.T) {
 	}
 
 	conn := s.RPCClientConn(t, username.RootUserName())
-	client := tspb.NewTimeSeriesClient(conn)
+	client := conn.NewTimeSeriesClient()
 	aggregatedResponse, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
 		StartNanos: 400 * 1e9,
 		EndNanos:   500 * 1e9,
@@ -465,7 +1059,7 @@ func TestServerQueryTenant(t *testing.T) {
 	}
 	require.Equal(t, expectedAggregatedResult, aggregatedResponse)
 
-	// System tenant ID should provide system tenant ts data.
+	// System tenant ID should provide system tenant ts data (same as aggregate).
 	systemID := roachpb.MustMakeTenantID(1)
 	expectedSystemResult := &tspb.TimeSeriesQueryResponse{
 		Results: []tspb.TimeSeriesQueryResponse_Result{
@@ -478,11 +1072,11 @@ func TestServerQueryTenant(t *testing.T) {
 				Datapoints: []tspb.TimeSeriesDatapoint{
 					{
 						TimestampNanos: 400 * 1e9,
-						Value:          100.0,
+						Value:          101.0,
 					},
 					{
 						TimestampNanos: 500 * 1e9,
-						Value:          200.0,
+						Value:          202.0,
 					},
 				},
 			},
@@ -495,11 +1089,11 @@ func TestServerQueryTenant(t *testing.T) {
 				Datapoints: []tspb.TimeSeriesDatapoint{
 					{
 						TimestampNanos: 400 * 1e9,
-						Value:          300.0,
+						Value:          305.0,
 					},
 					{
 						TimestampNanos: 500 * 1e9,
-						Value:          600.0,
+						Value:          607.0,
 					},
 				},
 			},
@@ -571,14 +1165,11 @@ func TestServerQueryTenant(t *testing.T) {
 	}
 
 	tenant, _ := serverutils.StartTenant(t, s, base.TestTenantArgs{TenantID: tenantID})
-	_, err = systemDB.Exec("ALTER TENANT [2] GRANT CAPABILITY can_view_tsdb_metrics=true;\n")
-	if err != nil {
-		t.Fatal(err)
-	}
-	capability := map[tenantcapabilities.ID]string{tenantcapabilities.CanViewTSDBMetrics: "true"}
-	serverutils.WaitForTenantCapabilities(t, s, tenantID, capability, "")
+	require.NoError(t, s.GrantTenantCapabilities(
+		context.Background(), tenantID,
+		map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanViewTSDBMetrics: "true"}))
 	tenantConn := tenant.RPCClientConn(t, username.RootUserName())
-	tenantClient := tspb.NewTimeSeriesClient(tenantConn)
+	tenantClient := tenantConn.NewTimeSeriesClient()
 
 	tenantResponse, err := tenantClient.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
 		StartNanos: 400 * 1e9,
@@ -601,6 +1192,77 @@ func TestServerQueryTenant(t *testing.T) {
 		sort.Strings(r.Sources)
 	}
 	require.Equal(t, expectedTenantResponse, tenantResponse)
+
+	// Store-level tenant metrics (e.g. cr.store.livebytes) should be scoped
+	// to the tenant via isStoreTenantMetric, even though they're not in the
+	// tenant registry. Tenant 2 should see only its per-tenant data.
+	expectedTenantStoreResponse := &tspb.TimeSeriesQueryResponse{
+		Results: []tspb.TimeSeriesQueryResponse_Result{
+			{
+				Query: tspb.Query{
+					Name:     storeMetricName,
+					Sources:  []string{"1"},
+					TenantID: tenantID,
+				},
+				Datapoints: []tspb.TimeSeriesDatapoint{
+					{
+						TimestampNanos: 400 * 1e9,
+						Value:          10.0,
+					},
+					{
+						TimestampNanos: 500 * 1e9,
+						Value:          20.0,
+					},
+				},
+			},
+		},
+	}
+	tenantStoreResponse, err := tenantClient.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+		StartNanos: 400 * 1e9,
+		EndNanos:   500 * 1e9,
+		Queries: []tspb.Query{
+			{
+				Name:    storeMetricName,
+				Sources: []string{"1"},
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, expectedTenantStoreResponse, tenantStoreResponse)
+
+	// The system tenant should see the aggregate store metric values.
+	expectedSystemStoreResponse := &tspb.TimeSeriesQueryResponse{
+		Results: []tspb.TimeSeriesQueryResponse_Result{
+			{
+				Query: tspb.Query{
+					Name:    storeMetricName,
+					Sources: []string{"1"},
+				},
+				Datapoints: []tspb.TimeSeriesDatapoint{
+					{
+						TimestampNanos: 400 * 1e9,
+						Value:          50.0,
+					},
+					{
+						TimestampNanos: 500 * 1e9,
+						Value:          70.0,
+					},
+				},
+			},
+		},
+	}
+	systemStoreResponse, err := client.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+		StartNanos: 400 * 1e9,
+		EndNanos:   500 * 1e9,
+		Queries: []tspb.Query{
+			{
+				Name:    storeMetricName,
+				Sources: []string{"1"},
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, expectedSystemStoreResponse, systemStoreResponse)
 
 	// Test that host metrics are inaccessible to tenant without capability.
 	hostMetricsRequest := &tspb.TimeSeriesQueryRequest{
@@ -638,12 +1300,9 @@ func TestServerQueryTenant(t *testing.T) {
 			},
 		},
 	}
-	_, err = systemDB.Exec("ALTER TENANT [2] GRANT CAPABILITY can_view_all_metrics=true;\n")
-	if err != nil {
-		t.Fatal(err)
-	}
-	capability = map[tenantcapabilities.ID]string{tenantcapabilities.CanViewAllMetrics: "true"}
-	serverutils.WaitForTenantCapabilities(t, s, tenantID, capability, "")
+	require.NoError(t, s.GrantTenantCapabilities(
+		context.Background(), tenantID,
+		map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanViewAllMetrics: "true"}))
 
 	tenantResponse, err = tenantClient.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
 		StartNanos: 400 * 1e9,
@@ -657,6 +1316,41 @@ func TestServerQueryTenant(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, expectedTenantHostMetricsResponse, tenantResponse)
+
+	// We should get back the histogram data for the tenant.
+	expectedTenantHistogramResponse := &tspb.TimeSeriesQueryResponse{
+		Results: []tspb.TimeSeriesQueryResponse_Result{
+			{
+				Query: tspb.Query{
+					Name:     histogramSuffixedName,
+					Sources:  []string{"1"},
+					TenantID: tenantID,
+				},
+				Datapoints: []tspb.TimeSeriesDatapoint{
+					{
+						TimestampNanos: 400 * 1e9,
+						Value:          50.0,
+					},
+					{
+						TimestampNanos: 500 * 1e9,
+						Value:          60.0,
+					},
+				},
+			},
+		},
+	}
+	tenantHistogramResponse, err := tenantClient.Query(context.Background(), &tspb.TimeSeriesQueryRequest{
+		StartNanos: 400 * 1e9,
+		EndNanos:   500 * 1e9,
+		Queries: []tspb.Query{
+			{
+				Name:    histogramSuffixedName,
+				Sources: []string{"1"},
+			},
+		},
+	})
+	require.NoError(t, err)
+	require.Equal(t, expectedTenantHistogramResponse, tenantHistogramResponse)
 }
 
 // TestServerQueryMemoryManagement verifies that queries succeed under
@@ -696,7 +1390,7 @@ func TestServerQueryMemoryManagement(t *testing.T) {
 	}
 
 	conn := s.RPCClientConn(t, username.RootUserName())
-	client := tspb.NewTimeSeriesClient(conn)
+	client := conn.NewTimeSeriesClient()
 
 	queries := make([]tspb.Query, 0, seriesCount)
 	for i := 0; i < seriesCount; i++ {
@@ -773,7 +1467,7 @@ func TestServerDump(t *testing.T) {
 	}
 
 	conn := s.RPCClientConn(t, username.RootUserName())
-	client := tspb.NewTimeSeriesClient(conn)
+	client := conn.NewTimeSeriesClient()
 
 	dumpClient, err := client.Dump(ctx, &tspb.DumpRequest{
 		Names:      names,
@@ -784,7 +1478,7 @@ func TestServerDump(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	readDataFromDump := func(t *testing.T, dumpClient tspb.TimeSeries_DumpClient) (totalMsgCount int, _ map[string]map[string]tspb.TimeSeriesData) {
+	readDataFromDump := func(t *testing.T, dumpClient tspb.RPCTimeSeries_DumpClient) (totalMsgCount int, _ map[string]map[string]tspb.TimeSeriesData) {
 		t.Helper()
 		// Read data from dump command.
 		resultMap := make(map[string]map[string]tspb.TimeSeriesData)
@@ -869,7 +1563,7 @@ func TestServerDump(t *testing.T) {
 		require.NoError(t, s.DB().Run(ctx, &b))
 
 		conn := s.RPCClientConn(t, username.RootUserName())
-		client := tspb.NewTimeSeriesClient(conn)
+		client := conn.NewTimeSeriesClient()
 
 		dumpClient, err := client.Dump(ctx, &tspb.DumpRequest{
 			Names:      names,
@@ -883,6 +1577,201 @@ func TestServerDump(t *testing.T) {
 		_, resultsMap := readDataFromDump(t, dumpClient)
 		require.Equal(t, expectedMap, resultsMap)
 	}
+}
+
+// TestServerDumpChildMetrics covers the dump path's handling of labeled child
+// metrics. For each base in tsutil.AllowedChildMetrics, the server runs a
+// 1m-resolution scan keyed on the base after stripping any histogram suffix
+// from the requested names. The span [base, base|) covers labeled
+// counters/gauges ("base{labels}") and labeled histogram children
+// ("base{labels}-anysuffix") in a single pass, since '{' (0x7B) > '-' (0x2D).
+//
+// Cases exercise non-histogram counters, histogram-suffixed names (which the
+// CLI expands per quantile), allow-list misses (no scan should occur), and
+// dedup across multiple suffixes that share a base (the scan must run once).
+func TestServerDumpChildMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		// For now, direct access to the tsdb is reserved to the storage layer.
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				DisableTimeSeriesMaintenanceQueue: true,
+			},
+		},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	tsdb := s.TsDB().(*ts.DB)
+	conn := s.RPCClientConn(t, username.RootUserName())
+	client := conn.NewTimeSeriesClient()
+
+	// store writes a single-datapoint series at the given resolution.
+	store := func(name string, res ts.Resolution) {
+		require.NoError(t, tsdb.StoreData(ctx, res, []tspb.TimeSeriesData{{
+			Name:   name,
+			Source: "1",
+			Datapoints: []tspb.TimeSeriesDatapoint{
+				{TimestampNanos: 100 * 1e9, Value: 1.0},
+			},
+		}}))
+	}
+
+	// suffixed returns base appended with each HistogramMetricComputers suffix
+	// -- the shape the CLI sends for histogram metrics.
+	suffixed := func(base string) []string {
+		out := make([]string, 0, len(metric.HistogramMetricComputers))
+		for _, c := range metric.HistogramMetricComputers {
+			out = append(out, base+c.Suffix)
+		}
+		return out
+	}
+
+	// labeledSuffixed returns one "base{labels}suffix" per histogram suffix --
+	// labels appear before the suffix, matching how labeled histogram children
+	// are stored in production.
+	labeledSuffixed := func(base, labels string) []string {
+		out := make([]string, 0, len(metric.HistogramMetricComputers))
+		for _, c := range metric.HistogramMetricComputers {
+			out = append(out, base+labels+c.Suffix)
+		}
+		return out
+	}
+
+	// counterBase and histogramBase must be in tsutil.AllowedChildMetrics;
+	// nonAllowedBase must not.
+	const (
+		counterBase    = "cr.node.changefeed.emitted_messages"
+		histogramBase  = "cr.node.changefeed.sink_backpressure_nanos"
+		nonAllowedBase = "cr.node.sql.bytesin"
+	)
+
+	tests := []struct {
+		name string
+		// setup populates tsdb with the series this case needs.
+		setup func()
+		// requestNames is sent in DumpRequest.Names.
+		requestNames []string
+		// expectedPresent must each appear exactly once in the dump output.
+		// More than once indicates a missing dedup or repeated scan.
+		expectedPresent []string
+		// expectedAbsent must not appear in the dump output.
+		expectedAbsent []string
+	}{
+		{
+			name: "non-histogram counter with labeled children",
+			setup: func() {
+				store(counterBase, ts.Resolution10s)
+				store(counterBase+`{feed_id="123",scope="default"}`, ts.Resolution1m)
+				store(counterBase+`{feed_id="456",scope="system"}`, ts.Resolution1m)
+			},
+			requestNames: []string{counterBase},
+			expectedPresent: []string{
+				counterBase,
+				counterBase + `{feed_id="123",scope="default"}`,
+				counterBase + `{feed_id="456",scope="system"}`,
+			},
+		},
+		{
+			name: "histogram with labeled children at every suffix",
+			setup: func() {
+				for _, n := range suffixed(histogramBase) {
+					store(n, ts.Resolution10s)
+				}
+				for _, n := range labeledSuffixed(histogramBase, `{scope="default"}`) {
+					store(n, ts.Resolution1m)
+				}
+			},
+			requestNames:    suffixed(histogramBase),
+			expectedPresent: labeledSuffixed(histogramBase, `{scope="default"}`),
+		},
+		{
+			name: "non-allow-listed metric: labeled children are not scanned",
+			setup: func() {
+				store(nonAllowedBase, ts.Resolution10s)
+				store(nonAllowedBase+`{app="foo"}`, ts.Resolution1m)
+			},
+			requestNames:    []string{nonAllowedBase},
+			expectedPresent: []string{nonAllowedBase},
+			expectedAbsent:  []string{nonAllowedBase + `{app="foo"}`},
+		},
+		{
+			name: "dedup: multiple suffixes sharing a base scan once",
+			setup: func() {
+				// Distinct labels from the histogram case so we can attribute
+				// any duplicates to this case's request shape rather than to
+				// data left over from earlier subtests.
+				for _, n := range labeledSuffixed(histogramBase, `{scope="dedup"}`) {
+					store(n, ts.Resolution1m)
+				}
+			},
+			// One request per histogram suffix, all sharing histogramBase.
+			// Each labeled child must appear exactly once -- a count > 1 means
+			// the seenBases dedup is broken and the 1m scan ran multiple times.
+			requestNames:    suffixed(histogramBase),
+			expectedPresent: labeledSuffixed(histogramBase, `{scope="dedup"}`),
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.setup()
+
+			stream, err := client.Dump(ctx, &tspb.DumpRequest{
+				Names:      tc.requestNames,
+				StartNanos: 100 * 1e9,
+				EndNanos:   300 * 1e9,
+			})
+			require.NoError(t, err)
+
+			counts := make(map[string]int)
+			for {
+				msg, err := stream.Recv()
+				if err == io.EOF {
+					break
+				}
+				require.NoError(t, err)
+				counts[msg.Name]++
+			}
+
+			for _, name := range tc.expectedPresent {
+				require.Equalf(t, 1, counts[name],
+					"expected %q exactly once, got %d", name, counts[name])
+			}
+			for _, name := range tc.expectedAbsent {
+				require.Zerof(t, counts[name],
+					"did not expect %q in dump output", name)
+			}
+		})
+	}
+
+	// Smoke-test the DumpRaw streaming path. Both Dump and DumpRaw share
+	// dumpImpl, so the table above already exercises the lookup logic; this
+	// subtest only confirms that labeled child KVs survive the raw RPC path.
+	t.Run("DumpRaw streams labeled child KVs", func(t *testing.T) {
+		stream, err := client.DumpRaw(ctx, &tspb.DumpRequest{
+			Names:      []string{counterBase},
+			StartNanos: 100 * 1e9,
+			EndNanos:   300 * 1e9,
+		})
+		require.NoError(t, err)
+
+		var sawLabeled bool
+		for {
+			kv, err := stream.Recv()
+			if err == io.EOF {
+				break
+			}
+			require.NoError(t, err)
+			if strings.Contains(string(kv.Key), "{") {
+				sawLabeled = true
+			}
+		}
+		require.True(t, sawLabeled, "DumpRaw should stream labeled child KVs")
+	})
 }
 
 func BenchmarkServerQuery(b *testing.B) {
@@ -899,7 +1788,7 @@ func BenchmarkServerQuery(b *testing.B) {
 	}
 
 	conn := s.RPCClientConn(b, username.RootUserName())
-	client := tspb.NewTimeSeriesClient(conn)
+	client := conn.NewTimeSeriesClient()
 
 	queries := make([]tspb.Query, 0, seriesCount)
 	for i := 0; i < seriesCount; i++ {

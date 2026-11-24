@@ -142,7 +142,6 @@ func (lp LeasePlanner) PlanOneChange(
 		existingVoters,
 		repl,
 		usage,
-		false, /* forceDecisionWithoutStats */
 		allocator.TransferLeaseOptions{
 			Goal:                   allocator.FollowTheWorkload,
 			ExcludeLeaseRepl:       false,
@@ -172,8 +171,12 @@ func (lp LeasePlanner) PlanOneChange(
 	}
 
 	change.Op = AllocationTransferLeaseOp{
-		Source:             repl.StoreID(),
-		Target:             target.StoreID,
+		Source: roachpb.ReplicationTarget{
+			StoreID: repl.StoreID(), NodeID: repl.NodeID(),
+		},
+		Target: roachpb.ReplicationTarget{
+			StoreID: target.StoreID, NodeID: target.NodeID,
+		},
 		Usage:              usage,
 		bypassSafetyChecks: false,
 	}

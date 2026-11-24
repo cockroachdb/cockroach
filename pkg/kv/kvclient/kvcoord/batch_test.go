@@ -208,8 +208,10 @@ func TestBatchPrevNext(t *testing.T) {
 			const canReorderRequestsSlice = false
 			ascHelper, err := NewBatchTruncationHelper(Ascending, ba.Requests, mustPreserveOrder, canReorderRequestsSlice)
 			require.NoError(t, err)
+			defer ascHelper.Release()
 			descHelper, err := NewBatchTruncationHelper(Descending, ba.Requests, mustPreserveOrder, canReorderRequestsSlice)
 			require.NoError(t, err)
+			defer descHelper.Release()
 			if _, _, next, err := ascHelper.Truncate(
 				roachpb.RSpan{
 					Key:    roachpb.RKeyMin,
@@ -562,6 +564,7 @@ func TestTruncateLoop(t *testing.T) {
 						scanDir, requests, mustPreserveOrder, canReorderRequestsSlice,
 					)
 					require.NoError(t, err)
+					defer helper.Release()
 					for i := 0; i < len(ranges); i++ {
 						curRangeRS := ranges[i]
 						if scanDir == Descending {
@@ -642,7 +645,6 @@ func BenchmarkTruncateLoop(b *testing.B) {
 	defer leaktest.AfterTest(b)()
 	defer log.Scope(b).Close(b)
 
-	rng, _ := randutil.NewTestRand()
 	const keyLength = 8
 	for _, scanDir := range []ScanDirection{Ascending, Descending} {
 		for _, mustPreserveOrder := range []bool{false, true} {
@@ -650,6 +652,7 @@ func BenchmarkTruncateLoop(b *testing.B) {
 				for _, numRanges := range []int{4, 64} {
 					// We'll split the whole key space into numRanges ranges
 					// using random numRanges-1 split points.
+					rng := randutil.NewTestRandWithSeed(51)
 					rangeSpans := makeRanges(rng, numRanges, keyLength)
 					if scanDir == Descending {
 						// Reverse all the range spans for the Descending scan
@@ -702,6 +705,7 @@ func BenchmarkTruncateLoop(b *testing.B) {
 									_, _, _, err := h.Truncate(rs)
 									require.NoError(b, err)
 								}
+								h.Release()
 							}
 						})
 					}

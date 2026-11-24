@@ -7,6 +7,7 @@ package rangefeed
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -56,14 +57,30 @@ type ScheduledProcessor struct {
 
 	requestQueue chan request
 	eventC       chan *event
-	// If true, processor is not processing data anymore and waiting for registrations
-	// to be complete.
-	stopping bool
+
+	// stopping, when true, indicates that a stop request has been processed.
+	// After this is set, all subsequent registration requests will fail fast and
+	// any events will be ignored. This is only ever set via stopInternal, but it
+	// is an atomic to allow it to be read outside this processor. This is used in
+	// the replica to handle the case where we have stopped ourselves but are
+	// still attached to the replica. It should be preferred over stoppedC for all
+	// uses other than unblocking request waiters since stoppedC is not closed
+	// until the processsor is fully closed up.
+	stopping atomic.Bool
+	// stoppedC is closed during the final steps of processor shutdown. This is
+	// used to unblock anyone who might be waiting on a response. Callsites that
+	// need to decide whether or not to process a request should consult stopping
+	// instead.
 	stoppedC chan struct{}
 
 	// stopper passed by start that is used for firing up async work from scheduler.
 	stopper       *stop.Stopper
 	txnPushActive bool
+
+	// pendingUnregistrations indicates that the registry may have registrations
+	// that can be unregistered. This is handled outside of the requestQueue to
+	// avoid blocking clients who only need to signal unregistration.
+	pendingUnregistrations atomic.Bool
 }
 
 // NewScheduledProcessor creates a new scheduler based rangefeed Processor.
@@ -111,21 +128,28 @@ func (p *ScheduledProcessor) Start(
 	// Launch an async task to scan over the resolved timestamp iterator and
 	// initialize the unresolvedIntentQueue.
 	if rtsIterFunc != nil {
-		rtsIter := rtsIterFunc()
+		rtsIter, err := rtsIterFunc()
+		if err != nil {
+			// No need to close rtsIter if error is non-nil.
+			p.scheduler.StopProcessor()
+			return err
+		}
+
 		initScan := newInitResolvedTSScan(p.Span, p, rtsIter)
 		// TODO(oleg): we need to cap number of tasks that we can fire up across
 		// all feeds as they could potentially generate O(n) tasks during start.
-		err := stopper.RunAsyncTask(p.taskCtx, "rangefeed: init resolved ts", initScan.Run)
+		err = stopper.RunAsyncTask(p.taskCtx, "rangefeed: init resolved ts", initScan.Run)
 		if err != nil {
 			initScan.Cancel()
 			p.scheduler.StopProcessor()
 			return err
 		}
 	} else {
+		// This case should only be reached in tests.
 		p.initResolvedTS(p.taskCtx, nil)
 	}
 
-	p.Metrics.RangeFeedProcessorsScheduler.Inc(1)
+	p.Metrics.RangeFeedProcessors.Inc(1)
 	return nil
 }
 
@@ -157,6 +181,16 @@ func (p *ScheduledProcessor) processRequests(ctx context.Context) {
 		case e := <-p.requestQueue:
 			e(ctx)
 		default:
+			if p.pendingUnregistrations.Swap(false) {
+				p.reg.unregisterMarkedRegistrations(ctx)
+				// If we have no more registrations, we can stop this processor. Note
+				// that stopInternal sets p.stopping to true so any register requests
+				// being concurrenly enqueued will fail-fast before being added to the
+				// registry.
+				if p.reg.Len() == 0 {
+					p.stopInternal(ctx, nil)
+				}
+			}
 			return
 		}
 	}
@@ -169,7 +203,7 @@ func (p *ScheduledProcessor) processEvents(ctx context.Context) {
 	for max := len(p.eventC); max > 0; max-- {
 		select {
 		case e := <-p.eventC:
-			if !p.stopping {
+			if !p.stopping.Load() {
 				// If we are stopping, there's no need to forward any remaining
 				// data since registrations already have errors set.
 				p.consumeEvent(ctx, e)
@@ -217,7 +251,7 @@ func (p *ScheduledProcessor) processPushTxn(ctx context.Context) {
 
 func (p *ScheduledProcessor) processStop() {
 	p.cleanup()
-	p.Metrics.RangeFeedProcessorsScheduler.Dec(1)
+	p.Metrics.RangeFeedProcessors.Dec(1)
 }
 
 func (p *ScheduledProcessor) cleanup() {
@@ -258,6 +292,10 @@ func (p *ScheduledProcessor) StopWithErr(pErr *kvpb.Error) {
 	p.sendStop(pErr)
 }
 
+func (p *ScheduledProcessor) Stopping() bool {
+	return p.stopping.Load()
+}
+
 // DisconnectSpanWithErr disconnects all rangefeed registrations that overlap
 // the given span with the given error.
 func (p *ScheduledProcessor) DisconnectSpanWithErr(span roachpb.Span, pErr *kvpb.Error) {
@@ -271,40 +309,29 @@ func (p *ScheduledProcessor) DisconnectSpanWithErr(span roachpb.Span, pErr *kvpb
 
 func (p *ScheduledProcessor) sendStop(pErr *kvpb.Error) {
 	p.enqueueRequest(func(ctx context.Context) {
-		p.reg.DisconnectWithErr(ctx, all, pErr)
-		// First set stopping flag to ensure that once all registrations are removed
-		// processor should stop.
-		p.stopping = true
-		p.scheduler.StopProcessor()
+		p.stopInternal(ctx, pErr)
 	})
 }
 
-// Register registers the stream over the specified span of keys.
-//
-// The registration will not observe any events that were consumed before this
-// method was called. It is undefined whether the registration will observe
-// events that are consumed concurrently with this call. The channel will be
-// provided an error when the registration closes.
-//
-// The optionally provided "catch-up" iterator is used to read changes from the
-// engine which occurred after the provided start timestamp (exclusive).
-//
-// If the method returns false, the processor will have been stopped, so calling
-// Stop is not necessary. If the method returns true, it will also return an
-// updated operation filter that includes the operations required by the new
-// registration.
-//
-// NB: startTS is exclusive; the first possible event will be at startTS.Next().
+func (p *ScheduledProcessor) stopInternal(ctx context.Context, pErr *kvpb.Error) {
+	p.reg.DisconnectAllOnShutdown(ctx, pErr)
+	// First set stopping flag to ensure that once all registrations are removed
+	// processor should stop.
+	p.stopping.Store(true)
+	p.scheduler.StopProcessor()
+}
+
+// Register implements rangefeed.Processor.
 func (p *ScheduledProcessor) Register(
 	streamCtx context.Context,
 	span roachpb.RSpan,
 	startTS hlc.Timestamp,
-	catchUpIter *CatchUpIterator,
+	catchUpSnap *CatchUpSnapshot,
 	withDiff bool,
 	withFiltering bool,
 	withOmitRemote bool,
+	bulkDeliverySize int,
 	stream Stream,
-	disconnectFn func(),
 ) (bool, Disconnector, *Filter) {
 	// Synchronize the event channel so that this registration doesn't see any
 	// events that were consumed before this registration was called. Instead,
@@ -312,23 +339,25 @@ func (p *ScheduledProcessor) Register(
 	p.syncEventC()
 
 	blockWhenFull := p.Config.EventChanTimeout == 0 // for testing
+
 	var r registration
-	if _, ok := stream.(BufferedStream); ok {
-		log.Fatalf(context.Background(),
-			"unimplemented: unbuffered registrations for rangefeed, see #126560")
+	bufferedStream, isBufferedStream := stream.(BufferedStream)
+	if isBufferedStream {
+		r = newUnbufferedRegistration(
+			streamCtx, span.AsRawSpanWithNoLocals(), startTS, catchUpSnap, withDiff, withFiltering, withOmitRemote, bulkDeliverySize,
+			p.Config.EventChanCap, p.Metrics, bufferedStream, p.unregisterClientAsync)
 	} else {
 		r = newBufferedRegistration(
-			streamCtx, span.AsRawSpanWithNoLocals(), startTS, catchUpIter, withDiff, withFiltering, withOmitRemote,
-			p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, disconnectFn,
-		)
+			streamCtx, span.AsRawSpanWithNoLocals(), startTS, catchUpSnap, withDiff, withFiltering, withOmitRemote, bulkDeliverySize,
+			p.Config.EventChanCap, blockWhenFull, p.Metrics, stream, p.unregisterClientAsync)
 	}
 
 	filter := runRequest(p, func(ctx context.Context, p *ScheduledProcessor) *Filter {
-		if p.stopping {
+		if p.stopping.Load() {
 			return nil
 		}
-		if !p.Span.AsRawSpanWithNoLocals().Contains(r.getSpan()) {
-			log.Fatalf(ctx, "registration %s not in Processor's key range %v", r, p.Span)
+		if !p.Span.AsRawSpanWithNoLocals().Contains(r.Span()) {
+			log.KvExec.Fatalf(ctx, "registration %s not in Processor's key range %v", r, p.Span)
 		}
 
 		// Add the new registration to the registry.
@@ -345,23 +374,16 @@ func (p *ScheduledProcessor) Register(
 		r.publish(ctx, p.newCheckpointEvent(), nil)
 
 		// Run an output loop for the registry.
-		runOutputLoop := func(ctx context.Context) {
-			r.runOutputLoop(ctx, p.RangeID)
-			if p.unregisterClient(r) {
-				// unreg callback is set by replica to tear down processors that have
-				// zero registrations left and to update event filters.
-				if f := r.getUnreg(); f != nil {
-					f()
-				}
-			}
-		}
+		runOutputLoop := func(ctx context.Context) { r.runOutputLoop(ctx, p.RangeID) }
 		// NB: use ctx, not p.taskCtx, as the registry handles teardown itself.
 		if err := p.Stopper.RunAsyncTask(ctx, "rangefeed: output loop", runOutputLoop); err != nil {
 			// If we can't schedule internally, processor is already stopped which
 			// could only happen on shutdown. Disconnect stream and just remove
 			// registration.
 			r.Disconnect(kvpb.NewError(err))
-			p.reg.Unregister(ctx, r)
+			// Normally, ubr.runOutputLoop is responsible for draining catch up
+			// buffer. If it fails to start, we should drain it here.
+			r.drainAllocations(ctx)
 		}
 		return f
 	})
@@ -369,13 +391,6 @@ func (p *ScheduledProcessor) Register(
 		return true, r, filter
 	}
 	return false, nil, nil
-}
-
-func (p *ScheduledProcessor) unregisterClient(r registration) bool {
-	return runRequest(p, func(ctx context.Context, p *ScheduledProcessor) bool {
-		p.reg.Unregister(ctx, r)
-		return true
-	})
 }
 
 // ConsumeLogicalOps informs the rangefeed processor of the set of logical
@@ -608,7 +623,7 @@ func runRequest[T interface{}](
 		if buildutil.CrdbTestBuild {
 			select {
 			case <-p.stoppedC:
-				log.Fatalf(ctx, "processing request on stopped processor")
+				log.KvExec.Fatalf(ctx, "processing request on stopped processor")
 			default:
 			}
 		}
@@ -636,6 +651,29 @@ func (p *ScheduledProcessor) enqueueRequest(req request) {
 	}
 }
 
+// unregisterClientAsync instructs the processor to unregister the given
+// registration. This doesn't send an actual request to the request queue to
+// ensure that it is non-blocking.
+//
+// Rather, the registration has its shouldUnregister flag set and the
+// processor's pendingUnregistrations flag is set. During processRequests, if
+// pendingUnregistrations is true, we remove any marked registrations from the
+// registry.
+//
+// We are OK with these being processed out of order since these requests
+// originate from a registration cleanup, so the registration in question is no
+// longer processing events.
+func (p *ScheduledProcessor) unregisterClientAsync(r registration) {
+	select {
+	case <-p.stoppedC:
+		return
+	default:
+	}
+	r.setShouldUnregister()
+	p.pendingUnregistrations.Store(true)
+	p.scheduler.Enqueue(RequestQueued)
+}
+
 func (p *ScheduledProcessor) consumeEvent(ctx context.Context, e *event) {
 	switch {
 	case e.ops != nil:
@@ -649,7 +687,7 @@ func (p *ScheduledProcessor) consumeEvent(ctx context.Context, e *event) {
 	case e.sync != nil:
 		if e.sync.testRegCatchupSpan != nil {
 			if err := p.reg.waitForCaughtUp(ctx, *e.sync.testRegCatchupSpan); err != nil {
-				log.Errorf(
+				log.KvExec.Errorf(
 					ctx,
 					"error waiting for registries to catch up during test, results might be impacted: %s",
 					err,
@@ -658,7 +696,7 @@ func (p *ScheduledProcessor) consumeEvent(ctx context.Context, e *event) {
 		}
 		close(e.sync.c)
 	default:
-		log.Fatalf(ctx, "missing event variant: %+v", e)
+		log.KvExec.Fatalf(ctx, "missing event variant: %+v", e)
 	}
 }
 
@@ -696,7 +734,7 @@ func (p *ScheduledProcessor) consumeLogicalOps(
 			// No updates to publish.
 
 		default:
-			log.Fatalf(ctx, "unknown logical op %T", t)
+			log.KvExec.Fatalf(ctx, "unknown logical op %T", t)
 		}
 
 		// Determine whether the operation caused the resolved timestamp to
@@ -740,7 +778,7 @@ func (p *ScheduledProcessor) publishValue(
 	alloc *SharedBudgetAllocation,
 ) {
 	if !p.Span.ContainsKey(roachpb.RKey(key)) {
-		log.Fatalf(ctx, "key %v not in Processor's key range %v", key, p.Span)
+		log.KvExec.Fatalf(ctx, "key %v not in Processor's key range %v", key, p.Span)
 	}
 
 	var prevVal roachpb.Value
@@ -767,7 +805,7 @@ func (p *ScheduledProcessor) publishDeleteRange(
 ) {
 	span := roachpb.Span{Key: startKey, EndKey: endKey}
 	if !p.Span.ContainsKeyRange(roachpb.RKey(startKey), roachpb.RKey(endKey)) {
-		log.Fatalf(ctx, "span %s not in Processor's key range %v", span, p.Span)
+		log.KvExec.Fatalf(ctx, "span %s not in Processor's key range %v", span, p.Span)
 	}
 
 	var event kvpb.RangeFeedEvent
@@ -786,10 +824,10 @@ func (p *ScheduledProcessor) publishSSTable(
 	alloc *SharedBudgetAllocation,
 ) {
 	if sstSpan.Equal(roachpb.Span{}) {
-		log.Fatalf(ctx, "received SSTable without span")
+		log.KvExec.Fatalf(ctx, "received SSTable without span")
 	}
 	if sstWTS.IsEmpty() {
-		log.Fatalf(ctx, "received SSTable without write timestamp")
+		log.KvExec.Fatalf(ctx, "received SSTable without write timestamp")
 	}
 	p.reg.PublishToOverlapping(ctx, sstSpan, &kvpb.RangeFeedEvent{
 		SST: &kvpb.RangeFeedSSTable{

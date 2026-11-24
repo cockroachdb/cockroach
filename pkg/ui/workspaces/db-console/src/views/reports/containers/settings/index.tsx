@@ -10,26 +10,17 @@ import {
   SortSetting,
   util,
   Timestamp,
+  useClusterSettings,
+  ClusterSetting,
 } from "@cockroachlabs/cluster-ui";
-import isNil from "lodash/isNil";
-import React from "react";
+import moment from "moment-timezone";
+import React, { useState } from "react";
 import { Helmet } from "react-helmet";
-import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
-
-import * as protos from "src/js/protos";
-import { refreshSettings } from "src/redux/apiReducers";
-import { CachedDataReducerState } from "src/redux/cachedDataReducer";
-import { AdminUIState } from "src/redux/state";
 
 import { BackToAdvanceDebug } from "../util";
 
-import "./index.styl";
-
-interface SettingsOwnProps {
-  settings: CachedDataReducerState<protos.cockroach.server.serverpb.SettingsResponse>;
-  refreshSettings: typeof refreshSettings;
-}
+import "./index.scss";
 
 interface IterableSetting {
   key: string;
@@ -40,150 +31,120 @@ interface IterableSetting {
   last_updated?: moment.Moment;
 }
 
-interface SettingsState {
-  sortSetting: {
-    ascending: boolean;
-    columnTitle: string;
-  };
-}
+const columns: ColumnDescriptor<IterableSetting>[] = [
+  {
+    name: "name",
+    title: "Setting",
+    cell: (setting: IterableSetting) => setting.key,
+    sort: (setting: IterableSetting) => setting.key,
+  },
+  {
+    name: "value",
+    title: "Value",
+    cell: (setting: IterableSetting) => setting.value,
+  },
+  {
+    name: "lastUpdated",
+    title: "Last Updated",
+    cell: (setting: IterableSetting) => (
+      <Timestamp
+        time={setting.last_updated}
+        format={util.DATE_FORMAT_24_TZ}
+        fallback={"No overrides"}
+      />
+    ),
+    sort: (setting: IterableSetting) => setting.last_updated?.valueOf(),
+  },
+  {
+    name: "description",
+    title: "Description",
+    cell: (setting: IterableSetting) => setting.description,
+  },
+];
 
-type SettingsProps = SettingsOwnProps & RouteComponentProps;
+function settingsToIterableArray(
+  allSettings: Record<string, ClusterSetting>,
+): IterableSetting[] {
+  return Object.entries(allSettings).map(([key, cs]) => ({
+    key,
+    description: cs.description,
+    type: cs.type,
+    value: cs.value,
+    public: cs.public,
+    last_updated: cs.lastUpdated,
+  }));
+}
 
 /**
  * Renders the Cluster Settings Report page.
  */
-export class Settings extends React.Component<SettingsProps, SettingsState> {
-  constructor(props: SettingsProps) {
-    super(props);
-    this.state = {
-      sortSetting: { ascending: true, columnTitle: "lastUpdated" },
-    };
-  }
+export function Settings({ history }: RouteComponentProps): React.ReactElement {
+  const [sortSetting, setSortSetting] = useState({
+    ascending: true,
+    columnTitle: "lastUpdated",
+  });
+  const [changedOnly, setChangedOnly] = useState(false);
 
-  sortSetting: { ascending: boolean; columnTitle: string | null };
+  const { settingValues, isLoading, error } = useClusterSettings();
 
-  refresh(props = this.props) {
-    props.refreshSettings(
-      new protos.cockroach.server.serverpb.SettingsRequest(),
+  const renderTable = (wantPublic: boolean) => {
+    let dataArray = settingsToIterableArray(settingValues).filter(obj =>
+      wantPublic ? obj.public : !obj.public,
     );
-  }
-
-  componentDidMount() {
-    // Refresh settings query when mounting.
-    this.refresh();
-  }
-
-  renderTable(wantPublic: boolean) {
-    if (isNil(this.props.settings.data)) {
-      return null;
+    if (changedOnly) {
+      dataArray = dataArray.filter(obj => obj.last_updated != null);
     }
-
-    const { key_values } = this.props.settings.data;
-    const dataArray: IterableSetting[] = Object.keys(key_values)
-      .map(key => ({
-        key,
-        ...key_values[key],
-      }))
-      .map(obj => {
-        return {
-          ...obj,
-          last_updated: obj.last_updated
-            ? util.TimestampToMoment(obj.last_updated)
-            : null,
-        };
-      });
-    const columns: ColumnDescriptor<IterableSetting>[] = [
-      {
-        name: "name",
-        title: "Setting",
-        cell: (setting: IterableSetting) => setting.key,
-        sort: (setting: IterableSetting) => setting.key,
-      },
-      {
-        name: "value",
-        title: "Value",
-        cell: (setting: IterableSetting) => setting.value,
-      },
-      {
-        name: "lastUpdated",
-        title: "Last Updated",
-        cell: (setting: IterableSetting) => (
-          <Timestamp
-            time={setting.last_updated}
-            format={util.DATE_FORMAT_24_TZ}
-            fallback={"No overrides"}
-          />
-        ),
-        sort: (setting: IterableSetting) => setting.last_updated?.valueOf(),
-      },
-      {
-        name: "description",
-        title: "Description",
-        cell: (setting: IterableSetting) => setting.description,
-      },
-    ];
 
     return (
       <SortedTable
-        data={dataArray.filter(obj =>
-          wantPublic ? obj.public : obj.public === undefined,
-        )}
+        data={dataArray}
         columns={columns}
-        sortSetting={this.state.sortSetting}
+        sortSetting={sortSetting}
         onChangeSortSetting={(ss: SortSetting) =>
-          this.setState({
-            sortSetting: {
-              ascending: ss.ascending,
-              columnTitle: ss.columnTitle,
-            },
+          setSortSetting({
+            ascending: ss.ascending,
+            columnTitle: ss.columnTitle,
           })
         }
       />
     );
-  }
+  };
 
-  render() {
-    return (
-      <div className="section">
-        <Helmet title="Cluster Settings | Debug" />
-        <BackToAdvanceDebug history={this.props.history} />
-        <h1 className="base-heading">Cluster Settings</h1>
-        <Loading
-          loading={!this.props.settings.data}
-          page={"container settings"}
-          error={this.props.settings.lastError}
-          render={() => (
-            <div>
-              <p className="settings-note">
-                Note that some settings have been redacted for security
-                purposes.
-              </p>
-              {this.renderTable(true)}
-              <h3>Reserved settings</h3>
-              <p className="settings-note">
-                Note that changes to the following settings can yield
-                unpredictable or negative effects on the entire cluster. Use at
-                your own risk.
-              </p>
-              {this.renderTable(false)}
-            </div>
-          )}
-        />
-      </div>
-    );
-  }
+  return (
+    <div className="section">
+      <Helmet title="Cluster Settings | Debug" />
+      <BackToAdvanceDebug history={history} />
+      <h1 className="base-heading">Cluster Settings</h1>
+      <Loading
+        loading={isLoading}
+        page={"container settings"}
+        error={error}
+        render={() => (
+          <div>
+            <label className="settings-changed-only">
+              <input
+                type="checkbox"
+                checked={changedOnly}
+                onChange={e => setChangedOnly(e.target.checked)}
+              />
+              Changed only
+            </label>
+            <p className="settings-note">
+              Note that some settings have been redacted for security purposes.
+            </p>
+            {renderTable(true)}
+            <h3>Reserved settings</h3>
+            <p className="settings-note">
+              Note that changes to the following settings can yield
+              unpredictable or negative effects on the entire cluster. Use at
+              your own risk.
+            </p>
+            {renderTable(false)}
+          </div>
+        )}
+      />
+    </div>
+  );
 }
 
-const mapStateToProps = (state: AdminUIState) => ({
-  // RootState contains declaration for whole state
-  settings: state.cachedData.settings,
-});
-
-const mapDispatchToProps = {
-  // actionCreators returns objects with type and payload
-  refreshSettings,
-};
-
-export default withRouter(
-  connect(mapStateToProps, mapDispatchToProps)(Settings),
-);
+export default withRouter(Settings);

@@ -42,17 +42,19 @@ export interface SqlBoxProps {
 
 const cx = classNames.bind(styles);
 
-export class SqlBox extends React.Component<SqlBoxProps> {
-  preNode: React.RefObject<HTMLPreElement> = React.createRef();
-  render(): React.ReactElement {
-    const value = this.props.format
-      ? FormatQuery(this.props.value)
-      : this.props.value;
-    const sizeClass = this.props.size ? this.props.size : "";
-    return (
-      <div className={cx("box-highlight", this.props.className, sizeClass)}>
-        <Highlight {...this.props} value={value} />
-      </div>
-    );
-  }
+export function SqlBox({
+  value: rawValue,
+  format,
+  size,
+  className,
+  ...restProps
+}: SqlBoxProps): React.ReactElement {
+  const value = format ? FormatQuery(rawValue) : rawValue;
+  const sizeClass = size ? size : "";
+
+  return (
+    <div className={cx("box-highlight", className, sizeClass)}>
+      <Highlight {...restProps} value={value} format={format} size={size} />
+    </div>
+  );
 }

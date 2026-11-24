@@ -24,11 +24,14 @@ func registerSchemaChangeMixedVersions(r registry.Registry) {
 	r.Add(registry.TestSpec{
 		// schemachange/mixed-versions tests random schema changes (via the schemachange workload)
 		// in a mixed version state, validating that the cluster is still healthy (via debug doctor examine).
-		Name:                       "schemachange/mixed-versions",
-		Owner:                      registry.OwnerSQLFoundations,
-		Cluster:                    r.MakeClusterSpec(4, spec.WorkloadNode()),
-		CompatibleClouds:           registry.AllExceptAWS,
-		Suites:                     registry.Suites(registry.Nightly),
+		Name:    "schemachange/mixed-versions",
+		Owner:   registry.OwnerSQLFoundations,
+		Cluster: r.MakeClusterSpec(4, spec.WorkloadNode()),
+		// Disabled on IBM because s390x is only built on master and mixed-version
+		// is impossible to test as of 05/2025.
+		CompatibleClouds:           registry.AllClouds.NoAWS().NoIBM(),
+		Suites:                     registry.Suites(registry.MixedVersion, registry.Nightly),
+		Monitor:                    true,
 		Randomized:                 true,
 		NativeLibs:                 registry.LibGEOS,
 		RequiresDeprecatedWorkload: true, // uses schemachange
@@ -38,6 +41,10 @@ func registerSchemaChangeMixedVersions(r registry.Registry) {
 			if c.IsLocal() {
 				maxOps = 10
 				concurrency = 2
+			} else if t.RuntimeAssertionsCockroach() != "" {
+				// When runtime assertions are enabled, produce fewer operations
+				// to avoid risk of timeouts.
+				maxOps = maxOps / 4
 			}
 			runSchemaChangeMixedVersions(ctx, t, c, maxOps, concurrency)
 		},

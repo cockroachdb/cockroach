@@ -37,6 +37,7 @@ var showTableStatsColumns = colinfo.ResultColumns{
 	{Name: "partial_predicate", Typ: types.String},
 	{Name: "histogram_id", Typ: types.Int},
 	{Name: "full_histogram_id", Typ: types.Int},
+	{Name: "delay_delete", Typ: types.Bool},
 }
 
 var showTableStatsJSONColumns = colinfo.ResultColumns{
@@ -89,29 +90,14 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 	return &delayedNode{
 		name:    n.String(),
 		columns: columns,
-		constructor: func(ctx context.Context, p *planner) (_ planNode, err error) {
+		constructor: func(ctx context.Context, p *planner) (_ planNode, retErr error) {
 			// We need to query the table_statistics and then do some post-processing:
 			//  - convert column IDs to column names
 			//  - if the statistic has a histogram, we return the statistic ID as a
 			//    "handle" which can be used with SHOW HISTOGRAM.
 			// TODO(yuzefovich): refactor the code to use the iterator API
 			// (currently it is not possible due to a panic-catcher below).
-			stmt := `SELECT
-							"tableID",
-							"statisticID",
-							name,
-							"columnIDs",
-							"createdAt",
-							"rowCount",
-							"distinctCount",
-							"nullCount",
-							"avgSize",
-							"partialPredicate",
-							histogram,
-							"fullStatisticID"
-						FROM system.table_statistics
-						WHERE "tableID" = $1
-						ORDER BY "createdAt", "columnIDs", "statisticID"`
+			stmt := stats.GetTableStatisticsStmt(ctx, p.ExtendedEvalContext().Settings, tree.Ascending)
 
 			// There is a privilege check above to make sure the user has any
 			// privilege on the table being inspected. We use the node user to execute
@@ -142,6 +128,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 				partialPredicateIdx
 				histogramIdx
 				fullStatisticIDIdx
+				delayDeleteIdx
 				numCols
 			)
 
@@ -149,21 +136,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 			nCols := numCols
 
 			// Guard against crashes in the code below (e.g. #56356).
-			defer func() {
-				if r := recover(); r != nil {
-					// This code allows us to propagate internal errors without having to add
-					// error checks everywhere throughout the code. This is only possible
-					// because the code does not update shared state and does not manipulate
-					// locks.
-					if ok, e := errorutil.ShouldCatch(r); ok {
-						err = e
-					} else {
-						// Other panic objects can't be considered "safe" and thus are
-						// propagated as crashes that terminate the session.
-						panic(r)
-					}
-				}
-			}()
+			defer errorutil.MaybeCatchPanic(&retErr, nil /* errCallback */)
 
 			_, withMerge := opts[showTableStatsOptMerge]
 			_, withForecast := opts[showTableStatsOptForecast]
@@ -182,7 +155,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 					}
 					obs := &stats.TableStatistic{TableStatisticProto: *stat}
 					if obs.HistogramData != nil && !obs.HistogramData.ColumnType.UserDefined() {
-						if err := stats.DecodeHistogramBuckets(obs); err != nil {
+						if err := stats.DecodeHistogramBuckets(ctx, obs); err != nil {
 							return nil, err
 						}
 					}
@@ -195,9 +168,9 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 					statsList[i], statsList[j] = statsList[j], statsList[i]
 				}
 
+				merged := stats.MergedStatistics(ctx, statsList, p.ExtendedEvalContext().Settings)
+				statsList = append(merged, statsList...)
 				if withMerge {
-					merged := stats.MergedStatistics(ctx, statsList, p.ExtendedEvalContext().Settings)
-					statsList = append(merged, statsList...)
 					// Iterate in reverse order to match the ORDER BY "columnIDs".
 					for i := len(merged) - 1; i >= 0; i-- {
 						mergedRow, err := tableStatisticProtoToRow(&merged[i].TableStatisticProto)
@@ -266,6 +239,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 						statsRow.PartialPredicate = string(*r[partialPredicateIdx].(*tree.DString))
 						statsRow.FullStatisticID = (uint64)(*r[fullStatisticIDIdx].(*tree.DInt))
 					}
+					statsRow.DelayDelete = (bool)(*r[delayDeleteIdx].(*tree.DBool))
 					if err := statsRow.DecodeAndSetHistogram(ctx, &p.semaCtx, r[histIdx]); err != nil {
 						v.Close(ctx)
 						return nil, err
@@ -297,17 +271,16 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 				}
 
 				colIDs := r[columnIDsIdx].(*tree.DArray).Array
-				colNames := tree.NewDArray(types.String)
-				colNames.Array = make(tree.Datums, len(colIDs))
+				colNames := make(tree.Datums, len(colIDs))
 				ignoreStatsRowWithDroppedColumn := false
-				var colName string
 				for i, d := range colIDs {
+					var colName string
 					colName, err = statColumnString(desc, d)
 					if err != nil && sqlerrors.IsUndefinedColumnError(err) {
 						ignoreStatsRowWithDroppedColumn = true
 						break
 					}
-					colNames.Array[i] = tree.NewDString(colName)
+					colNames[i] = tree.NewDString(colName)
 				}
 				if ignoreStatsRowWithDroppedColumn {
 					continue
@@ -326,7 +299,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 
 				res := tree.Datums{
 					r[nameIdx],
-					colNames,
+					tree.NewDArrayFromDatums(types.String, colNames),
 					createdAtTZ,
 					r[rowCountIdx],
 					r[distinctCountIdx],
@@ -335,6 +308,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 					r[partialPredicateIdx],
 					histogramID,
 					r[fullStatisticIDIdx],
+					r[delayDeleteIdx],
 				}
 
 				if _, err := v.rows.AddRow(ctx, res); err != nil {
@@ -399,5 +373,6 @@ func tableStatisticProtoToRow(stat *stats.TableStatisticProto) (tree.Datums, err
 		row = append(row, tree.NewDBytes(tree.DBytes(histogram)))
 	}
 	row = append(row, FullStatisticID)
+	row = append(row, tree.MakeDBool(tree.DBool(stat.DelayDelete)))
 	return row, nil
 }

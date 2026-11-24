@@ -17,7 +17,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 )
 
 var npgsqlReleaseTagRegex = regexp.MustCompile(`^v(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
@@ -59,6 +58,12 @@ func registerNpgsql(r registry.Registry) {
 			`GRANT admin TO npgsql_tests`,
 			`DROP DATABASE IF EXISTS npgsql_tests`,
 			`CREATE DATABASE npgsql_tests`,
+			// The npgsql test suite runs many tests in parallel. Concurrent DDL
+			// modify the database descriptor and cause concurrent transactions
+			// to fail with a retry error which npgsql does not retry. Retain
+			// the old descriptor versions to prevent the un-retried errors from
+			// percolating.
+			`SET CLUSTER SETTING sql.catalog.descriptor_lease.lock_old_versions.enabled = 'true'`,
 		} {
 			if _, err := db.ExecContext(ctx, cmd); err != nil {
 				t.Fatal(err)
@@ -66,7 +71,7 @@ func registerNpgsql(r registry.Registry) {
 		}
 
 		// Install dotnet as per these docs:
-		// https://learn.microsoft.com/en-us/dotnet/core/install/linux-ubuntu
+		// https://learn.microsoft.com/en-us/dotnet/core/install/linux-scripted-manual#scripted-install
 		t.Status("setting up dotnet")
 		if err := repeatRunE(
 			ctx,
@@ -74,9 +79,9 @@ func registerNpgsql(r registry.Registry) {
 			c,
 			node,
 			"install dependencies",
-			`sudo snap install dotnet-sdk --channel=7.0/stable --classic && \
-sudo snap alias dotnet-sdk.dotnet dotnet && \
-sudo ln -s /snap/dotnet-sdk/current/dotnet /usr/local/bin/dotnet`,
+			`curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh && \
+chmod +x /tmp/dotnet-install.sh && \
+/tmp/dotnet-install.sh --channel 7.0`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -131,7 +136,7 @@ echo '%s' | git apply --ignore-whitespace -`, fmt.Sprintf(npgsqlPatch, result.St
 		// Running the test suite is expected to error out, so swallow the error.
 		result, err = c.RunWithDetailsSingleNode(
 			ctx, t.L(), option.WithNodes(node),
-			`cd /mnt/data1/npgsql && dotnet test test/Npgsql.Tests --logger trx`,
+			`export PATH="$HOME/.dotnet:$PATH" && cd /mnt/data1/npgsql && dotnet test test/Npgsql.Tests --logger trx`,
 		)
 
 		rawResults := "stdout:\n" + result.Stdout + "\n\nstderr:\n" + result.Stderr
@@ -172,9 +177,9 @@ echo '%s' | git apply --ignore-whitespace -`, fmt.Sprintf(npgsqlPatch, result.St
 		Name:  "npgsql",
 		Owner: registry.OwnerSQLFoundations,
 		// .NET only supports AMD64 arch for 7.0.
-		Cluster:          r.MakeClusterSpec(1, spec.Arch(vm.ArchAMD64)),
+		Cluster:          r.MakeClusterSpec(1, spec.Arch(spec.OnlyAMD64)),
 		Leases:           registry.MetamorphicLeases,
-		CompatibleClouds: registry.AllExceptAWS,
+		CompatibleClouds: registry.AllExceptAWS.NoIBM(),
 		Suites:           registry.Suites(registry.Nightly, registry.Driver),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runNpgsql(ctx, t, c)

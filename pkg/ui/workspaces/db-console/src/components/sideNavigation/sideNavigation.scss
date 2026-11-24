@@ -1,0 +1,38 @@
+// Copyright 2026 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+@import 'src/components/core/index.scss';
+
+.side-navigation--list {
+  margin-bottom: inherit;
+}
+
+.side-navigation__navigation-item {
+  list-style-type: none;
+  margin-bottom: $spacing-small;
+  color: $colors--secondary-text;
+
+  & *, 
+  & *:hover, 
+  & *:active {
+    color: inherit;
+    text-decoration: inherit;
+  }
+}
+
+.side-navigation__navigation-item:hover, 
+.side-navigation__navigation-item:active {
+  color: $colors--link;
+}
+
+.side-navigation__navigation-item--active {
+  color: $colors--link;
+}
+
+.side-navigation__navigation-item--disabled {
+  color: $colors--disabled;
+  pointer-events: none;
+  cursor: default;
+}

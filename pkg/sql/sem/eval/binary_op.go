@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/ltree"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/trigram"
 	"github.com/cockroachdb/cockroach/pkg/util/tsearch"
@@ -283,6 +284,20 @@ func (e *evaluator) EvalConcatVarBitOp(
 	}, nil
 }
 
+func (e *evaluator) EvalConcatLTreeOp(
+	ctx context.Context, _ *tree.ConcatLTreeOp, left, right tree.Datum,
+) (tree.Datum, error) {
+	lhs := tree.MustBeDLTree(left)
+	rhs := tree.MustBeDLTree(right)
+	concat, err := ltree.Concat(lhs.LTree, rhs.LTree)
+	if err != nil {
+		return nil, err
+	}
+	return &tree.DLTree{
+		LTree: concat,
+	}, nil
+}
+
 func (e *evaluator) EvalContainedByArrayOp(
 	ctx context.Context, _ *tree.ContainedByArrayOp, a, b tree.Datum,
 ) (tree.Datum, error) {
@@ -301,6 +316,50 @@ func (e *evaluator) EvalContainedByJsonbOp(
 	return tree.MakeDBool(tree.DBool(c)), nil
 }
 
+func (e *evaluator) EvalContainedByLTreeOp(
+	ctx context.Context, _ *tree.ContainedByLTreeOp, a, b tree.Datum,
+) (tree.Datum, error) {
+	left := tree.MustBeDLTree(a)
+	right := tree.MustBeDLTree(b)
+	c := right.LTree.Contains(left.LTree)
+	return tree.MakeDBool(tree.DBool(c)), nil
+}
+
+func (e *evaluator) EvalContainedByLTreeArrayOp(
+	ctx context.Context, _ *tree.ContainedByLTreeArrayOp, a, b tree.Datum,
+) (tree.Datum, error) {
+	array, ok := a.(*tree.DArray)
+	elem, _ := b.(*tree.DLTree)
+	if !ok {
+		array = tree.MustBeDArray(b)
+		elem = tree.MustBeDLTree(a)
+	}
+
+	for _, d := range array.Array {
+		if elem.LTree.Contains(tree.MustBeDLTree(d).LTree) {
+			return tree.DBoolTrue, nil
+		}
+	}
+	return tree.DBoolFalse, nil
+}
+
+func (e *evaluator) EvalFirstContainedByLTreeOp(
+	ctx context.Context, _ *tree.FirstContainedByLTreeOp, a, b tree.Datum,
+) (tree.Datum, error) {
+	array := tree.MustBeDArray(a)
+	elem := tree.MustBeDLTree(b)
+
+	if array.HasNulls() {
+		return nil, pgerror.New(pgcode.NullValueNotAllowed, "array must not contain nulls")
+	}
+	for _, d := range array.Array {
+		if elem.LTree.Contains(tree.MustBeDLTree(d).LTree) {
+			return tree.MustBeDLTree(d), nil
+		}
+	}
+	return tree.DNull, nil
+}
+
 func (e *evaluator) EvalContainsArrayOp(
 	ctx context.Context, _ *tree.ContainsArrayOp, a, b tree.Datum,
 ) (tree.Datum, error) {
@@ -317,6 +376,50 @@ func (e *evaluator) EvalContainsJsonbOp(
 		return nil, err
 	}
 	return tree.MakeDBool(tree.DBool(c)), nil
+}
+
+func (e *evaluator) EvalContainsLTreeOp(
+	ctx context.Context, _ *tree.ContainsLTreeOp, a, b tree.Datum,
+) (tree.Datum, error) {
+	left := tree.MustBeDLTree(a)
+	right := tree.MustBeDLTree(b)
+	c := left.LTree.Contains(right.LTree)
+	return tree.MakeDBool(tree.DBool(c)), nil
+}
+
+func (e *evaluator) EvalContainsLTreeArrayOp(
+	ctx context.Context, _ *tree.ContainsLTreeArrayOp, a, b tree.Datum,
+) (tree.Datum, error) {
+	array, ok := a.(*tree.DArray)
+	elem, _ := b.(*tree.DLTree)
+	if !ok {
+		array = tree.MustBeDArray(b)
+		elem = tree.MustBeDLTree(a)
+	}
+
+	for _, d := range array.Array {
+		if tree.MustBeDLTree(d).LTree.Contains(elem.LTree) {
+			return tree.DBoolTrue, nil
+		}
+	}
+	return tree.DBoolFalse, nil
+}
+
+func (e *evaluator) EvalFirstContainsLTreeOp(
+	ctx context.Context, _ *tree.FirstContainsLTreeOp, a, b tree.Datum,
+) (tree.Datum, error) {
+	array := tree.MustBeDArray(a)
+	elem := tree.MustBeDLTree(b)
+
+	if array.HasNulls() {
+		return nil, pgerror.New(pgcode.NullValueNotAllowed, "array must not contain nulls")
+	}
+	for _, d := range array.Array {
+		if tree.MustBeDLTree(d).LTree.Contains(elem.LTree) {
+			return tree.MustBeDLTree(d), nil
+		}
+	}
+	return tree.DNull, nil
 }
 
 func (e *evaluator) EvalDivDecimalIntOp(
@@ -1493,7 +1596,7 @@ func (e *evaluator) EvalPowDecimalIntOp(
 	r := tree.MustBeDInt(right)
 	dd := &tree.DDecimal{}
 	dd.SetInt64(int64(r))
-	_, err := tree.DecimalCtx.Pow(&dd.Decimal, l, &dd.Decimal)
+	err := DecimalPow(tree.DecimalCtx, &dd.Decimal, l, &dd.Decimal)
 	return dd, err
 }
 
@@ -1503,15 +1606,14 @@ func (e *evaluator) EvalPowDecimalOp(
 	l := &left.(*tree.DDecimal).Decimal
 	r := &right.(*tree.DDecimal).Decimal
 	dd := &tree.DDecimal{}
-	_, err := tree.DecimalCtx.Pow(&dd.Decimal, l, r)
+	err := DecimalPow(tree.DecimalCtx, &dd.Decimal, l, r)
 	return dd, err
 }
 
 func (e *evaluator) EvalPowFloatOp(
 	ctx context.Context, _ *tree.PowFloatOp, left, right tree.Datum,
 ) (tree.Datum, error) {
-	f := math.Pow(float64(*left.(*tree.DFloat)), float64(*right.(*tree.DFloat)))
-	return tree.NewDFloat(tree.DFloat(f)), nil
+	return FloatPow(float64(*left.(*tree.DFloat)), float64(*right.(*tree.DFloat)))
 }
 
 func (e *evaluator) EvalPowIntDecimalOp(
@@ -1521,7 +1623,7 @@ func (e *evaluator) EvalPowIntDecimalOp(
 	r := &right.(*tree.DDecimal).Decimal
 	dd := &tree.DDecimal{}
 	dd.SetInt64(int64(l))
-	_, err := tree.DecimalCtx.Pow(&dd.Decimal, &dd.Decimal, r)
+	err := DecimalPow(tree.DecimalCtx, &dd.Decimal, &dd.Decimal, r)
 	return dd, err
 }
 

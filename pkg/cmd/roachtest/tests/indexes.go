@@ -24,7 +24,7 @@ import (
 
 func registerNIndexes(r registry.Registry, secondaryIndexes int) {
 	const nodes = 6
-	gceGeoZones := []string{"us-east1-b", "us-west1-b", "europe-west2-b"}
+	gceGeoZones := []string{"us-east1-b", "us-west1-c", "europe-west2-b"}
 	awsGeoZones := []string{"us-east-2b", "us-west-1a", "eu-west-1a"}
 	r.Add(registry.TestSpec{
 		Name:      fmt.Sprintf("indexes/%d/nodes=%d/multi-region", secondaryIndexes, nodes),
@@ -55,7 +55,7 @@ func registerNIndexes(r registry.Registry, secondaryIndexes int) {
 			conn := c.Conn(ctx, t.L(), 1)
 
 			t.Status("running workload")
-			m := c.NewMonitor(ctx, c.CRDBNodes())
+			m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 			m.Go(func(ctx context.Context) error {
 				secondary := " --secondary-indexes=" + strconv.Itoa(secondaryIndexes)
 				initCmd := "./workload init indexes" + secondary + " {pgurl:1}"

@@ -8,6 +8,7 @@ package scrun
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -112,6 +114,7 @@ func RunSchemaChangesInJob(
 	knobs *scexec.TestingKnobs,
 	deps JobRunDependencies,
 	jobID jobspb.JobID,
+	jobStartTime time.Time,
 	descriptorIDs []descpb.ID,
 	rollbackCause error,
 ) error {
@@ -120,7 +123,7 @@ func RunSchemaChangesInJob(
 			return err
 		}
 	}
-	p, err := makePostCommitPlan(ctx, deps, jobID, descriptorIDs, rollbackCause)
+	p, err := makePostCommitPlan(ctx, deps, jobID, jobStartTime, descriptorIDs, rollbackCause)
 	if err != nil {
 		if knobs != nil && knobs.OnPostCommitPlanError != nil {
 			return knobs.OnPostCommitPlanError(err)
@@ -141,9 +144,13 @@ func RunSchemaChangesInJob(
 			if i+1 == len(p.Stages) {
 				var template eventpb.EventWithCommonSchemaChangePayload
 				if p.CurrentState.InRollback {
-					template = &eventpb.FinishSchemaChangeRollback{}
+					template = &eventpb.FinishSchemaChangeRollback{
+						LatencyNanos: timeutil.Since(jobStartTime).Nanoseconds(),
+					}
 				} else {
-					template = &eventpb.FinishSchemaChange{}
+					template = &eventpb.FinishSchemaChange{
+						LatencyNanos: timeutil.Since(jobStartTime).Nanoseconds(),
+					}
 				}
 				if err := logSchemaChangeEvents(ctx, el, p.CurrentState, template); err != nil {
 					return err
@@ -198,10 +205,11 @@ func executeStage(
 			!pgerror.HasCandidateCode(err) {
 			err = p.DecorateErrorWithPlanDetails(err)
 		}
-		// Certain errors are aimed to be user consumable and should never be
-		// wrapped.
-		if userError := scerrors.UnwrapSchemaChangerUserError(err); userError != nil {
-			return userError
+		// User errors should be returned without additional wrapping to keep
+		// messages clean, but we preserve the SchemaChangerUserError wrapper
+		// so that IsPermanentSchemaChangeError can identify them as permanent.
+		if scerrors.HasSchemaChangerUserError(err) {
+			return err
 		}
 		return errors.Wrapf(err, "error executing %s", stage)
 	}
@@ -218,11 +226,20 @@ func makePostCommitPlan(
 	ctx context.Context,
 	deps JobRunDependencies,
 	jobID jobspb.JobID,
+	jobStartTime time.Time,
 	descriptorIDs []descpb.ID,
 	rollbackCause error,
 ) (scplan.Plan, error) {
 	var state scpb.CurrentState
 	do := func(ctx context.Context, txnDeps scexec.Dependencies, eventLogger EventLogger) error {
+		// If a BeforeStage hook is set up, ensure the latest descriptor versions
+		// for this plan are available. We could do this during execution, but we
+		// have the descriptor IDs already.
+		if txnDeps.GetTestingKnobs().BeforeStage != nil {
+			if err := txnDeps.Catalog().TestingEnsureLatestLeaseIsAvailable(ctx, descriptorIDs); err != nil {
+				return err
+			}
+		}
 		// Read the descriptors which each contain a part of the declarative
 		// schema change state.
 		descriptors, err := txnDeps.Catalog().MustReadImmutableDescriptors(ctx, descriptorIDs...)
@@ -252,8 +269,9 @@ func makePostCommitPlan(
 			// Revert the schema change and write about it in the event log.
 			state.Rollback()
 			return logSchemaChangeEvents(ctx, eventLogger, state, &eventpb.ReverseSchemaChange{
-				Error:    fmt.Sprintf("%v", rollbackCause),
-				SQLSTATE: pgerror.GetPGCode(rollbackCause).String(),
+				Error:        redact.Sprintf("%+v", rollbackCause),
+				SQLSTATE:     pgerror.GetPGCode(rollbackCause).String(),
+				LatencyNanos: timeutil.Since(jobStartTime).Nanoseconds(),
 			})
 		}
 		return nil
@@ -261,10 +279,17 @@ func makePostCommitPlan(
 	if err := deps.WithTxnInJob(ctx, do); err != nil {
 		return scplan.Plan{}, err
 	}
+	// Ensure rollbacks always start in non-revertible phase. Previously,
+	// the rollback relied on hitting not revertible operations for this to
+	// happen.
+	initialPhase := scop.PostCommitPhase
+	if state.InRollback {
+		initialPhase = scop.PostCommitNonRevertiblePhase
+	}
 	// Plan the schema change.
 	return scplan.MakePlan(ctx, state, scplan.Params{
 		ActiveVersion:              deps.ClusterSettings().Version.ActiveVersion(ctx),
-		ExecutionPhase:             scop.PostCommitPhase,
+		ExecutionPhase:             initialPhase,
 		SchemaChangerJobIDSupplier: func() jobspb.JobID { return jobID },
 		SkipPlannerSanityChecks:    true,
 		InRollback:                 state.InRollback,

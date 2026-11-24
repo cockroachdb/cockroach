@@ -8,7 +8,7 @@ package server
 import (
 	"context"
 	"fmt"
-	math_rand "math/rand"
+	"math/rand"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
@@ -29,7 +29,6 @@ var (
 		"server.log_gc.period",
 		"the period at which log-like system tables are checked for old entries",
 		time.Hour,
-		settings.NonNegativeDuration,
 		settings.WithPublic)
 
 	systemLogGCLimit = settings.RegisterIntSetting(
@@ -203,9 +202,9 @@ func runSystemLogGC(
 		}
 
 		if rowsAffected, err := runSystemLogGCForOneTable(ctx, sqlServer, st, gcConfig); err != nil {
-			log.Warningf(ctx, "error garbage collecting %s.%s: %v", gcConfig.table, gcConfig.timestampCol, err)
+			log.Dev.Warningf(ctx, "error garbage collecting %s.%s: %v", gcConfig.table, gcConfig.timestampCol, err)
 		} else {
-			log.Infof(ctx, "garbage collected %d rows from %s.%s", rowsAffected, gcConfig.table, gcConfig.timestampCol)
+			log.Dev.Infof(ctx, "garbage collected %d rows from %s.%s", rowsAffected, gcConfig.table, gcConfig.timestampCol)
 		}
 	}
 }
@@ -259,9 +258,18 @@ func startSystemLogsGC(ctx context.Context, sqlServer *SQLServer) error {
 		for ; ; timer.Reset(getPeriod()) {
 			select {
 			case <-timer.C:
-				timer.Read = true
-
-				// Do the work for all system tables.
+				if sqlServer.execCfg.Codec.ForSystemTenant() {
+					isMeta1LH, err := sqlServer.isMeta1Leaseholder(
+						ctx, sqlServer.execCfg.Clock.NowAsClockTimestamp(),
+					)
+					if err != nil {
+						log.Dev.Warningf(ctx, "failed to check meta1 leaseholder: %v", err)
+						continue
+					}
+					if !isMeta1LH {
+						continue // for loop
+					}
+				}
 				runSystemLogGC(ctx, sqlServer, st, systemLogsToGC)
 
 				// If we are in a test, coordinate with the test.
@@ -291,5 +299,5 @@ func startSystemLogsGC(ctx context.Context, sqlServer *SQLServer) error {
 // jitteredInterval returns a randomly jittered (+/-25%) duration
 // from the interval.
 func jitteredInterval(interval time.Duration) time.Duration {
-	return time.Duration(float64(interval) * (0.75 + 0.5*math_rand.Float64()))
+	return time.Duration(float64(interval) * (0.75 + 0.5*rand.Float64()))
 }

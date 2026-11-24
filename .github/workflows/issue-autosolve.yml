@@ -1,0 +1,95 @@
+name: Issue Auto-Solver
+
+# Issues live in this repository, but the code under repair, the runners
+# that can build it, and the private Go module mirror all live in the
+# repository named by the CODE_REPO secret. Runners here cannot fetch from
+# that mirror, so this workflow only forwards the label event: it dispatches
+# CODE_REPO's copy of issue-autosolve.yml, which does the assessment, the
+# fix, and the pull request.
+#
+# Outcomes are not reported back here. GITHUB_TOKEN in the other repository
+# cannot write to this one, so a successful run shows up as a draft PR in
+# CODE_REPO that references the issue, and a skipped or failed run is only
+# visible in that workflow's logs.
+
+on:
+  issues:
+    types: [labeled]
+
+concurrency:
+  group: autosolve-issue-${{ github.event.issue.number }}
+  cancel-in-progress: false
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.event.label.name == 'autosolve' || github.event.label.name == 'c-autosolve'
+    permissions:
+      issues: write
+    env:
+      CODE_REPO: ${{ secrets.CODE_REPO }}
+      ISSUE_NUMBER: ${{ github.event.issue.number }}
+
+    steps:
+      - name: Check that labeler is not the issue author
+        id: check
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          LABELER: ${{ github.actor }}
+          ISSUE_AUTHOR: ${{ github.event.issue.user.login }}
+        run: |
+          if [ "$LABELER" = "$ISSUE_AUTHOR" ]; then
+            echo "::notice::Skipping auto-solver: labeler ($LABELER) is the issue author"
+            gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body \
+              "Auto-solver skipped: the \`c-autosolve\` label should be applied by someone other than the issue author."
+            gh issue edit "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --remove-label "c-autosolve" || true
+            exit 1
+          fi
+
+      - name: Validate configuration
+        env:
+          AUTOSOLVER_CREATE_PRS_PAT: ${{ secrets.AUTOSOLVER_CREATE_PRS_PAT }}
+        run: |
+          for v in AUTOSOLVER_CREATE_PRS_PAT CODE_REPO; do
+            if [ -z "${!v:-}" ]; then
+              echo "::error::$v is not configured"
+              exit 1
+            fi
+          done
+
+      # workflow_dispatch across repositories needs a token with the Actions
+      # write permission on CODE_REPO; GITHUB_TOKEN is scoped to this one.
+      - name: Dispatch to the code repository
+        id: dispatch
+        env:
+          GH_TOKEN: ${{ secrets.AUTOSOLVER_CREATE_PRS_PAT }}
+          LABELER: ${{ github.actor }}
+        run: |
+          gh workflow run issue-autosolve.yml \
+            --repo "$CODE_REPO" \
+            --ref master \
+            -f "issue_number=$ISSUE_NUMBER" \
+            -f "issue_repo=$GITHUB_REPOSITORY" \
+            -f "labeler=$LABELER"
+
+      - name: Comment on issue - Dispatched
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body \
+            "Auto-solver run dispatched to the code repository's [Issue Auto-Solver workflow](https://github.com/${CODE_REPO}/actions/workflows/issue-autosolve.yml).
+
+          If it produces a fix, a draft PR referencing this issue will be opened there. Skipped or failed runs are reported only in that workflow's logs."
+
+      # Only when the dispatch itself (or its configuration) failed, not when
+      # the labeler check above declined to run.
+      - name: Comment on issue - Dispatch failed
+        if: failure() && steps.check.conclusion == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue comment "$ISSUE_NUMBER" --repo "$GITHUB_REPOSITORY" --body \
+            "Auto-solver could not be dispatched to the code repository. This is a configuration problem with the workflow, not with the issue.
+
+          [Workflow run](https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID})"

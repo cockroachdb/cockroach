@@ -11,7 +11,7 @@ import (
 	"database/sql/driver"
 	"io"
 
-	"github.com/jackc/pgconn"
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 // BeginCopyTo starts a COPY TO query.

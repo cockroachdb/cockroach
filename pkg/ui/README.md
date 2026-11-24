@@ -32,7 +32,7 @@ $ pushd pkg/ui/workspaces/eslint-plugin-crdb; pnpm install && pnpm build; popd
 Behind the scenes, our UI is compiled using a collection of tools that depends on
 [Node.js](https://nodejs.org/) and are managed with
 [pnpm](https://pnpm.io), a package manager that offers more deterministic
-package installation than NPM. LTS versions of NodeJS (16.x) and pnpm (8.6.x)
+package installation than NPM. LTS versions of NodeJS (22.x) and pnpm (9.x)
 are known to work. [Chrome](https://www.google.com/chrome/), Google's internet
 browser. Unit tests are run using Chrome's "Headless" mode.
 

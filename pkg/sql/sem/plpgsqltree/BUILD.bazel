@@ -5,6 +5,7 @@ go_library(
     srcs = [
         "constants.go",
         "exception.go",
+        "pretty.go",
         "statements.go",
         "variable.go",
         "visitor.go",
@@ -14,6 +15,7 @@ go_library(
     deps = [
         "//pkg/sql/sem/tree",
         "//pkg/util/errorutil/unimplemented",
+        "//pkg/util/pretty",
         "@com_github_cockroachdb_errors//:errors",
     ],
 )

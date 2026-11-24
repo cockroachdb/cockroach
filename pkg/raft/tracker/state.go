@@ -34,6 +34,10 @@ const (
 	// from the leader's Raft log. Such a follower needs a full snapshot to
 	// return to StateReplicate.
 	StateSnapshot
+
+	// StateCount is a sentinel value equal to the number of distinct replication
+	// flow states. This is not a valid state.
+	StateCount
 )
 
 var prstmap = [...]string{

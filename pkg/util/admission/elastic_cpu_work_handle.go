@@ -30,6 +30,12 @@ type ElasticCPUWorkHandle struct {
 	// duration to count against what it was allotted, but we still want to
 	// track to deduct an appropriate number of granter tokens.
 	preWork time.Duration
+	// yield decides whether Overlimit will call runtime.Yield.
+	yield bool
+	// bypassedAdmission is true if the allotment happened without waiting.
+	bypassedAdmission bool
+	// granter is used to record yield delays in metrics.
+	granter granterAndYieldDelayRecorder
 
 	// This handle is used in tight loops that are sensitive to per-iteration
 	// overhead (checking against the running time too can have an effect). To
@@ -49,9 +55,19 @@ type ElasticCPUWorkHandle struct {
 }
 
 func newElasticCPUWorkHandle(
-	tenantID roachpb.TenantID, allotted time.Duration,
+	tenantID roachpb.TenantID,
+	allotted time.Duration,
+	yield bool,
+	bypassedAdmission bool,
+	granter granterAndYieldDelayRecorder,
 ) *ElasticCPUWorkHandle {
-	h := &ElasticCPUWorkHandle{tenantID: tenantID, allotted: allotted}
+	h := &ElasticCPUWorkHandle{
+		tenantID:          tenantID,
+		allotted:          allotted,
+		yield:             yield,
+		bypassedAdmission: bypassedAdmission,
+		granter:           granter,
+	}
 	h.cpuStart = grunning.Time()
 	return h
 }
@@ -85,25 +101,47 @@ func (h *ElasticCPUWorkHandle) runningTime() time.Duration {
 	return grunning.Elapsed(h.cpuStart, grunning.Time())
 }
 
-// OverLimit is used to check whether we're over the allotted elastic CPU
-// tokens. If StartTimer was invoked, we start measuring on-CPU time only after
-// the invocation. It also returns the total time difference between how long we
-// ran for and what was allotted. The difference includes pre-work, if any. If
-// the difference is positive we've exceeded what was allotted, and vice versa.
-// It's possible to not be OverLimit but still have exceeded the allotment
-// (because of excessive pre-work).
+// SetYield sets the behavior of whether to call runtime.Yield. It should only
+// be used when it is not possible to set the value correctly at construction
+// time.
+func (h *ElasticCPUWorkHandle) SetYield(yield bool) {
+	h.yield = yield
+}
+
+// IsOverLimitAndPossiblyYield is used to check whether we're over the
+// allotted elastic CPU tokens. If StartTimer was invoked, we start measuring
+// on-CPU time only after the invocation. It also returns the total time
+// difference between how long we ran for and what was allotted. The
+// difference includes pre-work, if any. If the difference is positive we've
+// exceeded what was allotted, and vice versa. It's possible to not be
+// IsOverLimitAndPossiblyYield but still have exceeded the allotment (because
+// of excessive pre-work).
 //
-// Integrated callers are expected to invoke this in tight loops (we assume most
-// callers are CPU-intensive and thus have tight loops somewhere) and bail once
-// done.
+// When yielding is enabled, at construction time of the handle, or later by
+// calling SetYield, the callee also calls runtime.Yield. The yieldDelay
+// return value indicates how long the goroutine was delayed by the yield
+// (0 if no delay occurred or yielding is disabled).
+//
+// Integrated callers are expected to invoke this in tight loops (we assume
+// most callers are CPU-intensive and thus have tight loops somewhere) and
+// bail once done.
 //
 // TODO(irfansharif): Non-test callers use one or the other return value, not
 // both. Split this API?
-func (h *ElasticCPUWorkHandle) OverLimit() (overLimit bool, difference time.Duration) {
+func (h *ElasticCPUWorkHandle) IsOverLimitAndPossiblyYield() (
+	overLimit bool,
+	difference time.Duration,
+	yieldDelay time.Duration,
+) {
 	if h == nil { // not applicable
-		return false, time.Duration(0)
+		return false, 0, 0
 	}
-
+	if h.yield {
+		yieldDelay = runtimeYield()
+		if yieldDelay > 0 {
+			h.granter.RecordYieldDelay(yieldDelay)
+		}
+	}
 	// What we're effectively doing is just:
 	//
 	// 		runningTime := h.runningTime()
@@ -119,14 +157,16 @@ func (h *ElasticCPUWorkHandle) OverLimit() (overLimit bool, difference time.Dura
 	// adjust for it elsewhere by penalizing subsequent waiters.
 	h.itersSinceLastCheck++
 	if h.itersSinceLastCheck < h.itersUntilCheck {
-		return false, h.preWork + h.differenceWithAllottedAtLastCheck
+		return false, h.preWork + h.differenceWithAllottedAtLastCheck, yieldDelay
 	}
-	return h.overLimitInner()
+	overLimit, difference = h.overLimitInner()
+	return overLimit, difference, yieldDelay
 }
 
 // RunningTime returns the pre-work duration and the work duration. This
-// should not be called in a tight loop (unlike OverLimit()). Expected usage
-// is to call this after OverLimit() has returned true, in order to get stats
+// should not be called in a tight loop (unlike
+// IsOverLimitAndPossiblyYield()). Expected usage is to call this after
+// IsOverLimitAndPossiblyYield() has returned true, in order to get stats
 // about CPU usage.
 func (h *ElasticCPUWorkHandle) RunningTime() (preWork time.Duration, work time.Duration) {
 	if h == nil {
@@ -160,7 +200,7 @@ func (h *ElasticCPUWorkHandle) overLimitInner() (overLimit bool, difference time
 }
 
 // TestingOverrideOverLimit allows tests to override the behaviour of
-// OverLimit().
+// IsOverLimitAndPossiblyYield().
 func (h *ElasticCPUWorkHandle) TestingOverrideOverLimit(f func() (bool, time.Duration)) {
 	h.testingOverrideOverLimit = f
 }
@@ -190,11 +230,11 @@ func ElasticCPUWorkHandleFromContext(ctx context.Context) *ElasticCPUWorkHandle 
 // TestingNewElasticCPUHandle exports the ElasticCPUWorkHandle constructor for
 // testing purposes.
 func TestingNewElasticCPUHandle() *ElasticCPUWorkHandle {
-	return newElasticCPUWorkHandle(roachpb.SystemTenantID, 420*time.Hour) // use a very high allotment
+	return newElasticCPUWorkHandle(roachpb.SystemTenantID, 420*time.Hour, false, false, nil) // use a very high allotment
 }
 
 // TestingNewElasticCPUHandleWithCallback constructs an ElasticCPUWorkHandle
-// with a testing override for the behaviour of OverLimit().
+// with a testing override for the behaviour of IsOverLimitAndPossiblyYield().
 func TestingNewElasticCPUHandleWithCallback(cb func() (bool, time.Duration)) *ElasticCPUWorkHandle {
 	h := TestingNewElasticCPUHandle()
 	h.testingOverrideOverLimit = cb

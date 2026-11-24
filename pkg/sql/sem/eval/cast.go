@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
@@ -96,6 +97,23 @@ func PerformAssignmentCast(
 func performCast(
 	ctx context.Context, evalCtx *Context, d tree.Datum, t *types.T, truncateWidth bool,
 ) (tree.Datum, error) {
+	// For domain types, perform the cast (using the domain type's inherited base
+	// type properties), adjust the value, then validate domain constraints.
+	// AdjustValueToType uses the base type because it has OID-specific branches
+	// (e.g., T_bpchar whitespace trimming, T_varchar truncation) that would not
+	// match the domain's user-defined OID.
+	if t.TypeMeta.DomainData != nil {
+		var err error
+		d, err = performCastWithoutPrecisionTruncation(ctx, evalCtx, d, t, truncateWidth)
+		if err != nil {
+			return nil, err
+		}
+		d, err = tree.AdjustValueToType(t.TypeMeta.DomainData.BaseType, d)
+		if err != nil {
+			return nil, err
+		}
+		return d, ValidateDomainConstraints(ctx, evalCtx, d, t)
+	}
 	d, err := performCastWithoutPrecisionTruncation(ctx, evalCtx, d, t, truncateWidth)
 	if err != nil {
 		return nil, err
@@ -494,12 +512,16 @@ func performCastWithoutPrecisionTruncation(
 			s = tree.AsStringWithFlags(t, tree.FmtPgwireText)
 		case *tree.DJSON:
 			s = t.JSON.String()
+		case *tree.DJsonpath:
+			s = t.Jsonpath.String()
 		case *tree.DTSQuery:
 			s = t.TSQuery.String()
 		case *tree.DTSVector:
 			s = t.TSVector.String()
 		case *tree.DPGVector:
 			s = t.T.String()
+		case *tree.DLTree:
+			s = t.LTree.String()
 		case *tree.DEnum:
 			s = t.LogicalRep
 		case *tree.DVoid:
@@ -509,6 +531,10 @@ func performCastWithoutPrecisionTruncation(
 		case types.StringFamily:
 			if t.Oid() == oid.T_name {
 				return tree.NewDName(s), nil
+			}
+			if t.Oid() == oid.T_aclitem {
+				ds := tree.DString(s)
+				return tree.NewDACLItemFromDString(&ds)
 			}
 
 			// bpchar types truncate trailing whitespace.
@@ -524,6 +550,10 @@ func performCastWithoutPrecisionTruncation(
 			}
 			return tree.NewDString(s), nil
 		case types.CollatedStringFamily:
+			if t.Oid() == oidext.T_citext {
+				return tree.NewDCIText(s, &evalCtx.CollationEnv)
+			}
+
 			// bpchar types truncate trailing whitespace.
 			if t.Oid() == oid.T_bpchar {
 				s = strings.TrimRight(s, " ")
@@ -608,17 +638,34 @@ func performCastWithoutPrecisionTruncation(
 		case *tree.DArray:
 			switch d.ParamTyp.Family() {
 			case types.FloatFamily, types.IntFamily, types.DecimalFamily:
+				if len(d.Array) == 0 {
+					return nil, pgerror.Newf(pgcode.DataException,
+						"vector must have at least 1 dimension")
+				}
+
+				if d.HasNulls() {
+					return nil, pgerror.Newf(pgcode.NullValueNotAllowed,
+						"array must not contain nulls")
+				}
 				v := make(vector.T, len(d.Array))
 				for i, elem := range d.Array {
-					if elem == tree.DNull {
-						return nil, pgerror.Newf(pgcode.NullValueNotAllowed,
-							"array must not contain nulls")
-					}
 					datum, err := performCast(ctx, evalCtx, elem, types.Float4, false)
 					if err != nil {
 						return nil, err
 					}
-					v[i] = float32(*datum.(*tree.DFloat))
+
+					val := float32(*datum.(*tree.DFloat))
+					if math.IsInf(float64(val), 0) {
+						return nil, pgerror.Newf(pgcode.DataException,
+							"infinite value not allowed in vector")
+					}
+
+					if math.IsNaN(float64(val)) {
+						return nil, pgerror.Newf(pgcode.DataException,
+							"NaN not allowed in vector")
+					}
+
+					v[i] = val
 				}
 				return tree.NewDPGVector(v), nil
 			}
@@ -892,6 +939,8 @@ func performCastWithoutPrecisionTruncation(
 		switch v := d.(type) {
 		case *tree.DString:
 			return tree.ParseDJSON(string(*v))
+		case *tree.DCollatedString:
+			return tree.ParseDJSON(v.Contents)
 		case *tree.DJSON:
 			return v, nil
 		case *tree.DGeography:
@@ -907,10 +956,23 @@ func performCastWithoutPrecisionTruncation(
 			}
 			return tree.ParseDJSON(string(j))
 		}
+	case types.JsonpathFamily:
+		switch v := d.(type) {
+		case *tree.DString:
+			return tree.ParseDJsonpath(string(*v))
+		case *tree.DCollatedString:
+			return tree.ParseDJsonpath(v.Contents)
+		}
 	case types.TSQueryFamily:
 		switch v := d.(type) {
 		case *tree.DString:
 			q, err := tsearch.ParseTSQuery(string(*v))
+			if err != nil {
+				return nil, err
+			}
+			return &tree.DTSQuery{TSQuery: q}, nil
+		case *tree.DCollatedString:
+			q, err := tsearch.ParseTSQuery(v.Contents)
 			if err != nil {
 				return nil, err
 			}
@@ -926,8 +988,31 @@ func performCastWithoutPrecisionTruncation(
 				return nil, err
 			}
 			return &tree.DTSVector{TSVector: vec}, nil
+		case *tree.DCollatedString:
+			vec, err := tsearch.ParseTSVector(v.Contents)
+			if err != nil {
+				return nil, err
+			}
+			return &tree.DTSVector{TSVector: vec}, nil
 		case *tree.DTSVector:
 			return d, nil
+		}
+	case types.LTreeFamily:
+		switch v := d.(type) {
+		case *tree.DLTree:
+			return d, nil
+		case *tree.DString:
+			ltree, err := tree.ParseDLTree(string(*v))
+			if err != nil {
+				return nil, err
+			}
+			return ltree, nil
+		case *tree.DCollatedString:
+			ltree, err := tree.ParseDLTree(v.Contents)
+			if err != nil {
+				return nil, err
+			}
+			return ltree, nil
 		}
 	case types.ArrayFamily:
 		switch v := d.(type) {
@@ -971,6 +1056,8 @@ func performCastWithoutPrecisionTruncation(
 			return performIntToOidCast(ctx, evalCtx.Planner, t, *v)
 		case *tree.DString:
 			return ParseDOid(ctx, evalCtx, string(*v), t)
+		case *tree.DCollatedString:
+			return ParseDOid(ctx, evalCtx, v.Contents, t)
 		}
 	case types.TupleFamily:
 		switch v := d.(type) {
@@ -998,10 +1085,13 @@ func performCastWithoutPrecisionTruncation(
 		case *tree.DString:
 			res, _, err := tree.ParseDTupleFromString(evalCtx, string(*v), t)
 			return res, err
+		case *tree.DCollatedString:
+			res, _, err := tree.ParseDTupleFromString(evalCtx, v.Contents, t)
+			return res, err
 		}
 	case types.VoidFamily:
 		switch d.(type) {
-		case *tree.DString:
+		case *tree.DString, *tree.DCollatedString, *tree.DVoid:
 			return tree.DVoidDatum, nil
 		}
 	}
@@ -1030,39 +1120,24 @@ func performIntToOidCast(
 	case oid.T_oid:
 		return tree.NewDOidWithType(o, t), nil
 	case oid.T_regtype:
-		// Mapping an dOid to a regtype is easy: we have a hardcoded map.
-		var name string
+		// Builtin types have hardcoded SQL-standard names (e.g. "integer"
+		// for int4) that match Postgres's format_type output and are
+		// independent of search_path. UDTs fall through to resolveOID for
+		// search-path-aware schema qualification.
 		if typ, ok := types.OidToType[o]; ok {
-			name = typ.PGName()
-		} else if types.IsOIDUserDefinedType(o) {
-			typ, err := res.ResolveTypeByOID(ctx, o)
-			if err != nil {
-				return nil, err
-			}
-			name = typ.PGName()
+			return tree.NewDOidWithTypeAndName(o, t, typ.PGName()), nil
 		}
-		return tree.NewDOidWithTypeAndName(o, t, name), nil
-
-	case oid.T_regproc, oid.T_regprocedure:
-		name, _, err := res.ResolveFunctionByOID(ctx, oid.Oid(v))
-		if err != nil {
-			if errors.Is(err, tree.ErrRoutineUndefined) {
-				return tree.NewDOidWithType(o, t), nil //nolint:returnerrcheck
-			}
+	}
+	// resolveOID applies Postgres's search-path-aware schema qualification
+	// (regclassout / regprocout / regtypeout style output).
+	dOid, errSafeToIgnore, err := res.ResolveOIDFromOID(ctx, t, tree.NewDOid(o))
+	if err != nil {
+		if !errSafeToIgnore {
 			return nil, err
 		}
-		return tree.NewDOidWithTypeAndName(o, t, name.Object()), nil
-
-	default:
-		dOid, errSafeToIgnore, err := res.ResolveOIDFromOID(ctx, t, tree.NewDOid(o))
-		if err != nil {
-			if !errSafeToIgnore {
-				return nil, err
-			}
-			dOid = tree.NewDOidWithType(o, t)
-		}
-		return dOid, nil
+		dOid = tree.NewDOidWithType(o, t)
 	}
+	return dOid, nil
 }
 
 func roundDecimalToInt(d *apd.Decimal) (int64, error) {

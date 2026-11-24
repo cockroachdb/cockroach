@@ -7,8 +7,10 @@ package state
 
 import (
 	"fmt"
+	"math"
 	"math/rand"
 	"sort"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/asim/config"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -30,35 +32,51 @@ func (s requestCounts) Less(i, j int) bool {
 }
 func (s requestCounts) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
 
-func evenDistribution(n int) []float64 {
+func evenDistribution(numOfStores int) []float64 {
 	distribution := []float64{}
-	frac := 1.0 / float64(n)
-	for i := 0; i < n; i++ {
+	frac := 1.0 / float64(numOfStores)
+	for i := 0; i < numOfStores; i++ {
 		distribution = append(distribution, frac)
 	}
 	return distribution
 }
 
-func skewedDistribution(n, k int) []float64 {
-	distribution := []float64{}
-	rem := k
-	for i := 0; i < n; i++ {
-		rem /= 2
-		distribution = append(distribution, float64(rem))
+func skewedDistribution(numOfStores int) []float64 {
+	weights := make([]float64, numOfStores)
+	// Sum of weights. Since weights computed won't add up to 1, we normalize it
+	// by dividing the sum of weights. Sum is pre-computed here using the partial
+	// sum formula of a geometric series: sum of 2^(-i) from i = 0 to k gives
+	// 2-2^(-k).
+	// Example: given 3 stores, cur(weights before normalization) is 1, 0.5, 0.25,
+	// sum is 2.0-2^(-2) = 1.75. After normalization, weights are 0.57, 0.29,
+	// 0.14.
+	sum := 2.0 - math.Pow(2, float64(-(numOfStores-1)))
+	cur := float64(1)
+	for i := 0; i < numOfStores; i++ {
+		// cur is 1, 0.5, 0.25, ...
+		weights[i] = cur / sum
+		cur /= 2
+	}
+	return weights
+}
+
+func exactDistribution(storeReplicaCount []int) []float64 {
+	distribution := make([]float64, len(storeReplicaCount))
+	total := 0
+	for _, count := range storeReplicaCount {
+		total += count
+	}
+	for i, count := range storeReplicaCount {
+		distribution[i] = float64(count) / float64(total)
 	}
 	return distribution
 }
 
-func exactDistribution(counts []int) []float64 {
-	distribution := make([]float64, len(counts))
-	total := 0
-	for _, count := range counts {
-		total += count
-	}
-	for i, count := range counts {
-		distribution[i] = float64(count) / float64(total)
-	}
-	return distribution
+func DefaultSpanConfigWithRF(rf int) roachpb.SpanConfig {
+	spanConfig := defaultSpanConfig
+	spanConfig.NumReplicas = int32(rf)
+	spanConfig.NumVoters = int32(rf)
+	return spanConfig
 }
 
 // weighted struct handles weighted random index selection from an input array,
@@ -86,7 +104,8 @@ func newWeighted(weightedStores []float64) weighted {
 		prefixSumWeight += item
 		cumulativeWeights[i] = prefixSumWeight
 	}
-	if cumulativeWeights[len(weightedStores)-1] != float64(1) {
+	const epsilon = 1e-10
+	if math.Abs(cumulativeWeights[len(weightedStores)-1]-float64(1)) > epsilon {
 		panic(fmt.Sprintf("total cumulative weights for all stores should sum up to 1 but got %.2f\n",
 			cumulativeWeights[len(weightedStores)-1]))
 	}
@@ -119,16 +138,16 @@ func weightedRandDistribution(randSource *rand.Rand, weightedStores []float64) [
 // randDistribution generates a random distribution across stores. It achieves
 // this by creating an array of size n, selecting random numbers from [0, 10)
 // for each index, and returning the exact distribution of this result.
-func randDistribution(randSource *rand.Rand, n int) []float64 {
+func randDistribution(randSource *rand.Rand, numOfStores int) []float64 {
 	total := float64(0)
-	distribution := make([]float64, n)
-	for i := 0; i < n; i++ {
+	distribution := make([]float64, numOfStores)
+	for i := 0; i < numOfStores; i++ {
 		num := float64(randSource.Intn(10))
 		distribution[i] = num
 		total += num
 	}
 
-	for i := 0; i < n; i++ {
+	for i := 0; i < numOfStores; i++ {
 		distribution[i] = distribution[i] / total
 	}
 	return distribution
@@ -148,12 +167,17 @@ func RangesInfoWithDistribution(
 	numRanges int,
 	config roachpb.SpanConfig,
 	minKey, maxKey, rangeSize int64,
-) RangesInfo {
+) (RangesInfo, string) {
 	ret := make([]RangeInfo, numRanges)
 	rf := int(config.NumReplicas)
 
 	targetReplicaCount := make(requestCounts, len(stores))
 	targetLeaseCount := map[StoreID]int{}
+	var buf strings.Builder
+	storesInfo := make(map[StoreID]struct {
+		replicas int
+		leases   int
+	})
 	for i, store := range stores {
 		requiredReplicas := int(float64(numRanges*rf) * (replicaWeights[i]))
 		requiredLeases := int(float64(numRanges) * (leaseWeights[i]))
@@ -169,10 +193,10 @@ func RangesInfoWithDistribution(
 		numRanges = 1
 	}
 
-	// There cannot be less keys than there are ranges.
+	// There cannot be fewekeys than there are ranges.
 	if int64(numRanges) > maxKey-minKey {
 		panic(fmt.Sprintf(
-			"The number of ranges specified (%d) is less than num keys in startKey-endKey (%d %d) ",
+			"The number of ranges specified (%d) is larger than num keys in startKey-endKey (%d %d) ",
 			numRanges, minKey, maxKey))
 	}
 	// We create each range in sorted order by start key. Then assign replicas
@@ -201,6 +225,9 @@ func RangesInfoWithDistribution(
 			rangeInfo.Descriptor.InternalReplicas[replCandidateIdx] = roachpb.ReplicaDescriptor{
 				StoreID: roachpb.StoreID(storeID),
 			}
+			storeInfo := storesInfo[storeID]
+			storeInfo.replicas++
+			storesInfo[storeID] = storeInfo
 			if targetLeaseCount[storeID] >
 				targetLeaseCount[StoreID(rangeInfo.Descriptor.InternalReplicas[maxLeaseRequestedIdx].StoreID)] {
 				maxLeaseRequestedIdx = replCandidateIdx
@@ -213,10 +240,23 @@ func RangesInfoWithDistribution(
 		lhStore := rangeInfo.Descriptor.InternalReplicas[maxLeaseRequestedIdx].StoreID
 		targetLeaseCount[StoreID(lhStore)]--
 		rangeInfo.Leaseholder = StoreID(lhStore)
+		storeInfo := storesInfo[StoreID(lhStore)]
+		storeInfo.leases++
+		storesInfo[StoreID(lhStore)] = storeInfo
 		ret[rngIdx] = rangeInfo
 	}
 
-	return ret
+	_, _ = fmt.Fprintf(&buf, "[")
+	for i, sID := range stores {
+		storeInfo := storesInfo[sID]
+		_, _ = fmt.Fprintf(&buf, "s%d:(%d,%d*)", int(sID), storeInfo.replicas, storeInfo.leases)
+		if i != len(stores)-1 {
+			_, _ = fmt.Fprintf(&buf, ",")
+		}
+	}
+	_, _ = fmt.Fprintf(&buf, "]")
+
+	return ret, buf.String()
 }
 
 // ClusterInfoWithDistribution returns a ClusterInfo. The ClusterInfo regions
@@ -227,7 +267,9 @@ func RangesInfoWithDistribution(
 func ClusterInfoWithDistribution(
 	nodeCount int, storesPerNode int, regions []string, regionNodeWeights []float64,
 ) ClusterInfo {
-	ret := ClusterInfo{}
+	ret := ClusterInfo{
+		NodeCPURateCapacityNanos: []uint64{config.DefaultNodeCPURateCapacityNanos},
+	}
 
 	ret.Regions = make([]Region, len(regions))
 	availableNodes := nodeCount
@@ -266,23 +308,19 @@ func makeStoreList(stores int) []StoreID {
 }
 
 func RangesInfoSkewedDistribution(
-	stores int, ranges int, keyspace int, replicationFactor int, rangeSize int64,
-) RangesInfo {
-	distribution := skewedDistribution(stores, ranges)
+	stores int, ranges int, minKey int64, maxKey int64, replicationFactor int, rangeSize int64,
+) (RangesInfo, string) {
+	distribution := skewedDistribution(stores)
 	storeList := makeStoreList(stores)
 
-	spanConfig := defaultSpanConfig
-	spanConfig.NumReplicas = int32(replicationFactor)
-	spanConfig.NumVoters = int32(replicationFactor)
-
 	return RangesInfoWithDistribution(
-		storeList, distribution, distribution, ranges, spanConfig,
-		int64(MinKey), int64(keyspace), rangeSize)
+		storeList, distribution, distribution, ranges,
+		DefaultSpanConfigWithRF(replicationFactor), minKey, maxKey, rangeSize)
 }
 
 func RangesInfoWithReplicaCounts(
 	replCounts map[StoreID]int, keyspace, replicationFactor int, rangeSize int64,
-) RangesInfo {
+) (RangesInfo, string) {
 	stores := len(replCounts)
 	counts := make([]int, stores)
 	total := 0
@@ -295,28 +333,20 @@ func RangesInfoWithReplicaCounts(
 	distribution := exactDistribution(counts)
 	storeList := makeStoreList(stores)
 
-	spanConfig := defaultSpanConfig
-	spanConfig.NumReplicas = int32(replicationFactor)
-	spanConfig.NumVoters = int32(replicationFactor)
-
 	return RangesInfoWithDistribution(
-		storeList, distribution, distribution, ranges, spanConfig,
-		int64(MinKey), int64(keyspace), rangeSize)
+		storeList, distribution, distribution, ranges,
+		DefaultSpanConfigWithRF(replicationFactor), int64(MinKey), int64(keyspace), rangeSize)
 }
 
 func RangesInfoEvenDistribution(
-	stores int, ranges int, keyspace int, replicationFactor int, rangeSize int64,
-) RangesInfo {
+	stores int, ranges int, minKey int64, maxKey int64, replicationFactor int, rangeSize int64,
+) (RangesInfo, string) {
 	distribution := evenDistribution(stores)
 	storeList := makeStoreList(stores)
 
-	spanConfig := defaultSpanConfig
-	spanConfig.NumReplicas = int32(replicationFactor)
-	spanConfig.NumVoters = int32(replicationFactor)
-
 	return RangesInfoWithDistribution(
-		storeList, distribution, distribution, ranges, spanConfig,
-		int64(MinKey), int64(keyspace), rangeSize)
+		storeList, distribution, distribution, ranges,
+		DefaultSpanConfigWithRF(replicationFactor), minKey, maxKey, rangeSize)
 }
 
 // RangesInfoWeightedRandDistribution returns a RangesInfo, where ranges are
@@ -325,27 +355,23 @@ func RangesInfoWeightedRandDistribution(
 	randSource *rand.Rand,
 	weightedStores []float64,
 	ranges int,
-	keyspace int,
+	minKey, maxKey int64,
 	replicationFactor int,
 	rangeSize int64,
-) RangesInfo {
+) (RangesInfo, string) {
 	if randSource == nil || len(weightedStores) == 0 {
 		panic("randSource cannot be nil and weightedStores must be non-empty in order to generate weighted random range info")
 	}
 	distribution := weightedRandDistribution(randSource, weightedStores)
 	storeList := makeStoreList(len(weightedStores))
-	spanConfig := defaultSpanConfig
-	spanConfig.NumReplicas = int32(replicationFactor)
-	spanConfig.NumVoters = int32(replicationFactor)
 	return RangesInfoWithDistribution(
 		storeList,
 		distribution,
 		distribution,
 		ranges,
-		spanConfig,
-		int64(MinKey),
-		int64(keyspace),
-		rangeSize, /* rangeSize */
+		DefaultSpanConfigWithRF(replicationFactor),
+		minKey, maxKey,
+		rangeSize,
 	)
 }
 
@@ -355,10 +381,10 @@ func RangesInfoRandDistribution(
 	randSource *rand.Rand,
 	stores int,
 	ranges int,
-	keyspace int,
+	minKey, maxKey int64,
 	replicationFactor int,
 	rangeSize int64,
-) RangesInfo {
+) (RangesInfo, string) {
 	if randSource == nil {
 		panic("randSource cannot be nil in order to generate random range info")
 	}
@@ -370,109 +396,65 @@ func RangesInfoRandDistribution(
 	spanConfig.NumVoters = int32(replicationFactor)
 
 	return RangesInfoWithDistribution(
-		storeList, distribution, distribution, ranges, spanConfig,
-		int64(MinKey), int64(keyspace), rangeSize)
+		storeList, distribution, distribution, ranges, DefaultSpanConfigWithRF(replicationFactor),
+		minKey, maxKey, rangeSize)
 }
 
-// NewStateWithDistribution returns a State where the stores given are
-// initialized with the specified % of the replicas. This is done on a best
-// effort basis, given the replication factor. It may be impossible to satisfy
-// some distributions, for example: percentOfReplicas {1: 0.40, 2: 0.20, 3:
-// 0.20}, replicationFactor 3, would be impossible to satisfy as the only
-// distribution possible is {1: 0.33, 2: 0.33, 3: 0.33} given a replication
-// factor of 3. A best effort distribution is applied in these cases.
-func NewStateWithDistribution(
-	percentOfReplicas []float64,
-	ranges, replicationFactor, keyspace int,
-	settings *config.SimulationSettings,
-) State {
-	numNodes := len(percentOfReplicas)
-	// Currently multi-store is not tested for correctness. Default to a single
-	// store per node.
-	clusterInfo := ClusterInfoWithStoreCount(numNodes, 1 /* storesPerNode */)
-	s := LoadClusterInfo(clusterInfo, settings)
-
-	stores := make([]StoreID, numNodes)
-	for i, store := range s.Stores() {
-		stores[i] = store.StoreID()
+func RangesInfoWithReplicaPlacement(
+	rp ReplicaPlacement, numRanges int, config roachpb.SpanConfig, minKey, maxKey, rangeSize int64,
+) (RangesInfo, string) {
+	// If there are no ranges specified, default to 1 range.
+	if numRanges == 0 {
+		numRanges = 1
 	}
-	spanConfig := defaultSpanConfig
-	spanConfig.NumReplicas = int32(replicationFactor)
-	spanConfig.NumVoters = int32(replicationFactor)
 
-	rangesInfo := RangesInfoWithDistribution(
-		stores,
-		percentOfReplicas,
-		percentOfReplicas,
-		ranges,
-		spanConfig,
-		int64(MinKey),
-		int64(keyspace),
-		0, /* rangeSize */
-	)
-	LoadRangeInfo(s, rangesInfo...)
-	return s
-}
+	ret := initializeRangesInfoWithSpanConfigs(numRanges, config, minKey, maxKey, rangeSize)
+	result := rp.findReplicaPlacementForEveryStoreSet(numRanges)
+	var buf strings.Builder
+	_, _ = fmt.Fprintf(&buf, "[")
+	for i, ratio := range result {
+		_, _ = fmt.Fprintf(&buf, "{")
+		for j, sid := range ratio.StoreIDs {
+			_, _ = fmt.Fprintf(&buf, "s%v", sid)
+			if sid == ratio.LeaseholderID {
+				_, _ = fmt.Fprintf(&buf, "*")
+			}
+			if j != len(ratio.StoreIDs)-1 {
+				_, _ = fmt.Fprintf(&buf, ",")
+			}
+		}
+		_, _ = fmt.Fprintf(&buf, "}:%d", ratio.Ranges)
+		if i != len(result)-1 {
+			_, _ = fmt.Fprintf(&buf, ",")
+		}
+	}
+	_, _ = fmt.Fprintf(&buf, "]")
 
-// NewStateWithReplCounts returns a new test state where each store is
-// initialized the given number of replicas. The required number of ranges is
-// inferred from the replication factor and the replica count.
-func NewStateWithReplCounts(
-	replCounts map[StoreID]int, replicationFactor, keyspace int, settings *config.SimulationSettings,
-) State {
-	clusterInfo := ClusterInfoWithStoreCount(len(replCounts), 1 /* storesPerNode */)
-	rangesInfo := RangesInfoWithReplicaCounts(replCounts, keyspace, replicationFactor, 0 /* rangeSize */)
-	return LoadConfig(clusterInfo, rangesInfo, settings)
-}
+	rf := int(config.NumReplicas)
 
-// NewStateEvenDistribution returns a new State where the replica count per
-// store is equal.
-func NewStateEvenDistribution(
-	stores, ranges, replicationFactor, keyspace int, settings *config.SimulationSettings,
-) State {
-	clusterInfo := ClusterInfoWithStoreCount(stores, 1 /* storesPerNode*/)
-	rangesInfo := RangesInfoEvenDistribution(stores, ranges, keyspace, replicationFactor, 0 /* rangeSize */)
-	return LoadConfig(clusterInfo, rangesInfo, settings)
-}
-
-// NewStateSkewedDistribution returns a new State where the replica count per
-// store is skewed.
-func NewStateSkewedDistribution(
-	stores, ranges, replicationFactor, keyspace int, settings *config.SimulationSettings,
-) State {
-	clusterInfo := ClusterInfoWithStoreCount(stores, 1 /* storesPerNode */)
-	rangesInfo := RangesInfoSkewedDistribution(stores, ranges, keyspace, replicationFactor, 0 /* rangeSize */)
-	return LoadConfig(clusterInfo, rangesInfo, settings)
-}
-
-// NewStateRandDistribution returns a new State where the replica count per
-// store is randomized.
-func NewStateRandDistribution(
-	seed int64,
-	stores int,
-	ranges int,
-	keyspace int,
-	replicationFactor int,
-	settings *config.SimulationSettings,
-) State {
-	randSource := rand.New(rand.NewSource(seed))
-	clusterInfo := ClusterInfoWithStoreCount(stores, 1 /* storesPerNode */)
-	rangesInfo := RangesInfoRandDistribution(randSource, stores, ranges, keyspace, replicationFactor, 0 /* rangeSize */)
-	return LoadConfig(clusterInfo, rangesInfo, settings)
-}
-
-// NewStateWeightedRandDistribution returns a new State where the replica count
-// per store is weighted randomized based on weightedStores.
-func NewStateWeightedRandDistribution(
-	seed int64,
-	weightedStores []float64,
-	ranges int,
-	keyspace int,
-	replicationFactor int,
-	settings *config.SimulationSettings,
-) State {
-	randSource := rand.New(rand.NewSource(seed))
-	clusterInfo := ClusterInfoWithStoreCount(len(weightedStores), 1 /* storesPerNode */)
-	rangesInfo := RangesInfoWeightedRandDistribution(randSource, weightedStores, ranges, keyspace, replicationFactor, 0 /* rangeSize */)
-	return LoadConfig(clusterInfo, rangesInfo, settings)
+	for rngIdx := 0; rngIdx < len(ret); rngIdx++ {
+		nextStoreSet := 0
+		for i := 0; i < len(result); i++ {
+			if result[i].Ranges > 0 {
+				nextStoreSet = i
+				break
+			}
+		}
+		ratio := result[nextStoreSet]
+		if len(ratio.StoreIDs) != rf {
+			panic(fmt.Sprintf("expected %d replicas, got %d", rf, len(ratio.StoreIDs)))
+		}
+		if len(ratio.StoreIDs) != len(ratio.Types) {
+			panic(fmt.Sprintf("expected %d types, got %d", len(ratio.StoreIDs), len(ratio.Types)))
+		}
+		for j := 0; j < len(ratio.StoreIDs); j++ {
+			ret[rngIdx].Descriptor.InternalReplicas[j] = roachpb.ReplicaDescriptor{
+				StoreID: roachpb.StoreID(ratio.StoreIDs[j]),
+				Type:    ratio.Types[j],
+			}
+		}
+		ret[rngIdx].Leaseholder = StoreID(ratio.LeaseholderID)
+		result[nextStoreSet].Ranges--
+	}
+	return ret, buf.String()
 }

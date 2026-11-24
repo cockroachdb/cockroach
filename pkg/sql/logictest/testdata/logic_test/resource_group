@@ -1,0 +1,244 @@
+# LogicTest: !local-mixed-25.4 !local-mixed-26.1 !local-mixed-26.2
+
+# Tests for the CREATE/ALTER/DROP/SHOW RESOURCE GROUP statements added for
+# the in-development resource manager. The whole feature is hidden behind
+# sql.experimental_resource_groups.enabled.
+
+subtest disabled_by_default
+
+statement error pq: resource group SQL is disabled
+CREATE RESOURCE GROUP g WITH (cpu_weight = 100)
+
+statement error pq: resource group SQL is disabled
+ALTER RESOURCE GROUP g WITH (cpu_weight = 100)
+
+statement error pq: resource group SQL is disabled
+DROP RESOURCE GROUP g
+
+statement error pq: resource group SQL is disabled
+SHOW RESOURCE GROUP g
+
+statement error pq: resource group SQL is disabled
+SHOW RESOURCE GROUPS
+
+subtest end
+
+# Enable the feature for the rest of the tests.
+statement ok
+SET CLUSTER SETTING sql.experimental_resource_groups.enabled = true
+
+subtest create
+
+# CREATE requires WITH clause (and thus at least one option).
+statement error at or near "EOF": syntax error
+CREATE RESOURCE GROUP missing_weight
+
+statement error pq: cpu_weight is required and must be a positive integer
+CREATE RESOURCE GROUP only_max_cpu WITH (max_cpu = true)
+
+statement error pq: cpu_weight must be a positive integer
+CREATE RESOURCE GROUP zero_weight WITH (cpu_weight = 0)
+
+statement error pq: cpu_weight must be a positive integer
+CREATE RESOURCE GROUP negative_weight WITH (cpu_weight = -1)
+
+# Unknown options are rejected.
+statement error pq: unknown resource group option "bogus"
+CREATE RESOURCE GROUP unknown_opt WITH (cpu_weight = 1, bogus = 1)
+
+# Repeating an option is rejected (rather than silently last-writer-wins).
+statement error pq: cpu_weight specified multiple times
+CREATE RESOURCE GROUP dup_weight WITH (cpu_weight = 10, cpu_weight = 20)
+
+statement error pq: max_cpu specified multiple times
+CREATE RESOURCE GROUP dup_max_cpu WITH (cpu_weight = 1, max_cpu = true, max_cpu = false)
+
+# The no-parens form is rejected; parentheses are required around the option list.
+statement error at or near "cpu_weight": syntax error
+CREATE RESOURCE GROUP no_parens WITH cpu_weight = 100
+
+# IDs < 16 are reserved; the sequence's first allocated id is 17.
+statement ok
+CREATE RESOURCE GROUP high WITH (cpu_weight = 100, max_cpu = true)
+
+query ITIBF colnames
+SHOW RESOURCE GROUP high
+----
+id  name  cpu_weight  max_cpu  cpu_share_percent
+17  high  100         true     100
+
+# Defaults: max_cpu omitted on CREATE -> false.
+statement ok
+CREATE RESOURCE GROUP medium WITH (cpu_weight = 50)
+
+query ITIBF colnames
+SHOW RESOURCE GROUP medium
+----
+id  name    cpu_weight  max_cpu  cpu_share_percent
+18  medium  50          false    33.33333333333333
+
+# Duplicate name is rejected; IF NOT EXISTS swallows the conflict.
+statement error pq: resource group "high" already exists
+CREATE RESOURCE GROUP high WITH (cpu_weight = 999)
+
+statement ok
+CREATE RESOURCE GROUP IF NOT EXISTS high WITH (cpu_weight = 999)
+
+# The existing row was not modified.
+query I
+SELECT cpu_weight FROM [SHOW RESOURCE GROUP high]
+----
+100
+
+subtest end
+
+subtest show
+
+# SHOW RESOURCE GROUPS lists all.
+query ITIBF colnames,rowsort
+SHOW RESOURCE GROUPS
+----
+id  name    cpu_weight  max_cpu  cpu_share_percent
+17  high    100         true     66.66666666666666
+18  medium  50          false    33.33333333333333
+
+# SHOW RESOURCE GROUP <name> errors when the named group does not exist.
+statement error pq: resource group "ghost" does not exist
+SHOW RESOURCE GROUP ghost
+
+subtest end
+
+subtest alter
+
+# ALTER updates only specified options (partial update).
+statement ok
+ALTER RESOURCE GROUP high WITH (cpu_weight = 200)
+
+query ITIBF colnames
+SHOW RESOURCE GROUP high
+----
+id  name  cpu_weight  max_cpu  cpu_share_percent
+17  high  200         true     80
+
+statement ok
+ALTER RESOURCE GROUP high WITH (max_cpu = false)
+
+query ITIBF colnames
+SHOW RESOURCE GROUP high
+----
+id  name  cpu_weight  max_cpu  cpu_share_percent
+17  high  200         false    80
+
+# ALTER on a missing group: error without IF EXISTS, no-op with.
+statement error pq: resource group "ghost" does not exist
+ALTER RESOURCE GROUP ghost WITH (cpu_weight = 1)
+
+statement ok
+ALTER RESOURCE GROUP IF EXISTS ghost WITH (cpu_weight = 1)
+
+# Repeating an option is rejected on ALTER as well.
+statement error pq: cpu_weight specified multiple times
+ALTER RESOURCE GROUP high WITH (cpu_weight = 10, cpu_weight = 20)
+
+subtest end
+
+subtest drop
+
+statement ok
+DROP RESOURCE GROUP medium
+
+statement error pq: resource group "medium" does not exist
+DROP RESOURCE GROUP medium
+
+statement ok
+DROP RESOURCE GROUP IF EXISTS medium
+
+# After dropping medium, only high remains.
+query ITIBF colnames
+SHOW RESOURCE GROUPS
+----
+id  name  cpu_weight  max_cpu  cpu_share_percent
+17  high  200         false    100
+
+subtest end
+
+subtest cpu_share
+
+# cpu_share_percent is derived from the entire set of user-defined
+# groups: share = weight / max(100, Σ weights). The 100-weight floor
+# prevents a single small group from appearing to receive 100% of CPU.
+#
+# Only `high` (weight 200) is present; the floor does not bind and the
+# whole 100% goes to `high`.
+query F
+SELECT cpu_share_percent FROM [SHOW RESOURCE GROUP high]
+----
+100
+
+statement ok
+ALTER RESOURCE GROUP high WITH (cpu_weight = 20)
+
+statement ok
+CREATE RESOURCE GROUP a WITH (cpu_weight = 30)
+
+statement ok
+CREATE RESOURCE GROUP b WITH (cpu_weight = 50)
+
+query TF rowsort
+SELECT name, cpu_share_percent FROM [SHOW RESOURCE GROUPS]
+----
+high  20
+a     30
+b     50
+
+# Drop b. Sum is now 50, below the floor, so the floor binds: each
+# group's share is weight/100 and the shares no longer add to 100%.
+statement ok
+DROP RESOURCE GROUP b
+
+query TF rowsort
+SELECT name, cpu_share_percent FROM [SHOW RESOURCE GROUPS]
+----
+high  40
+a     60
+
+# Restore the prior state so the rest of the file sees `high` alone
+# with cpu_weight=200.
+statement ok
+DROP RESOURCE GROUP a
+
+statement ok
+ALTER RESOURCE GROUP high WITH (cpu_weight = 200)
+
+subtest end
+
+subtest non_admin
+
+user testuser
+
+statement error pq: only users with the admin role may use resource group statements
+CREATE RESOURCE GROUP unauth WITH (cpu_weight = 1)
+
+statement error pq: only users with the admin role may use resource group statements
+ALTER RESOURCE GROUP high WITH (cpu_weight = 1)
+
+statement error pq: only users with the admin role may use resource group statements
+DROP RESOURCE GROUP high
+
+statement error pq: only users with the admin role may use resource group statements
+SHOW RESOURCE GROUP high
+
+statement error pq: only users with the admin role may use resource group statements
+SHOW RESOURCE GROUPS
+
+user root
+
+subtest end
+
+subtest resource_not_reserved
+
+# RESOURCE is not reserved: still usable as an identifier.
+statement ok
+CREATE TABLE resource (id INT PRIMARY KEY); DROP TABLE resource
+
+subtest end

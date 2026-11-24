@@ -19,27 +19,23 @@ import (
 )
 
 type controlJobsNode struct {
-	rows          planNode
-	desiredStatus jobs.Status
-	numRows       int
+	singleInputPlanNode
+	rowsAffectedOutputHelper
+	desiredStatus jobs.State
 	reason        string
 }
 
-var jobCommandToDesiredStatus = map[tree.JobCommand]jobs.Status{
-	tree.CancelJob: jobs.StatusCanceled,
-	tree.ResumeJob: jobs.StatusRunning,
-	tree.PauseJob:  jobs.StatusPaused,
+var jobCommandToDesiredStatus = map[tree.JobCommand]jobs.State{
+	tree.CancelJob: jobs.StateCanceled,
+	tree.ResumeJob: jobs.StateRunning,
+	tree.PauseJob:  jobs.StatePaused,
 }
 
-// FastPathResults implements the planNodeFastPath inteface.
-func (n *controlJobsNode) FastPathResults() (int, bool) {
-	return n.numRows, true
-}
-
+// startExec implements the planNode interface.
 func (n *controlJobsNode) startExec(params runParams) error {
-	if n.desiredStatus != jobs.StatusPaused && len(n.reason) > 0 {
+	if n.desiredStatus != jobs.StatePaused && len(n.reason) > 0 {
 		return errors.AssertionFailedf("status %v is not %v and thus does not support a reason %v",
-			n.desiredStatus, jobs.StatusPaused, n.reason)
+			n.desiredStatus, jobs.StatePaused, n.reason)
 	}
 
 	reg := params.p.ExecCfg().JobRegistry
@@ -48,7 +44,7 @@ func (n *controlJobsNode) startExec(params runParams) error {
 		return err
 	}
 	for {
-		ok, err := n.rows.Next(params)
+		ok, err := n.input.Next(params)
 		if err != nil {
 			return err
 		}
@@ -56,28 +52,29 @@ func (n *controlJobsNode) startExec(params runParams) error {
 			break
 		}
 
-		jobIDDatum := n.rows.Values()[0]
+		jobIDDatum := n.input.Values()[0]
 		if jobIDDatum == tree.DNull {
 			continue
 		}
 
-		jobID, ok := tree.AsDInt(jobIDDatum)
+		jobID, ok := jobIDDatum.(*tree.DInt)
 		if !ok {
 			return errors.AssertionFailedf("%q: expected *DInt, found %T", jobIDDatum, jobIDDatum)
 		}
 
-		if err := reg.UpdateJobWithTxn(params.ctx, jobspb.JobID(jobID), params.p.InternalSQLTxn(),
-			func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+		if err := reg.DeprecatedUpdateJobWithTxn(params.ctx, jobspb.JobID(*jobID), params.p.InternalSQLTxn(),
+			func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 				if err := jobsauth.Authorize(params.ctx, params.p,
-					md.ID, md.Payload, jobsauth.ControlAccess, globalPrivileges); err != nil {
+					md.ID, md.Payload.UsernameProto.Decode(), jobsauth.ControlAccess, globalPrivileges); err != nil {
 					return err
 				}
 				switch n.desiredStatus {
-				case jobs.StatusPaused:
+				case jobs.StatePaused:
 					return ju.PauseRequested(params.ctx, txn, md, n.reason)
-				case jobs.StatusRunning:
+				case jobs.StateRunning:
 					return ju.Unpaused(params.ctx, md)
-				case jobs.StatusCanceled:
+				case jobs.StateCanceled:
 					return ju.CancelRequested(params.ctx, md)
 				default:
 					return errors.AssertionFailedf("unhandled status %v", n.desiredStatus)
@@ -86,23 +83,29 @@ func (n *controlJobsNode) startExec(params runParams) error {
 			return err
 		}
 
-		n.numRows++
+		n.incAffectedRows()
 	}
 	switch n.desiredStatus {
-	case jobs.StatusPaused:
+	case jobs.StatePaused:
 		telemetry.Inc(sqltelemetry.SchemaJobControlCounter("pause"))
-	case jobs.StatusRunning:
+	case jobs.StateRunning:
 		telemetry.Inc(sqltelemetry.SchemaJobControlCounter("resume"))
-	case jobs.StatusCanceled:
+	case jobs.StateCanceled:
 		telemetry.Inc(sqltelemetry.SchemaJobControlCounter("cancel"))
 	}
 	return nil
 }
 
-func (*controlJobsNode) Next(runParams) (bool, error) { return false, nil }
+// Next implements the planNode interface.
+func (n *controlJobsNode) Next(_ runParams) (bool, error) {
+	return n.next(), nil
+}
 
-func (*controlJobsNode) Values() tree.Datums { return nil }
+// Values implements the planNode interface.
+func (n *controlJobsNode) Values() tree.Datums {
+	return n.values()
+}
 
 func (n *controlJobsNode) Close(ctx context.Context) {
-	n.rows.Close(ctx)
+	n.input.Close(ctx)
 }

@@ -16,8 +16,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/opgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/current"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/release_24_2"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/release_24_3"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/release_25_4"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/release_26_1"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules/release_26_2"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scgraph"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/scstage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -118,7 +119,7 @@ func makePlan(ctx context.Context, p *Plan) (err error) {
 		// Generate the graph used to build the stages.
 		p.Graph = buildGraph(ctx, p.Params.ActiveVersion, p.CurrentState)
 		if log.ExpensiveLogEnabled(ctx, 2) {
-			log.Infof(ctx, "graph generation took %v", timeutil.Since(start))
+			log.Dev.Infof(ctx, "graph generation took %v", timeutil.Since(start))
 		}
 	}
 	{
@@ -132,7 +133,7 @@ func makePlan(ctx context.Context, p *Plan) (err error) {
 			!p.Params.SkipPlannerSanityChecks,
 		)
 		if log.ExpensiveLogEnabled(ctx, 2) {
-			log.Infof(ctx, "stage generation took %v", timeutil.Since(start))
+			log.Dev.Infof(ctx, "stage generation took %v", timeutil.Since(start))
 		}
 	}
 	if n := len(p.Stages); n > 0 && p.Stages[n-1].Phase > scop.PreCommitPhase {
@@ -155,9 +156,25 @@ type rulesForRelease struct {
 // rulesForRelease supported rules for each release, this is an ordered array
 // with the newest supported version first.
 var rulesForReleases = []rulesForRelease{
+	// NB: sort versions in descending order, i.e. newest supported version first.
 	{activeVersion: clusterversion.Latest, rulesRegistry: current.GetRegistry()},
-	{activeVersion: clusterversion.V24_3, rulesRegistry: release_24_3.GetRegistry()},
-	{activeVersion: clusterversion.V24_2, rulesRegistry: release_24_2.GetRegistry()},
+	{activeVersion: clusterversion.V26_2, rulesRegistry: release_26_2.GetRegistry()},
+	{activeVersion: clusterversion.V26_1, rulesRegistry: release_26_1.GetRegistry()},
+	{activeVersion: clusterversion.V25_4, rulesRegistry: release_25_4.GetRegistry()},
+}
+
+func init() {
+	// Assert that rulesForReleases is in descending order (newest first).
+	for i := 0; i < len(rulesForReleases)-1; i++ {
+		curr := rulesForReleases[i].activeVersion.Version()
+		next := rulesForReleases[i+1].activeVersion.Version()
+		if curr.Less(next) {
+			panic(errors.AssertionFailedf(
+				"rulesForReleases must be in descending order: %v < %v at positions %d and %d",
+				curr, next, i, i+1,
+			))
+		}
+	}
 }
 
 // minVersionForRules the oldest version supported by the rules.
@@ -204,7 +221,7 @@ func getMinValidVersionForRules(
 	ctx context.Context, activeVersion clusterversion.ClusterVersion,
 ) clusterversion.ClusterVersion {
 	if !activeVersion.IsActive(minVersionForRules) {
-		log.Warningf(ctx, "falling back to rules for minimum version (%v),"+
+		log.Dev.Warningf(ctx, "falling back to rules for minimum version (%v),"+
 			"active version was : %v",
 			minVersionForRules,
 			activeVersion)

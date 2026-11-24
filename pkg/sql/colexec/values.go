@@ -75,9 +75,9 @@ func (v *valuesOp) Init(ctx context.Context) {
 	v.row = make(rowenc.EncDatumRow, len(v.typs))
 }
 
-func (v *valuesOp) Next() coldata.Batch {
+func (v *valuesOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	if len(v.data) == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 
 	var reallocated bool
@@ -120,5 +120,5 @@ func (v *valuesOp) Next() coldata.Batch {
 	}
 
 	v.batch.SetLength(nRows)
-	return v.batch
+	return v.batch, nil
 }

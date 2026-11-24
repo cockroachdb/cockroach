@@ -14,13 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
-// RangefeedMetricsRecorder is an interface for recording rangefeed metrics.
-type RangefeedMetricsRecorder interface {
-	UpdateMetricsOnRangefeedConnect()
-	UpdateMetricsOnRangefeedDisconnect()
-	UpdateMetricsOnRangefeedDisconnectBy(num int64)
-}
-
 // ServerStreamSender forwards MuxRangefeedEvents from UnbufferedSender to the
 // underlying grpc stream.
 type ServerStreamSender interface {
@@ -134,10 +127,16 @@ func (ubs *UnbufferedSender) sendBuffered(
 // Important to be thread-safe.
 func (ubs *UnbufferedSender) sendUnbuffered(event *kvpb.MuxRangeFeedEvent) error {
 	if event.Error != nil {
-		log.Fatalf(context.Background(), "unexpected: SendUnbuffered called with error event")
+		log.KvExec.Fatalf(context.Background(), "unexpected: SendUnbuffered called with error event")
 	}
 	return ubs.sender.Send(event)
 }
+
+// addStream implements sender.
+func (ubs *UnbufferedSender) addStream(int64) {}
+
+// cleanup implements sender.
+func (ubs *UnbufferedSender) cleanup(context.Context) {}
 
 // run forwards rangefeed completion errors back to the client. run is expected
 // to be called in a goroutine and will block until the context is done or the
@@ -154,7 +153,7 @@ func (ubs *UnbufferedSender) run(
 			for _, clientErr := range toSend {
 				onError(clientErr.StreamID)
 				if err := ubs.sender.Send(clientErr); err != nil {
-					log.Infof(ctx, "failed to send rangefeed error to client: %v", err)
+					log.KvExec.Infof(ctx, "failed to send rangefeed error to client: %v", err)
 					return err
 				}
 			}
@@ -192,5 +191,3 @@ func (ubs *UnbufferedSender) detachMuxErrors() []*kvpb.MuxRangeFeedEvent {
 	ubs.mu.muxErrors = nil
 	return toSend
 }
-
-func (ubs *UnbufferedSender) cleanup(context.Context) {}

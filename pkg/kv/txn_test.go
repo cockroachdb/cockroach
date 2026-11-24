@@ -119,35 +119,12 @@ func newTestTxnFactory(
 			}
 			if ba.Txn != nil && br.Txn == nil {
 				br.Txn = ba.Txn.Clone()
-				if pErr == nil {
-					br.Txn.Status = status
-				}
+				br.Txn.Status = status
 				// Update the MockTxnSender's proto.
 				*txn = *br.Txn
 			}
 			return br, pErr
 		})
-}
-
-func TestInitPut(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	ctx := context.Background()
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-	// This test is mostly an excuse to exercise otherwise unused code.
-	// TODO(vivekmenezes): update test or remove when InitPut is being
-	// considered sufficiently tested and this path exercised.
-	clock := hlc.NewClockForTesting(nil)
-	db := NewDB(log.MakeTestingAmbientCtxWithNewTracer(), newTestTxnFactory(func(ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
-		br := ba.CreateReply()
-		return br, nil
-	}), clock, stopper)
-
-	txn := NewTxn(ctx, db, 0 /* gatewayNodeID */)
-	if pErr := txn.InitPut(ctx, "a", "b", false); pErr != nil {
-		t.Fatal(pErr)
-	}
 }
 
 // TestTransactionConfig verifies the proper unwrapping and re-wrapping of the
@@ -455,7 +432,7 @@ func TestWrongTxnRetry(t *testing.T) {
 
 	var retries int
 	txnClosure := func(ctx context.Context, outerTxn *Txn) error {
-		log.Infof(ctx, "outer retry")
+		log.KvExec.Infof(ctx, "outer retry")
 		retries++
 		// Ensure the KV transaction is created.
 		if err := outerTxn.Put(ctx, "a", "b"); err != nil {

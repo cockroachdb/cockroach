@@ -37,12 +37,15 @@ import {
 import {
   transactionsCountBarChart,
   transactionsBytesReadBarChart,
-  transactionsLatencyBarChart,
+  transactionsServiceLatencyBarChart,
   transactionsContentionBarChart,
   transactionsCPUBarChart,
+  transactionsAdmissionWaitTimeBarChart,
+  transactionsKVCPUTimeBarChart,
   transactionsMaxMemUsageBarChart,
   transactionsNetworkBytesBarChart,
   transactionsRetryBarChart,
+  transactionsCommitLatencyBarChart,
 } from "./transactionsBarCharts";
 import { transactionLink } from "./transactionsCells";
 import { tableClasses } from "./transactionsTableClasses";
@@ -114,7 +117,11 @@ export function makeTransactionsColumns(
     transactions,
     defaultBarChartOptions,
   );
-  const latencyBar = transactionsLatencyBarChart(
+  const serviceLatencyBar = transactionsServiceLatencyBarChart(
+    transactions,
+    latencyClasses.barChart,
+  );
+  const commitLatencyBar = transactionsCommitLatencyBarChart(
     transactions,
     latencyClasses.barChart,
   );
@@ -123,6 +130,14 @@ export function makeTransactionsColumns(
     sampledExecStatsBarChartOptions,
   );
   const cpuBar = transactionsCPUBarChart(
+    transactions,
+    sampledExecStatsBarChartOptions,
+  );
+  const kvCPUTimeBar = transactionsKVCPUTimeBarChart(
+    transactions,
+    defaultBarChartOptions, // kvCPUTime is always collected, it is not part of the sampled exec stats.
+  );
+  const admissionWaitTimeBar = transactionsAdmissionWaitTimeBarChart(
     transactions,
     sampledExecStatsBarChartOptions,
   );
@@ -207,9 +222,16 @@ export function makeTransactionsColumns(
     {
       name: "time",
       title: statisticsTableTitles.time(statType),
-      cell: latencyBar,
+      cell: serviceLatencyBar,
       className: latencyClasses.column,
       sort: (item: TransactionInfo) => item.stats_data.stats.service_lat.mean,
+    },
+    {
+      name: "commitLatency",
+      title: statisticsTableTitles.commitLatency(statType),
+      cell: commitLatencyBar,
+      className: latencyClasses.column,
+      sort: (item: TransactionInfo) => item.stats_data.stats.commit_lat.mean,
     },
     {
       name: "contention",
@@ -226,6 +248,24 @@ export function makeTransactionsColumns(
       className: cx("statements-table__col-cpu"),
       sort: (item: TransactionInfo) =>
         FixLong(Number(item.stats_data.stats.exec_stats.cpu_sql_nanos?.mean)),
+    },
+    {
+      name: "admissionWaitTime",
+      title: statisticsTableTitles.admissionWaitTime(statType),
+      cell: admissionWaitTimeBar,
+      className: cx("statements-table__col-admission-wait-time"),
+      sort: (item: TransactionInfo) =>
+        FixLong(
+          Number(item.stats_data.stats.exec_stats.admission_wait_time?.mean),
+        ),
+    },
+    {
+      name: "kvCPUTime",
+      title: statisticsTableTitles.kvCPUTime(statType),
+      cell: kvCPUTimeBar,
+      className: cx("statements-table__col-kv-cpu-time"),
+      sort: (item: TransactionInfo) =>
+        FixLong(Number(item.stats_data.stats.kv_cpu_time_nanos?.mean)),
     },
     {
       name: "maxMemUsage",

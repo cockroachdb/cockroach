@@ -92,11 +92,14 @@ type windowPeerGrouperNoPartitionOp struct {
 
 var _ colexecop.Operator = &windowPeerGrouperNoPartitionOp{}
 
-func (p *windowPeerGrouperNoPartitionOp) Next() coldata.Batch {
-	b := p.Input.Next()
+func (p *windowPeerGrouperNoPartitionOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	b, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := b.Length()
 	if n == 0 {
-		return b
+		return b, nil
 	}
 	sel := b.Selection()
 	peersVec := b.ColVec(p.outputColIdx)
@@ -113,7 +116,7 @@ func (p *windowPeerGrouperNoPartitionOp) Next() coldata.Batch {
 		// p.distinctCol.
 		copy(peersCol[:n], p.distinctCol[:n])
 	}
-	return b
+	return b, nil
 }
 
 type windowPeerGrouperWithPartitionOp struct {
@@ -122,11 +125,14 @@ type windowPeerGrouperWithPartitionOp struct {
 
 var _ colexecop.Operator = &windowPeerGrouperWithPartitionOp{}
 
-func (p *windowPeerGrouperWithPartitionOp) Next() coldata.Batch {
-	b := p.Input.Next()
+func (p *windowPeerGrouperWithPartitionOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	b, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := b.Length()
 	if n == 0 {
-		return b
+		return b, nil
 	}
 	partitionCol := b.ColVec(p.partitionColIdx).Bool()
 	sel := b.Selection()
@@ -153,7 +159,7 @@ func (p *windowPeerGrouperWithPartitionOp) Next() coldata.Batch {
 			peersCol[i] = partitionCol[i] || distinctCol[i]
 		}
 	}
-	return b
+	return b, nil
 }
 
 type windowPeerGrouperAllPeersNoPartitionOp struct {
@@ -163,11 +169,14 @@ type windowPeerGrouperAllPeersNoPartitionOp struct {
 
 var _ colexecop.Operator = &windowPeerGrouperAllPeersNoPartitionOp{}
 
-func (p *windowPeerGrouperAllPeersNoPartitionOp) Next() coldata.Batch {
-	b := p.Input.Next()
+func (p *windowPeerGrouperAllPeersNoPartitionOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	b, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := b.Length()
 	if n == 0 {
-		return b
+		return b, nil
 	}
 	sel := b.Selection()
 	peersVec := b.ColVec(p.outputColIdx)
@@ -186,7 +195,7 @@ func (p *windowPeerGrouperAllPeersNoPartitionOp) Next() coldata.Batch {
 		peersCol[0] = !p.seenFirstTuple
 		p.seenFirstTuple = true
 	}
-	return b
+	return b, nil
 }
 
 type windowPeerGrouperAllPeersWithPartitionOp struct {
@@ -195,11 +204,14 @@ type windowPeerGrouperAllPeersWithPartitionOp struct {
 
 var _ colexecop.Operator = &windowPeerGrouperAllPeersWithPartitionOp{}
 
-func (p *windowPeerGrouperAllPeersWithPartitionOp) Next() coldata.Batch {
-	b := p.Input.Next()
+func (p *windowPeerGrouperAllPeersWithPartitionOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	b, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := b.Length()
 	if n == 0 {
-		return b
+		return b, nil
 	}
 	partitionCol := b.ColVec(p.partitionColIdx).Bool()
 	sel := b.Selection()
@@ -216,5 +228,5 @@ func (p *windowPeerGrouperAllPeersWithPartitionOp) Next() coldata.Batch {
 		// over partitionCol.
 		copy(peersCol[:n], partitionCol[:n])
 	}
-	return b
+	return b, nil
 }

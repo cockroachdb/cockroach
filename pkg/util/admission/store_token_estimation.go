@@ -197,23 +197,24 @@ func (e *storePerWorkTokenEstimator) updateEstimates(
 	cumLSMIngestedBytes uint64,
 	cumDiskWrite uint64,
 	admissionStats storeAdmissionStats,
+	unflushedMemTableTooLarge bool,
 ) {
 	if e.cumL0WriteBytes == 0 {
 		e.cumStoreAdmissionStats = admissionStats
-		e.cumL0WriteBytes = l0Metrics.BytesFlushed
-		e.cumL0IngestedBytes = l0Metrics.BytesIngested
+		e.cumL0WriteBytes = l0Metrics.TablesFlushed.Bytes + l0Metrics.BlobBytesFlushed
+		e.cumL0IngestedBytes = l0Metrics.TablesIngested.Bytes + l0Metrics.BlobBytesFlushed
 		e.cumLSMIngestedBytes = cumLSMIngestedBytes
 		e.cumDiskWrites = cumDiskWrite
 		return
 	}
-	intL0WriteBytes := int64(l0Metrics.BytesFlushed) - int64(e.cumL0WriteBytes)
+	intL0WriteBytes := int64(l0Metrics.TablesFlushed.Bytes+l0Metrics.BlobBytesFlushed) - int64(e.cumL0WriteBytes)
 	intL0IgnoredWriteBytes := int64(admissionStats.statsToIgnore.writeBytes) -
 		int64(e.cumStoreAdmissionStats.statsToIgnore.writeBytes)
 	adjustedIntL0WriteBytes := intL0WriteBytes - intL0IgnoredWriteBytes
 	if adjustedIntL0WriteBytes < 0 {
 		adjustedIntL0WriteBytes = 0
 	}
-	intL0IngestedBytes := int64(l0Metrics.BytesIngested) - int64(e.cumL0IngestedBytes)
+	intL0IngestedBytes := int64(l0Metrics.TablesIngested.Bytes) - int64(e.cumL0IngestedBytes)
 	intL0IgnoredIngestedBytes := int64(admissionStats.statsToIgnore.ingestStats.ApproxIngestedIntoL0Bytes) -
 		int64(e.cumStoreAdmissionStats.statsToIgnore.ingestStats.ApproxIngestedIntoL0Bytes)
 	adjustedIntL0IngestedBytes := intL0IngestedBytes - intL0IgnoredIngestedBytes
@@ -228,8 +229,10 @@ func (e *storePerWorkTokenEstimator) updateEstimates(
 	// many did go to L0.
 	intIngestedAccountedBytes := int64(admissionStats.ingestedAccountedBytes) -
 		int64(e.cumStoreAdmissionStats.ingestedAccountedBytes)
-	e.atDoneL0WriteTokensLinearModel.updateModelUsingIntervalStats(
-		intL0WriteAccountedBytes, adjustedIntL0WriteBytes, intWorkCount)
+	if !unflushedMemTableTooLarge {
+		e.atDoneL0WriteTokensLinearModel.updateModelUsingIntervalStats(
+			intL0WriteAccountedBytes, adjustedIntL0WriteBytes, intWorkCount)
+	}
 	e.atDoneL0IngestTokensLinearModel.updateModelUsingIntervalStats(
 		intIngestedAccountedBytes, adjustedIntL0IngestedBytes, intWorkCount)
 	// Ingest across all levels model.
@@ -260,7 +263,7 @@ func (e *storePerWorkTokenEstimator) updateEstimates(
 		int64(e.cumStoreAdmissionStats.aboveRaftStats.writeAccountedBytes)
 	intAboveRaftIngestedAccountedBytes := int64(admissionStats.aboveRaftStats.ingestedAccountedBytes) -
 		int64(e.cumStoreAdmissionStats.aboveRaftStats.ingestedAccountedBytes)
-	if intAboveRaftWorkCount > 1 && intL0TotalBytes > 0 {
+	if intAboveRaftWorkCount > 1 && intL0TotalBytes > 0 && !unflushedMemTableTooLarge {
 		// We don't know how many of the intL0TotalBytes (which is a stat derived
 		// from Pebble stats) are due to above-raft admission. So we simply apply
 		// the linear models to the stats we have and then use the modeled bytes
@@ -311,8 +314,8 @@ func (e *storePerWorkTokenEstimator) updateEstimates(
 	}
 	// Store the latest cumulative values.
 	e.cumStoreAdmissionStats = admissionStats
-	e.cumL0WriteBytes = l0Metrics.BytesFlushed
-	e.cumL0IngestedBytes = l0Metrics.BytesIngested
+	e.cumL0WriteBytes = l0Metrics.TablesFlushed.Bytes + l0Metrics.BlobBytesFlushed
+	e.cumL0IngestedBytes = l0Metrics.TablesIngested.Bytes
 	e.cumLSMIngestedBytes = cumLSMIngestedBytes
 	e.cumDiskWrites = cumDiskWrite
 }

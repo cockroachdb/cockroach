@@ -84,9 +84,9 @@ func TestSetSessionArguments(t *testing.T) {
 	expectedFoundOptions := len(expectedOptions)
 
 	var foundOptions int
-	var variable, value string
+	var variable, value, description string
 	for rows.Next() {
-		err = rows.Scan(&variable, &value)
+		err = rows.Scan(&variable, &value, &description)
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -33,7 +33,7 @@ exports_files([
 # gazelle:proto default
 # gazelle:proto_group go_package
 # gazelle:go_proto_compilers //pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler
-# gazelle:go_grpc_compilers //pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler
+# gazelle:go_grpc_compilers //pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler,//pkg/cmd/protoc-gen-go-drpc:protoc-gen-go-drpc_compiler
 
 # Gazelle needs the following resolve hints.
 #
@@ -45,18 +45,21 @@ exports_files([
 # gazelle:resolve proto proto gogoproto/gogo.proto @com_github_gogo_protobuf//gogoproto:gogo_proto
 # gazelle:resolve proto go gogoproto/gogo.proto @com_github_gogo_protobuf//gogoproto
 # gazelle:resolve proto proto google/api/annotations.proto @go_googleapis//google/api:annotations_proto
-# gazelle:resolve proto go google/api/annotations.proto @org_golang_google_genproto//googleapis/api/annotations:go_default_library
+# gazelle:resolve proto go google/api/annotations.proto @org_golang_google_genproto_googleapis_api//annotations:go_default_library
 # gazelle:resolve proto io/prometheus/client/metrics.proto @com_github_prometheus_client_model//io/prometheus/client:io_prometheus_client_proto
 # gazelle:resolve proto go io/prometheus/client/metrics.proto @com_github_prometheus_client_model//go
 # gazelle:resolve go github.com/prometheus/client_model/go @com_github_prometheus_client_model//go
-# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/ccl/gssapiccl //pkg/ccl/gssapiccl
+# gazelle:resolve go github.com/cockroachdb/cockroach/pkg/security/gssapiauth //pkg/security/gssapiauth
 # gazelle:resolve go github.com/cockroachdb/cockroach/pkg/cli_test //pkg/cli:cli_test
 # gazelle:resolve go github.com/cockroachdb/cockroach/pkg/sql/colflow_test //pkg/sql/colflow:colflow_test
 # gazelle:resolve go github.com/cockroachdb/cockroach/pkg/util/caller_test //pkg/util/caller:caller_test
 # gazelle:resolve go github.com/cockroachdb/cockroach/pkg/util/json_test //pkg/util/json:json_test
+# gazelle:resolve go github.com/cockroachdb/changefeedpb @com_github_cockroachdb_changefeedpb//:go_default_library
 # gazelle:resolve go google.golang.org/genproto/googleapis/pubsub/v1 @org_golang_google_genproto//googleapis/pubsub/v1:pubsub
 # gazelle:resolve go google.golang.org/genproto/googleapis/cloud/kms/v1 @org_golang_google_genproto//googleapis/cloud/kms/v1:kms
 # gazelle:resolve go google.golang.org/genproto/googleapis/devtools/build/v1 @org_golang_google_genproto//googleapis/devtools/build/v1:build
+# gazelle:resolve go google.golang.org/genproto/googleapis/api/httpbody @org_golang_google_genproto_googleapis_api//httpbody:go_default_library
+# gazelle:resolve go google.golang.org/genproto/googleapis/api/annotations @org_golang_google_genproto_googleapis_api//annotations:go_default_library
 
 # See pkg/kv/kvpb/gen/BUILD.bazel for more details.
 #
@@ -93,7 +96,7 @@ exports_files([
 # gazelle:exclude bin
 # gazelle:exclude build/builder_home
 # gazelle:exclude lib
-# gazelle:exclude pkg/ccl/gssapiccl
+# gazelle:exclude pkg/security/gssapiauth
 # gazelle:exclude pkg/ui/node_modules
 # gazelle:exclude pkg/ui/workspaces/cluster-ui/node_modules
 # gazelle:exclude pkg/ui/workspaces/db-console/node_modules
@@ -122,6 +125,8 @@ exports_files([
 # gazelle:exclude pkg/sql/plpgsql/parser/lexbase/keywords.go
 # gazelle:exclude pkg/sql/plpgsql/parser/lexbase/tokens.go
 # gazelle:exclude pkg/sql/plpgsql/parser/lexbase/reserved_keywords.go
+# gazelle:exclude pkg/util/jsonpath/parser/lexbase/keywords.go
+# gazelle:exclude pkg/util/jsonpath/parser/lexbase/tokens.go
 # gazelle:exclude pkg/sql/scanner/token_names_test.go
 # gazelle:exclude pkg/sql/schemachanger/scexec/mocks_generated_test.go
 # gazelle:exclude pkg/cmd/prereqs/testdata
@@ -130,7 +135,6 @@ exports_files([
 # gazelle:exclude pkg/roachprod/vm/aws/embedded.go
 # gazelle:exclude pkg/**/*_string.go
 # gazelle:exclude pkg/ui/distccl/distccl_no_bazel.go
-# gazelle:exclude pkg/ui/distoss/distoss_no_bazel.go
 # gazelle:exclude pkg/util/buildutil/crdb_test_off.go
 # gazelle:exclude pkg/util/buildutil/crdb_test_on.go
 # gazelle:exclude pkg/testutils/bazelcodecover/crdb_test_off.go
@@ -174,7 +178,10 @@ nogo(
         "@org_golang_x_tools//go/analysis/passes/lostcancel:go_default_library",
         "@org_golang_x_tools//go/analysis/passes/nilfunc:go_default_library",
         "@org_golang_x_tools//go/analysis/passes/nilness:go_default_library",
-        "@org_golang_x_tools//go/analysis/passes/pkgfact:go_default_library",
+        # TODO(ricky): With the Go 1.25 upgrade, this started failing with errors
+        # like `VERSION="5.19.0"`. I don't know what that means and it doesn't seem
+        # significant to us, so disabling for now.
+        # "@org_golang_x_tools//go/analysis/passes/pkgfact:go_default_library",
         "@org_golang_x_tools//go/analysis/passes/printf:go_default_library",
         "@org_golang_x_tools//go/analysis/passes/shift:go_default_library",
         "@org_golang_x_tools//go/analysis/passes/sortslice:go_default_library",
@@ -187,6 +194,7 @@ nogo(
         "@org_golang_x_tools//go/analysis/passes/unreachable:go_default_library",
         "@org_golang_x_tools//go/analysis/passes/unsafeptr:go_default_library",
         "@org_golang_x_tools//go/analysis/passes/unusedresult:go_default_library",
+        "//pkg/testutils/lint/passes/deferloop",
         "//pkg/testutils/lint/passes/deferunlockcheck",
         "//pkg/testutils/lint/passes/descriptormarshal",
         "//pkg/testutils/lint/passes/errcheck",
@@ -203,7 +211,8 @@ nogo(
         "//pkg/testutils/lint/passes/returncheck",
         "//pkg/testutils/lint/passes/returnerrcheck",
         "//pkg/testutils/lint/passes/shadow",
-        "//pkg/testutils/lint/passes/timer",
         "//pkg/testutils/lint/passes/unconvert",
+        "//pkg/testutils/lint/passes/roachtest",
+        "//pkg/testutils/lint/passes/benchdoc",
     ],
 )

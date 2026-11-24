@@ -34,10 +34,7 @@ func (tc *Catalog) ResolveFunction(
 	}
 
 	// Attempt to resolve to a built-in function first.
-	def, err := tree.GetBuiltinFuncDefinition(fn, path)
-	if err != nil {
-		return nil, err
-	}
+	def := tree.GetBuiltinFuncDefinition(fn, path)
 	if def != nil {
 		return def, nil
 	}
@@ -86,7 +83,9 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 		}
 	}
 	if c.RoutineBody != nil {
-		panic(fmt.Errorf("routine body of BEGIN ATOMIC is not supported"))
+		if err := tree.ConvertInlineRoutineBodyToOption(c); err != nil {
+			panic(err)
+		}
 	}
 
 	// Resolve the parameter names and types.
@@ -146,11 +145,12 @@ func (tc *Catalog) CreateRoutine(c *tree.CreateRoutine) {
 			panic(pgerror.Newf(pgcode.InvalidFunctionDefinition, "function result type must be %s because of OUT parameters", outParamType.Name()))
 		}
 		// Override the return types so that we do return type validation and SHOW
-		// CREATE correctly.
-		retType = outParamType
-		c.ReturnType = &tree.RoutineReturnType{
-			Type: outParamType,
+		// CREATE correctly. Make sure not to override the SetOf value if it is set.
+		if c.ReturnType == nil {
+			c.ReturnType = &tree.RoutineReturnType{}
 		}
+		c.ReturnType.Type = outParamType
+		retType = outParamType
 	} else if retType == nil {
 		if c.IsProcedure {
 			// A procedure doesn't need a return type. Use a VOID return type to avoid

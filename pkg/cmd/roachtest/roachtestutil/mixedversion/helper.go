@@ -15,11 +15,14 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/clusterupgrade"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 )
 
@@ -47,6 +50,8 @@ type (
 		connFunc        func(int) *gosql.DB
 		stepLogger      *logger.Logger
 		clusterVersions *atomic.Value
+		monitor         test.Monitor
+		nodes           option.NodeListOption
 	}
 
 	// Helper is the struct passed to `stepFunc`s (user-provided or
@@ -67,6 +72,17 @@ type (
 	}
 )
 
+func (s *Service) randomAvailableNode(rng *rand.Rand) int {
+	nodes := s.AvailableNodes()
+	return nodes.SeededRandNode(rng)[0]
+}
+
+// AvailableNodes uses the monitor implementation to return the
+// set of available nodes as determined by their expected health.
+func (s *Service) AvailableNodes() option.NodeListOption {
+	return s.monitor.AvailableNodes(s.Descriptor.Name).Intersect(s.nodes)
+}
+
 // Connect returns a connection pool to the given node. Note that
 // these connection pools are managed by the framework and therefore
 // *must not* be closed. They are closed automatically when the test
@@ -79,17 +95,24 @@ func (s *Service) Connect(node int) *gosql.DB {
 // cluster. Do *not* call `Close` on the pool returned (see comment on
 // `Connect` function).
 func (s *Service) RandomDB(rng *rand.Rand) (int, *gosql.DB) {
-	node := s.Descriptor.Nodes.SeededRandNode(rng)[0]
+	node := s.randomAvailableNode(rng)
 	return node, s.Connect(node)
 }
 
-// prepareQuery returns a connection to one of the `nodes` provided
-// and logs the query and gateway node in the step's log file. Called
+// prepareQuery returns a connection to one of the available nodes in `nodes`
+// provided and logs the query and gateway node in the step's log file. Called
 // before the query is actually performed.
 func (s *Service) prepareQuery(
 	rng *rand.Rand, nodes option.NodeListOption, query string, args ...any,
 ) (*gosql.DB, error) {
-	node := nodes.SeededRandNode(rng)[0]
+	availableNodes := s.AvailableNodes().Intersect(nodes)
+	if len(availableNodes) == 0 {
+		return nil, errors.Newf(
+			"no available nodes in the intersection of %s and %s",
+			s.AvailableNodes(), nodes,
+		)
+	}
+	node := availableNodes.SeededRandNode(rng)[0]
 	db := s.Connect(node)
 
 	v, err := s.NodeVersion(node)
@@ -131,11 +154,27 @@ func (s *Service) ExecWithGateway(
 	return err
 }
 
+func (s *Service) ExecWithRetry(
+	rng *rand.Rand,
+	nodes option.NodeListOption,
+	retryOpts retry.Options,
+	query string,
+	args ...interface{},
+) error {
+	db, err := s.prepareQuery(rng, nodes, query, args...)
+	if err != nil {
+		return err
+	}
+
+	_, err = roachtestutil.ExecWithRetry(s.ctx, s.stepLogger, db, retryOpts, query, args...)
+	return err
+}
+
 func (s *Service) ClusterVersion(rng *rand.Rand) (roachpb.Version, error) {
 	if s.Finalizing {
 		n, db := s.RandomDB(rng)
 		s.stepLogger.Printf("querying cluster version through node %d", n)
-		cv, err := clusterupgrade.ClusterVersion(s.ctx, db)
+		cv, err := clusterupgrade.ClusterVersion(s.ctx, s.stepLogger, db)
 		if err != nil {
 			return roachpb.Version{}, fmt.Errorf("failed to query cluster version: %w", err)
 		}
@@ -174,6 +213,15 @@ func (h *Helper) DefaultService() *Service {
 	}
 
 	return h.System
+}
+
+func (h *Helper) AvailableNodes() option.NodeListOption {
+	return h.DefaultService().AvailableNodes()
+}
+
+func (h *Helper) RandomAvailableNode(rng *rand.Rand) int {
+	nodes := h.AvailableNodes()
+	return nodes.SeededRandNode(rng)[0]
 }
 
 func (h *Helper) Context() *ServiceContext {
@@ -224,8 +272,21 @@ func (h *Helper) ExecWithGateway(
 	return h.DefaultService().ExecWithGateway(rng, nodes, query, args...)
 }
 
-// GoWithCancel implements the Tasker interface.
-func (h *Helper) GoWithCancel(fn task.Func, opts ...task.Option) context.CancelFunc {
+// ExecWithRetry is like ExecWithGateway, but retries the execution of
+// the statement on errors, using the retry options provided.
+func (h *Helper) ExecWithRetry(
+	rng *rand.Rand,
+	nodes option.NodeListOption,
+	retryOpts retry.Options,
+	query string,
+	args ...interface{},
+) error {
+	return h.DefaultService().ExecWithRetry(rng, nodes, retryOpts, query, args...)
+}
+
+// defaultTaskOptions returns the default options that are passed to all tasks
+// started by the helper.
+func (h *Helper) defaultTaskOptions() []task.Option {
 	loggerFuncOpt := task.LoggerFunc(func(name string) (*logger.Logger, error) {
 		bgLogger, err := h.loggerFor(name)
 		if err != nil {
@@ -246,14 +307,29 @@ func (h *Helper) GoWithCancel(fn task.Func, opts ...task.Option) context.CancelF
 		}
 		return nil
 	})
+	return []task.Option{loggerFuncOpt, panicOpt, errHandlerOpt}
+}
+
+// GoWithCancel implements the Tasker interface.
+func (h *Helper) GoWithCancel(fn task.Func, opts ...task.Option) context.CancelFunc {
 	return h.runner.background.GoWithCancel(
-		fn, task.OptionList(opts...), loggerFuncOpt, panicOpt, errHandlerOpt,
+		fn, task.OptionList(h.defaultTaskOptions()...), task.OptionList(opts...),
 	)
 }
 
 // Go implements the Tasker interface.
 func (h *Helper) Go(fn task.Func, opts ...task.Option) {
 	h.GoWithCancel(fn, opts...)
+}
+
+// NewGroup implements the Group interface.
+func (h *Helper) NewGroup(opts ...task.Option) task.Group {
+	return h.runner.background.NewGroup(task.OptionList(h.defaultTaskOptions()...), task.OptionList(opts...))
+}
+
+// NewErrorGroup implements the Group interface.
+func (h *Helper) NewErrorGroup(opts ...task.Option) task.ErrorGroup {
+	return h.runner.background.NewErrorGroup(task.OptionList(h.defaultTaskOptions()...), task.OptionList(opts...))
 }
 
 // GoCommand has the same semantics of `GoWithCancel()`; the command passed will
@@ -265,20 +341,6 @@ func (h *Helper) GoCommand(cmd string, nodes option.NodeListOption) context.Canc
 		l.Printf("running command `%s` on nodes %v in a task", cmd, nodes)
 		return h.runner.cluster.RunE(ctx, option.WithNodes(nodes), cmd)
 	}, task.Name(desc))
-}
-
-// ExpectDeath alerts the testing infrastructure that a node is
-// expected to die. Regular restarts as part of the mixedversion
-// testing are already taken into account. This function should only
-// be used by tests that perform their own node restarts or chaos
-// events.
-func (h *Helper) ExpectDeath() {
-	h.ExpectDeaths(1)
-}
-
-// ExpectDeaths is the general version of `ExpectDeath()`.
-func (h *Helper) ExpectDeaths(n int) {
-	h.runner.monitor.ExpectDeaths(n)
 }
 
 // ClusterVersion returns the currently active cluster version. Avoids
@@ -326,6 +388,14 @@ func (h *Helper) IsSkipVersionUpgrade() bool {
 	// used when upgrading: we keep release data starting from 21.2.
 	numReleases, _ := release.MajorReleasesBetween(&h.testContext.FromVersion().Version, &h.testContext.ToVersion().Version)
 	return numReleases > 1
+}
+
+// VersionedCockroachPath returns the correct binary path to use when
+// executing workload commands in user-defined hooks that will match the
+// current cluster's version e.g., v25.3.1/cockroach
+func (h *Helper) VersionedCockroachPath(rt test.Test) string {
+	return clusterupgrade.BinaryPathForVersion(
+		rt, h.System.FromVersion, "cockroach")
 }
 
 // logSQL standardizes the logging when a SQL statement or query is

@@ -1,0 +1,282 @@
+# Tests for crdb_internal.decode_key and crdb_internal.encode_key functions.
+
+subtest decode_key
+
+# Test decode_key function - the inverse of encode_key
+
+statement ok
+CREATE TABLE decode_key_test (
+  id INT PRIMARY KEY,
+  name STRING,
+  INDEX idx_name (name)
+)
+
+let $decode_key_test_id
+SELECT id FROM system.namespace WHERE name='decode_key_test'
+
+# Test decoding a primary key - verify table_id
+query B
+SELECT (crdb_internal.decode_key(
+  crdb_internal.encode_key($decode_key_test_id, 1, (42,))
+)->>'table_id')::INT = $decode_key_test_id
+----
+true
+
+# Test decoding a primary key - verify index_id
+query T
+SELECT crdb_internal.decode_key(
+  crdb_internal.encode_key($decode_key_test_id, 1, (42,))
+)->>'index_id'
+----
+1
+
+# Test decoding a primary key - verify table_name
+query T
+SELECT crdb_internal.decode_key(
+  crdb_internal.encode_key($decode_key_test_id, 1, (42,))
+)->>'table_name'
+----
+decode_key_test
+
+# Test decoding a primary key - verify index_name
+query T
+SELECT crdb_internal.decode_key(
+  crdb_internal.encode_key($decode_key_test_id, 1, (1,))
+)->>'index_name'
+----
+decode_key_test_pkey
+
+# Test decoding a primary key - verify database_name matches current database
+query B
+SELECT crdb_internal.decode_key(
+  crdb_internal.encode_key($decode_key_test_id, 1, (42,))
+)->>'database_name' = current_database()
+----
+true
+
+# Test decoding a primary key - verify schema_name matches current schema
+query B
+SELECT crdb_internal.decode_key(
+  crdb_internal.encode_key($decode_key_test_id, 1, (42,))
+)->>'schema_name' = current_schema()
+----
+true
+
+# Test decoding with full column values - verify key column name
+query T
+SELECT crdb_internal.decode_key(
+  crdb_internal.encode_key($decode_key_test_id, 1, (123,))
+)->'key_columns'->0->>'name'
+----
+id
+
+# Test decoding with full column values - verify key column type
+query T
+SELECT crdb_internal.decode_key(
+  crdb_internal.encode_key($decode_key_test_id, 1, (123,))
+)->'key_columns'->0->>'type'
+----
+INT8
+
+# Test decoding with full column values - verify key column value
+query T
+SELECT crdb_internal.decode_key(
+  crdb_internal.encode_key($decode_key_test_id, 1, (123,))
+)->'key_columns'->0->>'value'
+----
+123
+
+# Test decoding a secondary index key - verify index_name
+query T
+SELECT crdb_internal.decode_key(
+  crdb_internal.encode_key($decode_key_test_id, 2, ('hello', 42))
+)->>'index_name'
+----
+idx_name
+
+# Test decoding a secondary index key - verify key column values
+query T
+SELECT crdb_internal.decode_key(
+  crdb_internal.encode_key($decode_key_test_id, 2, ('hello', 42))
+)->'key_columns'->0->>'name'
+----
+name
+
+query T
+SELECT crdb_internal.decode_key(
+  crdb_internal.encode_key($decode_key_test_id, 2, ('hello', 42))
+)->'key_columns'->0->>'value'
+----
+'hello'
+
+query T
+SELECT crdb_internal.decode_key(
+  crdb_internal.encode_key($decode_key_test_id, 2, ('hello', 42))
+)->'key_columns'->1->>'name'
+----
+id
+
+query T
+SELECT crdb_internal.decode_key(
+  crdb_internal.encode_key($decode_key_test_id, 2, ('hello', 42))
+)->'key_columns'->1->>'value'
+----
+42
+
+# Test with invalid key returns an error.
+# The error message differs between tenant and non-tenant modes:
+# - Non-tenant: "invalid key prefix"
+# - Tenant: "invalid tenant id prefix"
+query error invalid.*prefix
+SELECT crdb_internal.decode_key('\x00'::BYTES)
+
+statement ok
+DROP TABLE decode_key_test
+
+subtest end
+
+subtest decode_key_privileges
+
+# Test decode_key with privilege checks
+
+statement ok
+CREATE TABLE decode_key_priv_test (
+  id INT PRIMARY KEY,
+  name STRING
+)
+
+let $priv_test_id
+SELECT id FROM system.namespace WHERE name='decode_key_priv_test'
+
+# Test that user with SELECT privilege can decode the key
+statement ok
+GRANT SELECT ON TABLE decode_key_priv_test TO testuser
+
+user testuser
+
+# Verify table_id with SELECT privilege
+query B
+SELECT (crdb_internal.decode_key(
+  crdb_internal.encode_key($priv_test_id, 1, (42,))
+)->>'table_id')::INT = $priv_test_id
+----
+true
+
+# Verify index_id with SELECT privilege
+query T
+SELECT crdb_internal.decode_key(
+  crdb_internal.encode_key($priv_test_id, 1, (42,))
+)->>'index_id'
+----
+1
+
+# Verify table_name with SELECT privilege
+query T
+SELECT crdb_internal.decode_key(
+  crdb_internal.encode_key($priv_test_id, 1, (42,))
+)->>'table_name'
+----
+decode_key_priv_test
+
+# Verify index_name with SELECT privilege
+query T
+SELECT crdb_internal.decode_key(
+  crdb_internal.encode_key($priv_test_id, 1, (42,))
+)->>'index_name'
+----
+decode_key_priv_test_pkey
+
+# Verify database_name is present with SELECT privilege
+query B
+SELECT (crdb_internal.decode_key(
+  crdb_internal.encode_key($priv_test_id, 1, (42,))
+)->>'database_name') IS NOT NULL
+----
+true
+
+# Verify schema_name is present with SELECT privilege
+query B
+SELECT (crdb_internal.decode_key(
+  crdb_internal.encode_key($priv_test_id, 1, (42,))
+)->>'schema_name') IS NOT NULL
+----
+true
+
+# Verify key column name with SELECT privilege
+query T
+SELECT crdb_internal.decode_key(
+  crdb_internal.encode_key($priv_test_id, 1, (42,))
+)->'key_columns'->0->>'name'
+----
+id
+
+# Verify key column type with SELECT privilege
+query T
+SELECT crdb_internal.decode_key(
+  crdb_internal.encode_key($priv_test_id, 1, (42,))
+)->'key_columns'->0->>'type'
+----
+INT8
+
+# Verify key column value with SELECT privilege
+query T
+SELECT crdb_internal.decode_key(
+  crdb_internal.encode_key($priv_test_id, 1, (42,))
+)->'key_columns'->0->>'value'
+----
+42
+
+user root
+
+# Revoke all privileges from testuser
+statement ok
+REVOKE SELECT ON TABLE decode_key_priv_test FROM testuser
+
+user testuser
+
+# Test that user without privileges gets permission denied error in result
+query T
+SELECT crdb_internal.decode_key(
+  crdb_internal.encode_key($priv_test_id, 1, (42,))
+)->>'error'
+----
+permission denied
+
+# The table_id should still be present even without access
+query B
+SELECT (crdb_internal.decode_key(
+  crdb_internal.encode_key($priv_test_id, 1, (42,))
+)->>'table_id')::INT = $priv_test_id
+----
+true
+
+# The index_id should still be present even without access
+query T
+SELECT crdb_internal.decode_key(
+  crdb_internal.encode_key($priv_test_id, 1, (42,))
+)->>'index_id'
+----
+1
+
+# Table name should NOT be present without access
+query T
+SELECT crdb_internal.decode_key(
+  crdb_internal.encode_key($priv_test_id, 1, (42,))
+)->>'table_name'
+----
+NULL
+
+# Key columns should NOT be present without access
+query T
+SELECT crdb_internal.decode_key(
+  crdb_internal.encode_key($priv_test_id, 1, (42,))
+)->'key_columns'
+----
+NULL
+
+user root
+
+statement ok
+DROP TABLE decode_key_priv_test
+
+subtest end

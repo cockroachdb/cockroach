@@ -2,48 +2,35 @@
 //
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { ArrowLeft } from "@cockroachlabs/icons";
 import { Col, Row, Tabs } from "antd";
 import classNames from "classnames/bind";
-import Long from "long";
-import moment from "moment-timezone";
-import React, { useContext } from "react";
+import long from "long";
+import React, {
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import Helmet from "react-helmet";
-import { RouteComponentProps } from "react-router-dom";
+import { useHistory, useRouteMatch } from "react-router-dom";
 
-import { JobRequest, JobResponse } from "src/api/jobsApi";
+import { useJobDetails } from "src/api/jobsApi";
+import { useUserSQLRoles } from "src/api/userApi";
 import { Button } from "src/button";
 import { commonStyles } from "src/common";
 import { CockroachCloudContext } from "src/contexts";
 import jobStyles from "src/jobs/jobs.module.scss";
-import { HighwaterTimestamp } from "src/jobs/util/highwaterTimestamp";
-import { JobStatusCell } from "src/jobs/util/jobStatusCell";
 import { Loading } from "src/loading";
 import { SqlBox, SqlBoxSize } from "src/sql";
-import { UIConfigState } from "src/store";
-import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
-import {
-  TimestampToMoment,
-  idAttr,
-  getMatchParamByName,
-  DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ,
-} from "src/util";
+import { idAttr } from "src/util";
 
-import {
-  GetJobProfilerExecutionDetailRequest,
-  GetJobProfilerExecutionDetailResponse,
-  ListJobProfilerExecutionDetailsRequest,
-  ListJobProfilerExecutionDetailsResponse,
-  RequestState,
-} from "../../api";
-import { Timestamp } from "../../timestamp";
-import { isTerminalState } from "../util/jobOptions";
+import { isTerminalState } from "../util";
 
 import { JobProfilerView } from "./jobProfilerView";
-
-const { TabPane } = Tabs;
+import OverviewTabContent from "./overviewTab";
 
 const cardCx = classNames.bind(summaryCardStyles);
 const jobCx = classNames.bind(jobStyles);
@@ -53,274 +40,106 @@ enum TabKeysEnum {
   PROFILER = "Advanced Debugging",
 }
 
-export interface JobDetailsStateProps {
-  jobRequest: RequestState<JobResponse>;
-  jobProfilerExecutionDetailFilesResponse: RequestState<ListJobProfilerExecutionDetailsResponse>;
-  jobProfilerLastUpdated: moment.Moment;
-  jobProfilerDataIsValid: boolean;
-  onDownloadExecutionFileClicked: (
-    req: GetJobProfilerExecutionDetailRequest,
-  ) => Promise<GetJobProfilerExecutionDetailResponse>;
-  hasAdminRole?: UIConfigState["hasAdminRole"];
-}
-
-export interface JobDetailsDispatchProps {
-  refreshJob: (req: JobRequest) => void;
-  refreshExecutionDetailFiles: (
-    req: ListJobProfilerExecutionDetailsRequest,
-  ) => void;
-  onRequestExecutionDetails: (jobID: Long) => void;
-  refreshUserSQLRoles: () => void;
-}
-
-export interface JobDetailsState {
-  currentTab?: string;
-}
-
-export type JobDetailsProps = JobDetailsStateProps &
-  JobDetailsDispatchProps &
-  RouteComponentProps;
-
-export class JobDetails extends React.Component<
-  JobDetailsProps,
-  JobDetailsState
-> {
-  refreshDataInterval: NodeJS.Timeout;
-
-  constructor(props: JobDetailsProps) {
-    super(props);
-    const searchParams = new URLSearchParams(props.history.location.search);
-    this.state = {
-      currentTab: searchParams.get("tab") || "overview",
-    };
-  }
-
-  private refresh(): void {
-    if (isTerminalState(this.props.jobRequest.data?.status)) {
-      clearInterval(this.refreshDataInterval);
-      return;
+export function JobDetailsV2(): React.ReactElement {
+  const history = useHistory();
+  const match = useRouteMatch();
+  const ccContext = useContext(CockroachCloudContext);
+  const { data: userRoles } = useUserSQLRoles();
+  const hasAdminRole = userRoles?.roles?.includes("ADMIN") ?? false;
+  const jobId = useMemo(
+    () => long.fromString((match.params as Record<string, string>)[idAttr]),
+    [match],
+  );
+  const [jobTerminal, setJobTerminal] = useState(false);
+  const {
+    data: job,
+    error,
+    isLoading,
+  } = useJobDetails(jobId, {
+    refreshInterval: 10 * 1000,
+    keepPreviousData: true,
+    isPaused: () => jobTerminal,
+  });
+  const searchParams = useMemo(() => {
+    return new URLSearchParams(history.location.search);
+  }, [history.location.search]);
+  const [currentTab, setCurrentTab] = React.useState<string>(
+    searchParams.get("tab") || "overview",
+  );
+  const onTabChange = useCallback(
+    (tabId: string): void => {
+      searchParams.set("tab", tabId);
+      setCurrentTab(tabId);
+      history.replace({
+        ...history.location,
+        search: searchParams.toString(),
+      });
+    },
+    [history, searchParams],
+  );
+  useEffect(() => {
+    if (job) {
+      setJobTerminal(isTerminalState(job.status));
     }
+  }, [job]);
 
-    this.props.refreshJob(
-      new cockroach.server.serverpb.JobRequest({
-        job_id: Long.fromString(getMatchParamByName(this.props.match, idAttr)),
-      }),
-    );
-  }
-
-  componentDidMount(): void {
-    this.props.refreshUserSQLRoles();
-    if (!this.props.jobRequest.data) {
-      this.refresh();
-    }
-    // Refresh every 10s.
-    this.refreshDataInterval = setInterval(() => this.refresh(), 10 * 1000);
-  }
-
-  componentWillUnmount(): void {
-    if (this.refreshDataInterval) {
-      clearInterval(this.refreshDataInterval);
-    }
-  }
-
-  prevPage = (): void => this.props.history.goBack();
-
-  renderProfilerTabContent = (
-    job: cockroach.server.serverpb.JobResponse,
-  ): React.ReactElement => {
-    const id = job?.id;
-    return (
-      <JobProfilerView
-        jobID={id}
-        executionDetailFilesResponse={
-          this.props.jobProfilerExecutionDetailFilesResponse
-        }
-        refreshExecutionDetailFiles={this.props.refreshExecutionDetailFiles}
-        lastUpdated={this.props.jobProfilerLastUpdated}
-        isDataValid={this.props.jobProfilerDataIsValid}
-        onDownloadExecutionFileClicked={
-          this.props.onDownloadExecutionFileClicked
-        }
-        onRequestExecutionDetails={this.props.onRequestExecutionDetails}
-      />
-    );
-  };
-
-  renderOverviewTabContent = (
-    hasNextRun: boolean,
-    nextRun: moment.Moment,
-    job: JobResponse,
-  ): React.ReactElement => {
-    if (!job) {
-      return null;
-    }
-
-    return (
-      <Row gutter={24}>
-        <Col className="gutter-row" span={24}>
-          <SummaryCard className={cardCx("summary-card")}>
-            <SummaryCardItem
-              label="Status"
-              value={
-                <JobStatusCell job={job} lineWidth={1.5} hideDuration={true} />
-              }
-            />
-            {hasNextRun && (
-              <>
-                <SummaryCardItem
-                  label="Next Planned Execution Time"
-                  value={
-                    <Timestamp
-                      time={nextRun}
-                      format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ}
-                    />
-                  }
-                />
-              </>
-            )}
-            <SummaryCardItem
-              label="Creation Time"
-              value={
-                <Timestamp
-                  time={TimestampToMoment(job.created, null)}
-                  format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ}
-                />
-              }
-            />
-            {job.modified && (
-              <SummaryCardItem
-                label="Last Modified Time"
-                value={
-                  <Timestamp
-                    time={TimestampToMoment(job.modified, null)}
-                    format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ}
-                  />
-                }
-              />
-            )}
-            {job.finished && (
-              <SummaryCardItem
-                label="Completed Time"
-                value={
-                  <Timestamp
-                    time={TimestampToMoment(job.finished, null)}
-                    format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ}
-                  />
-                }
-              />
-            )}
-            <SummaryCardItem
-              label="Last Execution Time"
-              value={
-                <Timestamp
-                  time={TimestampToMoment(job.last_run, null)}
-                  format={DATE_WITH_SECONDS_AND_MILLISECONDS_FORMAT_24_TZ}
-                />
-              }
-            />
-            <SummaryCardItem
-              label="Execution Count"
-              value={String(job.num_runs)}
-            />
-            <SummaryCardItem label="User Name" value={job.username} />
-            {job.highwater_timestamp && (
-              <SummaryCardItem
-                label="High-water Timestamp"
-                value={
-                  <HighwaterTimestamp
-                    timestamp={job.highwater_timestamp}
-                    decimalString={job.highwater_decimal}
-                  />
-                }
-              />
-            )}
-          </SummaryCard>
-        </Col>
-      </Row>
-    );
-  };
-
-  onTabChange = (tabId: string): void => {
-    const { history } = this.props;
-    const searchParams = new URLSearchParams(history.location.search);
-    searchParams.set("tab", tabId);
-    history.replace({
-      ...history.location,
-      search: searchParams.toString(),
-    });
-    this.setState({
-      currentTab: tabId,
-    });
-  };
-
-  render(): React.ReactElement {
-    const isLoading =
-      this.props.jobRequest.inFlight && !this.props.jobRequest.data;
-    const error = this.props.jobRequest.error;
-    const job = this.props.jobRequest.data;
-    const nextRun = TimestampToMoment(job?.next_run);
-    const hasNextRun = nextRun?.isAfter();
-    const { currentTab } = this.state;
-    return (
-      <div className={jobCx("job-details")}>
-        <Helmet title={"Details | Job"} />
-        <div className={jobCx("section page--header")}>
-          <Button
-            onClick={this.prevPage}
-            type="unstyled-link"
-            size="small"
-            icon={<ArrowLeft fontSize={"10px"} />}
-            iconPosition="left"
-            className={commonStyles("small-margin")}
-          >
-            Jobs
-          </Button>
-          <h3 className={jobCx("page--header__title")}>{`Job ID: ${String(
-            getMatchParamByName(this.props.match, idAttr),
-          )}`}</h3>
-        </div>
-        <section className={jobCx("section section--container")}>
-          <Loading
-            loading={isLoading}
-            page={"job details"}
-            error={error}
-            render={() => (
-              <>
-                <section className={cardCx("summary-card")}>
-                  <Row gutter={24}>
-                    <Col className="gutter-row" span={24}>
-                      <SqlBox
-                        value={job?.description ?? "Job not found."}
-                        size={SqlBoxSize.CUSTOM}
-                        format={true}
-                      />
-                    </Col>
-                  </Row>
-                </section>
-                <Tabs
-                  className={commonStyles("cockroach--tabs")}
-                  defaultActiveKey={TabKeysEnum.OVERVIEW}
-                  onChange={this.onTabChange}
-                  activeKey={currentTab}
-                >
-                  <TabPane tab={TabKeysEnum.OVERVIEW} key="overview">
-                    {this.renderOverviewTabContent(hasNextRun, nextRun, job)}
-                  </TabPane>
-                  {!useContext(CockroachCloudContext) &&
-                    this.props.hasAdminRole && (
-                      <TabPane
-                        tab={TabKeysEnum.PROFILER}
-                        key="advancedDebugging"
-                      >
-                        {this.renderProfilerTabContent(job)}
-                      </TabPane>
-                    )}
-                </Tabs>
-              </>
-            )}
-          />
-        </section>
+  return (
+    <div className={jobCx("job-details")}>
+      <Helmet title={"Details | Job"} />
+      <div className={jobCx("section page--header")}>
+        <Button
+          onClick={() => history.goBack()}
+          type="unstyled-link"
+          size="small"
+          icon={<ArrowLeft fontSize={"10px"} />}
+          iconPosition="left"
+          className={commonStyles("small-margin")}
+        >
+          Jobs
+        </Button>
+        <h3 className={jobCx("page--header__title")}>{`Job ID: ${jobId}`}</h3>
       </div>
-    );
-  }
+      <section className={jobCx("section section--container")}>
+        <Loading
+          loading={isLoading}
+          page={"job details"}
+          error={error}
+          render={() => (
+            <>
+              <section className={cardCx("summary-card")}>
+                <Row gutter={24}>
+                  <Col className="gutter-row" span={24}>
+                    <SqlBox
+                      value={job?.description ?? "Job not found."}
+                      size={SqlBoxSize.CUSTOM}
+                      format={true}
+                    />
+                  </Col>
+                </Row>
+              </section>
+              <Tabs
+                className={commonStyles("cockroach--tabs")}
+                defaultActiveKey={TabKeysEnum.OVERVIEW}
+                onChange={onTabChange}
+                activeKey={currentTab}
+                items={[
+                  {
+                    key: "overview",
+                    label: TabKeysEnum.OVERVIEW,
+                    children: <OverviewTabContent job={job} />,
+                  },
+                  !ccContext &&
+                    hasAdminRole && {
+                      key: "profiler",
+                      label: TabKeysEnum.PROFILER,
+                      children: <JobProfilerView jobID={jobId} />,
+                    },
+                ]}
+              />
+            </>
+          )}
+        />
+      </section>
+    </div>
+  );
 }

@@ -59,12 +59,14 @@ func testingResetLoad(s State, rangeID RangeID) {
 // NewStorePool returns a store pool with no gossip instance and default values
 // for configuration.
 func NewStorePool(
-	nodeCountFn storepool.NodeCountFunc, nodeLivenessFn storepool.NodeLivenessFunc, hlc *hlc.Clock,
-) (*storepool.StorePool, *cluster.Settings) {
+	nodeCountFn storepool.NodeCountFunc,
+	nodeLivenessFn storepool.NodeLivenessFunc,
+	clock *hlc.Clock,
+	st *cluster.Settings,
+) *storepool.StorePool {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 
-	st := cluster.MakeTestingClusterSettings()
 	ambientCtx := log.MakeTestingAmbientContext(stopper.Tracer())
 
 	// Never gossip, pass in nil values.
@@ -73,12 +75,15 @@ func NewStorePool(
 		ambientCtx,
 		st,
 		g,
-		hlc,
+		clock,
 		nodeCountFn,
 		nodeLivenessFn,
-		/* deterministic */ true,
+		// TODO(kv-distribution): consider adding tests which mock
+		// StoreLivenessFn.
+		storepool.NewMockStoreLiveness().StoreLivenessFunc,
+		true, /* deterministic */
 	)
-	return sp, st
+	return sp
 }
 
 // OffsetTick offsets start time by adding tick number of seconds to it.

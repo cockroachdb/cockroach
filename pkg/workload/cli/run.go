@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/cockroachdb/cockroach/pkg/workload/changefeeds"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram/exporter"
 	"github.com/cockroachdb/cockroach/pkg/workload/workloadsql"
@@ -57,7 +58,7 @@ var drop = initFlags.Bool("drop", false, "Drop the existing database, if it exis
 var sharedFlags = pflag.NewFlagSet(`shared`, pflag.ContinueOnError)
 var pprofport = sharedFlags.Int("pprofport", 33333, "Port for pprof endpoint.")
 var dataLoader = sharedFlags.String("data-loader", `AUTO`,
-	"How to load initial table data. All workloads support INSERT; some support IMPORT, which AUTO prefers if available.")
+	"How to load initial table data. All workloads support INSERT; some support IMPORT, which AUTO prefers if available. Use NONE to create schema without loading data.")
 var initConns = sharedFlags.Int("init-conns", 16,
 	"The number of connections to use during INSERT init")
 
@@ -90,6 +91,10 @@ var histogramsMaxLatency = runFlags.Duration(
 	"histograms-max-latency", 100*time.Second,
 	"Expected maximum latency of running a query")
 
+var disableTempHistogramFile = runFlags.Bool("disable-temp-hist-file", false,
+	"If true, disables the use of a temporary file for incremental histogram data. Instead, data is written directly to the final file. "+
+		"Note: If the workload stops abruptly, the final file may become corrupted.")
+
 var openmetricsLabels = runFlags.String("openmetrics-labels", "",
 	"Comma separated list of key value pairs used as labels, used by openmetrics exporter. Eg 'cloud=aws, workload=tpcc'")
 
@@ -100,6 +105,20 @@ var secure = securityFlags.Bool("secure", false,
 		"For example when using root, certs/client.root.crt certs/client.root.key should exist.")
 var user = securityFlags.String("user", "root", "Specify a user to run the workload as")
 var password = securityFlags.String("password", "", "Optionally specify a password for the user")
+
+// Options relating to the optional changefeed.
+var (
+	changefeed = runFlags.Bool("changefeed", false,
+		"Optionally run a changefeed over the tables")
+	changefeedStartDelay = runFlags.Duration("changefeed-start-delay", 0*time.Second,
+		"How long to wait before starting the changefeed")
+	changefeedMaxRate = runFlags.Float64(
+		"changefeed-max-rate", 0, "Maximum frequency of changefeed ingestion. If 0, no limit.")
+	changefeedResolvedTarget = runFlags.Duration("changefeed-resolved-target", 5*time.Second,
+		"The target frequency of resolved messages. O to disable resolved reporting and accept server defaults.")
+	changefeedCursor = runFlags.String("changefeed-cursor", "",
+		"The cursor to start the changefeed from. If empty, the changefeed will start from the current cluster logical timestamp.")
+)
 
 func init() {
 
@@ -318,11 +337,11 @@ func runInit(gen workload.Generator, urls []string, dbName string) error {
 
 	startPProfEndPoint(ctx)
 	maybeLogRandomSeed(ctx, gen)
-	return runInitImpl(ctx, gen, initDB, dbName)
+	return runInitImpl(ctx, gen, initDB, dbName, urls)
 }
 
 func runInitImpl(
-	ctx context.Context, gen workload.Generator, initDB *gosql.DB, dbName string,
+	ctx context.Context, gen workload.Generator, initDB *gosql.DB, dbName string, urls []string,
 ) error {
 	if *drop {
 		if _, err := initDB.ExecContext(ctx, `DROP DATABASE IF EXISTS `+dbName); err != nil {
@@ -354,6 +373,8 @@ func runInitImpl(
 		}
 	case `import`, `imports`:
 		l = workload.ImportDataLoader
+	case `none`:
+		l = workloadsql.SchemaOnlyDataLoader{URLs: urls}
 	default:
 		return errors.Errorf(`unknown data loader: %s`, *dataLoader)
 	}
@@ -374,7 +395,7 @@ func startPProfEndPoint(ctx context.Context) {
 	go func() {
 		err := http.ListenAndServe(":"+strconv.Itoa(*pprofport), nil)
 		if err != nil {
-			log.Errorf(ctx, "%v", err)
+			log.Dev.Errorf(ctx, "%v", err)
 		}
 	}()
 }
@@ -398,17 +419,17 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 		return err
 	}
 	if *doInit || *drop {
-		log.Info(ctx, `DEPRECATION: `+
+		log.Dev.Info(ctx, `DEPRECATION: `+
 			`the --init flag on "workload run" will no longer be supported after 19.2`)
 		for {
-			err = runInitImpl(ctx, gen, initDB, dbName)
+			err = runInitImpl(ctx, gen, initDB, dbName, urls)
 			if err == nil {
 				break
 			}
 			if !*tolerateErrors {
 				return err
 			}
-			log.Infof(ctx, "retrying after error during init: %v", err)
+			log.Dev.Infof(ctx, "retrying after error during init: %v", err)
 		}
 	}
 
@@ -419,6 +440,12 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 		// Create a limiter using maxRate specified on the command line and
 		// with allowed burst of 1 at the maximum allowed rate.
 		limiter = rate.NewLimiter(rate.Limit(*maxRate), 1)
+	}
+	var changefeedLimiter *rate.Limiter
+	if *changefeedMaxRate > 0 {
+		ratePerSecond := *changefeedMaxRate
+		burst := max(int(ratePerSecond), 1)
+		changefeedLimiter = rate.NewLimiter(rate.Limit(ratePerSecond), burst)
 	}
 
 	maybeLogRandomSeed(ctx, gen)
@@ -432,27 +459,11 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 		publisher = histogram.CreateUdpPublisher(*individualOperationReceiverAddr)
 	}
 
-	metricsExporter, file, err := maybeInitAndCreateExporter(gen)
+	metricsExporter, file, err := maybeInitAndCreateExporter()
 	if err != nil {
 		return errors.Wrap(err, "error creating metrics exporter")
 	}
-	defer func() {
-		if metricsExporter != nil {
-			if err = metricsExporter.Close(func() error {
-				if file == nil {
-					log.Infof(ctx, "no file to close")
-					return nil
-				}
-
-				if err := file.Close(); err != nil {
-					return err
-				}
-				return nil
-			}); err != nil {
-				log.Warningf(ctx, "failed to close metrics exporter: %v", err)
-			}
-		}
-	}()
+	defer closeExporter(ctx, metricsExporter, file)
 
 	reg := histogram.NewRegistryWithPublisherAndExporter(
 		*histogramsMaxLatency,
@@ -467,44 +478,54 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 			fmt.Sprintf(":%d", *prometheusPort),
 			promhttp.HandlerFor(reg.Gatherer(), promhttp.HandlerOpts{}),
 		); err != nil {
-			log.Errorf(context.Background(), "error serving prometheus: %v", err)
+			log.Dev.Errorf(context.Background(), "error serving prometheus: %v", err)
 		}
 	}()
 
 	var ops workload.QueryLoad
 	prepareStart := timeutil.Now()
-	log.Infof(ctx, "creating load generator...")
-	// We set up a timer that cancels this context after prepareTimeout,
-	// but we'll collect the stacks before we do, so that they can be
-	// logged.
+	log.Dev.Infof(ctx, "creating load generator...")
+
 	prepareCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	stacksCh := make(chan []byte, 1)
-	const prepareTimeout = 90 * time.Minute
-	defer time.AfterFunc(prepareTimeout, func() {
-		stacksCh <- allstacks.Get()
-		cancel()
-	}).Stop()
+
 	if prepareErr := func(ctx context.Context) error {
+		// We set up a timer that cancels this context after prepareTimeout,
+		// but we'll collect the stacks before we do, so that they can be
+		// logged.
+		const prepareTimeout = 90 * time.Minute
+		defer time.AfterFunc(prepareTimeout, func() {
+			stacksCh <- allstacks.Get()
+			cancel()
+		}).Stop()
+
 		retry := retry.StartWithCtx(ctx, retry.Options{})
 		var err error
 		for retry.Next() {
 			if err != nil {
-				log.Warningf(ctx, "retrying after error while creating load: %v", err)
+				log.Dev.Warningf(ctx, "retrying after error while creating load: %v", err)
 			}
 			ops, err = o.Ops(ctx, urls, reg)
+			if err != nil && !*tolerateErrors {
+				return errors.Wrapf(err, "failed to initialize the load generator")
+			}
+
+			if *changefeed {
+				log.Dev.Infof(ctx, "adding changefeed to query load...")
+				err = changefeeds.AddChangefeedToQueryLoad(ctx, gen.(workload.ConnFlagser), dbName, *changefeedResolvedTarget, *changefeedCursor, urls, reg, &ops)
+				if err != nil && !*tolerateErrors {
+					return errors.Wrapf(err, "failed to initialize changefeed")
+				}
+			}
 			if err == nil {
 				return nil
-			}
-			err = errors.Wrapf(err, "failed to initialize the load generator")
-			if !*tolerateErrors {
-				return err
 			}
 		}
 		if ctx.Err() != nil {
 			// Don't retry endlessly. Note that this retry loop is not under the
 			// control of --duration, so we're avoiding retrying endlessly.
-			log.Errorf(ctx, "Attempt to create load generator failed. "+
+			log.Dev.Errorf(ctx, "Attempt to create load generator failed. "+
 				"It's been more than %s since we started trying to create the load generator "+
 				"so we're giving up. Last failure: %s\nStacks:\n%s", prepareTimeout, err, <-stacksCh)
 		}
@@ -512,7 +533,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 	}(prepareCtx); prepareErr != nil {
 		return prepareErr
 	}
-	log.Infof(ctx, "creating load generator... done (took %s)", timeutil.Since(prepareStart))
+	log.Dev.Infof(ctx, "creating load generator... done (took %s)", timeutil.Since(prepareStart))
 
 	start := timeutil.Now()
 	errCh := make(chan error)
@@ -536,8 +557,17 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 	workersCtx, cancelWorkers := context.WithCancel(ctx)
 	defer cancelWorkers()
 	var wg sync.WaitGroup
-	wg.Add(len(ops.WorkerFns))
+	wg.Add(len(ops.WorkerFns) + len(ops.ChangefeedFns))
 	go func() {
+		for _, workFn := range ops.ChangefeedFns {
+			go func(workFn func(context.Context) error) {
+				if *changefeedStartDelay > 0 {
+					time.Sleep(*changefeedStartDelay)
+				}
+				workerRun(workersCtx, errCh, &wg, changefeedLimiter, workFn)
+			}(workFn)
+		}
+
 		// If a ramp period was specified, start all the workers gradually
 		// with a new context.
 		var rampCtx context.Context
@@ -591,12 +621,12 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 			formatter.outputError(err)
 			if *tolerateErrors {
 				if everySecond.ShouldLog() {
-					log.Errorf(ctx, "%v", err)
+					log.Dev.Errorf(ctx, "%v", err)
 				}
 				continue
 			}
-			// Log the error so we get the stack trace.
-			log.Errorf(ctx, "%v", err)
+			// Log the error with %+v so we get the stack trace.
+			log.Dev.Errorf(ctx, "workload run error: %+v", err)
 			return err
 
 		case <-ticker.C:
@@ -605,8 +635,15 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 				formatter.outputTick(startElapsed, t)
 				if t.Exporter != nil && rampDone == nil {
 					if err := t.Exporter.SnapshotAndWrite(t.Hist, t.Now, t.Elapsed, &t.Name); err != nil {
-						log.Warningf(ctx, "histogram: %v", err)
+						log.Dev.Warningf(ctx, "histogram: %v", err)
 					}
+				}
+				// TODO(ssd): Ugly hack. Until we support something other than
+				// histograms here, for this particular metric, if we reset the
+				// histogram. We don't reset the Cumulative histogram which lets us see
+				// pMax.
+				if t.Name == "changefeed-resolved" {
+					t.Hist.Reset()
 				}
 			})
 
@@ -630,7 +667,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 				formatter.outputTotal(startElapsed, t)
 				if t.Exporter != nil {
 					if err := t.Exporter.SnapshotAndWrite(t.Hist, t.Now, t.Elapsed, &t.Name); err != nil {
-						log.Warningf(ctx, "histogram: %v", err)
+						log.Dev.Warningf(ctx, "histogram: %v", err)
 					}
 				}
 				if ops.ResultHist == `` || ops.ResultHist == t.Name {
@@ -662,17 +699,19 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 // if a seed is being used.
 func maybeLogRandomSeed(ctx context.Context, gen workload.Generator) {
 	if randomSeed := gen.Meta().RandomSeed; randomSeed != nil {
-		log.Infof(ctx, "%s", randomSeed.LogMessage())
+		log.Dev.Infof(ctx, "%s", randomSeed.LogMessage())
 	}
 }
 
-func maybeInitAndCreateExporter(gen workload.Generator) (exporter.Exporter, *os.File, error) {
+func maybeInitAndCreateExporter() (exporter.Exporter, *os.File, error) {
 	if *histograms == "" {
 		return nil, nil, nil
 	}
 
 	var metricsExporter exporter.Exporter
 	var file *os.File
+	var tempFilePath string
+	var finalPath string
 
 	switch *histogramExportFormat {
 	case "json":
@@ -681,15 +720,12 @@ func maybeInitAndCreateExporter(gen workload.Generator) (exporter.Exporter, *os.
 		labelValues := strings.Split(*openmetricsLabels, ",")
 		labels := make(map[string]string)
 		for _, label := range labelValues {
-			parts := strings.Split(label, "=")
+			parts := strings.SplitN(label, "=", 2)
 			if len(parts) != 2 {
 				return nil, nil, errors.Errorf("invalid histogram label %q", label)
 			}
 			labels[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
 		}
-
-		// Append workload generator name as a tag
-		labels["workload"] = gen.Meta().Name
 		openMetricsExporter := exporter.OpenMetricsExporter{}
 		openMetricsExporter.SetLabels(&labels)
 		metricsExporter = &openMetricsExporter
@@ -708,7 +744,17 @@ func maybeInitAndCreateExporter(gen workload.Generator) (exporter.Exporter, *os.
 		return nil, nil, err
 	}
 
-	file, err = os.Create(*histograms)
+	// Create a temporary file path
+	finalPath = *histograms
+	dir := filepath.Dir(finalPath)
+	tempFilePath = filepath.Join(dir, fmt.Sprintf(".%s.tmp.%d", filepath.Base(finalPath), timeutil.Now().UnixNano()))
+
+	// Create the file based on the disableTempHistogramFile flag
+	if *disableTempHistogramFile {
+		file, err = os.Create(finalPath)
+	} else {
+		file, err = os.Create(tempFilePath)
+	}
 	if err != nil {
 		return nil, nil, err
 	}
@@ -717,4 +763,52 @@ func maybeInitAndCreateExporter(gen workload.Generator) (exporter.Exporter, *os.
 	metricsExporter.Init(&writer)
 
 	return metricsExporter, file, nil
+}
+
+func closeExporter(ctx context.Context, metricsExporter exporter.Exporter, file *os.File) {
+	if metricsExporter != nil {
+		if err := metricsExporter.Close(func() error {
+			if file == nil {
+				log.Dev.Infof(ctx, "no file to close")
+				return nil
+			}
+
+			// if disableTempHistogramFile is enabled, directly close the final file.
+			if *disableTempHistogramFile {
+				return file.Close()
+
+			}
+
+			return renameTempFile(file, *histograms)
+		}); err != nil {
+			log.Dev.Warningf(ctx, "failed to close metrics exporter: %v", err)
+		}
+	}
+}
+
+func renameTempFile(file *os.File, finalPath string) error {
+	tempPath := file.Name()
+	defer func() {
+		_ = os.Remove(tempPath) // Clean up the temp folder if still exists
+	}()
+
+	// Sync file to ensure all data is written to disk
+	if err := file.Sync(); err != nil {
+		// If we are not able to sync the file, we should not attempt to rename it.
+		// This is to avoid the case where an incomplete file is renamed.
+		return err
+	}
+
+	// Close the file
+	if err := file.Close(); err != nil {
+		return err
+	}
+
+	// Rename from temp to final path
+	// This is atomic on all unix-like systems
+	if err := os.Rename(tempPath, finalPath); err != nil {
+		return errors.Wrap(err, "failed to rename temporary file")
+	}
+
+	return nil
 }

@@ -5,4 +5,3 @@
 
 export * from "./uiConfig.reducer";
 export * from "./uiConfig.selector";
-export * from "./uiConfig.sagas";

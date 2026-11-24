@@ -8,12 +8,14 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -55,14 +57,13 @@ func DeleteTableWithPredicate(
 	ctx context.Context,
 	db *kv.DB,
 	codec keys.SQLCodec,
-	sv *settings.Values,
+	clusterSettings *cluster.Settings,
 	distSender *kvcoord.DistSender,
 	tableID catid.DescID,
 	predicates kvpb.DeleteRangePredicates,
 	batchSize int64,
 ) error {
-
-	log.Infof(ctx, "deleting data for table %d with predicate %s", tableID, predicates.String())
+	log.Dev.Infof(ctx, "deleting data for table %d with predicate %s", tableID, predicates.String())
 	tableKey := roachpb.RKey(codec.TablePrefix(uint32(tableID)))
 	tableSpan := roachpb.RSpan{Key: tableKey, EndKey: tableKey.PrefixEnd()}
 
@@ -71,16 +72,16 @@ func DeleteTableWithPredicate(
 	// The partitions are sent to the workers via the spansToDo channel.
 	//
 	// TODO (msbutler): tune these
-	rangesPerBatch := rollbackBatchSize.Get(sv)
-	numWorkers := int(predicateDeleteRangeNumWorkers.Get(sv))
+	rangesPerBatch := rollbackBatchSize.Get(&clusterSettings.SV)
+	numWorkers := int(predicateDeleteRangeNumWorkers.Get(&clusterSettings.SV))
 
 	spansToDo := make(chan *roachpb.Span, 1)
 
-	// Create a cancellable context to prevent the worker goroutines below from
-	// leaking once the parent goroutine returns.
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
+	// Producer and workers run inside the same ctxgroup so they share its
+	// derived context. Either a parent-ctx cancellation (e.g. PAUSE on a
+	// reverting IMPORT) or a worker error then propagates to the other side
+	// via ctx.Done(); without this sharing the producer would block on send
+	// into a channel with no readers. See #168754.
 	grp := ctxgroup.WithContext(ctx)
 	grp.GoCtx(func(ctx context.Context) error {
 		return ctxgroup.GroupWorkers(ctx, numWorkers, func(ctx context.Context, _ int) error {
@@ -108,7 +109,9 @@ func DeleteTableWithPredicate(
 								Key:    span.Key,
 								EndKey: span.EndKey,
 							},
-							UseRangeTombstone: true,
+							// Support for deletion predicates without range tombstones was
+							// added in 26_1.
+							UseRangeTombstone: !clusterSettings.Version.IsActive(ctx, clusterversion.V26_1),
 							Predicates:        predicates,
 						}
 						log.VEventf(ctx, 2, "deleting range %s - %s; attempt %v", span.Key, span.EndKey, resumeCount)
@@ -121,7 +124,7 @@ func DeleteTableWithPredicate(
 							delRangeRequest)
 
 						if err != nil {
-							log.Errorf(ctx, "delete range %s - %s failed: %s", span.Key, span.EndKey, err.String())
+							log.Dev.Errorf(ctx, "delete range %s - %s failed: %v", span.Key, span.EndKey, err)
 							return errors.Wrapf(err.GoError(), "delete range %s - %s", span.Key, span.EndKey)
 						}
 						span = nil
@@ -139,27 +142,38 @@ func DeleteTableWithPredicate(
 		})
 	})
 
-	var n int64
-	lastKey := tableSpan.Key
-	ri := kvcoord.MakeRangeIterator(distSender)
-	for ri.Seek(ctx, tableSpan.Key, kvcoord.Ascending); ; ri.Next(ctx) {
-		if !ri.Valid() {
-			return ri.Error()
-		}
-		if n++; n >= rangesPerBatch || !ri.NeedAnother(tableSpan) {
-			endKey := ri.Desc().EndKey
-			if tableSpan.EndKey.Less(endKey) {
-				endKey = tableSpan.EndKey
+	grp.GoCtx(func(ctx context.Context) error {
+		defer close(spansToDo)
+		var n int64
+		lastKey := tableSpan.Key
+		ri := kvcoord.MakeRangeIterator(distSender)
+		for ri.Seek(ctx, tableSpan.Key, kvcoord.Ascending); ; ri.Next(ctx) {
+			if !ri.Valid() {
+				return ri.Error()
 			}
-			spansToDo <- &roachpb.Span{Key: lastKey.AsRawKey(), EndKey: endKey.AsRawKey()}
-			n = 0
-			lastKey = endKey
+			if n++; n >= rangesPerBatch || !ri.NeedAnother(tableSpan) {
+				endKey := ri.Desc().EndKey
+				if tableSpan.EndKey.Less(endKey) {
+					endKey = tableSpan.EndKey
+				}
+				select {
+				case <-ctx.Done():
+					// Return nil so grp.Wait surfaces the originating error
+					// (a worker's wrapped KV error, or a worker's ctx.Err on
+					// parent cancellation) rather than this producer's
+					// downstream context.Canceled. ctxgroup.Wait falls back
+					// to ctx.Err when no goroutine returned an error.
+					return nil
+				case spansToDo <- &roachpb.Span{Key: lastKey.AsRawKey(), EndKey: endKey.AsRawKey()}:
+				}
+				n = 0
+				lastKey = endKey
+			}
+			if !ri.NeedAnother(tableSpan) {
+				return nil
+			}
 		}
+	})
 
-		if !ri.NeedAnother(tableSpan) {
-			break
-		}
-	}
-	close(spansToDo)
 	return grp.Wait()
 }

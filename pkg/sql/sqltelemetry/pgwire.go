@@ -81,3 +81,7 @@ var NotReadOnlyStmtsTriedWithPausablePortals = telemetry.GetCounterOnce("pgwire.
 // pgwire portal and the session variable multiple_active_portals_enabled has
 // been set to true. In this case the execution cannot be paused.
 var SubOrPostQueryStmtsTriedWithPausablePortals = telemetry.GetCounterOnce("pgwire.pausable_portal_stmts_with_sub_or_post_queries")
+
+// CertSANEnableCounter is to be incremented every time the
+// security.client_cert.san_required.enabled cluster setting is toggled on.
+var CertSANEnableCounter = telemetry.GetCounterOnce("auth.cert.san.enable")

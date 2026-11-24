@@ -17,8 +17,9 @@ func ValidateTable(
 	targets changefeedbase.Targets,
 	tableDesc catalog.TableDescriptor,
 	canHandle changefeedbase.CanHandle,
+	allowOfflineDescriptor bool,
 ) error {
-	if err := validateTable(targets, tableDesc, canHandle); err != nil {
+	if err := validateTable(targets, tableDesc, canHandle, allowOfflineDescriptor); err != nil {
 		return changefeedbase.WithTerminalError(err)
 	}
 	return nil
@@ -28,6 +29,7 @@ func validateTable(
 	targets changefeedbase.Targets,
 	tableDesc catalog.TableDescriptor,
 	canHandle changefeedbase.CanHandle,
+	allowOfflineDescriptor bool,
 ) error {
 	// Technically, the only non-user table known not to work is system.jobs
 	// (which creates a cycle since the resolved timestamp high-water mark is
@@ -47,6 +49,9 @@ func validateTable(
 		return errors.Errorf(`CHANGEFEED cannot target sequences: %s`, tableDesc.GetName())
 	}
 	if tableDesc.Offline() {
+		if allowOfflineDescriptor {
+			return nil
+		}
 		return errors.Errorf("CHANGEFEED cannot target offline table: %s (offline reason: %q)", tableDesc.GetName(), tableDesc.GetOfflineReason())
 	}
 	found, err := targets.EachHavingTableID(tableDesc.GetID(), func(t changefeedbase.Target) error {
@@ -86,6 +91,16 @@ func validateTable(
 	for _, requiredColumn := range canHandle.RequiredColumns {
 		if catalog.FindColumnByName(tableDesc, requiredColumn) == nil {
 			return errors.Errorf("required column %s not present on table %s", requiredColumn, tableDesc.GetName())
+		}
+	}
+
+	for name, typ := range canHandle.RequiredColumnTypes {
+		col := catalog.FindColumnByName(tableDesc, name)
+		if col == nil {
+			return errors.Errorf("required column %s not present on table %s", name, tableDesc.GetName())
+		}
+		if !col.GetType().Equivalent(typ) {
+			return errors.Errorf("column %s of type %s does not match required type %s", name, col.GetType(), typ)
 		}
 	}
 

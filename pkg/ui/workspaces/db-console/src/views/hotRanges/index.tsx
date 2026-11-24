@@ -9,61 +9,103 @@ import {
   Anchor,
   util,
   TimezoneContext,
+  SortSetting,
+  ISortedTablePagination,
+  useNodesSummary,
 } from "@cockroachlabs/cluster-ui";
 import classNames from "classnames/bind";
-import React, { useRef, useEffect, useState, useContext } from "react";
+import React, { useRef, useMemo, useEffect, useContext, useState } from "react";
 import { Helmet } from "react-helmet";
-import { useDispatch, useSelector } from "react-redux";
 
-import { cockroach } from "src/js/protos";
-import { refreshHotRanges } from "src/redux/apiReducers";
-import {
-  hotRangesSelector,
-  isLoadingSelector,
-  isValidSelector,
-  lastErrorSelector,
-  lastSetAtSelector,
-} from "src/redux/hotRanges";
-import { selectNodeLocalities } from "src/redux/localities";
+import { useHotRanges } from "src/hooks/useHotRanges";
+import { analytics } from "src/redux/analytics";
 import { performanceBestPracticesHotSpots } from "src/util/docs";
 import { HotRangesFilter } from "src/views/hotRanges/hotRangesFilter";
+import useFilters, { filterRanges } from "src/views/hotRanges/useFilters";
 
 import ErrorBoundary from "../app/components/errorMessage/errorBoundary";
 
-import styles from "./hotRanges.module.styl";
+import styles from "./hotRanges.module.scss";
 import HotRangesTable from "./hotRangesTable";
 
 const cx = classNames.bind(styles);
-const HotRangesRequest = cockroach.server.serverpb.HotRangesRequest;
-type HotRange = cockroach.server.serverpb.HotRangesResponseV2.IHotRange;
+
+const emptyMessages = {
+  SELECT_NODES: {
+    title: "Select nodes to view top ranges",
+    message:
+      "Select one or more nodes with high activity, such as high CPU usage, to investigate potential hotspots. Filtering fewer nodes helps you identify the hottest ranges more quickly and improves page load time.",
+  },
+  MODIFY_FILTERS: {
+    title: "No results found",
+    message:
+      "No hot ranges found for the selected filters. Modify the filters to identify hot ranges",
+  },
+};
 
 const HotRangesPage = () => {
-  const dispatch = useDispatch();
-  const hotRanges = useSelector(hotRangesSelector);
-  const isValid = useSelector(isValidSelector);
-  const lastError = useSelector(lastErrorSelector);
-  const lastSetAt = useSelector(lastSetAtSelector);
-  const isLoading = useSelector(isLoadingSelector);
-  const nodeIdToLocalityMap = useSelector(selectNodeLocalities);
+  const { nodeStatuses } = useNodesSummary();
+  const nodeIdToLocalityMap = useMemo(() => {
+    return new Map(
+      (nodeStatuses ?? []).map(n => {
+        const locality = (n.desc?.locality?.tiers || [])
+          .map(t => `${t.key}=${t.value}`)
+          .join(", ");
+        return [n.desc.node_id, locality];
+      }),
+    );
+  }, [nodeStatuses]);
   const timezone = useContext(TimezoneContext);
 
-  useEffect(() => {
-    if (!isValid) {
-      dispatch(refreshHotRanges(new HotRangesRequest()));
-    }
-  }, [dispatch, isValid]);
+  const { filters, applyFilters } = useFilters();
+  const { hotRanges, error, isLoading, lastSetAt } = useHotRanges(
+    filters.nodeIds,
+  );
+  const [sortSetting, setSortSetting] = useState<SortSetting>({
+    ascending: false,
+    columnTitle: "qps",
+  });
+  const [pagination, setPagination] = useState<ISortedTablePagination>(null);
 
-  const [filteredHotRanges, setFilteredHotRanges] =
-    useState<HotRange[]>(hotRanges);
+  // track analytics on filters, pagination and sort.
+  const analyticsKey = JSON.stringify([filters, sortSetting, pagination]);
+  useEffect(() => {
+    if (!filters.nodeIds.length || !pagination || !sortSetting) {
+      return;
+    }
+    analytics.track({
+      event: "Hot Ranges Page Load",
+      properties: {
+        filters,
+        pagination,
+        sortSetting,
+      },
+    });
+    // this is keyed on a hash of the contents for filters, pagination and sortSetting
+    // as opposed to the references themselves, as we don't want to re-run this effect
+    // when the contents haven't changed, but the references have.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [analyticsKey]);
 
   const clearButtonRef = useRef<HTMLSpanElement>();
+  const filteredRanges = useMemo(() => {
+    return filterRanges(hotRanges, filters);
+  }, [filters, hotRanges]);
+
+  const emptyMessage = useMemo(
+    () =>
+      filters.nodeIds.length
+        ? emptyMessages.MODIFY_FILTERS
+        : emptyMessages.SELECT_NODES,
+    [filters.nodeIds],
+  );
 
   return (
     <React.Fragment>
-      <Helmet title="Hot Ranges" />
-      <h3 className="base-heading">Hot Ranges</h3>
+      <Helmet title="Top Ranges" />
+      <h3 className="base-heading">Top Ranges</h3>
       <Text className={cx("hotranges-description")}>
-        The Hot Ranges table shows ranges receiving a high number of reads or
+        The Top Ranges table shows ranges receiving a high number of reads or
         writes. By default, the table is sorted by ranges with the highest QPS
         (queries per second). <br />
         Use this information to
@@ -72,19 +114,15 @@ const HotRangesPage = () => {
           find and reduce hot spots.
         </Anchor>
       </Text>
-      <HotRangesFilter
-        hotRanges={hotRanges}
-        onChange={setFilteredHotRanges}
-        nodeIdToLocalityMap={nodeIdToLocalityMap}
-        clearButtonContainer={clearButtonRef.current}
-      />
+      <HotRangesFilter filters={filters} applyFilters={applyFilters} />
       <ErrorBoundary>
         <Loading
           loading={isLoading}
-          error={lastError}
+          loadingText={`Loading ranges for ${filters.nodeIds?.length} nodes...`}
+          error={error}
           render={() => (
             <HotRangesTable
-              hotRangesList={filteredHotRanges}
+              hotRangesList={filteredRanges}
               lastUpdate={
                 lastSetAt &&
                 util.FormatWithTimezone(
@@ -95,6 +133,19 @@ const HotRangesPage = () => {
               }
               nodeIdToLocalityMap={nodeIdToLocalityMap}
               clearFilterContainer={<span ref={clearButtonRef} />}
+              sortSetting={sortSetting}
+              onSortChange={setSortSetting}
+              emptyMessage={emptyMessage}
+              onViewPropertiesChange={({
+                sortSetting: ss,
+                pagination: pg,
+              }: {
+                sortSetting: SortSetting;
+                pagination: ISortedTablePagination;
+              }) => {
+                setSortSetting(ss);
+                setPagination(pg);
+              }}
             />
           )}
           page={undefined}

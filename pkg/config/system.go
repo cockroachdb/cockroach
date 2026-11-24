@@ -211,9 +211,9 @@ func (s *SystemConfig) GetLargestObjectID(
 	// Search for the descriptor table entries within the SystemConfig. lowIndex
 	// (in s.Values) is the first and highIndex one past the last KV pair in the
 	// descriptor table.
-	lowBound := keys.SystemSQLCodec.TablePrefix(keys.DescriptorTableID)
+	lowBound := keys.SystemSQLCodec.IndexPrefix(keys.DescriptorTableID, keys.DescriptorTablePrimaryKeyIndexID)
 	lowIndex := s.getIndexBound(lowBound)
-	highBound := keys.SystemSQLCodec.TablePrefix(keys.DescriptorTableID + 1)
+	highBound := keys.SystemSQLCodec.IndexPrefix(keys.DescriptorTableID+1, keys.DescriptorTablePrimaryKeyIndexID)
 	highIndex := s.getIndexBound(highBound)
 	if lowIndex == highIndex {
 		return 0, fmt.Errorf("descriptor table not found in system config of %d values", len(s.Values))
@@ -328,15 +328,15 @@ func (s *SystemConfig) getZoneConfigForKey(
 	return id, s.DefaultZoneConfig, nil
 }
 
-// GetSpanConfigForKey looks of the span config for the given key and the bounds
-// that span the configuration applies to. It's part of spanconfig.StoreReader
-// interface. Note that it is only usable for the system tenant config.
+// GetSpanConfigForKey looks up the span config for the given key. It's part of
+// the spanconfig.StoreReader interface. Note that it is only usable for the
+// system tenant config.
 func (s *SystemConfig) GetSpanConfigForKey(
 	ctx context.Context, key roachpb.RKey,
-) (roachpb.SpanConfig, roachpb.Span, error) {
+) (roachpb.SpanConfig, error) {
 	id, zone, err := s.getZoneConfigForKey(keys.SystemSQLCodec, key)
 	if err != nil {
-		return roachpb.SpanConfig{}, roachpb.Span{}, err
+		return roachpb.SpanConfig{}, err
 	}
 	spanConfig := zone.AsSpanConfig()
 	if id <= keys.MaxReservedDescID {
@@ -349,8 +349,7 @@ func (s *SystemConfig) GetSpanConfigForKey(
 		// applicable to user tables.
 		spanConfig.GCPolicy.IgnoreStrictEnforcement = true
 	}
-	prefix := keys.SystemSQLCodec.TablePrefix(uint32(id))
-	return spanConfig, roachpb.Span{Key: prefix, EndKey: prefix.PrefixEnd()}, nil
+	return spanConfig, nil
 }
 
 // DecodeKeyIntoZoneIDAndSuffix figures out the zone that the key belongs to.
@@ -458,6 +457,7 @@ func (s *SystemConfig) getZoneEntry(codec keys.SQLCodec, id ObjectID) (zoneEntry
 }
 
 var staticSplits = []roachpb.RKey{
+	roachpb.RKey(keys.Meta2Prefix),                  // start of meta2 span
 	roachpb.RKey(keys.NodeLivenessPrefix),           // end of meta records / start of node liveness span
 	roachpb.RKey(keys.NodeLivenessKeyMax),           // end of node liveness span
 	roachpb.RKey(keys.TimeseriesPrefix),             // start of timeseries span
@@ -479,6 +479,19 @@ var staticSplits = []roachpb.RKey{
 // between various system tables are also created.
 func StaticSplits() []roachpb.RKey {
 	return staticSplits
+}
+
+// StaticSplitAfter returns the first static split point strictly after key.
+// This is useful for determining the end of a named zone's key span: named
+// zones (meta, liveness, timeseries, system) are bounded by static splits,
+// so the next split after a key gives the zone's upper boundary.
+func StaticSplitAfter(key roachpb.RKey) (roachpb.RKey, bool) {
+	for _, split := range staticSplits {
+		if key.Less(split) {
+			return split, true
+		}
+	}
+	return nil, false
 }
 
 // ComputeSplitKey takes a start and end key and returns the first key at which
@@ -594,7 +607,7 @@ func (s *SystemConfig) systemTenantTableBoundarySplitKey(
 	if uint32(startID) <= keys.MaxReservedDescID {
 		endID, err := s.GetLargestObjectID(keys.MaxReservedDescID, keys.PseudoTableIDs)
 		if err != nil {
-			log.Errorf(ctx, "unable to determine largest reserved object ID from system config: %s", err)
+			log.Dev.Errorf(ctx, "unable to determine largest reserved object ID from system config: %s", err)
 			return nil
 		}
 		if splitKey := findSplitKey(startID, endID); splitKey != nil {
@@ -606,7 +619,7 @@ func (s *SystemConfig) systemTenantTableBoundarySplitKey(
 	// Find the split key in the system tenant's user space.
 	endID, err := s.GetLargestObjectID(0 /* maxReservedDescID */, keys.PseudoTableIDs)
 	if err != nil {
-		log.Errorf(ctx, "unable to determine largest object ID from system config: %s", err)
+		log.Dev.Errorf(ctx, "unable to determine largest object ID from system config: %s", err)
 		return nil
 	}
 	return findSplitKey(startID, endID)
@@ -634,7 +647,7 @@ func (s *SystemConfig) tenantBoundarySplitKey(
 		// would consider splitting on is the following ID.
 		_, lowTenIDExcl, err := keys.DecodeTenantPrefix(searchSpan.Key)
 		if err != nil {
-			log.Errorf(ctx, "unable to decode tenant ID from start key: %s", err)
+			log.Dev.Errorf(ctx, "unable to decode tenant ID from start key: %s", err)
 			return nil
 		}
 		if lowTenIDExcl.ToUint64() >= roachpb.MaxTenantID.ToUint64() {
@@ -649,7 +662,7 @@ func (s *SystemConfig) tenantBoundarySplitKey(
 	} else {
 		rem, highTenIDExcl, err := keys.DecodeTenantPrefix(searchSpan.EndKey)
 		if err != nil {
-			log.Errorf(ctx, "unable to decode tenant ID from end key: %s", err)
+			log.Dev.Errorf(ctx, "unable to decode tenant ID from end key: %s", err)
 			return nil
 		}
 		if len(rem) == 0 {
@@ -687,7 +700,7 @@ func (s *SystemConfig) tenantBoundarySplitKey(
 	splitKey := s.Values[lowIndex].Key
 	splitTenID, err := keys.SystemSQLCodec.DecodeTenantMetadataID(splitKey)
 	if err != nil {
-		log.Errorf(ctx, "unable to decode tenant ID from system config: %s", err)
+		log.Dev.Errorf(ctx, "unable to decode tenant ID from system config: %s", err)
 		return nil
 	}
 	if splitTenID.ToUint64() > highTenID.ToUint64() {
@@ -695,6 +708,16 @@ func (s *SystemConfig) tenantBoundarySplitKey(
 		return nil
 	}
 	return roachpb.RKey(keys.MakeTenantPrefix(splitTenID))
+}
+
+// ForEachOverlappingSpanConfig implements spanconfig.StoreReader.
+// SystemConfig is only used as a StoreReader in the legacy fallback
+// path (when span configs are disabled); no callers invoke
+// ForEachOverlappingSpanConfig through that path.
+func (s *SystemConfig) ForEachOverlappingSpanConfig(
+	context.Context, roachpb.Span, func(roachpb.Span, roachpb.SpanConfig) error,
+) error {
+	panic("not implemented")
 }
 
 // NeedsSplit returns whether the range [startKey, endKey) needs a split due

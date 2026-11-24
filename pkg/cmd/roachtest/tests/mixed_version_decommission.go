@@ -25,35 +25,18 @@ import (
 )
 
 func runDecommissionMixedVersions(ctx context.Context, t test.Test, c cluster.Cluster) {
-	// NB: The suspect duration must be at least 10s, as versions 23.2 and
-	// beyond will reset to the default of 30s if it fails validation, even if
-	// set by a previous version.
-	const suspectDuration = 10 * time.Second
+	// NB: The default value for both the store liveness and node liveness
+	// suspect duration settings is 30s.
+	const suspectDuration = 30 * time.Second
 
 	mvt := mixedversion.NewTest(ctx, t, t.L(), c, c.All(),
 		// We test only upgrades from 23.2 in this test because it uses
 		// the `workload fixtures import` command, which is only supported
 		// reliably multi-tenant mode starting from that version.
 		mixedversion.MinimumSupportedVersion("v23.2.0"),
-		// This test sometimes flake on separate-process
-		// deployments. Needs investigation.
-		mixedversion.EnabledDeploymentModes(
-			mixedversion.SystemOnlyDeployment,
-			mixedversion.SharedProcessDeployment,
-		),
 	)
 	n1 := 1
 	n2 := 2
-
-	mvt.OnStartup(
-		"set suspect duration",
-		func(ctx context.Context, l *logger.Logger, rng *rand.Rand, h *mixedversion.Helper) error {
-			return h.System.Exec(
-				rng,
-				"SET CLUSTER SETTING server.time_after_store_suspect = $1",
-				suspectDuration.String(),
-			)
-		})
 
 	mvt.OnStartup(
 		"preload data",

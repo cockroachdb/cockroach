@@ -653,7 +653,7 @@ func (d *entryDecoderJSON) Decode(entry *logpb.Entry) (err error) {
 		// Wrap all errors except EOF as a malformed entries to make it easier to
 		// handle this type of error later on.
 		if err != nil && err != io.EOF {
-			err = errors.CombineErrors(ErrMalformedLogEntry, err)
+			err = errors.CombineErrors(ErrMalformedJSON, err)
 		}
 	}()
 	var rp *redactablePackage

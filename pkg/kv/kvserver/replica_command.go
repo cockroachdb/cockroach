@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -24,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/batcheval"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/benignerror"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
@@ -31,11 +31,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/tracker"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -138,11 +139,6 @@ func splitSnapshotWarningStr(rangeID roachpb.RangeID, status *raft.Status) redac
 	var s redact.RedactableString
 	if status != nil && status.RaftState == raftpb.StateLeader {
 		for replicaID, pr := range status.Progress {
-			if replicaID == status.Lead {
-				// TODO(tschottdorf): remove this line once we have picked up
-				// https://github.com/etcd-io/etcd/pull/10279
-				continue
-			}
 			if pr.State == tracker.StateReplicate {
 				// This follower is in good working order.
 				continue
@@ -367,7 +363,7 @@ func (r *Replica) adminSplitWithDescriptor(
 			var err error
 			targetSize := r.GetMaxBytes(ctx) / 2
 			foundSplitKey, err = storage.MVCCFindSplitKey(
-				ctx, r.store.TODOEngine(), desc.StartKey, desc.EndKey, targetSize)
+				ctx, r.store.StateEngine(), desc.StartKey, desc.EndKey, targetSize)
 			if err != nil {
 				return reply, errors.Wrap(err, "unable to determine split key")
 			}
@@ -398,12 +394,15 @@ func (r *Replica) adminSplitWithDescriptor(
 					return reply, err
 				}
 				if foundSplitKey, err = storage.MVCCFirstSplitKey(
-					ctx, r.store.TODOEngine(), desiredSplitKey,
+					ctx, r.store.StateEngine(), desiredSplitKey,
 					desc.StartKey, desc.EndKey,
 				); err != nil {
 					return reply, errors.Wrap(err, "unable to determine split key")
 				} else if foundSplitKey == nil {
-					return reply, unsplittableRangeError{}
+					return reply, errors.Wrap(
+						unsplittableRangeError{},
+						"unable to find an existing key between desired split key and range boundaries",
+					)
 				}
 			} else {
 				foundSplitKey = args.SplitKey
@@ -443,7 +442,7 @@ func (r *Replica) adminSplitWithDescriptor(
 	// as a no-op and return success instead of throwing an error.
 	if desc.StartKey.Equal(splitKey) {
 		if len(args.SplitKey) == 0 {
-			log.Fatal(ctx, "MVCCFindSplitKey returned start key of range")
+			log.KvDistribution.Fatal(ctx, "MVCCFindSplitKey returned start key of range")
 		}
 		log.Event(ctx, "range already split")
 		// Even if the range is already split, we should still update the sticky
@@ -498,7 +497,7 @@ func (r *Replica) adminSplitWithDescriptor(
 		if r.GetMVCCStats().ContainsEstimates == 0 {
 			useEstimatedStatsForExternalBytes = false
 		} else if hasExternal, err := r.HasExternalBytes(); err != nil {
-			log.Warningf(ctx, "failed to get approximate disk bytes: %v", err)
+			log.KvDistribution.Warningf(ctx, "failed to get approximate disk bytes: %v", err)
 			useEstimatedStatsForExternalBytes = false
 		} else {
 			useEstimatedStatsForExternalBytes = hasExternal
@@ -532,7 +531,7 @@ func (r *Replica) adminSplitWithDescriptor(
 				// the error here, and let the code below handle the descriptor-changed
 				// error coming from splitTxnAttempt.
 				if errors.Is(err, batcheval.RecomputeStatsMismatchError) {
-					log.Warningf(ctx, "failed to re-compute MVCCStats pre split: %v", err)
+					log.KvDistribution.Warningf(ctx, "failed to re-compute MVCCStats pre split: %v", err)
 				} else {
 					return reply, errors.Wrapf(err, "failed to re-compute MVCCStats pre split")
 				}
@@ -543,7 +542,8 @@ func (r *Replica) adminSplitWithDescriptor(
 		// post-split LHS stats by combining these stats with the non-user stats
 		// computed in splitTrigger. More details in makeEstimatedSplitStatsHelper.
 		userOnlyLeftStats, err = rditer.ComputeStatsForRangeUserOnly(
-			ctx, leftDesc, r.store.TODOEngine(), r.store.Clock().NowAsClockTimestamp().WallTime)
+			ctx, leftDesc, r.store.StateEngine(), fs.BatchEvalReadCategory,
+			r.store.Clock().NowAsClockTimestamp().WallTime)
 		if err != nil {
 			return reply, errors.Wrapf(err, "unable to compute user-only pre-split stats for LHS range")
 		}
@@ -699,7 +699,7 @@ func (r *Replica) executeAdminCommandWithDescriptor(
 			break
 		}
 		if splitRetryLogLimiter.ShouldLog() {
-			log.Warningf(ctx, "retrying split after err: %v", lastErr)
+			log.KvDistribution.Warningf(ctx, "retrying split after err: %v", lastErr)
 		}
 	}
 	return kvpb.NewError(lastErr)
@@ -840,7 +840,7 @@ func (r *Replica) AdminMerge(
 		}
 		updatedLeftDesc.IncrementGeneration()
 		updatedLeftDesc.EndKey = rightDesc.EndKey
-		log.Infof(ctx, "initiating a merge of %s into this range (%s)", &rightDesc, reason)
+		log.KvDistribution.Infof(ctx, "initiating a merge of %s into this range (%s)", &rightDesc, reason)
 
 		// Log the merge into the range event log.
 		if err := r.store.logMerge(ctx, txn, updatedLeftDesc, rightDesc, true /* logAsync */); err != nil {
@@ -882,12 +882,48 @@ func (r *Replica) AdminMerge(
 		// Intents have been placed, so the merge is now in its critical phase. Get
 		// a consistent view of the data from the right-hand range. If the merge
 		// commits, we'll write this data to the left-hand range in the merge
-		// trigger.
+		// trigger. This consistent view is dependent on two things (a) the
+		// SubsumeRequest is evaluated at a leaseholder that is at least as recent
+		// as the leaseholder that evaluated the deletion intent placed on the RHS
+		// RangeDescriptor, (b) the SubsumeRequest freezes the range for new reads
+		// and writes at the leaseholder, and freezes the closed timestamp so
+		// follower reads cannot occur at a timestamp beyond what is accounted for
+		// in SubsumeResponse.ClosedTimestamp (see batcheval.Subsume for more
+		// details).
+		//
+		// When SubsumeRequest does a write (on newer cluster versions), (a) is
+		// guaranteed by the fact that this request needs to be replicated and so
+		// cannot be successfully processed by a stale leaseholder (due to the
+		// protection in RaftCommand.ProposerLeaseSequence). When SubsumeRequest
+		// is a read, it may seem that (a) is not guaranteed since the request
+		// below is sent outside the txn, and does not set a timestamp, so could
+		// be assigned a timestamp lower than the txn timestamp, and routed to an
+		// older leaseholder. The reason this doesn't happen is subtle:
+		// - Say the txn (whose txn coordinator is this node) got assigned a
+		//   timestamp t1.
+		// - The intent put went to the RHS leaseholder which was ahead, at
+		//   timestamp t2. The response to the intent put will bump up the local
+		//   hlc.Timestamp to t2.
+		// - This SubsumeRequest does not set kvpb.Header.Timestamp, but it will
+		//   include in kvpb.Header.Now a value that is >= t2. When this request
+		//   is received by an old leaseholder (the aforementioned hazard), the
+		//   old leaseholder will bump its hlc.Clock to >= t2 and stop being the
+		//   leaseholder, and reject the request. The request will get eventually
+		//   (successfully) retried at a leaseholder that has the lease at
+		//   timestamp >= t2.
+		//
+		// This must be a single request in a BatchRequest: there are multiple
+		// places that do special logic (needed for safety) that rely on
+		// BatchRequest.IsSingleSubsumeRequest() returning true.
+		shouldPreserveLocks := concurrency.UnreplicatedLockReliabilityMerge.Get(&r.ClusterSettings().SV)
 		br, pErr := kv.SendWrapped(ctx, r.store.DB().NonTransactionalSender(),
 			&kvpb.SubsumeRequest{
-				RequestHeader: kvpb.RequestHeader{Key: rightDesc.StartKey.AsRawKey()},
-				LeftDesc:      *origLeftDesc,
-				RightDesc:     rightDesc,
+				RequestHeader: kvpb.RequestHeader{
+					Key: rightDesc.StartKey.AsRawKey(),
+				},
+				PreserveUnreplicatedLocks: shouldPreserveLocks,
+				LeftDesc:                  *origLeftDesc,
+				RightDesc:                 rightDesc,
 			})
 		if pErr != nil {
 			return pErr.GoError()
@@ -951,7 +987,7 @@ func (r *Replica) AdminMerge(
 			if attempt < 3 {
 				log.VEventf(ctx, 2, "merge txn failed: %s", err)
 			} else {
-				log.Warningf(ctx, "merge txn failed (attempt %d): %s", attempt, err)
+				log.KvDistribution.Warningf(ctx, "merge txn failed (attempt %d): %s", attempt, err)
 			}
 			if rollbackErr := txn.Rollback(ctx); rollbackErr != nil {
 				log.VEventf(ctx, 2, "merge txn rollback failed: %s", rollbackErr)
@@ -959,13 +995,23 @@ func (r *Replica) AdminMerge(
 		}
 		if !errors.HasType(err, (*kvpb.TransactionRetryWithProtoRefreshError)(nil)) {
 			if err != nil {
-				return reply, kvpb.NewErrorf("merge failed: %s", err)
+				return reply, kvpb.NewError(errors.Wrap(err, "merge failed"))
 			}
 			return reply, nil
 		}
 	}
 }
 
+// waitForApplication is waiting for application at all replicas (voters or
+// non-voters). This is an outlier in that the system is typically expected to
+// function with only a quorum of voters being available. So it should be used
+// extremely sparingly.
+//
+// IMPORTANT: if adding a call to this method, ensure that whatever command is
+// needing this behavior sets
+// ReplicatedEvalResult.DoTimelyApplicationToAllReplicas. That ensures that
+// replication flow control will not arbitrarily delay application on a
+// replica by maintaining a non-empty send-queue.
 func waitForApplication(
 	ctx context.Context,
 	dialer *nodedialer.Dialer,
@@ -977,11 +1023,11 @@ func waitForApplication(
 	for _, repl := range replicas {
 		repl := repl // copy for goroutine
 		g.GoCtx(func(ctx context.Context) error {
-			conn, err := dialer.Dial(ctx, repl.NodeID, rpc.DefaultClass)
+			client, err := DialPerReplicaClient(dialer, ctx, repl.NodeID, rpcbase.DefaultClass)
 			if err != nil {
 				return errors.Wrapf(err, "could not dial n%d", repl.NodeID)
 			}
-			_, err = NewPerReplicaClient(conn).WaitForApplication(ctx, &WaitForApplicationRequest{
+			_, err = client.WaitForApplication(ctx, &WaitForApplicationRequest{
 				StoreRequestHeader: StoreRequestHeader{NodeID: repl.NodeID, StoreID: repl.StoreID},
 				RangeID:            rangeID,
 				LeaseIndex:         leaseIndex,
@@ -1007,11 +1053,11 @@ func waitForReplicasInit(
 		for _, repl := range replicas {
 			repl := repl // copy for goroutine
 			g.GoCtx(func(ctx context.Context) error {
-				conn, err := dialer.Dial(ctx, repl.NodeID, rpc.DefaultClass)
+				client, err := DialPerReplicaClient(dialer, ctx, repl.NodeID, rpcbase.DefaultClass)
 				if err != nil {
 					return errors.Wrapf(err, "could not dial n%d", repl.NodeID)
 				}
-				_, err = NewPerReplicaClient(conn).WaitForReplicaInit(ctx, &WaitForReplicaInitRequest{
+				_, err = client.WaitForReplicaInit(ctx, &WaitForReplicaInitRequest{
 					StoreRequestHeader: StoreRequestHeader{NodeID: repl.NodeID, StoreID: repl.StoreID},
 					RangeID:            rangeID,
 				})
@@ -1181,7 +1227,7 @@ func (r *Replica) changeReplicasImpl(
 		return nil, err
 	}
 
-	if err := validateReplicationChanges(desc, chgs); err != nil {
+	if err := allocatorimpl.ValidateReplicationChanges(desc, chgs); err != nil {
 		return nil, errors.Mark(err, errMarkInvalidReplicationChange)
 	}
 	targets := SynthesizeTargetsByChangeType(chgs)
@@ -1262,7 +1308,7 @@ func (r *Replica) changeReplicasImpl(
 			// Don't leave a learner replica lying around if we didn't succeed in
 			// promoting it to a voter.
 			if adds := targets.VoterAdditions; len(adds) > 0 {
-				log.Infof(ctx, "could not promote %v to voter, rolling back: %v", adds, err)
+				log.KvDistribution.Infof(ctx, "could not promote %v to voter, rolling back: %v", adds, err)
 				for _, target := range adds {
 					r.tryRollbackRaftLearner(ctx, r.Desc(), target, reason, details)
 				}
@@ -1392,7 +1438,7 @@ func (r *Replica) maybeTransferLeaseDuringLeaveJoint(
 		// to continue trying to leave the JOINT config. If this is the case,
 		// our replica will not be able to leave the JOINT config, but the new
 		// leaseholder will be able to do so.
-		log.Warningf(ctx, "no VOTER_INCOMING to transfer lease to. This replica probably lost the "+
+		log.KvExec.Warningf(ctx, "no VOTER_INCOMING to transfer lease to. This replica probably lost the "+
 			"lease, but still thinks its the leaseholder. In this case the new leaseholder is expected to "+
 			"complete LEAVE_JOINT. Range descriptor: %v", desc)
 		return nil
@@ -1561,282 +1607,6 @@ func (r *Replica) maybeLeaveAtomicChangeReplicasAndRemoveLearners(
 	return desc, learnersRemoved, nil
 }
 
-// validateAdditionsPerStore ensures that we're not trying to add the same type
-// of replica to a store that already has one or that we're not trying to add
-// any type of replica to a store that has a LEARNER.
-func validateAdditionsPerStore(
-	desc *roachpb.RangeDescriptor, chgsByStoreID changesByStoreID,
-) error {
-	for storeID, chgs := range chgsByStoreID {
-		for _, chg := range chgs {
-			if chg.ChangeType.IsRemoval() {
-				continue
-			}
-			// If the replica already exists, check that we're not trying to add the
-			// same type of replica again.
-			//
-			// NB: Trying to add a different type of replica, for instance, a
-			// NON_VOTER to a store that already has a VOTER is fine when we're trying
-			// to swap a VOTER with a NON_VOTER. Ensuring that this is indeed the case
-			// is outside the scope of this particular helper method. See
-			// validatePromotionsAndDemotions for how that is checked.
-			replDesc, found := desc.GetReplicaDescriptor(storeID)
-			if !found {
-				// The store we're trying to add to doesn't already have a replica, all
-				// good.
-				continue
-			}
-			switch t := replDesc.Type; t {
-			case roachpb.LEARNER:
-				// Looks like we found a learner with the same store and node id. One of
-				// the following is true:
-				// 1. some previous leaseholder was trying to add it with the
-				// learner+snapshot+voter cycle and got interrupted.
-				// 2. we hit a race between the replicate queue and AdminChangeReplicas.
-				// 3. We're trying to swap a voting replica with a non-voting replica
-				// before the voting replica has been upreplicated and switched from
-				// LEARNER to VOTER_FULL.
-				return errors.AssertionFailedf(
-					"trying to add(%+v) to a store that already has a %s", chg, t)
-			case roachpb.VOTER_FULL:
-				if chg.ChangeType == roachpb.ADD_VOTER {
-					return errors.AssertionFailedf(
-						"trying to add a voter to a store that already has a %s", t)
-				}
-			case roachpb.NON_VOTER:
-				if chg.ChangeType == roachpb.ADD_NON_VOTER {
-					return errors.AssertionFailedf(
-						"trying to add a non-voter to a store that already has a %s", t)
-				}
-			default:
-				return errors.AssertionFailedf("store(%d) being added to already contains a"+
-					" replica of an unexpected type: %s", storeID, t)
-			}
-		}
-	}
-	return nil
-}
-
-// validateRemovals ensures that replicas being removed actually exist and that
-// the type of replica being removed matches the type of the removal.
-func validateRemovals(desc *roachpb.RangeDescriptor, chgsByStoreID changesByStoreID) error {
-	for storeID, chgs := range chgsByStoreID {
-		for _, chg := range chgs {
-			if chg.ChangeType.IsAddition() {
-				continue
-			}
-			replDesc, found := desc.GetReplicaDescriptor(storeID)
-			if !found {
-				return errors.AssertionFailedf("trying to remove a replica that doesn't exist: %+v", chg)
-			}
-			// Ensure that the type of replica being removed is the same as the type
-			// of replica present in the range descriptor.
-			switch t := replDesc.Type; t {
-			case roachpb.VOTER_FULL, roachpb.LEARNER:
-				if chg.ChangeType != roachpb.REMOVE_VOTER {
-					return errors.AssertionFailedf("type of replica being removed (%s) does not match"+
-						" expectation for change: %+v", t, chg)
-				}
-			case roachpb.NON_VOTER:
-				if chg.ChangeType != roachpb.REMOVE_NON_VOTER {
-					return errors.AssertionFailedf("type of replica being removed (%s) does not match"+
-						" expectation for change: %+v", t, chg)
-				}
-			default:
-				return errors.AssertionFailedf("unexpected replica type for removal %+v: %s", chg, t)
-			}
-		}
-	}
-	return nil
-}
-
-// validatePromotionsAndDemotions ensures the following:
-// 1. All additions of voters to stores that already have a non-voter are
-// accompanied by a removal of that non-voter (which is interpreted as a
-// promotion of a non-voter to a voter).
-// 2. All additions of non-voters to stores that already have a voter are
-// accompanied by a removal of that voter (which is interpreted as a demotion of
-// a voter to a non-voter)
-func validatePromotionsAndDemotions(
-	desc *roachpb.RangeDescriptor, chgsByStoreID changesByStoreID,
-) error {
-	for storeID, chgs := range chgsByStoreID {
-		replDesc, found := desc.GetReplicaDescriptor(storeID)
-		switch len(chgs) {
-		case 0:
-			continue
-		case 1:
-			if chgs[0].ChangeType.IsAddition() {
-				// If there's only one addition on this store, without an accompanying
-				// removal, then the change cannot correspond to a promotion/demotion.
-				// Thus, the store must not already have a replica.
-				if found {
-					return errors.AssertionFailedf("trying to add(%+v) to a store(%s) that already"+
-						" has a replica(%s)", chgs[0], storeID, replDesc.Type)
-				}
-			}
-		case 2:
-			c1, c2 := chgs[0], chgs[1]
-			if !found {
-				return errors.AssertionFailedf("found 2 changes(%+v) for a store(%d)"+
-					" that has no replicas", chgs, storeID)
-			}
-			if c1.ChangeType.IsAddition() && c2.ChangeType.IsRemoval() {
-				// There's only two legal possibilities here:
-				// 1. Promotion: ADD_VOTER, REMOVE_NON_VOTER
-				// 2. Demotion: ADD_NON_VOTER, REMOVE_VOTER
-				//
-				// We reject everything else.
-				isPromotion := c1.ChangeType == roachpb.ADD_VOTER && c2.ChangeType == roachpb.REMOVE_NON_VOTER
-				isDemotion := c1.ChangeType == roachpb.ADD_NON_VOTER && c2.ChangeType == roachpb.REMOVE_VOTER
-				if !(isPromotion || isDemotion) {
-					return errors.AssertionFailedf("trying to add-remove the same replica(%s):"+
-						" %+v", replDesc.Type, chgs)
-				}
-			} else {
-				// NB: validateOneReplicaPerNode has a stronger version of this check,
-				// but we check it here anyway for the sake of a more precise error
-				// message.
-				return errors.AssertionFailedf("the only permissible order of operations within a"+
-					" store is add-remove; got %+v", chgs)
-			}
-		default:
-			return errors.AssertionFailedf("more than 2 changes referring to the same store: %+v", chgs)
-		}
-	}
-	return nil
-}
-
-// validateOneReplicaPerNode ensures that there are no more than 2 changes for
-// any given node and if a node already has a replica, then adding a second
-// replica is prohibited unless the existing replica is being removed with it.
-func validateOneReplicaPerNode(desc *roachpb.RangeDescriptor, chgsByNodeID changesByNodeID) error {
-	replsByNodeID := make(map[roachpb.NodeID]int)
-	for _, repl := range desc.Replicas().Descriptors() {
-		replsByNodeID[repl.NodeID]++
-	}
-
-	for nodeID, chgs := range chgsByNodeID {
-		if len(chgs) > 2 {
-			return errors.AssertionFailedf("more than 2 changes for the same node(%d): %+v",
-				nodeID, chgs)
-		}
-		switch replsByNodeID[nodeID] {
-		case 0:
-			// If there are no existing replicas on the node, a rebalance is not
-			// possible and there must not be more than 1 change for it.
-			//
-			// NB: We don't care _what_ kind of change it is. If it's a removal, it
-			// will be invalidated by `validateRemovals`.
-			if len(chgs) > 1 {
-				return errors.AssertionFailedf("unexpected set of changes(%+v) for node %d, which has"+
-					" no existing replicas for the range", chgs, nodeID)
-			}
-		case 1:
-			// If the node has exactly one replica, then the only changes allowed on
-			// the node are:
-			// 1. An addition and a removal (constituting a rebalance within the node)
-			// 2. Removal
-			switch n := len(chgs); n {
-			case 1:
-				// Must be a removal unless the range only has a single replica. Ranges
-				// with only one replica cannot be atomically rebalanced, and must go
-				// through addition and then removal separately. See #40333.
-				if !chgs[0].ChangeType.IsRemoval() && len(desc.Replicas().Descriptors()) > 1 {
-					return errors.AssertionFailedf("node %d already has a replica; only valid actions"+
-						" are a removal or a rebalance(add/remove); got %+v", nodeID, chgs)
-				}
-			case 2:
-				// Must be an addition then removal
-				c1, c2 := chgs[0], chgs[1]
-				if !(c1.ChangeType.IsAddition() && c2.ChangeType.IsRemoval()) {
-					return errors.AssertionFailedf("node %d already has a replica; only valid actions"+
-						" are a removal or a rebalance(add/remove); got %+v", nodeID, chgs)
-				}
-			default:
-				panic(fmt.Sprintf("unexpected number of changes for node %d: %+v", nodeID, chgs))
-			}
-		case 2:
-			// If there are 2 replicas on any given node, a removal is the only legal
-			// thing to do.
-			if !(len(chgs) == 1 && chgs[0].ChangeType.IsRemoval()) {
-				return errors.AssertionFailedf("node %d has 2 replicas, expected exactly one of them"+
-					" to be removed; got %+v", nodeID, chgs)
-			}
-		default:
-			return errors.AssertionFailedf("node %d unexpectedly has more than 2 replicas: %s",
-				nodeID, desc.Replicas().Descriptors())
-		}
-	}
-	return nil
-}
-
-// validateReplicationChanges runs a series of validation checks against the
-// given range descriptor and the proposed set of replication changes on the
-// range.
-//
-// It ensures the following:
-// 1. There are no duplicate changes: we shouldn't be adding or removing a
-// replica twice.
-// 2. We're not adding a replica on a store that already has one, unless it's
-// for a promotion or demotion.
-// 3. If there are two changes for a single store, the first one must be an
-// addition and the second one must be a removal.
-// 4. We're not adding a replica on a node that already has one, unless the
-// range only has one replica.
-// 5. We're not removing a replica that doesn't exist.
-// 6. Additions to stores that already contain a replica are strictly the ones
-// that correspond to a voter demotion and/or a non-voter promotion
-func validateReplicationChanges(desc *roachpb.RangeDescriptor, chgs kvpb.ReplicationChanges) error {
-	chgsByStoreID := getChangesByStoreID(chgs)
-	chgsByNodeID := getChangesByNodeID(chgs)
-
-	if err := validateAdditionsPerStore(desc, chgsByStoreID); err != nil {
-		return err
-	}
-	if err := validateRemovals(desc, chgsByStoreID); err != nil {
-		return err
-	}
-	if err := validatePromotionsAndDemotions(desc, chgsByStoreID); err != nil {
-		return err
-	}
-	if err := validateOneReplicaPerNode(desc, chgsByNodeID); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-// changesByStoreID represents a map from StoreID to a slice of replication
-// changes on that store.
-type changesByStoreID map[roachpb.StoreID][]kvpb.ReplicationChange
-
-// changesByNodeID represents a map from NodeID to a slice of replication
-// changes on that node.
-type changesByNodeID map[roachpb.NodeID][]kvpb.ReplicationChange
-
-func getChangesByStoreID(chgs kvpb.ReplicationChanges) changesByStoreID {
-	chgsByStoreID := make(map[roachpb.StoreID][]kvpb.ReplicationChange, len(chgs))
-	for _, chg := range chgs {
-		if _, ok := chgsByStoreID[chg.Target.StoreID]; !ok {
-			chgsByStoreID[chg.Target.StoreID] = make([]kvpb.ReplicationChange, 0, 2)
-		}
-		chgsByStoreID[chg.Target.StoreID] = append(chgsByStoreID[chg.Target.StoreID], chg)
-	}
-	return chgsByStoreID
-}
-
-func getChangesByNodeID(chgs kvpb.ReplicationChanges) changesByNodeID {
-	chgsByNodeID := make(map[roachpb.NodeID][]kvpb.ReplicationChange, len(chgs))
-	for _, chg := range chgs {
-		if _, ok := chgsByNodeID[chg.Target.NodeID]; !ok {
-			chgsByNodeID[chg.Target.NodeID] = make([]kvpb.ReplicationChange, 0, 2)
-		}
-		chgsByNodeID[chg.Target.NodeID] = append(chgsByNodeID[chg.Target.NodeID], chg)
-	}
-	return chgsByNodeID
-}
-
 // initializeRaftLearners adds etcd LearnerNodes (LEARNERs or NON_VOTERs in
 // Cockroach-land) to the given replication targets and synchronously sends them
 // an initial snapshot to upreplicate. Once this successfully returns, the
@@ -1861,7 +1631,7 @@ func (r *Replica) initializeRaftLearners(
 	case roachpb.NON_VOTER:
 		iChangeType = internalChangeTypeAddNonVoter
 	default:
-		log.Fatalf(ctx, "unexpected replicaType %s", replicaType)
+		log.KvDistribution.Fatalf(ctx, "unexpected replicaType %s", replicaType)
 	}
 
 	// Lock learner snapshots even before we run the ConfChange txn to add them
@@ -1879,7 +1649,7 @@ func (r *Replica) initializeRaftLearners(
 	// them all back.
 	defer func() {
 		if err != nil {
-			log.Infof(
+			log.KvExec.Infof(
 				ctx,
 				"could not successfully add and upreplicate %s replica(s) on %s, rolling back: %v",
 				replicaType,
@@ -2147,7 +1917,7 @@ func (r *Replica) tryRollbackRaftLearner(
 	if err := timeutil.RunWithTimeout(
 		rollbackCtx, "learner rollback", rollbackTimeout, rollbackFn,
 	); err != nil {
-		log.Infof(
+		log.KvExec.Infof(
 			ctx,
 			"failed to rollback %s %s, abandoning it for the replicate queue: %v",
 			repDesc.Type,
@@ -2156,7 +1926,7 @@ func (r *Replica) tryRollbackRaftLearner(
 		)
 		r.store.replicateQueue.MaybeAddAsync(ctx, r, r.store.Clock().NowAsClockTimestamp())
 	} else {
-		log.Infof(ctx, "rolled back %s %s in %s", repDesc.Type, target, rangeDesc)
+		log.KvDistribution.Infof(ctx, "rolled back %s %s in %s", repDesc.Type, target, rangeDesc)
 	}
 }
 
@@ -2352,18 +2122,6 @@ func prepareChangeReplicasTrigger(
 	return crt, nil
 }
 
-func within10s(ctx context.Context, fn func() error) error {
-	retOpts := retry.Options{InitialBackoff: time.Second, MaxBackoff: time.Second, MaxRetries: 10}
-	var err error
-	for re := retry.StartWithCtx(ctx, retOpts); re.Next(); {
-		err = fn()
-		if err == nil {
-			return nil
-		}
-	}
-	return ctx.Err()
-}
-
 type changeReplicasTxnArgs struct {
 	db *kv.DB
 
@@ -2421,7 +2179,7 @@ func execChangeReplicasTxn(
 				// race than other operations. So we verify that the descriptor fetched
 				// from kv is indeed in a joint config, and hint to the caller that it
 				// can no-op this replication change.
-				log.Infof(
+				log.KvExec.Infof(
 					ctx, "we were trying to exit a joint config but found that we are no longer in one; skipping",
 				)
 				return false /* matched */, true /* skip */
@@ -2437,7 +2195,7 @@ func execChangeReplicasTxn(
 					}
 				}
 				if learnerAlreadyRemoved {
-					log.Infof(ctx, "skipping learner removal because it was already removed")
+					log.KvDistribution.Infof(ctx, "skipping learner removal because it was already removed")
 					return false /* matched */, true /* skip */
 				}
 			}
@@ -2500,7 +2258,12 @@ func execChangeReplicasTxn(
 
 			// NB: we haven't written any intents yet, so even in the unlikely case in which
 			// this is held up, we won't block anyone else.
-			if err := within10s(ctx, func() error {
+			if err := (retry.Options{
+				InitialBackoff: 100 * time.Millisecond,
+				Multiplier:     2,
+				MaxBackoff:     time.Second,
+				MaxDuration:    10 * time.Second,
+			}).Do(ctx, func(ctx context.Context) error {
 				if args.testAllowDangerousReplicationChanges {
 					return nil
 				}
@@ -3117,7 +2880,7 @@ func (r *Replica) validateSnapshotDelegationRequest(
 	// send an additional one. This check attempts to minimize the change of the
 	// double snapshot being sent.
 	if replTerm < req.Term {
-		log.Infof(
+		log.KvExec.Infof(
 			ctx,
 			"sender: %v is not fit to send snapshot for %v; sender term: %v coordinator term: %v",
 			req.DelegatedSender, req.CoordinatorReplica, replTerm, req.Term,
@@ -3134,7 +2897,7 @@ func (r *Replica) validateSnapshotDelegationRequest(
 	// possible that we can enforce strictly lesser than if etcd does not require
 	// previous raft log entries for appending.
 	if replIdx <= req.FirstIndex {
-		log.Infof(
+		log.KvExec.Infof(
 			ctx, "sender: %v is not fit to send snapshot;"+
 				" sender first index: %v, "+
 				"coordinator log truncation constraint: %v", req.DelegatedSender, replIdx, req.FirstIndex,
@@ -3188,7 +2951,8 @@ var traceSnapshotThreshold = settings.RegisterDurationSetting(
 	"kv.trace.snapshot.enable_threshold",
 	"enables tracing and gathers timing information on all snapshots;"+
 		"snapshots with a duration longer than this threshold will have their "+
-		"trace logged (set to 0 to disable);", 0,
+		"trace logged (set to 0 to disable);",
+	0,
 )
 
 var externalFileSnapshotting = settings.RegisterBoolSetting(
@@ -3217,7 +2981,7 @@ func (r *Replica) followerSendSnapshot(
 			if sendThreshold > 0 && sendDur > sendThreshold {
 				// Note that log lines larger than 65k are truncated in the debug zip (see
 				// #50166).
-				log.Infof(ctx, "%s took %s, exceeding threshold of %s:\n%s",
+				log.KvExec.Infof(ctx, "%s took %s, exceeding threshold of %s:\n%s",
 					"snapshot", sendDur, sendThreshold, sp.GetConfiguredRecording())
 			}
 			sp.Finish()
@@ -3258,16 +3022,6 @@ func (r *Replica) followerSendSnapshot(
 	defer snap.Close()
 	log.Event(ctx, "generated snapshot")
 
-	// We avoid shipping over the past Raft log in the snapshot by changing the
-	// truncated state (we're allowed to -- it's an unreplicated key and not
-	// subject to mapping across replicas). The actual sending happens in
-	// kvBatchSnapshotStrategy.Send and results in no log entries being sent at
-	// all. Note that Metadata.Index is really the applied index of the replica.
-	snap.State.TruncatedState = &kvserverpb.RaftTruncatedState{
-		Index: kvpb.RaftIndex(snap.RaftSnap.Metadata.Index),
-		Term:  kvpb.RaftTerm(snap.RaftSnap.Metadata.Term),
-	}
-
 	// See comment on DeprecatedUsingAppliedStateKey for why we need to set this
 	// explicitly for snapshots going out to followers.
 	snap.State.DeprecatedUsingAppliedStateKey = true
@@ -3283,14 +3037,13 @@ func (r *Replica) followerSendSnapshot(
 	// replication, are dealing with a non-system range, are on at
 	// least 24.1, and our store has external files.
 	externalReplicate := !sharedReplicate && nonSystemRange &&
-		r.store.ClusterSettings().Version.IsActive(ctx, clusterversion.V24_1) &&
 		externalFileSnapshotting.Get(&r.store.ClusterSettings().SV)
 	if externalReplicate {
 		start := snap.State.Desc.StartKey.AsRawKey()
 		end := snap.State.Desc.EndKey.AsRawKey()
 		total, _, external, err := r.store.StateEngine().ApproximateDiskBytes(start, end)
 		if err != nil {
-			log.Warningf(ctx, "could not determine if store has external bytes: %v", err)
+			log.KvDistribution.Warningf(ctx, "could not determine if store has external bytes: %v", err)
 			externalReplicate = false
 		}
 
@@ -3319,15 +3072,14 @@ func (r *Replica) followerSendSnapshot(
 		SenderQueuePriority: req.SenderQueuePriority,
 		SharedReplicate:     sharedReplicate,
 		ExternalReplicate:   externalReplicate,
-		RangeKeysInOrder:    true,
 	}
 	newBatchFn := func() storage.WriteBatch {
-		return r.store.TODOEngine().NewWriteBatch()
+		return r.store.StateEngine().NewWriteBatch()
 	}
 	sent := func() {
 		r.store.metrics.RangeSnapshotsGenerated.Inc(1)
 	}
-	comparisonResult := r.store.getLocalityComparison(ctx, req.CoordinatorReplica.NodeID,
+	comparisonResult := r.store.getLocalityComparison(req.CoordinatorReplica.NodeID,
 		req.RecipientReplica.NodeID)
 
 	recordBytesSent := func(inc int64) {
@@ -3555,7 +3307,7 @@ func (r *Replica) AdminRelocateRange(
 	// the joint config if we're in one.
 	newDesc, _, err := r.maybeLeaveAtomicChangeReplicasAndRemoveLearners(ctx, &rangeDesc)
 	if err != nil {
-		log.Warningf(ctx, "%v", err)
+		log.KvDistribution.Warningf(ctx, "%v", err)
 		return err
 	}
 	rangeDesc = *newDesc
@@ -3606,7 +3358,7 @@ func (r *Replica) relocateReplicas(
 		if err := r.store.DB().AdminTransferLease(
 			ctx, startKey, target.StoreID,
 		); err != nil {
-			log.Warningf(ctx, "while transferring lease: %+v", err)
+			log.KvExec.Warningf(ctx, "while transferring lease: %+v", err)
 			if r.store.TestingKnobs().DontIgnoreFailureToTransferLease {
 				return err
 			}
@@ -3652,7 +3404,7 @@ func (r *Replica) relocateReplicas(
 						return rangeDesc, returnErr
 					}
 					if every.ShouldLog() {
-						log.Infof(ctx, "%v", returnErr)
+						log.KvDistribution.Infof(ctx, "%v", returnErr)
 					}
 					success = false
 					break
@@ -3746,7 +3498,7 @@ func (roo *replicaRelocateOneOptions) LoadSpanConfig(
 	if err != nil {
 		return nil, errors.Wrap(err, "can't relocate range")
 	}
-	conf, _, err := confReader.GetSpanConfigForKey(ctx, startKey)
+	conf, err := confReader.GetSpanConfigForKey(ctx, startKey)
 	if err != nil {
 		return nil, err
 	}
@@ -4112,16 +3864,51 @@ func intersectTargets(
 	return intersection
 }
 
-// adminScatter moves replicas and leaseholders for a selection of ranges.
-func (r *Replica) adminScatter(
-	ctx context.Context, args kvpb.AdminScatterRequest,
-) (kvpb.AdminScatterResponse, error) {
-	rq := r.store.replicateQueue
+// scatterRangeAndRandomizeLeases does two things: 1. attempts to move replicas
+// of a range using the replicate queue to perform changes upon a range until we
+// hit a terminating error or `maxAttempts`. 2. attempts to transfer lease to a
+// randomly chosen suitable replica. scatterRangeAndRandomizeLeases is
+// best-effort, randomized, and does not guarantee a uniform distribution.
+// Return number of replicas moved based on comparing the state before and after
+// the scatter operation.
+func (r *Replica) scatterRangeAndRandomizeLeases(ctx context.Context, randomizeLeases bool) int {
 	retryOpts := retry.Options{
 		InitialBackoff: 50 * time.Millisecond,
 		MaxBackoff:     1 * time.Second,
 		Multiplier:     2,
 		MaxRetries:     5,
+	}
+
+	var tokenErr error
+	// Acquire the allocator token explicitly to coordinate replication changes on
+	// the replica, since rq.processOneChange and r.AdminTransferLease bypasses
+	// replicateQueue.process and leaseQueue.process, where the token is normally
+	// acquired. The allocator token is shared by the store rebalancer, replicate
+	// queue, and lease queue to coordinate replication changes on the same range.
+	// Retry if token acquisition failed until the MaxRetries is hit.
+	for re := retry.StartWithCtx(ctx, retryOpts); re.Next(); {
+		tokenErr = r.allocatorToken.TryAcquire(ctx, "admin scatter")
+		if tokenErr == nil {
+			break
+		}
+	}
+
+	// Return early with number of replicas moved as 0.
+	if tokenErr != nil {
+		log.KvExec.Warningf(ctx, "unable to acquire allocator "+
+			"due to %v after %d attempts", tokenErr, retryOpts.MaxRetries)
+		return 0
+	}
+
+	// Successfully acquired the token.
+	defer r.allocatorToken.Release(ctx)
+
+	// Construct a mapping to store the replica IDs before we attempt to scatter
+	// them. This is used to below to check which replicas were actually moved by
+	// the replicate queue .
+	preScatterReplicaIDs := make(map[roachpb.ReplicaID]struct{})
+	for _, rd := range r.Desc().Replicas().Descriptors() {
+		preScatterReplicaIDs[rd.ReplicaID] = struct{}{}
 	}
 
 	// On every `processOneChange` call with the `scatter` option set, stores in
@@ -4136,33 +3923,30 @@ func (r *Replica) adminScatter(
 	maxAttempts := len(r.Desc().Replicas().Descriptors())
 	currentAttempt := 0
 
-	if args.MaxSize > 0 {
-		if existing, limit := r.GetMVCCStats().Total(), args.MaxSize; existing > limit {
-			return kvpb.AdminScatterResponse{}, errors.Errorf("existing range size %d exceeds specified limit %d", existing, limit)
-		}
-	}
+	rq := r.store.replicateQueue
 
-	// Construct a mapping to store the replica IDs before we attempt to scatter
-	// them. This is used to below to check which replicas were actually moved by
-	// the replicate queue .
-	preScatterReplicaIDs := make(map[roachpb.ReplicaID]struct{})
-	for _, rd := range r.Desc().Replicas().Descriptors() {
-		preScatterReplicaIDs[rd.ReplicaID] = struct{}{}
-	}
-
-	// Loop until we hit an error or until we hit `maxAttempts` for the range.
+	// Loop until an error occurs or we reach maxAttempts for the range.
+	// maxAttempts is set to the replication factor to ensure we at least attempt
+	// rebalancing for each replica. Separately, MaxRetries (set to 5) controls
+	// the number of retries for retriable errors within each replica attempt
+	// (currentAttempt). Note that there's a backoff between retries for each
+	// currentAttempt, but no backoff between different attempts.
 	for re := retry.StartWithCtx(ctx, retryOpts); re.Next(); {
 		if currentAttempt == maxAttempts {
+			log.KvDistribution.Infof(ctx, "stopped scattering after hitting max %d attempts", maxAttempts)
 			break
 		}
 		desc, conf := r.DescAndSpanConfig()
 		_, err := rq.replicaCanBeProcessed(ctx, r, false /* acquireLeaseIfNeeded */)
 		if err != nil {
 			// The replica can not be processed, so skip it.
+			log.KvExec.Warningf(ctx,
+				"cannot process range (%v) due to %v at attempt %d",
+				desc, err, currentAttempt+1)
 			break
 		}
 		_, err = rq.processOneChange(
-			ctx, r, desc, conf, true /* scatter */, false, /* dryRun */
+			ctx, r, desc, conf, true /* scatter */, false /* dryRun */, -1, /*priorityAtEnqueue*/
 		)
 		if err != nil {
 			// If the error is expected to be transient, retry processing the range.
@@ -4170,9 +3954,11 @@ func (r *Replica) adminScatter(
 			// issued, in which case the scatter may fail due to the range split
 			// updating the descriptor while processing.
 			if IsRetriableReplicationChangeError(err) {
-				log.VEventf(ctx, 1, "retrying scatter process after retryable error: %v", err)
+				log.KvDistribution.Errorf(ctx, "retrying scatter process for range %v after retryable error: %v", desc, err)
 				continue
 			}
+			log.KvDistribution.Warningf(ctx, "failed to process range (%v) due to %v at attempt %d",
+				desc, err, currentAttempt+1)
 			break
 		}
 		currentAttempt++
@@ -4183,7 +3969,7 @@ func (r *Replica) adminScatter(
 	// queue would do on its own (#17341), do so after the replicate queue is
 	// done by transferring the lease to any of the given N replicas with
 	// probability 1/N of choosing each.
-	if args.RandomizeLeases && r.OwnsValidLease(ctx, r.store.Clock().NowAsClockTimestamp()) {
+	if randomizeLeases && r.OwnsValidLease(ctx, r.store.Clock().NowAsClockTimestamp()) {
 		desc, conf := r.DescAndSpanConfig()
 		potentialLeaseTargets := r.store.allocator.ValidLeaseTargets(
 			ctx, r.store.cfg.StorePool, desc, conf, desc.Replicas().VoterDescriptors(), r, allocator.TransferLeaseOptions{})
@@ -4191,14 +3977,10 @@ func (r *Replica) adminScatter(
 			newLeaseholderIdx := rand.Intn(len(potentialLeaseTargets))
 			targetStoreID := potentialLeaseTargets[newLeaseholderIdx].StoreID
 			if targetStoreID != r.store.StoreID() {
-				if tokenErr := r.allocatorToken.TryAcquire(ctx, "scatter"); tokenErr != nil {
-					log.Warningf(ctx, "failed to scatter lease to s%d: %+v", targetStoreID, tokenErr)
-				} else {
-					defer r.allocatorToken.Release(ctx)
-					log.VEventf(ctx, 2, "randomly transferring lease to s%d", targetStoreID)
-					if err := r.AdminTransferLease(ctx, targetStoreID, false /* bypassSafetyChecks */); err != nil {
-						log.Warningf(ctx, "failed to scatter lease to s%d: %+v", targetStoreID, err)
-					}
+				log.VEventf(ctx, 2, "randomly transferring lease to s%d", targetStoreID)
+				if err := r.AdminTransferLease(ctx, targetStoreID, false /* bypassSafetyChecks */); err != nil {
+					log.KvExec.Warningf(ctx, "scatter lease to s%d failed due to %v: candidates included %v",
+						targetStoreID, err, potentialLeaseTargets)
 				}
 			}
 		}
@@ -4214,6 +3996,23 @@ func (r *Replica) adminScatter(
 			numReplicasMoved++
 		}
 	}
+	return numReplicasMoved
+}
+
+// adminScatter moves replicas and leaseholders for a selection of ranges. It is
+// best-effort. Ranges that cannot be moved will just return early and not
+// return an error.
+func (r *Replica) adminScatter(
+	ctx context.Context, args kvpb.AdminScatterRequest,
+) (kvpb.AdminScatterResponse, error) {
+	if args.MaxSize > 0 {
+		if existing, limit := r.GetMVCCStats().Total(), args.MaxSize; existing > limit {
+			return kvpb.AdminScatterResponse{},
+				errors.Errorf("existing range size %d exceeds specified limit %d", existing, limit)
+		}
+	}
+
+	numReplicasMoved := r.scatterRangeAndRandomizeLeases(ctx, args.RandomizeLeases)
 
 	ri := r.GetRangeInfo(ctx)
 	stats := r.GetMVCCStats()
@@ -4225,24 +4024,4 @@ func (r *Replica) adminScatter(
 		// adequate.
 		ReplicasScatteredBytes: stats.Total() * int64(numReplicasMoved),
 	}, nil
-}
-
-// TODO(arul): AdminVerifyProtectedTimestampRequest can entirely go away in
-// 22.2.
-func (r *Replica) adminVerifyProtectedTimestamp(
-	ctx context.Context, _ kvpb.AdminVerifyProtectedTimestampRequest,
-) (resp kvpb.AdminVerifyProtectedTimestampResponse, err error) {
-	// AdminVerifyProtectedTimestampRequest is not supported starting from the
-	// 22.1 release. We expect nodes running a 22.1 binary to still service this
-	// request in a {21.2, 22.1} mixed version cluster. This can happen if the
-	// request is initiated on a 21.2 node and the leaseholder of the range it is
-	// trying to verify is on a 22.1 node.
-	//
-	// We simply return true without attempting to verify in such a case. This
-	// ensures upstream jobs (backups) don't fail as a result. It is okay to
-	// return true regardless even if the PTS record being verified does not apply
-	// as the failure mode is non-destructive. Infact, this is the reason we're
-	// no longer supporting Verification past 22.1.
-	resp.Verified = true
-	return resp, nil
 }

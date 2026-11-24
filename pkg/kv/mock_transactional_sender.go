@@ -13,6 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/redact"
 )
 
@@ -46,7 +47,7 @@ func (m *MockTransactionalSender) Send(
 
 // GetLeafTxnInputState is part of the TxnSender interface.
 func (m *MockTransactionalSender) GetLeafTxnInputState(
-	context.Context,
+	context.Context, interval.Tree,
 ) (*roachpb.LeafTxnInputState, error) {
 	panic("unimplemented")
 }
@@ -106,6 +107,14 @@ func (m *MockTransactionalSender) GetOmitInRangefeeds() bool {
 // SetOmitInRangefeeds is part of the TxnSender interface.
 func (m *MockTransactionalSender) SetOmitInRangefeeds() {
 	m.txn.OmitInRangefeeds = true
+}
+
+// SetBufferedWritesEnabled is part of the TxnSender interface.
+func (m *MockTransactionalSender) SetBufferedWritesEnabled(enabled bool) {}
+
+// BufferedWritesEnabled is part of the TxnSender interface.
+func (m *MockTransactionalSender) BufferedWritesEnabled() bool {
+	return false
 }
 
 // String is part of the TxnSender interface.
@@ -211,6 +220,9 @@ func (m *MockTransactionalSender) CanUseSavepoint(context.Context, SavepointToke
 	panic("unimplemented")
 }
 
+// Key is part of the TxnSender interface.
+func (m *MockTransactionalSender) Key() roachpb.Key { panic("unimplemented") }
+
 // Epoch is part of the TxnSender interface.
 func (m *MockTransactionalSender) Epoch() enginepb.TxnEpoch { panic("unimplemented") }
 
@@ -268,6 +280,11 @@ func (m *MockTransactionalSender) HasPerformedReads() bool {
 // HasPerformedWrites is part of TxnSenderFactory.
 func (m *MockTransactionalSender) HasPerformedWrites() bool {
 	panic("unimplemented")
+}
+
+// HasBufferedWrites is part of TxnSenderFactory.
+func (m *MockTransactionalSender) HasBufferedWrites() bool {
+	return false
 }
 
 // TestingShouldRetry is part of TxnSenderFactory.

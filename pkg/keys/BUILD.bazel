@@ -21,6 +21,7 @@ go_library(
         "//pkg/util/uuid",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
+        "@com_github_cockroachdb_redact//interfaces",
     ],
 )
 
@@ -28,6 +29,7 @@ go_test(
     name = "keys_test",
     size = "small",
     srcs = [
+        "doc_test.go",
         "keys_test.go",
         "printer_test.go",
         "sql_test.go",
@@ -47,6 +49,7 @@ go_test(
         "@com_github_cockroachdb_apd_v3//:apd",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_redact//:redact",
+        "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
     ],
 )

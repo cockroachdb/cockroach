@@ -32,6 +32,7 @@ EXECGEN_SRCS = [
     "//pkg/sql/colexec/colexecbase:cast.eg.go",
     "//pkg/sql/colexec/colexecbase:const.eg.go",
     "//pkg/sql/colexec/colexecbase:distinct.eg.go",
+    "//pkg/sql/colexec/colexecbuiltins:substring.eg.go",
     "//pkg/sql/colexec/colexeccmp:default_cmp_expr.eg.go",
     "//pkg/sql/colexec/colexechash:hash_utils.eg.go",
     "//pkg/sql/colexec/colexechash:hashtable_distinct.eg.go",
@@ -84,7 +85,6 @@ EXECGEN_SRCS = [
     "//pkg/sql/colexec:sort.eg.go",
     "//pkg/sql/colexec:sort_partitioner.eg.go",
     "//pkg/sql/colexec:sorttopk.eg.go",
-    "//pkg/sql/colexec:substring.eg.go",
     "//pkg/sql/colexec:values_differ.eg.go",
     "//pkg/sql/colexec:vec_comparators.eg.go",
 ]

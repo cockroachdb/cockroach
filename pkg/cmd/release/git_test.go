@@ -5,7 +5,11 @@
 
 package main
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/cockroachdb/version"
+)
 
 func TestBumpVersion(t *testing.T) {
 	tests := []struct {
@@ -112,11 +116,14 @@ func TestBumpVersion(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.version, func(t *testing.T) {
 			got, err := bumpVersion(tt.version)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("bumpVersion() error = %v, wantErr %v", err, tt.wantErr)
+			if tt.wantErr {
+				if err == nil {
+					t.Errorf("bumpVersion() error = %v, wantErr %v", err, tt.wantErr)
+				}
 				return
 			}
-			if got != tt.nextVersion {
+			expected := version.MustParse(tt.nextVersion)
+			if got != expected {
 				t.Errorf("bumpVersion() got = %v, nextVersion %v", got, tt.nextVersion)
 			}
 		})

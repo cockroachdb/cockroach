@@ -100,16 +100,16 @@ func TestSplitFinder(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 			splits := tc.config.splits
-			_, _, tr, r := tc.config.createKeyGenerator()
+			kg := tc.config.createKeyGenerator()
 
 			if tc.expectPanic {
-				require.Panics(t, func() { splitFinder(0, 0, r, tr) })
+				require.Panics(t, func() { splitFinder(0, 0, kg.kr, kg.transformer) })
 				return
 			}
 
 			results := make([]interface{}, splits)
 			for i := range results {
-				results[i] = splitFinder(i, splits, r, tr)
+				results[i] = splitFinder(i, splits, kg.kr, kg.transformer)
 			}
 			require.Equal(t, tc.expected, results)
 		})

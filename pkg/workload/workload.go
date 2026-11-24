@@ -19,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -204,6 +205,10 @@ func (t Table) GetResolvedName() tree.TableName {
 type BatchedTuples struct {
 	// NumBatches is the number of batches of tuples.
 	NumBatches int
+	// MayContainDuplicates is a flag indicating whether the tuples may contain
+	// keys that violate uniqueness constraints. If true, the data loader will
+	// use INSERT ... ON CONFLICT DO NOTHING statements.
+	MayContainDuplicates bool
 	// FillBatch is a function to deterministically compute a columnar-batch of
 	// tuples given its index.
 	//
@@ -341,6 +346,12 @@ func ColBatchToRows(cb coldata.Batch) [][]interface{} {
 					datums[rowIdx*numCols+colIdx] = datum
 				}
 			}
+		case types.DecimalFamily:
+			for rowIdx, datum := range col.Decimal()[:numRows] {
+				if !nulls.NullAt(rowIdx) {
+					datums[rowIdx*numCols+colIdx] = datum
+				}
+			}
 		case types.BytesFamily:
 			// HACK: workload's Table schemas are SQL schemas, but the initial data is
 			// returned as a coldata.Batch, which has a more limited set of types.
@@ -359,6 +370,12 @@ func ColBatchToRows(cb coldata.Batch) [][]interface{} {
 			for rowIdx := 0; rowIdx < numRows; rowIdx++ {
 				if !nulls.NullAt(rowIdx) {
 					datums[rowIdx*numCols+colIdx] = colBytes.Get(rowIdx)
+				}
+			}
+		case types.TimestampTZFamily:
+			for rowIdx, datum := range col.Timestamp()[:numRows] {
+				if !nulls.NullAt(rowIdx) {
+					datums[rowIdx*numCols+colIdx] = datum
 				}
 			}
 		default:
@@ -402,7 +419,8 @@ func (l requiresCCLBinaryDataLoader) InitialDataLoad(
 type QueryLoad struct {
 	// WorkerFns is one function per worker. It is to be called once per unit of
 	// work to be done.
-	WorkerFns []func(context.Context) error
+	WorkerFns     []func(context.Context) error
+	ChangefeedFns []func(context.Context) error
 
 	// Close, if set, is called before the process exits, giving workloads a
 	// chance to print some information or perform cleanup.
@@ -503,6 +521,8 @@ func ApproxDatumSize(x interface{}) int64 {
 		return int64(len(t))
 	case []byte:
 		return int64(len(t))
+	case apd.Decimal:
+		return int64(t.Size())
 	case time.Time:
 		return 12
 	default:

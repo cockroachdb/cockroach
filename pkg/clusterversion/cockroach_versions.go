@@ -176,67 +176,133 @@ const (
 
 	VBootstrapMax
 
-	// V24_1 is CockroachDB v24.1. It's used for all v24.1.x patch releases.
-	V24_1
+	// V25_4 is CockroachDB v25.4. It's used for all v25.4.x patch releases.
+	V25_4
 
-	// V24_2 is CockroachDB v24.2. It's used for all v24.2.x patch releases.
-	V24_2
+	V26_1_Start
 
-	// V24_3_Start demarcates the start of cluster versions stepped through during
-	// the process of upgrading from 24.2 to 24.3.
-	V24_3_Start
+	// V26_1_InstallMeta2StaticSplitPoint installs a static split point between
+	// meta1 and meta2.
+	V26_1_InstallMeta2StaticSplitPoint
 
-	// V24_3_StoreLivenessEnabled is the earliest version which supports the use
-	// of the StoreLiveness fabric.
-	V24_3_StoreLivenessEnabled
+	// V26_1_AddTableStatisticsLocksTable adds the system.table_statistics_locks
+	// table. The table is used to limit the number of concurrent automatic
+	// table statistics collections.
+	V26_1_AddTableStatisticsLocksTable
 
-	// V24_3_AddTimeseriesZoneConfig is the version that adds an explicit zone
-	// config for the timeseries range if one does not exist currently.
-	V24_3_AddTimeseriesZoneConfig
+	// V26_1 is CockroachDB v26.1. It's used for all v26.1.x patch releases.
+	V26_1
 
-	// V24_3_TableMetadata is the migration to add the table_metadata table
-	// to the system tenant.
-	V24_3_TableMetadata
+	V26_2_Start
 
-	// V24_3_TenantExcludeDataFromBackup is the migration to add
-	// `exclude_data_from_backup` on certain system tables with low GC
-	// TTL to mirror the behaviour on the system tenant.
-	V24_3_TenantExcludeDataFromBackup
+	// V26_2_AddTableStatisticsDelayDeleteColumn adds the delayDelete column to the
+	// system.table_statistics table. This column is used to support canary stats
+	// rollout feature by marking statistics for delayed deletion rather than
+	// immediate removal.
+	V26_2_AddTableStatisticsDelayDeleteColumn
 
-	// V24_3_AdvanceCommitIndexViaMsgApps is the version that makes the commit
-	// index advancement using MsgApps only, and not MsgHeartbeat.
-	V24_3_AdvanceCommitIndexViaMsgApps
+	// V26_2_AddSystemClusterMetricsTable adds the system.cluster_metrics table.
+	// This table stores cluster metrics with labels, types, and values.
+	V26_2_AddSystemClusterMetricsTable
 
-	// V24_3_SQLInstancesAddDraining is the migration to add the `is_draining`
-	// column to the system.sql_instances table.
-	V24_3_SQLInstancesAddDraining
+	// V26_2_TriggerBackrefRepair repairs trigger backrefs to include the TriggerID
+	// field. Previously, trigger dependencies in DependedOnBy had TriggerID=0,
+	// making them indistinguishable from view dependencies. This upgrade ensures
+	// each trigger backref has the correct TriggerID set.
+	V26_2_TriggerBackrefRepair
 
-	// V24_3_MaybePreventUpgradeForCoreLicenseDeprecation is the migration step
-	// that checks for the core license deprecation. It checks to make sure that
-	// the cluster would not be unknowingly in violation of the new license
-	// policies.
-	V24_3_MaybePreventUpgradeForCoreLicenseDeprecation
+	// V26_1_StatementHintsTypeNameEnabledColumnsAdded adds hint_type, hint_name,
+	// and enabled columns to the system.statement_hints table.
+	V26_2_StatementHintsTypeNameEnabledColumnsAdded
 
-	// V24_3_UseRACV2WithV1EntryEncoding is the earliest version which supports
-	// ranges using replication flow control v2, still with v1 entry encoding.
-	V24_3_UseRACV2WithV1EntryEncoding
+	// V26_1_StatementHintsTypeColumnBackfilled adds hint_type, hint_name, and enabled
+	// columns to the system.statement_hints table.
+	V26_2_StatementHintsTypeColumnBackfilled
 
-	// V24_3_UseRACV2Full is the earliest version which supports ranges using
-	// replication flow control v2, with v2 entry encoding. Replication flow
-	// control v1 is unsupported at this version.
-	V24_3_UseRACV2Full
+	// V26_2_DescriptorTxnKeyGeneration stops generation of lease manager transaction
+	// keys from Collection.EmitDescriptorUpdatesKey, which was a hidden index for
+	// tracking all descriptors involved in a txn.
+	V26_2_DescriptorTxnKeyGeneration
 
-	// V24_3_AddTableMetadataCols is the migration to add additional columns
-	// to the system.table_metadata table
-	V24_3_AddTableMetadataCols
+	// V26_2_DescriptorTxnKeyCleanup cleans up any keys stored in a hidden index
+	// used for tracking all descriptors involved in a txn.
+	V26_2_DescriptorTxnKeyCleanup
 
-	// V24_3 is CockroachDB v24.3. It's used for all v24.3.x patch releases.
-	V24_3
+	// V26_2_AddStatementStatisticsComputedColumns adds new computed columns and
+	// a covering index to the system.statement_statistics table to support
+	// efficient aggregation queries.
+	V26_2_AddStatementStatisticsComputedColumns
 
-	V25_1_Start
+	// V26_2_AddTransactionStatisticsComputedColumns adds new computed columns
+	// and a covering index to the system.transaction_statistics table to support
+	// efficient aggregation queries.
+	V26_2_AddTransactionStatisticsComputedColumns
 
-	// V25_1_AddJobsTables added new jobs tables.
-	V25_1_AddJobsTables
+	// V26_2_ChangefeedsStopReadingSpanLevelCheckpoints is the version when
+	// changefeeds stop reading span-level checkpoints.
+	V26_2_ChangefeedsStopReadingSpanLevelCheckpoints
+
+	// V26_2_ChangefeedsStopWritingSpanLevelCheckpoints is the version when
+	// changefeeds stop writing span-level checkpoints.
+	V26_2_ChangefeedsStopWritingSpanLevelCheckpoints
+
+	// V26_2_ChangefeedsNoLongerHaveSpanLevelCheckpoints is the version when
+	// changefeeds no longer have span-level checkpoints.
+	V26_2_ChangefeedsNoLongerHaveSpanLevelCheckpoints
+
+	// V26_2_NoLastReplicaGCTimestampKeyOnEval is the version that stops writing
+	// LastReplicaGCTimestampKey to the state machine batch when evaluating
+	// commands. This unreplicated key is now written at apply time locally.
+	V26_2_NoLastReplicaGCTimestampKeyOnEval
+
+	// V26_2_GrantTemporaryToPublic grants the TEMPORARY privilege to the
+	// public role on all existing databases. This matches PostgreSQL behavior
+	// where TEMPORARY is granted to PUBLIC by default on all databases.
+	V26_2_GrantTemporaryToPublic
+
+	// V26_2_StmtDiagnosticsRequestID adds request_id column to
+	// system.statement_diagnostics for multi-bundle support.
+	V26_2_StmtDiagnosticsRequestID
+
+	// V26_2_AddSystemStatementsTable adds the system.statements table.
+	// The table stores information about executed statements.
+	V26_2_AddSystemStatementsTable
+
+	// V26_2 is CockroachDB v26.2. It's used for all v26.2.x patch releases.
+	V26_2
+
+	V26_3_Start
+
+	// V26_3_StmtDiagnosticsMaxLatency adds max_execution_latency column to
+	// system.statement_diagnostics_requests for bounded latency range filtering.
+	V26_3_StmtDiagnosticsMaxLatency
+
+	// V26_3_AddAdvisoryLocksTable adds the system.advisory_locks table for
+	// storing advisory lock state.
+	V26_3_AddAdvisoryLocksTable
+
+	// V26_3_AlterStatementsTablePK changes the primary key of system.statements
+	// to fingerprint_id and drops the legacy id column.
+	V26_3_AlterStatementsTablePK
+
+	// V26_3_AddResourceGroupsTable adds the system.resource_groups table and
+	// the system.resource_group_id_seq sequence used by the resource manager
+	// to persist per-tenant resource group configurations.
+	V26_3_AddResourceGroupsTable
+
+	// V26_3_CrdbInternalTSDB gates SQL access to the in-cluster TSDB through
+	// the crdb_internal.tsdb_query generator builtin.
+	V26_3_CrdbInternalTSDB
+
+	// V26_3_GrantReferencesToUsersWithCreate grants the REFERENCES privilege
+	// to all users/roles that currently hold CREATE on any table. This ensures
+	// backwards compatibility after FK creation switches from requiring CREATE
+	// to requiring REFERENCES on both the origin and referenced tables.
+	V26_3_GrantReferencesToUsersWithCreate
+
+	// V26_3_AddVcpuUsageTable adds the system.vcpu_usage table for
+	// tracking vCPU consumption per node per audit interval for license auditing.
+	V26_3_AddVcpuUsageTable
 
 	// *************************************************
 	// Step (1) Add new versions above this comment.
@@ -270,34 +336,72 @@ var versionTable = [numKeys]roachpb.Version{
 	VBootstrapTenant: {Major: 0, Minor: 0, Internal: 4},
 	VBootstrapMax:    {Major: 0, Minor: 0, Internal: 424242},
 
-	V24_1: {Major: 24, Minor: 1, Internal: 0},
+	V25_4: {Major: 25, Minor: 4, Internal: 0},
 
-	V24_2: {Major: 24, Minor: 2, Internal: 0},
+	// v26.1 versions. Internal versions must be even.
+	V26_1_Start: {Major: 25, Minor: 4, Internal: 2},
 
-	// v24.3 versions. Internal versions must be even.
-	V24_3_Start: {Major: 24, Minor: 2, Internal: 2},
+	V26_1_InstallMeta2StaticSplitPoint: {Major: 25, Minor: 4, Internal: 4},
 
-	V24_3_StoreLivenessEnabled:                         {Major: 24, Minor: 2, Internal: 4},
-	V24_3_AddTimeseriesZoneConfig:                      {Major: 24, Minor: 2, Internal: 6},
-	V24_3_TableMetadata:                                {Major: 24, Minor: 2, Internal: 8},
-	V24_3_TenantExcludeDataFromBackup:                  {Major: 24, Minor: 2, Internal: 10},
-	V24_3_AdvanceCommitIndexViaMsgApps:                 {Major: 24, Minor: 2, Internal: 12},
-	V24_3_SQLInstancesAddDraining:                      {Major: 24, Minor: 2, Internal: 14},
-	V24_3_MaybePreventUpgradeForCoreLicenseDeprecation: {Major: 24, Minor: 2, Internal: 16},
-	V24_3_UseRACV2WithV1EntryEncoding:                  {Major: 24, Minor: 2, Internal: 18},
-	V24_3_UseRACV2Full:                                 {Major: 24, Minor: 2, Internal: 20},
-	V24_3_AddTableMetadataCols:                         {Major: 24, Minor: 2, Internal: 22},
+	V26_1_AddTableStatisticsLocksTable: {Major: 25, Minor: 4, Internal: 6},
 
-	V24_3: {Major: 24, Minor: 3, Internal: 0},
+	V26_1: {Major: 26, Minor: 1, Internal: 0},
 
-	// v25.1 versions. Internal versions must be even.
-	V25_1_Start: {Major: 24, Minor: 3, Internal: 2},
+	// v26.2 versions. Internal versions must be even.
+	V26_2_Start: {Major: 26, Minor: 1, Internal: 2},
 
-	V25_1_AddJobsTables: {Major: 24, Minor: 3, Internal: 4},
+	V26_2_AddTableStatisticsDelayDeleteColumn: {Major: 26, Minor: 1, Internal: 4},
 
+	V26_2_AddSystemClusterMetricsTable: {Major: 26, Minor: 1, Internal: 6},
+
+	V26_2_TriggerBackrefRepair: {Major: 26, Minor: 1, Internal: 8},
+
+	V26_2_StatementHintsTypeNameEnabledColumnsAdded: {Major: 26, Minor: 1, Internal: 10},
+
+	V26_2_StatementHintsTypeColumnBackfilled: {Major: 26, Minor: 1, Internal: 12},
+
+	V26_2_DescriptorTxnKeyGeneration: {Major: 26, Minor: 1, Internal: 14},
+
+	V26_2_DescriptorTxnKeyCleanup: {Major: 26, Minor: 1, Internal: 16},
+
+	V26_2_AddStatementStatisticsComputedColumns: {Major: 26, Minor: 1, Internal: 18},
+
+	V26_2_AddTransactionStatisticsComputedColumns: {Major: 26, Minor: 1, Internal: 20},
+
+	V26_2_ChangefeedsStopReadingSpanLevelCheckpoints: {Major: 26, Minor: 1, Internal: 22},
+
+	V26_2_ChangefeedsStopWritingSpanLevelCheckpoints: {Major: 26, Minor: 1, Internal: 24},
+
+	V26_2_ChangefeedsNoLongerHaveSpanLevelCheckpoints: {Major: 26, Minor: 1, Internal: 26},
+
+	V26_2_NoLastReplicaGCTimestampKeyOnEval: {Major: 26, Minor: 1, Internal: 28},
+
+	V26_2_GrantTemporaryToPublic: {Major: 26, Minor: 1, Internal: 30},
+
+	V26_2_StmtDiagnosticsRequestID: {Major: 26, Minor: 1, Internal: 32},
+
+	V26_2_AddSystemStatementsTable: {Major: 26, Minor: 1, Internal: 34},
+
+	V26_2: {Major: 26, Minor: 2, Internal: 0},
+
+	// v26.3 versions. Internal versions must be even.
+	V26_3_Start: {Major: 26, Minor: 2, Internal: 2},
+
+	V26_3_StmtDiagnosticsMaxLatency: {Major: 26, Minor: 2, Internal: 4},
+
+	V26_3_AddAdvisoryLocksTable: {Major: 26, Minor: 2, Internal: 6},
+
+	V26_3_AlterStatementsTablePK: {Major: 26, Minor: 2, Internal: 8},
+
+	V26_3_AddResourceGroupsTable: {Major: 26, Minor: 2, Internal: 10},
+
+	V26_3_CrdbInternalTSDB: {Major: 26, Minor: 2, Internal: 12},
+
+	V26_3_GrantReferencesToUsersWithCreate: {Major: 26, Minor: 2, Internal: 14},
+
+	V26_3_AddVcpuUsageTable: {Major: 26, Minor: 2, Internal: 16},
 	// *************************************************
 	// Step (2): Add new versions above this comment.
-	// Do not add new versions to a patch release.
 	// *************************************************
 }
 
@@ -306,19 +410,19 @@ var versionTable = [numKeys]roachpb.Version{
 const Latest Key = numKeys - 1
 
 // MinSupported is the minimum logical cluster version supported by this branch.
-const MinSupported Key = V24_2
+const MinSupported Key = V25_4
 
 // PreviousRelease is the logical cluster version of the previous release (which must
 // have at least an RC build published).
-const PreviousRelease Key = V24_2
+const PreviousRelease Key = V26_2
 
-// V25_1 is a placeholder that will eventually be replaced by the actual 25.1
+// V26_3 is a placeholder that will eventually be replaced by the actual 26.3
 // version Key, but in the meantime it points to the latest Key. The placeholder
 // is defined so that it can be referenced in code that simply wants to check if
-// a cluster is running 24.3 and has completed all associated migrations; most
+// a cluster is running 26.3 and has completed all associated migrations; most
 // version gates can use this instead of defining their own version key if they
-// only need to check that the cluster has upgraded to 25.1.
-const V25_1 = Latest
+// only need to check that the cluster has upgraded to 26.3.
+const V26_3 = Latest
 
 // DevelopmentBranch must be true on the main development branch but should be
 // set to false on a release branch once the set of versions becomes append-only
@@ -339,8 +443,21 @@ const DevelopmentBranch = true
 // TestFinalVersion).
 const finalVersion Key = -1
 
+// TestingExtraVersions may be set to true by packages of tests which will
+// intentionally use Keys greater than Latest, which otherwise would crash
+// and/or cause errors. This should only be done in packages of tests
+// specifically focused on upgrade infrastructure, as it may make mistaken use
+// of Keys greater than latest, which would likely cause odd behavior, harder to
+// notice and debug.
+var TestingExtraVersions = false
+
 // Version returns the roachpb.Version corresponding to a key.
 func (k Key) Version() roachpb.Version {
+	if TestingExtraVersions && k > Latest {
+		v := versionTable[Latest]
+		v.Internal += int32(k-Latest) * 2
+		return maybeApplyDevOffset(k, v)
+	}
 	version := versionTable[k]
 	return maybeApplyDevOffset(k, version)
 }
@@ -390,7 +507,7 @@ func SupportedPreviousReleases() []Key {
 func ListBetween(from, to roachpb.Version) []roachpb.Version {
 	var cvs []roachpb.Version
 	for k := Key(0); k < numKeys; k++ {
-		if v := k.Version(); from.Less(v) && v.LessEq(to) {
+		if v := k.Version(); from.Cmp(v) < 0 && v.Cmp(to) <= 0 {
 			cvs = append(cvs, v)
 		}
 	}

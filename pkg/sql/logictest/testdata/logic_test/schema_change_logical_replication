@@ -45,3 +45,23 @@ CREATE INDEX idx ON t(y)
 
 statement ok
 DROP INDEX idx
+
+# Clean up the job; test harness uses DROP CASCADE which is not allowed.
+statement ok
+SELECT
+	crdb_internal.unsafe_upsert_descriptor(
+		d.id,
+		crdb_internal.json_to_pb(
+			'cockroach.sql.sqlbase.Descriptor',
+			json_set(
+				crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', d.descriptor),
+				ARRAY['table', 'ldrJobIds'],
+				'[]'::JSONB
+			)
+		),
+		true
+	)
+FROM
+	system.descriptor AS d INNER JOIN system.namespace AS ns ON d.id = ns.id
+WHERE
+	name = 't'

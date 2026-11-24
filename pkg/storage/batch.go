@@ -19,7 +19,7 @@ import (
 // latest key we considered equals InternalKeyKindMax, ensuring that compilation
 // will fail if it's not. Unfortunately, this doesn't protect against reusing a
 // currently unused RocksDB key kind.
-const _ = uint(pebble.InternalKeyKindExcise - pebble.InternalKeyKindMax)
+const _ = uint(pebble.InternalKeyKindSpanBoundary - pebble.InternalKeyKindMax)
 
 // decodeBatchHeader decodes the header of Pebble batch representation,
 // returning the parsed header and a batchrepr.Reader into the contents of the
@@ -123,12 +123,18 @@ func (r *BatchReader) EngineKey() (EngineKey, error) {
 	return key, nil
 }
 
+// IsPointValue returns true if the key is a point key that represents a
+// value.
+func (r *BatchReader) IsPointValue() bool {
+	return r.kind == pebble.InternalKeyKindSet || r.kind == pebble.InternalKeyKindSetWithDelete
+}
+
 // Value returns the value of the current batch entry. Value panics if the
 // kind is a point key deletion.
 func (r *BatchReader) Value() []byte {
 	switch r.kind {
 	case pebble.InternalKeyKindDelete, pebble.InternalKeyKindSingleDelete:
-		panic("cannot call Value on a deletion entry")
+		panic(errors.AssertionFailedf("cannot call Value on a deletion entry"))
 	default:
 		return r.value
 	}

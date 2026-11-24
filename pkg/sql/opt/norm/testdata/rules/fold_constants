@@ -789,6 +789,132 @@ values
  └── (false,)
 
 # --------------------------------------------------
+# FoldComparisonWithAny
+# --------------------------------------------------
+norm expect=FoldComparisonWithAny
+SELECT 1 >= any(1, (select x from t limit 1))
+----
+values
+ ├── columns: "?column?":4!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(4)
+ └── (true,)
+
+norm expect=FoldComparisonWithAny
+SELECT 5 > any(8, 9, 10, 11)
+----
+values
+ ├── columns: "?column?":1!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (false,)
+
+norm expect=FoldComparisonWithAny
+SELECT 1 <= any(1, 2, 3, (select x from t limit 1))
+----
+values
+ ├── columns: "?column?":4!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(4)
+ └── (true,)
+
+norm expect=FoldComparisonWithAny
+SELECT 10 < any(1, 2, 3, 4)
+----
+values
+ ├── columns: "?column?":1!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (false,)
+
+norm expect=FoldComparisonWithAny
+SELECT 10 < any(1, 2, NULL, 4)
+----
+values
+ ├── columns: "?column?":1
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (NULL,)
+
+norm expect=FoldComparisonWithAny
+SELECT 10 > any(1, 2, NULL, 4)
+----
+values
+ ├── columns: "?column?":1!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (true,)
+
+norm expect=FoldComparisonWithAny
+SELECT 10 > any(1, 2, NULL, (select x from t limit 1))
+----
+values
+ ├── columns: "?column?":4!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(4)
+ └── (true,)
+
+norm expect=FoldComparisonWithAny
+SELECT 'cockroaches' LIKE any('%bugs%', '%roaches%')
+----
+values
+ ├── columns: "?column?":1!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (true,)
+
+norm expect=FoldComparisonWithAny
+SELECT 'cockroaches' LIKE any('%bugs%', '%birds%')
+----
+values
+ ├── columns: "?column?":1!null
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (false,)
+
+norm expect-not=FoldComparisonWithAny
+SELECT 1 > any(5, 4, random()+1)
+----
+values
+ ├── columns: "?column?":1
+ ├── cardinality: [1 - 1]
+ ├── volatile
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (1 > ANY (5, 4, random() + 1.0),)
+
+norm expect-not=FoldComparisonWithAny
+SELECT 1 > any(5, NULL, random()+1)
+----
+values
+ ├── columns: "?column?":1
+ ├── cardinality: [1 - 1]
+ ├── volatile
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (1 > ANY (5, NULL, random() + 1.0),)
+
+norm expect-not=FoldComparisonWithAny
+SELECT 1 > any(NULL, random()+1)
+----
+values
+ ├── columns: "?column?":1
+ ├── cardinality: [1 - 1]
+ ├── volatile
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (1 > ANY (NULL, random() + 1.0),)
+
+# --------------------------------------------------
 # FoldCast
 # --------------------------------------------------
 norm expect=FoldCast

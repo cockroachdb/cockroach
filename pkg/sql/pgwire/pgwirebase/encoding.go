@@ -18,6 +18,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/geo"
+	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
@@ -33,6 +34,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	jsonpathparser "github.com/cockroachdb/cockroach/pkg/util/jsonpath/parser"
+	"github.com/cockroachdb/cockroach/pkg/util/ltree"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timetz"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
@@ -47,6 +50,8 @@ import (
 )
 
 const (
+	// If the default changes, consider also changing the default of
+	// sql.guardrails.max_row_size_log.
 	defaultMaxReadBufferMessageSize = 1 << 24
 	minReadBufferMessageSize        = 1 << 14
 )
@@ -213,8 +218,10 @@ func (b *ReadBuffer) ReadTypedMsg(rd BufferedReader) (ClientMessageType, int, er
 	return ClientMessageType(typ), n, err
 }
 
-// GetString reads a null-terminated string.
-func (b *ReadBuffer) GetString() (string, error) {
+// GetUnsafeString reads a null-terminated string as a reference.
+// Note: The underlying buffer will be prevented from GCing, so long lived
+// objects should never use this.
+func (b *ReadBuffer) GetUnsafeString() (string, error) {
 	pos := bytes.IndexByte(b.Msg, 0)
 	if pos == -1 {
 		return "", NewProtocolViolationErrorf("NUL terminator not found")
@@ -224,6 +231,16 @@ func (b *ReadBuffer) GetString() (string, error) {
 	s := encoding.UnsafeConvertBytesToString(b.Msg[:pos])
 	b.Msg = b.Msg[pos+1:]
 	return s, nil
+}
+
+// GetSafeString reads a null-terminated string as a copy of the original data
+// out.
+func (b *ReadBuffer) GetSafeString() (string, error) {
+	s, err := b.GetUnsafeString()
+	if err != nil {
+		return "", err
+	}
+	return strings.Clone(s), nil
 }
 
 // GetPrepareType returns the buffer's contents as a PrepareType.
@@ -461,6 +478,12 @@ func DecodeDatum(
 				return nil, tree.MakeParseError(bs, typ, err)
 			}
 			return da.NewDJSON(tree.DJSON{JSON: v}), nil
+		case oidext.T_jsonpath:
+			jp, err := jsonpathparser.Parse(bs)
+			if err != nil {
+				return nil, tree.MakeParseError(bs, typ, err)
+			}
+			return da.NewDJsonpath(tree.DJsonpath{Jsonpath: *jp.AST}), nil
 		case oid.T_tsquery:
 			ret, err := tsearch.ParseTSQuery(bs)
 			if err != nil {
@@ -479,6 +502,12 @@ func DecodeDatum(
 				return nil, err
 			}
 			return &tree.DPGVector{T: ret}, nil
+		case oidext.T_ltree:
+			ret, err := ltree.ParseLTree(bs)
+			if err != nil {
+				return nil, err
+			}
+			return &tree.DLTree{LTree: ret}, nil
 		}
 		switch typ.Family() {
 		case types.ArrayFamily, types.TupleFamily:
@@ -560,11 +589,22 @@ func DecodeDatum(
 				}
 			}
 
+			if alloc.pgNum.Ndigits < 0 {
+				return nil, pgerror.Newf(pgcode.InvalidBinaryRepresentation, "invalid numeric digit count: %d", alloc.pgNum.Ndigits)
+			}
+
+			if alloc.pgNum.Dscale < 0 {
+				return nil, pgerror.Newf(pgcode.InvalidBinaryRepresentation, "invalid decimal scale: %d", alloc.pgNum.Dscale)
+			}
+
 			if alloc.pgNum.Ndigits > 0 {
 				decDigits := make([]byte, 0, int(alloc.pgNum.Ndigits)*PGDecDigits)
 				for i := int16(0); i < alloc.pgNum.Ndigits; i++ {
 					if err := binary.Read(r, binary.BigEndian, &alloc.i16); err != nil {
 						return nil, err
+					}
+					if alloc.i16 < 0 || alloc.i16 >= PGDecBase {
+						return nil, pgerror.Newf(pgcode.InvalidBinaryRepresentation, "invalid numeric digit: %d", alloc.i16)
 					}
 					// Each 16-bit "digit" can represent a 4 digit number.
 					// In the case where each digit is not 4 digits, we must append
@@ -589,13 +629,13 @@ func DecodeDatum(
 					}
 				}
 
-				// In the case of padding zeros at the end, we may have padded too many
-				// digits in the loop. This can be determined if the weight (defined as
-				// number of 4 digit groups left of the decimal point - 1) + the scale
-				// (total number of digits on the RHS of the decimal point) is less
-				// than the number of digits given.
+				// We may have missing zeros or, in the case of padding zeros at the end,
+				// may have padded too many of them. This can be determined if the weight
+				// (defined as number of 4 digit groups left of the decimal point - 1) + the
+				// scale (total number of digits on the RHS of the decimal point) is greater
+				// or less than the number of digits given.
 				//
-				// In Postgres, this is handled by the "remove trailing zeros" in
+				// In Postgres, truncating is handled by the "remove trailing zeros" in
 				// `make_result_opt_error`, as well as `trunc_var`.
 				// Any zeroes are implicitly added back in when operating on the decimal
 				// value.
@@ -616,28 +656,41 @@ func DecodeDatum(
 				// * for "123456.000000000", we may have digits ["12", "3456", "0", "0", "0"]
 				// with scale 5, which would make digit string "0012,3456,0000,0000".
 				// We need to cut it back to "0012,3456,0000,0" for this to be correct.
+				// * for "120000" we have digits ["12"] with weight 1, which would make the
+				// digit string "12". We need to pad it back to "0012,0000" for this
+				// to be correct.
+				// * for "1.23000" we have digits ["1", "2300"] with scale 5, which would
+				// make the digit string "0001,2300". We need to pad it back to "0012,23000"
+				// for this to be correct.
 				//
-				// This is handled by the below code, which truncates the decDigits
+				// This is handled by the below code, which truncates or pads the decDigits
 				// such that it fits into the desired dscale. To do this:
 				// * ndigits [number of digits provided] - (weight+1) gives the number
 				// of digits on the RHS of the decimal place value as determined by
-				// the given input. Note dscale can be negative, meaning we truncated
-				// the leading zeroes at the front, giving a higher exponent (e.g. 0042,0000
-				// can omit the trailing 0000, giving dscale of -4, which makes the exponent 4).
+				// the given input. Note it can be negative, meaning there are implicit zeros
+				// before the decimal point, we need to add to the buffer.
 				// * if the digits we have in the buffer on the RHS, as calculated above,
-				// is larger than our calculated dscale, truncate our buffer to match the
-				// desired dscale.
-				dscale := (alloc.pgNum.Ndigits - (alloc.pgNum.Weight + 1)) * PGDecDigits
-				if overScale := dscale - alloc.pgNum.Dscale; overScale > 0 {
-					dscale -= overScale
-					decDigits = decDigits[:len(decDigits)-int(overScale)]
+				// is larger or smaller than our calculated dscale, truncate or pad our buffer to
+				// match the desired dscale.
+				overScale := (int(alloc.pgNum.Ndigits)-(int(alloc.pgNum.Weight)+1))*PGDecDigits - int(alloc.pgNum.Dscale)
+				if overScale > 0 {
+					if overScale > len(decDigits) {
+						return nil, pgerror.Newf(pgcode.InvalidBinaryRepresentation,
+							"invalid numeric: weight %d is inconsistent with digit count %d and scale %d",
+							alloc.pgNum.Weight, alloc.pgNum.Ndigits, alloc.pgNum.Dscale)
+					}
+					decDigits = decDigits[:len(decDigits)-overScale]
+				} else {
+					for i := 0; i < -overScale; i++ {
+						decDigits = append(decDigits, '0')
+					}
 				}
 
 				decString := encoding.UnsafeConvertBytesToString(decDigits)
 				if _, ok := alloc.dd.Coeff.SetString(decString, 10); !ok {
 					return nil, pgerror.Newf(pgcode.Syntax, "could not parse %q as type decimal", decString)
 				}
-				alloc.dd.Exponent = -int32(dscale)
+				alloc.dd.Exponent = -int32(alloc.pgNum.Dscale)
 			}
 
 			switch alloc.pgNum.Sign {
@@ -745,6 +798,12 @@ func DecodeDatum(
 				return nil, tree.MakeParseError(bs, typ, err)
 			}
 			return da.NewDJSON(tree.DJSON{JSON: v}), nil
+		case oidext.T_jsonpath:
+			jp, err := jsonpathparser.Parse(bs)
+			if err != nil {
+				return nil, tree.MakeParseError(bs, typ, err)
+			}
+			return da.NewDJsonpath(tree.DJsonpath{Jsonpath: *jp.AST}), nil
 		case oid.T_varbit, oid.T_bit:
 			if len(b) < 4 {
 				return nil, NewProtocolViolationErrorf("insufficient data: %d", len(b))
@@ -792,6 +851,43 @@ func DecodeDatum(
 				return nil, err
 			}
 			return tree.NewDTSVector(ret), nil
+		case oidext.T_pgvector:
+			// PG binary format is
+			//   2 bytes for dimensions
+			//   2 bytes for unused, and
+			//   4 bytes for each float4.
+			if len(b) < 4 {
+				return nil, pgerror.Newf(pgcode.Syntax, "vector requires at least 4 bytes for binary format")
+			}
+			dim := int(binary.BigEndian.Uint16(b))
+			b = b[4:]
+			if dim > vector.MaxDim {
+				return nil, vector.MaxDimExceededErr
+			}
+			if len(b) < 4*dim {
+				return nil, pgerror.Newf(pgcode.Syntax, "vector with %d dimensions requires %d bytes for binary format", dim, 4*dim)
+			}
+			v := make(vector.T, dim)
+			for i := 0; i < dim; i++ {
+				v[i] = math.Float32frombits(binary.BigEndian.Uint32(b))
+				b = b[4:]
+			}
+			return tree.NewDPGVector(v), nil
+		case oidext.T_box2d:
+			// Expect 8 bytes for each of LoX, HiX, LoY, HiY.
+			if len(b) < 32 {
+				return nil, pgerror.Newf(pgcode.Syntax, "box2d requires at least 32 bytes for binary format")
+			}
+			loX := math.Float64frombits(binary.BigEndian.Uint64(b[0:8]))
+			hiX := math.Float64frombits(binary.BigEndian.Uint64(b[8:16]))
+			loY := math.Float64frombits(binary.BigEndian.Uint64(b[16:24]))
+			hiY := math.Float64frombits(binary.BigEndian.Uint64(b[24:32]))
+			box := geo.CartesianBoundingBox{
+				BoundingBox: geopb.BoundingBox{
+					LoX: loX, HiX: hiX, LoY: loY, HiY: hiY,
+				},
+			}
+			return da.NewDBox2D(tree.DBox2D{CartesianBoundingBox: box}), nil
 		case oidext.T_geometry:
 			v, err := geo.ParseGeometryFromEWKB(b)
 			if err != nil {
@@ -804,6 +900,18 @@ func DecodeDatum(
 				return nil, err
 			}
 			return da.NewDGeography(tree.DGeography{Geography: v}), nil
+		case oidext.T_ltree:
+			version := b[0]
+			if version != 1 {
+				return nil, pgerror.Newf(pgcode.InvalidParameterValue,
+					"unsupported ltree version %d", version)
+			}
+			// Skip over the version byte when parsing binary LTREE.
+			ret, err := ltree.ParseLTree(bs[1:])
+			if err != nil {
+				return nil, err
+			}
+			return &tree.DLTree{LTree: ret}, nil
 		default:
 			if typ.Family() == types.ArrayFamily {
 				return decodeBinaryArray(ctx, evalCtx, typ.ArrayContents(), b, code, da)
@@ -859,14 +967,20 @@ func DecodeDatum(
 		sv := strings.TrimRight(bs, " ")
 		return da.NewDString(tree.DString(sv)), nil
 	case oid.T_char:
-		sv := bs
-		// Always truncate to 1 byte, and handle the null byte specially.
-		if len(b) >= 1 {
-			if b[0] == 0 {
-				sv = ""
-			} else {
+		var sv string
+		if len(b) == 1 {
+			// Take a single byte as-is, even if it is not a valid UTF-8
+			// character. The null byte represents an empty string.
+			if b[0] != 0 {
 				sv = string(b[:1])
 			}
+		} else if len(b) > 1 {
+			// If there is more than one byte, decode the first UTF-8 character.
+			r, _ := utf8.DecodeRune(b)
+			if r == utf8.RuneError {
+				return nil, invalidUTF8Error
+			}
+			sv = string(r)
 		}
 		return da.NewDString(tree.DString(sv)), nil
 	case oid.T_name:
@@ -874,6 +988,25 @@ func DecodeDatum(
 			return nil, err
 		}
 		return da.NewDName(tree.DString(bs)), nil
+	case oid.T_aclitem:
+		if err := validateStringBytes(b); err != nil {
+			return nil, err
+		}
+		s := tree.DString(bs)
+		d, err := tree.NewDACLItemFromDString(&s)
+		if err != nil {
+			return nil, err
+		}
+		return d, nil
+	case oidext.T_citext:
+		if err := validateStringBytes(b); err != nil {
+			return nil, err
+		}
+		d, err := da.NewDCIText(bs)
+		if err != nil {
+			return nil, tree.MakeParseError(bs, typ, err)
+		}
+		return d, nil
 	}
 
 	// Fallthrough case.
@@ -903,8 +1036,12 @@ const (
 	// PGNumericNan PGNumericSign = 0xC000
 )
 
-// PGDecDigits represents the number of decimal digits per int16 Postgres "digit".
-const PGDecDigits = 4
+const (
+	// PGDecDigits represents the number of decimal digits per int16 Postgres "digit".
+	PGDecDigits = 4
+	// PGDecBase represents the base of a Postgres numeric digit.
+	PGDecBase = 10000
+)
 
 // PGNumeric represents a numeric.
 type PGNumeric struct {

@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catalogkeys"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec/scmutationexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -84,10 +83,20 @@ type Catalog interface {
 		parentZone catalog.ZoneConfig,
 		subzone zonepb.Subzone,
 		subzoneSpans []zonepb.SubzoneSpan,
+		idxRefToDelete int32,
 	) (catalog.ZoneConfig, error)
 
 	// DeleteZoneConfig deletes the zone config for a descriptor.
 	DeleteZoneConfig(ctx context.Context, id descpb.ID) error
+
+	// DeleteSubzoneConfig deletes a subzone config from the zone config for a
+	// table.
+	DeleteSubzoneConfig(
+		ctx context.Context,
+		tableID descpb.ID,
+		subzone zonepb.Subzone,
+		subzoneSpans []zonepb.SubzoneSpan,
+	) error
 
 	// UpdateComment upserts a comment for the (objID, subID, cmtType) key.
 	UpdateComment(ctx context.Context, key catalogkeys.CommentKey, cmt string) error
@@ -109,7 +118,18 @@ type Catalog interface {
 	Reset(ctx context.Context) error
 
 	// InitializeSequence initializes the initial value for a sequence.
-	InitializeSequence(id descpb.ID, startVal int64)
+	InitializeSequence(ctx context.Context, id descpb.ID, startVal int64) error
+
+	// SetSequence sets a sequence to the given value.
+	SetSequence(ctx context.Context, seq *SequenceToSet) error
+
+	// MaybeUpdateSequenceValue updates a sequence value if certain conditions are met.
+	MaybeUpdateSequenceValue(ctx context.Context, seq *SequenceToMaybeUpdate) error
+
+	// CheckMaxSchemaObjects checks if the number of schema objects in the
+	// cluster plus the new objects being created would exceed the configured
+	// limit. Returns an error if the limit would be exceeded.
+	CheckMaxSchemaObjects(ctx context.Context, numNewObjects int) error
 }
 
 // Telemetry encapsulates metrics gather for the declarative schema changer.
@@ -158,7 +178,7 @@ type TransactionalJobRegistry interface {
 
 // JobUpdateCallback is for updating a job.
 type JobUpdateCallback = func(
-	md jobs.JobMetadata,
+	md jobs.DeprecatedJobMetadata,
 	updateProgress func(*jobspb.Progress),
 	updatePayload func(*jobspb.Payload),
 ) error
@@ -200,7 +220,8 @@ type Merger interface {
 	MergeIndexes(context.Context, *jobs.Job, MergeProgress, BackfillerProgressWriter, catalog.TableDescriptor) error
 }
 
-// Validator provides interfaces that allow indexes and check constraints to be validated.
+// Validator provides interfaces that allow indexes, check constraints,
+// and enum type values to be validated.
 type Validator interface {
 	ValidateForwardIndexes(
 		ctx context.Context,
@@ -225,6 +246,15 @@ type Validator interface {
 		indexIDForValidation descpb.IndexID,
 		override sessiondata.InternalExecutorOverride,
 	) error
+
+	ValidateEnumTypeValueRemoval(
+		ctx context.Context,
+		job *jobs.Job,
+		typeDesc catalog.TypeDescriptor,
+		physicalRep []byte,
+		logicalRep string,
+		override sessiondata.InternalExecutorOverride,
+	) error
 }
 
 // IndexSpanSplitter can try to split an index span in the current transaction
@@ -232,12 +262,18 @@ type Validator interface {
 type IndexSpanSplitter interface {
 
 	// MaybeSplitIndexSpans will attempt to split the backfilled index span, if
-	// the index is in the system tenant or is partitioned.
-	MaybeSplitIndexSpans(ctx context.Context, table catalog.TableDescriptor, indexToBackfill catalog.Index) error
+	// the index is in the system tenant or is partitioned. copyIndexSource is an
+	// optional index that can be specified as a potential source for split points.
+	MaybeSplitIndexSpans(ctx context.Context, table catalog.TableDescriptor, indexToBackfill catalog.Index, copyIndexSource catalog.Index) error
 
 	// MaybeSplitIndexSpansForPartitioning will split backfilled index spans
 	// across hash-sharded index boundaries if applicable.
 	MaybeSplitIndexSpansForPartitioning(ctx context.Context, table catalog.TableDescriptor, indexToBackfill catalog.Index) error
+
+	// ShouldSkipSplitForSmallTable returns true if the table's estimated size
+	// fits within a single range, meaning index boundary splits should be
+	// skipped to avoid range count bloat on small tables.
+	ShouldSkipSplitForSmallTable(ctx context.Context, table catalog.TableDescriptor) bool
 }
 
 // BackfillProgress tracks the progress for a Backfill.
@@ -255,6 +291,27 @@ type BackfillProgress struct {
 	// backfilled into the destination indexes. The spans are expected to
 	// contain any tenant prefix.
 	CompletedSpans []roachpb.Span
+
+	// SSTManifests captures SST metadata emitted by the distributed merge
+	// backfill pipeline.
+	SSTManifests []jobspb.BulkSSTManifest
+
+	// SSTStoragePrefixes identifies the external storage prefixes used to write
+	// distributed-merge SSTs for this backfill. These prefixes are used to clean
+	// up job-scoped files on completion or cancellation.
+	SSTStoragePrefixes []string
+
+	// DistributedMergePhase tracks backfill progress through the distributed
+	// merge pipeline. Values: 0 = map complete/no merge iterations done,
+	// N (N >= 1) = merge iteration N completed.
+	// See jobspb.BackfillProgress.DistributedMergePhase for full semantics.
+	DistributedMergePhase int32
+
+	// MergeIterationTasksTotal is the total number of tasks in current iteration.
+	MergeIterationTasksTotal int64
+
+	// MergeIterationCompletedTasks contains IDs of completed tasks for resumability.
+	MergeIterationCompletedTasks []int64
 }
 
 // Backfill corresponds to a definition of a backfill from a source
@@ -305,7 +362,7 @@ type BackfillerTracker interface {
 // PeriodicProgressFlusher is used to write updates to backfill progress
 // periodically.
 type PeriodicProgressFlusher interface {
-	StartPeriodicUpdates(ctx context.Context, tracker BackfillerProgressFlusher) (stop func() error)
+	StartPeriodicUpdates(ctx context.Context, tracker BackfillerProgressFlusher) (stop func())
 }
 
 // BackfillerProgressReader is used by the backfill execution layer to read
@@ -360,7 +417,13 @@ type DescriptorMetadataUpdater interface {
 
 	// UpdateTTLScheduleLabel updates the schedule_name for the TTL Scheduled Job
 	// of the given table.
-	UpdateTTLScheduleLabel(ctx context.Context, tbl *tabledesc.Mutable) error
+	UpdateTTLScheduleLabel(ctx context.Context, tbl catalog.TableDescriptor) error
+
+	// UpdateTTLScheduleCron updates the cron schedule for a TTL job.
+	UpdateTTLScheduleCron(ctx context.Context, scheduleID jobspb.ScheduleID, cronExpr string) error
+
+	// CreateRowLevelTTLSchedule creates a new row-level TTL schedule for a table.
+	CreateRowLevelTTLSchedule(ctx context.Context, tbl catalog.TableDescriptor) error
 }
 
 type TemporarySchemaCreator interface {
@@ -381,7 +444,7 @@ type StatsRefreshQueue interface {
 type StatsRefresher interface {
 	// NotifyMutation notifies the stats refresher that a table needs its
 	// statistics updated.
-	NotifyMutation(table catalog.TableDescriptor, rowsAffected int)
+	NotifyMutation(ctx context.Context, table catalog.TableDescriptor, rowsAffected int)
 }
 
 // ProtectedTimestampManager used to install a protected timestamp before
@@ -394,7 +457,7 @@ type ProtectedTimestampManager interface {
 	// function assumes the in-memory job is up to date with the persisted job
 	// record.
 	TryToProtectBeforeGC(
-		ctx context.Context, job *jobs.Job, tableDesc catalog.TableDescriptor, readAsOf hlc.Timestamp,
+		ctx context.Context, job *jobs.Job, tableID descpb.ID, readAsOf hlc.Timestamp,
 	) jobsprotectedts.Cleaner
 
 	// Protect adds a protected timestamp record for a historical transaction for

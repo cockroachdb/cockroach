@@ -13,3 +13,4 @@ pkg/ui/workspaces/eslint-plugin-crdb/node_modules
 pkg/ui/workspaces/crdb-api-client/node_modules
 tmp
 vendor
+.claude/skills/engflow-artifacts

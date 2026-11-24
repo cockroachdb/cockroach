@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/errors"
 )
 
 var (
@@ -182,18 +183,41 @@ func (s *testStream) SetSendErr(err error) {
 	s.mu.sendErr = err
 }
 
+func unwrapBulkEvents(in []*kvpb.RangeFeedEvent) []*kvpb.RangeFeedEvent {
+	if in == nil {
+		return nil
+	}
+	out := make([]*kvpb.RangeFeedEvent, 0, len(in))
+	for _, e := range in {
+		if e.BulkEvents != nil {
+			out = append(out, e.BulkEvents.Events...)
+		} else {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
 func (s *testStream) GetAndClearEvents() []*kvpb.RangeFeedEvent {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	es := s.mu.events
 	s.mu.events = nil
-	return es
+	return unwrapBulkEvents(es)
+}
+
+func (s *testStream) GetEvents() []*kvpb.RangeFeedEvent {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	es := s.mu.events
+	return unwrapBulkEvents(es)
 }
 
 func (s *testStream) BlockSend() func() {
 	s.mu.Lock()
 	var once sync.Once
 	return func() {
+		// nolint:deferunlockcheck
 		once.Do(s.mu.Unlock) // safe to call multiple times, e.g. defer and explicit
 	}
 }
@@ -228,49 +252,198 @@ func (s *testStream) WaitForError(t *testing.T) error {
 	}
 }
 
-type testRegistration struct {
-	*bufferedRegistration
-	*testStream
+func (s *testStream) waitForEventCount(t *testing.T, expected int) {
+	testutils.SucceedsSoon(t, func() error {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		actual := len(s.mu.events)
+		if actual != expected {
+			return errors.Errorf("expected %d events, got %d", expected, actual)
+		}
+		return nil
+	})
 }
 
-func makeCatchUpIterator(
+type simpleCatchupIterAdapter struct {
+	storage.SimpleMVCCIterator
+}
+
+func (i simpleCatchupIterAdapter) NextIgnoringTime() {
+	i.SimpleMVCCIterator.Next()
+}
+
+func (i simpleCatchupIterAdapter) RangeKeyChangedIgnoringTime() bool {
+	return i.SimpleMVCCIterator.RangeKeyChanged()
+}
+
+func (i simpleCatchupIterAdapter) RangeKeysIgnoringTime() storage.MVCCRangeKeyStack {
+	return i.SimpleMVCCIterator.RangeKeys()
+}
+
+func (i simpleCatchupIterAdapter) Close() {
+	// Noop, since the closing is handled by testSnapshot.
+}
+
+var _ SimpleCatchupIter = simpleCatchupIterAdapter{}
+
+type testSnapshot struct {
+	iter simpleCatchupIterAdapter
+}
+
+func (snap *testSnapshot) Close() {
+	snap.iter.SimpleMVCCIterator.Close()
+	snap.iter.SimpleMVCCIterator = nil
+}
+
+func (snap *testSnapshot) NewMVCCIncrementalIterator(
+	context.Context, storage.MVCCIncrementalIterOptions,
+) (SimpleCatchupIter, error) {
+	return snap.iter, nil
+}
+
+func makeCatchUpSnap(
 	iter storage.SimpleMVCCIterator, span roachpb.Span, startTime hlc.Timestamp,
-) *CatchUpIterator {
+) *CatchUpSnapshot {
 	if iter == nil {
 		return nil
 	}
-	return &CatchUpIterator{
-		simpleCatchupIter: simpleCatchupIterAdapter{iter},
-		span:              span,
-		startTime:         startTime,
+	return &CatchUpSnapshot{
+		snap:      &testSnapshot{simpleCatchupIterAdapter{iter}},
+		span:      span,
+		startTime: startTime,
 	}
 }
 
-func newTestRegistration(
-	span roachpb.Span,
-	ts hlc.Timestamp,
-	catchup storage.SimpleMVCCIterator,
-	withDiff bool,
-	withFiltering bool,
-	withOmitRemote bool,
-) *testRegistration {
-	s := newTestStream()
-	r := newBufferedRegistration(
-		s.ctx,
-		span,
-		ts,
-		makeCatchUpIterator(catchup, span, ts),
-		withDiff,
-		withFiltering,
-		withOmitRemote,
-		5,
-		false, /* blockWhenFull */
-		NewMetrics(),
-		s,
-		func() {},
-	)
-	return &testRegistration{
-		bufferedRegistration: r,
-		testStream:           s,
+type registrationOption func(*testRegistrationConfig)
+
+func withCatchUpIter(iter storage.SimpleMVCCIterator) registrationOption {
+	return func(cfg *testRegistrationConfig) {
+		cfg.catchup = iter
 	}
+}
+
+func withDiff(opt bool) registrationOption {
+	return func(cfg *testRegistrationConfig) {
+		cfg.withDiff = opt
+	}
+}
+
+func withFiltering(opt bool) registrationOption {
+	return func(cfg *testRegistrationConfig) {
+		cfg.withFiltering = opt
+	}
+}
+
+func withRMetrics(metrics *Metrics) registrationOption {
+	return func(cfg *testRegistrationConfig) {
+		cfg.metrics = metrics
+	}
+}
+
+func withOmitRemote(opt bool) registrationOption {
+	return func(cfg *testRegistrationConfig) {
+		cfg.withOmitRemote = opt
+	}
+}
+
+func withRegistrationType(regType registrationType) registrationOption {
+	return func(cfg *testRegistrationConfig) {
+		cfg.withRegistrationTestTypes = regType
+	}
+}
+
+func withRSpan(span roachpb.Span) registrationOption {
+	return func(cfg *testRegistrationConfig) {
+		cfg.span = span
+	}
+}
+
+func withStartTs(ts hlc.Timestamp) registrationOption {
+	return func(cfg *testRegistrationConfig) {
+		cfg.ts = ts
+	}
+}
+
+type registrationType bool
+
+const (
+	buffered   registrationType = false
+	unbuffered                  = true
+)
+
+func (t registrationType) String() string {
+	switch t {
+	case buffered:
+		return "buffered registration"
+	case unbuffered:
+		return "unbuffered registration"
+	}
+	panic("unknown processor type")
+}
+
+var registrationTestTypes = []registrationType{buffered, unbuffered}
+
+type testRegistrationConfig struct {
+	span                      roachpb.Span
+	ts                        hlc.Timestamp
+	catchup                   storage.SimpleMVCCIterator
+	withDiff                  bool
+	withFiltering             bool
+	withOmitRemote            bool
+	withBulkDelivery          int
+	withRegistrationTestTypes registrationType
+	metrics                   *Metrics
+}
+
+func newTestRegistration(s *testStream, opts ...registrationOption) testRegistration {
+	cfg := testRegistrationConfig{}
+	for _, opt := range opts {
+		opt(&cfg)
+	}
+	if cfg.metrics == nil {
+		cfg.metrics = NewMetrics()
+	}
+
+	switch cfg.withRegistrationTestTypes {
+	case buffered:
+		return newBufferedRegistration(
+			s.ctx,
+			cfg.span,
+			cfg.ts,
+			makeCatchUpSnap(cfg.catchup, cfg.span, cfg.ts),
+			cfg.withDiff,
+			cfg.withFiltering,
+			cfg.withOmitRemote,
+			cfg.withBulkDelivery,
+			5,
+			false, /* blockWhenFull */
+			cfg.metrics,
+			s,
+			func(registration) {},
+		)
+	case unbuffered:
+		return newUnbufferedRegistration(
+			s.ctx,
+			cfg.span,
+			cfg.ts,
+			makeCatchUpSnap(cfg.catchup, cfg.span, cfg.ts),
+			cfg.withDiff,
+			cfg.withFiltering,
+			cfg.withOmitRemote,
+			cfg.withBulkDelivery,
+			5,
+			cfg.metrics,
+			&testBufferedStream{Stream: s},
+			func(registration) {},
+		)
+	default:
+		panic("unknown registration type")
+	}
+}
+
+type testRegistration interface {
+	registration
+	getBuf() chan *sharedEvent
+	getOverflowed() bool
+	maybeRunCatchUpScan(ctx context.Context) error
 }

@@ -57,7 +57,21 @@ type byIDStateValue struct {
 	// this descriptor ID.
 	hasScanNamespaceForDatabaseEntries bool
 	hasScanNamespaceForDatabaseSchemas bool
-	hasGetDescriptorEntries            bool
+	hasDescriptor                      bool
+	hasComment                         bool
+	hasZoneConfig                      bool
+}
+
+func (b byIDStateValue) HasRequiredDescriptorEntries(
+	desc bool, comment bool, zoneConfig bool,
+) bool {
+	return (!desc || b.hasDescriptor) &&
+		(!comment || b.hasComment) &&
+		(!zoneConfig || b.hasZoneConfig)
+}
+
+func (s byIDStateValue) HasDescriptorEntries() bool {
+	return s.hasComment && s.hasZoneConfig && s.hasDescriptor
 }
 
 type byNameStateValue struct {
@@ -100,12 +114,25 @@ func (c *cachedCatalogReader) Cache() nstree.Catalog {
 
 // IsIDInCache is part of the CatalogReader interface.
 func (c *cachedCatalogReader) IsIDInCache(id descpb.ID) bool {
-	return c.byIDState[id].hasGetDescriptorEntries
+	return c.byIDState[id].HasDescriptorEntries()
+}
+
+// IsCommentInCache is part of the CatalogReader interface.
+func (c *cachedCatalogReader) IsCommentInCache(id descpb.ID) bool {
+	return c.byIDState[id].hasComment
 }
 
 // IsNameInCache is part of the CatalogReader interface.
-func (c *cachedCatalogReader) IsNameInCache(key catalog.NameKey) bool {
+func (c *cachedCatalogReader) IsNameInCache(key descpb.NameInfo) bool {
 	return c.cache.LookupNamespaceEntry(key) != nil
+}
+
+// IsNameKnownToNotExist is part of the CatalogReader interface.
+func (c *cachedCatalogReader) IsNameKnownToNotExist(key descpb.NameInfo) bool {
+	if c.cache.LookupNamespaceEntry(key) != nil {
+		return false
+	}
+	return c.hasScanAll || c.byNameState[key].hasGetNamespaceEntries
 }
 
 // IsDescIDKnownToNotExist is part of the CatalogReader interface.
@@ -114,6 +141,10 @@ func (c *cachedCatalogReader) IsDescIDKnownToNotExist(id, maybeParentID descpb.I
 		return false
 	}
 	if c.hasScanAll {
+		// Temp schemas have namespace entries but no descriptors.
+		if c.cache.LookupNamespaceEntryByID(id) != nil {
+			return false
+		}
 		return true
 	}
 	if c.byIDState[maybeParentID].hasScanNamespaceForDatabaseEntries {
@@ -179,7 +210,7 @@ func (c *cachedCatalogReader) ScanAll(ctx context.Context, txn *kv.Txn) (nstree.
 	// These ids don't have corresponding descriptors but some of them may have
 	// zone configs.
 	{
-		s := byIDStateValue{hasGetDescriptorEntries: true}
+		s := byIDStateValue{hasDescriptor: true, hasZoneConfig: true, hasComment: true}
 		c.setByIDState(keys.RootNamespaceID, s)
 		for _, id := range keys.PseudoTableIDs {
 			c.setByIDState(descpb.ID(id), s)
@@ -203,7 +234,9 @@ func (c *cachedCatalogReader) ScanAll(ctx context.Context, txn *kv.Txn) (nstree.
 		var nameState byNameStateValue
 		idState.hasScanNamespaceForDatabaseEntries = true
 		idState.hasScanNamespaceForDatabaseSchemas = true
-		idState.hasGetDescriptorEntries = true
+		idState.hasDescriptor = true
+		idState.hasComment = true
+		idState.hasZoneConfig = true
 		nameState.hasGetNamespaceEntries = true
 		c.setByIDState(desc.GetID(), idState)
 		ni := descpb.NameInfo{
@@ -228,6 +261,14 @@ func (c *cachedCatalogReader) ScanDescriptorsInSpans(
 	// TODO (brian.dillmann@): explore caching these calls.
 	// https://github.com/cockroachdb/cockroach/issues/134666
 	return c.cr.ScanDescriptorsInSpans(ctx, txn, spans)
+}
+
+// ScanAllTableIDsInDatabase is part of the CatalogReader interface.
+func (c *cachedCatalogReader) ScanAllTableIDsInDatabase(
+	ctx context.Context, txn *kv.Txn, parentDBID descpb.ID,
+) ([]descpb.ID, error) {
+	// Delegate to the underlying reader; this specialized query is not cached.
+	return c.cr.ScanAllTableIDsInDatabase(ctx, txn, parentDBID)
 }
 
 // ScanNamespaceForDatabases is part of the CatalogReader interface.
@@ -339,11 +380,20 @@ func (c *cachedCatalogReader) GetByIDs(
 	ids []descpb.ID,
 	isDescriptorRequired bool,
 	expectedType catalog.DescriptorType,
+	opts ...GetByIDOption,
 ) (nstree.Catalog, error) {
 	numUncached := 0
+	var options getByIDOptions
+	if len(opts) == 0 {
+		opts = withDefaultOptions()
+	}
+	for _, opt := range opts {
+		opt.apply(&options)
+	}
 	// Move any uncached IDs to the front of the slice.
 	for i, id := range ids {
-		if c.byIDState[id].hasGetDescriptorEntries || c.hasScanAll {
+		if c.byIDState[id].HasRequiredDescriptorEntries(options.withDescriptor,
+			options.withComments, options.withZoneConfig) || c.hasScanAll {
 			continue
 		}
 		if desc := c.systemDatabaseCache.lookupDescriptor(c.version, id); desc != nil {
@@ -354,7 +404,7 @@ func (c *cachedCatalogReader) GetByIDs(
 	}
 	if numUncached > 0 && !(c.hasScanAll && !isDescriptorRequired) {
 		uncachedIDs := ids[:numUncached]
-		read, err := c.cr.GetByIDs(ctx, txn, uncachedIDs, isDescriptorRequired, expectedType)
+		read, err := c.cr.GetByIDs(ctx, txn, uncachedIDs, isDescriptorRequired, expectedType, opts...)
 		if err != nil {
 			return nstree.Catalog{}, err
 		}
@@ -363,7 +413,10 @@ func (c *cachedCatalogReader) GetByIDs(
 		}
 		for _, id := range uncachedIDs {
 			s := c.byIDState[id]
-			s.hasGetDescriptorEntries = true
+			// Set flags based on what was read for us.
+			s.hasDescriptor = s.hasDescriptor || options.withDescriptor
+			s.hasComment = s.hasComment || options.withComments
+			s.hasZoneConfig = s.hasZoneConfig || options.withZoneConfig
 			c.setByIDState(id, s)
 		}
 	}
@@ -384,19 +437,18 @@ func (c *cachedCatalogReader) GetByNames(
 ) (nstree.Catalog, error) {
 	numUncached := 0
 	// Move any uncached name keys to the front of the slice.
-	for i := range nameInfos {
-		ni := &nameInfos[i]
-		if c.byNameState[*ni].hasGetNamespaceEntries || c.hasScanAll {
+	for i, ni := range nameInfos {
+		if c.byNameState[ni].hasGetNamespaceEntries || c.hasScanAll {
 			continue
 		}
 		if id, ts := c.systemDatabaseCache.lookupDescriptorID(c.version, ni); id != descpb.InvalidID {
 			c.cache.UpsertNamespaceEntry(ni, id, ts)
-			s := c.byNameState[*ni]
+			s := c.byNameState[ni]
 			s.hasGetNamespaceEntries = true
-			c.setByNameState(*ni, s)
+			c.setByNameState(ni, s)
 			continue
 		}
-		nameInfos[i], nameInfos[numUncached] = nameInfos[numUncached], *ni
+		nameInfos[i], nameInfos[numUncached] = nameInfos[numUncached], ni
 		numUncached++
 	}
 	if numUncached > 0 && !c.hasScanAll {
@@ -446,6 +498,11 @@ func (c *cachedCatalogReader) ensure(ctx context.Context, read nstree.Catalog) e
 	}
 	return c.memAcc.Grow(ctx, c.cache.ByteSize()-oldSize)
 
+}
+
+// InvalidateSystemCacheEntry is part of the CatalogReader interface.
+func (c *cachedCatalogReader) InvalidateSystemCacheEntry(key descpb.NameInfo) {
+	c.systemDatabaseCache.removeNameEntry(c.version, key)
 }
 
 func (c *cachedCatalogReader) setByIDState(id descpb.ID, s byIDStateValue) {

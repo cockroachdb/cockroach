@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -164,6 +165,7 @@ func makeMultiStoreArgs(storeKnobs *kvserver.StoreTestingKnobs) base.TestCluster
 func TestStoreLivenessAllToAllSupport(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuressWithIssue(t, 167469)
 
 	ctx := context.Background()
 	args := makeMultiStoreArgs(nil)
@@ -179,6 +181,7 @@ func TestStoreLivenessAllToAllSupport(t *testing.T) {
 func TestStoreLivenessRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuressWithIssue(t, 148566)
 
 	ctx := context.Background()
 	lisReg := listenerutil.NewListenerRegistry()
@@ -230,6 +233,7 @@ func TestStoreLivenessRestart(t *testing.T) {
 func TestStoreLivenessDiskStall(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuressWithIssue(t, 167469)
 
 	ctx := context.Background()
 	stalledStore := slpb.StoreIdent{NodeID: roachpb.NodeID(2), StoreID: roachpb.StoreID(3)}
@@ -278,7 +282,6 @@ func TestStoreLivenessDiskStall(t *testing.T) {
 	checkSupport(t, tc, checkSupportFn)
 
 	// Stop blocking writes.
-	testEngine.SignalToUnblock()
 	testEngine.SetBlockOnWrite(false)
 
 	// Ensure all-to-all support again.

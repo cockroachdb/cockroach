@@ -12,7 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/serverccl"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -80,11 +80,9 @@ func testTenantMetricsCapabilityRPC(
 	require.Error(t, err)
 
 	s := helper.HostCluster().Server(0)
-	db := helper.HostCluster().ServerConn(0)
-	_, err = db.Exec("ALTER TENANT [10] GRANT CAPABILITY can_view_tsdb_metrics=true\n")
-	require.NoError(t, err)
-	capability := map[tenantcapabilities.ID]string{tenantcapabilities.CanViewTSDBMetrics: "true"}
-	serverutils.WaitForTenantCapabilities(t, s, serverutils.TestTenantID(), capability, "")
+	require.NoError(t, s.GrantTenantCapabilities(
+		ctx, serverutils.TestTenantID(),
+		map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanViewTSDBMetrics: "true"}))
 
 	err = http.PostJSONChecked("/ts/query", &query, &queryResp)
 	require.NoError(t, err)
@@ -104,10 +102,9 @@ func testTenantMetricsCapabilityRPC(
 	err = http.PostJSONChecked("/ts/query", &query, &queryResp)
 	require.Error(t, err)
 
-	_, err = db.Exec("ALTER TENANT [10] GRANT CAPABILITY can_view_all_metrics=true\n")
-	require.NoError(t, err)
-	capability = map[tenantcapabilities.ID]string{tenantcapabilities.CanViewAllMetrics: "true"}
-	serverutils.WaitForTenantCapabilities(t, s, serverutils.TestTenantID(), capability, "")
+	require.NoError(t, s.GrantTenantCapabilities(
+		ctx, serverutils.TestTenantID(),
+		map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanViewAllMetrics: "true"}))
 
 	err = http.PostJSONChecked("/ts/query", &query, &queryResp)
 	require.NoError(t, err)

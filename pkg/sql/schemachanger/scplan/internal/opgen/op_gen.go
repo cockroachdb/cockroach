@@ -42,9 +42,15 @@ type Transition interface {
 }
 
 // HasTransient returns true if the element of this type has
-// Transient transitions
+// TransientAbsent transitions
 func HasTransient(elType scpb.Element) bool {
-	return hasTarget(elType, scpb.Transient)
+	return hasTarget(elType, scpb.TransientAbsent)
+}
+
+// HasTransientPublic returns true if the element of this type
+// has TransientPublic transitions.
+func HasTransientPublic(elType scpb.Element) bool {
+	return hasTarget(elType, scpb.TransientPublic)
 }
 
 // HasPublic returns true if the element of this type has
@@ -91,7 +97,7 @@ func (r *registry) buildGraph(
 		if err != nil || !log.ExpensiveLogEnabled(ctx, 2) {
 			return
 		}
-		log.Infof(ctx, "operation graph generation took %v", timeutil.Since(start))
+		log.Dev.Infof(ctx, "operation graph generation took %v", timeutil.Since(start))
 	}()
 	g, err := scgraph.New(cs)
 	if err != nil {
@@ -128,8 +134,14 @@ func (r *registry) buildGraph(
 			if e.ops != nil {
 				ops = e.ops(e.n.Element(), &md)
 			}
+			// Operations are revertible unless stated otherwise.
+			revertible := true
+			if e.revertible != nil {
+				// If a callback function exists invoke it to find out.
+				revertible = e.revertible(e.n.Element(), &md)
+			}
 			if err := g.AddOpEdges(
-				e.n.Target, e.from, e.to, e.revertible, e.canFail, ops...,
+				e.n.Target, e.from, e.to, revertible, e.canFail, ops...,
 			); err != nil {
 				return nil, err
 			}

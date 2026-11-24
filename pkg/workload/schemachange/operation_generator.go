@@ -24,10 +24,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -306,7 +308,7 @@ func (og *operationGenerator) addColumn(ctx context.Context, tx pgx.Tx) (*opStmt
 		{code: pgcode.DuplicateColumn, condition: columnExistsOnTable},
 		{code: pgcode.UndefinedObject, condition: typ == nil},
 		{code: pgcode.NotNullViolation, condition: hasRows && def.Nullable.Nullability == tree.NotNull},
-		{code: pgcode.FeatureNotSupported, condition: hasAlterPKSchemaChange},
+		{code: pgcode.FeatureNotSupported, condition: hasAlterPKSchemaChange && !og.useDeclarativeSchemaChanger},
 		// UNIQUE is only supported for indexable types.
 		{
 			code:      pgcode.FeatureNotSupported,
@@ -367,7 +369,7 @@ func (og *operationGenerator) addUniqueConstraint(ctx context.Context, tx pgx.Tx
 	if err != nil {
 		return nil, err
 	}
-	constraintExists, err := og.constraintExists(ctx, tx, constraintName)
+	constraintExists, err := og.constraintExists(ctx, tx, tableName.ObjectName, tree.Name(constraintName))
 	if err != nil {
 		return nil, err
 	}
@@ -393,17 +395,21 @@ func (og *operationGenerator) addUniqueConstraint(ctx context.Context, tx pgx.Tx
 	if err != nil {
 		return nil, err
 	}
+
 	stmt := makeOpStmt(OpStmtDDL)
 	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{code: pgcode.UndefinedColumn, condition: !columnExistsOnTable},
 		{code: pgcode.DuplicateRelation, condition: constraintExists},
 		{code: pgcode.FeatureNotSupported, condition: columnExistsOnTable && !colinfo.ColumnTypeIsIndexable(columnForConstraint.typ)},
-		{pgcode.FeatureNotSupported, hasAlterPKSchemaChange},
+		{code: pgcode.FeatureNotSupported, condition: hasAlterPKSchemaChange && !og.useDeclarativeSchemaChanger},
 		{code: pgcode.ObjectNotInPrerequisiteState, condition: databaseHasRegionChange && tableIsRegionalByRow},
 	})
 
 	if !canApplyConstraint {
 		og.candidateExpectedCommitErrors.add(pgcode.UniqueViolation)
+		// For newly created tables its possible for the execution to
+		// the unique violation error.
+		stmt.potentialExecErrors.add(pgcode.UniqueViolation)
 	} else {
 		// Otherwise there is still a possibility for an error,
 		// so add it in the potential set, since our validation query
@@ -508,6 +514,20 @@ func (og *operationGenerator) alterTableLocality(ctx context.Context, tx pgx.Tx)
 						stmt.expectedExecErrors.add(pgcode.InvalidTableDefinition)
 					}
 				}
+			}
+
+			// Check if any existing indexes are incompatible with the region
+			// column becoming an implicit partitioning column.
+			regionCol := tree.Name(tree.RegionalByRowRegionDefaultCol)
+			if columnForAsUsed {
+				regionCol = columnForAs.name
+			}
+			hasIncompat, err := og.tableHasIncompatibleIndexesForRBR(ctx, tx, tableName, regionCol)
+			if err != nil {
+				return "", err
+			}
+			if hasIncompat {
+				stmt.expectedExecErrors.add(pgcode.FeatureNotSupported)
 			}
 
 			return ret, nil
@@ -797,19 +817,30 @@ func (og *operationGenerator) primaryRegion(ctx context.Context, tx pgx.Tx) (*op
 			pgcode.InvalidName, pgcode.InvalidDatabaseDefinition), nil
 	}
 
-	// Conversion to multi-region is only allowed if the data is not already
-	// partitioned.
 	stmt := makeOpStmt(OpStmtDDL)
-	hasPartitioning, err := og.databaseHasTablesWithPartitioning(ctx, tx, database)
+
+	// Changing the primary region is blocked while a REGIONAL BY ROW transition
+	// is in progress on any table in the database. This is a potential error
+	// because the RBR change may complete before the primary region change executes.
+	databaseHasRegionalByRowChange, err := og.databaseHasRegionalByRowChange(ctx, tx)
 	if err != nil {
 		return nil, err
 	}
-	if hasPartitioning {
-		stmt.expectedExecErrors.add(pgcode.ObjectNotInPrerequisiteState)
-	}
+	stmt.potentialExecErrors.addAll(codesWithConditions{
+		{code: pgcode.ObjectNotInPrerequisiteState, condition: databaseHasRegionalByRowChange},
+	})
 
 	// No regions in database, set a random region to be the PRIMARY REGION.
+	// Conversion to multi-region is only allowed if the data is not already
+	// partitioned.
 	if len(regionsInDB) == 0 {
+		hasPartitioning, err := og.databaseHasTablesWithPartitioning(ctx, tx, database)
+		if err != nil {
+			return nil, err
+		}
+		if hasPartitioning {
+			stmt.expectedExecErrors.add(pgcode.ObjectNotInPrerequisiteState)
+		}
 		idx := og.params.rng.Intn(len(regionInfos))
 		stmt.sql = fmt.Sprintf(
 			`ALTER DATABASE %s PRIMARY REGION "%s"`,
@@ -890,18 +921,9 @@ func (og *operationGenerator) addForeignKeyConstraint(
 	if err != nil {
 		return nil, err
 	}
-	constraintExists, err := og.constraintExists(ctx, tx, string(constraintName))
+	constraintExists, err := og.constraintExists(ctx, tx, childTable.ObjectName, constraintName)
 	if err != nil {
 		return nil, err
-	}
-	// If we are intentionally using an invalid child type, then it doesn't make
-	// sense to validate if the rows validate the constraint.
-	rowsSatisfyConstraint := true
-	if !fetchInvalidChild {
-		rowsSatisfyConstraint, err = og.rowsSatisfyFkConstraint(ctx, tx, parentTable, parentColumn, childTable, childColumn)
-		if err != nil {
-			return nil, err
-		}
 	}
 
 	stmt := makeOpStmt(OpStmtDDL)
@@ -919,7 +941,6 @@ func (og *operationGenerator) addForeignKeyConstraint(
 	// separate job validating the constraint, we can't at transaction time predict,
 	// perfectly if an error is expected. We can confirm post transaction with a time
 	// travel query.
-	_ = rowsSatisfyConstraint
 	stmt.potentialExecErrors.add(pgcode.ForeignKeyViolation)
 	og.potentialCommitErrors.add(pgcode.ForeignKeyViolation)
 
@@ -927,6 +948,14 @@ func (og *operationGenerator) addForeignKeyConstraint(
 	// validation. In which case a potential commit error is an undefined table
 	// error.
 	og.potentialCommitErrors.add(pgcode.UndefinedTable)
+
+	// If the child column has an ON UPDATE expression (e.g., crdb_internal_expiration
+	// on TTL tables), specifying an ON UPDATE action on the foreign key constraint
+	// will fail with InvalidTableDefinition.
+	if childColumn.hasOnUpdate && referenceActions.Update != tree.NoAction {
+		stmt.potentialExecErrors.add(pgcode.InvalidTableDefinition)
+	}
+
 	stmt.sql = tree.Serialize(def)
 	return stmt, nil
 }
@@ -982,13 +1011,20 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 		}
 	}
 
+	// TODO(andyk): Do we need to include vector indexes?
+	indexType := idxtype.FORWARD
+	if og.randIntn(10) == 0 {
+		// 10% INVERTED
+		indexType = idxtype.INVERTED
+	}
+
 	def := &tree.CreateIndex{
 		Name:         tree.Name(indexName),
 		Table:        *tableName,
-		Unique:       og.randIntn(4) == 0,  // 25% UNIQUE
-		Inverted:     og.randIntn(10) == 0, // 10% INVERTED
-		IfNotExists:  og.randIntn(2) == 0,  // 50% IF NOT EXISTS
-		Invisibility: invisibility,         // 5% NOT VISIBLE
+		Unique:       og.randIntn(4) == 0, // 25% UNIQUE
+		Type:         indexType,
+		IfNotExists:  og.randIntn(2) == 0, // 50% IF NOT EXISTS
+		Invisibility: invisibility,        // 5% NOT VISIBLE
 	}
 
 	regionColumn := tree.Name("")
@@ -1020,7 +1056,7 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 		if columnNames[i].name == regionColumn && i != 0 {
 			duplicateRegionColumn = true
 		}
-		if def.Inverted {
+		if def.Type == idxtype.INVERTED {
 			// We can have an inverted index on a set of columns if the last column
 			// is an inverted indexable type and the preceding columns are not.
 			invertedIndexableType := colinfo.ColumnTypeIsInvertedIndexable(columnNames[i].typ)
@@ -1059,40 +1095,32 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 	// If there are extra columns not used in the index, randomly use them
 	// as stored columns.
 	stmt := makeOpStmt(OpStmtDDL)
-	duplicateStore := false
 	isStoringVirtualComputed := false
-	regionColStored := false
+	storingPKCol := false
 	columnNames = columnNames[len(def.Columns):]
 	if n := len(columnNames); n > 0 {
 		def.Storing = make(tree.NameList, og.randIntn(1+n))
 		for i := range def.Storing {
 			def.Storing[i] = columnNames[i].name
 
-			// The region column can not be stored.
-			if tableIsRegionalByRow && columnNames[i].name == regionColumn {
-				regionColStored = true
+			colIsPK, err := og.colIsPrimaryKey(ctx, tx, tableName, columnNames[i].name)
+			if err != nil {
+				return nil, err
+			}
+			if colIsPK {
+				storingPKCol = true
 			}
 
-			// Virtual computed columns are not allowed to be indexed
-			if columnNames[i].generated && !isStoringVirtualComputed {
+			// Virtual computed columns are not allowed to be indexed, but
+			// PK columns are silently dropped from STORING by the DSC
+			// before the virtual column check, so skip the check for PK cols.
+			if columnNames[i].generated && !isStoringVirtualComputed && !colIsPK {
 				isVirtualComputed, err := og.columnIsVirtualComputed(ctx, tx, tableName, columnNames[i].name)
 				if err != nil {
 					return nil, err
 				}
 				if isVirtualComputed {
 					isStoringVirtualComputed = true
-				}
-			}
-
-			// If the column is already used in the primary key, then attempting to store
-			// it using an index will produce a pgcode.DuplicateColumn error.
-			if !duplicateStore {
-				colUsedInPrimaryIdx, err := og.colIsPrimaryKey(ctx, tx, tableName, columnNames[i].name)
-				if err != nil {
-					return nil, err
-				}
-				if colUsedInPrimaryIdx {
-					duplicateStore = true
 				}
 			}
 		}
@@ -1124,6 +1152,15 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 		stmt.expectedExecErrors.add(pgcode.ObjectNotInPrerequisiteState)
 	}
 
+	// In v26.1, the DSC errors with DuplicateColumn when a STORING column
+	// overlaps with a PK column. In v26.2+, it silently drops the column
+	// with a NOTICE instead. During mixed-version upgrades, the statement
+	// may be routed to a v26.1 node.
+	storingPKColNotSupported, err := isClusterVersionLessThan(ctx, tx, clusterversion.V26_2.Version())
+	if err != nil {
+		return nil, err
+	}
+
 	// When an index exists, but `IF NOT EXISTS` is used, then
 	// the index will not be created and the op will complete without errors.
 	if !(indexExists && def.IfNotExists) {
@@ -1137,18 +1174,29 @@ func (og *operationGenerator) createIndex(ctx context.Context, tx pgx.Tx) (*opSt
 		stmt.expectedExecErrors.addAll(codesWithConditions{
 			{code: pgcode.DuplicateRelation, condition: indexExists},
 			// Inverted indexes do not support stored columns.
-			{code: pgcode.InvalidSQLStatementName, condition: len(def.Storing) > 0 && def.Inverted},
+			{code: pgcode.InvalidSQLStatementName, condition: len(def.Storing) > 0 && def.Type == idxtype.INVERTED},
 			// Inverted indexes cannot be unique.
-			{code: pgcode.InvalidSQLStatementName, condition: def.Unique && def.Inverted},
-			{code: pgcode.InvalidSQLStatementName, condition: def.Inverted && len(def.Storing) > 0},
-			{code: pgcode.DuplicateColumn, condition: duplicateStore},
+			{code: pgcode.InvalidSQLStatementName, condition: def.Unique && def.Type == idxtype.INVERTED},
+			{code: pgcode.InvalidSQLStatementName, condition: def.Type == idxtype.INVERTED && len(def.Storing) > 0},
 			{code: pgcode.FeatureNotSupported, condition: nonIndexableType},
-			{code: pgcode.FeatureNotSupported, condition: regionColStored},
 			{code: pgcode.FeatureNotSupported, condition: duplicateRegionColumn},
 			{code: pgcode.FeatureNotSupported, condition: isStoringVirtualComputed},
-			{code: pgcode.FeatureNotSupported, condition: hasAlterPKSchemaChange},
+			{code: pgcode.FeatureNotSupported, condition: hasAlterPKSchemaChange && !og.useDeclarativeSchemaChanger},
 			{code: pgcode.FeatureNotSupported, condition: lastColInvertedIndexIsDescending},
 			{code: pgcode.FeatureNotSupported, condition: pkColUsedInInvertedIndex},
+		})
+		// Unique violations can occur at the statement phase if the table is
+		// new.
+		stmt.potentialExecErrors.addAll(codesWithConditions{
+			{code: pgcode.UniqueViolation, condition: !uniqueViolationWillNotOccur},
+			// In mixed-version clusters, v26.1 nodes error when a STORING
+			// column is also a PK column. v26.2+ nodes handle this gracefully.
+			{code: pgcode.DuplicateColumn, condition: storingPKCol && storingPKColNotSupported},
+		})
+		// We can still hit an error on commit if data is inserted that
+		// violates the unique constraint.
+		og.potentialCommitErrors.addAll(codesWithConditions{
+			{code: pgcode.UniqueViolation, condition: def.Unique},
 		})
 	}
 
@@ -1259,36 +1307,36 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 		return nil, err
 	}
 
-	opt := randgen.TableOptAllowPartiallyVisibleIndex
+	opts := []randgen.TableOption{randgen.WithAllowPartiallyVisibleIndex()}
 	if databaseHasMultiRegion {
-		opt |= randgen.TableOptMultiRegion
+		opts = append(opts, randgen.WithMultiRegion())
 	}
 	stmt := randgen.RandCreateTableWithColumnIndexNumberGenerator(
-		ctx, og.params.rng, "table", tableIdx, opt, og.newUniqueSeqNumSuffix,
+		ctx, og.params.rng, "table", tableIdx, opts, og.newUniqueSeqNumSuffix,
 	)
 	stmt.Table = *tableName
 	stmt.IfNotExists = og.randIntn(2) == 0
-	hasVectorType := func() bool {
-		// Check if any of the indexes have PGVector types involved.
+
+	// Helper function to check if any column has a type with the given prefix.
+	hasColumnTypeWithPrefix := func(typePrefix string) bool {
 		for _, def := range stmt.Defs {
-			if col, ok := def.(*tree.ColumnTableDef); ok && strings.HasPrefix(col.Type.SQLString(), "VECTOR") {
+			if col, ok := def.(*tree.ColumnTableDef); ok && strings.HasPrefix(col.Type.SQLString(), typePrefix) {
 				return true
 			}
 		}
 		return false
-	}()
-	mixedVersion, err := isMixedVersionState(ctx, tx)
-	if err != nil {
-		return nil, err
 	}
-	hasUnsupportedBit0Type := func() bool {
-		for _, def := range stmt.Defs {
-			if col, ok := def.(*tree.ColumnTableDef); ok && isUnsupportedBit0Type(col.Type.SQLString(), mixedVersion) {
-				return true
-			}
-		}
-		return false
-	}()
+	hasVectorType := hasColumnTypeWithPrefix("VECTOR")
+	hasCitextType := hasColumnTypeWithPrefix("CITEXT")
+	hasLtreeType := hasColumnTypeWithPrefix("LTREE")
+
+	// Randomly create as schema locked table.
+	if og.params.rng.Intn(2) == 0 {
+		stmt.StorageParams = append(stmt.StorageParams, tree.StorageParam{
+			Key:   "schema_locked",
+			Value: tree.DBoolTrue,
+		})
+	}
 
 	tableExists, err := og.tableExists(ctx, tx, tableName)
 	if err != nil {
@@ -1308,7 +1356,13 @@ func (og *operationGenerator) createTable(ctx context.Context, tx pgx.Tx) (*opSt
 	opStmt.potentialExecErrors.addAll(codesWithConditions{
 		{code: pgcode.Syntax, condition: hasVectorType},
 		{code: pgcode.FeatureNotSupported, condition: hasVectorType},
-		{code: pgcode.InvalidParameterValue, condition: hasUnsupportedBit0Type},
+		{code: pgcode.UndefinedObject, condition: hasVectorType},
+		{code: pgcode.Syntax, condition: hasCitextType},
+		{code: pgcode.FeatureNotSupported, condition: hasCitextType},
+		{code: pgcode.UndefinedObject, condition: hasCitextType},
+		{code: pgcode.Syntax, condition: hasLtreeType},
+		{code: pgcode.FeatureNotSupported, condition: hasLtreeType},
+		{code: pgcode.UndefinedObject, condition: hasLtreeType},
 	})
 	opStmt.sql = tree.Serialize(stmt)
 	return opStmt, nil
@@ -1342,15 +1396,37 @@ func (og *operationGenerator) createType(
 	})
 
 	const letters = "abcdefghijklmnopqrstuvwxyz"
-	var statement tree.Statement
+	var statement *tree.CreateType
 
 	if isEnum {
 		statement = randgen.RandCreateEnumType(og.params.rng, typName.Object(), letters)
 	} else {
 		statement = randgen.RandCreateCompositeType(og.params.rng, typName.Object(), letters)
+
+		hasTypeWithPrefix := func(typePrefix string) bool {
+			for _, field := range statement.CompositeTypeList {
+				if strings.HasPrefix(field.Type.SQLString(), typePrefix) {
+					return true
+				}
+			}
+			return false
+		}
+
+		// Check for references to any types that are not supported in mixed version
+		// clusters.
+		ltreeNotSupported, err := isClusterVersionLessThan(ctx, tx, clusterversion.V25_4.Version())
+		if err != nil {
+			return nil, err
+		}
+		hasLtreeType := hasTypeWithPrefix("LTREE")
+		opStmt.potentialExecErrors.addAll(codesWithConditions{
+			{code: pgcode.UndefinedObject, condition: hasLtreeType && ltreeNotSupported},
+			{code: pgcode.FeatureNotSupported, condition: hasLtreeType && ltreeNotSupported},
+			{code: pgcode.Syntax, condition: hasLtreeType && ltreeNotSupported},
+		})
 	}
 
-	statement.(*tree.CreateType).TypeName = typName.ToUnresolvedObjectName()
+	statement.TypeName = typName.ToUnresolvedObjectName()
 	opStmt.sql = tree.Serialize(statement)
 	return opStmt, nil
 }
@@ -1446,7 +1522,9 @@ func (og *operationGenerator) createTableAs(ctx context.Context, tx pgx.Tx) (*op
 				}
 				selectStatement.Exprs = append(selectStatement.Exprs, selectExpr)
 
-				if _, exists := uniqueColumnNames[columnNamesForTable[j]]; exists {
+				// Internal columns will always be aliased to unique names, so they can
+				// never generate duplicate column errors.
+				if _, exists := uniqueColumnNames[columnNamesForTable[j]]; exists && !usingInternalColumn {
 					duplicateColumns = true
 				} else {
 					uniqueColumnNames[columnNamesForTable[j]] = true
@@ -1488,6 +1566,10 @@ func (og *operationGenerator) createTableAs(ctx context.Context, tx pgx.Tx) (*op
 	if opStmt.expectedExecErrors.empty() {
 		opStmt.potentialExecErrors.merge(getValidGenerationErrors())
 	}
+	// Limit any CTAS statements to a maximum time of 1 minute.
+	opStmt.statementTimeout = time.Minute
+	opStmt.potentialExecErrors.add(pgcode.QueryCanceled)
+	og.potentialCommitErrors.add(pgcode.QueryCanceled)
 
 	opStmt.sql = fmt.Sprintf(`CREATE TABLE %s AS %s FETCH FIRST %d ROWS ONLY`,
 		destTableName, selectStatement.String(), MaxRowsToConsume)
@@ -1614,8 +1696,12 @@ func (og *operationGenerator) createView(ctx context.Context, tx pgx.Tx) (*opStm
 	})
 	// Descriptor ID generator may be temporarily unavailable, so
 	// allow uncategorized errors temporarily.
-	opStmt.sql = fmt.Sprintf(`CREATE VIEW %s AS %s`,
-		destViewName, selectStatement.String())
+	securityInvokerClause, err := og.randSecurityInvokerClause(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+	opStmt.sql = fmt.Sprintf(`CREATE VIEW %s%s AS %s`,
+		destViewName, securityInvokerClause, selectStatement.String())
 	return opStmt, nil
 }
 
@@ -1639,6 +1725,17 @@ func (og *operationGenerator) dropColumn(ctx context.Context, tx pgx.Tx) (*opStm
 		return nil, err
 	}
 
+	// Check if the table has any policies or row-level TTL.
+	tableHasPolicies, tableHasTTL := false, false
+	if tableExists {
+		if tableHasPolicies, err = og.tableHasPolicies(ctx, tx, tableName); err != nil {
+			return nil, err
+		}
+		if tableHasTTL, err = og.tableHasRowLevelTTL(ctx, tx, tableName); err != nil {
+			return nil, err
+		}
+	}
+
 	columnName, err := og.randColumn(ctx, tx, *tableName, og.pctExisting(true))
 	if err != nil {
 		return nil, err
@@ -1648,14 +1745,6 @@ func (og *operationGenerator) dropColumn(ctx context.Context, tx pgx.Tx) (*opStm
 		return nil, err
 	}
 	colIsPrimaryKey, err := og.colIsPrimaryKey(ctx, tx, tableName, columnName)
-	if err != nil {
-		return nil, err
-	}
-	columnIsDependedOn, err := og.columnIsDependedOn(ctx, tx, tableName, columnName)
-	if err != nil {
-		return nil, err
-	}
-	columnRemovalWillDropFKBackingIndexes, err := og.columnRemovalWillDropFKBackingIndexes(ctx, tx, tableName, columnName)
 	if err != nil {
 		return nil, err
 	}
@@ -1677,16 +1766,63 @@ func (og *operationGenerator) dropColumn(ctx context.Context, tx pgx.Tx) (*opStm
 		{code: pgcode.ObjectNotInPrerequisiteState, condition: columnIsInAddingOrDroppingIndex},
 		{code: pgcode.UndefinedColumn, condition: !columnExists},
 		{code: pgcode.InvalidColumnReference, condition: colIsPrimaryKey || colIsRefByComputed},
-		{code: pgcode.DependentObjectsStillExist, condition: columnIsDependedOn || columnRemovalWillDropFKBackingIndexes},
-		{code: pgcode.FeatureNotSupported, condition: hasAlterPKSchemaChange},
+		{code: pgcode.FeatureNotSupported, condition: hasAlterPKSchemaChange && !og.useDeclarativeSchemaChanger},
 	})
-	// For legacy schema changer its possible for create index operations to interfere if they
-	// are in progress.
-	if !og.useDeclarativeSchemaChanger {
-		stmt.potentialExecErrors.add(pgcode.ObjectNotInPrerequisiteState)
-	}
+	stmt.potentialExecErrors.addAll(codesWithConditions{
+		// For legacy schema changer its possible for create index operations to interfere if they
+		// are in progress.
+		{code: pgcode.ObjectNotInPrerequisiteState, condition: !og.useDeclarativeSchemaChanger},
+		// It is possible the column we are dropping is in the new primary key,
+		// so a potential error is an invalid reference in this case.
+		{code: pgcode.InvalidColumnReference, condition: og.useDeclarativeSchemaChanger && hasAlterPKSchemaChange},
+		// It is possible that we cannot drop column because it is referenced
+		// in a policy expression or a row-level TTL expiration expression.
+		{code: pgcode.InvalidTableDefinition, condition: tableHasPolicies || tableHasTTL},
+		// Predicting DependentObjectsStillExist precisely has been a source of
+		// flakes, so permit it as a valid outcome instead.
+		{code: pgcode.DependentObjectsStillExist, condition: true},
+	})
 	stmt.sql = fmt.Sprintf(`ALTER TABLE %s DROP COLUMN %s`, tableName.String(), columnName.String())
 	return stmt, nil
+}
+
+// tableHasPolicies checks if a table has any row-level security policies defined
+func (og *operationGenerator) tableHasPolicies(
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName,
+) (bool, error) {
+	// Query to check if a table has any RLS policies
+	query := `
+	SELECT EXISTS (
+		SELECT 1
+		FROM pg_policy p
+		JOIN pg_class t ON p.polrelid = t.oid
+		JOIN pg_namespace n ON t.relnamespace = n.oid
+		WHERE t.relname = $1
+		AND n.nspname = $2
+		LIMIT 1
+	)
+	`
+
+	var hasPolicies bool
+	err := tx.QueryRow(ctx, query, tableName.Object(), tableName.Schema()).Scan(&hasPolicies)
+	if err != nil {
+		return false, err
+	}
+
+	return hasPolicies, nil
+}
+
+// tableHasRowLevelTTL checks if a table has a row-level TTL configured.
+func (og *operationGenerator) tableHasRowLevelTTL(
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName,
+) (bool, error) {
+	return og.scanBool(ctx, tx, `
+SELECT crdb_internal.pb_to_json(
+         'cockroach.sql.sqlbase.Descriptor',
+         descriptor
+       )->'table'->'rowLevelTtl' IS NOT NULL
+  FROM system.descriptor
+ WHERE id = $1::REGCLASS`, tableName.String())
 }
 
 func (og *operationGenerator) dropColumnDefault(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
@@ -1863,13 +1999,26 @@ func (og *operationGenerator) dropConstraint(ctx context.Context, tx pgx.Tx) (*o
 	}
 
 	// DROP INDEX CASCADE is preferred for dropping unique constraints, and
-	// dropping the constraint with ALTER TABLE ... DROP CONSTRAINT is unsupported.
+	// dropping the constraint with ALTER TABLE ... DROP CONSTRAINT is not
+	// supported by the legacy schema changer. The declarative schema changer
+	// added support for this in v26.2, so in mixed-version clusters running
+	// older versions, the error is still expected.
 	constraintIsUnique, err := og.constraintIsUnique(ctx, tx, tableName, constraintName)
 	if err != nil {
 		return nil, err
 	}
 	if constraintIsUnique {
-		stmt.expectedExecErrors.add(pgcode.FeatureNotSupported)
+		uniqueDropNotSupported, err := isClusterVersionLessThan(ctx, tx, clusterversion.V26_2.Version())
+		if err != nil {
+			return nil, err
+		}
+		if !og.useDeclarativeSchemaChanger || uniqueDropNotSupported {
+			stmt.expectedExecErrors.add(pgcode.FeatureNotSupported)
+		} else {
+			// The unique constraint may be referenced by a foreign key from
+			// another table, which would cause the drop to fail.
+			stmt.potentialExecErrors.add(pgcode.DependentObjectsStillExist)
+		}
 	}
 
 	constraintAddingOrDropping, err := og.constraintInAddOrDropState(ctx, tx, tableName, constraintName)
@@ -1922,7 +2071,7 @@ func (og *operationGenerator) dropIndex(ctx context.Context, tx pgx.Tx) (*opStmt
 	if err != nil {
 		return nil, err
 	}
-	if hasAlterPKSchemaChange {
+	if hasAlterPKSchemaChange && !og.useDeclarativeSchemaChanger {
 		stmt.expectedExecErrors.add(pgcode.FeatureNotSupported)
 	}
 
@@ -1947,20 +2096,29 @@ func (og *operationGenerator) dropSequence(ctx context.Context, tx pgx.Tx) (*opS
 	if err != nil {
 		return nil, err
 	}
-	ifExists := og.randIntn(2) == 0
-	dropSeq := &tree.DropSequence{
-		Names:    tree.TableNames{*sequenceName},
-		IfExists: ifExists,
-	}
-
-	stmt := makeOpStmt(OpStmtDDL)
 	sequenceExists, err := og.sequenceExists(ctx, tx, sequenceName)
 	if err != nil {
 		return nil, err
 	}
-	if !sequenceExists && !ifExists {
-		stmt.expectedExecErrors.add(pgcode.UndefinedTable)
+	seqHasDependencies, err := og.sequenceHasDependencies(ctx, tx, sequenceName)
+	if err != nil {
+		return nil, err
 	}
+
+	dropBehavior := tree.DropBehavior(og.randIntn(3))
+
+	ifExists := og.randIntn(2) == 0
+	dropSeq := &tree.DropSequence{
+		Names:        tree.TableNames{*sequenceName},
+		IfExists:     ifExists,
+		DropBehavior: dropBehavior,
+	}
+
+	stmt := makeOpStmt(OpStmtDDL)
+	stmt.expectedExecErrors.addAll(codesWithConditions{
+		{pgcode.UndefinedTable, !ifExists && !sequenceExists},
+		{pgcode.DependentObjectsStillExist, dropBehavior != tree.DropCascade && seqHasDependencies},
+	})
 	stmt.sql = tree.Serialize(dropSeq)
 	return stmt, nil
 }
@@ -1974,7 +2132,8 @@ func (og *operationGenerator) dropTable(ctx context.Context, tx pgx.Tx) (*opStmt
 	if err != nil {
 		return nil, err
 	}
-	tableHasDependencies, err := og.tableHasDependencies(ctx, tx, tableName, true /* includeFKs */)
+	tableHasDependencies, err := og.tableHasDependencies(ctx, tx, tableName, true, /* includeFKs */
+		true /* skipSelfRef */)
 	if err != nil {
 		return nil, err
 	}
@@ -2006,7 +2165,8 @@ func (og *operationGenerator) dropView(ctx context.Context, tx pgx.Tx) (*opStmt,
 	if err != nil {
 		return nil, err
 	}
-	viewHasDependencies, err := og.tableHasDependencies(ctx, tx, viewName, true /* includeFKs */)
+	viewHasDependencies, err := og.tableHasDependencies(ctx, tx, viewName, true, /* includeFKs */
+		true /* skipSelfRef */)
 	if err != nil {
 		return nil, err
 	}
@@ -2046,6 +2206,7 @@ func (og *operationGenerator) alterTypeDropValue(ctx context.Context, tx pgx.Tx)
 				COALESCE(member->>'direction' = 'REMOVE', false) AS dropping,
 				COALESCE(json_array_length(descriptor->'referencingDescriptorIds') > 0, false) AS has_references
 			FROM enum_members
+			WHERE name NOT LIKE 'crdb_internal_region'
 	`)
 
 	enumMembers, err := Collect(ctx, og, tx, pgx.RowToMap, query)
@@ -2053,11 +2214,11 @@ func (og *operationGenerator) alterTypeDropValue(ctx context.Context, tx pgx.Tx)
 		return nil, err
 	}
 
-	// TODO(chrisseto): We're currently missing cases around enum members being
-	// referenced as it's quite difficult to tell if an individual member is
-	// referenced. Unreferenced members can be dropped but referenced members may
-	// not. For now, we skip over all enums where the type itself is being
-	// referenced.
+	// It's difficult to tell if an individual enum member is referenced, so
+	// for the success case we allow any non-dropping member regardless of
+	// whether the type has references, and flag DependentObjectsStillExist as
+	// a potential error when the selected member's type is referenced.
+	var pickedReferenced bool
 
 	stmt, code, err := Generate[*tree.AlterType](og.params.rng, og.produceError(), []GenerationCase{
 		// Fail to drop values from a type that doesn't exist.
@@ -2066,22 +2227,37 @@ func (og *operationGenerator) alterTypeDropValue(ctx context.Context, tx pgx.Tx)
 		{pgcode.ObjectNotInPrerequisiteState, `{ with (EnumValue true false) } ALTER TYPE { .name } DROP VALUE { .value } { end }`},
 		// Fail to drop values that don't exist.
 		{pgcode.UndefinedObject, `{ with (EnumValue false false) } ALTER TYPE { .name } DROP VALUE 'ValueThatDoesntExist' { end }`},
-		// Successful drop of an enum value.
-		{pgcode.SuccessfulCompletion, `{ with (EnumValue false false) } ALTER TYPE { .name } DROP VALUE { .value } { end }`},
+		// Successful drop of an enum value. The member may belong to a
+		// referenced type, in which case the drop could fail.
+		{pgcode.SuccessfulCompletion, `{ with (AnyEnumValue false) } ALTER TYPE { .name } DROP VALUE { .value } { end }`},
 	}, template.FuncMap{
 		"EnumValue": func(dropping, referenced bool) (map[string]any, error) {
 			return PickOne(og.params.rng, util.Filter(enumMembers, func(enum map[string]any) bool {
 				return enum["has_references"].(bool) == referenced && enum["dropping"].(bool) == dropping
 			}))
 		},
+		"AnyEnumValue": func(dropping bool) (map[string]any, error) {
+			member, err := PickOne(og.params.rng, util.Filter(enumMembers, func(enum map[string]any) bool {
+				return enum["dropping"].(bool) == dropping
+			}))
+			if err == nil {
+				pickedReferenced = member["has_references"].(bool)
+			}
+			return member, err
+		},
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	return newOpStmt(stmt, codesWithConditions{
+	opStmt := newOpStmt(stmt, codesWithConditions{
 		{code, true},
-	}), nil
+	})
+	if pickedReferenced {
+		opStmt.potentialExecErrors.add(pgcode.DependentObjectsStillExist)
+		og.potentialCommitErrors.add(pgcode.DependentObjectsStillExist)
+	}
+	return opStmt, nil
 }
 
 func (og *operationGenerator) renameColumn(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
@@ -2119,20 +2295,20 @@ func (og *operationGenerator) renameColumn(ctx context.Context, tx pgx.Tx) (*opS
 	if err != nil {
 		return nil, err
 	}
-	destColumnExists, err := og.columnExistsOnTable(ctx, tx, tableName, destColumnName)
-	if err != nil {
-		return nil, err
-	}
-	columnIsDependedOnByView, err := og.columnIsDependedOnByView(ctx, tx, tableName, srcColumnName)
-	if err != nil {
-		return nil, err
-	}
 
 	stmt := makeOpStmt(OpStmtDDL)
 	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{pgcode.UndefinedColumn, !srcColumnExists},
-		{pgcode.DuplicateColumn, destColumnExists && srcColumnName != destColumnName},
-		{pgcode.DependentObjectsStillExist, columnIsDependedOnByView},
+	})
+	stmt.potentialExecErrors.addAll(codesWithConditions{
+		// The column may be referenced in a view or trigger, which can lead to a
+		// dependency error. This is particularly hard to detect in cases where renaming
+		// a column that is part of a hash-sharded primary key triggers a cascading rename
+		// of the crdb_internal shard column, which might be used indirectly by other objects.
+		{code: pgcode.DependentObjectsStillExist, condition: true},
+		// Duplicate name errors are potential because destination name conflicts
+		// can change after checking.
+		{code: pgcode.DuplicateColumn, condition: srcColumnName != destColumnName},
 	})
 
 	stmt.sql = fmt.Sprintf(`ALTER TABLE %s RENAME COLUMN %s TO %s`,
@@ -2175,15 +2351,15 @@ func (og *operationGenerator) renameIndex(ctx context.Context, tx pgx.Tx) (*opSt
 	if err != nil {
 		return nil, err
 	}
-	destIndexExists, err := og.indexExists(ctx, tx, tableName, destIndexName)
-	if err != nil {
-		return nil, err
-	}
 
 	stmt := makeOpStmt(OpStmtDDL)
 	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{code: pgcode.UndefinedObject, condition: !srcIndexExists},
-		{code: pgcode.DuplicateRelation, condition: destIndexExists && srcIndexName != destIndexName},
+	})
+	// Duplicate name errors are potential because destination name conflicts can
+	// change after checking.
+	stmt.potentialExecErrors.addAll(codesWithConditions{
+		{code: pgcode.DuplicateRelation, condition: srcIndexName != destIndexName},
 	})
 
 	stmt.sql = fmt.Sprintf(`ALTER INDEX %s@"%s" RENAME TO "%s"`,
@@ -2218,18 +2394,17 @@ func (og *operationGenerator) renameSequence(ctx context.Context, tx pgx.Tx) (*o
 		return nil, err
 	}
 
-	destSequenceExists, err := og.sequenceExists(ctx, tx, destSequenceName)
-	if err != nil {
-		return nil, err
-	}
-
 	srcEqualsDest := srcSequenceName.String() == destSequenceName.String()
 	stmt := makeOpStmt(OpStmtDDL)
 	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{code: pgcode.UndefinedTable, condition: !srcSequenceExists},
 		{code: pgcode.UndefinedSchema, condition: !destSchemaExists},
-		{code: pgcode.DuplicateRelation, condition: !srcEqualsDest && destSequenceExists},
 		{code: pgcode.InvalidName, condition: srcSequenceName.Schema() != destSequenceName.Schema()},
+	})
+	// Duplicate name errors are potential because destination name conflicts can
+	// change after checking.
+	stmt.potentialExecErrors.addAll(codesWithConditions{
+		{code: pgcode.DuplicateRelation, condition: !srcEqualsDest},
 	})
 
 	stmt.sql = fmt.Sprintf(`ALTER SEQUENCE %s RENAME TO %s`, srcSequenceName, destSequenceName)
@@ -2268,12 +2443,8 @@ func (og *operationGenerator) renameTable(ctx context.Context, tx pgx.Tx) (*opSt
 		return nil, err
 	}
 
-	destTableExists, err := og.tableExists(ctx, tx, destTableName)
-	if err != nil {
-		return nil, err
-	}
-
-	srcTableHasDependencies, err := og.tableHasDependencies(ctx, tx, srcTableName, false /* includeFKs */)
+	srcTableHasDependencies, err := og.tableHasDependencies(ctx, tx, srcTableName, false, /* includeFKs */
+		false /* skipSelfRef */)
 	if err != nil {
 		return nil, err
 	}
@@ -2283,9 +2454,13 @@ func (og *operationGenerator) renameTable(ctx context.Context, tx pgx.Tx) (*opSt
 	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{code: pgcode.UndefinedTable, condition: !srcTableExists},
 		{code: pgcode.UndefinedSchema, condition: !destSchemaExists},
-		{code: pgcode.DuplicateRelation, condition: !srcEqualsDest && destTableExists},
 		{code: pgcode.DependentObjectsStillExist, condition: srcTableHasDependencies},
 		{code: pgcode.InvalidName, condition: srcTableName.Schema() != destTableName.Schema()},
+	})
+	// Duplicate name errors are potential because destination name conflicts can
+	// change after checking.
+	stmt.potentialExecErrors.addAll(codesWithConditions{
+		{code: pgcode.DuplicateRelation, condition: !srcEqualsDest},
 	})
 
 	stmt.sql = fmt.Sprintf(`ALTER TABLE %s RENAME TO %s`, srcTableName, destTableName)
@@ -2318,12 +2493,8 @@ func (og *operationGenerator) renameView(ctx context.Context, tx pgx.Tx) (*opStm
 		return nil, err
 	}
 
-	destViewExists, err := og.viewExists(ctx, tx, destViewName)
-	if err != nil {
-		return nil, err
-	}
-
-	srcTableHasDependencies, err := og.tableHasDependencies(ctx, tx, srcViewName, true /* includeFKs */)
+	srcTableHasDependencies, err := og.tableHasDependencies(ctx, tx, srcViewName, true, /* includeFKs */
+		false /* skipSelfRef */)
 	if err != nil {
 		return nil, err
 	}
@@ -2333,12 +2504,76 @@ func (og *operationGenerator) renameView(ctx context.Context, tx pgx.Tx) (*opStm
 	stmt.expectedExecErrors.addAll(codesWithConditions{
 		{code: pgcode.UndefinedTable, condition: !srcViewExists},
 		{code: pgcode.UndefinedSchema, condition: !destSchemaExists},
-		{code: pgcode.DuplicateRelation, condition: !srcEqualsDest && destViewExists},
 		{code: pgcode.DependentObjectsStillExist, condition: srcTableHasDependencies},
 		{code: pgcode.InvalidName, condition: srcViewName.Schema() != destViewName.Schema()},
 	})
+	// Duplicate name errors are potential because destination name conflicts can
+	// change after checking.
+	stmt.potentialExecErrors.addAll(codesWithConditions{
+		{code: pgcode.DuplicateRelation, condition: !srcEqualsDest},
+	})
 
 	stmt.sql = fmt.Sprintf(`ALTER VIEW %s RENAME TO %s`, srcViewName, destViewName)
+	return stmt, nil
+}
+
+func (og *operationGenerator) alterViewSetViewOption(
+	ctx context.Context, tx pgx.Tx,
+) (*opStmt, error) {
+	viewName, err := og.randView(ctx, tx, og.pctExisting(true), "")
+	if err != nil {
+		return nil, err
+	}
+	viewExists, err := og.viewExists(ctx, tx, viewName)
+	if err != nil {
+		return nil, err
+	}
+	notSupported, err := isClusterVersionLessThan(
+		ctx, tx, clusterversion.V26_2.Version(),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	stmt := makeOpStmt(OpStmtDDL)
+	stmt.expectedExecErrors.addAll(codesWithConditions{
+		{code: pgcode.UndefinedTable, condition: !viewExists},
+		{code: pgcode.Syntax, condition: notSupported},
+		{code: pgcode.FeatureNotSupported, condition: notSupported},
+	})
+	value := "true"
+	if og.params.rng.Intn(2) == 0 {
+		value = "false"
+	}
+	stmt.sql = fmt.Sprintf(`ALTER VIEW %s SET (security_invoker = %s)`, viewName, value)
+	return stmt, nil
+}
+
+func (og *operationGenerator) alterViewResetViewOption(
+	ctx context.Context, tx pgx.Tx,
+) (*opStmt, error) {
+	viewName, err := og.randView(ctx, tx, og.pctExisting(true), "")
+	if err != nil {
+		return nil, err
+	}
+	viewExists, err := og.viewExists(ctx, tx, viewName)
+	if err != nil {
+		return nil, err
+	}
+	notSupported, err := isClusterVersionLessThan(
+		ctx, tx, clusterversion.V26_2.Version(),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	stmt := makeOpStmt(OpStmtDDL)
+	stmt.expectedExecErrors.addAll(codesWithConditions{
+		{code: pgcode.UndefinedTable, condition: !viewExists},
+		{code: pgcode.Syntax, condition: notSupported},
+		{code: pgcode.FeatureNotSupported, condition: notSupported},
+	})
+	stmt.sql = fmt.Sprintf(`ALTER VIEW %s RESET (security_invoker)`, viewName)
 	return stmt, nil
 }
 
@@ -2403,7 +2638,7 @@ func (og *operationGenerator) setColumnDefault(ctx context.Context, tx pgx.Tx) (
 
 	defaultDatum := randgen.RandDatum(og.params.rng, datumTyp, columnForDefault.nullable)
 	stmt := makeOpStmt(OpStmtDDL)
-	if (!datumTyp.Equivalent(columnForDefault.typ)) && defaultDatum != tree.DNull {
+	if !datumTyp.Equivalent(columnForDefault.typ) {
 		stmt.expectedExecErrors.add(pgcode.DatatypeMismatch)
 	}
 	// Generated columns cannot have default values.
@@ -2411,10 +2646,24 @@ func (og *operationGenerator) setColumnDefault(ctx context.Context, tx pgx.Tx) (
 		stmt.potentialExecErrors.add(pgcode.Syntax)
 		stmt.potentialExecErrors.add(pgcode.InvalidTableDefinition)
 	}
+	// Check for references to any types that are not supported in mixed version
+	// clusters.
+	ltreeNotSupported, err := isClusterVersionLessThan(ctx, tx, clusterversion.V25_4.Version())
+	if err != nil {
+		return nil, err
+	}
+	if ltreeNotSupported &&
+		defaultDatum.ResolvedType().Family() == types.ArrayFamily &&
+		strings.HasPrefix(defaultDatum.ResolvedType().ArrayContents().SQLString(), "LTREE") {
+		stmt.expectedExecErrors.add(pgcode.FeatureNotSupported)
+	}
 
 	strDefault := tree.AsStringWithFlags(defaultDatum, tree.FmtParsable)
-	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s SET DEFAULT %s`,
-		tableName.String(), columnForDefault.name.String(), strDefault)
+	// Always use explicit type casting to ensure consistent behavior and avoid parse errors.
+	// When the types don't match, this will produce the expected DatatypeMismatch error.
+	// When the types do match, the cast is harmless and makes the intent explicit.
+	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s SET DEFAULT %s::%s`,
+		tableName.String(), columnForDefault.name.String(), strDefault, datumTyp.SQLString())
 	return stmt, nil
 }
 
@@ -2465,8 +2714,15 @@ func (og *operationGenerator) setColumnNotNull(ctx context.Context, tx pgx.Tx) (
 		}
 		if colContainsNull {
 			og.candidateExpectedCommitErrors.add(pgcode.NotNullViolation)
-			// If executed within the same txn as CREATE TABLE.
+			// If the table is created within the txn, then the not null violation
+			// will be an execution error.
 			stmt.potentialExecErrors.add(pgcode.NotNullViolation)
+		}
+		// If we are running with the legacy schema changer, the not null constraint
+		// is enforced during the job phase. So it's still possible to INSERT not null
+		// data before then.
+		if !og.useDeclarativeSchemaChanger {
+			og.potentialCommitErrors.add(pgcode.NotNullViolation)
 		}
 	}
 
@@ -2485,15 +2741,13 @@ func (og *operationGenerator) setColumnType(ctx context.Context, tx pgx.Tx) (*op
 		return nil, err
 	}
 
-	const setSessionVariableString = `SET enable_experimental_alter_column_type_general = true;`
-
 	tableExists, err := og.tableExists(ctx, tx, tableName)
 	if err != nil {
 		return nil, err
 	}
 	if !tableExists {
 		return makeOpStmtForSingleError(OpStmtDDL,
-			fmt.Sprintf(`%s ALTER TABLE %s ALTER COLUMN IrrelevantColumnName SET DATA TYPE IrrelevantDataType`, setSessionVariableString, tableName),
+			fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN IrrelevantColumnName SET DATA TYPE IrrelevantDataType`, tableName),
 			pgcode.UndefinedTable), nil
 	}
 	err = og.tableHasPrimaryKeySwapActive(ctx, tx, tableName)
@@ -2512,29 +2766,12 @@ func (og *operationGenerator) setColumnType(ctx context.Context, tx pgx.Tx) (*op
 	}
 	if !columnExists {
 		return makeOpStmtForSingleError(OpStmtDDL,
-			fmt.Sprintf(`%s ALTER TABLE %s ALTER COLUMN "%s" SET DATA TYPE IrrelevantTypeName`,
-				setSessionVariableString, tableName, columnForTypeChange.name),
+			fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN "%s" SET DATA TYPE IrrelevantTypeName`,
+				tableName, columnForTypeChange.name),
 			pgcode.UndefinedColumn), nil
 	}
 
 	newTypeName, newType, err := og.randType(ctx, tx, og.pctExisting(true))
-	if err != nil {
-		return nil, err
-	}
-
-	columnHasDependencies, err := og.columnIsDependedOn(ctx, tx, tableName, columnForTypeChange.name)
-	if err != nil {
-		return nil, err
-	}
-
-	colIsRefByComputed, err := og.colIsRefByComputed(ctx, tx, tableName, columnForTypeChange.name)
-	if err != nil {
-		return nil, err
-	}
-
-	// We could potentially fail since colIsRefByComputed cannot catch the case
-	// of a contention with an ongoing alter primary key schema change.
-	hasOngoingAlterPKSchemaChange, err := og.tableHasOngoingAlterPKSchemaChanges(ctx, tx, tableName)
 	if err != nil {
 		return nil, err
 	}
@@ -2548,9 +2785,6 @@ func (og *operationGenerator) setColumnType(ctx context.Context, tx pgx.Tx) (*op
 		// Some type conversions are allowed, but the values stored with the old column
 		// type are out of range for the new type.
 		stmt.potentialExecErrors.add(pgcode.NumericValueOutOfRange)
-		// TODO(49351): We will remove this when we support alter
-		// type inside a transaction.
-		stmt.potentialExecErrors.add(pgcode.FeatureNotSupported)
 		// We fail if the column we are attempting to alter has a TTL expression.
 		stmt.potentialExecErrors.add(pgcode.InvalidTableDefinition)
 		// We fail if the column we are attempting to alter is used as an
@@ -2561,45 +2795,28 @@ func (og *operationGenerator) setColumnType(ctx context.Context, tx pgx.Tx) (*op
 		stmt.potentialExecErrors.add(pgcode.DatatypeMismatch)
 	}
 
+	// This can happen for any attempt to use the legacy schema changer.
+	stmt.potentialExecErrors.add(pgcode.FeatureNotSupported)
+	// Failure can occur if we attempt to alter a column that has a dependent
+	// computed column.
+	stmt.potentialExecErrors.add(pgcode.DependentObjectsStillExist)
+	// On older versions, attempts to alter the type will fail with an
+	// experimental feature failure.
+	stmt.potentialExecErrors.add(pgcode.ExperimentalFeature)
+
 	stmt.potentialExecErrors.addAll(codesWithConditions{
 		{code: pgcode.UndefinedObject, condition: newType == nil},
-		{code: pgcode.DependentObjectsStillExist, condition: columnHasDependencies || colIsRefByComputed || hasOngoingAlterPKSchemaChange},
 	})
 
-	// TODO(#134008): Remove this with the PR that fixes this bug.
-	stmt.potentialExecErrors.add(pgcode.DependentObjectsStillExist)
-
-	stmt.sql = fmt.Sprintf(`%s ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s`,
-		setSessionVariableString, tableName.String(), columnForTypeChange.name.String(), newTypeName.SQLString())
+	stmt.sql = fmt.Sprintf(`ALTER TABLE %s ALTER COLUMN %s SET DATA TYPE %s`,
+		tableName.String(), columnForTypeChange.name.String(), newTypeName.SQLString())
 	return stmt, nil
-
 }
 
 func (og *operationGenerator) alterTableAlterPrimaryKey(
 	ctx context.Context, tx pgx.Tx,
 ) (*opStmt, error) {
 	indexableQuery := "COALESCE((SELECT crdb_internal.type_is_indexable((col->'type'->>'oid')::oid)), false)"
-	typeIsIndexableNotSupported, err := isClusterVersionLessThan(
-		ctx,
-		tx,
-		clusterversion.V24_3.Version())
-	if err != nil {
-		return nil, err
-	}
-
-	// Primary Keys are backed by a unique index, therefore we can only use
-	// columns that are of an indexable type. This information is only available
-	// via the colinfo package (not SQL) and is subject to change across
-	// versions. To eliminate the chance of flakes, rely on this allow list to do
-	// the filtering. As this list is static and non-exhaustive, we're trading a
-	// bit of coverage for stability. It may be worth while to add index-ability
-	// information to `SHOW COLUMNS` or an internal SQL function in the future.
-	// TODO(sql-foundations): once #130271 is in the latest release of each active
-	// version, we can remove this allow list/the version gate.
-	if typeIsIndexableNotSupported {
-		indexableQuery = "COALESCE((col->'type'->>'family') = ANY(ARRAY['DecimalFamily', " +
-			"'IntFamily', 'StringFamily', 'UuidFamily']), false)"
-	}
 
 	colQuery := fmt.Sprintf(`
 		SELECT
@@ -2737,12 +2954,10 @@ func (og *operationGenerator) alterTableAlterPrimaryKey(
 		// TODO(sql-foundations): Add support for hash parameters and storage parameters.
 	}
 
-	if !typeIsIndexableNotSupported {
-		generationCases = append(generationCases, GenerationCase{
-			Code:     pgcode.FeatureNotSupported,
-			Template: `{ with TableNotUnderGoingSchemaChange } ALTER TABLE { .table_name } ALTER PRIMARY KEY USING COLUMNS ({ . | Unique true | Nullable false | Generated false | Indexable false | InInvertedIndex false | Columns }) { end }`,
-		})
-	}
+	generationCases = append(generationCases, GenerationCase{
+		Code:     pgcode.FeatureNotSupported,
+		Template: `{ with TableNotUnderGoingSchemaChange } ALTER TABLE { .table_name } ALTER PRIMARY KEY USING COLUMNS ({ . | Unique true | Nullable false | Generated false | Indexable false | InInvertedIndex false | Columns }) { end }`,
+	})
 
 	stmt, code, err := Generate[*tree.AlterTable](og.params.rng, og.produceError(), generationCases, template.FuncMap{
 		"TableNotUnderGoingSchemaChange": func() (map[string]any, error) {
@@ -2800,9 +3015,6 @@ func (og *operationGenerator) alterTableAlterPrimaryKey(
 		return nil, err
 	}
 
-	// TODO(sql-foundations): Until #130165 is resolved, we add this potential
-	// error.
-	og.potentialCommitErrors.add(pgcode.DuplicateColumn)
 	// There is a risk of unique violations if concurrent inserts
 	// happen during an ALTER PRIMARY KEY. So allow this to be
 	// a potential error on the commit.
@@ -2815,6 +3027,9 @@ func (og *operationGenerator) alterTableAlterPrimaryKey(
 	// errors.
 	opStmt.potentialExecErrors.add(pgcode.InvalidColumnReference)
 	opStmt.potentialExecErrors.add(pgcode.DuplicateColumn)
+	// When altering a primary key, the implicit rowid column may be dropped,
+	// but triggers could reference it, causing a dependency violation.
+	opStmt.potentialExecErrors.add(pgcode.DependentObjectsStillExist)
 
 	return opStmt, nil
 }
@@ -2847,6 +3062,17 @@ func (og *operationGenerator) survive(ctx context.Context, tx pgx.Tx) (*opStmt, 
 		},
 	})
 
+	// Changing the survival goal is blocked while a REGIONAL BY ROW transition
+	// is in progress on any table in the database. This is a potential error
+	// because the RBR change may complete before the survival goal change executes.
+	databaseHasRegionalByRowChange, err := og.databaseHasRegionalByRowChange(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+	stmt.potentialExecErrors.addAll(codesWithConditions{
+		{code: pgcode.ObjectNotInPrerequisiteState, condition: databaseHasRegionalByRowChange},
+	})
+
 	dbName, err := og.getDatabase(ctx, tx)
 	if err != nil {
 		return nil, err
@@ -2859,16 +3085,15 @@ func (og *operationGenerator) commentOn(ctx context.Context, tx pgx.Tx) (*opStmt
 	var onType string
 
 	// COMMENT ON TYPE is only implemented in the declarative schema changer in v24.2.
-	commentOnTypeNotSupported, err := isClusterVersionLessThan(
-		ctx,
-		tx,
-		clusterversion.V24_2.Version())
-	if err != nil {
-		return nil, err
-	}
-	if og.useDeclarativeSchemaChanger && !commentOnTypeNotSupported {
+	if og.useDeclarativeSchemaChanger {
 		onType = `UNION ALL
-	SELECT 'TYPE ' || quote_ident(schema) || '.' || quote_ident(name) FROM [SHOW TYPES]`
+	SELECT 'TYPE ' || quote_ident(nsp.nspname) || '.' || quote_ident(types.typname)
+	  FROM pg_catalog.pg_type AS types
+	  JOIN pg_catalog.pg_namespace AS nsp ON (types.typnamespace = nsp.oid)
+	  WHERE types.typtype IN ('e','c')
+	    AND types.typrelid IN (0, types.oid)
+	    AND nsp.nspname NOT IN ('information_schema', 'pg_catalog', 'crdb_internal', 'pg_extension')
+	    AND types.typname != 'crdb_internal_region'`
 	}
 	q := With([]CTE{
 		{"descriptors", descJSONQuery},
@@ -2877,9 +3102,9 @@ func (og *operationGenerator) commentOn(ctx context.Context, tx pgx.Tx) (*opStmt
 		{"indexes", `SELECT schema_id::REGNAMESPACE::TEXT as schema_name, name AS table_name, jsonb_array_elements(descriptor->'table'->'indexes') AS index FROM tables`},
 		{"constraints", `SELECT schema_id::REGNAMESPACE::TEXT as schema_name, name AS table_name, jsonb_array_elements(descriptor->'table'->'checks') AS constraint FROM tables`},
 	}, fmt.Sprintf(`
-	SELECT 'SCHEMA ' || quote_ident(schema_name) FROM [SHOW SCHEMAS] WHERE owner != 'node'
+	SELECT 'SCHEMA ' || quote_ident(schema_name) FROM information_schema.schemata WHERE schema_name NOT IN ('information_schema', 'pg_catalog', 'pg_extension', 'crdb_internal')
 		UNION ALL
-	SELECT 'TABLE ' || quote_ident(schema_name) || '.' || quote_ident(table_name) FROM [SHOW TABLES] WHERE type = 'table'
+	SELECT 'TABLE ' || quote_ident(table_schema) || '.' || quote_ident(table_name) FROM information_schema.tables WHERE table_type = 'BASE TABLE' AND table_schema NOT IN ('information_schema', 'pg_catalog', 'pg_extension', 'crdb_internal')
 		UNION ALL
 	SELECT 'COLUMN ' || quote_ident(schema_name) || '.' || quote_ident(table_name) || '.' || quote_ident("column"->>'name') FROM columns
 		UNION ALL
@@ -2952,7 +3177,23 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 	for i := 0; i < numRows; i++ {
 		var row []string
 		for _, col := range nonGeneratedCols {
-			d := randgen.RandDatum(og.params.rng, col.typ, col.nullable)
+			// Limit the size of columns being generated.
+			const maxSize = 1024 * 1024
+			maxAttempts := 32
+			var d tree.Datum
+			for i := 0; i < maxAttempts; i++ {
+				d = randgen.RandDatum(og.params.rng, col.typ, col.nullable)
+				// Retry if we exceed the maximum size.
+				if d.Size() < maxSize {
+					break
+				}
+			}
+			if d.Size() > maxSize {
+				og.LogMessage(fmt.Sprintf("datum of type %s exceeds size limit (%d / %d)",
+					col.typ.SQLString(),
+					d.Size(),
+					maxSize))
+			}
 			// Unfortunately, RandDatum for OIDs only selects random values, which will
 			// always fail validation. So, for OIDs we will select a random known type
 			// instead.
@@ -3003,7 +3244,7 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 	// Only evaluate these if we know that the inserted values are sane, since
 	// we will need to evaluate generated expressions below.
 	hasUniqueConstraints := false
-	fkViolation := false
+	hasUniqueConstraintsMutations := false
 	if !anyInvalidInserts {
 		// Verify if the new row may violate unique constraints by checking the
 		// constraints in the database.
@@ -3012,23 +3253,33 @@ func (og *operationGenerator) insertRow(ctx context.Context, tx pgx.Tx) (stmt *o
 			return nil, err
 		}
 		hasUniqueConstraints = len(constraints) > 0
-		// Verify if the new row will violate fk constraints by checking the constraints and rows
-		// in the database.
-		fkViolation, err = og.violatesFkConstraints(ctx, tx, tableName, nonGeneratedColNames, rows)
+		// If we have any unique constraint mutations pending then its always possible,
+		// for us to still violate them.
+		hasUniqueConstraintsMutations, err = og.tableHasUniqueConstraintMutation(ctx, tx, tableName)
 		if err != nil {
 			return nil, err
 		}
+	}
 
+	// A concurrent ADD COLUMN of a NOT NULL spatial type without a DEFAULT
+	// causes the optimizer to synthesize a default for the WRITE_ONLY mutation
+	// column which fails because tree.NewDefaultDatum has no zero value for
+	// these type families.
+	hasNotNullSpatialColumnMutation, err := og.tableHasNotNullSpatialColumnMutation(ctx, tx, tableName)
+	if err != nil {
+		return nil, err
 	}
 
 	stmt.potentialExecErrors.addAll(codesWithConditions{
-		{code: pgcode.UniqueViolation, condition: hasUniqueConstraints},
-		{code: pgcode.ForeignKeyViolation, condition: fkViolation},
+		{code: pgcode.UniqueViolation, condition: hasUniqueConstraints || hasUniqueConstraintsMutations},
+		{code: pgcode.ForeignKeyViolation, condition: true},
 		{code: pgcode.NotNullViolation, condition: true},
 		{code: pgcode.CheckViolation, condition: true},
+		{code: pgcode.InsufficientPrivilege, condition: true}, // For RLS violations
+		{code: pgcode.FeatureNotSupported, condition: hasNotNullSpatialColumnMutation},
 	})
-	og.expectedCommitErrors.addAll(codesWithConditions{
-		{code: pgcode.ForeignKeyViolation, condition: fkViolation},
+	og.potentialCommitErrors.addAll(codesWithConditions{
+		{code: pgcode.ForeignKeyViolation, condition: true},
 	})
 
 	var formattedRows []string
@@ -3077,6 +3328,8 @@ type opStmt struct {
 	potentialExecErrors errorCodeSet
 	// queryResultCallback handles the results of the query execution.
 	queryResultCallback opStmtQueryResultCallback
+	// statementTimeout if this statement has a timeout.
+	statementTimeout time.Duration
 }
 
 // String implements Stringer
@@ -3161,6 +3414,10 @@ func (es *ErrorState) Unwrap() error {
 	return es.cause
 }
 
+func (es *ErrorState) Cause() error {
+	return es.cause
+}
+
 func (es *ErrorState) Error() string {
 	return es.cause.Error()
 }
@@ -3189,6 +3446,16 @@ func (og *operationGenerator) WrapWithErrorState(err error, op *opStmt) error {
 func (s *opStmt) executeStmt(ctx context.Context, tx pgx.Tx, og *operationGenerator) error {
 	var err error
 	var rows pgx.Rows
+	// Apply any timeout for this statement
+	if s.statementTimeout > 0 {
+		_, err = tx.Exec(ctx, fmt.Sprintf("SET LOCAL statement_timeout='%s'", s.statementTimeout.String()))
+		if err != nil {
+			return errors.Mark(
+				og.WrapWithErrorState(errors.Wrap(err, "***UNEXPECTED ERROR; Unable to set statement timeout."), s),
+				errRunInTxnFatalSentinel,
+			)
+		}
+	}
 	// Statement doesn't produce any result set that needs to be validated.
 	if s.queryResultCallback == nil {
 		_, err = tx.Exec(ctx, s.sql)
@@ -3222,6 +3489,17 @@ func (s *opStmt) executeStmt(ctx context.Context, tx pgx.Tx, og *operationGenera
 				errRunInTxnRbkSentinel,
 			)
 		}
+
+		// Command is too large errors are allowed on DML operations since,
+		// some of the tables can be pretty wide in this test.
+		if s.queryType == OpStmtDML && pgcode.MakeCode(pgErr.Code) == pgcode.Uncategorized &&
+			strings.Contains(pgErr.Error(), "command is too large") {
+			return errors.Mark(
+				err,
+				errRunInTxnRbkSentinel,
+			)
+		}
+
 		if !s.expectedExecErrors.contains(pgcode.MakeCode(pgErr.Code)) &&
 			!s.potentialExecErrors.contains(pgcode.MakeCode(pgErr.Code)) {
 			return errors.Mark(
@@ -3249,6 +3527,16 @@ func (s *opStmt) executeStmt(ctx context.Context, tx pgx.Tx, og *operationGenera
 	if s.queryResultCallback != nil {
 		if err := s.queryResultCallback(ctx, rows); err != nil {
 			return err
+		}
+	}
+	// Reset any timeout for this statement
+	if s.statementTimeout > 0 {
+		_, err = tx.Exec(ctx, "SET LOCAL statement_timeout=0")
+		if err != nil {
+			return errors.Mark(
+				og.WrapWithErrorState(errors.Wrap(err, "***UNEXPECTED ERROR; Unable to reset statement timeout."), s),
+				errRunInTxnFatalSentinel,
+			)
 		}
 	}
 	return nil
@@ -3289,6 +3577,90 @@ func (og *operationGenerator) validate(ctx context.Context, tx pgx.Tx) (*opStmt,
 	return validateStmt, errors.Errorf("Validation FAIL:\n%s", strings.Join(errs, "\n"))
 }
 
+func (og *operationGenerator) inspect(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
+	stmt := makeOpStmt(OpStmtDML)
+
+	var sb strings.Builder
+	sb.WriteString("INSPECT ")
+
+	if og.randIntn(2) == 0 {
+		tableName, err := og.randTable(ctx, tx, og.pctExisting(true), "")
+		if err != nil {
+			return nil, err
+		}
+		tableExists, err := og.tableExists(ctx, tx, tableName)
+		if err != nil {
+			return nil, err
+		}
+		sb.WriteString("TABLE ")
+		sb.WriteString(tableName.String())
+		if !tableExists {
+			stmt.expectedExecErrors.add(pgcode.UndefinedTable)
+		}
+	} else {
+		database, err := og.getDatabase(ctx, tx)
+		if err != nil {
+			return nil, err
+		}
+		useExisting := og.randIntn(100) < og.pctExisting(true)
+		var databaseName string
+		if useExisting {
+			databaseName = database
+		} else {
+			databaseName = fmt.Sprintf("inspect_db_%s", og.newUniqueSeqNumSuffix())
+			stmt.expectedExecErrors.add(pgcode.InvalidCatalogName)
+		}
+		sb.WriteString("DATABASE ")
+		sb.WriteString(databaseName)
+	}
+
+	asof := og.randomInspectAsOfClause()
+	sb.WriteString(asof)
+	// If we use an ASOF time with inspect, chances are it will conflict with
+	// the timestamp chosen for the transaction, and return an "inconsistent AS
+	// OF SYSTEM TIME timestamp" error.
+	stmt.potentialExecErrors.addAll(codesWithConditions{
+		{pgcode.FeatureNotSupported, asof != ""},
+	})
+	// Detached flag was added in 26.1, so we expect errors till the user upgrades.
+	isDetachedUnsupported, err := isClusterVersionLessThan(ctx, tx, clusterversion.V26_1.Version())
+	if err != nil {
+		return nil, err
+	}
+	if isDetachedUnsupported {
+		stmt.potentialExecErrors.add(pgcode.FeatureNotSupported)
+		stmt.potentialExecErrors.add(pgcode.Syntax)
+	}
+	// Always run DETACHED as this allows us to use INSPECT inside of a
+	// transaction. We have post-processing at the end of the run to verify
+	// INSPECT didn't find any issues.
+	sb.WriteString(" WITH OPTIONS DETACHED")
+	stmt.sql = sb.String()
+
+	// If INSPECT is not supported yet, so we expect a syntax error or feature
+	// not supported.
+	isInspectUnsupported, err := isClusterVersionLessThan(ctx, tx, clusterversion.V25_4.Version())
+	if err != nil {
+		return nil, err
+	}
+	if isInspectUnsupported {
+		stmt.expectedExecErrors.add(pgcode.FeatureNotSupported)
+		stmt.expectedExecErrors.add(pgcode.Syntax)
+	}
+
+	return stmt, nil
+}
+
+func (og *operationGenerator) randomInspectAsOfClause() string {
+	// Use AS OF SYSTEM TIME infrequently (~10% of the time) because transactions
+	// are never started with AS OF SYSTEM TIME, and INSPECT with AS OF inside a
+	// transaction without AS OF can cause conflicts.
+	if og.randIntn(10) == 0 {
+		return fmt.Sprintf(" AS OF SYSTEM TIME '-%ds'", og.randIntn(30)+1)
+	}
+	return ""
+}
+
 type column struct {
 	name                tree.Name
 	typ                 *types.T
@@ -3296,6 +3668,9 @@ type column struct {
 	generated           bool
 	generatedExpression string
 	ordinal             int
+	// Only populated on 26.2 and newer, otherwise this is always
+	// true.
+	hasOnUpdate bool
 }
 
 func (og *operationGenerator) getTableColumns(
@@ -3327,11 +3702,12 @@ func (og *operationGenerator) getTableColumns(
 			   columns.ordinal::INT-1
     FROM [SHOW COLUMNS FROM %s] AS show_columns, columns
    WHERE show_columns.column_name != 'rowid'
+         AND show_columns.column_name NOT LIKE 'crdb_internal%%'
          AND show_columns.column_name = columns.column_name
 `, tableName)
 	rows, err := tx.Query(ctx, q, tableName)
 	if err != nil {
-		return nil, errors.Wrapf(err, "getting table columns from %s", tableName)
+		return nil, errors.Wrapf(err, "getting table columns from %s: query=%q", tableName, q)
 	}
 	defer rows.Close()
 
@@ -3388,12 +3764,13 @@ func (og *operationGenerator) randColumn(
   SELECT column_name
     FROM [SHOW COLUMNS FROM %s]
    WHERE NOT is_hidden
+         AND column_name NOT LIKE 'crdb_internal%%'
 ORDER BY random()
    LIMIT 1;
 `, tableName.String())
 	var name string
 	if err := tx.QueryRow(ctx, q).Scan(&name); err != nil {
-		return "", err
+		return "", errors.Wrapf(err, "randColumn: %q", q)
 	}
 	return tree.Name(name), nil
 }
@@ -3416,13 +3793,14 @@ func (og *operationGenerator) randColumnWithMeta(
 		}, nil
 	}
 	q := fmt.Sprintf(`
- SELECT 
-column_name, 
-data_type, 
-is_nullable, 
+ SELECT
+column_name,
+data_type,
+is_nullable,
 generation_expression != '' AS is_generated
    FROM [SHOW COLUMNS FROM %s]
   WHERE column_name != 'rowid'
+        AND column_name NOT LIKE 'crdb_internal%%'
 ORDER BY random()
   LIMIT 1;
 `, tableName.String())
@@ -3446,13 +3824,22 @@ ORDER BY random()
 func (og *operationGenerator) randChildColumnForFkRelation(
 	ctx context.Context, tx pgx.Tx, isNotComputed bool, typ string,
 ) (*tree.TableName, *column, error) {
-
+	// In a mixed version cluster always act like a column on update expression exists.
+	missingColumnOnUpdate, err := isClusterVersionLessThan(ctx, tx, clusterversion.V26_2.Version())
+	if err != nil {
+		return nil, nil, err
+	}
+	columnOnUpdateExpr := "'expr'"
+	if !missingColumnOnUpdate {
+		columnOnUpdateExpr = "column_on_update"
+	}
 	query := strings.Builder{}
-	query.WriteString(`
-    SELECT table_schema, table_name, column_name, crdb_sql_type, is_nullable
+	query.WriteString(fmt.Sprintf(`
+    SELECT table_schema, table_name, column_name, crdb_sql_type, is_nullable, %s IS NOT NULL
       FROM information_schema.columns
-		 WHERE table_name SIMILAR TO 'table_w[0-9]_+%' AND column_name <> 'rowid'
-  `)
+		 WHERE table_name SIMILAR TO 'table_w[0-9]_+%%' AND column_name <> 'rowid'
+		       AND column_name NOT LIKE 'crdb_internal%%'
+  `, columnOnUpdateExpr))
 	query.WriteString(fmt.Sprintf(`
 			AND crdb_sql_type = '%s'
 	`, typ))
@@ -3468,15 +3855,17 @@ func (og *operationGenerator) randChildColumnForFkRelation(
 	var columnName string
 	var typName string
 	var nullable string
+	var hasOnUpdate bool
 
-	err := tx.QueryRow(ctx, query.String()).Scan(&tableSchema, &tableName, &columnName, &typName, &nullable)
+	err = tx.QueryRow(ctx, query.String()).Scan(&tableSchema, &tableName, &columnName, &typName, &nullable, &hasOnUpdate)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	columnToReturn := column{
-		name:     tree.Name(columnName),
-		nullable: nullable == "YES",
+		name:        tree.Name(columnName),
+		nullable:    nullable == "YES",
+		hasOnUpdate: hasOnUpdate,
 	}
 	table := tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{
 		SchemaName:     tree.Name(tableSchema),
@@ -3507,6 +3896,35 @@ func (og *operationGenerator) randReferenceActions(
 	return acts
 }
 
+// randSecurityInvokerClause randomly returns a WITH (security_invoker) clause
+// for use in CREATE VIEW statements. It returns one of:
+// - " WITH (security_invoker = true)"
+// - " WITH (security_invoker = false)"
+// - "" (no clause)
+// The security_invoker option is only available in v26.2+, so an empty string
+// is always returned on older versions.
+func (og *operationGenerator) randSecurityInvokerClause(
+	ctx context.Context, tx pgx.Tx,
+) (string, error) {
+	notSupported, err := isClusterVersionLessThan(
+		ctx, tx, clusterversion.V26_2.Version(),
+	)
+	if err != nil {
+		return "", err
+	}
+	if notSupported {
+		return "", nil
+	}
+	switch og.params.rng.Intn(3) {
+	case 0:
+		return " WITH (security_invoker = true)", nil
+	case 1:
+		return " WITH (security_invoker = false)", nil
+	default:
+		return "", nil
+	}
+}
+
 // randParentColumnForFkRelation fetches a column and table to use as the parent in a single-column foreign key relation.
 // To successfully use a column as the parent, the column must be unique and must not be generated.
 func (og *operationGenerator) randParentColumnForFkRelation(
@@ -3523,6 +3941,7 @@ func (og *operationGenerator) randParentColumnForFkRelation(
                concat(table_schema, '.', table_name)::REGCLASS::INT8 AS tableid
           FROM information_schema.columns
 					WHERE column_name <> 'rowid'
+					      AND column_name NOT LIKE 'crdb_internal%%'
            ) AS cols
 		  JOIN (
 		        SELECT contype, conkey, conrelid
@@ -3549,22 +3968,12 @@ func (og *operationGenerator) randParentColumnForFkRelation(
 	var typName string
 	var nullable string
 
-	nestedTxn, err := tx.Begin(ctx)
-	if err != nil {
-		return nil, nil, err
-	}
-	err = nestedTxn.QueryRow(ctx, fmt.Sprintf(`
+	err := tx.QueryRow(ctx, fmt.Sprintf(`
 	SELECT table_schema, table_name, column_name, crdb_sql_type, is_nullable FROM (
 		%s
 	)`, subQuery.String())).Scan(&tableSchema, &tableName, &columnName, &typName, &nullable)
 	if err != nil {
-		if rbErr := nestedTxn.Rollback(ctx); rbErr != nil {
-			err = errors.CombineErrors(rbErr, err)
-		}
 		return nil, nil, err
-	}
-	if err = nestedTxn.Commit(ctx); err != nil {
-		return nil, nil, errors.WithStack(err)
 	}
 
 	columnToReturn := column{
@@ -3590,9 +3999,13 @@ func (og *operationGenerator) randConstraint(
 	if err := og.setSeedInDB(ctx, tx); err != nil {
 		return "", err
 	}
+	// NOT NULL rows in pg_constraint are synthesized from non-nullable column
+	// metadata, so they cannot be dropped via ALTER TABLE ... DROP CONSTRAINT.
+	// Skip them when picking a random constraint for drop.
 	q := fmt.Sprintf(`
   SELECT constraint_name
     FROM [SHOW CONSTRAINTS FROM %s]
+   WHERE constraint_type <> 'NOT NULL'
 ORDER BY random()
    LIMIT 1;
 `, tableName)
@@ -3726,9 +4139,13 @@ func (og *operationGenerator) randTypeName(
 		return &typeName, false, nil
 	}
 	var q = fmt.Sprintf(`
-		SELECT schema, name
-		    FROM [SHOW TYPES]
-		   WHERE name LIKE '%s'
+		SELECT nsp.nspname AS schema, types.typname AS name
+		    FROM pg_catalog.pg_type AS types
+		    JOIN pg_catalog.pg_namespace AS nsp ON (types.typnamespace = nsp.oid)
+		   WHERE types.typtype IN ('e','c')
+		     AND types.typrelid IN (0, types.oid)
+		     AND nsp.nspname NOT IN ('information_schema', 'pg_catalog', 'crdb_internal', 'pg_extension')
+		     AND types.typname LIKE '%s'
 		ORDER BY random()
 		   LIMIT 1;
 		`, prefix+"%")
@@ -3746,6 +4163,14 @@ func (og *operationGenerator) randTypeName(
 func (og *operationGenerator) randTable(
 	ctx context.Context, tx pgx.Tx, pctExisting int, desiredSchema string,
 ) (*tree.TableName, error) {
+	// Because the declarative schema change can automatically set / unset
+	// schema_locked on tables, we will allow random table selection include
+	// schema_locked tables. When working with the legacy schema changer, we
+	// will intentionally only select non-schema locked tables.
+	excludeSchemaLocked := "  AND create_statement NOT LIKE '%schema_locked%' "
+	if og.useDeclarativeSchemaChanger {
+		excludeSchemaLocked = ""
+	}
 	if err := og.setSeedInDB(ctx, tx); err != nil {
 		return nil, err
 	}
@@ -3758,13 +4183,15 @@ func (og *operationGenerator) randTable(
 			return &treeTableName, nil
 		}
 		q := fmt.Sprintf(`
-		  SELECT table_name
-		    FROM [SHOW TABLES]
-		   WHERE table_name SIMILAR TO 'table_w[0-9]_+%%'
+		  SELECT descriptor_name 
+		    FROM crdb_internal.create_statements
+		   WHERE descriptor_name SIMILAR TO 'table_w[0-9]_+%%'
 				 AND schema_name = '%s'
+		     AND descriptor_type='table'
+		 	   %s 
 		ORDER BY random()
 		   LIMIT 1;
-		`, desiredSchema)
+		`, desiredSchema, excludeSchemaLocked)
 
 		var tableName string
 		if err := tx.QueryRow(ctx, q).Scan(&tableName); err != nil {
@@ -3795,13 +4222,17 @@ func (og *operationGenerator) randTable(
 		return &treeTableName, nil
 	}
 
-	const q = `
-  SELECT schema_name, table_name
-    FROM [SHOW TABLES]
-   WHERE table_name SIMILAR TO 'table_w[0-9]_+%'
-ORDER BY random()
-   LIMIT 1;
-`
+	q := fmt.Sprintf(`
+SELECT schema_name, descriptor_name 
+		    FROM crdb_internal.create_statements
+		   WHERE descriptor_name SIMILAR TO 'table_w[0-9]_+%%'
+		     AND descriptor_type='table'
+		 	   %s 
+		ORDER BY random()
+		   LIMIT 1;
+`,
+		excludeSchemaLocked)
+
 	var schemaName string
 	var tableName string
 	if err := tx.QueryRow(ctx, q).Scan(&schemaName, &tableName); err != nil {
@@ -3833,9 +4264,10 @@ func (og *operationGenerator) randView(
 
 		q := fmt.Sprintf(`
 		  SELECT table_name
-		    FROM [SHOW TABLES]
+		    FROM information_schema.tables
 		   WHERE table_name LIKE 'view%%'
-				 AND schema_name = '%s'
+				 AND table_schema = '%s'
+				 AND table_schema NOT IN ('information_schema', 'pg_catalog', 'pg_extension', 'crdb_internal')
 		ORDER BY random()
 		   LIMIT 1;
 		`, desiredSchema)
@@ -3870,9 +4302,10 @@ func (og *operationGenerator) randView(
 		return nil, err
 	}
 	const q = `
-  SELECT schema_name, table_name
-    FROM [SHOW TABLES]
+  SELECT table_schema, table_name
+    FROM information_schema.tables
    WHERE table_name LIKE 'view%'
+     AND table_schema NOT IN ('information_schema', 'pg_catalog', 'pg_extension', 'crdb_internal')
 ORDER BY random()
    LIMIT 1;
 `
@@ -3894,7 +4327,8 @@ func (og *operationGenerator) tableColumnsShuffled(
 ) ([]string, error) {
 	q := fmt.Sprintf(`
 SELECT column_name
-FROM [SHOW COLUMNS FROM %s];
+FROM [SHOW COLUMNS FROM %s]
+WHERE NOT is_hidden;
 `, tableName)
 
 	rows, err := tx.Query(ctx, q)
@@ -3909,7 +4343,7 @@ FROM [SHOW COLUMNS FROM %s];
 		if err := rows.Scan(&name); err != nil {
 			return nil, err
 		}
-		if name != "rowid" {
+		if name != "rowid" && !strings.HasPrefix(name, "crdb_internal") {
 			columnNames = append(columnNames, name)
 		}
 	}
@@ -3942,22 +4376,18 @@ func (og *operationGenerator) randType(
 		return typName, typ, nil
 	}
 
-	pgVectorNotSupported, err := isClusterVersionLessThan(
+	// Block LTREE usage until v25.4 is finalized.
+	ltreeNotSupported, err := isClusterVersionLessThan(
 		ctx,
 		tx,
-		clusterversion.V24_2.Version())
-	if err != nil {
-		return nil, nil, err
-	}
-	mixedVersion, err := isMixedVersionState(ctx, tx)
+		clusterversion.V25_4.Version())
 	if err != nil {
 		return nil, nil, err
 	}
 
-	typ := randgen.RandSortingType(og.params.rng)
-	for (pgVectorNotSupported && typ.Family() == types.PGVectorFamily) ||
-		isUnsupportedBit0Type(typ.SQLString(), mixedVersion) {
-		typ = randgen.RandSortingType(og.params.rng)
+	typ := randgen.RandColumnType(og.params.rng)
+	for ltreeNotSupported && (typ.Oid() == oidext.T_ltree || typ.Oid() == oidext.T__ltree) {
+		typ = randgen.RandColumnType(og.params.rng)
 	}
 
 	typeName := tree.MakeUnqualifiedTypeName(typ.SQLString())
@@ -4054,7 +4484,7 @@ func (og *operationGenerator) createFunction(ctx context.Context, tx pgx.Tx) (*o
 	// TODO(chrisseto): Allow referencing sequences as well. Currently, `DROP
 	// SEQUENCE CASCADE` will break if we allow sequences. It may also be good to
 	// reference sequences with next_val or something.
-	tables, err := Collect(ctx, og, tx, pgx.RowTo[string], `SELECT quote_ident(schema_name) || '.' || quote_ident(table_name) FROM [SHOW TABLES] WHERE type != 'sequence'`)
+	tables, err := Collect(ctx, og, tx, pgx.RowTo[string], `SELECT quote_ident(table_schema) || '.' || quote_ident(table_name) FROM information_schema.tables WHERE table_type IN ('BASE TABLE', 'VIEW') AND table_schema NOT IN ('information_schema', 'pg_catalog', 'pg_extension', 'crdb_internal')`)
 	if err != nil {
 		return nil, err
 	}
@@ -4067,41 +4497,15 @@ func (og *operationGenerator) createFunction(ctx context.Context, tx pgx.Tx) (*o
 				COALESCE((descriptor->'state')::INT != 0, false) AS non_public
 			FROM enums
 		`)
-	enumMemberQuery := With([]CTE{
-		{"descriptors", descJSONQuery},
-		{"enums", enumDescsQuery},
-		{"enum_members", enumMemberDescsQuery},
-	}, `SELECT
-				quote_ident(schema_id::REGNAMESPACE::TEXT) || '.' || quote_ident(name) AS name,
-				quote_literal(member->>'logicalRepresentation') AS value,
-				(
-					COALESCE(member->>'direction' = 'REMOVE', false) OR
-					COALESCE(member->>'capability' = 'READ_ONLY', false)
-				) AS non_public
-			FROM enum_members
-		`)
 	schemasQuery := With([]CTE{
 		{"descriptors", descJSONQuery},
 	}, `SELECT quote_ident(name) FROM descriptors WHERE descriptor ? 'schema'`)
 
-	functionsQuery := With([]CTE{
-		{"descriptors", descJSONQuery},
-		{"functions", functionDescsQuery},
-	}, `SELECT
-	quote_ident(schema_id::REGNAMESPACE::STRING) AS schema,
-	quote_ident(name) AS name,
-	array_to_string(proargnames, ',') AS args,
-	proargtypes AS argtypes,
-	pronargdefaults as numdefaults
-FROM
-	functions
-	INNER JOIN pg_catalog.pg_proc ON oid = (id + 100000)
-	WHERE COALESCE((descriptor->'state')::STRING, 'PUBLIC') = 'PUBLIC'::STRING;`)
 	enums, err := Collect(ctx, og, tx, pgx.RowToMap, enumQuery)
 	if err != nil {
 		return nil, err
 	}
-	enumMembers, err := Collect(ctx, og, tx, pgx.RowToMap, enumMemberQuery)
+	enumMembers, err := og.collectEnumMembers(ctx, tx)
 	if err != nil {
 		return nil, err
 	}
@@ -4109,7 +4513,7 @@ FROM
 	if err != nil {
 		return nil, err
 	}
-	functions, err := Collect(ctx, og, tx, pgx.RowToMap, functionsQuery)
+	functions, err := og.findNonTriggerFunctions(ctx, tx)
 	if err != nil {
 		return nil, err
 	}
@@ -4138,22 +4542,7 @@ FROM
 		possibleParamReferences = append(possibleParamReferences, fmt.Sprintf(`enum_%d %s`, i, enum["name"]))
 	}
 
-	defaultExpressionsNotSupported, err := isClusterVersionLessThan(
-		ctx,
-		tx,
-		clusterversion.V24_1.Version())
-	if err != nil {
-		return nil, err
-	}
-
-	pgVectorNotSupported, err := isClusterVersionLessThan(
-		ctx,
-		tx,
-		clusterversion.V24_2.Version())
-	if err != nil {
-		return nil, err
-	}
-	mixedVersion, err := isMixedVersionState(ctx, tx)
+	ltreeNotSupported, err := isClusterVersionLessThan(ctx, tx, clusterversion.V25_4.Version())
 	if err != nil {
 		return nil, err
 	}
@@ -4170,20 +4559,26 @@ FROM
 			typeVal.Family() == types.VoidFamily {
 			continue
 		}
-		if pgVectorNotSupported && typeVal.Family() == types.PGVectorFamily ||
-			isUnsupportedBit0Type(typeVal.SQLString(), mixedVersion) {
+
+		// Skip types that are not legal column types (e.g. aclitem, int2vector,
+		// oidvector, regproc, jsonpath) since they have strict format requirements
+		// or edge cases that make random generation unreliable.
+		if !randgen.IsLegalColumnType(typeVal) {
+			continue
+		}
+
+		if ltreeNotSupported &&
+			(typeVal.Oid() == oidext.T_ltree || typeVal.Oid() == oidext.T__ltree) {
 			continue
 		}
 
 		possibleReturnReferences = append(possibleReturnReferences, typeVal.SQLStandardName())
 		possibleParamReferences = append(possibleParamReferences, fmt.Sprintf("val_%d %s", i+len(enums), typeVal.SQLStandardName()))
 		optionalDefaultValue := randgen.RandDatum(og.params.rng, typeVal, true)
-		if !defaultExpressionsNotSupported {
-			possibleParamReferencesWithDefaults = append(possibleParamReferencesWithDefaults, fmt.Sprintf("val_%d %s DEFAULT %s",
-				i+len(enums)+len(randgen.SeedTypes),
-				typeVal.SQLStandardName(),
-				tree.AsStringWithFlags(optionalDefaultValue, tree.FmtParsable)))
-		}
+		possibleParamReferencesWithDefaults = append(possibleParamReferencesWithDefaults, fmt.Sprintf("val_%d %s DEFAULT %s",
+			i+len(enums)+len(randgen.SeedTypes),
+			typeVal.SQLStandardName(),
+			tree.AsStringWithFlags(optionalDefaultValue, tree.FmtParsable)))
 
 	}
 
@@ -4200,56 +4595,12 @@ FROM
 		possibleBodyReferences = append(possibleBodyReferences, fmt.Sprintf(`((SELECT count(*) FROM %s LIMIT 0) = 0)`, table))
 	}
 
-	// For each function generate a possible invocation passing in null arguments.
-	disallowUDFCallingUDF, err := isClusterVersionLessThan(ctx, tx, clusterversion.V24_1.Version())
-	if err != nil {
-		return nil, err
-	}
-	if !disallowUDFCallingUDF {
-		for _, function := range functions {
-			args := ""
-			if function["args"] != nil {
-				args = function["args"].(string)
-				argTypesStr := strings.Split(function["argtypes"].(string), " ")
-				argTypes := make([]int, 0, len(argTypesStr))
-				// Determine how many default arguemnts should be used.
-				numDefaultArgs := int(function["numdefaults"].(int16))
-				if numDefaultArgs > 0 {
-					numDefaultArgs = rand.Intn(numDefaultArgs)
-				}
-				// Populate the arguments for this signature, and select some number
-				// of default arguments.
-				for _, oidStr := range argTypesStr {
-					oid, err := strconv.Atoi(oidStr)
-					if err != nil {
-						return nil, err
-					}
-					argTypes = append(argTypes, oid)
-				}
-				argIn := strings.Builder{}
-				for idx := range strings.Split(args, ",") {
-					// We have hit the default arguments that we want to not populate.
-					if idx > len(argTypesStr)-numDefaultArgs {
-						break
-					}
-					if argIn.Len() > 0 {
-						argIn.WriteString(",")
-					}
-					// Resolve the type for each column and if possible generate a random
-					// value via randgen.
-					oidValue := oid.Oid(argTypes[idx])
-					typ, ok := types.OidToType[oidValue]
-					if !ok {
-						argIn.WriteString("NULL")
-					} else {
-						randomDatum := randgen.RandDatum(og.params.rng, typ, true)
-						argIn.WriteString(tree.AsStringWithFlags(randomDatum, tree.FmtParsable))
-					}
-				}
-				args = argIn.String()
-			}
-			possibleBodyFuncReferences = append(possibleBodyFuncReferences, fmt.Sprintf("(SELECT %s.%s(%s) IS NOT NULL)", function["schema"].(string), function["name"].(string), args))
+	for _, function := range functions {
+		invocation, err := og.buildFuncInvocation(function)
+		if err != nil {
+			return nil, err
 		}
+		possibleBodyFuncReferences = append(possibleBodyFuncReferences, invocation)
 	}
 
 	hasFuncRefs := false
@@ -4322,7 +4673,7 @@ FROM
 		// 1. Nothing special, fully self contained function.
 		{pgcode.SuccessfulCompletion, `CREATE FUNCTION { Schema } . { UniqueName } (i int, j int) RETURNS VOID LANGUAGE SQL AS $$ SELECT NULL $$`},
 		// 2. 1 or more table or type references spread across parameters, return types, or the function body.
-		{pgcode.SuccessfulCompletion, `CREATE FUNCTION { Schema } . { UniqueName } ({ ParamRefs }) RETURNS { ReturnRefs } LANGUAGE SQL AS $$ SELECT NULL WHERE { BodyRefs } $$`},
+		{pgcode.SuccessfulCompletion, `CREATE FUNCTION { Schema } . { UniqueName } ({ ParamRefs }) RETURNS { ReturnRefs } LANGUAGE SQL AS $FUNC_BODY$ SELECT NULL WHERE { BodyRefs } $FUNC_BODY$`},
 		// 3. Reference a table that does not exist.
 		{pgcode.UndefinedTable, `CREATE FUNCTION { UniqueName } () RETURNS VOID LANGUAGE SQL AS $$ SELECT * FROM "ThisTableDoesNotExist" $$`},
 		// 4. Reference a UDT that does not exist.
@@ -4330,7 +4681,7 @@ FROM
 		// 5. Reference an Enum that's in the process of being dropped
 		{pgcode.UndefinedObject, `CREATE FUNCTION { UniqueName } (IN p1 { NonPublicEnum }) RETURNS VOID LANGUAGE SQL AS $$ SELECT NULL $$`},
 		// 6. Reference an Enum value that's in the process of being dropped
-		{pgcode.InvalidParameterValue, `CREATE FUNCTION { UniqueName } () RETURNS VOID LANGUAGE SQL AS $$ SELECT { NonPublicEnumMember } $$`},
+		{pgcode.InvalidParameterValue, `CREATE FUNCTION { UniqueName } () RETURNS VOID LANGUAGE SQL AS $FUNC_BODY$ SELECT { NonPublicEnumMember } $FUNC_BODY$`},
 	}, placeholderMap)
 	if err != nil {
 		return nil, err
@@ -4438,9 +4789,14 @@ func (og *operationGenerator) dropFunction(ctx context.Context, tx pgx.Tx) (*opS
 	if err != nil {
 		return nil, err
 	}
-	return newOpStmt(stmt, codesWithConditions{
+
+	opStmt := newOpStmt(stmt, codesWithConditions{
 		{expectedCode, true},
-	}), nil
+	})
+
+	// Needed for a trigger being created with a dependency on log_change_timestamp().
+	opStmt.potentialExecErrors.add(pgcode.DependentObjectsStillExist)
+	return opStmt, nil
 }
 
 func (og *operationGenerator) alterFunctionRename(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
@@ -4478,9 +4834,32 @@ func (og *operationGenerator) alterFunctionRename(ctx context.Context, tx pgx.Tx
 		return nil, err
 	}
 
+	triggerPolicyDeps, err := Collect(ctx, og, tx, pgx.RowToMap,
+		With([]CTE{
+			{"descriptors", descJSONQuery},
+		},
+			functionTriggerPolicyDepsQuery,
+		))
+	if err != nil {
+		return nil, err
+	}
+
+	// The server only blocks ALTER FUNCTION RENAME on trigger/policy
+	// back-refs when the cluster version reaches V26_3_Start. Mirror
+	// that gate here so the workload's error expectations match.
+	skipTriggerPolicyDeps, err := isClusterVersionLessThan(ctx, tx, clusterversion.V26_3_Start.Version())
+	if err != nil {
+		return nil, err
+	}
+
 	functionDepsMap := make(map[int64]struct{})
 	for _, f := range functionDeps {
 		functionDepsMap[f["to_oid"].(int64)] = struct{}{}
+	}
+	if !skipTriggerPolicyDeps {
+		for _, f := range triggerPolicyDeps {
+			functionDepsMap[f["func_oid"].(int64)] = struct{}{}
+		}
 	}
 
 	functionWithDeps := make([]map[string]any, 0, len(functions))
@@ -4575,9 +4954,32 @@ func (og *operationGenerator) alterFunctionSetSchema(
 		return nil, err
 	}
 
+	triggerPolicyDeps, err := Collect(ctx, og, tx, pgx.RowToMap,
+		With([]CTE{
+			{"descriptors", descJSONQuery},
+		},
+			functionTriggerPolicyDepsQuery,
+		))
+	if err != nil {
+		return nil, err
+	}
+
+	// The server only blocks ALTER FUNCTION SET SCHEMA on trigger/policy
+	// back-refs when the cluster version reaches V26_3_Start. Mirror
+	// that gate here so the workload's error expectations match.
+	skipTriggerPolicyDeps, err := isClusterVersionLessThan(ctx, tx, clusterversion.V26_3_Start.Version())
+	if err != nil {
+		return nil, err
+	}
+
 	functionDepsMap := make(map[int64]struct{})
 	for _, f := range functionDeps {
 		functionDepsMap[f["to_oid"].(int64)] = struct{}{}
+	}
+	if !skipTriggerPolicyDeps {
+		for _, f := range triggerPolicyDeps {
+			functionDepsMap[f["func_oid"].(int64)] = struct{}{}
+		}
 	}
 
 	functionWithDeps := make([]map[string]any, 0, len(functions))
@@ -4827,32 +5229,1241 @@ func isClusterVersionLessThan(
 	return clusterVersion.Less(targetVersion), nil
 }
 
-// isMixedVersionState works similarly to isClusterVersionLessThan, but without
-// specifying a version. It returns true if the cluster version is not the
-// latest, indicating a mixed-version test.
-func isMixedVersionState(ctx context.Context, tx pgx.Tx) (bool, error) {
-	return isClusterVersionLessThan(ctx, tx, clusterversion.Latest.Version())
-}
-
-func isUnsupportedBit0Type(typName string, mixedVersion bool) bool {
-	// TODO(spilchen): In mixed-version testing, declaring a BIT(0) column can cause a
-	// syntax error. Support for this type was recently added and backported, but the
-	// backport release is still pending. We need to regenerate the type until
-	// something other than BIT(0) is generated. This can be removed once 24.2.5 is
-	// publicly released.
-	return mixedVersion && strings.HasPrefix(typName, "BIT(0)")
-}
-
 func (og *operationGenerator) setSeedInDB(ctx context.Context, tx pgx.Tx) error {
-	if notSupported, err := isClusterVersionLessThan(ctx, tx, clusterversion.V24_1.Version()); err != nil {
-		return err
-	} else if notSupported {
-		// To allow the schemachange workload to work in a mixed-version state,
-		// this should not be treated as an error.
-		return nil
-	}
 	if _, err := tx.Exec(ctx, "SELECT setseed($1)", og.randFloat64()); err != nil {
 		return err
 	}
 	return nil
+}
+
+func (og *operationGenerator) alterTableRLS(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
+	tableName, err := og.randTable(ctx, tx, og.pctExisting(true), "")
+	if err != nil {
+		return nil, err
+	}
+
+	tableExists, err := og.tableExists(ctx, tx, tableName)
+	if err != nil {
+		return nil, err
+	}
+
+	// Define the available RLS options
+	rlsOptions := []string{
+		"ENABLE ROW LEVEL SECURITY",
+		"DISABLE ROW LEVEL SECURITY",
+		"FORCE ROW LEVEL SECURITY",
+		"NO FORCE ROW LEVEL SECURITY",
+	}
+
+	// Randomly decide between 1 or 2 options
+	numOptions := og.randIntn(2) + 1
+
+	// Randomly select a unique permutation of the options
+	perm := og.params.rng.Perm(len(rlsOptions))
+	selectedOptions := make([]string, numOptions)
+	for i := 0; i < numOptions; i++ {
+		selectedOptions[i] = rlsOptions[perm[i]]
+	}
+
+	// Build the SQL statement
+	sqlStatement := fmt.Sprintf(`ALTER TABLE %s %s`, tableName, strings.Join(selectedOptions, ", "))
+
+	opStmt := makeOpStmt(OpStmtDDL)
+	opStmt.expectedExecErrors.addAll(codesWithConditions{
+		{code: pgcode.FeatureNotSupported, condition: !og.useDeclarativeSchemaChanger},
+		{code: pgcode.UndefinedTable, condition: !tableExists},
+	})
+
+	opStmt.sql = sqlStatement
+	return opStmt, nil
+}
+
+// generatePolicyExpression creates a random expression suitable for use in policy USING or WITH CHECK clauses
+func (og *operationGenerator) generatePolicyExpression(
+	columns []string, preferredColumn int,
+) string {
+	if len(columns) == 0 {
+		// Fallback to simple boolean if no columns are available
+		if og.randIntn(2) == 0 {
+			return "true"
+		}
+		return "false"
+	}
+
+	// Choose a column index (or use the preferred one if valid)
+	colIdx := og.randIntn(len(columns))
+	if preferredColumn >= 0 && preferredColumn < len(columns) {
+		colIdx = preferredColumn
+	}
+
+	// Generate a basic expression (IS NULL or IS NOT NULL)
+	var expr string
+	if og.randIntn(2) == 0 {
+		// IS NULL check
+		expr = fmt.Sprintf("%s IS NULL", columns[colIdx])
+	} else {
+		// IS NOT NULL check
+		expr = fmt.Sprintf("%s IS NOT NULL", columns[colIdx])
+	}
+
+	// Sometimes add complexity to the expression
+	if og.randIntn(3) == 0 {
+		expressionType := og.randIntn(3)
+		switch expressionType {
+		case 0:
+			// Add OR TRUE/FALSE
+			if og.randIntn(2) == 0 {
+				expr = fmt.Sprintf("(%s OR TRUE)", expr)
+			} else {
+				expr = fmt.Sprintf("(%s OR FALSE)", expr)
+			}
+		case 1:
+			// Use a different column if available for a compound expression
+			if len(columns) > 1 {
+				secondColIdx := (colIdx + 1) % len(columns)
+				if og.randIntn(2) == 0 {
+					expr = fmt.Sprintf("(%s OR %s IS NOT NULL)", expr, columns[secondColIdx])
+				} else {
+					expr = fmt.Sprintf("(%s AND %s IS NULL)", expr, columns[secondColIdx])
+				}
+			}
+		case 2:
+			// Add a comparison with a literal
+			if og.randIntn(2) == 0 {
+				expr = fmt.Sprintf("((%s) OR (TRUE))", expr)
+			} else {
+				expr = fmt.Sprintf("(%s AND current_user = current_user)", expr)
+			}
+		}
+	}
+
+	return expr
+}
+
+func (og *operationGenerator) createPolicy(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
+	tableName, err := og.randTable(ctx, tx, og.pctExisting(true), "")
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if table exists to include appropriate expected error
+	tableExists, err := og.tableExists(ctx, tx, tableName)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get columns for the table to reference in expressions
+	var columns []string
+	if tableExists {
+		columns, err = og.tableColumnsShuffled(ctx, tx, tableName.String())
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Generate a unique policy name
+	policyName := fmt.Sprintf("policy_%s", og.newUniqueSeqNumSuffix())
+
+	// Determine which policy components to include
+	includeUsing := og.randIntn(2) == 0     // 50% chance to include a USING expression
+	includeWithCheck := og.randIntn(2) == 0 // 50% chance to include WITH CHECK
+
+	// Build the SQL statement
+	var sqlStatement strings.Builder
+	sqlStatement.WriteString(fmt.Sprintf("CREATE POLICY %s ON %s", policyName, tableName))
+
+	if includeUsing {
+		usingExpr := og.generatePolicyExpression(columns, -1) // -1 means no preferred column
+		sqlStatement.WriteString(fmt.Sprintf(" USING (%s)", usingExpr))
+	}
+
+	if includeWithCheck {
+		// Try to use a different column for WITH CHECK if possible
+		preferredColIdx := -1
+		if len(columns) > 1 && includeUsing {
+			preferredColIdx = og.randIntn(len(columns))
+		}
+
+		withCheckExpr := og.generatePolicyExpression(columns, preferredColIdx)
+		sqlStatement.WriteString(fmt.Sprintf(" WITH CHECK (%s)", withCheckExpr))
+	}
+
+	// Create the operation statement
+	opStmt := makeOpStmt(OpStmtDDL)
+	opStmt.sql = sqlStatement.String()
+
+	opStmt.expectedExecErrors.addAll(codesWithConditions{
+		{code: pgcode.FeatureNotSupported, condition: !og.useDeclarativeSchemaChanger},
+		{code: pgcode.UndefinedTable, condition: !tableExists},
+	})
+
+	return opStmt, nil
+}
+
+// policyInfo pairs a table name with a name of a policy
+type policyInfo struct {
+	table      tree.TableName
+	policyName string
+}
+
+// findExistingPolicy returns a policyInfo struct with the qualified table name and policy name.
+// It also returns a boolean indicating whether a policy was found.
+func findExistingPolicy(
+	ctx context.Context, tx pgx.Tx, og *operationGenerator,
+) (*policyInfo, bool, error) {
+	var policyWithInfo policyInfo
+	policyExists := false
+
+	// Search for tables that have policies
+	policyTableQuery := `
+		SELECT
+			t.relname as table_name,
+			n.nspname as schema_name,
+			p.polname as policy_name
+		FROM
+			pg_policy p
+			JOIN pg_class t ON p.polrelid = t.oid
+			JOIN pg_namespace n ON t.relnamespace = n.oid
+		ORDER BY random()
+		LIMIT 1
+	`
+
+	rows, err := tx.Query(ctx, policyTableQuery)
+	if err != nil {
+		return nil, policyExists, err
+	}
+	defer rows.Close()
+
+	// Check if any rows were returned
+	for rows.Next() {
+		var tableName, schemaName, policyName string
+		if err := rows.Scan(&tableName, &schemaName, &policyName); err != nil {
+			return nil, policyExists, err
+		}
+		policyWithInfo = policyInfo{
+			table: tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{
+				SchemaName:     tree.Name(schemaName),
+				ExplicitSchema: true,
+			}, tree.Name(tableName)),
+			policyName: policyName,
+		}
+		policyExists = true
+	}
+
+	if rows.Err() != nil {
+		return nil, false, rows.Err()
+	}
+
+	return &policyWithInfo, policyExists, nil
+}
+
+func (og *operationGenerator) dropPolicy(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
+	policyWithInfo, policyExists, err := findExistingPolicy(ctx, tx, og)
+	if err != nil {
+		return nil, err
+	}
+
+	tableExists := true
+
+	if !policyExists {
+		// Fall back to random table if no tables with policies were found
+		randomTable, err := og.randTable(ctx, tx, og.pctExisting(true), "")
+		if err != nil {
+			return nil, err
+		}
+		policyWithInfo.table = *randomTable
+
+		// If we didn't get a real policy name, generate a random one
+		if policyWithInfo.policyName == "" {
+			policyWithInfo.policyName = fmt.Sprintf("dummy_policy_%s", og.newUniqueSeqNumSuffix())
+		}
+
+		// Check if table exists to include appropriate expected error
+		tableExists, err = og.tableExists(ctx, tx, randomTable)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Build the SQL statement
+	var sqlStatement strings.Builder
+	sqlStatement.WriteString("DROP POLICY ")
+
+	// Randomly decide whether to include IF EXISTS (60% chance)
+	includeIfExists := og.randIntn(100) < 60
+	if includeIfExists {
+		sqlStatement.WriteString("IF EXISTS ")
+	}
+
+	sqlStatement.WriteString(fmt.Sprintf("%s ON %s", policyWithInfo.policyName, &policyWithInfo.table))
+
+	// Create the operation statement
+	opStmt := makeOpStmt(OpStmtDDL)
+	opStmt.sql = sqlStatement.String()
+
+	opStmt.expectedExecErrors.addAll(codesWithConditions{
+		// The policy might not exist
+		{code: pgcode.UndefinedObject, condition: !policyExists && !includeIfExists},
+		// Table might not exist
+		{code: pgcode.UndefinedTable, condition: !tableExists && !includeIfExists},
+	})
+
+	return opStmt, nil
+}
+
+func (og *operationGenerator) alterPolicy(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
+	// Try to find an existing policy to alter
+	policyWithInfo, policyExists, err := findExistingPolicy(ctx, tx, og)
+	if err != nil {
+		return nil, err
+	}
+
+	// Variable to track table existence
+	var tableExists bool = true
+
+	if !policyExists {
+		// Fall back to random table if no tables with policies were found
+		randomTable, err := og.randTable(ctx, tx, og.pctExisting(true), "")
+		if err != nil {
+			return nil, err
+		}
+		policyWithInfo.table = *randomTable
+
+		// If we didn't get a real policy name, generate a random one
+		if policyWithInfo.policyName == "" {
+			policyWithInfo.policyName = fmt.Sprintf("dummy_policy_%s", og.newUniqueSeqNumSuffix())
+		}
+
+		// Check if table exists to include appropriate expected error
+		tableExists, err = og.tableExists(ctx, tx, randomTable)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// Determine which ALTER POLICY features to include
+	alterType := og.randIntn(4) // 0-3 for different types of alterations
+
+	var sqlStatement strings.Builder
+	sqlStatement.WriteString(fmt.Sprintf("ALTER POLICY %s ON %s", policyWithInfo.policyName, &policyWithInfo.table))
+
+	usesDummyRole := false
+	includeUsing := false
+	includeWithCheck := false
+
+	var columns []string
+
+	switch alterType {
+	case 0: // RENAME TO
+		newName := fmt.Sprintf("policy_%s", og.newUniqueSeqNumSuffix())
+		sqlStatement.WriteString(fmt.Sprintf(" RENAME TO %s", newName))
+	case 1: // TO roles
+		// Define roles to grant the policy to
+		var roles string
+		if og.randIntn(2) == 0 {
+			// 50% chance to a real username
+			roles, err = og.randUser(ctx, tx)
+			if err != nil {
+				return nil, err
+			}
+		} else if og.randIntn(4) == 0 {
+			// Fall back to two options: 25% chance for PUBLIC or a 75% for generated dummy role
+			roles = "PUBLIC"
+		} else {
+			// Generate a random role name that doesn't exist
+			roles = fmt.Sprintf("dummy_role_%s", og.newUniqueSeqNumSuffix())
+			usesDummyRole = true
+		}
+
+		sqlStatement.WriteString(fmt.Sprintf(" TO %s", lexbase.EscapeSQLIdent(roles)))
+	default: // USING and/or WITH CHECK expressions
+		// For case 2 and 3, we generate USING, WITH CHECK, or both
+		includeUsing = alterType == 2 || og.randIntn(2) == 0
+		includeWithCheck = alterType == 3 || og.randIntn(2) == 0
+
+		// If neither was selected, default to including USING
+		if !includeUsing && !includeWithCheck {
+			includeUsing = true
+		}
+
+		// Get columns for the table to reference in expressions
+		if tableExists {
+			columns, err = og.tableColumnsShuffled(ctx, tx, policyWithInfo.table.String())
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		// Generate expressions for USING and WITH CHECK
+		if includeUsing {
+			usingExpr := og.generatePolicyExpression(columns, -1) // -1 means no preferred column
+			sqlStatement.WriteString(fmt.Sprintf(" USING (%s)", usingExpr))
+		}
+
+		if includeWithCheck {
+			// Try to use a different column for WITH CHECK if possible
+			preferredColIdx := -1
+			if len(columns) > 1 && includeUsing {
+				preferredColIdx = og.randIntn(len(columns))
+			}
+
+			withCheckExpr := og.generatePolicyExpression(columns, preferredColIdx)
+			sqlStatement.WriteString(fmt.Sprintf(" WITH CHECK (%s)", withCheckExpr))
+		}
+	}
+
+	// Create the operation statement
+	opStmt := makeOpStmt(OpStmtDDL)
+	opStmt.sql = sqlStatement.String()
+
+	opStmt.expectedExecErrors.addAll(codesWithConditions{
+		{code: pgcode.UndefinedObject, condition: !policyExists || usesDummyRole},
+		{code: pgcode.UndefinedTable, condition: !tableExists},
+	})
+
+	return opStmt, nil
+}
+
+// randUser returns a real username from the database.
+// It returns an error if no user is found.
+func (og *operationGenerator) randUser(ctx context.Context, tx pgx.Tx) (string, error) {
+	if err := og.setSeedInDB(ctx, tx); err != nil {
+		return "", err
+	}
+	query := "SELECT username FROM [SHOW USERS] ORDER BY random() LIMIT 1"
+	row := tx.QueryRow(ctx, query)
+
+	var realUser string
+	if err := row.Scan(&realUser); err != nil {
+		return "", err
+	}
+	og.LogMessage(fmt.Sprintf("Found real user: '%s'", realUser))
+	return realUser, nil
+}
+
+// createTriggerFunction generates a CREATE FUNCTION statement that returns
+// TRIGGER. The function body contains a random SELECT for dependency coverage.
+// Trigger functions created here are referenced by createTrigger.
+func (og *operationGenerator) createTriggerFunction(
+	ctx context.Context, tx pgx.Tx,
+) (*opStmt, error) {
+	schemaName, err := og.randSchema(ctx, tx, og.alwaysExisting())
+	if err != nil {
+		return nil, err
+	}
+	triggerFunctionName := fmt.Sprintf("trigger_function_%s", og.newUniqueSeqNumSuffix())
+	resolvedName := fmt.Sprintf("%s.%s", schemaName, triggerFunctionName)
+
+	// Generate a random SELECT statement for dependency coverage.
+	selectStmt, err := og.selectStmt(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+
+	// On clusters older than V26_3_Start, a trigger function that
+	// references a region column (of type crdb_internal_region) will
+	// cause a validation failure. Clear the SELECT if any of its
+	// tables have a region-typed column.
+	excludeRegion, err := isClusterVersionLessThan(ctx, tx, clusterversion.V26_3_Start.Version())
+	if err != nil {
+		return nil, err
+	}
+	if excludeRegion {
+		refsRegionCol, err := og.sqlReferencesRegionColumn(ctx, tx, selectStmt.sql)
+		if err != nil {
+			return nil, err
+		}
+		if refsRegionCol {
+			selectStmt.sql = "SELECT 1"
+		}
+	}
+
+	// Sometimes include a sequence reference to exercise trigger-sequence
+	// dependency tracking.
+	seqSelectStmt := ""
+	if og.randIntn(2) == 0 {
+		seqName, err := og.randSequence(ctx, tx, og.alwaysExisting(), "")
+		if err != nil {
+			// No sequences exist — skip the sequence reference.
+			if !errors.Is(err, pgx.ErrNoRows) {
+				return nil, err
+			}
+		} else {
+			seqSelectStmt = fmt.Sprintf("SELECT nextval('%s');", seqName.String())
+		}
+	}
+
+	// Sometimes include an enum cast expression to exercise trigger-enum
+	// dependency tracking (TriggerDeps.uses_type_ids).
+	enumSelectStmt := ""
+	if og.randIntn(2) == 0 {
+		enumMembers, err := og.collectEnumMembers(ctx, tx)
+		if err != nil {
+			return nil, err
+		}
+		// On clusters older than V26_3_Start, exclude the
+		// crdb_internal_region enum to avoid creating a type dependency
+		// that causes validation failures on v26.2 nodes (see #170091).
+		excludeRegion, err := isClusterVersionLessThan(
+			ctx, tx, clusterversion.V26_3_Start.Version(),
+		)
+		if err != nil {
+			return nil, err
+		}
+		if excludeRegion {
+			enumMembers = slices.DeleteFunc(enumMembers, func(m map[string]any) bool {
+				name, _ := m["name"].(string)
+				return strings.Contains(name, "crdb_internal_region")
+			})
+		}
+		var publicEnumExprs []string
+		for _, member := range enumMembers {
+			if member["non_public"].(bool) {
+				continue
+			}
+			publicEnumExprs = append(publicEnumExprs,
+				fmt.Sprintf(`(%s::%s IS NULL)`, member["value"], member["name"]))
+		}
+		if len(publicEnumExprs) > 0 {
+			picked, err := PickOne(og.params.rng, publicEnumExprs)
+			if err != nil {
+				return nil, err
+			}
+			enumSelectStmt = fmt.Sprintf("SELECT %s;", picked)
+		}
+	}
+
+	// Sometimes include a UDF call expression to exercise trigger-UDF
+	// dependency tracking (TriggerDeps.uses_routine_ids).
+	udfSelectStmt := ""
+	if og.randIntn(2) == 0 {
+		udfFunctions, err := og.findNonTriggerFunctions(ctx, tx)
+		if err != nil {
+			return nil, err
+		}
+		if len(udfFunctions) > 0 {
+			picked, err := PickOne(og.params.rng, udfFunctions)
+			if err != nil {
+				return nil, err
+			}
+			invocation, err := og.buildFuncInvocation(picked)
+			if err != nil {
+				return nil, err
+			}
+			udfSelectStmt = fmt.Sprintf("SELECT %s;", invocation)
+		}
+	}
+
+	// The trigger function always returns NEW to avoid breaking inserts.
+	opStmt := makeOpStmt(OpStmtDDL)
+	opStmt.sql = fmt.Sprintf(
+		`CREATE FUNCTION %s() RETURNS TRIGGER AS $FUNC_BODY$ BEGIN %s%s%s%s;RETURN NEW;END; $FUNC_BODY$ LANGUAGE PLpgSQL`,
+		resolvedName, seqSelectStmt, enumSelectStmt, udfSelectStmt, selectStmt.sql,
+	)
+	og.LogMessage(fmt.Sprintf("createTriggerFunction: %s", opStmt.sql))
+
+	routineAlreadyExists, err := og.fnExistsByName(ctx, tx, schemaName, triggerFunctionName)
+	if err != nil {
+		return nil, err
+	}
+
+	opStmt.expectedExecErrors.addAll(codesWithConditions{
+		{code: pgcode.FeatureNotSupported, condition: !og.useDeclarativeSchemaChanger},
+		{code: pgcode.DuplicateFunction, condition: routineAlreadyExists},
+	})
+	return opStmt, nil
+}
+
+// createTrigger generates a CREATE TRIGGER statement referencing an existing
+// trigger function. If no trigger functions exist yet, it emits a dummy
+// statement that fails gracefully.
+func (og *operationGenerator) createTrigger(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
+	tableName, err := og.randTable(ctx, tx, og.pctExisting(true), "")
+	if err != nil {
+		return nil, err
+	}
+
+	triggerTableExists, err := og.tableExists(ctx, tx, tableName)
+	if err != nil {
+		return nil, err
+	}
+
+	existingTriggerFunctions, err := og.findExistingTriggerFunctions(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+
+	opStmt := makeOpStmt(OpStmtDDL)
+
+	if len(existingTriggerFunctions) == 0 {
+		// No trigger functions exist yet. Emit a statement that will fail,
+		// similar to dropTrigger's dummy fallback.
+		opStmt.sql = `CREATE TRIGGER dummy_trigger BEFORE INSERT ON dummy_table FOR EACH ROW EXECUTE FUNCTION "NoSuchTriggerFunction"()`
+		opStmt.expectedExecErrors.add(pgcode.UndefinedTable)
+		og.LogMessage("createTrigger (no trigger functions): " + opStmt.sql)
+		return opStmt, nil
+	}
+
+	picked, err := PickOne(og.params.rng, existingTriggerFunctions)
+	if err != nil {
+		return nil, err
+	}
+	resolvedTriggerFunctionName := picked["resolved_name"].(string)
+
+	// Occasionally emit CREATE OR REPLACE TRIGGER. When it targets an existing
+	// trigger (by reusing its name and table, which scope a trigger), it
+	// exercises the schema changer's drop-and-recreate path for TriggerDeps,
+	// which is distinct from DROP + CREATE. When it targets a fresh name it
+	// behaves like a plain create, covering the OR REPLACE no-op-replace path.
+	// We only reuse an existing trigger's identity under OR REPLACE; reusing it
+	// with a plain CREATE would just collide with the existing trigger.
+	orReplace := ""
+	useOrReplace := og.randIntn(2) == 0
+	if useOrReplace {
+		orReplace = "OR REPLACE "
+	}
+	triggerName := fmt.Sprintf("trigger_%s", og.newUniqueSeqNumSuffix())
+	if useOrReplace && og.randIntn(2) == 0 {
+		existing, err := og.findExistingTrigger(ctx, tx)
+		if err != nil {
+			return nil, err
+		}
+		if existing != nil {
+			triggerName = existing.triggerName
+			tableName = &existing.table
+			triggerTableExists = true
+		}
+	}
+
+	// Randomize trigger timing and events.
+	triggerActionTime := "BEFORE"
+	if og.randIntn(2) == 1 {
+		triggerActionTime = "AFTER"
+	}
+
+	eventTypes := []string{"INSERT", "UPDATE", "DELETE"}
+	events, err := PickAtLeast(og.params.rng, 1, eventTypes)
+	if err != nil {
+		return nil, err
+	}
+
+	eventClause := strings.Join(events, " OR ")
+
+	opStmt.sql = fmt.Sprintf(
+		"CREATE %sTRIGGER %s %s %s ON %s FOR EACH ROW EXECUTE FUNCTION %s()",
+		orReplace, triggerName, triggerActionTime, eventClause, tableName, resolvedTriggerFunctionName,
+	)
+	og.LogMessage(fmt.Sprintf("createTrigger: %s", opStmt.sql))
+
+	opStmt.expectedExecErrors.addAll(codesWithConditions{
+		{code: pgcode.FeatureNotSupported, condition: !og.useDeclarativeSchemaChanger},
+		{code: pgcode.UndefinedTable, condition: !triggerTableExists},
+	})
+	opStmt.potentialExecErrors.addAll(codesWithConditions{
+		// References within the trigger function body (tables, functions,
+		// columns, enum types, enum members) are evaluated lazily at CREATE
+		// TRIGGER time, not when the function is created. Any referenced
+		// object may have been dropped or transitioned to a non-public state
+		// in the interim.
+		{code: pgcode.UndefinedTable, condition: true},
+		{code: pgcode.UndefinedFunction, condition: true},
+		{code: pgcode.UndefinedColumn, condition: true},
+		{code: pgcode.UndefinedObject, condition: true},
+		{code: pgcode.InvalidParameterValue, condition: true},
+		{code: pgcode.InvalidTextRepresentation, condition: true},
+		{code: pgcode.InvalidSchemaName, condition: true},
+		{code: pgcode.InvalidFunctionDefinition, condition: true},
+	})
+
+	return opStmt, nil
+}
+
+// dropTrigger generates a DROP TRIGGER statement.
+func (og *operationGenerator) dropTrigger(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
+	// Find an existing trigger
+	triggerWithInfo, err := og.findExistingTrigger(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+
+	opStmt := makeOpStmt(OpStmtDDL)
+
+	if triggerWithInfo == nil {
+		opStmt.sql = `DROP TRIGGER dummy_trigger ON dummy_table`
+		opStmt.expectedExecErrors.add(pgcode.UndefinedTable)
+		og.LogMessage("dropTrigger (non-existent): DROP TRIGGER dummy_trigger ON dummy_table")
+	} else {
+		sqlStatement := fmt.Sprintf("DROP TRIGGER %s ON %s", triggerWithInfo.triggerName, &triggerWithInfo.table)
+		og.LogMessage(fmt.Sprintf("dropTrigger: %s", sqlStatement))
+		opStmt.sql = sqlStatement
+	}
+
+	return opStmt, nil
+}
+
+// triggerInfo contains information about a trigger.
+type triggerInfo struct {
+	table       tree.TableName
+	triggerName string
+}
+
+// collectEnumMembers returns all public enum members in the current database.
+// Each result row is a map with keys "name" (qualified enum type name), "value"
+// (quoted member literal), and "non_public" (always false).
+//
+// This uses enum_range(NULL::type) which goes through the lease-based type
+// resolution and filters out read-only members. This ensures the results are
+// consistent with what DML statements see, avoiding TOCTOU races where the
+// previous system.descriptor-based query could see a member as public while a
+// concurrent schema change has already marked it as READ_ONLY in the leased
+// descriptor.
+func (og *operationGenerator) collectEnumMembers(
+	ctx context.Context, tx pgx.Tx,
+) ([]map[string]any, error) {
+	// First, collect all user-defined enum type names via pg_type (lease-based).
+	enumTypeNames, err := Collect(ctx, og, tx, pgx.RowTo[string], `
+		SELECT quote_ident(n.nspname) || '.' || quote_ident(t.typname)
+		FROM pg_catalog.pg_type t
+		JOIN pg_catalog.pg_namespace n ON t.typnamespace = n.oid
+		WHERE t.typtype = 'e'
+		  AND n.nspname NOT IN ('information_schema', 'pg_catalog', 'pg_extension', 'crdb_internal')
+	`)
+	if err != nil {
+		return nil, err
+	}
+	if len(enumTypeNames) == 0 {
+		return nil, nil
+	}
+
+	// For each enum type, use enum_range to get only public members. Build a
+	// UNION ALL query so we make a single round-trip.
+	var parts []string
+	for _, name := range enumTypeNames {
+		parts = append(parts, fmt.Sprintf(
+			`SELECT '%[1]s' AS name, quote_literal(v) AS value, false AS non_public
+			FROM unnest(enum_range(NULL::%[1]s)) v`, name))
+	}
+	q := strings.Join(parts, " UNION ALL ")
+	return Collect(ctx, og, tx, pgx.RowToMap, q)
+}
+
+// findNonTriggerFunctions returns public, non-trigger UDFs with argument
+// metadata (schema, name, args, argtypes, numdefaults) for building
+// invocations.
+func (og *operationGenerator) findNonTriggerFunctions(
+	ctx context.Context, tx pgx.Tx,
+) ([]map[string]any, error) {
+	q := With([]CTE{
+		{"descriptors", descJSONQuery},
+		{"functions", functionDescsQuery},
+	}, `SELECT
+	quote_ident(schema_id::REGNAMESPACE::STRING) AS schema,
+	quote_ident(name) AS name,
+	array_to_string(proargnames, ',') AS args,
+	proargtypes AS argtypes,
+	pronargdefaults as numdefaults
+FROM
+	functions
+	INNER JOIN pg_catalog.pg_proc ON oid = (id + 100000)
+	WHERE COALESCE((descriptor->'state')::STRING, 'PUBLIC') = 'PUBLIC'::STRING
+	AND prorettype != 'trigger'::REGTYPE;`)
+	return Collect(ctx, og, tx, pgx.RowToMap, q)
+}
+
+// buildFuncInvocation constructs a SQL expression that invokes the given UDF
+// with random arguments: (SELECT schema.func(args) IS NOT NULL).
+func (og *operationGenerator) buildFuncInvocation(function map[string]any) (string, error) {
+	args := ""
+	if function["args"] != nil {
+		args = function["args"].(string)
+		argTypesStr := strings.Split(function["argtypes"].(string), " ")
+		argTypes := make([]int, 0, len(argTypesStr))
+		numDefaultArgs := int(function["numdefaults"].(int16))
+		if numDefaultArgs > 0 {
+			numDefaultArgs = og.randIntn(numDefaultArgs)
+		}
+		for _, oidStr := range argTypesStr {
+			oidVal, err := strconv.Atoi(oidStr)
+			if err != nil {
+				return "", err
+			}
+			argTypes = append(argTypes, oidVal)
+		}
+		argIn := strings.Builder{}
+		for idx := range strings.Split(args, ",") {
+			if idx > len(argTypesStr)-numDefaultArgs {
+				break
+			}
+			if argIn.Len() > 0 {
+				argIn.WriteString(",")
+			}
+			oidValue := oid.Oid(argTypes[idx])
+			typ, ok := types.OidToType[oidValue]
+			if !ok {
+				argIn.WriteString("NULL")
+			} else {
+				randomDatum := randgen.RandDatum(og.params.rng, typ, true)
+				argIn.WriteString(tree.AsStringWithFlags(randomDatum, tree.FmtParsable))
+			}
+		}
+		args = argIn.String()
+	}
+	return fmt.Sprintf(
+		"(SELECT %s.%s(%s) IS NOT NULL)",
+		function["schema"].(string), function["name"].(string), args,
+	), nil
+}
+
+// findExistingTriggerFunctions returns existing trigger functions (RETURNS
+// TRIGGER, zero arguments) that can be reused by a new trigger.
+func (og *operationGenerator) findExistingTriggerFunctions(
+	ctx context.Context, tx pgx.Tx,
+) ([]map[string]any, error) {
+	q := With([]CTE{
+		{"descriptors", descJSONQuery},
+		{"functions", functionDescsQuery},
+	}, `SELECT
+		quote_ident(schema_id::REGNAMESPACE::STRING) || '.' || quote_ident(name) AS resolved_name
+	FROM functions
+	INNER JOIN pg_catalog.pg_proc ON oid = (id + 100000)
+	WHERE COALESCE((descriptor->'state')::STRING, 'PUBLIC') = 'PUBLIC'::STRING
+	  AND prorettype = 'trigger'::REGTYPE
+	  AND pronargs = 0`)
+	return Collect(ctx, og, tx, pgx.RowToMap, q)
+}
+
+// findExistingTrigger returns a randomly chosen existing trigger's qualified
+// table name and trigger name, or nil if the database contains no triggers.
+func (og *operationGenerator) findExistingTrigger(
+	ctx context.Context, tx pgx.Tx,
+) (*triggerInfo, error) {
+	if err := og.setSeedInDB(ctx, tx); err != nil {
+		return nil, err
+	}
+
+	var triggerWithInfo triggerInfo
+
+	// Query to find all triggers in the database using information_schema
+	triggerQuery := `
+		SELECT
+			event_object_schema,
+			event_object_table,
+			trigger_name
+		FROM
+			information_schema.triggers
+		ORDER BY random()
+		LIMIT 1
+	`
+
+	var schemaName, tableName, triggerName string
+	err := tx.QueryRow(ctx, triggerQuery).Scan(&schemaName, &tableName, &triggerName)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	triggerWithInfo = triggerInfo{
+		table: tree.MakeTableNameFromPrefix(tree.ObjectNamePrefix{
+			SchemaName:     tree.Name(schemaName),
+			ExplicitSchema: true,
+		}, tree.Name(tableName)),
+		triggerName: triggerName,
+	}
+
+	return &triggerWithInfo, nil
+}
+
+// truncateTable generates a TRUNCATE TABLE statement.
+func (og *operationGenerator) truncateTable(ctx context.Context, tx pgx.Tx) (*opStmt, error) {
+	tbls, err := Collect(ctx, og, tx, pgx.RowTo[string],
+		`SELECT quote_ident(table_schema) || '.' || quote_ident(table_name) FROM information_schema.tables WHERE table_type = 'BASE TABLE' AND table_schema NOT IN ('information_schema', 'pg_catalog', 'pg_extension', 'crdb_internal')`)
+	if err != nil {
+		return nil, err
+	}
+
+	const MaxTruncateTables = 8
+	stmt, expectedCode, err := Generate[*tree.Truncate](og.params.rng, og.produceError(), []GenerationCase{
+		{pgcode.SuccessfulCompletion, `TRUNCATE TABLE {MultipleTableNames}`},
+		{pgcode.SuccessfulCompletion, `TRUNCATE TABLE {MultipleTableNames} CASCADE`},
+		{pgcode.UndefinedTable, `TRUNCATE TABLE {TableNameDoesNotExist}`},
+		{pgcode.UndefinedTable, `TRUNCATE TABLE {TableNameDoesNotExist} CASCADE`},
+	}, template.FuncMap{
+		"MultipleTableNames": func() (string, error) {
+			selectedTables, err := PickBetween(og.params.rng, 1, MaxTruncateTables, tbls)
+			if err != nil {
+				return "", err
+			}
+			return strings.Join(selectedTables, ","), nil
+		},
+		"TableNameDoesNotExist": func() (string, error) {
+			return "TableThatDoesNotExist", nil
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	op := newOpStmt(stmt, codesWithConditions{
+		{expectedCode, true},
+	})
+
+	// A non-CASCADE TRUNCATE is rejected when an inbound foreign key references
+	// one of the truncated tables. Rather than checking for inbound FK
+	// dependencies, always allow the rejection as a potential outcome.
+	if expectedCode == pgcode.SuccessfulCompletion &&
+		stmt.DropBehavior != tree.DropCascade {
+		op.potentialExecErrors.add(pgcode.FeatureNotSupported)
+		// Pre-v26.1 binaries returned Uncategorized for this rejection; the
+		// pgcode was changed in #154382.
+		versionBefore261, err := isClusterVersionLessThan(ctx, tx, clusterversion.V26_1.Version())
+		if err != nil {
+			return nil, err
+		}
+		if versionBefore261 {
+			op.potentialExecErrors.add(pgcode.Uncategorized)
+		}
+	}
+	return op, nil
+}
+
+// setTableStorageParam picks a random table and a random storage parameter,
+// then attempts to set them. When setting TTL parameters, it sets either
+// ttl_expire_after or ttl_expiration_expression plus one other TTL parameter.
+func (og *operationGenerator) setTableStorageParam(
+	ctx context.Context, tx pgx.Tx,
+) (*opStmt, error) {
+	tableName, err := og.randTable(ctx, tx, og.pctExisting(true), "")
+	if err != nil {
+		return nil, err
+	}
+
+	tableExists, err := og.tableExists(ctx, tx, tableName)
+	if err != nil {
+		return nil, err
+	}
+	if !tableExists {
+		return makeOpStmtForSingleError(OpStmtDDL,
+			fmt.Sprintf(`ALTER TABLE %s SET (fillfactor=100)`, tableName),
+			pgcode.UndefinedTable), nil
+	}
+
+	err = og.tableHasPrimaryKeySwapActive(ctx, tx, tableName)
+	if err != nil {
+		return nil, err
+	}
+
+	stmt := makeOpStmt(OpStmtDDL)
+
+	// Randomly decide whether to set TTL parameters or a single non-TTL parameter
+	param, value, isValid, err := og.randStorageParam()
+	if err != nil {
+		return nil, err
+	}
+
+	if isTTLParam(param) {
+		// Set TTL parameters: one base param (expire_after or expiration_expression)
+		// plus one additional TTL param
+		baseParam, baseValue, err := og.randTTLExpirationParam(ctx, tx, tableName)
+		if err != nil {
+			return nil, err
+		}
+		stmt.sql = fmt.Sprintf(`ALTER TABLE %s SET (%s=%s, %s=%s)`,
+			tableName.String(), baseParam, baseValue, param, value)
+	} else {
+		// Set a single non-TTL parameter
+		stmt.sql = fmt.Sprintf(`ALTER TABLE %s SET (%s=%s)`,
+			tableName.String(), param, value)
+	}
+
+	if !isValid {
+		// Depending on the type of the parameter, different error codes are
+		// returned, so we add all possible ones.
+		stmt.expectedExecErrors.add(pgcode.InvalidParameterValue)
+		stmt.expectedExecErrors.add(pgcode.InvalidTextRepresentation)
+		stmt.expectedExecErrors.add(pgcode.InvalidDatetimeFormat)
+		// Before version 26.2 we did not properly handle invalid float values
+		// for certain parameters.
+		hasInvalidValueBug, err := isClusterVersionLessThan(ctx, tx, clusterversion.V26_2.Version())
+		if err != nil {
+			return nil, err
+		}
+		if hasInvalidValueBug {
+			stmt.potentialExecErrors.add(pgcode.Uncategorized)
+		}
+	} else if isSchemaLockedParam(param) {
+		// set schema_locked cannot be combined with other operations
+		// and will return an error if it does.
+		stmt.potentialExecErrors.add(pgcode.InvalidParameterValue)
+	} else if param == "exclude_data_from_backup" {
+		// exclude_data_from_backup cannot be set on tables with inbound FK
+		// references.
+		stmt.potentialExecErrors.add(pgcode.ObjectNotInPrerequisiteState)
+		// Before version 26.2, the error for inbound FK constraints used
+		// pgcode.Uncategorized instead of pgcode.ObjectNotInPrerequisiteState.
+		hasPgcodeBug, err := isClusterVersionLessThan(ctx, tx, clusterversion.V26_2.Version())
+		if err != nil {
+			return nil, err
+		}
+		if hasPgcodeBug {
+			stmt.potentialExecErrors.add(pgcode.Uncategorized)
+		}
+	} else if param == catpb.CanaryStatsWindowSettingName {
+		canaryNotSupported, err := isClusterVersionLessThan(ctx, tx, clusterversion.V26_2.Version())
+		if err != nil {
+			return nil, err
+		}
+		if canaryNotSupported {
+			stmt.potentialExecErrors.add(pgcode.FeatureNotSupported)
+		}
+	}
+
+	return stmt, nil
+}
+
+// resetTableStorageParam picks a random table and a random storage parameter,
+// then attempts to reset the param.
+func (og *operationGenerator) resetTableStorageParam(
+	ctx context.Context, tx pgx.Tx,
+) (*opStmt, error) {
+	tableName, err := og.randTable(ctx, tx, og.pctExisting(true), "")
+	if err != nil {
+		return nil, err
+	}
+
+	tableExists, err := og.tableExists(ctx, tx, tableName)
+	if err != nil {
+		return nil, err
+	}
+	if !tableExists {
+		return makeOpStmtForSingleError(OpStmtDDL,
+			fmt.Sprintf(`ALTER TABLE %s RESET (fillfactor)`, tableName),
+			pgcode.UndefinedTable), nil
+	}
+
+	err = og.tableHasPrimaryKeySwapActive(ctx, tx, tableName)
+	if err != nil {
+		return nil, err
+	}
+
+	stmt := makeOpStmt(OpStmtDDL)
+
+	// Randomly decide whether to set TTL parameters or a single non-TTL parameter
+	param, _, _, err := og.randStorageParam()
+	if err != nil {
+		return nil, err
+	}
+
+	// Reset a storage parameter
+	stmt.sql = fmt.Sprintf(`ALTER TABLE %s RESET (%s)`,
+		tableName.String(), param)
+
+	if isSchemaLockedParam(param) {
+		// reset schema_locked cannot be combined with other operations
+		// and will return an error if it does.
+		stmt.potentialExecErrors.add(pgcode.InvalidParameterValue)
+	}
+
+	return stmt, nil
+}
+
+// randBoolString returns a random boolean value as a string
+func (og *operationGenerator) randBoolString() string {
+	boolVals := []string{"true", "false", "'on'", "'off'", "'1'", "'0'"}
+	return boolVals[og.randIntn(len(boolVals))]
+}
+
+// randIntervalString returns a random interval string
+func (og *operationGenerator) randIntervalString() string {
+	intervals := []string{
+		"'10 minutes'",
+		"'1 hour'",
+		"'30 days'",
+		"'1 day'",
+		"'7 days'",
+		"'00:10:00'",
+		"'24:00:00'",
+	}
+	return intervals[og.randIntn(len(intervals))]
+}
+
+// randCronString returns a random cron expression string
+func (og *operationGenerator) randCronString() string {
+	crons := []string{
+		"'@daily'",
+		"'@weekly'",
+		"'@hourly'",
+		"'0 0 * * *'",
+		"'0 */6 * * *'",
+		"'*/15 * * * *'",
+	}
+	return crons[og.randIntn(len(crons))]
+}
+
+// randTTLExpirationParam returns either ttl_expire_after or ttl_expiration_expression
+// with a random value. One of the two must be set to enable TTL on a table.
+// If a table has a column with timestamp type, use it as the ttl_expiration_expression.
+// Otherwise, set ttl_expire_after to a random value.
+func (og *operationGenerator) randTTLExpirationParam(
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName,
+) (string, string, error) {
+	// Get a column with timestamp type if exists
+	timestampCol, err := og.findTimestampColumn(ctx, tx, tableName)
+	if err != nil {
+		return "", "", err
+	}
+	// If table has a timestamp column, use it to define ttl_expiration_expression,
+	// otherwise, use ttl_expire_after
+	if timestampCol != "" {
+		return "ttl_expiration_expression", timestampCol, nil
+	}
+	return "ttl_expire_after", og.randIntervalString(), nil
+}
+
+// findTimestampColumn finds a column with timestamp type in the given table.
+// Returns the column name, or an empty string if no timestamp column exists.
+func (og *operationGenerator) findTimestampColumn(
+	ctx context.Context, tx pgx.Tx, tableName *tree.TableName,
+) (string, error) {
+	colInfo, err := og.getTableColumns(ctx, tx, tableName, false)
+	if err != nil {
+		return "", err
+	}
+
+	for _, col := range colInfo {
+		if col.typ.Family() == types.TimestampTZFamily {
+			return col.name.String(), nil
+		}
+	}
+	return "", nil
+}
+
+// randStorageParam returns a random storage parameter (excluding the ttl base params)
+func (og *operationGenerator) randStorageParam() (
+	param string,
+	value string,
+	isValid bool,
+	_ error,
+) {
+	params := []struct {
+		name     string
+		valueGen func() string
+	}{
+		{
+			name:     "fillfactor",
+			valueGen: func() string { return fmt.Sprintf("%d", og.randIntn(100)) },
+		},
+		{
+			name:     "autovacuum_enabled",
+			valueGen: func() string { return og.randBoolString() },
+		},
+		{
+			name:     "ttl",
+			valueGen: func() string { return "true" },
+		},
+		{
+			name:     "ttl_select_batch_size",
+			valueGen: func() string { return fmt.Sprintf("%d", og.randIntn(10000)) },
+		},
+		{
+			name:     "ttl_delete_batch_size",
+			valueGen: func() string { return fmt.Sprintf("%d", og.randIntn(10000)) },
+		},
+		{
+			name:     "ttl_select_rate_limit",
+			valueGen: func() string { return fmt.Sprintf("%d", og.randIntn(10000)) },
+		},
+		{
+			name:     "ttl_delete_rate_limit",
+			valueGen: func() string { return fmt.Sprintf("%d", og.randIntn(10000)) },
+		},
+		{
+			name:     "ttl_label_metrics",
+			valueGen: func() string { return og.randBoolString() },
+		},
+		{
+			name:     "ttl_job_cron",
+			valueGen: func() string { return og.randCronString() },
+		},
+		{
+			name:     "ttl_pause",
+			valueGen: func() string { return og.randBoolString() },
+		},
+		{
+			name:     "ttl_row_stats_poll_interval",
+			valueGen: func() string { return og.randIntervalString() },
+		},
+		{
+			name:     "ttl_disable_changefeed_replication",
+			valueGen: func() string { return og.randBoolString() },
+		},
+		{
+			name:     "exclude_data_from_backup",
+			valueGen: func() string { return og.randBoolString() },
+		},
+		{
+			name:     catpb.AutoStatsEnabledTableSettingName,
+			valueGen: func() string { return og.randBoolString() },
+		},
+		{
+			name:     catpb.AutoStatsMinStaleTableSettingName,
+			valueGen: func() string { return fmt.Sprintf("%d", og.randIntn(10000)) },
+		},
+		{
+			name:     catpb.AutoStatsFractionStaleTableSettingName,
+			valueGen: func() string { return fmt.Sprintf("%f", og.randFloat64()) },
+		},
+		{
+			name:     catpb.AutoPartialStatsEnabledTableSettingName,
+			valueGen: func() string { return og.randBoolString() },
+		},
+		{
+			name:     catpb.AutoFullStatsEnabledTableSettingName,
+			valueGen: func() string { return og.randBoolString() },
+		},
+		{
+			name:     catpb.AutoPartialStatsMinStaleTableSettingName,
+			valueGen: func() string { return fmt.Sprintf("%d", og.randIntn(10000)) },
+		},
+		{
+			name:     catpb.AutoPartialStatsFractionStaleTableSettingName,
+			valueGen: func() string { return fmt.Sprintf("%f", og.randFloat64()) },
+		},
+		{
+			name:     "sql_stats_forecasts_enabled",
+			valueGen: func() string { return og.randBoolString() },
+		},
+		{
+			name:     "sql_stats_histogram_samples_count",
+			valueGen: func() string { return fmt.Sprintf("%d", og.randIntn(10000)) },
+		},
+		{
+			name:     "sql_stats_histogram_buckets_count",
+			valueGen: func() string { return fmt.Sprintf("%d", og.randIntn(1000)) },
+		},
+		{
+			name:     "schema_locked",
+			valueGen: func() string { return og.randBoolString() },
+		},
+		{
+			name:     catpb.CanaryStatsWindowSettingName,
+			valueGen: func() string { return og.randIntervalString() },
+		},
+	}
+
+	// Select a random parameter
+	randParam := params[og.randIntn(len(params))]
+	if og.produceError() {
+		return randParam.name, "INVALID_VAL", false, nil
+	}
+	return randParam.name, randParam.valueGen(), true, nil
+}
+
+// isTTLParam returns true if this is a TTL storage parameter.
+func isTTLParam(key string) bool {
+	return strings.HasPrefix(key, "ttl")
+}
+
+func isSchemaLockedParam(key string) bool {
+	return key == "schema_locked"
 }

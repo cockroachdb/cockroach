@@ -4,7 +4,13 @@
 // included in the /LICENSE file.
 
 import throttle from "lodash/throttle";
-import React from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import {
   CanvasHeight,
@@ -138,167 +144,102 @@ const BucketToolTip: React.FunctionComponent<TooltipProps> = props => {
   );
 };
 
-type KeyVisualizerState = {
-  tooltipState: TooltipProps;
-  showTooltip: boolean;
-  showSpanBoundaries: boolean;
-};
-export default class KeyVisualizer extends React.PureComponent<
-  KeyVisualizerProps,
-  KeyVisualizerState
-> {
-  canvasRef: React.RefObject<HTMLCanvasElement>;
-  ctx: CanvasRenderingContext2D;
-  xPanOffset = 0;
-  yPanOffset = 0;
-  xZoomFactor = 1;
-  yZoomFactor = 1;
-  throttledHandler: (e: React.MouseEvent) => void;
+const KeyVisualizer: React.FC<KeyVisualizerProps> = props => {
+  const { samples, keys, yOffsetsForKey, hottestBucket } = props;
 
-  state = {
-    showTooltip: false,
-    showSpanBoundaries: true,
-    tooltipState: {
-      x: 0,
-      y: 0,
-      startKey: "",
-      endKey: "",
-      requests: 0,
-      epochTime: 0,
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const ctxRef = useRef<CanvasRenderingContext2D>(null);
+
+  // Mutable pan/zoom state — these change on every scroll frame and must
+  // not trigger re-renders, so they live in refs rather than useState.
+  const xPanOffset = useRef(0);
+  const yPanOffset = useRef(0);
+  const xZoomFactor = useRef(1);
+  const yZoomFactor = useRef(1);
+
+  const [showTooltip, setShowTooltip] = useState(false);
+  const [showSpanBoundaries, setShowSpanBoundaries] = useState(true);
+  const [tooltipState, setTooltipState] = useState<TooltipProps>({
+    x: 0,
+    y: 0,
+    startKey: "",
+    endKey: "",
+    requests: 0,
+    epochTime: 0,
+  });
+
+  // Track showSpanBoundaries in a ref so the canvas render callback
+  // (called from throttled handlers) always sees the latest value.
+  const showSpanBoundariesRef = useRef(showSpanBoundaries);
+  showSpanBoundariesRef.current = showSpanBoundaries;
+
+  // Keep a ref to the latest props so throttled callbacks can access
+  // fresh data without needing to be recreated on every prop change.
+  const propsRef = useRef(props);
+  propsRef.current = props;
+
+  // Initialize canvas context on mount.
+  useEffect(() => {
+    ctxRef.current = canvasRef.current.getContext("2d");
+  }, []);
+
+  const computeBucketDimensions = useCallback(
+    (sampleIndex: number, bucket: SampleBucket) => {
+      const p = propsRef.current;
+      const startKey = p.keys[bucket.startKeyHex];
+      const endKey = p.keys[bucket.endKeyHex];
+      const nSamples = p.samples.length;
+
+      const x =
+        YAxisLabelPadding +
+        xPanOffset.current +
+        (sampleIndex * CanvasWidth * xZoomFactor.current) / nSamples;
+
+      const y =
+        p.yOffsetsForKey[startKey] * yZoomFactor.current + yPanOffset.current;
+
+      const width =
+        ((CanvasWidth - YAxisLabelPadding) * xZoomFactor.current) / nSamples;
+      const height =
+        p.yOffsetsForKey[endKey] * yZoomFactor.current - y + yPanOffset.current;
+
+      return { x, y, width, height };
     },
-  };
-  private zoomHandlerThrottled: any;
+    [],
+  );
 
-  constructor(props: KeyVisualizerProps) {
-    super(props);
-    this.canvasRef = React.createRef();
-  }
+  const renderCanvas = useCallback(() => {
+    const ctx = ctxRef.current;
+    if (!ctx) return;
+    const p = propsRef.current;
 
-  componentDidMount() {
-    this.ctx = this.canvasRef.current.getContext("2d");
-  }
-
-  computeBucketDimensions(sampleIndex: number, bucket: SampleBucket) {
-    const startKey = this.props.keys[bucket.startKeyHex];
-    const endKey = this.props.keys[bucket.endKeyHex];
-    const nSamples = this.props.samples.length;
-
-    const x =
-      YAxisLabelPadding +
-      this.xPanOffset +
-      (sampleIndex * CanvasWidth * this.xZoomFactor) / nSamples;
-
-    const y =
-      this.props.yOffsetsForKey[startKey] * this.yZoomFactor + this.yPanOffset;
-
-    const width =
-      ((CanvasWidth - YAxisLabelPadding) * this.xZoomFactor) / nSamples;
-    const height =
-      this.props.yOffsetsForKey[endKey] * this.yZoomFactor -
-      y +
-      this.yPanOffset;
-
-    return {
-      x,
-      y,
-      width,
-      height,
-    };
-  }
-
-  renderYAxis() {
-    // render y axis
-    this.ctx.fillStyle = "white";
-    this.ctx.font = "12px sans-serif";
-
-    const yAxisLabels: Record<string, number> = filterAxisLabels(
-      this.xZoomFactor,
-      this.yPanOffset,
-      this.props.yOffsetsForKey,
-      MaxLabelsYAxis,
-      CanvasHeight,
-    );
-
-    for (const [key, yOffset] of Object.entries(yAxisLabels)) {
-      this.ctx.fillText(
-        key,
-        YAxisLabelPadding,
-        yOffset * this.yZoomFactor + this.yPanOffset,
-      );
-    }
-  }
-
-  renderXAxis() {
-    const xOffsetForSampleTime = this.props.samples.reduce(
-      (acc, sample, index) => {
-        const wallTimeMs = sample.timestamp.seconds.toNumber() * 1e3;
-        const timeString = new Date(wallTimeMs).toISOString();
-        const offset = (index * CanvasWidth) / this.props.samples.length;
-        acc[timeString] = offset;
-        return acc;
-      },
-      {} as Record<string, number>,
-    );
-
-    const xAxisLabels = filterAxisLabels(
-      this.xZoomFactor,
-      this.xPanOffset,
-      xOffsetForSampleTime,
-      MaxLabelsXAxis,
-      CanvasWidth,
-    );
-
-    for (const [timestring, xOffset] of Object.entries(xAxisLabels)) {
-      // split timestring and render each part
-      const [s1, s2] = timestring.split("T");
-
-      this.ctx.fillText(
-        s1,
-        YAxisLabelPadding + this.xPanOffset + xOffset * this.xZoomFactor,
-        CanvasHeight - XAxisLabelPadding,
-      );
-
-      this.ctx.fillText(
-        s2,
-        YAxisLabelPadding + this.xPanOffset + xOffset * this.xZoomFactor,
-        CanvasHeight - 2.5 * XAxisLabelPadding,
-      );
-    }
-  }
-
-  renderKeyVisualizer() {
     requestAnimationFrame(() => {
       // clear
-      this.ctx.clearRect(0, 0, this.ctx.canvas.width, this.ctx.canvas.height);
-      this.ctx.fillStyle = "black";
-      this.ctx.fillRect(0, 0, this.ctx.canvas.width, this.ctx.canvas.height);
+      ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+      ctx.fillStyle = "black";
+      ctx.fillRect(0, 0, ctx.canvas.width, ctx.canvas.height);
 
-      const imageData = this.ctx.getImageData(
+      const imageData = ctx.getImageData(
         0,
         0,
-        this.ctx.canvas.width,
-        this.ctx.canvas.height,
+        ctx.canvas.width,
+        ctx.canvas.height,
       );
       const pixels = imageData.data;
 
       // render samples
-      // render samples
-      const nSamples = this.props.samples.length;
+      const nSamples = p.samples.length;
       for (let i = 0; i < nSamples; i++) {
-        const sample = this.props.samples[i];
+        const sample = p.samples[i];
 
         for (let j = 0; j < sample.buckets.length; j++) {
           const bucket = sample.buckets[j];
-
-          // compute x, y, width, and height of rendered span.
-          const dim = this.computeBucketDimensions(i, bucket);
-
+          const dim = computeBucketDimensions(i, bucket);
           const { x, y, width, height } = dim;
 
-          // compute color
           const color = [
             Math.log(Math.max(getRequestsAsNumber(bucket.requests), 1)) /
-              Math.log(this.props.hottestBucket),
+              Math.log(p.hottestBucket),
             0,
             0,
           ];
@@ -310,84 +251,135 @@ export default class KeyVisualizer extends React.PureComponent<
             Math.ceil(width),
             Math.ceil(height),
             color,
-            this.state.showSpanBoundaries,
+            showSpanBoundariesRef.current,
           );
         }
       }
 
       // blit
-      this.ctx.putImageData(imageData, 0, 0);
+      ctx.putImageData(imageData, 0, 0);
 
-      // render x and y axis
-      this.renderYAxis();
-      this.renderXAxis();
+      // render y axis
+      ctx.fillStyle = "white";
+      ctx.font = "12px sans-serif";
+
+      const yAxisLabels = filterAxisLabels(
+        xZoomFactor.current,
+        yPanOffset.current,
+        p.yOffsetsForKey,
+        MaxLabelsYAxis,
+        CanvasHeight,
+      );
+
+      for (const [key, yOff] of Object.entries(yAxisLabels)) {
+        ctx.fillText(
+          key,
+          YAxisLabelPadding,
+          yOff * yZoomFactor.current + yPanOffset.current,
+        );
+      }
+
+      // render x axis
+      const xOffsetForSampleTime = p.samples.reduce(
+        (acc, sample, index) => {
+          const wallTimeMs = sample.timestamp.seconds.toNumber() * 1e3;
+          const timeString = new Date(wallTimeMs).toISOString();
+          const offset = (index * CanvasWidth) / p.samples.length;
+          acc[timeString] = offset;
+          return acc;
+        },
+        {} as Record<string, number>,
+      );
+
+      const xAxisLabels = filterAxisLabels(
+        xZoomFactor.current,
+        xPanOffset.current,
+        xOffsetForSampleTime,
+        MaxLabelsXAxis,
+        CanvasWidth,
+      );
+
+      for (const [timestring, xOff] of Object.entries(xAxisLabels)) {
+        const [s1, s2] = timestring.split("T");
+        ctx.fillText(
+          s1,
+          YAxisLabelPadding + xPanOffset.current + xOff * xZoomFactor.current,
+          CanvasHeight - XAxisLabelPadding,
+        );
+        ctx.fillText(
+          s2,
+          YAxisLabelPadding + xPanOffset.current + xOff * xZoomFactor.current,
+          CanvasHeight - 2.5 * XAxisLabelPadding,
+        );
+      }
     });
-  }
+  }, [computeBucketDimensions]);
 
-  componentDidUpdate(prevProps: KeyVisualizerProps) {
-    // only render if the sample window changes.
-    // prevent render if there's a tooltip state change.
-    if (prevProps !== this.props) {
-      this.renderKeyVisualizer();
-    }
-  }
+  // Re-render the canvas when props change (equivalent to componentDidUpdate
+  // with prevProps !== this.props check — the effect runs only when the prop
+  // values actually change).
+  useEffect(() => {
+    renderCanvas();
+  }, [samples, keys, yOffsetsForKey, hottestBucket, renderCanvas]);
 
-  handleCanvasScroll = (e: any) => {
-    if (!this.zoomHandlerThrottled) {
-      this.zoomHandlerThrottled = throttle((e: any) => {
+  const handleCanvasScroll = useMemo(
+    () =>
+      throttle((e: any) => {
         // normalize value and negate so that "scrolling up" zooms in
         const deltaY = -e.deltaY / 100;
 
-        this.yZoomFactor += deltaY;
-        this.xZoomFactor += deltaY;
+        yZoomFactor.current += deltaY;
+        xZoomFactor.current += deltaY;
 
         // clamp zoom factor between 1 and MaxZoom
-        this.yZoomFactor = Math.max(1, Math.min(MaxZoom, this.yZoomFactor));
-        this.xZoomFactor = Math.max(1, Math.min(MaxZoom, this.xZoomFactor));
+        yZoomFactor.current = Math.max(
+          1,
+          Math.min(MaxZoom, yZoomFactor.current),
+        );
+        xZoomFactor.current = Math.max(
+          1,
+          Math.min(MaxZoom, xZoomFactor.current),
+        );
 
         // find mouse coordinates in terms of current window
         const windowPercentageX = e.nativeEvent.offsetX / CanvasWidth;
         const windowPercentageY = e.nativeEvent.offsetY / CanvasHeight;
 
         const z =
-          this.xZoomFactor === 1 ? 0 : (this.xZoomFactor - 1) / (MaxZoom - 1);
-        this.xPanOffset = windowPercentageX * CanvasWidth * MaxZoom * z * -1;
-        this.yPanOffset = windowPercentageY * CanvasHeight * MaxZoom * z * -1;
+          xZoomFactor.current === 1
+            ? 0
+            : (xZoomFactor.current - 1) / (MaxZoom - 1);
+        xPanOffset.current = windowPercentageX * CanvasWidth * MaxZoom * z * -1;
+        yPanOffset.current =
+          windowPercentageY * CanvasHeight * MaxZoom * z * -1;
 
         // if zoomed out, reset pan
-        if (this.yZoomFactor === 1 && this.xZoomFactor === 1) {
-          this.xPanOffset = 0;
-          this.yPanOffset = 0;
+        if (yZoomFactor.current === 1 && xZoomFactor.current === 1) {
+          xPanOffset.current = 0;
+          yPanOffset.current = 0;
         }
 
-        this.renderKeyVisualizer();
-      }, 1000 / 60);
-    }
+        renderCanvas();
+      }, 1000 / 60),
+    [renderCanvas],
+  );
 
-    this.zoomHandlerThrottled(e);
-  };
-
-  handleCanvasHover = (e: React.MouseEvent) => {
-    if (!this.throttledHandler) {
-      this.throttledHandler = throttle(e => {
-        const rect = this.canvasRef.current.getBoundingClientRect();
+  const handleCanvasHover = useMemo(
+    () =>
+      throttle((e: any) => {
+        const rect = canvasRef.current.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
-        const nSamples = this.props.samples.length;
+        const p = propsRef.current;
+        const nSamples = p.samples.length;
 
         // label this for loop so we can break from it.
-        // I thought this would need to be implemented with some sort of O(1) lookup
-        // or a binary partitioning scheme, but a naive `for` loop seems to be fast enough...
         iterate_samples: for (let i = 0; i < nSamples; i++) {
-          const sample = this.props.samples[i];
+          const sample = p.samples[i];
 
           for (let j = 0; j < sample.buckets.length; j++) {
             const bucket = sample.buckets[j];
-
-            const { x, y, width, height } = this.computeBucketDimensions(
-              i,
-              bucket,
-            );
+            const { x, y, width, height } = computeBucketDimensions(i, bucket);
 
             if (
               mouseX >= x &&
@@ -395,67 +387,62 @@ export default class KeyVisualizer extends React.PureComponent<
               mouseY >= y &&
               mouseY <= y + height
             ) {
-              this.setState({
-                tooltipState: {
-                  x: x + width + 20,
-                  y: y,
-                  startKey: this.props.keys[bucket.startKeyHex],
-                  endKey: this.props.keys[bucket.endKeyHex],
-                  requests: getRequestsAsNumber(bucket.requests),
-                  epochTime: sample.timestamp.seconds.toNumber(),
-                },
+              setTooltipState({
+                x: x + width + 20,
+                y: y,
+                startKey: p.keys[bucket.startKeyHex],
+                endKey: p.keys[bucket.endKeyHex],
+                requests: getRequestsAsNumber(bucket.requests),
+                epochTime: sample.timestamp.seconds.toNumber(),
               });
               break iterate_samples;
             }
           } // end iterate buckets
         } // end iterate_samples
-      }, 50);
-    }
+      }, 50),
+    [computeBucketDimensions],
+  );
 
-    this.throttledHandler(e);
-  };
+  const toggleShowSpanBoundaries = useCallback(() => {
+    setShowSpanBoundaries(prev => !prev);
+  }, []);
 
-  toggleShowSpanBoundaries = () => {
-    this.setState(
-      { showSpanBoundaries: !this.state.showSpanBoundaries },
-      () => {
-        this.renderKeyVisualizer();
-      },
-    );
-  };
+  // Re-render canvas when showSpanBoundaries changes (replaces the
+  // setState callback pattern from the class component).
+  useEffect(() => {
+    renderCanvas();
+  }, [showSpanBoundaries, renderCanvas]);
 
-  render() {
-    return (
-      <>
-        <canvas
-          onWheel={e => {
-            e.persist();
-            this.handleCanvasScroll(e);
-          }}
-          onMouseEnter={() => this.setState({ showTooltip: true })}
-          onMouseOut={() => this.setState({ showTooltip: false })}
-          onMouseMove={e => {
-            e.persist();
-            this.handleCanvasHover(e);
-          }}
-          width={CanvasWidth}
-          height={CanvasHeight}
-          ref={this.canvasRef}
-        />
-        {this.state.showTooltip && (
-          <BucketToolTip {...this.state.tooltipState} />
-        )}
-        <div>
-          <label>
-            <input
-              type="checkbox"
-              checked={this.state.showSpanBoundaries}
-              onChange={() => this.toggleShowSpanBoundaries()}
-            />{" "}
-            Show span boundaries
-          </label>
-        </div>
-      </>
-    );
-  }
-}
+  return (
+    <>
+      <canvas
+        onWheel={e => {
+          e.persist();
+          handleCanvasScroll(e);
+        }}
+        onMouseEnter={() => setShowTooltip(true)}
+        onMouseOut={() => setShowTooltip(false)}
+        onMouseMove={e => {
+          e.persist();
+          handleCanvasHover(e);
+        }}
+        width={CanvasWidth}
+        height={CanvasHeight}
+        ref={canvasRef}
+      />
+      {showTooltip && <BucketToolTip {...tooltipState} />}
+      <div>
+        <label>
+          <input
+            type="checkbox"
+            checked={showSpanBoundaries}
+            onChange={toggleShowSpanBoundaries}
+          />{" "}
+          Show span boundaries
+        </label>
+      </div>
+    </>
+  );
+};
+
+export default KeyVisualizer;

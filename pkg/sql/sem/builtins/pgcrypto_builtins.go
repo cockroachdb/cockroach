@@ -19,10 +19,10 @@ import (
 	"strings"
 	_ "unsafe" // required to use go:linkname
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgcrypto"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/pgcrypto"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
@@ -75,11 +75,11 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 				{Name: "type", Typ: types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				data := []byte(tree.MustBeDBytes(args[0]))
 				key := []byte(tree.MustBeDBytes(args[1]))
 				cipherType := string(tree.MustBeDString(args[2]))
-				decryptedData, err := pgcrypto.Decrypt(ctx, evalCtx, data, key, cipherType)
+				decryptedData, err := pgcrypto.Decrypt(data, key, cipherType)
 				if err != nil {
 					return nil, err
 				}
@@ -102,12 +102,12 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 				{Name: "type", Typ: types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				data := []byte(tree.MustBeDBytes(args[0]))
 				key := []byte(tree.MustBeDBytes(args[1]))
 				iv := []byte(tree.MustBeDBytes(args[2]))
 				cipherType := string(tree.MustBeDString(args[3]))
-				decryptedData, err := pgcrypto.DecryptIV(ctx, evalCtx, data, key, iv, cipherType)
+				decryptedData, err := pgcrypto.DecryptIV(data, key, iv, cipherType)
 				if err != nil {
 					return nil, err
 				}
@@ -172,11 +172,11 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 				{Name: "type", Typ: types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				data := []byte(tree.MustBeDBytes(args[0]))
 				key := []byte(tree.MustBeDBytes(args[1]))
 				cipherType := string(tree.MustBeDString(args[2]))
-				encryptedData, err := pgcrypto.Encrypt(ctx, evalCtx, data, key, cipherType)
+				encryptedData, err := pgcrypto.Encrypt(data, key, cipherType)
 				if err != nil {
 					return nil, err
 				}
@@ -199,12 +199,12 @@ var pgcryptoBuiltins = map[string]builtinDefinition{
 				{Name: "type", Typ: types.String},
 			},
 			ReturnType: tree.FixedReturnType(types.Bytes),
-			Fn: func(ctx context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				data := []byte(tree.MustBeDBytes(args[0]))
 				key := []byte(tree.MustBeDBytes(args[1]))
 				iv := []byte(tree.MustBeDBytes(args[2]))
 				cipherType := string(tree.MustBeDString(args[3]))
-				encryptedData, err := pgcrypto.EncryptIV(ctx, evalCtx, data, key, iv, cipherType)
+				encryptedData, err := pgcrypto.EncryptIV(data, key, iv, cipherType)
 				if err != nil {
 					return nil, err
 				}

@@ -9,10 +9,13 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage/wag/wagpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/errors"
 )
 
 // Server implements PerReplicaServer.
@@ -90,26 +93,54 @@ func (is Server) WaitForApplication(
 			leaseAppliedIndex := repl.shMu.state.LeaseAppliedIndex
 			repl.mu.RUnlock()
 			if leaseAppliedIndex >= req.LeaseIndex {
-				// For performance reasons, we don't sync to disk when
-				// applying raft commands. This means that if a node restarts
-				// after applying but before the next sync, its
-				// LeaseAppliedIndex could temporarily regress (until it
-				// reapplies its latest raft log entries).
-				//
-				// Merging relies on the monotonicity of the log applied
-				// index, so before returning ensure that rocksdb has synced
-				// everything up to this point to disk.
-				//
+				// Merging relies on the applied index monotonicity, so before returning
+				// ensure that the state machine synced everything up to this point.
 				// https://github.com/cockroachdb/cockroach/issues/33120
-				return storage.WriteSyncNoop(s.TODOEngine())
+				return syncAppliedState(repl)
 			}
 		}
 		if ctx.Err() == nil {
-			log.Fatal(ctx, "infinite retry loop exited but context has no error")
+			log.KvExec.Fatal(ctx, "infinite retry loop exited but context has no error")
 		}
 		return ctx.Err()
 	})
 	return resp, err
+}
+
+// syncAppliedState syncs the applied state of the given replica, with a
+// guarantee that it will never regress.
+//
+// NB: for performance reasons, we otherwise don't sync the state machine when
+// applying raft commands. This means that if a node restarts after applying but
+// before the next sync, its applied index could temporarily regress (until it
+// reapplies its latest raft log entries).
+func syncAppliedState(r *Replica) error {
+	s := r.store
+	// If engines are not separated, sync the entire engine.
+	if !s.EnginesSeparated() {
+		return storage.WriteSyncNoop(s.internalEngines.Engine())
+	}
+	// With separated engines, durably write a WAG node to the LogEngine
+	// instructing the replay to apply the replica up to its current index.
+	b := s.internalEngines.LogEngine().NewWriteBatch()
+	defer b.Close()
+	r.raftMu.Lock()
+	defer r.raftMu.Unlock()
+	if r.shMu.destroyStatus.Removed() {
+		// Skip the replica if it has already been destroyed. There is already a WAG
+		// node committing to its removal.
+		return nil
+	}
+	if err := wag.Write(b, s.wagSeq.Next(), wagpb.Node{
+		Events: []wagpb.Event{{
+			Addr:     wagpb.MakeAddr(r.ID(), r.shMu.state.RaftAppliedIndex),
+			Type:     wagpb.EventApply,
+			StartKey: r.shMu.state.Desc.StartKey,
+		}},
+	}); err != nil {
+		return errors.Wrapf(err, "writing WAG node")
+	}
+	return b.Commit(true /* sync */)
 }
 
 // WaitForReplicaInit implements PerReplicaServer.
@@ -130,7 +161,7 @@ func (is Server) WaitForReplicaInit(
 			}
 		}
 		if ctx.Err() == nil {
-			log.Fatal(ctx, "infinite retry loop exited but context has no error")
+			log.KvExec.Fatal(ctx, "infinite retry loop exited but context has no error")
 		}
 		return ctx.Err()
 	})
@@ -145,7 +176,9 @@ func (is Server) CompactEngineSpan(
 	resp := &CompactEngineSpanResponse{}
 	err := is.execStoreCommand(ctx, req.StoreRequestHeader,
 		func(ctx context.Context, s *Store) error {
-			return s.TODOEngine().CompactRange(req.Span.Key, req.Span.EndKey)
+			// TODO(sep-raft-log): this is likely only needed for StateEngine, but the
+			// API seems to be generic and may need to support both.
+			return s.TODOBothEngines().CompactRange(ctx, req.Span.Key, req.Span.EndKey)
 		})
 	return resp, err
 }
@@ -158,7 +191,7 @@ func (is Server) GetTableMetrics(
 	resp := &GetTableMetricsResponse{}
 	err := is.execStoreCommand(ctx, req.StoreRequestHeader,
 		func(ctx context.Context, s *Store) error {
-			metricsInfo, err := s.TODOEngine().GetTableMetrics(req.Span.Key, req.Span.EndKey)
+			metricsInfo, err := s.TODOBothEngines().GetTableMetrics(req.Span.Key, req.Span.EndKey)
 
 			if err != nil {
 				return err
@@ -176,7 +209,7 @@ func (is Server) ScanStorageInternalKeys(
 	resp := &ScanStorageInternalKeysResponse{}
 	err := is.execStoreCommand(ctx, req.StoreRequestHeader,
 		func(ctx context.Context, s *Store) error {
-			metrics, err := s.TODOEngine().ScanStorageInternalKeys(req.Span.Key, req.Span.EndKey, req.MegabytesPerSecond)
+			metrics, err := s.TODOBothEngines().ScanStorageInternalKeys(req.Span.Key, req.Span.EndKey, req.MegabytesPerSecond)
 
 			if err != nil {
 				return err
@@ -191,19 +224,21 @@ func (is Server) ScanStorageInternalKeys(
 // SetCompactionConcurrency implements PerStoreServer. It changes the compaction
 // concurrency of a store. While SetCompactionConcurrency is safe for concurrent
 // use, it adds uncertainty about the compaction concurrency actually set on
-// the store. It also adds uncertainty about the compaction concurrency set on
-// the store once the request is cancelled.
+// the store. We do guarantee that once all SetCompactionConcurrency requests
+// are finished (cancelled), the override is removed and the original
+// concurrency is restored.
 func (is Server) SetCompactionConcurrency(
 	ctx context.Context, req *CompactionConcurrencyRequest,
 ) (*CompactionConcurrencyResponse, error) {
 	resp := &CompactionConcurrencyResponse{}
 	err := is.execStoreCommand(ctx, req.StoreRequestHeader,
 		func(ctx context.Context, s *Store) error {
-			prevConcurrency := s.TODOEngine().SetCompactionConcurrency(req.CompactionConcurrency)
+			s.TODOBothEngines().SetCompactionConcurrency(req.CompactionConcurrency)
 
-			// Wait for cancellation, and once cancelled, reset the compaction concurrency.
+			// Wait for cancellation, and once cancelled, reset the compaction
+			// concurrency.
 			<-ctx.Done()
-			s.TODOEngine().SetCompactionConcurrency(prevConcurrency)
+			s.TODOBothEngines().SetCompactionConcurrency(0)
 			return nil
 		})
 	return resp, err

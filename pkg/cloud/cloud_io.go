@@ -28,6 +28,23 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
+// HTTPClientConfig defines the settings for building the underlying transport.
+type HTTPClientConfig struct {
+	// Bucket is name of the bucket. Used to label metrics.
+	Bucket string
+	// Client type (e.g. CDC vs backup). Used to label metrics.
+	Client string
+	// Cloud is the storage provider. Used to label metrics.
+	Cloud string
+	// InsecureSkipVerify controls whether a client verifies the server's
+	// certificate chain and host name. If InsecureSkipVerify is true, crypto/tls
+	// accepts any certificate presented by the server and any host name in that
+	// certificate. In this mode, TLS is susceptible to machine-in-the-middle attacks.
+	InsecureSkipVerify bool
+
+	HttpMiddleware HttpMiddleware
+}
+
 // Timeout is a cluster setting used for cloud storage interactions.
 var Timeout = settings.RegisterDurationSetting(
 	settings.ApplicationLevel,
@@ -77,9 +94,9 @@ var httpMetrics = settings.RegisterBoolSetting(
 // MakeHTTPClient makes an http client configured with the common settings used
 // for interacting with cloud storage (timeouts, retries, CA certs, etc).
 func MakeHTTPClient(
-	settings *cluster.Settings, metrics *Metrics, cloud, bucket, client string,
+	settings *cluster.Settings, metrics *Metrics, config HTTPClientConfig,
 ) (*http.Client, error) {
-	t, err := MakeTransport(settings, metrics, cloud, bucket, client)
+	t, err := MakeTransport(settings, metrics, config)
 	if err != nil {
 		return nil, err
 	}
@@ -99,10 +116,12 @@ func MakeHTTPClientForTransport(t http.RoundTripper) (*http.Client, error) {
 // used for interacting with cloud storage (timeouts, retries, CA certs, etc).
 // Prefer MakeHTTPClient where possible.
 func MakeTransport(
-	settings *cluster.Settings, metrics *Metrics, cloud, bucket, client string,
-) (*http.Transport, error) {
+	settings *cluster.Settings, metrics *Metrics, config HTTPClientConfig,
+) (http.RoundTripper, error) {
 	var tlsConf *tls.Config
-	if pem := httpCustomCA.Get(&settings.SV); pem != "" {
+	if config.InsecureSkipVerify {
+		tlsConf = &tls.Config{InsecureSkipVerify: true}
+	} else if pem := httpCustomCA.Get(&settings.SV); pem != "" {
 		roots, err := x509.SystemCertPool()
 		if err != nil {
 			return nil, errors.Wrap(err, "could not load system root CA pool")
@@ -112,7 +131,6 @@ func MakeTransport(
 		}
 		tlsConf = &tls.Config{RootCAs: roots}
 	}
-
 	t := http.DefaultTransport.(*http.Transport).Clone()
 
 	// Add our custom CA.
@@ -121,9 +139,15 @@ func MakeTransport(
 	// most bulk jobs.
 	t.MaxIdleConnsPerHost = 64
 	if metrics != nil {
-		t.DialContext = metrics.NetMetrics.Wrap(t.DialContext, cloud, bucket, client)
+		t.DialContext = metrics.NetMetrics.Wrap(t.DialContext, config.Cloud, config.Bucket, config.Client)
 	}
-	return t, nil
+
+	var roundTripper http.RoundTripper = t
+	if config.HttpMiddleware != nil {
+		roundTripper = config.HttpMiddleware(roundTripper)
+	}
+	roundTripper = maybeAddLogging(roundTripper)
+	return roundTripper, nil
 }
 
 // MaxDelayedRetryAttempts is the number of times the delayedRetry method will
@@ -199,7 +223,7 @@ func ResumingReaderRetryOnErrFnForSettings(
 
 		retryTimeouts := retryConnectionTimedOut.Get(&st.SV)
 		if retryTimeouts && sysutil.IsErrTimedOut(err) {
-			log.Warningf(ctx, "retrying connection timed out because %s = true", retryConnectionTimedOut.Name())
+			log.Dev.Warningf(ctx, "retrying connection timed out because %s = true", retryConnectionTimedOut.Name())
 			return true
 		}
 		return false
@@ -218,6 +242,7 @@ type ReaderOpenerAt func(ctx context.Context, pos int64) (io.ReadCloser, int64, 
 type ResumingReader struct {
 	Opener       ReaderOpenerAt   // Get additional content
 	Reader       io.ReadCloser    // Currently opened reader
+	ReaderSpan   *tracing.Span    // Span for the current reader, if Reader is non-nil
 	Filename     string           // Used for logging
 	Pos          int64            // How much data was received so far
 	Size         int64            // Total size of the file
@@ -252,7 +277,7 @@ func NewResumingReader(
 		ErrFn:        errFn,
 	}
 	if r.RetryOnErrFn == nil {
-		log.Warning(ctx, "no RetryOnErrFn specified when configuring ResumingReader, setting to default value")
+		log.Dev.Warning(ctx, "no RetryOnErrFn specified when configuring ResumingReader, setting to default value")
 		r.RetryOnErrFn = sysutil.IsErrConnectionReset
 	}
 	return r
@@ -260,6 +285,10 @@ func NewResumingReader(
 
 // Open opens the reader at its current offset.
 func (r *ResumingReader) Open(ctx context.Context) error {
+	if r.Reader != nil {
+		return errors.AssertionFailedf("reader already open")
+	}
+
 	if r.Size > 0 && r.Pos >= r.Size {
 		// Don't try to open a file if the size has been set and the position is
 		// at size. This generally results in an invalid range error for the
@@ -270,10 +299,18 @@ func (r *ResumingReader) Open(ctx context.Context) error {
 
 	return DelayedRetry(ctx, "Open", r.ErrFn, func() error {
 		var readErr error
+
+		ctx, span := tracing.ForkSpan(ctx, "resuming-reader")
 		r.Reader, r.Size, readErr = r.Opener(ctx, r.Pos)
 		if readErr != nil {
+			span.Finish()
 			return errors.Wrapf(readErr, "open %s", r.Filename)
 		}
+
+		// We hold onto the span for the lifetime of the reader because the reader
+		// may issue new HTTP requests after Open returns.
+		r.ReaderSpan = span
+
 		return nil
 	})
 }
@@ -299,14 +336,14 @@ func (r *ResumingReader) Read(ctx context.Context, p []byte) (int, error) {
 				return read, readErr
 			}
 			if r.Size > 0 && r.Pos == r.Size {
-				log.Warningf(ctx, "read %s ignoring read error received after completed read (%d): %v", r.Filename, r.Pos, readErr)
+				log.Dev.Warningf(ctx, "read %s ignoring read error received after completed read (%d): %v", r.Filename, r.Pos, readErr)
 				return read, io.EOF
 			}
 			lastErr = errors.Wrapf(readErr, "read %s", r.Filename)
 		}
 
 		if !errors.IsAny(lastErr, io.EOF, io.ErrUnexpectedEOF) {
-			log.Errorf(ctx, "%s", lastErr)
+			log.Dev.Errorf(ctx, "%s", lastErr)
 		}
 
 		// Use the configured retry-on-error decider to check for a resumable error.
@@ -314,12 +351,11 @@ func (r *ResumingReader) Read(ctx context.Context, p []byte) (int, error) {
 			if retries >= maxNoProgressReads {
 				return read, errors.Wrapf(lastErr, "multiple Read calls (%d) return no data", retries)
 			}
-			log.Errorf(ctx, "Retry IO error: %s", lastErr)
+			log.Dev.Errorf(ctx, "Retry IO error: %s", lastErr)
 			lastErr = nil
-			if r.Reader != nil {
-				r.Reader.Close()
-			}
-			r.Reader = nil
+			// Ignore the error from Close(). We are already handling a read error
+			// so we know the handle is in a bad state.
+			_ = r.Close(ctx)
 		}
 	}
 
@@ -332,10 +368,14 @@ func (r *ResumingReader) Read(ctx context.Context, p []byte) (int, error) {
 
 // Close implements io.Closer.
 func (r *ResumingReader) Close(ctx context.Context) error {
-	if r.Reader != nil {
-		return r.Reader.Close()
+	if r.Reader == nil {
+		return nil
 	}
-	return nil
+
+	err := r.Reader.Close()
+	r.ReaderSpan.Finish()
+	r.Reader = nil
+	return err
 }
 
 // CheckHTTPContentRangeHeader parses Content-Range header and ensures that
@@ -431,7 +471,7 @@ func WriteFile(ctx context.Context, dest ExternalStorage, basename string, src i
 	_, err = io.Copy(w, src)
 	if err != nil {
 		cancel()
-		return errors.CombineErrors(w.Close(), err)
+		return errors.CombineErrors(err, w.Close())
 	}
 	return errors.Wrap(w.Close(), "closing object")
 }

@@ -15,7 +15,6 @@ import (
 	pb "github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftstoreliveness"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // FortificationTracker is used to track fortification from peers. This can
@@ -60,11 +59,6 @@ type FortificationTracker struct {
 	// never regresses for a raft group. Naively, without any tracking, this
 	// can happen around configuration changes[1] and leader step down[2].
 	//
-	// NB: We use an atomicTimestamp here, which allows us to forward
-	// leadMaxSupported on every call to LeadSupportUntil, without requiring
-	// callers to acquire a write lock. Typically, LeadSupportUntil is called into
-	// by get{LeadSupport,}Status
-	//
 	// [1] We must ensure that the current LeadSupportUntil is greater than or
 	// equal to any previously calculated LeadSupportUntil before proposing a new
 	// configuration change.
@@ -73,9 +67,41 @@ type FortificationTracker struct {
 	// de-fortification messages, voting for another peer, or calling an election
 	// at a higher term) that could elect a leader until LeadSupportUntil is in
 	// the past.
-	leaderMaxSupported atomicTimestamp
+	leaderMaxSupported hlc.Timestamp
 
 	logger raftlogger.Logger
+
+	// steppingDown is set to true when the leader intends to step down. This is
+	// used to prevent the leader from stepping down and regressing its
+	// LeadSupportUntil promise. The leader with steppingDown set to true stops
+	// advancing the LeadSupportUntil. The leader will eventually step down when
+	// it's safe to do so, when the LeadSupportUntil is in the past.
+	steppingDown bool
+
+	// steppingDownTerm is the term for which the leader is stepping down. It is
+	// meaningful only when steppingDown is true. It's useful in cases where there
+	// is a stranded follower at a higher term . The leader can step down to the
+	// stranded follower's term and then campaign at one term higher, which then
+	// allows the follower to join the quorum. Without this, the leader would have
+	// to campaign at a lower term, then learns about the higher term, and then
+	// use it in the next campaign attempt.
+	steppingDownTerm uint64
+
+	// computedLeadSupportUntil is the last computed LeadSupportUntil. We
+	// update this value on:
+	// 1. Every tick.
+	// 2. Every time a new fortification is recorded.
+	// 3. On config changes.
+	//
+	// Callers of LeadSupportUntil will get this cached version of
+	// LeadSupportUntil, which is useful because LeadSupportUntil is called by
+	// every request trying to evaluate the lease's status.
+	computedLeadSupportUntil hlc.Timestamp
+
+	// supportExpMap is a map that hangs off the fortificationTracker to prevent
+	// allocations on every call to ComputeLeadSupportUntil. It stores the
+	// SupportFrom expiration timestamps for the voters, which are then used to
+	// calculate the LeadSupportUntil.
 }
 
 // NewFortificationTracker initializes a FortificationTracker.
@@ -112,6 +138,9 @@ func (ft *FortificationTracker) RecordFortification(id pb.PeerID, epoch pb.Epoch
 	// The supported epoch should never regress. Guard against out of order
 	// delivery of fortify responses by using max.
 	ft.fortification[id] = max(ft.fortification[id], epoch)
+	// Every time a new follower has fortified us, we need to recompute the
+	// LeadSupportUntil since it might have changed.
+	ft.ComputeLeadSupportUntil(pb.StateLeader)
 }
 
 // Reset clears out any previously tracked fortification and prepares the
@@ -125,6 +154,9 @@ func (ft *FortificationTracker) Reset(term uint64) {
 	ft.needsDefortification = true
 	clear(ft.fortification)
 	ft.leaderMaxSupported.Reset()
+	ft.steppingDown = false
+	ft.steppingDownTerm = 0
+	ft.computedLeadSupportUntil = hlc.Timestamp{}
 }
 
 // IsFortifiedBy returns whether the follower fortifies the leader or not.
@@ -156,49 +188,61 @@ func (ft *FortificationTracker) IsFortifiedBy(id pb.PeerID) (isFortified bool, i
 // LeadSupportUntil returns the timestamp until which the leader is guaranteed
 // fortification until based on the fortification being tracked for it by its
 // peers.
-func (ft *FortificationTracker) LeadSupportUntil(state pb.StateType) hlc.Timestamp {
-	if state != pb.StateLeader {
-		// We're not the leader, so LeadSupportUntil shouldn't advance.
-		return ft.leaderMaxSupported.Load()
-	}
-
-	// Compute the lead support using the current configuration and forward the
-	// leaderMaxSupported to avoid regressions when the configuration changes.
-	leadSupportUntil := ft.computeLeadSupportUntil(state)
-	return ft.leaderMaxSupported.Forward(leadSupportUntil)
+func (ft *FortificationTracker) LeadSupportUntil() hlc.Timestamp {
+	return ft.leaderMaxSupported
 }
 
-// computeLeadSupportUntil computes the timestamp until which the leader is
-// guaranteed fortification using the current quorum configuration.
-//
-// Unlike LeadSupportUntil, this computation does not provide a guarantee of
-// monotonicity. Specifically, its result may regress after a configuration
-// change.
-func (ft *FortificationTracker) computeLeadSupportUntil(state pb.StateType) hlc.Timestamp {
+// ComputeLeadSupportUntil updates the field
+// computedLeadSupportUntil by computing the LeadSupportExpiration.
+func (ft *FortificationTracker) ComputeLeadSupportUntil(state pb.StateType) {
 	if state != pb.StateLeader {
-		panic("computeLeadSupportUntil should only be called by the leader")
-	}
-	if len(ft.fortification) == 0 {
-		return hlc.Timestamp{} // fast-path for no fortification
+		panic("ComputeLeadSupportUntil should only be called by the leader")
 	}
 
-	// TODO(arul): avoid this map allocation as we're calling LeadSupportUntil
-	// from hot paths.
-	supportExpMap := make(map[pb.PeerID]hlc.Timestamp)
-	ft.config.Voters.Visit(func(id pb.PeerID) {
-		if supportEpoch, ok := ft.fortification[id]; ok {
-			curEpoch, curExp := ft.storeLiveness.SupportFrom(id)
-			// NB: We can't assert that supportEpoch <= curEpoch because there may be
-			// a race between a successful MsgFortifyLeaderResp and the store liveness
-			// heartbeat response that lets the leader know the follower's store is
-			// supporting the leader's store at the epoch in the MsgFortifyLeaderResp
-			// message.
-			if curEpoch == supportEpoch {
-				supportExpMap[id] = curExp
-			}
-		}
-	})
-	return ft.config.Voters.LeadSupportExpiration(supportExpMap)
+	if len(ft.fortification) == 0 {
+		ft.computedLeadSupportUntil = hlc.Timestamp{}
+		return // fast-path for no fortification
+	}
+
+	if ft.steppingDown {
+		// We're in the process of stepping down, so we don't want to advance the
+		// LeadSupportUntil; early return.
+		return
+	}
+
+	// Use an on-stack slice whenever n <= 7 (otherwise we alloc). The assumption
+	// is that running with a replication factor of >7 is rare, and in cases in
+	// which it happens, performance is less of a concern (it's not like
+	// performance implications of an allocation here are drastic).
+	//
+	// We prevent the slice from escaping to the heap by allocating here and
+	// having PopulateMajorityConfigSupport() to populate it in place.
+	n := len(ft.config.Voters[0])
+	var stkC0 [7]hlc.Timestamp
+	var supportC0 []hlc.Timestamp
+	if len(stkC0) >= n {
+		supportC0 = stkC0[:n]
+	} else {
+		supportC0 = make([]hlc.Timestamp, n)
+	}
+	ft.PopulateMajorityConfigSupport(ft.config.Voters[0], supportC0)
+
+	// Do the same thing for the second majority config.
+	n = len(ft.config.Voters[1])
+	var stkC1 [7]hlc.Timestamp
+	var supportC1 []hlc.Timestamp
+	if len(stkC1) >= n {
+		supportC1 = stkC1[:n]
+	} else {
+		supportC1 = make([]hlc.Timestamp, n)
+	}
+	ft.PopulateMajorityConfigSupport(ft.config.Voters[1], supportC1)
+
+	ft.computedLeadSupportUntil = ft.config.Voters.LeadSupportExpiration(supportC0, supportC1)
+
+	// Forward the leaderMaxSupported to avoid regressions when the configuration
+	// changes.
+	ft.leaderMaxSupported.Forward(ft.computedLeadSupportUntil)
 }
 
 // CanDefortify returns whether the caller can safely[1] de-fortify the term
@@ -211,14 +255,13 @@ func (ft *FortificationTracker) CanDefortify() bool {
 	if ft.term == 0 {
 		return false // nothing is being tracked
 	}
-	leaderMaxSupported := ft.leaderMaxSupported.Load()
-	if leaderMaxSupported.IsEmpty() {
+	if ft.leaderMaxSupported.IsEmpty() {
 		// If leaderMaxSupported is empty, it means that we've never returned any
 		// timestamps to the layers above in calls to LeadSupportUntil. We should be
 		// able to de-fortify. If a tree falls in a forrest ...
 		ft.logger.Debugf("leaderMaxSupported is empty when computing whether we can de-fortify or not")
 	}
-	return ft.storeLiveness.SupportExpired(leaderMaxSupported)
+	return ft.storeLiveness.SupportExpired(ft.leaderMaxSupported)
 }
 
 // NeedsDefortify returns whether the node should still continue to broadcast
@@ -261,6 +304,26 @@ func (ft *FortificationTracker) InformCommittedTerm(committedTerm uint64) {
 		// T' in its log, it just needs to know such an entry exists.
 		ft.needsDefortification = false
 	}
+}
+
+// BeginSteppingDown marks the leader's intention to step down. The leader will
+// stop advancing the LeadSupportedUntil.
+func (ft *FortificationTracker) BeginSteppingDown(term uint64) {
+	ft.steppingDown = true
+	if ft.steppingDownTerm < term {
+		ft.steppingDownTerm = term
+	}
+}
+
+// SteppingDown returns whether the leader is intending to step down or not.
+func (ft *FortificationTracker) SteppingDown() bool {
+	return ft.steppingDown
+}
+
+// SteppingDownTerm returns the term for which the leader is intending to step
+// down to. It is meaningful only when SteppingDown is true.
+func (ft *FortificationTracker) SteppingDownTerm() uint64 {
+	return ft.steppingDownTerm
 }
 
 // ConfigChangeSafe returns whether it is safe to propose a configuration change
@@ -315,20 +378,24 @@ func (ft *FortificationTracker) ConfigChangeSafe() bool {
 	// previous configuration, which is reflected in leaderMaxSupported.
 	//
 	// NB: Only run by the leader.
-	return ft.leaderMaxSupported.Load().LessEq(ft.computeLeadSupportUntil(pb.StateLeader))
+	return ft.leaderMaxSupported.LessEq(ft.computedLeadSupportUntil)
 }
 
 // QuorumActive returns whether the leader is currently supported by a quorum or
 // not.
 func (ft *FortificationTracker) QuorumActive() bool {
 	// NB: Only run by the leader.
-	return !ft.storeLiveness.SupportExpired(ft.LeadSupportUntil(pb.StateLeader))
+	return !ft.storeLiveness.SupportExpired(ft.LeadSupportUntil())
 }
 
 // RequireQuorumSupportOnCampaign returns true if quorum support before
 // campaigning is required.
 func (ft *FortificationTracker) RequireQuorumSupportOnCampaign() bool {
-	return ft.storeLiveness.SupportFromEnabled()
+	// Don't check for store liveness support if there is only one voter.
+	// Presumably, it supports itself; and if it doesn't for some reason (e.g.
+	// disk stall), it will not be able to fortify later, which is ok.
+	notSingleVoter := len(ft.config.Voters[0]) > 1 || len(ft.config.Voters[1]) > 1
+	return ft.storeLiveness.SupportFromEnabled() && notSingleVoter
 }
 
 // QuorumSupported returns whether this peer is currently supported by a quorum
@@ -342,6 +409,46 @@ func (ft *FortificationTracker) QuorumSupported() bool {
 	})
 
 	return ft.config.Voters.VoteResult(ft.votersSupport) == quorum.VoteWon
+}
+
+// PopulateMajorityConfigSupport receives a majority config and a slice of the
+// same majority config size. It populates the slice with the support
+// expiration.
+//
+// If a peer has not fortified the leader, or if we have no entry for it in
+// StoreLiveness, or if the epoch isn't supported in StoreLiveness, the output
+// support slice will have an empty timestamp entry for that peer.
+//
+// This function expects the slice to be cleared, of the same size as the
+// majority config.
+func (ft *FortificationTracker) PopulateMajorityConfigSupport(
+	majorityConfig quorum.MajorityConfig, support []hlc.Timestamp,
+) {
+	if len(support) != len(majorityConfig) {
+		panic("received a support slice of different size than the majority config")
+	}
+
+	n := len(support)
+	i := n - 1
+	for id := range majorityConfig {
+		if supportEpoch, ok := ft.fortification[id]; ok {
+			curEpoch, curExp := ft.storeLiveness.SupportFrom(id)
+			// NB: We can't assert that supportEpoch <= curEpoch because there may be
+			// a race between a successful MsgFortifyLeaderResp and the store liveness
+			// heartbeat response that lets the leader know the follower's store is
+			// supporting the leader's store at the epoch in the MsgFortifyLeaderResp
+			// message.
+			if curEpoch == supportEpoch {
+				// Fill the slice with Timestamps for peers in the configuration. Any
+				// unused slots will be left as empty Timestamps for our calculation.
+				// We fill from the right (since typically, callers will want to sort
+				// this slice, which means that zeros will end up on the left after
+				// sorting anyway).
+				support[i] = curExp
+				i--
+			}
+		}
+	}
 }
 
 // Term returns the leadership term for which the tracker is/was tracking
@@ -369,31 +476,4 @@ func (ft *FortificationTracker) String() string {
 		fmt.Fprintf(&buf, "%d : %d\n", id, ft.fortification[id])
 	}
 	return buf.String()
-}
-
-// atomicTimestamp is a thin wrapper to provide atomic access to a timestamp.
-type atomicTimestamp struct {
-	mu syncutil.Mutex
-
-	ts hlc.Timestamp
-}
-
-func (a *atomicTimestamp) Load() hlc.Timestamp {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	return a.ts
-}
-
-func (a *atomicTimestamp) Forward(ts hlc.Timestamp) hlc.Timestamp {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-
-	a.ts.Forward(ts)
-	return a.ts
-}
-
-func (a *atomicTimestamp) Reset() {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.ts = hlc.Timestamp{}
 }

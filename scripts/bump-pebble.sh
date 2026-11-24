@@ -92,10 +92,8 @@ fi
 ./dev generate go
 go get "github.com/cockroachdb/pebble@${NEW_SHA}"
 go mod tidy
-
+git add go.mod go.sum
 # Create the branch and commit on the CockroachDB repository.
-./dev generate bazel --mirror
-git add go.mod go.sum DEPS.bzl build/bazelutil/distdir_files.bzl
 git commit -m "go.mod: bump Pebble to ${NEW_SHA:0:12}
 
 Changes:
@@ -105,5 +103,12 @@ $COMMITS
 Release note: none.
 Epic: none.
 "
-# Open an editor to allow the user to set the release note.
-git commit --amend
+
+# This command sometimes fails to upload, retry a few times.
+./dev generate bazel --mirror || ./dev generate bazel --mirror || ./dev generate bazel --mirror
+git add DEPS.bzl build/bazelutil/distdir_files.bzl
+git commit --amend --no-edit
+
+# Run the storage package tests and try to build the binary.
+./dev test pkg/storage/... || true
+./dev build short || true

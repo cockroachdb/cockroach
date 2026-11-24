@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -33,6 +34,10 @@ import (
 	"github.com/lib/pq/oid"
 	"github.com/stretchr/testify/require"
 )
+
+func init() {
+	sql.DoParserInjection()
+}
 
 func TestValidateFuncDesc(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -341,7 +346,6 @@ func TestValidateFuncDesc(t *testing.T) {
 				DependedOnBy: []descpb.FunctionDescriptor_Reference{
 					{ID: tableID},
 				},
-				DependsOn:      []descpb.ID{tableID},
 				DependsOnTypes: []descpb.ID{typeID},
 			},
 		},

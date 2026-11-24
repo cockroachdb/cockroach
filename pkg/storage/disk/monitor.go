@@ -6,15 +6,17 @@
 package disk
 
 import (
-	"fmt"
+	"context"
 	"slices"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble/vfs"
+	"github.com/cockroachdb/redact"
 )
 
 var DefaultDiskStatsPollingInterval = envutil.EnvOrDefaultDuration("COCKROACH_DISK_STATS_POLLING_INTERVAL", 100*time.Millisecond)
@@ -22,13 +24,18 @@ var defaultDiskTracePeriod = envutil.EnvOrDefaultDuration("COCKROACH_DISK_TRACE_
 
 // DeviceID uniquely identifies block devices.
 type DeviceID struct {
-	major uint32
-	minor uint32
+	Major uint32
+	Minor uint32
 }
 
 // String returns the string representation of the device ID.
 func (d DeviceID) String() string {
-	return fmt.Sprintf("%d:%d", d.major, d.minor)
+	return redact.StringWithoutMarkers(d)
+}
+
+// SafeFormat implements redact.SafeFormatter.
+func (d DeviceID) SafeFormat(w redact.SafePrinter, _ rune) {
+	w.Printf("%d:%d", d.Major, d.Minor)
 }
 
 // MonitorManager provides observability into a pool of disks by sampling disk stats
@@ -42,8 +49,9 @@ type MonitorManager struct {
 
 	mu struct {
 		syncutil.Mutex
-		stop  chan struct{}
-		disks []*monitoredDisk
+		cancel         context.CancelFunc
+		statsCollector statsCollector
+		disks          []*monitoredDisk
 	}
 }
 
@@ -83,13 +91,15 @@ func (m *MonitorManager) Monitor(path string) (*Monitor, error) {
 
 		// The design maintains the invariant that the disk stat polling loop
 		// is always running unless there are no disks being monitored.
-		if m.mu.stop == nil {
+		if m.mu.cancel == nil {
 			collector, err := newStatsCollector(m.fs)
 			if err != nil {
 				return nil, err
 			}
-			m.mu.stop = make(chan struct{})
-			go m.monitorDisks(collector, m.mu.stop)
+			ctx, cancel := context.WithCancel(context.Background())
+			m.mu.cancel = cancel
+			m.mu.statsCollector = collector
+			go m.monitorDisks(ctx, collector)
 		}
 	}
 	disk.refCount++
@@ -98,7 +108,7 @@ func (m *MonitorManager) Monitor(path string) (*Monitor, error) {
 }
 
 func (m *MonitorManager) unrefDisk(disk *monitoredDisk) {
-	var stop chan struct{}
+	var cancel context.CancelFunc
 	func() {
 		m.mu.Lock()
 		defer m.mu.Unlock()
@@ -116,41 +126,51 @@ func (m *MonitorManager) unrefDisk(disk *monitoredDisk) {
 			// If the MonitorManager has no disks left to monitor, the disk stat polling loop can
 			// be stopped.
 			if len(m.mu.disks) == 0 {
-				stop = m.mu.stop
-				m.mu.stop = nil
+				cancel = m.mu.cancel
+				m.mu.cancel = nil
+				m.mu.statsCollector = nil
 			}
 		}
 	}()
 
-	if stop != nil {
-		stop <- struct{}{}
+	if cancel != nil {
+		cancel()
 	}
 }
 
 type statsCollector interface {
-	collect(disks []*monitoredDisk) error
+	// collect collects disk stats for all monitored disks as of time `now` and
+	// writes the results to the tracer ring buffer.
+	collect(disks []*monitoredDisk, now time.Time) (countCollected int, err error)
+
+	// collectInstantaneous collects disk stats for all monitored disks as of
+	// time `now` and invokes the recorder callback for each disk. The buf
+	// parameter is a byte buffer for reading raw disk stats; it may be
+	// reallocated if too small, and is returned for reuse in subsequent calls.
+	collectInstantaneous(
+		disks []*monitoredDisk, now time.Time, recorder func(traceEvent), buf []byte,
+	) (countCollected int, _ []byte, err error)
 }
 
 // monitorDisks runs a loop collecting disk stats for all monitored disks.
-//
-// NB: A stop channel must be passed down to ensure that the function terminates during the
-// race where the MonitorManager creates a new stop channel after unrefDisk sends a message
-// across the old stop channel.
-func (m *MonitorManager) monitorDisks(collector statsCollector, stop chan struct{}) {
+// monitorDisks returns when the context is done.
+func (m *MonitorManager) monitorDisks(ctx context.Context, collector statsCollector) {
 	ticker := time.NewTicker(DefaultDiskStatsPollingInterval)
 	defer ticker.Stop()
 
+	every := log.Every(5 * time.Minute)
 	for {
 		select {
-		case <-stop:
-			close(stop)
+		case <-ctx.Done():
 			return
 		case <-ticker.C:
 			m.mu.Lock()
 			disks := m.mu.disks
 			m.mu.Unlock()
 
-			if err := collector.collect(disks); err != nil {
+			now := timeutil.Now()
+			countCollected, err := collector.collect(disks, now)
+			if err != nil {
 				for i := range disks {
 					disks[i].tracer.RecordEvent(traceEvent{
 						time:  timeutil.Now(),
@@ -158,9 +178,62 @@ func (m *MonitorManager) monitorDisks(collector statsCollector, stop chan struct
 						err:   err,
 					})
 				}
+			} else if countCollected != len(disks) && every.ShouldLog() {
+				// Log a warning if we collected fewer disk stats than expected.
+				log.Dev.Warningf(ctx, "collected %d disk stats, expected %d", countCollected, len(disks))
+				cutoff := now.Add(-10 * time.Second)
+				for i := range disks {
+					if lastEventTime := disks[i].tracer.LastEventTime(); lastEventTime.IsZero() {
+						log.Dev.Warningf(ctx, "disk %s has not recorded any stats", disks[i].deviceID)
+					} else if lastEventTime.Before(cutoff) {
+						log.Dev.Warningf(ctx, "disk %s has not recorded any stats since %s",
+							disks[i].deviceID, lastEventTime)
+					}
+				}
 			}
 		}
 	}
+}
+
+// CollectInstantaneous returns fresh disk stats for all monitored disks by
+// reading synchronously. Unlike the background polling which updates every
+// 100ms, this enables callers to get stats at arbitrary intervals.
+//
+// Parameters:
+//   - statsBuf: Stats slice to reuse; will be reset and populated with results.
+//   - byteBuf: Byte buffer for reading raw disk stats; may be reallocated if too
+//     small.
+//
+// Returns:
+//   - []Stats: One Stats entry per monitored disk.
+//   - []byte: The (possibly reallocated) byte buffer for reuse in subsequent
+//     calls.
+func (m *MonitorManager) CollectInstantaneous(
+	statsBuf []Stats, byteBuf []byte,
+) ([]Stats, []byte, error) {
+	m.mu.Lock()
+	disks := m.mu.disks
+	collector := m.mu.statsCollector
+	m.mu.Unlock()
+	statsBuf = statsBuf[:0]
+	if collector == nil {
+		// No collector set, so no disks are being monitored. Return empty stats and byte buffer.
+		return statsBuf, byteBuf, nil
+	}
+	now := timeutil.Now()
+	var err error
+	var err2 error
+	_, byteBuf, err2 = collector.collectInstantaneous(disks, now, func(e traceEvent) {
+		if e.err != nil {
+			err = errors.CombineErrors(err, e.err)
+			return
+		}
+		statsBuf = append(statsBuf, e.stats)
+	}, byteBuf)
+	if err2 != nil {
+		err = errors.CombineErrors(err, err2)
+	}
+	return statsBuf, byteBuf, err
 }
 
 type monitoredDisk struct {
@@ -174,14 +247,6 @@ type monitoredDisk struct {
 	// for ensuring that the monitoredDisk is a singleton which relies on refCount
 	// being modified atomically.
 	refCount int
-}
-
-func (m *monitoredDisk) recordStats(t time.Time, stats Stats) {
-	m.tracer.RecordEvent(traceEvent{
-		time:  t,
-		stats: stats,
-		err:   nil,
-	})
 }
 
 // StatsWindow is a wrapper around a rolling window of disk stats, used to
@@ -227,11 +292,14 @@ type Monitor struct {
 	}
 }
 
+// DeviceID returns the device ID of the disk being monitored.
+func (m *Monitor) DeviceID() DeviceID {
+	return m.deviceID
+}
+
 // CumulativeStats returns the most-recent stats observed.
 func (m *Monitor) CumulativeStats() (Stats, error) {
-	if event, err := m.tracer.Latest(); err != nil {
-		return Stats{}, err
-	} else if event.err != nil {
+	if event := m.tracer.Latest(); event.err != nil {
 		return Stats{}, event.err
 	} else {
 		return event.stats, nil
@@ -293,5 +361,5 @@ func getDeviceIDFromPath(fs vfs.FS, path string) (DeviceID, error) {
 	if err != nil {
 		return DeviceID{}, errors.Wrapf(err, "fstat(%s)", path)
 	}
-	return deviceIDFromFileInfo(finfo), nil
+	return deviceIDFromFileInfo(finfo, path), nil
 }

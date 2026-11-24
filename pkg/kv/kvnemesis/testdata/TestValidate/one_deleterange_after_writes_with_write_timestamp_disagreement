@@ -5,6 +5,7 @@ db0.Put(ctx, tk(2), sv(2)) // @0.000000002,0 <nil>
 db0.Put(ctx, tk(3), sv(3)) // @0.000000003,0 <nil>
 db0.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
   txn.SetIsoLevel(isolation.Serializable)
+  txn.SetBufferedWritesEnabled(false)
   txn.DelRange(ctx, tk(1), tk(3), true /* @s4 */) // (/Table/100/"0000000000000001", /Table/100/"0000000000000002", /Table/100/"0000000000000003", <nil>)
   return nil
 }) // @0.000000004,0 <nil>

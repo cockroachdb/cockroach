@@ -1,4 +1,4 @@
-# LogicTest: local 3node-tenant
+# LogicTest: local local-mixed-25.4 3node-tenant
 
 statement error a role/user named admin already exists
 CREATE ROLE admin
@@ -25,13 +25,13 @@ statement ok
 CREATE ROLE myrole
 
 query TTT colnames,rowsort
-SHOW ROLES
+select username, options, member_of from [SHOW ROLES]
 ----
-username  options  member_of
-admin     ·        {}
-myrole    NOLOGIN  {}
-root      ·        {admin}
-testuser  ·        {}
+username  options   member_of
+admin     {}        {}
+myrole    {NOLOGIN} {}
+root      {}        {admin}
+testuser  {}        {}
 
 statement error a role/user named myrole already exists
 CREATE ROLE myrole
@@ -55,24 +55,24 @@ statement error pq: cannot drop roles/users admin, myrole: grants still exist on
 DROP ROLE admin, myrole
 
 query TTT colnames,rowsort
-SHOW ROLES
+select username, options, member_of from [SHOW ROLES]
 ----
-username  options  member_of
-admin     ·        {}
-myrole    NOLOGIN  {}
-root      ·        {admin}
-testuser  ·        {}
+username  options   member_of
+admin     {}        {}
+myrole    {NOLOGIN} {}
+root      {}        {admin}
+testuser  {}        {}
 
 statement ok
 DROP ROLE myrole
 
 query TTT colnames,rowsort
-SHOW ROLES
+select username, options, member_of from [SHOW ROLES]
 ----
 username  options  member_of
-admin     ·        {}
-root      ·        {admin}
-testuser  ·        {}
+admin     {}       {}
+root      {}       {admin}
+testuser  {}       {}
 
 statement error pq: role/user "myrole" does not exist
 DROP ROLE myrole
@@ -102,12 +102,17 @@ statement ok
 DROP ROLE rolea, roleb
 
 query TTT colnames,rowsort
-SHOW ROLES
+select username, options, member_of from [SHOW ROLES]
 ----
 username  options  member_of
-admin     ·        {}
-root      ·        {admin}
-testuser  ·        {}
+admin     {}       {}
+root      {}       {admin}
+testuser  {}       {}
+
+query T noticetrace
+SHOW ROLES
+----
+NOTICE: estimated_last_login_time is computed on a best effort basis; it is not guaranteed to capture every login event
 
 statement ok
 CREATE USER testuser2
@@ -183,7 +188,11 @@ GRANT testrole TO testuser WITH ADMIN OPTION
 
 statement ok
 CREATE ROLE child_role;
+
+statement ok
 GRANT testrole to child_role;
+
+statement ok
 GRANT testuser TO child_role;
 
 query TTB colnames,rowsort
@@ -488,15 +497,15 @@ admin  root      true
 roled  testuser  false
 
 query TTT rowsort
-SHOW ROLES
+select username, options, member_of from [SHOW ROLES]
 ----
-admin      ·        {}
-roleb      NOLOGIN  {}
-roled      NOLOGIN  {}
-rolee      NOLOGIN  {}
-root       ·        {admin}
-testuser   ·        {roled}
-testuser2  ·        {}
+admin      {}         {}
+roleb      {NOLOGIN}  {}
+roled      {NOLOGIN}  {}
+rolee      {NOLOGIN}  {}
+root       {}         {admin}
+testuser   {}         {roled}
+testuser2  {}         {}
 
 statement ok
 DROP ROLE roleb
@@ -759,6 +768,7 @@ database_name  grantee   privilege_type  is_grantable
 db2            admin     ALL             true
 db2            newgroup  ALL             false
 db2            public    CONNECT         false
+db2            public    TEMPORARY       false
 db2            root      ALL             true
 
 statement ok
@@ -1073,7 +1083,7 @@ CREATE ROLE rolej
 # Testing LOGIN and VALID UNTIL role privilege
 user root
 
-statement ok
+statement count 15
 DELETE FROM system.role_options WHERE NOT username in ('root', 'admin')
 
 statement ok
@@ -1205,6 +1215,7 @@ SHOW DATABASES
 db2        root  NULL  NULL  {}  NULL
 defaultdb  root  NULL  NULL  {}  NULL
 postgres   root  NULL  NULL  {}  NULL
+privatedb  root  NULL  NULL  {}  NULL
 publicdb   root  NULL  NULL  {}  NULL
 test       root  NULL  NULL  {}  NULL
 
@@ -1217,6 +1228,7 @@ public  publictable   table  root  0  NULL
 query TTTTIT
 SHOW TABLES FROM privatedb
 ----
+public  publictable  table  root  0  NULL
 
 statement ok
 SELECT * FROM publicdb.publictable
@@ -1512,6 +1524,66 @@ ALTER USER testuser2 WITH PASSWORD 'abc'
 
 statement ok
 RESET ROLE
+
+subtest end
+
+subtest validate_alter_provisioned_user_restrictions
+
+# Changing PROVISIONSRC privilege for provisioned users is disallowed even for
+# ADMIN users, they can only be dropped.
+statement ok
+DROP ROLE testuser
+
+statement ok
+CREATE USER testuser with PROVISIONSRC 'ldap:example.com'
+
+statement error pq: cannot alter PASSWORD/PROVISIONSRC option for provisioned user testuser
+ALTER ROLE testuser WITH PROVISIONSRC 'ldap:example.com'
+
+statement ok
+SET ROLE testuser
+
+# Changing users with SET ROLE should now disallow self-password/provisionsrc
+# change as role has a PROVISIONSRC privilege.
+statement error pq: cannot alter PASSWORD/PROVISIONSRC option for provisioned user testuser
+ALTER USER testuser PASSWORD 'cat'
+
+statement error pq: cannot alter PASSWORD/PROVISIONSRC option for provisioned user testuser
+ALTER USER testuser PROVISIONSRC 'ldap:example2.com'
+
+statement ok
+RESET ROLE
+
+user testuser
+
+# Verify that now provisioned testuser can't change its own password or provisionsrc.
+statement error pq: cannot alter PASSWORD/PROVISIONSRC option for provisioned user testuser
+ALTER USER testuser PASSWORD 'xyz'
+
+statement error pq: cannot alter PASSWORD/PROVISIONSRC option for provisioned user testuser
+ALTER USER CURRENT_USER PASSWORD '123'
+
+statement error pq: cannot alter PASSWORD/PROVISIONSRC option for provisioned user testuser
+ALTER USER testuser PROVISIONSRC 'ldap:example2.com'
+
+# Verify that provisioned testuser still cannot *remove* its own password.
+statement error pq: cannot alter PASSWORD/PROVISIONSRC option for provisioned user testuser
+ALTER USER testuser PASSWORD NULL
+
+# testuser still cannot change another user's password.
+statement error pq: user testuser does not have CREATEROLE privilege
+ALTER USER testuser2 WITH PASSWORD 'abc'
+
+# Verify that testuser still cannot modify other role options of itself.
+statement error pq: cannot alter PASSWORD/PROVISIONSRC option for provisioned user testuser
+ALTER USER testuser PASSWORD 'abc' VALID UNTIL '4044-10-31'
+
+user root
+
+
+statement ok
+DROP user testuser;
+CREATE user testuser CREATEROLE;
 
 subtest end
 
@@ -1860,15 +1932,15 @@ DROP ROLE creator_of_databases
 
 subtest end
 
-subtest subject
+subtest provisionsrc
 
 skipif config 3node-tenant
-statement error OSS binaries do not include enterprise features
-CREATE ROLE role_with_subject SUBJECT 'foo'
+statement ok
+CREATE ROLE role_with_provisioning PROVISIONSRC 'ldap:ldap.example.com'
 
 skipif config 3node-tenant
-statement error OSS binaries do not include enterprise features
-ALTER ROLE testuser SUBJECT 'foo'
+statement ok
+ALTER ROLE testuser PROVISIONSRC 'ldap:ldap.example.com'
 
 subtest end
 

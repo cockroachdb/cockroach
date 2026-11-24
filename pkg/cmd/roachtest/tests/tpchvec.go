@@ -298,7 +298,7 @@ func (p *tpchVecPerfTest) postTestRunHook(
 
 			// In order to understand where the slowness comes from, we will run
 			// EXPLAIN ANALYZE (DEBUG) of the query with all setup options
-			// tpchPerfTestNumRunsPerQuery times (hoping at least one will
+			// runConfig.numRunsPerQuery times (hoping at least one will
 			// "catch" the slowness).
 			for setupIdx, setup := range runConfig.clusterSetups {
 				performClusterSetup(t, conn, setup)
@@ -310,68 +310,7 @@ func (p *tpchVecPerfTest) postTestRunHook(
 				if p.sharedProcessMT() {
 					tenantName = appTenantName
 				}
-				tempConn, err := c.ConnE(ctx, t.L(), 1, option.VirtualClusterName(tenantName))
-				if err != nil {
-					t.Fatal(err)
-				}
-				defer tempConn.Close()
-				sqlConnCtx := clisqlclient.Context{}
-				pgURL, err := c.ExternalPGUrl(ctx, t.L(), c.Node(1), roachprod.PGURLOptions{
-					VirtualClusterName: tenantName,
-				})
-				if err != nil {
-					t.Fatal(err)
-				}
-				connForBundle := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, pgURL[0])
-				if _, err := tempConn.Exec("USE tpch;"); err != nil {
-					t.Fatal(err)
-				}
-				for i := 0; i < runConfig.numRunsPerQuery; i++ {
-					t.Status(fmt.Sprintf("\nRunning EXPLAIN ANALYZE (DEBUG) for setup=%s\n", runConfig.setupNames[setupIdx]))
-					rows, err := tempConn.Query(fmt.Sprintf(
-						"EXPLAIN ANALYZE (DEBUG) %s;", tpch.QueriesByNumber[queryNum],
-					))
-					if err != nil {
-						t.Fatal(err)
-					}
-					// The output of the command in both single-tenant and
-					// multi-tenant configs contains a line like
-					//
-					//   SQL shell: \statement-diag download 951198764631457793
-					//
-					// We'll use that command to figure out the bundle ID and
-					// then download the bundle into the artifacts.
-					sqlShellPrefix := `SQL shell: \statement-diag download `
-					var line, debugOutput string
-					var bundleID int64
-					for rows.Next() {
-						if err = rows.Scan(&line); err != nil {
-							t.Fatal(err)
-						}
-						debugOutput += line + "\n"
-						if strings.HasPrefix(line, sqlShellPrefix) {
-							id, err := strconv.Atoi(line[len(sqlShellPrefix):])
-							if err != nil {
-								t.Fatalf("couldn't parse bundle ID in %d\n%v", id, debugOutput)
-							}
-							bundleID = int64(id)
-							break
-						}
-					}
-					if err = rows.Close(); err != nil {
-						t.Fatal(err)
-					}
-					if bundleID == 0 {
-						t.Fatal(fmt.Sprintf("unexpectedly didn't find a line "+
-							"with %q prefix in EXPLAIN ANALYZE (DEBUG) output\n%s",
-							sqlShellPrefix, debugOutput))
-					}
-					dest := fmt.Sprintf("%s/bundle_%d_%d.zip", t.ArtifactsDir(), setupIdx, i)
-					err = clisqlclient.StmtDiagDownloadBundle(ctx, connForBundle, bundleID, dest)
-					if err != nil {
-						t.Fatal(err)
-					}
-				}
+				p.runExplainAnalyzeOnSetup(ctx, t, c, queryNum, setupIdx, runConfig.setupNames[setupIdx], tenantName, runConfig.numRunsPerQuery)
 			}
 			msg := fmt.Sprintf(
 				"[q%d] ON is slower by %.2f%% than OFF\n ON times: %v\nOFF times: %v",
@@ -384,6 +323,80 @@ func (p *tpchVecPerfTest) postTestRunHook(
 			}
 		}
 	})
+}
+
+func (p *tpchVecPerfTest) runExplainAnalyzeOnSetup(
+	ctx context.Context,
+	t test.Test,
+	c cluster.Cluster,
+	queryNum int,
+	setupIdx int,
+	setupName string,
+	tenantName string,
+	numRunsPerQuery int,
+) {
+	tempConn, err := c.ConnE(ctx, t.L(), 1, option.VirtualClusterName(tenantName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tempConn.Close()
+	sqlConnCtx := clisqlclient.Context{}
+	pgURL, err := c.ExternalPGUrl(ctx, t.L(), c.Node(1), roachprod.PGURLOptions{
+		VirtualClusterName: tenantName,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	connForBundle := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, pgURL[0])
+	if _, err := tempConn.Exec("USE tpch;"); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < numRunsPerQuery; i++ {
+		t.Status(fmt.Sprintf("\nRunning EXPLAIN ANALYZE (DEBUG) for setup=%s\n", setupName))
+		rows, err := tempConn.Query(fmt.Sprintf(
+			"EXPLAIN ANALYZE (DEBUG) %s;", tpch.QueriesByNumber[queryNum],
+		))
+		if err != nil {
+			t.Fatal(err)
+		}
+		// The output of the command in both single-tenant and
+		// multi-tenant configs contains a line like
+		//
+		//   SQL shell: \statement-diag download 951198764631457793
+		//
+		// We'll use that command to figure out the bundle ID and
+		// then download the bundle into the artifacts.
+		sqlShellPrefix := `SQL shell: \statement-diag download `
+		var line, debugOutput string
+		var bundleID int64
+		for rows.Next() {
+			if err = rows.Scan(&line); err != nil {
+				t.Fatal(err)
+			}
+			debugOutput += line + "\n"
+			if strings.HasPrefix(line, sqlShellPrefix) {
+				id, err := strconv.Atoi(line[len(sqlShellPrefix):])
+				if err != nil {
+					t.Fatalf("couldn't parse bundle ID in %d\n%v", id, debugOutput)
+				}
+				bundleID = int64(id)
+				break
+			}
+		}
+		if err = rows.Close(); err != nil {
+			t.Fatal(err)
+		}
+		if bundleID == 0 {
+			t.Fatal(fmt.Sprintf("unexpectedly didn't find a line "+
+				"with %q prefix in EXPLAIN ANALYZE (DEBUG) output\n%s",
+				sqlShellPrefix, debugOutput))
+		}
+		dest := fmt.Sprintf("%s/bundle_%d_%d.zip", t.ArtifactsDir(), setupIdx, i)
+		err = clisqlclient.StmtDiagDownloadBundle(ctx, connForBundle, bundleID, dest)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 
 type tpchVecBenchTest struct {
@@ -512,20 +525,19 @@ func getTPCHVecWorkloadCmd(numRunsPerQuery, queryNum int, sharedProcessMT bool) 
 	if sharedProcessMT {
 		url = fmt.Sprintf("{pgurl:1:%s}", appTenantName)
 	}
-	// Note that we use --default-vectorize flag which tells tpch workload to
-	// use the current cluster setting sql.defaults.vectorize which must have
-	// been set correctly in preQueryRunHook.
 	return fmt.Sprintf("./cockroach workload run tpch --concurrency=1 --db=tpch "+
-		"--default-vectorize --max-ops=%d --queries=%d %s --enable-checks=true",
+		"--max-ops=%d --queries=%d %s",
 		numRunsPerQuery, queryNum, url)
 }
 
 func runTPCHVec(ctx context.Context, t test.Test, c cluster.Cluster, testCase tpchVecTestCase) {
 	c.Start(ctx, t.L(), option.NewStartOpts(option.NoBackupSchedule), install.MakeClusterSettings())
 
+	var virtualClusterName string
 	var conn *gosql.DB
 	var disableMergeQueue bool
 	if testCase.sharedProcessMT() {
+		virtualClusterName = appTenantName
 		singleTenantConn := c.Conn(ctx, t.L(), 1)
 		// Disable merge queue in the system tenant.
 		if _, err := singleTenantConn.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false;"); err != nil {
@@ -539,9 +551,10 @@ func runTPCHVec(ctx context.Context, t test.Test, c cluster.Cluster, testCase tp
 		disableMergeQueue = true
 	}
 
-	t.Status("restoring TPCH dataset for Scale Factor 1")
-	if err := loadTPCHDataset(
-		ctx, t, c, conn, 1 /* sf */, c.NewMonitor(ctx), c.All(), disableMergeQueue,
+	t.Status("importing TPCH dataset for Scale Factor 1")
+	if err := importTPCHDataset(
+		ctx, t, c, virtualClusterName, conn, 1 /* sf */, c.NewDeprecatedMonitor(ctx),
+		c.All(), disableMergeQueue, true, /* smallRanges */
 	); err != nil {
 		t.Fatal(err)
 	}

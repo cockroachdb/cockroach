@@ -659,7 +659,7 @@ ordinality
  ├── columns: k:1!null i:2!null f:3!null s:4 j:5 ordinality:8!null
  ├── cardinality: [0 - 10]
  ├── key: (1)
- ├── fd: (1)-->(2-5,8), (2)==(3), (3)==(2), (8)-->(1-5)
+ ├── fd: (1)-->(2-5,8), (8)-->(1-5), (2)==(3), (3)==(2)
  ├── ordering: +(2|3) [actual: +2]
  └── limit
       ├── columns: k:1!null i:2!null f:3!null s:4 j:5
@@ -1161,6 +1161,34 @@ limit
  │         └── a:1 = u:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
  └── -1
 
+# Don't push limits larger than MaxUint32 into a join input, since the
+# cardinality system can't track them, which would lead to a rule cycle.
+# Regression test for #168718.
+norm expect-not=(PushLimitIntoJoinLeft,PushLimitIntoJoinRight)
+SELECT * FROM ab LEFT JOIN uv ON a = u LIMIT 4611686018427387903
+----
+limit
+ ├── columns: a:1!null b:2 u:5 v:6
+ ├── key: (1)
+ ├── fd: (1)-->(2,5,6), (5)-->(6)
+ ├── left-join (hash)
+ │    ├── columns: a:1!null b:2 u:5 v:6
+ │    ├── multiplicity: left-rows(exactly-one), right-rows(zero-or-one)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2,5,6), (5)-->(6)
+ │    ├── limit hint: 4611686018427387904.00
+ │    ├── scan ab
+ │    │    ├── columns: a:1!null b:2
+ │    │    ├── key: (1)
+ │    │    └── fd: (1)-->(2)
+ │    ├── scan uv
+ │    │    ├── columns: u:5!null v:6
+ │    │    ├── key: (5)
+ │    │    └── fd: (5)-->(6)
+ │    └── filters
+ │         └── a:1 = u:5 [outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
+ └── 4611686018427387903
+
 # Don't push limits into an inner join that may not preserve rows.
 norm expect-not=(PushLimitIntoJoinLeft,PushLimitIntoJoinRight)
 SELECT * FROM ab INNER JOIN uv ON a = u LIMIT 10
@@ -1604,7 +1632,7 @@ lock abcde
  ├── lock columns: (8-12)
  ├── locking: for-update
  ├── cardinality: [0 - 1]
- ├── volatile, mutations
+ ├── volatile
  ├── key: ()
  ├── fd: ()-->(1-5)
  └── index-join abcde
@@ -1626,7 +1654,7 @@ lock abcde
  ├── key columns: a:1
  ├── lock columns: (8-12)
  ├── locking: for-update
- ├── volatile, mutations
+ ├── volatile
  ├── key: (1)
  ├── fd: ()-->(4), (1)-->(2,3,5)
  └── index-join abcde
@@ -1651,7 +1679,7 @@ SELECT * FROM abcde WHERE d IS NULL LIMIT 1 FOR UPDATE SKIP LOCKED
 limit
  ├── columns: a:1!null b:2 c:3!null d:4 e:5
  ├── cardinality: [0 - 1]
- ├── volatile, mutations
+ ├── volatile
  ├── key: ()
  ├── fd: ()-->(1-5)
  ├── lock abcde
@@ -1659,7 +1687,7 @@ limit
  │    ├── key columns: a:1
  │    ├── lock columns: (8-12)
  │    ├── locking: for-update,skip-locked
- │    ├── volatile, mutations
+ │    ├── volatile
  │    ├── key: (1)
  │    ├── fd: ()-->(4), (1)-->(2,3,5)
  │    ├── limit hint: 1.00
@@ -1684,14 +1712,14 @@ SELECT a FROM abcde WHERE d IS NULL OFFSET 1 FOR UPDATE SKIP LOCKED
 ----
 offset
  ├── columns: a:1!null
- ├── volatile, mutations
+ ├── volatile
  ├── key: (1)
  ├── lock abcde
  │    ├── columns: a:1!null
  │    ├── key columns: a:1
  │    ├── lock columns: (8-12)
  │    ├── locking: for-update,skip-locked
- │    ├── volatile, mutations
+ │    ├── volatile
  │    ├── key: (1)
  │    └── project
  │         ├── columns: a:1!null
@@ -1722,7 +1750,7 @@ lock abcde
  ├── lock columns: (8-12)
  ├── locking: for-update,durability-guaranteed
  ├── cardinality: [0 - 1]
- ├── volatile, mutations
+ ├── volatile
  ├── key: ()
  ├── fd: ()-->(1-5)
  └── index-join abcde
@@ -1744,7 +1772,7 @@ lock abcde
  ├── key columns: a:1
  ├── lock columns: (8-12)
  ├── locking: for-update,durability-guaranteed
- ├── volatile, mutations
+ ├── volatile
  ├── key: (1)
  ├── fd: ()-->(4), (1)-->(2,3,5)
  └── index-join abcde
@@ -1769,7 +1797,7 @@ SELECT * FROM abcde WHERE d IS NULL LIMIT 1 FOR UPDATE SKIP LOCKED
 limit
  ├── columns: a:1!null b:2 c:3!null d:4 e:5
  ├── cardinality: [0 - 1]
- ├── volatile, mutations
+ ├── volatile
  ├── key: ()
  ├── fd: ()-->(1-5)
  ├── lock abcde
@@ -1777,7 +1805,7 @@ limit
  │    ├── key columns: a:1
  │    ├── lock columns: (8-12)
  │    ├── locking: for-update,skip-locked,durability-guaranteed
- │    ├── volatile, mutations
+ │    ├── volatile
  │    ├── key: (1)
  │    ├── fd: ()-->(4), (1)-->(2,3,5)
  │    ├── limit hint: 1.00
@@ -1802,7 +1830,7 @@ SELECT * FROM abcde WHERE d IS NULL OFFSET 1 FOR UPDATE SKIP LOCKED
 ----
 offset
  ├── columns: a:1!null b:2 c:3!null d:4 e:5
- ├── volatile, mutations
+ ├── volatile
  ├── key: (1)
  ├── fd: ()-->(4), (1)-->(2,3,5)
  ├── lock abcde
@@ -1810,7 +1838,7 @@ offset
  │    ├── key columns: a:1
  │    ├── lock columns: (8-12)
  │    ├── locking: for-update,skip-locked,durability-guaranteed
- │    ├── volatile, mutations
+ │    ├── volatile
  │    ├── key: (1)
  │    ├── fd: ()-->(4), (1)-->(2,3,5)
  │    └── index-join abcde

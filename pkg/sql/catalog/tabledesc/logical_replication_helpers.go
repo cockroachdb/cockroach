@@ -23,11 +23,14 @@ import (
 // descriptor is a valid target for logical replication and is equivalent to the
 // source table.
 func CheckLogicalReplicationCompatibility(
-	src, dst *descpb.TableDescriptor, skipTableEquivalenceCheck bool,
+	src, dst *descpb.TableDescriptor,
+	skipTableEquivalenceCheck bool,
+	requireKvWriterCompatible bool,
+	isTxnMode bool,
 ) error {
 	const cannotLDRMsg = "cannot create logical replication stream"
 	if !skipTableEquivalenceCheck {
-		if err := checkSrcDstColsMatch(src, dst); err != nil {
+		if err := checkSrcDstColsMatch(src, dst, requireKvWriterCompatible); err != nil {
 			return pgerror.Wrapf(err, pgcode.InvalidTableDefinition, cannotLDRMsg)
 		}
 	}
@@ -39,7 +42,7 @@ func CheckLogicalReplicationCompatibility(
 		return pgerror.Wrapf(err, pgcode.InvalidTableDefinition, cannotLDRMsg)
 	}
 
-	if err := checkExpressionEvaluation(dst); err != nil {
+	if err := checkExpressionEvaluation(dst, requireKvWriterCompatible, isTxnMode); err != nil {
 		return pgerror.Wrapf(err, pgcode.InvalidTableDefinition, cannotLDRMsg)
 	}
 	if err := checkUniqueWithoutIndex(dst); err != nil {
@@ -58,6 +61,40 @@ func CheckLogicalReplicationCompatibility(
 		return pgerror.Wrapf(err, pgcode.InvalidTableDefinition, cannotLDRMsg)
 	}
 
+	if err := checkForbiddenTypes(dst); err != nil {
+		return pgerror.Wrapf(err, pgcode.InvalidTableDefinition, cannotLDRMsg)
+	}
+
+	return nil
+}
+
+func checkForbiddenTypes(dst *descpb.TableDescriptor) error {
+	var isForbiddenType func(typ *types.T) error
+	isForbiddenType = func(typ *types.T) error {
+		switch typ.Family() {
+		case types.RefCursorFamily:
+			// RefCursor is not supported by LDR because it has no definition of
+			// equality. It's a weird type that should never exist in a durable table
+			// since a cursor is a session scoped entity.
+			return errors.Newf("RefCursor is not supported by LDR")
+		case types.ArrayFamily:
+			return isForbiddenType(typ.ArrayContents())
+		case types.TupleFamily:
+			for _, tupleTyp := range typ.TupleContents() {
+				if err := isForbiddenType(tupleTyp); err != nil {
+					return err
+				}
+			}
+			return nil
+		default:
+			return nil
+		}
+	}
+	for _, col := range dst.Columns {
+		if err := isForbiddenType(col.Type); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -82,25 +119,26 @@ func checkOutboundReferences(dst *descpb.TableDescriptor) error {
 	return nil
 }
 
-// We disallow expression evaluation (e.g., virtual columns that appear in an
-// index) because the LDR KV write path does not understand how to evaluate
-// expressions. The writer expects to receive the full set of columns, even the
-// computed ones, along with a list of columns that we've already determined
-// should be updated.
-func checkExpressionEvaluation(dst *descpb.TableDescriptor) error {
-	// Disallow partial indexes.
-	for _, idx := range dst.Indexes {
-		if idx.IsPartial() {
-			return errors.Newf("table %s has a partial index %s", dst.Name, idx.Name)
-		}
-	}
-
+// For the KV writer, we disallow expression evaluation (e.g., virtual columns
+// that appear in an index) because the LDR KV write path does not understand
+// how to evaluate expressions. The writer expects to receive the full set of
+// columns, even the computed ones, along with a list of columns that we've
+// already determined should be updated.
+//
+// For transactional LDR, we additionally disallow computed columns in
+// secondary unique indexes and foreign key constraints.
+//
+// TODO(msbutler): allow virtual computed columns in pk.
+func checkExpressionEvaluation(
+	dst *descpb.TableDescriptor, requireKVCompatible bool, isTxnMode bool,
+) error {
 	// Disallow virtual columns if they are a key of an index.
 	// NB: it is impossible for a virtual column to be stored in an index.
 	columns := make([]catalog.Column, len(dst.Columns))
 	for i, col := range dst.Columns {
 		columns[i] = column{desc: &col, ordinal: i}
 	}
+
 	colOrd := catalog.ColumnIDToOrdinalMap(columns)
 	for _, pkColID := range dst.PrimaryIndex.KeyColumnIDs {
 		pkColOrd, ok := colOrd.Get(pkColID)
@@ -111,13 +149,83 @@ func checkExpressionEvaluation(dst *descpb.TableDescriptor) error {
 			)
 		}
 	}
+
+	if isTxnMode {
+		if err := checkComputedColumnsInConstraints(dst, columns, colOrd); err != nil {
+			return err
+		}
+	}
+
+	if requireKVCompatible {
+		for _, idx := range dst.Indexes {
+			if idx.IsPartial() {
+				return errors.Newf("table %s has a partial index %s", dst.Name, idx.Name)
+			}
+		}
+
+		for _, idx := range dst.Indexes {
+			for _, keyColID := range idx.KeyColumnIDs {
+				keyColOrd, ok := colOrd.Get(keyColID)
+				if ok && columns[keyColOrd].IsComputed() && columns[keyColOrd].IsVirtual() {
+					return errors.Newf(
+						"table %s has a virtual computed column %s that is a key of index %s",
+						dst.Name, columns[keyColOrd].GetName(), idx.Name,
+					)
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
+// checkComputedColumnsInConstraints rejects virtual computed columns that are
+// in a unique or a foreign key constraint. Lock derivation hashes column datums
+// from the decoded row, which does not contain virtual computed columns.
+func checkComputedColumnsInConstraints(
+	dst *descpb.TableDescriptor, columns []catalog.Column, colOrd catalog.TableColMap,
+) error {
+	getVirtualCol := func(colID descpb.ColumnID) (catalog.Column, bool) {
+		ord, ok := colOrd.Get(colID)
+		if ok && columns[ord].IsVirtual() {
+			return columns[ord], true
+		}
+		return nil, false
+	}
+
 	for _, idx := range dst.Indexes {
-		for _, keyColID := range idx.KeyColumnIDs {
-			keyColOrd, ok := colOrd.Get(keyColID)
-			if ok && columns[keyColOrd].IsComputed() && columns[keyColOrd].IsVirtual() {
+		if !idx.Unique {
+			continue
+		}
+		for _, colID := range idx.KeyColumnIDs {
+			if col, ok := getVirtualCol(colID); ok {
 				return errors.Newf(
-					"table %s has a virtual computed column %s that is a key of index %s",
-					dst.Name, columns[keyColOrd].GetName(), idx.Name,
+					"table %s has a virtual computed column %s that is a key of unique index %s",
+					dst.Name, col.GetName(), idx.Name,
+				)
+			}
+		}
+	}
+
+	// CRDB doesn't currently support FKs over virtual computed columns (#59671)
+	// but the check should be harmless in case we add support.
+	for _, fk := range dst.OutboundFKs {
+		for _, colID := range fk.OriginColumnIDs {
+			if col, ok := getVirtualCol(colID); ok {
+				return errors.Newf(
+					"table %s has a virtual computed column %s that is part of foreign key %s",
+					dst.Name, col.GetName(), fk.Name,
+				)
+			}
+		}
+	}
+
+	for _, fk := range dst.InboundFKs {
+		for _, colID := range fk.ReferencedColumnIDs {
+			if col, ok := getVirtualCol(colID); ok {
+				return errors.Newf(
+					"table %s has a virtual computed column %s that is referenced by foreign key %s",
+					dst.Name, col.GetName(), fk.Name,
 				)
 			}
 		}
@@ -180,7 +288,12 @@ func checkColumnFamilies(dst *descpb.TableDescriptor) error {
 // All column names and types must match with the source table’s columns. The KV
 // and SQL write path ingestion side logic assumes that src and dst columns
 // match. If they don’t, the LDR job will DLQ these rows and move on.
-func checkSrcDstColsMatch(src *descpb.TableDescriptor, dst *descpb.TableDescriptor) error {
+//
+// If requireKvWriterCompatible is true, we also check that the column IDs
+// match.
+func checkSrcDstColsMatch(
+	src *descpb.TableDescriptor, dst *descpb.TableDescriptor, requireKvWriterCompatible bool,
+) error {
 	if len(src.Columns) != len(dst.Columns) {
 		return errors.Newf(
 			"destination table %s has %d columns, but the source table %s has %d columns",
@@ -209,6 +322,12 @@ func checkSrcDstColsMatch(src *descpb.TableDescriptor, dst *descpb.TableDescript
 			return errors.Wrapf(err,
 				"destination table %s column %s has type %s, but the source table %s has type %s",
 				dst.Name, dstCol.Name, dstCol.Type.SQLStringForError(), src.Name, srcCol.Type.SQLStringForError(),
+			)
+		}
+
+		if requireKvWriterCompatible && srcCol.ID != dstCol.ID {
+			return errors.Newf("destination table %s column %s has ID %d, but the source table %s has ID %d. To circumvent this check, unset logical_replication.consumer.immediate_mode_writer from 'legacy-kv'",
+				dst.Name, dstCol.Name, dstCol.ID, src.Name, srcCol.ID,
 			)
 		}
 	}

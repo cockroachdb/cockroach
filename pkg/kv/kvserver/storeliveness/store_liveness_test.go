@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	clustersettings "github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/dd"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -42,7 +43,7 @@ func TestStoreLiveness(t *testing.T) {
 			manual := timeutil.NewManualTime(timeutil.Unix(1, 0))
 			clock := hlc.NewClockForTesting(manual)
 			sender := testMessageSender{}
-			sm := NewSupportManager(storeID, engine, Options{}, settings, stopper, clock, &sender, nil)
+			sm := NewSupportManager(storeID, engine, Options{}, settings, stopper, clock, nil, &sender, nil)
 			require.NoError(t, sm.onRestart(ctx))
 			datadriven.RunTest(
 				t, path, func(t *testing.T, d *datadriven.TestData) string {
@@ -64,7 +65,7 @@ func TestStoreLiveness(t *testing.T) {
 					case "send-heartbeats":
 						now := parseTimestamp(t, d, "now")
 						manual.AdvanceTo(now.GoTime())
-						sm.options.LivenessInterval = parseDuration(t, d, "liveness-interval")
+						sm.options.SupportDuration = dd.ScanArg[time.Duration](t, d, "support-duration")
 						sm.maybeAddStores(ctx)
 						sm.sendHeartbeats(ctx)
 						heartbeats := sender.drainSentMessages()
@@ -88,19 +89,18 @@ func TestStoreLiveness(t *testing.T) {
 
 					case "restart":
 						now := parseTimestamp(t, d, "now")
-						gracePeriod := parseDuration(t, d, "grace-period")
+						gracePeriod := dd.ScanArg[time.Duration](t, d, "grace-period")
 						o := Options{SupportWithdrawalGracePeriod: gracePeriod}
 						sm = NewSupportManager(
-							storeID, engine, o, settings, stopper, clock, &sender, nil,
+							storeID, engine, o, settings, stopper, clock, nil, &sender, nil,
 						)
 						manual.AdvanceTo(now.GoTime())
 						require.NoError(t, sm.onRestart(ctx))
 						return ""
 
 					case "error-on-write":
-						var errorOnWrite bool
-						d.ScanArgs(t, "on", &errorOnWrite)
-						engine.errorOnWrite = errorOnWrite
+						errorOnWrite := dd.ScanArg[bool](t, d, "on")
+						engine.SetErrorOnWrite(errorOnWrite)
 						return ""
 
 					case "debug-requester-state":
@@ -120,7 +120,11 @@ func TestStoreLiveness(t *testing.T) {
 					case "debug-supporter-state":
 						var sortedSupportMap []string
 						for _, support := range sm.supporterStateHandler.supporterState.supportFor {
-							sortedSupportMap = append(sortedSupportMap, fmt.Sprintf("%+v", support))
+							sortedSupportMap = append(sortedSupportMap, fmt.Sprintf(
+								"%+v lastSupportWithdrawnTime:%s",
+								support.SupportState,
+								support.lastSupportWithdrawnTime,
+							))
 						}
 						slices.Sort(sortedSupportMap)
 						return fmt.Sprintf(
@@ -166,31 +170,15 @@ func printMsgs(msgs []slpb.Message) string {
 func parseStoreID(
 	t *testing.T, d *datadriven.TestData, nodeStr string, storeStr string,
 ) slpb.StoreIdent {
-	var nodeID int64
-	d.ScanArgs(t, nodeStr, &nodeID)
-	var storeID int64
-	d.ScanArgs(t, storeStr, &storeID)
 	return slpb.StoreIdent{
-		NodeID:  roachpb.NodeID(nodeID),
-		StoreID: roachpb.StoreID(storeID),
+		NodeID:  dd.ScanArg[roachpb.NodeID](t, d, nodeStr),
+		StoreID: dd.ScanArg[roachpb.StoreID](t, d, storeStr),
 	}
 }
 
 func parseTimestamp(t *testing.T, d *datadriven.TestData, name string) hlc.Timestamp {
-	var wallTimeSecs int64
-	d.ScanArgs(t, name, &wallTimeSecs)
-	wallTime := wallTimeSecs * int64(time.Second)
-	return hlc.Timestamp{WallTime: wallTime}
-}
-
-func parseDuration(t *testing.T, d *datadriven.TestData, name string) time.Duration {
-	var durationStr string
-	d.ScanArgs(t, name, &durationStr)
-	duration, err := time.ParseDuration(durationStr)
-	if err != nil {
-		t.Errorf("can't parse duration %s; error: %v", durationStr, err)
-	}
-	return duration
+	wallTimeSecs := dd.ScanArg[int64](t, d, name)
+	return hlc.Timestamp{WallTime: wallTimeSecs * int64(time.Second)}
 }
 
 func parseMsgs(t *testing.T, d *datadriven.TestData, storeIdent slpb.StoreIdent) []*slpb.Message {
@@ -205,10 +193,8 @@ func parseMsgs(t *testing.T, d *datadriven.TestData, storeIdent slpb.StoreIdent)
 		if d.Cmd != "msg" {
 			d.Fatalf(t, "expected \"msg\", found %s", d.Cmd)
 		}
-		var msgTypeStr string
-		d.ScanArgs(t, "type", &msgTypeStr)
 		var msgType slpb.MessageType
-		switch msgTypeStr {
+		switch msgTypeStr := dd.ScanArg[string](t, d, "type"); msgTypeStr {
 		case slpb.MsgHeartbeat.String():
 			msgType = slpb.MsgHeartbeat
 		case slpb.MsgHeartbeatResp.String():
@@ -217,14 +203,13 @@ func parseMsgs(t *testing.T, d *datadriven.TestData, storeIdent slpb.StoreIdent)
 			d.Fatalf(t, "unexpected \"type\", found %s", msgTypeStr)
 		}
 		remoteID := parseStoreID(t, d, "from-node-id", "from-store-id")
-		var epoch int64
-		d.ScanArgs(t, "epoch", &epoch)
+		epoch := dd.ScanArg[slpb.Epoch](t, d, "epoch")
 		expiration := parseTimestamp(t, d, "expiration")
 		msg := &slpb.Message{
 			Type:       msgType,
 			From:       remoteID,
 			To:         storeIdent,
-			Epoch:      slpb.Epoch(epoch),
+			Epoch:      epoch,
 			Expiration: expiration,
 		}
 		msgs = append(msgs, msg)

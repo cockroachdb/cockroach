@@ -7,6 +7,7 @@ package cluster
 
 import (
 	"context"
+	"strconv"
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
@@ -32,8 +33,6 @@ type Settings struct {
 	// overwriting the default of a single setting.
 	Manual atomic.Value // bool
 
-	ExternalIODir string
-
 	// Tracks whether a CPU profile is going on and if so, which kind. See
 	// CPUProfileType().
 	// This is used so that we can enable "non-cheap" instrumentation only when it
@@ -47,7 +46,7 @@ type Settings struct {
 	Version clusterversion.Handle
 
 	// Cache can be used for arbitrary caching, e.g. to cache decoded
-	// enterprises licenses for utilccl.CheckEnterpriseEnabled().
+	// enterprises licenses.
 	Cache syncutil.Map[any, any]
 
 	// OverridesInformer can be nil.
@@ -64,8 +63,25 @@ type OverridesInformer interface {
 	IsOverridden(settingKey settings.InternalKey) bool
 }
 
+var SettingOverrideErr = errors.New("cluster setting is overridden by system virtual cluster")
+
+// telemetryOptOutCompTimeString controls whether to opt out of telemetry
+// (including Sentry) or not compile time. The variable is set by bazel via stamping
+// (`stamp.sh -d true/false`). Becuase Go only supports strings for in
+// `-ldflags "-X ..."`, we have to use a string representation here.
+
+var telemetryOptOutCompTimeString = "false"
+
+func telemetryOptOutCompTime(defaultValue bool) bool {
+	ret, err := strconv.ParseBool(telemetryOptOutCompTimeString)
+	if err != nil {
+		return defaultValue
+	}
+	return ret
+}
+
 // TelemetryOptOut controls whether to opt out of telemetry (including Sentry) or not.
-var TelemetryOptOut = envutil.EnvOrDefaultBool("COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING", false)
+var TelemetryOptOut = envutil.EnvOrDefaultBool("COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING", false) || telemetryOptOutCompTime(false)
 
 // NoSettings is used when a func requires a Settings but none is available
 // (for example, a CLI subcommand that does not connect to a cluster).
@@ -103,7 +119,7 @@ func (s *Settings) SetCPUProfiling(to CPUProfileType) error {
 		return errors.New("a CPU profile is already in process, try again later")
 	}
 	if log.V(1) {
-		log.Infof(context.Background(), "active CPU profile type set to: %d", to)
+		log.Dev.Infof(context.Background(), "active CPU profile type set to: %d", to)
 	}
 	return nil
 }
@@ -164,7 +180,7 @@ func MakeTestingClusterSettingsWithVersions(
 	if initializeVersion {
 		// Initialize cluster version to specified latestVersion.
 		if err := clusterversion.Initialize(context.TODO(), latestVersion, &s.SV); err != nil {
-			log.Fatalf(context.TODO(), "unable to initialize version: %s", err)
+			log.Dev.Fatalf(context.TODO(), "unable to initialize version: %s", err)
 		}
 	}
 	return s
@@ -174,9 +190,7 @@ func MakeTestingClusterSettingsWithVersions(
 // be used for settings objects that are passed as initial parameters for test
 // clusters; the given Settings object should not be in use by any server.
 func TestingCloneClusterSettings(st *Settings) *Settings {
-	result := &Settings{
-		ExternalIODir: st.ExternalIODir,
-	}
+	result := &Settings{}
 	result.Version = clusterversion.MakeVersionHandle(
 		&result.SV, st.Version.LatestVersion(), st.Version.MinSupportedVersion(),
 	)

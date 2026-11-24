@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
+	"github.com/cockroachdb/redact"
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 )
@@ -33,7 +34,7 @@ type adminPrivilegeChecker struct {
 	// comment in pkg/scheduledjobs/env.go on planHookMaker. It should
 	// be cast to AuthorizationAccessor in order to use privilege
 	// checking functions.
-	makeAuthzAccessor func(opName string) (sql.AuthorizationAccessor, func())
+	makeAuthzAccessor func(opName redact.SafeString) (sql.AuthorizationAccessor, func())
 }
 
 // RequireViewActivityPermission is part of the CheckerForRPCHandlers interface.
@@ -85,36 +86,6 @@ func (c *adminPrivilegeChecker) RequireViewActivityOrViewActivityRedactedPermiss
 	return grpcstatus.Errorf(
 		codes.PermissionDenied, "this operation requires the %s or %s system privileges",
 		roleoption.VIEWACTIVITY, roleoption.VIEWACTIVITYREDACTED)
-}
-
-// RequireViewClusterSettingOrModifyClusterSettingPermission's error return is a gRPC error.
-func (c *adminPrivilegeChecker) RequireViewClusterSettingOrModifyClusterSettingPermission(
-	ctx context.Context,
-) (err error) {
-	userName, isAdmin, err := c.GetUserAndRole(ctx)
-	if err != nil {
-		return srverrors.ServerError(ctx, err)
-	}
-	if isAdmin {
-		return nil
-	}
-	hasView, err := c.HasPrivilegeOrRoleOption(ctx, userName, privilege.VIEWCLUSTERSETTING)
-	if err != nil {
-		return srverrors.ServerError(ctx, err)
-	}
-	if hasView {
-		return nil
-	}
-	hasModify, err := c.HasPrivilegeOrRoleOption(ctx, userName, privilege.MODIFYCLUSTERSETTING)
-	if err != nil {
-		return srverrors.ServerError(ctx, err)
-	}
-	if hasModify {
-		return nil
-	}
-	return grpcstatus.Errorf(
-		codes.PermissionDenied, "this operation requires the %s or %s system privileges",
-		privilege.VIEWCLUSTERSETTING.DisplayName(), privilege.MODIFYCLUSTERSETTING.DisplayName())
 }
 
 // RequireViewActivityAndNoViewActivityRedactedPermission requires
@@ -286,9 +257,8 @@ func (c *adminPrivilegeChecker) HasGlobalPrivilege(
 	return aa.HasPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege, user)
 }
 
-// TestingSetPlannerFn is used in tests only.
 func (c *adminPrivilegeChecker) SetAuthzAccessorFactory(
-	fn func(opName string) (sql.AuthorizationAccessor, func()),
+	fn func(opName redact.SafeString) (sql.AuthorizationAccessor, func()),
 ) {
 	c.makeAuthzAccessor = fn
 }

@@ -13,7 +13,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
-	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -21,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -138,11 +138,6 @@ func TestExplainGist(t *testing.T) {
 	skip.UnderDeadlock(t, "the test is too slow")
 	skip.UnderRace(t, "the test is too slow")
 
-	// Use the release-build panic-catching behavior instead of the
-	// crdb_test-build behavior. This is needed so that some known bugs like
-	// #117101 don't result in a test failure.
-	defer colexecerror.ProductionBehaviorForTests()()
-
 	ctx := context.Background()
 	rng, _ := randutil.NewTestRand()
 
@@ -165,14 +160,23 @@ func TestExplainGist(t *testing.T) {
 
 		// Given that statement timeout might apply differently between test
 		// runs with the same seed (e.g. because of different CPU load), we'll
-		// accumulate all successful statements for ease of reproduction.
-		var successfulStmts strings.Builder
-		logStmt := func(stmt string) {
-			successfulStmts.WriteString(stmt)
-			successfulStmts.WriteString(";\n")
+		// accumulate all statements for ease of reproduction.
+		var stmts strings.Builder
+		logStmt := func(stmt string, successful bool) {
+			if !successful {
+				// Comment out the canceled stmt since its effects might not
+				// have applied, but we still might need to know it for
+				// reproduction.
+				//
+				// Also replace newline characters with tabs so that it takes
+				// only a single line.
+				stmt = "-- cancelled:\t" + strings.ReplaceAll(stmt, "\n", "\t")
+			}
+			stmts.WriteString(stmt)
+			stmts.WriteString(";\n")
 		}
 		for _, stmt := range setup {
-			logStmt(stmt)
+			logStmt(stmt, true /* successful */)
 		}
 
 		smither, err := sqlsmith.NewSmither(sqlDB, rng, sqlsmith.SimpleNames())
@@ -195,17 +199,18 @@ func TestExplainGist(t *testing.T) {
 			if err != nil && strings.Contains(err.Error(), "internal error") {
 				// Ignore all errors except the internal ones.
 				for _, knownErr := range []string{
-					"invalid datum type given: RECORD, expected RECORD", // #117101
-					"expected equivalence dependants to be its closure", // #119045
-					"not in index", // #133129
+					"expected equivalence dependants to be its closure",                  // #119045
+					"argument expression has type RECORD, need type USER DEFINED RECORD", // #139910
+					"invalid datum type given: RECORD, expected RECORD",                  // #140773
+					"is a built-in type", // #164215
 				} {
 					if strings.Contains(err.Error(), knownErr) {
 						// Don't fail the test on a set of known errors.
 						return
 					}
 				}
-				t.Log(successfulStmts.String())
-				t.Fatalf("%v: %s", err, stmt)
+				t.Log(stmts.String())
+				t.Fatalf("%v:\n%s;", err, stmt)
 			}
 		}
 
@@ -295,12 +300,15 @@ func TestExplainGist(t *testing.T) {
 			case err = <-errCh:
 				if err != nil {
 					checkErr(err, stmt)
+					logStmt(stmt, false /* successful */)
 				} else {
-					logStmt(stmt)
+					logStmt(stmt, true /* successful */)
 				}
-			case <-time.After(time.Minute):
-				t.Log(successfulStmts.String())
-				t.Fatalf("stmt wasn't canceled by statement_timeout of 0.1s - ran at least for 1m: %s", stmt)
+			case <-time.After(3 * time.Minute):
+				t.Log(stmts.String())
+				sl := allstacks.Get()
+				t.Logf("stacks:\n\n%s", sl)
+				t.Fatalf("stmt wasn't canceled by statement_timeout of 0.1s - ran at least for 3m: %s", stmt)
 			}
 		}
 	})

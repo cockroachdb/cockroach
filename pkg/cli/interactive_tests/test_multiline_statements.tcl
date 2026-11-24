@@ -37,7 +37,7 @@ send "drop table if exists t.blih;"
 send "create table if not exists t.kv(k int primary key, v int);\r"
 eexpect "CREATE TABLE"
 eexpect "defaultdb>"
-send "begin; create table t.blih(x INT REFERENCES t.kv(k));\r\r"
+send "begin; set local autocommit_before_ddl=off; create table t.blih(x INT REFERENCES t.kv(k));\r\r"
 eexpect "CREATE TABLE"
 eexpect "defaultdb"
 eexpect OPEN

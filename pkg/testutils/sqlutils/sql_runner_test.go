@@ -10,6 +10,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -82,4 +83,33 @@ type mockFataler struct {
 
 func (f *mockFataler) Fatalf(s string, args ...interface{}) {
 	f.err = fmt.Sprintf(s, args...)
+}
+
+func TestExpectErrWithTimeout(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	t.Run("matching error passes", func(t *testing.T) {
+		runner := sqlutils.MakeSQLRunner(db)
+		runner.ExpectErrWithTimeout(
+			t, `does not exist`,
+			`SELECT * FROM nonexistent_table`,
+		)
+	})
+
+	t.Run("timeout produces goroutine dump", func(t *testing.T) {
+		runner := sqlutils.MakeSQLRunner(db)
+		runner.SucceedsSoonDuration = 1 * time.Second
+
+		f := &mockFataler{}
+		runner.ExpectErrWithTimeout(
+			f, `will never match`,
+			`SELECT pg_sleep(30)`,
+		)
+		require.NotEmpty(t, f.err, "expected Fatalf to be called")
+		require.Contains(t, f.err, "goroutine dump")
+	})
 }

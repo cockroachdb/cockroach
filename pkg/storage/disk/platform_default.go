@@ -4,26 +4,32 @@
 // included in the /LICENSE file.
 
 //go:build !linux && !darwin
-// +build !linux,!darwin
 
 package disk
 
 import (
 	"io/fs"
+	"time"
 
 	"github.com/cockroachdb/pebble/vfs"
 )
 
 type defaultCollector struct{}
 
-func (defaultCollector) collect([]*monitoredDisk) error {
-	return nil
+func (defaultCollector) collect(disks []*monitoredDisk, time time.Time) (int, error) {
+	return len(disks), nil
+}
+
+func (defaultCollector) collectInstantaneous(
+	disks []*monitoredDisk, now time.Time, recorder func(traceEvent), buf []byte,
+) (countCollected int, _ []byte, err error) {
+	return len(disks), buf, nil
 }
 
 func newStatsCollector(fs vfs.FS) (*defaultCollector, error) {
 	return &defaultCollector{}, nil
 }
 
-func deviceIDFromFileInfo(fs.FileInfo) DeviceID {
+func deviceIDFromFileInfo(fs.FileInfo, string) DeviceID {
 	return DeviceID{}
 }

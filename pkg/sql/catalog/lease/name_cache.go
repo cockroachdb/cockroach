@@ -75,12 +75,15 @@ func (c *nameCache) get(
 	}
 
 	// Expired descriptor. Don't hand it out.
-	if desc.hasExpiredLocked(ctx, timestamp) {
+	if desc.hasExpired(ctx, timestamp) {
 		return nil, hlc.Timestamp{}
 	}
 
-	desc.incRefCountLocked(ctx, expensiveLogEnabled)
-	return desc, desc.mu.expiration
+	desc.incRefCount(ctx, expensiveLogEnabled)
+	if exp := desc.expiration.Load(); exp != nil {
+		return desc, *exp
+	}
+	return desc, hlc.Timestamp{}
 }
 
 func (c *nameCache) insert(ctx context.Context, desc *descriptorVersionState) {

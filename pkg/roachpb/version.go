@@ -6,6 +6,7 @@
 package roachpb
 
 import (
+	"cmp"
 	"fmt"
 	"regexp"
 	"strconv"
@@ -16,39 +17,33 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-// Less compares two Versions.
+// Cmp returns -1 if v < otherV, 0 if v == otherV, and 1 if v > otherV.
+func (v Version) Cmp(otherV Version) int {
+	if v.Major != otherV.Major {
+		return cmp.Compare(v.Major, otherV.Major)
+	}
+	if v.Minor != otherV.Minor {
+		return cmp.Compare(v.Minor, otherV.Minor)
+	}
+	if v.Patch != otherV.Patch {
+		return cmp.Compare(v.Patch, otherV.Patch)
+	}
+	return cmp.Compare(v.Internal, otherV.Internal)
+}
+
+// Less returns whether the receiver is less than the parameter.
 func (v Version) Less(otherV Version) bool {
-	if v.Major < otherV.Major {
-		return true
-	} else if v.Major > otherV.Major {
-		return false
-	}
-	if v.Minor < otherV.Minor {
-		return true
-	} else if v.Minor > otherV.Minor {
-		return false
-	}
-	if v.Patch < otherV.Patch {
-		return true
-	} else if v.Patch > otherV.Patch {
-		return false
-	}
-	if v.Internal < otherV.Internal {
-		return true
-	} else if v.Internal > otherV.Internal {
-		return false
-	}
-	return false
+	return v.Cmp(otherV) < 0
 }
 
 // LessEq returns whether the receiver is less than or equal to the parameter.
 func (v Version) LessEq(otherV Version) bool {
-	return v.Equal(otherV) || v.Less(otherV)
+	return v.Cmp(otherV) <= 0
 }
 
 // AtLeast returns true if the receiver is greater than or equal to the parameter.
 func (v Version) AtLeast(otherV Version) bool {
-	return !v.Less(otherV)
+	return v.Cmp(otherV) >= 0
 }
 
 // String implements the fmt.Stringer interface. The result is of the form
@@ -112,11 +107,11 @@ func (v Version) IsFence() bool {
 
 // PrettyPrint returns the value in a format that makes it apparent whether or
 // not it is a fence version.
-func (v Version) PrettyPrint() string {
+func (v Version) PrettyPrint() redact.RedactableString {
 	if !v.IsFence() {
-		return v.String()
+		return redact.Sprintf("%v", v)
 	}
-	return fmt.Sprintf("%v(fence)", v)
+	return redact.Sprintf("%v(fence)", v)
 }
 
 // FenceVersion is the fence version -- the internal immediately prior -- for
@@ -236,6 +231,12 @@ var successorSeries = map[ReleaseSeries]ReleaseSeries{
 	{24, 1}: {24, 2},
 	{24, 2}: {24, 3},
 	{24, 3}: {25, 1},
+	{25, 1}: {25, 2},
+	{25, 2}: {25, 3},
+	{25, 3}: {25, 4},
+	{25, 4}: {26, 1},
+	{26, 1}: {26, 2},
+	{26, 2}: {26, 3},
 }
 
 // ReleaseSeries obtains the release series for the given version. Specifically:

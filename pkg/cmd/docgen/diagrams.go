@@ -416,10 +416,15 @@ var specs = []stmtSpec{
 		nosplit: true,
 	},
 	{
+		name:    "alter_external_connection",
+		stmt:    "alter_external_connection_stmt",
+		replace: map[string]string{"label_spec": "connection_name", "string_or_placeholder": "connection_uri"},
+		unlink:  []string{"connection_name", "connection_uri"},
+	},
+	{
 		name:    "alter_index",
 		stmt:    "alter_index_stmt",
 		inline:  []string{"alter_oneindex_stmt", "alter_index_cmds", "alter_index_cmd", "partition_by_index", "partition_by_inner", "partition_by", "table_index_name", "alter_split_index_stmt", "alter_unsplit_index_stmt", "alter_rename_index_stmt", "alter_zone_index_stmt", "var_set_list", "alter_index_visible_stmt", "set_zone_config", "alter_index_visible"},
-		exclude: []*regexp.Regexp{regexp.MustCompile("alter_scatter_index_stmt")},
 		replace: map[string]string{"standalone_index_name": "index_name", "var_name": "variable", "var_value": "value", "'RENAME' 'TO' index_name": "'RENAME' 'TO' index_new_name"},
 		unlink:  []string{"index_new_name", "variable", "value"},
 	},
@@ -550,7 +555,6 @@ var specs = []stmtSpec{
 		name:    "alter_table",
 		stmt:    "alter_table_stmt",
 		inline:  []string{"alter_onetable_stmt", "alter_table_cmds", "alter_split_stmt", "alter_unsplit_stmt", "alter_zone_table_stmt", "alter_rename_table_stmt", "alter_table_set_schema_stmt", "alter_table_locality_stmt", "alter_table_owner_stmt", "set_zone_config", "var_set_list"},
-		exclude: []*regexp.Regexp{regexp.MustCompile("alter_scatter_stmt")},
 		replace: map[string]string{"relation_expr": "table_name", "'RENAME' 'TO' table_name": "'RENAME' 'TO' table_new_name", "var_name": "variable", "var_value": "value"},
 		unlink:  []string{"table_name", "table_new_name", "variable", "value"},
 	},
@@ -574,6 +578,29 @@ var specs = []stmtSpec{
 		inline:  []string{"alter_rename_view_stmt", "alter_view_set_schema_stmt", "alter_view_owner_stmt", "opt_transaction"},
 		replace: map[string]string{"relation_expr": "view_name", "'RENAME' 'TO' view_name": "'RENAME' 'TO' view_new_name"},
 		unlink:  []string{"view_name", "view_new_name"},
+	},
+	{
+		name:    "alter_virtual_cluster",
+		stmt:    "alter_virtual_cluster_stmt",
+		inline:  []string{"virtual_cluster", "replication_options_list", "alter_virtual_cluster_capability_stmt", "alter_virtual_cluster_replication_stmt", "alter_virtual_cluster_rename_stmt", "alter_virtual_cluster_service_stmt"},
+		replace: map[string]string{"'ON' d_expr": "'ON' physical_cluster", "d_expr": "virtual_cluster_spec", "a_expr": "timestamp"},
+		unlink:  []string{"physical_cluster", "virtual_cluster_spec", "timestamp"},
+	},
+	{
+		name: "alter_virtual_cluster_capability",
+		stmt: "alter_virtual_cluster_capability_stmt",
+	},
+	{
+		name: "alter_virtual_cluster_replication",
+		stmt: "alter_virtual_cluster_replication_stmt",
+	},
+	{
+		name: "alter_virtual_cluster_rename",
+		stmt: "alter_virtual_cluster_rename_stmt",
+	},
+	{
+		name: "alter_virtual_cluster_service",
+		stmt: "alter_virtual_cluster_service_stmt",
 	},
 	{
 		name:    "alter_zone_database_stmt",
@@ -625,22 +652,20 @@ var specs = []stmtSpec{
 		exclude: []*regexp.Regexp{regexp.MustCompile("'IN'")},
 	},
 	{
-		name: "begin_stmt",
+		name: "legacy_begin_stmt",
 		inline: []string{
 			"opt_transaction",
 			"begin_transaction",
-			"transaction_mode",
-			"transaction_user_priority",
-			"user_priority",
-			"iso_level",
 			"transaction_mode_list",
 			"opt_comma",
+			"transaction_mode",
+			"transaction_user_priority",
 			"transaction_read_mode",
 			"as_of_clause",
 			"transaction_deferrable_mode",
-		},
-		exclude: []*regexp.Regexp{
-			regexp.MustCompile("'START'"),
+			"user_priority",
+			"transaction_iso_level",
+			"iso_level",
 		},
 	},
 	{
@@ -656,6 +681,16 @@ var specs = []stmtSpec{
 		unlink:  []string{"table_name", "column_name", "column_type", "check_expr", "column_constraints", "table_constraints"},
 	},
 	{
+		name:   "check_external_connection",
+		stmt:   "check_external_connection_stmt",
+		inline: []string{"opt_with_check_external_connection_options_list"},
+		exclude: []*regexp.Regexp{
+			regexp.MustCompile("'WITH' 'OPTIONS'"),
+		},
+		replace: map[string]string{"string_or_placeholder": "connection_uri"},
+		unlink:  []string{"connection_uri"},
+	},
+	{
 		name:    "check_table_level",
 		stmt:    "stmt_block",
 		replace: map[string]string{"	stmt": "	'CREATE' 'TABLE' table_name '(' ( column_table_def ( ',' column_table_def )* ) ( 'CONSTRAINT' constraint_name | ) 'CHECK' '(' check_expr ')' ( table_constraints | ) ')'"},
@@ -665,6 +700,17 @@ var specs = []stmtSpec{
 		name:   "column_table_def",
 		stmt:   "column_table_def",
 		inline: []string{"col_qual_list"},
+	},
+	{
+		name:   "do",
+		stmt:   "do_stmt",
+		inline: []string{"do_stmt_opt_list", "do_stmt_opt_item"},
+		replace: map[string]string{
+			"'SCONST' | ":                 "",
+			"non_reserved_word_or_sconst": "'PLPGSQL'  | routine_body_str",
+		},
+		unlink:  []string{"routine_body_str"},
+		nosplit: true,
 	},
 	{
 		name:   "for_locking",
@@ -692,8 +738,12 @@ var specs = []stmtSpec{
 		match:  []*regexp.Regexp{regexp.MustCompile("'COMMIT'|'END'")},
 	},
 	{
-		name:    "copy_stmt",
-		inline:  []string{"opt_with_copy_options", "copy_options_list", "opt_with", "opt_where_clause", "where_clause"},
+		name:   "copy_stmt",
+		inline: []string{"opt_with_copy_options", "copy_options_list", "opt_with", "opt_where_clause", "where_clause"},
+		replace: map[string]string{
+			"copy_to_stmt":                      "query",
+			"'(' copy_generic_options_list ')'": "",
+		},
 		exclude: []*regexp.Regexp{regexp.MustCompile("'WHERE'")},
 	},
 	{
@@ -736,9 +786,10 @@ var specs = []stmtSpec{
 		unlink:  []string{"non_reserved_word_or_sconst", "signed_iconst", "encoding", "limit"},
 		nosplit: true,
 	},
+	// TODO: Add new database level changefeed syntax here when it is ready to be released (#149347).
 	{
 		name:   "create_changefeed_stmt",
-		inline: []string{"changefeed_targets", "opt_changefeed_sink", "opt_with_options", "kv_option_list", "kv_option"},
+		inline: []string{"changefeed_table_targets", "opt_changefeed_sink", "opt_with_options", "kv_option_list", "kv_option"},
 		replace: map[string]string{
 			"table_option":                 "table_name",
 			"'INTO' string_or_placeholder": "'INTO' sink",
@@ -750,9 +801,10 @@ var specs = []stmtSpec{
 		unlink: []string{"table_name", "sink", "option", "value"},
 	},
 	{
-		name:    "create_external_connection_stmt",
-		replace: map[string]string{"label_spec": "connection_name", "string_or_placeholder": "connection_URI"},
-		unlink:  []string{"connection_name", "connection_URI"},
+		name:    "create_external_connection",
+		stmt:    "create_external_connection_stmt",
+		replace: map[string]string{"label_spec": "connection_name", "string_or_placeholder": "connection_uri"},
+		unlink:  []string{"connection_name", "connection_uri"},
 	},
 	{
 		name:   "create_index_stmt",
@@ -792,7 +844,7 @@ var specs = []stmtSpec{
 	},
 	{
 		name:   "create_schedule_for_changefeed_stmt",
-		inline: []string{"opt_with_schedule_options", "changefeed_targets", "table_pattern", "opt_where_clause", "changefeed_target_expr", "cron_expr"},
+		inline: []string{"opt_with_schedule_options", "changefeed_table_targets", "table_pattern", "opt_where_clause", "changefeed_target_expr", "cron_expr"},
 		replace: map[string]string{
 			"schedule_label_spec":   "( 'IF NOT EXISTS' | )  schedule_label",
 			"changefeed_sink":       "( 'INTO' changefeed_sink )",
@@ -900,6 +952,10 @@ var specs = []stmtSpec{
 			"opt_role_options":                  "OPTIONS",
 			"string_or_placeholder  'PASSWORD'": "name 'PASSWORD'",
 			"'PASSWORD' string_or_placeholder":  "'PASSWORD' password"},
+	},
+	{
+		name:   "declare_cursor_stmt",
+		inline: []string{"opt_hold"},
 	},
 	{
 		name: "default_value_column_level",
@@ -1074,7 +1130,7 @@ var specs = []stmtSpec{
 		name:   "explain_stmt",
 		inline: []string{"explain_option_list"},
 		replace: map[string]string{
-			"explain_option_name": "( 'VERBOSE' | 'TYPES' | 'OPT' | 'ENV' | 'MEMO' | 'REDACT' | 'DISTSQL' | 'VEC' )",
+			"explain_option_name": "( 'VERBOSE' | 'TYPES' | 'OPT' | 'ENV' | 'MEMO' | 'REDACT' | 'DISTSQL' | 'VEC' | 'FINGERPRINT' )",
 		},
 		exclude: []*regexp.Regexp{
 			regexp.MustCompile("'ANALYZE'"),
@@ -1285,9 +1341,8 @@ var specs = []stmtSpec{
 		replace: map[string]string{
 			"a_expr": "timestamp",
 			"'WITH' 'OPTIONS' '(' kv_option_list ')'": "",
-			"backup_targets":                         "( 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
-			"string_or_placeholder":                  "( ( subdirectory | 'LATEST' ) )",
-			"list_of_string_or_placeholder_opt_list": "( collectionURI | '(' localityURI ( ',' localityURI )* ')' )",
+			"backup_targets": "( 'TABLE' table_pattern ( ( ',' table_pattern ) )* | 'DATABASE' database_name ( ( ',' database_name ) )* )",
+			"string_or_placeholder IN string_or_placeholder_opt_list": "( ( subdirectory | 'LATEST' ) ) 'IN' ( collectionURI | '(' localityURI ( ',' localityURI )* ')' )",
 		},
 		unlink: []string{"subdirectory", "timestamp", "collectionURI", "localityURI"},
 		exclude: []*regexp.Regexp{
@@ -1420,7 +1475,7 @@ var specs = []stmtSpec{
 	},
 	{
 		name: "set_transaction",
-		stmt: "nonpreparable_set_stmt",
+		stmt: "set_transaction_stmt",
 		inline: []string{
 			"set_transaction_stmt",
 			"transaction_mode",
@@ -1431,6 +1486,8 @@ var specs = []stmtSpec{
 			"as_of_clause",
 			"opt_comma",
 			"transaction_deferrable_mode",
+			"transaction_iso_level",
+			"iso_level",
 		},
 		match: []*regexp.Regexp{regexp.MustCompile("'SET' 'TRANSACTION'")},
 	},
@@ -1484,7 +1541,7 @@ var specs = []stmtSpec{
 	{
 		name:   "show_backup",
 		stmt:   "show_backup_stmt",
-		inline: []string{"opt_with_options", "show_backup_details", "opt_with_show_backup_options", "opt_with_show_backup_connection_options_list", "show_backup_connection_options_list", "show_backup_options_list"},
+		inline: []string{"opt_with_options", "show_backup_details", "opt_with_show_backup_options", "show_backup_options_list"},
 		replace: map[string]string{
 			"'BACKUPS' 'IN' string_or_placeholder_opt_list":                                       "'BACKUPS' 'IN' collectionURI",
 			"'BACKUP' string_or_placeholder 'IN' string_or_placeholder_opt_list":                  "'BACKUP' subdirectory 'IN' collectionURI",
@@ -1538,6 +1595,11 @@ var specs = []stmtSpec{
 	{
 		name: "show_regions",
 		stmt: "show_regions_stmt",
+	},
+	{
+		name:   "show_statement_hints",
+		stmt:   "show_statement_hints_stmt",
+		inline: []string{"opt_with_show_hints_options", "show_hints_options_list", "show_hints_options"},
 	},
 	{
 		name:   "show_statements",

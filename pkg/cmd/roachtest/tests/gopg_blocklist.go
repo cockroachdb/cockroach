@@ -28,12 +28,15 @@ var gopgBlockList = blocklist{
 	"v10.ExampleDB_Model_postgresArrayStructTag":                      "32552",
 	"v10.TestConversion":                                              "32552",
 	"v10.TestGinkgo":                                                  "41522",
-	"v10.TestGocheck":                                                 "17511",
 	"v10.TestReadColumnValue":                                         "26925",
 	"v10.TestUnixSocket":                                              "31113",
 }
 
 var gopgIgnoreList = blocklist{
+	`pg | BeforeQuery and AfterQuery CopyFrom | is called for CopyFrom with model`:    "160602",
+	`pg | BeforeQuery and AfterQuery CopyFrom | is called for CopyFrom without model`: "160602",
+	`pg | BeforeQuery and AfterQuery CopyTo | is called for CopyTo with model`:        "168663",
+	`pg | BeforeQuery and AfterQuery CopyTo | is called for CopyTo without model`:     "168663",
 	// These "fetching" tests assume a particular order when ORDER BY clause is
 	// omitted from the query by the ORM itself.
 	"pg | ORM slice model | fetches Book relations":       "41690",
@@ -51,4 +54,13 @@ var gopgIgnoreList = blocklist{
 	"pg | DB race | SelectOrInsert with OnConflict is race free":    "unknown",
 	"pg | DB race | SelectOrInsert without OnConflict is race free": "unknown",
 	`pg | ORM | relation with no results does not panic`:            "unknown",
+	// This test flakes sometimes because of connection reuse.
+	`v10.TestColumnReuse`: "unknown",
+	// This test is flaky.
+	`v10.TestGocheck`: "unknown",
+	// This test is flaky sometimes due to the use of temp tables.
+	`pg | soft delete with int column nil model ForceDelete | deletes the model`: "unknown",
+	// This test is sometimes flaky due to a small delta in the expected soft
+	// deletion timestamp (i.e. the test allows up to one seconds worth of difference).
+	`pg | soft delete with int column model | ForceDelete deletes the model`: "unknown",
 }

@@ -9,6 +9,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -17,13 +18,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/licenseccl"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/diagnostics/diagnosticspb"
+	"github.com/cockroachdb/cockroach/pkg/server/license"
+	"github.com/cockroachdb/cockroach/pkg/server/license/licensepb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -34,10 +35,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -45,6 +48,11 @@ import (
 	"github.com/mitchellh/reflectwalk"
 	"google.golang.org/protobuf/proto"
 )
+
+// TelemetryHttpTimeout allows for configuration of the client timeout
+// for sending telemetry reports. It is not expected that customers
+// would tweak this.
+var TelemetryHttpTimeout = envutil.EnvOrDefaultDuration("COCKROACH_TELEMETRY_HTTP_CLIENT_TIMEOUT", 1*time.Minute)
 
 // NodeStatusGenerator abstracts the status.MetricRecorder for read access.
 type NodeStatusGenerator interface {
@@ -60,7 +68,6 @@ var reportFrequency = settings.RegisterDurationSetting(
 	"diagnostics.reporting.interval",
 	"interval at which diagnostics data should be reported",
 	time.Hour,
-	settings.NonNegativeDuration,
 	settings.WithPublic)
 
 // Reporter is a helper struct that phones home to report usage and diagnostics.
@@ -99,6 +106,53 @@ type Reporter struct {
 	// regardless of whether the response we get back is successful or
 	// not.
 	LastSuccessfulTelemetryPing atomic.Int64
+
+	// client is the HTTP client used for sending requests to the
+	// registration server.
+	client *httputil.Client
+}
+
+func NewDiagnosticReporter(
+	startTime time.Time,
+	ambientCtx *log.AmbientContext,
+	config *base.Config,
+	settings *cluster.Settings,
+	storageClusterID func() uuid.UUID,
+	logicalClusterID func() uuid.UUID,
+	tenantID roachpb.TenantID,
+	sqlInstanceID func() base.SQLInstanceID,
+	sqlServer *sql.Server,
+	internalExec *sql.InternalExecutor,
+	db *kv.DB,
+	recorder NodeStatusGenerator,
+	locality roachpb.Locality,
+) *Reporter {
+	timeout := TelemetryHttpTimeout
+	if timeout > 5*time.Minute {
+		timeout = 5 * time.Minute
+	} else if timeout < 3*time.Second {
+		timeout = 3 * time.Second
+	}
+
+	r := &Reporter{
+		StartTime:        startTime,
+		AmbientCtx:       ambientCtx,
+		Config:           config,
+		Settings:         settings,
+		StorageClusterID: storageClusterID,
+		LogicalClusterID: logicalClusterID,
+		TenantID:         tenantID,
+		SQLInstanceID:    sqlInstanceID,
+		SQLServer:        sqlServer,
+		InternalExec:     internalExec,
+		DB:               db,
+		Recorder:         recorder,
+		Locality:         locality,
+		client:           httputil.NewClientWithTimeout(timeout),
+	}
+	r.LastSuccessfulTelemetryPing.Store(r.now().Unix())
+
+	return r
 }
 
 // shouldReportDiagnostics determines using the diagnostics report setting in
@@ -110,16 +164,16 @@ func shouldReportDiagnostics(ctx context.Context, st *cluster.Settings) bool {
 		return true
 	}
 
-	license, err := utilccl.GetLicense(st)
+	license, err := license.GetLicense(st)
 	// If we cannot fetch the license, we do not send the report.
 	if err != nil {
-		log.Errorf(ctx, "error fetching license in shouldReportDiagnostics: %s", err)
+		log.Dev.Errorf(ctx, "error fetching license in shouldReportDiagnostics: %s", err)
 		return false
 	}
 	if license == nil {
 		return false
 	}
-	isLimited := license.Type == licenseccl.License_Free || license.Type == licenseccl.License_Trial
+	isLimited := license.Type == licensepb.License_Free || license.Type == licensepb.License_Trial
 
 	return isLimited
 }
@@ -127,11 +181,12 @@ func shouldReportDiagnostics(ctx context.Context, st *cluster.Settings) bool {
 // PeriodicallyReportDiagnostics starts a background worker that periodically
 // phones home to report usage and diagnostics.
 func (r *Reporter) PeriodicallyReportDiagnostics(ctx context.Context, stopper *stop.Stopper) {
-	// Prior to starting the periodic report job, we store the current
-	// timestamp to initialize to a valid value.
-	r.LastSuccessfulTelemetryPing.Store(timeutil.Now().Unix())
 	_ = stopper.RunAsyncTaskEx(ctx, stop.TaskOpts{TaskName: "diagnostics", SpanOpt: stop.SterileRootSpan}, func(ctx context.Context) {
+		var cancel context.CancelFunc
+		ctx, cancel = stopper.WithCancelOnQuiesce(ctx)
+		defer cancel()
 		defer logcrash.RecoverAndReportNonfatalPanic(ctx, &r.Settings.SV)
+		rng, _ := randutil.NewPseudoRand()
 		nextReport := r.StartTime
 
 		var timer timeutil.Timer
@@ -146,15 +201,21 @@ func (r *Reporter) PeriodicallyReportDiagnostics(ctx context.Context, stopper *s
 
 			nextReport = nextReport.Add(reportFrequency.Get(&r.Settings.SV))
 
-			timer.Reset(addJitter(nextReport.Sub(timeutil.Now())))
+			timer.Reset(addJitter(nextReport.Sub(timeutil.Now()), rng))
 			select {
 			case <-stopper.ShouldQuiesce():
 				return
 			case <-timer.C:
-				timer.Read = true
 			}
 		}
 	})
+}
+
+func (r *Reporter) now() time.Time {
+	if r.TestingKnobs != nil && r.TestingKnobs.TimeSource != nil {
+		return r.TestingKnobs.TimeSource.Now()
+	}
+	return timeutil.Now()
 }
 
 // ReportDiagnostics phones home to report usage and diagnostics.
@@ -167,10 +228,10 @@ func (r *Reporter) ReportDiagnostics(ctx context.Context) {
 
 	report := r.CreateReport(ctx, telemetry.ResetCounts)
 
-	license, err := utilccl.GetLicense(r.Settings)
+	license, err := license.GetLicense(r.Settings)
 	if err != nil {
 		if log.V(2) {
-			log.Warningf(ctx, "failed to retrieve license while reporting diagnostics: %v", err)
+			log.Dev.Warningf(ctx, "failed to retrieve license while reporting diagnostics: %v", err)
 		}
 	}
 	url := r.buildReportingURL(report, license)
@@ -180,25 +241,32 @@ func (r *Reporter) ReportDiagnostics(ctx context.Context) {
 
 	b, err := protoutil.Marshal(report)
 	if err != nil {
-		log.Warningf(ctx, "%v", err)
+		log.Dev.Warningf(ctx, "%v", err)
 		return
 	}
 
-	res, err := httputil.Post(
+	res, err := r.client.Post(
 		ctx, url.String(), "application/x-protobuf", bytes.NewReader(b),
 	)
 	if err != nil {
 		if log.V(2) {
 			// This is probably going to be relatively common in production
 			// environments where network access is usually curtailed.
-			log.Warningf(ctx, "failed to report node usage metrics: %v", err)
+			log.Dev.Warningf(ctx, "failed to report node usage metrics: %v", err)
+		}
+		var netErr net.Error
+		if errors.As(err, &netErr) && netErr.Timeout() {
+			// We consider timeout errors to signal successful "contact" with
+			// telemetry server. They can happen for a number of reasons
+			// outside of the cluster's control.
+			r.LastSuccessfulTelemetryPing.Store(r.now().Unix())
 		}
 		return
 	}
 	defer res.Body.Close()
 	b, err = io.ReadAll(res.Body)
 	if err != nil {
-		log.Warningf(ctx, "failed to report node usage metrics: status: %s, body: %s, "+
+		log.Dev.Warningf(ctx, "failed to report node usage metrics: status: %s, body: %s, "+
 			"error: %v", res.Status, b, err)
 		return
 	}
@@ -207,13 +275,16 @@ func (r *Reporter) ReportDiagnostics(ctx context.Context) {
 	// with the telemetry server and any further problems are not the
 	// customer's fault. We update the telemetry timestamp before moving
 	// on with other request handling.
-	r.LastSuccessfulTelemetryPing.Store(timeutil.Now().Unix())
+	r.LastSuccessfulTelemetryPing.Store(r.now().Unix())
 
 	if res.StatusCode != http.StatusOK {
-		log.Warningf(ctx, "failed to report node usage metrics: status: %s, body: %s", res.Status, b)
+		log.Dev.Warningf(ctx, "failed to report node usage metrics: status: %s, body: %s", res.Status, b)
 		return
 	}
-	r.SQLServer.GetReportedSQLStatsController().ResetLocalSQLStats(ctx)
+	err = r.SQLServer.GetReportedSQLStatsProvider().Reset(ctx)
+	if err != nil {
+		log.Dev.Warningf(ctx, "failed to reset SQL stats: %s", err)
+	}
 }
 
 // GetLastSuccessfulTelemetryPing will return the timestamp of when we last got
@@ -247,7 +318,7 @@ func (r *Reporter) CreateReport(
 
 	schema, err := r.collectSchemaInfo(ctx)
 	if err != nil {
-		log.Warningf(ctx, "error collecting schema info for diagnostic report: %+v", err)
+		log.Dev.Warningf(ctx, "error collecting schema info for diagnostic report: %+v", err)
 		schema = nil
 	}
 	info.Schema = schema
@@ -262,7 +333,7 @@ func (r *Reporter) CreateReport(
 		sessiondata.NodeUserSessionDataOverride,
 		"SELECT name FROM system.settings",
 	); err != nil {
-		log.Warningf(ctx, "failed to read settings: %s", err)
+		log.Dev.Warningf(ctx, "failed to read settings: %s", err)
 	} else {
 		info.AlteredSettings = make(map[string]string)
 		var ok bool
@@ -276,7 +347,7 @@ func (r *Reporter) CreateReport(
 		if err != nil {
 			// No need to clear AlteredSettings map since we only make best
 			// effort to populate it.
-			log.Warningf(ctx, "failed to read settings: %s", err)
+			log.Dev.Warningf(ctx, "failed to read settings: %s", err)
 		}
 	}
 
@@ -287,7 +358,7 @@ func (r *Reporter) CreateReport(
 		sessiondata.NodeUserSessionDataOverride,
 		"SELECT id, config FROM system.zones",
 	); err != nil {
-		log.Warningf(ctx, "%v", err)
+		log.Dev.Warningf(ctx, "%v", err)
 	} else {
 		info.ZoneConfigs = make(map[int64]zonepb.ZoneConfig)
 		var ok bool
@@ -299,7 +370,7 @@ func (r *Reporter) CreateReport(
 				continue
 			} else {
 				if err := protoutil.Unmarshal([]byte(*bytes), &zone); err != nil {
-					log.Warningf(ctx, "unable to parse zone config %d: %v", id, err)
+					log.Dev.Warningf(ctx, "unable to parse zone config %d: %v", id, err)
 					continue
 				}
 			}
@@ -310,14 +381,14 @@ func (r *Reporter) CreateReport(
 		if err != nil {
 			// No need to clear ZoneConfigs map since we only make best effort
 			// to populate it.
-			log.Warningf(ctx, "%v", err)
+			log.Dev.Warningf(ctx, "%v", err)
 		}
 	}
 
-	info.SqlStats, err = r.SQLServer.GetScrubbedReportingStats(ctx, 100 /* limit */)
+	info.SqlStats, err = r.SQLServer.GetScrubbedReportingStats(ctx, 100 /* limit */, false)
 	if err != nil {
 		if log.V(2 /* level */) {
-			log.Warningf(ctx, "unexpected error encountered when getting scrubbed reporting stats: %s", err)
+			log.Dev.Warningf(ctx, "unexpected error encountered when getting scrubbed reporting stats: %s", err)
 		}
 	}
 
@@ -380,7 +451,7 @@ func (r *Reporter) populateSQLInfo(uptime int64, sql *diagnosticspb.SQLInstanceI
 // type fields. Check out `schematelemetry` package for a better data source for
 // collecting redacted schema information.
 func (r *Reporter) collectSchemaInfo(ctx context.Context) ([]descpb.TableDescriptor, error) {
-	startKey := keys.MakeSQLCodec(r.TenantID).TablePrefix(keys.DescriptorTableID)
+	startKey := keys.MakeSQLCodec(r.TenantID).IndexPrefix(keys.DescriptorTableID, keys.DescriptorTablePrimaryKeyIndexID)
 	endKey := startKey.PrefixEnd()
 	kvs, err := r.DB.Scan(ctx, startKey, endKey, 0)
 	if err != nil {
@@ -409,10 +480,10 @@ func (r *Reporter) collectSchemaInfo(ctx context.Context) ([]descpb.TableDescrip
 // buildReportingURL creates a URL to report diagnostics.
 // If an empty updates URL is set (via empty environment variable), returns nil.
 func (r *Reporter) buildReportingURL(
-	report *diagnosticspb.DiagnosticReport, license *licenseccl.License,
+	report *diagnosticspb.DiagnosticReport, license *licensepb.License,
 ) *url.URL {
 	if license == nil {
-		license = &licenseccl.License{}
+		license = &licensepb.License{}
 	}
 
 	clusterInfo := ClusterInfo{
@@ -432,9 +503,9 @@ func (r *Reporter) buildReportingURL(
 }
 
 func getLicenseType(ctx context.Context, settings *cluster.Settings) string {
-	licenseType, err := base.LicenseType(settings)
+	licenseType, err := license.GetLicenseType(settings)
 	if err != nil {
-		log.Errorf(ctx, "error retrieving license type: %s", err)
+		log.Dev.Errorf(ctx, "error retrieving license type: %s", err)
 		return ""
 	}
 	return licenseType

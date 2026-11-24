@@ -22,11 +22,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
@@ -39,6 +44,17 @@ var indexBackfillMergeBatchSize = settings.RegisterIntSetting(
 	"bulkio.index_backfill.merge_batch_size",
 	"the number of rows we merge between temporary and adding indexes in a single batch",
 	1000,
+	settings.NonNegativeInt, /* validateFn */
+)
+
+// indexBackfillVectorMergeBatchSize is the maximum number of vectors we attempt to merge
+// in a single transaction during the merging process. This is a much smaller number because
+// fixups create a lot of conflicts with big batches.
+var indexBackfillVectorMergeBatchSize = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"bulkio.index_backfill.vector_merge_batch_size",
+	"the number of vectors we merge between temporary and adding indexes in a single batch",
+	3,
 	settings.NonNegativeInt, /* validateFn */
 )
 
@@ -65,12 +81,27 @@ var indexBackfillMergeNumWorkers = settings.RegisterIntSetting(
 	settings.PositiveInt,
 )
 
+// indexBackfillMergeMaxKVAutoRetry is the maximum number of times a merge operation
+// will automatically retry in the KV layer before reducing the batch size to handle
+// contention.
+var indexBackfillMergeMaxKVAutoRetry = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"bulkio.index_backfill.merge_max_kv_auto_retries",
+	"the number of times a merge operation will automatically retry in the KV layer before lowering the batch size",
+	10,
+	settings.PositiveInt,
+)
+
 // keyBatch will manage merging a batch of keys. Potentially splitting the batch
 // across multiple transactions depending on contention.
 type keyBatch struct {
 	sourceKeys    []roachpb.Key
 	processedKeys int
-	batchSize     int
+	// batchSize the size of the current batches being used.
+	batchSize int
+	// keysToSkip is the set of keys that can be safely skipped,
+	// because we noticed a newer timestamp on them.
+	keysToSkip intsets.Fast
 }
 
 // IndexBackfillMerger is a processor that merges entries from the corresponding
@@ -81,6 +112,7 @@ type IndexBackfillMerger struct {
 	desc           catalog.TableDescriptor
 	flowCtx        *execinfra.FlowCtx
 	muBoundAccount muBoundAccount
+	VectorIndexes  map[descpb.IndexID]*VectorIndexMergeHelper
 }
 
 // OutputTypes is always nil.
@@ -103,7 +135,8 @@ func (ibm *IndexBackfillMerger) Run(ctx context.Context, output execinfra.RowRec
 	defer span.Finish()
 	// This method blocks until all worker goroutines exit, so it's safe to
 	// close memory monitoring infra in defers.
-	mergerMon := execinfra.NewMonitor(ctx, ibm.flowCtx.Cfg.BackfillerMonitor, "index-backfiller-merger-mon")
+	mergerMon := execinfra.NewMonitor(ctx, ibm.flowCtx.Cfg.BackfillerMonitor,
+		mon.MakeName("index-backfiller-merger-mon"))
 	defer mergerMon.Stop(ctx)
 	ibm.muBoundAccount.boundAccount = mergerMon.MakeBoundAccount()
 	defer func() {
@@ -113,6 +146,31 @@ func (ibm *IndexBackfillMerger) Run(ctx context.Context, output execinfra.RowRec
 	}()
 	defer output.ProducerDone()
 	defer execinfra.SendTraceData(ctx, ibm.flowCtx, output)
+
+	for i, idx := range ibm.spec.AddedIndexes {
+		idxDesc, err := catalog.MustFindIndexByID(ibm.desc, idx)
+		if err != nil {
+			panic(err)
+		}
+		if idxDesc.GetType() != idxtype.VECTOR {
+			continue
+		}
+		tmpIdx, err := catalog.MustFindIndexByID(ibm.desc, ibm.spec.TemporaryIndexes[i])
+		if err != nil {
+			panic(err)
+		}
+		// Initialize the vector index merge helper.
+		if ibm.VectorIndexes == nil {
+			ibm.VectorIndexes = make(map[descpb.IndexID]*VectorIndexMergeHelper)
+		}
+
+		var vim VectorIndexMergeHelper
+		if err := vim.Init(ctx, ibm.flowCtx.EvalCtx, ibm.desc, ibm.flowCtx.Cfg.VecIndexManager.(*vecindex.Manager), idxDesc, tmpIdx); err != nil {
+			panic(err)
+		}
+
+		ibm.VectorIndexes[idx] = &vim
+	}
 
 	mu := struct {
 		syncutil.Mutex
@@ -222,7 +280,16 @@ func (ibm *IndexBackfillMerger) Run(ctx context.Context, output execinfra.RowRec
 	})
 
 	workersDoneCh := make(chan error)
-	go func() { workersDoneCh <- g.Wait() }()
+	go func() {
+		// Without this defer, a panic re-thrown from a ctxgroup worker via Wait
+		// would tear down the SQL pod with no Sentry report. We can't switch
+		// this goroutine to stop.Stopper.RunAsyncTask because Run blocks on
+		// g.Wait to satisfy the invariant that the deferred memory monitor
+		// cleanup above runs only after the workers in g have exited; a refused
+		// stopper task would force a return with workers still running.
+		defer logcrash.RecoverAndReportPanic(ctx, &ibm.flowCtx.Cfg.Settings.SV)
+		workersDoneCh <- g.Wait()
+	}()
 
 	tick := time.NewTicker(indexBackfillMergeProgressReportInterval)
 	defer tick.Stop()
@@ -263,7 +330,12 @@ func (ibm *IndexBackfillMerger) scan(
 			}
 		}
 	}
-	chunkSize := indexBackfillMergeBatchSize.Get(&ibm.flowCtx.Cfg.Settings.SV)
+	var chunkSize int64
+	if _, ok := ibm.VectorIndexes[ibm.spec.AddedIndexes[spanIdx]]; ok {
+		chunkSize = indexBackfillVectorMergeBatchSize.Get(&ibm.flowCtx.Cfg.Settings.SV)
+	} else {
+		chunkSize = indexBackfillMergeBatchSize.Get(&ibm.flowCtx.Cfg.Settings.SV)
+	}
 	chunkBytes := indexBackfillMergeBatchBytes.Get(&ibm.flowCtx.Cfg.Settings.SV)
 
 	var br *kvpb.BatchResponse
@@ -272,7 +344,7 @@ func (ibm *IndexBackfillMerger) scan(
 			return err
 		}
 		// For now just grab all of the destination KVs and merge the corresponding entries.
-		log.VInfof(ctx, 2, "scanning batch [%s, %s) at %v to merge", startKey, endKey, readAsOf)
+		log.Dev.VInfof(ctx, 2, "scanning batch [%s, %s) at %v to merge", startKey, endKey, readAsOf)
 		ba := &kvpb.BatchRequest{}
 		ba.TargetBytes = chunkBytes
 		if err := ibm.growBoundAccount(ctx, chunkBytes); err != nil {
@@ -345,18 +417,33 @@ func (ibm *IndexBackfillMerger) merge(
 	destPrefix := rowenc.MakeIndexKeyPrefix(codec, table.GetID(), destinationID)
 
 	batch := &keyBatch{sourceKeys: sourceKeys}
-
 	err := retryWithReducedBatchWhenAutoRetryLimitExceeded(ctx, batch,
 		func(ctx context.Context, keys []roachpb.Key) error {
 			return ibm.flowCtx.Cfg.DB.Txn(ctx, func(
 				ctx context.Context, txn isql.Txn,
-			) error {
+			) (err error) {
+				if knobs, ok := ibm.flowCtx.Cfg.TestingKnobs.IndexBackfillMergerTestingKnobs.(*IndexBackfillMergerTestingKnobs); ok {
+					if knobs != nil && knobs.RunBeforeMergeTxn != nil {
+						if err := knobs.RunBeforeMergeTxn(ctx, txn.KV(), keys, batch.keysToSkip.Len()); err != nil {
+							return err
+						}
+					}
+				}
+
+				// We explicitly specify a low retry limit because this operation is
+				// wrapped with its own retry function that will also take care of
+				// adjusting the batch size on each retry.
+				maxAutoRetries := indexBackfillMergeMaxKVAutoRetry.Get(&ibm.flowCtx.Cfg.Settings.SV)
+				txn.KV().SetMaxAutoRetries(int(maxAutoRetries))
+
 				var deletedCount int
+				var keysToSkipCount int
 				txn.KV().AddCommitTrigger(func(ctx context.Context) {
 					commitTs, _ := txn.KV().CommitTimestamp()
-					log.VInfof(ctx, 2, "merged batch of %d keys (%d deletes) (span: %s) (commit timestamp: %s)",
+					log.Dev.VInfof(ctx, 2, "merged batch of %d keys (%d deletes, %d skipped) (span: %s) (commit timestamp: %s)",
 						len(keys),
 						deletedCount,
+						keysToSkipCount,
 						sourceSpan,
 						commitTs,
 					)
@@ -365,15 +452,44 @@ func (ibm *IndexBackfillMerger) merge(
 					return nil
 				}
 
-				wb, memUsedInMerge, deletedKeys, err := ibm.constructMergeBatch(
-					ctx, txn.KV(), keys, sourcePrefix, destPrefix,
-				)
-				if err != nil {
-					return err
+				var entryMerger func(
+					ctx context.Context,
+					sourceKV *kv.KeyValue,
+					destKey roachpb.Key,
+				) (*kv.KeyValue, bool, error)
+				vim, ok := ibm.VectorIndexes[destinationID]
+				if ok {
+					vm, err := vim.NewVectorIndexMergerTxn(ctx, ibm.flowCtx.EvalCtx, txn.KV())
+					if err != nil {
+						return err
+					}
+					defer vm.Close(ctx)
+					entryMerger = func(
+						ctx context.Context,
+						sourceKV *kv.KeyValue,
+						destKey roachpb.Key,
+					) (*kv.KeyValue, bool, error) {
+						return vm.MergeVector(ctx, sourceKV, destKey)
+					}
+				} else {
+					entryMerger = func(
+						ctx context.Context,
+						sourceKV *kv.KeyValue,
+						destKey roachpb.Key,
+					) (*kv.KeyValue, bool, error) {
+						return mergeEntry(sourceKV, destKey)
+					}
 				}
 
+				wb, memUsedInMerge, deletedKeys, keysToSkip, err := ibm.constructMergeBatch(
+					ctx, txn.KV(), keys, sourcePrefix, destPrefix, batch, entryMerger,
+				)
+				if err != nil || wb == nil {
+					return err
+				}
 				defer ibm.shrinkBoundAccount(ctx, memUsedInMerge)
 				deletedCount = deletedKeys
+				keysToSkipCount = keysToSkip
 				if err := txn.KV().Run(ctx, wb); err != nil {
 					return err
 				}
@@ -399,58 +515,86 @@ func (ibm *IndexBackfillMerger) constructMergeBatch(
 	sourceKeys []roachpb.Key,
 	sourcePrefix []byte,
 	destPrefix []byte,
-) (*kv.Batch, int64, int, error) {
+	batch *keyBatch,
+	entryMerger func(ctx context.Context, sourceKV *kv.KeyValue, destKey roachpb.Key) (*kv.KeyValue, bool, error),
+) (*kv.Batch, int64, int, int, error) {
+	var keysToSkip int
+	var keysAdded int
 	rb := txn.NewBatch()
 	for i := range sourceKeys {
+		if batch.isKeySkipped(i) {
+			keysToSkip++
+			continue
+		}
 		rb.Get(sourceKeys[i])
+		keysAdded++
+	}
+	// All of the keys in this batch are skipped, so nothing
+	// to fetch.
+	if keysAdded == 0 {
+		return nil, 0, 0, keysToSkip, nil
 	}
 	if err := txn.Run(ctx, rb); err != nil {
-		return nil, 0, 0, err
+		return nil, 0, 0, 0, err
 	}
 
-	// We acquire the bound account lock for the entirety of the merge batch
-	// construction so that we don't have to acquire the lock every time we want
-	// to grow the account.
 	var memUsedInMerge int64
-	ibm.muBoundAccount.Lock()
-	defer ibm.muBoundAccount.Unlock()
-	for i := range rb.Results {
-		// Since the source index is delete-preserving, reading the latest value for
-		// a key that has existed in the past should always return a value.
-		if rb.Results[i].Rows[0].Value == nil {
-			return nil, 0, 0, errors.AssertionFailedf("expected value to be present in temp index for key=%s", rb.Results[i].Rows[0].Key)
+	err := func() error {
+		ibm.muBoundAccount.Lock()
+		defer ibm.muBoundAccount.Unlock()
+		for i := range rb.Results {
+			// Since the source index is delete-preserving, reading the latest value for
+			// a key that has existed in the past should always return a value.
+			if rb.Results[i].Rows[0].Value == nil {
+				return errors.AssertionFailedf("expected value to be present in temp index for key=%s", rb.Results[i].Rows[0].Key)
+			}
+			rowMem := int64(len(rb.Results[i].Rows[0].Key)) + int64(len(rb.Results[i].Rows[0].Value.RawBytes))
+			if err := ibm.muBoundAccount.boundAccount.Grow(ctx, rowMem); err != nil {
+				return errors.Wrap(err, "failed to allocate space to read latest keys from temp index")
+			}
+			memUsedInMerge += rowMem
 		}
-		rowMem := int64(len(rb.Results[i].Rows[0].Key)) + int64(len(rb.Results[i].Rows[0].Value.RawBytes))
-		if err := ibm.muBoundAccount.boundAccount.Grow(ctx, rowMem); err != nil {
-			return nil, 0, 0, errors.Wrap(err, "failed to allocate space to read latest keys from temp index")
-		}
-		memUsedInMerge += rowMem
+		return nil
+	}()
+	if err != nil {
+		return nil, 0, 0, 0, err
 	}
 
 	prefixLen := len(sourcePrefix)
 	destKey := make([]byte, len(destPrefix))
 	var deletedCount int
+	var totalEntryBytes int64
 	wb := txn.NewBatch()
-	for i := range rb.Results {
+	resultOffset := 0
+	for sourceOffset := range sourceKeys {
+		if batch.isKeySkipped(sourceOffset) {
+			continue
+		}
+		i := resultOffset
+		resultOffset++
 		sourceKV := &rb.Results[i].Rows[0]
 		if len(sourceKV.Key) < prefixLen {
-			return nil, 0, 0, errors.Errorf("key for index entry %v does not start with prefix %v", sourceKV, sourcePrefix)
+			return nil, 0, 0, 0, errors.Errorf("key for index entry %v does not start with prefix %v", sourceKV, sourcePrefix)
 		}
-
+		// If the timestamp we are looking at is after the merge timestamp,
+		// then no work needs to be done for this row.
+		if !sourceKV.Value.Timestamp.LessEq(ibm.spec.MergeTimestamp) {
+			batch.markKeyAsSkipped(sourceOffset)
+			keysToSkip++
+			continue
+		}
 		destKey = destKey[:0]
 		destKey = append(destKey, destPrefix...)
 		destKey = append(destKey, sourceKV.Key[prefixLen:]...)
 
-		mergedEntry, deleted, err := mergeEntry(sourceKV, destKey)
+		mergedEntry, deleted, err := entryMerger(ctx, sourceKV, destKey)
 		if err != nil {
-			return nil, 0, 0, err
+			return nil, 0, 0, 0, err
+		} else if mergedEntry == nil {
+			continue
 		}
 
-		entryBytes := mergedEntryBytes(mergedEntry, deleted)
-		if err := ibm.muBoundAccount.boundAccount.Grow(ctx, entryBytes); err != nil {
-			return nil, 0, 0, errors.Wrap(err, "failed to allocate space to merge entry from temp index")
-		}
-		memUsedInMerge += entryBytes
+		totalEntryBytes += mergedEntryBytes(mergedEntry, deleted)
 		if deleted {
 			deletedCount++
 			wb.Del(mergedEntry.Key)
@@ -458,8 +602,20 @@ func (ibm *IndexBackfillMerger) constructMergeBatch(
 			wb.Put(mergedEntry.Key, mergedEntry.Value)
 		}
 	}
+	err = func() error {
+		ibm.muBoundAccount.Lock()
+		defer ibm.muBoundAccount.Unlock()
+		if err := ibm.muBoundAccount.boundAccount.Grow(ctx, totalEntryBytes); err != nil {
+			return errors.Wrap(err, "failed to allocate space to merge entry from temp index")
+		}
+		return nil
+	}()
+	if err != nil {
+		return nil, 0, 0, 0, err
+	}
+	memUsedInMerge += totalEntryBytes
 
-	return wb, memUsedInMerge, deletedCount, nil
+	return wb, memUsedInMerge, deletedCount, keysToSkip, nil
 }
 
 func mergedEntryBytes(entry *kv.KeyValue, deleted bool) int64 {
@@ -536,6 +692,8 @@ type IndexBackfillMergerTestingKnobs struct {
 	// RunAfterScanChunk is called once after a chunk has been successfully scanned.
 	RunAfterScanChunk func()
 
+	RunBeforeMergeTxn func(ctx context.Context, txn *kv.Txn, sourceKeys []roachpb.Key, keysToSkipCount int) error
+
 	RunDuringMergeTxn func(ctx context.Context, txn *kv.Txn, startKey roachpb.Key, endKey roachpb.Key) error
 
 	// PushesProgressEveryChunk forces the process to push the merge process after
@@ -574,7 +732,7 @@ func retryWithReducedBatchWhenAutoRetryLimitExceeded(
 		// If we reached the auto retry limit, we reduce the keys for the next batch.
 		if kv.IsAutoRetryLimitExhaustedError(err) {
 			batch.reduceForRetry()
-			log.Infof(ctx,
+			log.Dev.Infof(ctx,
 				"kv auto retry limit was reached, retrying with a reduced batch size of %d keys. kv error: %v",
 				batch.batchSize, err)
 			continue
@@ -601,6 +759,16 @@ func (k *keyBatch) getKeysForNextBatch() []roachpb.Key {
 	}
 	batchEnd := min(k.processedKeys+k.batchSize, len(k.sourceKeys))
 	return k.sourceKeys[k.processedKeys:batchEnd]
+}
+
+// markKeyAsSkipped marks that a key in the batch can be skipped.
+func (k *keyBatch) markKeyAsSkipped(keyIdx int) {
+	k.keysToSkip.Add(keyIdx + k.processedKeys)
+}
+
+// isKeySkipped returns true if a key in the batch can be skipped.
+func (k *keyBatch) isKeySkipped(keyIdx int) bool {
+	return k.keysToSkip.Contains(keyIdx + k.processedKeys)
 }
 
 // setLastBatchComplete is a helper for when we successfully merged the last

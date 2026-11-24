@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -49,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/errors/errutil"
 	"github.com/cockroachdb/redact"
@@ -373,12 +375,9 @@ func TestSendRPCOrder(t *testing.T) {
 	}
 
 	// We want to test logic that relies on behavior of CanSendToFollower.
-	// Given we don't want to link that code here, we inject behavior that
-	// says that we can send to a follower if the closed timestamp policy
-	// is LEAD_FOR_GLOBAL_READS.
-	old := CanSendToFollower
-	defer func() { CanSendToFollower = old }()
-	CanSendToFollower = func(
+	// We inject behavior that says that we can send to a follower if the
+	// closed timestamp policy is LEAD_FOR_GLOBAL_READS.
+	canSendToFollower := func(
 		_ context.Context,
 		_ *cluster.Settings,
 		_ *hlc.Clock,
@@ -446,6 +445,7 @@ func TestSendRPCOrder(t *testing.T) {
 		TransportFactory:  transportFactory,
 		RangeDescriptorDB: mockRangeDescriptorDBForDescs(descriptor),
 		Settings:          cluster.MakeTestingClusterSettings(),
+		CanSendToFollower: canSendToFollower,
 		// This test is checking how the different locality settings impact the
 		// choice of routing and number of requests. It needs to route to the
 		// leaseholder first to prevent extra calls.
@@ -460,7 +460,7 @@ func TestSendRPCOrder(t *testing.T) {
 			cfg.Locality = roachpb.Locality{
 				Tiers: tc.tiers,
 			}
-			ds := NewDistSender(cfg)
+			ds := NewDistSender(ctx, cfg)
 
 			ds.rangeCache.Clear()
 			var lease roachpb.Lease
@@ -595,7 +595,7 @@ func TestImmutableBatchArgs(t *testing.T) {
 		Settings:          cluster.MakeTestingClusterSettings(),
 	}
 
-	ds := NewDistSender(cfg)
+	ds := NewDistSender(ctx, cfg)
 
 	txn := roachpb.MakeTransaction(
 		"test", nil /* baseKey */, isolation.Serializable, roachpb.NormalUserPriority,
@@ -718,7 +718,7 @@ func TestErrorWithCancellationExit(t *testing.T) {
 				RangeDescriptorDB: defaultMockRangeDescriptorDB,
 				Settings:          cluster.MakeTestingClusterSettings(),
 			}
-			ds := NewDistSender(cfg)
+			ds := NewDistSender(ctx, cfg)
 			// Start a request that runs through distSender.
 			put := kvpb.NewPut(roachpb.Key("a"), roachpb.MakeValueFromString("value"))
 			_, pErr := kv.SendWrapped(ctx, ds, put)
@@ -839,7 +839,7 @@ func TestRetryOnNotLeaseHolderError(t *testing.T) {
 				RangeDescriptorDB: threeReplicaMockRangeDescriptorDB,
 				Settings:          cluster.MakeTestingClusterSettings(),
 			}
-			ds := NewDistSender(cfg)
+			ds := NewDistSender(ctx, cfg)
 			v := roachpb.MakeValueFromString("value")
 			put := kvpb.NewPut(roachpb.Key("a"), v)
 			if _, pErr := kv.SendWrapped(ctx, ds, put); !testutils.IsPError(pErr, "boom") {
@@ -941,7 +941,7 @@ func TestBackoffOnNotLeaseHolderErrorDuringTransfer(t *testing.T) {
 	} {
 		t.Run("", func(t *testing.T) {
 			sequences = c.leaseSequences
-			ds := NewDistSender(cfg)
+			ds := NewDistSender(ctx, cfg)
 			v := roachpb.MakeValueFromString("value")
 			put := kvpb.NewPut(roachpb.Key("a"), v)
 			if _, pErr := kv.SendWrapped(ctx, ds, put); !testutils.IsPError(pErr, "boom") {
@@ -964,18 +964,6 @@ func TestNoBackoffOnNotLeaseHolderErrorFromFollowerRead(t *testing.T) {
 	stopper := stop.NewStopper()
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
-
-	old := CanSendToFollower
-	defer func() { CanSendToFollower = old }()
-	CanSendToFollower = func(
-		_ context.Context,
-		_ *cluster.Settings,
-		_ *hlc.Clock,
-		_ roachpb.RangeClosedTimestampPolicy,
-		ba *kvpb.BatchRequest,
-	) bool {
-		return true
-	}
 
 	var sentTo []roachpb.NodeID
 	lease := roachpb.Lease{
@@ -1015,8 +1003,17 @@ func TestNoBackoffOnNotLeaseHolderErrorFromFollowerRead(t *testing.T) {
 		TransportFactory:  adaptSimpleTransport(testFn),
 		RangeDescriptorDB: threeReplicaMockRangeDescriptorDB,
 		Settings:          cluster.MakeTestingClusterSettings(),
+		CanSendToFollower: func(
+			_ context.Context,
+			_ *cluster.Settings,
+			_ *hlc.Clock,
+			_ roachpb.RangeClosedTimestampPolicy,
+			ba *kvpb.BatchRequest,
+		) bool {
+			return true
+		},
 	}
-	ds := NewDistSender(cfg)
+	ds := NewDistSender(ctx, cfg)
 	ds.rangeCache.Insert(ctx, roachpb.RangeInfo{
 		Desc:  testUserRangeDescriptor3Replicas,
 		Lease: lease,
@@ -1083,7 +1080,7 @@ func TestNoBackoffOnNotLeaseHolderErrorWithoutLease(t *testing.T) {
 		RangeDescriptorDB: threeReplicaMockRangeDescriptorDB,
 		Settings:          cluster.MakeTestingClusterSettings(),
 	}
-	ds := NewDistSender(cfg)
+	ds := NewDistSender(ctx, cfg)
 	ds.rangeCache.Insert(ctx, roachpb.RangeInfo{
 		Desc:  rangeDesc,
 		Lease: lease,
@@ -1186,7 +1183,7 @@ func TestDistSenderMovesOnFromReplicaWithStaleLease(t *testing.T) {
 		// the leaseholder first to avoid spurious calls.
 		TestingKnobs: ClientTestingKnobs{RouteToLeaseholderFirst: true},
 	}
-	ds := NewDistSender(cfg)
+	ds := NewDistSender(ctx, cfg)
 
 	ds.rangeCache.Insert(ctx, roachpb.RangeInfo{
 		Desc:  desc,
@@ -1308,7 +1305,7 @@ func TestDistSenderIgnoresNLHEBasedOnOldRangeGeneration(t *testing.T) {
 				// has to route to the leaseholder first.
 				TestingKnobs: ClientTestingKnobs{RouteToLeaseholderFirst: true},
 			}
-			ds := NewDistSender(cfg)
+			ds := NewDistSender(ctx, cfg)
 
 			ds.rangeCache.Insert(ctx, roachpb.RangeInfo{
 				Desc:  desc,
@@ -1413,7 +1410,7 @@ func TestDistSenderRetryOnTransportErrors(t *testing.T) {
 				RangeDescriptorDB: threeReplicaMockRangeDescriptorDB,
 				Settings:          cluster.MakeTestingClusterSettings(),
 			}
-			ds := NewDistSender(cfg)
+			ds := NewDistSender(ctx, cfg)
 
 			ds.rangeCache.Insert(ctx, roachpb.RangeInfo{
 				Desc:  desc,
@@ -1509,7 +1506,7 @@ func TestDistSenderLeaseholderDown(t *testing.T) {
 		Settings:          cluster.MakeTestingClusterSettings(),
 	}
 
-	ds := NewDistSender(cfg)
+	ds := NewDistSender(ctx, cfg)
 	ds.rangeCache.Insert(ctx, roachpb.RangeInfo{
 		Desc:                  desc,
 		Lease:                 lease1,
@@ -1574,7 +1571,7 @@ func TestRetryOnDescriptorLookupError(t *testing.T) {
 		}),
 		Settings: cluster.MakeTestingClusterSettings(),
 	}
-	ds := NewDistSender(cfg)
+	ds := NewDistSender(ctx, cfg)
 	put := kvpb.NewPut(roachpb.Key("a"), roachpb.MakeValueFromString("value"))
 	// Error on descriptor lookup, second attempt successful.
 	if _, pErr := kv.SendWrapped(context.Background(), ds, put); pErr != nil {
@@ -1644,7 +1641,7 @@ func TestEvictOnFirstRangeGossip(t *testing.T) {
 		Settings:           cluster.MakeTestingClusterSettings(),
 	}
 
-	ds := NewDistSender(cfg).withMetaRecursion()
+	ds := NewDistSender(ctx, cfg).withMetaRecursion()
 
 	anyKey := roachpb.Key("anything")
 	rAnyKey := keys.MustAddr(anyKey)
@@ -1780,7 +1777,7 @@ func TestEvictCacheOnError(t *testing.T) {
 				RangeDescriptorDB: defaultMockRangeDescriptorDB,
 				Settings:          cluster.MakeTestingClusterSettings(),
 			}
-			ds := NewDistSender(cfg)
+			ds := NewDistSender(ctx, cfg)
 
 			var lease roachpb.Lease
 			lease.Replica = leaseHolder
@@ -1853,7 +1850,7 @@ func TestEvictCacheOnUnknownLeaseHolder(t *testing.T) {
 		RangeDescriptorDB: threeReplicaMockRangeDescriptorDB,
 		Settings:          cluster.MakeTestingClusterSettings(),
 	}
-	ds := NewDistSender(cfg)
+	ds := NewDistSender(ctx, cfg)
 	key := roachpb.Key("a")
 	put := kvpb.NewPut(key, roachpb.MakeValueFromString("value"))
 
@@ -1863,6 +1860,112 @@ func TestEvictCacheOnUnknownLeaseHolder(t *testing.T) {
 	if count != 3 {
 		t.Errorf("expected three retries; got %d", count)
 	}
+}
+
+// TestEventuallyRecoverFromLeaseholderContextError verifies that upon
+// encountering a context error, the DistSender will eventually randomize the
+// leaseholder for a range descriptor cache entry to try to contact a healthy
+// replica.
+func TestEventuallyRecoverFromLeaseholderContextError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	clock := hlc.NewClockForTesting(nil)
+	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
+	g := makeGossip(t, stopper, rpcContext)
+	for _, n := range testUserRangeDescriptor3Replicas.Replicas().VoterDescriptors() {
+		require.NoError(t, g.AddInfoProto(
+			gossip.MakeNodeIDKey(n.NodeID),
+			newNodeDesc(n.NodeID),
+			gossip.NodeDescriptorTTL,
+		))
+	}
+
+	var sendCtx context.Context
+	var cancel context.CancelFunc
+	originalLeaseholder := testUserRangeDescriptor3Replicas.Replicas().VoterDescriptors()[0]
+	testFn := func(_ context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
+		t.Logf("testFn: sending to %s", ba.Replica)
+		switch ba.Replica {
+		case originalLeaseholder:
+			// We wish to create an artificial context error in the original
+			// leaseholder replica.
+			cancel()
+			return nil, sendCtx.Err()
+		default:
+			return ba.CreateReply(), nil
+		}
+	}
+
+	cfg := DistSenderConfig{
+		AmbientCtx:        log.MakeTestingAmbientCtxWithNewTracer(),
+		Clock:             clock,
+		NodeDescs:         g,
+		Stopper:           stopper,
+		TransportFactory:  adaptSimpleTransport(testFn),
+		RangeDescriptorDB: threeReplicaMockRangeDescriptorDB,
+		Settings:          cluster.MakeTestingClusterSettings(),
+		TestingKnobs: ClientTestingKnobs{
+			// The leaseholder randomization mechanism depends on the leaseholder
+			// being tried first; override the metamorphic default.
+			RouteToLeaseholderFirst: true,
+		},
+	}
+	ds := NewDistSender(ctx, cfg)
+
+	// Set the clock for the range cache to be manual.
+	manualClock := hlc.NewHybridManualClock()
+	ds.rangeCache.TestingSetManualClock(manualClock)
+
+	// Pre-populate the range cache with a known leaseholder.
+	ds.rangeCache.Insert(ctx, roachpb.RangeInfo{
+		Desc:  testUserRangeDescriptor3Replicas,
+		Lease: roachpb.Lease{Replica: originalLeaseholder, Sequence: 1},
+	})
+
+	// sendGet sends a Get("a") and returns the error and the recorded trace.
+	sendGet := func() (tracingpb.Recording, error) {
+		tracer := tracing.NewTracer()
+		logCtx, getLogs := tracing.ContextWithRecordingSpan(ctx, tracer, "send")
+		sendCtx, cancel = context.WithCancel(logCtx)
+		defer cancel()
+		_, pErr := kv.SendWrapped(sendCtx, ds, kvpb.NewGet(roachpb.Key("a")))
+		return getLogs(), pErr.GoError()
+	}
+
+	hasRandomized := func(rec tracingpb.Recording) bool {
+		_, ok := rec.FindLogMessage("randomizing the leaseholder")
+		return ok
+	}
+
+	// First send: should fail, leaseholder should not be randomized (the
+	// TTL hasn't elapsed yet).
+	rec, err := sendGet()
+	require.Error(t, err)
+	require.False(t, hasRandomized(rec), "unexpected randomization in first send, trace:\n%s", rec)
+
+	// Advance the clock past the randomization threshold.
+	manualClock.Increment(randomizeLeaseholderOnContextErrorDuration.Get(&ds.st.SV).Nanoseconds())
+
+	// Second send: should fail, but this time randomize the leaseholder.
+	rec, err = sendGet()
+	require.Error(t, err)
+	require.True(t, hasRandomized(rec), "expected randomization in second send, trace:\n%s", rec)
+
+	// Verify the cache now has a different speculative leaseholder.
+	rng, err := ds.rangeCache.TestingGetCached(
+		ctx, testUserRangeDescriptor3Replicas.StartKey, false, roachpb.LAG_BY_CLUSTER_SETTING)
+	require.NoError(t, err)
+	require.False(t, rng.Lease.Empty())
+	require.NotEqual(t, originalLeaseholder, rng.Lease.Replica)
+
+	// Third send: should succeed now that we try a different replica.
+	_, err = sendGet()
+	require.NoError(t, err)
 }
 
 // TestRetryOnWrongReplicaError sets up a DistSender on a minimal gossip
@@ -1950,7 +2053,7 @@ func TestRetryOnWrongReplicaError(t *testing.T) {
 		FirstRangeProvider: g,
 		Settings:           cluster.MakeTestingClusterSettings(),
 	}
-	ds := NewDistSender(cfg)
+	ds := NewDistSender(ctx, cfg)
 	scan := kvpb.NewScan(roachpb.Key("a"), roachpb.Key("d"))
 	if _, err := kv.SendWrapped(context.Background(), ds, scan); err != nil {
 		t.Errorf("scan encountered error: %s", err)
@@ -2051,7 +2154,7 @@ func TestRetryOnWrongReplicaErrorWithSuggestion(t *testing.T) {
 		// lookups. However if our sender returns an error, this test wants to fail.
 		RPCRetryOptions: &retry.Options{MaxRetries: 1},
 	}
-	ds := NewDistSender(cfg)
+	ds := NewDistSender(ctx, cfg)
 	scan := kvpb.NewScan(roachpb.Key("a"), roachpb.Key("d"))
 	if _, err := kv.SendWrapped(context.Background(), ds, scan); err != nil {
 		t.Errorf("scan encountered error: %s", err)
@@ -2061,9 +2164,10 @@ func TestRetryOnWrongReplicaErrorWithSuggestion(t *testing.T) {
 func TestGetFirstRangeDescriptor(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	ctx := context.Background()
 	tr := tracing.NewTracer()
 	stopper := stop.NewStopper(stop.WithTracer(tr))
-	defer stopper.Stop(context.Background())
+	defer stopper.Stop(ctx)
 
 	n := simulation.NewNetwork(stopper, 3, true)
 	for _, node := range n.Nodes {
@@ -2071,7 +2175,12 @@ func TestGetFirstRangeDescriptor(t *testing.T) {
 		node.Gossip.EnableSimulationCycler(false)
 	}
 	n.Start()
-	ds := NewDistSender(DistSenderConfig{
+	// Make sure the first two nodes are connected via gossip.
+	n.SimulateNetwork(func(_ int, _ *simulation.Network) bool { return false })
+	<-n.Nodes[0].Gossip.Connected
+	<-n.Nodes[1].Gossip.Connected
+
+	ds := NewDistSender(ctx, DistSenderConfig{
 		AmbientCtx:         log.MakeTestingAmbientContext(stopper.Tracer()),
 		NodeDescs:          n.Nodes[0].Gossip,
 		Stopper:            stopper,
@@ -2169,7 +2278,7 @@ func TestSendRPCRetry(t *testing.T) {
 		RangeDescriptorDB: descDB,
 		Settings:          cluster.MakeTestingClusterSettings(),
 	}
-	ds := NewDistSender(cfg)
+	ds := NewDistSender(ctx, cfg)
 	scan := kvpb.NewScan(roachpb.Key("a"), roachpb.Key("d"))
 	sr, err := kv.SendWrappedWith(ctx, ds, kvpb.Header{MaxSpanRequestKeys: 1}, scan)
 	if err != nil {
@@ -2290,7 +2399,7 @@ func TestDistSenderDescriptorUpdatesOnSuccessfulRPCs(t *testing.T) {
 				RangeDescriptorDB: descDB,
 				Settings:          cluster.MakeTestingClusterSettings(),
 			}
-			ds := NewDistSender(cfg)
+			ds := NewDistSender(ctx, cfg)
 
 			// Send a request that's going to receive a response with a RangeInfo.
 			k := roachpb.Key("a")
@@ -2397,7 +2506,7 @@ func TestSendRPCRangeNotFoundError(t *testing.T) {
 		RangeDescriptorDB: descDB,
 		Settings:          cluster.MakeTestingClusterSettings(),
 	}
-	ds = NewDistSender(cfg)
+	ds = NewDistSender(ctx, cfg)
 	get := kvpb.NewGet(roachpb.Key("b"))
 	_, err := kv.SendWrapped(ctx, ds, get)
 	if err != nil {
@@ -2477,7 +2586,7 @@ func TestMultiRangeGapReverse(t *testing.T) {
 		Settings:          cluster.MakeTestingClusterSettings(),
 	}
 
-	ds := NewDistSender(cfg)
+	ds := NewDistSender(ctx, cfg)
 
 	txn := roachpb.MakeTransaction(
 		"foo",
@@ -2592,7 +2701,7 @@ func TestMultiRangeMergeStaleDescriptor(t *testing.T) {
 		}),
 		Settings: cluster.MakeTestingClusterSettings(),
 	}
-	ds := NewDistSender(cfg)
+	ds := NewDistSender(ctx, cfg)
 	scan := kvpb.NewScan(roachpb.Key("a"), roachpb.Key("d"))
 	// Set the Txn info to avoid an OpRequiresTxnError.
 	reply, err := kv.SendWrappedWith(ctx, ds, kvpb.Header{
@@ -2637,7 +2746,7 @@ func TestRangeLookupOptionOnReverseScan(t *testing.T) {
 		}),
 		Settings: cluster.MakeTestingClusterSettings(),
 	}
-	ds := NewDistSender(cfg)
+	ds := NewDistSender(ctx, cfg)
 	rScan := &kvpb.ReverseScanRequest{
 		RequestHeader: kvpb.RequestHeader{Key: roachpb.Key("a"), EndKey: roachpb.Key("b")},
 	}
@@ -2667,7 +2776,7 @@ func TestClockUpdateOnResponse(t *testing.T) {
 		TransportFactory:  GRPCTransportFactory(nodedialer.New(rpcContext, gossip.AddressResolver(g))),
 		Settings:          cluster.MakeTestingClusterSettings(),
 	}
-	ds := NewDistSender(cfg)
+	ds := NewDistSender(ctx, cfg)
 
 	expectedErr := kvpb.NewError(errors.New("boom"))
 
@@ -2801,7 +2910,7 @@ func TestTruncateWithSpanAndDescriptor(t *testing.T) {
 		RangeDescriptorDB: descDB,
 		Settings:          cluster.MakeTestingClusterSettings(),
 	}
-	ds := NewDistSender(cfg)
+	ds := NewDistSender(ctx, cfg)
 
 	// Send a batch request containing two puts. In the first
 	// attempt, the span of the descriptor found in the cache is
@@ -2926,7 +3035,7 @@ func TestTruncateWithLocalSpanAndDescriptor(t *testing.T) {
 		RangeDescriptorDB: descDB,
 		Settings:          cluster.MakeTestingClusterSettings(),
 	}
-	ds := NewDistSender(cfg)
+	ds := NewDistSender(ctx, cfg)
 
 	// Send a batch request contains two scans. In the first
 	// attempt, the range of the descriptor found in the cache is
@@ -3115,7 +3224,7 @@ func TestMultiRangeWithEndTxn(t *testing.T) {
 			RangeDescriptorDB: descDB,
 			Settings:          cluster.MakeTestingClusterSettings(),
 		}
-		ds := NewDistSender(cfg)
+		ds := NewDistSender(ctx, cfg)
 		ds.DisableParallelBatches()
 
 		// Send a batch request containing two puts.
@@ -3246,7 +3355,7 @@ func TestParallelCommitSplitFromQueryIntents(t *testing.T) {
 				RangeDescriptorDB: defaultMockRangeDescriptorDB,
 				Settings:          cluster.MakeTestingClusterSettings(),
 			}
-			ds := NewDistSender(cfg)
+			ds := NewDistSender(ctx, cfg)
 			ds.DisableParallelBatches()
 
 			// Send a batch request containing the requests.
@@ -3373,7 +3482,7 @@ func TestParallelCommitsDetectIntentMissingCause(t *testing.T) {
 				RangeDescriptorDB: defaultMockRangeDescriptorDB,
 				Settings:          cluster.MakeTestingClusterSettings(),
 			}
-			ds := NewDistSender(cfg)
+			ds := NewDistSender(ctx, cfg)
 
 			// Send a parallel commit batch request.
 			ba := &kvpb.BatchRequest{}
@@ -3457,7 +3566,7 @@ func TestCountRanges(t *testing.T) {
 		RangeDescriptorDB: descDB,
 		Settings:          cluster.MakeTestingClusterSettings(),
 	}
-	ds := NewDistSender(cfg)
+	ds := NewDistSender(ctx, cfg)
 
 	// Verify counted ranges.
 	keyIn := func(desc roachpb.RangeDescriptor) roachpb.RKey {
@@ -3539,7 +3648,7 @@ func TestPProfLabelsAppliedToBatchRequestHeader(t *testing.T) {
 		RangeDescriptorDB: defaultMockRangeDescriptorDB,
 		Settings:          cluster.MakeTestingClusterSettings(),
 	}
-	ds := NewDistSender(cfg)
+	ds := NewDistSender(ctx, cfg)
 	ba := &kvpb.BatchRequest{}
 	ba.Add(kvpb.NewPut(roachpb.Key("a"), roachpb.MakeValueFromString("value")))
 	expectedLabels := map[string]string{"key": "value", "key2": "value2"}
@@ -3591,7 +3700,7 @@ func TestGatewayNodeID(t *testing.T) {
 		RangeDescriptorDB: defaultMockRangeDescriptorDB,
 		Settings:          cluster.MakeTestingClusterSettings(),
 	}
-	ds := NewDistSender(cfg)
+	ds := NewDistSender(ctx, cfg)
 	ba := &kvpb.BatchRequest{}
 	ba.Add(kvpb.NewPut(roachpb.Key("a"), roachpb.MakeValueFromString("value")))
 	if _, err := ds.Send(context.Background(), ba); err != nil {
@@ -3658,6 +3767,7 @@ func TestReplicaErrorsMerged(t *testing.T) {
 
 	notLeaseHolderErr := kvpb.NewError(kvpb.NewNotLeaseHolderError(lease3, 0, &descriptor2, ""))
 	startedRequestError := errors.New("request might have started")
+	notStartedRequestError := grpcstatus.Errorf(codes.PermissionDenied, "request did not start")
 	unavailableError1 := kvpb.NewError(kvpb.NewReplicaUnavailableError(errors.New("unavailable"), &initDescriptor, initDescriptor.InternalReplicas[0]))
 	unavailableError2 := kvpb.NewError(kvpb.NewReplicaUnavailableError(errors.New("unavailable"), &initDescriptor, initDescriptor.InternalReplicas[1]))
 
@@ -3669,6 +3779,7 @@ func TestReplicaErrorsMerged(t *testing.T) {
 	// See https://cockroachlabs.com/blog/demonic-nondeterminism/#appendix for
 	// the gory details.
 	testCases := []struct {
+		transactional      bool
 		withCommit         bool
 		sendErr1, sendErr2 error
 		err1, err2         *kvpb.Error
@@ -3676,45 +3787,93 @@ func TestReplicaErrorsMerged(t *testing.T) {
 	}{
 		// The ambiguous error is returned with higher priority for withCommit.
 		{
-			withCommit: true,
-			sendErr1:   startedRequestError,
-			err2:       notLeaseHolderErr,
-			expErr:     "result is ambiguous",
+			transactional: true,
+			withCommit:    true,
+			sendErr1:      startedRequestError,
+			err2:          notLeaseHolderErr,
+			expErr:        "result is ambiguous",
 		},
 		// The not leaseholder errors is the last error.
 		{
-			withCommit: false,
-			sendErr1:   startedRequestError,
-			err2:       notLeaseHolderErr,
-			expErr:     "leaseholder not found in transport",
+			transactional: true,
+			withCommit:    false,
+			sendErr1:      startedRequestError,
+			err2:          notLeaseHolderErr,
+			expErr:        "leaseholder not found in transport",
 		},
 		// The ambiguous error is returned with higher priority for withCommit.
 		{
-			withCommit: true,
-			sendErr1:   startedRequestError,
-			err2:       unavailableError2,
-			expErr:     "result is ambiguous",
+			transactional: true,
+			withCommit:    true,
+			sendErr1:      startedRequestError,
+			err2:          unavailableError2,
+			expErr:        "result is ambiguous",
 		},
 		// The unavailable error is the last error.
 		{
-			withCommit: false,
-			sendErr1:   startedRequestError,
-			err2:       unavailableError2,
-			expErr:     "unavailable",
+			transactional: true,
+			withCommit:    false,
+			sendErr1:      startedRequestError,
+			err2:          unavailableError2,
+			expErr:        "unavailable",
 		},
-		// The unavailable error is returned with higher priority regardless of withCommit.
+		// The ambiguous error is returned with higher priority for
+		// non-transactional batches (next 2 test cases). This is the case only
+		// because the test sets NonTransactionalWritesNotIdempotent = true.
+		// Otherwise, the non-transactional requests would be treated like they are
+		// idempotent and the NLHE/RUE would be returned as the last error.
 		{
-			withCommit: true,
-			err1:       unavailableError1,
-			err2:       notLeaseHolderErr,
-			expErr:     "unavailable",
+			transactional: false,
+			withCommit:    false,
+			sendErr1:      startedRequestError,
+			err2:          notLeaseHolderErr,
+			expErr:        "result is ambiguous",
 		},
-		// The unavailable error is returned with higher priority regardless of withCommit.
 		{
-			withCommit: false,
-			err1:       unavailableError1,
-			err2:       notLeaseHolderErr,
-			expErr:     "unavailable",
+			transactional: false,
+			withCommit:    false,
+			sendErr1:      startedRequestError,
+			err2:          unavailableError2,
+			expErr:        "result is ambiguous",
+		},
+		// If we know the request did not start, do not return an ambiguous error
+		// (next 2 test cases).
+		{
+			transactional: false,
+			withCommit:    false,
+			sendErr1:      notStartedRequestError,
+			err2:          notLeaseHolderErr,
+			expErr:        "leaseholder not found in transport",
+		},
+		{
+			transactional: false,
+			withCommit:    false,
+			sendErr1:      notStartedRequestError,
+			err2:          unavailableError2,
+			expErr:        "unavailable",
+		},
+		// The unavailable error is returned with higher priority regardless of
+		// withCommit and transactional (next 3 test cases).
+		{
+			transactional: true,
+			withCommit:    true,
+			err1:          unavailableError1,
+			err2:          notLeaseHolderErr,
+			expErr:        "unavailable",
+		},
+		{
+			transactional: true,
+			withCommit:    false,
+			err1:          unavailableError1,
+			err2:          notLeaseHolderErr,
+			expErr:        "unavailable",
+		},
+		{
+			transactional: false,
+			withCommit:    false,
+			err1:          unavailableError1,
+			err2:          notLeaseHolderErr,
+			expErr:        "unavailable",
 		},
 	}
 	clock := hlc.NewClockForTesting(nil)
@@ -3738,6 +3897,7 @@ func TestReplicaErrorsMerged(t *testing.T) {
 				stopper := stop.NewStopper()
 				defer stopper.Stop(ctx)
 				st := cluster.MakeTestingClusterSettings()
+				NonTransactionalWritesNotIdempotent.Override(ctx, &st.SV, true)
 				rc := rangecache.NewRangeCache(st, nil /* db */, func() int64 { return 100 }, stopper)
 				rc.Insert(ctx, roachpb.RangeInfo{
 					Desc:  initDescriptor,
@@ -3780,16 +3940,20 @@ func TestReplicaErrorsMerged(t *testing.T) {
 						return nil, nil, errors.New("range desc db unexpectedly used")
 					}),
 					TransportFactory: adaptSimpleTransport(transportFn),
-					Settings:         cluster.MakeTestingClusterSettings(),
+					Settings:         st,
 				}
-				ds := NewDistSender(cfg)
+				ds := NewDistSender(ctx, cfg)
 
 				ba := &kvpb.BatchRequest{}
 				ba.Add(kvpb.NewGet(roachpb.Key("a")))
+				ba.Add(kvpb.NewPut(roachpb.Key("b"), roachpb.MakeValueFromString("value")))
+				if tc.transactional {
+					ba.Txn = &roachpb.Transaction{Name: "test"}
+				}
 				tok, err := rc.LookupWithEvictionToken(ctx, roachpb.RKeyMin, rangecache.EvictionToken{}, false)
 				require.NoError(t, err)
 				br, err := ds.sendToReplicas(ctx, ba, tok, tc.withCommit)
-				log.Infof(ctx, "Error is %v", err)
+				log.Dev.Infof(ctx, "Error is %v", err)
 				require.ErrorContains(t, err, tc.expErr)
 				require.Nil(t, br)
 			})
@@ -3996,7 +4160,7 @@ func TestMultipleErrorsMerged(t *testing.T) {
 					Settings:          cluster.MakeTestingClusterSettings(),
 					RPCRetryOptions:   &retry.Options{MaxRetries: 1},
 				}
-				ds := NewDistSender(cfg)
+				ds := NewDistSender(ctx, cfg)
 
 				ba := &kvpb.BatchRequest{}
 				ba.Txn = txn.Clone()
@@ -4020,6 +4184,27 @@ func TestMultipleErrorsMerged(t *testing.T) {
 			})
 		})
 	}
+}
+
+func TestMergeErrorIndex(t *testing.T) {
+	// When merging, the error with lower index should be preferred. Create two
+	// errors with the same priority but different indices.
+	err1 := kvpb.NewError(&kvpb.ConditionFailedError{})
+	err1.Index = &kvpb.ErrPosition{Index: 2}
+	err2 := kvpb.NewError(&kvpb.ConditionFailedError{})
+	err2.Index = &kvpb.ErrPosition{Index: 1}
+
+	require.Equal(t, int32(1), mergeErrors(err1, err2).Index.Index)
+	require.Equal(t, int32(1), mergeErrors(err2, err1).Index.Index)
+
+	// Test that priority still takes precedence over index
+	highPriorityErr := kvpb.NewError(&kvpb.TransactionAbortedError{})
+	highPriorityErr.Index = &kvpb.ErrPosition{Index: 5}
+	lowPriorityErr := kvpb.NewError(&kvpb.ConditionFailedError{})
+	lowPriorityErr.Index = &kvpb.ErrPosition{Index: 3}
+
+	require.Equal(t, int32(5), mergeErrors(highPriorityErr, lowPriorityErr).Index.Index)
+	require.Equal(t, int32(5), mergeErrors(lowPriorityErr, highPriorityErr).Index.Index)
 }
 
 // Regression test for #20067.
@@ -4131,7 +4316,7 @@ func TestErrorIndexAlignment(t *testing.T) {
 				RangeDescriptorDB: descDB,
 				Settings:          cluster.MakeTestingClusterSettings(),
 			}
-			ds := NewDistSender(cfg)
+			ds := NewDistSender(ctx, cfg)
 			ds.DisableParallelBatches()
 
 			ba := &kvpb.BatchRequest{}
@@ -4170,18 +4355,7 @@ func TestCanSendToFollower(t *testing.T) {
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
 
-	old := CanSendToFollower
-	defer func() { CanSendToFollower = old }()
 	canSend := true
-	CanSendToFollower = func(
-		_ context.Context,
-		_ *cluster.Settings,
-		_ *hlc.Clock,
-		_ roachpb.RangeClosedTimestampPolicy,
-		ba *kvpb.BatchRequest,
-	) bool {
-		return !ba.IsLocking() && canSend
-	}
 
 	clock := hlc.NewClockForTesting(nil)
 	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
@@ -4213,6 +4387,15 @@ func TestCanSendToFollower(t *testing.T) {
 			MaxBackoff:     time.Microsecond,
 		},
 		Settings: cluster.MakeTestingClusterSettings(),
+		CanSendToFollower: func(
+			_ context.Context,
+			_ *cluster.Settings,
+			_ *hlc.Clock,
+			_ roachpb.RangeClosedTimestampPolicy,
+			ba *kvpb.BatchRequest,
+		) bool {
+			return !ba.IsLocking() && canSend
+		},
 		// This test is looking at the exact nodes the requests are sent to. If
 		// we send to a follower first, the sentTo node is incorrect.
 		TestingKnobs: ClientTestingKnobs{RouteToLeaseholderFirst: true},
@@ -4255,7 +4438,7 @@ func TestCanSendToFollower(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			sentTo = roachpb.ReplicaDescriptor{}
 			canSend = c.canSendToFollower
-			ds := NewDistSender(cfg)
+			ds := NewDistSender(ctx, cfg)
 			// Make store 2 the leaseholder.
 			lease := roachpb.Lease{
 				Replica:  testUserRangeDescriptor3Replicas.InternalReplicas[1],
@@ -4433,7 +4616,7 @@ func TestEvictMetaRange(t *testing.T) {
 			FirstRangeProvider: g,
 			Settings:           cluster.MakeTestingClusterSettings(),
 		}
-		ds := NewDistSender(cfg)
+		ds := NewDistSender(ctx, cfg)
 
 		scan := kvpb.NewScan(roachpb.Key("a"), roachpb.Key("b"))
 		if _, pErr := kv.SendWrapped(ctx, ds, scan); pErr != nil {
@@ -4528,7 +4711,7 @@ func TestConnectionClass(t *testing.T) {
 
 	// class will capture the connection class used for the last transport
 	// created.
-	var class rpc.ConnectionClass
+	var class rpcbase.ConnectionClass
 	var transportFactory TransportFactory = func(opts SendOptions, replicas ReplicaSlice) Transport {
 		class = opts.class
 		return adaptSimpleTransport(
@@ -4552,20 +4735,20 @@ func TestConnectionClass(t *testing.T) {
 		RangeDescriptorDB: rDB,
 		Settings:          cluster.MakeTestingClusterSettings(),
 	}
-	ds := NewDistSender(cfg)
+	ds := NewDistSender(ctx, cfg)
 
 	for _, pair := range []struct {
 		key       roachpb.Key
-		wantClass rpc.ConnectionClass
+		wantClass rpcbase.ConnectionClass
 	}{
-		{key: keys.Meta1Prefix, wantClass: rpc.SystemClass},
-		{key: keys.NodeLivenessKey(1), wantClass: rpc.SystemClass},
-		{key: keys.StatusNodePrefix, wantClass: rpc.SystemClass},
-		{key: keys.NodeStatusKey(15), wantClass: rpc.SystemClass},
-		{key: keys.NodeIDGenerator, wantClass: rpc.SystemClass},
-		{key: keys.TimeseriesPrefix, wantClass: rpc.DefaultClass},
-		{key: keys.SystemSpanConfigPrefix, wantClass: rpc.DefaultClass},
-		{key: keys.SystemSQLCodec.TablePrefix(1234), wantClass: rpc.DefaultClass},
+		{key: keys.Meta1Prefix, wantClass: rpcbase.SystemClass},
+		{key: keys.NodeLivenessKey(1), wantClass: rpcbase.SystemClass},
+		{key: keys.StatusNodePrefix, wantClass: rpcbase.SystemClass},
+		{key: keys.NodeStatusKey(15), wantClass: rpcbase.SystemClass},
+		{key: keys.NodeIDGenerator, wantClass: rpcbase.SystemClass},
+		{key: keys.TimeseriesPrefix, wantClass: rpcbase.DefaultClass},
+		{key: keys.SystemSpanConfigPrefix, wantClass: rpcbase.DefaultClass},
+		{key: keys.SystemSQLCodec.TablePrefix(1234), wantClass: rpcbase.DefaultClass},
 	} {
 		t.Run(pair.key.String(), func(t *testing.T) {
 			ba := &kvpb.BatchRequest{}
@@ -4710,7 +4893,7 @@ func TestEvictionTokenCoalesce(t *testing.T) {
 		FirstRangeProvider: g,
 		Settings:           cluster.MakeTestingClusterSettings(),
 	}
-	ds = NewDistSender(cfg)
+	ds = NewDistSender(ctx, cfg)
 
 	var batchWaitGroup sync.WaitGroup
 	putFn := func(key, value string) {
@@ -4749,7 +4932,7 @@ func TestDistSenderSlowLogMessage(t *testing.T) {
 	desc := &roachpb.RangeDescriptor{RangeID: 9, StartKey: roachpb.RKey("x"), EndKey: roachpb.RKey("z")}
 	{
 		exp := `have been waiting 8.16s (120 attempts) for RPC Get(Shared,Unreplicated) [‹"a"›] to` +
-			` r9:‹{x-z}› [<no replicas>, next=0, gen=0]; resp: ‹(err: boom)›`
+			` r9:{‹x›-‹z›} [<no replicas>, next=0, gen=0]; resp: (err: boom)`
 		var s redact.StringBuilder
 		slowRangeRPCWarningStr(&s, ba, dur, attempts, desc, nil /* err */, br)
 		act := s.RedactableString()
@@ -4764,7 +4947,7 @@ func TestDistSenderSlowLogMessage(t *testing.T) {
 	}
 	{
 		exp := `have been waiting 8.16s (120 attempts) for RPC Get(Shared,Unreplicated) [‹"a"›] to` +
-			` replica (n2,s3):1; resp: ‹(err: boom)›`
+			` replica (n2,s3):1; resp: (err: boom)`
 		var s redact.StringBuilder
 		slowReplicaRPCWarningStr(&s, ba, dur, attempts, nil /* err */, br)
 		act := s.RedactableString()
@@ -4888,7 +5071,7 @@ func TestErrorIndexOnRangeSplit(t *testing.T) {
 		case 2:
 			// We'll receive a few batches, all with 1 Get. Find the one
 			// targeting keyB and simulate it encountering an error (that could
-			// occur for InitPuts).
+			// occur for CPuts).
 			if len(ba.Requests) != 1 {
 				require.Fail(t, "unexpected number of requests in a batch")
 			}
@@ -4914,7 +5097,7 @@ func TestErrorIndexOnRangeSplit(t *testing.T) {
 		Settings:          cluster.MakeTestingClusterSettings(),
 	}
 
-	ds := NewDistSender(cfg)
+	ds := NewDistSender(ctx, cfg)
 	rc = ds.rangeCache
 
 	ba := &kvpb.BatchRequest{}
@@ -5048,7 +5231,7 @@ func TestRequestSubdivisionAfterDescriptorChange(t *testing.T) {
 				Settings:          cluster.MakeTestingClusterSettings(),
 			}
 
-			ds := NewDistSender(cfg)
+			ds := NewDistSender(ctx, cfg)
 			rc = ds.rangeCache
 
 			// We're going to send a batch with two reqs, on different sides of the split.
@@ -5139,7 +5322,7 @@ func TestRequestSubdivisionAfterDescriptorChangeWithUnavailableReplicasTerminate
 		Settings:          cluster.MakeTestingClusterSettings(),
 	}
 
-	ds := NewDistSender(cfg)
+	ds := NewDistSender(ctx, cfg)
 
 	ba := &kvpb.BatchRequest{}
 	ba.Add(get(keyA), get(keyC))
@@ -5304,7 +5487,7 @@ func TestDescriptorChangeAfterRequestSubdivision(t *testing.T) {
 				Settings:          cluster.MakeTestingClusterSettings(),
 			}
 
-			ds := NewDistSender(cfg)
+			ds := NewDistSender(ctx, cfg)
 			rc = ds.rangeCache
 
 			// We're going to send a batch with two reqs, on different sides of the split.
@@ -5533,7 +5716,7 @@ func TestSendToReplicasSkipsStaleReplicas(t *testing.T) {
 					Settings:         cluster.MakeTestingClusterSettings(),
 				}
 
-				ds := NewDistSender(cfg)
+				ds := NewDistSender(ctx, cfg)
 
 				ba := &kvpb.BatchRequest{}
 				get := &kvpb.GetRequest{}
@@ -5670,7 +5853,7 @@ func TestDistSenderDescEvictionAfterLeaseUpdate(t *testing.T) {
 		Settings: cluster.MakeTestingClusterSettings(),
 	}
 
-	ds := NewDistSender(cfg)
+	ds := NewDistSender(ctx, cfg)
 	ba := &kvpb.BatchRequest{}
 	get := &kvpb.GetRequest{}
 	get.Key = roachpb.Key("a")
@@ -5734,7 +5917,7 @@ func TestDistSenderRPCMetrics(t *testing.T) {
 		Settings:         cluster.MakeTestingClusterSettings(),
 	}
 
-	ds := NewDistSender(cfg)
+	ds := NewDistSender(ctx, cfg)
 	ds.rangeCache.Insert(ctx, roachpb.RangeInfo{
 		Desc: desc,
 		Lease: roachpb.Lease{
@@ -5932,7 +6115,7 @@ func TestDistSenderNLHEFromUninitializedReplicaDoesNotCauseUnboundedBackoff(t *t
 		Settings: cluster.MakeTestingClusterSettings(),
 	}
 
-	ds := NewDistSender(cfg)
+	ds := NewDistSender(ctx, cfg)
 	ba := &kvpb.BatchRequest{}
 	get := &kvpb.GetRequest{}
 	get.Key = roachpb.Key("a")
@@ -5969,6 +6152,7 @@ func TestOptimisticRangeDescriptorLookups(t *testing.T) {
 		}),
 	)
 	setup := func() (chan batchRequest, *DistSender, *stop.Stopper) {
+		ctx := context.Background()
 		stopper := stop.NewStopper()
 		manualC := timeutil.NewManualTime(timeutil.Unix(0, 1))
 		clock := hlc.NewClockForTesting(manualC)
@@ -6011,7 +6195,7 @@ func TestOptimisticRangeDescriptorLookups(t *testing.T) {
 			},
 			Settings: cluster.MakeTestingClusterSettings(),
 		}
-		ds := NewDistSender(cfg)
+		ds := NewDistSender(ctx, cfg)
 		return sendCh, ds, stopper
 	}
 
@@ -6288,7 +6472,7 @@ func TestProxyRequestDoesNotSplit(t *testing.T) {
 		TransportFactory:  adaptSimpleTransport(transportFn),
 		Settings:          cluster.MakeTestingClusterSettings(),
 	}
-	ds := NewDistSender(cfg)
+	ds := NewDistSender(ctx, cfg)
 
 	// Send without the proxy header. This request will be split into two and
 	// sent through the transport twice, once to each store.
@@ -6492,7 +6676,7 @@ func benchDistSender(b *testing.B, rf int, numRange int, conc bool) {
 		},
 		Settings: st,
 	}
-	ds := NewDistSender(cfg)
+	ds := NewDistSender(ctx, cfg)
 
 	// Run through all the ranges once to pre-populate the cache. This allows the
 	// runs to be stable fairly quickly.

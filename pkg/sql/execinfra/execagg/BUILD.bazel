@@ -6,6 +6,7 @@ go_library(
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/execinfra/execagg",
     visibility = ["//visibility:public"],
     deps = [
+        "//pkg/sql/execinfra/execexpr",
         "//pkg/sql/execinfrapb",
         "//pkg/sql/sem/builtins",
         "//pkg/sql/sem/builtins/builtinsregistry",

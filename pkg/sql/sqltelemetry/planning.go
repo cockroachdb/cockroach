@@ -122,6 +122,10 @@ var ExplainOptVerboseUseCounter = telemetry.GetCounterOnce("sql.plan.explain-opt
 // EXPLAIN (GIST) is run.
 var ExplainGist = telemetry.GetCounterOnce("sql.plan.explain-gist")
 
+// ExplainFingerprint is to be incremented whenever
+// EXPLAIN (FINGERPRINT) is run.
+var ExplainFingerprint = telemetry.GetCounterOnce("sql.plan.explain-fingerprint")
+
 // CreateStatisticsUseCounter is to be incremented whenever a non-automatic
 // run of CREATE STATISTICS occurs.
 var CreateStatisticsUseCounter = telemetry.GetCounterOnce("sql.plan.stats.created")
@@ -219,6 +223,20 @@ var PlanTypeAutoCustomCounter = telemetry.GetCounterOnce("sql.plan.type.auto-cus
 // PlanTypeAutoGenericCounter is to be incremented whenever a custom plan is
 // used when plan_cache_mode=auto.
 var PlanTypeAutoGenericCounter = telemetry.GetCounterOnce("sql.plan.type.auto-generic")
+
+// PlanClampedHistogramSelectivityCounter is to be incremented whenever a plan
+// is used that clamped the selectivity estimate derived from a histogram to a
+// minimum value.
+var PlanClampedHistogramSelectivityCounter = telemetry.GetCounterOnce("sql.plan.clamped-histogram-selectivity")
+
+// PlanClampedInequalitySelectivityCounter is to be incremented whenever a plan
+// is used that clamped the selectivity estimate derived from an inequality over
+// a histogram to a minimum value.
+var PlanClampedInequalitySelectivityCounter = telemetry.GetCounterOnce("sql.plan.clamped-inequality-selectivity")
+
+// StatementHintsCounter is to be incremented whenever external statement hints
+// are used.
+var StatementHintsCounter = telemetry.GetCounterOnce("sql.session.statement-hints")
 
 // We can't parameterize these telemetry counters, so just make a bunch of
 // buckets for setting the join reorder limit since the range of reasonable

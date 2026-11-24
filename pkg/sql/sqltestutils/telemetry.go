@@ -23,7 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/persistedsqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/sslocal"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/diagutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -76,10 +77,16 @@ import (
 //     Installs a rule to rewrite all matches of the regexp in the first
 //     line to the string in the second line. This is useful to eliminate
 //     non-determinism in the output.
-func TelemetryTest(t *testing.T, serverArgs []base.TestServerArgs, testTenant bool) {
+func TelemetryTest(
+	t *testing.T, serverArgs []base.TestServerArgs, testTenant bool, testdataDir ...string,
+) {
+	dir := "testdata/telemetry"
+	if len(testdataDir) > 0 && testdataDir[0] != "" {
+		dir = testdataDir[0]
+	}
 	// Note: these tests cannot be run in parallel (with each other or with other
 	// tests) because telemetry counters are global.
-	datadriven.Walk(t, "testdata/telemetry", func(t *testing.T, path string) {
+	datadriven.Walk(t, dir, func(t *testing.T, path string) {
 		// Disable cloud info reporting (it would make these tests really slow).
 		defer cloudinfo.Disable()()
 
@@ -91,7 +98,7 @@ func TelemetryTest(t *testing.T, serverArgs []base.TestServerArgs, testTenant bo
 		t.Run("server", func(t *testing.T) {
 			datadriven.RunTest(t, path, func(t *testing.T, td *datadriven.TestData) string {
 				reporter := test.server.DiagnosticsReporter().(*diagnostics.Reporter)
-				statsController := test.server.SQLServer().(*sql.Server).GetSQLStatsController()
+				statsController := test.server.SQLServer().(*sql.Server).GetLocalSQLStatsProvider()
 				return test.RunTest(td, test.serverDB, reporter.ReportDiagnostics, statsController)
 			})
 		})
@@ -101,7 +108,7 @@ func TelemetryTest(t *testing.T, serverArgs []base.TestServerArgs, testTenant bo
 			t.Run("tenant", func(t *testing.T) {
 				datadriven.RunTest(t, path, func(t *testing.T, td *datadriven.TestData) string {
 					reporter := test.tenant.DiagnosticsReporter().(*diagnostics.Reporter)
-					statsController := test.tenant.SQLServer().(*sql.Server).GetSQLStatsController()
+					statsController := test.tenant.SQLServer().(*sql.Server).GetLocalSQLStatsProvider()
 					return test.RunTest(td, test.tenantDB, reporter.ReportDiagnostics, statsController)
 				})
 			})
@@ -139,6 +146,9 @@ func (tt *telemetryTest) Start(t *testing.T, serverArgs []base.TestServerArgs) {
 	diagSrvURL := tt.diagSrv.URL()
 	mapServerArgs := make(map[int]base.TestServerArgs, len(serverArgs))
 	for i, v := range serverArgs {
+		v.Knobs.SQLStatsKnobs = &sqlstats.TestingKnobs{
+			SynchronousSQLStats: true,
+		}
 		v.Knobs.Server = &server.TestingKnobs{
 			DiagnosticsTestingKnobs: diagnostics.TestingKnobs{
 				OverrideReportingURL: &diagSrvURL,
@@ -178,7 +188,7 @@ func (tt *telemetryTest) RunTest(
 	td *datadriven.TestData,
 	db *gosql.DB,
 	reportDiags func(ctx context.Context),
-	statsController *persistedsqlstats.Controller,
+	statsController *sslocal.SQLStats,
 ) (out string) {
 	defer func() {
 		if out == "" {
@@ -257,7 +267,9 @@ func (tt *telemetryTest) RunTest(
 
 	case "sql-stats":
 		// Report diagnostics once to reset the stats.
-		statsController.ResetLocalSQLStats(ctx)
+		if err := statsController.Reset(ctx); err != nil {
+			td.Fatalf(tt.t, "error resetting sql stats: %s", err)
+		}
 		reportDiags(ctx)
 
 		_, err := db.Exec(td.Input)
@@ -265,7 +277,9 @@ func (tt *telemetryTest) RunTest(
 		if err != nil {
 			fmt.Fprintf(&buf, "error: %v\n", err)
 		}
-		statsController.ResetLocalSQLStats(ctx)
+		if err := statsController.Reset(ctx); err != nil {
+			td.Fatalf(tt.t, "error resetting sql stats: %s", err)
+		}
 		reportDiags(ctx)
 		last := tt.diagSrv.LastRequestData()
 		buf.WriteString(formatSQLStats(last.SqlStats))

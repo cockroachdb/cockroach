@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -47,6 +48,7 @@ func TestReplicaCollection(t *testing.T) {
 
 	ctx := context.Background()
 
+	skip.UnderRace(t, "slow under race")
 	skip.UnderDeadlock(t, "occasionally flakes")
 
 	// This test stops cluster servers. Use "reusable" listeners, otherwise the
@@ -90,10 +92,15 @@ func TestReplicaCollection(t *testing.T) {
 
 		// Check counters on retrieved replica info.
 		cnt := getInfoCounters(replicas)
+
 		require.Equal(t, liveNodes, cnt.stores, "collected replicas from stores")
 		require.Equal(t, liveNodes, cnt.nodes, "collected replicas from nodes")
 		if expectRangeMeta {
-			require.Equal(t, totalRanges, cnt.descriptors,
+			// The number of range descriptors is counted by iterating over meta2
+			// keys. Since meta1 and meta2 ranges are split, the number of range
+			// descriptors is going to be one less than the number of ranges as meta1
+			// is a range but its descriptor isn't stored in meta2.
+			require.Equal(t, totalRanges, cnt.descriptors+1,
 				"number of collected descriptors from metadata")
 		}
 		require.Equal(t, totalRanges*liveNodes, cnt.replicas, "number of collected replicas")
@@ -101,7 +108,7 @@ func TestReplicaCollection(t *testing.T) {
 		require.Equal(t, liveNodes, stats.Nodes, "node counter stats")
 		require.Equal(t, liveNodes, stats.Stores, "store counter stats")
 		if expectRangeMeta {
-			require.Equal(t, totalRanges, stats.Descriptors, "range descriptor counter stats")
+			require.Equal(t, totalRanges, stats.Descriptors+1, "range descriptor counter stats")
 		}
 		require.NotEqual(t, replicas.ClusterID, uuid.UUID{}.String(), "cluster UUID must not be empty")
 		require.Equal(t, replicas.Version,
@@ -123,6 +130,8 @@ func TestStreamRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderRace(t, "slow under race")
+
 	ctx := context.Background()
 
 	var failCount atomic.Int64
@@ -133,7 +142,7 @@ func TestStreamRestart(t *testing.T) {
 			Knobs: base.TestingKnobs{
 				LOQRecovery: &loqrecovery.TestingKnobs{
 					MetadataScanTimeout: 15 * time.Second,
-					ForwardReplicaFilter: func(response *serverpb.RecoveryCollectLocalReplicaInfoResponse) error {
+					MaybeInjectError: func(response *serverpb.RecoveryCollectLocalReplicaInfoResponse) error {
 						if response.ReplicaInfo.NodeID == 2 && response.ReplicaInfo.Desc.RangeID == 14 && failCount.Add(1) < 3 {
 							return errors.New("rpc stream stopped")
 						}
@@ -165,14 +174,18 @@ func TestStreamRestart(t *testing.T) {
 		cnt := getInfoCounters(replicas)
 		require.Equal(t, liveNodes, cnt.stores, "collected replicas from stores")
 		require.Equal(t, liveNodes, cnt.nodes, "collected replicas from nodes")
-		require.Equal(t, totalRanges, cnt.descriptors,
+		// The number of range descriptors is counted by iterating over meta2
+		// keys. Since meta1 and meta2 ranges are split, the number of range
+		// descriptors is going to be one less than the number of ranges as meta1
+		// is a range but its descriptor isn't stored in meta2.
+		require.Equal(t, totalRanges, cnt.descriptors+1,
 			"number of collected descriptors from metadata")
 		require.Equal(t, totalRanges*liveNodes, cnt.replicas,
 			"number of collected replicas")
 		// Check stats counters as well.
 		require.Equal(t, liveNodes, stats.Nodes, "node counter stats")
 		require.Equal(t, liveNodes, stats.Stores, "store counter stats")
-		require.Equal(t, totalRanges, stats.Descriptors, "range descriptor counter stats")
+		require.Equal(t, totalRanges, stats.Descriptors+1, "range descriptor counter stats")
 	}
 
 	assertReplicas(3)
@@ -203,7 +216,7 @@ func TestGetPlanStagingState(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, _, planStores := prepTestCluster(t, 3)
+	tc, _, planStores := prepTestCluster(ctx, t, 3)
 	defer tc.Stopper().Stop(ctx)
 
 	adm := tc.GetAdminClient(t, 0)
@@ -263,7 +276,7 @@ func TestStageRecoveryPlans(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, _, _ := prepTestCluster(t, 3)
+	tc, _, _ := prepTestCluster(ctx, t, 3)
 	defer tc.Stopper().Stop(ctx)
 
 	adm := tc.GetAdminClient(t, 0)
@@ -306,7 +319,7 @@ func TestStageBadVersions(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, _, _ := prepTestCluster(t, 1)
+	tc, _, _ := prepTestCluster(ctx, t, 1)
 	defer tc.Stopper().Stop(ctx)
 
 	adm := tc.GetAdminClient(t, 0)
@@ -342,7 +355,7 @@ func TestStageConflictingPlans(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, _, _ := prepTestCluster(t, 3)
+	tc, _, _ := prepTestCluster(ctx, t, 3)
 	defer tc.Stopper().Stop(ctx)
 
 	adm := tc.GetAdminClient(t, 0)
@@ -388,7 +401,7 @@ func TestForcePlanUpdate(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, _, _ := prepTestCluster(t, 3)
+	tc, _, _ := prepTestCluster(ctx, t, 3)
 	defer tc.Stopper().Stop(ctx)
 
 	adm := tc.GetAdminClient(t, 0)
@@ -436,7 +449,7 @@ func TestNodeDecommissioned(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, _, _ := prepTestCluster(t, 3)
+	tc, _, _ := prepTestCluster(ctx, t, 3)
 	defer tc.Stopper().Stop(ctx)
 
 	adm := tc.GetAdminClient(t, 0)
@@ -470,7 +483,7 @@ func TestRejectDecommissionReachableNode(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, _, _ := prepTestCluster(t, 3)
+	tc, _, _ := prepTestCluster(ctx, t, 3)
 	defer tc.Stopper().Stop(ctx)
 
 	adm := tc.GetAdminClient(t, 0)
@@ -492,7 +505,7 @@ func TestStageRecoveryPlansToWrongCluster(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, _, _ := prepTestCluster(t, 3)
+	tc, _, _ := prepTestCluster(ctx, t, 3)
 	defer tc.Stopper().Stop(ctx)
 
 	adm := tc.GetAdminClient(t, 0)
@@ -526,7 +539,7 @@ func TestRetrieveRangeStatus(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, _, _ := prepTestCluster(t, 5)
+	tc, _, _ := prepTestCluster(ctx, t, 5)
 	defer tc.Stopper().Stop(ctx)
 
 	// Use scratch range to ensure we have a range that loses quorum.
@@ -583,7 +596,7 @@ func TestRetrieveApplyStatus(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, _, _ := prepTestCluster(t, 5)
+	tc, _, _ := prepTestCluster(ctx, t, 5)
 	defer tc.Stopper().Stop(ctx)
 
 	// Use scratch range to ensure we have a range that loses quorum.
@@ -685,7 +698,7 @@ func TestRejectBadVersionApplication(t *testing.T) {
 
 	ctx := context.Background()
 
-	tc, _, pss := prepTestCluster(t, 3)
+	tc, _, pss := prepTestCluster(ctx, t, 3)
 	defer tc.Stopper().Stop(ctx)
 
 	adm := tc.GetAdminClient(t, 0)
@@ -721,7 +734,7 @@ func TestRejectBadVersionApplication(t *testing.T) {
 }
 
 func prepTestCluster(
-	t *testing.T, nodes int,
+	ctx context.Context, t *testing.T, nodes int,
 ) (*testcluster.TestCluster, fs.StickyRegistry, map[int]loqrecovery.PlanStore) {
 	skip.UnderRace(t, "cluster frequently fails to start under stress race")
 
@@ -733,8 +746,11 @@ func prepTestCluster(
 		ServerArgsPerNode:   make(map[int]base.TestServerArgs),
 		ReusableListenerReg: lReg,
 	}
+
+	st := cluster.MakeTestingClusterSettings()
 	for i := 0; i < nodes; i++ {
 		args.ServerArgsPerNode[i] = base.TestServerArgs{
+			Settings: st,
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
 					StickyVFSRegistry: reg,
@@ -786,7 +802,7 @@ func createRecoveryForRange(
 }
 
 func makeTestRecoveryPlan(
-	ctx context.Context, t *testing.T, ac serverpb.AdminClient,
+	ctx context.Context, t *testing.T, ac serverpb.RPCAdminClient,
 ) loqrecoverypb.ReplicaUpdatePlan {
 	t.Helper()
 	cr, err := ac.Cluster(ctx, &serverpb.ClusterRequest{})

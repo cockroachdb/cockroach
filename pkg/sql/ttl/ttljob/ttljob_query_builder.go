@@ -16,7 +16,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
+	"github.com/cockroachdb/cockroach/pkg/sql/spanutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/ttl/ttlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -24,32 +26,12 @@ import (
 	"github.com/cockroachdb/redact"
 )
 
-// QueryBounds stores the start and end bounds for the SELECT query that the
-// SelectQueryBuilder will run.
-type QueryBounds struct {
-	// Start represent the lower bounds in the SELECT statement. After each
-	// SelectQueryBuilder.Run, the start bounds increase to exclude the rows
-	// selected in the previous SelectQueryBuilder.Run.
-	//
-	// For the first SELECT in a span, the start bounds are inclusive because the
-	// start bounds are based on the first row >= Span.Key. That row must be
-	// included in the first SELECT. For subsequent SELECTS, the start bounds
-	// are exclusive to avoid re-selecting the last row from the previous SELECT.
-	Start tree.Datums
-	// End represents the upper bounds in the SELECT statement. The end bounds
-	// never change between each SelectQueryBuilder.Run.
-	//
-	// For all SELECTS in a span, the end bounds are inclusive even though a
-	// span's end key is exclusive because the end bounds are based on the first
-	// row < Span.EndKey.
-	End tree.Datums
-}
-
 type SelectQueryParams struct {
 	RelationName      string
 	PKColNames        []string
 	PKColDirs         []catenumpb.IndexColumn_Direction
-	Bounds            QueryBounds
+	PKColTypes        []*types.T
+	Bounds            spanutils.QueryBounds
 	AOSTDuration      time.Duration
 	SelectBatchSize   int64
 	TTLExpr           catpb.Expression
@@ -57,9 +39,17 @@ type SelectQueryParams struct {
 	SelectRateLimiter *quotapool.RateLimiter
 }
 
+type SelectQueryBuilder interface {
+	// Run will perform the SELECT operation and return the rows.
+	Run(ctx context.Context, ie isql.Executor) (_ []tree.Datums, hasNext bool, _ error)
+
+	// BuildQuery will generate the SELECT query for the given builder.
+	BuildQuery() (string, error)
+}
+
 // SelectQueryBuilder is responsible for maintaining state around the SELECT
 // portion of the TTL job.
-type SelectQueryBuilder struct {
+type selectQueryBuilder struct {
 	SelectQueryParams
 	selectOpName redact.RedactableString
 	// isFirst is true if we have not invoked a query using the builder yet.
@@ -91,7 +81,7 @@ func MakeSelectQueryBuilder(params SelectQueryParams, cutoff time.Time) SelectQu
 		cachedArgs = append(cachedArgs, d)
 	}
 
-	return SelectQueryBuilder{
+	return &selectQueryBuilder{
 		SelectQueryParams: params,
 		selectOpName:      redact.Sprintf("ttl select %s", params.RelationName),
 		cachedArgs:        cachedArgs,
@@ -99,11 +89,13 @@ func MakeSelectQueryBuilder(params SelectQueryParams, cutoff time.Time) SelectQu
 	}
 }
 
-func (b *SelectQueryBuilder) buildQuery() string {
+// BuildQuery implements the SelectQueryBuilder interface.
+func (b *selectQueryBuilder) BuildQuery() (string, error) {
 	return ttlbase.BuildSelectQuery(
 		b.RelationName,
 		b.PKColNames,
 		b.PKColDirs,
+		b.PKColTypes,
 		b.AOSTDuration,
 		b.TTLExpr,
 		len(b.Bounds.Start),
@@ -123,18 +115,33 @@ func getInternalExecutorOverride(
 	}
 }
 
-func (b *SelectQueryBuilder) Run(
+// Run implements the SelectQueryBuilder interface.
+func (b *selectQueryBuilder) Run(
 	ctx context.Context, ie isql.Executor,
 ) (_ []tree.Datums, hasNext bool, _ error) {
 	var query string
+	var err error
 	if b.isFirst {
-		query = b.buildQuery()
+		query, err = b.BuildQuery()
+		if err != nil {
+			return nil, false, err
+		}
 		b.isFirst = false
 	} else {
 		if b.cachedQuery == "" {
-			b.cachedQuery = b.buildQuery()
+			b.cachedQuery, err = b.BuildQuery()
+			if err != nil {
+				return nil, false, err
+			}
 		}
 		query = b.cachedQuery
+	}
+	// Convert any DEnum args to their logical representation to avoid the risk
+	// of using the wrong version of the enum type descriptor.
+	for i, arg := range b.cachedArgs {
+		if enum, ok := arg.(*tree.DEnum); ok {
+			b.cachedArgs[i] = enum.LogicalRep
+		}
 	}
 
 	tokens, err := b.SelectRateLimiter.Acquire(ctx, b.SelectBatchSize)
@@ -188,7 +195,18 @@ type DeleteQueryParams struct {
 
 // DeleteQueryBuilder is responsible for maintaining state around the DELETE
 // portion of the TTL job.
-type DeleteQueryBuilder struct {
+type DeleteQueryBuilder interface {
+	// Run will perform the DELETE operation on the given rows.
+	Run(ctx context.Context, txn isql.Txn, rows []tree.Datums) (int64, error)
+
+	// BuildQuery generates the DELETE query for the given number of rows.
+	BuildQuery(numRows int) string
+
+	// GetBatchSize returns the batch size for the DELETE operation.
+	GetBatchSize() int
+}
+
+type deleteQueryBuilder struct {
 	DeleteQueryParams
 	deleteOpName redact.RedactableString
 	// cachedQuery is the cached query, which stays the same as long as we are
@@ -206,14 +224,14 @@ func MakeDeleteQueryBuilder(params DeleteQueryParams, cutoff time.Time) DeleteQu
 	cachedArgs := make([]interface{}, 0, 1+int64(len(params.PKColNames))*params.DeleteBatchSize)
 	cachedArgs = append(cachedArgs, cutoff)
 
-	return DeleteQueryBuilder{
+	return &deleteQueryBuilder{
 		DeleteQueryParams: params,
 		deleteOpName:      redact.Sprintf("ttl delete %s", params.RelationName),
 		cachedArgs:        cachedArgs,
 	}
 }
 
-func (b *DeleteQueryBuilder) buildQuery(numRows int) string {
+func (b *deleteQueryBuilder) BuildQuery(numRows int) string {
 	return ttlbase.BuildDeleteQuery(
 		b.RelationName,
 		b.PKColNames,
@@ -222,24 +240,36 @@ func (b *DeleteQueryBuilder) buildQuery(numRows int) string {
 	)
 }
 
-func (b *DeleteQueryBuilder) Run(
+// GetBatchSize implements the DeleteQueryBuilder interface.
+func (b *deleteQueryBuilder) GetBatchSize() int {
+	return int(b.DeleteBatchSize)
+}
+
+// Run implements the DeleteQueryBuilder interface.
+func (b *deleteQueryBuilder) Run(
 	ctx context.Context, txn isql.Txn, rows []tree.Datums,
 ) (int64, error) {
 	numRows := len(rows)
 	var query string
 	if int64(numRows) == b.DeleteBatchSize {
 		if b.cachedQuery == "" {
-			b.cachedQuery = b.buildQuery(numRows)
+			b.cachedQuery = b.BuildQuery(numRows)
 		}
 		query = b.cachedQuery
 	} else {
-		query = b.buildQuery(numRows)
+		query = b.BuildQuery(numRows)
 	}
 
 	deleteArgs := b.cachedArgs[:1]
 	for _, row := range rows {
 		for _, col := range row {
-			deleteArgs = append(deleteArgs, col)
+			// Convert any DEnum args to their logical representation to avoid the risk
+			// of using the wrong version of the enum type descriptor.
+			if enum, ok := col.(*tree.DEnum); ok {
+				deleteArgs = append(deleteArgs, enum.LogicalRep)
+			} else {
+				deleteArgs = append(deleteArgs, col)
+			}
 		}
 	}
 

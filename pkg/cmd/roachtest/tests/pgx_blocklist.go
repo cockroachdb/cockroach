@@ -8,7 +8,9 @@ package tests
 // Please keep these lists alphabetized for easy diffing.
 // After a failed run, an updated version of this blocklist should be available
 // in the test log.
-var pgxBlocklist = blocklist{}
+var pgxBlocklist = blocklist{
+	"v5.TestBeginReadOnly": "142043",
+}
 
 var pgxIgnorelist = blocklist{
 	"v5.TestBeginIsoLevels": "We don't support isolation levels",

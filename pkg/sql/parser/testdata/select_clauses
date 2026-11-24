@@ -786,6 +786,46 @@ SELECT a FROM t WHERE a NOT LIKE b -- literals removed
 SELECT _ FROM _ WHERE _ NOT LIKE _ -- identifiers removed
 
 parse
+SELECT a ~~ b
+----
+SELECT a LIKE b -- normalized!
+SELECT ((a) LIKE (b)) -- fully parenthesized
+SELECT a LIKE b -- literals removed
+SELECT _ LIKE _ -- identifiers removed
+
+parse
+SELECT a ~~ 'foo'
+----
+SELECT a LIKE 'foo' -- normalized!
+SELECT ((a) LIKE ('foo')) -- fully parenthesized
+SELECT a LIKE '_' -- literals removed
+SELECT _ LIKE 'foo' -- identifiers removed
+
+parse
+SELECT a FROM t WHERE a ~ ~ b
+----
+SELECT a FROM t WHERE a ~ (~b) -- normalized!
+SELECT (a) FROM t WHERE ((a) ~ ((~(b)))) -- fully parenthesized
+SELECT a FROM t WHERE a ~ (~b) -- literals removed
+SELECT _ FROM _ WHERE _ ~ (~_) -- identifiers removed
+
+parse
+SELECT a !~~ b
+----
+SELECT a NOT LIKE b -- normalized!
+SELECT ((a) NOT LIKE (b)) -- fully parenthesized
+SELECT a NOT LIKE b -- literals removed
+SELECT _ NOT LIKE _ -- identifiers removed
+
+parse
+SELECT a !~~ 'foo'
+----
+SELECT a NOT LIKE 'foo' -- normalized!
+SELECT ((a) NOT LIKE ('foo')) -- fully parenthesized
+SELECT a NOT LIKE '_' -- literals removed
+SELECT _ NOT LIKE 'foo' -- identifiers removed
+
+parse
 SELECT a FROM t WHERE a ILIKE b
 ----
 SELECT a FROM t WHERE a ILIKE b
@@ -800,6 +840,38 @@ SELECT a FROM t WHERE a NOT ILIKE b
 SELECT (a) FROM t WHERE ((a) NOT ILIKE (b)) -- fully parenthesized
 SELECT a FROM t WHERE a NOT ILIKE b -- literals removed
 SELECT _ FROM _ WHERE _ NOT ILIKE _ -- identifiers removed
+
+parse
+SELECT a ~~* b
+----
+SELECT a ILIKE b -- normalized!
+SELECT ((a) ILIKE (b)) -- fully parenthesized
+SELECT a ILIKE b -- literals removed
+SELECT _ ILIKE _ -- identifiers removed
+
+parse
+SELECT a ~~* 'foo'
+----
+SELECT a ILIKE 'foo' -- normalized!
+SELECT ((a) ILIKE ('foo')) -- fully parenthesized
+SELECT a ILIKE '_' -- literals removed
+SELECT _ ILIKE 'foo' -- identifiers removed
+
+parse
+SELECT a !~~* b
+----
+SELECT a NOT ILIKE b -- normalized!
+SELECT ((a) NOT ILIKE (b)) -- fully parenthesized
+SELECT a NOT ILIKE b -- literals removed
+SELECT _ NOT ILIKE _ -- identifiers removed
+
+parse
+SELECT a !~~* 'foo'
+----
+SELECT a NOT ILIKE 'foo' -- normalized!
+SELECT ((a) NOT ILIKE ('foo')) -- fully parenthesized
+SELECT a NOT ILIKE '_' -- literals removed
+SELECT _ NOT ILIKE 'foo' -- identifiers removed
 
 parse
 SELECT a FROM t WHERE a SIMILAR TO b
@@ -2804,6 +2876,59 @@ SELECT * FROM ROWS FROM (json_to_record('')) AS t (a "Nice Enum 📙", b STRING,
 SELECT (*) FROM ROWS FROM ((json_to_record(('')))) AS t (a "Nice Enum 📙", b STRING, c foo) -- fully parenthesized
 SELECT * FROM ROWS FROM (json_to_record('_')) AS t (a "Nice Enum 📙", b STRING, c foo) -- literals removed
 SELECT * FROM ROWS FROM (_('')) AS _ (_ _, _ STRING, _ _) -- identifiers removed
+
+# Regression test for #168372: a column name in an AS column-def list must be
+# quoted when it is the unreserved keyword INDEX, because the lexer's INDEX
+# disambiguation heuristic reclassifies a bare INDEX followed by an identifier
+# and '(' (e.g. a parameterized type like VARBIT(61)) into
+# INDEX_BEFORE_NAME_THEN_PAREN, which the 'name' grammar production rejects.
+#
+# The input uses BIT VARYING(61) (a two-word type) so the initial parse
+# succeeds: the lexer only sees INDEX followed by BIT followed by VARYING (not
+# '('). The formatter normalizes the type to VARBIT(61), which would trigger
+# the reclassification on re-parse if INDEX were left bare.
+
+parse
+SELECT * FROM json_to_record('') AS t (index BIT VARYING(61))
+----
+SELECT * FROM ROWS FROM (json_to_record('')) AS t ("index" VARBIT(61)) -- normalized!
+SELECT (*) FROM ROWS FROM ((json_to_record(('')))) AS t ("index" VARBIT(61)) -- fully parenthesized
+SELECT * FROM ROWS FROM (json_to_record('_')) AS t ("index" VARBIT(61)) -- literals removed
+SELECT * FROM ROWS FROM (_('')) AS _ (_ VARBIT(61)) -- identifiers removed
+
+parse
+SELECT * FROM json_to_record('') AS t (index BIT VARYING(61)[])
+----
+SELECT * FROM ROWS FROM (json_to_record('')) AS t ("index" VARBIT(61)[]) -- normalized!
+SELECT (*) FROM ROWS FROM ((json_to_record(('')))) AS t ("index" VARBIT(61)[]) -- fully parenthesized
+SELECT * FROM ROWS FROM (json_to_record('_')) AS t ("index" VARBIT(61)[]) -- literals removed
+SELECT * FROM ROWS FROM (_('')) AS _ (_ VARBIT(61)[]) -- identifiers removed
+
+parse
+SELECT * FROM json_to_record('') AS t (a INT, index BIT VARYING(61), b INT)
+----
+SELECT * FROM ROWS FROM (json_to_record('')) AS t (a INT8, "index" VARBIT(61), b INT8) -- normalized!
+SELECT (*) FROM ROWS FROM ((json_to_record(('')))) AS t (a INT8, "index" VARBIT(61), b INT8) -- fully parenthesized
+SELECT * FROM ROWS FROM (json_to_record('_')) AS t (a INT8, "index" VARBIT(61), b INT8) -- literals removed
+SELECT * FROM ROWS FROM (_('')) AS _ (_ INT8, _ VARBIT(61), _ INT8) -- identifiers removed
+
+# Already-quoted INDEX as a column name continues to round-trip.
+parse
+SELECT * FROM json_to_record('') AS t ("index" BIT VARYING(61))
+----
+SELECT * FROM ROWS FROM (json_to_record('')) AS t ("index" VARBIT(61)) -- normalized!
+SELECT (*) FROM ROWS FROM ((json_to_record(('')))) AS t ("index" VARBIT(61)) -- fully parenthesized
+SELECT * FROM ROWS FROM (json_to_record('_')) AS t ("index" VARBIT(61)) -- literals removed
+SELECT * FROM ROWS FROM (_('')) AS _ (_ VARBIT(61)) -- identifiers removed
+
+# Reduced reproducer of the original RandomSyntaxSelect failure (#168372).
+parse
+SELECT * FROM [FUNCTION 198]() AS TEMP (INDEX BIT VARYING(61) ARRAY[233])
+----
+SELECT * FROM ROWS FROM ([FUNCTION 198]()) AS temp ("index" VARBIT(61)[]) -- normalized!
+SELECT (*) FROM ROWS FROM (([FUNCTION 198]())) AS temp ("index" VARBIT(61)[]) -- fully parenthesized
+SELECT * FROM ROWS FROM ([FUNCTION 198]()) AS temp ("index" VARBIT(61)[]) -- literals removed
+SELECT * FROM ROWS FROM ([FUNCTION 198]()) AS _ (_ VARBIT(61)[]) -- identifiers removed
 
 parse
 SELECT 123 AS OF FROM t

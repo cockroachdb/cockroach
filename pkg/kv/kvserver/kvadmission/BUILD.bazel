@@ -1,4 +1,4 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "kvadmission",
@@ -11,8 +11,8 @@ go_library(
         "//pkg/kv/kvserver/kvflowcontrol",
         "//pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb",
         "//pkg/kv/kvserver/kvflowcontrol/replica_rac2",
-        "//pkg/kv/kvserver/raftlog",
-        "//pkg/raft/raftpb",
+        "//pkg/obs/ash",
+        "//pkg/obs/workloadid",
         "//pkg/roachpb",
         "//pkg/settings",
         "//pkg/settings/cluster",
@@ -21,9 +21,22 @@ go_library(
         "//pkg/util/buildutil",
         "//pkg/util/grunning",
         "//pkg/util/log",
-        "//pkg/util/stop",
         "//pkg/util/timeutil",
         "@com_github_cockroachdb_errors//:errors",
         "@com_github_cockroachdb_pebble//:pebble",
+    ],
+)
+
+go_test(
+    name = "kvadmission_test",
+    srcs = ["kvadmission_test.go"],
+    embed = [":kvadmission"],
+    deps = [
+        "//pkg/kv/kvpb",
+        "//pkg/roachpb",
+        "//pkg/settings/cluster",
+        "//pkg/util/admission",
+        "//pkg/util/admission/admissionpb",
+        "@com_github_stretchr_testify//require",
     ],
 )

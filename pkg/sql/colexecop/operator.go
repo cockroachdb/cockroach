@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -31,6 +32,8 @@ type Operator interface {
 	//
 	// It might panic with an expected error, so there must be a "root"
 	// component that will catch that panic.
+	//
+	// Init and Next must be called from the same goroutine.
 	Init(ctx context.Context)
 
 	// Next returns the next Batch from this operator. Once the operator is
@@ -40,9 +43,16 @@ type Operator interface {
 	// Calling Next may invalidate the contents of the last Batch returned by
 	// Next.
 	//
+	// Implementations should strive for reusing the same Batch across calls to
+	// Next which should be possible if the capacity of the Batch didn't change.
+	//
+	// Exactly one of the return arguments will be non-nil.
+	//
 	// It might panic with an expected error, so there must be a "root"
 	// component that will catch that panic.
-	Next() coldata.Batch
+	//
+	// Init and Next must be called from the same goroutine.
+	Next() (coldata.Batch, *execinfrapb.ProducerMetadata)
 
 	execopnode.OpNode
 }
@@ -73,16 +83,27 @@ type KVReader interface {
 	// GetContentionTime returns the amount of time KV reads spent
 	// contending. It must be safe for concurrent use.
 	GetContentionTime() time.Duration
+	// GetLockWaitTime returns the amount of time KV reads spent
+	// waiting in the lock table. It must be safe for concurrent use.
+	GetLockWaitTime() time.Duration
+	// GetLatchWaitTime returns the amount of time KV reads spent
+	// waiting to acquire a latch. It must be safe for concurrent use.
+	GetLatchWaitTime() time.Duration
 	// GetScanStats returns statistics about the scan that happened during the
 	// KV reads. It must be safe for concurrent use.
 	GetScanStats() execstats.ScanStats
 	// GetConsumedRU returns the number of RUs that were consumed during the
 	// KV reads.
 	GetConsumedRU() uint64
-	// GetKVCPUTime returns the CPU time consumed *on the current goroutine* by
-	// KV requests. It must be safe for concurrent use. It is used to calculate
-	// the SQL CPU time.
-	GetKVCPUTime() time.Duration
+	// GetLocalKVCPUTime returns the SQL goroutine CPU time (in nanoseconds)
+	// spent inside KV calls, measured via grunning deltas around txn.Send.
+	// This is the portion of SQL goroutine CPU that overlapped with KV work,
+	// not the CPU consumed on KV servers (see GetKVResponseCPUTime for that).
+	// It must be safe for concurrent use.
+	GetLocalKVCPUTime() int64
+	// GetKVResponseCPUTime returns the CPU time as reported by KV BatchResponses
+	// processed by the KVReader throughout its lifetime so far.
+	GetKVResponseCPUTime() int64
 	// UsedStreamer returns whether the Streamer API was used by the KVReader.
 	UsedStreamer() bool
 }
@@ -241,8 +262,8 @@ func NewFeedOperator() *FeedOperator {
 func (FeedOperator) Init(context.Context) {}
 
 // Next implements the colexecop.Operator interface.
-func (o *FeedOperator) Next() coldata.Batch {
-	return o.batch
+func (o *FeedOperator) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	return o.batch, nil
 }
 
 // SetBatch sets the next batch to be returned on Next call.
@@ -453,7 +474,7 @@ func NewNoop(input Operator) ResettableOperator {
 	return &noopOperator{OneInputInitCloserHelper: MakeOneInputInitCloserHelper(input)}
 }
 
-func (n *noopOperator) Next() coldata.Batch {
+func (n *noopOperator) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	return n.Input.Next()
 }
 
@@ -468,13 +489,19 @@ func (n *noopOperator) Reset(ctx context.Context) {
 // TODO(yuzefovich): remove this interface in favor of DrainableOperator and
 // clarify that calling DrainMeta on an uninitialized operator is illegal.
 type MetadataSource interface {
-	// DrainMeta returns all the metadata produced by the processor or operator.
+	// DrainMeta returns all the "trailing" metadata produced by the processor
+	// or operator (i.e. such metadata that is created when the component is
+	// being drained).
+	//
 	// It will be called exactly once, usually, when the processor or operator
 	// has finished doing its computations. This is a signal that the output
 	// requires no more rows to be returned.
+	//
 	// Implementers can choose what to do on subsequent calls (if such occur).
 	// TODO(yuzefovich): modify the contract to require returning nil on all
 	// calls after the first one.
+	// TODO(yuzefovich): it probably makes sense to modify the return parameter
+	// to be []*execinfrapb.ProducerMetadata.
 	DrainMeta() []execinfrapb.ProducerMetadata
 }
 
@@ -507,4 +534,24 @@ type VectorizedStatsCollector interface {
 	// GetStats returns the execution statistics of a single Operator. It will
 	// always return non-nil (but possibly empty) object.
 	GetStats() *execinfrapb.ComponentStats
+}
+
+// NextNoMeta simplifies Next signature to avoid the metadata argument. If
+// non-nil metadata is returned, it'll panic with it.
+//
+// This function can be used whenever the whole Operator chain cannot ever emit
+// any metadata.
+func NextNoMeta(op Operator) coldata.Batch {
+	b, meta := op.Next()
+	if meta != nil {
+		if buildutil.CrdbTestBuild && (meta.RowNum != nil || meta.Metrics != nil) {
+			// In test builds, the invariantsChecker can inject RowNum metadata
+			// in arbitrary Operator chains, and synchronizer / router / outbox
+			// wrappers may emit Metrics metadata carrying the always-on
+			// grunning measurement. Both are silently swallowed.
+			return NextNoMeta(op)
+		}
+		colexecerror.InternalError(errors.AssertionFailedf("non-nil metadata from %T: %v", op, meta))
+	}
+	return b
 }

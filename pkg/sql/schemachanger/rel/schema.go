@@ -189,7 +189,11 @@ func checkType(typ, exp reflect.Type) error {
 			return errors.Errorf("%v does not implement %v", typ, exp)
 		}
 	default:
-		if typ != exp {
+		// Check if types are incompatible. Types that differ are acceptable if they
+		// share the same underlying kind and typ is convertible to exp. This allows
+		// named types like "type RegionName string" to satisfy as "string", but
+		// "int8" to not satisfy as "int32".
+		if typ != exp && (typ.Kind() != exp.Kind() || !typ.ConvertibleTo(exp)) {
 			return errors.Errorf("%v is not %v", typ, exp)
 		}
 	}
@@ -426,7 +430,7 @@ func (sb *schemaBuilder) addTypeAttrMapping(
 			} else if !f.isSlice() {
 				compType := getComparableType(typ)
 				if f.isPtr() && f.isScalar() {
-					compType = reflect.PtrTo(compType)
+					compType = reflect.PointerTo(compType)
 				}
 				vg := makeValueGetter(compType, offset)
 				if f.isPtr() && f.isScalar() {
@@ -521,5 +525,5 @@ func makeSliceMemberType(srcType, sliceType reflect.Type, valueFieldName string)
 			Name: valueFieldName, Type: sliceType.Elem(),
 		},
 	}
-	return reflect.PtrTo(reflect.StructOf(fields[:]))
+	return reflect.PointerTo(reflect.StructOf(fields[:]))
 }

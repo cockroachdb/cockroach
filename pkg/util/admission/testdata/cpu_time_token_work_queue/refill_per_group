@@ -1,0 +1,127 @@
+###
+# This test exercises refillBurstBucketForGroup, which refills a
+# single group's burst bucket with per-group scaled amounts (as
+# opposed to refillBurstBuckets which applies uniform amounts to
+# all groups).
+#
+# refillBurstBucketForGroup only operates on rg-keyed containers
+# (panics on tenant kind), so the test runs in RM mode
+# (set-priority-based-groups=true) and routes admits via priority:
+# NormalPri (0) -> rg 1, BulkNormalPri (-30) -> rg 2.
+#
+# Note: admit id= is a test-local handle for tracking admit results,
+# unrelated to tenant or group IDs.
+###
+init
+----
+
+set-priority-based-groups v=true
+----
+
+set-try-get-return-value v=true
+----
+
+# Create two rg-keyed groups via priority-based routing.
+admit id=1 tenant=10 priority=0 requested-count=1
+----
+tryGet: input can_burst, returning true
+id 1: admit succeeded
+
+admit id=2 tenant=10 priority=-30 requested-count=1
+----
+tryGet: input no_burst, returning true
+id 2: admit succeeded
+
+# Refill only rg 1 with a large amount. rg 2 gets nothing.
+# rg 1 should be at high fullness (can_burst), while rg 2
+# remains at -1 tokens with capacity=0 (no_burst).
+refill-burst-bucket-for-group group=1 to-add=100 capacity=100
+----
+
+print
+----
+closed epoch: 0 groupHeap len: 0
+ group-id: t0g1 used: 1, w: 80, fifo: -128
+ group-id: t0g2 used: 1, w: 20, fifo: -128
+ group-id: t1g0 used: 0, w: 4294967295, fifo: -128
+burst-buckets: t0g1=fullness=99.0% tokens=99 capacity=100 maxCPU=true qual=can_burst t0g2=fullness=0.0% tokens=-1 capacity=0 qual=no_burst t1g0=fullness=0.0% tokens=0 capacity=0 maxCPU=true qual=can_burst
+
+# Refill rg 2 with a smaller amount. rg 2 should reach 49%
+# (no_burst).
+refill-burst-bucket-for-group group=2 to-add=50 capacity=100
+----
+
+print
+----
+closed epoch: 0 groupHeap len: 0
+ group-id: t0g1 used: 1, w: 80, fifo: -128
+ group-id: t0g2 used: 1, w: 20, fifo: -128
+ group-id: t1g0 used: 0, w: 4294967295, fifo: -128
+burst-buckets: t0g1=fullness=99.0% tokens=99 capacity=100 maxCPU=true qual=can_burst t0g2=fullness=49.0% tokens=49 capacity=100 qual=no_burst t1g0=fullness=0.0% tokens=0 capacity=0 maxCPU=true qual=can_burst
+
+###
+# Verify that refill-burst-bucket-for-group correctly updates the
+# heap when burst qualification changes. Queue work for both groups
+# (both currently no_burst on the test_granter side because we'll
+# flip set-try-get-return-value to false), then refill rg 2 past
+# 90% to push it to can_burst. rg 2's work should be granted before
+# rg 1's.
+###
+
+set-try-get-return-value v=false
+----
+
+# Drain reservation tokens to put both groups in equal queue state.
+gc-groups-and-reset-used
+----
+
+admit id=3 tenant=10 priority=0 requested-count=1
+----
+tryGet: input can_burst, returning false
+
+admit id=4 tenant=10 priority=-30 requested-count=1
+----
+
+# Refill rg 2 past the 90% threshold. This exercises the heap fix
+# path: refillBurstBucketLocked calls groupHeap.fix() when burst
+# qualification changes, transitioning rg 2 to can_burst.
+refill-burst-bucket-for-group group=2 to-add=50 capacity=100
+----
+
+print
+----
+closed epoch: 0 groupHeap len: 2 top group: t0g1
+ group-id: t0g1 used: 0, w: 80, fifo: -128 waiting work heap: [0: pri: normal-pri, ct: 1, epoch: 0, qt: 100]
+ group-id: t0g2 used: 0, w: 20, fifo: -128 waiting work heap: [0: pri: bulk-normal-pri, ct: 1, epoch: 0, qt: 100]
+ group-id: t1g0 used: 0, w: 4294967295, fifo: -128
+burst-buckets: t0g1=fullness=99.0% tokens=99 capacity=100 maxCPU=true qual=can_burst t0g2=fullness=99.0% tokens=99 capacity=100 qual=can_burst t1g0=fullness=0.0% tokens=0 capacity=0 maxCPU=true qual=can_burst
+
+# rg 2 should be granted first (it was already at top of heap when
+# rg 1 was no_burst; now both can_burst, ordering by used/weight is
+# identical so insertion order wins).
+granted chain-id=1
+----
+continueGrantChain 1
+id 3: admit succeeded
+granted: returned 1
+
+granted chain-id=1
+----
+continueGrantChain 1
+id 4: admit succeeded
+granted: returned 1
+
+###
+# Verify refill for a nonexistent group is a no-op.
+###
+
+refill-burst-bucket-for-group group=999 to-add=100 capacity=100
+----
+
+print
+----
+closed epoch: 0 groupHeap len: 0
+ group-id: t0g1 used: 1, w: 80, fifo: -128
+ group-id: t0g2 used: 1, w: 20, fifo: -128
+ group-id: t1g0 used: 0, w: 4294967295, fifo: -128
+burst-buckets: t0g1=fullness=98.0% tokens=98 capacity=100 maxCPU=true qual=can_burst t0g2=fullness=98.0% tokens=98 capacity=100 qual=can_burst t1g0=fullness=0.0% tokens=0 capacity=0 maxCPU=true qual=can_burst

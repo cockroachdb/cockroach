@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils/dd"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/datadriven"
@@ -64,8 +65,7 @@ func TestTokenTracker(t *testing.T) {
 	datadriven.RunTest(t, "testdata/token_tracker", func(t *testing.T, d *datadriven.TestData) string {
 		switch d.Cmd {
 		case "init":
-			var term uint64
-			d.ScanArgs(t, "term", &term)
+			term := dd.ScanArg[uint64](t, d, "term")
 			tracker.Init(term, kvflowcontrol.Stream{})
 			return "ok"
 
@@ -109,8 +109,7 @@ func TestTokenTracker(t *testing.T) {
 		case "untrack":
 			var av AdmittedVector
 			d.ScanArgs(t, "term", &av.Term)
-			var evalTokensGEIndex uint64
-			d.ScanArgs(t, "eval-tokens-ge-index", &evalTokensGEIndex)
+			evalTokensGEIndex := dd.ScanArg[uint64](t, d, "eval-tokens-ge-index")
 			for _, line := range strings.Split(d.Input, "\n") {
 				line = strings.TrimSpace(line)
 				if line == "" {

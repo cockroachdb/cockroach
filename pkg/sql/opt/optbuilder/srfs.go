@@ -7,6 +7,7 @@ package optbuilder
 
 import (
 	"context"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -102,7 +103,7 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 		if err != nil {
 			panic(err)
 		}
-		texpr := inScope.resolveType(expr, types.Any)
+		texpr := inScope.resolveType(expr, types.AnyElement)
 
 		var def *tree.ResolvedFunctionDefinition
 		funcExpr, ok := texpr.(*tree.FuncExpr)
@@ -148,6 +149,25 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 		} else {
 			scalar = b.buildScalar(texpr, inScope, outScope, outCol, nil)
 		}
+
+		// For Postgres compatibility, set the data source name of SRF columns
+		// to the unqualified function name. This allows column references to
+		// be qualified with the function name, e.g. jsonb_each_text.key.
+		if def != nil {
+			// def.Name is unqualified for pg_catalog builtins and UDFs, but
+			// includes the schema for non-pg_catalog builtins (e.g.
+			// "information_schema._pg_expandarray"). Strip the prefix to get
+			// the unqualified function name.
+			funcNameStr := def.Name
+			if idx := strings.LastIndex(funcNameStr, "."); idx >= 0 {
+				funcNameStr = funcNameStr[idx+1:]
+			}
+			funcName := tree.Name(funcNameStr)
+			for j := startCols; j < len(outScope.cols); j++ {
+				outScope.cols[j].table = tree.MakeUnqualifiedTableName(funcName)
+			}
+		}
+
 		numExpectedOutputCols := len(outScope.cols) - startCols
 		cols := make(opt.ColList, 0, numExpectedOutputCols)
 		for j := startCols; j < len(outScope.cols); j++ {
@@ -271,9 +291,7 @@ func (b *Builder) validateGeneratorFunctionReturnType(
 			}
 		}
 	} else if overload.ReturnsRecordType {
-		panic(pgerror.New(pgcode.Syntax,
-			"a column definition list is required for functions returning \"record\"",
-		))
+		panic(needColumnDefListForRecordErr)
 	}
 
 	// Verify that the function return type can be assignment-casted to the
@@ -322,3 +340,7 @@ func (b *Builder) buildProjectSet(inScope *scope) {
 
 	inScope.expr = b.factory.ConstructProjectSet(inScope.expr, zip)
 }
+
+var needColumnDefListForRecordErr = pgerror.New(pgcode.Syntax,
+	"a column definition list is required for functions returning \"record\"",
+)

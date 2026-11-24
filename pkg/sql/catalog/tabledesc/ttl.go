@@ -11,7 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/errors"
@@ -55,7 +55,7 @@ func ValidateRowLevelTTL(ttl *catpb.RowLevelTTL) error {
 		}
 	}
 	if ttl.RowStatsPollInterval != 0 {
-		if err := ValidateTTLRowStatsPollInterval("ttl_row_stats_poll_interval", ttl.RowStatsPollInterval); err != nil {
+		if err := ValidateNotNegativeInterval("ttl_row_stats_poll_interval", ttl.RowStatsPollInterval); err != nil {
 			return err
 		}
 	}
@@ -72,7 +72,7 @@ func ValidateTTLExpirationExpr(desc catalog.TableDescriptor) error {
 	if expirationExpr == "" {
 		return nil
 	}
-	exprs, err := parser.ParseExprs([]string{string(expirationExpr)})
+	exprs, err := parserutils.ParseExprs([]string{string(expirationExpr)})
 	if err != nil {
 		return errors.Wrapf(err, "ttl_expiration_expression %q must be a valid expression", expirationExpr)
 	} else if len(exprs) != 1 {
@@ -108,21 +108,21 @@ func ValidateTTLExpirationColumn(desc catalog.TableDescriptor) error {
 	if err != nil {
 		return errors.Wrapf(err, "expected column %s", catpb.TTLDefaultExpirationColumnName)
 	}
-	expectedStr := `current_timestamp():::TIMESTAMPTZ + ` + string(intervalExpr)
-	if col.GetDefaultExpr() != expectedStr {
+	expectedExpr := catpb.Expression(`current_timestamp():::TIMESTAMPTZ + ` + string(intervalExpr))
+	if col.GetDefaultExpr() != expectedExpr {
 		return pgerror.Newf(
 			pgcode.InvalidTableDefinition,
-			"expected DEFAULT expression of %s to be %s",
+			"expected DEFAULT expression of %s to be ( %s ), but got: ( %s )",
 			catpb.TTLDefaultExpirationColumnName,
-			expectedStr,
+			expectedExpr, col.GetDefaultExpr(),
 		)
 	}
-	if col.GetOnUpdateExpr() != expectedStr {
+	if col.GetOnUpdateExpr() != expectedExpr {
 		return pgerror.Newf(
 			pgcode.InvalidTableDefinition,
-			"expected ON UPDATE expression of %s to be %s",
+			"expected ON UPDATE expression of %s to be ( %s ), but got: ( %s )",
 			catpb.TTLDefaultExpirationColumnName,
-			expectedStr,
+			expectedExpr, col.GetOnUpdateExpr(),
 		)
 	}
 
@@ -131,10 +131,10 @@ func ValidateTTLExpirationColumn(desc catalog.TableDescriptor) error {
 
 // ValidateTTLBatchSize validates the batch size of a TTL.
 func ValidateTTLBatchSize(key string, val int64) error {
-	if val <= 0 {
+	if val < 0 {
 		return pgerror.Newf(
 			pgcode.InvalidParameterValue,
-			`"%s" must be at least 1`,
+			`"%s" must be at least 0`,
 			key,
 		)
 	}
@@ -154,13 +154,12 @@ func ValidateTTLCronExpr(key string, str string) error {
 	return nil
 }
 
-// ValidateTTLRowStatsPollInterval validates the automatic statistics field
-// of TTL.
-func ValidateTTLRowStatsPollInterval(key string, val time.Duration) error {
-	if val <= 0 {
+// ValidateNotNegativeInterval validates the provided interval is not negative.
+func ValidateNotNegativeInterval(key string, val time.Duration) error {
+	if val < 0 {
 		return pgerror.Newf(
 			pgcode.InvalidParameterValue,
-			`"%s" must be at least 1`,
+			`"%s" must be at least 0`,
 			key,
 		)
 	}
@@ -169,10 +168,10 @@ func ValidateTTLRowStatsPollInterval(key string, val time.Duration) error {
 
 // ValidateTTLRateLimit validates the rate limit parameters of TTL.
 func ValidateTTLRateLimit(key string, val int64) error {
-	if val <= 0 {
+	if val < 0 {
 		return pgerror.Newf(
 			pgcode.InvalidParameterValue,
-			`"%s" must be at least 1`,
+			`"%s" must be at least 0`,
 			key,
 		)
 	}

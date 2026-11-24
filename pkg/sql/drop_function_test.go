@@ -7,22 +7,24 @@ package sql_test
 
 import (
 	"context"
+	"fmt"
 	"regexp"
 	"sort"
 	"strconv"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/lib/pq/oid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -31,9 +33,7 @@ func TestDropFunction(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(107322),
-	})
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 	tDB := sqlutils.MakeSQLRunner(sqlDB)
 
@@ -59,33 +59,49 @@ CREATE SCHEMA test_sc;
 `,
 	)
 
-	err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
-		funcDesc, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, 109)
+	// Query object IDs programmatically instead of hardcoding them.
+	tableID := descpb.ID(sqlutils.QueryTableID(t, sqlDB, "defaultdb", "public", "t"))
+	seqID := descpb.ID(sqlutils.QueryTableID(t, sqlDB, "defaultdb", "public", "sq1"))
+	viewID := descpb.ID(sqlutils.QueryTableID(t, sqlDB, "defaultdb", "public", "v"))
+	var funcID descpb.ID
+	tDB.QueryRow(t, `
+		SELECT function_id FROM crdb_internal.create_function_statements
+		WHERE database_name = 'defaultdb' AND schema_name = 'public' AND function_name = 'f'
+	`).Scan(&funcID)
+	var typeID, arrayTypeID descpb.ID
+	tDB.QueryRow(t, `SELECT 'notmyworkday'::regtype::oid::int`).Scan(&typeID)
+	tDB.QueryRow(t, `SELECT 'notmyworkday[]'::regtype::oid::int`).Scan(&arrayTypeID)
+	typeID = catid.UserDefinedOIDToID(oid.Oid(typeID))
+	arrayTypeID = catid.UserDefinedOIDToID(oid.Oid(arrayTypeID))
+
+	err := sqltestutils.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		funcDesc, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, funcID)
 		require.NoError(t, err)
 		require.Equal(t, funcDesc.GetName(), "f")
 
-		require.Equal(t,
-			`SELECT a FROM defaultdb.public.t;
+		expectedBody := fmt.Sprintf(`SELECT a FROM defaultdb.public.t;
 SELECT b FROM defaultdb.public.t@t_idx_b;
 SELECT c FROM defaultdb.public.t@t_idx_c;
 SELECT a FROM defaultdb.public.v;
-SELECT nextval(105:::REGCLASS);`,
-			funcDesc.GetFunctionBody())
+SELECT nextval(%d:::REGCLASS);`, seqID)
+		require.Equal(t, expectedBody, string(funcDesc.GetFunctionBody()))
 
 		sort.Slice(funcDesc.GetDependsOn(), func(i, j int) bool {
 			return funcDesc.GetDependsOn()[i] < funcDesc.GetDependsOn()[j]
 		})
-		require.Equal(t,
-			[]descpb.ID{104, 105, 106},
-			funcDesc.GetDependsOn(),
-		)
+		expectedDependsOn := []descpb.ID{tableID, seqID, viewID}
+		sort.Slice(expectedDependsOn, func(i, j int) bool {
+			return expectedDependsOn[i] < expectedDependsOn[j]
+		})
+		require.Equal(t, expectedDependsOn, funcDesc.GetDependsOn())
 		sort.Slice(funcDesc.GetDependsOnTypes(), func(i, j int) bool {
 			return funcDesc.GetDependsOnTypes()[i] < funcDesc.GetDependsOnTypes()[j]
 		})
-		require.Equal(t,
-			[]descpb.ID{107, 108},
-			funcDesc.GetDependsOnTypes(),
-		)
+		expectedDependsOnTypes := []descpb.ID{typeID, arrayTypeID}
+		sort.Slice(expectedDependsOnTypes, func(i, j int) bool {
+			return expectedDependsOnTypes[i] < expectedDependsOnTypes[j]
+		})
+		require.Equal(t, expectedDependsOnTypes, funcDesc.GetDependsOnTypes())
 
 		// Make sure columns and indexes has correct back references.
 		tn := tree.MakeTableNameWithSchema("defaultdb", "public", "t")
@@ -94,10 +110,10 @@ SELECT nextval(105:::REGCLASS);`,
 		require.Equal(t, "t", tbl.GetName())
 		require.Equal(t,
 			[]descpb.TableDescriptor_Reference{
-				{ID: 106, ColumnIDs: []catid.ColumnID{1}},
-				{ID: 109, ColumnIDs: []catid.ColumnID{1}},
-				{ID: 109, IndexID: 2, ColumnIDs: []catid.ColumnID{2}},
-				{ID: 109, IndexID: 3, ColumnIDs: []catid.ColumnID{3}},
+				{ID: viewID, ColumnIDs: []catid.ColumnID{1}},
+				{ID: funcID, ColumnIDs: []catid.ColumnID{1}},
+				{ID: funcID, IndexID: 2, ColumnIDs: []catid.ColumnID{2}},
+				{ID: funcID, IndexID: 3, ColumnIDs: []catid.ColumnID{3}},
 			},
 			tbl.GetDependedOnBy(),
 		)
@@ -109,7 +125,7 @@ SELECT nextval(105:::REGCLASS);`,
 		require.Equal(t, "sq1", seq.GetName())
 		require.Equal(t,
 			[]descpb.TableDescriptor_Reference{
-				{ID: 109, ByID: true},
+				{ID: funcID, ByID: true},
 			},
 			seq.GetDependedOnBy(),
 		)
@@ -121,7 +137,7 @@ SELECT nextval(105:::REGCLASS);`,
 		require.Equal(t, "v", view.GetName())
 		require.Equal(t,
 			[]descpb.TableDescriptor_Reference{
-				{ID: 109, ColumnIDs: []catid.ColumnID{1}},
+				{ID: funcID, ColumnIDs: []catid.ColumnID{1}},
 			},
 			view.GetDependedOnBy(),
 		)
@@ -132,7 +148,7 @@ SELECT nextval(105:::REGCLASS);`,
 		require.NoError(t, err)
 		require.Equal(t, "notmyworkday", typ.GetName())
 		require.Equal(t, 1, typ.NumReferencingDescriptors())
-		require.Equal(t, descpb.ID(109), typ.GetReferencingDescriptorID(0))
+		require.Equal(t, funcID, typ.GetReferencingDescriptorID(0))
 
 		return nil
 	})
@@ -140,8 +156,8 @@ SELECT nextval(105:::REGCLASS);`,
 
 	// DROP the function and make sure dependencies are cleared.
 	tDB.Exec(t, "DROP FUNCTION f")
-	err = sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
-		_, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, 109)
+	err = sqltestutils.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+		_, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, funcID)
 		require.Error(t, err)
 		require.Regexp(t, regexp.MustCompile(`function \d+ does not exist`), err.Error())
 
@@ -151,7 +167,7 @@ SELECT nextval(105:::REGCLASS);`,
 		require.NoError(t, err)
 		require.Equal(t,
 			[]descpb.TableDescriptor_Reference{
-				{ID: 106, ColumnIDs: []catid.ColumnID{1}},
+				{ID: viewID, ColumnIDs: []catid.ColumnID{1}},
 			},
 			tbl.GetDependedOnBy(),
 		)
@@ -188,6 +204,8 @@ func TestDropFailOnDependentFunction(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	tDB := sqlutils.MakeSQLRunner(sqlDB)
 
+	// This test also validates the legacy schema changer so disable schema locked.
+	tDB.Exec(t, "SET create_table_with_schema_locked=false")
 	tDB.Exec(t, `
 CREATE TABLE t(
   a INT PRIMARY KEY,
@@ -242,12 +260,14 @@ USE defaultdb;
 			dscExpectedErr: `pq: cannot drop view v because other objects depend on it`,
 		},
 		{
-			stmt:        "ALTER TABLE t RENAME TO t_new",
-			expectedErr: `pq: cannot rename relation "t" because function "f" depends on it`,
+			stmt:           "ALTER TABLE t RENAME TO t_new",
+			expectedErr:    `pq: cannot rename relation "t" because function "f" depends on it`,
+			dscExpectedErr: `pq: cannot rename relation "defaultdb.public.t" because function "f" depends on it`,
 		},
 		{
-			stmt:        "ALTER TABLE t SET SCHEMA test_sc",
-			expectedErr: `pq: cannot set schema on relation "t" because function "f" depends on it`,
+			stmt:           "ALTER TABLE t SET SCHEMA test_sc",
+			expectedErr:    `pq: cannot set schema on relation "t" because function "f" depends on it`,
+			dscExpectedErr: `pq: cannot set schema on relation "defaultdb.public.t" because function "f" depends on it`,
 		},
 		{
 			stmt:        "ALTER TABLE t DROP COLUMN d",
@@ -311,6 +331,7 @@ func TestDropCascadeRemoveFunction(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	setupQuery := `
+SET create_table_with_schema_locked=false;
 CREATE DATABASE test_db;
 USE test_db;
 CREATE TABLE t(
@@ -380,7 +401,7 @@ $$;
 			// Test drop/rename behavior in legacy schema changer.
 			tDB.Exec(t, "SET use_declarative_schema_changer = off;")
 
-			err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+			err := sqltestutils.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 				fnDesc, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, 113)
 				require.NoError(t, err)
 				require.Equal(t, "f", fnDesc.GetName())
@@ -391,7 +412,7 @@ $$;
 
 			tDB.Exec(t, tc.stmt)
 
-			err = sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+			err = sqltestutils.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 				_, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, 113)
 				require.Error(t, err)
 				require.Regexp(t, regexp.MustCompile(`function \d+ does not exist`), err.Error())
@@ -413,7 +434,7 @@ $$;
 			// Test drop/rename behavior in legacy schema changer.
 			tDB.Exec(t, "SET use_declarative_schema_changer = on;")
 
-			err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+			err := sqltestutils.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 				fnDesc, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, 113)
 				require.NoError(t, err)
 				require.Equal(t, "f", fnDesc.GetName())
@@ -424,7 +445,7 @@ $$;
 
 			tDB.Exec(t, tc.stmt)
 
-			err = sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+			err = sqltestutils.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 				_, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, 113)
 				require.Error(t, err)
 				require.Regexp(t, regexp.MustCompile(`function \d+ does not exist`), err.Error())

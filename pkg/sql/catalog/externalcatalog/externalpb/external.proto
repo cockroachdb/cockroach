@@ -1,0 +1,18 @@
+// Copyright 2024 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+
+syntax = "proto3";
+package cockroach.sql.catalog.externalcatalog.externalpb;
+option go_package = "github.com/cockroachdb/cockroach/pkg/sql/catalog/externalcatalog/externalpb";
+
+import "gogoproto/gogo.proto";
+import "sql/catalog/descpb/structured.proto";
+
+message ExternalCatalog {
+  repeated cockroach.sql.sqlbase.TableDescriptor tables = 1 [(gogoproto.nullable) = false];
+  repeated cockroach.sql.sqlbase.TypeDescriptor types = 2 [(gogoproto.nullable) = false];
+
+}

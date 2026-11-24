@@ -31,6 +31,7 @@ func (d *deferredVisitor) CreateSchemaChangerJob(
 		job.Authorization,
 		catalog.MakeDescriptorIDSet(job.DescriptorIDs...),
 		job.RunningStatus,
+		job.DistributedMergeMode,
 	)
 }
 

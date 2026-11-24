@@ -21,19 +21,14 @@ var KVSlotAdjusterOverloadThreshold = settings.RegisterIntSetting(
 	"admission.kv_slot_adjuster.overload_threshold",
 	"when the number of runnable goroutines per CPU is greater than this threshold, the "+
 		"slot adjuster considers the cpu to be overloaded",
-	32, settings.PositiveInt)
+	32, settings.PositiveInt,
+	settings.WithName("admission.kv.cpu_overload_threshold"))
 
 // kvSlotAdjuster is an implementer of CPULoadListener and
 // cpuOverloadIndicator.
 type kvSlotAdjuster struct {
 	settings *cluster.Settings
-	// This is the slotGranter used for KVWork. In single-tenant settings, it
-	// is the only one we adjust using the periodic cpu overload signal. We
-	// don't adjust slots for SQLStatementLeafStartWork and
-	// SQLStatementRootStartWork using the periodic cpu overload signal since:
-	// - these are potentially long-lived work items and not CPU bound
-	// - we don't know how to coordinate adjustment of those slots and the KV
-	//   slots.
+	// This is the slotGranter used for KVWork.
 	granter     *slotGranter
 	minCPUSlots int
 	maxCPUSlots int
@@ -51,11 +46,10 @@ var _ CPULoadListener = &kvSlotAdjuster{}
 func (kvsa *kvSlotAdjuster) CPULoad(runnable int, procs int, samplePeriod time.Duration) {
 	threshold := int(KVSlotAdjusterOverloadThreshold.Get(&kvsa.settings.SV))
 
-	periodDurationMicros := samplePeriod.Microseconds()
 	if samplePeriod > time.Millisecond {
-		kvsa.cpuLoadLongPeriodDurationMetric.Inc(periodDurationMicros)
+		kvsa.cpuLoadLongPeriodDurationMetric.Inc(samplePeriod.Nanoseconds())
 	} else {
-		kvsa.cpuLoadShortPeriodDurationMetric.Inc(periodDurationMicros)
+		kvsa.cpuLoadShortPeriodDurationMetric.Inc(samplePeriod.Nanoseconds())
 	}
 
 	// Simple heuristic, which worked ok in experiments. More sophisticated ones

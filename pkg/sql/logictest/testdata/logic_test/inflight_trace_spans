@@ -5,6 +5,7 @@
 # picks up more spans than it wants.
 # TODO(andrei): Figure out a replacement for this test that is more robust.
 # cluster-opt: tracing-off
+# knob-opt: allow-unsafe
 
 statement ok
 GRANT ADMIN TO testuser

@@ -1,0 +1,70 @@
+setup
+CREATE TABLE t (i INT PRIMARY KEY, j INT, CONSTRAINT cc CHECK (i > 0));
+----
+
+build
+ALTER TABLE t RENAME CONSTRAINT cc TO cc_renamed;
+----
+- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 104}
+- [[ConstraintWithoutIndexName:{DescID: 104, Name: cc, ConstraintID: 2}, ABSENT], PUBLIC]
+  {constraintId: 2, name: cc, tableId: 104}
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
+- [[ConstraintWithoutIndexName:{DescID: 104, Name: cc_renamed, ConstraintID: 2}, PUBLIC], ABSENT]
+  {constraintId: 2, name: cc_renamed, tableId: 104}
+
+setup
+CREATE TABLE t2 (i INT PRIMARY KEY, CONSTRAINT u UNIQUE (i));
+----
+
+build
+ALTER TABLE t2 RENAME CONSTRAINT u TO u_renamed;
+----
+- [[IndexData:{DescID: 105, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 105}
+- [[IndexName:{DescID: 105, Name: u, IndexID: 2}, ABSENT], PUBLIC]
+  {indexId: 2, name: u, tableId: 105}
+- [[IndexData:{DescID: 105, IndexID: 2}, PUBLIC], PUBLIC]
+  {indexId: 2, tableId: 105}
+- [[TableData:{DescID: 105, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 105}
+- [[IndexName:{DescID: 105, Name: u_renamed, IndexID: 2}, PUBLIC], ABSENT]
+  {indexId: 2, name: u_renamed, tableId: 105}
+
+setup
+CREATE TABLE t3 (i INT PRIMARY KEY);
+CREATE TABLE t4 (i INT REFERENCES t3(i));
+----
+
+build
+ALTER TABLE t4 RENAME CONSTRAINT t4_i_fkey TO fk_renamed;
+----
+- [[IndexData:{DescID: 107, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 107}
+- [[ConstraintWithoutIndexName:{DescID: 107, Name: t4_i_fkey, ConstraintID: 2}, ABSENT], PUBLIC]
+  {constraintId: 2, name: t4_i_fkey, tableId: 107}
+- [[TableData:{DescID: 107, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 107}
+- [[ConstraintWithoutIndexName:{DescID: 107, Name: fk_renamed, ConstraintID: 2}, PUBLIC], ABSENT]
+  {constraintId: 2, name: fk_renamed, tableId: 107}
+
+setup
+CREATE TABLE t5 (i INT PRIMARY KEY, j INT, CONSTRAINT con1 CHECK (i > 0), CONSTRAINT con2 CHECK (j > 0));
+----
+
+build
+ALTER TABLE t5 RENAME CONSTRAINT con1 TO con1_old, RENAME CONSTRAINT con2 TO con1;
+----
+- [[IndexData:{DescID: 108, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 108}
+- [[ConstraintWithoutIndexName:{DescID: 108, Name: con1, ConstraintID: 2}, ABSENT], PUBLIC]
+  {constraintId: 2, name: con1, tableId: 108}
+- [[ConstraintWithoutIndexName:{DescID: 108, Name: con2, ConstraintID: 3}, ABSENT], PUBLIC]
+  {constraintId: 3, name: con2, tableId: 108}
+- [[TableData:{DescID: 108, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 108}
+- [[ConstraintWithoutIndexName:{DescID: 108, Name: con1_old, ConstraintID: 2}, PUBLIC], ABSENT]
+  {constraintId: 2, name: con1_old, tableId: 108}
+- [[ConstraintWithoutIndexName:{DescID: 108, Name: con1, ConstraintID: 3}, PUBLIC], ABSENT]
+  {constraintId: 3, name: con1, tableId: 108}

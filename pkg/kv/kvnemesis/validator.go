@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
@@ -398,6 +399,7 @@ func transferLeaseResultIsIgnorable(res Result) bool {
 	}
 	return kvserver.IsLeaseTransferRejectedBecauseTargetMayNeedSnapshotError(err) ||
 		kvserver.IsLeaseTransferRejectedBecauseTargetCannotReceiveLease(err) ||
+		kvserver.IsLeaseTransferRejectedBecauseTargetHasSendQueueError(err) ||
 		// A lease transfer is not permitted while a range merge is in its
 		// critical phase.
 		resultIsErrorStr(res, `cannot transfer lease while merge in progress`) ||
@@ -432,6 +434,9 @@ func (v *validator) processOp(op Operation) {
 		if _, isErr := v.checkError(op, t.Result); isErr {
 			break
 		}
+		if t.Result.ResumeSpan != nil {
+			break
+		}
 		read := &observedRead{
 			Key:        t.Key,
 			SkipLocked: t.SkipLocked,
@@ -463,6 +468,9 @@ func (v *validator) processOp(op Operation) {
 		if v.checkNonAmbError(op, t.Result) {
 			break
 		}
+		if t.Result.ResumeSpan != nil {
+			break
+		}
 		// Accumulate all the writes for this transaction.
 		write := &observedWrite{
 			Key:   t.Key,
@@ -477,8 +485,62 @@ func (v *validator) processOp(op Operation) {
 		if v.buffering == bufferingSingle {
 			v.checkAtomic(`put`, t.Result)
 		}
+	case *CPutOperation:
+		if v.checkNonAmbError(op, t.Result) {
+			break
+		}
+		readObservation := &observedRead{Key: t.Key}
+		var shouldObserveRead bool
+		writeObservation := &observedWrite{
+			Key:   t.Key,
+			Seq:   t.Seq,
+			Value: roachpb.MakeValueFromString(t.Value()),
+		}
+		var shouldObserveWrite bool
+		// If the CPut hit a ConditionFailedError, we don't observe the read or
+		// the write. The CPut's condition-check read is not added to the txn's
+		// read refresh spans and no write lock is acquired, so nothing protects
+		// this read from becoming stale if the txn's write timestamp is later
+		// pushed.
+		//
+		// If the CPut succeeded, the expected value is observed, and the CPut's
+		// write is also observed.
+		err := errorFromResult(t.Result)
+		if !errors.HasType(err, (*kvpb.ConditionFailedError)(nil)) {
+			if !t.AllowIfDoesNotExist {
+				// If AllowIfDoesNotExist == true, we don't know if the read found the
+				// expected value or no value, so we can't add a read observation.
+				// Otherwise, it must have observed the expected value.
+				observedVal := roachpb.Value{}
+				if t.ExpVal != nil {
+					observedVal = roachpb.MakeValueFromBytes(t.ExpVal)
+				}
+				readObservation.Value = observedVal
+				shouldObserveRead = true
+			}
+			if sv, ok := v.tryConsumeWrite(t.Key, t.Seq); ok {
+				writeObservation.Timestamp = sv.Timestamp
+			}
+			shouldObserveWrite = true
+		}
+		// The read observation should be added before the write observation, since
+		// that's the order in which the CPut executed. Moreover, the CPut read is
+		// always non-locking, so if the observation filter is observeLocking, we
+		// won't be adding it.
+		if shouldObserveRead && v.observationFilter != observeLocking {
+			v.curObservations = append(v.curObservations, readObservation)
+		}
+		if shouldObserveWrite {
+			v.curObservations = append(v.curObservations, writeObservation)
+		}
+		if v.buffering == bufferingSingle {
+			v.checkAtomic(`cput`, t.Result)
+		}
 	case *DeleteOperation:
 		if v.checkNonAmbError(op, t.Result) {
+			break
+		}
+		if t.Result.ResumeSpan != nil {
 			break
 		}
 		sv, _ := v.tryConsumeWrite(t.Key, t.Seq)
@@ -523,6 +585,9 @@ func (v *validator) processOp(op Operation) {
 			deleteOps[i] = write
 		}
 		v.curObservations = append(v.curObservations, deleteOps...)
+		// Adding the scan to the current observations should follow the same
+		// conditions as a regular scan: add it ony if there are no errors.
+		_, isErr := v.checkError(op, t.Result)
 		// The span ought to be empty right after the DeleteRange.
 		//
 		// However, we do not add this observation if the observation filter is
@@ -530,11 +595,15 @@ func (v *validator) processOp(op Operation) {
 		// that for isolation levels that permit write skew, the DeleteRange does
 		// not prevent new keys from being inserted in the deletion span between the
 		// transaction's read and write timestamps.
-		if v.observationFilter != observeLocking {
+		if v.observationFilter != observeLocking && !isErr {
+			endKey := t.EndKey
+			if t.Result.ResumeSpan != nil {
+				endKey = t.Result.ResumeSpan.Key
+			}
 			v.curObservations = append(v.curObservations, &observedScan{
 				Span: roachpb.Span{
 					Key:    t.Key,
-					EndKey: t.EndKey,
+					EndKey: endKey,
 				},
 				IsDeleteRange: true, // just for printing
 				KVs:           nil,
@@ -608,12 +677,15 @@ func (v *validator) processOp(op Operation) {
 			v.curObservations = append(v.curObservations, write)
 		}
 
+		// Adding the scan to the current observations should follow the same
+		// conditions as a regular scan: add it ony if there are no errors.
+		_, isErr := v.checkError(op, t.Result)
 		// The span ought to be empty right after the DeleteRange, even if parts of
 		// the DeleteRange that didn't materialize due to a shadowing operation.
 		//
 		// See above for why we do not add this observation if the observation
 		// filter is observeLocking.
-		if v.observationFilter != observeLocking {
+		if v.observationFilter != observeLocking && !isErr {
 			v.curObservations = append(v.curObservations, &observedScan{
 				Span: roachpb.Span{
 					Key:    t.Key,
@@ -734,17 +806,36 @@ func (v *validator) processOp(op Operation) {
 		}
 		// We don't yet actually check the barrier guarantees here, i.e. that all
 		// concurrent writes are applied by the time it completes. Maybe later.
+	case *FlushLockTableOperation:
+		execTimestampStrictlyOptional = true
+		if resultHasErrorType(t.Result, &kvpb.RangeKeyMismatchError{}) {
+			// FlushLockTableOperation may race with a split.
+		} else {
+			// Fail or retry on other errors, depending on type.
+			v.checkNonAmbError(op, t.Result, exceptUnhandledRetry)
+		}
 	case *ScanOperation:
 		if _, isErr := v.checkError(op, t.Result); isErr {
 			break
 		}
+		readSpan := roachpb.Span{Key: t.Key, EndKey: t.EndKey}
+		// If the ResumeSpan equals the original request span, the scan wasn't
+		// processed at all.
+		if t.Result.ResumeSpan != nil && t.Result.ResumeSpan.Equal(readSpan) {
+			break
+		}
+
 		switch v.observationFilter {
 		case observeAll:
+			if t.Result.ResumeSpan != nil {
+				if op.Scan.Reverse {
+					readSpan.Key = t.Result.ResumeSpan.EndKey
+				} else {
+					readSpan.EndKey = t.Result.ResumeSpan.Key
+				}
+			}
 			scan := &observedScan{
-				Span: roachpb.Span{
-					Key:    t.Key,
-					EndKey: t.EndKey,
-				},
+				Span:       readSpan,
 				Reverse:    t.Reverse,
 				SkipLocked: t.SkipLocked,
 				KVs:        make([]roachpb.KeyValue, len(t.Result.Values)),
@@ -809,7 +900,9 @@ func (v *validator) processOp(op Operation) {
 		//
 		// So we ignore the results of failIfError, calling it only for its side
 		// effect of perhaps registering a failure with the validator.
-		v.failIfError(op, t.Result, exceptRollback, exceptAmbiguous)
+		//
+		// Refer to the note in checkError about exceptBatchTimestampBeforeGC.
+		v.failIfError(op, t.Result, exceptRollback, exceptAmbiguous, exceptBatchTimestampBeforeGC)
 
 		ops := t.Ops
 		if t.CommitInBatch != nil {
@@ -888,6 +981,14 @@ func (v *validator) processOp(op Operation) {
 		if !transferLeaseResultIsIgnorable(t.Result) {
 			v.failIfError(op, t.Result) // fail on all other errors
 		}
+	case *ChangeSettingOperation:
+		execTimestampStrictlyOptional = true
+		// It's possible that reading the modified setting times out. Ignore these
+		// errors for now, at least until we do some validation that depends on the
+		// cluster settings being fully propagated.
+		if !resultIsErrorStr(t.Result, `setting updated but timed out waiting to read new value`) {
+			v.failIfError(op, t.Result)
+		}
 	case *ChangeZoneOperation:
 		execTimestampStrictlyOptional = true
 		v.failIfError(op, t.Result) // fail on all errors
@@ -909,6 +1010,35 @@ func (v *validator) processOp(op Operation) {
 		// Don't fail on all errors because savepoints can be labeled with
 		// errOmitted if a previous op in the txn failed.
 		v.checkError(op, t.Result)
+	case *MutateBatchHeaderOperation:
+		execTimestampStrictlyOptional = true
+		v.checkError(op, t.Result)
+	case *AddNetworkPartitionOperation, *RemoveNetworkPartitionOperation:
+		execTimestampStrictlyOptional = true
+		// Ignore any errors due to the generator trying to add/remove a partition
+		// that doesn't exist or from a node to itself.
+	case *StopNodeOperation:
+		execTimestampStrictlyOptional = true
+		v.checkError(op, t.Result)
+	case *RestartNodeOperation:
+		execTimestampStrictlyOptional = true
+		v.checkError(op, t.Result)
+	case *CrashNodeOperation:
+		execTimestampStrictlyOptional = true
+		v.checkError(op, t.Result)
+	case *MvccGCOperation:
+		execTimestampStrictlyOptional = true
+		if resultHasErrorType(t.Result, (*kvpb.NotLeaseHolderError)(nil)) ||
+			resultHasErrorType(t.Result, (*kvpb.RangeNotFoundError)(nil)) ||
+			resultIsErrorStr(t.Result, `no valid lease`) {
+			// Ignore any transient errors due to not being able to find a leaseholder.
+		} else if resultIsErrorStr(
+			t.Result, `mismatched range suggestion not different from original desc`) {
+			// Ignore this error that occurred due to a GC/split race.
+			// TODO: revisit after https://github.com/cockroachdb/cockroach/issues/165995 is resolved.
+		} else {
+			v.failIfError(op, t.Result)
+		}
 	default:
 		panic(errors.AssertionFailedf(`unknown operation type: %T %v`, t, t))
 	}
@@ -936,14 +1066,14 @@ func (v *validator) checkAtomic(atomicType string, result Result) {
 		// of writing, checkAtomicCommitted doesn't capitalize on this unconditional
 		// presence yet, and most unit tests don't specify it for reads.
 		if !result.OptionalTimestamp.IsSet() {
-			err := errors.AssertionFailedf("operation has no execution timestamp: %s", result)
+			err := errors.AssertionFailedf("operation has no execution timestamp: %v", result)
 			v.failures = append(v.failures, err)
 		}
 		v.checkAtomicCommitted(`committed `+atomicType, observations, result.OptionalTimestamp)
 	} else if resultIsAmbiguous(result) {
 		// An ambiguous result shouldn't have an execution timestamp.
 		if result.OptionalTimestamp.IsSet() {
-			err := errors.AssertionFailedf("OptionalTimestamp set for ambiguous result: %s", result)
+			err := errors.AssertionFailedf("OptionalTimestamp set for ambiguous result: %v", result)
 			v.failures = append(v.failures, err)
 		}
 		v.checkAtomicAmbiguous(`ambiguous `+atomicType, observations)
@@ -1029,8 +1159,8 @@ func (v *validator) checkAtomicCommitted(
 	// it, un-hiding each of them as we encounter each write, and using the
 	// current state of the view as we encounter each read. Luckily this is easy
 	// to do by with a pebble.Batch "view".
-	batch := v.kvs.kvs.NewIndexedBatch()
-	defer func() { _ = batch.Close() }()
+	firstBatch := v.kvs.kvs.NewIndexedBatch()
+	defer func() { _ = firstBatch.Close() }()
 
 	var failure string
 	// writeTS is populated with the timestamp of the materialized observed writes
@@ -1059,6 +1189,7 @@ func (v *validator) checkAtomicCommitted(
 	// rollbackSp = observedSavepoint{...} when the observedSavepoint object
 	// contains a rollback for which we haven't encountered a matching create yet.
 	var rollbackSp *observedSavepoint = nil
+	batch := firstBatch
 	for idx := len(txnObservations) - 1; idx >= 0; idx-- {
 		observation := txnObservations[idx]
 		switch o := observation.(type) {
@@ -1120,7 +1251,7 @@ func (v *validator) checkAtomicCommitted(
 			} else { // ranged write
 				key := storage.EngineKey{Key: o.Key}.Encode()
 				endKey := storage.EngineKey{Key: o.EndKey}.Encode()
-				suffix := storage.EncodeMVCCTimestampSuffix(o.Timestamp)
+				suffix := mvccencoding.EncodeMVCCTimestampSuffix(o.Timestamp)
 				if err := batch.RangeKeyUnset(key, endKey, suffix, nil); err != nil {
 					panic(err)
 				}
@@ -1197,7 +1328,7 @@ func (v *validator) checkAtomicCommitted(
 			} else {
 				key := storage.EngineKey{Key: o.Key}.Encode()
 				endKey := storage.EngineKey{Key: o.EndKey}.Encode()
-				suffix := storage.EncodeMVCCTimestampSuffix(writeTS)
+				suffix := mvccencoding.EncodeMVCCTimestampSuffix(writeTS)
 				if err := batch.RangeKeySet(key, endKey, suffix, o.Value.RawBytes, nil); err != nil {
 					panic(err)
 				}
@@ -1396,7 +1527,17 @@ func (v *validator) checkError(
 	op Operation, r Result, extraExceptions ...func(err error) bool,
 ) (ambiguous, hadError bool) {
 	sl := []func(error) bool{
-		exceptAmbiguous, exceptOmitted, exceptRetry, exceptDelRangeUsingTombstoneStraddlesRangeBoundary,
+		exceptAmbiguous,
+		exceptOmitted,
+		exceptRetry,
+		exceptDelRangeUsingTombstoneStraddlesRangeBoundary,
+		// NB: we need to exclude this error because with MVCC GC operations
+		// enabled with a low TTL, GC might advance past a transaction's
+		// timestamp, which is a violation of our assumption that GC is far
+		// enough behind us to not touch any ongoing transactions. So this error
+		// is expected and correct, and should be ignored in the context of
+		// KVNemesis.
+		exceptBatchTimestampBeforeGC,
 	}
 	sl = append(sl, extraExceptions...)
 	return v.failIfError(op, r, sl...)
@@ -1542,7 +1683,7 @@ func validReadTimes(
 			// Range key contains the key. Emit a point deletion on the key
 			// at the tombstone's timestamp for each active range key.
 			for _, rk := range iter.RangeKeys() {
-				ts, err := storage.DecodeMVCCTimestampSuffix(rk.Suffix)
+				ts, err := mvccencoding.DecodeMVCCTimestampSuffix(rk.Suffix)
 				if err != nil {
 					panic(err)
 				}

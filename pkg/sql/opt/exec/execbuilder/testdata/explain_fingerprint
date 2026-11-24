@@ -1,0 +1,249 @@
+# LogicTest: local
+
+statement ok
+CREATE TABLE t (a INT PRIMARY KEY, b STRING, c FLOAT)
+
+statement ok
+CREATE TABLE u (x INT, y STRING, INDEX idx_y (y))
+
+# Basic EXPLAIN (FINGERPRINT) test
+query T
+EXPLAIN (FINGERPRINT) SELECT * FROM t
+----
+SELECT * FROM t
+
+# Test with constants - they should be replaced with placeholders
+query T
+EXPLAIN (FINGERPRINT) SELECT * FROM t WHERE a = 123
+----
+SELECT * FROM t WHERE a = _
+
+# Test with string constants
+query T
+EXPLAIN (FINGERPRINT) SELECT * FROM t WHERE b = 'hello'
+----
+SELECT * FROM t WHERE b = _
+
+# Test with multiple constants
+query T
+EXPLAIN (FINGERPRINT) SELECT * FROM t WHERE a = 1 AND b = 'test' AND c = 3.14
+----
+SELECT * FROM t WHERE ((a = _) AND (b = _)) AND (c = _)
+
+# Test with JOIN
+query T
+EXPLAIN (FINGERPRINT) SELECT t.a, u.y FROM t JOIN u ON t.a = u.x
+----
+SELECT t.a, u.y FROM t JOIN u ON t.a = u.x
+
+# Test with GROUP BY and aggregation
+query T
+EXPLAIN (FINGERPRINT) SELECT b, count(*) FROM t GROUP BY b
+----
+SELECT b, count(*) FROM t GROUP BY b
+
+# Test with ORDER BY
+query T
+EXPLAIN (FINGERPRINT) SELECT * FROM t ORDER BY a DESC
+----
+SELECT * FROM t ORDER BY a DESC
+
+# Test with LIMIT
+query T
+EXPLAIN (FINGERPRINT) SELECT * FROM t LIMIT 10
+----
+SELECT * FROM t LIMIT _
+
+# Test with subquery
+query T
+EXPLAIN (FINGERPRINT) SELECT * FROM t WHERE a IN (SELECT x FROM u WHERE y = 'test')
+----
+SELECT * FROM t WHERE a IN (SELECT x FROM u WHERE y = _)
+
+# Test with INSERT
+query T
+EXPLAIN (FINGERPRINT) INSERT INTO t VALUES (1, 'foo', 2.5)
+----
+INSERT INTO t VALUES (_, __more__)
+
+# Test with UPDATE
+query T
+EXPLAIN (FINGERPRINT) UPDATE t SET b = 'updated' WHERE a = 100
+----
+UPDATE t SET b = _ WHERE a = _
+
+# Test with DELETE
+query T
+EXPLAIN (FINGERPRINT) DELETE FROM t WHERE a > 50
+----
+DELETE FROM t WHERE a > _
+
+# Test with index hint
+query T
+EXPLAIN (FINGERPRINT) SELECT * FROM u@idx_y WHERE y = 'search'
+----
+SELECT * FROM u@idx_y WHERE y = _
+
+# Test with UNION
+query T
+EXPLAIN (FINGERPRINT) SELECT a FROM t UNION SELECT x FROM u
+----
+SELECT a FROM t UNION SELECT x FROM u
+
+# Test with CTE
+query T
+EXPLAIN (FINGERPRINT) WITH cte AS (SELECT * FROM t WHERE a < 10) SELECT * FROM cte
+----
+WITH cte AS (SELECT * FROM t WHERE a < _) SELECT * FROM cte
+
+# Test prepared statement functionality
+statement ok
+PREPARE stmt1 AS SELECT * FROM t WHERE a = $1
+
+query T
+EXPLAIN (FINGERPRINT) EXECUTE stmt1
+----
+EXECUTE stmt1
+
+statement ok
+PREPARE stmt2 AS INSERT INTO t VALUES ($1, $2, $3)
+
+query T
+EXPLAIN (FINGERPRINT) EXECUTE stmt2
+----
+EXECUTE stmt2
+
+statement ok
+PREPARE stmt3 AS SELECT t.a, u.y FROM t JOIN u ON t.a = u.x WHERE t.b = $1
+
+query T
+EXPLAIN (FINGERPRINT) EXECUTE stmt3
+----
+EXECUTE stmt3
+
+# Test prepare of EXPLAIN (FINGERPRINT)
+statement ok
+PREPARE stmt4 AS EXPLAIN (FINGERPRINT) SELECT 1
+
+query T
+EXECUTE stmt4
+----
+SELECT _
+
+# Test that invalid combinations are rejected
+statement error EXPLAIN \(FINGERPRINT\) cannot be used with VERBOSE
+EXPLAIN (FINGERPRINT, VERBOSE) SELECT * FROM t
+
+statement error EXPLAIN \(FINGERPRINT\) cannot be used with TYPES
+EXPLAIN (FINGERPRINT, TYPES) SELECT * FROM t
+
+statement error pq: at or near "EOF": syntax error: the JSON flag can only be used with DISTSQL
+EXPLAIN (FINGERPRINT, JSON) SELECT * FROM t
+
+# Test that regular EXPLAIN EXECUTE is still rejected while FINGERPRINT works
+statement error EXPLAIN EXECUTE is not supported; use EXPLAIN ANALYZE
+EXPLAIN EXECUTE stmt1
+
+# But EXPLAIN (FINGERPRINT) EXECUTE should work (already tested above)
+
+# Test with more complex queries
+query T
+EXPLAIN (FINGERPRINT)
+SELECT t.a, t.b, count(u.x) as cnt
+FROM t
+LEFT JOIN u ON t.a = u.x
+WHERE t.c > 1.0 AND (t.b LIKE 'prefix%' OR t.b IS NULL)
+GROUP BY t.a, t.b
+HAVING count(u.x) > 5
+ORDER BY cnt DESC, t.a ASC
+LIMIT 20 OFFSET 10
+----
+SELECT t.a, t.b, count(u.x) AS cnt FROM t LEFT JOIN u ON t.a = u.x WHERE (t.c > _) AND ((t.b LIKE _) OR (t.b IS NULL)) GROUP BY t.a, t.b HAVING count(u.x) > _ ORDER BY cnt DESC, t.a ASC LIMIT _ OFFSET _
+
+# Test with window functions
+query T
+EXPLAIN (FINGERPRINT)
+SELECT a, b, row_number() OVER (PARTITION BY b ORDER BY a) as rn
+FROM t
+----
+SELECT a, b, row_number() OVER (PARTITION BY b ORDER BY a) AS rn FROM t
+
+query T
+EXPLAIN (FINGERPRINT)
+SELECT
+  department_id,
+  employee_id,
+  salary,
+  avg(salary) OVER (
+    PARTITION BY department_id
+    ORDER BY employee_id
+    ROWS BETWEEN 2 PRECEDING AND CURRENT ROW
+  ) AS moving_avg_salary,
+  round(avg(salary) OVER (
+    PARTITION BY department_id
+  ), 2) AS dept_avg_salary,
+  1.05 * salary AS adjusted_salary,
+  salary + 1000 AS bonus_salary
+FROM employees
+----
+SELECT department_id, employee_id, salary, avg(salary) OVER (PARTITION BY department_id ORDER BY employee_id ROWS BETWEEN _ PRECEDING AND CURRENT ROW) AS moving_avg_salary, round(avg(salary) OVER (PARTITION BY department_id), _) AS dept_avg_salary, _ * salary AS adjusted_salary, salary + _ AS bonus_salary FROM employees
+
+
+# Test with CASE expression
+query T
+EXPLAIN (FINGERPRINT)
+SELECT a,
+       CASE
+         WHEN a > 100 THEN 'high'
+         WHEN a > 50 THEN 'medium'
+         ELSE 'low'
+       END as category
+FROM t
+----
+SELECT a, CASE WHEN a > _ THEN _ WHEN a > _ THEN _ ELSE _ END AS category FROM t
+
+# Test that different constant values produce the same fingerprint
+query T
+EXPLAIN (FINGERPRINT) SELECT * FROM t WHERE a = 999
+----
+SELECT * FROM t WHERE a = _
+
+query T
+EXPLAIN (FINGERPRINT) SELECT * FROM t WHERE a = 111
+----
+SELECT * FROM t WHERE a = _
+
+# Test with cluster setting sql.stats.statement_fingerprint.format_mask set to 0
+statement ok
+SET CLUSTER SETTING sql.stats.statement_fingerprint.format_mask = 0
+
+# With format_mask=0, long lists should not be collapsed to __more__
+query T
+EXPLAIN (FINGERPRINT) INSERT INTO t VALUES (1, 'a', 1.1), (2, 'b', 2.2), (3, 'c', 3.3), (4, 'd', 4.4), (5, 'e', 5.5)
+----
+INSERT INTO t VALUES (_, '_', __more1_10__), (__more1_10__)
+
+query T
+EXPLAIN (FINGERPRINT) SELECT * FROM t WHERE a IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+----
+SELECT * FROM t WHERE a IN (_, _, __more1_10__)
+
+query T
+EXPLAIN (FINGERPRINT) UPDATE t SET b = 'updated' WHERE a IN (10, 20, 30, 40, 50, 60, 70, 80, 90, 100)
+----
+UPDATE t SET b = '_' WHERE a IN (_, _, __more1_10__)
+
+# Reset cluster setting to default
+statement ok
+RESET CLUSTER SETTING sql.stats.statement_fingerprint.format_mask
+
+# Verify default behavior is restored (long lists should be collapsed)
+query T
+EXPLAIN (FINGERPRINT) INSERT INTO t VALUES (1, 'a', 1.1), (2, 'b', 2.2), (3, 'c', 3.3), (4, 'd', 4.4), (5, 'e', 5.5)
+----
+INSERT INTO t VALUES (_, __more__), (__more__)
+
+query T
+EXPLAIN (FINGERPRINT) SELECT * FROM t WHERE a IN (1, 2, 3, 4, 5, 6, 7, 8, 9, 10)
+----
+SELECT * FROM t WHERE a IN (_, __more__)

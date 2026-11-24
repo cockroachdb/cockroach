@@ -33,6 +33,7 @@ import (
 )
 
 type alterTableSetLocalityNode struct {
+	zeroInputPlanNode
 	n         tree.AlterTableLocality
 	tableDesc *tabledesc.Mutable
 	dbDesc    catalog.DatabaseDescriptor
@@ -80,7 +81,7 @@ func (p *planner) AlterTableLocality(
 	}
 
 	// Disallow schema changes if this table's schema is locked.
-	if err := checkSchemaChangeIsAllowed(tableDesc, n); err != nil {
+	if err := p.checkSchemaChangeIsAllowed(ctx, tableDesc, n); err != nil {
 		return nil, err
 	}
 
@@ -247,7 +248,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 	enumOID := catid.TypeIDToOID(enumTypeID)
 
 	var newColumnID *descpb.ColumnID
-	var newColumnDefaultExpr *string
+	var newColumnDefaultExpr *descpb.Expression
 
 	if !createDefaultRegionCol {
 		// If the column is not public, we cannot use it yet.
@@ -280,6 +281,32 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 			)
 		}
 	} else {
+		// Block REGIONAL BY ROW conversion when safe updates are enabled to prevent
+		// DML failures caused by the legacy schema changer's simultaneous column
+		// addition and primary key alteration.
+		// When this operation is implemented in the declarative schema changer, we
+		// should not need this check since the declarative schema changer should
+		// handle the element transitions correctly.
+		if params.p.SessionData().SafeUpdates && !n.tableDesc.Adding() {
+			primaryRegion, err := n.dbDesc.PrimaryRegionName()
+			if err != nil {
+				return err
+			}
+
+			return errors.WithHintf(
+				pgerror.Newf(
+					pgcode.InvalidTableDefinition,
+					"cannot convert table to REGIONAL BY ROW with sql_safe_updates enabled",
+				),
+				"To safely convert to REGIONAL BY ROW, either disable sql_safe_updates; or "+
+					"use the following three-step workaround:\n"+
+					"  1. ALTER TABLE %[1]s ADD COLUMN %[2]s public.crdb_internal_region NOT VISIBLE NOT NULL DEFAULT '%[3]s'::public.crdb_internal_region;\n"+
+					"  2. ALTER TABLE %[1]s ALTER COLUMN %[2]s SET DEFAULT default_to_database_primary_region(gateway_region())::public.crdb_internal_region;\n"+
+					"  3. ALTER TABLE %[1]s SET LOCALITY REGIONAL BY ROW;",
+				tree.Name(n.tableDesc.GetName()), partColName, primaryRegion,
+			)
+		}
+
 		// No crdb_region column is found so we are implicitly creating it.
 		// We insert the column definition before altering the primary key.
 
@@ -353,10 +380,27 @@ func (n *alterTableSetLocalityNode) alterTableLocalityToRegionalByRow(
 		if err != nil {
 			return err
 		}
-		s := tree.Serialize(finalDefaultExpr)
-		newColumnDefaultExpr = &s
+		expr := descpb.Expression(tree.Serialize(finalDefaultExpr))
+		newColumnDefaultExpr = &expr
 		newColumnID = &col.ID
 	}
+
+	// Disallow changing the region column if the table is using a FK constraint
+	// to determine values for the region column.
+	if n.tableDesc.RBRUsingConstraint != descpb.ConstraintID(0) {
+		originalColName, err := n.tableDesc.GetRegionalByRowTableRegionColumnName()
+		if err != nil {
+			return err
+		}
+		if partColName != originalColName {
+			return pgerror.Newf(
+				pgcode.InvalidTableDefinition,
+				`cannot change the REGIONAL BY ROW column from %s to %s when "%s" is set`,
+				originalColName, partColName, catpb.RBRUsingConstraintTableSettingName,
+			)
+		}
+	}
+
 	return n.alterTableLocalityFromOrToRegionalByRow(
 		params,
 		tabledesc.LocalityConfigRegionalByRow(newLocality.RegionalByRowColumn),
@@ -377,7 +421,7 @@ func (n *alterTableSetLocalityNode) alterTableLocalityFromOrToRegionalByRow(
 	mutationIdxAllowedInSameTxn *int,
 	newColumnName *tree.Name,
 	newColumnID *descpb.ColumnID,
-	newColumnDefaultExpr *string,
+	newColumnDefaultExpr *descpb.Expression,
 	pkColumnNames []string,
 	pkColumnDirections []catenumpb.IndexColumn_Direction,
 ) error {
@@ -431,6 +475,12 @@ func (n *alterTableSetLocalityNode) alterTableLocalityFromOrToRegionalByRow(
 		},
 	); err != nil {
 		return err
+	}
+
+	// When altering the table from REGIONAL BY ROW, automatically unset the RBR
+	// using constraint.
+	if newLocalityConfig.GetRegionalByRow() == nil {
+		n.tableDesc.RBRUsingConstraint = descpb.ConstraintID(0)
 	}
 
 	return params.p.writeSchemaChange(
@@ -665,9 +715,10 @@ func setNewLocalityConfig(
 		if err != nil {
 			return err
 		}
-		typ.RemoveReferencingDescriptorID(desc.GetID())
-		if err := descsCol.WriteDescToBatch(ctx, kvTrace, typ, b); err != nil {
-			return err
+		if typ.RemoveReferencingDescriptorID(desc.GetID()) {
+			if err := descsCol.WriteDescToBatch(ctx, kvTrace, typ, b); err != nil {
+				return err
+			}
 		}
 	}
 	desc.LocalityConfig = &config
@@ -677,9 +728,10 @@ func setNewLocalityConfig(
 		if err != nil {
 			return err
 		}
-		typ.AddReferencingDescriptorID(desc.GetID())
-		if err := descsCol.WriteDescToBatch(ctx, kvTrace, typ, b); err != nil {
-			return err
+		if typ.AddReferencingDescriptorID(desc.GetID()) {
+			if err := descsCol.WriteDescToBatch(ctx, kvTrace, typ, b); err != nil {
+				return err
+			}
 		}
 	}
 	return nil

@@ -1,0 +1,3 @@
+echo
+----
+r7+s4[cpu:100ns/s, write-bandwidth:0 B/s, byte-size:0 B] r8+s5[cpu:200ns/s, write-bandwidth:2.0 kB/s, byte-size:0 B] r7-s2[cpu:-100ns/s, write-bandwidth:0 B/s, byte-size:0 B]

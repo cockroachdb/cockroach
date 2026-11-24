@@ -40,6 +40,20 @@ func (n *ControlJobs) Format(ctx *FmtCtx) {
 	}
 }
 
+// AlterJobOwner represents an ALTER JOB OWNER TO statement.
+type AlterJobOwner struct {
+	Job   Expr
+	Owner RoleSpec
+}
+
+// Format implements the NodeFormatter interface.
+func (n *AlterJobOwner) Format(ctx *FmtCtx) {
+	ctx.WriteString("ALTER JOB ")
+	ctx.FormatNode(n.Job)
+	ctx.WriteString(" OWNER TO ")
+	ctx.FormatNode(&n.Owner)
+}
+
 // CancelQueries represents a CANCEL QUERIES statement.
 type CancelQueries struct {
 	Queries  *Select
@@ -78,6 +92,7 @@ const (
 	PauseSchedule ScheduleCommand = iota
 	ResumeSchedule
 	DropSchedule
+	ExecuteSchedule
 )
 
 func (c ScheduleCommand) String() string {
@@ -88,6 +103,8 @@ func (c ScheduleCommand) String() string {
 		return "RESUME"
 	case DropSchedule:
 		return "DROP"
+	case ExecuteSchedule:
+		return "EXECUTE"
 	default:
 		panic("unhandled schedule command")
 	}

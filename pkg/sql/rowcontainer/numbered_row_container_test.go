@@ -44,7 +44,7 @@ func TestNumberedRowContainerDeDuping(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)
-	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec, nil /* statsCollector */)
+	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), nil /* statsCollector */)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +68,7 @@ func TestNumberedRowContainerDeDuping(t *testing.T) {
 	defer memoryMonitor.Stop(ctx)
 
 	// Use random types and random rows.
-	types := randgen.RandSortingTypes(rng, numCols)
+	typs := randgen.RandSortingTypes(rng, numCols)
 	ordering := colinfo.ColumnOrdering{
 		colinfo.ColumnOrderInfo{
 			ColIdx:    0,
@@ -79,9 +79,9 @@ func TestNumberedRowContainerDeDuping(t *testing.T) {
 			Direction: encoding.Descending,
 		},
 	}
-	numRows, rows := makeUniqueRows(t, &evalCtx, rng, numRows, types, ordering)
+	numRows, rows := makeUniqueRows(t, &evalCtx, rng, numRows, typs, ordering)
 	rc := NewDiskBackedNumberedRowContainer(
-		true /*deDup*/, types, &evalCtx, tempEngine, memoryMonitor, diskMonitor,
+		true /* deDup */, typs, &evalCtx, tempEngine, memoryMonitor, evalCtx.TestingMon, diskMonitor,
 	)
 	defer rc.Close(ctx)
 
@@ -108,10 +108,10 @@ func TestNumberedRowContainerDeDuping(t *testing.T) {
 			if skip {
 				continue
 			}
-			require.Equal(t, rows[accesses[i]].String(types), row.String(types))
+			require.Equal(t, rows[accesses[i]].String(typs), row.String(typs))
 		}
 		// Reset and reorder the rows for the next pass.
-		rand.Shuffle(numRows, func(i, j int) {
+		rng.Shuffle(numRows, func(i, j int) {
 			rows[i], rows[j] = rows[j], rows[i]
 		})
 		require.NoError(t, rc.UnsafeReset(ctx))
@@ -128,7 +128,7 @@ func TestNumberedRowContainerIteratorCaching(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)
-	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec, nil /* statsCollector */)
+	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), nil /* statsCollector */)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,7 +162,7 @@ func TestNumberedRowContainerIteratorCaching(t *testing.T) {
 	}
 	numRows, rows := makeUniqueRows(t, &evalCtx, rng, numRows, types, ordering)
 	rc := NewDiskBackedNumberedRowContainer(
-		false /*deDup*/, types, &evalCtx, tempEngine, memoryMonitor, diskMonitor,
+		false /* deDup */, types, &evalCtx, tempEngine, memoryMonitor, evalCtx.TestingMon, diskMonitor,
 	)
 	defer rc.Close(ctx)
 
@@ -205,7 +205,7 @@ func TestNumberedRowContainerIteratorCaching(t *testing.T) {
 		fmt.Printf("hits: %d, misses: %d, maxCacheSize: %d\n",
 			rc.rowIter.hitCount, rc.rowIter.missCount, rc.rowIter.maxCacheSize)
 		// Reset and reorder the rows for the next pass.
-		rand.Shuffle(numRows, func(i, j int) {
+		rng.Shuffle(numRows, func(i, j int) {
 			rows[i], rows[j] = rows[j], rows[i]
 		})
 		require.NoError(t, rc.UnsafeReset(ctx))
@@ -223,7 +223,7 @@ func TestCompareNumberedAndIndexedRowContainers(t *testing.T) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)
-	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec, nil /* statsCollector */)
+	tempEngine, _, err := storage.NewTempEngine(ctx, base.DefaultTestTempStorageConfig(st), nil /* statsCollector */)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -310,7 +310,7 @@ func TestCompareNumberedAndIndexedRowContainers(t *testing.T) {
 			}
 		}
 		// Reset and reorder the rows for the next pass.
-		rand.Shuffle(numRows, func(i, j int) {
+		rng.Shuffle(numRows, func(i, j int) {
 			rows[i], rows[j] = rows[j], rows[i]
 		})
 		for _, rc := range containers {
@@ -369,7 +369,9 @@ func makeNumberedContainerUsingNRC(
 	diskMonitor *mon.BytesMonitor,
 ) numberedContainerUsingNRC {
 	memoryMonitor := makeMemMonitorAndStart(ctx, st, memoryBudget)
-	rc := NewDiskBackedNumberedRowContainer(false /* deDup */, types, evalCtx, engine, memoryMonitor, diskMonitor)
+	rc := NewDiskBackedNumberedRowContainer(
+		false /* deDup */, types, evalCtx, engine, memoryMonitor, evalCtx.TestingMon, diskMonitor,
+	)
 	_, err := rc.SpillToDisk(ctx)
 	require.NoError(t, err)
 	return numberedContainerUsingNRC{rc: rc, memoryMonitor: memoryMonitor}
@@ -421,7 +423,8 @@ func makeNumberedContainerUsingIRC(
 ) numberedContainerUsingIRC {
 	memoryMonitor := makeMemMonitorAndStart(ctx, st, memoryBudget)
 	rc := NewDiskBackedIndexedRowContainer(
-		nil /* ordering */, types, evalCtx, engine, memoryMonitor, diskMonitor)
+		nil /* ordering */, types, evalCtx, engine, memoryMonitor, evalCtx.TestingMon, diskMonitor,
+	)
 	require.NoError(t, rc.SpillToDisk(ctx))
 	return numberedContainerUsingIRC{rc: rc, memoryMonitor: memoryMonitor}
 }
@@ -528,7 +531,7 @@ func BenchmarkNumberedContainerIteratorCaching(b *testing.B) {
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := eval.MakeTestingEvalContext(st)
-	tempEngine, _, err := storage.NewTempEngine(ctx, base.TempStorageConfig{InMemory: true, Settings: st}, base.DefaultTestStoreSpec, nil /* statsCollector */)
+	tempEngine, _, err := storage.NewTempEngine(ctx, base.TempStorageConfig{InMemory: true, Settings: st}, nil /* statsCollector */)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -549,7 +552,7 @@ func BenchmarkNumberedContainerIteratorCaching(b *testing.B) {
 	for i := 0; i < numRows; i++ {
 		rows[i] = make([]rowenc.EncDatum, len(typs))
 		for j := range typs {
-			rows[i][j] = rowenc.DatumToEncDatum(typs[j], randgen.RandDatum(rng, typs[j], false))
+			rows[i][j] = rowenc.DatumToEncDatumUnsafe(typs[j], randgen.RandDatum(rng, typs[j], false))
 		}
 	}
 

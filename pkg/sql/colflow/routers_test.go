@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/system"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
@@ -237,7 +238,7 @@ func TestRouterOutputAddBatch(t *testing.T) {
 				out := colexectestutils.NewOpTestOutput(o, data[:len(tc.selection)])
 				in.Init(ctx)
 				for {
-					b := in.Next()
+					b := colexecop.NextNoMeta(in)
 					pushSelectionIntoBatch(b, tc.selection)
 					o.addBatch(ctx, b)
 					if b.Length() == 0 {
@@ -281,7 +282,7 @@ func TestRouterOutputNext(t *testing.T) {
 			// is data available.
 			unblockEvent: func(in colexecop.Operator, o *routerOutputOp) {
 				for {
-					b := in.Next()
+					b := colexecop.NextNoMeta(in)
 					pushSelectionIntoBatch(b, fullSelection)
 					o.addBatch(ctx, b)
 					if b.Length() == 0 {
@@ -348,7 +349,7 @@ func TestRouterOutputNext(t *testing.T) {
 				wg.Add(1)
 				go func() {
 					for {
-						b := o.Next()
+						b := colexecop.NextNoMeta(o)
 						batchChan <- b
 						if b.Length() == 0 {
 							break
@@ -463,14 +464,14 @@ func TestRouterOutputNext(t *testing.T) {
 			out := colexectestutils.NewOpTestOutput(o, expected)
 			in.Init(ctx)
 
-			b := in.Next()
+			b := colexecop.NextNoMeta(in)
 			// Make sure the output doesn't consider itself blocked. We're right at the
 			// limit but not over.
 			pushSelectionIntoBatch(b, selection)
 			if o.addBatch(ctx, b) {
 				t.Fatal("unexpectedly blocked")
 			}
-			b = in.Next()
+			b = colexecop.NextNoMeta(in)
 			// This addBatch call should now block the output.
 			pushSelectionIntoBatch(b, selection)
 			if !o.addBatch(ctx, b) {
@@ -479,7 +480,7 @@ func TestRouterOutputNext(t *testing.T) {
 
 			// Add the rest of the data.
 			for {
-				b = in.Next()
+				b = colexecop.NextNoMeta(in)
 				pushSelectionIntoBatch(b, selection)
 				if o.addBatch(ctx, b) {
 					t.Fatal("should only return true when switching from unblocked to blocked")
@@ -567,7 +568,7 @@ func TestRouterOutputRandom(t *testing.T) {
 					defer wg.Done()
 					lastBlockedState := false
 					for {
-						b := inputs[0].Next()
+						b := colexecop.NextNoMeta(inputs[0])
 						selection := b.Selection()
 						if selection == nil {
 							selection = coldatatestutils.RandomSel(rng, b.Length(), rng.Float64())
@@ -629,7 +630,7 @@ func TestRouterOutputRandom(t *testing.T) {
 				go func() {
 					o.Init(ctx)
 					for {
-						b := o.Next()
+						b := colexecop.NextNoMeta(o)
 						actual.Add(coldatatestutils.CopyBatch(b, typs, tu.testColumnFactory), typs)
 						if b.Length() == 0 {
 							wg.Done()
@@ -658,9 +659,10 @@ func TestRouterOutputRandom(t *testing.T) {
 
 type callbackRouterOutput struct {
 	colexecop.ZeroInputNode
-	addBatchCb   func(coldata.Batch) bool
-	cancelCb     func()
-	forwardedErr error
+	addBatchCb    func(coldata.Batch) bool
+	cancelCb      func()
+	forwardedErr  error
+	forwardedMeta []execinfrapb.ProducerMetadata
 }
 
 var _ routerOutput = &callbackRouterOutput{}
@@ -684,8 +686,13 @@ func (o *callbackRouterOutput) forwardErr(err error) {
 	o.forwardedErr = err
 }
 
+func (o *callbackRouterOutput) forwardMeta(meta *execinfrapb.ProducerMetadata) {
+	o.forwardedMeta = append(o.forwardedMeta, *meta)
+}
+
 func (o *callbackRouterOutput) resetForTests(context.Context) {
 	o.forwardedErr = nil
+	o.forwardedMeta = nil
 }
 
 func TestHashRouterComputesDestination(t *testing.T) {
@@ -723,6 +730,11 @@ func TestHashRouterComputesDestination(t *testing.T) {
 		numOutputs      = 4
 		valsPushed      = make([]int, numOutputs)
 	)
+
+	if system.BigEndian {
+		// On big endian architectures we expect a different distribution.
+		expectedNumVals = []int{238, 260, 259, 267}
+	}
 
 	outputs := make([]routerOutput, numOutputs)
 	for i := range outputs {
@@ -939,10 +951,13 @@ func TestHashRouterOneOutput(t *testing.T) {
 				t.Fatal(err)
 			}
 			wg.Wait()
-			// Expect no metadata, this should be a successful run.
-			unexpectedMetadata := ro.DrainMeta()
-			if len(unexpectedMetadata) != 0 {
-				t.Fatalf("unexpected metadata when draining HashRouter output: %+v", unexpectedMetadata)
+			// Expect no metadata other than the always-on Metrics record
+			// carrying the router goroutine's RawSQLCPUTime.
+			for _, meta := range ro.DrainMeta() {
+				if meta.Metrics != nil {
+					continue
+				}
+				t.Fatalf("unexpected metadata when draining HashRouter output: %+v", meta)
 			}
 			if !mtc.skipExpSpillCheck {
 				// If len(sel) == 0, no items will have been enqueued so override an
@@ -1146,7 +1161,7 @@ func TestHashRouterRandom(t *testing.T) {
 						for {
 							var b coldata.Batch
 							err := colexecerror.CatchVectorizedRuntimeError(func() {
-								b = outputsAsOps[i].Next()
+								b = colexecop.NextNoMeta(outputsAsOps[i])
 							})
 							if err != nil || b.Length() == 0 || isTerminationScenario(outputRng, 0.5, hashRouterPrematureDrainMeta) {
 								resultsByOp[i].err = err
@@ -1181,8 +1196,20 @@ func TestHashRouterRandom(t *testing.T) {
 
 				wg.Wait()
 				// The waitGroup protects metadataMu from concurrent access, so there's
-				// no need to lock the mutex here.
+				// no need to lock the mutex here. Filter out the always-on grunning
+				// emission from the HashRouter goroutine; it is orthogonal to the
+				// error metadata this test exercises.
 				metadata := metadataMu.metadata
+				for i := range metadata {
+					filtered := metadata[i][:0]
+					for _, m := range metadata[i] {
+						if m.Metrics != nil && m.Err == nil {
+							continue
+						}
+						filtered = append(filtered, m)
+					}
+					metadata[i] = filtered
+				}
 				checkMetadata := func(t *testing.T, expectedErrMsgs []string) {
 					t.Helper()
 					require.Equal(t, 1, len(metadata), "one output (the last to exit) should return metadata")
@@ -1371,7 +1398,7 @@ func BenchmarkHashRouter(b *testing.B) {
 						go func(j int) {
 							outputs[j].Init(ctx)
 							for {
-								oBatch := outputs[j].Next()
+								oBatch := colexecop.NextNoMeta(outputs[j])
 								actualDistribution[j] += oBatch.Length()
 								if oBatch.Length() == 0 {
 									_ = outputs[j].DrainMeta()

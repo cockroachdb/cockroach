@@ -9,22 +9,28 @@ package kvserver
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
@@ -36,7 +42,7 @@ func TestRaftReceiveQueue(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	g := metric.NewGauge(metric.Metadata{})
 	m := mon.NewUnlimitedMonitor(context.Background(), mon.Options{
-		Name:     "test",
+		Name:     mon.MakeName("test"),
 		CurCount: g,
 		Settings: st,
 	})
@@ -141,7 +147,7 @@ func TestRaftCrossLocalityMetrics(t *testing.T) {
 	clock := hlc.NewClockForTesting(timeutil.NewManualTime(timeutil.Unix(0, 123)))
 	cfg := TestStoreConfig(clock)
 	var stopper *stop.Stopper
-	stopper, _, _, cfg.StorePool, _ = storepool.CreateTestStorePool(ctx, cfg.Settings,
+	stopper, _, _, cfg.StorePool, _, _ = storepool.CreateTestStorePool(ctx, cfg.Settings,
 		liveness.TestTimeUntilNodeDead, false, /* deterministic */
 		func() int { return 0 }, /* nodeCount */
 		livenesspb.NodeLivenessStatus_DEAD)
@@ -149,8 +155,8 @@ func TestRaftCrossLocalityMetrics(t *testing.T) {
 
 	// Create a noop store.
 	node := roachpb.NodeDescriptor{NodeID: roachpb.NodeID(1)}
-	eng := storage.NewDefaultInMemForTesting()
-	stopper.AddCloser(eng)
+	eng := kvstorage.MakeEngines(storage.NewDefaultInMemForTesting())
+	stopper.AddCloser(&eng)
 	cfg.Transport = NewDummyRaftTransport(cfg.AmbientCtx, cfg.Settings, cfg.Clock)
 	store := NewStore(ctx, cfg, eng, &node)
 	store.Ident = &roachpb.StoreIdent{
@@ -220,4 +226,91 @@ func TestRaftCrossLocalityMetrics(t *testing.T) {
 			require.Equal(t, metricsDiff, expectedDiff)
 		})
 	}
+}
+
+func TestRaftReceiveQueuesEnforceMaxLenConcurrency(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	skip.UnderDuress(t, "slow test")
+	st := cluster.MakeTestingClusterSettings()
+	g := metric.NewGauge(metric.Metadata{})
+	m := mon.NewUnlimitedMonitor(context.Background(), mon.Options{
+		Name:     mon.MakeName("test"),
+		CurCount: g,
+		Settings: st,
+	})
+	qs := raftReceiveQueues{mon: m}
+	// checkingMu is locked in write mode when checking that the values of
+	// enforceMaxLen across all the queues is the expected value.
+	var checkingMu syncutil.RWMutex
+	// doneCh is used to tell the goroutines to stop, and wg is used to wait
+	// until they are done.
+	doneCh := make(chan struct{})
+	var wg sync.WaitGroup
+	// Spin up goroutines to create queues.
+	for i := 0; i < 20; i++ {
+		wg.Add(1)
+		go func() {
+			rng, _ := randutil.NewTestRand()
+			defer wg.Done()
+			// Loop until the doneCh is closed.
+			for {
+				checkingMu.RLock()
+				// Most queues will be newly created due to lack of collision in the
+				// random numbers. Newly created queues have their enforceMaxLen set
+				// in LoadOrCreate.
+				qs.LoadOrCreate(roachpb.RangeID(rng.Int63()), 10)
+				checkingMu.RUnlock()
+				select {
+				case <-doneCh:
+					return
+				default:
+				}
+			}
+		}()
+	}
+	// Iterate and set different values of enforceMaxLen.
+	enforceMaxLen := false
+	for i := 0; i < 25; i++ {
+		// NB: SetEnforceMaxLen runs concurrently with LoadOrCreate calls.
+		qs.SetEnforceMaxLen(enforceMaxLen)
+		// Exclude all LoadOrCreate calls while checking is happening.
+		checkingMu.Lock()
+		qs.m.Range(func(_ roachpb.RangeID, q *raftReceiveQueue) bool {
+			require.Equal(t, enforceMaxLen, q.getEnforceMaxLenForTesting())
+			return true
+		})
+		checkingMu.Unlock()
+		enforceMaxLen = !enforceMaxLen
+		// Do a tiny sleep after releasing the write lock. This gives some
+		// opportunity for a bunch of goroutines to acquire the read lock, so when
+		// this code loops around to call SetEnforceMaxLen, there is a higher
+		// chance of encountering concurrent LoadOrCreate.
+		time.Sleep(time.Millisecond)
+	}
+	close(doneCh)
+	wg.Wait()
+}
+
+func TestRaftReceiveQueuesEnforceMaxLen(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	st := cluster.MakeTestingClusterSettings()
+	g := metric.NewGauge(metric.Metadata{})
+	m := mon.NewUnlimitedMonitor(context.Background(), mon.Options{
+		Name:     mon.MakeName("test"),
+		CurCount: g,
+		Settings: st,
+	})
+	qs := raftReceiveQueues{mon: m}
+	qs.SetEnforceMaxLen(false)
+	q, _ := qs.LoadOrCreate(1, 2)
+	var s RaftMessageResponseStream
+	for i := 0; i < 10; i++ {
+		_, _, appended := q.Append(&kvserverpb.RaftMessageRequest{}, s)
+		require.True(t, appended)
+	}
+	qs.SetEnforceMaxLen(true)
+	_, _, appended := q.Append(&kvserverpb.RaftMessageRequest{}, s)
+	require.False(t, appended)
 }

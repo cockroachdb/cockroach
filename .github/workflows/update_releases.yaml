@@ -17,7 +17,6 @@ on:
     - cron: 0 0 * * *
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
-
 name: Update pkg/testutils/release/cockroach_releases.yaml
 jobs:
   update-crdb-releases-yaml:
@@ -27,11 +26,12 @@ jobs:
       matrix:
         branch:
           - "master"
-          - "release-23.1"
-          - "release-23.2"
           - "release-24.1"
-          - "release-24.2"
           - "release-24.3"
+          - "release-25.2"
+          - "release-25.4"
+          - "release-26.1"
+          - "release-26.2"
     name: Update pkg/testutils/release/cockroach_releases.yaml on ${{ matrix.branch }}
     runs-on: ubuntu-latest
     steps:
@@ -49,7 +49,7 @@ jobs:
           $(bazel info bazel-bin)/pkg/cmd/release/release_/release update-releases-file
           git diff
       - name: Update pkg/testutils/release/cockroach_releases.yaml on ${{ matrix.branch }}
-        uses: peter-evans/create-pull-request@v5
+        uses: peter-evans/create-pull-request@4e1beaa7521e8b457b572c090b25bd3db56bf1c5 # v5
         with:
           base: "${{ matrix.branch }}"
           branch: "crdb-releases-yaml-update-${{ matrix.branch }}"

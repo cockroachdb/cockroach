@@ -27,27 +27,17 @@ type kvWriter struct {
 	// Used to write leases that have will no longer have an expiration,
 	// but have their lifetime tied to a sqlliveness session.
 	sessionBasedWriter bootstrap.KVWriter
-	// Used to write leases that would use an expiration time
-	// previously.
-	expiryBasedWriter bootstrap.KVWriter
 
-	settingsWatcher    *settingswatcher.SettingsWatcher
-	sessionBasedReader sessionBasedLeasingModeReader
+	settingsWatcher *settingswatcher.SettingsWatcher
 }
 
 func newKVWriter(
-	codec keys.SQLCodec,
-	db *kv.DB,
-	id descpb.ID,
-	settingsWatcher *settingswatcher.SettingsWatcher,
-	sessionModeReader sessionBasedLeasingModeReader,
+	codec keys.SQLCodec, db *kv.DB, id descpb.ID, settingsWatcher *settingswatcher.SettingsWatcher,
 ) *kvWriter {
 	return &kvWriter{
 		db:                 db,
 		sessionBasedWriter: bootstrap.MakeKVWriter(codec, leaseTableWithID(id, systemschema.LeaseTable())),
-		expiryBasedWriter:  bootstrap.MakeKVWriter(codec, leaseTableWithID(id, systemschema.LeaseTable_V23_2())),
 		settingsWatcher:    settingsWatcher,
-		sessionBasedReader: sessionModeReader,
 	}
 }
 
@@ -62,55 +52,31 @@ func leaseTableWithID(id descpb.ID, table systemschema.SystemTable) catalog.Tabl
 	return mut.ImmutableCopy().(catalog.TableDescriptor)
 }
 
-func (w *kvWriter) insertLease(ctx context.Context, txn *kv.Txn, l leaseFields) error {
-	if err := w.do(ctx, txn, l, func(b *kv.Batch) error {
-		// We support writing both session based and expiry based leases within
-		// the KV writer. To be able to support a migration between the two types
-		// of writer will in some cases need to be able to write both types of leases.
-		// As a result based on our currently active mode, determine which types
-		// of leases should be written. The scenarios we support are:
-		// 1) Session Based Off => Only expiry based leases are written.
-		// 2) Dual-Write => Both session and expiry based leases will be written.
-		// 3) Session Only => Only session based leases will get written.
-		if w.sessionBasedReader.sessionBasedLeasingModeAtLeast(ctx, SessionBasedDualWrite) &&
-			l.sessionID != nil {
-			err := w.sessionBasedWriter.Insert(ctx, b, false /*kvTrace*/, leaseAsSessionBasedDatum(l)...)
-			if err != nil {
-				return err
-			}
-		}
-		if !w.sessionBasedReader.sessionBasedLeasingModeAtLeast(ctx, SessionBasedOnly) {
-			err := w.expiryBasedWriter.Insert(ctx, b, false /*kvTrace */, leaseAsRbrDatum(l)...)
-			if err != nil {
-				return err
+func (w *kvWriter) insertLeases(ctx context.Context, txn *kv.Txn, leases []leaseFields) error {
+	if err := w.do(ctx, txn, leases, func(b *kv.Batch) error {
+		for _, l := range leases {
+			if l.sessionID != nil {
+				err := w.sessionBasedWriter.Insert(ctx, b, false /*kvTrace*/, leaseAsSessionBasedDatum(l)...)
+				if err != nil {
+					return err
+				}
 			}
 		}
 		return nil
 	}); err != nil {
-		return errors.Wrapf(err, "failed to insert lease %v", l)
+		return errors.Wrapf(err, "failed to insert lease %v", leases)
 	}
 	return nil
 }
 
+func (w *kvWriter) insertLease(ctx context.Context, txn *kv.Txn, l leaseFields) error {
+	return w.insertLeases(ctx, txn, []leaseFields{l})
+}
+
 func (w *kvWriter) deleteLease(ctx context.Context, txn *kv.Txn, l leaseFields) error {
-	if err := w.do(ctx, txn, l, func(b *kv.Batch) error {
-		// We support deleting both session based and expiry based leases within
-		// the KV writer. To be able to support a migration between the two types
-		// of writer will in some cases need to be able to delete both types of leases.
-		// As a result based on our currently active mode, determine which types
-		// of leases should be deleted. The scenarios we support are:
-		// 1) Session Based Off => Only expiry based leases are deleted.
-		// 2) Dual-Write => Both session and expiry based leases will be deleted.
-		// 3) Session Only => Only session based leases will get deleted.
-		if w.sessionBasedReader.sessionBasedLeasingModeAtLeast(ctx, SessionBasedDualWrite) &&
-			l.sessionID != nil {
+	if err := w.do(ctx, txn, []leaseFields{l}, func(b *kv.Batch) error {
+		if l.sessionID != nil {
 			err := w.sessionBasedWriter.Delete(ctx, b, false /*kvTrace*/, leaseAsSessionBasedDatum(l)...)
-			if err != nil {
-				return err
-			}
-		}
-		if !w.sessionBasedReader.sessionBasedLeasingModeAtLeast(ctx, SessionBasedOnly) {
-			err := w.expiryBasedWriter.Delete(ctx, b, false /*kvTrace */, leaseAsRbrDatum(l)...)
 			if err != nil {
 				return err
 			}
@@ -125,7 +91,7 @@ func (w *kvWriter) deleteLease(ctx context.Context, txn *kv.Txn, l leaseFields) 
 type addToBatchFunc = func(*kv.Batch) error
 
 func (w *kvWriter) do(
-	ctx context.Context, txn *kv.Txn, lease leaseFields, addToBatch addToBatchFunc,
+	ctx context.Context, txn *kv.Txn, lease []leaseFields, addToBatch addToBatchFunc,
 ) error {
 	run := (*kv.Txn).Run
 	do := func(ctx context.Context, txn *kv.Txn) error {
@@ -150,15 +116,4 @@ func leaseAsSessionBasedDatum(l leaseFields) []tree.Datum {
 		tree.NewDBytes(tree.DBytes(l.sessionID)),
 		tree.NewDBytes(tree.DBytes(l.regionPrefix)),
 	}
-}
-
-func leaseAsRbrDatum(l leaseFields) []tree.Datum {
-	return []tree.Datum{
-		tree.NewDInt(tree.DInt(l.descID)),
-		tree.NewDInt(tree.DInt(l.version)),
-		tree.NewDInt(tree.DInt(l.instanceID)),
-		&l.expiration,
-		tree.NewDBytes(tree.DBytes(l.regionPrefix)),
-	}
-
 }

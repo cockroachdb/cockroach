@@ -1,0 +1,241 @@
+/* setup */
+CREATE TABLE t (
+    i INT,
+    j INT NOT NULL GENERATED ALWAYS AS IDENTITY
+);
+----
+...
++object {100 101 t} -> 104
++object {100 101 t_j_seq} -> 105
+
+/* test */
+ALTER TABLE t ALTER COLUMN j DROP IDENTITY;
+----
+begin transaction #1
+# begin StatementPhase
+checking for feature: ALTER TABLE
+increment telemetry for sql.schema.alter_table
+increment telemetry for sql.schema.alter_table.drop_identity
+## StatementPhase stage 1 of 1 with 12 MutationType ops
+delete object namespace entry {100 101 t_j_seq} -> 105
+upsert descriptor #104
+  ...
+         oid: 20
+         width: 64
+  -  - defaultExpr: nextval(105:::REGCLASS)
+  -    generatedAsIdentitySequenceOption: ""
+  -    generatedAsIdentityType: GENERATED_ALWAYS
+  -    id: 2
+  +  - id: 2
+       name: j
+  -    ownsSequenceIds:
+  -    - 105
+       type:
+         family: IntFamily
+         oid: 20
+         width: 64
+  -    usesSequenceIds:
+  -    - 105
+     - defaultExpr: unique_rowid()
+       hidden: true
+  ...
+     replacementOf:
+       time: {}
+  -  schemaLocked: true
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
+upsert descriptor #105
+  ...
+       sessionCacheSize: "1"
+       start: "1"
+  +  state: DROP
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
+# end StatementPhase
+# begin PreCommitPhase
+## PreCommitPhase stage 1 of 2 with 1 MutationType op
+undo all catalog changes within txn #1
+persist all catalog changes to storage
+## PreCommitPhase stage 2 of 2 with 15 MutationType ops
+delete object namespace entry {100 101 t_j_seq} -> 105
+upsert descriptor #104
+  ...
+         oid: 20
+         width: 64
+  -  - defaultExpr: nextval(105:::REGCLASS)
+  -    generatedAsIdentitySequenceOption: ""
+  -    generatedAsIdentityType: GENERATED_ALWAYS
+  -    id: 2
+  +  - id: 2
+       name: j
+  -    ownsSequenceIds:
+  -    - 105
+       type:
+         family: IntFamily
+         oid: 20
+         width: 64
+  -    usesSequenceIds:
+  -    - 105
+     - defaultExpr: unique_rowid()
+       hidden: true
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses: <redacted>
+  +    jobId: "1"
+  +    nameMapping:
+  +      columns:
+  +        "1": i
+  +        "2": j
+  +        "3": rowid
+  +        "4294967292": crdb_internal_origin_timestamp
+  +        "4294967293": crdb_internal_origin_id
+  +        "4294967294": tableoid
+  +        "4294967295": crdb_internal_mvcc_timestamp
+  +      families:
+  +        "0": primary
+  +      id: 104
+  +      indexes:
+  +        "1": t_pkey
+  +      name: t
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER COLUMN ‹j› DROP IDENTITY
+  +        statement: ALTER TABLE t ALTER COLUMN j DROP IDENTITY
+  +        statementTag: ALTER TABLE
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+     replacementOf:
+       time: {}
+  -  schemaLocked: true
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
+upsert descriptor #105
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses: <redacted>
+  +    jobId: "1"
+  +    nameMapping:
+  +      id: 105
+  +      name: t_j_seq
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER COLUMN ‹j› DROP IDENTITY
+  +        statement: ALTER TABLE t ALTER COLUMN j DROP IDENTITY
+  +        statementTag: ALTER TABLE
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
+     dependedOnBy:
+     - byId: true
+  ...
+       sessionCacheSize: "1"
+       start: "1"
+  +  state: DROP
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
+persist all catalog changes to storage
+create job #1 (non-cancelable: true): "ALTER TABLE defaultdb.public.t ALTER COLUMN j DROP IDENTITY"
+  descriptor IDs: [104 105]
+# end PreCommitPhase
+commit transaction #1
+notified job registry to adopt jobs: [1]
+# begin PostCommitPhase
+begin transaction #2
+commit transaction #2
+begin transaction #3
+## PostCommitNonRevertiblePhase stage 1 of 1 with 5 MutationType ops
+upsert descriptor #104
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses: <redacted>
+  -    jobId: "1"
+  -    nameMapping:
+  -      columns:
+  -        "1": i
+  -        "2": j
+  -        "3": rowid
+  -        "4294967292": crdb_internal_origin_timestamp
+  -        "4294967293": crdb_internal_origin_id
+  -        "4294967294": tableoid
+  -        "4294967295": crdb_internal_mvcc_timestamp
+  -      families:
+  -        "0": primary
+  -      id: 104
+  -      indexes:
+  -        "1": t_pkey
+  -      name: t
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER COLUMN ‹j› DROP IDENTITY
+  -        statement: ALTER TABLE t ALTER COLUMN j DROP IDENTITY
+  -        statementTag: ALTER TABLE
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+     replacementOf:
+       time: {}
+  +  schemaLocked: true
+     unexposedParentSchemaId: 101
+  -  version: "2"
+  +  version: "3"
+upsert descriptor #105
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses: <redacted>
+  -    jobId: "1"
+  -    nameMapping:
+  -      id: 105
+  -      name: t_j_seq
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› ALTER COLUMN ‹j› DROP IDENTITY
+  -        statement: ALTER TABLE t ALTER COLUMN j DROP IDENTITY
+  -        statementTag: ALTER TABLE
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     dependedOnBy:
+     - byId: true
+  ...
+     state: DROP
+     unexposedParentSchemaId: 101
+  -  version: "2"
+  +  version: "3"
+persist all catalog changes to storage
+create job #2 (non-cancelable: true): "GC for ALTER TABLE defaultdb.public.t ALTER COLUMN j DROP IDENTITY"
+  descriptor IDs: [105]
+update progress of schema change job #1: "all stages completed"
+set schema change job #1 to non-cancellable
+updated schema change job #1 descriptor IDs to []
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 104
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 105
+commit transaction #3
+notified job registry to adopt jobs: [2]
+# end PostCommitPhase

@@ -262,10 +262,10 @@ func (f *Factory) EvalContext() *eval.Context {
 }
 
 // CopyAndReplace builds this factory's memo by constructing a copy of a subtree
-// that is part of another memo. That memo's metadata is copied to this
-// factory's memo so that tables and columns referenced by the copied memo can
-// keep the same ids. The copied subtree becomes the root of the destination
-// memo, having the given physical properties.
+// that is part of another memo. fromMemo's metadata is copied to this factory's
+// memo so that tables and columns referenced by the copied memo can keep the
+// same ids. The copied subtree becomes the root of the destination memo, having
+// the given physical properties.
 //
 // The "replace" callback function allows the caller to override the default
 // traversal and cloning behavior with custom logic. It is called for each node
@@ -288,18 +288,18 @@ func (f *Factory) EvalContext() *eval.Context {
 //	  return f.CopyAndReplaceDefault(e, replaceFn)
 //	}
 //
-//	f.CopyAndReplace(from, fromProps, replaceFn)
+//	f.CopyAndReplace(fromMemo, from, fromProps, replaceFn)
 //
 // NOTE: Callers must take care to always create brand new copies of non-
 // singleton source nodes rather than referencing existing nodes. The source
 // memo should always be treated as immutable, and the destination memo must be
 // completely independent of it once CopyAndReplace has completed.
 func (f *Factory) CopyAndReplace(
-	from memo.RelExpr, fromProps *physical.Required, replace ReplaceFunc,
+	fromMemo *memo.Memo, from memo.RelExpr, fromProps *physical.Required, replace ReplaceFunc,
 ) {
 	opt.MaybeInjectOptimizerTestingPanic(f.ctx, f.evalCtx)
 
-	f.CopyMetadataFrom(from.Memo())
+	f.CopyMetadataFrom(fromMemo)
 
 	// Perform copy and replacement, and store result as the root of this
 	// factory's memo.
@@ -317,10 +317,10 @@ func (f *Factory) CopyMetadataFrom(from *memo.Memo) {
 		panic(errors.AssertionFailedf("destination memo must be empty"))
 	}
 
-	// Copy the next scalar rank to the target memo so that new scalar
-	// expressions built with the new memo will not share scalar ranks with
-	// existing expressions.
-	f.mem.CopyNextRankFrom(from)
+	// Copy the next scalar rank, With ID, and routine buffer ID to the target
+	// memo so that new expressions built with the new memo will not share scalar
+	// ranks, With IDs, or routine buffer IDs with existing expressions.
+	f.mem.CopyRankAndIDsFrom(from)
 
 	// Copy all metadata to the target memo so that referenced tables and
 	// columns can keep the same ids they had in the "from" memo. Scalar
@@ -340,57 +340,80 @@ func (f *Factory) CopyWithoutAssigningPlaceholders(e opt.Expr) opt.Expr {
 // assigned values. This can trigger additional normalization rules that can
 // substantially rewrite the tree. Once all placeholders are assigned, the
 // exploration phase can begin.
-func (f *Factory) AssignPlaceholders(from *memo.Memo) (err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			// This code allows us to propagate errors without adding lots of checks
-			// for `if err != nil` throughout the construction code. This is only
-			// possible because the code does not update shared state and does not
-			// manipulate locks.
-			if ok, e := errorutil.ShouldCatch(r); ok {
-				err = e
-			} else {
-				panic(r)
-			}
-		}
-	}()
+func (f *Factory) AssignPlaceholders(from *memo.Memo) (retErr error) {
+	defer errorutil.MaybeCatchPanic(&retErr, nil /* errCallback */)
 
 	// Copy the "from" memo to this memo, replacing any Placeholder operators as
 	// the copy proceeds.
 	var replaceFn ReplaceFunc
+	// We keep track of UDF definitions so that we don't copy the same UDF more
+	// than once.
+	var newRoutineDefs map[*memo.UDFDefinition]*memo.UDFDefinition
 	replaceFn = func(e opt.Expr) opt.Expr {
-		if placeholder, ok := e.(*memo.PlaceholderExpr); ok {
+		switch t := e.(type) {
+		case *memo.PlaceholderExpr:
 			d, err := eval.Expr(f.ctx, f.evalCtx, e.(*memo.PlaceholderExpr).Value)
 			if err != nil {
 				panic(err)
 			}
-			return f.ConstructConstVal(d, placeholder.DataType())
-		}
-		// A recursive CTE may have the stats change on its Initial expression
-		// after placeholder assignment, if that happens we need to
-		// propagate that change to the Binding expression and rebuild
-		// everything.
-		if rcte, ok := e.(*memo.RecursiveCTEExpr); ok {
-			newInitial := f.CopyAndReplaceDefault(rcte.Initial, replaceFn).(memo.RelExpr)
-			if newInitial != rcte.Initial {
+			return f.ConstructConstVal(d, t.DataType())
+		case *memo.UDFCallExpr:
+			// Statements in the body of a UDF cannot have placeholders, but
+			// they must be copied so that they reference the new memo.
+			if newRoutineDefs == nil {
+				newRoutineDefs = make(map[*memo.UDFDefinition]*memo.UDFDefinition)
+			}
+
+			// Copy the arguments, if any.
+			var newArgs memo.ScalarListExpr
+			if t.Args != nil {
+				copiedArgs := f.CopyAndReplaceDefault(&t.Args, replaceFn).(*memo.ScalarListExpr)
+				newArgs = *copiedArgs
+			}
+
+			// Check if we've seen this UDF already.
+			newDef, ok := newRoutineDefs[t.Def]
+			if !ok {
+				// Add the new definition before copying the body to handle recursion.
+				defCopy := *t.Def
+				newDef = &defCopy
+				newRoutineDefs[t.Def] = newDef
+				// Make sure to copy the slice that stores the body statements, rather
+				// than mutating the original. BodyBuilder is immutable and
+				// memo-independent; the struct copy above suffices.
+				if t.Def.Body != nil {
+					newDef.Body = make([]memo.RelExpr, len(t.Def.Body))
+					for i := range t.Def.Body {
+						newDef.Body[i] = f.CopyAndReplaceDefault(t.Def.Body[i], replaceFn).(memo.RelExpr)
+					}
+				}
+			}
+			return f.ConstructUDFCall(newArgs, &memo.UDFCallPrivate{Def: newDef})
+		case *memo.RecursiveCTEExpr:
+			// A recursive CTE may have the stats change on its Initial expression
+			// after placeholder assignment, if that happens we need to
+			// propagate that change to the Binding expression and rebuild
+			// everything.
+			newInitial := f.CopyAndReplaceDefault(t.Initial, replaceFn).(memo.RelExpr)
+			if newInitial != t.Initial {
 				newBinding := f.ConstructFakeRel(&memo.FakeRelPrivate{
 					Props: MakeBindingPropsForRecursiveCTE(
-						props.AnyCardinality, rcte.Binding.Relational().OutputCols,
+						props.AnyCardinality, t.Binding.Relational().OutputCols,
 						newInitial.Relational().Statistics().RowCount)})
-				if id := rcte.WithBindingID(); id != 0 {
+				if id := t.WithBindingID(); id != 0 {
 					f.Metadata().AddWithBinding(id, newBinding)
 				}
 				return f.ConstructRecursiveCTE(
 					newBinding,
 					newInitial,
-					f.invokeReplace(rcte.Recursive, replaceFn).(memo.RelExpr),
-					&rcte.RecursiveCTEPrivate,
+					f.invokeReplace(t.Recursive, replaceFn).(memo.RelExpr),
+					&t.RecursiveCTEPrivate,
 				)
 			}
 		}
 		return f.CopyAndReplaceDefault(e, replaceFn)
 	}
-	f.CopyAndReplace(from.RootExpr().(memo.RelExpr), from.RootProps(), replaceFn)
+	f.CopyAndReplace(from, from.RootExpr(), from.RootProps(), replaceFn)
 
 	return nil
 }

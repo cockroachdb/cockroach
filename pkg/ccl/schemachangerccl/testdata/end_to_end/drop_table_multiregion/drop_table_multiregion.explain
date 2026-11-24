@@ -10,15 +10,15 @@ EXPLAIN (DDL) DROP TABLE multi_region_test_db.public.table_regional_by_row;
 Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹table_regional_by_row›;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
- │         ├── 35 elements transitioning toward ABSENT
- │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 108 (table_regional_by_row-), Name: "table_regional_by_row", ReferencedDescID: 104 (multi_region_test_db)}
+ │         ├── 45 elements transitioning toward ABSENT
+ │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 108 (table_regional_by_row-), Name: "table_regional_by_row", ReferencedDescID: 104 (multi_region_test_db), IntValue: 105}
  │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 108 (table_regional_by_row-)}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 108 (table_regional_by_row-), Name: "admin"}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 108 (table_regional_by_row-), Name: "root"}
  │         │    ├── PUBLIC → DROPPED Table:{DescID: 108 (table_regional_by_row-)}
  │         │    ├── PUBLIC → ABSENT  SchemaChild:{DescID: 108 (table_regional_by_row-), ReferencedDescID: 105 (public)}
  │         │    ├── PUBLIC → ABSENT  TablePartitioning:{DescID: 108 (table_regional_by_row-)}
- │         │    ├── PUBLIC → ABSENT  TableLocalityRegionalByRow:{DescID: 108 (table_regional_by_row-)}
+ │         │    ├── PUBLIC → ABSENT  TableLocalityRegionalByRow:{DescID: 108 (table_regional_by_row-), Value: ""}
  │         │    ├── PUBLIC → ABSENT  ColumnFamily:{DescID: 108 (table_regional_by_row-), Name: "primary", ColumnFamilyID: 0 (primary-)}
  │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108 (table_regional_by_row-), ColumnID: 1 (k-)}
  │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108 (table_regional_by_row-), Name: "k", ColumnID: 1 (k-)}
@@ -27,43 +27,59 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108 (table_regional_by_row-), ColumnID: 2 (crdb_region-)}
  │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108 (table_regional_by_row-), Name: "crdb_region", ColumnID: 2 (crdb_region-)}
  │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108 (table_regional_by_row-), ReferencedTypeIDs: [106 (crdb_internal_region), 107 (_crdb_internal_region)], ColumnFamilyID: 0 (primary-), ColumnID: 2 (crdb_region-), TypeName: "public.crdb_internal_region"}
+ │         │    ├── PUBLIC → ABSENT  ColumnHidden:{DescID: 108 (table_regional_by_row-), ColumnID: 2 (crdb_region-)}
  │         │    ├── PUBLIC → ABSENT  ColumnNotNull:{DescID: 108 (table_regional_by_row-), ColumnID: 2 (crdb_region-), IndexID: 0}
  │         │    ├── PUBLIC → ABSENT  ColumnDefaultExpression:{DescID: 108 (table_regional_by_row-), ReferencedTypeIDs: [106 (crdb_internal_region), 107 (_crdb_internal_region)], ColumnID: 2 (crdb_region-), Expr: default_to_database_primary_region(gateway_region())::@100106}
  │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108 (table_regional_by_row-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
  │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108 (table_regional_by_row-), Name: "crdb_internal_mvcc_timestamp", ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
  │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108 (table_regional_by_row-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-), TypeName: "DECIMAL"}
+ │         │    ├── PUBLIC → ABSENT  ColumnHidden:{DescID: 108 (table_regional_by_row-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
  │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108 (table_regional_by_row-), ColumnID: 4294967294 (tableoid-)}
  │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108 (table_regional_by_row-), Name: "tableoid", ColumnID: 4294967294 (tableoid-)}
  │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108 (table_regional_by_row-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-), TypeName: "OID"}
+ │         │    ├── PUBLIC → ABSENT  ColumnHidden:{DescID: 108 (table_regional_by_row-), ColumnID: 4294967294 (tableoid-)}
  │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108 (table_regional_by_row-), ColumnID: 4294967293 (crdb_internal_origin_id-)}
  │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108 (table_regional_by_row-), Name: "crdb_internal_origin_id", ColumnID: 4294967293 (crdb_internal_origin_id-)}
  │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108 (table_regional_by_row-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967293 (crdb_internal_origin_id-), TypeName: "INT4"}
+ │         │    ├── PUBLIC → ABSENT  ColumnHidden:{DescID: 108 (table_regional_by_row-), ColumnID: 4294967293 (crdb_internal_origin_id-)}
  │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108 (table_regional_by_row-), ColumnID: 4294967292 (crdb_internal_origin_timestamp-)}
  │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108 (table_regional_by_row-), Name: "crdb_internal_origin_timestamp", ColumnID: 4294967292 (crdb_internal_origin_timestamp-)}
  │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108 (table_regional_by_row-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967292 (crdb_internal_origin_timestamp-), TypeName: "DECIMAL"}
+ │         │    ├── PUBLIC → ABSENT  ColumnHidden:{DescID: 108 (table_regional_by_row-), ColumnID: 4294967292 (crdb_internal_origin_timestamp-)}
  │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID: 108 (table_regional_by_row-), ColumnID: 2 (crdb_region-), IndexID: 1 (table_regional_by_row_pkey-)}
  │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID: 108 (table_regional_by_row-), ColumnID: 1 (k-), IndexID: 1 (table_regional_by_row_pkey-)}
  │         │    ├── PUBLIC → ABSENT  PrimaryIndex:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-), ConstraintID: 1}
  │         │    ├── PUBLIC → ABSENT  IndexPartitioning:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-)}
- │         │    └── PUBLIC → ABSENT  IndexName:{DescID: 108 (table_regional_by_row-), Name: "table_regional_by_row_pkey", IndexID: 1 (table_regional_by_row_pkey-)}
- │         └── 46 Mutation operations
+ │         │    ├── PUBLIC → ABSENT  IndexName:{DescID: 108 (table_regional_by_row-), Name: "table_regional_by_row_pkey", IndexID: 1 (table_regional_by_row_pkey-)}
+ │         │    ├── PUBLIC → ABSENT  TableZoneConfig:{DescID: 108 (table_regional_by_row-), SeqNum: 0}
+ │         │    ├── PUBLIC → ABSENT  PartitionZoneConfig:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-), SeqNum: 0, PartitionName: "us-east1"}
+ │         │    ├── PUBLIC → ABSENT  PartitionZoneConfig:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-), SeqNum: 0, PartitionName: "us-east2"}
+ │         │    ├── PUBLIC → ABSENT  PartitionZoneConfig:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-), SeqNum: 0, PartitionName: "us-east3"}
+ │         │    └── PUBLIC → ABSENT  TableSchemaLocked:{DescID: 108 (table_regional_by_row-)}
+ │         └── 53 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":108}
  │              ├── RemoveObjectParent {"ObjectID":108,"ParentSchemaID":105}
  │              ├── NotImplementedForPublicObjects {"DescID":108,"ElementType":"scpb.TablePartit..."}
+ │              ├── UnsetTableLocality {"TableID":108}
  │              ├── MakePublicColumnNotNullValidated {"ColumnID":1,"TableID":108}
  │              ├── MakePublicColumnNotNullValidated {"ColumnID":2,"TableID":108}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967295,"TableID":108}
  │              ├── SetColumnName {"ColumnID":4294967295,"Name":"crdb_internal_co...","TableID":108}
+ │              ├── MakeColumnVisible {"ColumnID":4294967295,"TableID":108}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967294,"TableID":108}
  │              ├── SetColumnName {"ColumnID":4294967294,"Name":"crdb_internal_co...","TableID":108}
+ │              ├── MakeColumnVisible {"ColumnID":4294967294,"TableID":108}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967293,"TableID":108}
  │              ├── SetColumnName {"ColumnID":4294967293,"Name":"crdb_internal_co...","TableID":108}
+ │              ├── MakeColumnVisible {"ColumnID":4294967293,"TableID":108}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967292,"TableID":108}
  │              ├── SetColumnName {"ColumnID":4294967292,"Name":"crdb_internal_co...","TableID":108}
+ │              ├── MakeColumnVisible {"ColumnID":4294967292,"TableID":108}
  │              ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":108}
  │              ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":108}
+ │              ├── SetTableSchemaLocked {"TableID":108}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":108,"Name":"table_regional_b...","SchemaID":105}}
- │              ├── NotImplementedForPublicObjects {"DescID":108,"ElementType":"scpb.Owner"}
+ │              ├── RemoveOwner {"DescriptorID":108}
  │              ├── RemoveUserPrivileges {"DescriptorID":108,"User":"admin"}
  │              ├── RemoveUserPrivileges {"DescriptorID":108,"User":"root"}
  │              ├── RemoveColumnNotNull {"ColumnID":1,"TableID":108}
@@ -76,6 +92,7 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │              ├── SetColumnName {"ColumnID":1,"Name":"crdb_internal_co...","TableID":108}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":2,"TableID":108}
  │              ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":108}
+ │              ├── MakeColumnVisible {"ColumnID":2,"TableID":108}
  │              ├── RemoveColumnDefaultExpression {"ColumnID":2,"TableID":108}
  │              ├── UpdateTableBackReferencesInTypes {"BackReferencedTableID":108}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967295,"TableID":108}
@@ -95,15 +112,15 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │              └── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":108}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
- │    │    ├── 35 elements transitioning toward ABSENT
- │    │    │    ├── ABSENT  → PUBLIC Namespace:{DescID: 108 (table_regional_by_row-), Name: "table_regional_by_row", ReferencedDescID: 104 (multi_region_test_db)}
+ │    │    ├── 45 elements transitioning toward ABSENT
+ │    │    │    ├── ABSENT  → PUBLIC Namespace:{DescID: 108 (table_regional_by_row-), Name: "table_regional_by_row", ReferencedDescID: 104 (multi_region_test_db), IntValue: 105}
  │    │    │    ├── ABSENT  → PUBLIC Owner:{DescID: 108 (table_regional_by_row-)}
  │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 108 (table_regional_by_row-), Name: "admin"}
  │    │    │    ├── ABSENT  → PUBLIC UserPrivileges:{DescID: 108 (table_regional_by_row-), Name: "root"}
  │    │    │    ├── DROPPED → PUBLIC Table:{DescID: 108 (table_regional_by_row-)}
  │    │    │    ├── ABSENT  → PUBLIC SchemaChild:{DescID: 108 (table_regional_by_row-), ReferencedDescID: 105 (public)}
  │    │    │    ├── ABSENT  → PUBLIC TablePartitioning:{DescID: 108 (table_regional_by_row-)}
- │    │    │    ├── ABSENT  → PUBLIC TableLocalityRegionalByRow:{DescID: 108 (table_regional_by_row-)}
+ │    │    │    ├── ABSENT  → PUBLIC TableLocalityRegionalByRow:{DescID: 108 (table_regional_by_row-), Value: ""}
  │    │    │    ├── ABSENT  → PUBLIC ColumnFamily:{DescID: 108 (table_regional_by_row-), Name: "primary", ColumnFamilyID: 0 (primary-)}
  │    │    │    ├── ABSENT  → PUBLIC Column:{DescID: 108 (table_regional_by_row-), ColumnID: 1 (k-)}
  │    │    │    ├── ABSENT  → PUBLIC ColumnName:{DescID: 108 (table_regional_by_row-), Name: "k", ColumnID: 1 (k-)}
@@ -112,37 +129,47 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │    │    │    ├── ABSENT  → PUBLIC Column:{DescID: 108 (table_regional_by_row-), ColumnID: 2 (crdb_region-)}
  │    │    │    ├── ABSENT  → PUBLIC ColumnName:{DescID: 108 (table_regional_by_row-), Name: "crdb_region", ColumnID: 2 (crdb_region-)}
  │    │    │    ├── ABSENT  → PUBLIC ColumnType:{DescID: 108 (table_regional_by_row-), ReferencedTypeIDs: [106 (crdb_internal_region), 107 (_crdb_internal_region)], ColumnFamilyID: 0 (primary-), ColumnID: 2 (crdb_region-), TypeName: "public.crdb_internal_region"}
+ │    │    │    ├── ABSENT  → PUBLIC ColumnHidden:{DescID: 108 (table_regional_by_row-), ColumnID: 2 (crdb_region-)}
  │    │    │    ├── ABSENT  → PUBLIC ColumnNotNull:{DescID: 108 (table_regional_by_row-), ColumnID: 2 (crdb_region-), IndexID: 0}
  │    │    │    ├── ABSENT  → PUBLIC ColumnDefaultExpression:{DescID: 108 (table_regional_by_row-), ReferencedTypeIDs: [106 (crdb_internal_region), 107 (_crdb_internal_region)], ColumnID: 2 (crdb_region-), Expr: default_to_database_primary_region(gateway_region())::@100106}
  │    │    │    ├── ABSENT  → PUBLIC Column:{DescID: 108 (table_regional_by_row-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
  │    │    │    ├── ABSENT  → PUBLIC ColumnName:{DescID: 108 (table_regional_by_row-), Name: "crdb_internal_mvcc_timestamp", ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
  │    │    │    ├── ABSENT  → PUBLIC ColumnType:{DescID: 108 (table_regional_by_row-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-), TypeName: "DECIMAL"}
+ │    │    │    ├── ABSENT  → PUBLIC ColumnHidden:{DescID: 108 (table_regional_by_row-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
  │    │    │    ├── ABSENT  → PUBLIC Column:{DescID: 108 (table_regional_by_row-), ColumnID: 4294967294 (tableoid-)}
  │    │    │    ├── ABSENT  → PUBLIC ColumnName:{DescID: 108 (table_regional_by_row-), Name: "tableoid", ColumnID: 4294967294 (tableoid-)}
  │    │    │    ├── ABSENT  → PUBLIC ColumnType:{DescID: 108 (table_regional_by_row-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-), TypeName: "OID"}
+ │    │    │    ├── ABSENT  → PUBLIC ColumnHidden:{DescID: 108 (table_regional_by_row-), ColumnID: 4294967294 (tableoid-)}
  │    │    │    ├── ABSENT  → PUBLIC Column:{DescID: 108 (table_regional_by_row-), ColumnID: 4294967293 (crdb_internal_origin_id-)}
  │    │    │    ├── ABSENT  → PUBLIC ColumnName:{DescID: 108 (table_regional_by_row-), Name: "crdb_internal_origin_id", ColumnID: 4294967293 (crdb_internal_origin_id-)}
  │    │    │    ├── ABSENT  → PUBLIC ColumnType:{DescID: 108 (table_regional_by_row-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967293 (crdb_internal_origin_id-), TypeName: "INT4"}
+ │    │    │    ├── ABSENT  → PUBLIC ColumnHidden:{DescID: 108 (table_regional_by_row-), ColumnID: 4294967293 (crdb_internal_origin_id-)}
  │    │    │    ├── ABSENT  → PUBLIC Column:{DescID: 108 (table_regional_by_row-), ColumnID: 4294967292 (crdb_internal_origin_timestamp-)}
  │    │    │    ├── ABSENT  → PUBLIC ColumnName:{DescID: 108 (table_regional_by_row-), Name: "crdb_internal_origin_timestamp", ColumnID: 4294967292 (crdb_internal_origin_timestamp-)}
  │    │    │    ├── ABSENT  → PUBLIC ColumnType:{DescID: 108 (table_regional_by_row-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967292 (crdb_internal_origin_timestamp-), TypeName: "DECIMAL"}
+ │    │    │    ├── ABSENT  → PUBLIC ColumnHidden:{DescID: 108 (table_regional_by_row-), ColumnID: 4294967292 (crdb_internal_origin_timestamp-)}
  │    │    │    ├── ABSENT  → PUBLIC IndexColumn:{DescID: 108 (table_regional_by_row-), ColumnID: 2 (crdb_region-), IndexID: 1 (table_regional_by_row_pkey-)}
  │    │    │    ├── ABSENT  → PUBLIC IndexColumn:{DescID: 108 (table_regional_by_row-), ColumnID: 1 (k-), IndexID: 1 (table_regional_by_row_pkey-)}
  │    │    │    ├── ABSENT  → PUBLIC PrimaryIndex:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-), ConstraintID: 1}
  │    │    │    ├── ABSENT  → PUBLIC IndexPartitioning:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-)}
- │    │    │    └── ABSENT  → PUBLIC IndexName:{DescID: 108 (table_regional_by_row-), Name: "table_regional_by_row_pkey", IndexID: 1 (table_regional_by_row_pkey-)}
+ │    │    │    ├── ABSENT  → PUBLIC IndexName:{DescID: 108 (table_regional_by_row-), Name: "table_regional_by_row_pkey", IndexID: 1 (table_regional_by_row_pkey-)}
+ │    │    │    ├── ABSENT  → PUBLIC TableZoneConfig:{DescID: 108 (table_regional_by_row-), SeqNum: 0}
+ │    │    │    ├── ABSENT  → PUBLIC PartitionZoneConfig:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-), SeqNum: 0, PartitionName: "us-east1"}
+ │    │    │    ├── ABSENT  → PUBLIC PartitionZoneConfig:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-), SeqNum: 0, PartitionName: "us-east2"}
+ │    │    │    ├── ABSENT  → PUBLIC PartitionZoneConfig:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-), SeqNum: 0, PartitionName: "us-east3"}
+ │    │    │    └── ABSENT  → PUBLIC TableSchemaLocked:{DescID: 108 (table_regional_by_row-)}
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
- │         ├── 35 elements transitioning toward ABSENT
- │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 108 (table_regional_by_row-), Name: "table_regional_by_row", ReferencedDescID: 104 (multi_region_test_db)}
+ │         ├── 45 elements transitioning toward ABSENT
+ │         │    ├── PUBLIC → ABSENT  Namespace:{DescID: 108 (table_regional_by_row-), Name: "table_regional_by_row", ReferencedDescID: 104 (multi_region_test_db), IntValue: 105}
  │         │    ├── PUBLIC → ABSENT  Owner:{DescID: 108 (table_regional_by_row-)}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 108 (table_regional_by_row-), Name: "admin"}
  │         │    ├── PUBLIC → ABSENT  UserPrivileges:{DescID: 108 (table_regional_by_row-), Name: "root"}
  │         │    ├── PUBLIC → DROPPED Table:{DescID: 108 (table_regional_by_row-)}
  │         │    ├── PUBLIC → ABSENT  SchemaChild:{DescID: 108 (table_regional_by_row-), ReferencedDescID: 105 (public)}
  │         │    ├── PUBLIC → ABSENT  TablePartitioning:{DescID: 108 (table_regional_by_row-)}
- │         │    ├── PUBLIC → ABSENT  TableLocalityRegionalByRow:{DescID: 108 (table_regional_by_row-)}
+ │         │    ├── PUBLIC → ABSENT  TableLocalityRegionalByRow:{DescID: 108 (table_regional_by_row-), Value: ""}
  │         │    ├── PUBLIC → ABSENT  ColumnFamily:{DescID: 108 (table_regional_by_row-), Name: "primary", ColumnFamilyID: 0 (primary-)}
  │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108 (table_regional_by_row-), ColumnID: 1 (k-)}
  │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108 (table_regional_by_row-), Name: "k", ColumnID: 1 (k-)}
@@ -151,43 +178,59 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108 (table_regional_by_row-), ColumnID: 2 (crdb_region-)}
  │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108 (table_regional_by_row-), Name: "crdb_region", ColumnID: 2 (crdb_region-)}
  │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108 (table_regional_by_row-), ReferencedTypeIDs: [106 (crdb_internal_region), 107 (_crdb_internal_region)], ColumnFamilyID: 0 (primary-), ColumnID: 2 (crdb_region-), TypeName: "public.crdb_internal_region"}
+ │         │    ├── PUBLIC → ABSENT  ColumnHidden:{DescID: 108 (table_regional_by_row-), ColumnID: 2 (crdb_region-)}
  │         │    ├── PUBLIC → ABSENT  ColumnNotNull:{DescID: 108 (table_regional_by_row-), ColumnID: 2 (crdb_region-), IndexID: 0}
  │         │    ├── PUBLIC → ABSENT  ColumnDefaultExpression:{DescID: 108 (table_regional_by_row-), ReferencedTypeIDs: [106 (crdb_internal_region), 107 (_crdb_internal_region)], ColumnID: 2 (crdb_region-), Expr: default_to_database_primary_region(gateway_region())::@100106}
  │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108 (table_regional_by_row-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
  │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108 (table_regional_by_row-), Name: "crdb_internal_mvcc_timestamp", ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
  │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108 (table_regional_by_row-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-), TypeName: "DECIMAL"}
+ │         │    ├── PUBLIC → ABSENT  ColumnHidden:{DescID: 108 (table_regional_by_row-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
  │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108 (table_regional_by_row-), ColumnID: 4294967294 (tableoid-)}
  │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108 (table_regional_by_row-), Name: "tableoid", ColumnID: 4294967294 (tableoid-)}
  │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108 (table_regional_by_row-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-), TypeName: "OID"}
+ │         │    ├── PUBLIC → ABSENT  ColumnHidden:{DescID: 108 (table_regional_by_row-), ColumnID: 4294967294 (tableoid-)}
  │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108 (table_regional_by_row-), ColumnID: 4294967293 (crdb_internal_origin_id-)}
  │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108 (table_regional_by_row-), Name: "crdb_internal_origin_id", ColumnID: 4294967293 (crdb_internal_origin_id-)}
  │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108 (table_regional_by_row-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967293 (crdb_internal_origin_id-), TypeName: "INT4"}
+ │         │    ├── PUBLIC → ABSENT  ColumnHidden:{DescID: 108 (table_regional_by_row-), ColumnID: 4294967293 (crdb_internal_origin_id-)}
  │         │    ├── PUBLIC → ABSENT  Column:{DescID: 108 (table_regional_by_row-), ColumnID: 4294967292 (crdb_internal_origin_timestamp-)}
  │         │    ├── PUBLIC → ABSENT  ColumnName:{DescID: 108 (table_regional_by_row-), Name: "crdb_internal_origin_timestamp", ColumnID: 4294967292 (crdb_internal_origin_timestamp-)}
  │         │    ├── PUBLIC → ABSENT  ColumnType:{DescID: 108 (table_regional_by_row-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967292 (crdb_internal_origin_timestamp-), TypeName: "DECIMAL"}
+ │         │    ├── PUBLIC → ABSENT  ColumnHidden:{DescID: 108 (table_regional_by_row-), ColumnID: 4294967292 (crdb_internal_origin_timestamp-)}
  │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID: 108 (table_regional_by_row-), ColumnID: 2 (crdb_region-), IndexID: 1 (table_regional_by_row_pkey-)}
  │         │    ├── PUBLIC → ABSENT  IndexColumn:{DescID: 108 (table_regional_by_row-), ColumnID: 1 (k-), IndexID: 1 (table_regional_by_row_pkey-)}
  │         │    ├── PUBLIC → ABSENT  PrimaryIndex:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-), ConstraintID: 1}
  │         │    ├── PUBLIC → ABSENT  IndexPartitioning:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-)}
- │         │    └── PUBLIC → ABSENT  IndexName:{DescID: 108 (table_regional_by_row-), Name: "table_regional_by_row_pkey", IndexID: 1 (table_regional_by_row_pkey-)}
- │         └── 50 Mutation operations
+ │         │    ├── PUBLIC → ABSENT  IndexName:{DescID: 108 (table_regional_by_row-), Name: "table_regional_by_row_pkey", IndexID: 1 (table_regional_by_row_pkey-)}
+ │         │    ├── PUBLIC → ABSENT  TableZoneConfig:{DescID: 108 (table_regional_by_row-), SeqNum: 0}
+ │         │    ├── PUBLIC → ABSENT  PartitionZoneConfig:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-), SeqNum: 0, PartitionName: "us-east1"}
+ │         │    ├── PUBLIC → ABSENT  PartitionZoneConfig:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-), SeqNum: 0, PartitionName: "us-east2"}
+ │         │    ├── PUBLIC → ABSENT  PartitionZoneConfig:{DescID: 108 (table_regional_by_row-), IndexID: 1 (table_regional_by_row_pkey-), SeqNum: 0, PartitionName: "us-east3"}
+ │         │    └── PUBLIC → ABSENT  TableSchemaLocked:{DescID: 108 (table_regional_by_row-)}
+ │         └── 57 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":108}
  │              ├── RemoveObjectParent {"ObjectID":108,"ParentSchemaID":105}
  │              ├── NotImplementedForPublicObjects {"DescID":108,"ElementType":"scpb.TablePartit..."}
+ │              ├── UnsetTableLocality {"TableID":108}
  │              ├── MakePublicColumnNotNullValidated {"ColumnID":1,"TableID":108}
  │              ├── MakePublicColumnNotNullValidated {"ColumnID":2,"TableID":108}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967295,"TableID":108}
  │              ├── SetColumnName {"ColumnID":4294967295,"Name":"crdb_internal_co...","TableID":108}
+ │              ├── MakeColumnVisible {"ColumnID":4294967295,"TableID":108}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967294,"TableID":108}
  │              ├── SetColumnName {"ColumnID":4294967294,"Name":"crdb_internal_co...","TableID":108}
+ │              ├── MakeColumnVisible {"ColumnID":4294967294,"TableID":108}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967293,"TableID":108}
  │              ├── SetColumnName {"ColumnID":4294967293,"Name":"crdb_internal_co...","TableID":108}
+ │              ├── MakeColumnVisible {"ColumnID":4294967293,"TableID":108}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967292,"TableID":108}
  │              ├── SetColumnName {"ColumnID":4294967292,"Name":"crdb_internal_co...","TableID":108}
+ │              ├── MakeColumnVisible {"ColumnID":4294967292,"TableID":108}
  │              ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":108}
  │              ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":108}
+ │              ├── SetTableSchemaLocked {"TableID":108}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":104,"DescriptorID":108,"Name":"table_regional_b...","SchemaID":105}}
- │              ├── NotImplementedForPublicObjects {"DescID":108,"ElementType":"scpb.Owner"}
+ │              ├── RemoveOwner {"DescriptorID":108}
  │              ├── RemoveUserPrivileges {"DescriptorID":108,"User":"admin"}
  │              ├── RemoveUserPrivileges {"DescriptorID":108,"User":"root"}
  │              ├── RemoveColumnNotNull {"ColumnID":1,"TableID":108}
@@ -200,6 +243,7 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │              ├── SetColumnName {"ColumnID":1,"Name":"crdb_internal_co...","TableID":108}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":2,"TableID":108}
  │              ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":108}
+ │              ├── MakeColumnVisible {"ColumnID":2,"TableID":108}
  │              ├── RemoveColumnDefaultExpression {"ColumnID":2,"TableID":108}
  │              ├── UpdateTableBackReferencesInTypes {"BackReferencedTableID":108}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967295,"TableID":108}
@@ -220,7 +264,7 @@ Schema change plan for DROP TABLE ‹multi_region_test_db›.‹public›.‹tab
  │              ├── SetJobStateOnDescriptor {"DescriptorID":106,"Initialize":true}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":107,"Initialize":true}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":108,"Initialize":true}
- │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+ │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"Pending: Updatin..."}
  └── PostCommitNonRevertiblePhase
       └── Stage 1 of 1 in PostCommitNonRevertiblePhase
            ├── 3 elements transitioning toward ABSENT

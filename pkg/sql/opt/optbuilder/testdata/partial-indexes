@@ -208,15 +208,16 @@ delete partial_indexes
       ├── columns: partial_index_del1:11 partial_index_del2:12 partial_index_del3:13 partial_index_del4:14 a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10
       ├── scan partial_indexes
       │    ├── columns: a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10
-      │    └── partial index predicates
-      │         ├── partial_indexes_b_idx1: filters
-      │         │    └── c:8 = 'foo'
-      │         ├── partial_indexes_c_idx: filters
-      │         │    └── (a:6 > b:7) AND (c:8 = 'bar')
-      │         ├── b: filters
-      │         │    └── c:8 = 'delete-only'
-      │         └── b: filters
-      │              └── c:8 = 'write-only'
+      │    ├── partial index predicates
+      │    │    ├── partial_indexes_b_idx1: filters
+      │    │    │    └── c:8 = 'foo'
+      │    │    ├── partial_indexes_c_idx: filters
+      │    │    │    └── (a:6 > b:7) AND (c:8 = 'bar')
+      │    │    ├── b: filters
+      │    │    │    └── c:8 = 'delete-only'
+      │    │    └── b: filters
+      │    │         └── c:8 = 'write-only'
+      │    └── flags: avoid-full-scan
       └── projections
            ├── c:8 = 'foo' [as=partial_index_del1:11]
            ├── (a:6 > b:7) AND (c:8 = 'bar') [as=partial_index_del2:12]
@@ -238,13 +239,14 @@ delete ambig
       │    ├── columns: partial_index_put1:7 ambig.partial_index_del1:8!null check1:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
       │    ├── scan ambig
       │    │    ├── columns: partial_index_put1:7 ambig.partial_index_del1:8 check1:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    │    └── partial index predicates
-      │    │         ├── ambig_partial_index_put1_key: filters
-      │    │         │    └── partial_index_put1:7 > 0
-      │    │         ├── ambig_partial_index_del1_key: filters
-      │    │         │    └── ambig.partial_index_del1:8 > 0
-      │    │         └── ambig_partial_index_put1_idx: filters
-      │    │              └── check1:9 > 0
+      │    │    ├── partial index predicates
+      │    │    │    ├── ambig_partial_index_put1_key: filters
+      │    │    │    │    └── partial_index_put1:7 > 0
+      │    │    │    ├── ambig_partial_index_del1_key: filters
+      │    │    │    │    └── ambig.partial_index_del1:8 > 0
+      │    │    │    └── ambig_partial_index_put1_idx: filters
+      │    │    │         └── check1:9 > 0
+      │    │    └── flags: avoid-full-scan
       │    └── filters
       │         └── ambig.partial_index_del1:8 = 5
       └── projections
@@ -270,11 +272,12 @@ delete comp
       │    │    │    │    └── lower(c:10)
       │    │    │    └── e:12
       │    │    │         └── upper(c:10)
-      │    │    └── partial index predicates
-      │    │         ├── comp_b_idx: filters
-      │    │         │    └── lower(c:10) = 'foo'
-      │    │         └── comp_b_idx1: filters
-      │    │              └── e:12 = 'FOO'
+      │    │    ├── partial index predicates
+      │    │    │    ├── comp_b_idx: filters
+      │    │    │    │    └── lower(c:10) = 'foo'
+      │    │    │    └── comp_b_idx1: filters
+      │    │    │         └── e:12 = 'FOO'
+      │    │    └── flags: avoid-full-scan
       │    └── projections
       │         └── lower(c:10) [as=d:11]
       └── projections
@@ -299,15 +302,16 @@ update partial_indexes
       │    ├── columns: a_new:11!null a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10
       │    ├── scan partial_indexes
       │    │    ├── columns: a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10
-      │    │    └── partial index predicates
-      │    │         ├── partial_indexes_b_idx1: filters
-      │    │         │    └── c:8 = 'foo'
-      │    │         ├── partial_indexes_c_idx: filters
-      │    │         │    └── (a:6 > b:7) AND (c:8 = 'bar')
-      │    │         ├── b: filters
-      │    │         │    └── c:8 = 'delete-only'
-      │    │         └── b: filters
-      │    │              └── c:8 = 'write-only'
+      │    │    ├── partial index predicates
+      │    │    │    ├── partial_indexes_b_idx1: filters
+      │    │    │    │    └── c:8 = 'foo'
+      │    │    │    ├── partial_indexes_c_idx: filters
+      │    │    │    │    └── (a:6 > b:7) AND (c:8 = 'bar')
+      │    │    │    ├── b: filters
+      │    │    │    │    └── c:8 = 'delete-only'
+      │    │    │    └── b: filters
+      │    │    │         └── c:8 = 'write-only'
+      │    │    └── flags: avoid-full-scan
       │    └── projections
       │         └── 1 [as=a_new:11]
       └── projections
@@ -337,15 +341,16 @@ update partial_indexes
       │    ├── columns: a_new:11!null a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10
       │    ├── scan partial_indexes
       │    │    ├── columns: a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10
-      │    │    └── partial index predicates
-      │    │         ├── partial_indexes_b_idx1: filters
-      │    │         │    └── c:8 = 'foo'
-      │    │         ├── partial_indexes_c_idx: filters
-      │    │         │    └── (a:6 > b:7) AND (c:8 = 'bar')
-      │    │         ├── b: filters
-      │    │         │    └── c:8 = 'delete-only'
-      │    │         └── b: filters
-      │    │              └── c:8 = 'write-only'
+      │    │    ├── partial index predicates
+      │    │    │    ├── partial_indexes_b_idx1: filters
+      │    │    │    │    └── c:8 = 'foo'
+      │    │    │    ├── partial_indexes_c_idx: filters
+      │    │    │    │    └── (a:6 > b:7) AND (c:8 = 'bar')
+      │    │    │    ├── b: filters
+      │    │    │    │    └── c:8 = 'delete-only'
+      │    │    │    └── b: filters
+      │    │    │         └── c:8 = 'write-only'
+      │    │    └── flags: avoid-full-scan
       │    └── projections
       │         └── a:6 + 5 [as=a_new:11]
       └── projections
@@ -377,15 +382,16 @@ update partial_indexes
       │    │    │    ├── columns: a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10 column1:11!null
       │    │    │    ├── scan partial_indexes
       │    │    │    │    ├── columns: a:6!null b:7 c:8 crdb_internal_mvcc_timestamp:9 tableoid:10
-      │    │    │    │    └── partial index predicates
-      │    │    │    │         ├── partial_indexes_b_idx1: filters
-      │    │    │    │         │    └── c:8 = 'foo'
-      │    │    │    │         ├── partial_indexes_c_idx: filters
-      │    │    │    │         │    └── (a:6 > b:7) AND (c:8 = 'bar')
-      │    │    │    │         ├── b: filters
-      │    │    │    │         │    └── c:8 = 'delete-only'
-      │    │    │    │         └── b: filters
-      │    │    │    │              └── c:8 = 'write-only'
+      │    │    │    │    ├── partial index predicates
+      │    │    │    │    │    ├── partial_indexes_b_idx1: filters
+      │    │    │    │    │    │    └── c:8 = 'foo'
+      │    │    │    │    │    ├── partial_indexes_c_idx: filters
+      │    │    │    │    │    │    └── (a:6 > b:7) AND (c:8 = 'bar')
+      │    │    │    │    │    ├── b: filters
+      │    │    │    │    │    │    └── c:8 = 'delete-only'
+      │    │    │    │    │    └── b: filters
+      │    │    │    │    │         └── c:8 = 'write-only'
+      │    │    │    │    └── flags: avoid-full-scan
       │    │    │    ├── values
       │    │    │    │    ├── columns: column1:11!null
       │    │    │    │    ├── (1,)
@@ -435,13 +441,14 @@ update ambig
       │    │    │    ├── columns: ambig.partial_index_put1:7!null ambig.partial_index_del1:8!null ambig.check1:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
       │    │    │    ├── scan ambig
       │    │    │    │    ├── columns: ambig.partial_index_put1:7 ambig.partial_index_del1:8 ambig.check1:9 rowid:10!null crdb_internal_mvcc_timestamp:11 tableoid:12
-      │    │    │    │    └── partial index predicates
-      │    │    │    │         ├── ambig_partial_index_put1_key: filters
-      │    │    │    │         │    └── ambig.partial_index_put1:7 > 0
-      │    │    │    │         ├── ambig_partial_index_del1_key: filters
-      │    │    │    │         │    └── ambig.partial_index_del1:8 > 0
-      │    │    │    │         └── ambig_partial_index_put1_idx: filters
-      │    │    │    │              └── ambig.check1:9 > 0
+      │    │    │    │    ├── partial index predicates
+      │    │    │    │    │    ├── ambig_partial_index_put1_key: filters
+      │    │    │    │    │    │    └── ambig.partial_index_put1:7 > 0
+      │    │    │    │    │    ├── ambig_partial_index_del1_key: filters
+      │    │    │    │    │    │    └── ambig.partial_index_del1:8 > 0
+      │    │    │    │    │    └── ambig_partial_index_put1_idx: filters
+      │    │    │    │    │         └── ambig.check1:9 > 0
+      │    │    │    │    └── flags: avoid-full-scan
       │    │    │    └── filters
       │    │    │         └── (ambig.partial_index_put1:7 = 10) AND (ambig.partial_index_del1:8 = 20)
       │    │    └── projections
@@ -481,11 +488,12 @@ update comp
       │    │    │    │    │    │    └── lower(c:10)
       │    │    │    │    │    └── e:12
       │    │    │    │    │         └── upper(c:10)
-      │    │    │    │    └── partial index predicates
-      │    │    │    │         ├── comp_b_idx: filters
-      │    │    │    │         │    └── lower(c:10) = 'foo'
-      │    │    │    │         └── comp_b_idx1: filters
-      │    │    │    │              └── e:12 = 'FOO'
+      │    │    │    │    ├── partial index predicates
+      │    │    │    │    │    ├── comp_b_idx: filters
+      │    │    │    │    │    │    └── lower(c:10) = 'foo'
+      │    │    │    │    │    └── comp_b_idx1: filters
+      │    │    │    │    │         └── e:12 = 'FOO'
+      │    │    │    │    └── flags: avoid-full-scan
       │    │    │    └── projections
       │    │    │         └── lower(c:10) [as=d:11]
       │    │    └── projections
@@ -524,11 +532,12 @@ update comp
       │    │    │    │    │    │    └── lower(c:10)
       │    │    │    │    │    └── e:12
       │    │    │    │    │         └── upper(c:10)
-      │    │    │    │    └── partial index predicates
-      │    │    │    │         ├── comp_b_idx: filters
-      │    │    │    │         │    └── lower(c:10) = 'foo'
-      │    │    │    │         └── comp_b_idx1: filters
-      │    │    │    │              └── e:12 = 'FOO'
+      │    │    │    │    ├── partial index predicates
+      │    │    │    │    │    ├── comp_b_idx: filters
+      │    │    │    │    │    │    └── lower(c:10) = 'foo'
+      │    │    │    │    │    └── comp_b_idx1: filters
+      │    │    │    │    │         └── e:12 = 'FOO'
+      │    │    │    │    └── flags: avoid-full-scan
       │    │    │    └── projections
       │    │    │         └── lower(c:10) [as=d:11]
       │    │    └── projections
@@ -582,9 +591,10 @@ project
            │    │    │    │    ├── columns: a:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8 column1:9!null
            │    │    │    │    ├── scan t61520 [as=t]
            │    │    │    │    │    ├── columns: a:5 rowid:6!null crdb_internal_mvcc_timestamp:7 tableoid:8
-           │    │    │    │    │    └── partial index predicates
-           │    │    │    │    │         └── t61520_a_idx: filters
-           │    │    │    │    │              └── a:5 > 0
+           │    │    │    │    │    ├── partial index predicates
+           │    │    │    │    │    │    └── t61520_a_idx: filters
+           │    │    │    │    │    │         └── a:5 > 0
+           │    │    │    │    │    └── flags: avoid-full-scan
            │    │    │    │    ├── values
            │    │    │    │    │    ├── columns: column1:9!null
            │    │    │    │    │    └── (1.0,)
@@ -646,7 +656,7 @@ insert partial_indexes
       │    │    │    │    │    │    │    └── c:11 = 'delete-only'
       │    │    │    │    │    │    └── b: filters
       │    │    │    │    │    │         └── c:11 = 'write-only'
-      │    │    │    │    │    └── flags: disabled not visible index feature
+      │    │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
       │    │    │    │    └── filters
       │    │    │    │         └── column1:6 = a:9
       │    │    │    ├── scan partial_indexes
@@ -660,7 +670,7 @@ insert partial_indexes
       │    │    │    │    │    │    └── c:16 = 'delete-only'
       │    │    │    │    │    └── b: filters
       │    │    │    │    │         └── c:16 = 'write-only'
-      │    │    │    │    └── flags: disabled not visible index feature
+      │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
       │    │    │    └── filters
       │    │    │         ├── column2:7 = b:15
       │    │    │         └── column3:8 = c:16
@@ -723,7 +733,7 @@ upsert partial_indexes
       │    │    │    │    │    │    └── c:11 = 'delete-only'
       │    │    │    │    │    └── b: filters
       │    │    │    │    │         └── c:11 = 'write-only'
-      │    │    │    │    └── flags: disabled not visible index feature
+      │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
       │    │    │    └── filters
       │    │    │         ├── column2:7 = b:10
       │    │    │         └── column3:8 = c:11
@@ -789,7 +799,7 @@ upsert partial_indexes
       │    │    │    │    │    └── c:11 = 'delete-only'
       │    │    │    │    └── b: filters
       │    │    │    │         └── c:11 = 'write-only'
-      │    │    │    └── flags: disabled not visible index feature
+      │    │    │    └── flags: avoid-full-scan disabled not visible index feature
       │    │    └── filters
       │    │         └── column1:6 = a:9
       │    └── projections
@@ -854,7 +864,7 @@ insert comp
       │    │    │    │    │    │    └── lower(c:15) = 'foo'
       │    │    │    │    │    └── comp_b_idx1: filters
       │    │    │    │    │         └── e:17 = 'FOO'
-      │    │    │    │    └── flags: disabled not visible index feature
+      │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
       │    │    │    └── projections
       │    │    │         └── lower(c:15) [as=d:16]
       │    │    └── filters
@@ -937,7 +947,7 @@ upsert comp
       │    │    │    │    │    │    │    │    └── lower(c:15) = 'foo'
       │    │    │    │    │    │    │    └── comp_b_idx1: filters
       │    │    │    │    │    │    │         └── e:17 = 'FOO'
-      │    │    │    │    │    │    └── flags: disabled not visible index feature
+      │    │    │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
       │    │    │    │    │    └── projections
       │    │    │    │    │         └── lower(c:15) [as=d:16]
       │    │    │    │    └── filters
@@ -1021,7 +1031,7 @@ upsert comp
       │    │    │    │    │    │    └── lower(c:15) = 'foo'
       │    │    │    │    │    └── comp_b_idx1: filters
       │    │    │    │    │         └── e:17 = 'FOO'
-      │    │    │    │    └── flags: disabled not visible index feature
+      │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
       │    │    │    └── projections
       │    │    │         └── lower(c:15) [as=d:16]
       │    │    └── filters
@@ -1069,7 +1079,7 @@ insert uniq
       │         │    │    │    │    │    ├── partial index predicates
       │         │    │    │    │    │    │    └── uniq_b_key: filters
       │         │    │    │    │    │    │         └── c:11 = 'foo'
-      │         │    │    │    │    │    └── flags: disabled not visible index feature
+      │         │    │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
       │         │    │    │    │    └── filters
       │         │    │    │    │         └── column1:6 = a:9
       │         │    │    │    ├── select
@@ -1079,7 +1089,7 @@ insert uniq
       │         │    │    │    │    │    ├── partial index predicates
       │         │    │    │    │    │    │    └── uniq_b_key: filters
       │         │    │    │    │    │    │         └── c:16 = 'foo'
-      │         │    │    │    │    │    └── flags: disabled not visible index feature
+      │         │    │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
       │         │    │    │    │    └── filters
       │         │    │    │    │         └── c:16 = 'foo'
       │         │    │    │    └── filters
@@ -1148,7 +1158,7 @@ insert uniq
       │         │    │         │    │    │    │    │    │    │    └── c:11 = 'foo'
       │         │    │         │    │    │    │    │    │    └── u2: filters
       │         │    │         │    │    │    │    │    │         └── c:11 = 'bar'
-      │         │    │         │    │    │    │    │    └── flags: disabled not visible index feature
+      │         │    │         │    │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
       │         │    │         │    │    │    │    └── filters
       │         │    │         │    │    │    │         └── c:11 = 'foo'
       │         │    │         │    │    │    └── filters
@@ -1163,7 +1173,7 @@ insert uniq
       │         │    │         │    │    │    │    │    │    └── c:16 = 'foo'
       │         │    │         │    │    │    │    │    └── u2: filters
       │         │    │         │    │    │    │    │         └── c:16 = 'bar'
-      │         │    │         │    │    │    │    └── flags: disabled not visible index feature
+      │         │    │         │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
       │         │    │         │    │    │    └── filters
       │         │    │         │    │    │         └── c:16 = 'bar'
       │         │    │         │    │    └── filters
@@ -1230,7 +1240,7 @@ insert uniq
       │    │    │    │    │    └── c:11 = 'foo'
       │    │    │    │    └── u2: filters
       │    │    │    │         └── c:11 = 'bar'
-      │    │    │    └── flags: disabled not visible index feature
+      │    │    │    └── flags: avoid-full-scan disabled not visible index feature
       │    │    └── filters
       │    │         └── column2:7 = b:10
       │    └── aggregations
@@ -1280,7 +1290,7 @@ insert uniq
       │    ├── scan uniq@u4,partial
       │    │    ├── columns: b:10!null
       │    │    ├── constraint: /10: [/1 - /1]
-      │    │    └── flags: disabled not visible index feature
+      │    │    └── flags: avoid-full-scan disabled not visible index feature
       │    └── filters (true)
       └── projections
            ├── column3:8 = 'foo' [as=partial_index_put1:15]
@@ -1347,7 +1357,7 @@ upsert uniq
       │    │    │    │    │    │    │    └── c:12 = 'foo'
       │    │    │    │    │    │    └── u2: filters
       │    │    │    │    │    │         └── c:12 = 'bar'
-      │    │    │    │    │    └── flags: disabled not visible index feature
+      │    │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
       │    │    │    │    └── filters
       │    │    │    │         └── c:12 = 'foo'
       │    │    │    └── filters
@@ -1433,7 +1443,7 @@ upsert ambig
       │    │    │    │    │    │    │    │    └── ambig.partial_index_del1:13 > 0
       │    │    │    │    │    │    │    └── ambig_partial_index_put1_idx: filters
       │    │    │    │    │    │    │         └── ambig.check1:14 > 0
-      │    │    │    │    │    │    └── flags: disabled not visible index feature
+      │    │    │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
       │    │    │    │    │    └── filters
       │    │    │    │    │         └── ambig.partial_index_put1:12 > 0
       │    │    │    │    └── filters
@@ -1514,7 +1524,7 @@ insert comp
       │         │    │    │    │    │    │    │    │    └── e:17 = 'FOO'
       │         │    │    │    │    │    │    │    └── u1: filters
       │         │    │    │    │    │    │    │         └── lower(c:15) = 'foo'
-      │         │    │    │    │    │    │    └── flags: disabled not visible index feature
+      │         │    │    │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
       │         │    │    │    │    │    └── projections
       │         │    │    │    │    │         └── lower(c:15) [as=d:16]
       │         │    │    │    │    └── filters
@@ -1537,7 +1547,7 @@ insert comp
       │         │    │    │    │    │    │    │    │    └── e:24 = 'FOO'
       │         │    │    │    │    │    │    │    └── u1: filters
       │         │    │    │    │    │    │    │         └── lower(c:22) = 'foo'
-      │         │    │    │    │    │    │    └── flags: disabled not visible index feature
+      │         │    │    │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
       │         │    │    │    │    │    └── projections
       │         │    │    │    │    │         └── lower(c:22) [as=d:23]
       │         │    │    │    │    └── filters
@@ -1636,7 +1646,7 @@ insert comp
       │         │    │         │    │    │    │    │    │    │    │    └── lower(c:15) = 'foo'
       │         │    │         │    │    │    │    │    │    │    └── u2: filters
       │         │    │         │    │    │    │    │    │    │         └── e:17 = 'bar'
-      │         │    │         │    │    │    │    │    │    └── flags: disabled not visible index feature
+      │         │    │         │    │    │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
       │         │    │         │    │    │    │    │    └── projections
       │         │    │         │    │    │    │    │         └── lower(c:15) [as=d:16]
       │         │    │         │    │    │    │    └── filters
@@ -1664,7 +1674,7 @@ insert comp
       │         │    │         │    │    │    │    │    │    │    └── lower(c:22) = 'foo'
       │         │    │         │    │    │    │    │    │    └── u2: filters
       │         │    │         │    │    │    │    │    │         └── e:24 = 'bar'
-      │         │    │         │    │    │    │    │    └── flags: disabled not visible index feature
+      │         │    │         │    │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
       │         │    │         │    │    │    │    └── projections
       │         │    │         │    │    │    │         └── lower(c:22) [as=d:23]
       │         │    │         │    │    │    └── filters
@@ -1760,7 +1770,7 @@ insert comp
       │    │    │    │    │    │    └── lower(c:15) = 'foo'
       │    │    │    │    │    └── u2: filters
       │    │    │    │    │         └── e:17 = 'bar'
-      │    │    │    │    └── flags: disabled not visible index feature
+      │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
       │    │    │    └── projections
       │    │    │         └── lower(c:15) [as=d:16]
       │    │    └── filters
@@ -1869,7 +1879,7 @@ upsert comp
       │    │    │    │    │    │    │    │    │    └── lower(c:16) = 'foo'
       │    │    │    │    │    │    │    │    └── u2: filters
       │    │    │    │    │    │    │    │         └── e:18 = 'bar'
-      │    │    │    │    │    │    │    └── flags: disabled not visible index feature
+      │    │    │    │    │    │    │    └── flags: avoid-full-scan disabled not visible index feature
       │    │    │    │    │    │    └── projections
       │    │    │    │    │    │         └── lower(c:16) [as=d:17]
       │    │    │    │    │    └── filters

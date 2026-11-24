@@ -17,7 +17,7 @@ import {
   TextInput,
   TextTypes,
 } from "src/components";
-import "./jwtAuthToken.styl";
+import "./jwtAuthToken.scss";
 
 const OIDC_LOGIN_PATH_WITH_JWT = "oidc/v1/login?jwt";
 

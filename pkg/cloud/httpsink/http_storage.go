@@ -8,12 +8,10 @@ package httpsink
 import (
 	"context"
 	"fmt"
-	"hash/fnv"
 	"io"
 	"net/http"
 	"net/url"
 	"path"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
@@ -31,6 +29,7 @@ import (
 func parseHTTPURL(uri *url.URL) (cloudpb.ExternalStorage, error) {
 	conf := cloudpb.ExternalStorage{}
 	conf.Provider = cloudpb.ExternalStorageProvider_http
+	conf.URI = uri.String()
 	conf.HttpPath.BaseUri = uri.String()
 	return conf, nil
 }
@@ -38,9 +37,9 @@ func parseHTTPURL(uri *url.URL) (cloudpb.ExternalStorage, error) {
 type httpStorage struct {
 	base     *url.URL
 	client   *http.Client
-	hosts    []string
 	settings *cluster.Settings
 	ioConf   base.ExternalIODirConfig
+	uri      string // original URI used to construct this storage
 }
 
 var _ cloud.ExternalStorage = &httpStorage{}
@@ -67,7 +66,12 @@ func MakeHTTPStorage(
 	}
 
 	clientName := args.ExternalStorageOptions().ClientName
-	client, err := cloud.MakeHTTPClient(args.Settings, args.MetricsRecorder, "http", base, clientName)
+	client, err := cloud.MakeHTTPClient(args.Settings, args.MetricsRecorder,
+		cloud.HTTPClientConfig{
+			Cloud:  "http",
+			Bucket: "base",
+			Client: clientName,
+		})
 	if err != nil {
 		return nil, err
 	}
@@ -78,9 +82,9 @@ func MakeHTTPStorage(
 	return &httpStorage{
 		base:     uri,
 		client:   client,
-		hosts:    strings.Split(uri.Host, ","),
 		settings: args.Settings,
 		ioConf:   args.IOConf,
+		uri:      dest.URI,
 	}, nil
 }
 
@@ -90,6 +94,7 @@ func (h *httpStorage) Conf() cloudpb.ExternalStorage {
 		HttpPath: cloudpb.ExternalStorage_Http{
 			BaseUri: h.base.String(),
 		},
+		URI: h.uri,
 	}
 }
 
@@ -117,7 +122,7 @@ func (h *httpStorage) openStreamAt(
 			return resp, err
 		}
 
-		log.Errorf(ctx, "HTTP:Req error: err=%s (attempt %d)", err, attempt)
+		log.Dev.Errorf(ctx, "HTTP:Req error: err=%s (attempt %d)", err, attempt)
 
 		if !errors.HasType(err, (*retryableHTTPError)(nil)) {
 			return nil, err
@@ -170,7 +175,9 @@ func (h *httpStorage) Writer(ctx context.Context, basename string) (io.WriteClos
 	}), nil
 }
 
-func (h *httpStorage) List(_ context.Context, _, _ string, _ cloud.ListingFn) error {
+func (h *httpStorage) List(
+	_ context.Context, _ string, _ cloud.ListOptions, _ cloud.ListingFn,
+) error {
 	return errors.Mark(errors.New("http storage does not support listing"), cloud.ErrListingUnsupported)
 }
 
@@ -178,6 +185,9 @@ func (h *httpStorage) Delete(ctx context.Context, basename string) error {
 	return timeutil.RunWithTimeout(ctx, redact.Sprintf("DELETE %s", basename),
 		cloud.Timeout.Get(&h.settings.SV), func(ctx context.Context) error {
 			_, err := h.reqNoBody(ctx, "DELETE", basename, nil)
+			if errors.Is(err, cloud.ErrFileDoesNotExist) {
+				return nil
+			}
 			return err
 		})
 }
@@ -213,20 +223,14 @@ func (h *httpStorage) reqNoBody(
 	return resp, err
 }
 
+func isNotFoundErr(resp *http.Response) bool {
+	return resp != nil && resp.StatusCode == http.StatusNotFound
+}
+
 func (h *httpStorage) req(
 	ctx context.Context, method, file string, body io.Reader, headers map[string]string,
 ) (*http.Response, error) {
 	dest := *h.base
-	if hosts := len(h.hosts); hosts > 1 {
-		if file == "" {
-			return nil, errors.New("cannot use a multi-host HTTP basepath for single file")
-		}
-		hash := fnv.New32a()
-		if _, err := hash.Write([]byte(file)); err != nil {
-			panic(errors.Wrap(err, `"It never returns an error." -- https://golang.org/pkg/hash`))
-		}
-		dest.Host = h.hosts[int(hash.Sum32())%hosts]
-	}
 	dest.Path = path.Join(dest.Path, file)
 	url := dest.String()
 	req, err := http.NewRequest(method, url, body)
@@ -251,22 +255,17 @@ func (h *httpStorage) req(
 
 	switch resp.StatusCode {
 	case 200, 201, 204, 206:
-	// Pass.
+		// Pass.
+		return resp, nil
 	default:
 		body, _ := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
 		err := errors.Errorf("error response from server: %s %q", resp.Status, body)
-		if err != nil && resp.StatusCode == 404 {
-			// nolint:errwrap
-			err = errors.Wrapf(
-				errors.Wrap(cloud.ErrFileDoesNotExist, "http storage file does not exist"),
-				"%v",
-				err.Error(),
-			)
+		if isNotFoundErr(resp) {
+			return nil, cloud.WrapErrFileDoesNotExist(err, "http storage file does not exist")
 		}
 		return nil, err
 	}
-	return resp, nil
 }
 
 func init() {

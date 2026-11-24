@@ -1,34 +1,30 @@
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("@io_bazel_rules_go//go:def.bzl", "go_test")
 
-go_library(
-    name = "privileges",
-    srcs = ["privileges.go"],
-    importpath = "github.com/cockroachdb/cockroach/pkg/cloud/privileges",
-    visibility = ["//visibility:public"],
-    deps = [
-        "//pkg/cloud",
-        "//pkg/cloud/cloudpb",
-        "//pkg/clusterversion",
-        "//pkg/sql",
-        "//pkg/sql/pgwire/pgcode",
-        "//pkg/sql/pgwire/pgerror",
-        "//pkg/sql/privilege",
-        "//pkg/sql/syntheticprivilege",
+go_test(
+    name = "cloudprivilege_test",
+    srcs = [
+        "main_test.go",
+        "privileges_test.go",
     ],
-)
-
-go_library(
-    name = "cloudprivilege",
-    srcs = ["privileges.go"],
-    importpath = "github.com/cockroachdb/cockroach/pkg/cloud/cloudprivilege",
-    visibility = ["//visibility:public"],
+    exec_properties = {
+        "dockerNetwork": "standard",
+    },  # keep
     deps = [
+        "//pkg/backup",
+        "//pkg/base",
         "//pkg/cloud",
-        "//pkg/cloud/cloudpb",
-        "//pkg/sql",
-        "//pkg/sql/pgwire/pgcode",
-        "//pkg/sql/pgwire/pgerror",
-        "//pkg/sql/privilege",
-        "//pkg/sql/syntheticprivilege",
+        "//pkg/cloud/impl:cloudimpl",
+        "//pkg/security/securityassets",
+        "//pkg/security/securitytest",
+        "//pkg/security/username",
+        "//pkg/server",
+        "//pkg/testutils",
+        "//pkg/testutils/serverutils",
+        "//pkg/testutils/sqlutils",
+        "//pkg/testutils/testcluster",
+        "//pkg/util/leaktest",
+        "//pkg/util/log",
+        "//pkg/util/randutil",
+        "@com_github_stretchr_testify//require",
     ],
 )

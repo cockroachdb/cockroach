@@ -489,3 +489,10 @@ optional: y IN (10, 20, 30)
 ----
 lookup expression:
   ((y IN (10, 20, 30)) AND (z > b)) AND (a = x)
+
+lookup-constraints left=(a int, b int, c int) right=(x int, y int, z int) index=(x, y, z)
+x = a AND z IN (100, 200, 300)
+optional: y IN (10, 20, 30)
+----
+lookup expression:
+  ((y IN (10, 20, 30)) AND (z IN (100, 200, 300))) AND (a = x)

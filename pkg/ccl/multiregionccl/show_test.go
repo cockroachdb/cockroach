@@ -8,8 +8,6 @@ package multiregionccl_test
 import (
 	"testing"
 
-	// Blank import partitionccl to install CreatePartitioning hook.
-	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -29,7 +27,7 @@ func TestShowCreateTable(t *testing.T) {
 	a INT8 NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
 	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC)
-) LOCALITY GLOBAL`,
+) LOCALITY GLOBAL;`,
 			Database: "mrdb",
 		},
 		// Check REGIONAL BY TABLE tables are round trippable.
@@ -41,7 +39,7 @@ func TestShowCreateTable(t *testing.T) {
 	a INT8 NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
 	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC)
-) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION`,
+) LOCALITY REGIONAL BY TABLE IN PRIMARY REGION;`,
 			Database: "mrdb",
 		},
 		{
@@ -52,7 +50,7 @@ func TestShowCreateTable(t *testing.T) {
 	a INT8 NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
 	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC)
-) LOCALITY REGIONAL BY TABLE IN "us-west1"`,
+) LOCALITY REGIONAL BY TABLE IN "us-west1";`,
 			Database: "mrdb",
 		},
 		// Check REGIONAL BY ROW tests are round trippable.
@@ -67,7 +65,7 @@ func TestShowCreateTable(t *testing.T) {
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
 	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC),
 	INDEX a_idx (a ASC)
-) LOCALITY REGIONAL BY ROW`,
+) LOCALITY REGIONAL BY ROW;`,
 			Database: "mrdb",
 		},
 		{
@@ -82,7 +80,7 @@ func TestShowCreateTable(t *testing.T) {
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
 	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC),
 	INDEX a_idx (a ASC)
-) LOCALITY REGIONAL BY ROW AS crdb_region_col`,
+) LOCALITY REGIONAL BY ROW AS crdb_region_col;`,
 			Database: "mrdb",
 		},
 		{
@@ -97,7 +95,7 @@ func TestShowCreateTable(t *testing.T) {
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
 	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC),
 	INDEX a_idx (a ASC) WHERE a > 0:::INT8
-) LOCALITY REGIONAL BY ROW AS crdb_region_col`,
+) LOCALITY REGIONAL BY ROW AS crdb_region_col;`,
 			Database: "mrdb",
 		},
 	}

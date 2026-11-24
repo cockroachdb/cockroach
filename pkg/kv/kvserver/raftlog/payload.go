@@ -26,6 +26,12 @@ type EncodeOptions struct {
 	RaftAdmissionMeta *kvflowcontrolpb.RaftAdmissionMeta
 	// When this entry should be encoded using an AC encoding, this specifies
 	// whether a WithACAndPriority encoding should be used.
+	//
+	// NB: this is always set to true in production, since RACv2 encoding is
+	// always used. Since we have not run a migration to remove old Raft log
+	// entries, there is a possibility that RACv1 encoded entries still exist,
+	// and we need to decode them. We leave this option here for tests that need
+	// to both encode and decode RACv1 encoded entries.
 	EncodePriority bool
 }
 

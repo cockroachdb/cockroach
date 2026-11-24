@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/seqexpr"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
@@ -237,6 +237,12 @@ func (tdb *tableDescriptorBuilder) RunRestoreChanges(
 	// Upgrade the declarative schema changer state
 	if scpb.MigrateDescriptorState(version, tdb.getOrInitModifiedDesc().ParentID, tdb.getOrInitModifiedDesc().DeclarativeSchemaChangerState) {
 		tdb.changes.Add(catalog.UpgradedDeclarativeSchemaChangerState)
+	}
+
+	// Repair trigger backrefs for restores from versions before TriggerID was tracked.
+	// TODO(rafi): remove this when we no longer support restoring from v26.1 or older.
+	if repaired := maybeRepairTriggerBackrefs(descLookupFn, tdb.getOrInitModifiedDesc()); repaired {
+		tdb.changes.Add(catalog.RepairedTriggerBackrefs)
 	}
 
 	return err
@@ -514,6 +520,11 @@ func maybeFillInDescriptor(
 	set(catalog.StrippedDanglingSelfBackReferences, maybeStripDanglingSelfBackReferences(builder))
 	set(catalog.FixSecondaryIndexEncodingType, maybeFixSecondaryIndexEncodingType(builder))
 	set(catalog.FixedIncorrectForeignKeyOrigins, maybeFixForeignKeySelfReferences(builder))
+	identityColumnsFixed, err := maybeFixUsesSequencesIDForIdentityColumns(builder)
+	if err != nil {
+		return catalog.PostDeserializationChanges{}, err
+	}
+	set(catalog.FixedUsesSequencesIDForIdentityColumns, identityColumnsFixed)
 	return changes, nil
 }
 
@@ -837,7 +848,10 @@ func maybeUpgradePrimaryIndexFormatVersion(builder *tableDescriptorBuilder) (has
 func maybeUpgradeSecondaryIndexFormatVersion(idx *descpb.IndexDescriptor) (hasChanged bool) {
 	switch idx.Version {
 	case descpb.SecondaryIndexFamilyFormatVersion:
-		if idx.Type == descpb.IndexDescriptor_INVERTED {
+		// If the index type does not support STORING columns, then it's not
+		// encoded differently based on whether column families are in use, so
+		// nothing to do.
+		if !idx.Type.SupportsStoring() {
 			return false
 		}
 	case descpb.EmptyArraysInInvertedIndexesVersion:
@@ -1137,7 +1151,7 @@ func maybeUpgradeSequenceReferenceForTable(
 
 		// Upgrade sequence reference in DEFAULT expression, if any.
 		if col.HasDefault() {
-			hasUpgradedInDefault, err := seqexpr.UpgradeSequenceReferenceInExpr(col.DefaultExpr, usedSequenceIDToNames)
+			hasUpgradedInDefault, err := seqexpr.UpgradeSequenceReferenceInExpr((*string)(col.DefaultExpr), usedSequenceIDToNames)
 			if err != nil {
 				return hasUpgraded, err
 			}
@@ -1146,7 +1160,7 @@ func maybeUpgradeSequenceReferenceForTable(
 
 		// Upgrade sequence reference in ON UPDATE expression, if any.
 		if col.HasOnUpdate() {
-			hasUpgradedInOnUpdate, err := seqexpr.UpgradeSequenceReferenceInExpr(col.OnUpdateExpr, usedSequenceIDToNames)
+			hasUpgradedInOnUpdate, err := seqexpr.UpgradeSequenceReferenceInExpr((*string)(col.OnUpdateExpr), usedSequenceIDToNames)
 			if err != nil {
 				return hasUpgraded, err
 			}
@@ -1180,7 +1194,7 @@ func maybeUpgradeSequenceReferenceForView(
 		if err != nil {
 			return false, expr, err
 		}
-		newExpr, err = parser.ParseExpr(newExprStr)
+		newExpr, err = parserutils.ParseExpr(newExprStr)
 		if err != nil {
 			return false, expr, err
 		}
@@ -1189,7 +1203,7 @@ func maybeUpgradeSequenceReferenceForView(
 		return false, newExpr, err
 	}
 
-	stmt, err := parser.ParseOne(viewDesc.GetViewQuery())
+	stmt, err := parserutils.ParseOne(string(viewDesc.GetViewQuery()))
 	if err != nil {
 		return hasUpgraded, err
 	}
@@ -1199,7 +1213,7 @@ func maybeUpgradeSequenceReferenceForView(
 		return hasUpgraded, err
 	}
 
-	viewDesc.ViewQuery = newStmt.String()
+	viewDesc.ViewQuery = descpb.Statement(newStmt.String())
 
 	return hasUpgraded, err
 }
@@ -1290,4 +1304,138 @@ func maybeFixForeignKeySelfReferences(builder *tableDescriptorBuilder) (wasRepai
 		}
 	}
 	return wasRepaired
+}
+
+// maybeFixUsesSequencesIDForIdentityColumns fixes sequence references for
+// identity / serial column expressions.
+func maybeFixUsesSequencesIDForIdentityColumns(
+	builder *tableDescriptorBuilder,
+) (wasRepaired bool, err error) {
+	tableDesc := builder.getLatestDesc()
+	for idx := range tableDesc.Columns {
+		column := &tableDesc.Columns[idx]
+		if column.GeneratedAsIdentityType == catpb.GeneratedAsIdentityType_NOT_IDENTITY_COLUMN {
+			continue
+		}
+		// If the column doesn't have exactly one sequence reference then something
+		// is wrong.
+		if len(column.UsesSequenceIds) == 1 {
+			continue
+		}
+		if len(column.OwnsSequenceIds) == 0 {
+			// With serial_normalization=rowid, a table definition like
+			// `CREATE TABLE t (a SERIAL GENERATED ALWAYS AS IDENTITY)`
+			// creates an identity column without any backing sequence. If that's the
+			// case, there's no need to add a sequence reference.
+			continue
+		}
+		tableDesc = builder.getOrInitModifiedDesc()
+		column = &tableDesc.Columns[idx]
+		column.UsesSequenceIds = append(column.UsesSequenceIds, column.OwnsSequenceIds[0])
+		wasRepaired = true
+	}
+	return wasRepaired, nil
+}
+
+// maybeRepairTriggerBackrefs repairs trigger backrefs that have TriggerID=0.
+// Previously, trigger dependencies in DependedOnBy had TriggerID=0, making them
+// indistinguishable from view dependencies. This function ensures each trigger
+// backref has the correct TriggerID set.
+//
+// For each backref with TriggerID=0, we look up the referencing table to find
+// all triggers that reference this table, then replace the legacy backrefs with
+// individual backrefs for each trigger. If multiple legacy backrefs from the
+// same table exist (e.g., from two triggers that each created a separate
+// backref), only the first is processed and subsequent duplicates are skipped.
+// When there are multiple matching triggers, we can't determine which column
+// IDs are referenced by each trigger, so we use empty column IDs, which is
+// treated as meaning "depends on the whole table" in the dependency tracking
+// logic. When there is only one matching trigger, the original column IDs are
+// preserved.
+func maybeRepairTriggerBackrefs(
+	descLookupFn func(id descpb.ID) catalog.Descriptor, desc *descpb.TableDescriptor,
+) bool {
+	if len(desc.DependedOnBy) == 0 {
+		return false
+	}
+
+	repaired := false
+	var newDependedOnBy []descpb.TableDescriptor_Reference
+	// Track which referencing tables have already had their legacy backrefs
+	// (TriggerID=0) processed. If multiple legacy backrefs from the same table
+	// exist, we only expand the first one to avoid producing duplicate entries.
+	processedLegacyTables := make(map[descpb.ID]bool)
+
+	for _, backref := range desc.DependedOnBy {
+		// Only process backrefs with TriggerID=0 that might be legacy trigger refs.
+		if backref.TriggerID != 0 {
+			newDependedOnBy = append(newDependedOnBy, backref)
+			continue
+		}
+
+		// Skip duplicate legacy backrefs from the same referencing table.
+		if processedLegacyTables[backref.ID] {
+			repaired = true
+			continue
+		}
+		processedLegacyTables[backref.ID] = true
+
+		// Look up the referencing table to find triggers.
+		refDesc := descLookupFn(backref.ID)
+		if refDesc == nil {
+			newDependedOnBy = append(newDependedOnBy, backref)
+			continue
+		}
+		refTbl, ok := refDesc.(catalog.TableDescriptor)
+		if !ok {
+			newDependedOnBy = append(newDependedOnBy, backref)
+			continue
+		}
+
+		// Find all triggers on the referencing table that reference this table.
+		triggers := refTbl.GetTriggers()
+		var matchingTriggers []descpb.TriggerDescriptor
+		for _, trigger := range triggers {
+			for _, depID := range trigger.DependsOn {
+				if depID == desc.ID {
+					matchingTriggers = append(matchingTriggers, trigger)
+					break
+				}
+			}
+		}
+
+		if len(matchingTriggers) == 0 {
+			// No triggers reference this table - keep the original backref.
+			// This might be a view dependency.
+			newDependedOnBy = append(newDependedOnBy, backref)
+			continue
+		}
+
+		// Replace the legacy backref with one backref per trigger.
+		for _, trigger := range matchingTriggers {
+			newBackref := descpb.TableDescriptor_Reference{
+				ID:        backref.ID,
+				ByID:      backref.ByID,
+				TriggerID: trigger.ID,
+			}
+			if len(matchingTriggers) == 1 {
+				// Only one trigger references this table, so the original
+				// column IDs and index ID are known to be correct for this trigger.
+				newBackref.ColumnIDs = backref.ColumnIDs
+				newBackref.IndexID = backref.IndexID
+			}
+			// When there are multiple matching triggers, we can't determine
+			// which column IDs or index ID belong to which trigger, so we
+			// leave them empty. An empty column IDs slice is treated as
+			// meaning "depends on the whole table" in the dependency
+			// tracking logic, so this is being overly conservative.
+			newDependedOnBy = append(newDependedOnBy, newBackref)
+		}
+		repaired = true
+	}
+
+	if repaired {
+		desc.DependedOnBy = newDependedOnBy
+	}
+	return repaired
 }

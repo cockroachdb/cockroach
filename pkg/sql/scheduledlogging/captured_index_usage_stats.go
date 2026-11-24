@@ -37,7 +37,6 @@ var telemetryCaptureIndexUsageStatsInterval = settings.RegisterDurationSetting(
 	"sql.telemetry.capture_index_usage_stats.interval",
 	"the scheduled interval time between capturing index usage statistics when capturing index usage statistics is enabled",
 	8*time.Hour,
-	settings.NonNegativeDuration,
 )
 
 var telemetryCaptureIndexUsageStatsStatusCheckEnabledInterval = settings.RegisterDurationSetting(
@@ -45,7 +44,6 @@ var telemetryCaptureIndexUsageStatsStatusCheckEnabledInterval = settings.Registe
 	"sql.telemetry.capture_index_usage_stats.check_enabled_interval",
 	"the scheduled interval time between checks to see if index usage statistics has been enabled",
 	10*time.Minute,
-	settings.NonNegativeDuration,
 )
 
 var telemetryCaptureIndexUsageStatsLoggingDelay = settings.RegisterDurationSetting(
@@ -54,7 +52,6 @@ var telemetryCaptureIndexUsageStatsLoggingDelay = settings.RegisterDurationSetti
 	"the time delay between emitting individual index usage stats logs, this is done to "+
 		"mitigate the log-line limit of 10 logs per second on the telemetry pipeline",
 	500*time.Millisecond,
-	settings.NonNegativeDuration,
 )
 
 // CaptureIndexUsageStatsTestingKnobs provides hooks and knobs for unit tests.
@@ -128,6 +125,9 @@ func Start(
 
 func (s *CaptureIndexUsageStatsLoggingScheduler) start(ctx context.Context, stopper *stop.Stopper) {
 	_ = stopper.RunAsyncTask(ctx, "capture-index-usage-stats", func(ctx context.Context) {
+		ctx, cancel := stopper.WithCancelOnQuiesce(ctx)
+		defer cancel()
+
 		// Start the scheduler immediately.
 		timer := time.NewTimer(0 * time.Second)
 		defer timer.Stop()
@@ -144,7 +144,7 @@ func (s *CaptureIndexUsageStatsLoggingScheduler) start(ctx context.Context, stop
 				s.currentCaptureStartTime = timeutil.Now()
 				err := captureIndexUsageStats(ctx, ie, stopper, telemetryCaptureIndexUsageStatsLoggingDelay.Get(&s.st.SV))
 				if err != nil {
-					log.Warningf(ctx, "error capturing index usage stats: %+v", err)
+					log.Dev.Warningf(ctx, "error capturing index usage stats: %+v", err)
 				}
 				if s.knobs != nil && s.knobs.onScheduleComplete != nil {
 					s.knobs.onScheduleComplete()
@@ -160,6 +160,29 @@ func (s *CaptureIndexUsageStatsLoggingScheduler) start(ctx context.Context, stop
 		}
 	})
 }
+
+// CaptureIndexUsageStatsStmt is exported so that it can be used by the
+// benchmarks in the rttanalysis package, without needing to keep the benchmark
+// code in sync with any changes to this query.
+const CaptureIndexUsageStatsStmt = `
+		SELECT
+		 ti.descriptor_name as table_name,
+		 ti.descriptor_id as table_id,
+		 ti.index_name,
+		 ti.index_id,
+		 ti.index_type,
+		 ti.is_unique,
+		 ti.is_inverted,
+		 total_reads,
+		 last_read,
+		 ti.created_at,
+		 ns.nspname::string
+		FROM crdb_internal.index_usage_statistics AS us
+    INNER LOOKUP JOIN crdb_internal.table_indexes AS ti ON us.table_id = ti.descriptor_id
+                                          AND us.index_id = ti.index_id
+    INNER LOOKUP JOIN pg_catalog.pg_class AS c ON ti.descriptor_id::OID = c.oid
+    INNER LOOKUP JOIN pg_catalog.pg_namespace AS ns ON ns.oid = c.relnamespace
+ORDER BY total_reads ASC`
 
 func captureIndexUsageStats(
 	ctx context.Context, ie isql.Executor, stopper *stop.Stopper, loggingDelay time.Duration,
@@ -179,25 +202,6 @@ func captureIndexUsageStats(
 		if databaseName == "system" || databaseName == "defaultdb" || databaseName == "postgres" {
 			continue
 		}
-		const stmt = `
-		SELECT
-		 ti.descriptor_name as table_name,
-		 ti.descriptor_id as table_id,
-		 ti.index_name,
-		 ti.index_id,
-		 ti.index_type,
-		 ti.is_unique,
-		 ti.is_inverted,
-		 total_reads,
-		 last_read,
-		 ti.created_at,
-		 ns.nspname::string
-		FROM crdb_internal.index_usage_statistics AS us
-    JOIN crdb_internal.table_indexes AS ti ON us.index_id = ti.index_id
-                                          AND us.table_id = ti.descriptor_id
-    JOIN pg_catalog.pg_class AS c ON ti.descriptor_id = c.oid
-    JOIN pg_catalog.pg_namespace AS ns ON ns.oid = c.relnamespace
-ORDER BY total_reads ASC`
 
 		it, err := ie.QueryIteratorEx(
 			ctx,
@@ -207,7 +211,7 @@ ORDER BY total_reads ASC`
 				User:     username.NodeUserName(),
 				Database: string(databaseName),
 			},
-			stmt,
+			CaptureIndexUsageStatsStmt,
 		)
 		if err != nil {
 			return err

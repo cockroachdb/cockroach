@@ -67,6 +67,17 @@ func TestMrSystemDatabase(t *testing.T) {
 
 	tDB := sqlutils.MakeSQLRunner(tenantSQL)
 
+	// Disable automatic stats collection to prevent a race condition during the
+	// multi-region system database conversion. The conversion changes the
+	// crdb_region column type from bytes to the crdb_internal_region enum and
+	// deletes old stats, but automatic stats collection can re-insert stats with
+	// the old column type before the async refresh completes, causing
+	// "unsupported comparison: bytes to crdb_internal_region" errors.
+	// Also wait for any in-flight auto stats jobs that were already running before
+	// the setting was disabled.
+	tDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`)
+	tDB.Exec(t, `SHOW JOBS WHEN COMPLETE (SELECT job_id FROM crdb_internal.jobs WHERE job_type = 'AUTO CREATE STATS' AND status = 'running')`)
+
 	// Generate stats for system.sqlinstances. See the "QueryByEnum" test for
 	// details.
 	tDB.Exec(t, `ANALYZE system.sqlliveness;`)
@@ -85,6 +96,8 @@ func TestMrSystemDatabase(t *testing.T) {
 
 	sDB := sqlutils.MakeSQLRunner(systemSQL)
 
+	sDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`)
+	sDB.Exec(t, `SHOW JOBS WHEN COMPLETE (SELECT job_id FROM crdb_internal.jobs WHERE job_type = 'AUTO CREATE STATS' AND status = 'running')`)
 	sDB.Exec(t, `ANALYZE system.sqlliveness;`)
 	sDB.Exec(t, `SET CLUSTER SETTING sql.multiregion.system_database_multiregion.enabled = true`)
 	sDB.Exec(t, `ALTER DATABASE system SET PRIMARY REGION "us-east1"`)
@@ -278,103 +291,16 @@ func TestMrSystemDatabase(t *testing.T) {
 		})
 
 		t.Run("RegionTables", func(t *testing.T) {
-			query := `
-		    SELECT target
-			FROM [SHOW ALL ZONE CONFIGURATIONS]
-			WHERE target LIKE 'TABLE system.public.%'
-			    AND raw_config_sql NOT LIKE '%global_reads = true%'
-			ORDER BY target;
-		`
-			tDB.CheckQueryResults(t, query, [][]string{
-				{"TABLE system.public.eventlog"},
-				{"TABLE system.public.external_connections"},
-				{"TABLE system.public.job_info"},
-				{"TABLE system.public.job_message"},
-				{"TABLE system.public.job_progress"},
-				{"TABLE system.public.job_progress_history"},
-				{"TABLE system.public.job_status"},
-				{"TABLE system.public.jobs"},
-				{"TABLE system.public.join_tokens"},
-				{"TABLE system.public.locations"},
-				{"TABLE system.public.migrations"},
-				{"TABLE system.public.mvcc_statistics"},
-				{"TABLE system.public.protected_ts_meta"},
-				{"TABLE system.public.protected_ts_records"},
-				{"TABLE system.public.rangelog"},
-				{"TABLE system.public.replication_constraint_stats"},
-				{"TABLE system.public.replication_critical_localities"},
-				{"TABLE system.public.replication_stats"},
-				{"TABLE system.public.reports_meta"},
-				{"TABLE system.public.scheduled_jobs"},
-				{"TABLE system.public.span_configurations"},
-				{"TABLE system.public.span_count"},
-				{"TABLE system.public.span_stats_buckets"},
-				{"TABLE system.public.span_stats_samples"},
-				{"TABLE system.public.span_stats_tenant_boundaries"},
-				{"TABLE system.public.span_stats_unique_keys"},
-				{"TABLE system.public.statement_activity"},
-				{"TABLE system.public.statement_bundle_chunks"},
-				{"TABLE system.public.statement_diagnostics"},
-				{"TABLE system.public.statement_diagnostics_requests"},
-				{"TABLE system.public.statement_execution_insights"},
-				{"TABLE system.public.statement_statistics"},
-				{"TABLE system.public.table_metadata"},
-				{"TABLE system.public.task_payloads"},
-				{"TABLE system.public.tenant_settings"},
-				{"TABLE system.public.tenant_tasks"},
-				{"TABLE system.public.tenant_usage"},
-				{"TABLE system.public.tenants"},
-				{"TABLE system.public.transaction_activity"},
-				{"TABLE system.public.transaction_execution_insights"},
-				{"TABLE system.public.transaction_statistics"},
-				{"TABLE system.public.ui"},
-			})
-
-			sDB.CheckQueryResults(t, query, [][]string{
-				{"TABLE system.public.eventlog"},
-				{"TABLE system.public.external_connections"},
-				{"TABLE system.public.job_info"},
-				{"TABLE system.public.job_message"},
-				{"TABLE system.public.job_progress"},
-				{"TABLE system.public.job_progress_history"},
-				{"TABLE system.public.job_status"},
-				{"TABLE system.public.jobs"},
-				{"TABLE system.public.join_tokens"},
-				{"TABLE system.public.lease"},
-				{"TABLE system.public.locations"},
-				{"TABLE system.public.migrations"},
-				{"TABLE system.public.mvcc_statistics"},
-				{"TABLE system.public.protected_ts_meta"},
-				{"TABLE system.public.protected_ts_records"},
-				{"TABLE system.public.rangelog"},
-				{"TABLE system.public.replication_constraint_stats"},
-				{"TABLE system.public.replication_critical_localities"},
-				{"TABLE system.public.replication_stats"},
-				{"TABLE system.public.reports_meta"},
-				{"TABLE system.public.scheduled_jobs"},
-				{"TABLE system.public.span_configurations"},
-				{"TABLE system.public.span_count"},
-				{"TABLE system.public.span_stats_buckets"},
-				{"TABLE system.public.span_stats_samples"},
-				{"TABLE system.public.span_stats_tenant_boundaries"},
-				{"TABLE system.public.span_stats_unique_keys"},
-				{"TABLE system.public.statement_activity"},
-				{"TABLE system.public.statement_bundle_chunks"},
-				{"TABLE system.public.statement_diagnostics"},
-				{"TABLE system.public.statement_diagnostics_requests"},
-				{"TABLE system.public.statement_execution_insights"},
-				{"TABLE system.public.statement_statistics"},
-				{"TABLE system.public.table_metadata"},
-				{"TABLE system.public.task_payloads"},
-				{"TABLE system.public.tenant_settings"},
-				{"TABLE system.public.tenant_tasks"},
-				{"TABLE system.public.tenant_usage"},
-				{"TABLE system.public.tenants"},
-				{"TABLE system.public.transaction_activity"},
-				{"TABLE system.public.transaction_execution_insights"},
-				{"TABLE system.public.transaction_statistics"},
-				{"TABLE system.public.ui"},
-			})
+			// Verify that the locations table is REGIONAL BY TABLE IN PRIMARY
+			// REGION. With PrimaryRegionNotSpecifiedName, these tables inherit
+			// the database-level zone config rather than getting their own
+			// explicit zone config.
+			query := `SELECT create_statement FROM [SHOW CREATE TABLE system.locations]`
+			for _, db := range []*sqlutils.SQLRunner{tDB, sDB} {
+				var createStmt string
+				db.QueryRow(t, query).Scan(&createStmt)
+				require.Contains(t, createStmt, "REGIONAL BY TABLE IN PRIMARY REGION")
+			}
 		})
 
 		t.Run(fmt.Sprintf("QueryByEnum %s", testCase.name), func(t *testing.T) {
@@ -412,13 +338,15 @@ func TestMultiRegionTenantRegions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	skip.UnderDuress(t, "slow test")
+
 	tc, _, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
 		t, 3 /*numServers*/, base.TestingKnobs{},
 	)
 	defer cleanup()
 
 	ctx := context.Background()
-	ten, tSQL := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{
+	tenEast1, tenEast1SQL := serverutils.StartTenant(t, tc.Server(0), base.TestTenantArgs{
 		TenantID: serverutils.TestTenantID(),
 		Locality: roachpb.Locality{
 			Tiers: []roachpb.Tier{
@@ -426,9 +354,13 @@ func TestMultiRegionTenantRegions(t *testing.T) {
 			},
 		},
 	})
-	defer ten.AppStopper().Stop(ctx)
-	defer tSQL.Close()
-	tenSQLDB := sqlutils.MakeSQLRunner(tSQL)
+	defer tenEast1.AppStopper().Stop(ctx)
+	defer tenEast1SQL.Close()
+	tenEast1SQLDB := sqlutils.MakeSQLRunner(tenEast1SQL)
+
+	// Shorten the sqlliveness TTL to speed up the test.
+	tenEast1SQLDB.Exec(t, "SET CLUSTER SETTING server.sqlliveness.ttl = '5s'")
+	tenEast1SQLDB.Exec(t, "SET CLUSTER SETTING server.sqlliveness.heartbeat = '1s'")
 
 	// Update system database with regions.
 	checkRegions := func(t *testing.T, regions ...string) {
@@ -436,48 +368,86 @@ func TestMultiRegionTenantRegions(t *testing.T) {
 		for _, r := range regions {
 			res = append(res, []string{r})
 		}
-		tenSQLDB.CheckQueryResults(t, "SELECT region FROM [SHOW REGIONS] ORDER BY region ASC", res)
+		tenEast1SQLDB.CheckQueryResults(t, "SELECT region FROM [SHOW REGIONS] ORDER BY region ASC", res)
 	}
 
 	// Note that before we've made this a multi-region tenant, because we've
 	// enabled the cluster setting, we can see all the host cluster regions,
 	// and we can create databases using them.
 	checkRegions(t, "us-east1", "us-east2", "us-east3")
-	tenSQLDB.Exec(t, `CREATE DATABASE db PRIMARY REGION "us-east2"`)
-	tenSQLDB.Exec(t, `ALTER DATABASE db ADD REGION "us-east1"`)
-	tenSQLDB.Exec(t, `DROP DATABASE db`)
+	tenEast1SQLDB.Exec(t, `CREATE DATABASE db PRIMARY REGION "us-east2"`)
+	tenEast1SQLDB.Exec(t, `ALTER DATABASE db ADD REGION "us-east1"`)
+	tenEast1SQLDB.Exec(t, `DROP DATABASE db`)
 
 	// Convert the tenant to a multi-region tenant by adding a primary region
 	// to the system database.  Ensure that the regions show up as they are added.
-	tenSQLDB.Exec(t, `ALTER DATABASE system SET PRIMARY REGION "us-east1"`)
+	tenEast1SQLDB.Exec(t, `ALTER DATABASE system SET PRIMARY REGION "us-east1"`)
 	checkRegions(t, "us-east1")
 
 	// Check that regions which are not part of the database cannot be used
 	// until they are added to the system database.
-	tenSQLDB.ExpectErr(t, `region "us-east2" does not exist`,
+	tenEast1SQLDB.ExpectErr(t, `region "us-east2" does not exist`,
 		`CREATE DATABASE db PRIMARY REGION "us-east2"`)
-	tenSQLDB.Exec(t, `CREATE DATABASE db PRIMARY REGION "us-east1"`)
+	tenEast1SQLDB.Exec(t, `CREATE DATABASE db PRIMARY REGION "us-east1"`)
 
-	tenSQLDB.Exec(t, `ALTER DATABASE system ADD REGION "us-east2"`)
+	tenEast1SQLDB.Exec(t, `ALTER DATABASE system ADD REGION "us-east2"`)
 	checkRegions(t, "us-east1", "us-east2")
-	tenSQLDB.ExpectErr(t, `region "us-east3" does not exist`,
+
+	tenEast1SQLDB.ExpectErr(t, `region "us-east3" does not exist`,
 		`CREATE DATABASE db2 PRIMARY REGION "us-east3"`)
-	tenSQLDB.ExpectErr(t, `region "us-east3" does not exist`,
+	tenEast1SQLDB.ExpectErr(t, `region "us-east3" does not exist`,
 		`ALTER DATABASE db ADD REGION "us-east3"`)
-	tenSQLDB.Exec(t, `ALTER DATABASE db ADD REGION "us-east2"`)
+	tenEast1SQLDB.Exec(t, `ALTER DATABASE db ADD REGION "us-east2"`)
+
+	// Start a tenant instance in us-east2. Starting it after adding us-east2 to
+	// the system database ensures that the tenant's sqlliveness session is
+	// tied to us-east2.
+	tenEast2, _ := serverutils.StartTenant(t, tc.Server(1), base.TestTenantArgs{
+		TenantID: serverutils.TestTenantID(),
+		Locality: roachpb.Locality{
+			Tiers: []roachpb.Tier{
+				{Key: "region", Value: "us-east2"},
+			},
+		},
+	})
+	defer tenEast2.AppStopper().Stop(ctx)
+	tenEast1SQLDB.CheckQueryResultsRetry(t,
+		"SELECT count(*) FROM system.sqlliveness WHERE crdb_region = 'us-east2' AND crdb_internal.sql_liveness_is_alive(session_id, true)",
+		[][]string{{"1"}},
+	)
 
 	// Check that a region cannot be dropped from the system database while
 	// it is in use in any database in that tenant.
-	tenSQLDB.ExpectErr(t, `(?s)cannot drop region "us-east2" from the system `+
+	tenEast1SQLDB.ExpectErr(t, `(?s)cannot drop region "us-east2" from the system `+
 		`database while that region is still in use\s+HINT: region is in use by `+
 		`databases: db`,
 		`ALTER DATABASE system DROP REGION "us-east2"`)
-	tenSQLDB.Exec(t, `ALTER DATABASE db DROP REGION "us-east2"`)
-	tenSQLDB.Exec(t, `ALTER DATABASE system DROP REGION "us-east2"`)
+	tenEast1SQLDB.Exec(t, `ALTER DATABASE db DROP REGION "us-east2"`)
 
-	tenSQLDB.Exec(t, `ALTER DATABASE system ADD REGION "us-east3"`)
+	// Check that region cannot be dropped from the system database while
+	// there are live sessions in that region.
+	tenEast1SQLDB.ExpectErr(t, `(?s)cannot drop region "us-east2" from the system `+
+		`database while there are live nodes in that region\s+HINT: You must not `+
+		`have any active sessions that are in this region.`,
+		`ALTER DATABASE system DROP REGION "us-east2"`)
+
+	// Stop the tenant, and make sure it's no longer alive.
+	tenEast2.AppStopper().Stop(ctx)
+	tenEast1SQLDB.CheckQueryResultsRetry(t,
+		"SELECT count(*) FROM system.sqlliveness WHERE crdb_region = 'us-east2' AND crdb_internal.sql_liveness_is_alive(session_id, true)",
+		[][]string{{"0"}},
+	)
+
+	// Drop the region and make sure it is no longer in the enum type.
+	tenEast1SQLDB.Exec(t, `ALTER DATABASE system DROP REGION "us-east2"`)
+	tenEast1SQLDB.CheckQueryResults(t,
+		"USE system; SELECT unnest(values) FROM [SHOW ENUMS] WHERE name = 'crdb_internal_region'",
+		[][]string{{"us-east1"}},
+	)
+
+	tenEast1SQLDB.Exec(t, `ALTER DATABASE system ADD REGION "us-east3"`)
 	checkRegions(t, "us-east1", "us-east3")
-	tenSQLDB.Exec(t, `ALTER DATABASE db ADD REGION "us-east3"`)
+	tenEast1SQLDB.Exec(t, `ALTER DATABASE db ADD REGION "us-east3"`)
 }
 
 func TestTenantStartupWithMultiRegionEnum(t *testing.T) {
@@ -635,4 +605,162 @@ func TestMrSystemDatabaseUpgrade(t *testing.T) {
 		{"ALTER PARTITION \"us-east2\" OF INDEX system.public.lease@primary CONFIGURE ZONE USING\n\tnum_voters = 3,\n\tvoter_constraints = '[+region=us-east2]',\n\tlease_preferences = '[[+region=us-east2]]'"},
 		{"ALTER PARTITION \"us-east3\" OF INDEX system.public.lease@primary CONFIGURE ZONE USING\n\tnum_voters = 3,\n\tvoter_constraints = '[+region=us-east3]',\n\tlease_preferences = '[[+region=us-east3]]'"},
 	})
+}
+
+// TestDropRegionFromUserDatabaseCleansUpSystemTables verifies that
+// dropping a region from a user database doesn't remove  rows
+// from the system.sql_instances table.
+func TestDropRegionFromUserDatabaseCleansUpSystemTables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	makeSettings := func() *cluster.Settings {
+		cs := cluster.MakeTestingClusterSettings()
+		instancestorage.ReclaimLoopInterval.Override(ctx, &cs.SV, 150*time.Millisecond)
+		return cs
+	}
+
+	_, systemSQL, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(t, 3,
+		base.TestingKnobs{},
+		multiregionccltestutils.WithSettings(makeSettings()))
+	defer cleanup()
+
+	sDB := sqlutils.MakeSQLRunner(systemSQL)
+
+	// Create a user database with multiple regions
+	sDB.Exec(t, `CREATE DATABASE userdb PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3" SURVIVE ZONE FAILURE`)
+
+	// Verify sql_instances has data before the operation
+	initialCount := sDB.QueryStr(t, `SELECT count(*) FROM system.sql_instances`)
+	require.NotEmpty(t, initialCount)
+	require.Equal(t, "13", initialCount[0][0], "sql_instances should have data initially")
+
+	// Drop a region from the USER database (not system database)
+	sDB.Exec(t, `ALTER DATABASE userdb DROP REGION "us-east2"`)
+
+	// Verify that dropping a region from a user database doesn't affect system.sql_instances.
+	// The region still exists in the system database, so instances should remain unchanged.
+	finalCount := sDB.QueryStr(t, `SELECT count(*) FROM system.sql_instances`)
+	require.NotEmpty(t, finalCount)
+	// The count should remain the same since we only dropped from userdb, not system.
+	require.Equal(t, initialCount[0][0], finalCount[0][0],
+		"sql_instances count should not change when dropping region from user database")
+}
+
+func TestDropRegionSystemDatabaseMultiTenant(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderDuress(t, "slow test")
+
+	ctx := context.Background()
+
+	makeSettings := func() *cluster.Settings {
+		cs := cluster.MakeTestingClusterSettings()
+		instancestorage.ReclaimLoopInterval.Override(ctx, &cs.SV, 150*time.Millisecond)
+		return cs
+	}
+
+	// Create a multi-region cluster with 3 nodes (one per region).
+	regionNames := []string{"aws-us-east-1", "aws-eu-central-1", "aws-us-east-2"}
+	tc, systemSQL, cleanup := multiregionccltestutils.TestingCreateMultiRegionClusterWithRegionList(
+		t, regionNames, 1, /* serversPerRegion */
+		base.TestingKnobs{},
+		multiregionccltestutils.WithSettings(makeSettings()))
+	defer cleanup()
+
+	sDB := sqlutils.MakeSQLRunner(systemSQL)
+	sDB.Exec(t, `ANALYZE system.sqlliveness`)
+	sDB.Exec(t, `SET CLUSTER SETTING sql.multiregion.system_database_multiregion.enabled = true`)
+
+	// Create a tenant and make its system database multi-region.
+	id, err := roachpb.MakeTenantID(11)
+	require.NoError(t, err)
+
+	connectToTenant := func() (serverutils.ApplicationLayerInterface, *sqlutils.SQLRunner) {
+		var euServer serverutils.TestServerInterface
+		for _, s := range tc.Servers {
+			loc := s.Locality()
+			if region, _ := loc.Find("region"); region == "aws-eu-central-1" {
+				euServer = s
+				break
+			}
+		}
+		require.NotNil(t, euServer)
+
+		// Start the tenant *on that server* with matching locality.
+		tenantArgs := base.TestTenantArgs{
+			Settings: makeSettings(),
+			TenantID: id,                  // your tenant 11
+			Locality: euServer.Locality(), // region=aws-eu-central-1
+		}
+		tenantServer, tenantSQL := serverutils.StartTenant(t, euServer, tenantArgs)
+		return tenantServer, sqlutils.MakeSQLRunner(tenantSQL)
+	}
+	tenantServer, tDB := connectToTenant()
+
+	tDB.Exec(t, `ANALYZE system.sqlliveness`)
+	tDB.Exec(t, `ALTER DATABASE system SET PRIMARY REGION "aws-us-east-1"`)
+	tDB.Exec(t, `ALTER DATABASE system ADD REGION "aws-eu-central-1"`)
+	tDB.Exec(t, `ALTER DATABASE system ADD REGION "aws-us-east-2"`)
+	tDB.CheckQueryResults(t,
+		`USE system; SELECT unnest(values) FROM [SHOW ENUMS] WHERE name = 'crdb_internal_region'`,
+		[][]string{{"aws-eu-central-1"}, {"aws-us-east-1"}, {"aws-us-east-2"}})
+
+	// Change the primary away. This leaves all system tables with REGIONAL BY
+	// TABLE in the old primary. This is key for this scenario as we want to see
+	// that dropping the old primary will repair those tables.
+	tDB.Exec(t, `ALTER DATABASE system SET PRIMARY REGION "aws-eu-central-1"`)
+
+	// Test 1: Dropping a region when there are 3 regions.
+	tDB.Exec(t, `ALTER DATABASE system DROP REGION "aws-us-east-2"`)
+	tDB.CheckQueryResults(t,
+		`SELECT region FROM [SHOW REGIONS FROM DATABASE system] ORDER BY region`,
+		[][]string{{"aws-eu-central-1"}, {"aws-us-east-1"}})
+
+	// Verify that the DROP is blocked while the session is still alive.
+	tDB.ExpectErr(t,
+		`cannot drop region "aws-us-east-1" from the system database while there are live nodes in that region`,
+		`ALTER DATABASE system DROP REGION "aws-us-east-1"`)
+
+	// Release the tenant's sqlliveness session so we can drop its region.
+	// The session was created with crdb_region=aws-us-east-1 (the original
+	// primary) and cannot be moved, so we must delete it. Release() stops
+	// the heartbeat and deletes the session from storage.
+	provider := tenantServer.ExecutorConfig().(sql.ExecutorConfig).SQLLiveness
+	_, err = provider.Release(ctx)
+	require.NoError(t, err)
+
+	// The old SQL connection is no longer usable after releasing the session.
+	// Start a fresh tenant whose session will be in aws-eu-central-1 (the
+	// current primary region).
+	_, tDB = connectToTenant()
+
+	// Wait for any remaining live sessions in the old region to be confirmed
+	// dead across all three tables checked by checkCanDropSystemDatabaseRegion.
+	tDB.CheckQueryResultsRetry(t,
+		`SELECT count(*) FROM system.sqlliveness WHERE crdb_region = 'aws-us-east-1' AND crdb_internal.sql_liveness_is_alive(session_id, true)`,
+		[][]string{{"0"}})
+	tDB.CheckQueryResultsRetry(t,
+		`SELECT count(*) FROM system.sql_instances WHERE crdb_region = 'aws-us-east-1' AND crdb_internal.sql_liveness_is_alive(session_id, true)`,
+		[][]string{{"0"}})
+
+	// Test 2: Prove that you can keep dropping until you are down to one region.
+	tDB.Exec(t, `ALTER DATABASE system DROP REGION "aws-us-east-1"`)
+	tDB.CheckQueryResults(t,
+		`USE system; SELECT unnest(values) FROM [SHOW ENUMS] WHERE name = 'crdb_internal_region'`,
+		[][]string{{"aws-eu-central-1"}})
+	tDB.CheckQueryResults(t,
+		`SELECT count(*) FROM crdb_internal.zones
+		WHERE raw_config_sql LIKE '%aws-us-east%'`,
+		[][]string{{"0"}})
+
+	// Verify no system table locality configs reference dropped regions.
+	tDB.CheckQueryResults(t,
+		`SELECT count(*) FROM crdb_internal.tables
+		WHERE database_name = 'system'
+		  AND locality LIKE '%aws-us-east%'`,
+		[][]string{{"0"}})
 }

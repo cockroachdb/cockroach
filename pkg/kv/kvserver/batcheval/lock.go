@@ -54,7 +54,7 @@ func CollectIntentRows(
 		if err != nil {
 			if errors.HasType(err, (*kvpb.LockConflictError)(nil)) ||
 				errors.HasType(err, (*kvpb.ReadWithinUncertaintyIntervalError)(nil)) {
-				log.Fatalf(ctx, "unexpected %T in CollectIntentRows: %+v", err, err)
+				log.KvExec.Fatalf(ctx, "unexpected %T in CollectIntentRows: %+v", err, err)
 			}
 			return nil, err
 		}
@@ -79,11 +79,11 @@ func readProvisionalVal(
 		if err != nil {
 			return roachpb.KeyValue{}, err
 		}
-		if valRes.Value == nil {
+		if !valRes.Value.IsPresent() {
 			// Intent is a deletion.
 			return roachpb.KeyValue{}, nil
 		}
-		return roachpb.KeyValue{Key: intent.Key, Value: *valRes.Value}, nil
+		return roachpb.KeyValue{Key: intent.Key, Value: valRes.Value.Value}, nil
 	}
 	res, err := storage.MVCCScanAsTxn(
 		ctx, reader, intent.Key, intent.Key.Next(), intent.Txn.WriteTimestamp, intent.Txn,
@@ -92,7 +92,7 @@ func readProvisionalVal(
 		return roachpb.KeyValue{}, err
 	}
 	if len(res.KVs) > 1 {
-		log.Fatalf(ctx, "multiple key-values returned from single-key scan: %+v", res.KVs)
+		log.KvExec.Fatalf(ctx, "multiple key-values returned from single-key scan: %+v", res.KVs)
 	} else if len(res.KVs) == 0 {
 		// Intent is a deletion.
 		return roachpb.KeyValue{}, nil
@@ -137,7 +137,7 @@ func acquireLocksOnKeys(
 	case kvpb.BATCH_RESPONSE:
 		err := storage.MVCCScanDecodeKeyValues(scanRes.KVData, func(key storage.MVCCKey, _ []byte) error {
 			k := copyKey(key.Key)
-			acq, err := acquireLockOnKey(ctx, readWriter, txn, str, dur, k, ms, settings)
+			acq, err := acquireLockOnKey(ctx, readWriter, txn, str, dur, k, ms, settings, false /* 	allowSequenceNumberRegression */)
 			if err != nil {
 				return err
 			}
@@ -153,7 +153,7 @@ func acquireLocksOnKeys(
 	case kvpb.KEY_VALUES:
 		for _, row := range scanRes.KVs {
 			k := copyKey(row.Key)
-			acq, err := acquireLockOnKey(ctx, readWriter, txn, str, dur, k, ms, settings)
+			acq, err := acquireLockOnKey(ctx, readWriter, txn, str, dur, k, ms, settings, false /* 	allowSequenceNumberRegression */)
 			if err != nil {
 				return nil, err
 			}
@@ -198,6 +198,7 @@ func acquireLockOnKey(
 	key roachpb.Key,
 	ms *enginepb.MVCCStats,
 	settings *cluster.Settings,
+	allowSequenceNumberRegression bool,
 ) (roachpb.LockAcquisition, error) {
 	maxLockConflicts := storage.MaxConflictsPerLockConflictError.Get(&settings.SV)
 	targetLockConflictBytes := storage.TargetBytesPerLockConflictError.Get(&settings.SV)
@@ -233,7 +234,8 @@ func acquireLockOnKey(
 		// conflicts with un-contended replicated locks -- we need to do so before
 		// we can acquire our own replicated lock; do that now, and also acquire
 		// the replicated lock if no conflicts are found.
-		if err := storage.MVCCAcquireLock(ctx, readWriter, txn, str, key, ms, maxLockConflicts, targetLockConflictBytes); err != nil {
+		if err := storage.MVCCAcquireLock(ctx, readWriter, &txn.TxnMeta, txn.IgnoredSeqNums, str,
+			key, ms, maxLockConflicts, targetLockConflictBytes, allowSequenceNumberRegression); err != nil {
 			return roachpb.LockAcquisition{}, err
 		}
 	default:

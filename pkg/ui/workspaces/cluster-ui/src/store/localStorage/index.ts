@@ -4,4 +4,3 @@
 // included in the /LICENSE file.
 
 export * from "./localStorage.reducer";
-export * from "./localStorage.saga";

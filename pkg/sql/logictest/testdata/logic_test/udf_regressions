@@ -109,7 +109,6 @@ query T
 EXPLAIN CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS 'SELECT 1'
 ----
 distribution: local
-vectorized: true
 ·
 • create function
 
@@ -198,7 +197,6 @@ query I
 SELECT count(descriptor) FROM system.descriptor WHERE id = $dropped_fn_id;
 ----
 0
-
 
 subtest end
 
@@ -454,7 +452,6 @@ SELECT f_103869('sq_103869')
 ----
 2
 
-
 subtest end
 
 # Regression test for #104927. Correctly resolve table references in UDFs as
@@ -490,7 +487,6 @@ SELECT f104927()
 ----
 [{"i": 1, "s": "foo"}]
 
-
 subtest end
 
 # Regression test for https://github.com/cockroachdb/cockroach/issues/104242.
@@ -520,7 +516,7 @@ CREATE FUNCTION public.func104242()
   LANGUAGE SQL
   SECURITY INVOKER
   AS $$
-  SELECT 1 FROM test.public.tab104242 WHERE NULL IN ();
+  SELECT 1 FROM public.tab104242 WHERE NULL IN ();
 $$
 
 statement ok
@@ -539,11 +535,10 @@ CREATE FUNCTION public.func104242_not_null()
   LANGUAGE SQL
   SECURITY INVOKER
   AS $$
-  SELECT 1 FROM test.public.tab104242 WHERE 'foo':::public.typ104242 IN ();
+  SELECT 1 FROM public.tab104242 WHERE 'foo':::public.typ104242 IN ();
 $$
 
 subtest end
-
 
 # Regression tests for #105259 and #107654. Do not type-check subqueries in UDFs
 # outside optbuilder. Doing so can cause internal errors.
@@ -567,7 +562,6 @@ CREATE FUNCTION f() RETURNS VOID LANGUAGE SQL AS $$
 $$
 
 subtest end
-
 
 # Regression test for #108297. UDFs with VOID return types should succeed when
 # the last statement returns columns of any type.
@@ -642,5 +636,277 @@ query B
 SELECT now() > '2024-06-21 19:04:25.625514+00'
 ----
 false
+
+subtest end
+
+subtest regression_166024
+statement ok
+CREATE TABLE t166024 (
+  id INT8 NOT NULL DEFAULT 0,
+  k VARCHAR(50) NULL,
+  CONSTRAINT t1_pkey PRIMARY KEY (id ASC)
+)
+
+statement ok
+CREATE TABLE u166024 (
+  code VARCHAR(20) NOT NULL,
+  name VARCHAR NULL,
+  active BOOL NULL DEFAULT true,
+  flag BOOL NULL DEFAULT false,
+  CONSTRAINT u166024_pkey PRIMARY KEY (code ASC)
+)
+
+statement ok
+CREATE FUNCTION f161993(p_in JSONB, OUT p_out JSONB)
+  RETURNS JSONB
+  LANGUAGE plpgsql
+  AS $$
+  DECLARE
+  v1 BOOL;
+  v2 BOOL;
+  v3 TIMESTAMP;
+  v4 INT8;
+  v5 JSONB;
+  v6 JSONB;
+  v7 JSONB;
+  v8 VARCHAR;
+  v9 BOOL;
+  v10 VARCHAR;
+  v11 VARCHAR;
+  BEGIN
+  v2 := true;
+  v5 := p_in;
+  v8 := COALESCE(btrim(v5->>'code'), '1')::VARCHAR;
+  v10 := '';
+  v11 := '';
+  -- Block 1
+  IF v2 = true THEN
+    SELECT id FROM t166024 WHERE k = split_part(v10, '|', 5) INTO v4;
+    v2 := true;
+  END IF;
+  -- Block 2
+  IF v4 IN (11, 16, 89) THEN
+    v1 := COALESCE(btrim((v5->>'flag')), 'false')::BOOL;
+  END IF;
+  -- Block 3
+  IF v2 = true THEN
+    v7 := '{}'::JSONB;
+  END IF;
+  -- Block 4
+  IF v2 = true THEN
+    v8 := CASE WHEN EXISTS (SELECT 1 FROM u166024 AS x WHERE (x.code = v8) AND (x.active = true)) THEN v8 ELSE '1' END;
+  END IF;
+  -- Block 5
+  IF v2 = true THEN
+    v6 := '{}'::JSONB;
+  END IF;
+  -- Block 6
+  IF (v2 = true) AND (v9::BOOL = true) THEN
+    SELECT COALESCE(flag, false) FROM u166024 WHERE name = split_part(v11, '|', 4) INTO v9;
+  END IF;
+  -- Block 7
+  IF v2 = true THEN
+    v7 := '{}'::JSONB;
+  END IF;
+  -- Block 8
+  IF v2 = true THEN
+    v8 := CASE WHEN EXISTS (SELECT 1 FROM u166024 AS x WHERE (x.code = v8) AND (x.active = true)) THEN v8 ELSE '1' END;
+  END IF;
+  -- Block 9
+  IF v2 = true THEN
+    v6 := '{}'::JSONB;
+  END IF;
+  -- Block 10
+  IF v2 = true THEN
+    v7 := '{}'::JSONB;
+  END IF;
+  -- Block 11
+  IF v2 = true THEN
+    v8 := CASE WHEN EXISTS (SELECT 1 FROM u166024 AS x WHERE (x.code = v8) AND (x.active = true)) THEN v8 ELSE '1' END;
+  END IF;
+  -- Block 12
+  IF v2 = true THEN
+    v6 := '{}'::JSONB;
+  END IF;
+  -- Block 13
+  IF v2 = true THEN
+    v7 := '{}'::JSONB;
+  END IF;
+  -- Block 14
+  IF v2 = true THEN
+    v8 := CASE WHEN EXISTS (SELECT 1 FROM u166024 AS x WHERE (x.code = v8) AND (x.active = true)) THEN v8 ELSE '1' END;
+  END IF;
+  -- Block 15
+  IF v2 = true THEN
+    v6 := '{}'::JSONB;
+  END IF;
+  -- Block 16
+  IF v2 = true THEN
+    v7 := '{}'::JSONB;
+  END IF;
+  -- Block 17
+  IF v2 = true THEN
+    v8 := CASE WHEN EXISTS (SELECT 1 FROM u166024 AS x WHERE (x.code = v8) AND (x.active = true)) THEN v8 ELSE '1' END;
+  END IF;
+  -- Block 18
+  IF v2 = true THEN
+    v6 := '{}'::JSONB;
+  END IF;
+  -- Block 19
+  IF v2 = true THEN
+    v7 := '{}'::JSONB;
+  END IF;
+  -- Block 20
+  IF v2 = true THEN
+    v8 := CASE WHEN EXISTS (SELECT 1 FROM u166024 AS x WHERE (x.code = v8) AND (x.active = true)) THEN v8 ELSE '1' END;
+  END IF;
+  -- Block 21
+  IF v2 = true THEN
+    v6 := '{}'::JSONB;
+  END IF;
+  -- Block 22
+  IF v2 = true THEN
+    v7 := '{}'::JSONB;
+  END IF;
+  -- Block 23
+  IF v2 = true THEN
+    v8 := CASE WHEN EXISTS (SELECT 1 FROM u166024 AS x WHERE (x.code = v8) AND (x.active = true)) THEN v8 ELSE '1' END;
+  END IF;
+  -- Block 24
+  IF v2 = true THEN
+    v6 := '{}'::JSONB;
+  END IF;
+  -- Block 25
+  IF v2 = true THEN
+    v3 := clock_timestamp();
+    v7 := v7::JSONB || jsonb_build_object('key', split_part(v10, '|', 5));
+    p_out := '{}'::JSONB;
+  END IF;
+  END;
+$$
+
+statement ok
+EXPLAIN ANALYZE (DEBUG) SELECT f161993('{}')
+
+subtest end
+
+subtest regression_62227
+
+# Regression test for #62227. Creating a PL/pgSQL UDF that references a
+# schema-qualified sequence via a REGCLASS cast should not fail with
+# "relation does not exist" at CREATE FUNCTION time.
+statement ok
+CREATE SCHEMA sc_62227;
+CREATE SEQUENCE sc_62227.myseq;
+
+statement ok
+CREATE FUNCTION sc_62227.next_id()
+RETURNS INT
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v INT;
+BEGIN
+  SELECT nextval('sc_62227.myseq'::REGCLASS) INTO v;
+  RETURN v;
+END;
+$$;
+
+query I
+SELECT sc_62227.next_id()
+----
+1
+
+# The same bug affected SQL UDFs, not only PL/pgSQL.
+statement ok
+CREATE FUNCTION sc_62227.next_id_sql()
+RETURNS INT
+LANGUAGE sql
+AS $$
+  SELECT nextval('sc_62227.myseq'::REGCLASS);
+$$;
+
+query I
+SELECT sc_62227.next_id_sql()
+----
+2
+
+# Also test using an OID integer as the source of a ::REGCLASS cast. The OID
+# may change across test runs, so we capture it in a variable first.
+let $seqoid
+SELECT 'sc_62227.myseq'::REGCLASS::OID;
+
+statement ok
+CREATE OR REPLACE FUNCTION sc_62227.next_id()
+RETURNS INT
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v INT;
+BEGIN
+  SELECT nextval($seqoid::REGCLASS) INTO v;
+  RETURN v;
+END;
+$$;
+
+query I
+SELECT sc_62227.next_id()
+----
+3
+
+statement ok
+DROP FUNCTION sc_62227.next_id;
+DROP FUNCTION sc_62227.next_id_sql;
+DROP SEQUENCE sc_62227.myseq;
+DROP SCHEMA sc_62227;
+
+subtest end
+
+subtest regression_170852
+
+# Regression test for #170852. Building a routine whose body contains a
+# NULL-valued REGCLASS expression (e.g. NULL::REGCLASS, or an uninitialized
+# OUT parameter of type REGCLASS) should not fail with an internal error.
+# maybeTrackRegclassDependenciesForViews evaluates constant REGCLASS
+# expressions and previously asserted the result was a *tree.DOid, but a NULL
+# REGCLASS evaluates to tree.DNull.
+statement ok
+CREATE FUNCTION f_170852_null() RETURNS INT LANGUAGE plpgsql AS $$
+DECLARE
+  v INT;
+BEGIN
+  SELECT nextval(NULL::REGCLASS) INTO v;
+  RETURN v;
+END;
+$$;
+
+# An uninitialized OUT parameter of type REGCLASS also evaluates to NULL when
+# the routine body is built.
+statement ok
+CREATE FUNCTION f_170852_out(OUT p0 REGCLASS, IN p1 BOOL) RETURNS REGCLASS
+LANGUAGE plpgsql AS $$
+BEGIN
+  p0 := p0;
+END;
+$$;
+
+# The same NULL handling applies to SQL UDFs.
+statement ok
+CREATE FUNCTION f_170852_sql() RETURNS REGCLASS LANGUAGE sql AS $$
+  SELECT NULL::REGCLASS;
+$$;
+
+# Empty function body should work too.
+statement ok
+CREATE FUNCTION f_170852_empty_body(OUT p0 REGCLASS, IN p1 BOOL) RETURNS REGCLASS
+LANGUAGE plpgsql AS $$
+BEGIN
+END;
+$$;
+
+statement ok
+DROP FUNCTION f_170852_null;
+DROP FUNCTION f_170852_out;
+DROP FUNCTION f_170852_sql;
 
 subtest end

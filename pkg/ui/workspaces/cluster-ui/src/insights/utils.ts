@@ -158,7 +158,7 @@ export function insightType(type: InsightType): string {
     case "DropIndex":
       return "Drop Unused Index";
     case "ReplaceIndex":
-      return "Replace Index";
+      return "Create Replacement Index";
     case "AlterIndex":
       return "Alter Index";
     case "HighContention":

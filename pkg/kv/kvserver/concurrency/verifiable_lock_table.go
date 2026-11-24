@@ -6,8 +6,11 @@
 package concurrency
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // verifiableLockTable is a lock table that is able to verify structural and
@@ -33,7 +36,12 @@ var _ lockTable = &verifyingLockTable{}
 // maybeWrapInVerifyingLockTable wraps the supplied lock table to perform
 // verification for test-only builds.
 func maybeWrapInVerifyingLockTable(lt lockTable) lockTable {
-	if buildutil.CrdbTestBuild {
+	// Verification methods are called while holding mutexes, and the algorithm is
+	// quite slow, so this can falsely trip the deadlock detector. Enable the
+	// checks only in non-deadlock test builds.
+	//
+	// See https://github.com/cockroachdb/cockroach/issues/161496.
+	if buildutil.CrdbTestBuild && !syncutil.DeadlockEnabled {
 		return &verifyingLockTable{lt: lt.(verifiableLockTable)}
 	}
 	return lt
@@ -51,12 +59,18 @@ func (v verifyingLockTable) Clear(disable bool) {
 	v.lt.Clear(disable)
 }
 
+// ClearGE implements the lockTable interface.
+func (v verifyingLockTable) ClearGE(key roachpb.Key) []roachpb.LockAcquisition {
+	defer v.lt.verify()
+	return v.lt.ClearGE(key)
+}
+
 // ScanAndEnqueue implements the lockTable interface.
 func (v verifyingLockTable) ScanAndEnqueue(
-	req Request, guard lockTableGuard,
+	ctx context.Context, req Request, guard lockTableGuard,
 ) (lockTableGuard, *Error) {
 	defer v.lt.verify()
-	return v.lt.ScanAndEnqueue(req, guard)
+	return v.lt.ScanAndEnqueue(ctx, req, guard)
 }
 
 // ScanOptimistic implements the lockTable interface.
@@ -66,37 +80,47 @@ func (v verifyingLockTable) ScanOptimistic(req Request) lockTableGuard {
 }
 
 // Dequeue implements the lockTable interface.
-func (v verifyingLockTable) Dequeue(guard lockTableGuard) {
+func (v verifyingLockTable) Dequeue(ctx context.Context, guard lockTableGuard) {
 	defer v.lt.verify()
-	v.lt.Dequeue(guard)
+	v.lt.Dequeue(ctx, guard)
 }
 
 // AddDiscoveredLock implements the lockTable interface.
 func (v verifyingLockTable) AddDiscoveredLock(
+	ctx context.Context,
 	foundLock *roachpb.Lock,
 	seq roachpb.LeaseSequence,
 	consultTxnStatusCache bool,
 	guard lockTableGuard,
 ) (bool, error) {
 	defer v.lt.verifyKey(foundLock.Key)
-	return v.lt.AddDiscoveredLock(foundLock, seq, consultTxnStatusCache, guard)
+	return v.lt.AddDiscoveredLock(ctx, foundLock, seq, consultTxnStatusCache, guard)
 }
 
 // AcquireLock implements the lockTable interface.
-func (v verifyingLockTable) AcquireLock(acq *roachpb.LockAcquisition) error {
+func (v verifyingLockTable) AcquireLock(ctx context.Context, acq *roachpb.LockAcquisition) error {
 	defer v.lt.verifyKey(acq.Key)
-	return v.lt.AcquireLock(acq)
+	return v.lt.AcquireLock(ctx, acq)
+}
+
+// MarkIneligibleForExport implements the lockTable interface.
+func (v verifyingLockTable) MarkIneligibleForExport(
+	ctx context.Context, acq *roachpb.LockAcquisition,
+) error {
+	return v.lt.MarkIneligibleForExport(ctx, acq)
 }
 
 // UpdateLocks implements the lockTable interface.
-func (v verifyingLockTable) UpdateLocks(up *roachpb.LockUpdate) error {
+func (v verifyingLockTable) UpdateLocks(ctx context.Context, up *roachpb.LockUpdate) error {
 	defer v.lt.verify()
-	return v.lt.UpdateLocks(up)
+	return v.lt.UpdateLocks(ctx, up)
 }
 
 // PushedTransactionUpdated implements the lockTable interface.
-func (v verifyingLockTable) PushedTransactionUpdated(txn *roachpb.Transaction) {
-	v.lt.PushedTransactionUpdated(txn)
+func (v verifyingLockTable) PushedTransactionUpdated(
+	txn *roachpb.Transaction, clockObs roachpb.ObservedTimestamp,
+) {
+	v.lt.PushedTransactionUpdated(txn, clockObs)
 }
 
 // QueryLockTableState implements the lockTable interface.
@@ -104,6 +128,12 @@ func (v verifyingLockTable) QueryLockTableState(
 	span roachpb.Span, opts QueryLockTableOptions,
 ) ([]roachpb.LockStateInfo, QueryLockTableResumeState) {
 	return v.lt.QueryLockTableState(span, opts)
+}
+
+func (v verifyingLockTable) ExportUnreplicatedLocks(
+	span roachpb.Span, exporter func(*roachpb.LockAcquisition) bool,
+) {
+	v.lt.ExportUnreplicatedLocks(span, exporter)
 }
 
 // Metrics implements the lockTable interface.
@@ -116,7 +146,7 @@ func (v verifyingLockTable) String() string {
 	return v.lt.String()
 }
 
-// TestingSetMaxLocks implements the lockTable interface.
-func (v verifyingLockTable) TestingSetMaxLocks(maxKeysLocked int64) {
-	v.lt.TestingSetMaxLocks(maxKeysLocked)
+// SetMaxLockTableSize implements the lockTable interface.
+func (v verifyingLockTable) SetMaxLockTableSize(maxKeysLocked int64) {
+	v.lt.SetMaxLockTableSize(maxKeysLocked)
 }

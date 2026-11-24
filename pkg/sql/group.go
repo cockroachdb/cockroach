@@ -16,11 +16,10 @@ import (
 // A groupNode implements the planNode interface and handles the grouping logic.
 // It "wraps" a planNode which is used to retrieve the ungrouped results.
 type groupNode struct {
+	singleInputPlanNode
+
 	// The schema for this groupNode.
 	columns colinfo.ResultColumns
-
-	// The source node (which returns values that feed into the aggregation).
-	plan planNode
 
 	// Indices of the group by columns in the source plan.
 	groupCols []exec.NodeColumnOrdinal
@@ -41,6 +40,10 @@ type groupNode struct {
 	// estimatedRowCount, when set, is the estimated number of rows that this
 	// groupNode will output.
 	estimatedRowCount uint64
+
+	// estimatedInputRowCount, when set, is the estimated number of rows that
+	// this groupNode will read from its input.
+	estimatedInputRowCount uint64
 }
 
 func (n *groupNode) startExec(params runParams) error {
@@ -56,7 +59,7 @@ func (n *groupNode) Values() tree.Datums {
 }
 
 func (n *groupNode) Close(ctx context.Context) {
-	n.plan.Close(ctx)
+	n.input.Close(ctx)
 }
 
 type aggregateFuncHolder struct {

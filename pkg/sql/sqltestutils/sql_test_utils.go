@@ -17,10 +17,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -66,15 +70,15 @@ func DisableGCTTLStrictEnforcement(t *testing.T, db *gosql.DB) (cleanup func()) 
 // SetShortRangeFeedIntervals is a helper to set the cluster settings
 // pertaining to rangefeeds to short durations. This is helps tests which
 // rely on zone/span configuration changes to propagate.
-func SetShortRangeFeedIntervals(t *testing.T, db sqlutils.DBHandle) {
-	tdb := sqlutils.MakeSQLRunner(db)
+func SetShortRangeFeedIntervals(t *testing.T, srv serverutils.TestServerInterface) {
+	systemDB := sqlutils.MakeSQLRunner(srv.SystemLayer().SQLConn(t))
 	short := "'20ms'"
 	if util.RaceEnabled {
 		short = "'200ms'"
 	}
-	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = `+short)
-	tdb.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = `+short)
-	tdb.Exec(t, `SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = `+short)
+	systemDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = `+short)
+	systemDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = `+short)
+	systemDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.closed_timestamp_refresh_interval = `+short)
 }
 
 // AddDefaultZoneConfig adds an entry for the given id into system.zones.
@@ -158,4 +162,15 @@ func PGXConn(t *testing.T, connURL url.URL) (*pgx.Conn, error) {
 		t.Fatal(err)
 	}
 	return pgx.ConnectConfig(context.Background(), pgxConfig)
+}
+
+// TestingDescsTxn is a convenience function for running a transaction on
+// descriptors when you have a serverutils.ApplicationLayerInterface.
+func TestingDescsTxn(
+	ctx context.Context,
+	s serverutils.ApplicationLayerInterface,
+	f func(ctx context.Context, txn isql.Txn, col *descs.Collection) error,
+) error {
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
+	return sql.DescsTxn(ctx, &execCfg, f)
 }

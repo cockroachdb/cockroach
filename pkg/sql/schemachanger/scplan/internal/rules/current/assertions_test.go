@@ -11,11 +11,14 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/opgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan/internal/rules"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/screl"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/walkutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -38,7 +41,8 @@ func TestRuleAssertions(t *testing.T) {
 		nameParts := strings.Split(fullName, "rules.")
 		shortName := nameParts[len(nameParts)-1]
 		t.Run(shortName, func(t *testing.T) {
-			_ = scpb.ForEachElementType(func(e scpb.Element) error {
+			cv := clusterversion.ClusterVersion{Version: rulesVersionKey.Version()}
+			_ = rules.ForEachElementInActiveVersion(cv, func(e scpb.Element) error {
 				e = nonNilElement(e)
 				if err := fn(e); err != nil {
 					t.Errorf("%T: %+v", e, err)
@@ -92,13 +96,20 @@ func checkToAbsentCategories(e scpb.Element) error {
 		if isSimpleDependent(e) {
 			return nil
 		}
+		// TableSchemaLocked is subject to the two version invariant rule, so that
+		// toggling the lock will have descriptor version bumps in between.
+		// However, it is allowed direct transitions from PUBLIC -> ABSENT /
+		// ABSENT -> PUBLIC.
+		if isTableSchemaLocked(e) {
+			return nil
+		}
 	}
 	return errors.Newf("unexpected transition %s -> %s in direction ABSENT", s0, s1)
 }
 
 // Assert that isWithTypeT covers all elements with embedded TypeTs.
 func checkIsWithTypeT(e scpb.Element) error {
-	return screl.WalkTypes(e, func(t *types.T) error {
+	return walkutil.Walk(e, func(t *types.T) error {
 		if isWithTypeT(e) {
 			return nil
 		}
@@ -109,7 +120,7 @@ func checkIsWithTypeT(e scpb.Element) error {
 // Assert that isWithExpression covers all elements with embedded
 // expressions.
 func checkIsWithExpression(e scpb.Element) error {
-	return screl.WalkExpressions(e, func(t *catpb.Expression) error {
+	return walkutil.Walk(e, func(t *catpb.Expression) error {
 		switch e.(type) {
 		// Ignore elements which have catpb.Expression fields but which don't
 		// have them within an scpb.Expression for valid reasons.
@@ -119,7 +130,7 @@ func checkIsWithExpression(e scpb.Element) error {
 		if isWithExpression(e) {
 			return nil
 		}
-		return errors.New("should verify isWithExpression but doesn't")
+		return errors.Newf("should verify isWithExpression but doesn't: %T", e)
 	})
 }
 

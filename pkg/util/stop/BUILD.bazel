@@ -2,11 +2,16 @@ load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
 
 go_library(
     name = "stop",
-    srcs = ["stopper.go"],
+    srcs = [
+        "handle.go",
+        "stopper.go",
+    ],
     importpath = "github.com/cockroachdb/cockroach/pkg/util/stop",
     visibility = ["//visibility:public"],
     deps = [
         "//pkg/kv/kvpb",
+        "//pkg/util/debugutil",
+        "//pkg/util/growstack",
         "//pkg/util/leaktest",
         "//pkg/util/log",
         "//pkg/util/log/logcrash",
@@ -22,11 +27,13 @@ go_test(
     name = "stop_test",
     size = "small",
     srcs = [
+        "example_test.go",
         "main_test.go",
+        "stopper_bench_test.go",
         "stopper_test.go",
     ],
+    embed = [":stop"],
     deps = [
-        ":stop",
         "//pkg/kv/kvpb",
         "//pkg/testutils",
         "//pkg/util/leaktest",
@@ -34,7 +41,9 @@ go_test(
         "//pkg/util/quotapool",
         "//pkg/util/syncutil",
         "//pkg/util/tracing",
+        "//pkg/util/tracing/tracingpb",
         "@com_github_cockroachdb_errors//:errors",
+        "@com_github_petermattis_goid//:goid",
         "@com_github_stretchr_testify//require",
     ],
 )

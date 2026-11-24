@@ -6,6 +6,8 @@
 package geomfn
 
 import (
+	"sort"
+
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/geo/geopb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -111,6 +113,15 @@ func transformToMVTGeom(
 	if out.Empty() {
 		return geo.Geometry{}, nil
 	}
+
+	// Sort multipoint coordinates by (X, Y) to match PostGIS behavior.
+	// PostGIS sorts multipoints as part of its duplicate removal algorithm
+	// in lwgeom_remove_repeated_points_in_place.
+	out, err = sortMultiPointCoords(out)
+	if err != nil {
+		return geo.Geometry{}, errors.Wrap(err, "failed to sort multipoint coordinates")
+	}
+
 	return out, nil
 }
 
@@ -147,23 +158,31 @@ func clipAndValidateMVTOutput(
 		bbox.LoY = overwriteMinusZero(-float64(buffer))
 		g, err = ClipByRect(g, bbox)
 		if err != nil {
-			return geo.Geometry{}, errors.Wrap(err, "failed to clip geometry")
+			// Clipping can fail on degenerate geometries (e.g., polygons that
+			// collapsed to too few points after snapping). PostGIS's Wagyu clipper
+			// handles these gracefully and returns NULL.
+			return geo.Geometry{}, nil //nolint:returnerrcheck
 		}
 	}
 	g, err = snapToGridAndValidate(g, inputBasicType)
 	if err != nil {
-		return geo.Geometry{}, errors.Wrap(err, "failed to grid and validate")
+		// Snapping and validation can fail on degenerate geometries. PostGIS
+		// returns NULL in these cases.
+		return geo.Geometry{}, nil //nolint:returnerrcheck
 	}
 	outputGt, err := g.AsGeomT()
 	if err != nil {
-		return geo.Geometry{}, errors.Wrap(err, "failed to convert geometry into geom.T")
+		// Degenerate geometries can fail to parse. PostGIS returns NULL.
+		return geo.Geometry{}, nil //nolint:returnerrcheck
 	}
 	outputBasicType, err := getBasicType(outputGt)
 	if err != nil {
-		return geo.Geometry{}, err
+		return geo.Geometry{}, nil //nolint:returnerrcheck
 	}
 	if inputBasicType != outputBasicType {
-		return geo.Geometry{}, errors.New("geometry dropped because of output type change")
+		// The geometry's type changed during clipping/validation (e.g., a polygon
+		// collapsed to a line). PostGIS returns NULL in this case.
+		return geo.Geometry{}, nil
 	}
 	return g, nil
 }
@@ -241,6 +260,53 @@ func snapToGridAndValidateBasicPolygon(
 		return geo.Geometry{}, errors.Wrap(err, "failed to make geometry from geom.T")
 	}
 	return g, nil
+}
+
+// sortMultiPointCoords sorts the coordinates of a MultiPoint geometry by
+// (X, Y) ascending. This matches PostGIS behavior, which sorts multipoints
+// during duplicate removal in lwgeom_remove_repeated_points_in_place.
+// For non-MultiPoint geometries, this is a no-op.
+func sortMultiPointCoords(g geo.Geometry) (geo.Geometry, error) {
+	gt, err := g.AsGeomT()
+	if err != nil {
+		return g, err
+	}
+	mpt, ok := gt.(*geom.MultiPoint)
+	if !ok || mpt.NumPoints() <= 1 {
+		return g, nil
+	}
+
+	// Collect all point coordinates.
+	type pointCoord struct {
+		x, y float64
+	}
+	points := make([]pointCoord, mpt.NumPoints())
+	for i := 0; i < mpt.NumPoints(); i++ {
+		c := mpt.Point(i).Coords()
+		points[i] = pointCoord{c.X(), c.Y()}
+	}
+
+	// Sort by X ascending, then Y ascending.
+	sort.Slice(points, func(i, j int) bool {
+		if points[i].x != points[j].x {
+			return points[i].x < points[j].x
+		}
+		return points[i].y < points[j].y
+	})
+
+	// Build a new MultiPoint with sorted coordinates.
+	layout := mpt.Layout()
+	stride := layout.Stride()
+	flatCoords := make([]float64, 0, len(points)*stride)
+	for _, p := range points {
+		c := make([]float64, stride)
+		c[0] = p.x
+		c[1] = p.y
+		flatCoords = append(flatCoords, c...)
+	}
+	sorted := geom.NewMultiPointFlat(layout, flatCoords).SetSRID(mpt.SRID())
+
+	return geo.MakeGeometryFromGeomT(sorted)
 }
 
 func snapToIntegersGrid(g geo.Geometry) (geo.Geometry, error) {

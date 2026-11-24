@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/errors"
 )
 
 // TestColBatchScanMeta makes sure that the ColBatchScan propagates the leaf
@@ -57,13 +58,15 @@ func TestColBatchScanMeta(t *testing.T) {
 	defer evalCtx.Stop(ctx)
 	var monitorRegistry colexecargs.MonitorRegistry
 	defer monitorRegistry.Close(ctx)
+	var closerRegistry colexecargs.CloserRegistry
+	defer closerRegistry.Close(ctx)
 
 	rootTxn := kv.NewTxn(ctx, s.DB(), s.DistSQLPlanningNodeID())
-	leafInputState, err := rootTxn.GetLeafTxnInputState(ctx)
+	leafInputState, err := rootTxn.GetLeafTxnInputState(ctx, nil /* readsTree */)
 	if err != nil {
 		t.Fatal(err)
 	}
-	leafTxn := kv.NewLeafTxn(ctx, s.DB(), s.DistSQLPlanningNodeID(), leafInputState)
+	leafTxn := kv.NewLeafTxn(ctx, s.DB(), s.DistSQLPlanningNodeID(), leafInputState, nil /* header */)
 	flowCtx := execinfra.FlowCtx{
 		EvalCtx: &evalCtx,
 		Mon:     evalCtx.TestingMon,
@@ -93,15 +96,14 @@ func TestColBatchScanMeta(t *testing.T) {
 	}
 
 	args := &colexecargs.NewColOperatorArgs{
-		Spec:                &spec,
-		StreamingMemAccount: testMemAcc,
-		MonitorRegistry:     &monitorRegistry,
+		Spec:            &spec,
+		MonitorRegistry: &monitorRegistry,
+		CloserRegistry:  &closerRegistry,
 	}
 	res, err := colbuilder.NewColOperator(ctx, &flowCtx, args)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer res.TestCleanupNoError(t)
 	tr := res.Root
 	tr.Init(ctx)
 	meta := res.MetadataSources[0].DrainMeta()
@@ -158,7 +160,11 @@ func BenchmarkColBatchScan(b *testing.B) {
 			evalCtx := eval.MakeTestingEvalContext(s.ClusterSettings())
 			defer evalCtx.Stop(ctx)
 			var monitorRegistry colexecargs.MonitorRegistry
-			defer monitorRegistry.Close(ctx)
+			var closerRegistry colexecargs.CloserRegistry
+			afterEachRun := func() {
+				closerRegistry.BenchmarkReset(ctx)
+				monitorRegistry.BenchmarkReset(ctx)
+			}
 
 			flowCtx := execinfra.FlowCtx{
 				EvalCtx: &evalCtx,
@@ -176,9 +182,9 @@ func BenchmarkColBatchScan(b *testing.B) {
 				// modifies it.
 				spec.Core.TableReader.Spans = []roachpb.Span{span}
 				args := &colexecargs.NewColOperatorArgs{
-					Spec:                &spec,
-					StreamingMemAccount: testMemAcc,
-					MonitorRegistry:     &monitorRegistry,
+					Spec:            &spec,
+					MonitorRegistry: &monitorRegistry,
+					CloserRegistry:  &closerRegistry,
 				}
 				res, err := colbuilder.NewColOperator(ctx, &flowCtx, args)
 				if err != nil {
@@ -188,13 +194,19 @@ func BenchmarkColBatchScan(b *testing.B) {
 				b.StartTimer()
 				tr.Init(ctx)
 				for {
-					bat := tr.Next()
+					bat, meta := tr.Next()
+					if meta != nil {
+						if meta.Metrics != nil {
+							continue
+						}
+						b.Fatal(errors.AssertionFailedf("unexpected meta: %+v", meta))
+					}
 					if bat.Length() == 0 {
 						break
 					}
 				}
 				b.StopTimer()
-				res.TestCleanupNoError(b)
+				afterEachRun()
 			}
 		})
 	}

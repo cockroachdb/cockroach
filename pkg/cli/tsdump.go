@@ -18,40 +18,80 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/cli/clierrorplus"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/ts"
+	"github.com/cockroachdb/cockroach/pkg/ts/tsdumpmeta"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
 	"github.com/cockroachdb/cockroach/pkg/ts/tsutil"
+	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"github.com/klauspost/compress/zstd"
 	"github.com/spf13/cobra"
 )
+
+const tsDumpAppName = catconstants.InternalAppNamePrefix + " cockroach tsdump"
 
 // TODO(knz): this struct belongs elsewhere.
 // See: https://github.com/cockroachdb/cockroach/issues/49509
 var debugTimeSeriesDumpOpts = struct {
-	format       tsDumpFormat
-	from, to     timestampValue
-	clusterLabel string
-	yaml         string
-	targetURL    string
-	ddApiKey     string
-	ddSite       string
-	httpToken    string
+	format                 tsDumpFormat
+	from, to               timestampValue
+	clusterLabel           string
+	targetURL              string
+	ddApiKey               string
+	ddSite                 string
+	httpToken              string
+	clusterID              string
+	zendeskTicket          string
+	organizationName       string
+	userName               string
+	storeToNodeMapYAMLFile string
+	dryRun                 bool
+	noOfUploadWorkers      int
+	retryFailedRequests    bool
+	disableDeltaProcessing bool
+	ddMetricInterval       int64  // interval for datadoginit format only
+	metricsListFile        string // file containing explicit list of metrics to dump
+	nonVerbose             bool   // dump only essential and support metrics
+	output                 string // output file path; empty means stdout
+	encoding               string // encoding for raw format: zstd (empty means no encoding)
 }{
-	format:       tsDumpText,
-	from:         timestampValue{},
-	to:           timestampValue(timeutil.Now().Add(24 * time.Hour)),
-	clusterLabel: "",
-	yaml:         "/tmp/tsdump.yaml",
+	format:                 tsDumpRaw,
+	from:                   timestampValue{},
+	to:                     timestampValue(timeutil.Now().Add(24 * time.Hour)),
+	clusterLabel:           "",
+	retryFailedRequests:    false,
+	disableDeltaProcessing: false, // delta processing enabled by default
+	nonVerbose:             false, // dump all metrics by default
+	encoding:               "",    // default: no encoding
+
+	// default to 10 seconds interval for datadoginit.
+	// This is based on the scrape interval that is currently set accross all managed clusters
+	ddMetricInterval: 10,
 }
+
+// hostNameOverride is used to override the hostname for testing purpose.
+var hostNameOverride string
+
+// datadogSeriesThreshold holds the threshold for the number of series
+// that will be uploaded to Datadog in a single request. We have capped it to 50
+// to avoid hitting the Datadog API limits.
+var datadogSeriesThreshold = 50
+
+const uploadWorkerErrorMessage = "--upload-workers is set to an invalid value." +
+	" please select a value which between 1 and 100."
 
 var debugTimeSeriesDumpCmd = &cobra.Command{
 	Use:   "tsdump",
@@ -77,8 +117,26 @@ will then convert it to the --format requested in the current invocation.
 			convertFile = args[0]
 		}
 
+		var output io.Writer = os.Stdout
+		if debugTimeSeriesDumpOpts.output != "" {
+			f, err := os.Create(debugTimeSeriesDumpOpts.output)
+			if err != nil {
+				return errors.Wrapf(err, "failed to create file %q", debugTimeSeriesDumpOpts.output)
+			}
+			defer f.Close()
+			output = f
+		}
+
+		// Validate encoding flag is only used with raw format
+		if debugTimeSeriesDumpOpts.encoding != "" && debugTimeSeriesDumpOpts.format != tsDumpRaw {
+			return errors.New("--encoding is only supported with --format=raw")
+		}
+		if debugTimeSeriesDumpOpts.encoding != "" && debugTimeSeriesDumpOpts.encoding != "zstd" {
+			return errors.Errorf("invalid value for --encoding: %s (supported: zstd)", debugTimeSeriesDumpOpts.encoding)
+		}
+
 		var w tsWriter
-		switch debugTimeSeriesDumpOpts.format {
+		switch cmd := debugTimeSeriesDumpOpts.format; cmd {
 		case tsDumpRaw:
 			if convertFile != "" {
 				return errors.Errorf("input file is already in raw format")
@@ -86,13 +144,13 @@ will then convert it to the --format requested in the current invocation.
 
 			// Special case, we don't go through the text output code.
 		case tsDumpCSV:
-			w = csvTSWriter{w: csv.NewWriter(os.Stdout)}
+			w = csvTSWriter{w: csv.NewWriter(output)}
 		case tsDumpTSV:
-			cw := csvTSWriter{w: csv.NewWriter(os.Stdout)}
+			cw := csvTSWriter{w: csv.NewWriter(output)}
 			cw.w.Comma = '\t'
 			w = cw
 		case tsDumpText:
-			w = defaultTSWriter{w: os.Stdout}
+			w = defaultTSWriter{w: output}
 		case tsDumpJSON:
 			w = makeJSONWriter(
 				debugTimeSeriesDumpOpts.targetURL,
@@ -100,41 +158,55 @@ will then convert it to the --format requested in the current invocation.
 				10_000_000, /* threshold */
 				doRequest,
 			)
-		case tsDumpDatadog:
-			targetURL, err := getDatadogTargetURL(debugTimeSeriesDumpOpts.ddSite)
-			if err != nil {
-				return err
-			}
-
-			var datadogWriter = makeDatadogWriter(
-				targetURL,
-				false,
-				debugTimeSeriesDumpOpts.ddApiKey,
-				100,
-				doDDRequest,
-			)
-			return datadogWriter.upload(args[0])
-
 		case tsDumpDatadogInit:
-			targetURL, err := getDatadogTargetURL(debugTimeSeriesDumpOpts.ddSite)
+			datadogWriter, err := makeDatadogWriter(
+				debugTimeSeriesDumpOpts.ddSite,
+				true, /* init */
+				debugTimeSeriesDumpOpts.ddApiKey,
+				datadogSeriesThreshold,
+				hostNameOverride,
+				debugTimeSeriesDumpOpts.noOfUploadWorkers,
+				false, /* retryFailedRequests not applicable for init */
+			)
 			if err != nil {
 				return err
 			}
 
-			var datadogWriter = makeDatadogWriter(
-				targetURL,
-				true,
+			return datadogWriter.uploadInitMetrics()
+		case tsDumpDatadog:
+			if len(args) < 1 {
+				return errors.New("no input file provided")
+			}
+
+			if debugTimeSeriesDumpOpts.noOfUploadWorkers <= 0 || debugTimeSeriesDumpOpts.noOfUploadWorkers > 100 {
+				return errors.New(uploadWorkerErrorMessage)
+			}
+
+			datadogWriter, err := makeDatadogWriter(
+				debugTimeSeriesDumpOpts.ddSite,
+				false, /* init */
 				debugTimeSeriesDumpOpts.ddApiKey,
-				100,
-				doDDRequest,
+				datadogSeriesThreshold,
+				hostNameOverride,
+				debugTimeSeriesDumpOpts.noOfUploadWorkers,
+				debugTimeSeriesDumpOpts.retryFailedRequests,
 			)
+			if err != nil {
+				return err
+			}
+
+			// Handle retry of failed requests if flag is set
+			if datadogWriter.isPartialUploadOfFailedRequests {
+				return datadogWriter.retryFailedRequests(args[0])
+			}
+
 			return datadogWriter.upload(args[0])
 		case tsDumpOpenMetrics:
 			if debugTimeSeriesDumpOpts.targetURL != "" {
 				write := beginHttpRequestWithWritePipe(debugTimeSeriesDumpOpts.targetURL)
 				w = makeOpenMetricsWriter(write)
 			} else {
-				w = makeOpenMetricsWriter(os.Stdout)
+				w = makeOpenMetricsWriter(output)
 			}
 		default:
 			return errors.Newf("unknown output format: %v", debugTimeSeriesDumpOpts.format)
@@ -144,15 +216,52 @@ will then convert it to the --format requested in the current invocation.
 		if convertFile == "" {
 			// To enable conversion without a running cluster, we want to skip
 			// connecting to the server when converting an existing tsdump.
-			conn, finish, err := getClientGRPCConn(ctx, serverCfg)
+			if cliCtx.clientOpts.User != username.RootUser {
+				// Error is ignored because PurposeValidation does not return errors.
+				serverCfg.User, _ = username.MakeSQLUsernameFromUserInput(cliCtx.clientOpts.User, username.PurposeValidation)
+			}
+
+			conn, finish, err := newClientConn(ctx, serverCfg)
 			if err != nil {
 				return err
 			}
 			defer finish()
 
-			names, err := serverpb.GetInternalTimeseriesNamesFromServer(ctx, conn)
+			target, _ := addr.AddrWithDefaultLocalhost(serverCfg.AdvertiseAddr)
+			adminClient := conn.NewAdminClient()
+
+			// Validate that --non-verbose and --metrics-list-file are not both specified
+			if debugTimeSeriesDumpOpts.nonVerbose && debugTimeSeriesDumpOpts.metricsListFile != "" {
+				return errors.New("--non-verbose and --metrics-list-file cannot be used together")
+			}
+
+			var names []string
+			var filter []serverpb.MetricsFilterEntry
+			if debugTimeSeriesDumpOpts.metricsListFile != "" {
+				// Use explicit metrics list from file
+				filter, err = readMetricsListFile(debugTimeSeriesDumpOpts.metricsListFile)
+				if err != nil {
+					return err
+				}
+			}
+			var stats serverpb.FilterStats
+			names, stats, err = serverpb.GetInternalTimeseriesNamesFromServer(ctx, adminClient, filter, debugTimeSeriesDumpOpts.nonVerbose)
 			if err != nil {
 				return err
+			}
+			if debugTimeSeriesDumpOpts.metricsListFile != "" {
+				// Print warnings for unmatched literal metric names
+				for _, literal := range stats.UnmatchedLiterals {
+					fmt.Fprintf(os.Stderr, "Warning: metric '%s' not found (check for typos or outdated metric names)\n", literal)
+				}
+				// Print regex match counts for user feedback
+				for pattern, count := range stats.RegexMatchCounts {
+					if count > 0 {
+						fmt.Fprintf(os.Stderr, "Pattern '%s' matched %d metrics\n", pattern, count)
+					} else {
+						fmt.Fprintf(os.Stderr, "Warning: pattern '%s' matched no metrics\n", pattern)
+					}
+				}
 			}
 			req := &tspb.DumpRequest{
 				StartNanos: time.Time(debugTimeSeriesDumpOpts.from).UnixNano(),
@@ -162,23 +271,12 @@ will then convert it to the --format requested in the current invocation.
 					tspb.TimeSeriesResolution_RESOLUTION_30M, tspb.TimeSeriesResolution_RESOLUTION_10S,
 				},
 			}
-			tsClient := tspb.NewTimeSeriesClient(conn)
 
+			tsClient := conn.NewTimeSeriesClient()
 			if debugTimeSeriesDumpOpts.format == tsDumpRaw {
-				stream, err := tsClient.DumpRaw(context.Background(), req)
-				if err != nil {
-					return err
-				}
-
-				// Buffer the writes to os.Stdout since we're going to
-				// be writing potentially a lot of data to it.
-				w := bufio.NewWriterSize(os.Stdout, 1024*1024)
-				if err := tsutil.DumpRawTo(stream, w); err != nil {
-					return err
-				}
-
 				// get the node details so that we can get the SQL port
-				resp, err := serverpb.NewStatusClient(conn).Details(ctx, &serverpb.DetailsRequest{NodeId: "local"})
+				statusClient := conn.NewStatusClient()
+				resp, err := statusClient.Details(ctx, &serverpb.DetailsRequest{NodeId: "local"})
 				if err != nil {
 					return err
 				}
@@ -190,14 +288,49 @@ will then convert it to the --format requested in the current invocation.
 					return err
 				}
 
-				if err = createYAML(ctx); err != nil {
+				// Get store-to-node and node-to-region mappings for metadata.
+				storeToNodeMap, nodeToRegionMap, err := getTSDumpMappings(ctx)
+				if err != nil {
 					return err
 				}
-				return w.Flush()
+
+				// Create metadata header
+				metadata := tsdumpmeta.Metadata{
+					Version:         build.BinaryVersion(),
+					StoreToNodeMap:  storeToNodeMap,
+					NodeToRegionMap: nodeToRegionMap,
+					CreatedAt:       timeutil.Now(),
+				}
+
+				stream, err := tsClient.DumpRaw(context.Background(), req)
+				if err != nil {
+					return errors.Wrapf(err, "connecting to %s", target)
+				}
+
+				// Create the output writer with optional encoding
+				rawWriter, err := makeRawOutputWriter(output, debugTimeSeriesDumpOpts.encoding)
+				if err != nil {
+					return err
+				}
+
+				// Write embedded metadata first
+				if err := tsdumpmeta.Write(rawWriter, metadata); err != nil {
+					return err
+				}
+
+				if err := tsutil.DumpRawTo(stream, rawWriter); err != nil {
+					return err
+				}
+
+				if err := rawWriter.Close(); err != nil {
+					return err
+				}
+
+				return nil
 			}
 			stream, err := tsClient.Dump(context.Background(), req)
 			if err != nil {
-				return err
+				return errors.Wrapf(err, "connecting to %s", target)
 			}
 			recv = stream.Recv
 		} else {
@@ -205,13 +338,29 @@ will then convert it to the --format requested in the current invocation.
 			if err != nil {
 				return err
 			}
+			defer f.Close()
 			type tup struct {
 				data *tspb.TimeSeriesData
 				err  error
 			}
 
 			dec := gob.NewDecoder(f)
-			gob.Register(&roachpb.KeyValue{})
+
+			// Try to read embedded metadata first
+			embeddedMetadata, metadataErr := tsdumpmeta.Read(dec)
+			if metadataErr != nil {
+				// No embedded metadata, restart from beginning
+				if _, err := f.Seek(0, io.SeekStart); err != nil {
+					return err
+				}
+				dec = gob.NewDecoder(f) // Reset decoder to read from beginning
+			} else {
+				fmt.Printf("Found embedded store-to-node mapping with %d entries\n", len(embeddedMetadata.StoreToNodeMap))
+				if len(embeddedMetadata.NodeToRegionMap) > 0 {
+					fmt.Printf("Found embedded node-to-region mapping with %d entries\n", len(embeddedMetadata.NodeToRegionMap))
+				}
+			}
+
 			decodeOne := func() (*tspb.TimeSeriesData, error) {
 				var v roachpb.KeyValue
 				err := dec.Decode(&v)
@@ -238,6 +387,10 @@ will then convert it to the --format requested in the current invocation.
 				for {
 					data, err := decodeOne()
 					ch <- tup{data, err}
+					// Exit the goroutine if we encounter EOF or any error
+					if err != nil {
+						break
+					}
 				}
 			}()
 
@@ -253,22 +406,13 @@ will then convert it to the --format requested in the current invocation.
 				return w.Flush()
 			}
 			if err != nil {
-				return err
+				return errors.Wrapf(err, "connecting to %s", serverCfg.AdvertiseAddr)
 			}
 			if err := w.Emit(data); err != nil {
 				return err
 			}
 		}
 	}),
-}
-
-func getDatadogTargetURL(site string) (string, error) {
-	host, ok := ddSiteToHostMap[site]
-	if !ok {
-		return "", fmt.Errorf("unsupported datadog site '%s'", site)
-	}
-	targetURL := fmt.Sprintf(targetURLFormat, host)
-	return targetURL, nil
 }
 
 func doRequest(req *http.Request) error {
@@ -449,41 +593,147 @@ type openMetricsWriter struct {
 	labels map[string]string
 }
 
-// createYAML generates and writes tsdump.yaml to default /tmp or to a specified path.
-// This file is used for staging the tsdump data into a local database for debugging
-func createYAML(ctx context.Context) (resErr error) {
-	file, err := os.OpenFile(debugTimeSeriesDumpOpts.yaml, os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0666)
-	if err != nil {
-		return err
-	}
-	defer file.Close()
-
-	sqlConn, err := makeSQLClient(ctx, "cockroach tsdump", useSystemDb)
-	if err != nil {
-		return err
-	}
-	defer func() { resErr = errors.CombineErrors(resErr, sqlConn.Close()) }()
-
+// queryRows runs the given query on the provided connection and returns the
+// result rows.
+func queryRows(ctx context.Context, sqlConn clisqlclient.Conn, query string) ([][]string, error) {
 	_, rows, err := sqlExecCtx.RunQuery(
-		ctx,
-		sqlConn,
-		clisqlclient.MakeQuery(`SELECT store_id || ': ' || node_id FROM crdb_internal.kv_store_status`), false)
+		ctx, sqlConn, clisqlclient.MakeQuery(query), false)
+	return rows, err
+}
 
+// makeTSDumpSQLConn opens a SQL connection for tsdump operations. The caller
+// is responsible for closing the returned connection.
+func makeTSDumpSQLConn(ctx context.Context) (clisqlclient.Conn, error) {
+	return makeSQLClient(ctx, tsDumpAppName, useSystemDb)
+}
+
+// getTSDumpMappings retrieves the store-to-node and node-to-region mappings
+// using a single SQL connection. Query failures for either mapping are
+// non-fatal; an empty map is returned with a warning so tsdump can proceed.
+func getTSDumpMappings(
+	ctx context.Context,
+) (storeToNode map[string]string, nodeToRegion map[string]string, _ error) {
+	sqlConn, err := makeTSDumpSQLConn(ctx)
 	if err != nil {
-		return err
+		return nil, nil, err
+	}
+	defer func() {
+		if closeErr := sqlConn.Close(); closeErr != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to close SQL connection: %v\n", closeErr)
+		}
+	}()
+
+	// Both mapping queries are non-fatal so tsdump still works when the
+	// underlying virtual tables are inaccessible.
+	storeToNode, err = getStoreToNodeMapping(ctx, sqlConn)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to get store-to-node mapping: %v\n", err)
+		storeToNode = make(map[string]string)
 	}
 
-	var strStoreNodeID string
+	nodeToRegion, err = getNodeToRegionMapping(ctx, sqlConn)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to get node-to-region mapping: %v\n", err)
+		nodeToRegion = make(map[string]string)
+	}
+
+	return storeToNode, nodeToRegion, nil
+}
+
+// getStoreToNodeMapping retrieves the store-to-node mapping from the database.
+func getStoreToNodeMapping(
+	ctx context.Context, sqlConn clisqlclient.Conn,
+) (map[string]string, error) {
+	rows, err := queryRows(ctx, sqlConn,
+		`SELECT store_id, node_id FROM crdb_internal.kv_store_status`)
+	if err != nil {
+		return nil, err
+	}
+
+	mapping := make(map[string]string)
 	for _, row := range rows {
-		storeNodeID := row
-		strStoreNodeID = strings.Join(storeNodeID, " ")
-		strStoreNodeID += "\n"
-		_, err := file.WriteString(strStoreNodeID)
-		if err != nil {
-			return err
+		if len(row) >= 2 {
+			storeID := strings.TrimSpace(row[0])
+			nodeID := strings.TrimSpace(row[1])
+			mapping[storeID] = nodeID
 		}
 	}
-	return nil
+	return mapping, nil
+}
+
+// getNodeToRegionMapping retrieves the node-to-region mapping from the database
+// by querying gossip_nodes for each node's locality, then anonymizes region
+// names (e.g. "region-1", "region-2") to avoid leaking sensitive locality info.
+func getNodeToRegionMapping(
+	ctx context.Context, sqlConn clisqlclient.Conn,
+) (map[string]string, error) {
+	rows, err := queryRows(ctx, sqlConn,
+		`SELECT node_id, locality FROM crdb_internal.gossip_nodes`)
+	if err != nil {
+		return nil, err
+	}
+
+	return anonymizeNodeRegions(rows), nil
+}
+
+// anonymizeNodeRegions takes rows of [node_id, locality] and produces a mapping
+// from node ID to an anonymized region label. Unique region names are sorted
+// alphabetically and assigned labels "region-1", "region-2", etc. Nodes without
+// a region tier in their locality are omitted from the mapping.
+func anonymizeNodeRegions(rows [][]string) map[string]string {
+	// First pass: collect unique regions.
+	regionSet := make(map[string]struct{})
+	type nodeRegion struct {
+		nodeID string
+		region string
+	}
+	var nodeRegions []nodeRegion
+	for _, row := range rows {
+		if len(row) < 2 {
+			continue
+		}
+		nodeID := strings.TrimSpace(row[0])
+		locality := strings.TrimSpace(row[1])
+		region := extractRegionFromLocality(locality)
+		if region == "" {
+			continue
+		}
+		regionSet[region] = struct{}{}
+		nodeRegions = append(nodeRegions, nodeRegion{nodeID: nodeID, region: region})
+	}
+
+	// Sort unique regions alphabetically for deterministic assignment.
+	uniqueRegions := make([]string, 0, len(regionSet))
+	for r := range regionSet {
+		uniqueRegions = append(uniqueRegions, r)
+	}
+	sort.Strings(uniqueRegions)
+
+	// Build region-name to anonymized-label mapping.
+	regionToAnon := make(map[string]string, len(uniqueRegions))
+	for i, r := range uniqueRegions {
+		regionToAnon[r] = fmt.Sprintf("region-%d", i+1)
+	}
+
+	// Second pass: build node-to-anonymized-region mapping.
+	result := make(map[string]string, len(nodeRegions))
+	for _, nr := range nodeRegions {
+		result[nr.nodeID] = regionToAnon[nr.region]
+	}
+	return result
+}
+
+// extractRegionFromLocality parses a locality string like
+// "region=us-west-1,zone=us-west-1a" and returns the value of the "region"
+// tier, or "" if no region tier is found.
+func extractRegionFromLocality(locality string) string {
+	for _, tier := range strings.Split(locality, ",") {
+		parts := strings.SplitN(strings.TrimSpace(tier), "=", 2)
+		if len(parts) == 2 && parts[0] == "region" {
+			return strings.TrimSpace(parts[1])
+		}
+	}
+	return ""
 }
 
 func makeOpenMetricsWriter(out io.Writer) *openMetricsWriter {
@@ -593,6 +843,115 @@ func (w defaultTSWriter) Emit(data *tspb.TimeSeriesData) error {
 		fmt.Fprintf(w.w, "%v %v\n", d.TimestampNanos, d.Value)
 	}
 	return nil
+}
+
+// regexMetaChars contains characters that indicate a line is a regex pattern
+// rather than a literal metric name. Metric names only contain alphanumeric
+// characters, dots, underscores, and hyphens.
+var regexMetaChars = regexp.MustCompile(`[*+?^$|()\[\]{}\\]`)
+
+// isRegexPattern returns true if the line contains regex metacharacters,
+// indicating it should be treated as a regex pattern rather than a literal name.
+func isRegexPattern(line string) bool {
+	return regexMetaChars.MatchString(line)
+}
+
+// readMetricsListFile reads a file containing metric names or regex patterns (one per line).
+// Lines starting with # are treated as comments and skipped. Inline comments
+// (text after #) are also stripped. Empty lines are skipped. If metric names
+// include cr.node., cr.store., or cockroachdb. prefixes, they are stripped.
+// Lines containing regex metacharacters (*+?^$|()[]{}\) are automatically
+// detected and treated as regex patterns.
+// Duplicate entries are removed. Returns entries without any prefix.
+func readMetricsListFile(filePath string) ([]serverpb.MetricsFilterEntry, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, errors.Wrapf(err, "failed to open metrics list file %s", filePath)
+	}
+	defer file.Close()
+
+	seen := make(map[string]struct{})
+	var entries []serverpb.MetricsFilterEntry
+	scanner := bufio.NewScanner(file)
+	lineNum := 0
+	for scanner.Scan() {
+		lineNum++
+		line := scanner.Text()
+
+		// Strip inline comments (anything after #)
+		if idx := strings.Index(line, "#"); idx >= 0 {
+			line = line[:idx]
+		}
+		line = strings.TrimSpace(line)
+
+		// Skip empty lines
+		if line == "" {
+			continue
+		}
+
+		// Auto-detect if this is a regex pattern based on metacharacters
+		isRegex := isRegexPattern(line)
+		if isRegex {
+			// Validate the regex - if invalid, warn and skip this line
+			if _, err := regexp.Compile(line); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: invalid regex pattern on line %d, skipping: %s (%v)\n", lineNum, line, err)
+				continue
+			}
+		} else {
+			// Strip common prefixes if present (cr.node., cr.store., cockroachdb.)
+			line = strings.TrimPrefix(line, "cr.node.")
+			line = strings.TrimPrefix(line, "cr.store.")
+			line = strings.TrimPrefix(line, "cockroachdb.")
+		}
+
+		// Skip duplicates
+		if _, exists := seen[line]; exists {
+			continue
+		}
+		seen[line] = struct{}{}
+		entries = append(entries, serverpb.MetricsFilterEntry{Value: line, IsRegex: isRegex})
+	}
+	if err := scanner.Err(); err != nil {
+		return nil, errors.Wrapf(err, "error reading metrics list file %s", filePath)
+	}
+	if len(entries) == 0 {
+		return nil, errors.Newf("metrics list file %s contains no valid metric names or patterns", filePath)
+	}
+	return entries, nil
+}
+
+// rawOutputWriter wraps a writer with a buffer that needs flushing on close.
+type rawOutputWriter struct {
+	io.Writer               // embedded - Write() delegated automatically
+	buf       *bufio.Writer // buffer to flush
+	encoder   io.Closer     // encoder to close (may be nil)
+}
+
+// Close closes the encoder (if any) and flushes the buffer.
+func (w *rawOutputWriter) Close() error {
+	if w.encoder != nil {
+		if err := w.encoder.Close(); err != nil {
+			return err
+		}
+	}
+	return w.buf.Flush()
+}
+
+// makeRawOutputWriter creates a buffered writer with optional encoding.
+func makeRawOutputWriter(output io.Writer, encoding string) (*rawOutputWriter, error) {
+	buf := bufio.NewWriterSize(output, 1024*1024)
+
+	if encoding == "zstd" {
+		encoder, err := zstd.NewWriter(buf)
+		if err != nil {
+			return nil, errors.Wrap(err, "creating zstd encoder")
+		}
+		// encoder is used as a Writer and a Closer because it implements both io.Writer and io.Closer
+		return &rawOutputWriter{Writer: encoder, buf: buf, encoder: encoder}, nil
+	}
+
+	// buf is both the Writer and the buffer to flush
+	return &rawOutputWriter{Writer: buf, buf: buf}, nil
 }
 
 type tsDumpFormat int

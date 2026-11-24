@@ -26,6 +26,9 @@ type DeferredMutationVisitor interface {
 	DeleteSchedule(context.Context, DeleteSchedule) error
 	RefreshStats(context.Context, RefreshStats) error
 	MaybeAddSplitForIndex(context.Context, MaybeAddSplitForIndex) error
+	UpdateTTLScheduleMetadata(context.Context, UpdateTTLScheduleMetadata) error
+	UpdateTTLScheduleCron(context.Context, UpdateTTLScheduleCron) error
+	CreateRowLevelTTLSchedule(context.Context, CreateRowLevelTTLSchedule) error
 }
 
 // Visit is part of the DeferredMutationOp interface.
@@ -71,4 +74,19 @@ func (op RefreshStats) Visit(ctx context.Context, v DeferredMutationVisitor) err
 // Visit is part of the DeferredMutationOp interface.
 func (op MaybeAddSplitForIndex) Visit(ctx context.Context, v DeferredMutationVisitor) error {
 	return v.MaybeAddSplitForIndex(ctx, op)
+}
+
+// Visit is part of the DeferredMutationOp interface.
+func (op UpdateTTLScheduleMetadata) Visit(ctx context.Context, v DeferredMutationVisitor) error {
+	return v.UpdateTTLScheduleMetadata(ctx, op)
+}
+
+// Visit is part of the DeferredMutationOp interface.
+func (op UpdateTTLScheduleCron) Visit(ctx context.Context, v DeferredMutationVisitor) error {
+	return v.UpdateTTLScheduleCron(ctx, op)
+}
+
+// Visit is part of the DeferredMutationOp interface.
+func (op CreateRowLevelTTLSchedule) Visit(ctx context.Context, v DeferredMutationVisitor) error {
+	return v.CreateRowLevelTTLSchedule(ctx, op)
 }

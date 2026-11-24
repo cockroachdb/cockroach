@@ -7,15 +7,17 @@ package schematelemetry
 
 import (
 	"context"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv/followerreads"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -63,6 +65,31 @@ func (t schemaTelemetryResumer) Resume(ctx context.Context, execCtx interface{})
 	if k := p.ExecCfg().SchemaTelemetryTestingKnobs; k != nil {
 		knobs = *k
 	}
+	// Notify the stats refresher to update the system.descriptors table stats,
+	// and update the object count in schema changer metrics.
+	err := p.ExecCfg().InternalDB.DescsTxn(ctx, func(ctx context.Context, txn descs.Txn) error {
+		desc, err := txn.Descriptors().ByIDWithLeased(txn.KV()).Get().Table(ctx, keys.DescriptorTableID)
+		if err != nil {
+			return err
+		}
+		p.ExecCfg().StatsRefresher.NotifyMutation(ctx, desc, math.MaxInt64 /* rowCount */)
+
+		// Note: This won't be perfectly up-to-date, but it will make sure the
+		// metric gets updated periodically. It also gets updated after every
+		// schema change.
+		tableStats, err := p.ExecCfg().TableStatsCache.GetFreshTableStats(ctx, desc, nil /* typeResolver */)
+		if err != nil {
+			return err
+		}
+		if len(tableStats) > 0 {
+			// Use the row count from the most recent statistic.
+			p.ExecCfg().SchemaChangerMetrics.ObjectCount.Update(int64(tableStats[0].RowCount))
+		}
+		return nil
+	})
+	if err != nil {
+		return errors.Wrap(err, "failed to notify stats refresher to update system.descriptors table stats")
+	}
 
 	// Outside of tests, scan the catalog tables AS OF SYSTEM TIME slightly in the
 	// past. Schema telemetry is not latency-sensitive to the point where a few
@@ -70,10 +97,8 @@ func (t schemaTelemetryResumer) Resume(ctx context.Context, execCtx interface{})
 	aostDuration := builtinconstants.DefaultFollowerReadDuration
 	if knobs.AOSTDuration != nil {
 		aostDuration = *knobs.AOSTDuration
-	} else if fn := builtins.EvalFollowerReadOffset; fn != nil {
-		if d, err := fn(p.ExecCfg().Settings); err == nil {
-			aostDuration = d
-		}
+	} else if d, err := followerreads.EvalFollowerReadOffset(p.ExecCfg().Settings); err == nil {
+		aostDuration = d
 	}
 
 	const maxRecords = 10000
@@ -150,14 +175,14 @@ func processInvalidObjects(
 
 			// IDs are always non-sensitive, and the validationErr is written to the
 			// table with redact.Sprint, so it's a RedactableString.
-			log.Warningf(ctx, "found invalid object with ID %d: %s",
+			log.Dev.Warningf(ctx, "found invalid object with ID %d: %s",
 				redact.SafeInt(*descID), redact.RedactableString(*validationErr),
 			)
 		}
 
 		metrics.InvalidObjects.Update(count)
 		if count == 0 {
-			log.Infof(ctx, "schema telemetry job found no invalid objects")
+			log.Dev.Infof(ctx, "schema telemetry job found no invalid objects")
 		}
 
 		return nil

@@ -6,6 +6,7 @@
 package changefeedccl
 
 import (
+	"bytes"
 	"context"
 	gosql "database/sql"
 	gojson "encoding/json"
@@ -15,21 +16,25 @@ import (
 	"net/url"
 	"os"
 	"reflect"
-	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	apd "github.com/cockroachdb/apd/v3"
+	"github.com/cockroachdb/changefeedpb"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kcjsonschema"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	_ "github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl" // allow locality-related mutations
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
-	_ "github.com/cockroachdb/cockroach/pkg/ccl/partitionccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobfrontier"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -37,15 +42,25 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/pgurlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtestutils"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -64,8 +79,11 @@ func maybeDisableDeclarativeSchemaChangesForTest(t testing.TB, sqlDB *sqlutils.S
 	disable := rand.Float32() < 0.1
 	if disable {
 		t.Log("using legacy schema changer")
+		sqlDB.Exec(t, "SET create_table_with_schema_locked=false")
 		sqlDB.Exec(t, "SET use_declarative_schema_changer='off'")
-		sqlDB.Exec(t, "SET CLUSTER SETTING  sql.defaults.use_declarative_schema_changer='off'")
+		sqlDB.Exec(t, "SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer='off'")
+		sqlDB.Exec(t, "SET CLUSTER SETTING sql.defaults.create_table_with_schema_locked='off'")
+
 	}
 	return disable
 }
@@ -96,23 +114,23 @@ func readNextMessages(
 	lastMessage := timeutil.Now()
 	for len(actual) < numMessages {
 		if ctx.Err() != nil {
-			return nil, ctx.Err()
+			return nil, errors.Wrapf(ctx.Err(), "got %d of %d expected changefeed messages", len(actual), numMessages)
 		}
 		if log.V(1) {
-			log.Infof(context.Background(), "about to read a message (%d out of %d)", len(actual), numMessages)
+			log.Changefeed.Infof(context.Background(), "about to read a message (%d out of %d)", len(actual), numMessages)
 		}
 		m, err := f.Next()
 		if log.V(1) {
 			if m != nil {
-				log.Infof(context.Background(), `msg %s: %s->%s (%s) (%s)`,
+				log.Changefeed.Infof(context.Background(), `msg %s: %s->%s (%s) (%s)`,
 					m.Topic, m.Key, m.Value, m.Resolved, timeutil.Since(lastMessage))
 			} else {
-				log.Infof(context.Background(), `err %v`, err)
+				log.Changefeed.Infof(context.Background(), `err %v`, err)
 			}
 		}
 		lastMessage = timeutil.Now()
 		if err != nil {
-			return nil, err
+			return nil, errors.Wrapf(err, "got %d of %d expected changefeed messages", len(actual), numMessages)
 		}
 		if m == nil {
 			return nil, errors.AssertionFailedf(`expected message`)
@@ -120,9 +138,10 @@ func readNextMessages(
 		if len(m.Key) > 0 || len(m.Value) > 0 {
 			actual = append(actual,
 				cdctest.TestFeedMessage{
-					Topic: m.Topic,
-					Key:   m.Key,
-					Value: m.Value,
+					Topic:   m.Topic,
+					Key:     m.Key,
+					Value:   m.Value,
+					Headers: m.Headers,
 				},
 			)
 		}
@@ -130,7 +149,46 @@ func readNextMessages(
 	return actual, nil
 }
 
-func stripTsFromPayloads(payloads []cdctest.TestFeedMessage) ([]string, error) {
+func applySourceAssertion(
+	payloads []cdctest.TestFeedMessage, sourceAssertion func(source map[string]any),
+) error {
+	if sourceAssertion == nil {
+		sourceAssertion = func(source map[string]any) {}
+	}
+	for _, m := range payloads {
+		var message map[string]any
+		decoder := gojson.NewDecoder(bytes.NewReader(m.Value))
+		decoder.UseNumber()
+		if err := decoder.Decode(&message); err != nil {
+			return errors.Wrapf(err, `decode: %s`, m.Value)
+		} else if offset := decoder.InputOffset(); offset != int64(len(m.Value)) {
+			return errors.Newf(
+				`decode: unexpected extra bytes at position %d in %s`, offset, m.Value)
+		}
+
+		// This message may have a `payload` wrapper if format=json and `enriched_properties` includes `schema`
+		if message["payload"] == nil {
+			if message["source"] != nil {
+				sourceAssertion(message["source"].(map[string]any))
+			} else {
+				sourceAssertion(nil)
+			}
+		} else {
+			payload := message["payload"].(map[string]any)
+			source := payload["source"]
+			if source != nil {
+				sourceAssertion(source.(map[string]any))
+			} else {
+				sourceAssertion(nil)
+			}
+		}
+	}
+	return nil
+}
+
+func stripTsFromPayloads(
+	envelopeType changefeedbase.EnvelopeType, payloads []cdctest.TestFeedMessage,
+) ([]string, error) {
 	var actual []string
 	for _, m := range payloads {
 		var value []byte
@@ -138,7 +196,24 @@ func stripTsFromPayloads(payloads []cdctest.TestFeedMessage) ([]string, error) {
 		if err := gojson.Unmarshal(m.Value, &message); err != nil {
 			return nil, errors.Wrapf(err, `unmarshal: %s`, m.Value)
 		}
-		delete(message, "updated")
+
+		switch envelopeType {
+		case changefeedbase.OptEnvelopeEnriched:
+			// This message may have a `payload` wrapper if format=json and `enriched_properties` includes `schema`
+			if message["payload"] == nil {
+				delete(message, "ts_ns")
+				delete(message, "source")
+			} else {
+				payload := message["payload"].(map[string]any)
+				delete(payload, "ts_ns")
+				delete(payload, "source")
+			}
+		case changefeedbase.OptEnvelopeWrapped:
+			delete(message, "updated")
+		default:
+			return nil, errors.Newf("unexpected envelope type: %s", envelopeType)
+		}
+
 		value, err := reformatJSON(message)
 		if err != nil {
 			return nil, err
@@ -186,9 +261,15 @@ func checkPerKeyOrdering(payloads []cdctest.TestFeedMessage) (bool, error) {
 }
 
 func assertPayloadsBase(
-	t testing.TB, f cdctest.TestFeed, expected []string, stripTs bool, perKeyOrdered bool,
+	t testing.TB,
+	f cdctest.TestFeed,
+	expected []string,
+	stripTs bool,
+	perKeyOrdered bool,
+	envelopeType changefeedbase.EnvelopeType,
 ) {
 	t.Helper()
+
 	timeout := assertPayloadsTimeout()
 	if len(expected) > 100 {
 		// Webhook sink is very slow; We have few tests that read 1000 messages.
@@ -198,22 +279,152 @@ func assertPayloadsBase(
 	require.NoError(t,
 		withTimeout(f, timeout,
 			func(ctx context.Context) (err error) {
-				return assertPayloadsBaseErr(ctx, f, expected, stripTs, perKeyOrdered)
+				return assertPayloadsBaseErr(ctx, f, expected, stripTs, perKeyOrdered, nil, envelopeType)
 			},
 		))
 }
 
+func enrichedMessageToWrappedMessage(m cdctest.TestFeedMessage) (cdctest.TestFeedMessage, error) {
+	if len(m.Resolved) > 0 {
+		return m, nil
+	}
+
+	key, err := parseJSON(string(m.Key))
+	if err != nil {
+		return cdctest.TestFeedMessage{}, err
+	}
+	val, err := parseJSON(string(m.Value))
+	if err != nil {
+		return cdctest.TestFeedMessage{}, err
+	}
+
+	source := val["source"].(map[string]any)
+
+	// Convert the key, which is a JSON object, to an array, using the schema info in the source,
+	primaryKeys := source["primary_keys"].([]any)
+	keyArray := make([]any, len(primaryKeys))
+	for i, keyCol := range primaryKeys {
+		keyArray[i] = key[keyCol.(string)]
+	}
+
+	// Set updated & mvcc_timestamp if present.
+	if updated, ok := source["ts_hlc"]; ok {
+		val["updated"] = updated
+	}
+	if mvccTimestamp, ok := source["mvcc_timestamp"]; ok {
+		val["mvcc_timestamp"] = mvccTimestamp
+	}
+
+	assertPresentAndDelete := func(key string) error {
+		if _, ok := val[key]; ok {
+			delete(val, key)
+			return nil
+		}
+		return errors.Newf("expected %s to be present in %v", key, val)
+	}
+	// Delete fields on the value that differ between the enriched and wrapped envelopes.
+	err = errors.Join(assertPresentAndDelete("op"), assertPresentAndDelete("ts_ns"), assertPresentAndDelete("source"))
+	if err != nil {
+		return cdctest.TestFeedMessage{}, err
+	}
+
+	keyJ, err := json.MakeJSON(keyArray)
+	if err != nil {
+		return cdctest.TestFeedMessage{}, err
+	}
+	valJ, err := json.MakeJSON(val)
+	if err != nil {
+		return cdctest.TestFeedMessage{}, err
+	}
+	m.Key = []byte(keyJ.String())
+	m.Value = []byte(valJ.String())
+
+	return m, nil
+}
+
 func assertPayloadsBaseErr(
-	ctx context.Context, f cdctest.TestFeed, expected []string, stripTs bool, perKeyOrdered bool,
+	ctx context.Context,
+	f cdctest.TestFeed,
+	expected []string,
+	stripTs bool,
+	perKeyOrdered bool,
+	sourceAssertion func(map[string]any),
+	envelopeType changefeedbase.EnvelopeType,
 ) error {
+	didForceEnriched := func() bool {
+		if ef, ok := f.(cdctest.EnterpriseTestFeed); ok {
+			return ef.ForcedEnriched()
+		}
+		return false
+	}()
+
+	if log.V(1) {
+		log.Changefeed.Infof(ctx, "expected messages: \n%s", strings.Join(expected, "\n"))
+	}
+
 	actual, err := readNextMessages(ctx, f, len(expected))
 	if err != nil {
 		return err
 	}
+	// Detect if this is a protobuf feed and format accordingly.
+	useProtobuf := false
+	if ef, ok := f.(cdctest.EnterpriseTestFeed); ok {
+		details, _ := ef.Details()
+		if details.Opts[changefeedbase.OptFormat] == string(changefeedbase.OptFormatProtobuf) {
+			useProtobuf = true
+		}
+	}
+
+	if didForceEnriched {
+		for i, m := range actual {
+			em, err := enrichedMessageToWrappedMessage(m)
+			if err != nil {
+				return err
+			}
+			actual[i] = em
+		}
+	}
 
 	var actualFormatted []string
-	for _, m := range actual {
-		actualFormatted = append(actualFormatted, fmt.Sprintf(`%s: %s->%s`, m.Topic, m.Key, m.Value))
+	for i, m := range actual {
+		if useProtobuf {
+			var msg changefeedpb.Message
+			if err := protoutil.Unmarshal(m.Value, &msg); err != nil {
+				return err
+			}
+
+			switch env := msg.GetData().(type) {
+			case *changefeedpb.Message_Bare:
+				m.Value, err = gojson.Marshal(env.Bare)
+				if err != nil {
+					return err
+				}
+			case *changefeedpb.Message_Wrapped:
+				m.Value, err = gojson.Marshal(env.Wrapped)
+				if err != nil {
+					return err
+				}
+			case *changefeedpb.Message_Enriched:
+				m.Value, err = gojson.Marshal(env.Enriched)
+				if err != nil {
+					return err
+				}
+
+			default:
+				return errors.Newf("unexpected message type: %T", env)
+			}
+			var key changefeedpb.Key
+			if err := protoutil.Unmarshal(m.Key, &key); err != nil {
+				return err
+			}
+			m.Key, err = gojson.Marshal(key.Key)
+			if err != nil {
+				return err
+			}
+			actual[i] = m
+		}
+		actualFormatted = append(actualFormatted, m.String())
+
 	}
 
 	if perKeyOrdered {
@@ -227,10 +438,23 @@ func assertPayloadsBaseErr(
 		}
 	}
 
+	if sourceAssertion != nil {
+		err := applySourceAssertion(actual, sourceAssertion)
+		if err != nil {
+			return err
+		}
+	}
+
+	if envelopeType == changefeedbase.OptEnvelopeEnriched {
+		if err := checkSchema(actual); err != nil {
+			return err
+		}
+	}
+
 	// strip timestamps after checking per-key ordering since check uses timestamps
 	if stripTs {
 		// format again with timestamps stripped
-		actualFormatted, err = stripTsFromPayloads(actual)
+		actualFormatted, err = stripTsFromPayloads(envelopeType, actual)
 		if err != nil {
 			return err
 		}
@@ -242,6 +466,7 @@ func assertPayloadsBaseErr(
 		return errors.Newf("expected\n  %s\ngot\n  %s",
 			strings.Join(expected, "\n  "), strings.Join(actualFormatted, "\n  "))
 	}
+
 	return nil
 }
 
@@ -259,36 +484,79 @@ func withTimeout(
 	if jobFeed, ok := f.(cdctest.EnterpriseTestFeed); ok {
 		jobID = jobFeed.JobID()
 	}
-	return timeutil.RunWithTimeout(context.Background(),
+	err := timeutil.RunWithTimeout(context.Background(),
 		redact.Sprintf("withTimeout-%d", jobID), timeout,
 		func(ctx context.Context) error {
 			defer stopFeedWhenDone(ctx, f)()
 			return fn(ctx)
 		},
 	)
+	if err != nil {
+		var timeoutErr *timeutil.TimeoutError
+		if errors.As(err, &timeoutErr) {
+			dumpFile := testutils.WriteGoroutineDump()
+			return errors.WithDetail(err, fmt.Sprintf("goroutine dump: %s", dumpFile))
+		}
+	}
+	return err
 }
 
 func assertPayloads(t testing.TB, f cdctest.TestFeed, expected []string) {
 	t.Helper()
-	assertPayloadsBase(t, f, expected, false, false)
+	assertPayloadsBase(t, f, expected, false, false, changefeedbase.OptEnvelopeWrapped)
+}
+
+// assertPayloadsEnriched is used to assert payloads for the enriched envelope.
+// When the source is included with includeSource, we dynamically make assertions
+// about the "source" fields but when it's false we remove the source fields entirely.
+// In either case we strip the timestamps.
+func assertPayloadsEnriched(
+	t testing.TB, f cdctest.TestFeed, expected []string, sourceAssertion func(map[string]any),
+) {
+	t.Helper()
+	timeout := assertPayloadsTimeout()
+	if len(expected) > 100 {
+		// Webhook sink is very slow; We have few tests that read 1000 messages.
+		timeout += time.Duration(math.Log(float64(len(expected)))) * time.Minute
+	}
+
+	require.NoError(t,
+		withTimeout(f, timeout,
+			func(ctx context.Context) (err error) {
+				return assertPayloadsBaseErr(ctx, f, expected, true, false, sourceAssertion, changefeedbase.OptEnvelopeEnriched)
+			},
+		))
 }
 
 func assertPayloadsStripTs(t testing.TB, f cdctest.TestFeed, expected []string) {
 	t.Helper()
-	assertPayloadsBase(t, f, expected, true, false)
+	assertPayloadsBase(t, f, expected, true, false, changefeedbase.OptEnvelopeWrapped)
 }
 
 // assert that the messages received by the sink maintain per-key ordering guarantees. then,
 // strip the timestamp from the messages and compare them to the expected payloads.
 func assertPayloadsPerKeyOrderedStripTs(t testing.TB, f cdctest.TestFeed, expected []string) {
 	t.Helper()
-	assertPayloadsBase(t, f, expected, true, true)
+	assertPayloadsBase(t, f, expected, true, true, changefeedbase.OptEnvelopeWrapped)
 }
 
 func avroToJSON(t testing.TB, reg *cdctest.SchemaRegistry, avroBytes []byte) []byte {
 	json, err := reg.AvroToJSON(avroBytes)
 	require.NoError(t, err)
 	return json
+}
+
+func parseJSON(s string) (map[string]any, error) {
+	dec := gojson.NewDecoder(bytes.NewBufferString(s))
+	dec.UseNumber()
+	var m map[string]any
+	if err := dec.Decode(&m); err != nil {
+		return nil, err
+	}
+	if dec.InputOffset() != int64(len(s)) {
+		return nil, errors.Newf("parsing json did not consume all bytes: %d != %d", dec.InputOffset(), len(s))
+	}
+	return m, nil
 }
 
 func assertRegisteredSubjects(t testing.TB, reg *cdctest.SchemaRegistry, expected []string) {
@@ -409,6 +677,8 @@ func startTestFullServer(
 		UseDatabase:       `d`,
 		ExternalIODir:     options.externalIODir,
 		Settings:          options.settings,
+		ClusterName:       options.clusterName,
+		Locality:          options.locality,
 	}
 
 	if options.debugUseAfterFinish {
@@ -523,6 +793,7 @@ func startTestTenant(
 		TestingKnobs:  knobs,
 		ExternalIODir: options.externalIODir,
 		Settings:      options.settings,
+		Locality:      options.locality,
 	}
 
 	if options.debugUseAfterFinish {
@@ -559,6 +830,10 @@ type feedTestOptions struct {
 	settings                     *cluster.Settings
 	additionalSystemPrivs        []string
 	debugUseAfterFinish          bool
+	clusterName                  string
+	locality                     roachpb.Locality
+	forceKafkaV1ConnectionCheck  bool
+	allowChangefeedErr           bool
 }
 
 type feedTestOption func(opts *feedTestOptions)
@@ -577,6 +852,12 @@ var feedTestNoExternalConnection = func(opts *feedTestOptions) { opts.forceNoExt
 // tests randomly choose between the root user connection or a test user connection where the test user
 // has privileges to create changefeeds on tables in the default database `d` only.
 var feedTestUseRootUserConnection = func(opts *feedTestOptions) { opts.forceRootUserConnection = true }
+
+// feedTestForceKafkaV1ConnectionCheck is a feedTestOption that will force the connection check
+// inside Dial() when using a Kafka v1 sink.
+var feedTestForceKafkaV1ConnectionCheck = func(opts *feedTestOptions) {
+	opts.forceKafkaV1ConnectionCheck = true
+}
 
 var feedTestForceSink = func(sinkType string) feedTestOption {
 	return feedTestRestrictSinks(sinkType)
@@ -600,10 +881,30 @@ var feedTestAdditionalSystemPrivs = func(privs ...string) feedTestOption {
 	}
 }
 
+var feedTestUseClusterName = func(clusterName string) feedTestOption {
+	return func(opts *feedTestOptions) {
+		opts.clusterName = clusterName
+	}
+}
+
+var feedTestUseLocality = func(locality roachpb.Locality) feedTestOption {
+	return func(opts *feedTestOptions) {
+		opts.locality = locality
+	}
+}
+
 func (opts feedTestOptions) omitSinks(sinks ...string) feedTestOptions {
 	res := opts
 	res.disabledSinkTypes = append(opts.disabledSinkTypes, sinks...)
 	return res
+}
+
+// feedTestwithSettings is a feedTestOption that allows the caller to set
+// the cluster settings used by the test server.
+func feedTestwithSettings(s *cluster.Settings) feedTestOption {
+	return func(opts *feedTestOptions) {
+		opts.settings = s
+	}
 }
 
 // withArgsFn is a feedTestOption that allow the caller to modify the
@@ -619,6 +920,72 @@ func withArgsFn(fn updateArgsFn) feedTestOption {
 // testing, these knobs are applied to both the kv and sql nodes.
 func withKnobsFn(fn updateKnobsFn) feedTestOption {
 	return func(opts *feedTestOptions) { opts.knobsFn = fn }
+}
+
+// withAllowChangefeedErr is a feedTestOption that will allow changefeed errors
+// to occur without causing the test to fail.
+func withAllowChangefeedErr(
+	reason string, /*for documentation only*/
+) feedTestOption {
+	return func(opts *feedTestOptions) {
+		opts.allowChangefeedErr = true
+	}
+}
+
+func requireNoFeedsFail(t *testing.T) (fn updateKnobsFn) {
+	t.Helper()
+	ignoreErrs := []string{
+		`schema change occurred`,
+		`cannot update progress on cancel-requested job`,
+		`cannot update progress on pause-requested job`,
+		`result is ambiguous`,
+		`query execution canceled`,
+		`node unavailable; try another peer`,
+		`was truncated`,
+		`connection refused`,
+		`connection reset by peer`,
+		`test .*error`,
+		`context canceled`,
+	}
+	shouldIgnoreErr := func(err error) bool {
+		if err == nil || errors.Is(err, context.Canceled) || grpcutil.IsClosedConnection(err) {
+			return true
+		}
+		for _, ignoreErr := range ignoreErrs {
+			if testutils.IsError(err, ignoreErr) {
+				return true
+			}
+		}
+		return false
+	}
+
+	fn = func(knobs *base.TestingKnobs) {
+		if knobs.DistSQL == nil {
+			knobs.DistSQL = &execinfra.TestingKnobs{}
+		}
+		if knobs.DistSQL.(*execinfra.TestingKnobs).Changefeed == nil {
+			knobs.DistSQL.(*execinfra.TestingKnobs).Changefeed = &TestingKnobs{}
+		}
+		handleErr := func(err error) error {
+			t.Helper()
+
+			if shouldIgnoreErr(err) {
+				return err
+			}
+			t.Errorf("requireNoFeedsFail: unexpected error: %v", err)
+			return err
+		}
+		cfKnobs := knobs.DistSQL.(*execinfra.TestingKnobs).Changefeed.(*TestingKnobs)
+		if cfKnobs.HandleDistChangefeedError != nil {
+			originalHandler := cfKnobs.HandleDistChangefeedError
+			cfKnobs.HandleDistChangefeedError = func(err error) error {
+				return originalHandler(handleErr(err))
+			}
+		} else {
+			cfKnobs.HandleDistChangefeedError = handleErr
+		}
+	}
+	return fn
 }
 
 // Silence the linter.
@@ -638,11 +1005,25 @@ func newTestOptions() feedTestOptions {
 	}
 }
 
-func makeOptions(opts ...feedTestOption) feedTestOptions {
+func makeOptions(t *testing.T, opts ...feedTestOption) feedTestOptions {
 	options := newTestOptions()
 	for _, o := range opts {
 		o(&options)
 	}
+
+	if !options.allowChangefeedErr {
+		knobsFn := requireNoFeedsFail(t)
+		if options.knobsFn == nil {
+			options.knobsFn = knobsFn
+		} else {
+			orig := options.knobsFn
+			options.knobsFn = func(knobs *base.TestingKnobs) {
+				orig(knobs)
+				knobsFn(knobs)
+			}
+		}
+	}
+
 	return options
 }
 
@@ -661,7 +1042,7 @@ func serverArgsRegion(args base.TestServerArgs) string {
 func expectNotice(
 	t *testing.T, s serverutils.ApplicationLayerInterface, sql string, expected string,
 ) {
-	url, cleanup := sqlutils.PGUrl(t, s.SQLAddr(), t.Name(), url.User(username.RootUser))
+	url, cleanup := pgurlutils.PGUrl(t, s.SQLAddr(), t.Name(), url.User(username.RootUser))
 	defer cleanup()
 	base, err := pq.NewConnector(url.String())
 	if err != nil {
@@ -695,13 +1076,15 @@ var jobRecordRetryOpts = retry.Options{
 	MaxRetries:     10,
 }
 
-// waitForCheckpoint waits for the specified job to have a non-empty checkpoint
-func waitForCheckpoint(t *testing.T, jf cdctest.EnterpriseTestFeed, jr *jobs.Registry) {
+// waitForCheckpoint waits for the persisted frontier to contain spans above
+// the minimum timestamp, indicating that some spans have advanced ahead of
+// others (i.e. a checkpoint exists).
+func waitForCheckpoint(t *testing.T, jf cdctest.EnterpriseTestFeed, idb isql.DB) {
 	for r := retry.Start(jobRecordRetryOpts); ; {
 		t.Log("waiting for checkpoint")
-		progress := loadProgress(t, jf, jr)
-		if p := progress.GetChangefeed(); p != nil && p.Checkpoint != nil && len(p.Checkpoint.Spans) > 0 {
-			t.Logf("read checkpoint: %#v", p.Checkpoint)
+		spans := loadCheckpointSpans(t, jf.JobID(), idb)
+		if len(spans) > 0 {
+			t.Logf("read checkpoint: %v", spans)
 			return
 		}
 		if !r.Next() {
@@ -732,21 +1115,330 @@ func loadProgress(
 	jobID := jobFeed.JobID()
 	job, err := jobRegistry.LoadJob(context.Background(), jobID)
 	require.NoError(t, err)
-	if job.Status().Terminal() {
-		t.Errorf("tried to load progress for job %v but it has reached terminal status %s with error %s", job, job.Status(), jobFeed.FetchTerminalJobErr())
+	if job.State().Terminal() {
+		t.Errorf("tried to load progress for job %v but it has reached terminal status %s with error %s", job, job.State(), jobFeed.FetchTerminalJobErr())
 	}
 	return job.Progress()
+}
+
+// loadFrontierSpans loads the frontier checkpoint from the job_info table.
+func loadFrontierSpans(t *testing.T, jobID jobspb.JobID, idb isql.DB) []jobspb.ResolvedSpan {
+	t.Helper()
+	ctx := context.Background()
+	var spans []jobspb.ResolvedSpan
+	require.NoError(t, idb.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		var found bool
+		var err error
+		spans, found, err = jobfrontier.GetResolvedSpans(ctx, txn, jobID, coordinatorFrontierName)
+		if err != nil {
+			return err
+		}
+		if !found {
+			spans = nil
+		}
+		return nil
+	}))
+	if len(spans) > 0 {
+		t.Logf("found frontier checkpoint: %v", spans)
+	}
+	return spans
+}
+
+// loadCheckpointSpans loads frontier spans that represent checkpoint progress
+// above the effective highwater (the minimum frontier timestamp). This is
+// analogous to the old span-level checkpoint, which only contained spans
+// ahead of the highwater.
+func loadCheckpointSpans(t *testing.T, jobID jobspb.JobID, idb isql.DB) []jobspb.ResolvedSpan {
+	t.Helper()
+	allSpans := loadFrontierSpans(t, jobID, idb)
+	if len(allSpans) == 0 {
+		return nil
+	}
+	// Find the minimum timestamp across all spans (the effective highwater).
+	minTS := allSpans[0].Timestamp
+	for _, rs := range allSpans[1:] {
+		if rs.Timestamp.Less(minTS) {
+			minTS = rs.Timestamp
+		}
+	}
+	// Return only spans strictly above the minimum.
+	var result []jobspb.ResolvedSpan
+	for _, rs := range allSpans {
+		if minTS.Less(rs.Timestamp) {
+			result = append(result, rs)
+		}
+	}
+	if len(result) > 0 {
+		t.Logf("found checkpoint spans (above min %s): %v", minTS, result)
+	}
+	return result
+}
+
+// makeSpanGroupFromFrontierSpans makes a span group containing all the spans
+// contained in a frontier checkpoint.
+func makeSpanGroupFromFrontierSpans(t *testing.T, spans []jobspb.ResolvedSpan) roachpb.SpanGroup {
+	t.Helper()
+	var spanGroup roachpb.SpanGroup
+	for _, rs := range spans {
+		spanGroup.Add(rs.Span)
+	}
+	return spanGroup
+}
+
+var forceEnrichedEnvelope = metamorphic.ConstantWithTestBool("changefeed-force-enriched-envelope", false)
+
+type optOutOfMetamorphicEnrichedEnvelope struct {
+	reason string
+}
+
+// TODO(#154053): Add back metamorphic testing for db-level changefeeds once it's enabled.
+var forceDBLevelChangefeed = false
+
+type optOutOfMetamorphicDBLevelChangefeed struct {
+	reason string
 }
 
 func feed(
 	t testing.TB, f cdctest.TestFeedFactory, create string, args ...interface{},
 ) cdctest.TestFeed {
 	t.Helper()
+
+	create, args, forced, err := maybeForceEnrichedEnvelope(t, create, f, args)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	create, args, err = maybeForceDBLevelChangefeed(t, create, f, args)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	feed, err := f.Feed(create, args...)
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	if forced {
+		if ej, ok := feed.(cdctest.EnterpriseTestFeed); ok {
+			ej.SetForcedEnriched(true)
+		}
+	}
+
 	return feed
+}
+
+func maybeForceDBLevelChangefeed(
+	t testing.TB, create string, f cdctest.TestFeedFactory, args []any,
+) (newCreate string, newArgs []any, err error) {
+	for i, arg := range args {
+		if o, ok := arg.(optOutOfMetamorphicDBLevelChangefeed); ok {
+			t.Logf("opted out of DB level changefeed for %s: %s", create, o.reason)
+			newArgs = slices.Clone(args)
+			newArgs = slices.Delete(newArgs, i, i+1)
+			return create, newArgs, nil
+		}
+	}
+
+	if !forceDBLevelChangefeed {
+		return create, args, nil
+	}
+
+	switch f := f.(type) {
+	case *sinklessFeedFactory:
+		t.Logf("did not force DB level changefeed for %s because %T is not supported", create, f)
+		return create, args, nil
+	case *externalConnectionFeedFactory:
+		return maybeForceDBLevelChangefeed(t, create, f.TestFeedFactory, args)
+	}
+
+	createStmt, err := parser.ParseOne(create)
+	if err != nil {
+		return "", nil, err
+	}
+	createAST := createStmt.AST.(*tree.CreateChangefeed)
+	if createAST.Select != nil {
+		t.Logf("did not force DB level changefeed for %s because it is a CDC query", create)
+		return create, args, nil
+	}
+
+	if createAST.Level == tree.ChangefeedLevelDatabase {
+		t.Logf("did not force DB level changefeed for %s because it is already a DB level changefeed", create)
+		return create, args, nil
+	}
+
+	opts := createAST.Options
+	for _, opt := range opts {
+		key := opt.Key.String()
+		if strings.EqualFold(key, "initial_scan") {
+			if opt.Value != nil && strings.EqualFold(opt.Value.String(), "'only'") {
+				t.Logf("did not force DB level changefeed for %s because it set initial scan only", create)
+				return create, args, nil
+			}
+		}
+		if strings.EqualFold(key, "initial_scan_only") {
+			t.Logf("did not force DB level changefeed for %s because it set initial scan only", create)
+			return create, args, nil
+		}
+		// Since DB level feeds set split column families, and split column families is incompatible
+		// with resolved for kafka and pubsub sinks, we skip DB level feeds metamorphic testing in
+		// that case.
+		// TODO(#158408): Add support for resolved for DB level changefeeds.
+		if strings.EqualFold(key, "resolved") {
+			switch f.(type) {
+			case *kafkaFeedFactory, *pubsubFeedFactory:
+				t.Logf("did not force DB level changefeed for %s because it set resolved", create)
+				return create, args, nil
+			}
+		}
+	}
+
+	for _, target := range createAST.TableTargets {
+		if target.FamilyName != "" {
+			t.Logf("did not force DB level changefeed for %s because it has column family %s", create, target.FamilyName)
+			return create, args, nil
+		}
+	}
+
+	// Keep the options as is but make it a DB level changefeed.
+	createStmt.AST.(*tree.CreateChangefeed).Level = tree.ChangefeedLevelDatabase
+	createStmt.AST.(*tree.CreateChangefeed).DatabaseTarget = tree.ChangefeedDatabaseTarget("d")
+
+	// Create the filter option for the db level changefeed by getting the name
+	// of each table target for an include filter.
+	var tables tree.TableNames
+	for _, tableTarget := range createStmt.AST.(*tree.CreateChangefeed).TableTargets {
+		unresolvedName, err := parser.ParseTableName(tableTarget.TableName.String())
+		if err != nil {
+			return "", nil, err
+		}
+		tableName := unresolvedName.ToTableName()
+		// For database-level changefeeds, use only the unqualified table name.
+		// This strips both database qualifiers (e.g., "d.bar" -> "bar") and
+		// schema qualifiers (e.g., "public.foo" -> "foo").
+		unqualifiedName := tree.MakeUnqualifiedTableName(tree.Name(tableName.Table()))
+		tables = append(tables, unqualifiedName)
+	}
+	createStmt.AST.(*tree.CreateChangefeed).FilterOption = tree.ChangefeedFilterOption{
+		Tables:     tables,
+		FilterType: tree.IncludeFilter,
+	}
+	createStmt.AST.(*tree.CreateChangefeed).TableTargets = nil
+
+	// Unlike table-level changefeeds, database-level changefeeds do not perform
+	// an initial scan by default. To convert a default table level feed into an
+	// equivalent DB level feed, we need to explicitly set the initial scan type.
+	if isUsingDefaultInitialScan(opts) {
+		createStmt.AST.(*tree.CreateChangefeed).Options = append(createStmt.AST.(*tree.CreateChangefeed).Options, tree.KVOption{
+			Key:   "initial_scan",
+			Value: tree.NewDString("yes"),
+		})
+	}
+
+	create = tree.AsStringWithFlags(createStmt.AST, tree.FmtShowPasswords)
+	t.Logf("forcing DB level changefeed for %T - %s", f, create)
+	return create, args, nil
+}
+
+// isUsingDefaultInitialScan returns true if the changefeed does not specify
+// an initial scan type and does not have a cursor, resulting in the default
+// behavior of the initial scan.
+func isUsingDefaultInitialScan(opts []tree.KVOption) bool {
+	for _, opt := range opts {
+		switch strings.ToLower(opt.Key.String()) {
+		case "cursor":
+			return false
+		case "initial_scan", "no_initial_scan", "initial_scan_only":
+			return false
+		}
+	}
+
+	return true
+}
+
+func maybeForceEnrichedEnvelope(
+	t testing.TB, create string, f cdctest.TestFeedFactory, args []any,
+) (newCreate string, newArgs []any, forced bool, _ error) {
+	for i, arg := range args {
+		if o, ok := arg.(optOutOfMetamorphicEnrichedEnvelope); ok {
+			t.Logf("opted out of metamorphic enriched envelope for %s: %s", create, o.reason)
+			newArgs = slices.Clone(args)
+			newArgs = slices.Delete(newArgs, i, i+1)
+			return create, newArgs, false, nil
+		}
+	}
+
+	if !forceEnrichedEnvelope {
+		return create, args, false, nil
+	}
+
+	switch f := f.(type) {
+	case *externalConnectionFeedFactory:
+		return maybeForceEnrichedEnvelope(t, create, f.TestFeedFactory, args)
+	// Skip these because:
+	// - sinkless feeds can't be tracked by job id
+	// - sql & pulsar are not supported
+	// - cloudstorage uses parquet sometimes which complicates things
+	case *sinklessFeedFactory, *tableFeedFactory, *pulsarFeedFactory, *cloudFeedFactory:
+		t.Logf("did not force enriched envelope for %s because %T is not supported", create, f)
+		return create, args, false, nil
+	}
+
+	createStmt, err := parser.ParseOne(create)
+	if err != nil {
+		return "", args, false, err
+	}
+	createAST := createStmt.AST.(*tree.CreateChangefeed)
+
+	// CDC Queries aren't supported in enriched envelopes.
+	if createAST.Select != nil {
+		t.Logf("did not force enriched envelope for %s because it is a CDC query", create)
+		return create, args, false, nil
+	}
+
+	opts := createAST.Options
+	var envelopeKV *tree.KVOption
+	for _, opt := range opts {
+		if strings.EqualFold(opt.Key.String(), "format") {
+			if opt.Value.String() != "'json'" {
+				t.Logf("did not force enriched envelope for %s because format=%s", create, opt.Value.String())
+				return create, args, false, nil
+			}
+		}
+		if strings.EqualFold(opt.Key.String(), "full_table_name") {
+			// TODO(#145927): full_table_name is not supported in enriched envelopes.
+			switch f.(type) {
+			case *webhookFeedFactory:
+				t.Logf("did not force enriched envelope for %s because full_table_name was specified for webhook sink", create)
+				return create, args, false, nil
+			}
+		}
+		if strings.EqualFold(opt.Key.String(), "envelope") {
+			envelopeKV = &opt
+		}
+	}
+	if envelopeKV != nil {
+		if envelopeKV.Value.String() != "wrapped" {
+			t.Logf("did not force enriched envelope for %s because it specified envelope=%s", create, envelopeKV.Value.String())
+			return create, args, false, nil
+		}
+		envelopeKV.Value = tree.NewDString("enriched")
+	} else {
+		opts = append(opts, tree.KVOption{
+			Key:   "envelope",
+			Value: tree.NewDString("enriched"),
+		})
+	}
+	// Include the source so we can transform the messages back to wrapped properly.
+	opts = append(opts, tree.KVOption{
+		Key:   "enriched_properties",
+		Value: tree.NewDString("source"),
+	})
+
+	createStmt.AST.(*tree.CreateChangefeed).Options = opts
+	create = tree.AsStringWithFlags(createStmt.AST, tree.FmtShowPasswords)
+
+	t.Logf("forcing enriched envelope for %T - %s", f, create)
+	return create, args, true, nil
 }
 
 func asUser(
@@ -818,7 +1510,7 @@ type TestServerWithSystem struct {
 func makeSystemServer(
 	t *testing.T, opts ...feedTestOption,
 ) (testServer TestServerWithSystem, cleanup func()) {
-	options := makeOptions(opts...)
+	options := makeOptions(t, opts...)
 	return makeSystemServerWithOptions(t, options)
 }
 
@@ -845,7 +1537,7 @@ func makeSystemServerWithOptions(
 func makeTenantServer(
 	t *testing.T, opts ...feedTestOption,
 ) (testServer TestServerWithSystem, cleanup func()) {
-	options := makeOptions(opts...)
+	options := makeOptions(t, opts...)
 	return makeTenantServerWithOptions(t, options)
 }
 func makeTenantServerWithOptions(
@@ -872,7 +1564,7 @@ func makeTenantServerWithOptions(
 func makeServer(
 	t *testing.T, opts ...feedTestOption,
 ) (testServer TestServerWithSystem, cleanup func()) {
-	options := makeOptions(opts...)
+	options := makeOptions(t, opts...)
 	return makeServerWithOptions(t, options)
 }
 
@@ -887,8 +1579,8 @@ func makeServerWithOptions(
 	return makeSystemServerWithOptions(t, options)
 }
 
-func randomSinkType(opts ...feedTestOption) string {
-	options := makeOptions(opts...)
+func randomSinkType(t *testing.T, opts ...feedTestOption) string {
+	options := makeOptions(t, opts...)
 	return randomSinkTypeWithOptions(options)
 }
 
@@ -952,7 +1644,7 @@ func makeFeedFactory(
 	db *gosql.DB,
 	testOpts ...feedTestOption,
 ) (factory cdctest.TestFeedFactory, sinkCleanup func()) {
-	options := makeOptions(testOpts...)
+	options := makeOptions(t, testOpts...)
 	return makeFeedFactoryWithOptions(t, sinkType, s, db, options)
 }
 
@@ -975,7 +1667,7 @@ func makeFeedFactoryWithOptions(
 	pgURLForUser := func(u string, pass ...string) (url.URL, func()) {
 		t.Logf("pgURL %s %s", sinkType, u)
 		if len(pass) < 1 {
-			return sqlutils.PGUrl(t, s.SQLAddr(), t.Name(), url.User(u))
+			return pgurlutils.PGUrl(t, s.SQLAddr(), t.Name(), url.User(u))
 		}
 		return url.URL{
 			Scheme: "postgres",
@@ -984,10 +1676,12 @@ func makeFeedFactoryWithOptions(
 	}
 	switch sinkType {
 	case "kafka":
-		f := makeKafkaFeedFactory(t, srvOrCluster, db)
+		f := makeKafkaFeedFactoryWithConnectionCheck(t, srvOrCluster, db, options.forceKafkaV1ConnectionCheck)
 		userDB, cleanup := getInitialDBForEnterpriseFactory(t, s, db, options)
 		f.(*kafkaFeedFactory).configureUserDB(userDB)
-		return f, func() { cleanup() }
+		return f, func() {
+			cleanup()
+		}
 	case "cloudstorage":
 		if options.externalIODir == "" {
 			t.Fatalf("expected externalIODir option to be set")
@@ -1011,22 +1705,28 @@ func makeFeedFactoryWithOptions(
 		f := makeWebhookFeedFactory(srvOrCluster, db)
 		userDB, cleanup := getInitialDBForEnterpriseFactory(t, s, db, options)
 		f.(*webhookFeedFactory).enterpriseFeedFactory.configureUserDB(userDB)
-		return f, func() { cleanup() }
+		return f, func() {
+			cleanup()
+		}
 	case "pubsub":
 		f := makePubsubFeedFactory(srvOrCluster, db)
 		userDB, cleanup := getInitialDBForEnterpriseFactory(t, s, db, options)
 		f.(*pubsubFeedFactory).enterpriseFeedFactory.configureUserDB(userDB)
-		return f, func() { cleanup() }
+		return f, func() {
+			cleanup()
+		}
 	case "pulsar":
 		f := makePulsarFeedFactory(srvOrCluster, db)
 		userDB, cleanup := getInitialDBForEnterpriseFactory(t, s, db, options)
 		f.(*pulsarFeedFactory).enterpriseFeedFactory.configureUserDB(userDB)
-		return f, func() { cleanup() }
+		return f, func() {
+			cleanup()
+		}
 	case "sinkless":
 		pgURLForUserSinkless := func(u string, pass ...string) (url.URL, func()) {
 			t.Logf("pgURL %s %s", sinkType, u)
 			if len(pass) < 1 {
-				sink, cleanup := sqlutils.PGUrl(t, s.SQLAddr(), t.Name(), url.User(u))
+				sink, cleanup := pgurlutils.PGUrl(t, s.SQLAddr(), t.Name(), url.User(u))
 				sink.Path = "d"
 				return sink, cleanup
 			}
@@ -1113,6 +1813,12 @@ func createUserWithDefaultPrivilege(
 		if err != nil {
 			t.Fatal(err)
 		}
+		if priv == "CHANGEFEED" {
+			_, err = rootDB.Exec(fmt.Sprintf(`GRANT %s ON DATABASE d TO %s`, priv, user))
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
 	}
 }
 
@@ -1144,8 +1850,9 @@ func cdcTestNamedWithSystem(
 	t *testing.T, name string, testFn cdcTestWithSystemFn, testOpts ...feedTestOption,
 ) {
 	t.Helper()
-	options := makeOptions(testOpts...)
+	options := makeOptions(t, testOpts...)
 	cleanupCloudStorage := addCloudStorageOptions(t, &options)
+	defer cleanupCloudStorage()
 	TestingClearSchemaRegistrySingleton()
 
 	sinkType := randomSinkTypeWithOptions(options)
@@ -1197,69 +1904,23 @@ func maybeUseExternalConnection(
 	}
 }
 
-func forceTableGC(
-	t testing.TB,
-	tsi serverutils.TestServerInterface,
-	sqlDB *sqlutils.SQLRunner,
-	database, table string,
-) {
+func forceTableGC(t testing.TB, tsi serverutils.TestServerInterface, database, table string) {
 	t.Helper()
 	if err := tsi.ForceTableGC(context.Background(), database, table, tsi.Clock().Now()); err != nil {
 		t.Fatal(err)
 	}
 }
 
-// All structured logs should contain this property which stores the snake_cased
-// version of the name of the message struct
-type BaseEventStruct struct {
-	EventType string
-}
-
-var cmLogRe = regexp.MustCompile(`event_log\.go`)
-
-func checkStructuredLogs(t *testing.T, eventType string, startTime int64) []string {
-	var matchingEntries []string
-	testutils.SucceedsSoon(t, func() error {
-		log.FlushFiles()
-		entries, err := log.FetchEntriesFromFiles(startTime,
-			math.MaxInt64, 10000, cmLogRe, log.WithMarkedSensitiveData)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		for _, e := range entries {
-			jsonPayload := []byte(e.Message)
-			var baseStruct BaseEventStruct
-			if err := gojson.Unmarshal(jsonPayload, &baseStruct); err != nil {
-				continue
-			}
-			if baseStruct.EventType != eventType {
-				continue
-			}
-
-			matchingEntries = append(matchingEntries, e.Message)
-		}
-
-		return nil
-	})
-
-	return matchingEntries
-}
-
-func checkContinuousChangefeedLogs(t *testing.T, startTime int64) []eventpb.ChangefeedEmittedBytes {
-	logs := checkStructuredLogs(t, "changefeed_emitted_bytes", startTime)
-	matchingEntries := make([]eventpb.ChangefeedEmittedBytes, len(logs))
-
-	for i, m := range logs {
-		jsonPayload := []byte(m)
-		var event eventpb.ChangefeedEmittedBytes
-		if err := gojson.Unmarshal(jsonPayload, &event); err != nil {
-			t.Errorf("unmarshalling %q: %v", m, err)
-		}
-		matchingEntries[i] = event
+func forceTableGCAtTimestamp(
+	t testing.TB,
+	tsi serverutils.TestServerInterface,
+	database, table string,
+	timestamp hlc.Timestamp,
+) {
+	t.Helper()
+	if err := tsi.ForceTableGC(context.Background(), database, table, timestamp); err != nil {
+		t.Fatal(err)
 	}
-
-	return matchingEntries
 }
 
 // verifyLogsWithEmittedBytes fetches changefeed_emitted_bytes telemetry logs produced
@@ -1267,10 +1928,14 @@ func checkContinuousChangefeedLogs(t *testing.T, startTime int64) []eventpb.Chan
 // This function also asserts the LoggingInterval and Closing fields of
 // each message.
 func verifyLogsWithEmittedBytesAndMessages(
-	t *testing.T, jobID jobspb.JobID, startTime int64, interval int64, closing bool,
+	t *testing.T,
+	jobID jobspb.JobID,
+	logSpy *logtestutils.StructuredLogSpy[eventpb.ChangefeedEmittedBytes],
+	interval int64,
+	closing bool,
 ) {
 	testutils.SucceedsSoon(t, func() error {
-		emittedBytesLogs := checkContinuousChangefeedLogs(t, startTime)
+		emittedBytesLogs := logSpy.GetUnreadLogs(getChangefeedLoggingChannel())
 		if len(emittedBytesLogs) == 0 {
 			return errors.New("no logs found")
 		}
@@ -1285,9 +1950,7 @@ func verifyLogsWithEmittedBytesAndMessages(
 			emittedBytes += msg.EmittedBytes
 			emittedMessages += msg.EmittedMessages
 			require.Equal(t, interval, msg.LoggingInterval)
-			if closing {
-				require.Equal(t, true, msg.Closing)
-			}
+			require.Equal(t, closing, msg.Closing)
 		}
 		if emittedBytes == 0 || emittedMessages == 0 {
 			return errors.Newf(
@@ -1296,36 +1959,6 @@ func verifyLogsWithEmittedBytesAndMessages(
 		}
 		return nil
 	})
-}
-
-func checkCreateChangefeedLogs(t *testing.T, startTime int64) []eventpb.CreateChangefeed {
-	var matchingEntries []eventpb.CreateChangefeed
-
-	for _, m := range checkStructuredLogs(t, "create_changefeed", startTime) {
-		jsonPayload := []byte(m)
-		var event eventpb.CreateChangefeed
-		if err := gojson.Unmarshal(jsonPayload, &event); err != nil {
-			t.Errorf("unmarshalling %q: %v", m, err)
-		}
-		matchingEntries = append(matchingEntries, event)
-	}
-
-	return matchingEntries
-}
-
-func checkChangefeedFailedLogs(t *testing.T, startTime int64) []eventpb.ChangefeedFailed {
-	var matchingEntries []eventpb.ChangefeedFailed
-
-	for _, m := range checkStructuredLogs(t, "changefeed_failed", startTime) {
-		jsonPayload := []byte(m)
-		var event eventpb.ChangefeedFailed
-		if err := gojson.Unmarshal(jsonPayload, &event); err != nil {
-			t.Errorf("unmarshalling %q: %v", m, err)
-		}
-		matchingEntries = append(matchingEntries, event)
-	}
-
-	return matchingEntries
 }
 
 func checkS3Credentials(t *testing.T) (bucket string, accessKey string, secretKey string) {
@@ -1345,15 +1978,15 @@ func checkS3Credentials(t *testing.T) (bucket string, accessKey string, secretKe
 	return bucket, accessKey, secretKey
 }
 
-func waitForJobStatus(
-	runner *sqlutils.SQLRunner, t *testing.T, id jobspb.JobID, targetStatus jobs.Status,
+func waitForJobState(
+	runner *sqlutils.SQLRunner, t *testing.T, id jobspb.JobID, targetState jobs.State,
 ) {
 	testutils.SucceedsSoon(t, func() error {
-		var jobStatus string
+		var jobState string
 		query := `SELECT status FROM [SHOW CHANGEFEED JOB $1]`
-		runner.QueryRow(t, query, id).Scan(&jobStatus)
-		if targetStatus != jobs.Status(jobStatus) {
-			return errors.Errorf("Expected status:%s but found status:%s", targetStatus, jobStatus)
+		runner.QueryRow(t, query, id).Scan(&jobState)
+		if targetState != jobs.State(jobState) {
+			return errors.Errorf("Expected status:%s but found status:%s", targetState, jobState)
 		}
 		return nil
 	})
@@ -1368,7 +2001,7 @@ func waitForJobStatus(
 //	TABLE table_a (with column type_a)
 //	TABLE table_b (with column type_a)
 //	USER adminUser (with admin privs)
-//	USER feedCreator (with CHANGEFEED priv on table_a and table_b)
+//	USER feedCreator (with CHANGEFEED priv on database d, table_a, and table_b)
 //	USER jobController (with the CONTROLJOB role option)
 //	USER userWithAllGrants (with CHANGEFEED on table_a and table b)
 //	USER userWithSomeGrants (with CHANGEFEED on table_a only)
@@ -1385,17 +2018,20 @@ func ChangefeedJobPermissionsTestSetup(t *testing.T, s TestServer) {
 
 		`CREATE USER adminUser`,
 		`GRANT ADMIN TO adminUser`,
+		`CREATE ROLE feedowner`,
 
 		`CREATE USER otherAdminUser`,
 		`GRANT ADMIN TO otherAdminUser`,
 
 		`CREATE USER feedCreator`,
+		`GRANT CHANGEFEED ON DATABASE d TO feedCreator`,
 		`GRANT CHANGEFEED ON table_a TO feedCreator`,
 		`GRANT CHANGEFEED ON table_b TO feedCreator`,
 
 		`CREATE USER jobController with CONTROLJOB`,
 
 		`CREATE USER userWithAllGrants`,
+		`GRANT feedowner TO userWithAllGrants`,
 		`GRANT CHANGEFEED ON table_a TO userWithAllGrants`,
 		`GRANT CHANGEFEED ON table_b TO userWithAllGrants`,
 
@@ -1403,5 +2039,192 @@ func ChangefeedJobPermissionsTestSetup(t *testing.T, s TestServer) {
 		`GRANT CHANGEFEED ON table_a TO userWithSomeGrants`,
 
 		`CREATE USER regularUser`,
+
+		`CREATE USER viewClusterMetadataUser`,
+		`GRANT SYSTEM VIEWCLUSTERMETADATA TO viewClusterMetadataUser`,
 	)
+}
+
+// getTestingEnrichedSourceData creates an enrichedSourceData
+// for use in tests.
+func getTestingEnrichedSourceData() enrichedSourceData {
+	primaryKeysBuilder := json.NewArrayBuilder(1)
+	primaryKeysBuilder.Add(json.FromString("test_primary_key"))
+
+	return enrichedSourceData{
+		jobID:              "test_id",
+		dbVersion:          "test_db_version",
+		clusterName:        "test_cluster_name",
+		clusterID:          "test_cluster_id",
+		sourceNodeLocality: "test_source_node_locality",
+		nodeName:           "test_node_name",
+		nodeID:             "test_node_id",
+		tableSchemaInfo: map[descpb.ID]tableSchemaInfo{
+			// We use 42 here since that is compatible with the tableID in
+			// cdcevent.TestingMakeEventRowFromEncDatums
+			42: {
+				tableName:       "test_table_name",
+				dbName:          "test_db_name",
+				schemaName:      "test_schema_name",
+				primaryKeys:     []string{"test_primary_key"},
+				primaryKeysJSON: primaryKeysBuilder.Build(),
+			},
+		},
+	}
+}
+
+// getTestingEnrichedSourceProvider creates an enrichedSourceProvider
+// for use in tests.
+func getTestingEnrichedSourceProvider(
+	t require.TestingT, opts changefeedbase.EncodingOptions,
+) *enrichedSourceProvider {
+	esp, err := newEnrichedSourceProvider(opts, getTestingEnrichedSourceData())
+	require.NoError(t, err)
+	return esp
+}
+
+func checkSchema(actual []cdctest.TestFeedMessage) error {
+	for _, tm := range actual {
+		var msg map[string]any
+		if err := gojson.Unmarshal(tm.Value, &msg); err != nil {
+			return errors.Wrapf(err, `unmarshal: %+v`, tm)
+		}
+
+		if _, ok := msg["schema"]; !ok {
+			return nil
+		}
+		schemaMap := msg["schema"].(map[string]any)
+		schemaBs, err := gojson.Marshal(schemaMap)
+		if err != nil {
+			return errors.Wrapf(err, `marshal: %+v`, schemaMap)
+		}
+		var schema kcjsonschema.Schema
+		if err := gojson.Unmarshal(schemaBs, &schema); err != nil {
+			return errors.Wrapf(err, `unmarshal: %+v`, schema)
+		}
+
+		// Re-parse payload with UseNumber since that's what this method expects.
+		payloadBs, err := gojson.Marshal(msg["payload"])
+		if err != nil {
+			return errors.Wrapf(err, `marshal: %+v`, msg["payload"])
+		}
+		var payload any
+		dec := gojson.NewDecoder(bytes.NewReader(payloadBs))
+		dec.UseNumber()
+		if err := dec.Decode(&payload); err != nil {
+			return errors.Wrapf(err, `decode: %+v`, payloadBs)
+		}
+
+		if err := kcjsonschema.TestingMatchesJSON(schema, payload); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+type regression141453Options struct {
+	maybeUseLegacySchemaChanger bool
+}
+
+type regression141453Option func(*regression141453Options)
+
+func withMaybeUseLegacySchemaChanger() regression141453Option {
+	return func(opts *regression141453Options) {
+		opts.maybeUseLegacySchemaChanger = true
+	}
+}
+
+// runWithAndWithoutRegression141453 runs the test both with and without testing
+// knobs that simulate the scenario where a change aggregator encounters a schema
+// change restart but draining the buffer fails so the resolved spans message
+// signaling the restart doesn't get sent to the change frontier.
+func runWithAndWithoutRegression141453(
+	t *testing.T,
+	testFn cdcTestFn,
+	runTestFn func(t *testing.T, testFn cdcTestFn),
+	opts ...regression141453Option,
+) {
+	testutils.RunTrueAndFalse(t, "regression 141453",
+		func(t *testing.T, regression141453 bool) {
+			testFn := func(t *testing.T, s TestServer, f cdctest.TestFeedFactory) {
+				var options regression141453Options
+				for _, opt := range opts {
+					opt(&options)
+				}
+
+				var useLegacySchemaChanger bool
+				if options.maybeUseLegacySchemaChanger {
+					sqlDB := sqlutils.MakeSQLRunner(s.DB)
+					useLegacySchemaChanger = maybeDisableDeclarativeSchemaChangesForTest(t, sqlDB)
+				}
+
+				// This regression scenario doesn't always happen with the legacy schema changer
+				// because altering the table sometimes results in backfills instead of restarts.
+				if useLegacySchemaChanger || !regression141453 {
+					testFn(t, s, f)
+					return
+				}
+
+				knobs := s.TestingKnobs.
+					DistSQL.(*execinfra.TestingKnobs).
+					Changefeed.(*TestingKnobs)
+
+				// We force the regression scenario to happen by:
+				// 1. Blocking popping from the kv feed to change aggregator buffer
+				//    before we add the restart resolved span boundary message.
+				// 2. Canceling the context that Drain uses so that it fails.
+				// 3. Re-allowing popping after the buffer is closed.
+				//
+				// This will ensure that the change aggregator will not be able
+				// to pop (and send) the restart resolved span boundary message
+				// and thus the changefeed should restart due to transient error
+				// (before the expected restart for the schema change).
+				//
+				// Previously, this scenario would incorrectly cause the changefeed
+				// to shut down as if it had completed successfully.
+				//
+				// Note that we only want to make Drain fail once, otherwise the test
+				// will never be able to proceed.
+				var drainFailedOnce atomic.Bool
+				knobs.MakeKVFeedToAggregatorBufferKnobs = func() kvevent.BlockingBufferTestingKnobs {
+					if drainFailedOnce.Load() {
+						return kvevent.BlockingBufferTestingKnobs{}
+					}
+					var blockPop atomic.Bool
+					popCh := make(chan struct{})
+					return kvevent.BlockingBufferTestingKnobs{
+						BeforeAdd: func(ctx context.Context, e kvevent.Event) (_ context.Context, _ kvevent.Event, shouldAdd bool) {
+							if e.Type() == kvevent.TypeResolved &&
+								e.Resolved().BoundaryType == jobspb.ResolvedSpan_RESTART {
+								blockPop.Store(true)
+							}
+							return ctx, e, true
+						},
+						BeforePop: func() {
+							if blockPop.Load() {
+								<-popCh
+							}
+						},
+						BeforeDrain: func(ctx context.Context) context.Context {
+							ctx, cancel := context.WithCancel(ctx)
+							cancel()
+							return ctx
+						},
+						AfterDrain: func(err error) {
+							require.Error(t, err)
+							drainFailedOnce.Store(true)
+						},
+						AfterCloseWithReason: func(err error) {
+							require.NoError(t, err)
+							close(popCh)
+							blockPop.Store(false)
+						},
+					}
+				}
+				testFn(t, s, f)
+				require.True(t, drainFailedOnce.Load())
+			}
+
+			runTestFn(t, testFn)
+		})
 }

@@ -9,12 +9,15 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keyvisualizer"
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessionmutator"
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
+	"github.com/cockroachdb/redact"
 )
 
 // plannerJobExecContext is a wrapper to implement JobExecContext with a planner
@@ -25,10 +28,12 @@ type plannerJobExecContext struct {
 	p *planner
 }
 
-// MakeJobExecContext makes a JobExecContext.
+// MakeJobExecContext makes a JobExecContext. If the context carries a
+// workload ID (via kv.ContextWithWorkloadInfo), EvalCtx.WorkloadID is
+// set so that DistSQL flows propagate attribution to remote nodes.
 func MakeJobExecContext(
 	ctx context.Context,
-	opName string,
+	opName redact.SafeString,
 	user username.SQLUsername,
 	memMetrics *MemoryMetrics,
 	execCfg *ExecutorConfig,
@@ -40,6 +45,7 @@ func MakeJobExecContext(
 		memMetrics,
 		execCfg,
 		NewInternalSessionData(ctx, execCfg.Settings, opName),
+		WithWorkloadInfo(kv.WorkloadInfoFromContext(ctx)),
 	)
 	p := plannerInterface.(*planner)
 	return &plannerJobExecContext{p: p}, close
@@ -52,7 +58,7 @@ func (e *plannerJobExecContext) ExtendedEvalContext() *extendedEvalContext {
 func (e *plannerJobExecContext) SessionData() *sessiondata.SessionData {
 	return e.p.SessionData()
 }
-func (e *plannerJobExecContext) SessionDataMutatorIterator() *sessionDataMutatorIterator {
+func (e *plannerJobExecContext) SessionDataMutatorIterator() *sessionmutator.SessionDataMutatorIterator {
 	return e.p.SessionDataMutatorIterator()
 }
 func (e *plannerJobExecContext) ExecCfg() *ExecutorConfig        { return e.p.ExecCfg() }
@@ -79,11 +85,17 @@ func (e *plannerJobExecContext) SpanStatsConsumer() keyvisualizer.SpanStatsConsu
 // methods that defined in terms of "the" txn, such as privilege/name accessors.
 // (though note that ExtendedEvalContext may transitively include methods that
 // close over/expect a txn so use it with caution).
+//
+// Workload attribution for ASH is handled via context propagation: the
+// jobs registry injects the job's ID into the context using
+// kv.ContextWithWorkloadInfo before calling the resumer. Any DB or
+// InternalDB transaction created with that context will automatically
+// carry the workload ID in KV BatchRequest headers.
 type JobExecContext interface {
 	SemaCtx() *tree.SemaContext
 	ExtendedEvalContext() *extendedEvalContext
 	SessionData() *sessiondata.SessionData
-	SessionDataMutatorIterator() *sessionDataMutatorIterator
+	SessionDataMutatorIterator() *sessionmutator.SessionDataMutatorIterator
 	ExecCfg() *ExecutorConfig
 	DistSQLPlanner() *DistSQLPlanner
 	LeaseMgr() *lease.Manager

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -185,10 +186,13 @@ func (p *distinctBoolOp) Reset(ctx context.Context) {
 	}
 }
 
-func (p *distinctBoolOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p *distinctBoolOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	if batch.Length() == 0 {
-		return batch
+		return batch, nil
 	}
 	outputCol := p.outputCol
 	vec := batch.ColVec(p.distinctColIdx)
@@ -425,7 +429,7 @@ func (p *distinctBoolOp) Next() coldata.Batch {
 	}
 	p.lastValNull = lastValNull
 
-	return batch
+	return batch, nil
 }
 
 // distinctBytesOp runs a distinct on the column in distinctColIdx, writing
@@ -464,10 +468,13 @@ func (p *distinctBytesOp) Reset(ctx context.Context) {
 	}
 }
 
-func (p *distinctBytesOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p *distinctBytesOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	if batch.Length() == 0 {
-		return batch
+		return batch, nil
 	}
 	outputCol := p.outputCol
 	vec := batch.ColVec(p.distinctColIdx)
@@ -668,7 +675,7 @@ func (p *distinctBytesOp) Next() coldata.Batch {
 	}
 	p.lastValNull = lastValNull
 
-	return batch
+	return batch, nil
 }
 
 // distinctDecimalOp runs a distinct on the column in distinctColIdx, writing
@@ -707,10 +714,13 @@ func (p *distinctDecimalOp) Reset(ctx context.Context) {
 	}
 }
 
-func (p *distinctDecimalOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p *distinctDecimalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	if batch.Length() == 0 {
-		return batch
+		return batch, nil
 	}
 	outputCol := p.outputCol
 	vec := batch.ColVec(p.distinctColIdx)
@@ -915,7 +925,7 @@ func (p *distinctDecimalOp) Next() coldata.Batch {
 	}
 	p.lastValNull = lastValNull
 
-	return batch
+	return batch, nil
 }
 
 // distinctInt16Op runs a distinct on the column in distinctColIdx, writing
@@ -954,10 +964,13 @@ func (p *distinctInt16Op) Reset(ctx context.Context) {
 	}
 }
 
-func (p *distinctInt16Op) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p *distinctInt16Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	if batch.Length() == 0 {
-		return batch
+		return batch, nil
 	}
 	outputCol := p.outputCol
 	vec := batch.ColVec(p.distinctColIdx)
@@ -1206,7 +1219,7 @@ func (p *distinctInt16Op) Next() coldata.Batch {
 	}
 	p.lastValNull = lastValNull
 
-	return batch
+	return batch, nil
 }
 
 // distinctInt32Op runs a distinct on the column in distinctColIdx, writing
@@ -1245,10 +1258,13 @@ func (p *distinctInt32Op) Reset(ctx context.Context) {
 	}
 }
 
-func (p *distinctInt32Op) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p *distinctInt32Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	if batch.Length() == 0 {
-		return batch
+		return batch, nil
 	}
 	outputCol := p.outputCol
 	vec := batch.ColVec(p.distinctColIdx)
@@ -1497,7 +1513,7 @@ func (p *distinctInt32Op) Next() coldata.Batch {
 	}
 	p.lastValNull = lastValNull
 
-	return batch
+	return batch, nil
 }
 
 // distinctInt64Op runs a distinct on the column in distinctColIdx, writing
@@ -1536,10 +1552,13 @@ func (p *distinctInt64Op) Reset(ctx context.Context) {
 	}
 }
 
-func (p *distinctInt64Op) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p *distinctInt64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	if batch.Length() == 0 {
-		return batch
+		return batch, nil
 	}
 	outputCol := p.outputCol
 	vec := batch.ColVec(p.distinctColIdx)
@@ -1788,7 +1807,7 @@ func (p *distinctInt64Op) Next() coldata.Batch {
 	}
 	p.lastValNull = lastValNull
 
-	return batch
+	return batch, nil
 }
 
 // distinctFloat64Op runs a distinct on the column in distinctColIdx, writing
@@ -1827,10 +1846,13 @@ func (p *distinctFloat64Op) Reset(ctx context.Context) {
 	}
 }
 
-func (p *distinctFloat64Op) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p *distinctFloat64Op) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	if batch.Length() == 0 {
-		return batch
+		return batch, nil
 	}
 	outputCol := p.outputCol
 	vec := batch.ColVec(p.distinctColIdx)
@@ -2111,7 +2133,7 @@ func (p *distinctFloat64Op) Next() coldata.Batch {
 	}
 	p.lastValNull = lastValNull
 
-	return batch
+	return batch, nil
 }
 
 // distinctTimestampOp runs a distinct on the column in distinctColIdx, writing
@@ -2150,10 +2172,13 @@ func (p *distinctTimestampOp) Reset(ctx context.Context) {
 	}
 }
 
-func (p *distinctTimestampOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p *distinctTimestampOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	if batch.Length() == 0 {
-		return batch
+		return batch, nil
 	}
 	outputCol := p.outputCol
 	vec := batch.ColVec(p.distinctColIdx)
@@ -2386,7 +2411,7 @@ func (p *distinctTimestampOp) Next() coldata.Batch {
 	}
 	p.lastValNull = lastValNull
 
-	return batch
+	return batch, nil
 }
 
 // distinctIntervalOp runs a distinct on the column in distinctColIdx, writing
@@ -2425,10 +2450,13 @@ func (p *distinctIntervalOp) Reset(ctx context.Context) {
 	}
 }
 
-func (p *distinctIntervalOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p *distinctIntervalOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	if batch.Length() == 0 {
-		return batch
+		return batch, nil
 	}
 	outputCol := p.outputCol
 	vec := batch.ColVec(p.distinctColIdx)
@@ -2633,7 +2661,7 @@ func (p *distinctIntervalOp) Next() coldata.Batch {
 	}
 	p.lastValNull = lastValNull
 
-	return batch
+	return batch, nil
 }
 
 // distinctJSONOp runs a distinct on the column in distinctColIdx, writing
@@ -2672,10 +2700,13 @@ func (p *distinctJSONOp) Reset(ctx context.Context) {
 	}
 }
 
-func (p *distinctJSONOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p *distinctJSONOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	if batch.Length() == 0 {
-		return batch
+		return batch, nil
 	}
 	outputCol := p.outputCol
 	vec := batch.ColVec(p.distinctColIdx)
@@ -2911,7 +2942,7 @@ func (p *distinctJSONOp) Next() coldata.Batch {
 	}
 	p.lastValNull = lastValNull
 
-	return batch
+	return batch, nil
 }
 
 // distinctDatumOp runs a distinct on the column in distinctColIdx, writing
@@ -2950,10 +2981,13 @@ func (p *distinctDatumOp) Reset(ctx context.Context) {
 	}
 }
 
-func (p *distinctDatumOp) Next() coldata.Batch {
-	batch := p.Input.Next()
+func (p *distinctDatumOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := p.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	if batch.Length() == 0 {
-		return batch
+		return batch, nil
 	}
 	outputCol := p.outputCol
 	vec := batch.ColVec(p.distinctColIdx)
@@ -3162,5 +3196,5 @@ func (p *distinctDatumOp) Next() coldata.Batch {
 	}
 	p.lastValNull = lastValNull
 
-	return batch
+	return batch, nil
 }

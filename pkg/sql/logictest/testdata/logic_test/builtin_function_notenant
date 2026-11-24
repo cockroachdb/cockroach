@@ -1,4 +1,4 @@
-# LogicTest: !3node-tenant-default-configs
+# LogicTest: !3node-tenant-default-configs !local-prepared
 
 subtest check_consistency
 
@@ -22,7 +22,7 @@ true
 
 # Ditto, but implicit start key \x03
 query B
-SELECT count(*) = 1 FROM crdb_internal.check_consistency(true, '', '\x04')
+SELECT count(*) = 2 FROM crdb_internal.check_consistency(true, '', '\x04')
 ----
 true
 
@@ -46,7 +46,7 @@ user root
 
 statement ok
 CREATE DATABASE root_test;
-REVOKE CONNECT ON DATABASE root_test FROM public
+REVOKE CONNECT, TEMPORARY ON DATABASE root_test FROM public
 
 statement ok
 CREATE TABLE root_test.t(a int)

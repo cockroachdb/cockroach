@@ -302,10 +302,11 @@ func runListCerts(cmd *cobra.Command, args []string) error {
 // encodeURICmd creates a PG URI for the given parameters.
 var encodeURICmd = func() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "encode-uri [postgres://][USERNAME[:PASSWORD]@]HOST",
-		Short: "encode a CRDB connection URL",
-		Args:  cobra.ExactArgs(1),
-		RunE:  clierrorplus.MaybeDecorateError(encodeURI),
+		Deprecated: "please use convert-url instead, as encode-uri will be removed in a future release.\n",
+		Use:        "encode-uri [postgres://][USERNAME[:PASSWORD]@]HOST",
+		Short:      "encode a CRDB connection URL",
+		Args:       cobra.ExactArgs(1),
+		RunE:       clierrorplus.MaybeDecorateError(encodeURI),
 	}
 	f := cmd.PersistentFlags()
 	f.BoolVar(&encodeURIOpts.sslInline, "inline", false, "whether to inline certificates (supported by CRDB's Physical Replication feature)")

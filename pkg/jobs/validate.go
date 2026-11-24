@@ -17,7 +17,7 @@ import (
 // JobMetadataGetter is an interface used during job validation.
 // It is similar in principle to validate.ValidationDereferencer.
 type JobMetadataGetter interface {
-	GetJobMetadata(jobspb.JobID) (*JobMetadata, error)
+	GetJobMetadata(jobspb.JobID) (*DeprecatedJobMetadata, error)
 }
 
 // ValidateJobReferencesInDescriptor checks a catalog.Descriptor for
@@ -45,8 +45,8 @@ func ValidateJobReferencesInDescriptor(
 		if j.Payload.Type() != jobspb.TypeSchemaChange {
 			errorAccFn(errors.AssertionFailedf("mutation job %d is of type %q, expected schema change job", m.JobID, j.Payload.Type()))
 		}
-		if j.Status.Terminal() {
-			errorAccFn(errors.AssertionFailedf("mutation job %d has terminal status (%s)", m.JobID, j.Status))
+		if j.State.Terminal() {
+			errorAccFn(errors.AssertionFailedf("mutation job %d has terminal state (%s)", m.JobID, j.State))
 		}
 	}
 }
@@ -56,13 +56,13 @@ func ValidateJobReferencesInDescriptor(
 // to an accumulator function. We also have a second accumulator function for
 // keeping track of INFO level details that do not need to fail validation.
 func ValidateDescriptorReferencesInJob(
-	j JobMetadata,
+	j DeprecatedJobMetadata,
 	descLookupFn func(id descpb.ID) catalog.Descriptor,
 	errorAccFn func(error),
 	infoAccFn func(string),
 ) {
-	switch j.Status {
-	case StatusRunning, StatusPaused, StatusPauseRequested:
+	switch j.State {
+	case StateRunning, StatePaused, StatePauseRequested:
 		// Proceed.
 	default:
 		return
@@ -82,19 +82,19 @@ func ValidateDescriptorReferencesInJob(
 	switch j.Payload.Type() {
 	case jobspb.TypeSchemaChange:
 		errorAccFn(errors.AssertionFailedf("%s schema change refers to missing descriptor(s) %+v",
-			j.Status, missing.Ordered()))
+			j.State, missing.Ordered()))
 	case jobspb.TypeSchemaChangeGC:
 		isSafeToDelete := existing.Len() == 0 && len(j.Progress.GetSchemaChangeGC().Indexes) == 0
 		infoAccFn(fmt.Sprintf("%s schema change GC refers to missing table "+
 			"descriptor(s) %+v; existing descriptors that still need to be dropped %+v; job safe to "+
-			"delete: %v", j.Status, missing.Ordered(), existing.Ordered(), isSafeToDelete))
+			"delete: %v", j.State, missing.Ordered(), existing.Ordered(), isSafeToDelete))
 	case jobspb.TypeTypeSchemaChange:
 		errorAccFn(errors.AssertionFailedf("%s type schema change refers to missing type descriptor %v",
-			j.Status, missing.Ordered()))
+			j.State, missing.Ordered()))
 	}
 }
 
-func collectDescriptorReferences(j JobMetadata) (ids catalog.DescriptorIDSet) {
+func collectDescriptorReferences(j DeprecatedJobMetadata) (ids catalog.DescriptorIDSet) {
 	switch j.Payload.Type() {
 	case jobspb.TypeSchemaChange:
 		sc := j.Payload.GetSchemaChange()

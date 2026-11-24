@@ -1,7 +1,12 @@
-# Cockroach Community License (ccl) Functionality
-This tree is intended to house our non-Apache2 licensed Go packages. By
-convention, all packages under this tree have the suffix `ccl`.
+# Cockroach Community License (CCL) packages
 
-Grouping CCL packages into one tree and clearly labeling all CCL packages
-with a recognizable suffix will hopefully make it easier to identify and prevent
-introducing any accidental dependencies on ccl from Apache2 packages.
+**Avoid adding new packages to this subdirectory**
+
+This tree previously housed our non-Apache2 licensed Go packages. Such
+packages were offered under the Cockroach Community License (ccl),
+hence the name. By convention, all packages under this tree have the
+suffix `ccl`.
+
+All CockroachDB code is now offered under the CockroachDB Software
+License, making this division unnecessary. Packages are slowly being moved out
+of this subtree as time allows.

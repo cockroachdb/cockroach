@@ -125,6 +125,16 @@ listeners, if the headers are allowed.`,
 		Description: "Test directory server binds and listens on this port.",
 	}
 
+	HTTPTestDirectoryGRPCPort = FlagInfo{
+		Name:        "grpc-port",
+		Description: "HTTP test directory server binds and listens on this port.",
+	}
+
+	HTTPTestDirectoryHTTPPort = FlagInfo{
+		Name:        "http-port",
+		Description: "HTTP test directory server exposes pod lifecycle API on this port.",
+	}
+
 	TestDirectoryTenantCertsDir = FlagInfo{
 		Name:        "certs-dir",
 		Description: CertsDir.Description,

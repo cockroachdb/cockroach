@@ -1,3 +1,4 @@
+# LogicTest: !local-prepared
 # pg arrays must preserve control characters when converted to string,
 # but their direct representation as string does not escape the
 # control characters. In order for the test file to remain valid
@@ -256,6 +257,40 @@ NULL
 query error cannot subscript type string because it is not an array
 SELECT '{a,b,c}'[0]
 
+# name type subscript access (0-based, matching PostgreSQL).
+# In PG, the name type has typsubscript => 'raw_array_subscript_handler',
+# treating it as a fixed-length array of chars. text does not support this.
+
+query T
+SELECT ('hello'::name)[0]
+----
+h
+
+query T
+SELECT ('hello'::name)[4]
+----
+o
+
+query T nosort
+SELECT ('hello'::name)[5]
+----
+NULL
+
+query T nosort
+SELECT ('hello'::name)[-1]
+----
+NULL
+
+# pg_dump compatibility: detect array types by checking first char of typname.
+query B
+SELECT (typname::name)[0] = '_' FROM pg_type WHERE typname = '_int4'
+----
+true
+
+# text/string subscripting is not supported (matches PG).
+statement error cannot subscript type string
+SELECT ('world'::STRING)[0]
+
 query T
 SELECT (ARRAY['a', 'b', 'c'])[2]
 ----
@@ -477,9 +512,10 @@ query T
 SELECT ARRAY[ROW()] FROM ident
 ----
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE a (b INT ARRAY)
 
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE a
 ----
@@ -487,14 +523,24 @@ a  CREATE TABLE public.a (
      b INT8[] NULL,
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
      CONSTRAINT a_pkey PRIMARY KEY (rowid ASC)
-   )
+   );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE a
+----
+a  CREATE TABLE public.a (
+     b INT8[] NULL,
+     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+     CONSTRAINT a_pkey PRIMARY KEY (rowid ASC)
+   ) WITH (schema_locked = true);
 
 statement ok
 DROP TABLE a
 
 # Int array columns.
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE a (b INT[])
 
 statement ok
@@ -505,7 +551,7 @@ SELECT b FROM a
 ----
 {1,2,3}
 
-statement ok
+statement count 1
 DELETE FROM a
 
 statement ok
@@ -516,7 +562,7 @@ SELECT b FROM a
 ----
 NULL
 
-statement ok
+statement count 1
 DELETE FROM a
 
 statement ok
@@ -527,7 +573,7 @@ SELECT b FROM a
 ----
 {}
 
-statement ok
+statement count 1
 DELETE FROM a;
 
 # Make sure arrays originating from ARRAY_AGG work as expected.
@@ -540,6 +586,7 @@ SELECT * FROM a
 ----
 {1,2,3}
 
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE a
 ----
@@ -547,7 +594,17 @@ a  CREATE TABLE public.a (
      b INT8[] NULL,
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
      CONSTRAINT a_pkey PRIMARY KEY (rowid ASC)
-   )
+   );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE a
+----
+a  CREATE TABLE public.a (
+     b INT8[] NULL,
+     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+     CONSTRAINT a_pkey PRIMARY KEY (rowid ASC)
+   ) WITH (schema_locked = true);
 
 statement error could not parse "foo" as type int
 INSERT INTO a VALUES (ARRAY['foo'])
@@ -555,7 +612,7 @@ INSERT INTO a VALUES (ARRAY['foo'])
 statement error could not parse "foo" as type int
 INSERT INTO a VALUES (ARRAY[1, 'foo'])
 
-statement ok
+statement count 1
 DELETE FROM a
 
 statement ok
@@ -577,7 +634,7 @@ NULL
 
 # NULL values
 
-statement ok
+statement count 3
 DELETE FROM a
 
 statement ok
@@ -591,7 +648,7 @@ SELECT * FROM a
 {1,NULL}
 {NULL,NULL}
 
-statement ok
+statement count 4
 DELETE FROM a
 
 # Test with arrays bigger than 8 elements so the NULL bitmap has to be larger than a byte
@@ -609,9 +666,10 @@ DROP TABLE a
 
 # Ensure that additional type info stays when used as an array.
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE a (b SMALLINT[])
 
+onlyif config schema-locked-disabled
 query TT
 SHOW CREATE TABLE a
 ----
@@ -619,7 +677,17 @@ a  CREATE TABLE public.a (
      b INT2[] NULL,
      rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
      CONSTRAINT a_pkey PRIMARY KEY (rowid ASC)
-   )
+   );
+
+skipif config schema-locked-disabled
+query TT
+SHOW CREATE TABLE a
+----
+a  CREATE TABLE public.a (
+     b INT2[] NULL,
+     rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+     CONSTRAINT a_pkey PRIMARY KEY (rowid ASC)
+   ) WITH (schema_locked = true);
 
 statement error integer out of range for type int2
 INSERT INTO a VALUES (ARRAY[100000])
@@ -650,7 +718,7 @@ SELECT b FROM a
 
 # Test NULLs with strings
 
-statement ok
+statement count 1
 DELETE FROM a
 
 statement ok
@@ -1142,7 +1210,7 @@ SELECT array_position(NULL::STRING[], 'abc')
 ----
 NULL
 
-query error array_position\(\): initial position must not be null
+query error initial position must not be null
 SELECT array_position(ARRAY['sun','mon','tue','wed','thu','fri','sat','mon'], 'mon', null)
 
 query error unknown signature: array_position\(int, string, int\)
@@ -1693,7 +1761,7 @@ statement error duplicate key value violates unique constraint
 CREATE UNIQUE INDEX ON unique_array(b)
 
 # Create an indexes on a bad type.
-statement error pq: unimplemented: column x is of type geography\[\] and thus is not indexable
+statement error column x has type geography\[\], which is not indexable in a non-inverted index\nHINT: you may want to create an inverted index instead. See the documentation for inverted indexes: https://www.cockroachlabs.com/docs/.+/inverted-indexes.html
 CREATE TABLE tbad (x GEOGRAPHY[] PRIMARY KEY)
 
 # Test arrays of composite types.
@@ -2467,3 +2535,28 @@ SELECT * FROM t95158 WHERE c !~ ANY (ARRAY['x']::STRING[])
 query I
 SELECT * FROM t95158 WHERE c !~ SOME (ARRAY['x']::STRING[])
 ----
+
+# Regression tests for internal errors on an empty array string (#89969).
+query error pgcode 42804 could not determine polymorphic type because input has type unknown
+SELECT array_length('{}', 1);
+
+query I
+SELECT array_length('{}'::text[], 1);
+----
+NULL
+
+query error pgcode 42804 could not determine polymorphic type because input has type unknown
+SELECT cardinality('{}');
+
+query I
+SELECT width_bucket(true, '{}'::BOOL[]);
+----
+0
+
+# TODO(yuzefovich): this works in PG because 'thresholds' argument uses
+# anycompatiblearray type, not anyarray.
+query error pgcode 42804 could not determine polymorphic type because input has type unknown
+SELECT width_bucket(true, '{}');
+
+query error pgcode 42804 could not determine polymorphic type because input has type unknown
+SELECT array_to_string('{}', 'foo');

@@ -150,9 +150,9 @@ func ClearRange(
 	// If we're writing Pebble range tombstones, use ClearRangeWithHeuristic to
 	// avoid writing tombstones across empty spans -- in particular, across the
 	// range key span, since we expect range keys to be rare.
-	const pointKeyThreshold, rangeKeyThreshold = 2, 2
+	const pointKeyThreshold = 2
 	if err := storage.ClearRangeWithHeuristic(
-		ctx, readWriter, readWriter, from, to, pointKeyThreshold, rangeKeyThreshold,
+		ctx, readWriter, readWriter, from, to, pointKeyThreshold,
 	); err != nil {
 		return result.Result{}, err
 	}
@@ -168,7 +168,7 @@ func ClearRange(
 // path of simply subtracting the non-system values is accurate.
 // Returns the delta stats.
 func computeStatsDelta(
-	ctx context.Context, readWriter storage.ReadWriter, cArgs CommandArgs, from, to roachpb.Key,
+	ctx context.Context, reader storage.Reader, cArgs CommandArgs, from, to roachpb.Key,
 ) (enginepb.MVCCStats, error) {
 	desc := cArgs.EvalCtx.Desc()
 	var delta enginepb.MVCCStats
@@ -189,7 +189,7 @@ func computeStatsDelta(
 	// If we can't use the fast stats path, or race test is enabled, compute stats
 	// across the key span to be cleared.
 	if !entireRange || util.RaceEnabled {
-		computed, err := storage.ComputeStats(ctx, readWriter, from, to, delta.LastUpdateNanos)
+		computed, err := storage.ComputeStats(ctx, reader, fs.BatchEvalReadCategory, from, to, delta.LastUpdateNanos)
 		if err != nil {
 			return enginepb.MVCCStats{}, err
 		}
@@ -201,7 +201,7 @@ func computeStatsDelta(
 			// We only want to assert the correctness of stats that do not contain
 			// estimates.
 			if delta.ContainsEstimates == 0 && !delta.Equal(computed) {
-				log.Fatalf(ctx, "fast-path MVCCStats computation gave wrong result: diff(fast, computed) = %s",
+				log.KvExec.Fatalf(ctx, "fast-path MVCCStats computation gave wrong result: diff(fast, computed) = %s",
 					pretty.Diff(delta, computed))
 			}
 		}
@@ -214,7 +214,7 @@ func computeStatsDelta(
 		if !entireRange {
 			leftPeekBound, rightPeekBound := rangeTombstonePeekBounds(
 				from, to, desc.StartKey.AsRawKey(), desc.EndKey.AsRawKey())
-			rkIter, err := readWriter.NewMVCCIterator(ctx, storage.MVCCKeyIterKind, storage.IterOptions{
+			rkIter, err := reader.NewMVCCIterator(ctx, storage.MVCCKeyIterKind, storage.IterOptions{
 				KeyTypes:     storage.IterKeyTypeRangesOnly,
 				LowerBound:   leftPeekBound,
 				UpperBound:   rightPeekBound,

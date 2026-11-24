@@ -41,13 +41,14 @@ func runDebugListFiles(cmd *cobra.Command, _ []string) error {
 	defer cancel()
 
 	// Connect to the node pointed to in the command line.
-	status, finish, err := getStatusClient(ctx, serverCfg)
+	conn, finish, err := newClientConn(ctx, serverCfg)
 	if err != nil {
 		return err
 	}
 	defer finish()
 
 	// Retrieve the details for the head node.
+	status := conn.NewStatusClient()
 	firstNodeDetails, err := status.Details(ctx, &serverpb.DetailsRequest{NodeId: "local"})
 	if err != nil {
 		return err
@@ -56,7 +57,7 @@ func runDebugListFiles(cmd *cobra.Command, _ []string) error {
 	// Retrieve the list of all nodes.
 	nodes, err := status.Nodes(ctx, &serverpb.NodesRequest{})
 	if err != nil {
-		log.Warningf(ctx, "cannot retrieve node list: %v", err)
+		log.Dev.Warningf(ctx, "cannot retrieve node list: %v", err)
 	}
 	// In case nodes came up back empty (the Nodes() RPC failed), we
 	// still want to inspect the per-node endpoints on the head
@@ -97,7 +98,7 @@ func runDebugListFiles(cmd *cobra.Command, _ []string) error {
 		nodeIDs := fmt.Sprintf("%d", nodeID)
 		nodeLogs, err := status.LogFilesList(ctx, &serverpb.LogFilesListRequest{NodeId: nodeIDs})
 		if err != nil {
-			log.Warningf(ctx, "cannot retrieve log file list from node %d: %v", nodeID, err)
+			log.Dev.Warningf(ctx, "cannot retrieve log file list from node %d: %v", nodeID, err)
 		} else {
 			logFiles[nodeID] = nodeLogs.Files
 		}
@@ -112,7 +113,7 @@ func runDebugListFiles(cmd *cobra.Command, _ []string) error {
 				Patterns: zipCtx.files.retrievalPatterns(),
 			})
 			if err != nil {
-				log.Warningf(ctx, "cannot retrieve %s file list from node %d: %v", serverpb.FileType_name[fileType], nodeID, err)
+				log.Dev.Warningf(ctx, "cannot retrieve %s file list from node %d: %v", serverpb.FileType_name[fileType], nodeID, err)
 			} else {
 				otherFiles[nodeID][fileType] = nodeFiles.Files
 			}

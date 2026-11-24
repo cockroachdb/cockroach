@@ -87,5 +87,5 @@ var ErrorFnFormatStringIndex = map[string]int{
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate.inputErrorf": 0,
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/sqlproxyccl.newErrorf": 1,
+	"github.com/cockroachdb/cockroach/pkg/sqlproxy.newErrorf": 1,
 }

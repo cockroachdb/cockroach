@@ -1,3 +1,4 @@
+# LogicTest: !local-prepared
 statement ok
 CREATE TABLE ab (
   a INT PRIMARY KEY,
@@ -106,9 +107,9 @@ CREATE FUNCTION public.f(a public.notmyworkday)
   LANGUAGE SQL
   SECURITY INVOKER
   AS $$
-  SELECT a FROM test.public.t;
-  SELECT b FROM test.public.t@t_idx_b;
-  SELECT c FROM test.public.t@t_idx_c;
+  SELECT a FROM public.t;
+  SELECT b FROM public.t@t_idx_b;
+  SELECT c FROM public.t@t_idx_c;
   SELECT nextval('public.sq1'::REGCLASS);
 $$
 
@@ -170,7 +171,7 @@ SELECT '100126'::REGPROC;
 query T
 SELECT 'sc.proc_f_2'::REGPROC;
 ----
-proc_f_2
+sc.proc_f_2
 
 query I
 SELECT 'sc.proc_f_2'::REGPROC::INT;
@@ -677,8 +678,8 @@ CREATE FUNCTION public.single_quote(s STRING)
   LANGUAGE SQL
   SECURITY INVOKER
   AS $$
-  SELECT (e'\'' || s) || e'\'';
-$$
+    SELECT e'\'' || s || e'\'';
+  $$
 
 query T
 SELECT single_quote('hello')
@@ -834,7 +835,7 @@ SELECT * FROM f();
 statement ok
 DROP FUNCTION f;
 
-statement error pgcode 42P13 pq: return type mismatch in function declared to return one_typ
+statement error pgcode 42P13 pq: return type mismatch in function declared to return public\.one_typ
 CREATE FUNCTION f() RETURNS one_typ LANGUAGE SQL AS $$ SELECT ROW(ROW(1)); $$;
 
 # Test a function returning a composite type with two elements.
@@ -853,6 +854,8 @@ SELECT * FROM f();
 
 statement ok
 DROP FUNCTION f;
+
+statement ok
 CREATE FUNCTION f() RETURNS two_typ LANGUAGE SQL AS $$ SELECT ROW(1, 2); $$;
 
 query T
@@ -868,7 +871,7 @@ SELECT * FROM f();
 statement ok
 DROP FUNCTION f;
 
-statement error pgcode 42P13 pq: return type mismatch in function declared to return two_typ
+statement error pgcode 42P13 pq: return type mismatch in function declared to return public\.two_typ
 CREATE FUNCTION f() RETURNS two_typ LANGUAGE SQL AS $$ SELECT ROW(ROW(1, 2)); $$;
 
 # Test a function with two OUT-parameters.
@@ -930,5 +933,626 @@ SELECT f('0');
 
 statement ok
 DROP FUNCTION f;
+
+# Regression test for #117101 - update the resolved type of a VALUES row with a
+# UDF after the UDF is built.
+subtest regression_117101
+
+statement ok
+CREATE FUNCTION f117101() RETURNS RECORD CALLED ON NULL INPUT AS $funcbody$
+  SELECT ((42)::INT8, (43)::INT8)
+$funcbody$ LANGUAGE SQL;
+
+statement error pgcode 42804 pq: VALUES types tuple{int, int} and tuple{tuple{string, int}, unknown} cannot be matched
+SELECT
+  *
+FROM
+(
+  VALUES
+    (
+     (('aloha'::TEXT,
+     (44)::INT8), NULL)
+    ),
+    (COALESCE(f117101(), NULL))
+);
+
+subtest end
+
+# Regression test for #137968 - do not incorrectly modify the resolved type of
+# an expression that already found a non-wildcard type.
+subtest regression_137968
+
+statement ok
+SELECT
+	tab_18298.col_30903
+FROM
+	(
+		VALUES
+			(
+				('-26 years -422 days -21:13:57.660026':::INTERVAL::INTERVAL + now():::TIMESTAMP::TIMESTAMP::TIMESTAMP)::TIMESTAMP
+			),
+			(NULL)
+	)
+		AS tab_18298 (col_30903)
+ORDER BY
+	tab_18298.col_30903 ASC
+LIMIT
+	3:::INT8;
+
+subtest end
+
+# Regression test for #104009.
+subtest regression_104009
+
+statement ok
+CREATE TABLE ab104009(a INT PRIMARY KEY, b INT)
+
+statement ok
+CREATE TABLE cd104009(c INT PRIMARY KEY, d INT)
+
+statement ok
+CREATE TABLE e104009(e INT PRIMARY KEY)
+
+statement ok
+CREATE FUNCTION f(o INT) RETURNS STRING STABLE LANGUAGE SQL AS $$
+  SELECT a
+  FROM ab104009
+  JOIN cd104009 ON a = c
+  JOIN e104009 ON b = e
+  WHERE b = $1
+$$
+
+statement ok
+PREPARE p AS SELECT f($1::REGCLASS::INT)
+
+statement ok
+EXECUTE p(10)
+
+subtest end
+
+subtest regression_142886
+
+# Regression test for #142886 - we should not be able to create an overload that
+# differs only in the type width of the input type.
+statement ok
+CREATE FUNCTION f142886(p VARCHAR(10)) RETURNS INT LANGUAGE SQL AS $$ SELECT 0; $$;
+
+statement error pgcode 42723 function "f142886" already exists with same argument types
+CREATE FUNCTION f142886(p VARCHAR(100)) RETURNS INT LANGUAGE SQL AS $$ SELECT 0; $$;
+
+statement ok
+DROP FUNCTION f142886;
+
+subtest end
+
+# Regression test for #142615.
+subtest regression_142615
+
+statement ok
+create function app_to_db_id(app_id INT8) RETURNS INT8 LANGUAGE plpgsql AS $$ BEGIN RETURN app_id * 2; END; $$;
+
+statement ok
+create sequence seq1;
+
+statement ok
+create table test (id int8 not null default app_to_db_id(nextval('seq1'::REGCLASS)));
+
+query TTITT rowsort
+select * from pg_catalog.pg_attrdef;
+----
+1508958170  132  2  unique_rowid()                                         unique_rowid()
+1202826234  151  1  gen_random_uuid()                                      gen_random_uuid()
+1202826232  151  3  now()                                                  now()
+3466299042  175  1  public.app_to_db_id(nextval('public.seq1'::regclass))  public.app_to_db_id(nextval('public.seq1'::regclass))
+3466299041  175  2  unique_rowid()                                         unique_rowid()
+
+subtest end
+
+subtest view
+
+statement ok
+CREATE TABLE xy (x INT, y INT);
+INSERT INTO xy VALUES (1, 2), (3, 4), (5, 6);
+
+statement ok
+CREATE FUNCTION f_scalar() RETURNS INT LANGUAGE SQL AS $$ SELECT count(*) FROM xy $$;
+
+statement ok
+CREATE FUNCTION f_setof() RETURNS SETOF xy LANGUAGE SQL AS $$ SELECT * FROM xy $$;
+
+statement ok
+CREATE VIEW v AS SELECT x, y, f_scalar() FROM f_setof();
+
+statement ok
+CREATE MATERIALIZED VIEW mv AS SELECT x, y, f_scalar() FROM f_setof();
+
+query III
+SELECT * FROM v ORDER BY x, y;
+----
+1  2  3
+3  4  3
+5  6  3
+
+query III
+SELECT * FROM mv ORDER BY x, y;
+----
+1  2  3
+3  4  3
+5  6  3
+
+statement ok
+REFRESH MATERIALIZED VIEW mv;
+
+query III
+SELECT * FROM mv ORDER BY x, y;
+----
+1  2  3
+3  4  3
+5  6  3
+
+statement ok
+INSERT INTO xy VALUES (7, 8);
+
+query III
+SELECT * FROM v ORDER BY x, y;
+----
+1  2  4
+3  4  4
+5  6  4
+7  8  4
+
+query III
+SELECT * FROM mv ORDER BY x, y;
+----
+1  2  3
+3  4  3
+5  6  3
+
+statement ok
+REFRESH MATERIALIZED VIEW mv;
+
+query III
+SELECT * FROM mv ORDER BY x, y;
+----
+1  2  4
+3  4  4
+5  6  4
+7  8  4
+
+statement ok
+CREATE ROLE bob;
+
+statement ok
+GRANT ALL ON SCHEMA public TO bob;
+
+statement ok
+GRANT ALL ON v TO bob;
+
+statement ok
+GRANT ALL ON mv TO bob;
+
+statement ok
+REVOKE EXECUTE ON FUNCTION f_scalar() FROM PUBLIC;
+
+statement ok
+REVOKE EXECUTE ON FUNCTION f_scalar() FROM bob;
+
+statement ok
+SET ROLE bob;
+
+statement error pgcode 42501 pq: user bob does not have EXECUTE privilege on function f_scalar
+SELECT f_scalar();
+
+# Note: Postgres fails with a different error message: "user bob does not have EXECUTE privilege on function f_scalar".
+# This is because psql will first validate access to f_scalar, but crdb first validates access to xy.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pgcode 42501 pq: user bob does not have SELECT privilege on relation xy
+SELECT * FROM v;
+
+onlyif config local-mixed-25.4 local-mixed-26.1
+statement error pgcode 42501 pq: user bob does not have EXECUTE privilege on function f_scalar
+SELECT * FROM v;
+
+statement ok
+SELECT * FROM mv;
+
+statement ok
+SET ROLE root;
+
+statement ok
+GRANT SELECT ON xy TO bob;
+
+statement ok
+SET ROLE bob;
+
+statement error pgcode 42501 pq: user bob does not have EXECUTE privilege on function f_scalar
+SELECT * FROM v;
+
+statement ok
+SET ROLE root;
+
+statement ok
+REVOKE SELECT ON xy FROM bob;
+
+statement error pgcode 0A000 cannot rename function "f_scalar" because other objects \(\[test.public.v, test.public.mv\]\) still depend on it
+ALTER FUNCTION f_scalar RENAME TO f_scalar_renamed;
+
+statement error pgcode 0A000 cannot rename function "f_setof" because other objects \(\[test.public.v, test.public.mv\]\) still depend on it
+ALTER FUNCTION f_setof RENAME TO f_setof_renamed;
+
+statement error pgcode 2BP01 pq: cannot drop function "f_scalar" because other objects \(\[test.public.v, test.public.mv\]\) still depend on it
+DROP FUNCTION f_scalar;
+
+statement error pgcode 2BP01 pq: cannot drop function "f_setof" because other objects \(\[test.public.v, test.public.mv\]\) still depend on it
+DROP FUNCTION f_setof;
+
+statement ok
+DROP VIEW v;
+
+statement ok
+DROP MATERIALIZED VIEW mv;
+
+statement ok
+DROP FUNCTION f_scalar;
+
+statement ok
+DROP FUNCTION f_setof;
+
+# Test a view referencing a builtin function.
+statement ok
+CREATE VIEW v_builtin AS SELECT * FROM generate_series(1, 4);
+
+query I
+SELECT * FROM v_builtin ORDER BY 1;
+----
+1
+2
+3
+4
+
+statement ok
+DROP VIEW v_builtin;
+
+subtest end
+
+subtest show_create_func_cast_enum
+
+statement ok
+CREATE TYPE cast_udf_enum AS ENUM ('a', 'b', 'c');
+
+statement ok
+DROP TABLE IF EXISTS cast_udf_enum_t;
+
+statement ok
+CREATE TABLE cast_udf_enum_t (c STRING);
+
+statement ok
+INSERT INTO cast_udf_enum_t VALUES ('a'), ('a'), ('b')
+
+statement ok
+CREATE FUNCTION cast_to_enum() RETURNS INT LANGUAGE PLpgSQL AS $$
+  DECLARE
+    i INT;
+  BEGIN
+    SELECT count(*) INTO i FROM cast_udf_enum_t WHERE c::cast_udf_enum = 'a'::cast_udf_enum;
+    RETURN i;
+  END
+$$;
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION cast_to_enum];
+----
+CREATE FUNCTION public.cast_to_enum()
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE plpgsql
+  SECURITY INVOKER
+  AS $$
+  DECLARE
+  i INT8;
+  BEGIN
+  SELECT count(*) FROM public.cast_udf_enum_t WHERE c::public.cast_udf_enum = 'a'::test.public.cast_udf_enum INTO i;
+  RETURN i;
+  END;
+$$
+
+query I
+SELECT cast_to_enum()
+----
+2
+
+statement ok
+DROP FUNCTION cast_to_enum;
+
+statement ok
+DROP TABLE cast_udf_enum_t;
+
+statement ok
+DROP TYPE cast_udf_enum;
+
+subtest end
+
+subtest show_create_func_cast_composite_type
+
+statement ok
+CREATE TYPE composite_coord AS (x INT, y INT);
+
+statement ok
+CREATE TABLE composite_test_t (id INT, coord STRING);
+
+statement ok
+CREATE FUNCTION cast_to_composite() RETURNS INT LANGUAGE PLpgSQL AS $$
+  DECLARE
+    result INT;
+  BEGIN
+    SELECT 1 INTO result FROM composite_test_t WHERE coord::composite_coord IS NOT NULL;
+    RETURN result;
+  END
+$$;
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION cast_to_composite];
+----
+CREATE FUNCTION public.cast_to_composite()
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE plpgsql
+  SECURITY INVOKER
+  AS $$
+  DECLARE
+  result INT8;
+  BEGIN
+  SELECT 1 FROM public.composite_test_t WHERE coord::public.composite_coord IS NOT NULL INTO result;
+  RETURN result;
+  END;
+$$
+
+statement ok
+DROP FUNCTION cast_to_composite;
+
+statement ok
+DROP TABLE composite_test_t;
+
+statement ok
+DROP TYPE composite_coord;
+
+subtest end
+
+subtest show_create_func_cast_array_enum
+
+statement ok
+CREATE TYPE array_status AS ENUM ('active', 'inactive', 'pending');
+
+statement ok
+CREATE TABLE array_test_t (statuses STRING[]);
+
+statement ok
+CREATE FUNCTION process_array() RETURNS INT LANGUAGE PLpgSQL AS $$
+  DECLARE
+    count INT;
+  BEGIN
+    SELECT count(*) INTO count FROM array_test_t WHERE statuses[1]::array_status = 'active'::array_status;
+    RETURN count;
+  END
+$$;
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION process_array];
+----
+CREATE FUNCTION public.process_array()
+  RETURNS INT8
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE plpgsql
+  SECURITY INVOKER
+  AS $$
+  DECLARE
+  count INT8;
+  BEGIN
+  SELECT count(*) FROM public.array_test_t WHERE statuses[1]::public.array_status = 'active'::test.public.array_status INTO count;
+  RETURN count;
+  END;
+$$
+
+statement ok
+DROP FUNCTION process_array;
+
+statement ok
+DROP TABLE array_test_t;
+
+statement ok
+DROP TYPE array_status;
+
+subtest end
+
+subtest show_create_func_multiple_udt_casts
+
+statement ok
+CREATE TYPE user_status AS ENUM ('guest', 'member', 'admin');
+
+statement ok
+CREATE TYPE user_profile AS (name STRING, age INT);
+
+statement ok
+CREATE TABLE mixed_udt_t (status STRING, profile STRING);
+
+statement ok
+CREATE FUNCTION mixed_udt_func() RETURNS TEXT LANGUAGE PLpgSQL AS $$
+  DECLARE
+    status_val user_status;
+    profile_val user_profile;
+    result TEXT;
+  BEGIN
+    SELECT status::user_status, profile::user_profile INTO status_val, profile_val
+    FROM mixed_udt_t WHERE status::user_status = 'admin'::user_status;
+    result := status_val::TEXT;
+    RETURN result;
+  END
+$$;
+
+query T
+SELECT create_statement FROM [SHOW CREATE FUNCTION mixed_udt_func];
+----
+CREATE FUNCTION public.mixed_udt_func()
+  RETURNS STRING
+  VOLATILE
+  NOT LEAKPROOF
+  CALLED ON NULL INPUT
+  LANGUAGE plpgsql
+  SECURITY INVOKER
+  AS $$
+  DECLARE
+  status_val public.user_status;
+  profile_val public.user_profile;
+  result STRING;
+  BEGIN
+  SELECT status::public.user_status, profile::user_profile FROM public.mixed_udt_t WHERE status::user_status = 'admin'::test.public.user_status INTO status_val, profile_val;
+  result := status_val::STRING;
+  RETURN result;
+  END;
+$$
+
+statement ok
+DROP FUNCTION mixed_udt_func;
+
+statement ok
+DROP TABLE mixed_udt_t;
+
+statement ok
+DROP TYPE user_profile;
+
+statement ok
+DROP TYPE user_status;
+
+subtest end
+
+# Regression test: views should use the view owner's privileges for direct
+# table access, but SECURITY INVOKER functions called by the view should run
+# with the invoker's privileges (matching PostgreSQL behavior).
+subtest view_function_privilege_separation
+
+statement ok
+CREATE TABLE priv_t (id INT PRIMARY KEY, val TEXT);
+INSERT INTO priv_t VALUES (1, 'hello'), (2, 'world');
+
+statement ok
+CREATE FUNCTION priv_f() RETURNS SETOF priv_t LANGUAGE SQL AS $$
+  SELECT * FROM priv_t;
+$$;
+
+statement ok
+CREATE VIEW priv_v AS SELECT * FROM priv_f();
+
+statement ok
+CREATE ROLE IF NOT EXISTS alice;
+GRANT USAGE ON SCHEMA public TO alice;
+GRANT SELECT ON priv_v TO alice;
+REVOKE ALL ON priv_t FROM alice;
+REVOKE EXECUTE ON FUNCTION priv_f() FROM alice;
+REVOKE EXECUTE ON FUNCTION priv_f() FROM public;
+
+# Part 1: alice has SELECT on view, but no EXECUTE on function and no
+# SELECT on table.
+statement ok
+SET ROLE alice
+
+statement error pgcode 42501 user alice does not have SELECT privilege on relation priv_t
+SELECT * FROM priv_t
+
+statement error pgcode 42501 user alice does not have EXECUTE privilege on function priv_f
+SELECT * FROM priv_f()
+
+# The view calls priv_f which is SECURITY INVOKER. The EXECUTE privilege on
+# priv_f is checked against the invoker (alice), not the view owner.
+statement error pgcode 42501 user alice does not have EXECUTE privilege on function priv_f
+SELECT * FROM priv_v
+
+statement ok
+RESET ROLE
+
+# Part 2: grant EXECUTE on the function to alice. The function is
+# SECURITY INVOKER (default), so its body runs with alice's privileges.
+# Since alice does not have SELECT on priv_t, the function body fails.
+statement ok
+GRANT EXECUTE ON FUNCTION priv_f() TO alice
+
+statement ok
+SET ROLE alice
+
+statement error pgcode 42501 user alice does not have SELECT privilege on relation priv_t
+SELECT * FROM priv_t
+
+# alice can execute priv_f, but priv_f is SECURITY INVOKER and its body
+# reads priv_t — which alice cannot access.
+statement error pgcode 42501 user alice does not have SELECT privilege on relation priv_t
+SELECT * FROM priv_f()
+
+# Same result through the view: priv_f runs as alice (INVOKER), who
+# cannot read priv_t.
+skipif config local-mixed-25.4 local-mixed-26.1
+statement error pgcode 42501 user alice does not have SELECT privilege on relation priv_t
+SELECT * FROM priv_v
+
+onlyif config local-mixed-25.4 local-mixed-26.1
+statement ok
+SELECT * FROM priv_v
+
+statement ok
+RESET ROLE
+
+# Part 3: create a SECURITY DEFINER version of the function and a view that
+# uses it. The definer (root) has SELECT on priv_t, so alice should be
+# able to read through the view as long as she has EXECUTE on the function.
+statement ok
+CREATE FUNCTION priv_f_definer() RETURNS SETOF priv_t LANGUAGE SQL
+SECURITY DEFINER AS $$
+  SELECT * FROM priv_t;
+$$;
+
+statement ok
+CREATE VIEW priv_v_definer AS SELECT * FROM priv_f_definer();
+GRANT SELECT ON priv_v_definer TO alice;
+GRANT EXECUTE ON FUNCTION priv_f_definer() TO alice;
+
+statement ok
+SET ROLE alice
+
+# Still fails: alice has no SELECT on priv_t.
+statement error pgcode 42501 user alice does not have SELECT privilege on relation priv_t
+SELECT * FROM priv_t
+
+# Succeeds: priv_f_definer is SECURITY DEFINER, so its body runs with the
+# owner's (root) privileges. root has SELECT on priv_t.
+query IT nosort
+SELECT * FROM priv_f_definer() ORDER BY id
+----
+1  hello
+2  world
+
+# Succeeds through the view as well: alice has SELECT on the view and
+# EXECUTE on the definer function, which runs as root.
+query IT nosort
+SELECT * FROM priv_v_definer ORDER BY id
+----
+1  hello
+2  world
+
+statement ok
+RESET ROLE
+
+# Cleanup.
+statement ok
+DROP VIEW priv_v;
+DROP VIEW priv_v_definer;
+DROP FUNCTION priv_f;
+DROP FUNCTION priv_f_definer;
+DROP TABLE priv_t;
+REVOKE USAGE ON SCHEMA public FROM alice;
+DROP ROLE alice;
 
 subtest end

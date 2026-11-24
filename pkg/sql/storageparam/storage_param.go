@@ -10,6 +10,7 @@ package storageparam
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/docs"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/paramparse"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -34,6 +35,9 @@ type Setter interface {
 	// This allows checking whether multiple storage parameters together
 	// form a valid configuration.
 	RunPostChecks() error
+	// IsNewObject returns true if the storage parameter is being set on a new
+	// table or index (depending on the Setter implementation).
+	IsNewObject() bool
 }
 
 // Set sets the given storage parameters using the
@@ -45,7 +49,7 @@ func Set(
 	params tree.StorageParams,
 	setter Setter,
 ) error {
-	if err := storageParamPreChecks(ctx, evalCtx, params, nil /* resetParams */); err != nil {
+	if err := StorageParamPreChecks(ctx, evalCtx, setter.IsNewObject(), params, nil /* resetParams */); err != nil {
 		return err
 	}
 	for _, sp := range params {
@@ -55,29 +59,46 @@ func Set(
 		}
 		telemetry.Inc(sqltelemetry.SetTableStorageParameter(key))
 
+		// Special handling for parameters that are processed in the schema changer
+		// (EvalShardColumns, EvalShardBucketCount) and do not need evaluation here.
+		// This is necessary for 'shard_columns', as type checking will otherwise
+		// carry out column name resolution, and we do not currently have the table
+		// context needed for name resolution.
+		if key == `shard_columns` || key == `bucket_count` {
+			// Pass nil datum - these parameters are handled in the schema changer
+			// by accessing the raw expression from storageParams.
+			if err := setter.Set(ctx, semaCtx, evalCtx, key, nil); err != nil {
+				return err
+			}
+			continue
+		}
+
 		// Expressions may be an unresolved name.
 		// Cast these as strings.
 		expr := paramparse.UnresolvedNameToStrVal(sp.Value)
 
-		// Storage params handle their own scalar arguments, with no help from the
-		// optimizer. As such, they cannot contain subqueries.
-		defer semaCtx.Properties.Restore(semaCtx.Properties)
-		semaCtx.Properties.Require("table storage parameters", tree.RejectSubqueries)
+		err := func() error {
+			// Storage params handle their own scalar arguments, with no help from the
+			// optimizer. As such, they cannot contain subqueries.
+			defer semaCtx.Properties.Restore(semaCtx.Properties)
+			semaCtx.Properties.Require("table storage parameters", tree.RejectSubqueries)
 
-		// Convert the expressions to a datum.
-		typedExpr, err := tree.TypeCheck(ctx, expr, semaCtx, types.Any)
-		if err != nil {
-			return err
-		}
-		if typedExpr, err = normalize.Expr(ctx, evalCtx, typedExpr); err != nil {
-			return err
-		}
-		datum, err := eval.Expr(ctx, evalCtx, typedExpr)
-		if err != nil {
-			return err
-		}
+			// Convert the expressions to a datum.
+			typedExpr, err := tree.TypeCheck(ctx, expr, semaCtx, types.AnyElement)
+			if err != nil {
+				return err
+			}
+			if typedExpr, err = normalize.Expr(ctx, evalCtx, typedExpr); err != nil {
+				return err
+			}
+			datum, err := eval.Expr(ctx, evalCtx, typedExpr)
+			if err != nil {
+				return err
+			}
+			return setter.Set(ctx, semaCtx, evalCtx, key, datum)
+		}()
 
-		if err := setter.Set(ctx, semaCtx, evalCtx, key, datum); err != nil {
+		if err != nil {
 			return err
 		}
 	}
@@ -89,7 +110,7 @@ func Set(
 func Reset(
 	ctx context.Context, evalCtx *eval.Context, params []string, paramObserver Setter,
 ) error {
-	if err := storageParamPreChecks(ctx, evalCtx, nil /* setParam */, params); err != nil {
+	if err := StorageParamPreChecks(ctx, evalCtx, paramObserver.IsNewObject(), nil /* setParam */, params); err != nil {
 		return err
 	}
 	for _, p := range params {
@@ -106,7 +127,7 @@ func Reset(
 func SetFillFactor(ctx context.Context, evalCtx *eval.Context, key string, datum tree.Datum) error {
 	val, err := paramparse.DatumAsFloat(ctx, evalCtx, key, datum)
 	if err != nil {
-		return err
+		return pgerror.Wrapf(err, pgcode.InvalidParameterValue, "error decoding %q", key)
 	}
 	if val < 0 || val > 100 {
 		return pgerror.Newf(pgcode.InvalidParameterValue, "%q must be between 0 and 100", key)
@@ -120,21 +141,31 @@ func SetFillFactor(ctx context.Context, evalCtx *eval.Context, key string, datum
 	return nil
 }
 
-// storageParamPreChecks is where we specify pre-conditions for setting/resetting
+// StorageParamPreChecks is where we specify pre-conditions for setting/resetting
 // storage parameters `param`.
-func storageParamPreChecks(
-	ctx context.Context, evalCtx *eval.Context, setParams tree.StorageParams, resetParams []string,
+func StorageParamPreChecks(
+	ctx context.Context,
+	evalCtx *eval.Context,
+	isNewObject bool,
+	setParams tree.StorageParams,
+	resetParams []string,
 ) error {
 	if setParams != nil && resetParams != nil {
 		return errors.AssertionFailedf("only one of setParams and resetParams should be non-nil.")
 	}
 
-	var keys []string
+	keys := make([]string, 0, len(setParams)+len(resetParams))
+	params := make(map[string]struct{}, len(setParams))
 	for _, param := range setParams {
+		if _, exists := params[param.Key]; exists {
+			return pgerror.Newf(pgcode.InvalidParameterValue, "parameter %q specified more than once", param.Key)
+		}
+		params[param.Key] = struct{}{}
 		keys = append(keys, param.Key)
 	}
 	keys = append(keys, resetParams...)
 
+	hasTTLRateLimit := false
 	for _, key := range keys {
 		if key == `schema_locked` {
 			// We only allow setting/resetting `schema_locked` storage parameter in
@@ -144,11 +175,26 @@ func storageParamPreChecks(
 			// change we make to the descriptor in the transaction, so we can uphold
 			// the "one-version invariant" as discussed further in RFC
 			// https://github.com/ajwerner/cockroach/blob/ajwerner/low-latency-rfc-take-3/docs/RFCS/20230328_low_latency_changefeeds.md
-			if len(keys) > 1 || !evalCtx.TxnImplicit || !evalCtx.TxnIsSingleStmt {
+			// For newly created tables we will allow schema_locked to be set upon creation,
+			// since later operations cannot unset schema_locked (i.e. only implicit single
+			// statement transactions are allowed to manipulate schema_locked, see
+			// checkSchemaChangeIsAllowed).
+			if !isNewObject && (len(keys) > 1 || !evalCtx.TxnImplicit || !evalCtx.TxnIsSingleStmt) {
 				return pgerror.Newf(pgcode.InvalidParameterValue, "%q can only be set/reset on "+
 					"its own without other parameters in a single-statement implicit transaction.", key)
 			}
 		}
+		if key == `ttl_select_rate_limit` || key == `ttl_delete_rate_limit` {
+			hasTTLRateLimit = true
+		}
 	}
+
+	if hasTTLRateLimit {
+		evalCtx.ClientNoticeSender.BufferClientNotice(ctx, errors.WithDetail(
+			pgnotice.Newf("The TTL rate limit is per node per table."),
+			"See the documentation for additional details: "+docs.URL("row-level-ttl#ttl-storage-parameters"),
+		))
+	}
+
 	return nil
 }

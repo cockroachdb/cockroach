@@ -80,6 +80,7 @@ describe("Local Settings", function () {
     };
 
     beforeEach(function () {
+      sessionStorage.clear();
       topLevelState = {
         localSettings: {},
       };

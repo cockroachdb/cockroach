@@ -37,7 +37,7 @@ a given corpus file.
 					Version: version,
 				})
 			if rules == nil {
-				fmt.Printf("unsupported version number, the supported versions are: \n")
+				fmt.Printf("unsupported version number, the supported versions are:\n")
 				for _, v := range scplan.GetReleasesForRulesRegistries() {
 					fmt.Printf(" %s\n", v)
 				}

@@ -9,6 +9,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"database/sql/driver"
+	"encoding/binary"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -33,7 +34,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"github.com/jackc/pgconn"
 	pgproto3 "github.com/jackc/pgproto3/v2"
 	pgx "github.com/jackc/pgx/v4"
 	"github.com/lib/pq"
@@ -258,7 +261,6 @@ func TestPGPrepareFail(t *testing.T) {
 		"SELECT CASE WHEN TRUE THEN $1 ELSE $2 END": "pq: could not determine data type of placeholder $2",
 		"SELECT $1 > 0 AND NOT $1":                  "pq: placeholder $1 already has type int, cannot assign bool",
 		"CREATE TABLE $1 (id INT)":                  "pq: at or near \"1\": syntax error",
-		"UPDATE d.t SET s = i + $1":                 "pq: unsupported binary operator: <int> + <anyelement> (returning <string>)",
 		"SELECT $0 > 0":                             "pq: lexical error: placeholder index must be between 1 and 65536",
 		"SELECT $2 > 0":                             "pq: could not determine data type of placeholder $1",
 		"SELECT 3 + CASE (4) WHEN 4 THEN $1 END":    "pq: could not determine data type of placeholder $1",
@@ -292,6 +294,11 @@ func TestPGPrepareWithCreateDropInTxn(t *testing.T) {
 
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
+
+	_, err := db.Exec("SET autocommit_before_ddl = false")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	{
 		tx, err := db.Begin()
@@ -473,7 +480,7 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.SetArgs(2, 3).Results(2),
 			baseTest.SetArgs(true, 0).Error(`error in argument for \$1: could not parse "true" as type int: strconv.ParseInt: parsing "true": invalid syntax`),
 		}},
-		{"SELECT $1[2] LIKE 'b'", []preparedQueryTest{
+		{"SELECT ($1::TEXT[])[2] LIKE 'b'", []preparedQueryTest{
 			baseTest.SetArgs(pq.Array([]string{"a", "b", "c"})).Results(true),
 			baseTest.SetArgs(pq.Array([]gosql.NullString{{String: "a", Valid: true}, {Valid: false}, {String: "c", Valid: true}})).Results(gosql.NullBool{Valid: false}),
 		}},
@@ -491,7 +498,8 @@ func TestPGPreparedQuery(t *testing.T) {
 				Results("username", "STRING", false, gosql.NullBool{}, "", "{primary,users_user_id_idx}", false).
 				Results("hashedPassword", "BYTES", true, gosql.NullBool{}, "", "{primary}", false).
 				Results("isRole", "BOOL", false, false, "", "{primary}", false).
-				Results("user_id", "OID", false, gosql.NullBool{}, "", "{primary,users_user_id_idx}", false),
+				Results("user_id", "OID", false, gosql.NullBool{}, "", "{primary,users_user_id_idx}", false).
+				Results("estimated_last_login_time", "TIMESTAMPTZ", true, gosql.NullBool{}, "", "{primary}", false),
 		}},
 		{"SELECT database_name, owner FROM [SHOW DATABASES]", []preparedQueryTest{
 			baseTest.Results("d", username.RootUser).
@@ -514,6 +522,7 @@ func TestPGPreparedQuery(t *testing.T) {
 				Results("users", "primary", false, 2, "hashedPassword", "hashedPassword", "N/A", true, false, true, 1).
 				Results("users", "primary", false, 3, "isRole", "isRole", "N/A", true, false, true, 1).
 				Results("users", "primary", false, 4, "user_id", "user_id", "N/A", true, false, true, 1).
+				Results("users", "primary", false, 5, "estimated_last_login_time", "estimated_last_login_time", "N/A", true, false, true, 1).
 				Results("users", "users_user_id_idx", false, 1, "user_id", "user_id", "ASC", false, false, true, 1).
 				Results("users", "users_user_id_idx", false, 2, "username", "username", "ASC", true, true, true, 1),
 		}},
@@ -522,7 +531,10 @@ func TestPGPreparedQuery(t *testing.T) {
 		}},
 		{"SHOW CONSTRAINTS FROM system.users", []preparedQueryTest{
 			baseTest.Results("users", "primary", "PRIMARY KEY", "PRIMARY KEY (username ASC)", true).
-				Results("users", "users_user_id_idx", "UNIQUE", "UNIQUE (user_id ASC)", true),
+				Results("users", "users_isRole_not_null", "NOT NULL", "NOT NULL", true).
+				Results("users", "users_user_id_idx", "UNIQUE", "UNIQUE (user_id ASC)", true).
+				Results("users", "users_user_id_not_null", "NOT NULL", "NOT NULL", true).
+				Results("users", "users_username_not_null", "NOT NULL", "NOT NULL", true),
 		}},
 		{"SHOW TIME ZONE", []preparedQueryTest{
 			baseTest.Results("UTC"),
@@ -537,11 +549,11 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.SetArgs("def"),
 			baseTest.SetArgs("waa"),
 		}},
-		{"SHOW USERS", []preparedQueryTest{
-			baseTest.Results("abc", "", "{}").
-				Results("admin", "", "{}").
-				Results("root", "", "{admin}").
-				Results("woo", "", "{}"),
+		{"SELECT username, options, member_of from [SHOW USERS] ORDER BY username", []preparedQueryTest{
+			baseTest.Results("abc", "{}", "{}").
+				Results("admin", "{}", "{}").
+				Results("root", "{}", "{admin}").
+				Results("woo", "{}", "{}"),
 		}},
 		{"DROP USER abc, woo", []preparedQueryTest{
 			baseTest.SetArgs(),
@@ -697,7 +709,6 @@ func TestPGPreparedQuery(t *testing.T) {
 		{"EXPLAIN SELECT 1", []preparedQueryTest{
 			baseTest.SetArgs().
 				Results("distribution: local").
-				Results("vectorized: true").
 				Results("").
 				Results("• values").
 				Results("  size: 1 column, 1 row"),
@@ -765,7 +776,7 @@ func TestPGPreparedQuery(t *testing.T) {
 		{"INSERT INTO d.arr VALUES($1, $2)", []preparedQueryTest{
 			baseTest.SetArgs(pq.Array([]int64{}), pq.Array([]string{})),
 		}},
-		{"EXPERIMENTAL SCRUB TABLE system.locations", []preparedQueryTest{
+		{"INSPECT TABLE system.locations", []preparedQueryTest{
 			baseTest.SetArgs(),
 		}},
 		{"ALTER RANGE default CONFIGURE ZONE = $1", []preparedQueryTest{
@@ -816,7 +827,7 @@ func TestPGPreparedQuery(t *testing.T) {
 		for idx, test := range tests {
 			t.Run(fmt.Sprintf("%d", idx), func(t *testing.T) {
 				if testing.Verbose() || log.V(1) {
-					log.Infof(context.Background(), "query: %s", query)
+					log.Dev.Infof(context.Background(), "query: %s", query)
 				}
 				rows, err := queryFunc(test.qargs...)
 				if err != nil {
@@ -897,7 +908,7 @@ INSERT INTO d.t VALUES (10),(11);
 CREATE TABLE d.ts (a TIMESTAMP, b DATE);
 CREATE TABLE d.two (a INT, b INT);
 CREATE TABLE d.intStr (a INT, s STRING);
-CREATE TABLE d.str (s STRING, b BYTES);
+CREATE TABLE d.str (s STRING, b BYTES) WITH (schema_locked=false);
 CREATE TABLE d.arr (a INT[], b TEXT[]);
 CREATE TABLE d.emptynorows (); -- zero columns, zero rows
 CREATE TABLE d.emptyrows (x INT);
@@ -1224,7 +1235,7 @@ func TestPGPreparedExec(t *testing.T) {
 		for idx, test := range tests {
 			t.Run(fmt.Sprintf("%d", idx), func(t *testing.T) {
 				if testing.Verbose() || log.V(1) {
-					log.Infof(context.Background(), "exec: %s", query)
+					log.Dev.Infof(context.Background(), "exec: %s", query)
 				}
 				if result, err := execFunc(test.qargs...); err != nil {
 					if test.error == "" {
@@ -1258,7 +1269,7 @@ func TestPGPreparedExec(t *testing.T) {
 		for _, execTest := range execTests {
 			t.Run(execTest.query, func(t *testing.T) {
 				if testing.Verbose() || log.V(1) {
-					log.Infof(context.Background(), "prepare: %s", execTest.query)
+					log.Dev.Infof(context.Background(), "prepare: %s", execTest.query)
 				}
 				if stmt, err := db.Prepare(execTest.query); err != nil {
 					t.Errorf("%s: prepare error: %s", execTest.query, err)
@@ -1798,12 +1809,91 @@ func TestSessionParameters(t *testing.T) {
 	}
 }
 
+// TestPgDumpCompatibilityAppNameDefault verifies that connecting with the
+// application_name used by the PostgreSQL dump/restore client tools defaults
+// pg_dump_compatibility to "cockroachdb" (emitting a NOTICE), while an explicit
+// value in the connection string is always honored and ordinary applications
+// are unaffected.
+func TestPgDumpCompatibilityAppNameDefault(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{Insecure: true})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	host, ports, _ := net.SplitHostPort(s.AdvSQLAddr())
+	port, _ := strconv.Atoi(ports)
+
+	baseCfg, err := pgx.ParseConfig(
+		fmt.Sprintf("postgresql://%s@%s:%d/defaultdb?sslmode=disable", username.RootUser, host, port),
+	)
+	require.NoError(t, err)
+	baseCfg.TLSConfig = nil
+
+	testData := []struct {
+		name           string
+		appName        string
+		explicit       string // if non-empty, pg_dump_compatibility sent explicitly
+		expectedCompat string
+		expectNotice   bool
+	}{
+		{name: "pg_dump defaults to cockroachdb", appName: "pg_dump", expectedCompat: "cockroachdb", expectNotice: true},
+		{name: "pg_restore defaults to cockroachdb", appName: "pg_restore", expectedCompat: "cockroachdb", expectNotice: true},
+		{name: "pg_dumpall defaults to cockroachdb", appName: "pg_dumpall", expectedCompat: "cockroachdb", expectNotice: true},
+		{name: "explicit off is honored", appName: "pg_dump", explicit: "off", expectedCompat: "off", expectNotice: false},
+		{name: "explicit postgres is honored", appName: "pg_dump", explicit: "postgres", expectedCompat: "postgres", expectNotice: false},
+		{name: "ordinary app name is unaffected", appName: "psql", expectedCompat: "off", expectNotice: false},
+	}
+
+	for _, test := range testData {
+		t.Run(test.name, func(t *testing.T) {
+			var mu syncutil.Mutex
+			var notices []string
+			cfg := baseCfg.Copy()
+			cfg.RuntimeParams = map[string]string{"application_name": test.appName}
+			if test.explicit != "" {
+				cfg.RuntimeParams["pg_dump_compatibility"] = test.explicit
+			}
+			cfg.OnNotice = func(_ *pgconn.PgConn, n *pgconn.Notice) {
+				mu.Lock()
+				defer mu.Unlock()
+				notices = append(notices, n.Message)
+			}
+
+			db, err := pgx.ConnectConfig(ctx, cfg)
+			require.NoError(t, err)
+			defer func() { _ = db.Close(ctx) }()
+
+			var gotCompat string
+			require.NoError(t, db.QueryRow(ctx, "SHOW pg_dump_compatibility").Scan(&gotCompat))
+			require.Equal(t, test.expectedCompat, gotCompat)
+
+			mu.Lock()
+			defer mu.Unlock()
+			var pgDumpNotices []string
+			for _, msg := range notices {
+				if strings.Contains(msg, "pg_dump_compatibility") {
+					pgDumpNotices = append(pgDumpNotices, msg)
+				}
+			}
+			if test.expectNotice {
+				require.Lenf(t, pgDumpNotices, 1, "notices: %v", notices)
+				require.Contains(t, pgDumpNotices[0], test.appName)
+			} else {
+				require.Emptyf(t, pgDumpNotices, "unexpected notices: %v", notices)
+			}
+		})
+	}
+}
+
 type pgxTestLogger struct{}
 
 func (l pgxTestLogger) Log(
 	ctx context.Context, level pgx.LogLevel, msg string, data map[string]interface{},
 ) {
-	log.Infof(ctx, "pgx log [%s] %s - %s", level, msg, data)
+	log.Dev.Infof(ctx, "pgx log [%s] %s - %s", level, msg, data)
 }
 
 // pgxTestLogger implements pgx.Logger.
@@ -1895,6 +1985,154 @@ func TestUnsupportedGSSEnc(t *testing.T) {
 	})
 }
 
+// TestNegotiateProtocolVersion tests protocol version negotiation behavior.
+// It verifies that:
+// - Version 3.0 without _pq_.* options: no negotiation message is sent
+// - Version 3.0 with _pq_.* options: negotiation message lists unrecognized options
+// - Version 3.2+ (PostgreSQL 18+): negotiation message indicates version 3.0 supported
+// See: https://github.com/cockroachdb/cockroach/issues/153163
+func TestNegotiateProtocolVersion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Test only in insecure mode since the protocol negotiation happens before
+	// SSL/TLS handshake and the behavior is the same regardless of security mode.
+	ctx := context.Background()
+	params := base.TestServerArgs{Insecure: true}
+	srv := serverutils.StartServerOnly(t, params)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	const version30 = (3 << 16) + 0
+	const version32 = (3 << 16) + 2
+
+	testCases := []struct {
+		name                        string
+		protocolVersion             uint32
+		parameters                  map[string]string
+		expectNegotiation           bool
+		expectedUnrecognizedOptions []string
+	}{
+		{
+			// Version 3.0 with no special options should proceed directly to
+			// authentication without any negotiation.
+			name:              "v3.0_no_options",
+			protocolVersion:   version30,
+			parameters:        map[string]string{"user": "root"},
+			expectNegotiation: false,
+		},
+		{
+			// Version 3.0 with _pq_.* parameters triggers negotiation to inform the
+			// client which protocol options are not recognized. This is per the
+			// PostgreSQL protocol spec which reserves _pq_.* for protocol extensions.
+			name:                        "v3.0_with_pq_options",
+			protocolVersion:             version30,
+			parameters:                  map[string]string{"user": "root", "_pq_.feature": "value"},
+			expectNegotiation:           true,
+			expectedUnrecognizedOptions: []string{"_pq_.feature"},
+		},
+		{
+			// Version 3.2 (PostgreSQL 18+) with no special options should trigger
+			// negotiation to indicate we only support version 3.0.
+			name:              "v3.2_no_options",
+			protocolVersion:   version32,
+			parameters:        map[string]string{"user": "root"},
+			expectNegotiation: true,
+		},
+		{
+			// Version 3.2 with _pq_.* parameters should trigger negotiation that
+			// includes both the version downgrade and the unrecognized options.
+			name:            "v3.2_with_pq_options",
+			protocolVersion: version32,
+			parameters: map[string]string{
+				"user":                  "root",
+				"_pq_.protocol_feature": "some_value",
+				"_pq_.another_option":   "another_value",
+			},
+			expectNegotiation:           true,
+			expectedUnrecognizedOptions: []string{"_pq_.another_option", "_pq_.protocol_feature"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var d net.Dialer
+			conn, err := d.DialContext(ctx, "tcp", s.AdvSQLAddr())
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer conn.Close()
+
+			fe := pgproto3.NewFrontend(pgproto3.NewChunkReader(conn), conn)
+			if err := fe.Send(&pgproto3.StartupMessage{
+				ProtocolVersion: tc.protocolVersion,
+				Parameters:      tc.parameters,
+			}); err != nil {
+				t.Fatal(err)
+			}
+
+			if tc.expectNegotiation {
+				// Read the NegotiateProtocolVersion message.
+				// The format is:
+				//   - Byte1('v') - Message type
+				//   - Int32 - Length of message contents (including self)
+				//   - Int32 - Newest protocol version supported
+				//   - Int32 - Number of unrecognized protocol options
+				//   - For each unrecognized option: String - Option name
+				header := make([]byte, 5)
+				if _, err := io.ReadFull(conn, header); err != nil {
+					t.Fatalf("failed to read message header: %v", err)
+				}
+				msgType := header[0]
+				msgLen := binary.BigEndian.Uint32(header[1:5])
+
+				require.Equal(t, byte('v'), msgType, "expected NegotiateProtocolVersion message")
+
+				// Read the rest of the message.
+				body := make([]byte, msgLen-4) // -4 because length includes itself
+				if _, err := io.ReadFull(conn, body); err != nil {
+					t.Fatalf("failed to read message body: %v", err)
+				}
+
+				supportedVersion := binary.BigEndian.Uint32(body[0:4])
+				numUnrecognized := binary.BigEndian.Uint32(body[4:8])
+
+				require.Equal(t, uint32(version30), supportedVersion, "expected server to report protocol version 3.0")
+				require.Equal(t, uint32(len(tc.expectedUnrecognizedOptions)), numUnrecognized, "unexpected number of unrecognized options")
+
+				// Parse the unrecognized options from the message body.
+				var unrecognizedOptions []string
+				offset := 8
+				for i := 0; i < int(numUnrecognized); i++ {
+					// Find the null terminator for this string.
+					end := offset
+					for end < len(body) && body[end] != 0 {
+						end++
+					}
+					if end >= len(body) {
+						t.Fatalf("unterminated string in unrecognized options")
+					}
+					unrecognizedOptions = append(unrecognizedOptions, string(body[offset:end]))
+					offset = end + 1 // Skip the null terminator.
+				}
+
+				require.ElementsMatch(t, tc.expectedUnrecognizedOptions, unrecognizedOptions, "unexpected unrecognized options")
+			}
+
+			// After any negotiation (or immediately for v3.0 without options),
+			// the connection should proceed to authentication.
+			msg, err := fe.Receive()
+			if err != nil {
+				t.Fatalf("failed to receive message: %v", err)
+			}
+
+			// The server should proceed with authentication.
+			_, ok := msg.(*pgproto3.AuthenticationOk)
+			require.True(t, ok, "expected AuthenticationOk message, got %T", msg)
+		})
+	}
+}
+
 func TestFailPrepareFailsTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1917,4 +2155,103 @@ func TestFailPrepareFailsTxn(t *testing.T) {
 	if err := tx.Rollback(); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// TestTCPKeepAliveConnectionInit verifies that TCP keepalive session values
+// are correctly initialized from connection string options and ALTER ROLE SET
+// defaults during connection startup.
+func TestTCPKeepAliveConnectionInit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	_, err := db.ExecContext(ctx, "CREATE ROLE testuser WITH LOGIN")
+	require.NoError(t, err)
+
+	t.Run("connection string options", func(t *testing.T) {
+		pgURL, cleanup := s.PGUrl(t,
+			serverutils.CertsDirPrefix("TestTCPKeepAlive"),
+			serverutils.User(username.RootUser),
+		)
+		defer cleanup()
+		q := pgURL.Query()
+		// Append to existing options to preserve any cluster routing set by PGUrl.
+		opts := q.Get("options")
+		if opts != "" {
+			opts += " "
+		}
+		opts += "-c tcp_keepalives_idle=25 -c tcp_keepalives_interval=8 -c tcp_keepalives_count=4 -c tcp_user_timeout=15000"
+		q.Set("options", opts)
+		pgURL.RawQuery = q.Encode()
+
+		conn, err := pgx.Connect(ctx, pgURL.String())
+		require.NoError(t, err)
+		defer func() { _ = conn.Close(ctx) }()
+
+		var idle, interval, count, userTimeout string
+		err = conn.QueryRow(ctx, "SHOW tcp_keepalives_idle").Scan(&idle)
+		require.NoError(t, err)
+		require.Equal(t, "25", idle)
+		err = conn.QueryRow(ctx, "SHOW tcp_keepalives_interval").Scan(&interval)
+		require.NoError(t, err)
+		require.Equal(t, "8", interval)
+		err = conn.QueryRow(ctx, "SHOW tcp_keepalives_count").Scan(&count)
+		require.NoError(t, err)
+		require.Equal(t, "4", count)
+		err = conn.QueryRow(ctx, "SHOW tcp_user_timeout").Scan(&userTimeout)
+		require.NoError(t, err)
+		require.Equal(t, "15000", userTimeout)
+	})
+
+	t.Run("ALTER ROLE SET defaults", func(t *testing.T) {
+		_, err := db.ExecContext(ctx,
+			"ALTER ROLE testuser SET tcp_keepalives_idle = '20'")
+		require.NoError(t, err)
+
+		pgURL, cleanup := s.PGUrl(t,
+			serverutils.CertsDirPrefix("TestTCPKeepAlive"),
+			serverutils.User("testuser"),
+		)
+		defer cleanup()
+
+		conn, err := pgx.Connect(ctx, pgURL.String())
+		require.NoError(t, err)
+		defer func() { _ = conn.Close(ctx) }()
+
+		var idle string
+		err = conn.QueryRow(ctx, "SHOW tcp_keepalives_idle").Scan(&idle)
+		require.NoError(t, err)
+		require.Equal(t, "20", idle)
+	})
+
+	t.Run("connection string overrides ALTER ROLE SET", func(t *testing.T) {
+		// ALTER ROLE sets idle=20, but connection string sets idle=30.
+		pgURL, cleanup := s.PGUrl(t,
+			serverutils.CertsDirPrefix("TestTCPKeepAlive"),
+			serverutils.User("testuser"),
+		)
+		defer cleanup()
+		q := pgURL.Query()
+		// Append to existing options to preserve any cluster routing set by PGUrl.
+		opts := q.Get("options")
+		if opts != "" {
+			opts += " "
+		}
+		opts += "-c tcp_keepalives_idle=30"
+		q.Set("options", opts)
+		pgURL.RawQuery = q.Encode()
+
+		conn, err := pgx.Connect(ctx, pgURL.String())
+		require.NoError(t, err)
+		defer func() { _ = conn.Close(ctx) }()
+
+		var idle string
+		err = conn.QueryRow(ctx, "SHOW tcp_keepalives_idle").Scan(&idle)
+		require.NoError(t, err)
+		require.Equal(t, "30", idle)
+	})
 }

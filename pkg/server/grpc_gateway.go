@@ -7,9 +7,9 @@ package server
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/ts"
@@ -38,11 +38,7 @@ var _ grpcGatewayServer = authserver.Server(nil)
 var _ grpcGatewayServer = (*ts.Server)(nil)
 
 // configureGRPCGateway initializes services necessary for running the
-// GRPC Gateway services proxied against the server at `grpcSrv`.
-//
-// The connection between the reverse proxy provided by grpc-gateway
-// and our grpc server uses a loopback-based listener to create
-// connections between the two.
+// GRPC Gateway services proxied against the server at `grpcAddr`.
 //
 // The function returns 3 arguments that are necessary to call
 // `RegisterGateway` which generated for each of your gRPC services
@@ -52,8 +48,7 @@ func configureGRPCGateway(
 	ambientCtx log.AmbientContext,
 	rpcContext *rpc.Context,
 	stopper *stop.Stopper,
-	grpcSrv *grpcServer,
-	GRPCAddr string,
+	grpcAddr string,
 ) (*gwruntime.ServeMux, context.Context, *grpc.ClientConn, error) {
 	jsonpb := &protoutil.JSONPb{
 		EnumsAsInts:  true,
@@ -69,13 +64,14 @@ func configureGRPCGateway(
 		gwruntime.WithMarshalerOption(httputil.AltProtoContentType, protopb),
 		gwruntime.WithOutgoingHeaderMatcher(authserver.AuthenticationHeaderMatcher),
 		gwruntime.WithMetadata(authserver.TranslateHTTPAuthInfoToGRPCMetadata),
+		gwruntime.WithMetadata(rpc.MarkGatewayRequest),
 	)
 	gwCtx, gwCancel := context.WithCancel(ambientCtx.AnnotateCtx(context.Background()))
 	stopper.AddCloser(stop.CloserFn(gwCancel))
 
 	// Eschew `(*rpc.Context).GRPCDial` to avoid unnecessary moving parts on the
 	// uniquely in-process connection.
-	dialOpts, err := rpcContext.GRPCDialOptions(ctx, GRPCAddr, rpc.DefaultClass)
+	dialOpts, err := rpcContext.GRPCDialOptions(ctx, grpcAddr, rpcbase.DefaultClass)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -91,7 +87,7 @@ func configureGRPCGateway(
 		telemetry.Inc(getServerEndpointCounter(method))
 		return invoker(ctx, method, req, reply, cc, opts...)
 	}
-	conn, err := grpc.DialContext(ctx, GRPCAddr, append(
+	conn, err := grpc.DialContext(ctx, grpcAddr, append(
 		dialOpts,
 		grpc.WithUnaryInterceptor(callCountInterceptor),
 	)...)
@@ -120,6 +116,5 @@ func configureGRPCGateway(
 // getServerEndpointCounter returns a telemetry Counter corresponding to the
 // given grpc method.
 func getServerEndpointCounter(method string) telemetry.Counter {
-	const counterPrefix = "http.grpc-gateway"
-	return telemetry.GetCounter(fmt.Sprintf("%s.%s", counterPrefix, method))
+	return telemetry.GetCounter(rpc.GatewayEndpointCounterName("grpc", method))
 }

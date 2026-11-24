@@ -10,7 +10,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 )
 
 const (
@@ -91,4 +93,29 @@ func (nl *NodeLiveness) TestingMaybeUpdate(ctx context.Context, newRec Record) {
 // before a node is considered not-live.
 func (nl *NodeLiveness) TestingGetLivenessThreshold() time.Duration {
 	return nl.livenessThreshold
+}
+
+// NewTestKVStorage returns a Storage that uses the given key prefix instead of
+// the real node liveness keyspace. This allows contention benchmarks to
+// simulate many nodes' heartbeats and scans against a single-node test cluster
+// without requiring N actual nodes. The gossip trigger on Update is disabled
+// since it is only valid on the real liveness range.
+func NewTestKVStorage(db *kv.DB, keyPrefix roachpb.Key) Storage {
+	return &storageImpl{
+		db:             db,
+		keyPrefix:      keyPrefix,
+		keyMax:         keyPrefix.PrefixEnd(),
+		gossipOnUpdate: false,
+	}
+}
+
+// MakeTestLivenessUpdate constructs a LivenessUpdate for use in tests. It
+// pairs the new liveness value with the old record's raw bytes for the CPut
+// condition.
+func MakeTestLivenessUpdate(newLiveness livenesspb.Liveness, old Record) LivenessUpdate {
+	return LivenessUpdate{
+		newLiveness: newLiveness,
+		oldLiveness: old.Liveness,
+		oldRaw:      old.raw,
+	}
 }

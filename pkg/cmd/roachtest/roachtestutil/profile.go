@@ -10,8 +10,10 @@ import (
 	"bytes"
 	"context"
 	gosql "database/sql"
+	"encoding/hex"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,10 +22,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	rperrors "github.com/cockroachdb/cockroach/pkg/roachprod/errors"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
-	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
+	"github.com/google/pprof/profile"
 	"github.com/stretchr/testify/require"
 )
 
@@ -171,32 +177,50 @@ func DownloadProfiles(
 			return err
 		}
 		url := urlPrefix + diagID
-		resp, err := client.Get(ctx, url)
-		if err != nil {
+		if err := downloadProfile(ctx, logger, client, url, collectedAt, stmtDir); err != nil {
 			return err
 		}
-		defer resp.Body.Close()
-		// Copy the contents of the URL to a BytesBuffer to determine the
-		// filename before saving it below.
-		var buf bytes.Buffer
-		_, err = io.Copy(&buf, resp.Body)
-		if err != nil {
-			return err
-		}
-		filename, err := getFilename(collectedAt, buf)
-		if err != nil {
-			return err
-		}
-		// write the buf to the filename
-		file, err := os.Create(filepath.Join(stmtDir, filename))
-		if err != nil {
-			return err
-		}
-		if _, err := io.Copy(file, &buf); err != nil {
-			return err
-		}
-		logger.Printf("downloaded profile %s", filename)
 	}
+	return nil
+}
+
+func downloadProfile(
+	ctx context.Context,
+	logger *logger.Logger,
+	client *RoachtestHTTPClient,
+	url string,
+	collectedAt time.Time,
+	targetDir string,
+) error {
+	resp, err := client.Get(ctx, url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	// Copy the contents of the URL to a BytesBuffer to determine the
+	// filename before saving it below.
+	var buf bytes.Buffer
+	_, err = io.Copy(&buf, resp.Body)
+	if err != nil {
+		return err
+	}
+	filename, err := getFilename(collectedAt, buf)
+	if err != nil {
+		return err
+	}
+	// write the buf to the filename
+	file, err := os.Create(filepath.Join(targetDir, filename))
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(file, &buf); err != nil {
+		file.Close()
+		return err
+	}
+	if err := file.Close(); err != nil {
+		return err
+	}
+	logger.Printf("downloaded profile %s", filename)
 	return nil
 }
 
@@ -251,14 +275,14 @@ func MeasureQPS(
 		var dbs []*gosql.DB
 		for _, nodeId := range nodes {
 			db := c.Conn(ctx, t.L(), nodeId)
-			defer db.Close()
+			defer db.Close() //nolint:deferloop
 			dbs = append(dbs, db)
 		}
 		// Count the inserts before sleeping.
 		var total atomic.Int64
-		group := ctxgroup.WithContext(ctx)
+		g := t.NewErrorGroup(task.WithContext(ctx))
 		for _, db := range dbs {
-			group.Go(func() error {
+			g.Go(func(ctx context.Context, l *logger.Logger) error {
 				var v float64
 				if err := db.QueryRowContext(
 					ctx, `SELECT sum(value) FROM crdb_internal.node_metrics WHERE name in ('sql.select.count', 'sql.insert.count')`,
@@ -270,7 +294,7 @@ func MeasureQPS(
 			})
 		}
 
-		require.NoError(t, group.Wait())
+		require.NoError(t, g.WaitE())
 		return int(total.Load())
 	}
 
@@ -285,4 +309,154 @@ func MeasureQPS(
 		afterOps := totalOpsCompleted()
 		return float64(afterOps-beforeOps) / duration.Seconds()
 	}
+}
+
+// getProfileWithTimeout is a helper function that receives an HTTP client and a
+// profile request URL, and returns the profile data. It keeps trying until
+// it succeeds or the timeout is reached.
+func getProfileWithTimeout(
+	ctx context.Context,
+	logger *logger.Logger,
+	client *RoachtestHTTPClient,
+	url string,
+	timeout time.Duration,
+) (*profile.Profile, error) {
+	logger.Printf("getting profile using URL: %s", url)
+
+	// Set up a timer to limit the time spent trying to get the profile.
+	r := retry.StartWithCtx(ctx, retry.Options{
+		MaxDuration: timeout,
+	})
+	var latestError error
+	for r.Next() {
+		// Request the profile.
+		resp, err := client.Get(ctx, url)
+		if err != nil {
+			latestError = err
+			continue
+		}
+
+		var buf bytes.Buffer
+		_, err = io.Copy(&buf, resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			latestError = err
+			continue
+		}
+		// Helper to preview the raw payload to help with debugging.
+		maxPreview := 80
+		payloadPreview := func(payload []byte) string {
+			truncated := len(payload) > maxPreview
+			if truncated {
+				payload = payload[:maxPreview]
+			}
+			hexStr := hex.EncodeToString(payload)
+			if truncated {
+				hexStr += "..."
+			}
+			return hexStr
+		}
+		// If the response status code is not OK, the payload isn't valid.
+		if resp.StatusCode != http.StatusOK {
+			latestError = fmt.Errorf("pprof HTTP (status: %d): (bytes: %s)", resp.StatusCode, payloadPreview(buf.Bytes()))
+			continue
+		}
+		// Parse the profile data. This ensures that the data is valid and not
+		// corrupt.
+		prof, err := profile.ParseData(buf.Bytes())
+		if err != nil {
+			latestError = fmt.Errorf("bad pprof payload: %w (bytes: %s)", err, payloadPreview(buf.Bytes()))
+			continue
+		}
+
+		return prof, nil
+	}
+	return nil, errors.Wrapf(errors.CombineErrors(latestError, errors.New("timed out")),
+		"failed to get profile from %s after %s", url, timeout)
+}
+
+// getProfileSingleNode returns the specified profile for a single node. The
+// profile collection takes `duration` to complete. If the request fails, we
+// retry for an additional 30 seconds beyond the profile duration.
+// Supported profile types are: {"cpu", "allocs", "mutex", "heap"}.
+func getProfileSingleNode(
+	ctx context.Context,
+	cluster cluster.Cluster,
+	logger *logger.Logger,
+	profileType string,
+	nodeID int,
+	duration time.Duration,
+) (*profile.Profile, error) {
+	var actualProfileType string
+	switch profileType {
+	case "cpu":
+		// It's unfortunate that the CPU profile endpoint is called "profile".
+		actualProfileType = "profile"
+	case "allocs":
+		actualProfileType = "allocs"
+	case "mutex":
+		actualProfileType = "mutex"
+	case "heap":
+		actualProfileType = "heap"
+	default:
+		return nil, errors.Newf("invalid profile type %s", profileType)
+	}
+	adminUIAddrs, err := cluster.ExternalAdminUIAddr(ctx, logger, cluster.Node(nodeID))
+	if err != nil {
+		return nil, err
+	}
+	// Use a long enough HTTP timeout that is larger than the profile duration.
+	client := DefaultHTTPClient(cluster, logger, HTTPTimeout(2*duration))
+	url := fmt.Sprintf("https://%s/debug/pprof/%s?seconds=%d", adminUIAddrs[0],
+		actualProfileType, int(duration.Seconds()))
+	return getProfileWithTimeout(ctx, logger, client, url, duration+30*time.Second /* timeout */)
+}
+
+// GetProfile collect profiles for all the nodes received in the function
+// parameters. It returns a slice of profiles or an error if any of the
+// profiles failed to collect. Each entry in the slices is in the same order as
+// the nodes received.
+// Supported profile types are: {"cpu", "allocs", "mutex", "heap"}.
+func GetProfile(
+	ctx context.Context,
+	t task.GroupProvider,
+	cluster cluster.Cluster,
+	profileType string,
+	duration time.Duration,
+	nodes option.NodeListOption,
+) ([]*profile.Profile, error) {
+	profiles := make([]*profile.Profile, len(nodes))
+
+	// Create an error group to manage concurrent profile collection.
+	g := t.NewErrorGroup(task.WithContext(ctx))
+
+	for i, nodeId := range nodes {
+		g.Go(func(ctx context.Context, l *logger.Logger) error {
+			var err error
+			profiles[i], err = getProfileSingleNode(ctx, cluster, l, profileType,
+				nodeId, duration)
+
+			if err != nil {
+				l.Printf("error getting profile for node %d: %s", nodeId, err)
+				return rperrors.TransientFailure(errors.Wrapf(err, "getting profile for n%d", nodeId), "pprof_collection")
+			}
+			return nil
+		})
+	}
+
+	// Wait for all profiles to complete or first error
+	if err := g.WaitE(); err != nil {
+		return nil, err
+	}
+
+	return profiles, nil
+}
+
+// ExportProfile exports a profile to specified destination directory.
+func ExportProfile(profile *profile.Profile, destinationDir string, filename string) error {
+	buf := bytes.Buffer{}
+	if err := profile.Write(&buf); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(destinationDir, filename), buf.Bytes(), 0644)
 }

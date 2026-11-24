@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
-	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 )
 
@@ -38,11 +38,10 @@ func registerKerberosConnectionStressTest(r registry.Registry) {
 		Name:      "kerberos_connection_stress_test",
 		Owner:     registry.OwnerProductSecurity,
 		Benchmark: true,
-		Cluster:   r.MakeClusterSpec(numNodes, spec.GCEZones(regionUsCentral)),
+		Cluster:   r.MakeClusterSpec(numNodes, spec.GCEZones(regionUsCentral), spec.Arch(spec.OnlyAMD64)),
 		// Cannot be run locally as it is dependent on Linux.
 		CompatibleClouds: registry.OnlyGCE,
 		Suites:           registry.Suites(registry.Nightly),
-		RequiresLicense:  true,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runKerberosConnectionStressTest(ctx, t, c, numNodes, 1)
 		},

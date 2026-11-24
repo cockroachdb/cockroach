@@ -175,6 +175,39 @@ export default function (props: GraphDashboardProps) {
     </LineGraph>,
 
     <LineGraph
+      title="SQL Queries Within Routines Per Second"
+      isKvGraph={false}
+      sources={nodeSources}
+      tenantSource={tenantSource}
+      tooltip={`A ten-second moving average of the # of SELECT, INSERT, UPDATE, and DELETE statements
+           executed within routines (user-defined functions and stored procedures) ${tooltipSelection}.`}
+      showMetricsInTooltip={true}
+    >
+      <Axis label="queries within routines">
+        <Metric
+          name="cr.node.sql.routine.select.count"
+          title="Selects"
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.node.sql.routine.update.count"
+          title="Updates"
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.node.sql.routine.insert.count"
+          title="Inserts"
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.node.sql.routine.delete.count"
+          title="Deletes"
+          nonNegativeRate
+        />
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
       title="SQL Statement Errors"
       isKvGraph={false}
       sources={nodeSources}
@@ -268,6 +301,23 @@ export default function (props: GraphDashboardProps) {
             sources={[node]}
           />
         ))}
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Failed SQL Connections"
+      isKvGraph={false}
+      sources={nodeSources}
+      tenantSource={tenantSource}
+      tooltip={`The total number of failed SQL connection attempts ${tooltipSelection}.`}
+      showMetricsInTooltip={true}
+    >
+      <Axis label="failed connections">
+        <Metric
+          name="cr.node.sql.conn.failures"
+          title="Number of Failed SQL Connections"
+          downsampleMax
+        />
       </Axis>
     </LineGraph>,
 
@@ -542,6 +592,16 @@ export default function (props: GraphDashboardProps) {
           title="Aborted"
           nonNegativeRate
         />
+        <Metric
+          name="cr.node.txn.restarts.txnpush"
+          title="Pushed"
+          nonNegativeRate
+        />
+        <Metric
+          name="cr.node.txn.restarts.unknown"
+          title="Unknown"
+          nonNegativeRate
+        />
       </Axis>
     </LineGraph>,
 
@@ -637,6 +697,53 @@ export default function (props: GraphDashboardProps) {
           name="cr.node.sql.ddl.count"
           title="DDL Statements"
           nonNegativeRate
+        />
+      </Axis>
+    </LineGraph>,
+
+    <LineGraph
+      title="Table Statistics Collections"
+      isKvGraph={false}
+      sources={nodeSources}
+      tenantSource={tenantSource}
+      tooltip={`Details about table statistics collections ${tooltipSelection}.`}
+      showMetricsInTooltip={true}
+    >
+      <Axis label="jobs">
+        <Metric
+          name="cr.node.jobs.auto_create_stats.currently_running"
+          title="Auto Running"
+          downsampleMax
+        />
+        <Metric
+          name="cr.node.jobs.auto_create_partial_stats.currently_running"
+          title="Auto Partial Running"
+          downsampleMax
+        />
+        <Metric
+          name="cr.node.jobs.create_stats.currently_running"
+          title="Manual Running"
+          downsampleMax
+        />
+        <Metric
+          name="cr.node.jobs.auto_create_stats.currently_paused"
+          title="Auto Paused"
+          downsampleMax
+        />
+        <Metric
+          name="cr.node.jobs.auto_create_partial_stats.currently_paused"
+          title="Auto Partial Paused"
+          downsampleMax
+        />
+        <Metric
+          name="cr.node.jobs.auto_create_stats.resume_failed"
+          title="Auto Failed"
+          downsampleMax
+        />
+        <Metric
+          name="cr.node.jobs.auto_create_partial_stats.resume_failed"
+          title="Auto Partial Failed"
+          downsampleMax
         />
       </Axis>
     </LineGraph>,

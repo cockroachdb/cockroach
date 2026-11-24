@@ -1,0 +1,76 @@
+name: "Set up roachdev and Claude Code"
+description: >
+  Installs the Claude Code CLI and, optionally, the roachdev binary for
+  agent workflows in this (public) repository.
+
+  roachdev lives in an internal repository in another organization, which a
+  public repository cannot consume via `uses:` (GitHub blocks internal-repo
+  actions/reusable-workflows from public repos). This composite action is
+  the public-repo equivalent of the internal `cockroachlabs/roachdev@main`
+  setup action: it downloads a released roachdev binary directly, using a
+  caller-supplied token. When no token is supplied (e.g. personal-fork runs
+  that use an Anthropic API key and never touch the internal binary), the
+  roachdev install is skipped and only the Claude CLI is installed.
+
+inputs:
+  claude_version:
+    description: "Claude Code CLI version to install. Empty installs the latest."
+    required: false
+    default: ""
+  roachdev_download_token:
+    description: >
+      Token with read access to cockroachlabs/roachdev releases. When empty,
+      roachdev is not installed.
+    required: false
+    default: ""
+
+runs:
+  using: "composite"
+  steps:
+    - name: Install Claude Code CLI
+      shell: bash
+      env:
+        CLAUDE_VERSION: ${{ inputs.claude_version }}
+      run: |
+        set -euo pipefail
+        if [ -n "$CLAUDE_VERSION" ]; then
+          curl -fsSL https://claude.ai/install.sh | bash -s "$CLAUDE_VERSION"
+        else
+          curl -fsSL https://claude.ai/install.sh | bash
+        fi
+        # Export the binary path (for callers that hand a specific executable
+        # to another action) and put it on PATH so `roachdev` can invoke
+        # `claude` by name.
+        echo "CLAUDE_BIN=$HOME/.local/bin/claude" >> "$GITHUB_ENV"
+        echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+    - name: Install roachdev
+      if: inputs.roachdev_download_token != ''
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.roachdev_download_token }}
+      run: |
+        set -euo pipefail
+        # Resolve the latest release tag with a small retry and an API
+        # fallback: a single transient 404 from `gh release view` on a
+        # private repo would otherwise abort the whole workflow.
+        TAG=""
+        for attempt in 1 2 3; do
+          if TAG=$(gh release view --repo cockroachlabs/roachdev --json tagName 2>/dev/null | jq -r '.tagName') && [ -n "$TAG" ] && [ "$TAG" != "null" ]; then
+            break
+          fi
+          if TAG=$(gh api repos/cockroachlabs/roachdev/releases/latest 2>/dev/null | jq -r '.tag_name') && [ -n "$TAG" ] && [ "$TAG" != "null" ]; then
+            break
+          fi
+          TAG=""
+          [ "$attempt" -lt 3 ] && sleep $((attempt * 3))
+        done
+        if [ -z "$TAG" ]; then
+          echo "::error::failed to resolve roachdev release tag after 3 attempts (check the download token has read access to cockroachlabs/roachdev)"
+          exit 1
+        fi
+        gh release download "$TAG" --repo cockroachlabs/roachdev \
+          -p 'roachdev-linux-amd64.gz' -D "$RUNNER_TEMP"
+        gunzip -f "$RUNNER_TEMP/roachdev-linux-amd64.gz"
+        install "$RUNNER_TEMP/roachdev-linux-amd64" /usr/local/bin/roachdev
+        echo "Installed roachdev $TAG"

@@ -1,0 +1,218 @@
+# YAML for creating and configuring the drt-scale cluster. This also configures Datadog.
+# Build the drtprod and roachtest binaries (using --cross=linux) before running this script
+#
+# Planned Execution Date: 2025-12
+environment:
+  ROACHPROD_GCE_DEFAULT_SERVICE_ACCOUNT: 622274581499-compute@developer.gserviceaccount.com
+  ROACHPROD_DNS: drt.crdb.io
+  ROACHPROD_GCE_DNS_DOMAIN: drt.crdb.io
+  ROACHPROD_GCE_DNS_ZONE: drt
+  ROACHPROD_GCE_DEFAULT_PROJECT: cockroach-drt
+  CLUSTER: drt-scale-300
+  WORKLOAD_CLUSTER: workload-scale-300
+  CLUSTER_NODES: 300
+  RACKS: 300
+  NODES_PER_ZONE: 100
+  TOTAL_PARTITIONS: 300
+  # Both server-side partitions and client-side partitions were used during this
+  # run. Client-side partitions were used on the restored database.
+  PARTITION_TYPE: partitions
+  WORKLOAD_NODES: 15
+  # v25.4.1-14-g05f15f86753 was also used during this run but contained a
+  # dependency issue resulting in node panics.
+  VERSION: v25.4.1-16-g02c2602513a
+  WAREHOUSES: 4000000
+
+dependent_file_locations:
+  - pkg/cmd/drtprod/scripts/setup_dmsetup_disk_staller
+  - pkg/cmd/drtprod/scripts/setup_datadog_cluster
+  - pkg/cmd/drtprod/scripts/setup_datadog_workload
+  - pkg/cmd/drtprod/scripts/tpcc_init.sh
+  - pkg/cmd/drtprod/scripts/generate_tpcc_run.sh
+  - pkg/cmd/drtprod/scripts/populate_workload_keys.sh
+  - artifacts/roachtest
+  - artifacts/drtprod
+
+targets:
+  # crdb cluster specs
+  - target_name: $CLUSTER cluster initialisation
+    notify_progress: true
+    steps:
+      - command: create
+        args:
+          - $CLUSTER
+        flags:
+          clouds: gce
+          gce-managed: true
+          gce-enable-multiple-stores: true
+          gce-zones: "us-central1-a:$NODES_PER_ZONE,us-central1-b:$NODES_PER_ZONE,us-central1-c:$NODES_PER_ZONE"
+          nodes: $CLUSTER_NODES
+          gce-machine-type: n2-standard-16
+          local-ssd: false
+          gce-pd-volume-size: 2048
+          gce-pd-volume-type: pd-ssd
+          gce-pd-volume-count: 2
+          os-volume-size: 100
+          username: drt
+          lifetime: 8760h
+          gce-image: "ubuntu-2204-jammy-v20250112"
+      - command: sync
+        skip_notification: true
+        flags:
+          clouds: gce
+      - script: "pkg/cmd/drtprod/scripts/setup_dmsetup_disk_staller"
+        skip_notification: true
+      - command: stage
+        skip_notification: true
+        args:
+          - $CLUSTER
+          - lib # for libgeos
+      - command: stage
+        skip_notification: true
+        args:
+          - $CLUSTER
+          - customized
+          - $VERSION
+      - script: "pkg/cmd/drtprod/scripts/setup_datadog_cluster"
+        skip_notification: true
+      - command: start
+        args:
+          - $CLUSTER
+          - "--binary"
+          - "./cockroach"
+          - "--env" # from defaults
+          - "COCKROACH_TESTING_FORCE_RELEASE_BRANCH=true"
+          - "--env" # from defaults
+          - "COCKROACH_INTERNAL_DISABLE_METAMORPHIC_TESTING=true"
+          - "--env" # for MMA test case scenario
+          - "COCKROACH_ALLOW_MMA=true"
+        flags:
+          # add flag to set provisioned throughput on each store according to their cloud provider limits
+          enable-fluent-sink: true
+          store-count: 2
+          args: --wal-failover=among-stores
+          restart: false
+          sql-port: 26257
+          racks: $RACKS
+      - command: sql
+        args:
+          - $CLUSTER:1
+          - --
+          - -e
+          - "SET CLUSTER SETTING kv.snapshot_rebalance.max_rate='256 MB'"
+  # workload cluster specs
+  - target_name: $WORKLOAD_CLUSTER
+    steps:
+      - command: create
+        args:
+          - $WORKLOAD_CLUSTER
+        flags:
+          clouds: gce
+          gce-zones: "us-central1-a"
+          nodes: $WORKLOAD_NODES
+          gce-machine-type: n2-standard-8
+          os-volume-size: 100
+          username: workload
+          lifetime: 8760h
+          gce-image: "ubuntu-2204-jammy-v20250112"
+        on_rollback:
+          - command: destroy
+            args:
+              - $WORKLOAD_CLUSTER
+      - command: sync
+        flags:
+          clouds: gce
+      - command: stage
+        args:
+          - $WORKLOAD_CLUSTER
+          - release
+          - $VERSION
+      - command: put
+        args:
+          - $WORKLOAD_CLUSTER
+          - artifacts/roachtest
+          - roachtest-operations
+      - command: put
+        args:
+          - $WORKLOAD_CLUSTER
+          - artifacts/drtprod
+      - script: "pkg/cmd/drtprod/scripts/setup_datadog_workload"
+  - target_name: post_tasks
+    notify_progress: true
+    dependent_targets:
+      - $CLUSTER cluster initialisation
+      - $WORKLOAD_CLUSTER
+    steps:
+      - script: rm
+        skip_notification: true
+        args:
+          - -rf
+          - certs-$CLUSTER
+      - command: fetch-certs
+        skip_notification: true
+        args:
+          - $CLUSTER:1
+          - certs-$CLUSTER
+      - command: put
+        skip_notification: true
+        args:
+          - $WORKLOAD_CLUSTER
+          - certs-$CLUSTER
+          - certs
+      - script: "pkg/cmd/drtprod/scripts/tpcc_init.sh"
+        args:
+          - cct_tpcc
+          - false
+        flags:
+          partitions: $TOTAL_PARTITIONS
+          replicate-static-columns: true
+          partition-strategy: leases
+          warehouses: $WAREHOUSES
+          db: cct_tpcc
+      - script: pkg/cmd/drtprod/scripts/populate_workload_keys.sh
+  - target_name: tpcc_run
+    notify_progress: true
+    dependent_targets:
+      - $CLUSTER cluster initialisation
+      - $WORKLOAD_CLUSTER
+    steps:
+      - script: "pkg/cmd/drtprod/scripts/generate_tpcc_run.sh"
+        args:
+          - cct_tpcc
+          - false
+        flags:
+          # Workload parameters for generating a consistent customer-like load
+          # (open workload). The `active-workers` and `connections` are set to a
+          # point that would normally saturate the cluster, but gets limited by
+          # `max-rate` effectively making max-rate a target-rate. The total
+          # `tpmC` can be estimated by `max-rate` * `WORKLOAD_NODES` * 27.
+          db: cct_tpcc
+          warehouses:  $WAREHOUSES
+          active-warehouses: 266666
+          workers: 266666
+          conns: 1000
+          active-workers: 1000
+          max-rate: 2100
+          ramp: 20m
+          wait: 0
+  - target_name: tpcc_bench_run
+    notify_progress: true
+    dependent_targets:
+      - $CLUSTER cluster initialisation
+      - $WORKLOAD_CLUSTER
+    steps:
+      - script: "pkg/cmd/drtprod/scripts/generate_tpcc_run.sh"
+        args:
+          - cct_tpcc
+          - false
+        flags:
+          # Parameters used for TPC-C benchmarking configured as a closed
+          # workload.
+          db: cct_tpcc
+          warehouses:  $WAREHOUSES
+          active-warehouses: 100000
+          workers: 100000
+          conns: 960
+          active-workers: 960
+          ramp: 5m
+          wait: 0

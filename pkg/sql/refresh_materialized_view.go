@@ -10,17 +10,18 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 )
 
 type refreshMaterializedViewNode struct {
-	n    *tree.RefreshMaterializedView
-	desc *tabledesc.Mutable
+	zeroInputPlanNode
+	n *tree.RefreshMaterializedView
 }
 
 func (p *planner) RefreshMaterializedView(
@@ -33,29 +34,12 @@ func (p *planner) RefreshMaterializedView(
 	if !desc.MaterializedView() {
 		return nil, pgerror.Newf(pgcode.WrongObjectType, "%q is not a materialized view", desc.Name)
 	}
-	// TODO (rohany): Not sure if this is a real restriction, but let's start with
-	//  it to be safe.
-	for i := range desc.Mutations {
-		mut := &desc.Mutations[i]
-		if mut.GetMaterializedViewRefresh() != nil {
-			return nil, pgerror.Newf(pgcode.ObjectNotInPrerequisiteState, "view is already being refreshed")
-		}
-	}
 
-	hasOwnership, err := p.HasOwnership(ctx, desc)
-	if err != nil {
+	if err := p.CheckPrivilege(ctx, desc, privilege.MAINTAIN); err != nil {
 		return nil, err
 	}
 
-	if !hasOwnership {
-		return nil, pgerror.Newf(
-			pgcode.InsufficientPrivilege,
-			"must be owner of materialized view %s",
-			desc.Name,
-		)
-	}
-
-	return &refreshMaterializedViewNode{n: n, desc: desc}, nil
+	return &refreshMaterializedViewNode{n: n}, nil
 }
 
 func (n *refreshMaterializedViewNode) startExec(params runParams) error {
@@ -80,17 +64,31 @@ func (n *refreshMaterializedViewNode) startExec(params runParams) error {
 		)
 	}
 
+	_, desc, err := params.p.ResolveMutableTableDescriptorEx(params.ctx, n.n.Name, true /* required */, tree.ResolveRequireViewDesc)
+	if err != nil {
+		return err
+	}
+
+	// TODO (rohany): Not sure if this is a real restriction, but let's start with
+	//  it to be safe.
+	for i := range desc.Mutations {
+		mut := &desc.Mutations[i]
+		if mut.GetMaterializedViewRefresh() != nil {
+			return pgerror.Newf(pgcode.ObjectNotInPrerequisiteState, "view is already being refreshed")
+		}
+	}
+
 	// Prepare the new set of indexes by cloning all existing indexes on the view.
-	newPrimaryIndex := n.desc.GetPrimaryIndex().IndexDescDeepCopy()
-	newIndexes := make([]descpb.IndexDescriptor, len(n.desc.PublicNonPrimaryIndexes()))
-	for i, idx := range n.desc.PublicNonPrimaryIndexes() {
+	newPrimaryIndex := desc.GetPrimaryIndex().IndexDescDeepCopy()
+	newIndexes := make([]descpb.IndexDescriptor, len(desc.PublicNonPrimaryIndexes()))
+	for i, idx := range desc.PublicNonPrimaryIndexes() {
 		newIndexes[i] = idx.IndexDescDeepCopy()
 	}
 
 	// Reset and allocate new IDs for the new indexes.
 	getID := func() descpb.IndexID {
-		res := n.desc.NextIndexID
-		n.desc.NextIndexID++
+		res := desc.NextIndexID
+		desc.NextIndexID++
 		return res
 	}
 	newPrimaryIndex.ID = getID()
@@ -100,19 +98,34 @@ func (n *refreshMaterializedViewNode) startExec(params runParams) error {
 
 	// Set RefreshViewRequired to false. This will allow SELECT operations on the materialized
 	// view to succeed when the view has been created with the NO DATA option.
-	n.desc.RefreshViewRequired = false
+	desc.RefreshViewRequired = false
 	// Queue the refresh mutation.
-	n.desc.AddMaterializedViewRefreshMutation(&descpb.MaterializedViewRefresh{
+	refreshProto := &descpb.MaterializedViewRefresh{
 		NewPrimaryIndex: newPrimaryIndex,
 		NewIndexes:      newIndexes,
 		AsOf:            params.p.Txn().ReadTimestamp(),
 		ShouldBackfill:  n.n.RefreshDataOption != tree.RefreshDataClear,
-	})
+	}
+	if asOf := params.p.EvalContext().AsOfSystemTime; asOf != nil && asOf.ForBackfill {
+		refreshProto.AsOf = params.p.EvalContext().AsOfSystemTime.Timestamp
+	} else {
+		refreshProto.AsOf = params.p.Txn().ReadTimestamp()
+	}
+	desc.AddMaterializedViewRefreshMutation(refreshProto)
+
+	// Log the refresh materialized view event.
+	if err := params.p.logEvent(params.ctx,
+		desc.ID,
+		&eventpb.RefreshMaterializedView{
+			ViewName: params.p.ResolvedName(n.n.Name).FQString(),
+		}); err != nil {
+		return err
+	}
 
 	return params.p.writeSchemaChange(
 		params.ctx,
-		n.desc,
-		n.desc.ClusterVersion().NextMutationID,
+		desc,
+		desc.ClusterVersion().NextMutationID,
 		tree.AsStringWithFQNames(n.n, params.Ann()),
 	)
 }

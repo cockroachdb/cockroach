@@ -6,7 +6,7 @@
 import {
   ColumnsConfig,
   Table,
-  SortSetting,
+  useNodesSummary,
   util,
   Timestamp,
 } from "@cockroachlabs/cluster-ui";
@@ -14,40 +14,23 @@ import flow from "lodash/flow";
 import map from "lodash/map";
 import orderBy from "lodash/orderBy";
 import { Moment } from "moment-timezone";
-import * as React from "react";
+import React, { useMemo } from "react";
 import { Helmet } from "react-helmet";
-import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
-import { createSelector } from "reselect";
 
 import { Text } from "src/components";
 import { cockroach } from "src/js/protos";
-import { refreshLiveness, refreshNodes } from "src/redux/apiReducers";
-import { LocalSetting } from "src/redux/localsettings";
-import { nodesSummarySelector } from "src/redux/nodes";
-import { AdminUIState } from "src/redux/state";
 import { BackToAdvanceDebug } from "src/views/reports/containers/util";
 
-import "./decommissionedNodeHistory.styl";
+import "./decommissionedNodeHistory.scss";
 
 import MembershipStatus = cockroach.kv.kvserver.liveness.livenesspb.MembershipStatus;
 import ILiveness = cockroach.kv.kvserver.liveness.livenesspb.ILiveness;
-
-const decommissionedNodesSortSetting = new LocalSetting<
-  AdminUIState,
-  SortSetting
->("nodes/decommissioned_sort_setting", s => s.localSettings);
 
 interface DecommissionedNodeStatusRow {
   key: string;
   nodeId: number;
   decommissionedDate: Moment;
-}
-
-export interface DecommissionedNodeHistoryProps {
-  refreshNodes: typeof refreshNodes;
-  refreshLiveness: typeof refreshLiveness;
-  dataSource: DecommissionedNodeStatusRow[];
 }
 
 const sortByNodeId = (
@@ -76,68 +59,38 @@ const sortByDecommissioningDate = (
   return 0;
 };
 
-export class DecommissionedNodeHistory extends React.Component<
-  DecommissionedNodeHistoryProps & RouteComponentProps
-> {
-  columns: ColumnsConfig<DecommissionedNodeStatusRow> = [
-    {
-      key: "id",
-      title: "ID",
-      sorter: sortByNodeId,
-      render: (_text: string, record: DecommissionedNodeStatusRow) => (
-        <Text>{`n${record.nodeId}`}</Text>
-      ),
+const decommissionedColumns: ColumnsConfig<DecommissionedNodeStatusRow> = [
+  {
+    key: "id",
+    title: "ID",
+    sorter: sortByNodeId,
+    render: (_text: string, record: DecommissionedNodeStatusRow) => (
+      <Text>{`n${record.nodeId}`}</Text>
+    ),
+  },
+  {
+    key: "decommissionedOn",
+    title: "Decommissioned On",
+    sorter: sortByDecommissioningDate,
+    render: (_text: string, record: DecommissionedNodeStatusRow) => {
+      return (
+        <Timestamp
+          time={record.decommissionedDate}
+          format={util.DATE_FORMAT_24_TZ}
+        />
+      );
     },
-    {
-      key: "decommissionedOn",
-      title: "Decommissioned On",
-      sorter: sortByDecommissioningDate,
-      render: (_text: string, record: DecommissionedNodeStatusRow) => {
-        return (
-          <Timestamp
-            time={record.decommissionedDate}
-            format={util.DATE_FORMAT_24_TZ}
-          />
-        );
-      },
-    },
-  ];
+  },
+];
 
-  componentDidMount() {
-    this.props.refreshNodes();
-    this.props.refreshLiveness();
-  }
+function DecommissionedNodeHistory({
+  history,
+}: RouteComponentProps): React.ReactElement {
+  const { livenessByNodeID } = useNodesSummary();
 
-  componentDidUpdate() {
-    this.props.refreshNodes();
-    this.props.refreshLiveness();
-  }
-
-  render() {
-    const { dataSource } = this.props;
-
-    return (
-      <section className="section">
-        <Helmet title="Decommissioned Node History | Debug" />
-        <BackToAdvanceDebug history={this.props.history} />
-        <h1 className="base-heading title">Decommissioned Node History</h1>
-        <div>
-          <Table
-            dataSource={dataSource}
-            columns={this.columns}
-            noDataMessage="There are no decommissioned nodes in this cluster."
-          />
-        </div>
-      </section>
-    );
-  }
-}
-
-const decommissionedNodesTableData = createSelector(
-  nodesSummarySelector,
-  (nodesSummary): DecommissionedNodeStatusRow[] => {
+  const dataSource = useMemo((): DecommissionedNodeStatusRow[] => {
     const getDecommissionedTime = (nodeId: number) => {
-      const liveness = nodesSummary.livenessByNodeID[nodeId];
+      const liveness = livenessByNodeID[nodeId];
       if (!liveness) {
         return undefined;
       }
@@ -145,11 +98,11 @@ const decommissionedNodesTableData = createSelector(
       return util.LongToMoment(deadTime);
     };
 
-    const decommissionedNodes = Object.values(
-      nodesSummary.livenessByNodeID,
-    ).filter(liveness => {
-      return liveness?.membership === MembershipStatus.DECOMMISSIONED;
-    });
+    const decommissionedNodes = Object.values(livenessByNodeID).filter(
+      liveness => {
+        return liveness?.membership === MembershipStatus.DECOMMISSIONED;
+      },
+    );
 
     const data = flow(
       (liveness: ILiveness[]) =>
@@ -163,19 +116,22 @@ const decommissionedNodesTableData = createSelector(
     )(decommissionedNodes);
 
     return data;
-  },
-);
+  }, [livenessByNodeID]);
 
-const mapStateToProps = (state: AdminUIState, _: RouteComponentProps) => ({
-  dataSource: decommissionedNodesTableData(state),
-});
+  return (
+    <section className="section">
+      <Helmet title="Decommissioned Node History | Debug" />
+      <BackToAdvanceDebug history={history} />
+      <h1 className="base-heading title">Decommissioned Node History</h1>
+      <div>
+        <Table
+          dataSource={dataSource}
+          columns={decommissionedColumns}
+          noDataMessage="There are no decommissioned nodes in this cluster."
+        />
+      </div>
+    </section>
+  );
+}
 
-const mapDispatchToProps = {
-  refreshNodes,
-  refreshLiveness,
-  setSort: decommissionedNodesSortSetting.set,
-};
-
-export default withRouter(
-  connect(mapStateToProps, mapDispatchToProps)(DecommissionedNodeHistory),
-);
+export default withRouter(DecommissionedNodeHistory);

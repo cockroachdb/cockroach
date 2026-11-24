@@ -32,6 +32,7 @@ go_test(
         ":jobsprofiler",
         "//pkg/base",
         "//pkg/ccl",
+        "//pkg/cloud/impl:cloudimpl",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",
         "//pkg/jobs/jobsprofiler/profilerconstants",

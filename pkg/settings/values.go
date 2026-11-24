@@ -16,7 +16,7 @@ import (
 
 // MaxSettings is the maximum number of settings that the system supports.
 // Exported for tests.
-const MaxSettings = 1023
+const MaxSettings = 1151
 
 // Values is a container that stores values for all registered settings.
 // Each setting is assigned a unique slot (up to MaxSettings).

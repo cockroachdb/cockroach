@@ -52,7 +52,7 @@ type TestingKnobs struct {
 	// BeforeUpdate is called in the update transaction after the update function
 	// has run. If an error is returned, it will be propagated and the update will
 	// not be committed.
-	BeforeUpdate func(orig, updated JobMetadata) error
+	BeforeUpdate func(orig, updated DeprecatedJobMetadata) error
 
 	// IntervalOverrides consists of override knobs for job intervals.
 	IntervalOverrides TestingIntervalOverrides
@@ -72,8 +72,9 @@ type TestingKnobs struct {
 	// validates that these knobs are used in tandem.
 	DisableAdoptions bool
 
-	// DisableRegistryLifecycleManagement
-	DisableRegistryLifecycleManagent bool
+	// DisableRegistryLifecycleManagement disables all periodic job-system
+	// management tasks such as adoption and cancellation loops.
+	DisableRegistryLifecycleManagement bool
 
 	// BeforeWaitForJobsQuery is called once per invocation of the
 	// poll-show-jobs query in WaitForJobs.
@@ -118,6 +119,9 @@ type TestingIntervalOverrides struct {
 
 	// WaitForJobsMaxDelay
 	WaitForJobsMaxDelay *time.Duration
+
+	// ClaimTTLOnFailure overrides the ClaimTTLOnFailureSetting cluster setting.
+	ClaimTTLOnFailure *time.Duration
 }
 
 const defaultShortInterval = 10 * time.Millisecond
@@ -145,6 +149,7 @@ func NewTestingKnobsWithIntervals(
 			Cancel:            &cancel,
 			RetryInitialDelay: &initialDelay,
 			RetryMaxDelay:     &maxDelay,
+			ClaimTTLOnFailure: &adopt,
 		},
 	}
 }

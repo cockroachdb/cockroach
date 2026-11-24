@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -20,10 +21,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
-	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -52,6 +54,31 @@ type alterPrimaryKeySpec struct {
 	Sharded       *tree.ShardedIndexDef
 	Name          tree.Name
 	StorageParams tree.StorageParams
+	Partitioning  *partitioningSpec
+
+	// PkConstraintExplicitlyDropped is true when the user dropped the existing
+	// primary key constraint by name in the same statement (e.g.
+	// `ALTER TABLE ... DROP CONSTRAINT <pk>, ADD PRIMARY KEY (...)`). In that
+	// case alterPrimaryKey must not preserve the old PK as a unique secondary
+	// index — the user explicitly asked for the uniqueness constraint to go
+	// away. Only set by the ADD CONSTRAINT entry point; ALTER PRIMARY KEY
+	// leaves it false.
+	PkConstraintExplicitlyDropped bool
+}
+
+// partitioningSpec specifies partitioning to apply during ALTER PRIMARY KEY.
+// If non-nil, it overrides any existing partitioning or PARTITION ALL BY behavior.
+type partitioningSpec struct {
+	// PartitionBy is the partition definition to apply.
+	PartitionBy *tree.PartitionBy
+
+	// NewImplicitColumns are implicit columns to add to the index for partitioning.
+	NewImplicitColumns []*scpb.ColumnName
+
+	// AllowedNewColumnNames specifies columns that are allowed to be referenced
+	// in partition expressions even if they don't exist yet (e.g., being added
+	// in the same transaction). Can be nil.
+	AllowedNewColumnNames []tree.Name
 }
 
 func alterPrimaryKey(
@@ -67,12 +94,7 @@ func alterPrimaryKey(
 		return
 	}
 
-	// TODO (xiang): This section contains all fall-back cases and need to
-	// be removed to fully support `ALTER PRIMARY KEY`.
-	fallBackIfShardedIndexExists(b, t, tbl.TableID)
-	fallBackIfPartitionedIndexExists(b, t, tbl.TableID)
-	fallBackIfRegionalByRowTable(b, t.n, tbl.TableID)
-	fallBackIfSubZoneConfigExists(b, t.n, tbl.TableID)
+	panicIfRegionChangeUnderwayOnRBRTable(b, "ALTER PRIMARY KEY", tbl.TableID)
 
 	inflatedChain := getInflatedPrimaryIndexChain(b, tbl.TableID)
 	if !haveSameIndexColsByKind(b, tbl.TableID, inflatedChain.oldSpec.primary.IndexID,
@@ -85,24 +107,53 @@ func alterPrimaryKey(
 				" same transaction", tn.String()))
 	}
 
+	// Must drop all index partitioning elements when removing index partitioning.
+	// This is because inflating the primary index chain adds a copy of the current
+	// index partitioning to the builder state.
+	dropIndexPartitioningIfNeeded(t, b, tbl)
+
 	// Only worry about constraint name if it's supplied and it's not the
 	// same as the old PK name.
 	if t.Name != "" && string(t.Name) != inflatedChain.finalSpec.name.Name {
 		checkIfConstraintNameAlreadyExists(b, tbl, t)
-		inflatedChain.finalSpec.name.Name = string(t.Name)
+		// We need to drop the old IndexName and add a new one with the updated
+		// name. We can't just modify the Name field in place because Name is part
+		// of the element key in the builder state's element index map. Modifying
+		// it after the element was added would corrupt the map.
+		b.Drop(inflatedChain.finalSpec.name)
+		inflatedChain.finalSpec.name = &scpb.IndexName{
+			TableID: inflatedChain.finalSpec.name.TableID,
+			IndexID: inflatedChain.finalSpec.name.IndexID,
+			Name:    string(t.Name),
+		}
+		b.Add(inflatedChain.finalSpec.name)
 	}
 
 	// Set up shard column and sharding descriptor, if applicable.
-	setupSharding(b, tbl, t, inflatedChain.inter2Spec.primary, inflatedChain.finalSpec.primary)
+	setupSharding(b, tbl, t, &inflatedChain.oldSpec, inflatedChain.inter2Spec.primary, inflatedChain.finalSpec.primary)
 
 	// Alter index columns from `inter2` and `final`.
-	alterPKInPrimaryIndexAndItsTemp(b, tn, tbl.TableID, inflatedChain.inter2Spec.primary, t, false /* isIndexFinal */)
-	alterPKInPrimaryIndexAndItsTemp(b, tn, tbl.TableID, inflatedChain.finalSpec.primary, t, true /* isIndexFinal */)
+	prevSpec := makeIndexSpec(b, tbl.TableID, inflatedChain.inter1Spec.primary.IndexID)
+	alterPKInPrimaryIndexAndItsTemp(b, tn, tbl.TableID, &prevSpec, &inflatedChain.inter2Spec, t, false /* isIndexFinal */)
+	prevSpec = makeIndexSpec(b, tbl.TableID, inflatedChain.inter1Spec.primary.IndexID)
+	alterPKInPrimaryIndexAndItsTemp(b, tn, tbl.TableID, &prevSpec, &inflatedChain.finalSpec, t, true /* isIndexFinal */)
+
+	// Validate and apply storage parameters from WITH clause.
+	setupStorageParams(
+		b, t, inflatedChain.oldSpec.primary, inflatedChain.inter2Spec.primary,
+		inflatedChain.finalSpec.primary, inflatedChain.finalSpec.partitioning,
+	)
 
 	b.LogEventForExistingTarget(inflatedChain.finalSpec.primary)
 
 	// Recreate all secondary indexes.
-	recreateAllSecondaryIndexes(b, t, tbl, inflatedChain.finalSpec.primary, inflatedChain.inter2Spec.primary)
+	// inter1Spec has all the required columns for any new primary key, so it will
+	// be used as the source for the new secondary indexes.
+	// inter2Spec will have the new key columns, so the index will be fully usable
+	// once this index publishes.
+	// finalSpec is the final state of the primary index, which will have any
+	// added / dropped columns applied and the new primary key.
+	recreateAllSecondaryIndexes(b, t, tbl, inflatedChain.finalSpec.primary, inflatedChain.inter2Spec.primary, inflatedChain.inter1Spec.primary)
 
 	// Drop the rowid column, if applicable.
 	rowidToDrop := getPrimaryIndexDefaultRowIDColumn(b, tbl.TableID, inflatedChain.oldSpec.primary.IndexID)
@@ -126,14 +177,52 @@ func alterPrimaryKey(
 	}
 }
 
+// dropIndexPartitioningIfNeeded drops all existing index partitioning from the builder.
+// The function is used when removing all partitionings. For example, when altering
+// table locality from RBR to global or regional by table.
+func dropIndexPartitioningIfNeeded(t alterPrimaryKeySpec, b BuildCtx, tbl *scpb.Table) {
+	if t.Partitioning != nil && t.Partitioning.PartitionBy == nil {
+		b.QueryByID(tbl.TableID).FilterIndexPartitioning().ForEach(
+			func(current scpb.Status, target scpb.TargetStatus, e *scpb.IndexPartitioning) {
+				b.Drop(e)
+			})
+	}
+}
+
 // setupSharding set up or reset sharding. It includes
 //  1. (if set up) adding the new shard column if not exists already,
 //  2. set up the shard descriptor on the primary index `inter2` and `final`.
 func setupSharding(
-	b BuildCtx, tbl *scpb.Table, t alterPrimaryKeySpec, inter2, final *scpb.PrimaryIndex,
+	b BuildCtx,
+	tbl *scpb.Table,
+	t alterPrimaryKeySpec,
+	oldSpec *indexSpec,
+	inter2, final *scpb.PrimaryIndex,
 ) {
 	var sharding *catpb.ShardedDescriptor
 	if t.Sharded != nil {
+		// Get the partitioning columns on the existing index and confirm that these
+		// do not overlap with the new PK columns.
+		if oldSpec.partitioning != nil {
+			implicitColumnNames := make(map[string]struct{}, oldSpec.partitioning.NumImplicitColumns)
+			for _, col := range oldSpec.columns {
+				if !col.Implicit || col.Kind != scpb.IndexColumn_KEY {
+					continue
+				}
+				implicitColumnNames[mustRetrieveColumnName(b, tbl.TableID, col.ColumnID).Name] = struct{}{}
+			}
+			isRegionalByRow := isTableLocalityRegionalByRow(b, tbl.TableID)
+			for _, col := range t.Columns {
+				if _, ok := implicitColumnNames[string(col.Column)]; ok {
+					if isRegionalByRow {
+						panic(sqlerrors.HashIndexIncludesImplicitPartitionColFromRBR)
+					} else {
+						panic(sqlerrors.HashIndexIncludesImplicitPartitionColFromPartitionAllBy)
+					}
+				}
+			}
+		}
+
 		columnNames := make([]string, len(t.Columns))
 		for i, col := range t.Columns {
 			columnNames[i] = string(col.Column)
@@ -147,6 +236,54 @@ func setupSharding(
 	final.Sharding = sharding
 	finalTemp := mustRetrieveTemporaryIndexElem(b, tbl.TableID, final.TemporaryIndexID)
 	finalTemp.Sharding = sharding
+}
+
+// setupStorageParams validates and applies storage parameters from the WITH
+// clause to the new primary indexes, rejecting unknown or invalid ones.
+// Parameters default to their zero values when no WITH clause is specified.
+// When no WITH clause is provided but the new index retains implicit
+// partitioning (e.g. RBR-to-RBR locality change), skip_unique_checks is
+// preserved from the old primary index.
+func setupStorageParams(
+	b BuildCtx,
+	t alterPrimaryKeySpec,
+	old, inter2, final *scpb.PrimaryIndex,
+	partitioning *scpb.IndexPartitioning,
+) {
+	// Reset to defaults first, since the new PK should not inherit storage
+	// params from the old PK unless explicitly specified in the WITH clause.
+	// For locality swaps where the new index retains implicit partitioning
+	// (e.g. RBR-to-RBR), preserve skip_unique_checks from the old PK.
+	// For transitions that remove implicit partitioning (e.g. RBR-to-GLOBAL),
+	// clear it since it's only valid on implicitly partitioned indexes.
+	if t.Partitioning != nil && len(t.Partitioning.NewImplicitColumns) > 0 {
+		final.SkipUniqueChecks = old.SkipUniqueChecks
+	} else {
+		final.SkipUniqueChecks = false
+	}
+
+	// Validate and apply storage parameters from the WITH clause.
+	if err := paramparse.ValidateIndexStorageParams(
+		b,
+		t.StorageParams,
+		paramparse.IndexStorageParamContext{
+			IsPrimaryKey:            true,
+			IsUnique:                true,
+			IsSharded:               t.Sharded != nil,
+			HasImplicitPartitioning: partitioning != nil && partitioning.NumImplicitColumns > 0,
+			Version:                 b.EvalCtx().Settings.Version,
+		},
+	); err != nil {
+		panic(err)
+	}
+	maybeApplyStorageParameters(b, t.StorageParams, &final.Index, partitioning)
+
+	// Propagate the parsed values to the other indexes in the chain.
+	inter2.SkipUniqueChecks = final.SkipUniqueChecks
+	inter2Temp := mustRetrieveTemporaryIndexElem(b, inter2.TableID, inter2.TemporaryIndexID)
+	inter2Temp.SkipUniqueChecks = final.SkipUniqueChecks
+	finalTemp := mustRetrieveTemporaryIndexElem(b, final.TableID, final.TemporaryIndexID)
+	finalTemp.SkipUniqueChecks = final.SkipUniqueChecks
 }
 
 func getprimaryIndexShardColumn(
@@ -164,19 +301,29 @@ func alterPKInPrimaryIndexAndItsTemp(
 	b BuildCtx,
 	tn *tree.TableName,
 	tableID catid.DescID,
-	index *scpb.PrimaryIndex,
+	prevSpec *indexSpec,
+	spec *indexSpec,
 	t alterPrimaryKeySpec,
 	isIndexFinal bool,
 ) {
-	// generateIndexColumnForNewPK is a helper function that creates
+	index := spec.primary
+	// updateIndexColumnForNewPK is a helper function that creates
 	// index columns from an alter primary key spec for index `indexID`.
-	generateIndexColumnForNewPK := func(indexID catid.IndexID) (ret []indexColumnSpec) {
+	updateIndexColumnForNewPK := func(indexID catid.IndexID, isIndexFinal bool) {
+		oldSpec := makeIndexSpec(b, tableID, indexID)
+		newSpec := oldSpec.makeMutator()
+		// Start off with no columns and reconstruct the
+		// expected set.
+		newSpec.resetColumns()
 		// Get all KEY columns from t.Columns.
 		// If index is sharded, the first key column will be the new shard col.
 		if index.Sharding != nil {
-			ret = append(ret, indexColumnSpec{
-				columnID: getColumnIDFromColumnName(b, tableID, tree.Name(index.Sharding.Name), false /* required */),
-				kind:     scpb.IndexColumn_KEY,
+			newSpec.appendColumn(&scpb.IndexColumn{
+				TableID:   tableID,
+				IndexID:   indexID,
+				Direction: catenumpb.IndexColumn_ASC,
+				ColumnID:  getColumnIDFromColumnName(b, tableID, tree.Name(index.Sharding.Name), false /* required */),
+				Kind:      scpb.IndexColumn_KEY,
 			})
 		}
 
@@ -187,10 +334,12 @@ func alterPKInPrimaryIndexAndItsTemp(
 			if !exist {
 				panic(fmt.Sprintf("table %v does not have a column named %v", tn.String(), col.Column))
 			}
-			ret = append(ret, indexColumnSpec{
-				columnID:  colID,
-				kind:      scpb.IndexColumn_KEY,
-				direction: indexColumnDirection(col.Direction),
+			newSpec.appendColumn(&scpb.IndexColumn{
+				TableID:   tableID,
+				IndexID:   indexID,
+				ColumnID:  colID,
+				Kind:      scpb.IndexColumn_KEY,
+				Direction: indexColumnDirection(col.Direction),
 			})
 			keyColIDsInIndex[colID] = true
 		}
@@ -203,99 +352,57 @@ func alterPKInPrimaryIndexAndItsTemp(
 				colinfo.IsColIDSystemColumn(colID) {
 				continue
 			}
-			ret = append(ret, indexColumnSpec{
-				columnID: colID,
-				kind:     scpb.IndexColumn_STORED,
+			newSpec.appendColumn(&scpb.IndexColumn{
+				TableID:  tableID,
+				IndexID:  indexID,
+				ColumnID: colID,
+				Kind:     scpb.IndexColumn_STORED,
 			})
 		}
-
-		return ret
-	}
-
-	// alterPKInIndex is a helper function that changes columns in index `indexID`
-	// toward `inColumns`.
-	alterPKInIndex := func(indexID catid.IndexID, inColumns []indexColumnSpec) {
-		// Collect all existing index columns.
-		indexKeyCols := getIndexColumns(b.QueryByID(tableID), indexID, scpb.IndexColumn_KEY)
-		indexStoredCols := getIndexColumns(b.QueryByID(tableID), indexID, scpb.IndexColumn_STORED)
-		existingIndexColsByColumnID := make(map[catid.ColumnID]*scpb.IndexColumn)
-		// uncoveredExistingIndexCols are existing columns in the index that are not
-		// mentioned/covered in `inColumns`.
-		uncoveredExistingIndexCols := make(map[catid.ColumnID]bool)
-		for _, existingIndexCol := range append(indexKeyCols, indexStoredCols...) {
-			existingIndexColsByColumnID[existingIndexCol.ColumnID] = existingIndexCol
-			uncoveredExistingIndexCols[existingIndexCol.ColumnID] = true
+		var partitionByIndex *tree.PartitionByIndex
+		// Check if a partition all by already exists, which should take precedence.
+		partitionAllBy := b.QueryByID(tableID).FilterTablePartitioning().MustHaveZeroOrOne()
+		// Otherwise, retrieve the partitioning by from the previous index.
+		if partitionAllBy == nil {
+			partitionBy, err := partitionByFromTableID(b, tableID, prevSpec.indexID())
+			if err != nil {
+				panic(err)
+			}
+			partitionByIndex = &tree.PartitionByIndex{PartitionBy: partitionBy}
 		}
-
-		// Modify existing index columns toward `inColumns`.
-		// Note that `inColumns` might contain index column that does not exist yet,
-		// in which case we add them to the builder state.
-		m := make(map[scpb.IndexColumn_Kind]uint32)
-		for _, inColumn := range inColumns {
-			ordinalInKind := m[inColumn.kind]
-			m[inColumn.kind] = ordinalInKind + 1
-
-			if existingIndexCol, ok := existingIndexColsByColumnID[inColumn.columnID]; ok {
-				existingIndexCol.Kind = inColumn.kind
-				existingIndexCol.OrdinalInKind = ordinalInKind
-				existingIndexCol.Direction = inColumn.direction
-				delete(uncoveredExistingIndexCols, existingIndexCol.ColumnID)
+		err := configureIndexDescForNewIndexPartitioning(b, tableID, prevSpec.indexID(), prevSpec, newSpec, true /* isPrimary */, partitionByIndex, t.Partitioning)
+		if err != nil {
+			panic(err)
+		}
+		// Apply the updates into the builder state.
+		newSpec.applyDeltaForIndexColumns(b, &oldSpec, isIndexFinal)
+		// Apply any partitioning changes next.
+		if newSpec.partitioning != nil {
+			if isIndexFinal {
+				b.Add(newSpec.partitioning)
 			} else {
-				inIndexCol := &scpb.IndexColumn{
-					TableID:       tableID,
-					IndexID:       indexID,
-					ColumnID:      inColumn.columnID,
-					OrdinalInKind: ordinalInKind,
-					Kind:          inColumn.kind,
-					Direction:     inColumn.direction,
-				}
-				if isIndexFinal {
-					b.Add(inIndexCol)
-				} else {
-					b.AddTransient(inIndexCol)
-				}
+				b.AddTransient(newSpec.partitioning)
 			}
-		}
-
-		// Finally, if there is any existing column that is not mentioned in `inColumns`,
-		// then we need to drop them.
-		// For now, the only case this will happen is the shard column of the old PK.
-		for uncoveredExistingIndexColID := range uncoveredExistingIndexCols {
-			// sanity check: this index column must be the old shard column.
-			if !mustRetrieveColumnTypeElem(b, tableID, uncoveredExistingIndexColID).IsVirtual {
-				panic(errors.AssertionFailedf("programming error: find a physical column %v"+
-					" that existed in the index but is no longer after the primary key change", uncoveredExistingIndexColID))
-			}
-			b.Drop(existingIndexColsByColumnID[uncoveredExistingIndexColID])
 		}
 	}
-
-	alterPKInIndex(index.IndexID, generateIndexColumnForNewPK(index.IndexID))
-	alterPKInIndex(index.TemporaryIndexID, generateIndexColumnForNewPK(index.TemporaryIndexID))
+	updateIndexColumnForNewPK(index.IndexID, isIndexFinal)
+	updateIndexColumnForNewPK(index.TemporaryIndexID, false /* always temporary */)
 }
 
 // checkForEarlyExit asserts several precondition for a
 // `ALTER PRIMARY KEY`, including
 //  1. no expression columns allowed;
-//  2. no columns that are in `DROPPED` state;
-//  3. no inaccessible columns;
-//  4. no nullable columns;
-//  5. no virtual columns (starting from v22.1);
-//  6. No columns that are scheduled to be dropped (target status set to `ABSENT`);
-//  7. add more here
+//  2. no duplicate storage parameters;
+//  3. no columns that are in `DROPPED` state;
+//  4. no inaccessible columns;
+//  5. no nullable columns;
+//  6. no virtual columns (starting from v22.1);
+//  7. No columns that are scheduled to be dropped (target status set to `ABSENT`);
+//  8. no new implicit columns that are part of the key and are not a suffix of it
+//  9. add more here
 //
 // Panic if any precondition is found unmet.
 func checkForEarlyExit(b BuildCtx, tbl *scpb.Table, t alterPrimaryKeySpec) {
-	if err := paramparse.ValidateUniqueConstraintParams(
-		t.StorageParams,
-		paramparse.UniqueConstraintParamContext{
-			IsPrimaryKey: true,
-			IsSharded:    t.Sharded != nil,
-		},
-	); err != nil {
-		panic(err)
-	}
-
 	usedColumns := make(map[tree.Name]bool, len(t.Columns))
 	for _, col := range t.Columns {
 		if col.Column == "" && col.Expr != nil {
@@ -344,12 +451,45 @@ func checkForEarlyExit(b BuildCtx, tbl *scpb.Table, t alterPrimaryKeySpec) {
 		columnType := mustRetrieveColumnTypeElem(b, tbl.TableID, colElem.ColumnID)
 		// Check if the column type is indexable.
 		if !colinfo.ColumnTypeIsIndexable(columnType.Type) {
-			panic(unimplemented.NewWithIssueDetailf(35730,
-				columnType.Type.DebugString(),
-				"column %s is of type %s and thus is not indexable",
-				col.Column,
-				columnType.Type),
-			)
+			panic(sqlerrors.NewColumnNotIndexableError(
+				col.Column.String(), columnType.Type.Name(), columnType.Type.DebugString()))
+		}
+	}
+
+	// Determine implicit partitioning columns from the table's locality (RBR)
+	// or PARTITION ALL BY configuration. Note that RBR and PARTITION ALL BY
+	// cases are mutually exclusive.
+	var implicitColNames map[tree.Name]struct{}
+	isRegionalByRow := false
+	tableElts := b.QueryByID(tbl.TableID).Filter(publicTargetFilter)
+	if rbrElem := tableElts.FilterTableLocalityRegionalByRow().MustGetZeroOrOneElement(); rbrElem != nil {
+		isRegionalByRow = true
+		regionColName := explicitRegionColName(tree.Name(rbrElem.As))
+		implicitColNames = map[tree.Name]struct{}{regionColName: {}}
+	} else if tableElts.FilterTablePartitioning().MustGetZeroOrOneElement() != nil {
+		// PARTITION ALL BY: the implicit columns are the leading implicit key
+		// columns of the current primary index.
+		primaryIdx := mustRetrieveCurrentPrimaryIndexElement(b, tbl.TableID)
+		implicitColNames = make(map[tree.Name]struct{})
+		for _, col := range mustRetrieveKeyIndexColumns(b, tbl.TableID, primaryIdx.IndexID) {
+			if !col.Implicit {
+				break
+			}
+			colName := mustRetrieveColumnName(b, tbl.TableID, col.ColumnID)
+			implicitColNames[tree.Name(colName.Name)] = struct{}{}
+		}
+	}
+
+	// Block implicit partitioning columns that appear as non-leading key
+	// columns, since the implicit column will be prepended and the explicit
+	// reference would create a duplicate.
+	for i, col := range t.Columns {
+		if _, ok := implicitColNames[col.Column]; ok && i != 0 {
+			if isRegionalByRow {
+				panic(sqlerrors.NewIndexIncludesImplicitPartitionColFromRBR)
+			} else {
+				panic(sqlerrors.NewIndexIncludeImplicitPartitionColFromPartitionAllBy)
+			}
 		}
 	}
 }
@@ -360,13 +500,45 @@ func isNewPrimaryKeySameAsOldPrimaryKey(b BuildCtx, tbl *scpb.Table, t alterPrim
 	oldPrimaryIndexElem := mustRetrieveCurrentPrimaryIndexElement(b, tbl.TableID)
 	oldPrimaryIndexKeyColumns := mustRetrieveKeyIndexColumns(b, tbl.TableID, oldPrimaryIndexElem.IndexID)
 
-	// Check whether they have the same number of key columns.
-	if len(oldPrimaryIndexKeyColumns) != len(t.Columns) {
+	// Check if overriding the partitioning
+	if t.Partitioning != nil {
 		return false
+	}
+
+	// If a new name is specified and it differs from the old PK name, they're
+	// not the same.
+	if t.Name != "" {
+		oldPKName := mustRetrieveIndexNameElem(b, tbl.TableID, oldPrimaryIndexElem.IndexID)
+		if string(t.Name) != oldPKName.Name {
+			return false
+		}
 	}
 
 	// Check whether they are both sharded or both not sharded.
 	if (oldPrimaryIndexElem.Sharding == nil) != (t.Sharded == nil) {
+		return false
+	}
+
+	// If both are sharded, filter out the shard column from the old index's
+	// key columns. The user-specified columns (t.Columns) don't include the
+	// shard column, but the old index's key columns do.
+	if oldPrimaryIndexElem.Sharding != nil {
+		shardColID := getColumnIDFromColumnName(
+			b, tbl.TableID, tree.Name(oldPrimaryIndexElem.Sharding.Name), false,
+		)
+		if shardColID != 0 {
+			filtered := make([]*scpb.IndexColumn, 0, len(oldPrimaryIndexKeyColumns)-1)
+			for _, col := range oldPrimaryIndexKeyColumns {
+				if col.ColumnID != shardColID {
+					filtered = append(filtered, col)
+				}
+			}
+			oldPrimaryIndexKeyColumns = filtered
+		}
+	}
+
+	// Check whether they have the same number of key columns.
+	if len(oldPrimaryIndexKeyColumns) != len(t.Columns) {
 		return false
 	}
 
@@ -398,60 +570,18 @@ func isNewPrimaryKeySameAsOldPrimaryKey(b BuildCtx, tbl *scpb.Table, t alterPrim
 	return true
 }
 
-// fallBackIfPartitionedIndexExists panics with an unimplemented error
-// if there exists partitioned indexes on the table.
-func fallBackIfPartitionedIndexExists(b BuildCtx, t alterPrimaryKeySpec, tableID catid.DescID) {
-	tableElts := b.QueryByID(tableID).Filter(notFilter(absentTargetFilter))
-	scpb.ForEachIndexPartitioning(tableElts, func(_ scpb.Status, _ scpb.TargetStatus, _ *scpb.IndexPartitioning) {
-		panic(scerrors.NotImplementedErrorf(t.n,
-			"ALTER PRIMARY KEY on a table with index partitioning is not yet supported"))
-	})
-}
-
-// fallBackIfShardedIndexExists panics with an unimplemented
-// error if there exists sharded indexes on the table.
-func fallBackIfShardedIndexExists(b BuildCtx, t alterPrimaryKeySpec, tableID catid.DescID) {
-	tableElts := b.QueryByID(tableID).Filter(notFilter(absentTargetFilter))
-	var hasSecondary bool
-	scpb.ForEachSecondaryIndex(tableElts, func(_ scpb.Status, _ scpb.TargetStatus, idx *scpb.SecondaryIndex) {
-		hasSecondary = true
-		if idx.Sharding != nil {
-			panic(scerrors.NotImplementedErrorf(t.n, "ALTER PRIMARY KEY on a table with sharded secondary "+
-				"indexes is not yet supported."))
-		}
-	})
-	// Primary index sharding only matters if there are secondary indexes: even
-	// if we drop the sharding on the primary, we need to maintain it on the
-	// secondaries if they exist.
-	if !hasSecondary {
-		return
-	}
-	scpb.ForEachPrimaryIndex(tableElts, func(_ scpb.Status, _ scpb.TargetStatus, idx *scpb.PrimaryIndex) {
-		if idx.Sharding != nil {
-			panic(scerrors.NotImplementedErrorf(t.n, "ALTER PRIMARY KEY on a table with sharded primary "+
-				"indexes is not yet supported."))
-		}
-	})
-}
-
-// fallBackIfRegionalByRowTable panics with an unimplemented
-// error if it's a REGIONAL BY ROW table because we need to
-// include the implicit REGION column when constructing the
-// new primary key.
-func fallBackIfRegionalByRowTable(b BuildCtx, t tree.NodeFormatter, tableID catid.DescID) {
-	_, _, rbrElem := scpb.FindTableLocalityRegionalByRow(b.QueryByID(tableID))
-	if rbrElem != nil {
-		panic(scerrors.NotImplementedErrorf(t, "ALTER PRIMARY KEY on a REGIONAL BY ROW table "+
-			"is not yet supported."))
-	}
-}
-
+// mustRetrieveCurrentPrimaryIndexElement retrieves the current primary index,
+// which must be public.
 func mustRetrieveCurrentPrimaryIndexElement(
 	b BuildCtx, tableID catid.DescID,
 ) (res *scpb.PrimaryIndex) {
 	scpb.ForEachPrimaryIndex(b.QueryByID(tableID), func(
 		current scpb.Status, target scpb.TargetStatus, e *scpb.PrimaryIndex,
 	) {
+		// TODO(fqazi): We don't support DROP CONSTRAINT PRIMARY KEY, so there is no
+		// risk of ever seeing a non-public PrimaryIndex element. In the future when
+		// we do support DROP CONSTRAINT PRIMARY KEY, we should adapt callers of
+		// this function to handle the absent primary index case.
 		if current == scpb.Status_PUBLIC {
 			res = e
 		}
@@ -607,43 +737,69 @@ func checkIfConstraintNameAlreadyExists(b BuildCtx, tbl *scpb.Table, t alterPrim
 	publicTableElts := b.QueryByID(tbl.TableID).Filter(publicTargetFilter)
 	scpb.ForEachConstraintWithoutIndexName(publicTableElts, func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.ConstraintWithoutIndexName) {
 		if e.Name == string(t.Name) {
-			panic(pgerror.Newf(pgcode.DuplicateObject, "constraint with name %q already exists", t.Name))
+			panic(pgerror.Newf(pgcode.DuplicateRelation, "constraint with name %q already exists", t.Name))
 		}
 	})
 	// Check index names.
 	scpb.ForEachIndexName(publicTableElts, func(_ scpb.Status, _ scpb.TargetStatus, n *scpb.IndexName) {
 		if n.Name == string(t.Name) {
-			panic(pgerror.Newf(pgcode.DuplicateObject, "constraint with name %q already exists", t.Name))
+			panic(pgerror.Newf(pgcode.DuplicateRelation, "constraint with name %q already exists", t.Name))
 		}
 	})
 }
 
 // recreateAllSecondaryIndexes recreates all secondary indexes. While the key
 // columns remain the same in the face of a primary key change, the key suffix
-// columns or the stored columns may not.
+// columns or the stored columns may not. newPrimaryIndex is the final primary
+// index of this ALTER PRIMARY KEY, and the key columns will be determined by
+// this. usablePrimaryIndex is the first primary index that has matching key
+// columns to the final primary index. sourcePrimaryIndex is the first primary
+// index with all columns required for the backfill.
 func recreateAllSecondaryIndexes(
 	b BuildCtx,
 	t alterPrimaryKeySpec,
 	tbl *scpb.Table,
-	newPrimaryIndex, sourcePrimaryIndex *scpb.PrimaryIndex,
+	finalPrimaryIndex, primaryIndexWithNewKey, sourcePrimaryIndex *scpb.PrimaryIndex,
 ) {
 	publicTableElts := b.QueryByID(tbl.TableID).Filter(publicTargetFilter)
 	// Generate all possible key suffix columns.
 	var newKeySuffix []indexColumnSpec
 	{
 		scpb.ForEachIndexColumn(publicTableElts, func(_ scpb.Status, _ scpb.TargetStatus, ic *scpb.IndexColumn) {
-			if ic.IndexID == newPrimaryIndex.IndexID && ic.Kind == scpb.IndexColumn_KEY {
+			if ic.IndexID == finalPrimaryIndex.IndexID && ic.Kind == scpb.IndexColumn_KEY {
 				newKeySuffix = append(newKeySuffix, indexColumnSpec{
 					columnID:  ic.ColumnID,
 					kind:      scpb.IndexColumn_KEY_SUFFIX,
 					direction: ic.Direction,
+					implicit:  ic.Implicit,
 				})
 			}
 		})
 	}
 	// Recreate each secondary index.
-	scpb.ForEachSecondaryIndex(publicTableElts, func(_ scpb.Status, _ scpb.TargetStatus, idx *scpb.SecondaryIndex) {
+	scpb.ForEachSecondaryIndex(publicTableElts, func(currentStatus scpb.Status, _ scpb.TargetStatus, idx *scpb.SecondaryIndex) {
 		out := makeIndexSpec(b, idx.TableID, idx.IndexID)
+		// Create new index partitioning when overriding the partitioning.
+		// The secondary index partitioning desc might not be the same as the primary
+		// when the partitioning column is a suffix of the primary key.
+		if t.Partitioning != nil {
+			partMutatedSpec := out.makeMutator()
+			err := configureIndexDescForNewIndexPartitioning(
+				b,
+				tbl.TableID,
+				0,   /* sourcePartitionIndexID */
+				nil, /* prevSpec */
+				partMutatedSpec,
+				false, /* isPrimary */
+				nil,   /*partitionByIndex*/
+				t.Partitioning /* overridePartitioning */)
+			if err != nil {
+				panic(err)
+			}
+			out.partitioning = partMutatedSpec.partitioning
+			out.columns = partMutatedSpec.columns
+		}
+
 		// If this index is referenced by any other objects, then we will
 		// block the primary key swap, since we don't have a mechanism to
 		// fix these references yet.
@@ -676,7 +832,11 @@ func recreateAllSecondaryIndexes(
 		}
 
 		var idxColIDs catalog.TableColSet
-		inColumns := make([]indexColumnSpec, 0, len(out.columns))
+		numNewImplicitPartCols := 0
+		if t.Partitioning != nil {
+			numNewImplicitPartCols = len(t.Partitioning.NewImplicitColumns)
+		}
+		inColumns := make([]indexColumnSpec, 0, len(out.columns)+numNewImplicitPartCols)
 		// Determine which columns end up in the new secondary index.
 		{
 			var largestKeyOrdinal uint32
@@ -690,8 +850,9 @@ func recreateAllSecondaryIndexes(
 						columnID:  ic.ColumnID,
 						kind:      scpb.IndexColumn_KEY,
 						direction: ic.Direction,
+						implicit:  ic.Implicit,
 					})
-					if idx.IsInverted && ic.OrdinalInKind >= largestKeyOrdinal {
+					if idx.Type == idxtype.INVERTED && ic.OrdinalInKind >= largestKeyOrdinal {
 						largestKeyOrdinal = ic.OrdinalInKind
 						invertedColumnID = ic.ColumnID
 					}
@@ -703,7 +864,15 @@ func recreateAllSecondaryIndexes(
 				if !idxColIDs.Contains(ics.columnID) {
 					idxColIDs.Add(ics.columnID)
 					inColumns = append(inColumns, ics)
-				} else if idx.IsInverted && invertedColumnID == ics.columnID {
+				} else if idx.Type == idxtype.VECTOR {
+					// This primary key column is in the vector index prefix, so match directions
+					for i, col := range inColumns {
+						if col.columnID == ics.columnID {
+							inColumns[i].direction = ics.direction
+							break
+						}
+					}
+				} else if idx.Type == idxtype.INVERTED && invertedColumnID == ics.columnID {
 					// In an inverted index, the inverted column's value is not equal to
 					// the actual data in the row for that column. As a result, if the
 					// inverted column happens to also be in the primary key, it's crucial
@@ -736,10 +905,39 @@ func recreateAllSecondaryIndexes(
 			}
 		}
 		in, temp := makeSwapIndexSpec(b, out, sourcePrimaryIndex.IndexID, inColumns, false /* inUseTempIDs */)
-		in.secondary.RecreateSourceIndexID = out.indexID()
+		// Clear skip_unique_checks if the recreated index will no longer have
+		// implicit partitioning, since it's only valid on implicitly partitioned
+		// indexes.
+		if in.partitioning == nil || in.partitioning.NumImplicitColumns == 0 {
+			in.secondary.SkipUniqueChecks = false
+			temp.temporary.SkipUniqueChecks = false
+		}
+		// Set RecreateSourceIndexID only if the original index is already public.
+		// This enables index swapping: the new index will replace the old one when
+		// the old index becomes non-public.
+		//
+		// If the original index is not public (e.g., still being created), then we're
+		// in a concurrent scenario where both the index creation and primary key swap
+		// are happening in the same transaction. In this case, we don't set
+		// RecreateSourceIndexID because the "source" index will never become public
+		// and thus doesn't need to be replaced.
+		if currentStatus == scpb.Status_PUBLIC {
+			in.secondary.RecreateSourceIndexID = out.indexID()
+		}
+		in.secondary.HideForPrimaryKeyRecreated = b.ClusterSettings().Version.IsActive(b, clusterversion.V25_4)
+		in.secondary.RecreateTargetIndexID = primaryIndexWithNewKey.IndexID
 		out.apply(b.Drop)
 		in.apply(b.Add)
 		temp.apply(b.AddTransient)
+		// Update the index for partitioning.
+		if err := configureZoneConfigForReplacementIndexPartitioning(
+			b,
+			in.secondary.TableID,
+			idx.IndexID,
+			in.indexID(),
+		); err != nil {
+			panic(err)
+		}
 	})
 }
 
@@ -764,12 +962,20 @@ func maybeAddUniqueIndexForOldPrimaryKey(
 	newPrimaryIndex *scpb.PrimaryIndex,
 	rowidToDrop *scpb.Column,
 ) {
+	overrideIndexPartitioning := t.Partitioning != nil
 	if !shouldCreateUniqueIndexOnOldPrimaryKeyColumns(
-		b, tbl, oldPrimaryIndex.IndexID, newPrimaryIndex.IndexID, rowidToDrop,
+		b, t.n, tbl, oldPrimaryIndex.IndexID, newPrimaryIndex.IndexID, rowidToDrop,
+		overrideIndexPartitioning, t.PkConstraintExplicitlyDropped,
 	) {
 		return
 	}
 	sec, temp := addNewUniqueSecondaryIndexAndTempIndex(b, tbl, oldPrimaryIndex, newPrimaryIndex)
+	// Clear skip_unique_checks if partitioning is being overridden and the new
+	// index will not have implicit partitioning (e.g. REGIONAL BY ROW to GLOBAL).
+	if t.Partitioning != nil && len(t.Partitioning.NewImplicitColumns) == 0 {
+		sec.SkipUniqueChecks = false
+		temp.SkipUniqueChecks = false
+	}
 	addIndexColumnsForNewUniqueSecondaryIndexAndTempIndex(b, tn, tbl, t,
 		oldPrimaryIndex.IndexID, newPrimaryIndex.IndexID, sec.IndexID, temp.IndexID)
 	addIndexNameForNewUniqueSecondaryIndex(b, tbl, sec.IndexID)
@@ -789,11 +995,13 @@ func addNewUniqueSecondaryIndexAndTempIndex(
 		IndexID:             nextRelationIndexID(b, tbl),
 		IsUnique:            true,
 		IsInverted:          oldPrimaryIndexElem.IsInverted,
+		Type:                oldPrimaryIndexElem.Type,
 		Sharding:            oldPrimaryIndexElem.Sharding,
 		IsCreatedExplicitly: false,
 		ConstraintID:        b.NextTableConstraintID(tbl.TableID),
 		SourceIndexID:       newPrimaryIndexElem.IndexID,
 		TemporaryIndexID:    0,
+		SkipUniqueChecks:    oldPrimaryIndexElem.SkipUniqueChecks,
 	}}
 	temp := &scpb.TemporaryIndex{
 		Index:                    protoutil.Clone(sec).(*scpb.SecondaryIndex).Index,
@@ -838,6 +1046,7 @@ func addIndexColumnsForNewUniqueSecondaryIndexAndTempIndex(
 			OrdinalInKind: keyIndexColumn.OrdinalInKind,
 			Kind:          scpb.IndexColumn_KEY,
 			Direction:     keyIndexColumn.Direction,
+			Implicit:      keyIndexColumn.Implicit,
 		})
 		b.AddTransient(&scpb.IndexColumn{
 			TableID:       tbl.TableID,
@@ -846,6 +1055,7 @@ func addIndexColumnsForNewUniqueSecondaryIndexAndTempIndex(
 			OrdinalInKind: keyIndexColumn.OrdinalInKind,
 			Kind:          scpb.IndexColumn_KEY,
 			Direction:     keyIndexColumn.Direction,
+			Implicit:      keyIndexColumn.Implicit,
 		})
 	}
 
@@ -861,6 +1071,7 @@ func addIndexColumnsForNewUniqueSecondaryIndexAndTempIndex(
 				OrdinalInKind: ord,
 				Kind:          scpb.IndexColumn_KEY_SUFFIX,
 				Direction:     keyColInNewPrimaryIndex.Direction,
+				Implicit:      keyColInNewPrimaryIndex.Implicit,
 			})
 			b.AddTransient(&scpb.IndexColumn{
 				TableID:       tbl.TableID,
@@ -869,16 +1080,43 @@ func addIndexColumnsForNewUniqueSecondaryIndexAndTempIndex(
 				OrdinalInKind: ord,
 				Kind:          scpb.IndexColumn_KEY_SUFFIX,
 				Direction:     keyColInNewPrimaryIndex.Direction,
+				Implicit:      keyColInNewPrimaryIndex.Implicit,
 			})
 			ord++
 		}
+	}
+	prevSpec := makeIndexSpec(b, tbl.TableID, newUniqueSecondaryIndexID)
+	idxSpec := prevSpec.makeMutator()
+	indexPart := b.QueryByID(tbl.TableID).Filter(hasIndexIDAttrFilter(oldPrimaryIndexID)).FilterIndexPartitioning().MustGetZeroOrOneElement()
+	// Use the old partitioning descriptor to create the new index partitioning descriptor.
+	if indexPart != nil {
+		idxSpec.partitioning = &scpb.IndexPartitioning{
+			IndexID:                newUniqueSecondaryIndexID,
+			TableID:                tbl.TableID,
+			PartitioningDescriptor: indexPart.PartitioningDescriptor,
+		}
+	}
+	err := configureIndexDescForNewIndexPartitioning(b, tbl.TableID, 0 /* sourcePartitionIndexID */, nil /* prevSpec */, idxSpec, false /* isPrimary */, nil, nil /* overridePartitioning */)
+	if err != nil {
+		panic(err)
+	}
+	idxSpec.apply(b.Add)
+	// Finally, configure the zone config for the replacement index.
+	err = configureZoneConfigForReplacementIndexPartitioning(b, tbl.TableID, newUniqueSecondaryIndexID, newUniqueSecondaryIndexID)
+	if err != nil {
+		panic(err)
 	}
 }
 
 // addIndexNameForNewUniqueSecondaryIndex constructs and adds an IndexName
 // element for the new, unique secondary index on the old primary key.
 func addIndexNameForNewUniqueSecondaryIndex(b BuildCtx, tbl *scpb.Table, indexID catid.IndexID) {
-	indexName := getImplicitSecondaryIndexName(b, tbl.TableID, indexID, 0 /* numImplicitColumns */)
+	indexPartitioning := b.QueryByID(tbl.TableID).Filter(hasIndexIDAttrFilter(indexID)).FilterIndexPartitioning().MustGetZeroOrOneElement()
+	numImplicitColumns := 0
+	if indexPartitioning != nil {
+		numImplicitColumns = int(indexPartitioning.NumImplicitColumns)
+	}
+	indexName := getImplicitSecondaryIndexName(b, tbl.TableID, indexID, numImplicitColumns)
 	b.Add(&scpb.IndexName{
 		TableID: tbl.TableID,
 		IndexID: indexID,
@@ -888,6 +1126,9 @@ func addIndexNameForNewUniqueSecondaryIndex(b BuildCtx, tbl *scpb.Table, indexID
 
 // We only recreate the old primary key of the table as a unique secondary
 // index if:
+//   - The user did not explicitly drop the old PK constraint in the same
+//     statement (e.g. `ALTER TABLE ... DROP CONSTRAINT <pk>, ADD PRIMARY
+//     KEY (...)`).
 //   - The table has a primary key (no DROP PRIMARY KEY statements have
 //     been executed).
 //   - The primary key is not the default rowid primary key.
@@ -897,10 +1138,16 @@ func addIndexNameForNewUniqueSecondaryIndex(b BuildCtx, tbl *scpb.Table, indexID
 //   - There is no existing secondary index on the old primary key columns.
 func shouldCreateUniqueIndexOnOldPrimaryKeyColumns(
 	b BuildCtx,
+	n tree.NodeFormatter,
 	tbl *scpb.Table,
 	oldPrimaryIndexID, newPrimaryIndexID catid.IndexID,
 	rowidToDrop *scpb.Column,
+	overrideIndexPartitioning bool,
+	pkConstraintExplicitlyDropped bool,
 ) bool {
+	if pkConstraintExplicitlyDropped {
+		return false
+	}
 	// A function that retrieves all KEY columns of this index.
 	// If excludeShardedCol, sharded column is excluded, if any.
 	keyColumnIDsAndDirsOfIndex := func(
@@ -939,6 +1186,11 @@ func shouldCreateUniqueIndexOnOldPrimaryKeyColumns(
 		return true
 	}
 
+	// If partitioning is changing, don't create a unique index
+	if overrideIndexPartitioning {
+		return false
+	}
+
 	// If the primary key doesn't really change, don't create any unique indexes.
 	if keyColumnIDsAndDirsMatch(b, tbl.TableID, oldPrimaryIndexID, newPrimaryIndexID, true /* excludeShardedCol */) {
 		return false
@@ -951,7 +1203,7 @@ func shouldCreateUniqueIndexOnOldPrimaryKeyColumns(
 	alreadyHasSecondaryIndexOnPKColumns := func(
 		b BuildCtx, tableID catid.DescID, oldPrimaryIndexID catid.IndexID,
 	) (found bool) {
-		scpb.ForEachSecondaryIndex(b.QueryByID(tableID), func(
+		scpb.ForEachSecondaryIndex(b.QueryByID(tableID).Filter(notFilter(ghostElementFilter)), func(
 			current scpb.Status, target scpb.TargetStatus, candidate *scpb.SecondaryIndex,
 		) {
 			if !mustRetrieveIndexElement(b, tableID, candidate.IndexID).IsUnique {
@@ -988,16 +1240,6 @@ func shouldCreateUniqueIndexOnOldPrimaryKeyColumns(
 }
 
 func isIndexPartial(b BuildCtx, tableID catid.DescID, indexID catid.IndexID) (ret bool) {
-	scpb.ForEachSecondaryIndexPartial(b.QueryByID(tableID), func(
-		current scpb.Status, target scpb.TargetStatus, e *scpb.SecondaryIndexPartial,
-	) {
-		if e.IndexID == indexID {
-			ret = true
-		}
-	})
-	if ret {
-		return ret
-	}
 	scpb.ForEachSecondaryIndex(b.QueryByID(tableID), func(
 		current scpb.Status, target scpb.TargetStatus, e *scpb.SecondaryIndex,
 	) {
@@ -1025,7 +1267,7 @@ func getPrimaryIndexDefaultRowIDColumn(
 
 	// That one column should be hidden.
 	column = mustRetrieveColumnElem(b, tableID, columnID)
-	if !column.IsHidden {
+	if !(column.IsHidden || retrieveColumnHidden(b, tableID, column.ColumnID) != nil) {
 		return nil
 	}
 
@@ -1111,6 +1353,17 @@ func checkIfColumnCanBeDropped(b BuildCtx, columnToDrop *scpb.Column) bool {
 			}
 		case *scpb.View, *scpb.Sequence:
 			canBeDropped = false
+		case *scpb.PrimaryIndex:
+			isPartOfNewPrimaryKeyColumns := false
+			indexElts := b.QueryByID(columnToDrop.TableID).Filter(publicTargetFilter).Filter(hasIndexIDAttrFilter(e.IndexID))
+			scpb.ForEachIndexColumn(indexElts, func(_ scpb.Status, _ scpb.TargetStatus, ic *scpb.IndexColumn) {
+				if columnToDrop.ColumnID == ic.ColumnID && ic.Kind == scpb.IndexColumn_KEY {
+					isPartOfNewPrimaryKeyColumns = true
+				}
+			})
+			if isPartOfNewPrimaryKeyColumns {
+				canBeDropped = false
+			}
 		case *scpb.SecondaryIndex:
 			isOnlyKeySuffixColumn := true
 			indexElts := b.QueryByID(columnToDrop.TableID).Filter(publicTargetFilter).Filter(hasIndexIDAttrFilter(e.IndexID))
@@ -1123,7 +1376,7 @@ func checkIfColumnCanBeDropped(b BuildCtx, columnToDrop *scpb.Column) bool {
 				canBeDropped = false
 			}
 		}
-	})
+	}, false /* allowPartialIdxPredicateRef */)
 	return canBeDropped
 }
 
@@ -1156,12 +1409,23 @@ func ensureShardColAndMakeShardDesc(
 	if err != nil {
 		panic(err)
 	}
+
+	// Get shard columns from storage params, if specified.
+	shardColNames, err := tabledesc.EvalShardColumns(storageParams, columnNames)
+	if err != nil {
+		panic(err)
+	}
+	// If not specified, use all index columns (default behavior).
+	if shardColNames == nil {
+		shardColNames = columnNames
+	}
+
 	shardColName, shardColID := maybeCreateAndAddShardCol(b, int(buckets),
-		tbl, columnNames, n)
+		tbl, shardColNames, n)
 	return &catpb.ShardedDescriptor{
 		IsSharded:    true,
 		Name:         shardColName,
 		ShardBuckets: buckets,
-		ColumnNames:  columnNames,
+		ColumnNames:  shardColNames,
 	}, shardColID
 }

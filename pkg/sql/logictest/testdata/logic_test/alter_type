@@ -18,6 +18,7 @@ SELECT ARRAY['hi']::_newname
 # Test that we can use the new name within a transaction.
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl=off;
 ALTER TYPE newname RENAME TO renameagain
 
 query T
@@ -52,12 +53,72 @@ COMMIT
 statement ok
 ALTER TYPE new__name RENAME TO newname
 
+# Renaming a type multiple times within a single declarative schema change.
+
+# Force the declarative schema changer for multi-statement explicit
+# transactions.
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+SET use_declarative_schema_changer = unsafe_always
+
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
+SET LOCAL autocommit_before_ddl=off
+
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+ALTER TYPE newname RENAME TO rename_once
+
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+ALTER TYPE rename_once RENAME TO rename_twice
+
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+query T
+SELECT 'hi'::rename_twice
+----
+hi
+
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+COMMIT
+
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+query T
+SELECT 'hi'::rename_twice
+----
+hi
+
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+ALTER TYPE rename_twice RENAME TO newname
+
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+RESET use_declarative_schema_changer
+
+statement error pq: type "test\.public\.newname" already exists
+ALTER TYPE newname RENAME TO newname
+
 # We shouldn't be able to rename into a conflicting type.
 statement ok
 CREATE TABLE conflict (x INT)
 
-statement error pq: relation \"conflict\" already exists
+statement error pq: relation "test\.public\.conflict" already exists
 ALTER TYPE newname RENAME TO conflict
+
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+CREATE DOMAIN domain_conflict AS INT
+
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement error pq: type "test\.public\.domain_conflict" already exists
+ALTER TYPE newname RENAME TO domain_conflict
+
+skipif config local-mixed-25.4 local-mixed-26.1 local-mixed-26.2
+statement ok
+DROP DOMAIN domain_conflict
 
 # Renames should try and move around the array type to find a valid name.
 # This creates types _why and __why.
@@ -83,6 +144,14 @@ ALTER TYPE names RENAME VALUE 'james' TO 'johnny'
 # Cannot rename a value that is not a member of the type.
 statement error jim is not an existing enum value
 ALTER TYPE names RENAME VALUE 'jim' TO 'jimmy'
+
+# When oldVal doesn't exist and newVal does, report the missing old value first.
+statement error nonexistent is not an existing enum value
+ALTER TYPE names RENAME VALUE 'nonexistent' TO 'johnny'
+
+# Renaming a value to itself errors.
+statement error enum value james already exists
+ALTER TYPE names RENAME VALUE 'james' TO 'james'
 
 statement ok
 ALTER TYPE names RENAME VALUE 'james' to 'jimmy'
@@ -194,6 +263,9 @@ statement ok
 CREATE TABLE new_enum_values (x build)
 
 statement ok
+SET autocommit_before_ddl = false
+
+statement ok
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
 ALTER TYPE build ADD VALUE 'g';
 ALTER TYPE build ADD VALUE '_a' BEFORE 'a'
@@ -219,6 +291,21 @@ INSERT INTO new_enum_values VALUES ('g')
 
 statement ok
 ROLLBACK
+
+statement ok
+RESET autocommit_before_ddl
+
+# After ADD VALUE commits, the new value can be inserted into a table.
+statement ok
+ALTER TYPE build ADD VALUE 'g'
+
+statement ok
+INSERT INTO new_enum_values VALUES ('g')
+
+query T
+SELECT * FROM new_enum_values
+----
+g
 
 # Ensure that optimizer plan caching takes into account changes in types.
 statement ok
@@ -310,7 +397,7 @@ hello
 
 # Once the use of "yo" has been removed, we should be able to remove it from the
 # enum
-statement ok
+statement count 1
 DELETE FROM use_greetings WHERE use_greetings.v = 'yo'
 
 statement ok
@@ -329,6 +416,9 @@ CREATE TYPE alphabets AS ENUM('a', 'b', 'c', 'd', 'e', 'f');
 CREATE TABLE uses_alphabets (k INT PRIMARY KEY, v1 alphabets, v2 alphabets);
 INSERT INTO uses_alphabets VALUES (1, 'a', 'a'), (2, 'b', 'c')
 
+statement error pq: enum value "nonexistent" does not exist
+ALTER TYPE alphabets DROP VALUE 'nonexistent'
+
 statement error pq: could not remove enum value "a" as it is being used by "uses_alphabets"
 ALTER TYPE alphabets DROP VALUE 'a'
 
@@ -338,7 +428,7 @@ ALTER TYPE alphabets DROP VALUE 'b'
 statement error pq: could not remove enum value "c" as it is being used by "uses_alphabets"
 ALTER TYPE alphabets DROP VALUE 'c'
 
-statement ok
+statement count 1
 DELETE FROM uses_alphabets WHERE k = 1
 
 statement ok
@@ -366,8 +456,15 @@ INSERT INTO uses_alphabets_2 VALUES(1);
 statement error pq: could not remove enum value "e" as it is being used in a default expresion of "uses_alphabets_2"
 ALTER TYPE alphabets DROP VALUE 'e'
 
+
+statement ok
+ALTER TABLE uses_alphabets_2 SET (schema_locked=false)
+
 statement ok
 TRUNCATE uses_alphabets_2
+
+statement ok
+ALTER TABLE uses_alphabets_2 RESET (schema_locked)
 
 statement error pq: could not remove enum value "e" as it is being used in a default expresion of "uses_alphabets_2"
 ALTER TYPE alphabets DROP VALUE 'e'
@@ -390,6 +487,9 @@ subtest add_drop_same_value_in_txn
 
 statement ok
 CREATE TYPE a AS ENUM('a')
+
+statement ok
+SET autocommit_before_ddl = false
 
 statement error enum value "b" is being added, try again later
 BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE;
@@ -452,6 +552,9 @@ ALTER TYPE a RENAME VALUE 'a' TO 'new_name';
 statement ok
 ROLLBACK
 
+statement ok
+RESET autocommit_before_ddl
+
 # Ensure changes to the type are picked up by the array type descriptor as well.
 subtest regression_58710
 
@@ -472,13 +575,18 @@ ALTER TYPE ab_58710 ADD VALUE 'c';
 statement ok
 ALTER TYPE ab_58710 DROP VALUE 'a';
 
-# 'c' was added to the enum above and 'a' was dropped, so the array type alias
-# should reflect this.
-statement ok
-SELECT ARRAY['c']::_ab_58710;
+# 'c' was added to the enum above and 'a' was dropped, so the enum should
+# reflect this. The declarative schema changer processes ADD/DROP VALUE
+# asynchronously, so retry until the changes are visible.
+retry
+query T
+SELECT 'c'::ab_58710
+----
+c
 
+retry
 statement error invalid input value for enum ab_58710: "a"
-SELECT ARRAY['a']::_ab_58710
+SELECT 'a'::ab_58710
 
 subtest regression_60004_basic
 
@@ -525,7 +633,7 @@ statement error could not remove enum value "d" as it is being used by table "te
 ALTER TYPE alphabets_60004 DROP VALUE 'd'
 
 # Remove the row that uses 'd' in it and then try dropping.
-statement ok
+statement count 1
 DELETE FROM using_alphabets_60004 WHERE k = 2
 
 statement ok
@@ -538,7 +646,14 @@ statement error could not remove enum value "b" as it is being used by table "te
 ALTER TYPE alphabets_60004 DROP VALUE 'b'
 
 statement ok
+ALTER TABLE using_alphabets_60004 SET (schema_locked=false);
+
+statement ok
 TRUNCATE using_alphabets_60004
+
+statement ok
+ALTER TABLE using_alphabets_60004 RESET (schema_locked);
+
 
 statement ok
 ALTER TYPE alphabets_60004 DROP VALUE 'c'
@@ -550,7 +665,15 @@ statement error could not remove enum value "b" as it is being used by table "te
 ALTER TYPE alphabets_60004 DROP VALUE 'b'
 
 statement ok
+ALTER TABLE using_alphabets2_60004 SET (schema_locked=false);
+
+
+statement ok
 TRUNCATE using_alphabets2_60004
+
+statement ok
+ALTER TABLE using_alphabets2_60004 RESET (schema_locked);
+
 
 statement ok
 ALTER TYPE alphabets_60004 DROP VALUE 'a'
@@ -693,7 +816,6 @@ ALTER TYPE typ_110827 DROP VALUE 'a';
 statement error pgcode 2BP01 could not remove enum value "b" as it is being used by table ".*t_110827"
 ALTER TYPE typ_110827 DROP VALUE 'b';
 
-
 subtest end
 
 # We accidentally introduced a regression formatting dependent rows out,
@@ -706,6 +828,8 @@ CREATE TYPE typ_127136 AS ENUM('a', 'b', 'c');
 CREATE TABLE t_127136 (x INT PRIMARY KEY);
 CREATE INDEX foo ON t_127136((x*10));
 ALTER TABLE t_127136 ADD COLUMN y typ_127136;
+
+statement ok
 INSERT INTO t_127136 VALUES (1, 'a');
 
 statement error pgcode 2BP01 could not remove enum value "a" as it is being used by "t_127136" in row: x=1, y='a'
@@ -726,9 +850,182 @@ statement error pgcode 2BP01 could not remove enum value "a" as it is being used
 ALTER TYPE typ_127147 DROP VALUE 'a';
 
 statement ok
+ALTER TABLE t SET (schema_locked=false);
+
+statement ok
 TRUNCATE TABLE t;
 
 statement ok
+ALTER TABLE t RESET (schema_locked);
+
+statement ok
 ALTER TYPE typ_127147 DROP VALUE 'a';
+
+subtest end
+
+# Validate that invalid type conversions will return errors to users.
+subtest invalid_type_conversion
+
+statement ok
+CREATE TABLE invalid_table(id UUID PRIMARY KEY, s STRING);
+INSERT INTO invalid_table SELECT gen_random_uuid(), '{';
+
+skipif config local-legacy-schema-changer
+statement error pgcode 22P02 failed to construct index entries during backfill: could not parse JSON.*
+ALTER TABLE invalid_table ALTER COLUMN s SET DATA TYPE JSONB USING s::JSONB; -- Attempt to convert string to json
+
+skipif config local-legacy-schema-changer
+statement error failed to construct index entries during backfill: could not parse "{" as type int: strconv.ParseInt: parsing "{": invalid syntax
+ALTER TABLE invalid_table ALTER COLUMN s SET DATA TYPE INT USING s::INT; -- Attempt to convert string to int
+
+subtest end
+
+# Test that RENAME VALUE updates expressions in computed columns.
+subtest rename_value_computed_column
+
+statement ok
+CREATE TYPE rename_enum AS ENUM ('a', 'b');
+
+statement ok
+CREATE TABLE t_rename_computed (
+  x INT PRIMARY KEY,
+  y rename_enum AS ('a':::rename_enum) VIRTUAL,
+  z rename_enum AS ('a':::rename_enum) STORED,
+  FAMILY (x, z)
+) WITH (schema_locked = false);
+
+statement ok
+INSERT INTO t_rename_computed (x) VALUES (1);
+
+query ITT
+SELECT * FROM t_rename_computed;
+----
+1  a  a
+
+statement ok
+ALTER TYPE rename_enum RENAME VALUE 'a' TO 'alpha';
+
+# Both computed column expressions should be updated and return the new value name.
+query ITT
+SELECT * FROM t_rename_computed;
+----
+1  alpha  alpha
+
+query TT
+SELECT y, z FROM t_rename_computed;
+----
+alpha  alpha
+
+query TT
+SHOW CREATE TABLE t_rename_computed;
+----
+t_rename_computed  CREATE TABLE public.t_rename_computed (
+                     x INT8 NOT NULL,
+                     y public.rename_enum NULL AS ('alpha':::public.rename_enum) VIRTUAL,
+                     z public.rename_enum NULL AS ('alpha':::public.rename_enum) STORED,
+                     CONSTRAINT t_rename_computed_pkey PRIMARY KEY (x ASC),
+                     FAMILY fam_0_x_z (x, z)
+                   );
+
+subtest end
+
+subtest alter_type_set_schema
+
+statement ok
+CREATE SCHEMA s1;
+CREATE SCHEMA s2;
+CREATE TYPE sc_type AS ENUM ('a', 'b', 'c');
+
+# Move type from public to s1.
+statement ok
+ALTER TYPE sc_type SET SCHEMA s1
+
+# The type should be resolvable in the new schema.
+query T
+SELECT 'a'::s1.sc_type
+----
+a
+
+# The array type should have moved too.
+query T
+SELECT ARRAY['a']::s1._sc_type
+----
+{a}
+
+# Setting the same schema should be a no-op.
+statement ok
+ALTER TYPE s1.sc_type SET SCHEMA s1
+
+# Move from s1 to s2.
+statement ok
+ALTER TYPE s1.sc_type SET SCHEMA s2
+
+query T
+SELECT 'b'::s2.sc_type
+----
+b
+
+query T
+SELECT ARRAY['b']::s2._sc_type
+----
+{b}
+
+# The type should no longer exist in s1.
+query error pq: type "s1.sc_type" does not exist
+SELECT 'a'::s1.sc_type
+
+# Error when target schema doesn't exist.
+statement error pq: unknown schema "does_not_exist"
+ALTER TYPE s2.sc_type SET SCHEMA does_not_exist
+
+# Error when there's a name conflict in the target schema.
+statement ok
+CREATE TYPE s1.sc_type AS ENUM ('x', 'y')
+
+statement error pq: type "test.s1.sc_type" already exists
+ALTER TYPE s2.sc_type SET SCHEMA s1
+
+# Clean up.
+statement ok
+DROP TYPE s1.sc_type;
+DROP TYPE s2.sc_type;
+DROP SCHEMA s1;
+DROP SCHEMA s2
+
+subtest end
+
+subtest alter_type_set_schema_with_table_ref
+
+# Moving a type that is referenced by a table column should succeed
+# because types are referenced by ID, not name.
+statement ok
+CREATE SCHEMA s_ref;
+CREATE TYPE ref_type AS ENUM ('x', 'y', 'z');
+CREATE TABLE t_ref (c ref_type);
+INSERT INTO t_ref VALUES ('x')
+
+statement ok
+ALTER TYPE ref_type SET SCHEMA s_ref
+
+# The table should still work with the moved type.
+query T
+SELECT c FROM t_ref
+----
+x
+
+statement ok
+INSERT INTO t_ref VALUES ('y')
+
+query T rowsort
+SELECT c FROM t_ref
+----
+x
+y
+
+# Clean up.
+statement ok
+DROP TABLE t_ref;
+DROP TYPE s_ref.ref_type;
+DROP SCHEMA s_ref
 
 subtest end

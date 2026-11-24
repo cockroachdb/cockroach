@@ -105,7 +105,7 @@ func (f *PlanGistFactory) ConstructHashJoin(
 	return node, err
 }
 
-func (f *PlanGistFactory) decodeOperatorBody(op execOperator) (*Node, error) {
+func (d *planGistDecoder) decodeOperatorBody(op execOperator) (*Node, error) {
 	var _n *Node
 	var reqOrdering exec.OutputOrdering
 	var err error
@@ -113,24 +113,24 @@ func (f *PlanGistFactory) decodeOperatorBody(op execOperator) (*Node, error) {
 	switch op {
 	case scanOp:
 		var args scanArgs
-		args.Table = f.decodeTable()
+		args.Table = d.decodeTable()
 		tbl = args.Table
-		args.Index = f.decodeIndex(tbl)
-		args.Params = f.decodeScanParams()
+		args.Index = d.decodeIndex(tbl)
+		args.Params = d.decodeScanParams()
 		_n, err = newNode(op, &args, reqOrdering)
 	case filterOp:
 		var args filterArgs
-		args.Input = f.popChild()
+		args.Input = d.popChild()
 		_n, err = newNode(op, &args, reqOrdering, args.Input)
 	case hashJoinOp:
 		var args hashJoinArgs
-		args.JoinType = f.decodeJoinType()
-		args.LeftEqCols = f.decodeNodeColumnOrdinals()
-		args.RightEqCols = f.decodeNodeColumnOrdinals()
-		args.LeftEqColsAreKey = f.decodeBool()
-		args.RightEqColsAreKey = f.decodeBool()
-		args.Right = f.popChild()
-		args.Left = f.popChild()
+		args.JoinType = d.decodeJoinType()
+		args.LeftEqCols = d.decodeNodeColumnOrdinals()
+		args.RightEqCols = d.decodeNodeColumnOrdinals()
+		args.LeftEqColsAreKey = d.decodeBool()
+		args.RightEqColsAreKey = d.decodeBool()
+		args.Right = d.popChild()
+		args.Left = d.popChild()
 		_n, err = newNode(op, &args, reqOrdering, args.Left, args.Right)
 	default:
 		return nil, errors.Newf("invalid op: %d", op)

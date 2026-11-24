@@ -1,0 +1,90 @@
+# LogicTest: local
+
+query T
+EXPLAIN SELECT schema_name, table_name, type, owner, estimated_row_count, locality FROM [SHOW TABLES]
+----
+distribution: local
+·
+• render
+│
+└── • hash join (left outer)
+    │ equality: (column86) = (table_id)
+    │
+    ├── • render
+    │   │
+    │   └── • hash join (left outer)
+    │       │ equality: (column67) = (table_id)
+    │       │ right cols are key
+    │       │
+    │       ├── • render
+    │       │   │
+    │       │   └── • hash join (right outer)
+    │       │       │ equality: (oid) = (relowner)
+    │       │       │
+    │       │       ├── • virtual table
+    │       │       │     table: pg_roles@primary
+    │       │       │
+    │       │       └── • hash join
+    │       │           │ equality: (oid) = (relnamespace)
+    │       │           │
+    │       │           ├── • filter
+    │       │           │   │ filter: nspname NOT IN ('crdb_internal', 'information_schema', __more1_10__, 'pg_extension')
+    │       │           │   │
+    │       │           │   └── • virtual table
+    │       │           │         table: pg_namespace@primary
+    │       │           │
+    │       │           └── • filter
+    │       │               │ filter: relkind IN ('S', 'm', __more1_10__, 'v')
+    │       │               │
+    │       │               └── • virtual table
+    │       │                     table: pg_class@primary
+    │       │
+    │       └── • distinct
+    │           │ distinct on: table_id
+    │           │
+    │           └── • virtual table
+    │                 table: table_row_statistics@primary
+    │
+    └── • virtual table
+          table: tables@tables_database_name_idx (partial index)
+          spans: [/'test' - /'test']
+
+# Notice that there is no join against table_row_statistics when the
+# estimated_row_count column is not used.
+
+query T
+EXPLAIN SELECT schema_name, table_name, type, owner, locality FROM [SHOW TABLES]
+----
+distribution: local
+·
+• render
+│
+└── • hash join (left outer)
+    │ equality: (column86) = (table_id)
+    │
+    ├── • render
+    │   │
+    │   └── • hash join (right outer)
+    │       │ equality: (oid) = (relowner)
+    │       │
+    │       ├── • virtual table
+    │       │     table: pg_roles@primary
+    │       │
+    │       └── • hash join
+    │           │ equality: (oid) = (relnamespace)
+    │           │
+    │           ├── • filter
+    │           │   │ filter: nspname NOT IN ('crdb_internal', 'information_schema', __more1_10__, 'pg_extension')
+    │           │   │
+    │           │   └── • virtual table
+    │           │         table: pg_namespace@primary
+    │           │
+    │           └── • filter
+    │               │ filter: relkind IN ('S', 'm', __more1_10__, 'v')
+    │               │
+    │               └── • virtual table
+    │                     table: pg_class@primary
+    │
+    └── • virtual table
+          table: tables@tables_database_name_idx (partial index)
+          spans: [/'test' - /'test']

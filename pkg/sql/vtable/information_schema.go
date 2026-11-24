@@ -161,7 +161,8 @@ CREATE TABLE information_schema.columns (
 	GENERATION_EXPRESSION    STRING,          -- MySQL/CockroachDB extension.
 	IS_UPDATABLE             STRING,
 	IS_HIDDEN                STRING NOT NULL, -- CockroachDB extension for SHOW COLUMNS / dump.
-	CRDB_SQL_TYPE            STRING NOT NULL  -- CockroachDB extension for SHOW COLUMNS / dump.
+	CRDB_SQL_TYPE            STRING NOT NULL, -- CockroachDB extension for SHOW COLUMNS / dump.
+	COLUMN_ON_UPDATE         STRING           -- CockroachDB extension for ON UPDATE expression.
 )`
 
 // InformationSchemaAdministrableRoleAuthorizations describes the schema of the

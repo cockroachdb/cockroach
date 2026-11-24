@@ -118,7 +118,7 @@ func (s *Store) ComputeSplitKey(
 // GetSpanConfigForKey is part of the spanconfig.StoreReader interface.
 func (s *Store) GetSpanConfigForKey(
 	ctx context.Context, key roachpb.RKey,
-) (roachpb.SpanConfig, roachpb.Span, error) {
+) (roachpb.SpanConfig, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	return s.getSpanConfigForKeyRLocked(ctx, key)
@@ -128,42 +128,42 @@ func (s *Store) GetSpanConfigForKey(
 // caller to hold the Store read lock.
 func (s *Store) getSpanConfigForKeyRLocked(
 	ctx context.Context, key roachpb.RKey,
-) (roachpb.SpanConfig, roachpb.Span, error) {
-	conf, confSpan, found := s.mu.spanConfigStore.getSpanConfigForKey(ctx, key)
+) (roachpb.SpanConfig, error) {
+	conf, _, found := s.mu.spanConfigStore.getSpanConfigForKey(ctx, key)
 	if !found {
 		conf = s.getFallbackConfig()
 	}
 	var err error
 	conf, err = s.mu.systemSpanConfigStore.combine(key, conf)
 	if err != nil {
-		return roachpb.SpanConfig{}, roachpb.Span{}, err
+		return roachpb.SpanConfig{}, err
 	}
 
 	// No need to perform clamping if SpanConfigBounds are not enabled.
 	if !boundsEnabled.Get(&s.settings.SV) {
-		return conf, confSpan, nil
+		return conf, nil
 	}
 
 	_, tenID, err := keys.DecodeTenantPrefix(roachpb.Key(key))
 	if err != nil {
-		return roachpb.SpanConfig{}, roachpb.Span{}, err
+		return roachpb.SpanConfig{}, err
 	}
 	if tenID.IsSystem() {
 		// SpanConfig bounds do not apply to the system tenant.
-		return conf, confSpan, nil
+		return conf, nil
 	}
 
 	bounds, found := s.boundsReader.Bounds(tenID)
 	if !found {
-		return conf, confSpan, nil
+		return conf, nil
 	}
 
 	clamped := bounds.Clamp(&conf)
 
 	if clamped {
-		log.VInfof(ctx, 3, "span config for tenant clamped to %v", conf)
+		log.Dev.VInfof(ctx, 3, "span config for tenant clamped to %v", conf)
 	}
-	return conf, confSpan, nil
+	return conf, nil
 }
 
 func (s *Store) getFallbackConfig() roachpb.SpanConfig {
@@ -192,7 +192,7 @@ func (s *Store) Apply(
 
 	deleted, added, err := s.applyInternal(ctx, updates...)
 	if err != nil {
-		log.Fatalf(ctx, "%v", err)
+		log.Dev.Fatalf(ctx, "%v", err)
 	}
 	return deleted, added
 }
@@ -206,7 +206,7 @@ func (s *Store) ForEachOverlappingSpanConfig(
 	var foundOverlapping bool
 	err := s.mu.spanConfigStore.forEachOverlapping(span, func(sp roachpb.Span, conf roachpb.SpanConfig) error {
 		foundOverlapping = true
-		config, _, err := s.getSpanConfigForKeyRLocked(ctx, roachpb.RKey(sp.Key))
+		config, err := s.getSpanConfigForKeyRLocked(ctx, roachpb.RKey(sp.Key))
 		if err != nil {
 			return err
 		}
@@ -226,8 +226,8 @@ func (s *Store) ForEachOverlappingSpanConfig(
 	// system span config, such as a cluster wide protection policy, may still be
 	// applicable to the replica with the empty table span.
 	if !foundOverlapping {
-		log.VInfof(ctx, 3, "no overlapping span config found for span %s", span)
-		config, _, err := s.getSpanConfigForKeyRLocked(ctx, roachpb.RKey(span.Key))
+		log.Dev.VInfof(ctx, 3, "no overlapping span config found for span %s", span)
+		config, err := s.getSpanConfigForKeyRLocked(ctx, roachpb.RKey(span.Key))
 		if err != nil {
 			return err
 		}
@@ -360,7 +360,7 @@ func (s *Store) maybeLogUpdate(ctx context.Context, update *spanconfig.Update) e
 
 	// Log if there is a SpanConfig change in any field other than
 	// ProtectedTimestamps to avoid logging PTS updates.
-	if found && curSpanConfig.HasConfigurationChange(nextSC) {
+	if log.V(2) || (found && curSpanConfig.HasConfigurationChange(nextSC)) {
 		log.KvDistribution.Infof(ctx,
 			"changing the spanconfig for span:%+v from:%+v to:%+v",
 			target, curSpanConfig, nextSC)

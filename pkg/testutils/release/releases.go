@@ -11,7 +11,7 @@ import (
 	"math/rand"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/util/version"
+	"github.com/cockroachdb/version"
 	"gopkg.in/yaml.v2"
 )
 
@@ -81,24 +81,36 @@ func IsWithdrawn(v *version.Version) (bool, error) {
 	return false, nil
 }
 
-// MajorReleasesBetween returns the number of major releases between
-// any two versions passed. Returns an error when there is no
-// predecessor information for a release in the chain (which should
-// only happen if one of the versions passed is very old).
+// MajorReleasesBetween returns the number of released major versions
+// between any two versions passed, skipping unreleased series (those
+// with empty Latest). Returns an error when there is no predecessor
+// information for a release in the chain (which should only happen if
+// one of the versions passed is very old).
 func MajorReleasesBetween(v1, v2 *version.Version) (int, error) {
 	older, newer := v1, v2
-	if v1.AtLeast(v2) {
+	if v1.AtLeast(*v2) {
 		older, newer = v2, v1
 	}
 
 	var count int
 	currentSeries := VersionSeries(newer)
+	olderSeries := VersionSeries(older)
+	visited := map[string]bool{}
 
-	for currentSeries != VersionSeries(older) {
-		count++
+	for currentSeries != olderSeries {
+		if visited[currentSeries] {
+			return -1, fmt.Errorf("cycle in predecessor chain at series: %s", currentSeries)
+		}
+		visited[currentSeries] = true
+
 		seriesData, ok := releaseData[currentSeries]
 		if !ok {
 			return -1, fmt.Errorf("no release data for release series: %s", currentSeries)
+		}
+
+		// Only count series that have actual releases.
+		if seriesData.Latest != "" {
+			count++
 		}
 
 		currentSeries = seriesData.Predecessor
@@ -115,8 +127,44 @@ func LatestPatch(seriesStr string) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("no release information for %q series", seriesStr)
 	}
+	if series.Latest == "" {
+		return "", fmt.Errorf("no releases available for %q series", seriesStr)
+	}
 	activeReleases := activePatchReleases(series)
 	return activeReleases[len(activeReleases)-1], nil
+}
+
+// OlderPatchReleases returns all non-withdrawn patch releases in the
+// same series as v that have a lower patch number than v. For example,
+// if v is "v24.3.12", this returns all active patches from 24.3.0 to
+// 24.3.11 (excluding any withdrawn patches). Returns an empty slice if
+// v is the oldest patch, a pre-release, or if the series has no older
+// active patches.
+func OlderPatchReleases(v *version.Version) ([]string, error) {
+	// Pre-releases don't have enumerable older patches.
+	if v.IsPrerelease() {
+		return nil, nil
+	}
+
+	seriesStr := VersionSeries(v)
+	series, ok := releaseData[seriesStr]
+	if !ok {
+		return nil, fmt.Errorf("no release data for version %s", v)
+	}
+
+	// Get all active (non-withdrawn) patches in this series.
+	activePatches := activePatchReleases(series)
+
+	// Filter to only patches older than v.
+	var olderPatches []string
+	for _, patchStr := range activePatches {
+		patchV := mustParseVersion(patchStr)
+		if patchV.Patch() < v.Patch() {
+			olderPatches = append(olderPatches, patchStr)
+		}
+	}
+
+	return olderPatches, nil
 }
 
 // LatestPredecessor returns the latest non-withdrawn predecessor of
@@ -199,14 +247,15 @@ func activePatchReleases(releaseSeries Series) []string {
 
 	latestVersion := mustParseVersion(releaseSeries.Latest)
 	var releases []string
-	if latestVersion.PreRelease() != "" {
+	if latestVersion.IsPrerelease() {
 		// If the latest version for this series is a pre-release, don't
 		// try to enumerate all releases in this series. Instead, just
 		// return the latest pre-release defined.
 		releases = append(releases, strings.TrimPrefix(latestVersion.String(), "v"))
 	} else {
+		series := latestVersion.Format("%X.%Y")
 		for patch := 0; patch <= latestVersion.Patch(); patch++ {
-			patchVersion := fmt.Sprintf("%d.%d.%d", latestVersion.Major(), latestVersion.Minor(), patch)
+			patchVersion := fmt.Sprintf("%s.%d", series, patch)
 			if !isWithdrawn(patchVersion) {
 				releases = append(releases, patchVersion)
 			}
@@ -217,7 +266,9 @@ func activePatchReleases(releaseSeries Series) []string {
 }
 
 // predecessorSeries retrieves the corresponding `Series` data for the
-// version passed. Returns an error if the data is not available.
+// predecessor of the version passed, skipping unreleased series
+// (those with empty Latest). Returns an error if no released
+// predecessor is found.
 func predecessorSeries(v *version.Version) (Series, error) {
 	var empty Series
 	seriesStr := VersionSeries(v)
@@ -226,22 +277,32 @@ func predecessorSeries(v *version.Version) (Series, error) {
 		return empty, fmt.Errorf("no release information for %q (%q series)", v, seriesStr)
 	}
 
+	// Walk the predecessor chain, skipping unreleased series.
+	visited := map[string]bool{seriesStr: true}
+	cur := series.Predecessor
+	for cur != "" && !visited[cur] {
+		visited[cur] = true
+		predSeries, ok := releaseData[cur]
+		if !ok {
+			return empty, fmt.Errorf("no release information for %q (predecessor of %q)", cur, v)
+		}
+		if predSeries.Latest != "" {
+			return predSeries, nil
+		}
+		cur = predSeries.Predecessor
+	}
+
 	if series.Predecessor == "" {
 		return empty, fmt.Errorf("no known predecessor for %q (%q series)", v, seriesStr)
 	}
-
-	predSeries, ok := releaseData[series.Predecessor]
-	if !ok {
-		return empty, fmt.Errorf("no release information for %q (predecessor of %q)", series.Predecessor, v)
-	}
-
-	return predSeries, nil
+	return empty, fmt.Errorf("no released predecessor for %q (%q series)", v, seriesStr)
 }
 
 func mustParseVersion(str string) *version.Version {
-	return version.MustParse("v" + str)
+	v := version.MustParse("v" + str)
+	return &v
 }
 
 func VersionSeries(v *version.Version) string {
-	return fmt.Sprintf("%d.%d", v.Major(), v.Minor())
+	return v.Format("%X.%Y")
 }

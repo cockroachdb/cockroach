@@ -149,7 +149,8 @@ function hoverTooltipPlugin(
     tooltip.style.left = tooltipLeftOffset + lft + shiftY + "px";
 
     timeNode.textContent = `Time: ${xFormatter(u.data[0][dataIdx])}`;
-    labelNode.textContent = `${u.series[seriesIdx].label}:`;
+    const seriesLabel = u.series[seriesIdx].label;
+    labelNode.textContent = `${typeof seriesLabel === "string" ? seriesLabel : ""}:`;
     dataNode.textContent = ` ${yFormatter(u.data[seriesIdx][dataIdx])}`;
 
     const stroke = u.series[seriesIdx].stroke;

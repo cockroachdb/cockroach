@@ -32,7 +32,7 @@ func CheckExternalStorageConnection(
 	}
 	defer func() {
 		if err := es.Close(); err != nil {
-			log.Warningf(ctx, "failed to close External Storage %+v", err)
+			log.Dev.Warningf(ctx, "failed to close External Storage %+v", err)
 		}
 	}()
 
@@ -48,7 +48,7 @@ func CheckExternalStorageConnection(
 
 	// List the sentinel file.
 	var foundFile bool
-	if err := es.List(ctx, "", "", func(s string) error {
+	if err := es.List(ctx, "", cloud.ListOptions{}, func(s string) error {
 		paths := strings.Split(s, "/")
 		s = paths[len(paths)-1]
 		if match := strings.HasPrefix(s, markerFile); match {
@@ -88,7 +88,7 @@ func CheckKMSConnection(ctx context.Context, env externalconn.ExternalConnEnv, u
 	}
 	defer func() {
 		if err := kms.Close(); err != nil {
-			log.Warningf(ctx, "failed to close KMS %+v", err)
+			log.Dev.Warningf(ctx, "failed to close KMS %+v", err)
 		}
 	}()
 

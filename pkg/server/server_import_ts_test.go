@@ -16,6 +16,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/ts"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -24,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
 )
 
 // TestServerWithTimeseriesImport validates the functionality gated behind the
@@ -73,10 +73,11 @@ func TestServerWithTimeseriesImport(t *testing.T) {
 	require.Equal(t, bytesDumped, bytesDumpedAgain)
 }
 
-func dumpTSNonempty(t *testing.T, cc *grpc.ClientConn, dest string) (bytes int64) {
-	names, err := serverpb.GetInternalTimeseriesNamesFromServer(context.Background(), cc)
+func dumpTSNonempty(t *testing.T, cc serverutils.RPCConn, dest string) (bytes int64) {
+	ac := cc.NewAdminClient()
+	names, _, err := serverpb.GetInternalTimeseriesNamesFromServer(context.Background(), ac, nil, false)
 	require.NoError(t, err)
-	c, err := tspb.NewTimeSeriesClient(cc).DumpRaw(context.Background(), &tspb.DumpRequest{
+	c, err := cc.NewTimeSeriesClient().DumpRaw(context.Background(), &tspb.DumpRequest{
 		Names: names,
 	})
 	require.NoError(t, err)

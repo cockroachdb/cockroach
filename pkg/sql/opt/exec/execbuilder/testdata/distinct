@@ -12,7 +12,6 @@ query T
 EXPLAIN SELECT DISTINCT y, z FROM xyz
 ----
 distribution: local
-vectorized: true
 ·
 • distinct
 │ distinct on: y, z
@@ -27,7 +26,6 @@ query T
 EXPLAIN SELECT DISTINCT y, z FROM xyz ORDER BY z
 ----
 distribution: local
-vectorized: true
 ·
 • distinct
 │ distinct on: y, z
@@ -42,7 +40,6 @@ query T
 EXPLAIN SELECT DISTINCT y, z FROM xyz ORDER BY y
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ order: +y
@@ -60,7 +57,6 @@ query T
 EXPLAIN SELECT DISTINCT y, z FROM xyz ORDER BY y, z
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ order: +y,+z
@@ -78,7 +74,6 @@ query T
 EXPLAIN SELECT DISTINCT y + z AS r FROM xyz ORDER BY y + z
 ----
 distribution: local
-vectorized: true
 ·
 • distinct
 │ distinct on: r
@@ -98,7 +93,6 @@ query T
 EXPLAIN SELECT DISTINCT y AS w, z FROM xyz ORDER BY z
 ----
 distribution: local
-vectorized: true
 ·
 • distinct
 │ distinct on: y, z
@@ -113,7 +107,6 @@ query T
 EXPLAIN SELECT DISTINCT y AS w FROM xyz ORDER BY y
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ order: +y

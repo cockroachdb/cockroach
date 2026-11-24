@@ -1,0 +1,10 @@
+echo
+----
+Put: 0,0 /Local/RangeID/5/r/RangeLease (0x01698d72726c6c2d00): <empty>
+Put: 0,0 /Local/RangeID/5/r/RangeGCThreshold (0x01698d726c67632d00): 0,0
+Put: 0,0 /Local/RangeID/5/r/RangeGCHint (0x01698d727267636800): latest_range_delete_timestamp:<> gc_timestamp:<> gc_timestamp_next:<> 
+Put: 0,0 /Local/RangeID/5/r/RangeVersion (0x01698d727276657200): 10.2
+Put: 0,0 /Local/RangeID/5/r/RangeAppliedState (0x01698d727261736b00): raft_applied_index:10 lease_applied_index:10 range_stats:<sys_bytes:142 sys_count:4 > raft_closed_timestamp:<> raft_applied_index_term:5 
+Put: 0,0 /Local/RangeID/5/u/RaftReplicaID (0x01698d757266747200): replica_id:3 
+Put: 0,0 /Local/RangeID/5/u/RaftHardState (0x01698d757266746800): term:5 vote:0 commit:10 lead:0 lead_epoch:0 
+Put: 0,0 /Local/RangeID/5/u/RaftTruncatedState (0x01698d757266747400): index:10 term:5 

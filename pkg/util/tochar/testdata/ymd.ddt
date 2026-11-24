@@ -106,13 +106,13 @@ ID
 Dth
 IDTH
 ----
-DAYX: saturday X
+DAYX: SATURDAY X
 DayX: Saturday X
 dayX: saturday X
-FMDAYX: saturdayX
+FMDAYX: SATURDAYX
 FMDayX: SaturdayX
 FMdayX: saturdayX
-DY: sat
+DY: SAT
 Dy: Sat
 dy: sat
 D: 7
@@ -136,13 +136,13 @@ ID
 Dth
 IDTH
 ----
-DAYX: sunday   X
+DAYX: SUNDAY   X
 DayX: Sunday   X
 dayX: sunday   X
-FMDAYX: sundayX
+FMDAYX: SUNDAYX
 FMDayX: SundayX
 FMdayX: sundayX
-DY: sun
+DY: SUN
 Dy: Sun
 dy: sun
 D: 1
@@ -307,25 +307,15 @@ I
 ----
 0005-01-02 01:02:03: 0005-01-02 01:02:03
 YYYY: 0003
-IYYY: [ERROR] invalid format specification for an interval value
-  DETAIL: format IYYY
-  HINT: intervals are not tied to specific calendar dates
+IYYY: 0003
 YYYYth: 0003rd
-FMIYYY: [ERROR] invalid format specification for an interval value
-  DETAIL: format IYYY
-  HINT: intervals are not tied to specific calendar dates
+FMIYYY: 3
 YYY: 003
-IYY: [ERROR] invalid format specification for an interval value
-  DETAIL: format IYY
-  HINT: intervals are not tied to specific calendar dates
+IYY: 003
 YY: 03
-IY: [ERROR] invalid format specification for an interval value
-  DETAIL: format IY
-  HINT: intervals are not tied to specific calendar dates
+IY: 03
 Y: 3
-I: [ERROR] invalid format specification for an interval value
-  DETAIL: format I
-  HINT: intervals are not tied to specific calendar dates
+I: 3
 
 interval_fmt
 -37 months 5 days
@@ -341,25 +331,15 @@ Y
 I
 ----
 YYYY: -0003
-IYYY: [ERROR] invalid format specification for an interval value
-  DETAIL: format IYYY
-  HINT: intervals are not tied to specific calendar dates
+IYYY: -0004
 YYYYth: -0003rd
-FMIYYY: [ERROR] invalid format specification for an interval value
-  DETAIL: format IYYY
-  HINT: intervals are not tied to specific calendar dates
+FMIYYY: -4
 YYY: -003
-IYY: [ERROR] invalid format specification for an interval value
-  DETAIL: format IYY
-  HINT: intervals are not tied to specific calendar dates
+IYY: -004
 YY: -03
-IY: [ERROR] invalid format specification for an interval value
-  DETAIL: format IY
-  HINT: intervals are not tied to specific calendar dates
+IY: -04
 Y: -3
-I: [ERROR] invalid format specification for an interval value
-  DETAIL: format I
-  HINT: intervals are not tied to specific calendar dates
+I: -4
 
 timestamp_fmt
 0003-01-02 BC 01:02:03
@@ -439,15 +419,9 @@ FMIWth
 ----
 WW: 155
 FMWWth: 155th
-IW: [ERROR] invalid format specification for an interval value
-  DETAIL: format IW
-  HINT: intervals are not tied to specific calendar dates
-FMIW: [ERROR] invalid format specification for an interval value
-  DETAIL: format IW
-  HINT: intervals are not tied to specific calendar dates
-FMIWth: [ERROR] invalid format specification for an interval value
-  DETAIL: format IW
-  HINT: intervals are not tied to specific calendar dates
+IW: 48
+FMIW: 48
+FMIWth: 48th
 
 # Quarters
 timestamp
@@ -578,6 +552,6 @@ FMRM" < no spaces here"
 ----
 1 day:  < no spaces here
 1 month 1 day: I < no spaces here
--1 month 1 day: XI < no spaces here
--13 months: XI < no spaces here
+-1 month 1 day: XII < no spaces here
+-13 months: XII < no spaces here
 13 months: I < no spaces here

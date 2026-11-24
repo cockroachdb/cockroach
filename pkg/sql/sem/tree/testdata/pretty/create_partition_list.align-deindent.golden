@@ -32,7 +32,7 @@ CREATE TABLE students_by_list (
 					'AU',
 					'NZ'
 				),
-			PARTITION default
+			PARTITION "default"
 				VALUES IN (
 					DEFAULT
 				)
@@ -69,7 +69,7 @@ CREATE TABLE students_by_list (
 				'AU',
 				'NZ'
 			),
-		PARTITION default
+		PARTITION "default"
 			VALUES IN (
 				DEFAULT
 			)
@@ -103,7 +103,7 @@ CREATE TABLE students_by_list (
 				'AU',
 				'NZ'
 			),
-		PARTITION default
+		PARTITION "default"
 			VALUES IN (
 				DEFAULT
 			)
@@ -134,7 +134,7 @@ CREATE TABLE students_by_list (
 										'AU',
 										'NZ'
 									),
-								PARTITION default
+								PARTITION "default"
 									VALUES IN (
 										DEFAULT
 									)
@@ -160,7 +160,7 @@ CREATE TABLE students_by_list (
 										'AU',
 										'NZ'
 									),
-								PARTITION default
+								PARTITION "default"
 									VALUES IN (
 										DEFAULT
 									)
@@ -186,7 +186,7 @@ CREATE TABLE students_by_list (
 										'AU',
 										'NZ'
 									),
-								PARTITION default
+								PARTITION "default"
 									VALUES IN (DEFAULT)
                               )
 
@@ -204,27 +204,8 @@ CREATE TABLE students_by_list (
 									VALUES IN ('CA', 'US'),
 								PARTITION australia
 									VALUES IN ('AU', 'NZ'),
-								PARTITION default
+								PARTITION "default"
 									VALUES IN (DEFAULT)
-                              )
-
-61:
--------------------------------------------------------------
-CREATE TABLE students_by_list (
-	id                       SERIAL8,
-	name                     STRING,
-	email                    STRING,
-	country                  STRING,
-	expected_graduation_date DATE,
-	PRIMARY KEY (country, id)
-) PARTITION BY LIST (country) (
-								PARTITION north_america
-									VALUES IN ('CA', 'US'),
-								PARTITION australia
-									VALUES IN ('AU', 'NZ'),
-								PARTITION default VALUES IN (
-													DEFAULT
-								                  )
                               )
 
 63:
@@ -243,9 +224,9 @@ CREATE TABLE students_by_list (
 														'AU',
 														'NZ'
 								                    ),
-								PARTITION default VALUES IN (
-													DEFAULT
-								                  )
+								PARTITION "default" VALUES IN (
+														DEFAULT
+								                    )
                               )
 
 67:
@@ -266,13 +247,13 @@ CREATE TABLE students_by_list (
 														'AU',
 														'NZ'
 								                    ),
-								PARTITION default VALUES IN (
-													DEFAULT
-								                  )
+								PARTITION "default" VALUES IN (
+														DEFAULT
+								                    )
                               )
 
-69:
----------------------------------------------------------------------
+71:
+-----------------------------------------------------------------------
 CREATE TABLE students_by_list (
 	id                       SERIAL8,
 	name                     STRING,
@@ -289,7 +270,7 @@ CREATE TABLE students_by_list (
 														'AU',
 														'NZ'
 								                    ),
-								PARTITION default VALUES IN (DEFAULT)
+								PARTITION "default" VALUES IN (DEFAULT)
                               )
 
 75:
@@ -307,7 +288,7 @@ CREATE TABLE students_by_list (
 															'US'
 								                        ),
 								PARTITION australia VALUES IN ('AU', 'NZ'),
-								PARTITION default VALUES IN (DEFAULT)
+								PARTITION "default" VALUES IN (DEFAULT)
                               )
 
 79:
@@ -322,7 +303,7 @@ CREATE TABLE students_by_list (
 ) PARTITION BY LIST (country) (
 								PARTITION north_america VALUES IN ('CA', 'US'),
 								PARTITION australia VALUES IN ('AU', 'NZ'),
-								PARTITION default VALUES IN (DEFAULT)
+								PARTITION "default" VALUES IN (DEFAULT)
                               )
 
 89:
@@ -333,15 +314,8 @@ CREATE TABLE students_by_list (
 ) PARTITION BY LIST (country) (
 								PARTITION north_america VALUES IN ('CA', 'US'),
 								PARTITION australia VALUES IN ('AU', 'NZ'),
-								PARTITION default VALUES IN (DEFAULT)
+								PARTITION "default" VALUES IN (DEFAULT)
                               )
-
-161:
------------------------------------------------------------------------------------------------------------------------------------------------------------------
-CREATE TABLE students_by_list (
-	id SERIAL8, name STRING, email STRING, country STRING, expected_graduation_date DATE,
-	PRIMARY KEY (country, id)
-) PARTITION BY LIST (country) (PARTITION north_america VALUES IN ('CA', 'US'), PARTITION australia VALUES IN ('AU', 'NZ'), PARTITION default VALUES IN (DEFAULT))
 
 163:
 -------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -358,7 +332,7 @@ CREATE TABLE students_by_list (id SERIAL8, name STRING, email STRING, country ST
 																																							'AU',
 																																							'NZ'
 																																						),
-																																					PARTITION default
+																																					PARTITION "default"
 																																						VALUES IN (
 																																							DEFAULT
 																																						)
@@ -379,7 +353,7 @@ CREATE TABLE students_by_list (id SERIAL8, name STRING, email STRING, country ST
 																																							'AU',
 																																							'NZ'
 																																						),
-																																					PARTITION default
+																																					PARTITION "default"
 																																						VALUES IN (DEFAULT)
                                                                                                                                                   )
 
@@ -396,7 +370,7 @@ CREATE TABLE students_by_list (id SERIAL8, name STRING, email STRING, country ST
 																																														'AU',
 																																														'NZ'
 																																													),
-																																												PARTITION default
+																																												PARTITION "default"
 																																													VALUES IN (
 																																														DEFAULT
 																																													)
@@ -415,7 +389,7 @@ CREATE TABLE students_by_list (id SERIAL8, name STRING, email STRING, country ST
 																																														'AU',
 																																														'NZ'
 																																													),
-																																												PARTITION default
+																																												PARTITION "default"
 																																													VALUES IN (DEFAULT)
                                                                                                                                                                             )
 
@@ -426,20 +400,8 @@ CREATE TABLE students_by_list (id SERIAL8, name STRING, email STRING, country ST
 																																													VALUES IN ('CA', 'US'),
 																																												PARTITION australia
 																																													VALUES IN ('AU', 'NZ'),
-																																												PARTITION default
+																																												PARTITION "default"
 																																													VALUES IN (DEFAULT)
-                                                                                                                                                                            )
-
-205:
--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-CREATE TABLE students_by_list (id SERIAL8, name STRING, email STRING, country STRING, expected_graduation_date DATE, PRIMARY KEY (country, id)) PARTITION BY LIST (country) (
-																																												PARTITION north_america
-																																													VALUES IN ('CA', 'US'),
-																																												PARTITION australia
-																																													VALUES IN ('AU', 'NZ'),
-																																												PARTITION default VALUES IN (
-																																																	DEFAULT
-																																												                  )
                                                                                                                                                                             )
 
 207:
@@ -451,9 +413,9 @@ CREATE TABLE students_by_list (id SERIAL8, name STRING, email STRING, country ST
 																																																		'AU',
 																																																		'NZ'
 																																												                    ),
-																																												PARTITION default VALUES IN (
-																																																	DEFAULT
-																																												                  )
+																																												PARTITION "default" VALUES IN (
+																																																		DEFAULT
+																																												                    )
                                                                                                                                                                             )
 
 211:
@@ -467,13 +429,13 @@ CREATE TABLE students_by_list (id SERIAL8, name STRING, email STRING, country ST
 																																																		'AU',
 																																																		'NZ'
 																																												                    ),
-																																												PARTITION default VALUES IN (
-																																																	DEFAULT
-																																												                  )
+																																												PARTITION "default" VALUES IN (
+																																																		DEFAULT
+																																												                    )
                                                                                                                                                                             )
 
-213:
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+215:
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 CREATE TABLE students_by_list (id SERIAL8, name STRING, email STRING, country STRING, expected_graduation_date DATE, PRIMARY KEY (country, id)) PARTITION BY LIST (country) (
 																																												PARTITION north_america VALUES IN (
 																																																			'CA',
@@ -483,7 +445,7 @@ CREATE TABLE students_by_list (id SERIAL8, name STRING, email STRING, country ST
 																																																		'AU',
 																																																		'NZ'
 																																												                    ),
-																																												PARTITION default VALUES IN (DEFAULT)
+																																												PARTITION "default" VALUES IN (DEFAULT)
                                                                                                                                                                             )
 
 219:
@@ -494,7 +456,7 @@ CREATE TABLE students_by_list (id SERIAL8, name STRING, email STRING, country ST
 																																																			'US'
 																																												                        ),
 																																												PARTITION australia VALUES IN ('AU', 'NZ'),
-																																												PARTITION default VALUES IN (DEFAULT)
+																																												PARTITION "default" VALUES IN (DEFAULT)
                                                                                                                                                                             )
 
 223:
@@ -502,11 +464,11 @@ CREATE TABLE students_by_list (id SERIAL8, name STRING, email STRING, country ST
 CREATE TABLE students_by_list (id SERIAL8, name STRING, email STRING, country STRING, expected_graduation_date DATE, PRIMARY KEY (country, id)) PARTITION BY LIST (country) (
 																																												PARTITION north_america VALUES IN ('CA', 'US'),
 																																												PARTITION australia VALUES IN ('AU', 'NZ'),
-																																												PARTITION default VALUES IN (DEFAULT)
+																																												PARTITION "default" VALUES IN (DEFAULT)
                                                                                                                                                                             )
 
-303:
----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-CREATE TABLE students_by_list (id SERIAL8, name STRING, email STRING, country STRING, expected_graduation_date DATE, PRIMARY KEY (country, id)) PARTITION BY LIST (country) (PARTITION north_america VALUES IN ('CA', 'US'), PARTITION australia VALUES IN ('AU', 'NZ'), PARTITION default VALUES IN (DEFAULT))
+305:
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+CREATE TABLE students_by_list (id SERIAL8, name STRING, email STRING, country STRING, expected_graduation_date DATE, PRIMARY KEY (country, id)) PARTITION BY LIST (country) (PARTITION north_america VALUES IN ('CA', 'US'), PARTITION australia VALUES IN ('AU', 'NZ'), PARTITION "default" VALUES IN (DEFAULT))
 
 

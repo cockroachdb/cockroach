@@ -19,31 +19,35 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/plpgsqltree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/pretty"
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
 
 var (
-	flagWritePretty = flag.Bool("rewrite-pretty", false, "rewrite pretty test outputs")
-	testPrettyCfg   = func() tree.PrettyCfg {
+	flagRewrite   = flag.Bool("rewrite", false, "rewrite pretty test outputs")
+	testPrettyCfg = func() tree.PrettyCfg {
 		cfg := tree.DefaultPrettyCfg()
 		cfg.JSONFmt = true
 		return cfg
 	}()
 )
 
-// TestPrettyData reads in a single SQL statement from a file, formats
-// it at 40 characters width, and compares that output to a known-good
-// output file. It is most useful when changing or implementing the
-// doc interface for a node, and should be used to compare and verify
-// the changed output.
+// TestPrettyDataShort reads in a single SQL statement from a file, formats it
+// at 40 characters width, and compares that output to a known-good output file.
+// It is most useful when changing or implementing the doc interface for a node,
+// and should be used to compare and verify the changed output.
+//
+// Unlike TestPrettyData, this test only formats the statements at a single
+// width.
 func TestPrettyDataShort(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -51,21 +55,53 @@ func TestPrettyDataShort(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if *flagWritePretty {
-		t.Log("WARNING: do not forget to run TestPrettyData with build flag 'nightly' and the -rewrite-pretty flag too!")
+	if *flagRewrite {
+		t.Log("WARNING: do not forget to run TestPrettyData with build flag 'nightly' and the -rewrite flag too!")
 	}
 	cfg := testPrettyCfg
 	cfg.Align = tree.PrettyNoAlign
 	t.Run("ref", func(t *testing.T) {
-		runTestPrettyData(t, "ref", cfg, matches, true /*short*/)
+		runTestPrettyData(t, "ref", cfg, matches, true /* short */)
 	})
 	cfg.Align = tree.PrettyAlignAndDeindent
 	t.Run("align-deindent", func(t *testing.T) {
-		runTestPrettyData(t, "align-deindent", cfg, matches, true /*short*/)
+		runTestPrettyData(t, "align-deindent", cfg, matches, true /* short */)
 	})
 	cfg.Align = tree.PrettyAlignOnly
 	t.Run("align-only", func(t *testing.T) {
-		runTestPrettyData(t, "align-only", cfg, matches, true /*short*/)
+		runTestPrettyData(t, "align-only", cfg, matches, true /* short */)
+	})
+}
+
+// TestPrettyData reads in a single SQL statement from a file, formats it at all
+// line lengths, and compares that output to a known-good output file. It is
+// most useful when changing or implementing the doc interface for a node, and
+// should be used to compare and verify the changed output.
+//
+// Unlike TestPrettyDataShort, this test formats the statement at all possible
+// widths (based on the length of the statement itself).
+func TestPrettyData(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.IfNotMiscNightly(t)
+
+	matches, err := filepath.Glob(datapathutils.TestDataPath(t, "pretty", "*.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := testPrettyCfg
+	cfg.Align = tree.PrettyNoAlign
+	t.Run("ref", func(t *testing.T) {
+		runTestPrettyData(t, "ref", cfg, matches, false /* short */)
+	})
+	cfg.Align = tree.PrettyAlignAndDeindent
+	t.Run("align-deindent", func(t *testing.T) {
+		runTestPrettyData(t, "align-deindent", cfg, matches, false /* short */)
+	})
+	cfg.Align = tree.PrettyAlignOnly
+	t.Run("align-only", func(t *testing.T) {
+		runTestPrettyData(t, "align-only", cfg, matches, false /* short */)
 	})
 }
 
@@ -143,7 +179,7 @@ func runTestPrettyData(
 				outfile = outfile + ".short"
 			}
 
-			if *flagWritePretty {
+			if *flagRewrite {
 				if err := os.WriteFile(outfile, []byte(got), 0666); err != nil {
 					t.Fatal(err)
 				}
@@ -192,9 +228,11 @@ func TestPrettyVerify(t *testing.T) {
 func TestPrettyBigStatement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderRace(t, "excessive memory usage")
 
-	// Create a SELECT statement with a 1 million item IN expression. Without
-	// mitigation, this can cause stack overflows - see #91197.
+	// Create a SELECT statement with a 1 million item IN expression.
+	// The iterative pretty-printing algorithm handles this without
+	// stack overflow - see #91197.
 	var sb strings.Builder
 	sb.WriteString("SELECT * FROM foo WHERE id IN (")
 	for i := 0; i < 1_000_000; i++ {
@@ -212,7 +250,7 @@ func TestPrettyBigStatement(t *testing.T) {
 
 	cfg := tree.DefaultPrettyCfg()
 	_, err = cfg.Pretty(stmt.AST)
-	assert.Errorf(t, err, "max call stack depth of be exceeded")
+	require.NoError(t, err)
 }
 
 func BenchmarkPrettyData(b *testing.B) {
@@ -276,5 +314,107 @@ func TestPrettyExprs(t *testing.T) {
 		if pretty != got {
 			t.Fatalf("got: %s\nexpected: %s", got, pretty)
 		}
+	}
+}
+
+// TestPrettyCaseExprInPLpgSQL is a regression test for #168216. It verifies
+// that CASE expressions inside PL/pgSQL IF/ELSIF conditions are wrapped in
+// defensive parentheses when pretty-printed with FmtPLpgSQLParen. Without
+// wrapping, the PL/pgSQL parser confuses the CASE's inner THEN with the
+// IF/ELSIF's THEN, producing a syntax error.
+//
+// ASTs are built directly (not parsed from text) because parsing requires
+// parens around CASE in these positions, which would mask the bug we're
+// testing for.
+func TestPrettyCaseExprInPLpgSQL(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	makeCaseExpr := func() *tree.CaseExpr {
+		return &tree.CaseExpr{
+			Whens: []*tree.When{{Cond: tree.MakeDBool(true), Val: tree.NewDInt(1)}},
+			Else:  tree.NewDInt(0),
+		}
+	}
+
+	cfg := tree.DefaultPrettyCfg()
+	cfg.Simplify = false
+	cfg.FmtFlags = tree.FmtPLpgSQLParen
+
+	for name, tc := range map[string]struct {
+		body      []plpgsqltree.Statement
+		unwrapped string
+		wrapped   string
+	}{
+		"if condition": {
+			body: []plpgsqltree.Statement{
+				&plpgsqltree.If{
+					Condition: makeCaseExpr(),
+					ThenBody:  []plpgsqltree.Statement{&plpgsqltree.Null{}},
+				},
+			},
+			unwrapped: `DO $$
+	BEGIN
+		IF CASE WHEN true THEN 1 ELSE 0 END THEN
+			NULL;
+		END IF;
+	END;
+$$;`,
+			wrapped: `DO $$
+	BEGIN
+		IF (CASE WHEN true THEN 1 ELSE 0 END) THEN
+			NULL;
+		END IF;
+	END;
+$$;`,
+		},
+		"elsif condition": {
+			body: []plpgsqltree.Statement{
+				&plpgsqltree.If{
+					Condition: tree.MakeDBool(false),
+					ThenBody:  []plpgsqltree.Statement{&plpgsqltree.Null{}},
+					ElseIfList: []plpgsqltree.ElseIf{{
+						Condition: makeCaseExpr(),
+						Stmts:     []plpgsqltree.Statement{&plpgsqltree.Null{}},
+					}},
+				},
+			},
+			unwrapped: `DO $$
+	BEGIN
+		IF false THEN
+			NULL;
+		ELSIF CASE WHEN true THEN 1 ELSE 0 END THEN
+			NULL;
+		END IF;
+	END;
+$$;`,
+			wrapped: `DO $$
+	BEGIN
+		IF false THEN
+			NULL;
+		ELSIF (CASE WHEN true THEN 1 ELSE 0 END) THEN
+			NULL;
+		END IF;
+	END;
+$$;`,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			// Verify that the unwrapped form (bare CASE without defensive
+			// parens) is indeed unparseable due to THEN keyword ambiguity.
+			_, err := parser.ParseOne(tc.unwrapped)
+			require.ErrorContainsf(t, err, "syntax error",
+				"unwrapped input must not parse:\n%s", tc.unwrapped)
+
+			// Pretty-print the AST and verify it matches the wrapped form
+			// (CASE wrapped in parens) and that the result reparses.
+			block := &plpgsqltree.Block{Body: tc.body}
+			doBlock := &tree.DoBlock{Code: &plpgsqltree.DoBlock{Block: block}}
+			out, err := cfg.Pretty(doBlock)
+			require.NoError(t, err)
+			require.Equal(t, tc.wrapped, out)
+			_, err = parser.ParseOne(out)
+			require.NoError(t, err, "pretty-printed output must reparse:\n%s", out)
+		})
 	}
 }

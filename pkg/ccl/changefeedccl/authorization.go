@@ -11,8 +11,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobsauth"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -20,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/roleoption"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/errors"
 )
@@ -27,8 +26,17 @@ import (
 func checkPrivilegesForDescriptor(
 	ctx context.Context, p sql.PlanHookState, desc catalog.Descriptor,
 ) (hasSelect bool, hasChangefeed bool, err error) {
-	if desc.GetObjectType() != privilege.Table {
-		return false, false, errors.AssertionFailedf("expected descriptor %d to be a table descriptor, found: %s ", desc.GetID(), desc.GetObjectType())
+	if desc == nil {
+		return false, false, errors.AssertionFailedf("expected descriptor to be non-nil")
+	}
+	switch desc.GetObjectType() {
+	case privilege.Database, privilege.Table:
+	default:
+		return false, false, errors.AssertionFailedf(
+			"expected descriptor for %q to be a table or database descriptor, found: %s ",
+			desc.GetName(),
+			desc.GetObjectType(),
+		)
 	}
 
 	hasSelect, err = p.HasPrivilege(ctx, desc, privilege.SELECT, p.User())
@@ -62,6 +70,7 @@ func authorizeUserToCreateChangefeed(
 	sinkURI string,
 	hasSelectPrivOnAllTables bool,
 	hasChangefeedPrivOnAllTables bool,
+	changefeedLevel tree.ChangefeedLevel,
 	otherExternalURIs ...string,
 ) error {
 	isAdmin, err := p.HasAdminRole(ctx)
@@ -96,10 +105,17 @@ func authorizeUserToCreateChangefeed(
 		return nil
 	}
 
+	requiredPrivilegeTarget := func() string {
+		if changefeedLevel == tree.ChangefeedLevelDatabase {
+			return "the target database"
+		}
+		return "all target tables"
+	}()
+
 	if !hasChangefeedPrivOnAllTables {
 		return pgerror.Newf(pgcode.InsufficientPrivilege,
-			`user %s requires the %s privilege on all target tables to be able to run an enterprise changefeed`,
-			p.User(), privilege.CHANGEFEED)
+			`user %q requires the %s privilege on %s to be able to run an enterprise changefeed`,
+			p.User(), privilege.CHANGEFEED, requiredPrivilegeTarget)
 	}
 
 	enforceExternalConnections := changefeedbase.RequireExternalConnectionSink.Get(&p.ExecCfg().Settings.SV)
@@ -126,46 +142,12 @@ func authorizeUserToCreateChangefeed(
 			} else {
 				return pgerror.Newf(
 					pgcode.InsufficientPrivilege,
-					`the %s privilege on all tables can only be used with external connection sinks. see cluster setting %s`,
-					privilege.CHANGEFEED, changefeedbase.RequireExternalConnectionSink.Name(),
+					`the %s privilege on %s can only be used with external connection sinks. see cluster setting %s`,
+					privilege.CHANGEFEED, requiredPrivilegeTarget, changefeedbase.RequireExternalConnectionSink.Name(),
 				)
 			}
 		}
 	}
 
 	return nil
-}
-
-// AuthorizeChangefeedJobAccess determines if a user has access to the changefeed job denoted
-// by the supplied jobID and payload.
-func AuthorizeChangefeedJobAccess(
-	ctx context.Context,
-	a jobsauth.AuthorizationAccessor,
-	jobID jobspb.JobID,
-	payload *jobspb.Payload,
-) error {
-	specs, ok := payload.UnwrapDetails().(jobspb.ChangefeedDetails)
-	if !ok {
-		return errors.Newf("could not unwrap details from the payload of job %d", jobID)
-	}
-
-	for _, spec := range specs.TargetSpecifications {
-		err := a.CheckPrivilegeForTableID(ctx, spec.TableID, privilege.CHANGEFEED)
-		if err != nil {
-			// When performing SHOW JOBS or SHOW CHANGEFEED JOBS, there may be old changefeed
-			// records that reference tables which have been dropped or are being
-			// dropped. In this case, we would prefer to skip the permissions check on
-			// the dropped descriptor.
-			if pgerror.GetPGCode(err) == pgcode.UndefinedTable || errors.Is(err, catalog.ErrDescriptorDropped) {
-				continue
-			}
-
-			return err
-		}
-	}
-	return nil
-}
-
-func init() {
-	jobsauth.RegisterAuthorizer(jobspb.TypeChangefeed, AuthorizeChangefeedJobAccess)
 }

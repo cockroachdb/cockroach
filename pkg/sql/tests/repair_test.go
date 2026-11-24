@@ -14,11 +14,11 @@ import (
 
 	"github.com/cockroachdb/cockroach-go/v2/crdb"
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/eventlog"
 	"github.com/stretchr/testify/require"
 )
 
@@ -88,13 +88,12 @@ func TestDescriptorRepairOrphanedDescriptors(t *testing.T) {
 			return err
 		}))
 
-		// Ideally we should be able to query `crdb_internal.invalid_object` but it
-		// does not do enough validation. Instead we'll just observe the issue that
-		// the parent descriptor cannot be found.
-		_, err := db.Exec(
-			"SELECT count(*) FROM \"\".crdb_internal.tables WHERE table_id = $1",
-			descID)
-		require.Regexp(t, fmt.Sprintf(`pq: relation "foo" \(%d\): referenced database ID %d: referenced descriptor not found`, descID, parentID), err)
+		// Verify that the table is now invalid, since the parent descriptor cannot
+		// be found.
+		var errorStr string
+		err := db.QueryRow("SELECT error FROM \"\".crdb_internal.invalid_objects WHERE id = $1", descID).Scan(&errorStr)
+		require.NoError(t, err)
+		require.Contains(t, errorStr, fmt.Sprintf(`relation "foo" (%d): referenced database ID %d: referenced descriptor not found`, descID, parentID))
 
 		// In this case, we're treating the injected descriptor as having no data
 		// so we can clean it up by just deleting the erroneous descriptor and
@@ -148,13 +147,12 @@ func TestDescriptorRepairOrphanedDescriptors(t *testing.T) {
 			return err
 		}))
 
-		// Ideally we should be able to query `crdb_internal.invalid_objects` but it
-		// does not do enough validation. Instead we'll just observe the issue that
-		// the parent descriptor cannot be found.
-		_, err := db.Exec(
-			"SELECT count(*) FROM \"\".crdb_internal.tables WHERE table_id = $1",
-			descID)
-		require.Regexp(t, fmt.Sprintf(`pq: relation "foo" \(%d\): referenced database ID %d: referenced descriptor not found`, descID, parentID), err)
+		// Verify that the table is now invalid, since the parent descriptor cannot
+		// be found.
+		var errorStr string
+		err := db.QueryRow("SELECT error FROM \"\".crdb_internal.invalid_objects WHERE id = $1", descID).Scan(&errorStr)
+		require.NoError(t, err)
+		require.Contains(t, errorStr, fmt.Sprintf(`relation "foo" (%d): referenced database ID %d: referenced descriptor not found`, descID, parentID))
 
 		// In this case, we're going to inject a parent database
 		require.NoError(t, crdb.ExecuteTx(ctx, db, nil, func(tx *gosql.Tx) error {
@@ -257,8 +255,10 @@ func TestDescriptorRepair(t *testing.T) {
 	ctx := context.Background()
 	setup := func(t *testing.T) (serverutils.TestServerInterface, *gosql.DB, func()) {
 		args := base.TestServerArgs{}
-		args.Knobs.EventLog = &sql.EventLogTestingKnobs{SyncWrites: true}
+		args.Knobs.EventLog = &eventlog.EventLogTestingKnobs{SyncWrites: true}
 		s, db, _ := serverutils.StartServer(t, args)
+		_, err := db.Exec(`SET CLUSTER SETTING sql.catalog.descriptor_wait_for_initial_version.enabled=false`)
+		require.NoError(t, err)
 		return s, db, func() {
 			s.Stopper().Stop(ctx)
 		}
@@ -269,6 +269,8 @@ func TestDescriptorRepair(t *testing.T) {
 		defer cleanup()
 		tdb := sqlutils.MakeSQLRunner(db)
 
+		// This test needs to disable wait for an initial version, since the initial version
+		// is intentionally bad, so the lease manager can never acquire it.
 		tdb.Exec(t, "CREATE DATABASE db")
 		tdb.Exec(t, "CREATE TABLE foobar()")
 
@@ -333,11 +335,11 @@ func TestDescriptorRepair(t *testing.T) {
 				},
 				{
 					typ:  "change_table_privilege",
-					info: `"DescriptorID":$firstTableID,"Grantee":"newuser1","GrantedPrivileges":\["ALL"\]`,
+					info: `"DescriptorID":$firstTableID,"TxnReadTimestamp":.*,"Grantee":"newuser1","GrantedPrivileges":\["ALL"\]`,
 				},
 				{
 					typ:  "change_table_privilege",
-					info: `"DescriptorID":$firstTableID,"Grantee":"newuser2","GrantedPrivileges":\["ALL"\]`,
+					info: `"DescriptorID":$firstTableID,"TxnReadTimestamp":.*,"Grantee":"newuser2","GrantedPrivileges":\["ALL"\]`,
 				},
 			},
 		},
@@ -351,15 +353,15 @@ func TestDescriptorRepair(t *testing.T) {
 			expEventLogEntries: []eventLogPattern{
 				{
 					typ:  "alter_table_owner",
-					info: `"DescriptorID":$firstTableID,"TableName":"foo","Owner":"admin"`,
+					info: `"DescriptorID":$firstTableID,"TxnReadTimestamp":.*,"TableName":"foo","Owner":"admin"`,
 				},
 				{
 					typ:  "change_table_privilege",
-					info: `"DescriptorID":$firstTableID,"Grantee":"newuser1","GrantedPrivileges":\["DROP"\],"RevokedPrivileges":\["ALL"\]`,
+					info: `"DescriptorID":$firstTableID,"TxnReadTimestamp":.*,"Grantee":"newuser1","GrantedPrivileges":\["DROP"\],"RevokedPrivileges":\["ALL"\]`,
 				},
 				{
 					typ:  "change_table_privilege",
-					info: `"DescriptorID":$firstTableID,"Grantee":"newuser2","RevokedPrivileges":\["ALL"\]`,
+					info: `"DescriptorID":$firstTableID,"TxnReadTimestamp":.*,"Grantee":"newuser2","RevokedPrivileges":\["ALL"\]`,
 				},
 			},
 		},
@@ -371,7 +373,7 @@ func TestDescriptorRepair(t *testing.T) {
 SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
   FROM system.namespace WHERE name = 'foo';
 `,
-			expErrRE: `crdb_internal.unsafe_delete_namespace_entry\(\): refusing to delete namespace entry for non-dropped descriptor`,
+			expErrRE: `refusing to delete namespace entry for non-dropped descriptor`,
 		},
 		{ // 4
 			// Upsert a descriptor which is invalid, then try to upsert a namespace
@@ -404,7 +406,7 @@ SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
 				`SELECT crdb_internal.unsafe_upsert_namespace_entry($defaultDBID, $defaultDBPublicSchemaID, 'foo', $invalidTableID, true);`,
 			},
 			op:       `SELECT crdb_internal.unsafe_delete_descriptor($invalidTableID);`,
-			expErrRE: `pq: crdb_internal.unsafe_delete_descriptor\(\): relation "foo" \($invalidTableID\): column "i" duplicate ID of column "i"`,
+			expErrRE: `pq: relation "foo" \($invalidTableID\): column "i" duplicate ID of column "i"`,
 		},
 		{ // 7
 			// Upsert a descriptor which is invalid, upsert a namespace entry for it,
@@ -429,7 +431,7 @@ SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
 				`SELECT crdb_internal.unsafe_upsert_namespace_entry($defaultDBID, $defaultDBPublicSchemaID, 'foo', $invalidTableID, true);`,
 			},
 			op:       updateInvalidDuplicateColumnDescriptorNoForce,
-			expErrRE: `pq: crdb_internal.unsafe_upsert_descriptor\(\): relation "foo" \($invalidTableID\): column "i" duplicate ID of column "i"`,
+			expErrRE: `pq: relation "foo" \($invalidTableID\): column "i" duplicate ID of column "i"`,
 		},
 		{ // 9
 			// Upsert a descriptor which is invalid, upsert a namespace entry for it,
@@ -458,14 +460,18 @@ SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
 				`SELECT crdb_internal.unsafe_upsert_namespace_entry($defaultDBID, $defaultDBPublicSchemaID, 'foo', $invalidTableID, true);`,
 			},
 			op:       `SELECT crdb_internal.unsafe_delete_namespace_entry($defaultDBID, $defaultDBPublicSchemaID, 'foo', $invalidTableID);`,
-			expErrRE: `pq: crdb_internal.unsafe_delete_namespace_entry\(\): failed to retrieve descriptor $invalidTableID: relation "foo" \($invalidTableID\): column "i" duplicate ID of column "i"`,
+			expErrRE: `pq: failed to retrieve descriptor $invalidTableID: relation "foo" \($invalidTableID\): column "i" duplicate ID of column "i"`,
 		},
 		{ // 11
 			// Upsert a descriptor which is invalid, upsert a namespace entry for it,
 			// then show that deleting the namespace entry succeeds with the force flag.
+			// This test needs to disable wait for initial version because the intitial version
+			// is intentionally bad, so the lease manager can never acquire it.
 			before: []string{
+				`SET CLUSTER SETTING sql.catalog.descriptor_wait_for_initial_version.enabled=false`,
 				upsertInvalidDuplicateColumnDescriptorBefore,
 				`SELECT crdb_internal.unsafe_upsert_namespace_entry($defaultDBID, $defaultDBPublicSchemaID, 'foo', $invalidTableID, true);`,
+				`SET CLUSTER SETTING sql.catalog.descriptor_wait_for_initial_version.enabled=true`,
 			},
 			op: `SELECT crdb_internal.unsafe_delete_namespace_entry($defaultDBID, $defaultDBPublicSchemaID, 'foo', $invalidTableID, true);`,
 			expEventLogEntries: []eventLogPattern{
@@ -486,7 +492,7 @@ SELECT crdb_internal.unsafe_delete_namespace_entry("parentID", 0, 'foo', id)
 				`SELECT crdb_internal.unsafe_upsert_descriptor(id, descriptor, true) FROM system.descriptor WHERE id = 'test.foo'::REGCLASS::OID`,
 			},
 			op:       upsertInvalidNameInTestFooNoForce,
-			expErrRE: `pq: crdb_internal.unsafe_upsert_descriptor\(\): relation \"\" \($firstTableID\): empty relation name`,
+			expErrRE: `pq: relation \"\" \($firstTableID\): empty relation name`,
 		},
 	} {
 		name := fmt.Sprintf("case #%d: %s", caseIdx+1, tc.op)
@@ -906,8 +912,10 @@ func TestCorruptDescriptorRepair(t *testing.T) {
 	tdb.CheckQueryResults(t, `SELECT * FROM testdb.parent`, [][]string{{"1", "a"}})
 
 	// Dropping the table should fail, because the table descriptor will fail
-	// the validation checks when being read from storage.
-	tdb.ExpectErr(t, "invalid foreign key backreference", `DROP TABLE testdb.parent`)
+	// the validation checks. For the declarative schema changer before the
+	// execution phase the sel validation will fail with a generic error because
+	// all reads are immutable.
+	tdb.ExpectErr(t, "referenced descriptor ID 107: looking up ID 107: descriptor not found", `DROP TABLE testdb.parent`)
 
 	const parentVersion = `SELECT
 				crdb_internal.pb_to_json('cockroach.sql.sqlbase.Descriptor', sd.descriptor, false)->'table'->>'version'
@@ -968,4 +976,42 @@ FROM
 	// version.
 	tdb.Exec(t, repair, 12345, true)
 	tdb.Exec(t, `DROP TABLE testdb.parent`)
+}
+
+func TestAlterGCTTLOfDroppedRelations(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+	})
+	defer s.Stopper().Stop(ctx)
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	tdb.Exec(t, `CREATE DATABASE db2`)
+	tdb.Exec(t, `CREATE TABLE db2.t2 (i INT PRIMARY KEY);`)
+	tdb.Exec(t, `ALTER DATABASE db2 CONFIGURE ZONE USING gc.ttlseconds = 90001;`)
+	tdb.Exec(t, `CREATE TABLE t3 (x INT PRIMARY KEY)`)
+	tdb.Exec(t, `DROP TABLE t3`)
+	tdb.Exec(t, `DROP TABLE db2.t2`)
+
+	vtableQuery := `SELECT name, ttl FROM crdb_internal.kv_dropped_relations ORDER BY name`
+	spanConfigQuery := `
+SELECT
+  crdb_internal.pretty_key(start_key, -1),
+  crdb_internal.pb_to_json('cockroach.roachpb.SpanConfig', config)->'gcPolicy'->>'ttlSeconds'
+FROM system.span_configurations
+WHERE start_key >= (SELECT crdb_internal.table_span(100)[1])
+ORDER BY start_key`
+
+	tdb.CheckQueryResults(t, vtableQuery, [][]string{{"t2", "25:00:01"}, {"t3", "04:00:00"}})
+	tdb.CheckQueryResultsRetry(t, spanConfigQuery, [][]string{{"/Table/106", "90001"}, {"/Table/107", "14400"}})
+
+	tdb.Exec(t, `
+SELECT crdb_internal.upsert_dropped_relation_gc_ttl(id, '1 second')
+FROM crdb_internal.kv_dropped_relations WHERE name IN ('t2', 't3')`)
+
+	tdb.CheckQueryResults(t, vtableQuery, [][]string{{"t2", "00:00:01"}, {"t3", "00:00:01"}})
+	tdb.CheckQueryResultsRetry(t, spanConfigQuery, [][]string{{"/Table/106", "1"}, {"/Table/107", "1"}})
 }

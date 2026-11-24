@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -29,6 +30,7 @@ var (
 	// version upgrade, the rollup threshold is used instead.
 	deprecatedResolution10sDefaultPruneThreshold = 30 * 24 * time.Hour
 	resolution10sDefaultRollupThreshold          = 10 * 24 * time.Hour
+	resolution1mDefaultRollupThreshold           = 10 * 24 * time.Hour
 	resolution30mDefaultPruneThreshold           = 90 * 24 * time.Hour
 	resolution50nsDefaultPruneThreshold          = 1 * time.Millisecond
 	storeDataTimeout                             = 1 * time.Minute
@@ -52,6 +54,17 @@ var Resolution10sStorageTTL = settings.RegisterDurationSetting(
 	"the maximum age of time series data stored at the 10 second resolution. Data older than this "+
 		"is subject to rollup and deletion.",
 	resolution10sDefaultRollupThreshold,
+	settings.WithPublic)
+
+// Resolution1mStorageTTL defines the maximum age of data that will be retained
+// at the 1 minute resolution. Data older than this is subject to being "rolled
+// up" into the 30 minute resolution and then deleted.
+var Resolution1mStorageTTL = settings.RegisterDurationSetting(
+	settings.SystemVisible, // currently used in DB Console.
+	"timeseries.storage.resolution_1m.ttl",
+	"the maximum age of time series data stored at the 1 minute resolution. Data older than this "+
+		"is subject to rollup and deletion.",
+	resolution1mDefaultRollupThreshold,
 	settings.WithPublic)
 
 // Resolution30mStorageTTL defines the maximum age of data that will be
@@ -89,6 +102,7 @@ func NewDB(db *kv.DB, settings *cluster.Settings) *DB {
 			return Resolution10sStorageTTL.Get(&settings.SV).Nanoseconds()
 		},
 		Resolution30m:  func() int64 { return Resolution30mStorageTTL.Get(&settings.SV).Nanoseconds() },
+		Resolution1m:   func() int64 { return Resolution1mStorageTTL.Get(&settings.SV).Nanoseconds() },
 		resolution1ns:  func() int64 { return resolution1nsDefaultRollupThreshold.Nanoseconds() },
 		resolution50ns: func() int64 { return resolution50nsDefaultPruneThreshold.Nanoseconds() },
 	}
@@ -102,7 +116,7 @@ func NewDB(db *kv.DB, settings *cluster.Settings) *DB {
 
 // A DataSource can be queried for a slice of time series data.
 type DataSource interface {
-	GetTimeSeriesData() []tspb.TimeSeriesData
+	GetTimeSeriesData(childMetrics bool) []tspb.TimeSeriesData
 }
 
 // poller maintains information for a polling process started by PollSource().
@@ -113,6 +127,9 @@ type poller struct {
 	frequency time.Duration
 	r         Resolution
 	stopper   *stop.Stopper
+	// When childMetrics is set to true, the polling process calls alternate behaviour in metrics recorder,
+	// returning child metrics to be stored.
+	childMetrics bool
 }
 
 // PollSource begins a Goroutine which periodically queries the supplied
@@ -125,6 +142,7 @@ func (db *DB) PollSource(
 	frequency time.Duration,
 	r Resolution,
 	stopper *stop.Stopper,
+	childMetrics bool,
 ) (firstDone <-chan struct{}) {
 	ambient.AddLogTag("ts-poll", nil)
 	p := &poller{
@@ -134,6 +152,7 @@ func (db *DB) PollSource(
 		frequency:      frequency,
 		r:              r,
 		stopper:        stopper,
+		childMetrics:   childMetrics,
 	}
 	return p.start()
 }
@@ -141,18 +160,22 @@ func (db *DB) PollSource(
 // start begins the goroutine for this poller, which will periodically request
 // time series data from the DataSource and store it.
 func (p *poller) start() (firstDone <-chan struct{}) {
-	ch := make(chan struct{})
-	// Poll once immediately and synchronously.
-	bgCtx := p.AnnotateCtx(context.Background())
-	if p.stopper.RunAsyncTask(bgCtx, "ts-poller", func(ctx context.Context) {
-		ch := ch // goroutine-local copy
+	ch := make(chan struct{}) // closed on completion of first poll
+	ctx, hdl, err := p.stopper.GetHandle(
+		p.AnnotateCtx(context.Background()), stop.TaskOpts{TaskName: "ts-poller"},
+	)
+	if err != nil {
+		close(ch)
+		return ch
+	}
+	go func(ctx context.Context, ch chan struct{}) {
+		defer hdl.Activate(ctx).Release(ctx)
 		var ticker timeutil.Timer
-		ticker.Reset(0)
+		ticker.Reset(0) // poll immediately
 		defer ticker.Stop()
 		for {
 			select {
 			case <-ticker.C:
-				ticker.Read = true
 				ticker.Reset(p.frequency)
 				p.poll(ctx)
 				if ch != nil {
@@ -163,9 +186,7 @@ func (p *poller) start() (firstDone <-chan struct{}) {
 				return
 			}
 		}
-	}) != nil {
-		close(ch)
-	}
+	}(ctx, ch)
 	return ch
 }
 
@@ -177,7 +198,7 @@ func (p *poller) poll(ctx context.Context) {
 	}
 
 	if err := p.stopper.RunTask(ctx, "ts.poller: poll", func(ctx context.Context) {
-		data := p.source.GetTimeSeriesData()
+		data := p.source.GetTimeSeriesData(p.childMetrics)
 		if len(data) == 0 {
 			return
 		}
@@ -190,10 +211,10 @@ func (p *poller) poll(ctx context.Context) {
 				return p.db.StoreData(ctx, p.r, data)
 			},
 		); err != nil {
-			log.Warningf(ctx, "error writing time series data: %s", err)
+			log.Dev.Warningf(ctx, "error writing time series data: %s", err)
 		}
 	}); err != nil {
-		log.Warningf(ctx, "%v", err)
+		log.Dev.Warningf(ctx, "%v", err)
 	}
 }
 
@@ -294,6 +315,8 @@ func (db *DB) tryStoreRollup(ctx context.Context, r Resolution, data []rollupDat
 
 func (db *DB) storeKvs(ctx context.Context, kvs []roachpb.KeyValue) error {
 	b := &kv.Batch{}
+	b.Header.WorkloadID = uint64(workloadid.WORKLOAD_ID_TIMESERIES)
+	b.Header.WorkloadType = workloadid.WorkloadTypeSystem.ToUint32()
 	for _, kv := range kvs {
 		b.AddRawRequest(&kvpb.MergeRequest{
 			RequestHeader: kvpb.RequestHeader{
@@ -331,6 +354,13 @@ func (db *DB) PruneThreshold(r Resolution) int64 {
 // Metrics gets the TimeSeriesMetrics structure used by this DB instance.
 func (db *DB) Metrics() *TimeSeriesMetrics {
 	return db.metrics
+}
+
+// runBatch executes a pre-built kv.Batch against the underlying kv.DB. This
+// lets Server run combined read batches without directly accessing the
+// unexported db field.
+func (db *DB) runBatch(ctx context.Context, b *kv.Batch) error {
+	return db.db.Run(ctx, b)
 }
 
 // WriteColumnar returns true if this DB should write data in the newer columnar

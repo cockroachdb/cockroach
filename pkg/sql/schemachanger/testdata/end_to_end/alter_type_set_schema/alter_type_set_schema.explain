@@ -1,0 +1,69 @@
+/* setup */
+CREATE TYPE salmon AS ENUM('chinook', 'sockeye');
+CREATE SCHEMA fish;
+
+/* test */
+EXPLAIN (DDL) ALTER TYPE salmon SET SCHEMA fish;
+----
+Schema change plan for ALTER TYPE ‹defaultdb›.‹public›.‹salmon› SET SCHEMA ‹fish›;
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 4 elements transitioning toward PUBLIC
+ │         │    ├── ABSENT → PUBLIC Namespace:{DescID: 104 (salmon-salmon+), Name: "salmon", ReferencedDescID: 100 (defaultdb), IntValue: 106}
+ │         │    ├── ABSENT → PUBLIC SchemaChild:{DescID: 104 (salmon-salmon+), ReferencedDescID: 106 (fish)}
+ │         │    ├── ABSENT → PUBLIC Namespace:{DescID: 105 (_salmon-_salmon+), Name: "_salmon", ReferencedDescID: 100 (defaultdb), IntValue: 106}
+ │         │    └── ABSENT → PUBLIC SchemaChild:{DescID: 105 (_salmon-_salmon+), ReferencedDescID: 106 (fish)}
+ │         ├── 4 elements transitioning toward ABSENT
+ │         │    ├── PUBLIC → ABSENT Namespace:{DescID: 104 (salmon-salmon+), Name: "salmon", ReferencedDescID: 100 (defaultdb), IntValue: 101}
+ │         │    ├── PUBLIC → ABSENT SchemaChild:{DescID: 104 (salmon-salmon+), ReferencedDescID: 101 (public)}
+ │         │    ├── PUBLIC → ABSENT Namespace:{DescID: 105 (_salmon-_salmon+), Name: "_salmon", ReferencedDescID: 100 (defaultdb), IntValue: 101}
+ │         │    └── PUBLIC → ABSENT SchemaChild:{DescID: 105 (_salmon-_salmon+), ReferencedDescID: 101 (public)}
+ │         └── 10 Mutation operations
+ │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":104,"Name":"salmon","SchemaID":101}}
+ │              ├── RemoveObjectParent {"ObjectID":104,"ParentSchemaID":101}
+ │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":105,"Name":"_salmon","SchemaID":101}}
+ │              ├── RemoveObjectParent {"ObjectID":105,"ParentSchemaID":101}
+ │              ├── SetNameInDescriptor {"DescriptorID":104,"Name":"salmon"}
+ │              ├── AddDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":104,"Name":"salmon","SchemaID":106}}
+ │              ├── SetObjectParentID {"ObjParent":{"ChildObjectID":104,"SchemaID":106}}
+ │              ├── SetNameInDescriptor {"DescriptorID":105,"Name":"_salmon"}
+ │              ├── AddDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":105,"Name":"_salmon","SchemaID":106}}
+ │              └── SetObjectParentID {"ObjParent":{"ChildObjectID":105,"SchemaID":106}}
+ └── PreCommitPhase
+      ├── Stage 1 of 2 in PreCommitPhase
+      │    ├── 4 elements transitioning toward PUBLIC
+      │    │    ├── PUBLIC → ABSENT Namespace:{DescID: 104 (salmon-salmon+), Name: "salmon", ReferencedDescID: 100 (defaultdb), IntValue: 106}
+      │    │    ├── PUBLIC → ABSENT SchemaChild:{DescID: 104 (salmon-salmon+), ReferencedDescID: 106 (fish)}
+      │    │    ├── PUBLIC → ABSENT Namespace:{DescID: 105 (_salmon-_salmon+), Name: "_salmon", ReferencedDescID: 100 (defaultdb), IntValue: 106}
+      │    │    └── PUBLIC → ABSENT SchemaChild:{DescID: 105 (_salmon-_salmon+), ReferencedDescID: 106 (fish)}
+      │    ├── 4 elements transitioning toward ABSENT
+      │    │    ├── ABSENT → PUBLIC Namespace:{DescID: 104 (salmon-salmon+), Name: "salmon", ReferencedDescID: 100 (defaultdb), IntValue: 101}
+      │    │    ├── ABSENT → PUBLIC SchemaChild:{DescID: 104 (salmon-salmon+), ReferencedDescID: 101 (public)}
+      │    │    ├── ABSENT → PUBLIC Namespace:{DescID: 105 (_salmon-_salmon+), Name: "_salmon", ReferencedDescID: 100 (defaultdb), IntValue: 101}
+      │    │    └── ABSENT → PUBLIC SchemaChild:{DescID: 105 (_salmon-_salmon+), ReferencedDescID: 101 (public)}
+      │    └── 1 Mutation operation
+      │         └── UndoAllInTxnImmediateMutationOpSideEffects
+      └── Stage 2 of 2 in PreCommitPhase
+           ├── 4 elements transitioning toward PUBLIC
+           │    ├── ABSENT → PUBLIC Namespace:{DescID: 104 (salmon-salmon+), Name: "salmon", ReferencedDescID: 100 (defaultdb), IntValue: 106}
+           │    ├── ABSENT → PUBLIC SchemaChild:{DescID: 104 (salmon-salmon+), ReferencedDescID: 106 (fish)}
+           │    ├── ABSENT → PUBLIC Namespace:{DescID: 105 (_salmon-_salmon+), Name: "_salmon", ReferencedDescID: 100 (defaultdb), IntValue: 106}
+           │    └── ABSENT → PUBLIC SchemaChild:{DescID: 105 (_salmon-_salmon+), ReferencedDescID: 106 (fish)}
+           ├── 4 elements transitioning toward ABSENT
+           │    ├── PUBLIC → ABSENT Namespace:{DescID: 104 (salmon-salmon+), Name: "salmon", ReferencedDescID: 100 (defaultdb), IntValue: 101}
+           │    ├── PUBLIC → ABSENT SchemaChild:{DescID: 104 (salmon-salmon+), ReferencedDescID: 101 (public)}
+           │    ├── PUBLIC → ABSENT Namespace:{DescID: 105 (_salmon-_salmon+), Name: "_salmon", ReferencedDescID: 100 (defaultdb), IntValue: 101}
+           │    └── PUBLIC → ABSENT SchemaChild:{DescID: 105 (_salmon-_salmon+), ReferencedDescID: 101 (public)}
+           └── 12 Mutation operations
+                ├── DrainDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":104,"Name":"salmon","SchemaID":101}}
+                ├── RemoveObjectParent {"ObjectID":104,"ParentSchemaID":101}
+                ├── DrainDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":105,"Name":"_salmon","SchemaID":101}}
+                ├── RemoveObjectParent {"ObjectID":105,"ParentSchemaID":101}
+                ├── SetNameInDescriptor {"DescriptorID":104,"Name":"salmon"}
+                ├── AddDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":104,"Name":"salmon","SchemaID":106}}
+                ├── UpdateTTLScheduleMetadata {"NewName":"salmon","TableID":104}
+                ├── SetObjectParentID {"ObjParent":{"ChildObjectID":104,"SchemaID":106}}
+                ├── SetNameInDescriptor {"DescriptorID":105,"Name":"_salmon"}
+                ├── AddDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":105,"Name":"_salmon","SchemaID":106}}
+                ├── UpdateTTLScheduleMetadata {"NewName":"_salmon","TableID":105}
+                └── SetObjectParentID {"ObjParent":{"ChildObjectID":105,"SchemaID":106}}

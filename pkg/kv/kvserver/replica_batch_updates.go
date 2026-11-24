@@ -92,7 +92,7 @@ func maybeStripInFlightWrites(ba *kvpb.BatchRequest) (*kvpb.BatchRequest, error)
 				et.LockSpans[len(origET.LockSpans)+i] = roachpb.Span{Key: w.Key}
 			}
 			// See below for why we set Header.DistinctSpans here.
-			et.LockSpans, ba.Header.DistinctSpans = roachpb.MergeSpans(&et.LockSpans)
+			et.LockSpans, ba.Header.DistinctSpans = roachpb.MergeSpans(et.LockSpans)
 			return ba, nil
 		}
 	}
@@ -164,7 +164,7 @@ func maybeStripInFlightWrites(ba *kvpb.BatchRequest) (*kvpb.BatchRequest, error)
 		// batch overlap with each other. This will have (rare) false negatives
 		// when the in-flight writes overlap with existing lock spans, but never
 		// false positives.
-		et.LockSpans, ba.Header.DistinctSpans = roachpb.MergeSpans(&et.LockSpans)
+		et.LockSpans, ba.Header.DistinctSpans = roachpb.MergeSpans(et.LockSpans)
 	}
 	return ba, nil
 }
@@ -181,7 +181,7 @@ func maybeStripInFlightWrites(ba *kvpb.BatchRequest) (*kvpb.BatchRequest, error)
 // works for batches that exclusively contain writes; reads cannot be bumped
 // like this because they've already acquired timestamp-aware latches.
 func maybeBumpReadTimestampToWriteTimestamp(
-	ctx context.Context, ba *kvpb.BatchRequest, g *concurrency.Guard,
+	ctx context.Context, ba *kvpb.BatchRequest, g concurrency.Guard,
 ) (*kvpb.BatchRequest, bool) {
 	if ba.Txn == nil {
 		return ba, false
@@ -217,13 +217,13 @@ func maybeBumpReadTimestampToWriteTimestamp(
 // could not be bumped. Also returns the possibly updated batch request, which
 // is shallow-copied on write.
 func tryBumpBatchTimestamp(
-	ctx context.Context, ba *kvpb.BatchRequest, g *concurrency.Guard, ts hlc.Timestamp,
+	ctx context.Context, ba *kvpb.BatchRequest, g concurrency.Guard, ts hlc.Timestamp,
 ) (*kvpb.BatchRequest, bool) {
 	if g != nil && !g.IsolatedAtLaterTimestamps() {
 		return ba, false
 	}
 	if ts.Less(ba.Timestamp) {
-		log.Fatalf(ctx, "trying to bump to %s <= ba.Timestamp: %s", ts, ba.Timestamp)
+		log.KvExec.Fatalf(ctx, "trying to bump to %s <= ba.Timestamp: %s", ts, ba.Timestamp)
 	}
 	if ba.Txn == nil {
 		log.VEventf(ctx, 2, "bumping batch timestamp to %s from %s", ts, ba.Timestamp)
@@ -232,7 +232,7 @@ func tryBumpBatchTimestamp(
 		return ba, true
 	}
 	if ts.Less(ba.Txn.ReadTimestamp) || ts.Less(ba.Txn.WriteTimestamp) {
-		log.Fatalf(ctx, "trying to bump to %s inconsistent with ba.Txn.ReadTimestamp: %s, "+
+		log.KvExec.Fatalf(ctx, "trying to bump to %s inconsistent with ba.Txn.ReadTimestamp: %s, "+
 			"ba.Txn.WriteTimestamp: %s", ts, ba.Txn.ReadTimestamp, ba.Txn.WriteTimestamp)
 	}
 	log.VEventf(ctx, 2, "bumping batch timestamp to: %s from read: %s, write: %s",

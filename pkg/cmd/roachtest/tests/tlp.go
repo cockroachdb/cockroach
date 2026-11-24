@@ -9,6 +9,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,9 +18,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
@@ -32,7 +36,6 @@ func registerTLP(r registry.Registry) {
 		Name:             "tlp",
 		Owner:            registry.OwnerSQLQueries,
 		Timeout:          time.Hour * 1,
-		RequiresLicense:  true,
 		Cluster:          r.MakeClusterSpec(1),
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
@@ -167,20 +170,20 @@ func runOneTLP(
 		// for a fraction of iterations after that to continually change the
 		// state of the database.
 		if i < 1000 || i%10 == 0 {
-			runMutationStatement(conn, "", mutSmither, logStmt)
+			runMutationStatement(t, conn, "", mutSmither, logStmt)
 			continue
 		}
 
-		if err := runTLPQuery(conn, tlpSmither, logStmt); err != nil {
+		if err := runTLPQuery(t, conn, rnd, tlpSmither, logStmt); err != nil {
 			t.Fatal(err)
 		}
 	}
 }
 
-// runMutationsStatement runs a random INSERT, UPDATE, or DELETE statement that
-// potentially modifies the state of the database.
+// runMutationStatement runs a random INSERT, UPDATE, DELETE, or DDL statement
+// that potentially modifies the state of the database.
 func runMutationStatement(
-	conn *gosql.DB, connInfo string, smither *sqlsmith.Smither, logStmt func(string),
+	t test.Test, conn *gosql.DB, connInfo string, smither *sqlsmith.Smither, logStmt func(string),
 ) {
 	// Ignore panics from Generate.
 	defer func() {
@@ -189,11 +192,16 @@ func runMutationStatement(
 		}
 	}()
 
-	stmt := smither.Generate()
+	stmt, stmtType := smither.GenerateWithTag()
+	timeout := statementTimeout
+	if stmtType == tree.TypeDDL {
+		defer withIncreasedStmtTimeout(t, conn, logStmt, 3)()
+		timeout *= 3
+	}
 
 	// Ignore timeouts.
 	var err error
-	_ = runWithTimeout(func() error {
+	_ = runWithTimeout(t, timeout, func() error {
 		// Ignore errors. Log successful statements.
 		if _, err = conn.Exec(stmt); err == nil {
 			logStmt(connInfo + stmt)
@@ -207,7 +215,9 @@ func runMutationStatement(
 // returned. GenerateTLP also returns any placeholder arguments needed for the
 // partitioned query. See GenerateTLP for more information on TLP and the
 // generated queries.
-func runTLPQuery(conn *gosql.DB, smither *sqlsmith.Smither, logStmt func(string)) error {
+func runTLPQuery(
+	t task.Tasker, conn *gosql.DB, rnd *rand.Rand, smither *sqlsmith.Smither, logStmt func(string),
+) (err error) {
 	// Ignore panics from GenerateTLP.
 	defer func() {
 		if r := recover(); r != nil {
@@ -215,10 +225,24 @@ func runTLPQuery(conn *gosql.DB, smither *sqlsmith.Smither, logStmt func(string)
 		}
 	}()
 
+	// Force generic query plans for 25% of queries.
+	generic := false
+	const forceGeneric = "SET plan_cache_mode = force_generic_plan"
+	if rnd.Intn(4) == 0 {
+		generic = true
+		_, err = conn.Exec(forceGeneric)
+		if err != nil {
+			return err
+		}
+		defer func() {
+			_, err = conn.Exec("RESET plan_cache_mode")
+		}()
+	}
+
 	unpartitioned, partitioned, args := smither.GenerateTLP()
 	combined := sqlsmith.CombinedTLP(unpartitioned, partitioned)
 
-	return runWithTimeout(func() error {
+	return runWithTimeout(t, statementTimeout, func() error {
 		counts := conn.QueryRow(combined, args...)
 		var undiffCount, diffCount int
 		if err := counts.Scan(&undiffCount, &diffCount); err != nil {
@@ -260,6 +284,9 @@ func runTLPQuery(conn *gosql.DB, smither *sqlsmith.Smither, logStmt func(string)
 		}
 
 		diff := unsortedMatricesDiff(unpartitionedRows, partitionedRows)
+		if generic {
+			logStmt(forceGeneric)
+		}
 		logStmt(unpartitioned)
 		logStmt(partitioned)
 		return errors.Newf(
@@ -268,14 +295,15 @@ func runTLPQuery(conn *gosql.DB, smither *sqlsmith.Smither, logStmt func(string)
 	})
 }
 
-func runWithTimeout(f func() error) error {
+func runWithTimeout(t task.Tasker, timeout time.Duration, f func() error) error {
 	done := make(chan error, 1)
-	go func() {
+	t.Go(func(context.Context, *logger.Logger) error {
 		err := f()
 		done <- err
-	}()
+		return nil
+	})
 	select {
-	case <-time.After(statementTimeout + time.Second*5):
+	case <-time.After(timeout + time.Second*5):
 		// Ignore timeouts.
 		return nil
 	case err := <-done:

@@ -1,0 +1,9 @@
+/* setup */
+CREATE TABLE t (i int, j int);
+CREATE SCHEMA sc;
+
+/* test */
+EXPLAIN (DDL, SHAPE) ALTER TABLE t SET SCHEMA sc;
+----
+Schema change plan for ALTER TABLE ‹t› SET SCHEMA ‹sc›;
+ └── execute 1 system table mutations transaction

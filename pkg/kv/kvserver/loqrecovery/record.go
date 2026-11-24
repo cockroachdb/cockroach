@@ -11,6 +11,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/loqrecovery/loqrecoverypb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -64,7 +65,7 @@ func writeReplicaRecoveryStoreRecord(
 // recovery actions are properly reflected in server logs as needed.
 func RegisterOfflineRecoveryEvents(
 	ctx context.Context,
-	readWriter storage.ReadWriter,
+	readWriter kvstorage.RaftRW,
 	registerEvent func(context.Context, loqrecoverypb.ReplicaRecoveryRecord) (bool, error),
 ) (int, error) {
 	successCount := 0
@@ -195,7 +196,7 @@ func readNodeRecoveryStatusInfo(
 	ok, err := storage.MVCCGetProto(ctx, reader, keys.StoreLossOfQuorumRecoveryStatusKey(),
 		hlc.Timestamp{}, &result, storage.MVCCGetOptions{})
 	if err != nil {
-		log.Error(ctx, "failed to read loss of quorum recovery plan application status")
+		log.KvExec.Error(ctx, "failed to read loss of quorum recovery plan application status")
 		return loqrecoverypb.PlanApplicationResult{}, false, err
 	}
 	return result, ok, nil
@@ -204,13 +205,13 @@ func readNodeRecoveryStatusInfo(
 // ReadCleanupActionsInfo reads cleanup actions info if it is present in the
 // reader.
 func ReadCleanupActionsInfo(
-	ctx context.Context, writer storage.ReadWriter,
+	ctx context.Context, reader storage.Reader,
 ) (loqrecoverypb.DeferredRecoveryActions, bool, error) {
 	var result loqrecoverypb.DeferredRecoveryActions
-	exists, err := storage.MVCCGetProto(ctx, writer, keys.StoreLossOfQuorumRecoveryCleanupActionsKey(),
+	exists, err := storage.MVCCGetProto(ctx, reader, keys.StoreLossOfQuorumRecoveryCleanupActionsKey(),
 		hlc.Timestamp{}, &result, storage.MVCCGetOptions{})
 	if err != nil {
-		log.Errorf(ctx, "failed to read loss of quorum cleanup actions key: %s", err)
+		log.KvExec.Errorf(ctx, "failed to read loss of quorum cleanup actions key: %s", err)
 		return loqrecoverypb.DeferredRecoveryActions{}, false, err
 	}
 	return result, exists, nil

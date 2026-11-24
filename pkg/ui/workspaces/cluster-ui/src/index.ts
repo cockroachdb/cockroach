@@ -6,11 +6,13 @@
 import "./protobufInit";
 import * as api from "./api";
 import * as util from "./util";
+
 export * from "./anchor";
 export * from "./badge";
 export * from "./barCharts";
 export * from "./button";
 export * from "./common";
+export * from "./components";
 export * from "./delayed";
 export * from "./downloadFile";
 export * from "./dropdown";
@@ -40,6 +42,36 @@ export * from "./transactionDetails";
 export * from "./text";
 export * from "./tracez";
 export { util, api };
+export { useCluster, useClusterLabel } from "./api/clusterApi";
+export { useDatabasesList } from "./api/databasesApi";
+export { useNodes } from "./api/nodesApi";
+export { useNodesSummary } from "./api/nodesSummaryApi";
+export { useHealth } from "./api/healthApi";
+export { useLiveWorkload } from "./api/liveWorkloadApi";
+export { useSessions } from "./api/sessionsApi";
+export type {
+  LiveWorkloadData,
+  UseLiveWorkloadResult,
+} from "./api/liveWorkloadApi";
+export type { NodesSummary } from "./api/nodesSummaryApi";
+export { useClusterSettings } from "./api/clusterSettingsApi";
+export type { ClusterSetting } from "./api/clusterSettingsApi";
+export { useConnectivity } from "./api/connectivityApi";
+export { useLocations, buildLocalityTree } from "./api/locationsApi";
+export type {
+  LocalityTier,
+  LocalityTree,
+  LocationTree,
+} from "./api/locationsApi";
+export { useNodeLogs } from "./api/nodeLogsApi";
+export { useMetricMetadata } from "./api/metricMetadataApi";
+export { useTenants } from "./api/tenantsApi";
+export {
+  useTracingSnapshots,
+  useTracingSnapshot,
+  useRawTrace,
+} from "./api/tracezApi";
+export * from "./nodes/nodeSummaryStats";
 export * from "./sessions";
 export * from "./timeScaleDropdown";
 export * from "./activeExecutions";
@@ -48,9 +80,8 @@ export * from "./selectors";
 export * from "./contexts";
 export * from "./timestamp";
 export * from "./antdTheme";
-export * from "./databasesV2";
-export * from "./databaseDetailsV2";
-export * from "./tableDetailsV2";
+export * from "./pages";
+export * from "./types";
 // Reexport ConfigProvider instance from cluster-ui as exact instance
 // required in Db Console to apply Antd theme in Db Console.
 // TODO (koorosh): is it possible to define antd pacakge as peerDependency

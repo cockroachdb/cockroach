@@ -80,6 +80,7 @@ export interface TableProps<T> {
   errorState?: React.ReactElement;
   size?: AntDTableProps<T>["size"];
   darkmode?: boolean;
+  dataTest?: string;
 }
 
 export interface StateTemplateProps {
@@ -238,6 +239,7 @@ export function Table<T>({
   errorState,
   size,
   darkmode,
+  dataTest,
 }: TableProps<KeyedTableData<T>>) {
   if (error && errorState) {
     return (
@@ -313,6 +315,7 @@ export function Table<T>({
           "crl-table__inner-container",
           innerContainerClassName,
         )}
+        data-testid={dataTest}
       >
         <AntDTable
           columns={mapTableColumnsToAntDesignColumns(columns)}

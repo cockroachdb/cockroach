@@ -11,18 +11,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod-microbench/util"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
-	"golang.org/x/exp/maps"
 )
 
 // ClusterStat represents a filtered query by the given LabelName. For example,
@@ -74,7 +72,7 @@ type StatExporter interface {
 		from time.Time,
 		to time.Time,
 		queries []AggQuery,
-		benchmarkFns ...func(map[string]StatSummary) (string, float64),
+		benchmarkFns ...func(map[string]StatSummary) *roachtestutil.AggregatedMetric,
 	) (*ClusterStatRun, error)
 }
 
@@ -95,8 +93,9 @@ type StatSummary struct {
 // stat information collected during the run. This struct is mirrored in
 // cockroachdb/roachperf for deserialization.
 type ClusterStatRun struct {
-	Total map[string]float64     `json:"total"`
-	Stats map[string]StatSummary `json:"stats"`
+	Total            map[string]float64                        `json:"total"`
+	Stats            map[string]StatSummary                    `json:"stats"`
+	BenchmarkMetrics map[string]roachtestutil.AggregatedMetric `json:"-"` // Not serialized to JSON
 }
 
 // statsWriter writes the stats buffer to the file. This is used in unit test
@@ -130,32 +129,66 @@ func (r *ClusterStatRun) serializeOpenmetricsOutRun(
 	ctx context.Context, t test.Test, c cluster.Cluster,
 ) error {
 
-	labelString := GetOpenmetricsLabelString(t, c, nil)
+	labelString := roachtestutil.GetOpenmetricsLabelString(t, c, nil)
 	report, err := serializeOpenmetricsReport(*r, &labelString)
 	if err != nil {
 		return errors.Wrap(err, "failed to serialize perf artifacts")
 	}
-	dest := filepath.Join(t.PerfArtifactsDir(), "openmetrics.om")
+	dest := filepath.Join(t.PerfArtifactsDir(), "stats.om")
 	return statsWriter(ctx, t, c, report, dest)
 }
 
+// createReport returns a ClusterStatRun struct that encompases the results of
+// the run.
+func createReport(
+	summaries map[string]StatSummary,
+	summaryStats map[string]float64,
+	benchmarkMetrics map[string]roachtestutil.AggregatedMetric,
+) *ClusterStatRun {
+	testRun := ClusterStatRun{
+		Stats:            make(map[string]StatSummary),
+		BenchmarkMetrics: benchmarkMetrics,
+	}
+
+	for tag, summary := range summaries {
+		testRun.Stats[tag] = summary
+	}
+	testRun.Total = summaryStats
+	return &testRun
+}
+
+// serializeOpenmetricsReport serializes the passed in statistics into an openmetrics
+// parseable performance artifact format.
 func serializeOpenmetricsReport(r ClusterStatRun, labelString *string) (*bytes.Buffer, error) {
 	var buffer bytes.Buffer
 
 	// Emit summary metrics from Total
-	for key, value := range r.Total {
-		buffer.WriteString(fmt.Sprintf("# TYPE %s gauge\n", util.SanitizeMetricName(key)))
-		buffer.WriteString(fmt.Sprintf("%s{%s} %f %d\n", util.SanitizeKey(key), *labelString, value, timeutil.Now().UTC().Unix()))
+	for metricName, value := range r.Total {
+		buffer.WriteString(roachtestutil.GetOpenmetricsGaugeType(metricName))
+
+		// Add labels from benchmark metrics if available
+		additionalLabels := ""
+		if benchmarkMetric, ok := r.BenchmarkMetrics[metricName]; ok {
+			additionalLabels += fmt.Sprintf(",unit=\"%s\"", util.SanitizeValue(benchmarkMetric.Unit))
+			additionalLabels += fmt.Sprintf(",is_higher_better=\"%t\"", benchmarkMetric.IsHigherBetter)
+		}
+
+		buffer.WriteString(fmt.Sprintf("%s{%s%s} %f %d\n",
+			util.SanitizeMetricName(metricName),
+			*labelString,
+			additionalLabels,
+			value,
+			timeutil.Now().UTC().Unix()))
 	}
 
 	// Emit histogram metrics from Stats
 	for _, stat := range r.Stats {
-		buffer.WriteString(fmt.Sprintf("# TYPE %s gauge\n", util.SanitizeMetricName(stat.Tag)))
+		buffer.WriteString(roachtestutil.GetOpenmetricsGaugeType(stat.Tag))
 		for i, timestamp := range stat.Time {
 			t := timeutil.Unix(0, timestamp)
 			buffer.WriteString(
 				fmt.Sprintf("%s{%s,agg_tag=\"%s\"} %f %d\n",
-					util.SanitizeValue(stat.Tag),
+					util.SanitizeMetricName(stat.Tag),
 					*labelString,
 					util.SanitizeValue(stat.AggTag),
 					stat.Value[i],
@@ -166,7 +199,7 @@ func serializeOpenmetricsReport(r ClusterStatRun, labelString *string) (*bytes.B
 				t := timeutil.Unix(0, timestamp)
 				buffer.WriteString(
 					fmt.Sprintf("%s{%s,tag=\"%s\",agg_tag=\"%s\"} %f %d\n",
-						util.SanitizeValue(stat.Tag),
+						util.SanitizeMetricName(stat.Tag),
 						*labelString,
 						tag,
 						util.SanitizeValue(stat.AggTag),
@@ -179,20 +212,6 @@ func serializeOpenmetricsReport(r ClusterStatRun, labelString *string) (*bytes.B
 	buffer.WriteString("# EOF\n")
 
 	return &buffer, nil
-}
-
-// createReport returns a ClusterStatRun struct that encompases the results of
-// the run.
-func createReport(
-	summaries map[string]StatSummary, summaryStats map[string]float64,
-) *ClusterStatRun {
-	testRun := ClusterStatRun{Stats: make(map[string]StatSummary)}
-
-	for tag, summary := range summaries {
-		testRun.Stats[tag] = summary
-	}
-	testRun.Total = summaryStats
-	return &testRun
 }
 
 // Export collects, serializes and saves a roachperf file, with statistics
@@ -210,20 +229,37 @@ func (cs *clusterStatCollector) Export(
 	from time.Time,
 	to time.Time,
 	queries []AggQuery,
-	benchmarkFns ...func(summaries map[string]StatSummary) (string, float64),
+	benchmarkFns ...func(summaries map[string]StatSummary) *roachtestutil.AggregatedMetric,
 ) (testRun *ClusterStatRun, err error) {
 	l := t.L()
 	summaries := cs.collectSummaries(ctx, l, Interval{From: from, To: to}, queries)
 
-	summaryValues := make(map[string]float64)
-	for _, scalarFn := range benchmarkFns {
-		t, result := scalarFn(summaries)
-		summaryValues[t] = result
+	// Cache this value to avoid calling the function multiple times
+	isOpenMetricsEnabled := t.ExportOpenmetrics()
+
+	// Initialize benchmarkMetrics as nil when OpenMetrics is disabled
+	var benchmarkMetrics map[string]roachtestutil.AggregatedMetric
+	if isOpenMetricsEnabled {
+		benchmarkMetrics = make(map[string]roachtestutil.AggregatedMetric)
 	}
 
-	testRun = createReport(summaries, summaryValues)
+	// Summary values for total are always collected
+	summaryValues := map[string]float64{}
+	for _, benchMarkFn := range benchmarkFns {
+		benchmarkMetric := benchMarkFn(summaries)
+		if benchmarkMetric != nil {
+			summaryValues[benchmarkMetric.Name] = float64(benchmarkMetric.Value)
+
+			// Only populate BenchmarkMetrics when OpenMetrics export is enabled
+			if isOpenMetricsEnabled {
+				benchmarkMetrics[benchmarkMetric.Name] = *benchmarkMetric
+			}
+		}
+	}
+
+	testRun = createReport(summaries, summaryValues, benchmarkMetrics)
 	if !dryRun {
-		err = testRun.SerializeOutRun(ctx, t, c, t.ExportOpenmetrics())
+		err = testRun.SerializeOutRun(ctx, t, c, isOpenMetricsEnabled)
 	}
 	return testRun, err
 }
@@ -397,51 +433,4 @@ func (cs *clusterStatCollector) getStatSummary(
 		}
 	}
 	return ret, nil
-}
-
-// GetOpenmetricsLabelString creates a string that follows the openmetrics labels format
-func GetOpenmetricsLabelString(t test.Test, c cluster.Cluster, labels map[string]string) string {
-	return util.LabelMapToString(GetOpenmetricsLabelMap(t, c, labels))
-}
-
-// GetOpenmetricsLabelMap creates a map of label keys and values
-// It takes roachtest parameters and create relevant labels.
-// Test name is split and each split is added as a subtype
-func GetOpenmetricsLabelMap(
-	t test.Test, c cluster.Cluster, labels map[string]string,
-) map[string]string {
-	defaultMap := map[string]string{
-		"test-run-id": t.GetRunId(),
-		"cloud":       c.Cloud().String(),
-		"owner":       string(t.Spec().(*registry.TestSpec).Owner),
-	}
-
-	// Since the roachtest have / delimiter for subtests
-	// Partitioning the name by '/'
-	testNameArray := strings.Split(t.Name(), "/")
-	defaultMap["test"] = testNameArray[0]
-
-	subTestIterator := 1
-	for i := 1; i < len(testNameArray); i++ {
-		testSubName := testNameArray[i]
-
-		// If the partition has '=', add the key as a label itself
-		// and the value as its value
-		if strings.Contains(testSubName, "=") {
-			testLabels := strings.Split(testSubName, "=")
-			defaultMap[testLabels[0]] = testLabels[1]
-		} else {
-
-			// Add the subtest label with the iterator since there can be nested subtests
-			testSubType := fmt.Sprintf("subtest-%d", subTestIterator)
-			subTestIterator++
-			defaultMap[testSubType] = testSubName
-		}
-	}
-
-	// If the tests has passed some custom labels, copy them to the map created above
-	if labels != nil {
-		maps.Copy(defaultMap, labels)
-	}
-	return defaultMap
 }

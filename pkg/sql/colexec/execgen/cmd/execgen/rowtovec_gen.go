@@ -69,10 +69,7 @@ type familyWidthPair struct {
 
 var rowToVecPreludeTmpls = map[familyWidthPair]string{
 	{types.StringFamily, anyWidth}: `// Handle other STRING-related OID types, like oid.T_name.
-												 wrapper, ok := %[1]s.(*tree.DOidWrapper)
-												 if ok {
-												     %[1]s = wrapper.Wrapped
-												 }`,
+												 %[1]s = tree.UnwrapDOidWrapper(%[1]s)`,
 }
 
 // rowToVecConversionTmpls maps the type families to the corresponding

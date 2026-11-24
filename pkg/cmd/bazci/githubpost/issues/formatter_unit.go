@@ -44,22 +44,9 @@ func (unitTestFormatterTyp) Body(r *Renderer, data TemplateData) error {
 		data.Commit,
 		data.CommitURL,
 	)
-	if data.SideEyeSnapshotURL != "" {
-		r.Escaped(`. `)
-		msg := "A Side-Eye cluster snapshot was captured: "
-		if data.SideEyeSnapshotMsg != "" {
-			msg = data.SideEyeSnapshotMsg
-		}
-		r.Escaped(msg)
-		r.A(data.SideEyeSnapshotURL, data.SideEyeSnapshotURL)
-		r.Escaped(`.
+	r.Escaped(`:
 
 `)
-	} else {
-		r.Escaped(`:
-
-`)
-	}
 	if fop, ok := data.CondensedMessage.FatalOrPanic(50); ok {
 		if fop.Error != "" {
 			r.Escaped("Fatal error:")
@@ -82,6 +69,22 @@ func (unitTestFormatterTyp) Body(r *Renderer, data TemplateData) error {
 			r.Escaped("Schema:")
 			r.CodeBlock("", rsgCrash.Schema)
 		}
+	} else if fnr, ok := data.CondensedMessage.FatalNodeRoachtest(); ok {
+		r.Escaped("Failed with:")
+		r.CodeBlock("", fnr.Message)
+		r.Escaped("Fatal entries found in Cockroach logs:")
+		r.CodeBlock("", fnr.FatalLogs)
+		if nodeIpMap, ok := data.CondensedMessage.NodeToIpMappingRoachtest(); ok {
+			r.Escaped("Cluster Node to Ip Mapping:")
+			r.nl()
+			r.Escaped(nodeIpMap.NodeToIpMapping)
+		}
+	} else if nodeIpMap, ok := data.CondensedMessage.NodeToIpMappingRoachtest(); ok {
+		r.Escaped("Failed with:")
+		r.CodeBlock("", nodeIpMap.Message)
+		r.Escaped("Cluster Node to Ip Mapping:")
+		r.nl()
+		r.Escaped(nodeIpMap.NodeToIpMapping)
 	} else {
 		r.CodeBlock("", data.CondensedMessage.Digest(50))
 	}

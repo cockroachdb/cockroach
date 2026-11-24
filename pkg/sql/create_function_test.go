@@ -12,13 +12,13 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -63,7 +63,7 @@ $$;
 
 	tDB.Exec(t, `CREATE SCHEMA test_sc;`)
 
-	err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+	err := sqltestutils.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 		funcDesc, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, 110)
 		require.NoError(t, err)
 		require.Equal(t, funcDesc.GetName(), "f")
@@ -74,7 +74,7 @@ SELECT b FROM defaultdb.public.t@t_idx_b;
 SELECT c FROM defaultdb.public.t@t_idx_c;
 SELECT a FROM defaultdb.public.v;
 SELECT nextval(105:::REGCLASS);`,
-			funcDesc.GetFunctionBody())
+			string(funcDesc.GetFunctionBody()))
 
 		sort.Slice(funcDesc.GetDependsOn(), func(i, j int) bool {
 			return funcDesc.GetDependsOn()[i] < funcDesc.GetDependsOn()[j]
@@ -211,7 +211,7 @@ $$;
 `,
 	)
 
-	err := sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+	err := sqltestutils.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 		funcDesc, err := col.ByIDWithLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, 112)
 		require.NoError(t, err)
 		require.Equal(t, funcDesc.GetName(), "f")
@@ -220,7 +220,7 @@ $$;
 			`SELECT b FROM defaultdb.public.t1@t1_idx_b;
 SELECT a FROM defaultdb.public.v1;
 SELECT nextval(106:::REGCLASS);`,
-			funcDesc.GetFunctionBody())
+			string(funcDesc.GetFunctionBody()))
 
 		sort.Slice(funcDesc.GetDependsOn(), func(i, j int) bool {
 			return funcDesc.GetDependsOn()[i] < funcDesc.GetDependsOn()[j]
@@ -255,7 +255,7 @@ CREATE OR REPLACE FUNCTION f(a notmyworkday) RETURNS INT VOLATILE LANGUAGE SQL A
 $$;
 `)
 
-	err = sql.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
+	err = sqltestutils.TestingDescsTxn(ctx, s, func(ctx context.Context, txn isql.Txn, col *descs.Collection) error {
 		funcDesc, err := col.ByIDWithoutLeased(txn.KV()).WithoutNonPublic().Get().Function(ctx, 112)
 		require.NoError(t, err)
 		require.Equal(t, funcDesc.GetName(), "f")
@@ -264,7 +264,7 @@ $$;
 			`SELECT b FROM defaultdb.public.t2@t2_idx_b;
 SELECT a FROM defaultdb.public.v2;
 SELECT nextval(107:::REGCLASS);`,
-			funcDesc.GetFunctionBody())
+			string(funcDesc.GetFunctionBody()))
 
 		sort.Slice(funcDesc.GetDependsOn(), func(i, j int) bool {
 			return funcDesc.GetDependsOn()[i] < funcDesc.GetDependsOn()[j]
@@ -304,13 +304,14 @@ func TestCreateFunctionVisibilityInExplicitTransaction(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 	tDB := sqlutils.MakeSQLRunner(sqlDB)
 
-	tDB.Exec(t, `SET use_declarative_schema_changer = 'unsafe_always'`)
 	tDB.Exec(t, `CREATE TABLE t (a INT PRIMARY KEY, b INT NOT NULL)`)
 	tDB.Exec(t, `INSERT INTO t VALUES (1,1), (2,1)`)
+	tDB.Exec(t, `SET use_declarative_schema_changer = 'unsafe_always'`)
 
 	// Make sure that everything is rolled back if post commit job fails.
 	_, err := sqlDB.Exec(`
 BEGIN;
+SET LOCAL autocommit_before_ddl = false;
 CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
 CREATE UNIQUE INDEX idx ON t(b);
 COMMIT;
@@ -325,16 +326,16 @@ COMMIT;
 	tDB.Exec(t, `DELETE FROM t WHERE a = 2`)
 
 	// Make sure function cannot be used before job completes.
-	testingKnob.RunBeforeBackfill = func() error {
+	testingKnob.RunBeforeBackfill = func(_ []scexec.BackfillProgress) error {
 		_, err = sqlDB.Exec(`SELECT f()`)
 		require.Error(t, err, "")
 		require.Contains(t, err.Error(), `function "f" is being added`)
 		return nil
 	}
 
-	//tDB.Exec(t, `SET CLUSTER SETTING jobs.debug.pausepoints='newschemachanger.before.exec'`)
 	_, err = sqlDB.Exec(`
 BEGIN;
+SET LOCAL autocommit_before_ddl = false;
 CREATE FUNCTION f() RETURNS INT LANGUAGE SQL AS $$ SELECT 1 $$;
 CREATE UNIQUE INDEX idx ON t(b);
 COMMIT;

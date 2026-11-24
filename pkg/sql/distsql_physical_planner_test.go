@@ -23,11 +23,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/rangecache"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
@@ -276,6 +279,10 @@ func TestDistSQLRangeCachesIntegrationTest(t *testing.T) {
 			ReplicationMode: base.ReplicationManual,
 			ServerArgs: base.TestServerArgs{
 				UseDatabase: "test",
+				// Probably this test could work in shared-process mode, but
+				// it's occasionally flaking there and doesn't seem worth
+				// investigating since we're touching the ranges directly.
+				DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
 			},
 		})
 	defer tc.Stopper().Stop(context.Background())
@@ -296,7 +303,7 @@ func TestDistSQLRangeCachesIntegrationTest(t *testing.T) {
 	//
 	// TODO(andrei): This is super hacky. What this test really wants to do is to
 	// precisely control the contents of the range cache on node 4.
-	tc.Server(3).DistSenderI().(*kvcoord.DistSender).DisableFirstRangeUpdates()
+	tc.ApplicationLayer(3).DistSenderI().(*kvcoord.DistSender).DisableFirstRangeUpdates()
 	db3 := tc.ServerConn(3)
 	// Force the DistSQL on this connection.
 	_, err := db3.Exec(`SET CLUSTER SETTING sql.defaults.distsql = always;`)
@@ -449,10 +456,9 @@ func TestDistSQLUnavailableHosts(t *testing.T) {
 			}
 
 			// Grant capability to run RELOCATE to secondary (test) tenant.
-			systemDB := sqlutils.MakeSQLRunner(tc.SystemLayer(0).SQLConn(t))
-			systemDB.Exec(t,
-				`ALTER TENANT [$1] GRANT CAPABILITY can_admin_relocate_range=true`,
-				serverutils.TestTenantID().ToUint64())
+			tc.GrantTenantCapabilities(
+				ctx, t, serverutils.TestTenantID(),
+				map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanAdminRelocateRange: "true"})
 		}
 
 		// Connect to node 1 (gateway node)
@@ -920,6 +926,11 @@ func TestPartitionSpans(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	localityTag := func(nodeID int) string {
+		// Example output: 1: "x=1,y=1", 2: "x=1,y=0", 3: "x=2,y=1"
+		return fmt.Sprintf("x=%d,y=%d", (nodeID/3)+1, nodeID%2)
+	}
+
 	testCases := []struct {
 		ranges    []testSpanResolverRange
 		deadNodes []int
@@ -930,13 +941,18 @@ func TestPartitionSpans(t *testing.T) {
 		// the span is actually a point lookup.
 		spans [][2]string
 
-		locFilter string
+		// Note that each node's filter is determined by localityTag().
+		locFilter []string
+
+		// Planning should not error with strict locality filtering.
+		strictCompatible bool
 
 		// expected result: a map of node to list of spans.
 		partitions      map[int][][2]string
 		partitionStates []string
 		partitionState  spanPartitionState
 	}{
+		// 0
 		{
 			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}, {"D", 3}},
 			gatewayNode: 1,
@@ -950,10 +966,10 @@ func TestPartitionSpans(t *testing.T) {
 			},
 
 			partitionStates: []string{
-				"partition span: {A1-B}, instance ID: 1, reason: gossip-target-healthy",
-				"partition span: {B-C}, instance ID: 2, reason: gossip-target-healthy",
-				"partition span: C{-1}, instance ID: 1, reason: gossip-target-healthy",
-				"partition span: {D1-X}, instance ID: 3, reason: gossip-target-healthy",
+				"partition span: {A1-B}, instance ID: 1, reason: target-healthy",
+				"partition span: {B-C}, instance ID: 2, reason: target-healthy",
+				"partition span: C{-1}, instance ID: 1, reason: target-healthy",
+				"partition span: {D1-X}, instance ID: 3, reason: target-healthy",
 			},
 
 			partitionState: spanPartitionState{
@@ -962,13 +978,14 @@ func TestPartitionSpans(t *testing.T) {
 					2: 1,
 					3: 1,
 				},
-				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
-					SpanPartitionReason_GOSSIP_TARGET_HEALTHY: 4,
+				partitionSpanDecisions: [SpanPartitionReasonMax]int{
+					SpanPartitionReason_TARGET_HEALTHY: 4,
 				},
 				totalPartitionSpans: 4,
 			},
 		},
 
+		// 1
 		{
 			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}, {"D", 3}},
 			deadNodes:   []int{1}, // The health status of the gateway node shouldn't matter.
@@ -983,10 +1000,10 @@ func TestPartitionSpans(t *testing.T) {
 			},
 
 			partitionStates: []string{
-				"partition span: {A1-B}, instance ID: 1, reason: gossip-target-healthy",
-				"partition span: {B-C}, instance ID: 2, reason: gossip-target-healthy",
-				"partition span: C{-1}, instance ID: 1, reason: gossip-target-healthy",
-				"partition span: {D1-X}, instance ID: 3, reason: gossip-target-healthy",
+				"partition span: {A1-B}, instance ID: 1, reason: target-healthy",
+				"partition span: {B-C}, instance ID: 2, reason: target-healthy",
+				"partition span: C{-1}, instance ID: 1, reason: target-healthy",
+				"partition span: {D1-X}, instance ID: 3, reason: target-healthy",
 			},
 
 			partitionState: spanPartitionState{
@@ -995,13 +1012,14 @@ func TestPartitionSpans(t *testing.T) {
 					2: 1,
 					3: 1,
 				},
-				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
-					SpanPartitionReason_GOSSIP_TARGET_HEALTHY: 4,
+				partitionSpanDecisions: [SpanPartitionReasonMax]int{
+					SpanPartitionReason_TARGET_HEALTHY: 4,
 				},
 				totalPartitionSpans: 4,
 			},
 		},
 
+		// 2
 		{
 			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}, {"D", 3}},
 			deadNodes:   []int{2},
@@ -1015,10 +1033,10 @@ func TestPartitionSpans(t *testing.T) {
 			},
 
 			partitionStates: []string{
-				"partition span: {A1-B}, instance ID: 1, reason: gossip-target-healthy",
-				"partition span: {B-C}, instance ID: 1, reason: gossip-gateway-target-unhealthy",
-				"partition span: C{-1}, instance ID: 1, reason: gossip-target-healthy",
-				"partition span: {D1-X}, instance ID: 3, reason: gossip-target-healthy",
+				"partition span: {A1-B}, instance ID: 1, reason: target-healthy",
+				"partition span: {B-C}, instance ID: 1, reason: gateway-target-unhealthy",
+				"partition span: C{-1}, instance ID: 1, reason: target-healthy",
+				"partition span: {D1-X}, instance ID: 3, reason: target-healthy",
 			},
 
 			partitionState: spanPartitionState{
@@ -1026,14 +1044,15 @@ func TestPartitionSpans(t *testing.T) {
 					1: 3,
 					3: 1,
 				},
-				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
-					SpanPartitionReason_GOSSIP_TARGET_HEALTHY:           3,
-					SpanPartitionReason_GOSSIP_GATEWAY_TARGET_UNHEALTHY: 1,
+				partitionSpanDecisions: [SpanPartitionReasonMax]int{
+					SpanPartitionReason_TARGET_HEALTHY:           3,
+					SpanPartitionReason_GATEWAY_TARGET_UNHEALTHY: 1,
 				},
 				totalPartitionSpans: 4,
 			},
 		},
 
+		// 3
 		{
 			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}, {"D", 3}},
 			deadNodes:   []int{3},
@@ -1047,10 +1066,10 @@ func TestPartitionSpans(t *testing.T) {
 			},
 
 			partitionStates: []string{
-				"partition span: {A1-B}, instance ID: 1, reason: gossip-target-healthy",
-				"partition span: {B-C}, instance ID: 2, reason: gossip-target-healthy",
-				"partition span: C{-1}, instance ID: 1, reason: gossip-target-healthy",
-				"partition span: {D1-X}, instance ID: 1, reason: gossip-gateway-target-unhealthy",
+				"partition span: {A1-B}, instance ID: 1, reason: target-healthy",
+				"partition span: {B-C}, instance ID: 2, reason: target-healthy",
+				"partition span: C{-1}, instance ID: 1, reason: target-healthy",
+				"partition span: {D1-X}, instance ID: 1, reason: gateway-target-unhealthy",
 			},
 
 			partitionState: spanPartitionState{
@@ -1058,14 +1077,15 @@ func TestPartitionSpans(t *testing.T) {
 					1: 3,
 					2: 1,
 				},
-				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
-					SpanPartitionReason_GOSSIP_TARGET_HEALTHY:           3,
-					SpanPartitionReason_GOSSIP_GATEWAY_TARGET_UNHEALTHY: 1,
+				partitionSpanDecisions: [SpanPartitionReasonMax]int{
+					SpanPartitionReason_TARGET_HEALTHY:           3,
+					SpanPartitionReason_GATEWAY_TARGET_UNHEALTHY: 1,
 				},
 				totalPartitionSpans: 4,
 			},
 		},
 
+		// 4
 		{
 			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}, {"D", 3}},
 			deadNodes:   []int{1},
@@ -1079,10 +1099,10 @@ func TestPartitionSpans(t *testing.T) {
 			},
 
 			partitionStates: []string{
-				"partition span: {A1-B}, instance ID: 2, reason: gossip-gateway-target-unhealthy",
-				"partition span: {B-C}, instance ID: 2, reason: gossip-target-healthy",
-				"partition span: C{-1}, instance ID: 2, reason: gossip-gateway-target-unhealthy",
-				"partition span: {D1-X}, instance ID: 3, reason: gossip-target-healthy",
+				"partition span: {A1-B}, instance ID: 2, reason: gateway-target-unhealthy",
+				"partition span: {B-C}, instance ID: 2, reason: target-healthy",
+				"partition span: C{-1}, instance ID: 2, reason: gateway-target-unhealthy",
+				"partition span: {D1-X}, instance ID: 3, reason: target-healthy",
 			},
 
 			partitionState: spanPartitionState{
@@ -1090,14 +1110,15 @@ func TestPartitionSpans(t *testing.T) {
 					2: 3,
 					3: 1,
 				},
-				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
-					SpanPartitionReason_GOSSIP_TARGET_HEALTHY:           2,
-					SpanPartitionReason_GOSSIP_GATEWAY_TARGET_UNHEALTHY: 2,
+				partitionSpanDecisions: [SpanPartitionReasonMax]int{
+					SpanPartitionReason_TARGET_HEALTHY:           2,
+					SpanPartitionReason_GATEWAY_TARGET_UNHEALTHY: 2,
 				},
 				totalPartitionSpans: 4,
 			},
 		},
 
+		// 5
 		{
 			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}, {"D", 3}},
 			deadNodes:   []int{1},
@@ -1111,10 +1132,10 @@ func TestPartitionSpans(t *testing.T) {
 			},
 
 			partitionStates: []string{
-				"partition span: {A1-B}, instance ID: 3, reason: gossip-gateway-target-unhealthy",
-				"partition span: {B-C}, instance ID: 2, reason: gossip-target-healthy",
-				"partition span: C{-1}, instance ID: 3, reason: gossip-gateway-target-unhealthy",
-				"partition span: {D1-X}, instance ID: 3, reason: gossip-target-healthy",
+				"partition span: {A1-B}, instance ID: 3, reason: gateway-target-unhealthy",
+				"partition span: {B-C}, instance ID: 2, reason: target-healthy",
+				"partition span: C{-1}, instance ID: 3, reason: gateway-target-unhealthy",
+				"partition span: {D1-X}, instance ID: 3, reason: target-healthy",
 			},
 
 			partitionState: spanPartitionState{
@@ -1122,15 +1143,15 @@ func TestPartitionSpans(t *testing.T) {
 					2: 1,
 					3: 3,
 				},
-				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
-					SpanPartitionReason_GOSSIP_TARGET_HEALTHY:           2,
-					SpanPartitionReason_GOSSIP_GATEWAY_TARGET_UNHEALTHY: 2,
+				partitionSpanDecisions: [SpanPartitionReasonMax]int{
+					SpanPartitionReason_TARGET_HEALTHY:           2,
+					SpanPartitionReason_GATEWAY_TARGET_UNHEALTHY: 2,
 				},
 				totalPartitionSpans: 4,
 			},
 		},
 
-		// Test point lookups in isolation.
+		// 6: Test point lookups in isolation.
 		{
 			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}},
 			gatewayNode: 1,
@@ -1143,9 +1164,9 @@ func TestPartitionSpans(t *testing.T) {
 			},
 
 			partitionStates: []string{
-				"partition span: A2, instance ID: 1, reason: gossip-target-healthy",
-				"partition span: A1, instance ID: 1, reason: gossip-target-healthy",
-				"partition span: B1, instance ID: 2, reason: gossip-target-healthy",
+				"partition span: A2, instance ID: 1, reason: target-healthy",
+				"partition span: A1, instance ID: 1, reason: target-healthy",
+				"partition span: B1, instance ID: 2, reason: target-healthy",
 			},
 
 			partitionState: spanPartitionState{
@@ -1153,14 +1174,14 @@ func TestPartitionSpans(t *testing.T) {
 					1: 2,
 					2: 1,
 				},
-				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
-					SpanPartitionReason_GOSSIP_TARGET_HEALTHY: 3,
+				partitionSpanDecisions: [SpanPartitionReasonMax]int{
+					SpanPartitionReason_TARGET_HEALTHY: 3,
 				},
 				totalPartitionSpans: 3,
 			},
 		},
 
-		// Test point lookups intertwined with span scans.
+		// 7: Test point lookups intertwined with span scans.
 		{
 			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 1}, {"C", 2}},
 			gatewayNode: 1,
@@ -1173,16 +1194,16 @@ func TestPartitionSpans(t *testing.T) {
 			},
 
 			partitionStates: []string{
-				"partition span: A1, instance ID: 1, reason: gossip-target-healthy",
-				"partition span: A{1-2}, instance ID: 1, reason: gossip-target-healthy",
-				"partition span: A2, instance ID: 1, reason: gossip-target-healthy",
-				"partition span: {A2-B}, instance ID: 1, reason: gossip-target-healthy",
-				"partition span: {B-C}, instance ID: 1, reason: gossip-target-healthy",
-				"partition span: C{-2}, instance ID: 2, reason: gossip-target-healthy",
-				"partition span: B1, instance ID: 1, reason: gossip-target-healthy",
-				"partition span: {A3-B}, instance ID: 1, reason: gossip-target-healthy",
-				"partition span: B{-3}, instance ID: 1, reason: gossip-target-healthy",
-				"partition span: B2, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: A1, instance ID: 1, reason: target-healthy",
+				"partition span: A{1-2}, instance ID: 1, reason: target-healthy",
+				"partition span: A2, instance ID: 1, reason: target-healthy",
+				"partition span: {A2-B}, instance ID: 1, reason: target-healthy",
+				"partition span: {B-C}, instance ID: 1, reason: target-healthy",
+				"partition span: C{-2}, instance ID: 2, reason: target-healthy",
+				"partition span: B1, instance ID: 1, reason: target-healthy",
+				"partition span: {A3-B}, instance ID: 1, reason: target-healthy",
+				"partition span: B{-3}, instance ID: 1, reason: target-healthy",
+				"partition span: B2, instance ID: 1, reason: target-healthy",
 			},
 
 			partitionState: spanPartitionState{
@@ -1190,14 +1211,14 @@ func TestPartitionSpans(t *testing.T) {
 					1: 9,
 					2: 1,
 				},
-				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
-					SpanPartitionReason_GOSSIP_TARGET_HEALTHY: 10,
+				partitionSpanDecisions: [SpanPartitionReasonMax]int{
+					SpanPartitionReason_TARGET_HEALTHY: 10,
 				},
 				totalPartitionSpans: 10,
 			},
 		},
 
-		// A single span touching multiple ranges but on the same node results
+		// 8: A single span touching multiple ranges but on the same node results
 		// in a single partitioned span.
 		{
 			ranges:      []testSpanResolverRange{{"A", 1}, {"A1", 1}, {"B", 2}},
@@ -1210,21 +1231,22 @@ func TestPartitionSpans(t *testing.T) {
 			},
 
 			partitionStates: []string{
-				"partition span: A{-1}, instance ID: 1, reason: gossip-target-healthy",
-				"partition span: {A1-B}, instance ID: 1, reason: gossip-target-healthy",
+				"partition span: A{-1}, instance ID: 1, reason: target-healthy",
+				"partition span: {A1-B}, instance ID: 1, reason: target-healthy",
 			},
 
 			partitionState: spanPartitionState{
 				partitionSpans: map[base.SQLInstanceID]int{
 					1: 2,
 				},
-				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
-					SpanPartitionReason_GOSSIP_TARGET_HEALTHY: 2,
+				partitionSpanDecisions: [SpanPartitionReasonMax]int{
+					SpanPartitionReason_TARGET_HEALTHY: 2,
 				},
 				totalPartitionSpans: 2,
 			},
 		},
-		// Test some locality-filtered planning too.
+
+		// 9: Test some locality-filtered planning too.
 		//
 		// Since this test is run on a system tenant but there is a locality filter,
 		// the spans are resolved in a mixed process mode. As a result, the
@@ -1235,7 +1257,7 @@ func TestPartitionSpans(t *testing.T) {
 			gatewayNode: 1,
 
 			spans:     [][2]string{{"A1", "C1"}, {"D1", "X"}},
-			locFilter: "x=1",
+			locFilter: []string{"x=1"}, // nodes 1 and 2 should match this.
 			partitions: map[int][][2]string{
 				1: {{"A1", "B"}, {"C", "C1"}},
 				2: {{"B", "C"}, {"D1", "X"}},
@@ -1253,7 +1275,7 @@ func TestPartitionSpans(t *testing.T) {
 					1: 2,
 					2: 2,
 				},
-				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
+				partitionSpanDecisions: [SpanPartitionReasonMax]int{
 					SpanPartitionReason_TARGET_HEALTHY:                              3,
 					SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED: 1,
 				},
@@ -1263,12 +1285,14 @@ func TestPartitionSpans(t *testing.T) {
 				totalPartitionSpans: 4,
 			},
 		},
+
+		// 10
 		{
 			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}, {"D", 3}},
 			gatewayNode: 1,
 
 			spans:     [][2]string{{"A1", "C1"}, {"D1", "X"}},
-			locFilter: "y=0",
+			locFilter: []string{"y=0"}, // Even nodes should match this.
 			partitions: map[int][][2]string{
 				2: {{"A1", "C1"}},
 				4: {{"D1", "X"}},
@@ -1286,19 +1310,21 @@ func TestPartitionSpans(t *testing.T) {
 					2: 3,
 					4: 1,
 				},
-				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
+				partitionSpanDecisions: [SpanPartitionReasonMax]int{
 					SpanPartitionReason_TARGET_HEALTHY:         1,
 					SpanPartitionReason_CLOSEST_LOCALITY_MATCH: 3,
 				},
 				totalPartitionSpans: 4,
 			},
 		},
+
+		// 11
 		{
 			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}, {"D", 3}},
 			gatewayNode: 7,
 
 			spans:     [][2]string{{"A1", "C1"}, {"D1", "X"}},
-			locFilter: "x=3",
+			locFilter: []string{"x=3"}, // Node 6 - 8 should match this.
 			partitions: map[int][][2]string{
 				6: {{"B", "C1"}},
 				7: {{"A1", "B"}, {"D1", "X"}},
@@ -1316,7 +1342,7 @@ func TestPartitionSpans(t *testing.T) {
 					6: 2,
 					7: 2,
 				},
-				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
+				partitionSpanDecisions: [SpanPartitionReasonMax]int{
 					SpanPartitionReason_GATEWAY_NO_LOCALITY_MATCH:                   2,
 					SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED: 2,
 				},
@@ -1326,12 +1352,14 @@ func TestPartitionSpans(t *testing.T) {
 				},
 			},
 		},
+
+		// 12
 		{
 			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}, {"D", 3}},
 			gatewayNode: 1,
 
 			spans:     [][2]string{{"A1", "C1"}, {"D1", "X"}},
-			locFilter: "x=3,y=1",
+			locFilter: []string{"x=3,y=1"}, // node 7 should match this. gateway node 1 is ineligible.
 			partitions: map[int][][2]string{
 				7: {{"A1", "C1"}, {"D1", "X"}},
 			},
@@ -1347,8 +1375,78 @@ func TestPartitionSpans(t *testing.T) {
 				partitionSpans: map[base.SQLInstanceID]int{
 					7: 4,
 				},
-				partitionSpanDecisions: [SpanPartitionReason_LOCALITY_FILTERED_RANDOM_GATEWAY_OVERLOADED + 1]int{
+				partitionSpanDecisions: [SpanPartitionReasonMax]int{
 					SpanPartitionReason_LOCALITY_FILTERED_RANDOM: 4,
+				},
+				totalPartitionSpans: 4,
+			},
+		},
+
+		// 13: filter with multiple localities. Essentially the same as test case 9,
+		// except passing a locality that matches node 3.
+		{
+			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}, {"D", 3}},
+			gatewayNode: 1,
+
+			spans:            [][2]string{{"A1", "C1"}, {"D1", "X"}},
+			locFilter:        []string{"x=1", "x=2"}, // all nodes should match this
+			strictCompatible: true,
+
+			partitions: map[int][][2]string{
+				1: {{"A1", "B"}, {"C", "C1"}},
+				2: {{"B", "C"}},
+				3: {{"D1", "X"}},
+			},
+
+			partitionStates: []string{
+				"partition span: {A1-B}, instance ID: 1, reason: target-healthy",
+				"partition span: {B-C}, instance ID: 2, reason: target-healthy",
+				"partition span: C{-1}, instance ID: 1, reason: target-healthy",
+				"partition span: {D1-X}, instance ID: 3, reason: target-healthy",
+			},
+
+			partitionState: spanPartitionState{
+				partitionSpans: map[base.SQLInstanceID]int{
+					1: 2,
+					2: 1,
+					3: 1,
+				},
+				partitionSpanDecisions: [SpanPartitionReasonMax]int{
+					SpanPartitionReason_TARGET_HEALTHY: 4,
+				},
+				totalPartitionSpans: 4,
+			},
+		},
+		// 14: filter with multiple hierarchical localities.
+		{
+			ranges:      []testSpanResolverRange{{"A", 1}, {"B", 2}, {"C", 1}, {"D", 3}},
+			gatewayNode: 1,
+
+			spans:            [][2]string{{"A1", "C1"}, {"D1", "X"}},
+			locFilter:        []string{"x=1,y=1", "x=1,y=0", "x=2,y=1"}, // 1, 2, 3
+			strictCompatible: true,
+
+			partitions: map[int][][2]string{
+				1: {{"A1", "B"}, {"C", "C1"}},
+				2: {{"B", "C"}},
+				3: {{"D1", "X"}},
+			},
+
+			partitionStates: []string{
+				"partition span: {A1-B}, instance ID: 1, reason: target-healthy",
+				"partition span: {B-C}, instance ID: 2, reason: target-healthy",
+				"partition span: C{-1}, instance ID: 1, reason: target-healthy",
+				"partition span: {D1-X}, instance ID: 3, reason: target-healthy",
+			},
+
+			partitionState: spanPartitionState{
+				partitionSpans: map[base.SQLInstanceID]int{
+					1: 2,
+					2: 1,
+					3: 1,
+				},
+				partitionSpanDecisions: [SpanPartitionReasonMax]int{
+					SpanPartitionReason_TARGET_HEALTHY: 4,
 				},
 				totalPartitionSpans: 4,
 			},
@@ -1358,21 +1456,22 @@ func TestPartitionSpans(t *testing.T) {
 	// We need a mock Gossip to contain addresses for the nodes. Otherwise the
 	// DistSQLPlanner will not plan flows on them.
 	ctx := context.Background()
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			DistSQL: &execinfra.TestingKnobs{
 				MinimumNumberOfGatewayPartitions: 1,
 			},
 		},
 	})
-	defer s.Stopper().Stop(ctx)
-	mockGossip := gossip.NewTest(roachpb.NodeID(1), s.Stopper(), metric.NewRegistry())
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+	mockGossip := gossip.NewTest(roachpb.NodeID(1), srv.Stopper(), metric.NewRegistry())
 	var nodeDescs []*roachpb.NodeDescriptor
 	mockInstances := make(mockAddressResolver)
 	for i := 1; i <= 10; i++ {
 		sqlInstanceID := base.SQLInstanceID(i)
 		var l roachpb.Locality
-		require.NoError(t, l.Set(fmt.Sprintf("x=%d,y=%d", (i/3)+1, i%2)))
+		require.NoError(t, l.Set(localityTag(i)))
 		desc := &roachpb.NodeDescriptor{
 			NodeID:   roachpb.NodeID(sqlInstanceID),
 			Address:  util.UnresolvedAddr{AddressField: fmt.Sprintf("addr%d", i)},
@@ -1391,6 +1490,21 @@ func TestPartitionSpans(t *testing.T) {
 		}
 
 		nodeDescs = append(nodeDescs, desc)
+	}
+
+	stringifyPartition := func(partitions []SpanPartition) map[int][][2]string {
+		resMap := make(map[int][][2]string)
+		for _, p := range partitions {
+			if _, ok := resMap[int(p.SQLInstanceID)]; ok {
+				t.Fatalf("node %d shows up in multiple partitions", p.SQLInstanceID)
+			}
+			var spans [][2]string
+			for _, s := range p.Spans {
+				spans = append(spans, [2]string{string(s.Key), string(s.EndKey)})
+			}
+			resMap[int(p.SQLInstanceID)] = spans
+		}
+		return resMap
 	}
 
 	for testIdx, tc := range testCases {
@@ -1428,7 +1542,7 @@ func TestPartitionSpans(t *testing.T) {
 				gossip:               gw,
 				nodeHealth: distSQLNodeHealth{
 					gossip: gw,
-					connHealthSystem: func(node roachpb.NodeID, _ rpc.ConnectionClass) error {
+					connHealthSystem: func(node roachpb.NodeID, _ rpcbase.ConnectionClass) error {
 						return connHealth(node)
 					},
 					connHealthInstance: func(sqlInstance base.SQLInstanceID, _ string) error {
@@ -1445,16 +1559,18 @@ func TestPartitionSpans(t *testing.T) {
 						TestingKnobs: execinfra.TestingKnobs{MinimumNumberOfGatewayPartitions: 1},
 					},
 				},
-				codec:     keys.SystemSQLCodec,
+				codec:     s.Codec(),
 				nodeDescs: mockGossip,
 			}
 
-			var locFilter roachpb.Locality
-			if tc.locFilter != "" {
-				require.NoError(t, locFilter.Set(tc.locFilter))
+			var locFilters []roachpb.Locality
+			for _, filter := range tc.locFilter {
+				locFilter := roachpb.Locality{}
+				require.NoError(t, locFilter.Set(filter))
+				locFilters = append(locFilters, locFilter)
 			}
 			evalCtx := &eval.Context{
-				Codec: keys.SystemSQLCodec,
+				Codec: s.Codec(),
 				SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{
 					SessionData: sessiondatapb.SessionData{
 						DistsqlPlanGatewayBias: 2,
@@ -1463,7 +1579,7 @@ func TestPartitionSpans(t *testing.T) {
 			}
 			planCtx := dsp.NewPlanningCtxWithOracle(
 				ctx, &extendedEvalContext{Context: *evalCtx}, nil, /* planner */
-				nil /* txn */, FullDistribution, physicalplan.DefaultReplicaChooser, locFilter,
+				nil /* txn */, FullDistribution, physicalplan.DefaultReplicaChooser, locFilters, NoStrictLocalityFiltering,
 			)
 			planCtx.spanPartitionState.testingOverrideRandomSelection = tc.partitionState.testingOverrideRandomSelection
 			var spans []roachpb.Span
@@ -1471,10 +1587,11 @@ func TestPartitionSpans(t *testing.T) {
 				spans = append(spans, roachpb.Span{Key: roachpb.Key(s[0]), EndKey: roachpb.Key(s[1])})
 			}
 
-			partitions, err := dsp.PartitionSpans(ctx, planCtx, spans)
+			partitions, err := dsp.PartitionSpans(ctx, planCtx, spans, PartitionSpansBoundDefault)
 			if err != nil {
 				t.Fatal(err)
 			}
+
 			countRanges := func(parts []SpanPartition) (count int) {
 				for _, sp := range parts {
 					ri := tsp.NewSpanResolverIterator(nil, nil)
@@ -1510,26 +1627,42 @@ func TestPartitionSpans(t *testing.T) {
 					tc.partitionState, *planCtx.spanPartitionState)
 			}
 
-			resMap := make(map[int][][2]string)
-			for _, p := range partitions {
-				if _, ok := resMap[int(p.SQLInstanceID)]; ok {
-					t.Fatalf("node %d shows up in multiple partitions", p.SQLInstanceID)
-				}
-				var spans [][2]string
-				for _, s := range p.Spans {
-					spans = append(spans, [2]string{string(s.Key), string(s.EndKey)})
-				}
-				resMap[int(p.SQLInstanceID)] = spans
-			}
-
 			recording := getRecAndFinish()
-			t.Logf("recording is %s", recording)
 			for _, expectedMsg := range tc.partitionStates {
 				require.NotEqual(t, -1, tracing.FindMsgInRecording(recording, expectedMsg))
 			}
 
+			resMap := stringifyPartition(partitions)
+
 			if !reflect.DeepEqual(resMap, tc.partitions) {
 				t.Errorf("expected partitions:\n  %v\ngot:\n  %v", tc.partitions, resMap)
+			}
+
+			// Test strict locality filtering if applicable.
+			if len(locFilters) > 0 {
+				// create new ctx and evalCtx to avoid spanUseAfterFinish panic.
+				ctxLoc := context.Background()
+				evalCtxLoc := &eval.Context{
+					Codec: s.Codec(),
+					SessionDataStack: sessiondata.NewStack(&sessiondata.SessionData{
+						SessionData: sessiondatapb.SessionData{
+							DistsqlPlanGatewayBias: 2,
+						},
+					}),
+				}
+				planCtxStrict := dsp.NewPlanningCtxWithOracle(
+					ctxLoc, &extendedEvalContext{Context: *evalCtxLoc}, nil, /* planner */
+					nil /* txn */, FullDistribution, physicalplan.DefaultReplicaChooser, locFilters, true, /* strictFiltering */
+				)
+				planCtxStrict.spanPartitionState.testingOverrideRandomSelection = tc.partitionState.testingOverrideRandomSelection
+
+				partitionsStrict, strictErr := dsp.PartitionSpans(ctxLoc, planCtxStrict, spans, PartitionSpansBoundDefault)
+				if !tc.strictCompatible {
+					require.Error(t, strictErr, testIdx)
+				} else {
+					resMapStrict := stringifyPartition(partitionsStrict)
+					require.Equal(t, resMapStrict, tc.partitions)
+				}
 			}
 		})
 	}
@@ -1748,6 +1881,7 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
+	codec := keys.SystemSQLCodec
 
 	mockGossip := gossip.NewTest(roachpb.NodeID(1), stopper, metric.NewRegistry())
 	var nodeDescs []*roachpb.NodeDescriptor
@@ -1784,16 +1918,17 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 		ranges: ranges,
 	}
 
+	st := cluster.MakeTestingClusterSettings()
 	gw := gossip.MakeOptionalGossip(mockGossip)
 	dsp := DistSQLPlanner{
-		st:                   cluster.MakeTestingClusterSettings(),
+		st:                   st,
 		gatewaySQLInstanceID: base.SQLInstanceID(tsp.nodes[gatewayNode-1].NodeID),
 		stopper:              stopper,
 		spanResolver:         tsp,
 		gossip:               gw,
 		nodeHealth: distSQLNodeHealth{
 			gossip: gw,
-			connHealthSystem: func(node roachpb.NodeID, _ rpc.ConnectionClass) error {
+			connHealthSystem: func(node roachpb.NodeID, _ rpcbase.ConnectionClass) error {
 				_, _, err := mockGossip.GetNodeIDAddress(node)
 				return err
 			},
@@ -1801,15 +1936,17 @@ func TestPartitionSpansSkipsNodesNotInGossip(t *testing.T) {
 				return true
 			},
 		},
-		codec: keys.SystemSQLCodec,
+		codec: codec,
 	}
 
 	ctx := context.Background()
+	// This test is specific to gossip-based planning.
+	useGossipPlanning.Override(ctx, &st.SV, true)
 	planCtx := dsp.NewPlanningCtx(
-		ctx, &extendedEvalContext{Context: eval.Context{Codec: keys.SystemSQLCodec}},
+		ctx, &extendedEvalContext{Context: eval.Context{Codec: codec, Settings: st}},
 		nil /* planner */, nil /* txn */, FullDistribution,
 	)
-	partitions, err := dsp.PartitionSpans(ctx, planCtx, roachpb.Spans{span})
+	partitions, err := dsp.PartitionSpans(ctx, planCtx, roachpb.Spans{span}, PartitionSpansBoundDefault)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1868,10 +2005,10 @@ func TestCheckNodeHealth(t *testing.T) {
 		return true
 	}
 
-	connHealthy := func(roachpb.NodeID, rpc.ConnectionClass) error {
+	connHealthy := func(roachpb.NodeID, rpcbase.ConnectionClass) error {
 		return nil
 	}
-	connUnhealthy := func(roachpb.NodeID, rpc.ConnectionClass) error {
+	connUnhealthy := func(roachpb.NodeID, rpcbase.ConnectionClass) error {
 		return errors.New("injected conn health error")
 	}
 	_ = connUnhealthy
@@ -1899,7 +2036,7 @@ func TestCheckNodeHealth(t *testing.T) {
 	}
 
 	connHealthTests := []struct {
-		connHealth func(roachpb.NodeID, rpc.ConnectionClass) error
+		connHealth func(roachpb.NodeID, rpcbase.ConnectionClass) error
 		exp        string
 	}{
 		{connHealthy, ""},
@@ -1932,6 +2069,10 @@ func TestCheckScanParallelizationIfLocal(t *testing.T) {
 		require.NoError(t, b.RunPostDeserializationChanges())
 		return b.BuildImmutableTable()
 	}
+	mvccTimestampSysCol, err := catalog.MustFindColumnByID(makeTableDesc(), colinfo.MVCCTimestampColumnID)
+	require.NoError(t, err)
+	tableOidSysCol, err := catalog.MustFindColumnByID(makeTableDesc(), colinfo.TableOIDColumnID)
+	require.NoError(t, err)
 
 	scanToParallelize := &scanNode{parallelize: true}
 	for _, tc := range []struct {
@@ -1954,57 +2095,70 @@ func TestCheckScanParallelizationIfLocal(t *testing.T) {
 			hasScanNodeToParallelize: true,
 		},
 		{
-			plan:                     planComponents{main: planMaybePhysical{planNode: &distinctNode{plan: scanToParallelize}}},
+			plan:                     planComponents{main: planMaybePhysical{planNode: &distinctNode{singleInputPlanNode: singleInputPlanNode{scanToParallelize}}}},
 			hasScanNodeToParallelize: true,
 		},
 		{
-			plan: planComponents{main: planMaybePhysical{planNode: &filterNode{source: planDataSource{plan: scanToParallelize}}}},
+			plan: planComponents{main: planMaybePhysical{planNode: &filterNode{singleInputPlanNode: singleInputPlanNode{scanToParallelize}}}},
 			// filterNode might be handled via wrapping a row-execution
 			// processor, so we safely prohibit the parallelization.
 			prohibitParallelization: true,
 		},
 		{
 			plan: planComponents{main: planMaybePhysical{planNode: &groupNode{
-				plan:  scanToParallelize,
-				funcs: []*aggregateFuncHolder{{filterRenderIdx: tree.NoColumnIdx}}},
+				singleInputPlanNode: singleInputPlanNode{scanToParallelize},
+				funcs:               []*aggregateFuncHolder{{filterRenderIdx: tree.NoColumnIdx}}},
 			}},
 			// Non-filtering aggregation is supported.
 			hasScanNodeToParallelize: true,
 		},
 		{
 			plan: planComponents{main: planMaybePhysical{planNode: &groupNode{
-				plan:  scanToParallelize,
-				funcs: []*aggregateFuncHolder{{filterRenderIdx: 0}}},
+				singleInputPlanNode: singleInputPlanNode{scanToParallelize},
+				funcs:               []*aggregateFuncHolder{{filterRenderIdx: 0}}},
+			}},
+			// Filtering aggregation is not natively supported.
+			prohibitParallelization: true,
+		},
+		{
+			plan: planComponents{main: planMaybePhysical{planNode: &groupNode{
+				singleInputPlanNode: singleInputPlanNode{scanToParallelize},
+				funcs: []*aggregateFuncHolder{
+					{filterRenderIdx: 0},
+					{filterRenderIdx: tree.NoColumnIdx},
+				}},
 			}},
 			// Filtering aggregation is not natively supported.
 			prohibitParallelization: true,
 		},
 		{
 			plan: planComponents{main: planMaybePhysical{planNode: &indexJoinNode{
-				input: scanToParallelize,
-				table: &scanNode{desc: makeTableDesc()},
+				singleInputPlanNode: singleInputPlanNode{scanToParallelize},
+				indexJoinPlanningInfo: indexJoinPlanningInfo{
+					fetch: fetchPlanningInfo{desc: makeTableDesc()},
+				},
 			}}},
 			hasScanNodeToParallelize: true,
 		},
 		{
-			plan:                     planComponents{main: planMaybePhysical{planNode: &limitNode{plan: scanToParallelize}}},
+			plan:                     planComponents{main: planMaybePhysical{planNode: &limitNode{singleInputPlanNode: singleInputPlanNode{scanToParallelize}}}},
 			hasScanNodeToParallelize: true,
 		},
 		{
-			plan:                     planComponents{main: planMaybePhysical{planNode: &ordinalityNode{source: scanToParallelize}}},
+			plan:                     planComponents{main: planMaybePhysical{planNode: &ordinalityNode{singleInputPlanNode: singleInputPlanNode{scanToParallelize}}}},
 			hasScanNodeToParallelize: true,
 		},
 		{
 			plan: planComponents{main: planMaybePhysical{planNode: &renderNode{
-				source: planDataSource{plan: scanToParallelize},
-				render: []tree.TypedExpr{&tree.IndexedVar{Idx: 0}},
+				singleInputPlanNode: singleInputPlanNode{scanToParallelize},
+				render:              []tree.TypedExpr{&tree.IndexedVar{Idx: 0}},
 			}}},
 			hasScanNodeToParallelize: true,
 		},
 		{
 			plan: planComponents{main: planMaybePhysical{planNode: &renderNode{
-				source: planDataSource{plan: scanToParallelize},
-				render: []tree.TypedExpr{&tree.IsNullExpr{}},
+				singleInputPlanNode: singleInputPlanNode{scanToParallelize},
+				render:              []tree.TypedExpr{&tree.IsNullExpr{}},
 			}}},
 			// Not a simple projection (some expressions might be handled by
 			// wrapping a row-execution processor, so we choose to be safe and
@@ -2012,7 +2166,17 @@ func TestCheckScanParallelizationIfLocal(t *testing.T) {
 			prohibitParallelization: true,
 		},
 		{
-			plan:                     planComponents{main: planMaybePhysical{planNode: &sortNode{plan: scanToParallelize}}},
+			plan: planComponents{main: planMaybePhysical{planNode: &renderNode{
+				singleInputPlanNode: singleInputPlanNode{scanToParallelize},
+				render:              []tree.TypedExpr{&tree.IndexedVar{Idx: 0}, &tree.IsNullExpr{}},
+			}}},
+			// Not a simple projection (some expressions might be handled by
+			// wrapping a row-execution processor, so we choose to be safe and
+			// prohibit the parallelization for all non-IndexedVar expressions).
+			prohibitParallelization: true,
+		},
+		{
+			plan:                     planComponents{main: planMaybePhysical{planNode: &sortNode{singleInputPlanNode: singleInputPlanNode{scanToParallelize}}}},
 			hasScanNodeToParallelize: true,
 		},
 		{
@@ -2028,8 +2192,36 @@ func TestCheckScanParallelizationIfLocal(t *testing.T) {
 			hasScanNodeToParallelize: false,
 		},
 		{
-			plan: planComponents{main: planMaybePhysical{planNode: &windowNode{plan: scanToParallelize}}},
+			plan: planComponents{main: planMaybePhysical{planNode: &windowNode{singleInputPlanNode: singleInputPlanNode{scanToParallelize}}}},
 			// windowNode is not fully supported by the vectorized.
+			prohibitParallelization: true,
+		},
+		{
+			plan: planComponents{main: planMaybePhysical{planNode: &scanNode{
+				fetchPlanningInfo: fetchPlanningInfo{catalogCols: []catalog.Column{mvccTimestampSysCol}},
+			}}},
+			// Usage of crdb_internal_mvcc_timestamp prohibits parallelization
+			// since it forces usage of the LeafTxn, yet for buffered writes we
+			// might need to force usage of the RootTxn.
+			// TODO(#144166): relax this.
+			prohibitParallelization: true,
+		},
+		{
+			plan: planComponents{main: planMaybePhysical{planNode: &scanNode{
+				fetchPlanningInfo: fetchPlanningInfo{catalogCols: []catalog.Column{tableOidSysCol}},
+			}}},
+			// Usage of tableoid system column doesn't force usage of the
+			// LeafTxn, so parallelization is ok.
+			prohibitParallelization: false,
+		},
+		{
+			plan: planComponents{main: planMaybePhysical{planNode: &indexJoinNode{indexJoinPlanningInfo: indexJoinPlanningInfo{
+				fetch: fetchPlanningInfo{catalogCols: []catalog.Column{mvccTimestampSysCol}}},
+			}}},
+			// Usage of crdb_internal_mvcc_timestamp prohibits parallelization
+			// since it forces usage of the LeafTxn, yet for buffered writes we
+			// might need to force usage of the RootTxn.
+			// TODO(#144166): relax this.
 			prohibitParallelization: true,
 		},
 
@@ -2047,8 +2239,7 @@ func TestCheckScanParallelizationIfLocal(t *testing.T) {
 			prohibitParallelization: true,
 		},
 	} {
-		var c localScanParallelizationChecker
-		prohibitParallelization, hasScanNodeToParallize := checkScanParallelizationIfLocal(context.Background(), &tc.plan, &c)
+		prohibitParallelization, hasScanNodeToParallize := checkScanParallelizationIfLocal(context.Background(), &tc.plan)
 		require.Equal(t, tc.prohibitParallelization, prohibitParallelization)
 		require.Equal(t, tc.hasScanNodeToParallelize, hasScanNodeToParallize)
 	}
@@ -2122,4 +2313,76 @@ func TestClosestInstances(t *testing.T) {
 			require.Equal(t, tc.expectedLocalityStrength, strength)
 		})
 	}
+}
+
+// TestNewPlanningCtxLocalityFilterFromSession verifies that
+// DistSQLPlanner.NewPlanningCtx propagates a non-empty
+// distsql_plan_locality_filter (and the strict flag) from the planner's
+// session data into the constructed PlanningCtx. The wiring point lives in
+// distsql_physical_planner.go, so we exercise it directly via a real
+// in-memory server rather than mocking out the planner construction.
+func TestNewPlanningCtxLocalityFilterFromSession(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s := serverutils.StartServerOnly(t, base.TestServerArgs{
+		Locality: roachpb.Locality{Tiers: []roachpb.Tier{{Key: "region", Value: "us-east1"}}},
+	})
+	defer s.Stopper().Stop(ctx)
+
+	ts := s.ApplicationLayer()
+	execCfg := ts.ExecutorConfig().(ExecutorConfig)
+
+	// makePlanner produces a planner whose session data optionally has the
+	// locality filter and strict flag set. We then call NewPlanningCtx and
+	// observe the resulting PlanningCtx. The cleanup is scoped to the
+	// subtest so that the planner's monitors are stopped before the outer
+	// stopper shuts down.
+	makePlanner := func(t *testing.T, filter string, strict bool) *planner {
+		// Use a fresh internal session and overlay the locality filter on top.
+		sd := NewInternalSessionData(ctx, execCfg.Settings, "test-locality-filter")
+		sd.DistSQLPlanLocalityFilter = filter
+		sd.DistSQLPlanLocalityFilterStrict = strict
+		p, cleanup := NewInternalPlanner(
+			"test-locality-filter",
+			ts.DB().NewTxn(ctx, "test-locality-filter"),
+			username.NodeUserName(),
+			&MemoryMetrics{},
+			&execCfg,
+			sd,
+		)
+		t.Cleanup(cleanup)
+		return p.(*planner)
+	}
+
+	t.Run("empty filter leaves PlanningCtx unfiltered", func(t *testing.T) {
+		p := makePlanner(t, "", false)
+		planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(
+			ctx, p.ExtendedEvalContext(), p, p.Txn(), FullDistribution,
+		)
+		require.Empty(t, planCtx.localityFilters)
+		require.False(t, planCtx.strictFiltering)
+	})
+
+	t.Run("filter is parsed and propagated", func(t *testing.T) {
+		p := makePlanner(t, "region=us-east1,zone=us-east1-a", true)
+		planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(
+			ctx, p.ExtendedEvalContext(), p, p.Txn(), FullDistribution,
+		)
+		require.Len(t, planCtx.localityFilters, 1)
+		require.Equal(t, "region=us-east1,zone=us-east1-a",
+			planCtx.localityFilters[0].String())
+		require.True(t, planCtx.strictFiltering)
+	})
+
+	t.Run("nil planner leaves PlanningCtx unfiltered", func(t *testing.T) {
+		p := makePlanner(t, "", false)
+		planCtx := execCfg.DistSQLPlanner.NewPlanningCtx(
+			ctx, p.ExtendedEvalContext(), nil, /* planner */
+			p.Txn(), FullDistribution,
+		)
+		require.Empty(t, planCtx.localityFilters)
+		require.False(t, planCtx.strictFiltering)
+	})
 }

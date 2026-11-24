@@ -30,6 +30,11 @@ import (
 
 const gcpBucket = "cockroach-godeps"
 
+type versionedDependency struct {
+	Path    string
+	Version string
+}
+
 // downloadedModule captures `go mod download -json` output.
 type downloadedModule struct {
 	Path    string `json:"Path"`
@@ -56,6 +61,17 @@ func formatSubURL(path, version string) string {
 func formatURL(path, version string) string {
 	return fmt.Sprintf("https://storage.googleapis.com/%s/%s",
 		gcpBucket, formatSubURL(path, version))
+}
+
+func wrapGCPError(err error) error {
+	var gerr *googleapi.Error
+	if errors.As(err, &gerr) && gerr.Code == http.StatusForbidden {
+		return fmt.Errorf("%w\n\n"+
+			"Hint: Try re-running `gcloud auth application-default login`. "+
+			"You must be in Division-Engineering@cockroachlabs.com to run --mirror. "+
+			"If you need help, ask in #help-dev-inf on Slack.", err)
+	}
+	return err
 }
 
 func getSha256OfFile(path string) (string, error) {
@@ -94,19 +110,16 @@ func uploadFile(ctx context.Context, client *storage.Client, localPath, remotePa
 	defer in.Close()
 	out := client.Bucket(gcpBucket).Object(remotePath).If(storage.Conditions{DoesNotExist: true}).NewWriter(ctx)
 	if _, err := io.Copy(out, in); err != nil {
-		return err
+		return wrapGCPError(err)
 	}
 	if err := out.Close(); err != nil {
 		var gerr *googleapi.Error
-		if errors.As(err, &gerr) {
-			if gerr.Code == http.StatusPreconditionFailed {
-				// In this case the "DoesNotExist" precondition
-				// failed, i.e., the object does already exist.
-				return nil
-			}
-			return gerr
+		if errors.As(err, &gerr) && gerr.Code == http.StatusPreconditionFailed {
+			// In this case the "DoesNotExist" precondition
+			// failed, i.e., the object does already exist.
+			return nil
 		}
-		return err
+		return wrapGCPError(err)
 	}
 	return nil
 }
@@ -134,7 +147,7 @@ func createTmpDir() (tmpdir string, err error) {
 
 func downloadZips(
 	tmpdir string, listed map[string]listedModule,
-) (map[string]downloadedModule, error) {
+) (map[versionedDependency]downloadedModule, error) {
 	gobin, err := bazel.Runfile("bin/go")
 	if err != nil {
 		return nil, err
@@ -160,7 +173,7 @@ func downloadZips(
 			downloadArgs, string(jsonBytes), string(stderr), err)
 	}
 	var jsonBuilder strings.Builder
-	ret := make(map[string]downloadedModule)
+	ret := make(map[versionedDependency]downloadedModule)
 	for _, line := range strings.Split(string(jsonBytes), "\n") {
 		jsonBuilder.WriteString(line)
 		if strings.HasPrefix(line, "}") {
@@ -168,7 +181,14 @@ func downloadZips(
 			if err := json.Unmarshal([]byte(jsonBuilder.String()), &mod); err != nil {
 				return nil, err
 			}
-			ret[mod.Path] = mod
+			key := versionedDependency{
+				Path:    mod.Path,
+				Version: mod.Version,
+			}
+			if _, ok := ret[key]; ok {
+				panic(fmt.Sprintf("found entry in `go mod download -json` with duplicate key %+v", key))
+			}
+			ret[key] = mod
 			jsonBuilder.Reset()
 		}
 	}
@@ -205,6 +225,19 @@ func listAllModules(tmpdir string) (map[string]listedModule, error) {
 			// can just throw it away.
 			if mod.Path == "github.com/cockroachdb/cockroach" {
 				continue
+			}
+			// Sanity check: we expect the paths for all modules in
+			// this set to be unique. This is true of the output of
+			// `go list` but notably NOT the output of `go mod download`!!!
+			// `go list` lists modules by their imported names,
+			// and `go mod download` lists modules by their "real"
+			// names. For example, if you do `replace A => B`, the
+			// imported name is A but the "real" name is B. The
+			// imported name (A) is unique, but the "real" name is
+			// not. We can import B many times under different
+			// imported names.
+			if _, ok := ret[mod.Path]; ok {
+				panic(fmt.Sprintf("found duplicate imported path: %s. This is a bug. Go tell dev-inf about it.", mod.Path))
 			}
 			ret[mod.Path] = mod
 		}
@@ -262,7 +295,8 @@ func dumpPatchArgsForRepo(repoName string) error {
 func buildFileProtoModeForRepo(repoName string) string {
 	// Only generate code for protos in these three directories.
 	if repoName == "com_github_cockroachdb_errors" ||
-		repoName == "com_github_prometheus_client_model" {
+		repoName == "com_github_prometheus_client_model" ||
+		repoName == "com_github_cockroachdb_changefeedpb" {
 		return "default"
 	}
 	return "disable_global"
@@ -270,18 +304,22 @@ func buildFileProtoModeForRepo(repoName string) string {
 
 func dumpBuildDirectivesForRepo(repoName string) {
 	var directives []string
-	// Common directives for proto resolution, including generating with our
-	// internal compiler.
+	// Common directives for proto resolution.
 	protoDirectives := []string{
-		"gazelle:resolve proto proto gogoproto/gogo.proto @com_github_gogo_protobuf//gogoproto:gogo_proto",
-		"gazelle:resolve proto go gogoproto/gogo.proto @com_github_gogo_protobuf//gogoproto",
 		"gazelle:go_proto_compilers @com_github_cockroachdb_cockroach//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_compiler",
-		"gazelle:go_grpc_compilers @com_github_cockroachdb_cockroach//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler",
+		"gazelle:go_grpc_compilers  @com_github_cockroachdb_cockroach//pkg/cmd/protoc-gen-gogoroach:protoc-gen-gogoroach_grpc_compiler",
 	}
+	// Generate .pb.go with our internal compiler.
+	gogoDirectives := append(protoDirectives, []string{
+		"gazelle:resolve proto proto gogoproto/gogo.proto @com_github_gogo_protobuf//gogoproto:gogo_proto",
+		"gazelle:resolve proto go   gogoproto/gogo.proto @com_github_gogo_protobuf//gogoproto",
+	}...)
 
 	if repoName == "com_github_cockroachdb_errors" {
+		directives = append(directives, gogoDirectives...)
+	} else if repoName == "com_github_prometheus_client_model" ||
+		repoName == "com_github_cockroachdb_changefeedpb" {
 		directives = append(directives, protoDirectives...)
-	} else if repoName == "com_github_prometheus_client_model" {
 		directives = append(directives,
 			"gazelle:resolve go go github.com/golang/protobuf/ptypes/timestamp @com_github_golang_protobuf//ptypes/timestamp:go_default_library")
 	} else if repoName == "io_opentelemetry_go_proto_otlp" {
@@ -307,7 +345,7 @@ func dumpBuildNamingConventionArgsForRepo(repoName string) {
 
 func dumpNewDepsBzl(
 	listed map[string]listedModule,
-	downloaded map[string]downloadedModule,
+	downloaded map[versionedDependency]downloadedModule,
 	existingMirrors map[string]starlarkutil.DownloadableArtifact,
 ) error {
 	var sorted []string
@@ -325,7 +363,7 @@ func dumpNewDepsBzl(
 		var err error
 		client, err = storage.NewClient(ctx)
 		if err != nil {
-			return err
+			return wrapGCPError(fmt.Errorf("creating GCS client: %w", err))
 		}
 	}
 	g, ctx := errgroup.WithContext(ctx)
@@ -363,6 +401,10 @@ def go_deps():
 		replaced := &mod
 		if mod.Replace != nil {
 			replaced = mod.Replace
+			// Sanity check: there should not be multiple levels of "replace".
+			if replaced.Replace != nil {
+				panic(fmt.Sprintf("replaced module %s is replaced itself?? This is a bug. Go talk to dev-inf.", replaced.Replace))
+			}
 		}
 		fmt.Printf(`    go_repository(
         name = "%s",
@@ -387,7 +429,10 @@ def go_deps():
 `, oldMirror.Sha256, replaced.Path, replaced.Version, oldMirror.URL)
 		} else if canMirror() {
 			// We'll have to mirror our copy of the zip ourselves.
-			d := downloaded[replaced.Path]
+			d := downloaded[versionedDependency{
+				Path:    replaced.Path,
+				Version: replaced.Version,
+			}]
 			sha, err := getSha256OfFile(d.Zip)
 			if err != nil {
 				return fmt.Errorf("could not get zip for %v: %w", *replaced, err)
@@ -404,7 +449,10 @@ def go_deps():
 		} else {
 			// We don't have a mirror and can't upload one, so just
 			// have Gazelle pull the repo for us.
-			d := downloaded[replaced.Path]
+			d := downloaded[versionedDependency{
+				Path:    replaced.Path,
+				Version: replaced.Version,
+			}]
 			if mod.Replace != nil {
 				fmt.Printf("        replace = \"%s\",\n", replaced.Path)
 			}

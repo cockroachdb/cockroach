@@ -15,13 +15,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/dd"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -44,7 +43,7 @@ func TestPendingLogTruncations(t *testing.T) {
 	require.Equal(t, 2, truncs.capacity())
 	require.True(t, truncs.isEmptyLocked())
 	require.EqualValues(t, 55, truncs.computePostTruncLogSize(55))
-	require.EqualValues(t, 5, truncs.computePostTruncFirstIndex(5))
+	require.EqualValues(t, 4, truncs.nextCompactedIndex(4))
 
 	// One pending truncation.
 	truncs.mu.truncs[0].logDeltaBytes = -50
@@ -60,11 +59,11 @@ func TestPendingLogTruncations(t *testing.T) {
 	// Added -50 and bumped up to 0.
 	require.EqualValues(t, 0, truncs.computePostTruncLogSize(45))
 	// Advances to Index+1.
-	require.EqualValues(t, 21, truncs.computePostTruncFirstIndex(5))
-	require.EqualValues(t, 21, truncs.computePostTruncFirstIndex(20))
+	require.EqualValues(t, 20, truncs.nextCompactedIndex(4))
+	require.EqualValues(t, 20, truncs.nextCompactedIndex(19))
 	// Does not advance.
-	require.EqualValues(t, 21, truncs.computePostTruncFirstIndex(21))
-	require.EqualValues(t, 30, truncs.computePostTruncFirstIndex(30))
+	require.EqualValues(t, 20, truncs.nextCompactedIndex(20))
+	require.EqualValues(t, 29, truncs.nextCompactedIndex(29))
 
 	// Two pending truncations.
 	truncs.mu.truncs[1].logDeltaBytes = -70
@@ -83,11 +82,11 @@ func TestPendingLogTruncations(t *testing.T) {
 	// Added -120 and bumped up to 0.
 	require.EqualValues(t, 0, truncs.computePostTruncLogSize(115))
 	// Advances to Index+1 of second entry.
-	require.EqualValues(t, 31, truncs.computePostTruncFirstIndex(5))
-	require.EqualValues(t, 31, truncs.computePostTruncFirstIndex(30))
+	require.EqualValues(t, 30, truncs.nextCompactedIndex(4))
+	require.EqualValues(t, 30, truncs.nextCompactedIndex(29))
 	// Does not advance.
-	require.EqualValues(t, 31, truncs.computePostTruncFirstIndex(31))
-	require.EqualValues(t, 40, truncs.computePostTruncFirstIndex(40))
+	require.EqualValues(t, 30, truncs.nextCompactedIndex(30))
+	require.EqualValues(t, 39, truncs.nextCompactedIndex(39))
 
 	// Pop first.
 	last := truncs.mu.truncs[1]
@@ -109,7 +108,7 @@ func TestPendingLogTruncations(t *testing.T) {
 type replicaTruncatorTest struct {
 	rangeID         roachpb.RangeID
 	buf             *strings.Builder
-	stateLoader     stateloader.StateLoader
+	stateLoader     kvstorage.StateLoader
 	truncState      kvserverpb.RaftTruncatedState
 	pendingTruncs   pendingLogTruncations
 	sideloadedFreed int64
@@ -122,7 +121,7 @@ func makeReplicaTT(rangeID roachpb.RangeID, buf *strings.Builder) *replicaTrunca
 	return &replicaTruncatorTest{
 		rangeID:     rangeID,
 		buf:         buf,
-		stateLoader: stateloader.Make(rangeID),
+		stateLoader: kvstorage.MakeStateLoader(rangeID),
 	}
 }
 
@@ -140,34 +139,31 @@ func (r *replicaTruncatorTest) getPendingTruncs() *pendingLogTruncations {
 	return &r.pendingTruncs
 }
 
-func (r *replicaTruncatorTest) setTruncationDeltaAndTrusted(deltaBytes int64, isDeltaTrusted bool) {
-	fmt.Fprintf(r.buf, "r%d.setTruncationDeltaAndTrusted(delta:%d, trusted:%t)\n",
-		r.rangeID, deltaBytes, isDeltaTrusted)
+func (r *replicaTruncatorTest) sideloadedStats(
+	_ context.Context, span kvpb.RaftSpan,
+) (entries uint64, size int64, _ error) {
+	fmt.Fprintf(r.buf, "r%d.sideloadedStats(%d, %d)\n", r.rangeID, span.After, span.Last)
+	if r.sideloadedFreed != 0 {
+		entries = 1 // Make it look like we are removing some sideloaded entries.
+	}
+	return entries, r.sideloadedFreed, r.sideloadedErr
 }
 
-func (r *replicaTruncatorTest) sideloadedBytesIfTruncatedFromTo(
-	_ context.Context, from, to kvpb.RaftIndex,
-) (freed int64, _ error) {
-	fmt.Fprintf(r.buf, "r%d.sideloadedBytesIfTruncatedFromTo(%d, %d)\n", r.rangeID, from, to)
-	return r.sideloadedFreed, r.sideloadedErr
-}
-
-func (r *replicaTruncatorTest) getStateLoader() stateloader.StateLoader {
+func (r *replicaTruncatorTest) getStateLoader() kvstorage.StateLoader {
 	fmt.Fprintf(r.buf, "r%d.getStateLoader\n", r.rangeID)
 	return r.stateLoader
 }
 
-func (r *replicaTruncatorTest) setTruncatedStateAndSideEffects(
-	_ context.Context,
-	truncState *kvserverpb.RaftTruncatedState,
-	expectedFirstIndexPreTruncation kvpb.RaftIndex,
-) (expectedFirstIndexWasAccurate bool) {
-	expectedFirstIndexWasAccurate = r.truncState.Index+1 == expectedFirstIndexPreTruncation
-	r.truncState = *truncState
+func (r *replicaTruncatorTest) stagePendingTruncation(_ context.Context, pt pendingTruncation) {
+	trusted := pt.isDeltaTrusted && r.truncState.Index+1 == pt.expectedFirstIndex
 	fmt.Fprintf(r.buf,
-		"r%d.setTruncatedStateAndSideEffects(..., expectedFirstIndex:%d) => trusted:%t\n",
-		r.rangeID, expectedFirstIndexPreTruncation, expectedFirstIndexWasAccurate)
-	return expectedFirstIndexWasAccurate
+		"r%d.stagePendingTruncation(..., expFirstIndex:%d, delta:%v, trusted:%t) => trusted:%t\n",
+		r.rangeID, pt.expectedFirstIndex, pt.logDeltaBytes, pt.isDeltaTrusted, trusted)
+	r.truncState = pt.RaftTruncatedState
+}
+
+func (r *replicaTruncatorTest) finalizeTruncation(_ context.Context) {
+	fmt.Fprintf(r.buf, "r%d.finalizeTruncation\n", r.rangeID)
 }
 
 func (r *replicaTruncatorTest) writeRaftStateToEngine(
@@ -183,8 +179,10 @@ func (r *replicaTruncatorTest) writeRaftStateToEngine(
 func (r *replicaTruncatorTest) writeRaftAppliedIndex(
 	t *testing.T, eng storage.Engine, raftAppliedIndex kvpb.RaftIndex, flush bool,
 ) {
-	require.NoError(t, r.stateLoader.SetRangeAppliedState(context.Background(), eng,
-		raftAppliedIndex, 0, 0, &enginepb.MVCCStats{}, hlc.Timestamp{}, nil))
+	require.NoError(t, r.stateLoader.SetRangeAppliedState(
+		context.Background(), eng,
+		&kvserverpb.RangeAppliedState{RaftAppliedIndex: raftAppliedIndex},
+	))
 	// Flush to make it satisfy the contract of OnlyReadGuaranteedDurable in
 	// Pebble.
 	if flush {
@@ -238,14 +236,14 @@ func (r *replicaTruncatorTest) printReplicaState() {
 }
 
 type storeTruncatorTest struct {
-	eng      storage.Engine
+	eng      kvstorage.Engines
 	buf      *strings.Builder
 	replicas map[roachpb.RangeID]*replicaTruncatorTest
 }
 
 var _ storeForTruncator = &storeTruncatorTest{}
 
-func makeStoreTT(eng storage.Engine, buf *strings.Builder) *storeTruncatorTest {
+func makeStoreTT(eng kvstorage.Engines, buf *strings.Builder) *storeTruncatorTest {
 	return &storeTruncatorTest{
 		eng:      eng,
 		buf:      buf,
@@ -253,7 +251,7 @@ func makeStoreTT(eng storage.Engine, buf *strings.Builder) *storeTruncatorTest {
 	}
 }
 
-func (s *storeTruncatorTest) getEngine() storage.Engine {
+func (s *storeTruncatorTest) getEngines() kvstorage.Engines {
 	return s.eng
 }
 
@@ -283,81 +281,77 @@ func TestRaftLogTruncator(t *testing.T) {
 		buf.Reset()
 		return str
 	}
-	eng := storage.NewDefaultInMemForTesting()
+	eng := kvstorage.MakeEngines(storage.NewDefaultInMemForTesting())
 	defer eng.Close()
 	store := makeStoreTT(eng, &buf)
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 	truncator := makeRaftLogTruncator(
-		log.MakeTestingAmbientContext(tracing.NewTracer()), store, stopper)
+		log.MakeTestingAmbientContext(tracing.NewTracer()), store, stopper, nil /* runningNanos */)
 
 	datadriven.RunTest(t, datapathutils.TestDataPath(t, "raft_log_truncator"),
 		func(t *testing.T, d *datadriven.TestData) string {
 			switch d.Cmd {
 			case "create-replica":
-				rangeID := scanRangeID(t, d)
-				var truncIndex uint64
-				d.ScanArgs(t, "trunc-index", &truncIndex)
-				var lastLogEntry uint64
-				d.ScanArgs(t, "last-log-entry", &lastLogEntry)
+				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "id")
+				truncIndex := dd.ScanArg[kvpb.RaftIndex](t, d, "trunc-index")
+				lastLogEntry := dd.ScanArg[kvpb.RaftIndex](t, d, "last-log-entry")
+
 				r := makeReplicaTT(rangeID, &buf)
-				r.truncState.Index = kvpb.RaftIndex(truncIndex)
-				r.writeRaftStateToEngine(t, eng, kvpb.RaftIndex(truncIndex), kvpb.RaftIndex(lastLogEntry))
+				r.truncState.Index = truncIndex
+				r.writeRaftStateToEngine(t, eng.LogEngine(), truncIndex, lastLogEntry)
 				store.replicas[rangeID] = r
 				return flushAndReset()
 
 			case "print-engine-state":
-				store.replicas[scanRangeID(t, d)].printEngine(t, eng)
+				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "id")
+				store.replicas[rangeID].printEngine(t, eng.TODOBothEngines())
 				return flushAndReset()
 
 			case "add-pending-truncation":
-				rangeID := scanRangeID(t, d)
-				var firstIndex, truncIndex uint64
-				d.ScanArgs(t, "first-index", &firstIndex)
-				d.ScanArgs(t, "trunc-index", &truncIndex)
-				var deltaBytes, sideloadedBytes int
-				d.ScanArgs(t, "delta-bytes", &deltaBytes)
-				d.ScanArgs(t, "sideloaded-bytes", &sideloadedBytes)
+				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "id")
+				firstIndex := dd.ScanArg[kvpb.RaftIndex](t, d, "first-index")
+				truncIndex := dd.ScanArg[kvpb.RaftIndex](t, d, "trunc-index")
+				deltaBytes := dd.ScanArg[int64](t, d, "delta-bytes")
+				sideloadedBytes := dd.ScanArg[int64](t, d, "sideloaded-bytes")
+				sideloadedErr := dd.ScanArgOr(t, d, "sideloaded-err", false)
+
 				r := store.replicas[rangeID]
-				if d.HasArg("sideloaded-err") {
-					var sideloadedErr bool
-					d.ScanArgs(t, "sideloaded-err", &sideloadedErr)
-					if sideloadedErr {
-						r.sideloadedErr = errors.Errorf("side-loaded err")
-					}
+				if sideloadedErr {
+					r.sideloadedErr = errors.Errorf("side-loaded err")
 				}
-				r.sideloadedFreed = int64(sideloadedBytes)
+				r.sideloadedFreed = sideloadedBytes
 				truncator.addPendingTruncation(context.Background(), r,
-					kvserverpb.RaftTruncatedState{Index: kvpb.RaftIndex(truncIndex)}, kvpb.RaftIndex(firstIndex), int64(deltaBytes))
+					kvserverpb.RaftTruncatedState{Index: truncIndex}, firstIndex, deltaBytes)
 				printTruncatorState(t, &buf, truncator)
 				r.sideloadedErr = nil
 				return flushAndReset()
 
 			case "print-replica-state":
-				store.replicas[scanRangeID(t, d)].printReplicaState()
+				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "id")
+				store.replicas[rangeID].printReplicaState()
 				return flushAndReset()
 
 			case "write-raft-applied-index":
-				rangeID := scanRangeID(t, d)
-				var raftAppliedIndex uint64
-				d.ScanArgs(t, "raft-applied-index", &raftAppliedIndex)
-				noFlush := false
+				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "id")
+				raftAppliedIndex := dd.ScanArg[kvpb.RaftIndex](t, d, "raft-applied-index")
 				// The initial engine memtable size is 256KB, and doubles for each new
 				// memtable. Even the initial size is much larger than anything we do
 				// in this test between explicit flushes. Hence we can rely on the
 				// fact that no-flush will actually be respected, and we won't
 				// encounter an unexpected flush.
-				if d.HasArg("no-flush") {
-					d.ScanArgs(t, "no-flush", &noFlush)
-				}
-				store.replicas[rangeID].writeRaftAppliedIndex(t, eng, kvpb.RaftIndex(raftAppliedIndex), !noFlush)
+				noFlush := dd.ScanArgOr(t, d, "no-flush", false)
+
+				store.replicas[rangeID].writeRaftAppliedIndex(
+					t, eng.StateEngine(), raftAppliedIndex, !noFlush)
 				return flushAndReset()
 
 			case "add-replica-to-truncator":
 				// In addition to replicas being added to the truncator via
 				// add-pending-truncation, we can manually add them to test the
 				// replica not found etc. paths.
-				truncator.enqueueRange(scanRangeID(t, d))
+				rangeID := dd.ScanArg[roachpb.RangeID](t, d, "id")
+				truncator.enqueueRange(rangeID)
 				printTruncatorState(t, &buf, truncator)
 				return flushAndReset()
 
@@ -370,12 +364,6 @@ func TestRaftLogTruncator(t *testing.T) {
 				return fmt.Sprintf("unknown command: %s", d.Cmd)
 			}
 		})
-}
-
-func scanRangeID(t *testing.T, d *datadriven.TestData) roachpb.RangeID {
-	var id int
-	d.ScanArgs(t, "id", &id)
-	return roachpb.RangeID(id)
 }
 
 func printTruncatorState(t *testing.T, buf *strings.Builder, truncator *raftLogTruncator) {
@@ -392,5 +380,69 @@ func printTruncatorState(t *testing.T, buf *strings.Builder, truncator *raftLogT
 	for _, id := range ranges {
 		fmt.Fprintf(buf, "%s%d", prefixStr, id)
 		prefixStr = ", "
+	}
+}
+
+func (pt pendingTruncation) delta(delta int64, hasSideloaded, trusted bool) pendingTruncation {
+	pt.logDeltaBytes = delta
+	pt.isDeltaTrusted = trusted
+	pt.hasSideloaded = hasSideloaded
+	return pt
+}
+
+func TestPendingTruncationMerge(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	pt := func(from, to, term uint64) pendingTruncation {
+		return pendingTruncation{
+			RaftTruncatedState: kvserverpb.RaftTruncatedState{
+				Index: kvpb.RaftIndex(to),
+				Term:  kvpb.RaftTerm(term),
+			},
+			expectedFirstIndex: kvpb.RaftIndex(from + 1),
+		}
+	}
+	const hasSL, noSL = true, false
+	for _, tt := range []struct {
+		prev pendingTruncation
+		next pendingTruncation
+		want pendingTruncation
+	}{{
+		prev: pt(100, 200, 10).delta(1024, noSL, true),
+		next: pt(200, 300, 11).delta(1024, noSL, true),
+		want: pt(100, 300, 11).delta(2048, noSL, true),
+	}, {
+		prev: pt(100, 200, 10).delta(1024, noSL, false),
+		next: pt(200, 300, 11).delta(1024, noSL, true),
+		want: pt(100, 300, 11).delta(2048, noSL, false),
+	}, {
+		prev: pt(100, 200, 10).delta(1024, noSL, true),
+		next: pt(200, 300, 11).delta(1024, noSL, false),
+		want: pt(100, 300, 11).delta(2048, noSL, false),
+	}, {
+		prev: pt(100, 200, 10).delta(1024, hasSL, true),
+		next: pt(200, 300, 11).delta(1024, noSL, true),
+		want: pt(100, 300, 11).delta(2048, hasSL, true),
+	}, {
+		prev: pt(100, 200, 10).delta(1024, noSL, true),
+		next: pt(200, 300, 11).delta(1024, hasSL, true),
+		want: pt(100, 300, 11).delta(2048, hasSL, true),
+	}, {
+		prev: pt(100, 200, 10).delta(1024, hasSL, true),
+		next: pt(200, 300, 11).delta(1024, hasSL, true),
+		want: pt(100, 300, 11).delta(2048, hasSL, true),
+	}, {
+		prev: pt(100, 200, 10).delta(1024, noSL, true),
+		next: pt(150, 300, 11).delta(2048, noSL, true),
+		want: pt(100, 300, 11).delta(3072, noSL, false),
+	}, {
+		prev: pt(100, 200, 10).delta(1024, noSL, false),
+		next: pt(250, 400, 11).delta(2048, noSL, true),
+		want: pt(100, 400, 11).delta(3072, noSL, false),
+	}} {
+		t.Run("", func(t *testing.T) {
+			require.Equal(t, tt.want, tt.next.merge(tt.prev))
+		})
 	}
 }

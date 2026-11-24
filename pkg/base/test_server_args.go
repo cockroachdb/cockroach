@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils/listenerutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -42,7 +43,8 @@ type TestServerArgs struct {
 	// If not set (and hence the server is the only one in the cluster), the
 	// default zone config will be overridden to disable all replication - so that
 	// tests don't get log spam about ranges not being replicated enough. This
-	// is always set to true when the server is started via a TestCluster.
+	// is always set to true when the server is started via a TestCluster, unless
+	// the StartSingleNode TestClusterArgs is set.
 	PartOfCluster bool
 
 	// Listener (if nonempty) is the listener to use for all incoming RPCs.
@@ -88,12 +90,13 @@ type TestServerArgs struct {
 	// If not initialized, will default to DefaultTestTempStorageConfig.
 	TempStorageConfig TempStorageConfig
 
-	// ExternalIODir is used to initialize field in cluster.Settings.
-	ExternalIODir string
-
 	// ExternalIODirConfig is used to initialize the same-named
 	// field on the server.Config struct.
 	ExternalIODirConfig ExternalIODirConfig
+
+	// ExternalIODir is used to initialize the same-named field on
+	// the server.Config struct.
+	ExternalIODir string
 
 	// Fields copied to the server.Config.
 	Insecure                    bool
@@ -119,7 +122,14 @@ type TestServerArgs struct {
 	UseDatabase string
 
 	// If set, this will be configured in the test server to check connections
-	// from other test servers and to report in the SQL introspection.
+	// from other test servers and to report in the SQL introspection. It is
+	// advised to make the name sufficiently unique, in order to prevent a
+	// TestCluster from accidentally getting messages from unrelated clusters in
+	// the same environment that used the same TCP ports recently (e.g. see
+	// https://github.com/cockroachdb/cockroach/issues/157838).
+	//
+	// If empty (most cases), a unique ClusterName is generated automatically, or
+	// a higher-level default is used (e.g. taken from TestClusterArgs).
 	ClusterName string
 
 	// Stopper can be used to stop the server. If not set, a stopper will be
@@ -156,11 +166,123 @@ type TestServerArgs struct {
 	// below for alternative options that suits your test case.
 	DefaultTestTenant DefaultTestTenantOptions
 
+	// DefaultDRPCOption specifies the DRPC enablement mode for a test
+	// server. This controls whether inter-node connectivity uses DRPC, just
+	// gRPC, or is chosen randomly. It is resolved by the test framework
+	// (via ShouldEnableDRPC) into a concrete TestDRPCEnabled or
+	// TestDRPCDisabled value before the server starts.
+	DefaultDRPCOption DefaultTestDRPCOption
+
+	// DefaultTenantName is the name of the tenant created implicitly according
+	// to DefaultTestTenant. It is typically `test-tenant` for unit tests and
+	// always `demoapp` for the cockroach demo.
+	DefaultTenantName roachpb.TenantName
+
 	// StartDiagnosticsReporting checks cluster.TelemetryOptOut(), and
 	// if not disabled starts the asynchronous goroutine that checks for
 	// CockroachDB upgrades and periodically reports diagnostics to
 	// Cockroach Labs. Should remain disabled during unit testing.
 	StartDiagnosticsReporting bool
+
+	// DisableElasticCPUAdmission disables elastic CPU admission control for this
+	// test server. This is useful for tests that are sensitive to timing or
+	// resource scheduling where elastic AC can cause flakiness.
+	//
+	// TODO(dt): Flip this to an opt-in flag (EnableElasticCPUAdmission) and
+	// default to disabled in test servers, since they often run under sustained
+	// overload conditions in CI. Tests that specifically test elastic AC
+	// behavior can opt in.
+	DisableElasticCPUAdmission bool
+
+	SlimTestSeverConfig *SlimTestServerConfig
+}
+
+type slimOptions struct {
+	EnableSpanConfigJob bool
+	EnableAutoStats     bool
+	EnableTimeseries    bool
+	EnableAllUpgrades   bool
+}
+
+type SlimServerOption func(*slimOptions)
+
+func WithSpanConfigJob() SlimServerOption {
+	return func(o *slimOptions) {
+		o.EnableSpanConfigJob = true
+	}
+}
+
+func WithAutoStats() SlimServerOption {
+	return func(o *slimOptions) {
+		o.EnableAutoStats = true
+	}
+}
+
+func WithTimeseries() SlimServerOption {
+	return func(o *slimOptions) {
+		o.EnableTimeseries = true
+	}
+}
+
+func WithAllUpgrades() SlimServerOption {
+	return func(o *slimOptions) {
+		o.EnableAllUpgrades = true
+	}
+}
+
+func processOptions(opts []SlimServerOption) *slimOptions {
+	ret := &slimOptions{}
+	for _, o := range opts {
+		o(ret)
+	}
+	return ret
+}
+
+func (a *TestServerArgs) SlimServerConfig(opts ...SlimServerOption) {
+	a.SlimTestSeverConfig = &SlimTestServerConfig{
+		Options: *processOptions(opts),
+	}
+}
+
+type SlimTestServerConfig struct {
+	Options slimOptions
+}
+
+// DefaultTestDRPCOption specifies the DRPC enablement mode for a test
+// server. This controls whether inter-node connectivity uses DRPC, just gRPC,
+// or is chosen randomly.
+type DefaultTestDRPCOption uint8
+
+const (
+	// TestDRPCUnset represents an uninitialized or invalid DRPC option.
+	TestDRPCUnset DefaultTestDRPCOption = iota
+
+	// TestDRPCDisabled disables DRPC; all inter-node connectivity will use gRPC
+	// only.
+	TestDRPCDisabled
+
+	// TestDRPCEnabled enables DRPC. Some services may still use gRPC if they
+	// have not yet migrated to DRPC.
+	TestDRPCEnabled
+
+	// TestDRPCEnabledRandomly randomly chooses between the behavior of
+	// TestDRPCDisabled or TestDRPCEnabled.
+	TestDRPCEnabledRandomly
+)
+
+func (d DefaultTestDRPCOption) String() string {
+	switch d {
+	case TestDRPCUnset:
+		return "unset"
+	case TestDRPCDisabled:
+		return "disabled"
+	case TestDRPCEnabled:
+		return "enabled"
+	case TestDRPCEnabledRandomly:
+		return "enabled-randomly"
+	default:
+		panic("unreachable")
+	}
 }
 
 // TestClusterArgs contains the parameters one can set when creating a test
@@ -180,6 +302,10 @@ type TestClusterArgs struct {
 	// IDs unpredictable. Even in ParallelStart mode, StartTestCluster
 	// waits for all nodes to start before returning.
 	ParallelStart bool
+	// StartSingleNode will initialize the cluster like 'cockroach
+	// start-single-node'. Attempts to add more than one node to the cluster will
+	// fail.
+	StartSingleNode bool
 
 	// ServerArgsPerNode override the default ServerArgs with the value in this
 	// map. The map's key is an index within TestCluster.Servers. If there is
@@ -200,6 +326,13 @@ type TestClusterArgs struct {
 	// that field, RestartServer will return an error to guide the developer
 	// towards a non-flaky pattern.
 	ReusableListenerReg *listenerutil.ListenerRegistry
+
+	// EnablePartitioner, when true, installs RPC interceptors on each node that
+	// allow injecting network partitions via TestCluster.Partitioner(). This is
+	// required for CrashNode and tests that use the Partitioner directly. Because
+	// the interceptors overwrite RPC ContextTestingKnobs' client interceptors,
+	// this should only be enabled by tests that need it.
+	EnablePartitioner bool
 }
 
 // DefaultTestTenantOptions specifies the conditions under which a
@@ -219,7 +352,8 @@ type DefaultTestTenantOptions struct {
 	// warn".
 	noWarnImplicitInterfaces bool
 
-	// If test tenant is disabled, issue and label to link in log message.
+	// If test tenant is disabled, issue and label to link in log message. These
+	// can be left unset if one of the tenant modes is explicitly skipped.
 	issueNum int
 	label    string
 }
@@ -272,11 +406,6 @@ var (
 	// to use TestTenantProbabilistic or TestTenantProbabilisticOnly.
 	SharedTestTenantAlwaysEnabled = DefaultTestTenantOptions{testBehavior: ttEnabled | ttSharedProcess, allowAdditionalTenants: true}
 
-	// TODOTestTenantDisabled should not be used anymore. Use the
-	// other values instead.
-	// TODO(#76378): Review existing tests and use the proper value instead.
-	TODOTestTenantDisabled = DefaultTestTenantOptions{testBehavior: ttDisabled, allowAdditionalTenants: true}
-
 	// TestRequiresExplicitSQLConnection is used when the test is unable to pass
 	// the cluster as an option in the connection URL. The test could still
 	// probabilistically use an external process test virtual cluster, but
@@ -314,6 +443,11 @@ var (
 	// worth the cost of never running that test with the virtualization
 	// layer active.
 	TestNeedsTightIntegrationBetweenAPIsAndTestingKnobs = TestIsSpecificToStorageLayerAndNeedsASystemTenant
+
+	// TestSkipSecondaryTenantsUnderDuress should be used whenever we want to
+	// disable test tenant randomization under heavy configs (e.g. under race)
+	// due to overload.
+	TestSkipSecondaryTenantsUnderDuress = TestIsSpecificToStorageLayerAndNeedsASystemTenant
 )
 
 func (do DefaultTestTenantOptions) AllowAdditionalTenants() bool {
@@ -454,6 +588,40 @@ func TestIsForStuffThatShouldWorkWithSharedProcessModeButDoesntYet(
 	}
 }
 
+// TestSkippedForExternalModeDueToPerformance can be used to disable selecting
+// the external process virtual cluster due to significant performance
+// degradation compared to other modes. However, the goal is to eventually make
+// it work efficiently in external mode.
+//
+// It should link to a github issue with label C-investigation.
+func TestSkippedForExternalModeDueToPerformance(issueNumber int) DefaultTestTenantOptions {
+	return testSkippedForExternalProcessMode(issueNumber)
+}
+
+// TestDoesNotWorkWithExternalProcessMode disables selecting the external
+// process virtual cluster for tests that are not functional in that mode and
+// require further investigation. Any test using this function should reference
+// a GitHub issue tagged with "C-investigation" describing the underlying
+// problem.
+func TestDoesNotWorkWithExternalProcessMode(issueNumber int) DefaultTestTenantOptions {
+	return testSkippedForExternalProcessMode(issueNumber)
+}
+
+// TestSkipForExternalProcessMode disables selecting the external process
+// virtual cluster for tests that are not applicable to that mode.
+func TestSkipForExternalProcessMode() DefaultTestTenantOptions {
+	return testSkippedForExternalProcessMode(0 /* issueNumber */)
+}
+
+func testSkippedForExternalProcessMode(issueNumber int) DefaultTestTenantOptions {
+	return DefaultTestTenantOptions{
+		testBehavior:           ttSharedProcess,
+		allowAdditionalTenants: true,
+		issueNum:               issueNumber,
+		label:                  "C-investigation",
+	}
+}
+
 // InternalNonDefaultDecision builds a sentinel value used inside a
 // mechanism in serverutils. Should not be used by tests directly.
 func InternalNonDefaultDecision(
@@ -474,16 +642,12 @@ func InternalNonDefaultDecision(
 	return baseArg
 }
 
-var (
-	// DefaultTestStoreSpec is just a single in memory store of 512 MiB
-	// with no special attributes.
-	DefaultTestStoreSpec = StoreSpec{
-		InMemory: true,
-		Size: SizeSpec{
-			InBytes: 512 << 20,
-		},
-	}
-)
+// DefaultTestStoreSpec is just a single in memory store of 512 MiB
+// with no special attributes.
+var DefaultTestStoreSpec = storageconfig.Store{
+	InMemory: true,
+	Size:     storageconfig.BytesSize(512 << 20),
+}
 
 // DefaultTestTempStorageConfig is the associated temp storage for
 // DefaultTestStoreSpec that is in-memory.
@@ -498,7 +662,7 @@ func DefaultTestTempStorageConfigWithSize(
 	st *cluster.Settings, maxSizeBytes int64,
 ) TempStorageConfig {
 	monitor := mon.NewMonitor(mon.Options{
-		Name:      "in-mem temp storage",
+		Name:      mon.MakeName("in-mem temp storage"),
 		Res:       mon.DiskResource,
 		Increment: 1024 * 1024,
 		Settings:  st,
@@ -507,7 +671,6 @@ func DefaultTestTempStorageConfigWithSize(
 	return TempStorageConfig{
 		InMemory: true,
 		Mon:      monitor,
-		Spec:     DefaultTestStoreSpec,
 		Settings: st,
 	}
 }
@@ -520,6 +683,10 @@ type TestSharedProcessTenantArgs struct {
 	// TenantID is the ID of the tenant to be created. If not set, an ID is
 	// assigned automatically.
 	TenantID roachpb.TenantID
+	// TenantReadOnly indicates if this tenant should be created as read-only
+	// (for testing PCR reader tenants). This field is used for testing purposes
+	// and overrides the tenant record check.
+	TenantReadOnly bool
 
 	Knobs TestingKnobs
 
@@ -532,6 +699,10 @@ type TestSharedProcessTenantArgs struct {
 	SkipTenantCheck bool
 
 	Settings *cluster.Settings
+
+	// DisableElasticCPUAdmission disables elastic CPU admission control for this
+	// tenant server. See TestServerArgs.DisableElasticCPUAdmission.
+	DisableElasticCPUAdmission bool
 }
 
 // TestTenantArgs are the arguments to TestServer.StartTenant.
@@ -573,7 +744,7 @@ type TestTenantArgs struct {
 	ExternalIODirConfig ExternalIODirConfig
 
 	// ExternalIODir is used to initialize the same-named field on
-	// the params.Settings struct.
+	// the server.Config struct.
 	ExternalIODir string
 
 	// If set, this will be appended to the Postgres URL by functions that
@@ -643,4 +814,8 @@ type TestTenantArgs struct {
 	// CockroachDB upgrades and periodically reports diagnostics to
 	// Cockroach Labs. Should remain disabled during unit testing.
 	StartDiagnosticsReporting bool
+
+	// DisableElasticCPUAdmission disables elastic CPU admission control for this
+	// tenant server. See TestServerArgs.DisableElasticCPUAdmission.
+	DisableElasticCPUAdmission bool
 }

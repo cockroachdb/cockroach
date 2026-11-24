@@ -1,0 +1,38 @@
+# In this test, two stores on a single node change locality locality-tiers
+# one by one, so temporarily we are in a state in which stores on the same
+# node differ in in attributes that are usually shared across nodes.
+
+# In the initial state, stores agree on node-attrs and locality.
+set-store
+  store-id=1 node-id=1 node-attrs=himem attrs=orange,black locality-tiers=region=europe
+  store-id=2 node-id=1 node-attrs=himem attrs=purple,white locality-tiers=region=europe
+----
+node-id=1 locality-tiers=region=europe,node=1 node-attrs=himem
+  store-id=1 attrs=orange,black
+  store-id=2 attrs=purple,white
+
+# An update arrives that gives s2 a different node-attrs and locality.
+set-store
+  store-id=2 node-id=1 node-attrs=lomem attrs=teal locality-tiers=region=apac
+----
+node-id=1 locality-tiers=region=europe,node=1 node-attrs=himem
+  store-id=1 attrs=orange,black
+node-id=1 locality-tiers=region=apac,node=1 node-attrs=lomem
+  store-id=2 attrs=teal
+
+# An update arrives for s1, but still not in sync (lomem vs empty)
+set-store
+  store-id=1 node-id=1 attrs=orange,black locality-tiers=region=apac
+----
+node-id=1 locality-tiers=region=apac,node=1
+  store-id=1 attrs=orange,black
+node-id=1 locality-tiers=region=apac,node=1 node-attrs=lomem
+  store-id=2 attrs=teal
+
+# Synchronized again.
+set-store
+  store-id=1 node-id=1 attrs=orange,black locality-tiers=region=apac node-attrs=lomem
+----
+node-id=1 locality-tiers=region=apac,node=1 node-attrs=lomem
+  store-id=1 attrs=orange,black
+  store-id=2 attrs=teal

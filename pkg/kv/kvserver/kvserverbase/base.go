@@ -11,12 +11,15 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/redact"
 )
@@ -112,6 +115,149 @@ var MVCCGCQueueEnabled = settings.RegisterBoolSetting(
 	true,
 )
 
+// loadBasedRebalancingMode controls whether range rebalancing takes
+// additional variables such as write load and disk usage into account.
+// If disabled, rebalancing is done purely based on replica count.
+//
+// The "auto" value defers the choice between the legacy load-based
+// rebalancer and the multi-metric allocator (MMA) to the cluster version:
+// pre-finalization clusters get the legacy behavior, post-finalization
+// clusters get MMA. See GetLoadBasedRebalancingMode.
+var loadBasedRebalancingMode = settings.RegisterEnumSetting(
+	settings.SystemOnly,
+	"kv.allocator.load_based_rebalancing",
+	"whether to rebalance based on the distribution of load across stores",
+	"auto",
+	map[LBRebalancingMode]string{
+		LBRebalancingOff:                 LBRebalancingOff.String(),
+		LBRebalancingLeasesOnly:          LBRebalancingLeasesOnly.String(),
+		LBRebalancingLeasesAndReplicas:   LBRebalancingLeasesAndReplicas.String(),
+		LBRebalancingMultiMetricOnly:     LBRebalancingMultiMetricOnly.String(),
+		LBRebalancingMultiMetricAndCount: LBRebalancingMultiMetricAndCount.String(),
+		LBRebalancingAuto:                LBRebalancingAuto.String(),
+	},
+	settings.WithPublic,
+)
+
+// disableMMA is an emergency kill switch that prevents MMA modes from being
+// used. When set and the cluster setting is an MMA mode, the mode falls back
+// to LBRebalancingLeasesAndReplicas. Non-MMA modes are returned as-is.
+// Use when MMA causes crashes too frequent to change the setting.
+var disableMMA = envutil.EnvOrDefaultBool("COCKROACH_DISABLE_MMA", false)
+
+// GetLoadBasedRebalancingMode returns the resolved load-based rebalancing
+// mode.
+//
+// LBRebalancingAuto is resolved against the cluster version: once the v26.3
+// version gate is active (i.e. upgrade finalization has reached v26.3), auto
+// resolves to LBRebalancingMultiMetricAndCount; otherwise it resolves to
+// LBRebalancingLeasesAndReplicas. This deferral ensures MMA is not enabled in
+// mixed-version clusters where some nodes may not yet understand the MMA
+// path.
+//
+// If COCKROACH_DISABLE_MMA is set and the resolved mode is an MMA mode, the
+// mode is forced back to LBRebalancingLeasesAndReplicas. The kill-switch is
+// applied after auto resolution so it overrides both explicit MMA modes and
+// auto-derived MMA.
+func GetLoadBasedRebalancingMode(ctx context.Context, st *cluster.Settings) LBRebalancingMode {
+	mode := loadBasedRebalancingMode.Get(&st.SV)
+	if mode == LBRebalancingAuto {
+		// Use ActiveVersionOrEmpty rather than IsActive so callers with an
+		// uninitialized version handle (e.g. the asim simulator) get the
+		// conservative legacy behavior instead of fataling. The zero
+		// ClusterVersion is Less-than every real version, so the comparison
+		// below naturally falls to the legacy branch.
+		ver := st.Version.ActiveVersionOrEmpty(ctx)
+		if !ver.Less(clusterversion.V26_3.Version()) {
+			mode = LBRebalancingMultiMetricAndCount
+		} else {
+			mode = LBRebalancingLeasesAndReplicas
+		}
+	}
+	if disableMMA && mode.IsMMA() {
+		return LBRebalancingLeasesAndReplicas
+	}
+	return mode
+}
+
+// OverrideLoadBasedRebalancingMode overrides the load-based rebalancing
+// mode. Intended for use in tests.
+func OverrideLoadBasedRebalancingMode(
+	ctx context.Context, sv *settings.Values, mode LBRebalancingMode,
+) {
+	loadBasedRebalancingMode.Override(ctx, sv, mode)
+}
+
+// LoadBasedRebalancingModeIsMMA returns true if the load-based rebalancing mode
+// uses the multi-metric store rebalancer.
+var LoadBasedRebalancingModeIsMMA = func(ctx context.Context, st *cluster.Settings) bool {
+	return GetLoadBasedRebalancingMode(ctx, st).IsMMA()
+}
+
+// LBRebalancingMode controls if and when we do store-level rebalancing
+// based on load.
+type LBRebalancingMode int64
+
+const (
+	// LBRebalancingOff means that we do not do store-level rebalancing
+	// based on load statistics.
+	LBRebalancingOff LBRebalancingMode = iota
+	// LBRebalancingLeasesOnly means that we rebalance leases based on
+	// store-level load imbalances.
+	LBRebalancingLeasesOnly
+	// LBRebalancingLeasesAndReplicas means that we rebalance both leases and
+	// replicas based on store-level load imbalances.
+	LBRebalancingLeasesAndReplicas
+	// LBRebalancingMultiMetricOnly means that the store rebalancer yields to the
+	// multi-metric store rebalancer, balancing both leases and replicas based on
+	// store-level load imbalances. Note that this disables replica-count and
+	// lease-count based rebalancing.
+	LBRebalancingMultiMetricOnly
+	// LBRebalancingMultiMetricAndCount means that both multi-metric store
+	// rebalancer and count based rebalancing via lease queue and replicate queue
+	// are enabled, balancing lease count, replica count, and store-level load
+	// across stores. Note that this might cause more thrashing since lease and
+	// replica counts goal may be in conflict with the store-level load goal.
+	LBRebalancingMultiMetricAndCount
+	// LBRebalancingAuto defers the choice to the cluster version: once the
+	// v26.3 version gate is active, this resolves to
+	// LBRebalancingMultiMetricAndCount; otherwise it resolves to
+	// LBRebalancingLeasesAndReplicas. Used as the default value to roll MMA
+	// out at upgrade finalization without overriding explicit operator
+	// preferences. Resolution happens in GetLoadBasedRebalancingMode; this
+	// value is never returned from there.
+	LBRebalancingAuto
+)
+
+// IsMMA returns true if the mode uses the multi-metric store rebalancer.
+func (m LBRebalancingMode) IsMMA() bool {
+	return m == LBRebalancingMultiMetricOnly || m == LBRebalancingMultiMetricAndCount
+}
+
+func (m LBRebalancingMode) String() string {
+	return redact.StringWithoutMarkers(m)
+}
+
+// SafeFormat implements the redact.SafeFormatter interface.
+func (m LBRebalancingMode) SafeFormat(w redact.SafePrinter, _ rune) {
+	switch m {
+	case LBRebalancingOff:
+		w.Print("off")
+	case LBRebalancingLeasesOnly:
+		w.Print("leases")
+	case LBRebalancingLeasesAndReplicas:
+		w.Print("leases and replicas")
+	case LBRebalancingMultiMetricOnly:
+		w.Print("multi-metric only")
+	case LBRebalancingMultiMetricAndCount:
+		w.Print("multi-metric and count")
+	case LBRebalancingAuto:
+		w.Print("auto")
+	default:
+		w.Printf("unknown(%d)", int64(m))
+	}
+}
+
 // RangeFeedRefreshInterval is injected from kvserver to avoid import cycles
 // when accessed from kvcoord.
 var RangeFeedRefreshInterval *settings.DurationSetting
@@ -132,14 +278,15 @@ var _ redact.SafeFormatter = CmdIDKey("")
 
 // FilterArgs groups the arguments to a ReplicaCommandFilter.
 type FilterArgs struct {
-	Ctx     context.Context
-	CmdID   CmdIDKey
-	Index   int
-	Sid     roachpb.StoreID
-	Req     kvpb.Request
-	Hdr     kvpb.Header
-	Version roachpb.Version
-	Err     error // only used for TestingPostEvalFilter
+	Ctx          context.Context
+	CmdID        CmdIDKey
+	Index        int
+	Sid          roachpb.StoreID
+	Req          kvpb.Request
+	Hdr          kvpb.Header
+	AdmissionHdr kvpb.AdmissionHeader
+	Version      roachpb.Version
+	Err          error // only used for TestingPostEvalFilter
 }
 
 // ProposalFilterArgs groups the arguments to ReplicaProposalFilter.
@@ -317,3 +464,16 @@ var MaxCommandSize = settings.RegisterByteSizeSetting(
 	MaxCommandSizeDefault,
 	settings.ByteSizeWithMinimum(MaxCommandSizeFloor),
 )
+
+// DefaultRangefeedEventCap is the channel capacity of the rangefeed processor
+// and each registration. It is also used to calculate the default capacity
+// limit for the buffered sender.
+//
+// The size of an event is 72 bytes, so this will result in an allocation on the
+// order of ~300KB per RangeFeed. That's probably ok given the number of ranges
+// on a node that we'd like to support with active rangefeeds, but it's
+// certainly on the upper end of the range.
+//
+// Note that processors also must reserve memory from one of two memory monitors
+// for each event.
+const DefaultRangefeedEventCap = 4096

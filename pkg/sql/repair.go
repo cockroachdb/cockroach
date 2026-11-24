@@ -170,6 +170,10 @@ func (p *planner) UnsafeUpsertDescriptor(
 	if force {
 		p.Descriptors().SkipValidationOnWrite()
 	}
+	// Indicate that for locked leasing we should wait for the
+	// locked lease timestamp to bump as well, in case the prior
+	// version of the descriptor was invalid.
+	p.Descriptors().MaybeSetLockedLeaseBump(ctx)
 
 	// If we are pushing out a brand new descriptor confirm that no leases
 	// exist before we publish it. This could happen if we did an unsafe delete,
@@ -850,4 +854,20 @@ func (p *planner) UpsertDroppedRelationGCTTL(
 		return err
 	}
 	return p.txn.Run(ctx, b)
+}
+
+// UnsafeDeleteComment deletes all comments under a given object_id.
+func (p *planner) UnsafeDeleteComment(ctx context.Context, objectID int64) error {
+	// Privilege check.
+	const method = "crdb_internal.unsafe_delete_comment()"
+	err := checkPlannerStateForRepairFunctions(ctx, p, method)
+	if err != nil {
+		return err
+	}
+	_, err = p.InternalSQLTxn().Exec(ctx,
+		"delete-comment",
+		p.txn,
+		"DELETE FROM system.comments WHERE object_id = $1",
+		objectID)
+	return err
 }

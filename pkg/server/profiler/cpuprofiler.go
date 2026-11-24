@@ -84,7 +84,7 @@ func NewCPUProfiler(ctx context.Context, dir string, st *cluster.Settings) (*CPU
 		return nil, err
 	}
 
-	log.Infof(ctx, "writing cpu profile dumps to %s", log.SafeManaged(dir))
+	log.Dev.Infof(ctx, "writing cpu profile dumps to %s", log.SafeManaged(dir))
 	dumpStore := dumpstore.NewStore(dir, maxCombinedCPUProfFileSize, st)
 	cp := &CPUProfiler{
 		profiler: makeProfiler(
@@ -98,13 +98,14 @@ func NewCPUProfiler(ctx context.Context, dir string, st *cluster.Settings) (*CPU
 }
 
 // MaybeTakeProfile takes a cpu profile if cpu usage is high enough.
-func (cp *CPUProfiler) MaybeTakeProfile(ctx context.Context, currentCpuUsage int64) {
+// Returns true if a profile was successfully taken.
+func (cp *CPUProfiler) MaybeTakeProfile(ctx context.Context, currentCpuUsage int64) bool {
 	defer func() {
 		if p := recover(); p != nil {
 			logcrash.ReportPanic(ctx, &cp.st.SV, p, 1)
 		}
 	}()
-	cp.profiler.maybeTakeProfile(ctx, currentCpuUsage, cp.takeCPUProfile)
+	return cp.profiler.maybeTakeProfile(ctx, currentCpuUsage, cp.takeCPUProfile)
 }
 
 func (cp *CPUProfiler) takeCPUProfile(
@@ -114,7 +115,7 @@ func (cp *CPUProfiler) takeCPUProfile(
 		// Try writing a CPU profile.
 		f, err := os.Create(path)
 		if err != nil {
-			log.Warningf(ctx, "error creating go cpu profile %s: %v", path, err)
+			log.Dev.Warningf(ctx, "error creating go cpu profile %s: %v", path, err)
 			return err
 		}
 		defer f.Close()
@@ -124,7 +125,7 @@ func (cp *CPUProfiler) takeCPUProfile(
 		}
 		defer pprof.StopCPUProfile()
 		dur := cpuProfileDuration.Get(&cp.st.SV)
-		log.Infof(ctx, "taking CPU profile for %.2fs", dur.Seconds())
+		log.Dev.Infof(ctx, "taking CPU profile for %.2fs", dur.Seconds())
 		select {
 		case <-ctx.Done():
 		case <-time.After(cpuProfileDuration.Get(&cp.st.SV)):
@@ -133,7 +134,7 @@ func (cp *CPUProfiler) takeCPUProfile(
 	}); err != nil {
 		// Only log the errors, since errors can occur due to cpu profiles being taken
 		// elsewhere.
-		log.Infof(ctx, "error during CPU profile: %s", err)
+		log.Dev.Infof(ctx, "error during CPU profile: %s", err)
 		return false
 	}
 	return true

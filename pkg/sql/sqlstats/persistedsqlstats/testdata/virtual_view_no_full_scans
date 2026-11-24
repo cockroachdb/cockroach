@@ -15,7 +15,6 @@ WHERE
 ----
 ----
 distribution: local
-vectorized: true
 
 • group (hash)
 │ group by: aggregated_ts, fingerprint_id, app_name, aggregation_interval

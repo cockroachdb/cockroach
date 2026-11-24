@@ -8,12 +8,13 @@ package rangefeed
 import (
 	"context"
 	"fmt"
-	"sync"
 	"sync/atomic"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -36,53 +37,59 @@ func TestStreamManagerDisconnectStream(t *testing.T) {
 
 	testutils.RunValues(t, "feed type", testTypes, func(t *testing.T, rt rangefeedTestType) {
 		testServerStream := newTestServerStream()
-		testRangefeedCounter := newTestRangefeedCounter()
-		var s sender
-		switch rt {
-		case scheduledProcessorWithUnbufferedSender:
-			s = NewUnbufferedSender(testServerStream)
-		default:
-			t.Fatalf("unknown rangefeed test type %v", rt)
-		}
+		smMetrics := NewStreamManagerMetrics()
+		st := cluster.MakeTestingClusterSettings()
+		s := newSender(t, testServerStream, st, rt)
 
-		sm := NewStreamManager(s, testRangefeedCounter)
+		sm := NewStreamManager(s, smMetrics)
 		require.NoError(t, sm.Start(ctx, stopper))
 		defer sm.Stop(ctx)
 
-		const streamID = 0
+		var sid int64
+		nextStreamID := func() int64 {
+			sid++
+			return sid
+		}
+
 		err := kvpb.NewError(kvpb.NewRangeFeedRetryError(kvpb.RangeFeedRetryError_REASON_NO_LEASEHOLDER))
-		errEvent := makeMuxRangefeedErrorEvent(int64(streamID), 1, err)
+		errEvent := func(streamID int64) *kvpb.MuxRangeFeedEvent {
+			return makeMuxRangefeedErrorEvent(streamID, 1, err)
+		}
 
 		t.Run("basic operation", func(t *testing.T) {
 			var num atomic.Int32
-			sm.AddStream(int64(streamID), &cancelCtxDisconnector{
+			streamID := nextStreamID()
+			sm.RegisteringStream(streamID)
+			sm.AddStream(streamID, &cancelCtxDisconnector{
 				cancel: func() {
 					num.Add(1)
-					require.NoError(t, sm.sender.sendBuffered(errEvent, nil))
+					require.NoError(t, sm.sender.sendBuffered(errEvent(streamID), nil))
 				},
 			})
-			require.Equal(t, 1, testRangefeedCounter.get())
+			require.Equal(t, int64(1), smMetrics.ActiveMuxRangeFeed.Value())
 			require.Equal(t, 0, testServerStream.totalEventsSent())
-			sm.DisconnectStream(int64(streamID), err)
-			testServerStream.waitForEvent(t, errEvent)
+			sm.DisconnectStream(streamID, err)
+			testServerStream.waitForEvent(t, errEvent(streamID))
 			require.Equal(t, int32(1), num.Load())
 			require.Equal(t, 1, testServerStream.totalEventsSent())
-			testRangefeedCounter.waitForRangefeedCount(t, 0)
+			waitForRangefeedCount(t, smMetrics, 0)
 			testServerStream.reset()
 		})
 		t.Run("disconnect stream on the same stream is idempotent", func(t *testing.T) {
-			sm.AddStream(int64(streamID), &cancelCtxDisconnector{
+			streamID := nextStreamID()
+			sm.RegisteringStream(streamID)
+			sm.AddStream(streamID, &cancelCtxDisconnector{
 				cancel: func() {
-					require.NoError(t, sm.sender.sendBuffered(errEvent, nil))
+					require.NoError(t, sm.sender.sendBuffered(errEvent(streamID), nil))
 				},
 			})
-			require.Equal(t, 1, testRangefeedCounter.get())
-			sm.DisconnectStream(int64(streamID), err)
-			sm.DisconnectStream(int64(streamID), err)
-			testServerStream.waitForEvent(t, errEvent)
+			require.Equal(t, int64(1), smMetrics.ActiveMuxRangeFeed.Value())
+			sm.DisconnectStream(streamID, err)
+			sm.DisconnectStream(streamID, err)
+			testServerStream.waitForEvent(t, errEvent(streamID))
 			require.Equalf(t, 1, testServerStream.totalEventsSent(),
 				"expected only 1 error event but got %s", testServerStream.String())
-			testRangefeedCounter.waitForRangefeedCount(t, 0)
+			waitForRangefeedCount(t, smMetrics, 0)
 		})
 	})
 }
@@ -94,21 +101,16 @@ func TestStreamManagerChaosWithStop(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
 	testutils.RunValues(t, "feed type", testTypes, func(t *testing.T, rt rangefeedTestType) {
-		testServerStream := newTestServerStream()
-		testRangefeedCounter := newTestRangefeedCounter()
-		var s sender
-		switch rt {
-		case scheduledProcessorWithUnbufferedSender:
-			s = NewUnbufferedSender(testServerStream)
-		default:
-			t.Fatalf("unknown rangefeed test type %v", rt)
-		}
-		sm := NewStreamManager(s, testRangefeedCounter)
-		require.NoError(t, sm.Start(ctx, stopper))
+		stopper := stop.NewStopper()
+		defer stopper.Stop(ctx)
 
+		testServerStream := newTestServerStream()
+		smMetrics := NewStreamManagerMetrics()
+		st := cluster.MakeTestingClusterSettings()
+		s := newSender(t, testServerStream, st, rt)
+		sm := NewStreamManager(s, smMetrics)
+		require.NoError(t, sm.Start(ctx, stopper))
 		rng, _ := randutil.NewTestRand()
 
 		// [activeStreamStart,activeStreamEnd) are in the active streams.
@@ -121,12 +123,13 @@ func TestStreamManagerChaosWithStop(t *testing.T) {
 
 		t.Run("mixed operations of add and disconnect stream", func(t *testing.T) {
 			const ops = 1000
-			var wg sync.WaitGroup
+			g := ctxgroup.WithContext(ctx)
 			for i := 0; i < ops; i++ {
 				addStream := rng.Intn(2) == 0
 				require.LessOrEqualf(t, activeStreamStart, activeStreamEnd, "test programming error")
 				if addStream || activeStreamStart == activeStreamEnd {
 					streamID := activeStreamEnd
+					sm.RegisteringStream(streamID)
 					sm.AddStream(streamID, &cancelCtxDisconnector{
 						cancel: func() {
 							actualSum.Add(1)
@@ -136,26 +139,32 @@ func TestStreamManagerChaosWithStop(t *testing.T) {
 					})
 					activeStreamEnd++
 				} else {
-					wg.Add(1)
-					go func(id int64) {
-						defer wg.Done()
-						sm.DisconnectStream(id, newErrBufferCapacityExceeded())
-					}(activeStreamStart)
+					streamID := activeStreamStart
+					g.Go(func() error {
+						sm.DisconnectStream(streamID, newErrBufferCapacityExceeded())
+						return nil
+					})
 					activeStreamStart++
 				}
 			}
 
-			wg.Wait()
+			require.NoError(t, g.Wait())
 			require.Equal(t, int32(activeStreamStart), actualSum.Load())
 			testServerStream.waitForEventCount(t, int(activeStreamStart))
+			// We stop the stopper as a way to coordinate with the send loop in the
+			// case of a buffered sender, which needs to call the OnError callback
+			// before the below counters will be correct. Stopping the stopper kills
+			// the run loop of the buffered sender but doesn't call any cleanup
+			// routines.
+			stopper.Stop(ctx)
 			expectedActiveStreams := activeStreamEnd - activeStreamStart
 			require.Equal(t, int(expectedActiveStreams), sm.activeStreamCount())
-			testRangefeedCounter.waitForRangefeedCount(t, int(expectedActiveStreams))
+			waitForRangefeedCount(t, smMetrics, int(expectedActiveStreams))
 		})
 
 		t.Run("stream manager on stop", func(t *testing.T) {
 			sm.Stop(ctx)
-			require.Equal(t, 0, testRangefeedCounter.get())
+			require.Equal(t, int64(0), smMetrics.ActiveMuxRangeFeed.Value())
 			require.Equal(t, 0, sm.activeStreamCount())
 			// Cleanup functions should be called for all active streams.
 			require.Equal(t, int32(activeStreamEnd), actualSum.Load())
@@ -174,16 +183,11 @@ func TestStreamManagerErrorHandling(t *testing.T) {
 
 	testutils.RunValues(t, "feed type", testTypes, func(t *testing.T, rt rangefeedTestType) {
 		testServerStream := newTestServerStream()
-		testRangefeedCounter := newTestRangefeedCounter()
-		var s sender
-		switch rt {
-		case scheduledProcessorWithUnbufferedSender:
-			s = NewUnbufferedSender(testServerStream)
-		default:
-			t.Fatalf("unknown rangefeed test type %v", rt)
-		}
+		smMetrics := NewStreamManagerMetrics()
+		st := cluster.MakeTestingClusterSettings()
+		s := newSender(t, testServerStream, st, rt)
 
-		sm := NewStreamManager(s, testRangefeedCounter)
+		sm := NewStreamManager(s, smMetrics)
 		stopper := stop.NewStopper()
 		defer stopper.Stop(ctx)
 		require.NoError(t, sm.Start(ctx, stopper))
@@ -191,7 +195,7 @@ func TestStreamManagerErrorHandling(t *testing.T) {
 		disconnectErr := kvpb.NewError(fmt.Errorf("disconnection error"))
 
 		expectErrorHandlingInvariance := func(p Processor) {
-			testRangefeedCounter.waitForRangefeedCount(t, 0)
+			waitForRangefeedCount(t, smMetrics, 0)
 			testutils.SucceedsSoon(t, func() error {
 				if p.Len() == 0 {
 					return nil
@@ -207,10 +211,11 @@ func TestStreamManagerErrorHandling(t *testing.T) {
 		t.Run("Fail to register rangefeed with the processor", func(t *testing.T) {
 			p, _, stopper := newTestProcessor(t, withRangefeedTestType(rt))
 			defer stopper.Stop(ctx)
-			sm.NewStream(sID, rID)
-			// We mock failed registration by not calling p.Register.
-			// node.MuxRangefeed would call sendBuffered with error event.
-			require.NoError(t, sm.sender.sendBuffered(makeMuxRangefeedErrorEvent(sID, rID, disconnectErr), nil))
+			streamSink := sm.NewStream(sID, rID)
+			// We mock failed registration by not calling p.Register and calling
+			// SendError just as (*Node).muxRangeFeed does.
+			sm.RegisteringStream(sID)
+			streamSink.SendError(disconnectErr)
 			expectErrorHandlingInvariance(p)
 			testServerStream.reset()
 		})
@@ -219,12 +224,13 @@ func TestStreamManagerErrorHandling(t *testing.T) {
 				p, h, stopper := newTestProcessor(t, withRangefeedTestType(rt))
 				defer stopper.Stop(ctx)
 				stream := sm.NewStream(sID, rID)
-				registered, d, _ := p.Register(ctx, h.span, hlc.Timestamp{}, nil, /* catchUpIter */
-					false /* withDiff */, false /* withFiltering */, false, /* withOmitRemote */
-					stream, func() {})
+				sm.RegisteringStream(sID)
+				registered, d, _ := p.Register(ctx, h.span, hlc.Timestamp{}, nil, /* catchUpSnap */
+					false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, noBulkDelivery,
+					stream)
 				require.True(t, registered)
 				go p.StopWithErr(disconnectErr)
-				require.Equal(t, 0, testRangefeedCounter.get())
+				require.Equal(t, int64(0), smMetrics.ActiveMuxRangeFeed.Value())
 				sm.AddStream(sID, d)
 				expectErrorHandlingInvariance(p)
 				testServerStream.reset()
@@ -233,13 +239,14 @@ func TestStreamManagerErrorHandling(t *testing.T) {
 			stream := sm.NewStream(sID, rID)
 			p, h, stopper := newTestProcessor(t, withRangefeedTestType(rt))
 			defer stopper.Stop(ctx)
-			registered, d, _ := p.Register(ctx, h.span, hlc.Timestamp{}, nil, /* catchUpIter */
-				false /* withDiff */, false /* withFiltering */, false, /* withOmitRemote */
-				stream, func() {})
+			sm.RegisteringStream(sID)
+			registered, d, _ := p.Register(ctx, h.span, hlc.Timestamp{}, nil, /* catchUpSnap */
+				false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, noBulkDelivery,
+				stream)
 			require.True(t, registered)
 			sm.AddStream(sID, d)
 			require.Equal(t, 1, p.Len())
-			require.Equal(t, 1, testRangefeedCounter.get())
+			require.Equal(t, int64(1), smMetrics.ActiveMuxRangeFeed.Value())
 			sm.DisconnectStream(sID, disconnectErr)
 			expectErrorHandlingInvariance(p)
 			testServerStream.reset()
@@ -248,16 +255,17 @@ func TestStreamManagerErrorHandling(t *testing.T) {
 			stream := sm.NewStream(sID, rID)
 			p, h, stopper := newTestProcessor(t, withRangefeedTestType(rt))
 			defer stopper.Stop(ctx)
-			registered, d, _ := p.Register(ctx, h.span, hlc.Timestamp{}, nil, /* catchUpIter */
-				false /* withDiff */, false /* withFiltering */, false, /* withOmitRemote */
-				stream, func() {})
+			sm.RegisteringStream(sID)
+			registered, d, _ := p.Register(ctx, h.span, hlc.Timestamp{}, nil, /* catchUpSnap */
+				false /* withDiff */, false /* withFiltering */, false /* withOmitRemote */, noBulkDelivery,
+				stream)
 			require.True(t, registered)
 			sm.AddStream(sID, d)
-			require.Equal(t, 1, testRangefeedCounter.get())
+			require.Equal(t, int64(1), smMetrics.ActiveMuxRangeFeed.Value())
 			require.Equal(t, 1, p.Len())
 			sm.Stop(ctx)
 			// No disconnect events should be sent during Stop().
-			testRangefeedCounter.waitForRangefeedCount(t, 0)
+			waitForRangefeedCount(t, smMetrics, 0)
 			testutils.SucceedsSoon(t, func() error {
 				if p.Len() == 0 {
 					return nil
@@ -266,4 +274,18 @@ func TestStreamManagerErrorHandling(t *testing.T) {
 			})
 		})
 	})
+}
+
+func newSender(
+	t *testing.T, s *testServerStream, st *cluster.Settings, rt rangefeedTestType,
+) sender {
+	switch rt {
+	case scheduledProcessorWithUnbufferedSender:
+		return NewUnbufferedSender(s)
+	case scheduledProcessorWithBufferedSender:
+		return NewBufferedSender(s, st, NewBufferedSenderMetrics())
+	default:
+		t.Fatalf("unknown rangefeed test type %v", rt)
+		return nil
+	}
 }

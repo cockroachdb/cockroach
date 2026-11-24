@@ -1,0 +1,189 @@
+# Test that session setting hints are correctly applied and scoped when
+# executing through the pausable portal code path.
+
+# Create table with multiple rows so the portal pauses multiple times.
+send crdb_only
+Query {"String": "CREATE TABLE xy (x INT PRIMARY KEY, y INT)"}
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"CREATE TABLE"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+send crdb_only
+Query {"String": "INSERT INTO xy VALUES (1, 10), (2, 20), (3, 30)"}
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"INSERT 0 3"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Create a vectorize=off session setting hint for 'SELECT y FROM xy ORDER BY x'.
+send crdb_only
+Query {"String": "SELECT information_schema.crdb_set_session_variable_hint('SELECT y FROM xy ORDER BY x', 'vectorize', 'off')"}
+----
+
+until crdb_only ignore=DataRow ignore=RowDescription
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Wait for the hint cache to pick up the new hint.
+send crdb_only
+Query {"String": "SELECT crdb_internal.await_statement_hints_cache()"}
+----
+
+until crdb_only ignore=DataRow ignore=RowDescription
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SELECT 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Enable pausable portals.
+send crdb_only
+Query {"String": "SET multiple_active_portals_enabled = true"}
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SET"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Execute the hinted query through a pausable portal with MaxRows=1.
+# This exercises execStmtInOpenStateWithPausablePortal, which previously
+# did not apply session setting hints at all.
+send crdb_only
+Query {"String": "BEGIN"}
+Parse {"Name": "q1", "Query": "SELECT y FROM xy ORDER BY x"}
+Bind {"DestinationPortal": "p1", "PreparedStatement": "q1"}
+Execute {"Portal": "p1", "MaxRows": 1}
+Sync
+----
+
+until crdb_only
+ReadyForQuery
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"BEGIN"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"10"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+# While p1 is suspended, run EXPLAIN for the hinted query fingerprint in a
+# separate portal. The vectorized: false line confirms the hint is active.
+send crdb_only
+Parse {"Name": "e1", "Query": "EXPLAIN (VERBOSE) SELECT y FROM xy ORDER BY x"}
+Bind {"DestinationPortal": "pe1", "PreparedStatement": "e1"}
+Execute {"Portal": "pe1", "MaxRows": 2}
+Sync
+----
+
+until crdb_only ignore=RowDescription
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"distribution: local"}]}
+{"Type":"DataRow","Values":[{"text":"vectorized: false"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+# EXPLAIN a query that does NOT match the hint fingerprint. The vectorized:
+# true line confirms the hint is not applied.
+send crdb_only
+Parse {"Name": "e2", "Query": "EXPLAIN (VERBOSE) SELECT * FROM xy WHERE x = 1"}
+Bind {"DestinationPortal": "pe2", "PreparedStatement": "e2"}
+Execute {"Portal": "pe2", "MaxRows": 2}
+Sync
+----
+
+until crdb_only ignore=RowDescription
+ReadyForQuery
+----
+{"Type":"ParseComplete"}
+{"Type":"BindComplete"}
+{"Type":"DataRow","Values":[{"text":"distribution: local"}]}
+{"Type":"DataRow","Values":[{"text":"vectorized: true"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+# Continue executing p1 - get second row.
+send crdb_only
+Execute {"Portal": "p1", "MaxRows": 1}
+Sync
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"DataRow","Values":[{"text":"20"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+# Continue executing - get third row.
+send crdb_only
+Execute {"Portal": "p1", "MaxRows": 1}
+Sync
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"DataRow","Values":[{"text":"30"}]}
+{"Type":"PortalSuspended"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+# Execute again - portal is exhausted.
+send crdb_only
+Execute {"Portal": "p1", "MaxRows": 1}
+Sync
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"SELECT 0"}
+{"Type":"ReadyForQuery","TxStatus":"T"}
+
+send crdb_only
+Query {"String": "COMMIT"}
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"COMMIT"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Verify the hint didn't leak into the session after the portal completed.
+send crdb_only
+Query {"String": "SHOW vectorize"}
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"RowDescription","Fields":[{"Name":"vectorize","TableOID":0,"TableAttributeNumber":0,"DataTypeOID":25,"DataTypeSize":-1,"TypeModifier":-1,"Format":0}]}
+{"Type":"DataRow","Values":[{"text":"on"}]}
+{"Type":"CommandComplete","CommandTag":"SHOW"}
+{"Type":"ReadyForQuery","TxStatus":"I"}
+
+# Clean up.
+send crdb_only
+Query {"String": "DELETE FROM system.statement_hints WHERE true"}
+----
+
+until crdb_only
+ReadyForQuery
+----
+{"Type":"CommandComplete","CommandTag":"DELETE 1"}
+{"Type":"ReadyForQuery","TxStatus":"I"}

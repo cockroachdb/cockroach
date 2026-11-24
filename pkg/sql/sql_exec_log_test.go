@@ -7,7 +7,6 @@ package sql
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -38,13 +37,7 @@ func TestSqlExecLog(t *testing.T) {
 		t,
 		[]logpb.Channel{logpb.Channel_SQL_EXEC},
 		[]string{"query_execute"},
-		func(entry logpb.Entry) (eventpb.QueryExecute, error) {
-			var qe eventpb.QueryExecute
-			if err := json.Unmarshal([]byte(entry.Message[entry.StructuredStart:entry.StructuredEnd]), &qe); err != nil {
-				return qe, err
-			}
-			return qe, nil
-		},
+		logtestutils.FromLogEntry[eventpb.QueryExecute],
 		func(entry logpb.Entry, qe eventpb.QueryExecute) bool {
 			// Filter out internal queries.
 			return qe.ExecMode != executorTypeInternal.logLabel()

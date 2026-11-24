@@ -75,13 +75,16 @@ func (pzo *partitionZoneConfigObj) getZoneConfigElemForAdd(
 						PartitionName: sub.PartitionName,
 						Subzone:       sub,
 						SubzoneSpans:  spans,
+						OldIdxRef:     -1,
 						SeqNum:        pzo.seqNum + 1,
 					}
 				} else {
-					szCfgsToUpdate = append(szCfgsToUpdate, constructSideEffectPartitionElem(b, pzo, sub, spans))
+					szCfgsToUpdate = append(szCfgsToUpdate,
+						constructSideEffectPartitionElem(b, pzo, -1, sub, spans))
 				}
 			} else {
-				szCfgsToUpdate = append(szCfgsToUpdate, constructSideEffectIndexElem(b, pzo, sub, spans))
+				szCfgsToUpdate = append(szCfgsToUpdate,
+					constructSideEffectIndexElem(b, pzo, -1, spans, sub))
 			}
 		}
 	}
@@ -91,10 +94,86 @@ func (pzo *partitionZoneConfigObj) getZoneConfigElemForAdd(
 
 func (pzo *partitionZoneConfigObj) getZoneConfigElemForDrop(
 	b BuildCtx,
-) (scpb.Element, []scpb.Element) {
-	// TODO(annie): this will need to be revised in order to implement subzone
-	// discards. This is fine for now as we fallback before we can get here.
-	return pzo.getZoneConfigElemForAdd(b)
+) ([]scpb.Element, []scpb.Element) {
+	var subzonesToWrite []zonepb.Subzone
+	var err error
+
+	parentZoneConfig := pzo.getTableZoneConfig()
+	if parentZoneConfig != nil {
+		// Get the list of subzones after we have dropped the target; this is so we
+		// can correctly generate the list of subzone spans to upsert.
+		modifiedZc := protoutil.Clone(parentZoneConfig).(*zonepb.ZoneConfig)
+		modifiedZc.DeleteSubzone(uint32(pzo.indexID), pzo.partitionName)
+		subzonesToWrite = modifiedZc.Subzones
+	} else {
+		// Likely in an explicit txn that has not created an overarching
+		// TableZoneConfig yet.
+		var toDropElems []scpb.Element
+		// Ensure that we drop all elements associated with this partition. This
+		// becomes more relevant in explicit txns -- where there could be multiple
+		// zone config elements associated with this partition with increasing
+		// seqNums.
+		b.QueryByID(pzo.getTargetID()).FilterPartitionZoneConfig().
+			ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.PartitionZoneConfig) {
+				if e.PartitionName == pzo.partitionName && e.IndexID == pzo.indexID {
+					toDropElems = append(toDropElems, e)
+				}
+			})
+
+		if len(toDropElems) == 0 {
+			panic(errors.AssertionFailedf(
+				"attempted to drop subzone config for table [%d], partition %s of index %d that "+
+					"does not exist", pzo.tableID, pzo.partitionName, pzo.indexID))
+		}
+		return toDropElems, nil
+	}
+	ss, err := generateSubzoneSpans(b, pzo.tableID, subzonesToWrite)
+	if err != nil {
+		panic(err)
+	}
+
+	// TODO(annie): This does a little more work than necessary -- we should be
+	// able to just update the affected subzone spans. This can be done by
+	// comparing the parent's subzone spans with `ss`.
+	//
+	// Update the partition that is represented by pzo, along with all other
+	// subzones. These other subzones are "side effects" that will need their
+	// subzoneSpans updated in some way.
+	idxToSpansMap := getSubzoneSpansWithIdx(len(subzonesToWrite), ss)
+	var szCfgsToUpdate []scpb.Element
+	for i, sub := range subzonesToWrite {
+		if spans, ok := idxToSpansMap[int32(i)]; ok {
+			oldIdxRefToDelete := parentZoneConfig.GetSubzoneIndex(sub.IndexID, sub.PartitionName)
+			if len(sub.PartitionName) > 0 {
+				szCfgsToUpdate = append(szCfgsToUpdate,
+					constructSideEffectPartitionElem(b, pzo, oldIdxRefToDelete, sub, spans))
+			} else {
+				szCfgsToUpdate = append(szCfgsToUpdate,
+					constructSideEffectIndexElem(b, pzo, oldIdxRefToDelete, spans, sub))
+			}
+		}
+	}
+
+	var toDropElems []scpb.Element
+	if pzo.seqNum > 0 {
+		for i := range pzo.seqNum {
+			toDropElems = append(toDropElems, &scpb.PartitionZoneConfig{
+				TableID:       pzo.tableID,
+				IndexID:       pzo.indexID,
+				PartitionName: pzo.partitionName,
+				SeqNum:        i + 1,
+			})
+		}
+	} else {
+		toDropElems = append(toDropElems, &scpb.PartitionZoneConfig{
+			TableID:       pzo.tableID,
+			IndexID:       pzo.indexID,
+			PartitionName: pzo.partitionName,
+			SeqNum:        0,
+		})
+	}
+
+	return toDropElems, szCfgsToUpdate
 }
 
 func (pzo *partitionZoneConfigObj) retrievePartialZoneConfig(b BuildCtx) *zonepb.ZoneConfig {
@@ -213,10 +292,11 @@ func (pzo *partitionZoneConfigObj) applyZoneConfig(
 	copyFromParentList []tree.Name,
 	setters []func(c *zonepb.ZoneConfig),
 ) (*zonepb.ZoneConfig, error) {
-	// We are configuring a partition. Determine the index ID and fill this
-	// information out in our zoneConfigObject.
+	pzo.fillIndexFromPartition(b, n)
+	// Fill out the indexID based off of the corresponding index name; we either
+	// resolved the name fully above or it had been specified by the user.
+	pzo.fillIndexFromZoneSpecifier(b, n.ZoneSpecifier)
 	pzo.panicIfNoPartitionExistsOnIdx(b, n)
-	pzo.panicIfBadPartitionReference(b, n)
 	indexID := pzo.indexID
 	tempIndexID := mustRetrieveIndexElement(b, pzo.getTargetID(), indexID).TemporaryIndexID
 
@@ -226,6 +306,11 @@ func (pzo *partitionZoneConfigObj) applyZoneConfig(
 	subzonePlaceholder := false
 	// No zone was found. Possibly a SubzonePlaceholder depending on the index.
 	if partialZone == nil {
+		// If we are trying to discard a zone config that doesn't exist in
+		// system.zones, make this a no-op.
+		if n.Discard {
+			return nil, nil
+		}
 		partialZone = zonepb.NewZoneConfig()
 		subzonePlaceholder = true
 	}
@@ -328,8 +413,6 @@ func (pzo *partitionZoneConfigObj) panicIfNoPartitionExistsOnIdx(
 	b BuildCtx, n *tree.SetZoneConfig,
 ) {
 	zs := n.ZoneSpecifier
-	// If we allow StarIndex to be set in the DSC, we will have to guard against
-	// that here as well.
 	if zs.TargetsPartition() && len(zs.TableOrIndex.Index) != 0 {
 		partitionName := string(zs.Partition)
 		var indexes []scpb.IndexPartitioning
@@ -358,18 +441,20 @@ func (pzo *partitionZoneConfigObj) panicIfNoPartitionExistsOnIdx(
 	}
 }
 
-// panicIfBadPartitionReference panics if the partition referenced in a
-// ALTER PARTITION ... OF TABLE does not exist or if it exists on multiple
-// indexes. Otherwise, we find the existing index and save in to our AST.
-// In cases where we find the partition existing on two indexes, we check
-// to ensure that we are not in a backfill case before panicking.
-func (pzo *partitionZoneConfigObj) panicIfBadPartitionReference(b BuildCtx, n *tree.SetZoneConfig) {
+// fillIndexFromPartition finds the existing index for the given partition name
+// in an `ALTER PARTITION ... OF TABLE` and saves in to our AST. In cases where
+// we find the partition existing on two indexes, we check to ensure that we are
+// not in a backfill case before panicking. Otherwise, we panic if the partition
+// referenced does not exist or if it exists on multiple (2+) indexes.
+func (pzo *partitionZoneConfigObj) fillIndexFromPartition(b BuildCtx, n *tree.SetZoneConfig) {
 	zs := &n.ZoneSpecifier
 	// Backward compatibility for ALTER PARTITION ... OF TABLE. Determine which
 	// index has the specified partition.
 	//
-	// If we allow StarIndex to be set in the DSC, we will have to guard against
-	// that here as well.
+	// TODO(#130842): If we allow StarIndex to be set in the DSC, we will have to
+	// guard against that here as well (as in the case for StarIndex, we will have
+	// a TableOrIndex.Index name of len 0, but since we are referring to
+	// _multiple_ indexes, we want to skip this particular check).
 	if zs.TargetsPartition() && len(zs.TableOrIndex.Index) == 0 {
 		partitionName := string(zs.Partition)
 
@@ -395,9 +480,6 @@ func (pzo *partitionZoneConfigObj) panicIfBadPartitionReference(b BuildCtx, n *t
 			idx := indexes[0]
 			idxName := mustRetrieveIndexNameElem(b, pzo.tableID, idx.IndexID)
 			zs.TableOrIndex.Index = tree.UnrestrictedName(idxName.Name)
-			// Our index name has changed -- find the corresponding indexID
-			// and fill that out.
-			pzo.fillIndexFromZoneSpecifier(b, n.ZoneSpecifier)
 		case 2:
 			// Sort our indexes to guarantee proper ordering; in the case of a
 			// backfill, we want to ensure that the temporary index is always
@@ -414,9 +496,6 @@ func (pzo *partitionZoneConfigObj) panicIfBadPartitionReference(b BuildCtx, n *t
 			if isCorrespondingTemporaryIndex(b, pzo.tableID, maybeTempIdx.IndexID, idx.IndexID) {
 				idxName := mustRetrieveIndexNameElem(b, pzo.tableID, idx.IndexID)
 				zs.TableOrIndex.Index = tree.UnrestrictedName(idxName.Name)
-				// Our index name has changed -- find the corresponding indexID
-				// and fill that out.
-				pzo.fillIndexFromZoneSpecifier(b, n.ZoneSpecifier)
 				break
 			}
 			// We are not in a backfill case -- the partition we are referencing

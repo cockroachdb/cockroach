@@ -1,0 +1,99 @@
+error
+CREATE RESOURCE GROUP my_group
+----
+at or near "EOF": syntax error
+DETAIL: source SQL:
+CREATE RESOURCE GROUP my_group
+                              ^
+HINT: try \h CREATE RESOURCE GROUP
+
+parse
+CREATE RESOURCE GROUP my_group WITH (cpu_weight = 100, max_cpu = false)
+----
+CREATE RESOURCE GROUP my_group WITH (cpu_weight = 100, max_cpu = false)
+CREATE RESOURCE GROUP my_group WITH (cpu_weight = (100), max_cpu = (false)) -- fully parenthesized
+CREATE RESOURCE GROUP my_group WITH (cpu_weight = _, max_cpu = _) -- literals removed
+CREATE RESOURCE GROUP _ WITH (cpu_weight = 100, max_cpu = false) -- identifiers removed
+
+parse
+CREATE RESOURCE GROUP IF NOT EXISTS my_group WITH (cpu_weight = 1, max_cpu = true)
+----
+CREATE RESOURCE GROUP IF NOT EXISTS my_group WITH (cpu_weight = 1, max_cpu = true)
+CREATE RESOURCE GROUP IF NOT EXISTS my_group WITH (cpu_weight = (1), max_cpu = (true)) -- fully parenthesized
+CREATE RESOURCE GROUP IF NOT EXISTS my_group WITH (cpu_weight = _, max_cpu = _) -- literals removed
+CREATE RESOURCE GROUP IF NOT EXISTS _ WITH (cpu_weight = 1, max_cpu = true) -- identifiers removed
+
+parse
+CREATE RESOURCE GROUP my_group WITH (bucket_count = 10)
+----
+CREATE RESOURCE GROUP my_group WITH (bucket_count = 10)
+CREATE RESOURCE GROUP my_group WITH (bucket_count = (10)) -- fully parenthesized
+CREATE RESOURCE GROUP my_group WITH (bucket_count = _) -- literals removed
+CREATE RESOURCE GROUP _ WITH (bucket_count = 10) -- identifiers removed
+
+parse
+ALTER RESOURCE GROUP my_group WITH (cpu_weight = 200)
+----
+ALTER RESOURCE GROUP my_group WITH (cpu_weight = 200)
+ALTER RESOURCE GROUP my_group WITH (cpu_weight = (200)) -- fully parenthesized
+ALTER RESOURCE GROUP my_group WITH (cpu_weight = _) -- literals removed
+ALTER RESOURCE GROUP _ WITH (cpu_weight = 200) -- identifiers removed
+
+parse
+ALTER RESOURCE GROUP IF EXISTS my_group WITH (max_cpu = true)
+----
+ALTER RESOURCE GROUP IF EXISTS my_group WITH (max_cpu = true)
+ALTER RESOURCE GROUP IF EXISTS my_group WITH (max_cpu = (true)) -- fully parenthesized
+ALTER RESOURCE GROUP IF EXISTS my_group WITH (max_cpu = _) -- literals removed
+ALTER RESOURCE GROUP IF EXISTS _ WITH (max_cpu = true) -- identifiers removed
+
+# The no-parens form is rejected; parentheses are required.
+error
+CREATE RESOURCE GROUP my_group WITH cpu_weight = 100
+----
+at or near "cpu_weight": syntax error
+DETAIL: source SQL:
+CREATE RESOURCE GROUP my_group WITH cpu_weight = 100
+                                    ^
+HINT: try \h CREATE RESOURCE GROUP
+
+error
+ALTER RESOURCE GROUP my_group WITH cpu_weight = 200
+----
+at or near "cpu_weight": syntax error
+DETAIL: source SQL:
+ALTER RESOURCE GROUP my_group WITH cpu_weight = 200
+                                   ^
+HINT: try \h ALTER RESOURCE GROUP
+
+parse
+DROP RESOURCE GROUP my_group
+----
+DROP RESOURCE GROUP my_group
+DROP RESOURCE GROUP my_group -- fully parenthesized
+DROP RESOURCE GROUP my_group -- literals removed
+DROP RESOURCE GROUP _ -- identifiers removed
+
+parse
+DROP RESOURCE GROUP IF EXISTS my_group
+----
+DROP RESOURCE GROUP IF EXISTS my_group
+DROP RESOURCE GROUP IF EXISTS my_group -- fully parenthesized
+DROP RESOURCE GROUP IF EXISTS my_group -- literals removed
+DROP RESOURCE GROUP IF EXISTS _ -- identifiers removed
+
+parse
+SHOW RESOURCE GROUP my_group
+----
+SHOW RESOURCE GROUP my_group
+SHOW RESOURCE GROUP my_group -- fully parenthesized
+SHOW RESOURCE GROUP my_group -- literals removed
+SHOW RESOURCE GROUP _ -- identifiers removed
+
+parse
+SHOW RESOURCE GROUPS
+----
+SHOW RESOURCE GROUPS
+SHOW RESOURCE GROUPS -- fully parenthesized
+SHOW RESOURCE GROUPS -- literals removed
+SHOW RESOURCE GROUPS -- identifiers removed

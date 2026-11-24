@@ -14,6 +14,8 @@ import (
 	"math/rand"
 	"slices"
 	"sort"
+	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil"
@@ -27,13 +29,20 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
+	"golang.org/x/exp/maps"
 )
 
 // GeneratorConfig contains all the tunable knobs necessary to run a Generator.
 type GeneratorConfig struct {
-	Ops                   OperationConfig
+	Ops       OperationConfig
+	TxnConfig TxnConfig
+
 	NumNodes, NumReplicas int
+
+	SeedForLogging              int64
+	RandSourceCounterForLogging counter
 }
 
 // OperationConfig configures the relative probabilities of producing various
@@ -51,7 +60,10 @@ type OperationConfig struct {
 	Merge          MergeConfig
 	ChangeReplicas ChangeReplicasConfig
 	ChangeLease    ChangeLeaseConfig
+	ChangeSetting  ChangeSettingConfig
 	ChangeZone     ChangeZoneConfig
+	Fault          FaultConfig
+	MvccGC         MvccGCConfig
 }
 
 // ClosureTxnConfig configures the relative probability of running some
@@ -100,6 +112,9 @@ type ClosureTxnConfig struct {
 type ClientOperationConfig struct {
 	// GetMissing is an operation that Gets a key that definitely doesn't exist.
 	GetMissing int
+	// GetMissingFollowerRead is an operation that Gets a key that definitely
+	// doesn't exist, and is marked eligible to be served as a follower read.
+	GetMissingFollowerRead int
 	// GetMissingForUpdate is an operation that Gets a key that definitely doesn't
 	// exist using a locking read with strength lock.Exclusive.
 	GetMissingForUpdate int
@@ -135,6 +150,9 @@ type ClientOperationConfig struct {
 	GetMissingForShareSkipLockedGuaranteedDurability int
 	// GetExisting is an operation that Gets a key that likely exists.
 	GetExisting int
+	// GetExistingFollowerRead is an operation that Gets a key that likely exists,
+	// and is marked eligible to be served as a follower read.
+	GetExistingFollowerRead int
 	// GetExistingForUpdate is an operation that Gets a key that likely exists
 	// using a locking read with strength lock.Exclusive.
 	GetExistingForUpdate int
@@ -172,8 +190,29 @@ type ClientOperationConfig struct {
 	PutMissing int
 	// PutExisting is an operation that Puts a key that likely exists.
 	PutExisting int
+	// PutMustAcquireExclusiveLockMissing is an operation that Puts a key that
+	// definitely doesn't exist, with MustAcquireExclusiveLock set to true.
+	PutMustAcquireExclusiveLockMissing int
+	// PutMustAcquireExclusiveLockExisting is an operation that Puts a key that
+	// likely exists, with MustAcquireExclusiveLock set to true.
+	PutMustAcquireExclusiveLockExisting int
+	// CPutMatchExisting is an operation that CPuts a key with the condition
+	// likely matching the existing key's previous value.
+	CPutMatchExisting int
+	// CPutMatchMissing is an operation that CPuts a key with the condition
+	// likely matching the missing key's nil value.
+	CPutMatchMissing int
+	// CPutNoMatch is an operation that CPuts a key with the condition definitely
+	// not matching the key's previous value.
+	CPutNoMatch int
+	// CPutAllowIfDoesNotExist is an operation that CPuts a key with the condition
+	// allowing to succeed when no value exists.
+	CPutAllowIfDoesNotExist int
 	// Scan is an operation that Scans a key range that may contain values.
 	Scan int
+	// ScanFollowerRead is an operation that Scans a key range that may contain
+	// values, and is marked eligible to be served as a follower read.
+	ScanFollowerRead int
 	// ScanForUpdate is an operation that Scans a key range that may contain
 	// values using a per-key locking scan with strength lock.Exclusive.
 	ScanForUpdate int
@@ -211,6 +250,10 @@ type ClientOperationConfig struct {
 	// ReverseScan is an operation that Scans a key range that may contain
 	// values in reverse key order.
 	ReverseScan int
+	// ReverseScanFollowerRead is an operation that Scans a key range that may
+	// contain values in reverse key order, and is marked eligible to be served as
+	// a follower read.
+	ReverseScanFollowerRead int
 	// ReverseScanForUpdate is an operation that Scans a key range that may
 	// contain values using a per-key locking scan with strength lock.Exclusive in
 	// reverse key order.
@@ -252,6 +295,12 @@ type ClientOperationConfig struct {
 	DeleteMissing int
 	// DeleteExisting is an operation that Deletes a key that likely exists.
 	DeleteExisting int
+	// DeleteMustAcquireExclusiveLockMissing is an operation that Deletes a key
+	// that definitely doesn't exist, with MustAcquireExclusiveLock set to true.
+	DeleteMustAcquireExclusiveLockMissing int
+	// DeleteExisting is an operation that Deletes a key that likely exists, with
+	// MustAcquireExclusiveLock set to true.
+	DeleteMustAcquireExclusiveLockExisting int
 	// DeleteRange is an operation that Deletes a key range that may contain values.
 	DeleteRange int
 	// DeleteRange is an operation that invokes DeleteRangeUsingTombstone.
@@ -260,6 +309,14 @@ type ClientOperationConfig struct {
 	AddSSTable int
 	// Barrier is an operation that waits for in-flight writes to complete.
 	Barrier int
+
+	// FlushLockTable is an operation that moves unreplicated locks in the
+	// in-memory lock table into the
+	FlushLockTable int
+
+	// MutateBatchHeader mutates elements of the batch Header that may influence
+	// batch evaluation. Only relevant for BatchOperations.
+	MutateBatchHeader int
 }
 
 // BatchOperationConfig configures the relative probability of generating a
@@ -269,6 +326,11 @@ type ClientOperationConfig struct {
 type BatchOperationConfig struct {
 	Batch int
 	Ops   ClientOperationConfig
+}
+
+type TxnConfig struct {
+	BufferedWritesProb float64
+	RandomUserPriority bool
 }
 
 // SplitConfig configures the relative probability of generating a Split
@@ -324,6 +386,16 @@ type ChangeLeaseConfig struct {
 	TransferLease int
 }
 
+// ChangeSettingConfig configures the relative probability of generating a
+// cluster setting change operation.
+type ChangeSettingConfig struct {
+	// SetLeaseType changes the default range lease type.
+	SetLeaseType int
+	// ToggleVirtualIntentResolution toggles the VIR cluster setting, exercising
+	// transitions between physical and virtual intent resolution.
+	ToggleVirtualIntentResolution int
+}
+
 // ChangeZoneConfig configures the relative probability of generating a zone
 // configuration change operation.
 type ChangeZoneConfig struct {
@@ -340,22 +412,51 @@ type SavepointConfig struct {
 	SavepointRollback int
 }
 
+// FaultConfig configures the relative probabilities of generating different
+// types of faults. Network partitions can be symmetric or asymmetric, partial
+// or full, but they may need multiple operations to set up; e.g. a symmetric
+// partition between node A and node B requires to partitions: from A to B, and
+// from B to A.
+type FaultConfig struct {
+	// AddNetworkPartition is an operation that simulates a network partition.
+	AddNetworkPartition int
+	// RemoveNetworkPartition is an operation that simulates healing a network
+	// partition.
+	RemoveNetworkPartition int
+	// StopNode is an operation that stops a randomly chosen node.
+	StopNode int
+	// RestartNode is an operation that restarts a randomly chosen node.
+	RestartNode int
+	// CrashNode is an operation that crashes a randomly chosen node.
+	CrashNode int
+	// Disk stalls and other faults belong here.
+}
+
+// MvccGCConfig configures the relative probability of generating an MVCC GC
+// operation.
+type MvccGCConfig struct {
+	// MvccGC is an operation that performs MVCC GC on a range.
+	MvccGC int
+}
+
 // newAllOperationsConfig returns a GeneratorConfig that exercises *all*
 // options. You probably want NewDefaultConfig. Most of the time, these will be
 // the same, but having both allows us to merge code for operations that do not
 // yet pass (for example, if the new operation finds a kv bug or edge case).
 func newAllOperationsConfig() GeneratorConfig {
 	clientOpConfig := ClientOperationConfig{
-		GetMissing:                                        1,
-		GetMissingForUpdate:                               1,
-		GetMissingForUpdateGuaranteedDurability:           1,
-		GetMissingForUpdateSkipLocked:                     1,
-		GetMissingForUpdateSkipLockedGuaranteedDurability: 1,
-		GetMissingForShare:                                1,
-		GetMissingForShareGuaranteedDurability:            1,
-		GetMissingForShareSkipLocked:                      1,
-		GetMissingForShareSkipLockedGuaranteedDurability:  1,
+		GetMissing:                                         1,
+		GetMissingFollowerRead:                             1,
+		GetMissingForUpdate:                                1,
+		GetMissingForUpdateGuaranteedDurability:            1,
+		GetMissingForUpdateSkipLocked:                      1,
+		GetMissingForUpdateSkipLockedGuaranteedDurability:  1,
+		GetMissingForShare:                                 1,
+		GetMissingForShareGuaranteedDurability:             1,
+		GetMissingForShareSkipLocked:                       1,
+		GetMissingForShareSkipLockedGuaranteedDurability:   1,
 		GetExisting:                                        1,
+		GetExistingFollowerRead:                            1,
 		GetExistingForUpdate:                               1,
 		GetExistingForUpdateGuaranteedDurability:           1,
 		GetExistingForShare:                                1,
@@ -365,19 +466,27 @@ func newAllOperationsConfig() GeneratorConfig {
 		GetExistingForUpdateSkipLockedGuaranteedDurability: 1,
 		GetExistingForShareSkipLocked:                      1,
 		GetExistingForShareSkipLockedGuaranteedDurability:  1,
-		PutMissing:                        1,
-		PutExisting:                       1,
-		Scan:                              1,
-		ScanForUpdate:                     1,
-		ScanForUpdateGuaranteedDurability: 1,
-		ScanForShare:                      1,
-		ScanForShareGuaranteedDurability:  1,
-		ScanSkipLocked:                    1,
-		ScanForUpdateSkipLocked:           1,
+		PutMissing:                          1,
+		PutExisting:                         1,
+		PutMustAcquireExclusiveLockMissing:  1,
+		PutMustAcquireExclusiveLockExisting: 1,
+		CPutMatchExisting:                   1,
+		CPutMatchMissing:                    1,
+		CPutNoMatch:                         1,
+		CPutAllowIfDoesNotExist:             1,
+		Scan:                                1,
+		ScanFollowerRead:                    1,
+		ScanForUpdate:                       1,
+		ScanForUpdateGuaranteedDurability:   1,
+		ScanForShare:                        1,
+		ScanForShareGuaranteedDurability:    1,
+		ScanSkipLocked:                      1,
+		ScanForUpdateSkipLocked:             1,
 		ScanForUpdateSkipLockedGuaranteedDurability: 1,
 		ScanForShareSkipLocked:                      1,
 		ScanForShareSkipLockedGuaranteedDurability:  1,
 		ReverseScan:                                        1,
+		ReverseScanFollowerRead:                            1,
 		ReverseScanForUpdate:                               1,
 		ReverseScanForUpdateGuaranteedDurability:           1,
 		ReverseScanForShare:                                1,
@@ -389,10 +498,14 @@ func newAllOperationsConfig() GeneratorConfig {
 		ReverseScanForShareSkipLockedGuaranteedDurability:  1,
 		DeleteMissing:                                      1,
 		DeleteExisting:                                     1,
+		DeleteMustAcquireExclusiveLockMissing:              1,
+		DeleteMustAcquireExclusiveLockExisting:             1,
 		DeleteRange:                                        1,
 		DeleteRangeUsingTombstone:                          1,
 		AddSSTable:                                         1,
 		Barrier:                                            1,
+		FlushLockTable:                                     1,
+		MutateBatchHeader:                                  1,
 	}
 	batchOpConfig := BatchOperationConfig{
 		Batch: 4,
@@ -443,8 +556,22 @@ func newAllOperationsConfig() GeneratorConfig {
 		ChangeLease: ChangeLeaseConfig{
 			TransferLease: 1,
 		},
+		ChangeSetting: ChangeSettingConfig{
+			SetLeaseType:                  1,
+			ToggleVirtualIntentResolution: 1,
+		},
 		ChangeZone: ChangeZoneConfig{
 			ToggleGlobalReads: 1,
+		},
+		Fault: FaultConfig{
+			AddNetworkPartition:    1,
+			RemoveNetworkPartition: 1,
+			StopNode:               1,
+			RestartNode:            1,
+			CrashNode:              1,
+		},
+		MvccGC: MvccGCConfig{
+			MvccGC: 1,
 		},
 	}}
 }
@@ -455,6 +582,14 @@ func newAllOperationsConfig() GeneratorConfig {
 // operations/make some operations more likely.
 func NewDefaultConfig() GeneratorConfig {
 	config := newAllOperationsConfig()
+
+	// MutateBatchHeader is only valid in batches.
+	config.Ops.DB.MutateBatchHeader = 0
+	config.Ops.ClosureTxn.TxnClientOps.MutateBatchHeader = 0
+
+	// TODO(#153446): Header mutations with EndTransaction are not currently safe.
+	config.Ops.ClosureTxn.CommitBatchOps.MutateBatchHeader = 0
+
 	// DeleteRangeUsingTombstone does not support transactions.
 	config.Ops.ClosureTxn.TxnClientOps.DeleteRangeUsingTombstone = 0
 	config.Ops.ClosureTxn.TxnBatchOps.Ops.DeleteRangeUsingTombstone = 0
@@ -525,6 +660,22 @@ func NewDefaultConfig() GeneratorConfig {
 	config.Ops.ClosureTxn.CommitBatchOps.Barrier = 0
 	config.Ops.ClosureTxn.TxnClientOps.Barrier = 0
 	config.Ops.ClosureTxn.TxnBatchOps.Ops.Barrier = 0
+
+	config.Ops.Batch.Ops.FlushLockTable = 0
+	config.Ops.ClosureTxn.CommitBatchOps.FlushLockTable = 0
+	config.Ops.ClosureTxn.TxnClientOps.FlushLockTable = 0
+	config.Ops.ClosureTxn.TxnBatchOps.Ops.FlushLockTable = 0
+
+	// Network partitions and node restarts can result in unavailability and need
+	// to be enabled with care by specific test variants.
+	config.Ops.Fault.AddNetworkPartition = 0
+	config.Ops.Fault.RemoveNetworkPartition = 0
+	config.Ops.Fault.StopNode = 0
+	config.Ops.Fault.RestartNode = 0
+	config.Ops.Fault.CrashNode = 0
+
+	// MVCC GC operations are only enabled in specific test variants.
+	config.Ops.MvccGC.MvccGC = 0
 	return config
 }
 
@@ -543,7 +694,7 @@ func GeneratorDataSpan() roachpb.Span {
 
 // GetReplicasFn is a function that returns the current voting and non-voting
 // replicas, respectively, for the range containing a key.
-type GetReplicasFn func(roachpb.Key) ([]roachpb.ReplicationTarget, []roachpb.ReplicationTarget)
+type GetReplicasFn func(context.Context, roachpb.Key) ([]roachpb.ReplicationTarget, []roachpb.ReplicationTarget)
 
 // Generator incrementally constructs KV traffic designed to maximally test edge
 // cases.
@@ -574,7 +725,9 @@ type Generator struct {
 }
 
 // MakeGenerator constructs a Generator.
-func MakeGenerator(config GeneratorConfig, replicasFn GetReplicasFn) (*Generator, error) {
+func MakeGenerator(
+	config GeneratorConfig, replicasFn GetReplicasFn, mode TestMode, n *nodes,
+) (*Generator, error) {
 	if config.NumNodes <= 0 {
 		return nil, errors.Errorf(`NumNodes must be positive got: %d`, config.NumNodes)
 	}
@@ -585,13 +738,33 @@ func MakeGenerator(config GeneratorConfig, replicasFn GetReplicasFn) (*Generator
 		return nil, errors.Errorf(`NumReplicas (%d) must <= NumNodes (%d)`,
 			config.NumReplicas, config.NumNodes)
 	}
+	p := partitions{
+		healthy:     make(map[connection]struct{}),
+		partitioned: make(map[connection]struct{}),
+	}
+	for i := 1; i <= config.NumNodes; i++ {
+		for j := 1; j <= config.NumNodes; j++ {
+			// In liveness mode, we don't allow adding partitions between the two
+			// protected nodes (node 1 and node 2), so we don't include those
+			// connections in the set of healthy connections at all.
+			protectedConn := (i == 1 && j == 2) || (i == 2 && j == 1)
+			if i == j || (mode == Liveness && protectedConn) {
+				continue
+			}
+			conn := connection{from: i, to: j}
+			p.healthy[conn] = struct{}{}
+		}
+	}
 	g := &Generator{}
 	g.mu.generator = generator{
 		Config:           config,
 		replicasFn:       replicasFn,
-		keys:             make(map[string]struct{}),
+		keys:             make(map[string]string),
 		currentSplits:    make(map[string]struct{}),
 		historicalSplits: make(map[string]struct{}),
+		partitions:       p,
+		nodes:            n,
+		mode:             mode,
 	}
 	return g, nil
 }
@@ -611,9 +784,9 @@ type generator struct {
 
 	seqGen kvnemesisutil.Seq
 
-	// keys is the set of every key that has been written to, including those
-	// deleted or in rolled back transactions.
-	keys map[string]struct{}
+	// keys is a key-value map of every key that has been written to, including
+	// those deleted or in rolled back transactions.
+	keys map[string]string
 
 	// currentSplits is approximately the set of every split that has been made
 	// within DataSpan. The exact accounting is hard because Generator can hand
@@ -625,6 +798,95 @@ type generator struct {
 	// emitted, regardless of whether the split has since been applied or been
 	// merged away again.
 	historicalSplits map[string]struct{}
+
+	// partitions contains the sets of healthy and partitioned connections
+	// between nodes.
+	partitions
+
+	// nodes contains the sets of running and stopped nodes.
+	nodes *nodes
+
+	// mode is the test mode (e.g. Liveness or Safety). The generator needs it in
+	// order to set a timeout for range lookups under safety mode.
+	mode TestMode
+}
+
+type connection struct {
+	from int // node ID
+	to   int // node ID
+}
+
+type partitions struct {
+	healthy     map[connection]struct{}
+	partitioned map[connection]struct{}
+}
+
+// nodes contains the sets of running and stopped nodes. This struct is shared
+// between the generator and the applier to make sure nodes are promptly marked
+// as running/stopped when operations are generated/applied. The generator uses
+// removeRandRunning and removeRandStopped to pick nodes to stop/restart, and
+// the applier uses setRunning and setStopped to update the sets when operations
+// are actually applied. This is important because there could be a gap of
+// multiple seconds between generating a stop/restart operation and a node fully
+// stopping/restarting.
+type nodes struct {
+	mu      syncutil.RWMutex
+	running map[int]struct{}
+	stopped map[int]struct{}
+	crashed map[int]struct{}
+}
+
+func randNodeFromMap(m map[int]struct{}, rng *rand.Rand) int {
+	return maps.Keys(m)[rng.Intn(len(m))]
+}
+
+func (n *nodes) removeRandRunning(rng *rand.Rand) int {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	nodeID := randNodeFromMap(n.running, rng)
+	delete(n.running, nodeID)
+	return nodeID
+}
+
+// removeRandStoppedOrCrashed randomly picks a node from either the stopped or
+// crashed sets with uniform probability across all nodes.
+func (n *nodes) removeRandStoppedOrCrashed(rng *rand.Rand) int {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	stopped := len(n.stopped)
+	crashed := len(n.crashed)
+
+	if stopped == 0 && crashed == 0 {
+		panic("no stopped or crashed nodes available")
+	}
+
+	var nodeID int
+	if rng.Intn(stopped+crashed) < stopped {
+		nodeID = randNodeFromMap(n.stopped, rng)
+		delete(n.stopped, nodeID)
+	} else {
+		nodeID = randNodeFromMap(n.crashed, rng)
+		delete(n.crashed, nodeID)
+	}
+	return nodeID
+}
+
+func (n *nodes) setRunning(nodeID int) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.running[nodeID] = struct{}{}
+}
+
+func (n *nodes) setStopped(nodeID int) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.stopped[nodeID] = struct{}{}
+}
+
+func (n *nodes) setCrashed(nodeID int) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	n.crashed[nodeID] = struct{}{}
 }
 
 // RandStep returns a single randomly generated next operation to execute.
@@ -647,26 +909,45 @@ func (g *generator) RandStep(rng *rand.Rand) Step {
 	}
 
 	key := randKey(rng)
-	voters, nonVoters := g.replicasFn(roachpb.Key(key))
+	var voters, nonVoters []roachpb.ReplicationTarget
+	if g.mode == Safety {
+		if err := timeutil.RunWithTimeout(context.Background(), "getting replicas", 3*time.Second,
+			func(ctx context.Context) error {
+				voters, nonVoters = g.replicasFn(ctx, roachpb.Key(key))
+				return nil
+			}); err != nil {
+			voters, nonVoters = []roachpb.ReplicationTarget{}, []roachpb.ReplicationTarget{}
+		}
+	} else {
+		voters, nonVoters = g.replicasFn(context.Background(), roachpb.Key(key))
+	}
 	numVoters, numNonVoters := len(voters), len(nonVoters)
 	numReplicas := numVoters + numNonVoters
 	if numReplicas < g.Config.NumNodes {
-		addVoterFn := makeAddReplicaFn(key, voters, false /* atomicSwap */, true /* voter */)
-		addOpGen(&allowed, addVoterFn, g.Config.Ops.ChangeReplicas.AddVotingReplica)
-		addNonVoterFn := makeAddReplicaFn(key, nonVoters, false /* atomicSwap */, false /* voter */)
-		addOpGen(&allowed, addNonVoterFn, g.Config.Ops.ChangeReplicas.AddNonVotingReplica)
+		if len(voters) > 0 {
+			addVoterFn := makeAddReplicaFn(key, voters, false /* atomicSwap */, true /* voter */)
+			addOpGen(&allowed, addVoterFn, g.Config.Ops.ChangeReplicas.AddVotingReplica)
+		}
+		if len(nonVoters) > 0 {
+			addNonVoterFn := makeAddReplicaFn(key, nonVoters, false /* atomicSwap */, false /* voter */)
+			addOpGen(&allowed, addNonVoterFn, g.Config.Ops.ChangeReplicas.AddNonVotingReplica)
+		}
 	}
 	if numReplicas == g.Config.NumReplicas && numReplicas < g.Config.NumNodes {
-		atomicSwapVoterFn := makeAddReplicaFn(key, voters, true /* atomicSwap */, true /* voter */)
-		addOpGen(&allowed, atomicSwapVoterFn, g.Config.Ops.ChangeReplicas.AtomicSwapVotingReplica)
+		if len(voters) > 0 {
+			atomicSwapVoterFn := makeAddReplicaFn(key, voters, true /* atomicSwap */, true /* voter */)
+			addOpGen(&allowed, atomicSwapVoterFn, g.Config.Ops.ChangeReplicas.AtomicSwapVotingReplica)
+		}
 		if numNonVoters > 0 {
 			atomicSwapNonVoterFn := makeAddReplicaFn(key, nonVoters, true /* atomicSwap */, false /* voter */)
 			addOpGen(&allowed, atomicSwapNonVoterFn, g.Config.Ops.ChangeReplicas.AtomicSwapNonVotingReplica)
 		}
 	}
 	if numReplicas > g.Config.NumReplicas {
-		removeVoterFn := makeRemoveReplicaFn(key, voters, true /* voter */)
-		addOpGen(&allowed, removeVoterFn, g.Config.Ops.ChangeReplicas.RemoveVotingReplica)
+		if len(voters) > 0 {
+			removeVoterFn := makeRemoveReplicaFn(key, voters, true /* voter */)
+			addOpGen(&allowed, removeVoterFn, g.Config.Ops.ChangeReplicas.RemoveVotingReplica)
+		}
 		if numNonVoters > 0 {
 			removeNonVoterFn := makeRemoveReplicaFn(key, nonVoters, false /* voter */)
 			addOpGen(&allowed, removeNonVoterFn, g.Config.Ops.ChangeReplicas.RemoveNonVotingReplica)
@@ -680,10 +961,29 @@ func (g *generator) RandStep(rng *rand.Rand) Step {
 		promoteNonVoterFn := makePromoteReplicaFn(key, nonVoters)
 		addOpGen(&allowed, promoteNonVoterFn, g.Config.Ops.ChangeReplicas.PromoteReplica)
 	}
-	transferLeaseFn := makeTransferLeaseFn(key, append(voters, nonVoters...))
-	addOpGen(&allowed, transferLeaseFn, g.Config.Ops.ChangeLease.TransferLease)
+	if numVoters > 0 {
+		transferLeaseFn := makeTransferLeaseFn(key, append(voters, nonVoters...))
+		addOpGen(&allowed, transferLeaseFn, g.Config.Ops.ChangeLease.TransferLease)
+	}
 
+	addOpGen(&allowed, setLeaseType, g.Config.Ops.ChangeSetting.SetLeaseType)
+	addOpGen(&allowed, toggleVirtualIntentResolution, g.Config.Ops.ChangeSetting.ToggleVirtualIntentResolution)
 	addOpGen(&allowed, toggleGlobalReads, g.Config.Ops.ChangeZone.ToggleGlobalReads)
+	addOpGen(&allowed, addRandNetworkPartition, g.Config.Ops.Fault.AddNetworkPartition)
+	addOpGen(&allowed, removeRandNetworkPartition, g.Config.Ops.Fault.RemoveNetworkPartition)
+	if len(g.nodes.running) > 0 {
+		addOpGen(&allowed, stopRandNode, g.Config.Ops.Fault.StopNode)
+	}
+	if len(g.nodes.stopped) > 0 || len(g.nodes.crashed) > 0 {
+		addOpGen(&allowed, restartRandNode, g.Config.Ops.Fault.RestartNode)
+	}
+	if len(g.nodes.running) > 0 {
+		addOpGen(&allowed, crashRandNode, g.Config.Ops.Fault.CrashNode)
+	}
+
+	if len(g.keys) > 0 {
+		addOpGen(&allowed, randMvccGC, g.Config.Ops.MvccGC.MvccGC)
+	}
 
 	return step(g.selectOp(rng, allowed))
 }
@@ -701,7 +1001,9 @@ type opGen struct {
 }
 
 func addOpGen(valid *[]opGen, fn opGenFunc, weight int) {
-	*valid = append(*valid, opGen{fn: fn, weight: weight})
+	if weight > 0 {
+		*valid = append(*valid, opGen{fn: fn, weight: weight})
+	}
 }
 
 func (g *generator) selectOp(rng *rand.Rand, contextuallyValid []opGen) Operation {
@@ -722,6 +1024,7 @@ func (g *generator) selectOp(rng *rand.Rand, contextuallyValid []opGen) Operatio
 
 func (g *generator) registerClientOps(allowed *[]opGen, c *ClientOperationConfig) {
 	addOpGen(allowed, randGetMissing, c.GetMissing)
+	addOpGen(allowed, randGetMissingFollowerRead, c.GetMissingFollowerRead)
 	addOpGen(allowed, randGetMissingForUpdate, c.GetMissingForUpdate)
 	addOpGen(
 		allowed, randGetMissingForUpdateGuaranteedDurability, c.GetMissingForUpdateGuaranteedDurability,
@@ -744,9 +1047,16 @@ func (g *generator) registerClientOps(allowed *[]opGen, c *ClientOperationConfig
 		c.GetMissingForShareSkipLockedGuaranteedDurability,
 	)
 	addOpGen(allowed, randPutMissing, c.PutMissing)
+	addOpGen(allowed, randPutMustAcquireExclusiveLockMissing, c.PutMustAcquireExclusiveLockMissing)
+	addOpGen(allowed, randCPutMatchMissing, c.CPutMatchMissing)
+	addOpGen(allowed, randCPutNoMatch, c.CPutNoMatch)
+	addOpGen(allowed, randCPutAllowIfDoesNotExist, c.CPutAllowIfDoesNotExist)
 	addOpGen(allowed, randDelMissing, c.DeleteMissing)
+	addOpGen(allowed, randDelMustAcquireExclusiveLockMissing, c.DeleteMustAcquireExclusiveLockMissing)
+
 	if len(g.keys) > 0 {
 		addOpGen(allowed, randGetExisting, c.GetExisting)
+		addOpGen(allowed, randGetExistingFollowerRead, c.GetExistingFollowerRead)
 		addOpGen(allowed, randGetExistingForUpdate, c.GetExistingForUpdate)
 		addOpGen(
 			allowed,
@@ -773,9 +1083,13 @@ func (g *generator) registerClientOps(allowed *[]opGen, c *ClientOperationConfig
 			c.GetExistingForShareSkipLockedGuaranteedDurability,
 		)
 		addOpGen(allowed, randPutExisting, c.PutExisting)
+		addOpGen(allowed, randPutMustAcquireExclusiveLockExisting, c.PutMustAcquireExclusiveLockExisting)
+		addOpGen(allowed, randCPutMatchExisting, c.CPutMatchExisting)
 		addOpGen(allowed, randDelExisting, c.DeleteExisting)
+		addOpGen(allowed, randDelMustAcquireExclusiveLockExisting, c.DeleteMustAcquireExclusiveLockExisting)
 	}
 	addOpGen(allowed, randScan, c.Scan)
+	addOpGen(allowed, randScanFollowerRead, c.ScanFollowerRead)
 	addOpGen(allowed, randScanForUpdate, c.ScanForUpdate)
 	addOpGen(allowed, randScanForUpdateGuaranteedDurability, c.ScanForUpdateGuaranteedDurability)
 	addOpGen(allowed, randScanForShare, c.ScanForShare)
@@ -794,6 +1108,7 @@ func (g *generator) registerClientOps(allowed *[]opGen, c *ClientOperationConfig
 		c.ScanForShareSkipLockedGuaranteedDurability,
 	)
 	addOpGen(allowed, randReverseScan, c.ReverseScan)
+	addOpGen(allowed, randReverseScanFollowerRead, c.ReverseScanFollowerRead)
 	addOpGen(allowed, randReverseScanForUpdate, c.ReverseScanForUpdate)
 	addOpGen(
 		allowed,
@@ -821,6 +1136,8 @@ func (g *generator) registerClientOps(allowed *[]opGen, c *ClientOperationConfig
 	addOpGen(allowed, randDelRangeUsingTombstone, c.DeleteRangeUsingTombstone)
 	addOpGen(allowed, randAddSSTable, c.AddSSTable)
 	addOpGen(allowed, randBarrier, c.Barrier)
+	addOpGen(allowed, randFlushLockTable, c.FlushLockTable)
+	addOpGen(allowed, randBatchMutation, c.MutateBatchHeader)
 }
 
 func (g *generator) registerBatchOps(allowed *[]opGen, c *BatchOperationConfig) {
@@ -829,6 +1146,12 @@ func (g *generator) registerBatchOps(allowed *[]opGen, c *BatchOperationConfig) 
 
 func randGetMissing(_ *generator, rng *rand.Rand) Operation {
 	return get(randKey(rng))
+}
+
+func randGetMissingFollowerRead(_ *generator, rng *rand.Rand) Operation {
+	op := get(randKey(rng))
+	op.Get.FollowerReadEligible = true
+	return op
 }
 
 func randGetMissingForUpdate(g *generator, rng *rand.Rand) Operation {
@@ -890,8 +1213,15 @@ func randGetMissingForShareSkipLockedGuaranteedDurability(g *generator, rng *ran
 }
 
 func randGetExisting(g *generator, rng *rand.Rand) Operation {
-	key := randMapKey(rng, g.keys)
+	key := randSliceKey(rng, maps.Keys(g.keys))
 	return get(key)
+}
+
+func randGetExistingFollowerRead(g *generator, rng *rand.Rand) Operation {
+	key := randSliceKey(rng, maps.Keys(g.keys))
+	op := get(key)
+	op.Get.FollowerReadEligible = true
+	return op
 }
 
 func randGetExistingForUpdate(g *generator, rng *rand.Rand) Operation {
@@ -957,14 +1287,64 @@ func randGetExistingForShareSkipLockedGuaranteedDurability(g *generator, rng *ra
 func randPutMissing(g *generator, rng *rand.Rand) Operation {
 	seq := g.nextSeq()
 	key := randKey(rng)
-	g.keys[key] = struct{}{}
-	return put(key, seq)
+	op := put(key, seq)
+	g.keys[key] = op.Put.Value()
+	return op
 }
 
 func randPutExisting(g *generator, rng *rand.Rand) Operation {
 	seq := g.nextSeq()
-	key := randMapKey(rng, g.keys)
-	return put(key, seq)
+	key := randSliceKey(rng, maps.Keys(g.keys))
+	op := put(key, seq)
+	g.keys[key] = op.Put.Value()
+	return op
+}
+
+func randPutMustAcquireExclusiveLockMissing(g *generator, rng *rand.Rand) Operation {
+	seq := g.nextSeq()
+	key := randKey(rng)
+	op := putMustAcquireLock(key, seq)
+	g.keys[key] = op.Put.Value()
+	return op
+}
+
+func randPutMustAcquireExclusiveLockExisting(g *generator, rng *rand.Rand) Operation {
+	seq := g.nextSeq()
+	key := randSliceKey(rng, maps.Keys(g.keys))
+	op := putMustAcquireLock(key, seq)
+	g.keys[key] = op.Put.Value()
+	return op
+}
+
+func randCPutMatchExisting(g *generator, rng *rand.Rand) Operation {
+	seq := g.nextSeq()
+	key := randSliceKey(rng, maps.Keys(g.keys))
+	expVal := g.keys[key]
+	// There is no guarantee the expVal will actually match because the key may be
+	// overwritten concurrently.
+	op := cput(key, seq, expVal, false)
+	g.keys[key] = op.CPut.Value()
+	return op
+}
+
+func randCPutMatchMissing(g *generator, rng *rand.Rand) Operation {
+	seq := g.nextSeq()
+	key := randKey(rng)
+	return cput(key, seq, "", false)
+}
+
+func randCPutAllowIfDoesNotExist(g *generator, rng *rand.Rand) Operation {
+	seq := g.nextSeq()
+	key := randKey(rng)
+	op := cput(key, seq, "non-existent value", true)
+	g.keys[key] = op.CPut.Value()
+	return op
+}
+
+func randCPutNoMatch(g *generator, rng *rand.Rand) Operation {
+	seq := g.nextSeq()
+	key := randKey(rng)
+	return cput(key, seq, "non-existent value", false)
 }
 
 func randAddSSTable(g *generator, rng *rand.Rand) Operation {
@@ -989,8 +1369,8 @@ func randAddSSTable(g *generator, rng *rand.Rand) Operation {
 	// AddSSTable requests cannot span multiple ranges, so we try to fit them
 	// within an existing range. This may race with a concurrent split, in which
 	// case the AddSSTable will fail, but that's ok -- most should still succeed.
-	rangeStart, rangeEnd := randRangeSpan(rng, g.currentSplits)
-	curKeys := keysBetween(g.keys, rangeStart, rangeEnd)
+	rangeStart, rangeEnd := randRangeSpan(rng, maps.Keys(g.currentSplits))
+	curKeys := keysBetween(maps.Keys(g.keys), rangeStart, rangeEnd)
 
 	// Generate keys first, to write them in order and without duplicates. We pick
 	// either existing or new keys depending on probReplace, making sure they're
@@ -1119,16 +1499,36 @@ func randBarrier(g *generator, rng *rand.Rand) Operation {
 		// them within an existing range. This may race with a concurrent split, in
 		// which case the Barrier will fail, but that's ok -- most should still
 		// succeed. These errors are ignored by the validator.
-		key, endKey = randRangeSpan(rng, g.currentSplits)
+		key, endKey = randRangeSpan(rng, maps.Keys(g.currentSplits))
 	} else {
 		key, endKey = randSpan(rng)
 	}
 	return barrier(key, endKey, withLAI)
 }
 
+func randFlushLockTable(g *generator, rng *rand.Rand) Operation {
+	// FlushLockTable can't span multiple ranges. We want to test a combination of
+	// requests that span the entire range and those that span part of a range.
+	key, endKey := randRangeSpan(rng, maps.Keys(g.currentSplits))
+
+	wholeRange := rng.Float64() < 0.5
+	if !wholeRange {
+		key = randKeyBetween(rng, key, endKey)
+	}
+
+	return flushLockTable(key, endKey)
+}
+
 func randScan(g *generator, rng *rand.Rand) Operation {
 	key, endKey := randSpan(rng)
 	return scan(key, endKey)
+}
+
+func randScanFollowerRead(g *generator, rng *rand.Rand) Operation {
+	key, endKey := randSpan(rng)
+	op := scan(key, endKey)
+	op.Scan.FollowerReadEligible = true
+	return op
 }
 
 func randScanForUpdate(g *generator, rng *rand.Rand) Operation {
@@ -1195,6 +1595,13 @@ func randReverseScan(g *generator, rng *rand.Rand) Operation {
 	return op
 }
 
+func randReverseScanFollowerRead(g *generator, rng *rand.Rand) Operation {
+	op := randScan(g, rng)
+	op.Scan.Reverse = true
+	op.Scan.FollowerReadEligible = true
+	return op
+}
+
 func randReverseScanForUpdate(g *generator, rng *rand.Rand) Operation {
 	op := randReverseScan(g, rng)
 	op.Scan.ForUpdate = true
@@ -1257,15 +1664,28 @@ func randReverseScanForShareSkipLockedGuaranteedDurability(g *generator, rng *ra
 
 func randDelMissing(g *generator, rng *rand.Rand) Operation {
 	key := randKey(rng)
-	g.keys[key] = struct{}{}
+	g.keys[key] = ""
 	seq := g.nextSeq()
 	return del(key, seq)
 }
 
 func randDelExisting(g *generator, rng *rand.Rand) Operation {
-	key := randMapKey(rng, g.keys)
+	key := randSliceKey(rng, maps.Keys(g.keys))
 	seq := g.nextSeq()
 	return del(key, seq)
+}
+
+func randDelMustAcquireExclusiveLockExisting(g *generator, rng *rand.Rand) Operation {
+	key := randSliceKey(rng, maps.Keys(g.keys))
+	seq := g.nextSeq()
+	return delMustAcquireLock(key, seq)
+}
+
+func randDelMustAcquireExclusiveLockMissing(g *generator, rng *rand.Rand) Operation {
+	key := randKey(rng)
+	g.keys[key] = ""
+	seq := g.nextSeq()
+	return delMustAcquireLock(key, seq)
 }
 
 func randDelRange(g *generator, rng *rand.Rand) Operation {
@@ -1277,11 +1697,11 @@ func randDelRange(g *generator, rng *rand.Rand) Operation {
 }
 
 func randDelRangeUsingTombstone(g *generator, rng *rand.Rand) Operation {
-	return randDelRangeUsingTombstoneImpl(g.currentSplits, g.keys, g.nextSeq, rng)
+	return randDelRangeUsingTombstoneImpl(maps.Keys(g.currentSplits), maps.Keys(g.keys), g.nextSeq, rng)
 }
 
 func randDelRangeUsingTombstoneImpl(
-	currentSplits, keys map[string]struct{}, nextSeq func() kvnemesisutil.Seq, rng *rand.Rand,
+	currentSplits, keys []string, nextSeq func() kvnemesisutil.Seq, rng *rand.Rand,
 ) Operation {
 	yn := func(probY float64) bool {
 		return rng.Float64() <= probY
@@ -1316,7 +1736,7 @@ func randDelRangeUsingTombstoneImpl(
 		if yn(0.5) || len(keys) == 0 {
 			k = randKey(rng)
 		} else {
-			k = randMapKey(rng, keys)
+			k = randSliceKey(rng, keys)
 		}
 		ek = tk(fk(k) + 1)
 	} else {
@@ -1340,7 +1760,7 @@ func randSplitNew(g *generator, rng *rand.Rand) Operation {
 }
 
 func randSplitAgain(g *generator, rng *rand.Rand) Operation {
-	key := randMapKey(rng, g.historicalSplits)
+	key := randSliceKey(rng, maps.Keys(g.historicalSplits))
 	g.currentSplits[key] = struct{}{}
 	return split(key)
 }
@@ -1351,11 +1771,24 @@ func randMergeNotSplit(g *generator, rng *rand.Rand) Operation {
 }
 
 func randMergeIsSplit(g *generator, rng *rand.Rand) Operation {
-	key := randMapKey(rng, g.currentSplits)
+	key := randSliceKey(rng, maps.Keys(g.currentSplits))
 	// Assume that this split actually got merged, even though we may have handed
 	// out a concurrent split for the same key.
 	delete(g.currentSplits, key)
 	return merge(key)
+}
+
+func randBatchMutation(g *generator, rng *rand.Rand) Operation {
+	op := &MutateBatchHeaderOperation{}
+	// We currently only support two header option mutations, both of which can
+	// lead to early termination. Half the time we choose a value very likely to
+	// lead to early termination.
+	if rng.Float64() > 0.5 {
+		op.MaxSpanRequestKeys = randItem(rng, []int64{1, 100})
+	} else {
+		op.TargetBytes = randItem(rng, []int64{1, 1 << 20 /* 1MiB */})
+	}
+	return Operation{MutateBatchHeader: op}
 }
 
 func makeRemoveReplicaFn(key string, current []roachpb.ReplicationTarget, voter bool) opGenFunc {
@@ -1452,8 +1885,80 @@ func makeTransferLeaseFn(key string, current []roachpb.ReplicationTarget) opGenF
 	}
 }
 
+func setLeaseType(_ *generator, rng *rand.Rand) Operation {
+	leaseTypes := roachpb.TestingAllLeaseTypes()
+	leaseType := leaseTypes[rng.Intn(len(leaseTypes))]
+	op := changeSetting(ChangeSettingType_SetLeaseType)
+	op.ChangeSetting.LeaseType = leaseType
+	return op
+}
+
+func toggleVirtualIntentResolution(_ *generator, rng *rand.Rand) Operation {
+	op := changeSetting(ChangeSettingType_ToggleVirtualIntentResolution)
+	op.ChangeSetting.VirEnabled = rng.Intn(2) == 0
+	return op
+}
+
 func toggleGlobalReads(_ *generator, _ *rand.Rand) Operation {
 	return changeZone(ChangeZoneType_ToggleGlobalReads)
+}
+
+func addRandNetworkPartition(g *generator, rng *rand.Rand) Operation {
+	if len(g.partitions.healthy) == 0 {
+		return addNetworkPartition(0, 0)
+	}
+	all := make([]connection, 0, len(g.partitions.healthy))
+	for conn := range g.partitions.healthy {
+		all = append(all, conn)
+	}
+	randConn := all[rng.Intn(len(all))]
+	delete(g.partitions.healthy, randConn)
+	g.partitions.partitioned[randConn] = struct{}{}
+	return addNetworkPartition(randConn.from, randConn.to)
+}
+
+func removeRandNetworkPartition(g *generator, rng *rand.Rand) Operation {
+	if len(g.partitions.partitioned) == 0 {
+		return removeNetworkPartition(0, 0)
+	}
+	all := make([]connection, 0, len(g.partitions.partitioned))
+	for conn := range g.partitions.partitioned {
+		all = append(all, conn)
+	}
+	randConn := all[rng.Intn(len(all))]
+	delete(g.partitions.partitioned, randConn)
+	g.partitions.healthy[randConn] = struct{}{}
+	return removeNetworkPartition(randConn.from, randConn.to)
+}
+
+func stopRandNode(g *generator, rng *rand.Rand) Operation {
+	randNode := g.nodes.removeRandRunning(rng)
+	return stopNode(randNode)
+}
+
+func restartRandNode(g *generator, rng *rand.Rand) Operation {
+	randNode := g.nodes.removeRandStoppedOrCrashed(rng)
+	return restartNode(randNode)
+}
+
+func crashRandNode(g *generator, rng *rand.Rand) Operation {
+	randNode := g.nodes.removeRandRunning(rng)
+	return crashNode(randNode)
+}
+
+func randMvccGC(g *generator, rng *rand.Rand) Operation {
+	key := randSliceKey(rng, maps.Keys(g.keys))
+	return mvccGC(key)
+}
+
+func isFollowerReadEligibleOp(op Operation) bool {
+	if op.Get != nil && op.Get.FollowerReadEligible {
+		return true
+	}
+	if op.Scan != nil && op.Scan.FollowerReadEligible {
+		return true
+	}
+	return false
 }
 
 func makeRandBatch(c *ClientOperationConfig) opGenFunc {
@@ -1462,10 +1967,56 @@ func makeRandBatch(c *ClientOperationConfig) opGenFunc {
 		g.registerClientOps(&allowed, c)
 		numOps := rng.Intn(4)
 		ops := make([]Operation, numOps)
-		for i := range ops {
+		followerReadEligible := true
+		var addedForwardScan, addedReverseScan bool
+
+		// TODO(ssd): MutateBatchHeader is disallowed with Puts because of
+		// validation in the txnWriteBuffer that disallows such requests. We could
+		// relax this restriction for many batches if we had information about the
+		// enclosing transaction here.
+		var addedPutOrCPut, addedBatchHeaderMutation bool
+
+		for i := 0; i < numOps; i++ {
 			ops[i] = g.selectOp(rng, allowed)
+			// The batch is eligible for follower reads only if all its ops are.
+			followerReadEligible = followerReadEligible && isFollowerReadEligibleOp(ops[i])
+			if ops[i].Scan != nil {
+				if !ops[i].Scan.Reverse {
+					if addedReverseScan {
+						// We cannot include the forward scan into the batch
+						// that already contains the reverse scan.
+						i--
+						continue
+					}
+					addedForwardScan = true
+				} else {
+					if addedForwardScan {
+						// We cannot include the reverse scan into the batch
+						// that already contains the forward scan.
+						i--
+						continue
+					}
+					addedReverseScan = true
+				}
+			} else if ops[i].Put != nil || ops[i].CPut != nil {
+				if addedBatchHeaderMutation {
+					i--
+					continue
+				}
+				addedPutOrCPut = true
+			} else if ops[i].MutateBatchHeader != nil {
+				// In addition to avoiding batch mutations when we have Puts or CPuts,
+				// we also skip adding mutations if one is already added.
+				if addedPutOrCPut || addedBatchHeaderMutation {
+					i--
+					continue
+				}
+				addedBatchHeaderMutation = true
+			}
 		}
-		return batch(ops...)
+		op := batch(ops...)
+		op.Batch.FollowerReadEligible = followerReadEligible
+		return op
 	}
 }
 
@@ -1473,28 +2024,31 @@ func (g *generator) registerClosureTxnOps(allowed *[]opGen, c *ClosureTxnConfig)
 	const Commit, Rollback = ClosureTxnType_Commit, ClosureTxnType_Rollback
 	const SSI, SI, RC = isolation.Serializable, isolation.Snapshot, isolation.ReadCommitted
 	addOpGen(allowed,
-		makeClosureTxn(Commit, SSI, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.CommitSerializable)
+		makeClosureTxn(Commit, SSI, g.Config.TxnConfig, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.CommitSerializable)
 	addOpGen(allowed,
-		makeClosureTxn(Commit, SI, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.CommitSnapshot)
+		makeClosureTxn(Commit, SI, g.Config.TxnConfig, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.CommitSnapshot)
 	addOpGen(allowed,
-		makeClosureTxn(Commit, RC, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.CommitReadCommitted)
+		makeClosureTxn(Commit, RC, g.Config.TxnConfig, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.CommitReadCommitted)
+
 	addOpGen(allowed,
-		makeClosureTxn(Rollback, SSI, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.RollbackSerializable)
+		makeClosureTxn(Rollback, SSI, g.Config.TxnConfig, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.RollbackSerializable)
 	addOpGen(allowed,
-		makeClosureTxn(Rollback, SI, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.RollbackSnapshot)
+		makeClosureTxn(Rollback, SI, g.Config.TxnConfig, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.RollbackSnapshot)
 	addOpGen(allowed,
-		makeClosureTxn(Rollback, RC, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.RollbackReadCommitted)
+		makeClosureTxn(Rollback, RC, g.Config.TxnConfig, &c.TxnClientOps, &c.TxnBatchOps, nil /* commitInBatch*/, &c.SavepointOps), c.RollbackReadCommitted)
+
 	addOpGen(allowed,
-		makeClosureTxn(Commit, SSI, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps, &c.SavepointOps), c.CommitSerializableInBatch)
+		makeClosureTxn(Commit, SSI, g.Config.TxnConfig, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps, &c.SavepointOps), c.CommitSerializableInBatch)
 	addOpGen(allowed,
-		makeClosureTxn(Commit, SI, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps, &c.SavepointOps), c.CommitSnapshotInBatch)
+		makeClosureTxn(Commit, SI, g.Config.TxnConfig, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps, &c.SavepointOps), c.CommitSnapshotInBatch)
 	addOpGen(allowed,
-		makeClosureTxn(Commit, RC, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps, &c.SavepointOps), c.CommitReadCommittedInBatch)
+		makeClosureTxn(Commit, RC, g.Config.TxnConfig, &c.TxnClientOps, &c.TxnBatchOps, &c.CommitBatchOps, &c.SavepointOps), c.CommitReadCommittedInBatch)
 }
 
 func makeClosureTxn(
 	txnType ClosureTxnType,
 	iso isolation.Level,
+	txnConfig TxnConfig,
 	txnClientOps *ClientOperationConfig,
 	txnBatchOps *BatchOperationConfig,
 	commitInBatch *ClientOperationConfig,
@@ -1512,6 +2066,7 @@ func makeClosureTxn(
 		// Stack of savepoint indexes/ids.
 		// The last element of the slice is the top of the stack.
 		var spIDs []int
+		followerReadEligible := true
 		for i := range ops {
 			// In each iteration, we start with the allowed non-savepoint ops,
 			// and we add the valid savepoint ops in registerSavepointOps.
@@ -1522,19 +2077,36 @@ func makeClosureTxn(
 			// allowed savepoint ops changes. See registerSavepointOps.
 			g.registerSavepointOps(&allowedIncludingSavepointOps, savepointOps, spIDs, i)
 			ops[i] = g.selectOp(rng, allowedIncludingSavepointOps)
+			// The transaction is eligible for follower reads only if all its ops are.
+			followerReadEligible = followerReadEligible && isFollowerReadEligibleOp(ops[i])
 			// Now that a random op is selected, we may need to update the stack of
 			// existing savepoints. See maybeUpdateSavepoints.
 			maybeUpdateSavepoints(&spIDs, ops[i])
 		}
 		op := closureTxn(txnType, iso, ops...)
+		if txnConfig.RandomUserPriority {
+			op.ClosureTxn.UserPriority = randomUserPriority(rng)
+		}
+		op.ClosureTxn.BufferedWrites = rng.Float64() < txnConfig.BufferedWritesProb
 		if commitInBatch != nil {
 			if txnType != ClosureTxnType_Commit {
 				panic(errors.AssertionFailedf(`CommitInBatch must commit got: %s`, txnType))
 			}
 			op.ClosureTxn.CommitInBatch = makeRandBatch(commitInBatch)(g, rng).Batch
 		}
+		op.ClosureTxn.FollowerReadEligible = followerReadEligible
 		return op
 	}
+}
+
+var userPriorities = [3]roachpb.UserPriority{
+	roachpb.MinUserPriority,
+	roachpb.NormalUserPriority,
+	roachpb.MaxUserPriority,
+}
+
+func randomUserPriority(rng *rand.Rand) roachpb.UserPriority {
+	return userPriorities[rng.Intn(len(userPriorities))]
 }
 
 // registerSavepointOps assumes existingSp is the current stack of savepoints
@@ -1653,15 +2225,19 @@ func tk(n uint64) string {
 
 // keysBetween returns the keys between the given [start,end) span
 // in an undefined order. It takes a map for use with g.keys.
-func keysBetween(keys map[string]struct{}, start, end string) []string {
+func keysBetween(keys []string, start, end string) []string {
 	between := []string{}
 	s, e := fk(start), fk(end)
-	for key := range keys {
+	for _, key := range keys {
 		if nk := fk(key); nk >= s && nk < e {
 			between = append(between, key)
 		}
 	}
 	return between
+}
+
+func randItem[T any](rng *rand.Rand, l []T) T {
+	return l[rng.Intn(len(l))]
 }
 
 func randKey(rng *rand.Rand) string {
@@ -1679,11 +2255,7 @@ func randKey(rng *rand.Rand) string {
 
 // Interprets the provided map as the split points of the key space and returns
 // the boundaries of a random range.
-func randRangeSpan(rng *rand.Rand, curOrHistSplits map[string]struct{}) (string, string) {
-	keys := make([]string, 0, len(curOrHistSplits))
-	for key := range curOrHistSplits {
-		keys = append(keys, key)
-	}
+func randRangeSpan(rng *rand.Rand, keys []string) (string, string) {
 	sort.Strings(keys)
 	if len(keys) == 0 {
 		// No splits.
@@ -1703,11 +2275,11 @@ func randRangeSpan(rng *rand.Rand, curOrHistSplits map[string]struct{}) (string,
 	return keys[idx-1], keys[idx]
 }
 
-func randMapKey(rng *rand.Rand, m map[string]struct{}) string {
-	if len(m) == 0 {
+func randSliceKey(rng *rand.Rand, keys []string) string {
+	if len(keys) == 0 {
 		return randKey(rng)
 	}
-	k, ek := randRangeSpan(rng, m)
+	k, ek := randRangeSpan(rng, keys)
 	// If there is only one key in the map we will get [0,x) or [x,max)
 	// back and want to return `x` to avoid the endpoints, which are
 	// reserved.
@@ -1814,7 +2386,31 @@ func getForShareSkipLockedGuaranteedDurability(key string) Operation {
 }
 
 func put(key string, seq kvnemesisutil.Seq) Operation {
-	return Operation{Put: &PutOperation{Key: []byte(key), Seq: seq}}
+	return Operation{Put: &PutOperation{
+		Key: []byte(key),
+		Seq: seq}}
+}
+
+func putMustAcquireLock(key string, seq kvnemesisutil.Seq) Operation {
+	return Operation{Put: &PutOperation{
+		Key:                      []byte(key),
+		MustAcquireExclusiveLock: true,
+		Seq:                      seq}}
+}
+
+func cput(key string, seq kvnemesisutil.Seq, expVal string, allowIfDoesNotExist bool) Operation {
+	op := Operation{
+		CPut: &CPutOperation{
+			Key:                 []byte(key),
+			Seq:                 seq,
+			ExpVal:              []byte(expVal),
+			AllowIfDoesNotExist: allowIfDoesNotExist,
+		},
+	}
+	if expVal == "" {
+		op.CPut.ExpVal = nil
+	}
+	return op
 }
 
 func scan(key, endKey string) Operation {
@@ -1904,6 +2500,14 @@ func del(key string, seq kvnemesisutil.Seq) Operation {
 	}}
 }
 
+func delMustAcquireLock(key string, seq kvnemesisutil.Seq) Operation {
+	return Operation{Delete: &DeleteOperation{
+		Key:                      []byte(key),
+		Seq:                      seq,
+		MustAcquireExclusiveLock: true,
+	}}
+}
+
 func delRange(key, endKey string, seq kvnemesisutil.Seq) Operation {
 	return Operation{DeleteRange: &DeleteRangeOperation{Key: []byte(key), EndKey: []byte(endKey), Seq: seq}}
 }
@@ -1926,6 +2530,10 @@ func changeReplicas(key string, changes ...kvpb.ReplicationChange) Operation {
 
 func transferLease(key string, target roachpb.StoreID) Operation {
 	return Operation{TransferLease: &TransferLeaseOperation{Key: []byte(key), Target: target}}
+}
+
+func changeSetting(changeType ChangeSettingType) Operation {
+	return Operation{ChangeSetting: &ChangeSettingOperation{Type: changeType}}
 }
 
 func changeZone(changeType ChangeZoneType) Operation {
@@ -1952,6 +2560,13 @@ func barrier(key, endKey string, withLAI bool) Operation {
 	}}
 }
 
+func flushLockTable(key, endKey string) Operation {
+	return Operation{FlushLockTable: &FlushLockTableOperation{
+		Key:    []byte(key),
+		EndKey: []byte(endKey),
+	}}
+}
+
 func createSavepoint(id int) Operation {
 	return Operation{SavepointCreate: &SavepointCreateOperation{ID: int32(id)}}
 }
@@ -1962,4 +2577,67 @@ func releaseSavepoint(id int) Operation {
 
 func rollbackSavepoint(id int) Operation {
 	return Operation{SavepointRollback: &SavepointRollbackOperation{ID: int32(id)}}
+}
+
+func addNetworkPartition(from int, to int) Operation {
+	return Operation{
+		AddNetworkPartition: &AddNetworkPartitionOperation{FromNode: int32(from), ToNode: int32(to)},
+	}
+}
+
+func removeNetworkPartition(from int, to int) Operation {
+	return Operation{
+		RemoveNetworkPartition: &RemoveNetworkPartitionOperation{FromNode: int32(from), ToNode: int32(to)},
+	}
+}
+
+func stopNode(nodeID int) Operation {
+	return Operation{StopNode: &StopNodeOperation{NodeId: int32(nodeID)}}
+}
+
+func restartNode(nodeID int) Operation {
+	return Operation{RestartNode: &RestartNodeOperation{NodeId: int32(nodeID)}}
+}
+
+func crashNode(nodeID int) Operation {
+	return Operation{CrashNode: &CrashNodeOperation{NodeId: int32(nodeID)}}
+}
+
+func mvccGC(key string) Operation { return Operation{MvccGC: &MvccGCOperation{Key: []byte(key)}} }
+
+type countingRandSource struct {
+	count atomic.Uint64
+	inner rand.Source64
+}
+
+type counter interface {
+	Count() uint64
+}
+
+// newCountingSource creates random source that counts how many times it was
+// called for logging purposes.
+func newCountingSource(inner rand.Source64) *countingRandSource {
+	return &countingRandSource{
+		inner: inner,
+	}
+}
+
+func (c *countingRandSource) Count() uint64 {
+	return c.count.Load()
+}
+
+func (c *countingRandSource) Int63() int64 {
+	c.count.Add(1)
+	return c.inner.Int63()
+}
+
+func (c *countingRandSource) Uint64() uint64 {
+	c.count.Add(1)
+	return c.inner.Uint64()
+}
+
+func (c *countingRandSource) Seed(seed int64) {
+	// We assume that seed invalidates the count.
+	c.count.Store(0)
+	c.inner.Seed(seed)
 }

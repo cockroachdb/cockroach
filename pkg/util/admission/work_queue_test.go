@@ -8,11 +8,10 @@ package admission
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
-	"unicode"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -26,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/pebble"
+	prometheusgo "github.com/prometheus/client_model/go"
 	"github.com/stretchr/testify/require"
 )
 
@@ -58,25 +58,31 @@ func (b *builderWithMu) stringAndReset() string {
 }
 
 type testGranter struct {
-	gk   grantKind
 	name string
 	buf  *builderWithMu
 	r    requester
 
 	// Configurable knobs for tests.
-	returnValueFromTryGet bool
-	additionalTokens      int64
+	additionalTokens int64
+	printBurstQual   bool
+
+	mu struct {
+		syncutil.Mutex
+		returnValueFromTryGet bool
+	}
 }
 
 var _ granterWithStoreReplicatedWorkAdmitted = &testGranter{}
 
-func (tg *testGranter) grantKind() grantKind {
-	return tg.gk
-}
-
-func (tg *testGranter) tryGet(count int64) bool {
-	tg.buf.printf("tryGet%s: returning %t", tg.name, tg.returnValueFromTryGet)
-	return tg.returnValueFromTryGet
+func (tg *testGranter) tryGet(burstQual burstQualification, count int64) bool {
+	tg.mu.Lock()
+	defer tg.mu.Unlock()
+	if tg.printBurstQual {
+		tg.buf.printf("tryGet%s: input %s, returning %t", tg.name, burstQual.String(), tg.mu.returnValueFromTryGet)
+	} else {
+		tg.buf.printf("tryGet%s: returning %t", tg.name, tg.mu.returnValueFromTryGet)
+	}
+	return tg.mu.returnValueFromTryGet
 }
 
 func (tg *testGranter) returnGrant(count int64) {
@@ -108,9 +114,10 @@ func (tg *testGranter) storeReplicatedWorkAdmittedLocked(
 }
 
 type testWork struct {
-	tenantID roachpb.TenantID
 	cancel   context.CancelFunc
 	admitted bool
+	// For plain WorkQueue testing.
+	resp AdmitResponse
 	// For StoreWorkQueue testing.
 	handle StoreWorkHandle
 }
@@ -138,11 +145,14 @@ func (m *workMap) delete(id int) {
 	delete(m.workMap, id)
 }
 
+// resp can be empty when not testing plain WorkQueue (e.g.
+// TestSnapshotQueue).
 // handle can be empty when not testing StoreWorkQueue.
-func (m *workMap) setAdmitted(id int, handle StoreWorkHandle) {
+func (m *workMap) setAdmitted(id int, resp AdmitResponse, handle StoreWorkHandle) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.workMap[id].admitted = true
+	m.workMap[id].resp = resp
 	m.workMap[id].handle = handle
 }
 
@@ -192,15 +202,26 @@ func TestWorkQueueBasic(t *testing.T) {
 			switch d.Cmd {
 			case "init":
 				closeFn()
-				tg = &testGranter{gk: slot, buf: &buf}
-				opts := makeWorkQueueOptions(KVWork)
+				tg = &testGranter{buf: &buf}
+				st = cluster.MakeTestingClusterSettings()
+				workKind := KVWork
+				if d.HasArg("sql-kv") {
+					workKind = SQLKVResponseWork
+				} else if d.HasArg("sql-sql") {
+					workKind = SQLSQLResponseWork
+				}
+				opts := makeWorkQueueOptions(workKind)
 				timeSource = timeutil.NewManualTime(initialTime)
 				opts.timeSource = timeSource
 				opts.disableEpochClosingGoroutine = true
-				opts.disableGCTenantsAndResetUsed = true
-				st = cluster.MakeTestingClusterSettings()
+				opts.disableGCGroupsAndResetUsed = true
 				q = makeWorkQueue(log.MakeTestingAmbientContext(tracing.NewTracer()),
-					KVWork, tg, st, metrics, opts).(*WorkQueue)
+					workKind, tg, st, metrics, opts).(*WorkQueue)
+				if d.HasArg("override-all-to-bypass") {
+					q.SetOverrideAllToBypassAdmission(true)
+				} else {
+					q.SetOverrideAllToBypassAdmission(false)
+				}
 				tg.r = q
 				wrkMap.resetMap()
 				return ""
@@ -218,7 +239,7 @@ func TestWorkQueueBasic(t *testing.T) {
 				var bypass bool
 				d.ScanArgs(t, "bypass", &bypass)
 				ctx, cancel := context.WithCancel(context.Background())
-				wrkMap.set(id, &testWork{tenantID: tenant, cancel: cancel})
+				wrkMap.set(id, &testWork{cancel: cancel})
 				workInfo := WorkInfo{
 					TenantID:        tenant,
 					Priority:        admissionpb.WorkPriority(priority),
@@ -226,14 +247,17 @@ func TestWorkQueueBasic(t *testing.T) {
 					BypassAdmission: bypass,
 				}
 				go func(ctx context.Context, info WorkInfo, id int) {
-					enabled, err := q.Admit(ctx, info)
-					require.True(t, enabled)
+					require.Equal(t, int64(0), info.RequestedCount)
+					resp, err := q.Admit(ctx, info)
 					if err != nil {
 						buf.printf("id %d: admit failed", id)
 						wrkMap.delete(id)
 					} else {
+						require.True(t, resp.Enabled)
+						// Since slots, one concurrent slot always requested.
+						require.Equal(t, int64(1), resp.requestedCount)
 						buf.printf("id %d: admit succeeded", id)
-						wrkMap.setAdmitted(id, StoreWorkHandle{})
+						wrkMap.setAdmitted(id, resp, StoreWorkHandle{})
 					}
 				}(ctx, workInfo, id)
 				// Need deterministic output, and this is racing with the goroutine
@@ -244,7 +268,9 @@ func TestWorkQueueBasic(t *testing.T) {
 			case "set-try-get-return-value":
 				var v bool
 				d.ScanArgs(t, "v", &v)
-				tg.returnValueFromTryGet = v
+				tg.mu.Lock()
+				tg.mu.returnValueFromTryGet = v
+				tg.mu.Unlock()
 				return ""
 
 			case "granted":
@@ -289,29 +315,9 @@ func TestWorkQueueBasic(t *testing.T) {
 				if d.HasArg("cpu-time") {
 					d.ScanArgs(t, "cpu-time", &cpuTime)
 				}
-				q.AdmittedWorkDone(work.tenantID, time.Duration(cpuTime))
+				q.AdmittedWorkDone(work.resp, time.Duration(cpuTime))
 				wrkMap.delete(id)
 				return buf.stringAndReset()
-
-			case "set-tenant-weights":
-				var weights string
-				d.ScanArgs(t, "weights", &weights)
-				fields := strings.FieldsFunc(weights, func(r rune) bool {
-					return r == ':' || r == ',' || unicode.IsSpace(r)
-				})
-				if len(fields)%2 != 0 {
-					return "tenant and weight are not paired"
-				}
-				weightMap := make(map[uint64]uint32)
-				for i := 0; i < len(fields); i += 2 {
-					tenantID, err := strconv.Atoi(fields[i])
-					require.NoError(t, err)
-					weight, err := strconv.Atoi(fields[i+1])
-					require.NoError(t, err)
-					weightMap[uint64(tenantID)] = uint32(weight)
-				}
-				q.SetTenantWeights(weightMap)
-				return q.String()
 
 			case "print":
 				// Need deterministic output, and this is racing with the goroutine
@@ -329,8 +335,8 @@ func TestWorkQueueBasic(t *testing.T) {
 				q.tryCloseEpoch(timeSource.Now())
 				return q.String()
 
-			case "gc-tenants-and-reset-used":
-				q.gcTenantsAndResetUsed()
+			case "gc-groups-and-reset-used":
+				q.gcGroupsResetUsedAndUpdateEstimators(timeSource.Now())
 				return q.String()
 
 			default:
@@ -343,6 +349,26 @@ func scanTenantID(t *testing.T, d *datadriven.TestData) roachpb.TenantID {
 	var id int
 	d.ScanArgs(t, "tenant", &id)
 	return roachpb.MustMakeTenantID(uint64(id))
+}
+
+// newTestGroupAggMetrics wires both the primary (tenant_id, group_id) and the
+// legacy serverless-tenant (tenant_id only) AggCounter families into
+// workQueueOptions.perGroupAggMetrics for tests.
+func newTestGroupAggMetrics(m *cpuTimeTokenMetrics) *groupAggMetrics {
+	return &groupAggMetrics{
+		primary: &groupAggMetricSet{
+			admittedCount:  m.AdmittedCount,
+			waitTimeNanos:  m.WaitTimeNanos,
+			tokensUsed:     m.TokensUsed,
+			tokensReturned: m.TokensReturned,
+		},
+		legacy: &groupAggMetricSet{
+			admittedCount:  m.LegacyAdmittedCountPerTenant,
+			waitTimeNanos:  m.LegacyWaitTimeNanosPerTenant,
+			tokensUsed:     m.LegacyTokensUsedPerTenant,
+			tokensReturned: m.LegacyTokensReturnedPerTenant,
+		},
+	}
 }
 
 func maybeRetryWithWait(t *testing.T, expected string, rewrite bool, f func() string) {
@@ -365,17 +391,538 @@ func maybeRetryWithWait(t *testing.T, expected string, rewrite bool, f func() st
 	}
 }
 
-// TestWorkQueueTokenResetRace induces racing between tenantInfo.used
-// decrements and tenantInfo.used resets that used to fail until we eliminated
-// the code that decrements tenantInfo.used for tokens. It would also trigger
-// a used-after-free bug where the tenantInfo being used in Admit had been
+// TestCPUTimeTokenWorkQueue is a datadriven test of WorkQueue with
+// mode set to usesCPUTimeTokens. See the comments at
+// testdata/cpu_time_token_work_queue for details on what is tested
+// here. See TestCPUTimeTokenEstimation for testing of CPU time token
+// estimation.
+func TestCPUTimeTokenWorkQueue(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	dir := datapathutils.TestDataPath(t, "cpu_time_token_work_queue")
+	datadriven.Walk(t, dir, func(t *testing.T, path string) {
+		runCPUTimeTokenWorkQueueTest(t, path)
+	})
+}
+
+func runCPUTimeTokenWorkQueueTest(t *testing.T, path string) {
+	var q *WorkQueue
+	closeFn := func() {
+		if q != nil {
+			q.close()
+		}
+	}
+	defer closeFn()
+	var tg *testGranter
+	var wrkMap workMap
+	var buf builderWithMu
+	// 100ms after epoch.
+	initialTime := timeutil.FromUnixMicros(int64(100) * int64(time.Millisecond/time.Microsecond))
+	var timeSource *timeutil.ManualTime
+	var st *cluster.Settings
+	registry := metric.NewRegistry()
+	metrics := makeWorkQueueMetrics("", registry)
+	datadriven.RunTest(t, path,
+		func(t *testing.T, d *datadriven.TestData) string {
+			switch d.Cmd {
+			case "init":
+				closeFn()
+				tg = &testGranter{buf: &buf, printBurstQual: true}
+				st = cluster.MakeTestingClusterSettings()
+				workKind := KVWork
+				opts := makeWorkQueueOptions(workKind)
+				timeSource = timeutil.NewManualTime(initialTime)
+				opts.timeSource = timeSource
+				opts.disableEpochClosingGoroutine = true
+				opts.disableGCGroupsAndResetUsed = true
+				opts.mode = usesCPUTimeTokens
+				cpuMetrics := makeCPUTimeTokenMetrics()
+				opts.perGroupAggMetrics = newTestGroupAggMetrics(cpuMetrics)
+				opts.configHolder = newResourceGroupConfigHolder(&st.SV)
+				opts.groupKeyForWorkInfo = cpuTimeTokenGroupKeyForWorkInfo
+				q = makeWorkQueue(log.MakeTestingAmbientContext(tracing.NewTracer()),
+					workKind, tg, st, metrics, opts).(*WorkQueue)
+				q.knobs.DisableCPUTimeTokenEstimation = true
+				tg.r = q
+				wrkMap.resetMap()
+				return ""
+
+			case "admit":
+				var id int
+				d.ScanArgs(t, "id", &id)
+				if _, ok := wrkMap.get(id); ok {
+					panic(fmt.Sprintf("id %d is already used", id))
+				}
+				tenant := scanTenantID(t, d)
+				var bypass bool
+				if d.HasArg("bypass") {
+					bypass = true
+				}
+				ctx, cancel := context.WithCancel(context.Background())
+				var requestedCount int64
+				d.ScanArgs(t, "requested-count", &requestedCount)
+				var pri int
+				if d.HasArg("priority") {
+					d.ScanArgs(t, "priority", &pri)
+				}
+				wrkMap.set(id, &testWork{cancel: cancel})
+				workInfo := WorkInfo{
+					TenantID:        tenant,
+					Priority:        admissionpb.WorkPriority(pri),
+					CreateTime:      int64(1) * int64(time.Millisecond),
+					BypassAdmission: bypass,
+					RequestedCount:  requestedCount,
+				}
+				go func(ctx context.Context, info WorkInfo, id int) {
+					resp, err := q.Admit(ctx, info)
+					if err != nil {
+						buf.printf("id %d: admit failed", id)
+						wrkMap.delete(id)
+					} else {
+						require.True(t, resp.Enabled)
+						buf.printf("id %d: admit succeeded", id)
+						wrkMap.setAdmitted(id, resp, StoreWorkHandle{})
+					}
+				}(ctx, workInfo, id)
+				// Need deterministic output, and this is racing with the goroutine
+				// which is trying to get admitted. Retry to let it get scheduled.
+				maybeRetryWithWait(t, d.Expected, d.Rewrite, buf.String)
+				return buf.stringAndReset()
+
+			case "set-try-get-return-value":
+				var v bool
+				d.ScanArgs(t, "v", &v)
+				tg.mu.Lock()
+				tg.mu.returnValueFromTryGet = v
+				tg.mu.Unlock()
+				return ""
+
+			case "granted":
+				rv := tg.r.granted(grantChainID(1 /* chain ID not used */))
+				if rv > 0 {
+					// Need deterministic output, and this is racing with the goroutine that was
+					// admitted. Retry a few times.
+					maybeRetryWithWait(t, d.Expected, d.Rewrite, buf.String)
+				}
+				tg.buf.printf("granted%s: returned %d", tg.name, rv)
+				return buf.stringAndReset()
+
+			case "cancel-work":
+				var id int
+				d.ScanArgs(t, "id", &id)
+				work, ok := wrkMap.get(id)
+				if !ok {
+					return fmt.Sprintf("unknown id: %d", id)
+				}
+				if work.admitted {
+					return fmt.Sprintf("work already admitted id: %d", id)
+				}
+				work.cancel()
+				// Need deterministic output, and this is racing with the goroutine
+				// whose work is canceled. Retry to let it get scheduled.
+				maybeRetryWithWait(t, d.Expected, d.Rewrite, buf.String)
+				return buf.stringAndReset()
+
+			case "work-done":
+				var id int
+				d.ScanArgs(t, "id", &id)
+				work, ok := wrkMap.get(id)
+				if !ok {
+					return fmt.Sprintf("unknown id: %d\n", id)
+				}
+				if !work.admitted {
+					return fmt.Sprintf("id not admitted: %d\n", id)
+				}
+				cpuTime := int64(1)
+				if d.HasArg("cpu-time") {
+					d.ScanArgs(t, "cpu-time", &cpuTime)
+				}
+				q.AdmittedWorkDone(work.resp, time.Duration(cpuTime))
+				wrkMap.delete(id)
+				return buf.stringAndReset()
+
+			case "print":
+				// Need deterministic output, and this is racing with the goroutine
+				// whose work is canceled. Retry to let it get scheduled.
+				maybeRetryWithWait(t, d.Expected, d.Rewrite, q.String)
+				return q.String()
+
+			case "refill-burst-buckets":
+				var toAdd, capacity int64
+				d.ScanArgs(t, "to-add", &toAdd)
+				d.ScanArgs(t, "capacity", &capacity)
+				// Test helper: apply uniform (toAdd, capacity) to every
+				// group, bypassing burstFrac scaling. This keeps testdata
+				// files unchanged. Production code uses
+				// refillGroupBurstBuckets which scales per group.
+				q.mu.Lock()
+				q.mu.burstBucketCapacity = capacity
+				for _, group := range q.mu.groups {
+					q.refillBurstBucketLocked(group, toAdd, capacity)
+				}
+				q.mu.Unlock()
+				return ""
+
+			case "gc-groups-and-reset-used":
+				q.gcGroupsResetUsedAndUpdateEstimators(timeSource.Now())
+				return ""
+
+			case "set-max-cpu-groups":
+				var group int
+				var v bool
+				d.ScanArgs(t, "group", &group)
+				d.ScanArgs(t, "v", &v)
+				// Copy the entire config (including builtins), flip
+				// the requested group, and install directly. We bypass
+				// Set's builtin protection because the test needs to
+				// toggle maxCPU on built-in RM groups.
+				groups := q.configHolder.Snapshot().Groups()
+				fresh := make(ResourceGroupConfigSet, len(groups))
+				for gk, gc := range groups {
+					fresh[gk] = gc
+				}
+				k := rgGroupKey(0, uint64(group))
+				cur := fresh[k]
+				cur.MaxCPU = v
+				if cur.Weight == 0 {
+					cur.Weight = 1
+				}
+				fresh[k] = cur
+				q.configHolder.mu.Lock()
+				q.configHolder.mu.config = fresh
+				q.configHolder.mu.Unlock()
+				q.mu.Lock()
+				q.applyConfigLocked(q.configHolder.Snapshot().Groups())
+				q.mu.Unlock()
+				return ""
+
+			case "set-priority-based-groups":
+				var v bool
+				d.ScanArgs(t, "v", &v)
+				if v {
+					cpuTimeTokenACMode.Override(context.Background(), &st.SV, resourceManagerMode)
+					q.mu.Lock()
+					q.applyConfigLocked(q.configHolder.Snapshot().Groups())
+					q.mu.Unlock()
+				} else {
+					cpuTimeTokenACMode.Override(context.Background(), &st.SV, serverlessMode)
+				}
+				return ""
+
+			case "refill-burst-bucket-for-group":
+				var group int
+				var toAdd int64
+				var capacity int64
+				d.ScanArgs(t, "group", &group)
+				d.ScanArgs(t, "to-add", &toAdd)
+				d.ScanArgs(t, "capacity", &capacity)
+				q.refillBurstBucketForGroup(rgGroupKey(0, uint64(group)), toAdd, capacity)
+				return ""
+
+			default:
+				return fmt.Sprintf("unknown command: %s", d.Cmd)
+			}
+		})
+}
+
+// TestCPUTimeTokenEstimation tests estimation of the number of
+// CPU time tokens used by some work that calls Admit before it executes.
+// This is a test of the estimation logic *only*. See
+// TestCPUTimeTokenWorkQueue for a test of the CPU time work queue
+// itself.
+func TestCPUTimeTokenEstimation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var q *WorkQueue
+	closeFn := func() {
+		if q != nil {
+			q.close()
+		}
+	}
+	defer closeFn()
+	var tg *testGranter
+	var buf builderWithMu
+	// 100ms after epoch.
+	initialTime := timeutil.FromUnixMicros(int64(100) * int64(time.Millisecond/time.Microsecond))
+	var timeSource *timeutil.ManualTime
+	var st *cluster.Settings
+	registry := metric.NewRegistry()
+	metrics := makeWorkQueueMetrics("", registry)
+	closeFn()
+	tg = &testGranter{buf: &buf}
+	// We want all calls to tryGet to return true. Thus all calls
+	// to Admit allow admission immediately.
+	tg.mu.returnValueFromTryGet = true
+	opts := makeWorkQueueOptions(KVWork)
+	opts.mode = usesCPUTimeTokens
+	cpuMetrics := makeCPUTimeTokenMetrics()
+	opts.perGroupAggMetrics = newTestGroupAggMetrics(cpuMetrics)
+	opts.groupKeyForWorkInfo = cpuTimeTokenGroupKeyForWorkInfo
+	timeSource = timeutil.NewManualTime(initialTime)
+	opts.timeSource = timeSource
+	opts.disableEpochClosingGoroutine = true
+	opts.disableGCGroupsAndResetUsed = true
+	st = cluster.MakeTestingClusterSettings()
+	q = makeWorkQueue(log.MakeTestingAmbientContext(tracing.NewTracer()),
+		KVWork, tg, st, metrics, opts).(*WorkQueue)
+	tg.r = q
+	ctx := context.Background()
+
+	checkEstimation := func(resp AdmitResponse, expected time.Duration) {
+		require.InDelta(
+			t, expected.Nanoseconds(), resp.requestedCount, float64(time.Millisecond.Nanoseconds()),
+			"expected %v, got %v (tolerance 1ms)", time.Duration(expected.Nanoseconds()), time.Duration(resp.requestedCount))
+	}
+
+	// At init time, the estimators haven't seen any requests yet. They are
+	// hard-coded to return a single nanosecond token as an estimate in this
+	// case. Use a non-built-in tenant ID so the per-tenant estimator is
+	// eligible for GC at the bottom of the test.
+	info1 := WorkInfo{
+		TenantID: roachpb.MustMakeTenantID(4),
+	}
+	resp1, err := q.Admit(ctx, info1)
+	require.NoError(t, err)
+	checkEstimation(resp1, time.Nanosecond)
+
+	// A bunch of work finishes. 3*100=300 pieces of work have
+	// finished in total. Every 3*10=30 pieces of work that finish,
+	// a call to update happens, and the exponentially-smoothed estimates
+	// are updated. This simulates 30 pieces of work finishing every 1s,
+	// for 10s total (see the ticker in initWorkQueue). The rest of the
+	// cases are structured in a similar fashion, and so we will not
+	// repeat this explanation.
+	//
+	// In this case, all work is for tenant 1. The mean is 100ms. So,
+	// after a number of calls to update updating the exponentially-
+	// smoothed estimates, we expect 100ms for future estimates (see
+	// next call to Admit down below).
+	for i := 1; i <= 100; i++ {
+		q.AdmittedWorkDone(resp1, 100*time.Millisecond)
+		q.AdmittedWorkDone(resp1, 50*time.Millisecond)
+		q.AdmittedWorkDone(resp1, 150*time.Millisecond)
+
+		if i%10 == 0 {
+			q.gcGroupsResetUsedAndUpdateEstimators(time.Now())
+		}
+	}
+
+	resp1, err = q.Admit(ctx, info1)
+	require.NoError(t, err)
+	checkEstimation(resp1, 100*time.Millisecond)
+
+	// Tenant 2 is a new tenant. So the global estimator should be
+	// used. The global estimator has seen the same workload as
+	// tenant 1's estimator, so it should make the same estimate:
+	// 100ms.
+	info2 := WorkInfo{
+		TenantID: roachpb.MustMakeTenantID(2),
+	}
+	resp2, err := q.Admit(ctx, info2)
+	require.NoError(t, err)
+	checkEstimation(resp2, 100*time.Millisecond)
+
+	// A bunch of work finishes for tenant 1 and tenant 2. The mean for
+	// the tenant 1 work is 200ms. The mean for the tenant 2 work is
+	// 300ms.
+	for i := 1; i <= 100; i++ {
+		q.AdmittedWorkDone(resp1, 200*time.Millisecond)
+		q.AdmittedWorkDone(resp1, 150*time.Millisecond)
+		q.AdmittedWorkDone(resp1, 250*time.Millisecond)
+
+		q.AdmittedWorkDone(resp2, 300*time.Millisecond)
+		q.AdmittedWorkDone(resp2, 250*time.Millisecond)
+		q.AdmittedWorkDone(resp2, 350*time.Millisecond)
+
+		if i%10 == 0 {
+			q.gcGroupsResetUsedAndUpdateEstimators(time.Now())
+		}
+	}
+
+	resp1, err = q.Admit(ctx, info1)
+	require.NoError(t, err)
+	checkEstimation(resp1, 200*time.Millisecond)
+
+	resp2, err = q.Admit(ctx, info2)
+	require.NoError(t, err)
+	checkEstimation(resp2, 300*time.Millisecond)
+
+	// Tenant 3 is a new tenant. So the global estimator should be
+	// used. Lately, the estimator has seen equal number of 200ms mean
+	// requests and 300ms mean requests. (200 + 300) / 2 = 500 / 2 =
+	// 250. So 250ms is the expected estimate for tenant 3 work.
+	info3 := WorkInfo{
+		TenantID: roachpb.MustMakeTenantID(3),
+	}
+	resp3, err := q.Admit(ctx, info3)
+	require.NoError(t, err)
+	checkEstimation(resp3, 250*time.Millisecond)
+
+	// GC the per-tenant estimators (two ticks separated by the idle
+	// threshold), forcing tenant 1 & tenant 2 to fall back to the
+	// global estimator like tenant 3.
+	t0 := time.Now()
+	q.gcGroupsResetUsedAndUpdateEstimators(t0)
+	q.gcGroupsResetUsedAndUpdateEstimators(t0.Add(groupGCIdleThreshold + time.Second))
+	resp1, err = q.Admit(ctx, info1)
+	require.NoError(t, err)
+	checkEstimation(resp1, 250*time.Millisecond)
+	resp2, err = q.Admit(ctx, info2)
+	require.NoError(t, err)
+	checkEstimation(resp2, 250*time.Millisecond)
+	resp3, err = q.Admit(ctx, info3)
+	require.NoError(t, err)
+	checkEstimation(resp3, 250*time.Millisecond)
+}
+
+// makeCPUTimeTokenWorkQueue creates a WorkQueue in CTT mode for testing. The
+// returned testGranter has tryGet returning true by default (all Admit calls
+// succeed immediately).
+func makeCPUTimeTokenWorkQueue(
+	t *testing.T,
+) (q *WorkQueue, tg *testGranter, st *cluster.Settings, cleanup func()) {
+	var buf builderWithMu
+	tg = &testGranter{buf: &buf}
+	tg.mu.returnValueFromTryGet = true
+
+	st = cluster.MakeTestingClusterSettings()
+	metrics := makeWorkQueueMetrics("", metric.NewRegistry())
+
+	initialTime := timeutil.FromUnixMicros(
+		int64(100) * int64(time.Millisecond/time.Microsecond))
+	opts := makeWorkQueueOptions(KVWork)
+	opts.mode = usesCPUTimeTokens
+	cpuMetrics := makeCPUTimeTokenMetrics()
+	opts.perGroupAggMetrics = newTestGroupAggMetrics(cpuMetrics)
+	opts.timeSource = timeutil.NewManualTime(initialTime)
+	opts.disableEpochClosingGoroutine = true
+	opts.disableGCGroupsAndResetUsed = true
+	opts.configHolder = newResourceGroupConfigHolder(&st.SV)
+	opts.groupKeyForWorkInfo = cpuTimeTokenGroupKeyForWorkInfo
+
+	q = makeWorkQueue(log.MakeTestingAmbientContext(tracing.NewTracer()),
+		KVWork, tg, st, metrics, opts).(*WorkQueue)
+	tg.r = q
+	return q, tg, st, q.close
+}
+
+// TestSQLCPUAdmission verifies the SQL CPU admission integration with the CTT
+// WorkQueue. SQL CPU admission differs from KV admission: it sets
+// RequestedCount to the exact CPU consumed (from grunning), bypassing the
+// estimator, and does not call AdmittedWorkDone.
+func TestSQLCPUAdmission(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	tenantID := roachpb.MustMakeTenantID(1)
+
+	t.Run("explicit-requested-count-skips-estimator", func(t *testing.T) {
+		q, _, _, cleanup := makeCPUTimeTokenWorkQueue(t)
+		defer cleanup()
+
+		// Train the estimator so it returns something other than 1ns.
+		info := WorkInfo{TenantID: tenantID}
+		resp, err := q.Admit(ctx, info)
+		require.NoError(t, err)
+		for i := 0; i < 100; i++ {
+			q.AdmittedWorkDone(resp, 50*time.Millisecond)
+			if i%10 == 0 {
+				q.gcGroupsResetUsedAndUpdateEstimators(time.Now())
+			}
+		}
+
+		// Verify the estimator is trained.
+		resp, err = q.Admit(ctx, info)
+		require.NoError(t, err)
+		require.Greater(t, resp.requestedCount, int64(time.Millisecond),
+			"estimator should return a value >> 1ns after training")
+
+		// Admit with an explicit RequestedCount — the estimator should be
+		// skipped and the exact value preserved. This is the path taken by
+		// SQL CPU admission via reportAndAcquireConsumedCPU.
+		explicitCount := int64(12345)
+		resp, err = q.Admit(ctx, WorkInfo{
+			TenantID:       tenantID,
+			RequestedCount: explicitCount,
+		})
+		require.NoError(t, err)
+		require.Equal(t, explicitCount, resp.requestedCount,
+			"explicit RequestedCount should not be overridden by estimator")
+
+		// A subsequent Admit without RequestedCount still uses the
+		// estimator (the explicit call didn't corrupt anything).
+		resp, err = q.Admit(ctx, info)
+		require.NoError(t, err)
+		require.Greater(t, resp.requestedCount, int64(time.Millisecond),
+			"estimator should still work for callers that don't set RequestedCount")
+	})
+
+	t.Run("report-cpu-updates-counters", func(t *testing.T) {
+		q, _, _, cleanup := makeCPUTimeTokenWorkQueue(t)
+		defer cleanup()
+
+		provider := &sqlCPUProviderImpl{}
+
+		// Gateway CPU.
+		h := newSQLCPUAdmissionHandle(
+			WorkInfo{TenantID: tenantID}, true /* atGateway */, provider, q)
+		require.NoError(t, h.reportAndAcquireConsumedCPU(ctx, 5*time.Millisecond, false /* noWait */))
+		gw, dist := provider.GetCumulativeSQLCPUNanos()
+		require.Equal(t, int64(5*time.Millisecond), gw)
+		require.Equal(t, int64(0), dist)
+
+		// DistSQL CPU.
+		h2 := newSQLCPUAdmissionHandle(
+			WorkInfo{TenantID: tenantID}, false /* atGateway */, provider, q)
+		require.NoError(t, h2.reportAndAcquireConsumedCPU(ctx, 10*time.Millisecond, false /* noWait */))
+		gw, dist = provider.GetCumulativeSQLCPUNanos()
+		require.Equal(t, int64(5*time.Millisecond), gw)
+		require.Equal(t, int64(10*time.Millisecond), dist)
+	})
+
+	t.Run("nil-work-queue-skips-admit", func(t *testing.T) {
+		provider := &sqlCPUProviderImpl{}
+		h := newSQLCPUAdmissionHandle(
+			WorkInfo{TenantID: tenantID}, true /* atGateway */, provider, nil /* wq */)
+		require.NoError(t, h.reportAndAcquireConsumedCPU(ctx, 5*time.Millisecond, false /* noWait */))
+		gw, _ := provider.GetCumulativeSQLCPUNanos()
+		require.Equal(t, int64(5*time.Millisecond), gw)
+	})
+
+	t.Run("context-canceled-propagates-error", func(t *testing.T) {
+		q, tg, _, cleanup := makeCPUTimeTokenWorkQueue(t)
+		defer cleanup()
+
+		// Make tryGet return false so Admit blocks and observes the
+		// canceled context.
+		tg.mu.Lock()
+		tg.mu.returnValueFromTryGet = false
+		tg.mu.Unlock()
+
+		provider := &sqlCPUProviderImpl{}
+		h := newSQLCPUAdmissionHandle(
+			WorkInfo{TenantID: tenantID}, true /* atGateway */, provider, q)
+		cancelCtx, cancel := context.WithCancel(ctx)
+		cancel()
+		err := h.reportAndAcquireConsumedCPU(cancelCtx, 1*time.Millisecond, false /* noWait */)
+		require.ErrorIs(t, err, context.Canceled)
+	})
+}
+
+// TestWorkQueueTokenResetRace induces racing between groupInfo.used
+// decrements and groupInfo.used resets that used to fail until we eliminated
+// the code that decrements groupInfo.used for tokens. It would also trigger
+// a used-after-free bug where the groupInfo being used in Admit had been
 // returned to the sync.Pool because the used value was reset.
 func TestWorkQueueTokenResetRace(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
 	var buf builderWithMu
-	tg := &testGranter{gk: slot, buf: &buf}
+	tg := &testGranter{buf: &buf}
 	st := cluster.MakeTestingClusterSettings()
 	registry := metric.NewRegistry()
 	metrics := makeWorkQueueMetrics("", registry)
@@ -386,7 +933,8 @@ func TestWorkQueueTokenResetRace(t *testing.T) {
 	stopCh := make(chan struct{})
 	errCount, totalCount := 0, 0
 	var mu syncutil.Mutex
-	go func() {
+	var wg sync.WaitGroup
+	wg.Go(func() {
 		ticker := time.NewTicker(time.Microsecond * 100)
 		done := false
 		var work *testWork
@@ -395,22 +943,25 @@ func TestWorkQueueTokenResetRace(t *testing.T) {
 			select {
 			case <-ticker.C:
 				ctx, cancel := context.WithCancel(context.Background())
-				work2 := &testWork{tenantID: roachpb.MustMakeTenantID(tenantID), cancel: cancel}
+				work2 := &testWork{cancel: cancel}
 				tenantID++
-				go func(ctx context.Context, w *testWork, createTime int64) {
-					enabled, err := q.Admit(ctx, WorkInfo{
-						TenantID:   w.tenantID,
+				wg.Add(1)
+				go func(ctx context.Context, tenantID uint64, createTime int64) {
+					defer wg.Done()
+					resp, err := q.Admit(ctx, WorkInfo{
+						TenantID:   roachpb.MustMakeTenantID(tenantID),
 						CreateTime: createTime,
 					})
 					buf.printf("admit")
-					require.Equal(t, true, enabled)
 					mu.Lock()
 					defer mu.Unlock()
 					totalCount++
 					if err != nil {
 						errCount++
+					} else {
+						require.Equal(t, true, resp.Enabled)
 					}
-				}(ctx, work2, createTime)
+				}(ctx, tenantID, createTime)
 				createTime++
 				if work != nil {
 					rv := tg.r.granted(1)
@@ -437,7 +988,7 @@ func TestWorkQueueTokenResetRace(t *testing.T) {
 				buf.stringAndReset()
 			}
 		}
-	}()
+	})
 	go func() {
 		for {
 			select {
@@ -447,13 +998,14 @@ func TestWorkQueueTokenResetRace(t *testing.T) {
 				// This hot loop with GC calls is able to trigger the previously buggy
 				// code by squeezing in multiple times between the token grant and
 				// cancellation.
-				q.gcTenantsAndResetUsed()
+				q.gcGroupsResetUsedAndUpdateEstimators(time.Now())
 			}
 		}
 	}()
 	time.Sleep(time.Second)
 	close(stopCh)
 	q.close()
+	wg.Wait()
 	mu.Lock()
 	t.Logf("total: %d, err: %d", totalCount, errCount)
 	mu.Unlock()
@@ -566,13 +1118,13 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 			switch d.Cmd {
 			case "init":
 				closeFn()
-				tg[admissionpb.RegularWorkClass] = &testGranter{gk: token, name: " regular", buf: &buf}
-				tg[admissionpb.ElasticWorkClass] = &testGranter{gk: token, name: " elastic", buf: &buf}
+				tg[admissionpb.RegularWorkClass] = &testGranter{name: " regular", buf: &buf}
+				tg[admissionpb.ElasticWorkClass] = &testGranter{name: " elastic", buf: &buf}
 				opts := makeWorkQueueOptions(KVWork)
-				opts.usesTokens = true
+				opts.mode = usesTokens
 				opts.timeSource = timeutil.NewManualTime(timeutil.FromUnixMicros(0))
 				opts.disableEpochClosingGoroutine = true
-				opts.disableGCTenantsAndResetUsed = true
+				opts.disableGCGroupsAndResetUsed = true
 				st = cluster.MakeTestingClusterSettings()
 				var mockCoordMu syncutil.Mutex
 				q = makeStoreWorkQueue(log.MakeTestingAmbientContext(tracing.NewTracer()), roachpb.StoreID(1),
@@ -599,7 +1151,7 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 				var bypass bool
 				d.ScanArgs(t, "bypass", &bypass)
 				ctx, cancel := context.WithCancel(context.Background())
-				wrkMap.set(id, &testWork{tenantID: tenant, cancel: cancel})
+				wrkMap.set(id, &testWork{cancel: cancel})
 				workInfo := StoreWriteWorkInfo{
 					WorkInfo: WorkInfo{
 						TenantID:        tenant,
@@ -615,7 +1167,7 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 						wrkMap.delete(id)
 					} else {
 						buf.printf("id %d: admit succeeded with handle %+v", id, handle)
-						wrkMap.setAdmitted(id, handle)
+						wrkMap.setAdmitted(id, AdmitResponse{}, handle)
 					}
 				}(ctx, workInfo, id)
 				// Need deterministic output, and this is racing with the goroutine
@@ -627,7 +1179,10 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 				var v bool
 				d.ScanArgs(t, "v", &v)
 				wc := tryScanWorkClass(t, d)
-				tg[wc].returnValueFromTryGet = v
+
+				tg[wc].mu.Lock()
+				tg[wc].mu.returnValueFromTryGet = v
+				tg[wc].mu.Unlock()
 				return ""
 
 			case "set-store-request-estimates":
@@ -736,3 +1291,325 @@ func TestStoreWorkQueueBasic(t *testing.T) {
 // - Test race between grant and cancellation
 // - Add microbenchmark with high concurrency and procs for full admission
 //   system
+
+// getGroupLocked returns q.mu.groups[key] (or nil if absent) under
+// q.mu. Tests can read fields on the returned *groupInfo without
+// holding the lock, which is safe in tests where Admit/GC aren't
+// racing.
+func getGroupLocked(q *WorkQueue, key groupKey) *groupInfo {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return q.mu.groups[key]
+}
+
+// withGroupLocked invokes fn with q.mu held. Use for tests that
+// need to mutate groupInfo fields (e.g., driving used=0 to make the
+// group GC-eligible).
+func withGroupLocked(q *WorkQueue, fn func()) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	fn()
+}
+
+// TestApplyConfigLockedMaterializesGroups verifies that
+// applyConfigLocked materializes the holder's snapshot into
+// q.mu.groups: the built-in high/low rg containers must exist on the
+// queue immediately after, with the configured weight/maxCPU. Without
+// this, lazy-create would still reach the right state on first admit,
+// but operator-facing observers (metrics, debug print) would not see
+// the groups until traffic arrives.
+func TestApplyConfigLockedMaterializesGroups(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	q, _, st, cleanup := makeCPUTimeTokenWorkQueue(t)
+	defer cleanup()
+
+	// Pre-condition: no rg containers exist yet (we're in serverless mode).
+	require.Nil(t, getGroupLocked(q, highResourceGroupKey))
+	require.Nil(t, getGroupLocked(q, lowResourceGroupKey))
+
+	// Switch to RM mode and apply the config.
+	ctx := context.Background()
+	cpuTimeTokenACMode.Override(ctx, &st.SV, resourceManagerMode)
+	q.refreshResourceGroupConfig()
+
+	// Post-condition: both built-in rg containers pre-created with
+	// their configured weight/maxCPU.
+	high := getGroupLocked(q, highResourceGroupKey)
+	require.NotNil(t, high, "high rg container should be pre-created by apply")
+	require.Equal(t, uint32(80), high.weight)
+	require.True(t, high.cpuTimeBurstBucket.maxCPU)
+	low := getGroupLocked(q, lowResourceGroupKey)
+	require.NotNil(t, low, "low rg container should be pre-created by apply")
+	require.Equal(t, uint32(20), low.weight)
+	require.False(t, low.cpuTimeBurstBucket.maxCPU)
+}
+
+// TestRefreshResourceGroupConfigInServerlessIsNoOp verifies that
+// refreshResourceGroupConfig does not touch q.mu.groups when the
+// queue is in serverless mode. The holder Set takes effect, but the
+// WorkQueue's cached state stays untouched until the queue enters
+// RM mode.
+func TestRefreshResourceGroupConfigInServerlessIsNoOp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	q, _, _, cleanup := makeCPUTimeTokenWorkQueue(t)
+	defer cleanup()
+	// Stay in serverless mode (default).
+
+	q.configHolder.Set(ResourceGroupConfigSet{
+		rgGroupKey(0, 42): {Weight: 60, MaxCPU: true},
+	})
+	q.refreshResourceGroupConfig()
+
+	// rg containers must NOT have been pre-created.
+	require.Nil(t, getGroupLocked(q, rgGroupKey(0, 42)),
+		"refresh in serverless mode must not pre-create rg containers")
+
+	// But the holder DID record the change (it's caller-side state).
+	cfg := q.configHolder.Snapshot().Groups().GetOrDefault(rgGroupKey(0, 42))
+	require.Equal(t, uint32(60), cfg.Weight)
+	require.True(t, cfg.MaxCPU)
+}
+
+// TestGCExemptsBuiltins verifies that gcGroupsResetUsedAndUpdateEstimators
+// keeps built-in groups installed even when they have no recent
+// activity. Built-ins are always present in ResourceGroupConfigHolder,
+// so dropping and recreating them per interval would be wasted churn.
+func TestGCExemptsBuiltins(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	q, _, st, cleanup := makeCPUTimeTokenWorkQueue(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	cpuTimeTokenACMode.Override(ctx, &st.SV, resourceManagerMode)
+	q.refreshResourceGroupConfig()
+
+	high := getGroupLocked(q, highResourceGroupKey)
+	require.NotNil(t, high)
+	require.True(t, highResourceGroupKey.isBuiltin())
+	withGroupLocked(q, func() { high.used = 0 })
+	t0 := time.Now()
+	q.gcGroupsResetUsedAndUpdateEstimators(t0)
+	q.gcGroupsResetUsedAndUpdateEstimators(t0.Add(groupGCIdleThreshold + time.Second))
+
+	require.NotNil(t, getGroupLocked(q, highResourceGroupKey),
+		"built-in group must survive GC")
+}
+
+// TestGCThenLazyRecreateRecoversFromHolder verifies the design's
+// safety claim: after GC removes an idle configured group, the next
+// admit recreates it via the holder with the correct weight/maxCPU.
+// Without this property, GC could silently downgrade a configured
+// group's effective weight to defaultGroupConfig values until the
+// next refresh. Uses a non-built-in tenant key so the GC step is
+// actually exercised (built-ins are exempt; see TestGCExemptsBuiltins).
+func TestGCThenLazyRecreateRecoversFromHolder(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	q, _, _, cleanup := makeCPUTimeTokenWorkQueue(t)
+	defer cleanup()
+
+	const tenantID = 42
+	key := tenantGroupKey(tenantID)
+	require.False(t, key.isBuiltin())
+	q.configHolder.Set(ResourceGroupConfigSet{
+		key: {Weight: 99, BurstFrac: 0.5, MaxCPU: true},
+	})
+
+	// Lazy-create via Admit so the queue's groupInfo picks up the
+	// holder config.
+	_, err := q.Admit(context.Background(), WorkInfo{
+		TenantID: roachpb.MustMakeTenantID(tenantID),
+		Priority: admissionpb.NormalPri,
+	})
+	require.NoError(t, err)
+	g := getGroupLocked(q, key)
+	require.NotNil(t, g)
+	require.Equal(t, uint32(99), g.weight)
+	require.True(t, g.cpuTimeBurstBucket.maxCPU)
+
+	// Force GC: drive used to 0, then tick past the idle threshold.
+	withGroupLocked(q, func() { g.used = 0 })
+	t0 := time.Now()
+	q.gcGroupsResetUsedAndUpdateEstimators(t0)
+	q.gcGroupsResetUsedAndUpdateEstimators(t0.Add(groupGCIdleThreshold + time.Second))
+	require.Nil(t, getGroupLocked(q, key), "idle non-built-in group should be GC'd")
+
+	// Next admit recreates the container via the holder.
+	_, err = q.Admit(context.Background(), WorkInfo{
+		TenantID: roachpb.MustMakeTenantID(tenantID),
+		Priority: admissionpb.NormalPri,
+	})
+	require.NoError(t, err)
+	g2 := getGroupLocked(q, key)
+	require.NotNil(t, g2, "next admit should recreate the GC'd group")
+	require.Equal(t, uint32(99), g2.weight,
+		"recreated group should pick up configured weight, not default")
+	require.True(t, g2.cpuTimeBurstBucket.maxCPU,
+		"recreated group should pick up configured maxCPU, not default")
+}
+
+// TestGroupKeyForWorkInfoSelection verifies the per-WorkQueue
+// groupKey derivation policy: the default (tenantGroupKeyForWorkInfo)
+// ignores cpuTimeTokenACMode, while the CTT variant
+// (cpuTimeTokenGroupKeyForWorkInfo) honors it. This is the
+// invariant that keeps StoreWorkQueue's IO queues from being
+// reshaped by CTT settings.
+func TestGroupKeyForWorkInfoSelection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	st := cluster.MakeTestingClusterSettings()
+	ctx := context.Background()
+	info := WorkInfo{
+		TenantID: roachpb.MustMakeTenantID(5),
+		Priority: admissionpb.NormalPri,
+	}
+
+	for _, tc := range []struct {
+		name string
+		mode cpuTimeTokenMode
+	}{
+		{"off", offMode},
+		{"serverless", serverlessMode},
+		{"resource_manager", resourceManagerMode},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cpuTimeTokenACMode.Override(ctx, &st.SV, tc.mode)
+
+			require.Equal(t, tenantGroupKey(5), tenantGroupKeyForWorkInfo(info, &st.SV),
+				"default keying must not depend on cpuTimeTokenACMode")
+
+			cttKey := cpuTimeTokenGroupKeyForWorkInfo(info, &st.SV)
+			if tc.mode == resourceManagerMode {
+				require.Equal(t, highResourceGroupKey, cttKey)
+			} else {
+				require.Equal(t, tenantGroupKey(5), cttKey)
+			}
+		})
+	}
+}
+
+// TestCPUTimeTokenGroupKeyResourceGroupRouting verifies that in
+// resourceManagerMode cpuTimeTokenGroupKeyForWorkInfo routes work to
+// the built-in resource group named by WorkInfo.ResourceGroupID. An
+// unset id (0) falls through to the priority-derived group, a
+// non-built-in id is keyed by (tenant, group), and outside
+// resourceManagerMode the id is ignored entirely.
+func TestCPUTimeTokenGroupKeyResourceGroupRouting(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	st := cluster.MakeTestingClusterSettings()
+	ctx := context.Background()
+	const tenantID = 5
+
+	for _, tc := range []struct {
+		name            string
+		mode            cpuTimeTokenMode
+		resourceGroupID admissionpb.ResourceGroupID
+		priority        admissionpb.WorkPriority
+		expected        groupKey
+	}{
+		{
+			name:     "RM mode, unset id, falls back to priority",
+			mode:     resourceManagerMode,
+			priority: admissionpb.NormalPri,
+			expected: highResourceGroupKey,
+		},
+		{
+			name:            "RM mode, high id",
+			mode:            resourceManagerMode,
+			resourceGroupID: admissionpb.HighResourceGroupID,
+			// Low priority to prove the id, not the priority, picks the group.
+			priority: admissionpb.UserLowPri,
+			expected: highResourceGroupKey,
+		},
+		{
+			name:            "RM mode, low id",
+			mode:            resourceManagerMode,
+			resourceGroupID: admissionpb.LowResourceGroupID,
+			// High priority to prove the id, not the priority, picks the group.
+			priority: admissionpb.NormalPri,
+			expected: lowResourceGroupKey,
+		},
+		{
+			name:            "RM mode, non-built-in id, keyed by tenant and group",
+			mode:            resourceManagerMode,
+			resourceGroupID: 99,
+			priority:        admissionpb.UserLowPri,
+			expected:        rgGroupKey(tenantID, 99),
+		},
+		{
+			name:            "non-RM mode ignores id",
+			mode:            offMode,
+			resourceGroupID: admissionpb.LowResourceGroupID,
+			priority:        admissionpb.NormalPri,
+			expected:        tenantGroupKey(tenantID),
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cpuTimeTokenACMode.Override(ctx, &st.SV, tc.mode)
+			info := WorkInfo{
+				TenantID:        roachpb.MustMakeTenantID(tenantID),
+				ResourceGroupID: tc.resourceGroupID,
+				Priority:        tc.priority,
+			}
+			require.Equal(t, tc.expected, cpuTimeTokenGroupKeyForWorkInfo(info, &st.SV))
+		})
+	}
+}
+
+// TestGCKeepsMetricChildVisibleAcrossScrapes admits work for a
+// tenant, then simulates a sequence of GC ticks and observes
+// which labeled children the per-group parent counter exposes
+// (i.e., what a Prometheus scrape would see). The child for the
+// tenant remains visible across sub-threshold idle ticks and
+// disappears only once groupGCIdleThreshold has elapsed.
+func TestGCKeepsMetricChildVisibleAcrossScrapes(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	q, _, _, cleanup := makeCPUTimeTokenWorkQueue(t)
+	defer cleanup()
+
+	const tenantID = 42
+	info := WorkInfo{
+		TenantID: roachpb.MustMakeTenantID(tenantID),
+		Priority: admissionpb.NormalPri,
+	}
+
+	// scrape returns the tenant_id label values currently exposed
+	// on the per-group admittedCount parent.
+	scrape := func() []string {
+		var tenants []string
+		q.perGroupAggMetrics.primary.admittedCount.Each(nil, func(m *prometheusgo.Metric) {
+			for _, lp := range m.Label {
+				if lp.GetName() == "tenant_id" {
+					tenants = append(tenants, lp.GetValue())
+				}
+			}
+		})
+		return tenants
+	}
+
+	resp, err := q.Admit(context.Background(), info)
+	require.NoError(t, err)
+	q.AdmittedWorkDone(resp, 50*time.Millisecond)
+	require.Contains(t, scrape(), "42")
+
+	t0 := time.Now()
+	for i := 0; i < 5; i++ {
+		q.gcGroupsResetUsedAndUpdateEstimators(t0.Add(time.Duration(i) * time.Second))
+		require.Contains(t, scrape(), "42", "sub-threshold tick %d", i)
+	}
+
+	q.gcGroupsResetUsedAndUpdateEstimators(t0.Add(groupGCIdleThreshold))
+	require.NotContains(t, scrape(), "42")
+}

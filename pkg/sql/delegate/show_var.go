@@ -28,7 +28,7 @@ func (d *delegator) delegateShowVar(n *tree.ShowVar) (tree.Statement, error) {
 
 	if name == "all" {
 		return d.parse(
-			"SELECT variable, value FROM crdb_internal.session_variables WHERE hidden = FALSE",
+			"SELECT variable, value, description FROM crdb_internal.session_variables WHERE hidden = FALSE",
 		)
 	}
 

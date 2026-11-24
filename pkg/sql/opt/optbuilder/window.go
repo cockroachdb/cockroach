@@ -258,6 +258,15 @@ func (b *Builder) buildAggregationAsWindow(
 	for i, agg := range g.aggs {
 		argExprs := getTypedExprs(agg.Exprs)
 
+		// st_asmvt has optional arguments that must be padded with defaults
+		// before buildWindowArgs, so they get projected into columns
+		// (VariableExprs) rather than remaining as NullExprs. This is necessary
+		// because buildWindow in the execbuilder requires all window function
+		// children to be VariableExprs.
+		if agg.def.Name == "st_asmvt" {
+			argExprs = padSTAsMVTArgs(argExprs)
+		}
+
 		// Build the appropriate arguments.
 		argLists[i] = b.buildWindowArgs(argExprs, i, agg.def.Name, fromScope, g.aggInScope)
 
@@ -345,6 +354,8 @@ func (b *Builder) getTypedWindowArgs(w *windowInfo) []tree.TypedExpr {
 			null := reType(tree.DNull, argExprs[0].ResolvedType())
 			argExprs = append(argExprs, null)
 		}
+	case "st_asmvt":
+		argExprs = padSTAsMVTArgs(argExprs)
 	}
 
 	return argExprs
@@ -420,7 +431,7 @@ func (b *Builder) buildWindowOrdering(
 	ord := make(opt.Ordering, 0, len(orderBy))
 	for j, t := range orderBy {
 		// ORDER BY (a, b) => ORDER BY a, b.
-		te := inScope.resolveType(t.Expr, types.Any)
+		te := inScope.resolveType(t.Expr, types.AnyElement)
 		cols := flattenTuples([]tree.TypedExpr{te})
 
 		nullsDefaultOrder := b.hasDefaultNullsOrder(t)

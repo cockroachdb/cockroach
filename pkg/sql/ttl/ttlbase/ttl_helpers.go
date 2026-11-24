@@ -13,9 +13,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/spanutils"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
 
@@ -75,17 +77,14 @@ var (
 		false,
 		settings.WithPublic,
 	)
-)
-
-var (
-	startKeyCompareOps = map[catenumpb.IndexColumn_Direction]string{
-		catenumpb.IndexColumn_ASC:  ">",
-		catenumpb.IndexColumn_DESC: "<",
-	}
-	endKeyCompareOps = map[catenumpb.IndexColumn_Direction]string{
-		catenumpb.IndexColumn_ASC:  "<",
-		catenumpb.IndexColumn_DESC: ">",
-	}
+	processorConcurrencyOverride = settings.RegisterIntSetting(
+		settings.ApplicationLevel,
+		"sql.ttl.processor_concurrency",
+		"override for the TTL job processor concurrency (0 means use default based on GOMAXPROCS, "+
+			"and any value greater than GOMAXPROCS will be capped at GOMAXPROCS)",
+		0,
+		settings.NonNegativeInt,
+	)
 )
 
 // GetSelectBatchSize returns the table storage param value if specified or
@@ -159,22 +158,35 @@ func GetChangefeedReplicationDisabled(
 	return changefeedReplicationDisabled.Get(settingsValues)
 }
 
+// GetProcessorConcurrency returns the concurrency to use for TTL job processors.
+// If the cluster setting is 0 (default), it will return the provided default value.
+// If the cluster setting is greater than 0, it will return the minimum of the
+// cluster setting and the default value.
+func GetProcessorConcurrency(settingsValues *settings.Values, defaultConcurrency int64) int64 {
+	override := processorConcurrencyOverride.Get(settingsValues)
+	if override > 0 {
+		return min(override, defaultConcurrency)
+	}
+	return defaultConcurrency
+}
+
 // BuildScheduleLabel returns a string value intended for use as the
 // schedule_name/label column for the scheduled job created by row level TTL.
-func BuildScheduleLabel(tbl *tabledesc.Mutable) string {
-	return fmt.Sprintf("row-level-ttl: %s [%d]", tbl.GetName(), tbl.ID)
+func BuildScheduleLabel(tbl catalog.TableDescriptor) string {
+	return fmt.Sprintf("row-level-ttl: %s [%d]", tbl.GetName(), tbl.GetID())
 }
 
 func BuildSelectQuery(
 	relationName string,
 	pkColNames []string,
 	pkColDirs []catenumpb.IndexColumn_Direction,
+	pkColTypes []*types.T,
 	aostDuration time.Duration,
 	ttlExpr catpb.Expression,
 	numStartQueryBounds, numEndQueryBounds int,
 	limit int64,
 	startIncl bool,
-) string {
+) (string, error) {
 	numPkCols := len(pkColNames)
 	if numPkCols == 0 {
 		panic("pkColNames is empty")
@@ -202,52 +214,16 @@ func BuildSelectQuery(
 	buf.WriteString("\nWHERE ((")
 	buf.WriteString(string(ttlExpr))
 	buf.WriteString(") <= $1)")
-	writeBounds := func(
-		numQueryBounds int,
-		placeholderOffset int,
-		compareOps map[catenumpb.IndexColumn_Direction]string,
-		inclusive bool,
-	) {
-		if numQueryBounds > 0 {
-			buf.WriteString("\nAND (")
-			for i := 0; i < numQueryBounds; i++ {
-				isLast := i == numQueryBounds-1
-				buf.WriteString("\n  (")
-				for j := 0; j < i; j++ {
-					buf.WriteString(pkColNames[j])
-					buf.WriteString(" = $")
-					buf.WriteString(strconv.Itoa(j + placeholderOffset))
-					buf.WriteString(" AND ")
-				}
-				buf.WriteString(pkColNames[i])
-				buf.WriteString(" ")
-				buf.WriteString(compareOps[pkColDirs[i]])
-				if isLast && inclusive {
-					buf.WriteString("=")
-				}
-				buf.WriteString(" $")
-				buf.WriteString(strconv.Itoa(i + placeholderOffset))
-				buf.WriteString(")")
-				if !isLast {
-					buf.WriteString(" OR")
-				}
-			}
-			buf.WriteString("\n)")
+	if numStartQueryBounds > 0 || numEndQueryBounds > 0 {
+		buf.WriteString("\nAND ")
+		const endPlaceholderOffset = 2
+		clause, err := spanutils.RenderQueryBounds(pkColNames, pkColDirs, pkColTypes,
+			numStartQueryBounds, numEndQueryBounds, startIncl, endPlaceholderOffset)
+		if err != nil {
+			return "", err
 		}
+		buf.WriteString(clause)
 	}
-	const endPlaceholderOffset = 2
-	writeBounds(
-		numStartQueryBounds,
-		endPlaceholderOffset+numEndQueryBounds,
-		startKeyCompareOps,
-		startIncl,
-	)
-	writeBounds(
-		numEndQueryBounds,
-		endPlaceholderOffset,
-		endKeyCompareOps,
-		true, /*inclusive*/
-	)
 
 	// ORDER BY
 	buf.WriteString("\nORDER BY ")
@@ -262,7 +238,7 @@ func BuildSelectQuery(
 	// LIMIT
 	buf.WriteString("\nLIMIT ")
 	buf.WriteString(strconv.Itoa(int(limit)))
-	return buf.String()
+	return buf.String(), nil
 }
 
 func BuildDeleteQuery(

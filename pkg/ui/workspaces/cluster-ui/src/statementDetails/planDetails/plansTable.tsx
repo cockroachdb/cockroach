@@ -5,13 +5,12 @@
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { Tooltip } from "@cockroachlabs/ui-components";
-import classNames from "classnames/bind";
 import React, { ReactNode } from "react";
-import { Link } from "react-router-dom";
 
 import { ColumnDescriptor, SortedTable } from "src/sortedtable";
 
 import { Anchor } from "../../anchor";
+import { IndexStatsLink } from "../../components/links/indexStatsLink";
 import { Timestamp, Timezone } from "../../timestamp";
 import {
   Duration,
@@ -24,21 +23,17 @@ import {
   limitText,
   Count,
   intersperse,
-  EncodeDatabaseTableIndexUri,
-  EncodeDatabaseTableUri,
 } from "../../util";
-
-import styles from "./plansTable.module.scss";
 
 export type PlanHashStats =
   cockroach.server.serverpb.StatementDetailsResponse.ICollectedStatementGroupedByPlanHash;
-export class PlansSortedTable extends SortedTable<PlanHashStats> {}
-
-const cx = classNames.bind(styles);
+export const PlansSortedTable = SortedTable<PlanHashStats>;
 
 const planDetailsColumnLabels = {
   avgExecTime: "Average Execution Time",
   avgRowsRead: "Average Rows Read",
+  generic: "Generic Query Plan",
+  stmtHints: "Statement Hints",
   distSQL: "Distributed",
   execCount: "Execution Count",
   fullScan: "Full Scan",
@@ -47,9 +42,6 @@ const planDetailsColumnLabels = {
   lastExecTime: "Last Execution Time",
   latencyMax: "Max Latency",
   latencyMin: "Min Latency",
-  latencyP50: "P50 Latency",
-  latencyP90: "P90 Latency",
-  latencyP99: "P99 Latency",
   planGist: "Plan Gist",
   vectorized: "Vectorized",
 };
@@ -99,45 +91,6 @@ export const planDetailsTableTitles: PlanDetailsTableTitleType = {
         content={"The average execution time for this Explain Plan."}
       >
         {planDetailsColumnLabels.avgExecTime}
-      </Tooltip>
-    );
-  },
-  latencyP50: () => {
-    return (
-      <Tooltip
-        style="tableTitle"
-        placement="bottom"
-        content={
-          "The 50th latency percentile for sampled statement executions with this Explain Plan."
-        }
-      >
-        {planDetailsColumnLabels.latencyP50}
-      </Tooltip>
-    );
-  },
-  latencyP90: () => {
-    return (
-      <Tooltip
-        style="tableTitle"
-        placement="bottom"
-        content={
-          "The 90th latency percentile for sampled statement executions with this Explain Plan."
-        }
-      >
-        {planDetailsColumnLabels.latencyP90}
-      </Tooltip>
-    );
-  },
-  latencyP99: () => {
-    return (
-      <Tooltip
-        style="tableTitle"
-        placement="bottom"
-        content={
-          "The 99th latency percentile for sampled statement executions with this Explain Plan."
-        }
-      >
-        {planDetailsColumnLabels.latencyP99}
       </Tooltip>
     );
   },
@@ -197,6 +150,28 @@ export const planDetailsTableTitles: PlanDetailsTableTitleType = {
         content={"If the Explain Plan executed a full scan."}
       >
         {planDetailsColumnLabels.fullScan}
+      </Tooltip>
+    );
+  },
+  generic: () => {
+    return (
+      <Tooltip
+        style="tableTitle"
+        placement="bottom"
+        content={"If the Explain Plan was generic."}
+      >
+        {planDetailsColumnLabels.generic}
+      </Tooltip>
+    );
+  },
+  stmtHints: () => {
+    return (
+      <Tooltip
+        style="tableTitle"
+        placement="bottom"
+        content={"If hints from statement_hints were applied."}
+      >
+        {planDetailsColumnLabels.stmtHints}
       </Tooltip>
     );
   },
@@ -262,7 +237,7 @@ export function formatIndexes(indexes: string[], database: string): ReactNode {
   }
   const indexMap: Map<string, Array<string>> = new Map<string, Array<string>>();
   let droppedCount = 0;
-  let tableName;
+  let tableName: string;
   let idxName;
   let indexInfo;
   for (let i = 0; i < indexes.length; i++) {
@@ -288,15 +263,14 @@ export function formatIndexes(indexes: string[], database: string): ReactNode {
     const table = value[0];
     newLine = i > 0 ? <br /> : "";
     const indexesList = intersperse<ReactNode>(
-      value[1].map(idx => {
+      value[1].map((idx, i) => {
         return (
-          <Link
-            className={cx("regular-link")}
-            to={EncodeDatabaseTableIndexUri(database, table, idx)}
-            key={`${table}${idx}`}
-          >
-            {idx}
-          </Link>
+          <IndexStatsLink
+            key={`index-${i}`}
+            dbName={database}
+            escSchemaQualifiedTableName={tableName}
+            indexName={idx}
+          />
         );
       }),
       ", ",
@@ -304,13 +278,7 @@ export function formatIndexes(indexes: string[], database: string): ReactNode {
     return (
       <span key={table}>
         {newLine}
-        <Link
-          className={cx("bold-link")}
-          to={EncodeDatabaseTableUri(database, table)}
-        >
-          {table}
-        </Link>
-        : {indexesList}
+        {table}: {indexesList}
       </span>
     );
   });
@@ -330,6 +298,7 @@ export function formatIndexes(indexes: string[], database: string): ReactNode {
 
 export function makeExplainPlanColumns(
   handleDetails: (plan: PlanHashStats) => void,
+  database: string,
 ): ColumnDescriptor<PlanHashStats>[] {
   const duration = (v: number) => Duration(v * 1e9);
   const count = (v: number) => v.toFixed(1);
@@ -351,7 +320,7 @@ export function makeExplainPlanColumns(
       name: "indexes",
       title: planDetailsTableTitles.indexes(),
       cell: (item: PlanHashStats) =>
-        formatIndexes(item.stats.indexes, item.metadata.databases[0]),
+        formatIndexes(item.stats.indexes, database),
       sort: (item: PlanHashStats) => item.stats.indexes?.join(""),
     },
     {
@@ -417,25 +386,20 @@ export function makeExplainPlanColumns(
       sort: (item: PlanHashStats) => item.stats.latency_info.max,
     },
     {
-      name: "latencyP50",
-      title: planDetailsTableTitles.latencyP50(),
+      name: "generic",
+      title: planDetailsTableTitles.generic(),
       cell: (item: PlanHashStats) =>
-        formatNumberForDisplay(item.stats.latency_info.p50, duration),
-      sort: (item: PlanHashStats) => item.stats.latency_info.p50,
+        RenderCount(item.stats.generic_count, item.stats.count),
+      sort: (item: PlanHashStats) =>
+        RenderCount(item.stats.generic_count, item.stats.count),
     },
     {
-      name: "latencyP90",
-      title: planDetailsTableTitles.latencyP90(),
+      name: "stmtHints",
+      title: planDetailsTableTitles.stmtHints(),
       cell: (item: PlanHashStats) =>
-        formatNumberForDisplay(item.stats.latency_info.p90, duration),
-      sort: (item: PlanHashStats) => item.stats.latency_info.p90,
-    },
-    {
-      name: "latencyP99",
-      title: planDetailsTableTitles.latencyP99(),
-      cell: (item: PlanHashStats) =>
-        formatNumberForDisplay(item.stats.latency_info.p99, duration),
-      sort: (item: PlanHashStats) => item.stats.latency_info.p99,
+        RenderCount(item.stats.stmt_hints_count, item.stats.count),
+      sort: (item: PlanHashStats) =>
+        RenderCount(item.stats.stmt_hints_count, item.stats.count),
     },
     {
       name: "distSQL",

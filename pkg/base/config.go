@@ -12,24 +12,23 @@ import (
 	"net"
 	"net/url"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/cockroachdb/errors"
-	"github.com/cockroachdb/redact"
 )
 
 // Base config defaults.
 //
 // When changing these, TestDefaultRaftConfig must also be updated via -rewrite,
-// and the result copied to the defaultRangeLeaseRaftElectionTimeoutMultiplier
-// comment with any adjustments to the surrounding reasoning.
+// and the result copied to the defaultRangeLeaseDuration comment with any
+// adjustments to the surrounding reasoning.
 const (
 	defaultInsecure = false
 	defaultUser     = username.RootUser
@@ -55,41 +54,16 @@ const (
 	// See https://github.com/cockroachdb/cockroach/issues/20310.
 	DefaultMetricsSampleInterval = 10 * time.Second
 
-	// defaultRangeLeaseRenewalFraction specifies what fraction the range lease
-	// renewal duration should be of the range lease active time. For example,
-	// with a value of 0.2 and a lease duration of 10 seconds, leases would be
-	// eagerly renewed 8 seconds into each lease.
-	//
-	// A range lease extension requires 1 RTT (Raft consensus), assuming the
-	// leaseholder is colocated with the Raft leader, so 3 seconds should be
-	// sufficient (see NetworkTimeout). However, on user ranges, Raft consensus
-	// uses the DefaultClass RPC class, and is thus subject to head-of-line
-	// blocking by other RPC traffic which can cause very high latencies under
-	// heavy load (several seconds).
-	defaultRangeLeaseRenewalFraction = 0.5
-
-	// livenessRenewalFraction specifies what fraction the node liveness renewal
-	// duration should be of the node liveness duration. For example, with a value
-	// of 0.2 and a liveness duration of 10 seconds, each node's liveness record
-	// would be eagerly renewed after 8 seconds.
-	//
-	// A liveness record write requires 2 RTTs (RPC and Raft consensus). Assuming
-	// a max RTT of 600ms (see NetworkTimeout), 3 seconds is enough for 2 RTTs
-	// (2*600ms) and 1 RTO (900ms), with a 900ms buffer. The write is committed
-	// 1/2 RTT before this. Liveness RPCs including Raft messages are sent via
-	// SystemClass, and thus avoid head-of-line blocking by general RPC traffic.
-	livenessRenewalFraction = 0.5
-
-	// DefaultDescriptorLeaseDuration is the default mean duration a
-	// lease will be acquired for. The actual duration is jittered using
-	// the jitter fraction. Jittering is done to prevent multiple leases
-	// from being renewed simultaneously if they were all acquired
-	// simultaneously.
+	// DefaultDescriptorLeaseDuration is the default duration used as a
+	// grace period for old descriptor versions to expire after a new
+	// version is acquired. It also controls the background lease
+	// refresh/cleanup loop interval. The actual duration is jittered
+	// using the jitter fraction.
 	DefaultDescriptorLeaseDuration = 5 * time.Minute
 
 	// DefaultDescriptorLeaseJitterFraction is the default factor
-	// that we use to randomly jitter the lease duration when acquiring a
-	// new lease and the lease renewal timeout.
+	// that we use to randomly jitter the lease duration when computing
+	// the old version grace period and refresh interval.
 	DefaultDescriptorLeaseJitterFraction = 0.05
 
 	// DefaultDescriptorLeaseRenewalTimeout is the default time
@@ -99,6 +73,25 @@ const (
 	// DefaultLeaseRenewalCrossValidate is the default setting for if
 	// we should validate descriptors on lease renewals.
 	DefaultLeaseRenewalCrossValidate = false
+
+	// DefaultCPUUsageRefreshInterval controls how often cpu usage measurements
+	// are sampled by NodeCapacityProvider.
+	DefaultCPUUsageRefreshInterval = time.Second
+
+	// DefaultCPUCapacityRefreshInterval controls how often the total CPU capacity
+	// of the node is re-calculated by NodeCapacityProvider. This is less frequent
+	// than usage since capacity changes happen less often.
+	DefaultCPUCapacityRefreshInterval = 10 * time.Second
+
+	// DefaultCPUUsageMovingAverageAge defines the effective time window size for
+	// sampling cpu usage. With a value of 20, the 20th-to-last measurement
+	// contributes meaningfully to the average, while earlier measurements have
+	// diminishing impact.
+	DefaultCPUUsageMovingAverageAge = 20
+
+	// DefaultHighCardinalityMetricsSampleInterval is the default interval for
+	// sampling low-frequency high-cardinality metrics.
+	DefaultHighCardinalityMetricsSampleInterval = time.Minute
 )
 
 // DefaultCertsDirectory is the default value for the cert directory flag.
@@ -168,7 +161,7 @@ var (
 	//
 	// Raft election (fortification disabled):
 	// - Heartbeat offset (0-1 heartbeat interval)                [-1.00s - 0.00s]
-	// - Election timeout (random 1x-2x timeout)                  [ 2.00s - 4.00s]
+	// - Election timeout (timeout + random election jitter)      [ 2.00s - 4.00s]
 	// - Election (3x RTT: prevote, vote, append)                 [ 0.03s - 1.20s]
 	// Total latency                                              [ 1.03s - 5.20s]
 	//
@@ -186,13 +179,13 @@ var (
 	// Total latency                                              [ 3.03s - 7.20s]
 	//
 	// Leader lease acquisition (including raft election):
-	// - Store Liveness heartbeat offset (0-1 heartbeat interval) [-3.00s - 0.00s]
-	// - Store Liveness expiration (constant)                     [ 6.00s - 6.00s]
+	// - Store Liveness heartbeat offset (0-1 heartbeat interval) [-1.00s - 0.00s]
+	// - Store Liveness expiration (constant)                     [ 3.00s - 3.00s]
 	// - Store Liveness withdrawal (0-1 withdrawal interval)      [ 0.00s - 0.10s]
-	// - Raft election timeout jitter (random 0x-1x timeout)      [ 0.00s - 2.00s]
+	// - Raft election timeout jitter (random election jitter)    [ 0.00s - 2.00s]
 	// - Election (3x RTT: prevote, vote, append)                 [ 0.03s - 1.20s]
 	// - Lease acquisition (1x RTT: append)                       [ 0.01s - 0.40s]
-	// Total latency                                              [ 3.04s - 9.70s]
+	// Total latency                                              [ 2.04s - 6.70s]
 	//
 	// (generated by TestDefaultRaftConfig)
 	//
@@ -204,6 +197,33 @@ var (
 	// lease acquisition and 2.5s for Raft elections.
 	defaultRangeLeaseDuration = envutil.EnvOrDefaultDuration(
 		"COCKROACH_RANGE_LEASE_DURATION", 6*time.Second)
+
+	// defaultRangeLeaseRenewalFraction specifies what fraction the range lease
+	// renewal duration should be of the range lease active time. For example,
+	// with a value of 0.2 and a lease duration of 10 seconds, leases would be
+	// eagerly renewed 8 seconds into each lease.
+	//
+	// A range lease extension requires 1 RTT (Raft consensus), assuming the
+	// leaseholder is colocated with the Raft leader, so 3 seconds should be
+	// sufficient (see NetworkTimeout). However, on user ranges, Raft consensus
+	// uses the DefaultClass RPC class, and is thus subject to head-of-line
+	// blocking by other RPC traffic which can cause very high latencies under
+	// heavy load (several seconds).
+	defaultRangeLeaseRenewalFraction = envutil.EnvOrDefaultFloat64(
+		"COCKROACH_RANGE_LEASE_RENEWAL_FRACTION", 0.5)
+
+	// livenessRenewalFraction specifies what fraction the node liveness renewal
+	// duration should be of the node liveness duration. For example, with a value
+	// of 0.2 and a liveness duration of 10 seconds, each node's liveness record
+	// would be eagerly renewed after 8 seconds.
+	//
+	// A liveness record write requires 2 RTTs (RPC and Raft consensus). Assuming
+	// a max RTT of 600ms (see NetworkTimeout), 3 seconds is enough for 2 RTTs
+	// (2*600ms) and 1 RTO (900ms), with a 900ms buffer. The write is committed
+	// 1/2 RTT before this. Liveness RPCs including Raft messages are sent via
+	// SystemClass, and thus avoid head-of-line blocking by general RPC traffic.
+	livenessRenewalFraction = envutil.EnvOrDefaultFloat64(
+		"COCKROACH_LIVENESS_RENEWAL_FRACTION", 0.5)
 
 	// DefaultRPCHeartbeatTimeout is the default RPC heartbeat timeout. It is set
 	// very high at 3 * NetworkTimeout for several reasons: the gRPC transport may
@@ -228,9 +248,29 @@ var (
 	DefaultRPCHeartbeatTimeout = envutil.EnvOrDefaultDuration(
 		"COCKROACH_RPC_HEARTBEAT_TIMEOUT", 3*NetworkTimeout)
 
+	// defaultStoreLivenessHeartbeatInterval is the default value for
+	// StoreLivenessHeartbeatInterval.
+	defaultStoreLivenessHeartbeatInterval = envutil.EnvOrDefaultDuration(
+		"COCKROACH_STORE_LIVENESS_HEARTBEAT_INTERVAL", time.Second)
+
+	// defaultStoreLivenessSupportDuration is the default value for
+	// StoreLivenessSupportDuration.
+	defaultStoreLivenessSupportDuration = envutil.EnvOrDefaultDuration(
+		"COCKROACH_STORE_LIVENESS_SUPPORT_DURATION", 3*time.Second)
+
+	// defaultFortificationGracePeriod is the default value for
+	// FortificationGracePeriod.
+	defaultFortificationGracePeriod = envutil.EnvOrDefaultDuration(
+		"COCKROACH_RAFT_FORTIFICATION_GRACE_PERIOD", 3*time.Second)
+
 	// defaultRaftTickInterval is the default resolution of the Raft timer.
 	defaultRaftTickInterval = envutil.EnvOrDefaultDuration(
 		"COCKROACH_RAFT_TICK_INTERVAL", 500*time.Millisecond)
+
+	// defaultRaftTickSmearInterval is the default interval at which ticks are
+	// enqueued at.
+	defaultRaftTickSmearInterval = envutil.EnvOrDefaultDuration(
+		"COCKROACH_RAFT_TICK_SMEAR_INTERVAL", time.Millisecond)
 
 	// defaultRaftHeartbeatIntervalTicks is the default value for
 	// RaftHeartbeatIntervalTicks, which determines the number of ticks between
@@ -240,7 +280,9 @@ var (
 
 	// defaultRaftElectionTimeoutTicks specifies the minimum number of Raft ticks
 	// before holding an election. The actual election timeout per replica is
-	// multiplied by a random factor of 1-2, to avoid ties.
+	// selected randomly between the interval:
+	// [defaultRaftElectionTimeoutTicks,
+	//  defaultRaftElectionTimeoutTicks+defaultRaftElectionTimeoutJitterTicks).
 	//
 	// A timeout of 2 seconds with a Raft heartbeat sent every second gives each
 	// heartbeat 1 second to make it across the network. This is only half a
@@ -250,6 +292,14 @@ var (
 	// random factor provides an additional buffer.
 	defaultRaftElectionTimeoutTicks = envutil.EnvOrDefaultInt64(
 		"COCKROACH_RAFT_ELECTION_TIMEOUT_TICKS", 4)
+
+	// defaultRaftElectionTimeoutJitterTicks specifies the maximum number of Raft
+	// ticks after defaultRaftElectionTimeoutTicks before holding an election.
+	// The actual election timeout per replica is selected randomly between the
+	// interval: [defaultRaftElectionTimeoutTicks,
+	//  defaultRaftElectionTimeoutTicks+defaultRaftElectionTimeoutJitterTicks).
+	defaultRaftElectionTimeoutJitterTicks = envutil.EnvOrDefaultInt64(
+		"COCKROACH_RAFT_ELECTION_TIMEOUT_JITTER_TICKS", 4)
 
 	// defaultRaftReproposalTimeoutTicks is the number of ticks before reproposing
 	// a Raft command.
@@ -425,6 +475,9 @@ type Config struct {
 	// RPCHearbeatTimeout is the timeout for Ping requests.
 	RPCHeartbeatTimeout time.Duration
 
+	// UseDRPC indicates whether to use DRPC as the RPC framework instead of gRPC.
+	UseDRPC bool
+
 	// ApplicationInternalRPCPortMin/PortMax define the range of TCP ports
 	// used to start the internal RPC service for application-level
 	// servers. This service is used for node-to-node RPC traffic and to
@@ -535,11 +588,22 @@ type RaftConfig struct {
 	// RaftTickInterval is the resolution of the Raft timer.
 	RaftTickInterval time.Duration
 
+	// RaftTickSmearInterval is the interval at which ticks are enqueued at. This
+	// will smear the Raft tick processing over the RaftTickInterval. It's used to
+	// prevent all raft scheduler threads running ticking at the same time without
+	// utilizing the full RaftTickInterval. You can disable this by setting it to
+	// 0.
+	RaftTickSmearInterval time.Duration
+
 	// RaftElectionTimeoutTicks is the minimum number of raft ticks before holding
 	// an election. The actual election timeout is randomized by each replica to
-	// between 1-2 election timeouts. This value is inherited by individual stores
-	// unless overridden.
+	// between the interval: [defaultRaftElectionTimeoutTicks,
+	//  defaultRaftElectionTimeoutTicks+defaultRaftElectionTimeoutJitterTicks).
 	RaftElectionTimeoutTicks int64
+
+	// RaftElectionTimeoutJitterTicks is the maximum number of ticks after
+	// RaftElectionTimeoutTicks to hold an election.
+	RaftElectionTimeoutJitterTicks int64
 
 	// RaftReproposalTimeoutTicks is the number of ticks before reproposing a Raft
 	// command. This also specifies the number of ticks between each reproposal
@@ -548,6 +612,18 @@ type RaftConfig struct {
 
 	// RaftHeartbeatIntervalTicks is the number of ticks that pass between heartbeats.
 	RaftHeartbeatIntervalTicks int64
+
+	// StoreLivenessHeartbeatInterval determines how ofter stores request and
+	// extend store liveness support.
+	StoreLivenessHeartbeatInterval time.Duration
+
+	// StoreLivenessSupportDuration is the duration of store liveness support that
+	// stores request and extend.
+	StoreLivenessSupportDuration time.Duration
+
+	// FortificationGracePeriod is the minimum validity of a new leader lease to
+	// allow for the new leader to fortify.
+	FortificationGracePeriod time.Duration
 
 	// RangeLeaseRaftElectionTimeoutMultiplier specifies the range lease duration.
 	RangeLeaseDuration time.Duration
@@ -647,11 +723,26 @@ func (cfg *RaftConfig) SetDefaults() {
 	if cfg.RaftTickInterval == 0 {
 		cfg.RaftTickInterval = defaultRaftTickInterval
 	}
+	if cfg.RaftTickSmearInterval == 0 {
+		cfg.RaftTickSmearInterval = defaultRaftTickSmearInterval
+	}
 	if cfg.RaftElectionTimeoutTicks == 0 {
 		cfg.RaftElectionTimeoutTicks = defaultRaftElectionTimeoutTicks
 	}
+	if cfg.RaftElectionTimeoutJitterTicks == 0 {
+		cfg.RaftElectionTimeoutJitterTicks = defaultRaftElectionTimeoutJitterTicks
+	}
 	if cfg.RaftHeartbeatIntervalTicks == 0 {
 		cfg.RaftHeartbeatIntervalTicks = defaultRaftHeartbeatIntervalTicks
+	}
+	if cfg.StoreLivenessHeartbeatInterval == 0 {
+		cfg.StoreLivenessHeartbeatInterval = defaultStoreLivenessHeartbeatInterval
+	}
+	if cfg.StoreLivenessSupportDuration == 0 {
+		cfg.StoreLivenessSupportDuration = defaultStoreLivenessSupportDuration
+	}
+	if cfg.FortificationGracePeriod == 0 {
+		cfg.FortificationGracePeriod = defaultFortificationGracePeriod
 	}
 	if cfg.RangeLeaseDuration == 0 {
 		cfg.RangeLeaseDuration = defaultRangeLeaseDuration
@@ -764,11 +855,9 @@ func (cfg RaftConfig) NodeLivenessDurations() (livenessActive, livenessRenewal t
 }
 
 // StoreLivenessDurations computes durations for store liveness heartbeat
-// interval and liveness interval.
-func (cfg RaftConfig) StoreLivenessDurations() (livenessInterval, heartbeatInterval time.Duration) {
-	livenessInterval = cfg.RangeLeaseDuration
-	heartbeatInterval = time.Duration(float64(livenessInterval) * livenessRenewalFraction)
-	return
+// interval and support duration.
+func (cfg RaftConfig) StoreLivenessDurations() (supportDuration, heartbeatInterval time.Duration) {
+	return cfg.StoreLivenessSupportDuration, cfg.StoreLivenessHeartbeatInterval
 }
 
 // SentinelGossipTTL is time-to-live for the gossip sentinel, which is gossiped
@@ -826,176 +915,25 @@ type TempStorageConfig struct {
 	// InMemory specifies whether the temporary storage will remain
 	// in-memory or occupy a temporary subdirectory on-disk.
 	InMemory bool
-	// Path is the filepath of the temporary subdirectory created for
-	// the temp storage.
+	// Path is the filepath of the temporary subdirectory created for the temp
+	// storage. Empty if InMemory is true.
 	Path string
 	// Mon will be used by the temp storage to register all its capacity requests.
 	// It can be used to limit the disk or memory that temp storage is allowed to
 	// use. If InMemory is set, than this has to be a memory monitor; otherwise it
 	// has to be a disk monitor.
 	Mon *mon.BytesMonitor
-	// Spec stores the StoreSpec this TempStorageConfig will use.
-	Spec StoreSpec
+	// Encryption is set if encryption is enabled. We use the same encryption
+	// options as the store we chose for temp storage.
+	Encryption *storageconfig.EncryptionOptions
 	// Settings stores the cluster.Settings this TempStoreConfig will use. Must
 	// not be nil.
 	Settings *cluster.Settings
-}
-
-// WALFailoverMode specifies the mode of WAL failover.
-type WALFailoverMode int8
-
-const (
-	// WALFailoverDefault leaves the WAL failover configuration unspecified. Today
-	// this is interpreted as FailoverDisabled but future releases may default to
-	// another mode.
-	WALFailoverDefault WALFailoverMode = iota
-	// WALFailoverDisabled leaves WAL failover disabled. Commits to the storage
-	// engine observe the latency of a store's primary WAL directly.
-	WALFailoverDisabled
-	// WALFailoverAmongStores enables WAL failover among multiple stores within a
-	// node. This setting has no effect if the node has a single store. When a
-	// storage engine observes high latency writing to its WAL, it may
-	// transparently failover to an arbitrary, predetermined other store's data
-	// directory. If successful in syncing log entries to the other store's
-	// volume, the batch commit latency is insulated from the effects of momentary
-	// disk stalls.
-	WALFailoverAmongStores
-	// WALFailoverExplicitPath enables WAL failover for a single-store node to an
-	// explicitly specified path.
-	WALFailoverExplicitPath
-)
-
-// String implements fmt.Stringer.
-func (m *WALFailoverMode) String() string {
-	return redact.StringWithoutMarkers(m)
-}
-
-// SafeFormat implements the redact.SafeFormatter interface.
-func (m *WALFailoverMode) SafeFormat(p redact.SafePrinter, _ rune) {
-	switch *m {
-	case WALFailoverDefault:
-		// Empty
-	case WALFailoverDisabled:
-		p.SafeString("disabled")
-	case WALFailoverAmongStores:
-		p.SafeString("among-stores")
-	case WALFailoverExplicitPath:
-		p.SafeString("path")
-	default:
-		p.Printf("<unknown WALFailoverMode %d>", int8(*m))
-	}
-}
-
-// WALFailoverConfig configures a node's stores behavior under high write
-// latency to their write-ahead logs.
-type WALFailoverConfig struct {
-	Mode WALFailoverMode
-	// Path is the non-store path to which WALs should be written when failing
-	// over. It must be nonempty if and only if Mode == WALFailoverExplicitPath.
-	Path ExternalPath
-	// PrevPath is the previously used non-store path. It may be set with Mode ==
-	// WALFailoverExplicitPath (when changing the secondary path) or
-	// WALFailoverDisabled (when disabling WAL failover after it was previously
-	// enabled with WALFailoverExplicitPath). It must be empty for other modes.
-	// If Mode is WALFailoverDisabled and previously WAL failover was enabled
-	// using WALFailoverAmongStores, then PrevPath must not be set.
-	PrevPath ExternalPath
-}
-
-// ExternalPath represents a non-store path and associated encryption-at-rest
-// configuration.
-type ExternalPath struct {
-	Path string
-	// EncryptionOptions is a serialized protobuf set by Go CCL code describing
-	// the encryption-at-rest configuration. If encryption-at-rest has ever been
-	// enabled on the store, this field must be set.
-	EncryptionOptions []byte
-}
-
-// IsSet returns whether or not the external path was provided.
-func (e ExternalPath) IsSet() bool { return e.Path != "" }
-
-// Type implements the pflag.Value interface.
-func (c *WALFailoverConfig) Type() string { return "string" }
-
-// String implements fmt.Stringer.
-func (c *WALFailoverConfig) String() string {
-	return redact.StringWithoutMarkers(c)
-}
-
-// SafeFormat implements the redact.SafeFormatter interface.
-func (c *WALFailoverConfig) SafeFormat(p redact.SafePrinter, _ rune) {
-	switch c.Mode {
-	case WALFailoverDefault:
-		// Empty
-	case WALFailoverDisabled:
-		p.SafeString("disabled")
-		if c.PrevPath.IsSet() {
-			p.SafeString(",prev_path=")
-			p.SafeString(redact.SafeString(c.PrevPath.Path))
-		}
-	case WALFailoverAmongStores:
-		p.SafeString("among-stores")
-	case WALFailoverExplicitPath:
-		p.SafeString("path=")
-		p.SafeString(redact.SafeString(c.Path.Path))
-		if c.PrevPath.IsSet() {
-			p.SafeString(",prev_path=")
-			p.SafeString(redact.SafeString(c.PrevPath.Path))
-		}
-	default:
-		p.Printf("<unknown WALFailoverMode %d>", int8(c.Mode))
-	}
-}
-
-// Set implements the pflag.Value interface.
-func (c *WALFailoverConfig) Set(s string) error {
-	switch {
-	case strings.HasPrefix(s, "disabled"):
-		c.Mode = WALFailoverDisabled
-		var ok bool
-		c.Path.Path, c.PrevPath.Path, ok = parseWALFailoverPathFields(strings.TrimPrefix(s, "disabled"))
-		if !ok || c.Path.IsSet() {
-			return errors.Newf("invalid disabled --wal-failover setting: %s "+
-				"expect disabled[,prev_path=<prev_path>]", s)
-		}
-	case s == "among-stores":
-		c.Mode = WALFailoverAmongStores
-	case strings.HasPrefix(s, "path="):
-		c.Mode = WALFailoverExplicitPath
-		var ok bool
-		c.Path.Path, c.PrevPath.Path, ok = parseWALFailoverPathFields(s)
-		if !ok || !c.Path.IsSet() {
-			return errors.Newf("invalid path --wal-failover setting: %s "+
-				"expect path=<path>[,prev_path=<prev_path>]", s)
-		}
-	default:
-		return errors.Newf("invalid --wal-failover setting: %s "+
-			"(possible values: disabled, among-stores, path=<path>)", s)
-	}
-	return nil
-}
-
-func parseWALFailoverPathFields(s string) (path, prevPath string, ok bool) {
-	if s == "" {
-		return "", "", true
-	}
-	if s2 := strings.TrimPrefix(s, "path="); len(s2) < len(s) {
-		s = s2
-		if i := strings.IndexByte(s, ','); i == -1 {
-			return s, "", true
-		} else {
-			path = s[:i]
-			s = s[i:]
-		}
-	}
-
-	// Any remainder must be a prev_path= field.
-	if !strings.HasPrefix(s, ",prev_path=") {
-		return "", "", false
-	}
-	prevPath = strings.TrimPrefix(s, ",prev_path=")
-	return path, prevPath, true
+	// If set, TempDirsRecordPath is the path to a temp-dirs-record.txt file in
+	// one of the stores (see server.TempDirsRecordFilename). Used when we create
+	// a new temporary storage directory for a new shared-process tenant. Empty if
+	// InMemory is false.
+	TempDirsRecordPath string
 }
 
 // ExternalIODirConfig describes various configuration options pertaining
@@ -1027,37 +965,34 @@ type ExternalIODirConfig struct {
 	EnableNonAdminImplicitAndArbitraryOutbound bool
 }
 
-// TempStorageConfigFromEnv creates a TempStorageConfig.
-// If parentDir is not specified and the specified store is in-memory,
-// then the temp storage will also be in-memory.
-func TempStorageConfigFromEnv(
-	ctx context.Context,
-	st *cluster.Settings,
-	useStore StoreSpec,
-	parentDir string,
-	maxSizeBytes int64,
-) TempStorageConfig {
-	inMem := parentDir == "" && useStore.InMemory
-	return newTempStorageConfig(ctx, st, inMem, useStore, maxSizeBytes)
-}
-
 // InheritTempStorageConfig creates a new TempStorageConfig using the
 // configuration of the given TempStorageConfig. It assumes the given
 // TempStorageConfig has been fully initialized.
 func InheritTempStorageConfig(
 	ctx context.Context, st *cluster.Settings, parentConfig TempStorageConfig,
 ) TempStorageConfig {
-	return newTempStorageConfig(ctx, st, parentConfig.InMemory, parentConfig.Spec, parentConfig.Mon.Limit())
+	return NewTempStorageConfig(ctx, st, parentConfig.InMemory, parentConfig.Path, parentConfig.Encryption, parentConfig.Mon.Limit(), parentConfig.TempDirsRecordPath)
 }
 
-func newTempStorageConfig(
-	ctx context.Context, st *cluster.Settings, inMemory bool, useStore StoreSpec, maxSizeBytes int64,
+// NewTempStorageConfig creates a new TempStorageConfig.
+// The path should be empty iff inMemory is true.
+func NewTempStorageConfig(
+	ctx context.Context,
+	st *cluster.Settings,
+	inMemory bool,
+	path string,
+	encryption *storageconfig.EncryptionOptions,
+	maxSizeBytes int64,
+	tempDirsRecordPath string,
 ) TempStorageConfig {
-	var monitorName redact.RedactableString
+	if inMemory != (path == "") {
+		log.Dev.Fatalf(ctx, "inMemory (%t) must be true iff path is empty (%q)", inMemory, path)
+	}
+	var monitorName mon.Name
 	if inMemory {
-		monitorName = "in-mem temp storage"
+		monitorName = mon.MakeName("in-mem temp storage")
 	} else {
-		monitorName = "temp disk storage"
+		monitorName = mon.MakeName("temp disk storage")
 	}
 	monitor := mon.NewMonitor(mon.Options{
 		Name:      monitorName,
@@ -1067,9 +1002,11 @@ func newTempStorageConfig(
 	})
 	monitor.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(maxSizeBytes))
 	return TempStorageConfig{
-		InMemory: inMemory,
-		Mon:      monitor,
-		Spec:     useStore,
-		Settings: st,
+		InMemory:           inMemory,
+		Path:               path,
+		Mon:                monitor,
+		Encryption:         encryption,
+		Settings:           st,
+		TempDirsRecordPath: tempDirsRecordPath,
 	}
 }

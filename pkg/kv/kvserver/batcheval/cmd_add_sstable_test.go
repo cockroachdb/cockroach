@@ -6,7 +6,6 @@
 package batcheval_test
 
 import (
-	"bytes"
 	"context"
 	"os"
 	"regexp"
@@ -25,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/storageutils"
@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble/objstorage"
 	"github.com/stretchr/testify/require"
 )
 
@@ -55,7 +56,6 @@ func TestEvalAddSSTable(t *testing.T) {
 		reqTS          int64
 		toReqTS        int64 // SSTTimestampToRequestTimestamp with given SST timestamp
 		noConflict     bool  // DisallowConflicts
-		noShadow       bool  // DisallowShadowing
 		noShadowBelow  int64 // DisallowShadowingBelow
 		requireReqTS   bool  // AddSSTableRequireAtRequestTimestamp
 		expect         kvs
@@ -233,38 +233,6 @@ func TestEvalAddSSTable(t *testing.T) {
 			sst:        kvs{pointKV("a", 1, "sst"), pointKV("b", 1, "sst")},
 			expect:     kvs{pointKV("a", 8, "sst"), pointKV("a", 5, "a5"), pointKV("b", 8, "sst"), pointKV("b", 7, "b7")},
 		},
-		"SSTTimestampToRequestTimestamp errors with DisallowShadowing below existing": {
-			reqTS:     5,
-			toReqTS:   10,
-			noShadow:  true,
-			data:      kvs{pointKV("a", 5, "a5"), pointKV("b", 7, "b7")},
-			sst:       kvs{pointKV("a", 10, "sst"), pointKV("b", 10, "sst")},
-			expectErr: `ingested key collides with an existing one: "a"`,
-		},
-		"SSTTimestampToRequestTimestamp errors with DisallowShadowing above existing": {
-			reqTS:     8,
-			toReqTS:   1,
-			noShadow:  true,
-			data:      kvs{pointKV("a", 5, "a5"), pointKV("b", 7, "b7")},
-			sst:       kvs{pointKV("a", 1, "sst"), pointKV("b", 1, "sst")},
-			expectErr: `ingested key collides with an existing one: "a"`,
-		},
-		"SSTTimestampToRequestTimestamp succeeds with DisallowShadowing above tombstones": {
-			reqTS:    8,
-			toReqTS:  1,
-			noShadow: true,
-			data:     kvs{pointKV("a", 5, ""), pointKV("b", 7, "")},
-			sst:      kvs{pointKV("a", 1, "sst"), pointKV("b", 1, "sst")},
-			expect:   kvs{pointKV("a", 8, "sst"), pointKV("a", 5, ""), pointKV("b", 8, "sst"), pointKV("b", 7, "")},
-		},
-		"SSTTimestampToRequestTimestamp succeeds with DisallowShadowing and idempotent writes": {
-			reqTS:    5,
-			toReqTS:  1,
-			noShadow: true,
-			data:     kvs{pointKV("a", 5, "a5"), pointKV("b", 5, "b5"), pointKV("c", 5, "")},
-			sst:      kvs{pointKV("a", 1, "a5"), pointKV("b", 1, "b5"), pointKV("c", 1, "")},
-			expect:   kvs{pointKV("a", 5, "a5"), pointKV("b", 5, "b5"), pointKV("c", 5, "")},
-		},
 		"SSTTimestampToRequestTimestamp errors with DisallowShadowingBelow equal value above existing below limit": {
 			reqTS:         7,
 			toReqTS:       10,
@@ -428,135 +396,7 @@ func TestEvalAddSSTable(t *testing.T) {
 			expect:     kvs{rangeKV("a", "c", 3, ""), pointKV("b", 5, "sst"), pointKV("b", 2, ""), pointKV("b", 1, "b1")},
 		},
 
-		// DisallowShadowing
-		"DisallowShadowing errors above existing": {
-			noShadow:  true,
-			data:      kvs{pointKV("a", 3, "a3")},
-			sst:       kvs{pointKV("a", 4, "sst")},
-			expectErr: `ingested key collides with an existing one: "a"`,
-		},
-		"DisallowShadowing errors below existing": {
-			noShadow:  true,
-			data:      kvs{pointKV("a", 3, "a3")},
-			sst:       kvs{pointKV("a", 2, "sst")},
-			expectErr: `ingested key collides with an existing one: "a"`,
-		},
-		"DisallowShadowing errors at existing": {
-			noShadow:  true,
-			data:      kvs{pointKV("a", 3, "a3")},
-			sst:       kvs{pointKV("a", 3, "sst")},
-			expectErr: `ingested key collides with an existing one: "a"`,
-		},
-		"DisallowShadowing returns WriteTooOldError at existing tombstone": {
-			noShadow:  true,
-			data:      kvs{pointKV("a", 3, "")},
-			sst:       kvs{pointKV("a", 3, "sst")},
-			expectErr: &kvpb.WriteTooOldError{},
-		},
-		"DisallowShadowing returns WriteTooOldError below existing tombstone": {
-			noShadow:  true,
-			data:      kvs{pointKV("a", 3, "")},
-			sst:       kvs{pointKV("a", 2, "sst")},
-			expectErr: &kvpb.WriteTooOldError{},
-		},
-		"DisallowShadowing allows above existing tombstone": {
-			noShadow: true,
-			data:     kvs{pointKV("a", 3, "")},
-			sst:      kvs{pointKV("a", 4, "sst")},
-			expect:   kvs{pointKV("a", 4, "sst"), pointKV("a", 3, "")},
-		},
-		"DisallowShadowing returns LockConflictError below intent": {
-			noShadow:  true,
-			data:      kvs{pointKV("a", intentTS, "intent")},
-			sst:       kvs{pointKV("a", 3, "sst")},
-			expectErr: &kvpb.LockConflictError{},
-		},
-		"DisallowShadowing returns LockConflictError below intent above range key": {
-			noShadow:  true,
-			data:      kvs{pointKV("b", intentTS, "intent"), rangeKV("a", "d", 2, ""), pointKV("b", 1, "b1")},
-			sst:       kvs{pointKV("b", 3, "sst")},
-			expectErr: &kvpb.LockConflictError{},
-		},
-		"DisallowShadowing returns LockConflictError in span": {
-			noShadow:  true,
-			data:      kvs{pointKV("b", intentTS, "intent")},
-			sst:       kvs{pointKV("a", 3, "sst"), pointKV("c", 3, "sst")},
-			expectErr: &kvpb.LockConflictError{},
-		},
-		"DisallowShadowing is idempotent": {
-			noShadow: true,
-			data:     kvs{pointKV("a", 3, "a3")},
-			sst:      kvs{pointKV("a", 3, "a3")},
-			expect:   kvs{pointKV("a", 3, "a3")},
-		},
-		"DisallowShadowing allows new SST tombstones": {
-			noShadow: true,
-			sst:      kvs{pointKV("a", 3, "")},
-			expect:   kvs{pointKV("a", 3, "")},
-		},
-		"DisallowShadowing rejects SST tombstones when shadowing": {
-			noShadow:  true,
-			data:      kvs{pointKV("a", 2, "a2")},
-			sst:       kvs{pointKV("a", 3, "")},
-			expectErr: `ingested key collides with an existing one: "a"`,
-		},
-		"DisallowShadowing errors on SST range tombstones": { // for now
-			noShadow: true,
-			sst:      kvs{rangeKV("a", "d", 3, "")},
-			expect:   kvs{rangeKV("a", "d", 3, "")},
-		},
-		"DisallowShadowing allows new SST inline values": { // unfortunately, for performance
-			noShadow:      true,
-			sst:           kvs{pointKV("a", 0, "inline")},
-			expect:        kvs{pointKV("a", 0, "inline")},
-			expectErrRace: `SST contains inline value or intent for key "a"/0,0`,
-		},
-		"DisallowShadowing rejects SST inline values when shadowing": {
-			noShadow:      true,
-			data:          kvs{pointKV("a", 2, "a2")},
-			sst:           kvs{pointKV("a", 0, "inline")},
-			expectErr:     "SST keys must have timestamps",
-			expectErrRace: `SST contains inline value or intent for key "a"/0,0`,
-		},
-		"DisallowShadowing rejects existing inline values when shadowing": {
-			noShadow:  true,
-			data:      kvs{pointKV("a", 0, "a0")},
-			sst:       kvs{pointKV("a", 3, "sst")},
-			expectErr: "inline values are unsupported",
-		},
-		"DisallowShadowing collision SST start, existing start, above": {
-			noShadow:  true,
-			data:      kvs{pointKV("a", 2, "a2")},
-			sst:       kvs{pointKV("a", 7, "sst")},
-			expectErr: `ingested key collides with an existing one: "a"`,
-		},
-		"DisallowShadowing collision SST start, existing middle, below": {
-			noShadow:  true,
-			data:      kvs{pointKV("a", 2, "a2"), pointKV("a", 1, "a1"), pointKV("b", 2, "b2"), pointKV("c", 3, "c3")},
-			sst:       kvs{pointKV("b", 1, "sst")},
-			expectErr: `ingested key collides with an existing one: "b"`,
-		},
-		"DisallowShadowing collision SST end, existing end, above": {
-			noShadow:  true,
-			data:      kvs{pointKV("a", 2, "a2"), pointKV("a", 1, "a1"), pointKV("b", 2, "b2"), pointKV("d", 3, "d3")},
-			sst:       kvs{pointKV("c", 3, "sst"), pointKV("d", 4, "sst")},
-			expectErr: `ingested key collides with an existing one: "d"`,
-		},
-		"DisallowShadowing collision after write above tombstone": {
-			noShadow:  true,
-			data:      kvs{pointKV("a", 2, ""), pointKV("a", 1, "a1"), pointKV("b", 2, "b2")},
-			sst:       kvs{pointKV("a", 3, "sst"), pointKV("b", 1, "sst")},
-			expectErr: `ingested key collides with an existing one: "b"`,
-		},
-
 		// DisallowShadowingBelow
-		"DisallowShadowingBelow can be used with DisallowShadowing": {
-			noShadow:      true,
-			noShadowBelow: 5,
-			data:          kvs{pointKV("a", 5, "123")},
-			sst:           kvs{pointKV("a", 6, "123")},
-			expect:        kvs{pointKV("a", 6, "123"), pointKV("a", 5, "123")},
-		},
 		"DisallowShadowingBelow errors above existing": {
 			noShadowBelow: 5,
 			data:          kvs{pointKV("a", 3, "a3")},
@@ -991,30 +831,6 @@ func TestEvalAddSSTable(t *testing.T) {
 			sst:        kvs{rangeKV("a", "c", 8, ""), rangeKV("d", "e", 8, ""), pointKV("g", 8, "foo")},
 			expect:     kvs{rangeKV("a", "f", 8, ""), pointKV("a", 6, "d"), pointKV("g", 8, "foo")},
 		},
-		"DisallowShadowing disallows sst range keys shadowing live keys": {
-			noShadow:  true,
-			data:      kvs{pointKV("a", 6, "d"), rangeKV("a", "b", 5, "")},
-			sst:       kvs{rangeKV("a", "b", 8, "")},
-			expectErr: "ingested range key collides with an existing one",
-		},
-		"DisallowShadowing allows shadowing of keys deleted by engine range tombstones": {
-			noShadow: true,
-			data:     kvs{rangeKV("a", "b", 7, ""), pointKV("a", 6, "d")},
-			sst:      kvs{pointKV("a", 8, "a8")},
-			expect:   kvs{rangeKV("a", "b", 7, ""), pointKV("a", 8, "a8"), pointKV("a", 6, "d")},
-		},
-		"DisallowShadowing allows idempotent range tombstones": {
-			noShadow: true,
-			data:     kvs{rangeKV("a", "b", 7, "")},
-			sst:      kvs{rangeKV("a", "b", 7, "")},
-			expect:   kvs{rangeKV("a", "b", 7, "")},
-		},
-		"DisallowShadowing calculates stats correctly for merged range keys with idempotence": {
-			noShadow: true,
-			data:     kvs{rangeKV("b", "d", 8, ""), rangeKV("e", "f", 8, "")},
-			sst:      kvs{rangeKV("a", "c", 8, ""), rangeKV("d", "e", 8, "")},
-			expect:   kvs{rangeKV("a", "f", 8, "")},
-		},
 		"DisallowShadowingBelow disallows sst range keys shadowing live keys": {
 			noShadowBelow: 3,
 			data:          kvs{pointKV("a", 6, "d"), rangeKV("a", "b", 5, "")},
@@ -1208,7 +1024,6 @@ func TestEvalAddSSTable(t *testing.T) {
 								Data:                           sst,
 								MVCCStats:                      mvccStats,
 								DisallowConflicts:              tc.noConflict,
-								DisallowShadowing:              tc.noShadow,
 								DisallowShadowingBelow:         hlc.Timestamp{WallTime: tc.noShadowBelow},
 								SSTTimestampToRequestTimestamp: hlc.Timestamp{WallTime: tc.toReqTS},
 								IngestAsWrites:                 ingestAsWrites,
@@ -1264,7 +1079,7 @@ func TestEvalAddSSTable(t *testing.T) {
 								require.NoError(t, err)
 								v.LocalTimestamp.WallTime *= 1e9
 								kv.RangeKey.Timestamp.WallTime *= 1e9
-								kv.RangeKey.EncodedTimestampSuffix = storage.EncodeMVCCTimestampSuffix(kv.RangeKey.Timestamp)
+								kv.RangeKey.EncodedTimestampSuffix = mvccencoding.EncodeMVCCTimestampSuffix(kv.RangeKey.Timestamp)
 								vBytes, err := storage.EncodeMVCCValue(v)
 								require.NoError(t, err)
 								expect = append(expect, storage.MVCCRangeKeyValue{RangeKey: kv.RangeKey, Value: vBytes})
@@ -1431,7 +1246,6 @@ func runTestDBAddSSTable(
 	tr.TestingRecordAsyncSpans() // we assert on async span traces in this test
 	const ingestAsWrites, ingestAsSST = true, false
 	const allowConflicts = false
-	const allowShadowing = false
 	var allowShadowingBelow hlc.Timestamp
 	var nilStats *enginepb.MVCCStats
 	var noTS hlc.Timestamp
@@ -1448,13 +1262,13 @@ func runTestDBAddSSTable(
 
 		// Key is before the range in the request span.
 		_, _, err := db.AddSSTable(
-			ctx, k("d"), k("e"), sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS)
+			ctx, k("d"), k("e"), sst, allowConflicts, allowShadowingBelow, nilStats, ingestAsSST, noTS)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "not in request range")
 
 		// Key is after the range in the request span.
 		_, _, err = db.AddSSTable(
-			ctx, k("a"), k("b"), sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS)
+			ctx, k("a"), k("b"), sst, allowConflicts, allowShadowingBelow, nilStats, ingestAsSST, noTS)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "not in request range")
 
@@ -1462,7 +1276,7 @@ func runTestDBAddSSTable(
 		ingestCtx, getRecAndFinish := tracing.ContextWithRecordingSpan(ctx, tr, "test-recording")
 		defer getRecAndFinish()
 		_, _, err = db.AddSSTable(
-			ingestCtx, start, end, sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS)
+			ingestCtx, start, end, sst, allowConflicts, allowShadowingBelow, nilStats, ingestAsSST, noTS)
 		require.NoError(t, err)
 		trace := getRecAndFinish().String()
 		require.Contains(t, trace, "evaluating AddSSTable")
@@ -1491,7 +1305,7 @@ func runTestDBAddSSTable(
 	{
 		sst, start, end := storageutils.MakeSSTWithPrefix(t, cs, srv.Codec().TenantPrefix(), kvs{pointKV("bb", 1, "2")})
 		_, _, err := db.AddSSTable(
-			ctx, start, end, sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS)
+			ctx, start, end, sst, allowConflicts, allowShadowingBelow, nilStats, ingestAsSST, noTS)
 		require.NoError(t, err)
 		r, err := db.Get(ctx, k("bb"))
 		require.NoError(t, err)
@@ -1515,7 +1329,7 @@ func runTestDBAddSSTable(
 			defer getRecAndFinish()
 
 			_, _, err := db.AddSSTable(
-				ingestCtx, start, end, sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS)
+				ingestCtx, start, end, sst, allowConflicts, allowShadowingBelow, nilStats, ingestAsSST, noTS)
 			require.NoError(t, err)
 			trace := getRecAndFinish().String()
 			require.Contains(t, trace, "evaluating AddSSTable")
@@ -1552,7 +1366,7 @@ func runTestDBAddSSTable(
 			defer getRecAndFinish()
 
 			_, _, err := db.AddSSTable(
-				ingestCtx, start, end, sst, allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsWrites, noTS)
+				ingestCtx, start, end, sst, allowConflicts, allowShadowingBelow, nilStats, ingestAsWrites, noTS)
 			require.NoError(t, err)
 			trace := getRecAndFinish().String()
 			require.Contains(t, trace, "evaluating AddSSTable")
@@ -1577,20 +1391,22 @@ func runTestDBAddSSTable(
 		value := roachpb.MakeValueFromString("1")
 		value.InitChecksum([]byte("foo"))
 
-		var sstFile bytes.Buffer
-		w := storage.MakeBackupSSTWriter(ctx, cs, &sstFile)
+		var sstFile objstorage.MemObj
+		w := storage.MakeTransportSSTWriter(ctx, cs, &sstFile)
 		defer w.Close()
 		require.NoError(t, w.Put(key, value.RawBytes))
 		require.NoError(t, w.Finish())
 
 		_, _, err := db.AddSSTable(
-			ctx, k("b"), k("c"), sstFile.Bytes(), allowConflicts, allowShadowing, allowShadowingBelow, nilStats, ingestAsSST, noTS)
+			ctx, k("b"), k("c"), sstFile.Data(), allowConflicts, allowShadowingBelow, nilStats, ingestAsSST, noTS)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "invalid checksum")
 	}
 }
 
-// TestAddSSTableMVCCStats tests that statistics are computed accurately.
+// TestAddSSTableMVCCStats tests that statistics are computed accurately with
+// the ComputeStatsDiff flag and with some bias when the engine has some
+// overlapping keys.
 func TestAddSSTableMVCCStats(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1605,239 +1421,136 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 		Desc:            &roachpb.RangeDescriptor{},
 	}
 
-	engine := storage.NewDefaultInMemForTesting()
-	defer engine.Close()
+	testutils.RunTrueAndFalse(t, "ComputeStatsDiff", func(t *testing.T, computeStatsDiff bool) {
+		testutils.RunTrueAndFalse(t, "EngineHasRangeKey", func(t *testing.T, engineHasRangeKey bool) {
 
-	for _, kv := range []storage.MVCCKeyValue{
-		pointKV("A", 1, "A"),
-		pointKV("a", 1, "a"),
-		pointKV("a", 6, ""),
-		pointKV("b", 5, "bb"),
-		pointKV("c", 6, "ccccccccccccccccccccccccccccccccccccccccccccc"), // key 4b, 50b, live 64b
-		pointKV("d", 1, "d"),
-		pointKV("d", 2, ""),
-		pointKV("e", 1, "e"),
-		pointKV("u", 3, "u"),
-		pointKV("z", 2, "zzzzzz"),
-	} {
-		require.NoError(t, engine.PutRawMVCC(kv.Key, kv.Value))
-	}
+			expectEstimates := !computeStatsDiff || engineHasRangeKey
 
-	sst, start, end := storageutils.MakeSST(t, st, kvs{
-		pointKV("a", 4, "aaaaaa"), // mvcc-shadowed by existing delete.
-		pointKV("a", 2, "aa"),     // mvcc-shadowed within SST.
-		pointKV("c", 6, "ccc"),    // same TS as existing, LSM-shadows existing.
-		pointKV("d", 4, "dddd"),   // mvcc-shadow existing deleted d.
-		pointKV("e", 4, "eeee"),   // mvcc-shadow existing 1b.
-		pointKV("j", 2, "jj"),     // no colission – via MVCC or LSM – with existing.
-		pointKV("t", 3, ""),       // tombstone, no collission
-		pointKV("u", 5, ""),       // tombstone, shadows existing
+			engine := storage.NewDefaultInMemForTesting()
+			defer engine.Close()
+
+			if engineHasRangeKey {
+				require.NoError(t, engine.PutMVCCRangeKey(rangeKey("u", "zzzzzzzzzz", 1), storage.MVCCValue{}))
+			}
+
+			for _, kv := range []storage.MVCCKeyValue{
+				pointKV("A", 1, "A"),
+				pointKV("a", 1, "a"),
+				pointKV("b", 5, "bb"),
+				pointKV("c", 6, "ccccccccccccccccccccccccccccccccccccccccccccc"), // key 4b, 50b, live 64b
+				pointKV("d", 1, "d"),
+				pointKV("d", 2, ""),
+				pointKV("e", 1, "e"),
+				pointKV("u", 3, "u"),
+				pointKV("z", 2, "zzzzzz"),
+			} {
+				require.NoError(t, engine.PutRawMVCC(kv.Key, kv.Value))
+			}
+
+			sst, start, end := storageutils.MakeSST(t, st, kvs{
+				pointKV("a", 4, "aaaaaa"), // mvcc-shadowed by existing delete.
+				pointKV("a", 2, "aa"),     // mvcc-shadowed within SST.
+				pointKV("d", 4, "dddd"),   // mvcc-shadow existing deleted d.
+				pointKV("e", 1, "e"),      // duplicate
+				pointKV("j", 2, "jj"),     // no collision – via MVCC or LSM – with existing.
+				pointKV("t", 3, ""),       // tombstone, no collission
+				pointKV("u", 5, ""),       // tombstone, shadows existing
+			})
+
+			// estimatesCorrection describes the mvcc stats bias created when adding
+			// in sst into overlapping keyspace, when ComputeStatsDiff is not actually
+			// called.
+			estimatesCorrection := enginepb.MVCCStats{
+				// the sst will think it added 5 keys here, but a, e, and t shadow or are shadowed.
+				LiveCount: -3,
+				LiveBytes: -60,
+				// the sst will think it added 4 keys, but only j and t are new so 5 are over-counted.
+				KeyCount: -4,
+				KeyBytes: -20,
+				// the sst will think it added 6 values, but since e was a perfect (key+ts)
+				// collision, it *replaced* the existing value and is over-counted.
+				ValCount: -1,
+				ValBytes: -6,
+			}
+
+			// After EvalAddSSTable, cArgs.Stats contains a diff to the existing
+			// stats. Make sure recomputing from scratch gets the same answer as
+			// applying the diff to the stats
+			statsBefore := storageutils.EngineStats(t, engine, 0)
+			ts := hlc.Timestamp{WallTime: 7}
+			evalCtx.Stats = *statsBefore
+
+			cArgs := batcheval.CommandArgs{
+				EvalCtx: evalCtx.EvalContext(),
+				Header: kvpb.Header{
+					Timestamp: ts,
+				},
+				Args: &kvpb.AddSSTableRequest{
+					RequestHeader:    kvpb.RequestHeader{Key: start, EndKey: end},
+					Data:             sst,
+					ComputeStatsDiff: computeStatsDiff,
+				},
+				Stats: &enginepb.MVCCStats{},
+			}
+			var resp kvpb.AddSSTableResponse
+			_, err := batcheval.EvalAddSSTable(ctx, engine, cArgs, &resp)
+			require.NoError(t, err)
+
+			require.NoError(t, fs.WriteFile(engine.Env(), "sst", sst, fs.UnspecifiedWriteCategory))
+			require.NoError(t, engine.IngestLocalFiles(ctx, []string{"sst"}))
+
+			statsEvaled := statsBefore
+			statsEvaled.Add(*cArgs.Stats)
+
+			newStats := storageutils.EngineStats(t, engine, statsEvaled.LastUpdateNanos)
+			availableBytes := resp.AvailableBytes
+
+			if expectEstimates {
+				// Correct for bias.
+				statsEvaled.Add(estimatesCorrection)
+				availableBytes -= estimatesCorrection.Total()
+
+				// Actual stats are expected to be stimates.
+				newStats.ContainsEstimates = 1
+			}
+			require.Equal(t, newStats, statsEvaled)
+			require.Equal(t, max-newStats.Total(), availableBytes)
+
+			// Check stats for a single KV.
+			sst, start, end = storageutils.MakeSST(t, st, kvs{pointKV("zzzzzzz", int(ts.WallTime), "zzz")})
+			cArgs = batcheval.CommandArgs{
+				EvalCtx: evalCtx.EvalContext(),
+				Header:  kvpb.Header{Timestamp: ts},
+				Args: &kvpb.AddSSTableRequest{
+					RequestHeader:    kvpb.RequestHeader{Key: start, EndKey: end},
+					Data:             sst,
+					ComputeStatsDiff: computeStatsDiff,
+				},
+				Stats: &enginepb.MVCCStats{},
+			}
+			_, err = batcheval.EvalAddSSTable(ctx, engine, cArgs, &kvpb.AddSSTableResponse{})
+			require.NoError(t, err)
+
+			containsEstimates := int64(0)
+			if expectEstimates {
+				containsEstimates = 1
+			}
+			require.Equal(t, enginepb.MVCCStats{
+				ContainsEstimates: containsEstimates,
+				LastUpdateNanos:   ts.WallTime,
+				LiveBytes:         28,
+				LiveCount:         1,
+				KeyBytes:          20,
+				KeyCount:          1,
+				ValBytes:          8,
+				ValCount:          1,
+			}, *cArgs.Stats)
+		})
 	})
-	statsDelta := enginepb.MVCCStats{
-		// the sst will think it added 5 keys here, but a, c, e, and t shadow or are shadowed.
-		LiveCount: -4,
-		LiveBytes: -129,
-		// the sst will think it added 5 keys, but only j and t are new so 5 are over-counted.
-		KeyCount: -5,
-		KeyBytes: -22,
-		// the sst will think it added 6 values, but since one was a perfect (key+ts)
-		// collision, it *replaced* the existing value and is over-counted.
-		ValCount: -1,
-		ValBytes: -50,
-	}
-
-	// After EvalAddSSTable, cArgs.Stats contains a diff to the existing
-	// stats. Make sure recomputing from scratch gets the same answer as
-	// applying the diff to the stats
-	statsBefore := storageutils.EngineStats(t, engine, 0)
-	ts := hlc.Timestamp{WallTime: 7}
-	evalCtx.Stats = *statsBefore
-
-	cArgs := batcheval.CommandArgs{
-		EvalCtx: evalCtx.EvalContext(),
-		Header: kvpb.Header{
-			Timestamp: ts,
-		},
-		Args: &kvpb.AddSSTableRequest{
-			RequestHeader: kvpb.RequestHeader{Key: start, EndKey: end},
-			Data:          sst,
-		},
-		Stats: &enginepb.MVCCStats{},
-	}
-	var resp kvpb.AddSSTableResponse
-	_, err := batcheval.EvalAddSSTable(ctx, engine, cArgs, &resp)
-	require.NoError(t, err)
-
-	require.NoError(t, fs.WriteFile(engine.Env(), "sst", sst, fs.UnspecifiedWriteCategory))
-	require.NoError(t, engine.IngestLocalFiles(ctx, []string{"sst"}))
-
-	statsEvaled := statsBefore
-	statsEvaled.Add(*cArgs.Stats)
-	statsEvaled.Add(statsDelta)
-	statsEvaled.ContainsEstimates = 0
-
-	newStats := storageutils.EngineStats(t, engine, statsEvaled.LastUpdateNanos)
-	require.Equal(t, newStats, statsEvaled)
-
-	// Check that actual remaining bytes equals the returned remaining bytes once
-	// the delta for stats inaccuracy is applied.
-	require.Equal(t, max-newStats.Total(), resp.AvailableBytes-statsDelta.Total())
-
-	// Check stats for a single KV.
-	sst, start, end = storageutils.MakeSST(t, st, kvs{pointKV("zzzzzzz", int(ts.WallTime), "zzz")})
-	cArgs = batcheval.CommandArgs{
-		EvalCtx: evalCtx.EvalContext(),
-		Header:  kvpb.Header{Timestamp: ts},
-		Args: &kvpb.AddSSTableRequest{
-			RequestHeader: kvpb.RequestHeader{Key: start, EndKey: end},
-			Data:          sst,
-		},
-		Stats: &enginepb.MVCCStats{},
-	}
-	_, err = batcheval.EvalAddSSTable(ctx, engine, cArgs, &kvpb.AddSSTableResponse{})
-	require.NoError(t, err)
-	require.Equal(t, enginepb.MVCCStats{
-		ContainsEstimates: 1,
-		LastUpdateNanos:   ts.WallTime,
-		LiveBytes:         28,
-		LiveCount:         1,
-		KeyBytes:          20,
-		KeyCount:          1,
-		ValBytes:          8,
-		ValCount:          1,
-	}, *cArgs.Stats)
 }
 
-// TestAddSSTableMVCCStatsDisallowShadowing tests that stats are computed
-// accurately when DisallowShadowing is set.
-func TestAddSSTableMVCCStatsDisallowShadowing(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-	storage.DisableMetamorphicSimpleValueEncoding(t)
-
-	ctx := context.Background()
-	st := cluster.MakeTestingClusterSettings()
-	evalCtx := (&batcheval.MockEvalCtx{ClusterSettings: st, Desc: &roachpb.RangeDescriptor{}}).EvalContext()
-
-	engine := storage.NewDefaultInMemForTesting()
-	defer engine.Close()
-
-	for _, kv := range []storage.MVCCKeyValue{
-		pointKV("a", 2, "aa"),
-		pointKV("b", 1, "bb"),
-		pointKV("b", 6, ""),
-		pointKV("g", 5, "gg"),
-		pointKV("r", 1, "rr"),
-		pointKV("t", 3, ""),
-		pointKV("y", 1, "yy"),
-		pointKV("y", 2, ""),
-		pointKV("y", 5, "yyy"),
-		pointKV("z", 2, "zz"),
-	} {
-		require.NoError(t, engine.PutRawMVCC(kv.Key, kv.Value))
-	}
-
-	// This test ensures accuracy of MVCCStats in the situation that successive
-	// SSTs being ingested via AddSSTable have "perfectly shadowing" keys (same ts
-	// and value). Such KVs are not considered as collisions and so while they are
-	// skipped during ingestion, their stats would previously be double counted.
-	// To mitigate this problem we now return the stats of such skipped KVs while
-	// evaluating the AddSSTable command, and accumulate accurate stats in the
-	// CommandArgs Stats field by using:
-	// cArgs.Stats + ingested_stats - skipped_stats.
-	// Successfully evaluate the first SST as there are no key collisions.
-	sstKVs := kvs{
-		pointKV("c", 2, "bb"),
-		pointKV("h", 6, "hh"),
-	}
-	sst, start, end := storageutils.MakeSST(t, st, sstKVs)
-
-	// Accumulate stats across SST ingestion.
-	commandStats := enginepb.MVCCStats{}
-
-	cArgs := batcheval.CommandArgs{
-		EvalCtx: evalCtx,
-		Header: kvpb.Header{
-			Timestamp: hlc.Timestamp{WallTime: 7},
-		},
-		Args: &kvpb.AddSSTableRequest{
-			RequestHeader:     kvpb.RequestHeader{Key: start, EndKey: end},
-			Data:              sst,
-			DisallowShadowing: true,
-			MVCCStats:         storageutils.SSTStats(t, sst, 0),
-		},
-		Stats: &commandStats,
-	}
-	_, err := batcheval.EvalAddSSTable(ctx, engine, cArgs, &kvpb.AddSSTableResponse{})
-	require.NoError(t, err)
-	firstSSTStats := commandStats
-
-	// Insert KV entries so that we can correctly identify keys to skip when
-	// ingesting the perfectly shadowing KVs (same ts and same value) in the
-	// second SST.
-	for _, kv := range sstKVs.MVCCKeyValues() {
-		require.NoError(t, engine.PutRawMVCC(kv.Key, kv.Value))
-	}
-
-	// Evaluate the second SST. Both the KVs are perfectly shadowing and should
-	// not contribute to the stats.
-	sst, start, end = storageutils.MakeSST(t, st, kvs{
-		pointKV("c", 2, "bb"), // key has the same timestamp and value as the one present in the existing data.
-		pointKV("h", 6, "hh"), // key has the same timestamp and value as the one present in the existing data.
-	})
-
-	cArgs.Args = &kvpb.AddSSTableRequest{
-		RequestHeader:     kvpb.RequestHeader{Key: start, EndKey: end},
-		Data:              sst,
-		DisallowShadowing: true,
-		MVCCStats:         storageutils.SSTStats(t, sst, 0),
-	}
-	_, err = batcheval.EvalAddSSTable(ctx, engine, cArgs, &kvpb.AddSSTableResponse{})
-	require.NoError(t, err)
-
-	// Check that there has been no double counting of stats. All keys in second SST are shadowing.
-	if cArgs.Stats != nil {
-		cArgs.Stats.AgeTo(firstSSTStats.LastUpdateNanos)
-	}
-	require.Equal(t, firstSSTStats, *cArgs.Stats)
-
-	// Evaluate the third SST. Some of the KVs are perfectly shadowing, but there
-	// are two valid KVs which should contribute to the stats.
-	sst, start, end = storageutils.MakeSST(t, st, kvs{
-		pointKV("c", 2, "bb"), // key has the same timestamp and value as the one present in the existing data.
-		pointKV("e", 2, "ee"),
-		pointKV("h", 6, "hh"), // key has the same timestamp and value as the one present in the existing data.
-		pointKV("t", 3, ""),   // identical to existing tombstone.
-		pointKV("x", 7, ""),   // new tombstone.
-	})
-
-	cArgs.Args = &kvpb.AddSSTableRequest{
-		RequestHeader:     kvpb.RequestHeader{Key: start, EndKey: end},
-		Data:              sst,
-		DisallowShadowing: true,
-		MVCCStats:         storageutils.SSTStats(t, sst, 0),
-	}
-	_, err = batcheval.EvalAddSSTable(ctx, engine, cArgs, &kvpb.AddSSTableResponse{})
-	require.NoError(t, err)
-
-	// This is the stats contribution of the KVs {"e", 2, "ee"} and {"x", 7, ""}.
-	// This should be the only addition to the cumulative stats, as the other
-	// KVs are perfect shadows of existing data.
-	delta := enginepb.MVCCStats{
-		LiveCount: 1,
-		LiveBytes: 21,
-		KeyCount:  2,
-		KeyBytes:  28,
-		ValCount:  2,
-		ValBytes:  7,
-	}
-
-	// Check that there has been no double counting of stats.
-	firstSSTStats.Add(delta)
-	if cArgs.Stats != nil {
-		cArgs.Stats.AgeTo(firstSSTStats.LastUpdateNanos)
-	}
-	require.Equal(t, firstSSTStats, *cArgs.Stats)
+func makeKey(codec keys.SQLCodec, key string) roachpb.Key {
+	return append(append(roachpb.Key(nil), codec.TenantPrefix()...), key...)
 }
 
 // TestAddSSTableIntentResolution tests that AddSSTable resolves
@@ -1847,20 +1560,18 @@ func TestAddSSTableIntentResolution(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	srv, _, db := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109427),
-	})
+	srv, _, db := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 
 	// Start a transaction that writes an intent at b.
 	txn := db.NewTxn(ctx, "intent")
-	require.NoError(t, txn.Put(ctx, "b", "intent"))
+	require.NoError(t, txn.Put(ctx, makeKey(s.Codec(), "b"), "intent"))
 
 	// Generate an SSTable that covers keys a, b, and c, and submit it with high
 	// priority. This is going to abort the transaction above, encounter its
 	// intent, and resolve it.
-	sst, start, end := storageutils.MakeSST(t, s.ClusterSettings(), kvs{
+	sst, start, end := storageutils.MakeSSTWithPrefix(t, s.ClusterSettings(), s.Codec().TenantPrefix(), kvs{
 		pointKV("a", 1, "1"),
 		pointKV("b", 1, "2"),
 		pointKV("c", 1, "3"),
@@ -1869,10 +1580,9 @@ func TestAddSSTableIntentResolution(t *testing.T) {
 		Header: kvpb.Header{UserPriority: roachpb.MaxUserPriority},
 	}
 	ba.Add(&kvpb.AddSSTableRequest{
-		RequestHeader:     kvpb.RequestHeader{Key: start, EndKey: end},
-		Data:              sst,
-		MVCCStats:         storageutils.SSTStats(t, sst, 0),
-		DisallowShadowing: true,
+		RequestHeader: kvpb.RequestHeader{Key: start, EndKey: end},
+		Data:          sst,
+		MVCCStats:     storageutils.SSTStats(t, sst, 0),
 	})
 	_, pErr := db.NonTransactionalSender().Send(ctx, ba)
 	require.Nil(t, pErr)
@@ -1890,22 +1600,19 @@ func TestAddSSTableSSTTimestampToRequestTimestampRespectsTSCache(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	srv, _, db := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109427),
-		Knobs:             base.TestingKnobs{},
-	})
+	srv, _, db := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 
 	// Write key.
 	txn := db.NewTxn(ctx, "txn")
-	require.NoError(t, txn.Put(ctx, "key", "txn"))
+	require.NoError(t, txn.Put(ctx, makeKey(s.Codec(), "key"), "txn"))
 	require.NoError(t, txn.Commit(ctx))
 	txnTS, err := txn.CommitTimestamp()
 	require.NoError(t, err)
 
 	// Add an SST writing below the previous write.
-	sst, start, end := storageutils.MakeSST(t, s.ClusterSettings(), kvs{pointKV("key", 1, "sst")})
+	sst, start, end := storageutils.MakeSSTWithPrefix(t, s.ClusterSettings(), s.Codec().TenantPrefix(), kvs{pointKV("key", 1, "sst")})
 	sstReq := &kvpb.AddSSTableRequest{
 		RequestHeader:                  kvpb.RequestHeader{Key: start, EndKey: end},
 		Data:                           sst,
@@ -1921,7 +1628,7 @@ func TestAddSSTableSSTTimestampToRequestTimestampRespectsTSCache(t *testing.T) {
 
 	// Reading gets the value from the txn, because the tscache allowed writing
 	// below the committed value.
-	kv, err := db.Get(ctx, "key")
+	kv, err := db.Get(ctx, makeKey(s.Codec(), "key"))
 	require.NoError(t, err)
 	require.Equal(t, "txn", string(kv.ValueBytes()))
 
@@ -1934,7 +1641,7 @@ func TestAddSSTableSSTTimestampToRequestTimestampRespectsTSCache(t *testing.T) {
 	_, pErr = db.NonTransactionalSender().Send(ctx, ba)
 	require.Nil(t, pErr)
 
-	kv, err = db.Get(ctx, "key")
+	kv, err = db.Get(ctx, makeKey(s.Codec(), "key"))
 	require.NoError(t, err)
 	require.Equal(t, "sst", string(kv.ValueBytes()))
 }
@@ -1946,30 +1653,32 @@ func TestAddSSTableSSTTimestampToRequestTimestampRespectsClosedTS(t *testing.T) 
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, _, db := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(109427),
+	srv, _, db := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			Store: &kvserver.StoreTestingKnobs{
 				DisableCanAckBeforeApplication: true,
 			},
 		},
 	})
-	defer s.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	// Issue a write to trigger a closed timestamp.
-	require.NoError(t, db.Put(ctx, "someKey", "someValue"))
+	require.NoError(t, db.Put(ctx, makeKey(s.Codec(), "someKey"), "someValue"))
+
+	key := makeKey(s.Codec(), "key")
 
 	// Get the closed timestamp for the range owning "key".
-	rd, err := s.LookupRange(roachpb.Key("key"))
+	rd, err := srv.LookupRange(key)
 	require.NoError(t, err)
-	r, store, err := s.GetStores().(*kvserver.Stores).GetReplicaForRangeID(ctx, rd.RangeID)
+	r, store, err := srv.GetStores().(*kvserver.Stores).GetReplicaForRangeID(ctx, rd.RangeID)
 	require.NoError(t, err)
 	closedTS := r.GetCurrentClosedTimestamp(ctx)
 	require.NotZero(t, closedTS)
 
 	// Add an SST writing below the closed timestamp. It should get pushed above it.
 	reqTS := closedTS.Prev()
-	sst, start, end := storageutils.MakeSST(t, store.ClusterSettings(), kvs{pointKV("key", 1, "sst")})
+	sst, start, end := storageutils.MakeSSTWithPrefix(t, store.ClusterSettings(), s.Codec().TenantPrefix(), kvs{pointKV("key", 1, "sst")})
 	sstReq := &kvpb.AddSSTableRequest{
 		RequestHeader:                  kvpb.RequestHeader{Key: start, EndKey: end},
 		Data:                           sst,
@@ -1987,10 +1696,10 @@ func TestAddSSTableSSTTimestampToRequestTimestampRespectsClosedTS(t *testing.T) 
 	require.True(t, closedTS.LessEq(writeTS), "timestamp %s below closed timestamp %s", result.Timestamp, closedTS)
 
 	// Check that the value was in fact written at the write timestamp.
-	kvs, err := storage.Scan(context.Background(), store.TODOEngine(), roachpb.Key("key"), roachpb.Key("key").Next(), 0)
+	kvs, err := storage.Scan(context.Background(), store.StateEngine(), key, key.Next(), 0)
 	require.NoError(t, err)
 	require.Len(t, kvs, 1)
-	require.Equal(t, storage.MVCCKey{Key: roachpb.Key("key"), Timestamp: writeTS}, kvs[0].Key)
+	require.Equal(t, storage.MVCCKey{Key: key, Timestamp: writeTS}, kvs[0].Key)
 	mvccVal, err := storage.DecodeMVCCValue(kvs[0].Value)
 	require.NoError(t, err)
 	v, err := mvccVal.Value.GetBytes()

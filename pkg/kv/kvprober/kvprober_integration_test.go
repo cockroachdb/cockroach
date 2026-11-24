@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvprober"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
+	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -327,7 +328,7 @@ func TestPlannerMakesPlansCoveringAllRanges(t *testing.T) {
 			"SELECT count(*) FROM crdb_internal.ranges").Scan(&numRanges); err != nil {
 			require.True(t, false)
 		}
-		log.Infof(ctx, "want numRanges %v", numRanges)
+		log.Dev.Infof(ctx, "want numRanges %v", numRanges)
 
 		require.Eventually(t, func() bool {
 			step, err := p.ReadPlannerNext(ctx)
@@ -335,9 +336,15 @@ func TestPlannerMakesPlansCoveringAllRanges(t *testing.T) {
 
 			rangeIDToTimesWouldBeProbed[int64(step.RangeID)]++
 
-			log.Infof(ctx, "current rangeID to times would be probed map: %v", rangeIDToTimesWouldBeProbed)
+			log.Dev.Infof(ctx, "current rangeID to times would be probed map: %v", rangeIDToTimesWouldBeProbed)
 
 			for i := int64(1); i <= numRanges; i++ {
+				// Range 1 (meta1 range) is not probed by the kvprober planner, as it
+				// only scans meta2 records, and range 1's descriptor isn't stored in
+				// meta2.
+				if i == 1 {
+					continue
+				}
 				// Expect all ranges to eventually be returned by Next n or n+1 times.
 				// Can't expect all ranges to be returned by Next exactly n times,
 				// as the order in which the lowest ordinal ranges are returned by
@@ -411,9 +418,29 @@ func initTestServer(
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
 		// KV probes always go to the storage layer.
 		DefaultTestTenant: base.TestIsSpecificToStorageLayerAndNeedsASystemTenant,
+		Settings:          cluster.MakeClusterSettings(),
+		Knobs:             knobs,
+		RaftConfig: base.RaftConfig{
+			// Speed up tests.
+			RaftTickInterval:           100 * time.Millisecond,
+			RaftElectionTimeoutTicks:   2,
+			RaftHeartbeatIntervalTicks: 1,
+		},
+	})
 
-		Settings: cluster.MakeClusterSettings(),
-		Knobs:    knobs,
+	// With leader leases, wait for store liveness support to be established. This
+	// is useful as the leader will only be elected once it has quorum support
+	// in store liveness. Without this, we could see some deadline exceeded errors
+	// until the store liveness support is established and the leader is elected.
+	store, err := s.GetStores().(*kvserver.Stores).GetStore(s.GetFirstStoreID())
+	require.NoError(t, err)
+	testutils.SucceedsSoon(t, func() error {
+		ident := slpb.StoreIdent{NodeID: store.NodeID(), StoreID: store.StoreID()}
+		epoch, _ := store.TestingStoreLivenessSupportManager().SupportFrom(ident)
+		if epoch == 0 {
+			return errors.New("support not established")
+		}
+		return nil
 	})
 
 	// Given small test cluster, this better exercises the planning logic.

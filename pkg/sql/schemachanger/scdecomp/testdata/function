@@ -51,7 +51,6 @@ ElementState:
           tupleLabels: []
           udtMetadata:
             arrayTypeOid: 100109
-          visibleType: 0
           width: 0
         typeName: public.notmyworkday
     returnSet: false
@@ -71,7 +70,6 @@ ElementState:
         tupleContents: []
         tupleLabels: []
         udtMetadata: null
-        visibleType: 0
         width: 64
       typeName: INT8
   Status: PUBLIC
@@ -121,6 +119,36 @@ ElementState:
     functionId: 110
     nullInputBehavior:
       nullInputBehavior: CALLED_ON_NULL_INPUT
+  Status: PUBLIC
+- FunctionParams:
+    functionId: 110
+    params:
+    - class:
+        class: DEFAULT
+      defaultExpr: ""
+      name: a
+      type:
+        closedTypeIds:
+        - 108
+        - 109
+        type:
+          arrayContents: null
+          arrayDimensions: []
+          arrayElemType: null
+          family: EnumFamily
+          geoMetadata: null
+          intervalDurationField: null
+          locale: null
+          oid: 100108
+          precision: 0
+          timePrecisionIsSet: false
+          tupleContents: []
+          tupleLabels: []
+          udtMetadata:
+            arrayTypeOid: 100109
+          width: 0
+        typeName: public.notmyworkday
+    returnType: null
   Status: PUBLIC
 - FunctionSecurity:
     functionId: 110

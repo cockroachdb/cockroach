@@ -8,17 +8,21 @@ package main
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"math/rand"
+	"os"
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/bazci/githubpost/issues"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
@@ -35,6 +39,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/errors/oserror"
 	"github.com/kr/pretty"
 	"github.com/stretchr/testify/require"
 )
@@ -62,16 +67,33 @@ func nilLogger() *logger.Logger {
 
 func defaultClusterOpt() clustersOpt {
 	return clustersOpt{
-		typ:       roachprodCluster,
+		typ:       roachprodClusterType,
 		user:      "test_user",
 		cpuQuota:  1000,
 		debugMode: NoDebug,
 	}
 }
 
+// clusterOptWithProvisioningError returns a clusterOpt with
+// preAllocateClusterFn set to a function that always returns nil to mock a
+// cluster provisioning error.
+func clusterOptWithProvisioningError() clustersOpt {
+	return clustersOpt{
+		typ:       roachprodClusterType,
+		user:      "test_user",
+		cpuQuota:  1000,
+		debugMode: NoDebug,
+		preAllocateClusterFn: func(ctx context.Context,
+			t registry.TestSpec,
+			arch vm.CPUArch) error {
+			return errors.New("Provision error")
+		},
+	}
+}
+
 func defaultLoggingOpt(buf *syncedBuffer) loggingOpt {
 	return loggingOpt{
-		l:            nilLogger(),
+		runnerL:      nilLogger(),
 		tee:          logger.NoTee,
 		stdout:       buf,
 		stderr:       buf,
@@ -79,14 +101,51 @@ func defaultLoggingOpt(buf *syncedBuffer) loggingOpt {
 	}
 }
 
+func defaultGithub(disable bool) GithubPoster {
+	return &githubIssues{
+		disable: disable,
+		dryRun:  false,
+		// issuePoster isn't mocked because an env var check exits MaybePost when
+		// the GitHub API isn't present, so technically setting it here doesn't
+		// matter
+		issuePoster: func(context.Context, issues.Logger, issues.IssueFormatter, issues.PostRequest,
+			*issues.Options) (*issues.TestFailureIssue, error) {
+			return nil, errors.New("unit test should never post to github")
+		},
+	}
+}
+
+// mockGithubIssues is a mock implementation of GithubPoster to test GitHub
+// failure scenarios
+type mockGithubIssues struct{}
+
+func (m *mockGithubIssues) MaybePost(
+	t *testImpl,
+	issueInfo *githubIssueInfo,
+	l *logger.Logger,
+	message string,
+	params map[string]string,
+) (*issues.TestFailureIssue, error) {
+	return nil, errors.New("mocked MaybePost error")
+}
+
+func brokenGithub(disable bool) GithubPoster {
+	return &mockGithubIssues{}
+}
+
 func TestRunnerRun(t *testing.T) {
 	ctx := context.Background()
 
 	r := mkReg(t)
 	r.Add(registry.TestSpec{
-		Name:             "pass",
-		Owner:            OwnerUnitTest,
-		Run:              func(ctx context.Context, t test.Test, c cluster.Cluster) {},
+		Name:  "pass",
+		Owner: OwnerUnitTest,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			// N.B. sleep to ensure non-zero run duration
+			time.Sleep(time.Duration(rand.Intn(5)+1) * time.Millisecond)
+			t.L().Printf("pass")
+		},
+		// N.B. 0-node cluster results in a no-op cluster allocator. (See clusterFactory.newCluster)
 		Cluster:          r.MakeClusterSpec(0),
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
@@ -102,7 +161,7 @@ func TestRunnerRun(t *testing.T) {
 		Suites:           registry.Suites(registry.Nightly),
 	})
 	r.Add(registry.TestSpec{
-		Name:  "errors",
+		Name:  "fail_errors",
 		Owner: OwnerUnitTest,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			t.Errorf("first %s", "error")
@@ -113,7 +172,7 @@ func TestRunnerRun(t *testing.T) {
 		Suites:           registry.Suites(registry.Nightly),
 	})
 	r.Add(registry.TestSpec{
-		Name:  "panic",
+		Name:  "fail_panic",
 		Owner: OwnerUnitTest,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			sl := []int{0}
@@ -121,6 +180,26 @@ func TestRunnerRun(t *testing.T) {
 			// good at figuring out static out of bound indexing.
 			idx := rand.Intn(2) + 1 // definitely out of bounds
 			t.L().Printf("boom %d", sl[idx])
+		},
+		Cluster:          r.MakeClusterSpec(0),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+	})
+	r.Add(registry.TestSpec{
+		Name:  "skip",
+		Owner: OwnerUnitTest,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			t.Skip("#799")
+		},
+		Cluster:          r.MakeClusterSpec(0),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+	})
+	r.Add(registry.TestSpec{
+		Name:  "skip_details",
+		Owner: OwnerUnitTest,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			t.Skip("#999", "test is broken")
 		},
 		Cluster:          r.MakeClusterSpec(0),
 		CompatibleClouds: registry.AllExceptAWS,
@@ -141,14 +220,32 @@ func TestRunnerRun(t *testing.T) {
 		{filters: []string{"errors"}, expErr: "some tests failed", expOut: "second error"},
 		{filters: []string{"panic"}, expErr: "some tests failed", expOut: "index out of range"},
 	}
+	// Restore original values needed for enabling GH markdown output.
+	prev1 := os.Getenv("GITHUB_STEP_SUMMARY")
+	prev2 := roachtestflags.GitHubActions
+	defer func() {
+		err := os.Setenv("GITHUB_STEP_SUMMARY", prev1)
+		require.NoError(t, err)
+		roachtestflags.GitHubActions = prev2
+	}()
+
 	for _, c := range testCases {
 		t.Run("", func(t *testing.T) {
 			rt := setupRunnerTest(t, r, c.filters)
+			github := defaultGithub(rt.runner.config.disableIssue)
 
 			const count = 1
-			err := rt.runner.Run(ctx, rt.tests, count, defaultParallelism, rt.copt, testOpts{}, rt.lopt)
-
+			err := rt.runner.Run(ctx, rt.tests, count, defaultParallelism, rt.copt, testOpts{}, rt.lopt, github)
 			assertTestCompletion(t, rt.tests, c.filters, rt.runner.getCompletedTests(), err, c.expErr)
+			// Write test reports & verify their contents.
+			testSummaryPath := filepath.Join(rt.lopt.artifactsDir, "test_summary.tsv")
+			markdownPath := filepath.Join(rt.lopt.artifactsDir, "test_summary.md")
+			// Enable GH markdown output.
+			roachtestflags.GitHubActions = true
+			err = os.Setenv("GITHUB_STEP_SUMMARY", markdownPath)
+			require.NoError(t, err)
+			rt.runner.writeTestReports(ctx, nilLogger(), rt.lopt.artifactsDir)
+			assertTestReports(t, testSummaryPath, markdownPath, rt.runner.getCompletedTests())
 
 			// N.B. skip the case of no matching tests
 			if len(rt.tests) > 0 {
@@ -157,7 +254,8 @@ func TestRunnerRun(t *testing.T) {
 				copt.preAllocateClusterFn = func(ctx context.Context, t registry.TestSpec, arch vm.CPUArch) error {
 					return errors.New("cluster creation failed")
 				}
-				err = rt.runner.Run(ctx, rt.tests, count, defaultParallelism, copt, testOpts{}, rt.lopt)
+				err = rt.runner.Run(ctx, rt.tests, count, defaultParallelism, copt, testOpts{}, rt.lopt,
+					github)
 
 				assertTestCompletion(t,
 					rt.tests, c.filters, rt.runner.getCompletedTests(),
@@ -190,7 +288,7 @@ func TestRunnerEncryptionAtRest(t *testing.T) {
 		Owner:             OwnerUnitTest,
 		EncryptionSupport: registry.EncryptionMetamorphic,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-			encAtRest := c.(*clusterImpl).encAtRest
+			encAtRest := c.(testCluster).EncryptedAtRest()
 			t.L().Printf("encryption-at-rest=%t", encAtRest)
 			if encAtRest {
 				atomic.StoreInt32(&sawEncrypted, 1)
@@ -202,11 +300,12 @@ func TestRunnerEncryptionAtRest(t *testing.T) {
 	})
 
 	rt := setupRunnerTest(t, r, nil)
+	github := defaultGithub(rt.runner.config.disableIssue)
 
 	for i := 0; i < 10000; i++ {
 		require.NoError(t, rt.runner.Run(
 			context.Background(), rt.tests, 1 /* count */, 1, /* parallelism */
-			rt.copt, testOpts{}, rt.lopt,
+			rt.copt, testOpts{}, rt.lopt, github,
 		))
 		if atomic.LoadInt32(&sawEncrypted) == 0 {
 			// NB: since it's a 50% chance, the probability of *not* hitting
@@ -243,7 +342,7 @@ func setupRunnerTest(t *testing.T, r testRegistryImpl, testFilters []string) *ru
 	var stdout syncedBuffer
 	var stderr syncedBuffer
 	lopt := loggingOpt{
-		l: func() *logger.Logger {
+		runnerL: func() *logger.Logger {
 			l, err := logger.RootLogger(filepath.Join(t.TempDir(), "test.log"), logger.NoTee)
 			if err != nil {
 				panic(err)
@@ -253,7 +352,7 @@ func setupRunnerTest(t *testing.T, r testRegistryImpl, testFilters []string) *ru
 		tee:          logger.NoTee,
 		stdout:       &stdout,
 		stderr:       &stderr,
-		artifactsDir: "",
+		artifactsDir: filepath.Join(t.TempDir(), "runnerTest"),
 	}
 	copt := defaultClusterOpt()
 	return &runnerTest{
@@ -286,8 +385,94 @@ func assertTestCompletion(
 	for i, info := range completed {
 		if info.test == "pass" {
 			require.Truef(t, info.pass, "expected test %s to pass", tests[i].Name)
-		} else if info.test == "fail" {
+		} else if strings.Contains(info.test, "fail") {
 			require.Falsef(t, info.pass, "expected test %s to fail", tests[i].Name)
+		} else {
+			// Assert test was skipped.
+			require.Truef(t, info.skip != "", "expected test %s to be skipped", tests[i].Name)
+			require.Contains(t, info.test, "skip")
+		}
+	}
+}
+
+// verifies written test report files
+func assertTestReports(
+	t *testing.T, testSummaryPath, markdownPath string, completed []completedTestInfo,
+) {
+	t.Helper()
+
+	if len(completed) == 0 {
+		// no tests run, no reports written
+		_, err := os.Stat(testSummaryPath)
+		require.True(t, oserror.IsNotExist(err))
+		_, err = os.Stat(markdownPath)
+		require.True(t, oserror.IsNotExist(err))
+		return
+	}
+
+	summaryBytes, err := os.ReadFile(testSummaryPath)
+	require.NoError(t, err)
+	markdownBytes, err := os.ReadFile(markdownPath)
+	require.NoError(t, err)
+
+	summaryRows := strings.Split(string(summaryBytes), "\n")
+	markdownRows := strings.Split(string(markdownBytes), "\n")
+
+	findRow := func(rows []string, test string, numCols int, markdown bool) []string {
+		for _, row := range rows {
+			var columns []string
+			if markdown {
+				columns = strings.Split(row, "|")
+				if len(columns) > 1 {
+					// Skip leading and trailing pipes.
+					columns = columns[1 : len(columns)-1]
+					// Remove formatting to normalize column values.
+					for i := range columns {
+						columns[i] = strings.ToLower(strings.Trim(strings.TrimSpace(columns[i]), "`"))
+					}
+				}
+			} else {
+				columns = strings.Split(row, "\t")
+			}
+			if len(columns) != numCols {
+				continue
+			}
+			if columns[0] == test {
+				return columns
+			}
+		}
+		return []string{}
+	}
+
+	for _, info := range completed {
+		// columns: test_name, status, ignore_details, duration
+		summaryRow := findRow(summaryRows, info.test, 4, false)
+		markdownRow := findRow(markdownRows, info.test, 4, true)
+		// Assert test name.
+		require.Equal(t, info.test, summaryRow[0])
+		require.Equal(t, info.test, markdownRow[0])
+		// Assert status.
+		if info.pass {
+			require.Equal(t, "success", summaryRow[1])
+			require.Contains(t, markdownRow[1], "success")
+			// Assert duration > 0.
+			duration, err := strconv.ParseInt(summaryRow[3], 10, 64)
+			require.NoError(t, err)
+			require.Greater(t, duration, int64(0))
+
+			timeDuration, err := time.ParseDuration(markdownRow[3])
+			require.NoError(t, err)
+
+			require.Equal(t, duration, timeDuration.Milliseconds())
+		} else if info.failure != "" {
+			require.Equal(t, "failed", summaryRow[1])
+			require.Contains(t, markdownRow[1], "failed")
+		} else {
+			require.Equal(t, "skipped", summaryRow[1])
+			require.Contains(t, markdownRow[1], "skipped")
+			// Assert skip details.
+			require.Equal(t, info.skip, summaryRow[2])
+			require.Equal(t, info.skip, markdownRow[2])
 		}
 	}
 }
@@ -343,8 +528,9 @@ func TestRunnerTestTimeout(t *testing.T) {
 			<-ctx.Done()
 		},
 	}
+	github := defaultGithub(runner.config.disableIssue)
 	err := runner.Run(ctx, []registry.TestSpec{test}, 1, /* count */
-		defaultParallelism, copt, testOpts{}, lopt)
+		defaultParallelism, copt, testOpts{}, lopt, github)
 	if !testutils.IsError(err, "some tests failed") {
 		t.Fatalf("expected error \"some tests failed\", got: %v", err)
 	}
@@ -440,7 +626,8 @@ func runExitCodeTest(t *testing.T, injectedError error) error {
 	tests, _ := testsToRun(r, tf, false, 1.0, true)
 	var buf syncedBuffer
 	lopt := defaultLoggingOpt(&buf)
-	return runner.Run(ctx, tests, 1, 1, clustersOpt{}, testOpts{}, lopt)
+	github := defaultGithub(runner.config.disableIssue)
+	return runner.Run(ctx, tests, 1, 1, clustersOpt{}, testOpts{}, lopt, github)
 }
 
 func TestExitCode(t *testing.T) {
@@ -488,7 +675,7 @@ func TestNewCluster(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			createCallsCounter = 0
 			create = c.createMock
-			_, _, err := factory.newCluster(ctx, cfg, setStatus, true)
+			_, _, err := factory.newCluster(ctx, cfg, setStatus)
 			require.Error(t, err)
 			require.Equal(t, c.expectedCreateCalls, createCallsCounter)
 		})
@@ -538,8 +725,153 @@ func TestGCESameDefaultZone(t *testing.T) {
 		cfg.spec.Geo = c.geo
 		t.Run(c.name, func(t *testing.T) {
 			for i := 0; i < 100; i++ {
-				_, _, _ = factory.newCluster(ctx, cfg, setStatus, true)
+				_, _, _ = factory.newCluster(ctx, cfg, setStatus)
 			}
+		})
+	}
+}
+
+func TestNewClusterRetriesProviderSuggestedZone(t *testing.T) {
+	const suggestedZone = "us-central1-f"
+	createCalls := runGCECreateRetryTest(t, func(createCalls int, opts ...*cloud.ClusterCreateOpts) error {
+		require.Equal(t, len(opts), 2)
+		crdbZones := opts[0].ProviderOptsContainer[gce.ProviderName].(*gce.ProviderOpts).Zones
+		workloadZones := opts[1].ProviderOptsContainer[gce.ProviderName].(*gce.ProviderOpts).Zones
+		require.Equal(t, crdbZones, workloadZones)
+		require.NotEmpty(t, crdbZones)
+
+		if createCalls == 1 {
+			return &vm.CreateCapacityError{
+				CapacityClass:  vm.CreateCapacityClassZone,
+				Provider:       gce.ProviderName,
+				MachineType:    "t2a-standard-8",
+				FailedZones:    crdbZones,
+				SuggestedZones: []string{suggestedZone},
+				Cause:          errors.New("capacity unavailable"),
+			}
+		}
+
+		require.Equal(t, []string{suggestedZone}, crdbZones)
+		return &roachprod.ClusterAlreadyExistsError{}
+	})
+
+	require.Equal(t, 2, createCalls)
+}
+
+func TestNewClusterRetriesDifferentDefaultZoneAfterCapacityError(t *testing.T) {
+	var firstAttemptZones []string
+	createCalls := runGCECreateRetryTest(t, func(createCalls int, opts ...*cloud.ClusterCreateOpts) error {
+		require.Equal(t, len(opts), 2)
+		crdbZones := opts[0].ProviderOptsContainer[gce.ProviderName].(*gce.ProviderOpts).Zones
+		workloadZones := opts[1].ProviderOptsContainer[gce.ProviderName].(*gce.ProviderOpts).Zones
+		require.Equal(t, crdbZones, workloadZones)
+		require.Len(t, crdbZones, 1)
+
+		if createCalls == 1 {
+			firstAttemptZones = append([]string(nil), crdbZones...)
+			return &vm.CreateCapacityError{
+				CapacityClass: vm.CreateCapacityClassZone,
+				Provider:      gce.ProviderName,
+				MachineType:   "n2-standard-8",
+				FailedZones:   crdbZones,
+				Cause:         errors.New("capacity unavailable"),
+			}
+		}
+
+		require.NotEqual(t, firstAttemptZones, crdbZones)
+		return &roachprod.ClusterAlreadyExistsError{}
+	})
+
+	require.Equal(t, 2, createCalls)
+}
+
+func runGCECreateRetryTest(
+	t *testing.T, createMock func(createCalls int, opts ...*cloud.ClusterCreateOpts) error,
+) int {
+	t.Helper()
+	factory := &clusterFactory{sem: make(chan struct{}, 1), r: newClusterRegistry()}
+	cfg := clusterConfig{spec: spec.MakeClusterSpec(2, spec.WorkloadNode())}
+	prevCloud, prevZones, prevClusterWipe := roachtestflags.Cloud, roachtestflags.Zones, roachtestflags.ClusterWipe
+	roachtestflags.Cloud, roachtestflags.Zones, roachtestflags.ClusterWipe = spec.GCE, "", false
+	t.Cleanup(func() {
+		roachtestflags.Cloud, roachtestflags.Zones = prevCloud, prevZones
+		roachtestflags.ClusterWipe, create = prevClusterWipe, roachprod.Create
+	})
+
+	var createCalls int
+	create = func(ctx context.Context, l *logger.Logger, username string, opts ...*cloud.ClusterCreateOpts) error {
+		createCalls++
+		return createMock(createCalls, opts...)
+	}
+	_, _, err := factory.newCluster(context.Background(), cfg, func(string) {})
+	require.Error(t, err)
+	return createCalls
+}
+
+func TestCreateRetryPlannerFallsBackToUntriedDefaultZone(t *testing.T) {
+	planner := &createRetryPlanner{
+		retryCandidates: []string{"us-east1-b", "us-east1-c", "us-east1-d"},
+		attemptedZones:  map[string]struct{}{"us-east1-b": {}},
+	}
+
+	zones, source := planner.selectNextZones(&vm.CreateCapacityError{
+		FailedZones: []string{"us-east1-b"},
+	})
+	require.Equal(t, []string{"us-east1-c"}, zones)
+	require.Equal(t, "untried default zones", source)
+}
+
+func TestCreateRetryPlannerIgnoresFailedSuggestedZone(t *testing.T) {
+	planner := &createRetryPlanner{
+		retryCandidates: []string{"us-east1-b", "us-east1-c", "us-east1-d"},
+		attemptedZones:  make(map[string]struct{}),
+	}
+
+	zones, source := planner.selectNextZones(&vm.CreateCapacityError{
+		FailedZones:    []string{"us-east1-b"},
+		SuggestedZones: []string{"us-east1-b"},
+	})
+	require.Equal(t, []string{"us-east1-c"}, zones)
+	require.Equal(t, "untried default zones", source)
+}
+
+func TestCreateRetryPlannerUsesGCEMachineTypeRetryCandidates(t *testing.T) {
+	params := spec.RoachprodClusterConfig{Cloud: spec.GCE}
+	planner := newCreateRetryPlanner(
+		spec.MakeClusterSpec(2), params, vm.ArchARM64, "t2a-standard-4",
+	)
+
+	require.Equal(t, []string{"us-central1-a", "us-central1-b", "us-central1-f"}, planner.retryCandidates)
+}
+
+func TestCreateRetryPlannerRecordFailureSkipsOverride(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		planner createRetryPlanner
+	}{
+		{
+			name:    "explicit zones",
+			planner: createRetryPlanner{explicitZones: true},
+		},
+		{
+			name:    "geo-distributed",
+			planner: createRetryPlanner{clusterSpec: spec.ClusterSpec{Geo: true}},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			l := nilLogger()
+			defer l.Close()
+			planner := tc.planner
+			planner.attemptedZones = make(map[string]struct{})
+			planner.retryCandidates = []string{"us-east1-b", "us-east1-c"}
+
+			planner.recordFailure(&vm.CreateCapacityError{
+				CapacityClass: vm.CreateCapacityClassZone,
+				FailedZones:   []string{"us-east1-b"},
+			}, l)
+
+			require.Empty(t, planner.nextAttemptZones)
+			require.Empty(t, planner.attemptedZones)
 		})
 	}
 }
@@ -554,6 +886,7 @@ func TestTransientErrorFallback(t *testing.T) {
 	var buf syncedBuffer
 	copt := defaultClusterOpt()
 	lopt := defaultLoggingOpt(&buf)
+	github := defaultGithub(runner.config.disableIssue)
 
 	// Test that if a test fails with a transient error handled by the `require` package,
 	// the test runner will correctly still identify it as a flake and the run will have
@@ -571,7 +904,7 @@ func TestTransientErrorFallback(t *testing.T) {
 			},
 		}
 		err := runner.Run(ctx, []registry.TestSpec{mockTest}, 1, /* count */
-			defaultParallelism, copt, testOpts{}, lopt)
+			defaultParallelism, copt, testOpts{}, lopt, github)
 		require.NoError(t, err)
 	})
 
@@ -592,7 +925,7 @@ func TestTransientErrorFallback(t *testing.T) {
 			},
 		}
 		err := runner.Run(ctx, []registry.TestSpec{mockTest}, 1, /* count */
-			defaultParallelism, copt, testOpts{}, lopt)
+			defaultParallelism, copt, testOpts{}, lopt, github)
 		if !testutils.IsError(err, "some tests failed") {
 			t.Fatalf("expected error \"some tests failed\", got: %v", err)
 		}
@@ -609,6 +942,7 @@ func TestRunnerTasks(t *testing.T) {
 	var buf syncedBuffer
 	copt := defaultClusterOpt()
 	lopt := defaultLoggingOpt(&buf)
+	github := defaultGithub(runner.config.disableIssue)
 
 	mockTest := registry.TestSpec{
 		Name:             `mock test`,
@@ -634,7 +968,7 @@ func TestRunnerTasks(t *testing.T) {
 			<-ctx.Done()
 		}
 		err := runner.Run(ctx, []registry.TestSpec{mockTest}, 1, /* count */
-			defaultParallelism, copt, testOpts{}, lopt)
+			defaultParallelism, copt, testOpts{}, lopt, github)
 		if !testutils.IsError(err, "some tests failed") {
 			t.Fatalf("expected error \"some tests failed\", got: %v", err)
 		}
@@ -649,7 +983,7 @@ func TestRunnerTasks(t *testing.T) {
 			<-ctx.Done()
 		}
 		err := runner.Run(ctx, []registry.TestSpec{mockTest}, 1, /* count */
-			defaultParallelism, copt, testOpts{}, lopt)
+			defaultParallelism, copt, testOpts{}, lopt, github)
 		if !testutils.IsError(err, "some tests failed") {
 			t.Fatalf("expected error \"some tests failed\", got: %v", err)
 		}
@@ -669,7 +1003,7 @@ func TestRunnerTasks(t *testing.T) {
 			t.Fatalf("test failed")
 		}
 		err := runner.Run(ctx, []registry.TestSpec{mockTest}, 1, /* count */
-			defaultParallelism, copt, testOpts{}, lopt)
+			defaultParallelism, copt, testOpts{}, lopt, github)
 		if !testutils.IsError(err, "some tests failed") {
 			t.Fatalf("expected error \"some tests failed\", got: %v", err)
 		}
@@ -689,7 +1023,7 @@ func TestRunnerTasks(t *testing.T) {
 			}, task.Name("task"))
 		}
 		err := runner.Run(ctx, []registry.TestSpec{mockTest}, 1, /* count */
-			defaultParallelism, copt, testOpts{}, lopt)
+			defaultParallelism, copt, testOpts{}, lopt, github)
 		require.NoError(t, err)
 		require.Equal(t, uint32(1), tasksDone.Load())
 	})
@@ -705,6 +1039,7 @@ func TestVMPreemptionPolling(t *testing.T) {
 	var buf syncedBuffer
 	copt := defaultClusterOpt()
 	lopt := defaultLoggingOpt(&buf)
+	github := defaultGithub(runner.config.disableIssue)
 
 	mockTest := registry.TestSpec{
 		Name:             `preemption`,
@@ -746,7 +1081,7 @@ func TestVMPreemptionPolling(t *testing.T) {
 		setPollPreemptionInterval(50 * time.Millisecond)
 
 		err := runner.Run(ctx, []registry.TestSpec{mockTest}, 1, /* count */
-			defaultParallelism, copt, testOpts{}, lopt)
+			defaultParallelism, copt, testOpts{}, lopt, github)
 		// The preemption monitor should mark a VM as preempted and the test should
 		// be treated as a flake instead of a failed test.
 		require.NoError(t, err)
@@ -762,9 +1097,228 @@ func TestVMPreemptionPolling(t *testing.T) {
 			t.Error("Should be ignored")
 		}
 		err := runner.Run(ctx, []registry.TestSpec{mockTest}, 1, /* count */
-			defaultParallelism, copt, testOpts{}, lopt)
+			defaultParallelism, copt, testOpts{}, lopt, github)
 		// The post test failure check should mark a VM as preempted and the test should
 		// be treated as a flake instead of a failed test.
 		require.NoError(t, err)
 	})
+
+	// Test that if VM preemption polling finds a preempted VM but the post test failure
+	// check doesn't, the test is still marked as a flake.
+	t.Run("post test check doesn't catch preemption", func(t *testing.T) {
+		setPollPreemptionInterval(10 * time.Millisecond)
+		testPreemptedCh := make(chan struct{})
+		getPreemptedVMsHook = func(c cluster.Cluster, ctx context.Context, l *logger.Logger) ([]vm.PreemptedVM, error) {
+			preemptedVMs := []vm.PreemptedVM{{
+				Name:        "test_node",
+				PreemptedAt: time.Now(),
+			}}
+			close(testPreemptedCh)
+			return preemptedVMs, nil
+		}
+
+		mockTest.Run = func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			defer func() {
+				getPreemptedVMsHook = func(c cluster.Cluster, ctx context.Context, l *logger.Logger) ([]vm.PreemptedVM, error) {
+					return nil, nil
+				}
+			}()
+			// Make sure the preemption polling is called and the test context is cancelled
+			// before unblocking. Under stress, the test may time out before the preemption
+			// check is called otherwise.
+			<-testPreemptedCh
+			<-ctx.Done()
+		}
+
+		err := runner.Run(ctx, []registry.TestSpec{mockTest}, 1, /* count */
+			defaultParallelism, copt, testOpts{}, lopt, github)
+
+		require.NoError(t, err)
+	})
+
+	// Test that if the test hangs until timeout, a VM preemption will still be caught.
+	t.Run("test hangs and still catches preemption", func(t *testing.T) {
+		// We don't want the polling to cancel the test early.
+		setPollPreemptionInterval(10 * time.Minute)
+		getPreemptedVMsHook = func(c cluster.Cluster, ctx context.Context, l *logger.Logger) ([]vm.PreemptedVM, error) {
+			preemptedVMs := []vm.PreemptedVM{{
+				Name:        "test_node",
+				PreemptedAt: time.Now(),
+			}}
+			return preemptedVMs, nil
+		}
+
+		mockTest.Timeout = 10 * time.Millisecond
+		// We expect the following to occur:
+		//	1. The test blocks on the context, which is only cancelled when the test runner
+		//		 returns after test completion. This effectively blocks the test forever.
+		//  2. The test times out and the test runner marks it as failed.
+		//  3. Normally, this would result in a failed test and runner.Run returning an error.
+		//     However, because we injected a preemption, the test runner marks it as a flake
+		//     instead and returns no errors.
+		mockTest.Run = func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			<-ctx.Done()
+		}
+
+		err := runner.Run(ctx, []registry.TestSpec{mockTest}, 1, /* count */
+			defaultParallelism, copt, testOpts{}, lopt, github)
+
+		require.NoError(t, err)
+	})
+
+	// Test that a benchmark whose spot VM gets preempted is automatically
+	// requeued for one retry. Without this, a single preemption silently
+	// loses the nightly's perf data point for that benchmark (the runner
+	// uses --count=1 and the test selector only forces re-selection on
+	// the *next* nightly). The retry runs on a non-spot cluster, which is
+	// also the loop-breaker: only spot runs can preempt.
+	t.Run("benchmark preempted on spot is requeued for retry", func(t *testing.T) {
+		// Drive preemption via the polling path: both the original and the
+		// retry's Run will block on ctx.Done() and be cancelled when
+		// monitorForPreemptedVMs observes the (always-on) preemption hook.
+		setPollPreemptionInterval(50 * time.Millisecond)
+		getPreemptedVMsHook = func(c cluster.Cluster, ctx context.Context, l *logger.Logger) ([]vm.PreemptedVM, error) {
+			return []vm.PreemptedVM{{Name: "test_node", PreemptedAt: time.Now()}}, nil
+		}
+
+		var calls atomic.Int32
+		benchmarkTest := mockTest
+		benchmarkTest.Benchmark = true
+		benchmarkTest.Run = func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			calls.Add(1)
+			<-ctx.Done()
+		}
+
+		err := runner.Run(ctx, []registry.TestSpec{benchmarkTest}, 1, /* count */
+			defaultParallelism, copt, testOpts{}, lopt, github)
+		require.NoError(t, err)
+		require.Equal(t, int32(2), calls.Load(),
+			"benchmark should run twice: original (spot, preempted) + one non-spot retry")
+	})
+}
+
+// TestRunnerFailureAfterTimeout checks that a test has a failure added
+// after the test has timed out works as expected.
+//
+// Specifically, this is a regression test that replacing the test logger
+// for post test artifacts collection or assertion checks is atomic and
+// doesn't race with the logger potentially still being used by the test.
+func TestRunnerFailureAfterTimeout(t *testing.T) {
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	cr := newClusterRegistry()
+	runner := newUnitTestRunner(cr, stopper)
+	github := defaultGithub(runner.config.disableIssue)
+
+	var buf syncedBuffer
+	copt := defaultClusterOpt()
+	lopt := defaultLoggingOpt(&buf)
+	test := registry.TestSpec{
+		Name:  `timeout`,
+		Owner: OwnerUnitTest,
+		// Set the timeout very low so we can observe the timeout
+		// and error racing.
+		Timeout:          1 * time.Nanosecond,
+		Cluster:          spec.MakeClusterSpec(0),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		CockroachBinary:  registry.StandardCockroach,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			t.Error("test failed")
+		},
+	}
+	err := runner.Run(ctx, []registry.TestSpec{test}, 1, /* count */
+		defaultParallelism, copt, testOpts{}, lopt, github)
+	require.Error(t, err)
+}
+
+// TestRunnerProvisionErrorGithubError
+//  1. Test runner worker experiences provisioning error
+//  2. After provisioning error, the worker will get a GitHub POST error
+//     (mocked)
+//  3. Worker will return because it has nothing else to do
+//  4. Runner should return a joined error for failing to provision, and a
+//     GitHub error and relevant error counters in [testRunner] should be
+//     incremented
+func TestRunnerProvisionErrorGithubError(t *testing.T) {
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	cr := newClusterRegistry()
+	runner := newUnitTestRunner(cr, stopper)
+	github := brokenGithub(runner.config.disableIssue)
+
+	var buf syncedBuffer
+	copt := clusterOptWithProvisioningError()
+	lopt := defaultLoggingOpt(&buf)
+	test := registry.TestSpec{
+		Name:             `TestThatShouldNotRun`,
+		Owner:            OwnerUnitTest,
+		Timeout:          10 * time.Second,
+		Cluster:          spec.MakeClusterSpec(0),
+		CompatibleClouds: registry.AllExceptAWS,
+		Suites:           registry.Suites(registry.Nightly),
+		CockroachBinary:  registry.StandardCockroach,
+		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+			// If for some reason this test is executed, the test runner worker will
+			// recover from this panic as a test failure
+			panic("this test should never run")
+		},
+	}
+
+	err := runner.Run(ctx, []registry.TestSpec{test}, 1, /* count */
+		defaultParallelism, copt, testOpts{}, lopt, github)
+
+	// Assert test runner worker did not execute the test because infra shouldn't
+	// be provisioned
+	require.NotErrorIs(t, err, errTestsFailed)
+	// Assert error is of type errGithubPostFailed && errSomeClusterProvisioningFailed
+	require.ErrorIs(t, err, errGithubPostFailed)
+	require.ErrorIs(t, err, errSomeClusterProvisioningFailed)
+	// Assert test runner workers' error counts are as expected
+	require.Equal(t, runner.numGithubPostErrs, int32(1), "expected exactly 1 github post errors")
+	require.Equal(t, runner.numClusterErrs, int32(1), "expected exactly 1 cluster errors")
+}
+
+func TestRunnerInvariantViolation(t *testing.T) {
+	for _, testFailed := range []bool{false, true} {
+		t.Run(fmt.Sprintf("failed=%t", testFailed), func(t *testing.T) {
+			ctx := context.Background()
+			stopper := stop.NewStopper()
+			defer stopper.Stop(ctx)
+			cr := newClusterRegistry()
+			runner := newUnitTestRunner(cr, stopper)
+
+			var buf syncedBuffer
+			copt := defaultClusterOpt()
+			lopt := defaultLoggingOpt(&buf)
+			test := registry.TestSpec{
+				Name:             `invariant`,
+				Owner:            OwnerUnitTest,
+				Timeout:          10 * time.Second,
+				Cluster:          spec.MakeClusterSpec(0),
+				CompatibleClouds: registry.AllClouds,
+				Suites:           registry.Suites(registry.Nightly),
+				CockroachBinary:  registry.StandardCockroach,
+				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
+					if testFailed {
+						t.Fatal("boom")
+					}
+				},
+			}
+
+			// Simulate an invariant violation detected during teardown.
+			runner.storageInvariantViolation.Store(true)
+
+			github := defaultGithub(runner.config.disableIssue)
+			err := runner.Run(ctx, []registry.TestSpec{test}, 1, /* count */
+				defaultParallelism, copt, testOpts{}, lopt, github)
+
+			require.ErrorIs(t, err, errStorageInvariantViolation)
+			if testFailed {
+				require.ErrorIs(t, err, errTestsFailed)
+			}
+		})
+	}
 }

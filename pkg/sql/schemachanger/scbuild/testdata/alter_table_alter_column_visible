@@ -1,0 +1,37 @@
+setup
+CREATE TABLE defaultdb.foo (i INT PRIMARY KEY, a INT, b INT NOT VISIBLE);
+----
+
+build
+ALTER TABLE foo ALTER COLUMN a SET VISIBLE
+----
+
+build
+ALTER TABLE foo ALTER COLUMN b SET VISIBLE
+----
+- [[ColumnHidden:{DescID: 104, ColumnID: 3}, ABSENT], PUBLIC]
+  {columnId: 3, tableId: 104}
+- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 104}
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
+
+build
+ALTER TABLE foo ALTER COLUMN a SET NOT VISIBLE
+----
+- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 104}
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
+- [[ColumnHidden:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
+  {columnId: 2, tableId: 104}
+
+build
+ALTER TABLE foo ALTER COLUMN a SET NOT VISIBLE
+----
+- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 104}
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
+- [[ColumnHidden:{DescID: 104, ColumnID: 2}, PUBLIC], ABSENT]
+  {columnId: 2, tableId: 104}

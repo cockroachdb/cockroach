@@ -19,6 +19,9 @@ module.exports = (env, argv) => {
   env = env || {};
 
   return {
+    stats: {
+      errorDetails: true,
+    },
     context: __dirname,
     name: "cluster-ui",
     entry: path.resolve(__dirname, "./src/index.ts"),
@@ -28,6 +31,8 @@ module.exports = (env, argv) => {
       filename: "main.js",
       library: "adminUI",
       libraryTarget: "umd",
+      // Disable automatic publicPath detection which fails in Jest's JSDOM environment
+      publicPath: "",
     },
 
     // Enable sourcemaps for debugging webpack's output.
@@ -42,18 +47,17 @@ module.exports = (env, argv) => {
       alias: {
         src: path.resolve(__dirname, "src"),
       },
+      // Webpack 5 no longer auto-polyfills Node.js built-ins
+      fallback: {
+        "path": require.resolve("path-browserify"),
+      },
     },
 
     module: {
       rules: [
         {
           test: /\.(png|jpg|gif|svg|eot|ttf|woff|woff2)$/,
-          use: {
-            loader: "url-loader",
-            options: {
-              limit: true,
-            }
-          },
+          type: env["inline-assets"] ? "asset/inline" : "asset",
           exclude: /node_modules/,
         },
         // Styles in current project use SCSS preprocessing language with CSS modules.
@@ -66,6 +70,7 @@ module.exports = (env, argv) => {
             {
               loader: "css-loader",
               options: {
+                sourceMap: false,
                 modules: {
                   localIdentName: "[local]--[hash:base64:5]",
                 }
@@ -80,7 +85,7 @@ module.exports = (env, argv) => {
         // dir so it can access external dependencies.
         {
           test: /(?<!\.module)\.scss/,
-          use: ["style-loader", "css-loader", "sass-loader"],
+          use: ["style-loader", { loader: "css-loader", options: { sourceMap: false } }, "sass-loader"],
           exclude: /node_modules/,
         },
         {
@@ -138,6 +143,7 @@ module.exports = (env, argv) => {
             {
               loader: "esbuild-loader",
               options: {
+                sourceMap: false,
                 loader: "css",
                 minify: true,
               },
@@ -164,9 +170,8 @@ module.exports = (env, argv) => {
         profile: true,
       }),
       new MomentLocalesPlugin(),
-      // Use MomentTimezoneDataPlugin to remove timezone data that we don't need.
+      // Use MomentTimezoneDataPlugin to include all timezone data
       new MomentTimezoneDataPlugin({
-        matchZones: ['Etc/UTC', 'America/New_York'],
         startYear: 2021,
         endYear: currentYear + 10,
         // We have to tell the plugin where to store the pruned file
@@ -213,7 +218,6 @@ module.exports = (env, argv) => {
       "react-router": "react-router",
       "react-router-dom": "react-router-dom",
       "react-redux": "react-redux",
-      "redux-saga": "redux-saga",
       "redux": "redux",
     },
   };

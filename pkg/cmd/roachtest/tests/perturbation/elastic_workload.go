@@ -28,7 +28,9 @@ type elasticWorkload struct{}
 var _ perturbation = elasticWorkload{}
 
 func (e elasticWorkload) setup() variations {
-	return setup(e, 20.0)
+	// TODO(#137835): Determine why the impact is so high and reduce this once
+	// it is addressed.
+	return setup(e, defaultThresholds())
 }
 
 func (e elasticWorkload) setupMetamorphic(rng *rand.Rand) variations {
@@ -57,7 +59,7 @@ func (e elasticWorkload) startPerturbation(
 	startTime := timeutil.Now()
 	runCmd := fmt.Sprintf(
 		"./cockroach workload run kv --db elastic --txn-qos=background --duration=%s --max-block-bytes=%d --min-block-bytes=%d --concurrency=500 {pgurl%s}",
-		v.perturbationDuration, v.maxBlockBytes, v.maxBlockBytes, v.stableNodes())
+		v.perturbationDuration, v.blockSize, v.blockSize, v.stableNodes())
 	v.Run(ctx, option.WithNodes(v.workloadNodes()), runCmd)
 
 	// Wait a few seconds to allow the latency to resume after stopping the

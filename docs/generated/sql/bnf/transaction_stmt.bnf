@@ -3,3 +3,6 @@ transaction_stmt ::=
 	| commit_stmt
 	| rollback_stmt
 	| abort_stmt
+	| prepare_transaction_stmt
+	| commit_prepared_stmt
+	| rollback_prepared_stmt

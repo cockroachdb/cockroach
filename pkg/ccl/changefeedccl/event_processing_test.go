@@ -6,6 +6,7 @@
 package changefeedccl
 
 import (
+	"context"
 	"math/rand"
 	"testing"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/keyside"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -78,7 +80,7 @@ func TestTopicForEvent(t *testing.T) {
 			details: jobspb.ChangefeedDetails{
 				TargetSpecifications: []jobspb.ChangefeedTargetSpecification{
 					{
-						TableID:           1,
+						DescID:            1,
 						StatementTimeName: "t1",
 					},
 				},
@@ -91,7 +93,7 @@ func TestTopicForEvent(t *testing.T) {
 			details: jobspb.ChangefeedDetails{
 				TargetSpecifications: []jobspb.ChangefeedTargetSpecification{
 					{
-						TableID:           1,
+						DescID:            1,
 						StatementTimeName: "old_name",
 					},
 				},
@@ -105,7 +107,7 @@ func TestTopicForEvent(t *testing.T) {
 				TargetSpecifications: []jobspb.ChangefeedTargetSpecification{
 					{
 						Type:              jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY,
-						TableID:           1,
+						DescID:            1,
 						FamilyName:        "fam",
 						StatementTimeName: "t1",
 					},
@@ -120,13 +122,13 @@ func TestTopicForEvent(t *testing.T) {
 				TargetSpecifications: []jobspb.ChangefeedTargetSpecification{
 					{
 						Type:              jobspb.ChangefeedTargetSpecification_EACH_FAMILY,
-						TableID:           1,
+						DescID:            1,
 						FamilyName:        "fam",
 						StatementTimeName: "old_name",
 					},
 					{
 						Type:              jobspb.ChangefeedTargetSpecification_EACH_FAMILY,
-						TableID:           1,
+						DescID:            1,
 						FamilyName:        "fam2",
 						StatementTimeName: "old_name",
 					},
@@ -141,7 +143,7 @@ func TestTopicForEvent(t *testing.T) {
 				TargetSpecifications: []jobspb.ChangefeedTargetSpecification{
 					{
 						Type:              jobspb.ChangefeedTargetSpecification_COLUMN_FAMILY,
-						TableID:           1,
+						DescID:            1,
 						FamilyName:        "fam",
 						StatementTimeName: "t1",
 					},
@@ -152,11 +154,17 @@ func TestTopicForEvent(t *testing.T) {
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			// Can pass in nil for execCfg to AllTargets because we're not testing
+			// database-level targets.
+			targets, err := AllTargets(context.Background(), tc.details, nil, hlc.Timestamp{})
+			require.NoError(t, err)
+			cfg, err := makeChangefeedConfigFromJobDetails(tc.details, targets)
+			require.NoError(t, err)
 			c := kvEventToRowConsumer{
-				details:              makeChangefeedConfigFromJobDetails(tc.details),
+				details:              cfg,
 				topicDescriptorCache: make(map[TopicIdentifier]TopicDescriptor),
 			}
-			tn, err := MakeTopicNamer(AllTargets(tc.details))
+			tn, err := MakeTopicNamer(targets)
 			require.NoError(t, err)
 
 			td, err := c.topicForEvent(tc.event)

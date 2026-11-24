@@ -12,12 +12,16 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catformat"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/errors"
 )
 
 type shouldOmitFKClausesFromCreate int
@@ -108,7 +112,22 @@ func ShowCreateTable(
 		f.WriteString(",\n\tCONSTRAINT ")
 		formatQuoteNames(&f.Buffer, desc.GetPrimaryIndex().GetName())
 		f.WriteString(" ")
-		f.WriteString(tabledesc.PrimaryKeyString(desc))
+		primaryIdxStr, err := catformat.IndexForDisplay(
+			ctx,
+			desc,
+			&descpb.AnonymousTable,
+			desc.GetPrimaryIndex(),
+			"", /* partition */
+			fmtFlags,
+			p.EvalContext(),
+			p.SemaCtx(),
+			p.SessionData(),
+			catformat.IndexDisplayDefOnly,
+		)
+		if err != nil {
+			return "", err
+		}
+		f.WriteString(primaryIdxStr)
 	}
 
 	// TODO (lucy): Possibly include FKs in the mutations list here, or else
@@ -139,6 +158,7 @@ func ShowCreateTable(
 			f.WriteString(fkCtx.String())
 		}
 	}
+
 	for _, idx := range desc.PublicNonPrimaryIndexes() {
 		// Showing the primary index is handled above.
 
@@ -183,14 +203,28 @@ func ShowCreateTable(
 		return "", err
 	}
 
-	if storageParams := desc.GetStorageParams(true /* spaceBetweenEqual */); len(storageParams) > 0 {
+	pgCompat := p.SessionData().PgDumpCompatibility == sessiondatapb.PgDumpCompatibilityPostgres
+	var storageParams []string
+	if !pgCompat {
+		// All storage params are CockroachDB-specific, so skip them in
+		// postgres compat mode.
+		var err error
+		storageParams, err = desc.GetStorageParams(true /* spaceBetweenEqual */)
+		if err != nil {
+			return "", err
+		}
+	}
+	if len(storageParams) > 0 {
 		f.Buffer.WriteString(` WITH (`)
 		f.Buffer.WriteString(strings.Join(storageParams, ", "))
 		f.Buffer.WriteString(`)`)
 	}
 
-	if err := showCreateLocality(desc, f); err != nil {
-		return "", err
+	// Suppress CRDB-specific LOCALITY clause in postgres compat mode.
+	if !pgCompat {
+		if err := showCreateLocality(desc, f); err != nil {
+			return "", err
+		}
 	}
 
 	if !displayOptions.IgnoreComments {
@@ -200,6 +234,132 @@ func ShowCreateTable(
 	}
 
 	return f.CloseAndGetString(), nil
+}
+
+// showRLSAlterStatement returns a string of the ALTER TABLE ... ROW LEVEL SECURITY statements
+func showRLSAlterStatement(tn *tree.TableName, table catalog.TableDescriptor) (string, error) {
+	if !table.IsRowLevelSecurityEnabled() && !table.IsRowLevelSecurityForced() {
+		return "", nil
+	}
+	f := tree.NewFmtCtx(tree.FmtSimple)
+	un := tn.ToUnresolvedObjectName()
+
+	var cmds []tree.AlterTableCmd
+
+	if table.IsRowLevelSecurityEnabled() {
+		enabledCmd := &tree.AlterTableSetRLSMode{
+			Mode: tree.TableRLSEnable,
+		}
+		cmds = append(cmds, enabledCmd)
+	}
+
+	if table.IsRowLevelSecurityForced() {
+		forcedCmd := &tree.AlterTableSetRLSMode{
+			Mode: tree.TableRLSForce,
+		}
+		cmds = append(cmds, forcedCmd)
+	}
+
+	f.FormatNode(&tree.AlterTable{
+		Table: un,
+		Cmds:  cmds,
+	})
+
+	return f.CloseAndGetString(), nil
+}
+
+// showPolicyStatement returns a string of the row level security POLICY statements
+func showPolicyStatement(
+	ctx context.Context,
+	tn *tree.TableName,
+	table catalog.TableDescriptor,
+	evalCtx *eval.Context,
+	semaCtx *tree.SemaContext,
+	sessionData *sessiondata.SessionData,
+	policy descpb.PolicyDescriptor,
+) (string, error) {
+	un := tn.ToUnresolvedObjectName()
+
+	f := tree.NewFmtCtx(tree.FmtSimple)
+
+	var policyRoleSpecList []tree.RoleSpec
+	for _, roleName := range policy.RoleNames {
+		policyRoleSpecList = append(policyRoleSpecList, tree.MakeRoleSpecWithRoleName(roleName))
+	}
+
+	// Check if we have a policy using expression
+	var exprUsing tree.Expr
+	if len(policy.UsingExpr) != 0 {
+		formattedExpr, err := schemaexpr.FormatExprForDisplay(
+			ctx, table, policy.UsingExpr, evalCtx, semaCtx, sessionData, tree.FmtParsable,
+		)
+		if err != nil {
+			return "", err
+		}
+		exprUsing, err = parser.ParseExpr(formattedExpr)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	// Check if we have a policy with check expression
+	var exprCheck tree.Expr
+	if len(policy.WithCheckExpr) != 0 {
+		formattedExpr, err := schemaexpr.FormatExprForDisplay(
+			ctx, table, policy.WithCheckExpr, evalCtx, semaCtx, sessionData, tree.FmtParsable,
+		)
+		if err != nil {
+			return "", err
+		}
+		exprCheck, err = parser.ParseExpr(formattedExpr)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	f.FormatNode(&tree.CreatePolicy{
+		PolicyName: tree.Name(policy.Name),
+		TableName:  un,
+		Type:       convertPolicyType(policy.Type),
+		Cmd:        convertPolicyCommand(policy.Command),
+		Roles:      policyRoleSpecList,
+		Exprs: tree.PolicyExpressions{
+			Using:     exprUsing,
+			WithCheck: exprCheck,
+		},
+	})
+
+	return f.CloseAndGetString(), nil
+}
+
+// convertPolicyType will convert from a catpb.PolicyType to a tree.PolicyType
+func convertPolicyType(in catpb.PolicyType) tree.PolicyType {
+	switch in {
+	case catpb.PolicyType_RESTRICTIVE:
+		return tree.PolicyTypeRestrictive
+	case catpb.PolicyType_PERMISSIVE:
+		return tree.PolicyTypePermissive
+	default:
+		panic(errors.AssertionFailedf("cannot convert catpb.PolicyType: %v", in))
+	}
+}
+
+// convertPolicyCommand will convert from a catpb.PolicyCommand to a tree.PolicyCommand
+func convertPolicyCommand(in catpb.PolicyCommand) tree.PolicyCommand {
+	switch in {
+	case catpb.PolicyCommand_ALL:
+		return tree.PolicyCommandAll
+	case catpb.PolicyCommand_SELECT:
+		return tree.PolicyCommandSelect
+	case catpb.PolicyCommand_INSERT:
+		return tree.PolicyCommandInsert
+	case catpb.PolicyCommand_UPDATE:
+		return tree.PolicyCommandUpdate
+	case catpb.PolicyCommand_DELETE:
+		return tree.PolicyCommandDelete
+	default:
+		panic(errors.AssertionFailedf("cannot convert catpb.PolicyCommand: %v", in))
+	}
 }
 
 // formatQuoteNames quotes and adds commas between names.
@@ -241,7 +401,7 @@ func (p *planner) ShowCreate(
 	if desc.IsSequence() {
 		return ShowCreateSequence(ctx, &tn, desc)
 	}
-	lCtx := newInternalLookupCtx(allHydratedDescs, nil /* prefix */)
+	lCtx := newInternalLookupCtx(allHydratedDescs, nil /* prefix */, nil /*fallbackFn*/)
 	// Overwrite desc with hydrated descriptor.
 	var err error
 	desc, err = lCtx.getTableByID(desc.GetID())

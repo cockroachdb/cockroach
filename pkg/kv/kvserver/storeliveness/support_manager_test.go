@@ -27,12 +27,71 @@ var (
 	store       = slpb.StoreIdent{NodeID: roachpb.NodeID(1), StoreID: roachpb.StoreID(1)}
 	remoteStore = slpb.StoreIdent{NodeID: roachpb.NodeID(2), StoreID: roachpb.StoreID(2)}
 	options     = Options{
-		LivenessInterval:        6 * time.Millisecond,
+		SupportDuration:         6 * time.Millisecond,
 		HeartbeatInterval:       3 * time.Millisecond,
 		SupportExpiryInterval:   1 * time.Millisecond,
 		IdleSupportFromInterval: 1 * time.Minute,
 	}
 )
+
+// TestComputeSupportState verifies the support state determination logic based
+// on the Expiration and lastSupportWithdrawnTime fields.
+func TestComputeSupportState(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	nonEmptyExpiration := hlc.Timestamp{WallTime: 100}
+	nonEmptyWithdrawnTime := hlc.ClockTimestamp{WallTime: 50}
+
+	testCases := []struct {
+		name                     string
+		expiration               hlc.Timestamp
+		lastSupportWithdrawnTime hlc.ClockTimestamp
+		expectedState            SupportState
+		expectedWithdrawnTime    hlc.ClockTimestamp
+	}{
+		{
+			name:                     "empty expiration, empty withdrawn time",
+			expiration:               hlc.Timestamp{},
+			lastSupportWithdrawnTime: hlc.ClockTimestamp{},
+			expectedState:            StateUnknown,
+			expectedWithdrawnTime:    hlc.ClockTimestamp{},
+		},
+		{
+			name:                     "empty expiration, non-empty withdrawn time",
+			expiration:               hlc.Timestamp{},
+			lastSupportWithdrawnTime: nonEmptyWithdrawnTime,
+			expectedState:            StateNotSupporting,
+			expectedWithdrawnTime:    nonEmptyWithdrawnTime,
+		},
+		{
+			name:                     "non-empty expiration, empty withdrawn time",
+			expiration:               nonEmptyExpiration,
+			lastSupportWithdrawnTime: hlc.ClockTimestamp{},
+			expectedState:            StateSupporting,
+			expectedWithdrawnTime:    hlc.ClockTimestamp{},
+		},
+		{
+			name:                     "non-empty expiration, non-empty withdrawn time",
+			expiration:               nonEmptyExpiration,
+			lastSupportWithdrawnTime: nonEmptyWithdrawnTime,
+			expectedState:            StateSupporting,
+			expectedWithdrawnTime:    nonEmptyWithdrawnTime,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ss := supportState{
+				SupportState:             slpb.SupportState{Expiration: tc.expiration},
+				lastSupportWithdrawnTime: tc.lastSupportWithdrawnTime,
+			}
+			state, withdrawnTime := computeSupportState(ss)
+			require.Equal(t, tc.expectedState, state)
+			require.Equal(t, tc.expectedWithdrawnTime, withdrawnTime)
+		})
+	}
+}
 
 // TestSupportManagerRequestsSupport tests that the SupportManager requests and
 // establishes support on behalf of the local store.
@@ -49,7 +108,7 @@ func TestSupportManagerRequestsSupport(t *testing.T) {
 	manual := hlc.NewHybridManualClock()
 	clock := hlc.NewClockForTesting(manual)
 	sender := &testMessageSender{}
-	sm := NewSupportManager(store, engine, options, settings, stopper, clock, sender, nil)
+	sm := NewSupportManager(store, engine, options, settings, stopper, clock, nil, sender, nil)
 	require.NoError(t, sm.Start(ctx))
 
 	// Start sending heartbeats to the remote store by calling SupportFrom.
@@ -123,7 +182,13 @@ func TestSupportManagerProvidesSupport(t *testing.T) {
 	manual := hlc.NewHybridManualClock()
 	clock := hlc.NewClockForTesting(manual)
 	sender := &testMessageSender{}
-	sm := NewSupportManager(store, engine, options, settings, stopper, clock, sender, nil)
+	sm := NewSupportManager(store, engine, options, settings, stopper, clock, nil, sender, nil)
+	cb := func(supportWithdrawn map[roachpb.StoreID]struct{}) {
+		require.Equal(t, 1, len(supportWithdrawn))
+		_, ok := supportWithdrawn[roachpb.StoreID(2)]
+		require.True(t, ok)
+	}
+	sm.RegisterSupportWithdrawalCallback(cb)
 	require.NoError(t, sm.Start(ctx))
 
 	// Pause the clock so support is not withdrawn before calling SupportFor.
@@ -135,7 +200,7 @@ func TestSupportManagerProvidesSupport(t *testing.T) {
 		From:       remoteStore,
 		To:         sm.storeID,
 		Epoch:      slpb.Epoch(1),
-		Expiration: sm.clock.Now().AddDuration(options.LivenessInterval),
+		Expiration: sm.clock.Now().AddDuration(options.SupportDuration),
 	}
 	require.NoError(t, sm.HandleMessage(heartbeat))
 
@@ -204,7 +269,7 @@ func TestSupportManagerEnableDisable(t *testing.T) {
 	manual := hlc.NewHybridManualClock()
 	clock := hlc.NewClockForTesting(manual)
 	sender := &testMessageSender{}
-	sm := NewSupportManager(store, engine, options, settings, stopper, clock, sender, nil)
+	sm := NewSupportManager(store, engine, options, settings, stopper, clock, nil, sender, nil)
 	require.NoError(t, sm.Start(ctx))
 
 	// Start sending heartbeats by calling SupportFrom.
@@ -238,7 +303,7 @@ func TestSupportManagerRestart(t *testing.T) {
 	clock := hlc.NewClockForTesting(manual)
 	clockBehind := hlc.NewClockForTesting(manualBehind)
 	sender := &testMessageSender{}
-	sm := NewSupportManager(store, engine, options, settings, stopper, clock, sender, nil)
+	sm := NewSupportManager(store, engine, options, settings, stopper, clock, nil, sender, nil)
 	// Initialize the SupportManager without starting the main goroutine.
 	require.NoError(t, sm.onRestart(ctx))
 
@@ -261,17 +326,51 @@ func TestSupportManagerRestart(t *testing.T) {
 		From:       remoteStore,
 		To:         sm.storeID,
 		Epoch:      slpb.Epoch(1),
-		Expiration: clock.Now().AddDuration(sm.options.LivenessInterval),
+		Expiration: clock.Now().AddDuration(sm.options.SupportDuration),
 	}
 	sm.handleMessages(ctx, []*slpb.Message{heartbeatResp, heartbeat})
+
+	// Establish active support for a second store (will NOT be withdrawn).
+	storeWithActiveSupport := slpb.StoreIdent{NodeID: roachpb.NodeID(3), StoreID: roachpb.StoreID(3)}
+	activeHeartbeat := &slpb.Message{
+		Type:       slpb.MsgHeartbeat,
+		From:       storeWithActiveSupport,
+		To:         sm.storeID,
+		Epoch:      slpb.Epoch(1),
+		Expiration: clock.Now().AddDuration(time.Hour), // 1 hour: won't expire during test
+	}
+	sm.handleMessages(ctx, []*slpb.Message{activeHeartbeat})
+
+	// Verify active support for storeWithActiveSupport.
+	state, withdrawnTS := sm.SupportState(storeWithActiveSupport)
+	require.Equal(t, StateSupporting, state)
+	require.True(t, withdrawnTS.IsEmpty())
+
+	// Withdraw support for remoteStore (but not storeWithActiveSupport).
 	manual.Resume()
-	manual.Increment(sm.options.LivenessInterval.Nanoseconds())
+	manual.Increment(sm.options.SupportDuration.Nanoseconds())
 	sm.withdrawSupport(ctx)
 	withdrawalTime := sm.supporterStateHandler.supporterState.meta.MaxWithdrawn.ToTimestamp()
 
+	// Verify support was withdrawn for remoteStore.
+	state, withdrawnTS = sm.SupportState(remoteStore)
+	require.Equal(t, StateNotSupporting, state)
+	require.False(t, withdrawnTS.IsEmpty())
+
+	// Verify storeWithActiveSupport still has active support.
+	state, withdrawnTS = sm.SupportState(storeWithActiveSupport)
+	require.Equal(t, StateSupporting, state)
+	require.True(t, withdrawnTS.IsEmpty())
+
+	// A store we've never seen should return StateUnknown.
+	neverSeenStore := slpb.StoreIdent{NodeID: roachpb.NodeID(99), StoreID: roachpb.StoreID(99)}
+	state, withdrawnTS = sm.SupportState(neverSeenStore)
+	require.Equal(t, StateUnknown, state)
+	require.True(t, withdrawnTS.IsEmpty())
+
 	// Simulate a restart by creating a new SupportManager with the same engine.
 	// Use a regressed clock.
-	sm = NewSupportManager(store, engine, options, settings, stopper, clockBehind, sender, nil)
+	sm = NewSupportManager(store, engine, options, settings, stopper, clockBehind, nil, sender, nil)
 	now := sm.clock.Now()
 	require.False(t, requestedTime.Less(now))
 	require.False(t, withdrawalTime.Less(now))
@@ -284,6 +383,25 @@ func TestSupportManagerRestart(t *testing.T) {
 	now = sm.clock.Now()
 	require.True(t, requestedTime.Less(now))
 	require.True(t, withdrawalTime.Less(now))
+
+	// After restart, verify SupportState for different scenarios:
+
+	// 1. Store with withdrawn support: should return StateUnknown because
+	//    lastSupportWithdrawnTime is not persisted to disk.
+	state, withdrawnTS = sm.SupportState(remoteStore)
+	require.Equal(t, StateUnknown, state)
+	require.True(t, withdrawnTS.IsEmpty())
+
+	// 2. Store with active support: should return StateSupporting because
+	//    Expiration is persisted to disk.
+	state, withdrawnTS = sm.SupportState(storeWithActiveSupport)
+	require.Equal(t, StateSupporting, state)
+	require.True(t, withdrawnTS.IsEmpty())
+
+	// 3. Store we've never seen: should return StateUnknown.
+	state, withdrawnTS = sm.SupportState(neverSeenStore)
+	require.Equal(t, StateUnknown, state)
+	require.True(t, withdrawnTS.IsEmpty())
 }
 
 // TestSupportManagerDiskStall tests that the SupportManager continues to
@@ -301,7 +419,7 @@ func TestSupportManagerDiskStall(t *testing.T) {
 	manual := hlc.NewHybridManualClock()
 	clock := hlc.NewClockForTesting(manual)
 	sender := &testMessageSender{}
-	sm := NewSupportManager(store, engine, options, settings, stopper, clock, sender, nil)
+	sm := NewSupportManager(store, engine, options, settings, stopper, clock, nil, sender, nil)
 	// Initialize the SupportManager without starting the main goroutine.
 	require.NoError(t, sm.onRestart(ctx))
 
@@ -322,7 +440,7 @@ func TestSupportManagerDiskStall(t *testing.T) {
 		From:       remoteStore,
 		To:         sm.storeID,
 		Epoch:      slpb.Epoch(1),
-		Expiration: clock.Now().AddDuration(sm.options.LivenessInterval),
+		Expiration: clock.Now().AddDuration(sm.options.SupportDuration),
 	}
 	sm.handleMessages(ctx, []*slpb.Message{heartbeatResp, heartbeat})
 
@@ -348,7 +466,6 @@ func TestSupportManagerDiskStall(t *testing.T) {
 	require.True(t, supported)
 
 	// Stop blocking writes.
-	engine.SignalToUnblock()
 	engine.SetBlockOnWrite(false)
 
 	// Ensure the heartbeat is unblocked and sent out.
@@ -370,7 +487,7 @@ func TestSupportManagerReceiveQueueLimit(t *testing.T) {
 	manual := hlc.NewHybridManualClock()
 	clock := hlc.NewClockForTesting(manual)
 	sender := &testMessageSender{}
-	sm := NewSupportManager(store, engine, options, settings, stopper, clock, sender, nil)
+	sm := NewSupportManager(store, engine, options, settings, stopper, clock, nil, sender, nil)
 	// Initialize the SupportManager without starting the main goroutine.
 	require.NoError(t, sm.onRestart(ctx))
 
@@ -379,7 +496,7 @@ func TestSupportManagerReceiveQueueLimit(t *testing.T) {
 		From:       remoteStore,
 		To:         sm.storeID,
 		Epoch:      slpb.Epoch(1),
-		Expiration: clock.Now().AddDuration(sm.options.LivenessInterval),
+		Expiration: clock.Now().AddDuration(sm.options.SupportDuration),
 	}
 
 	for i := 0; i < maxReceiveQueueSize; i++ {
@@ -414,7 +531,7 @@ func TestSupportManagerHeartbeatNewStore(t *testing.T) {
 	// Set a very large heartbeat interval to ensure heartbeats for new stores are
 	// sent out before the heartbeat ticker is signalled.
 	options.HeartbeatInterval = time.Hour
-	sm := NewSupportManager(store, engine, options, settings, stopper, clock, sender, nil)
+	sm := NewSupportManager(store, engine, options, settings, stopper, clock, nil, sender, nil)
 	require.NoError(t, sm.Start(ctx))
 
 	// Start sending heartbeats to the remote store by calling SupportFrom.

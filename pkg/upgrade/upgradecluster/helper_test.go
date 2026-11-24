@@ -12,24 +12,31 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"google.golang.org/grpc"
+	"storj.io/drpc"
 )
 
 type NoopDialer struct{}
 
 func (n NoopDialer) Dial(
-	ctx context.Context, id roachpb.NodeID, class rpc.ConnectionClass,
+	ctx context.Context, id roachpb.NodeID, class rpcbase.ConnectionClass,
 ) (*grpc.ClientConn, error) {
 	return nil, nil
 }
 
-var _ NodeDialer = NoopDialer{}
+func (n NoopDialer) DRPCDial(
+	ctx context.Context, id roachpb.NodeID, class rpcbase.ConnectionClass,
+) (drpc.Conn, error) {
+	return nil, nil
+}
+
+var _ rpcbase.NodeDialer = NoopDialer{}
 
 func TestHelperEveryNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -45,6 +52,9 @@ func TestHelperEveryNode(t *testing.T) {
 		h := New(ClusterConfig{
 			NodeLiveness: tc,
 			Dialer:       NoopDialer{},
+			// UseDRPC is irrelevant here since NoopDialer returns nil for both
+			// Dial and DRPCDial; the dialer is never actually used in these tests.
+			UseDRPC: false,
 		})
 		opCount := 0
 		err := h.UntilClusterStable(ctx, retry.Options{
@@ -55,7 +65,7 @@ func TestHelperEveryNode(t *testing.T) {
 			MaxRetries:     10,
 		}, func() error {
 			return h.ForEveryNodeOrServer(ctx, "dummy-op", func(
-				context.Context, serverpb.MigrationClient,
+				context.Context, serverpb.RPCMigrationClient,
 			) error {
 				mu.Lock()
 				defer mu.Unlock()
@@ -84,6 +94,9 @@ func TestHelperEveryNode(t *testing.T) {
 		h := New(ClusterConfig{
 			NodeLiveness: tc,
 			Dialer:       NoopDialer{},
+			// UseDRPC is irrelevant here since NoopDialer returns nil for both
+			// Dial and DRPCDial; the dialer is never actually used in these tests.
+			UseDRPC: false,
 		})
 		opCount := 0
 		err := h.UntilClusterStable(ctx, retry.Options{
@@ -94,7 +107,7 @@ func TestHelperEveryNode(t *testing.T) {
 			MaxRetries:     10,
 		}, func() error {
 			return h.ForEveryNodeOrServer(ctx, "dummy-op", func(
-				context.Context, serverpb.MigrationClient,
+				context.Context, serverpb.RPCMigrationClient,
 			) error {
 				mu.Lock()
 				defer mu.Unlock()
@@ -124,6 +137,9 @@ func TestHelperEveryNode(t *testing.T) {
 		h := New(ClusterConfig{
 			NodeLiveness: tc,
 			Dialer:       NoopDialer{},
+			// UseDRPC is irrelevant here since NoopDialer returns nil for both
+			// Dial and DRPCDial; the dialer is never actually used in these tests.
+			UseDRPC: false,
 		})
 		expRe := "cluster not stable, nodes: n\\{1,2,3\\}, unavailable: n\\{2\\}"
 		opCount := 0
@@ -136,7 +152,7 @@ func TestHelperEveryNode(t *testing.T) {
 			MaxRetries:     10,
 		}, func() error {
 			return h.ForEveryNodeOrServer(ctx, "dummy-op", func(
-				context.Context, serverpb.MigrationClient,
+				context.Context, serverpb.RPCMigrationClient,
 			) error {
 				mu.Lock()
 				defer mu.Unlock()
@@ -160,7 +176,7 @@ func TestHelperEveryNode(t *testing.T) {
 			MaxRetries:     10,
 		}, func() error {
 			return h.ForEveryNodeOrServer(ctx, "dummy-op", func(
-				context.Context, serverpb.MigrationClient,
+				context.Context, serverpb.RPCMigrationClient,
 			) error {
 				return nil
 			})

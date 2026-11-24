@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insightspb"
 	"github.com/stretchr/testify/require"
 )
 
@@ -25,28 +26,28 @@ func TestCauses(t *testing.T) {
 
 	testCases := []struct {
 		name      string
-		statement *Statement
-		causes    []Cause
+		statement *insightspb.Statement
+		causes    []insightspb.Cause
 	}{
 		{
 			name:      "unset",
-			statement: &Statement{},
+			statement: &insightspb.Statement{},
 			causes:    nil,
 		},
 		{
 			name:      "suboptimal plan",
-			statement: &Statement{IndexRecommendations: []string{"THIS IS AN INDEX RECOMMENDATION"}},
-			causes:    []Cause{Cause_SuboptimalPlan},
+			statement: &insightspb.Statement{IndexRecommendations: []string{"THIS IS AN INDEX RECOMMENDATION"}},
+			causes:    []insightspb.Cause{insightspb.Cause_SuboptimalPlan},
 		},
 		{
 			name:      "high contention time",
-			statement: &Statement{Contention: &latencyThreshold},
-			causes:    []Cause{Cause_HighContention},
+			statement: &insightspb.Statement{Contention: &latencyThreshold},
+			causes:    []insightspb.Cause{insightspb.Cause_HighContention},
 		},
 		{
 			name:      "high retry count",
-			statement: &Statement{Retries: 10},
-			causes:    []Cause{Cause_HighRetryCount},
+			statement: &insightspb.Statement{Retries: 10},
+			causes:    []insightspb.Cause{insightspb.Cause_HighRetryCount},
 		},
 	}
 	for _, tc := range testCases {

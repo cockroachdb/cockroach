@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -198,7 +198,7 @@ func Start[E rangefeedbuffer.Event](
 
 		const aWhile = 5 * time.Minute // arbitrary but much longer than a retry
 		for r := retry.StartWithCtx(ctx, base.DefaultRetryOptions()); r.Next(); {
-			started := timeutil.Now()
+			started := crtime.NowMono()
 			if err := c.Run(ctx); err != nil {
 				if errors.Is(err, context.Canceled) {
 					return // we're done here
@@ -207,11 +207,11 @@ func Start[E rangefeedbuffer.Event](
 					onError(err)
 				}
 
-				if timeutil.Since(started) > aWhile {
+				if started.Elapsed() > aWhile {
 					r.Reset()
 				}
 
-				log.Warningf(ctx, "%s: failed with %v, retrying...", c.name, err)
+				log.Dev.Warningf(ctx, "%s: failed with %v, retrying...", c.name, err)
 				continue
 			}
 
@@ -230,7 +230,7 @@ func Start[E rangefeedbuffer.Event](
 // re-run the watcher.
 func (s *Watcher[E]) Run(ctx context.Context) error {
 	if !atomic.CompareAndSwapInt32(&s.started, 0, 1) {
-		log.Fatal(ctx, "currently started: only allowed once at any point in time")
+		log.Dev.Fatal(ctx, "currently started: only allowed once at any point in time")
 	}
 	if fn := s.knobs.PreExit; fn != nil {
 		defer fn()
@@ -281,7 +281,7 @@ func (s *Watcher[E]) Run(ctx context.Context) error {
 
 	initialScanTS := s.clock.Now()
 	if initialScanTS.Less(s.lastFrontierTS) {
-		log.Fatalf(ctx, "%s: initial scan timestamp (%s) regressed from last recorded frontier (%s)", s.name, initialScanTS, s.lastFrontierTS)
+		log.Dev.Fatalf(ctx, "%s: initial scan timestamp (%s) regressed from last recorded frontier (%s)", s.name, initialScanTS, s.lastFrontierTS)
 	}
 
 	rangeFeed := s.rangefeedFactory.New(string(s.name), initialScanTS,
@@ -312,6 +312,7 @@ func (s *Watcher[E]) Run(ctx context.Context) error {
 		rangefeed.WithDiff(s.withPrevValue),
 		rangefeed.WithRowTimestampInInitialScan(s.withRowTSInInitialScan),
 		rangefeed.WithOnInitialScanError(func(ctx context.Context, err error) (shouldFail bool) {
+			log.Dev.VInfof(ctx, 1, "initial scan error: %s", err)
 			// TODO(irfansharif): Consider if there are other errors which we
 			// want to treat as permanent. This was cargo culted from the
 			// settings watcher.
@@ -337,7 +338,7 @@ func (s *Watcher[E]) Run(ctx context.Context) error {
 		fn()
 	}
 
-	log.Infof(ctx, "%s: established range feed cache", s.name)
+	log.Dev.Infof(ctx, "%s: established range feed cache", s.name)
 
 	for {
 		select {

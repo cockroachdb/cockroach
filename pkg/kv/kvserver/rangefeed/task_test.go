@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/stretchr/testify/require"
@@ -243,6 +244,7 @@ func (s *testIterator) RangeKeyChanged() bool {
 
 func TestInitResolvedTSScan(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	startKey := roachpb.RKey("d")
@@ -311,7 +313,7 @@ func TestInitResolvedTSScan(t *testing.T) {
 			roachpb.MakeLock(&txn1.TxnMeta, roachpb.Key("p"), lock.Exclusive),
 		}
 		for _, l := range testLocks {
-			err := storage.MVCCAcquireLock(ctx, engine, &txn1, l.Strength, l.Key, nil, 0, 0)
+			err := storage.MVCCAcquireLock(ctx, engine, &txn1.TxnMeta, txn1.IgnoredSeqNums, l.Strength, l.Key, nil, 0, 0, false)
 			require.NoError(t, err)
 		}
 		return engine

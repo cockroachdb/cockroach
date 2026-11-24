@@ -12,39 +12,56 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/errors"
 )
 
+var testingAvoidFullScans = metamorphic.ConstantWithTestBool(
+	"jobs.avoid_full_scans_in_find_running_jobs",
+	true, /* defaultValue */
+)
+
+var avoidFullScans = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"jobs.avoid_full_scans_in_find_running_jobs.enabled",
+	"when true, enables hints to avoid full scans for internal, jobs-related queries",
+	testingAvoidFullScans)
+
 // RunningJobExists checks that whether there are any job of the given types
-// in the pending, running, or paused status, optionally ignoring the job with
+// in the pending, running, or paused state, optionally ignoring the job with
 // the ID specified by ignoreJobID as well as any jobs created after it, if
 // the passed ID is not InvalidJobID.
 func RunningJobExists(
-	ctx context.Context, ignoreJobID jobspb.JobID, txn isql.Txn, jobTypes ...jobspb.Type,
+	ctx context.Context,
+	cs *cluster.Settings,
+	ignoreJobID jobspb.JobID,
+	txn isql.Txn,
+	jobTypes ...jobspb.Type,
 ) (exists bool, retErr error) {
 	typeStrs, err := getJobTypeStrs(jobTypes)
 	if err != nil {
 		return false, err
 	}
 
-	orderBy := " ORDER BY created"
+	orderBy := "ORDER BY created"
 	if ignoreJobID == jobspb.InvalidJobID {
 		// There is no need to order by the created column if there is no job to
 		// ignore.
 		orderBy = ""
 	}
 
-	stmt := `
-SELECT
-  id
-FROM
-  system.jobs@jobs_status_created_idx
-WHERE
-	job_type IN ` + typeStrs + ` AND
-  status IN ` + NonTerminalStatusTupleString + orderBy + `
-LIMIT 1`
+	hint := "jobs_status_created_idx"
+	if avoidFullScans.Get(&cs.SV) {
+		hint = "{FORCE_INDEX=jobs_status_created_idx,AVOID_FULL_SCAN}"
+	}
+
+	q := `SELECT id FROM system.jobs@%s WHERE job_type IN %s AND status IN %s %s LIMIT 1`
+	stmt := fmt.Sprintf(q, hint, typeStrs, NonTerminalStateTupleString, orderBy)
+
 	it, err := txn.QueryIterator(
 		ctx,
 		"find-running-jobs-of-type",
@@ -70,32 +87,35 @@ LIMIT 1`
 }
 
 // RunningJobs returns the IDs of all jobs of the given types in the pending,
-// running, or paused status, optionally ignoring the job with the ID specified
+// running, or paused state, optionally ignoring the job with the ID specified
 // by ignoreJobID as well as any jobs created after it, if the passed ID is not
 // InvalidJobID.
 func RunningJobs(
-	ctx context.Context, ignoreJobID jobspb.JobID, txn isql.Txn, jobTypes ...jobspb.Type,
+	ctx context.Context,
+	cs *cluster.Settings,
+	ignoreJobID jobspb.JobID,
+	txn isql.Txn,
+	jobTypes ...jobspb.Type,
 ) (jobIDs []jobspb.JobID, retErr error) {
 	typeStrs, err := getJobTypeStrs(jobTypes)
 	if err != nil {
 		return jobIDs, err
 	}
 
-	orderBy := " ORDER BY created"
+	orderBy := "ORDER BY created"
 	if ignoreJobID == jobspb.InvalidJobID {
 		// There is no need to order by the created column if there is no job to
 		// ignore.
 		orderBy = ""
 	}
 
-	stmt := `
-SELECT
-  id
-FROM
-  system.jobs@jobs_status_created_idx
-WHERE
-	job_type IN ` + typeStrs + ` AND
-  status IN ` + NonTerminalStatusTupleString + orderBy
+	hint := "jobs_status_created_idx"
+	if avoidFullScans.Get(&cs.SV) {
+		hint = "{FORCE_INDEX=jobs_status_created_idx,AVOID_FULL_SCAN}"
+	}
+
+	q := `SELECT id FROM system.jobs@%s WHERE job_type IN %s AND status IN %s %s`
+	stmt := fmt.Sprintf(q, hint, typeStrs, NonTerminalStateTupleString, orderBy)
 	it, err := txn.QueryIterator(
 		ctx,
 		"find-all-running-jobs-of-type",
@@ -149,13 +169,19 @@ func JobCoordinatorID(
 		return 0, err
 	}
 	if row == nil {
-		return 0, errors.Errorf("coordinator not found for job %d", jobID)
+		return 0, NewJobNotFoundError(jobID)
 	}
-	coordinatorID, ok := tree.AsDInt(row[0])
+	if row[0] == tree.DNull {
+		return 0, errors.Mark(
+			errors.Newf("job %d is not currently claimed by any node", jobID),
+			errJobNotClaimed,
+		)
+	}
+	coordinatorID, ok := row[0].(*tree.DInt)
 	if !ok {
 		return 0, errors.AssertionFailedf("expected coordinator ID to be an int, got %T", row[0])
 	}
-	return int32(coordinatorID), nil
+	return int32(*coordinatorID), nil
 }
 
 // getJobTypeStrs is a helper function that returns a string representation of

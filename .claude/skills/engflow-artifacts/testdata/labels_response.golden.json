@@ -1,0 +1,4 @@
+[
+  "//pkg/ccl/workloadccl:workloadccl_test",
+  "//pkg/kv/kvserver:kvserver_test"
+]

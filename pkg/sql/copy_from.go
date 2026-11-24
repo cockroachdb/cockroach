@@ -343,9 +343,15 @@ func newCopyMachine(
 	// to have field data then we have to populate the expectedHiddenColumnIdxs
 	// field with the columns indexes we expect to be hidden.
 	if c.p.SessionData().ExpectAndIgnoreNotVisibleColumnsInCopy && len(n.Columns) == 0 {
+		numInaccessibleCols := 0
 		for i, col := range tableDesc.PublicColumns() {
 			if col.IsHidden() {
-				c.expectedHiddenColumnIdxs = append(c.expectedHiddenColumnIdxs, i)
+				// Offset the index by the number of preceding inaccessible
+				// columns, which are never expected in the input.
+				c.expectedHiddenColumnIdxs = append(c.expectedHiddenColumnIdxs, i-numInaccessibleCols)
+			}
+			if col.IsInaccessible() {
+				numInaccessibleCols++
 			}
 		}
 	}
@@ -360,7 +366,7 @@ func newCopyMachine(
 	// we still have all the encoder allocations to make.
 	//
 	// We also make the fraction depend on the number of indexes in the table
-	// since each secondary index will require a separate InitPut command for
+	// since each secondary index will require a separate CPut command for
 	// each input row. We want to pick the fraction to be in [0.1, 0.33] range
 	// so that 0.33 is used with no secondary indexes and 0.1 is used with 16 or
 	// more secondary indexes.
@@ -416,6 +422,23 @@ func (c *copyMachine) canSupportVectorized(table catalog.TableDescriptor) bool {
 		return false
 	}
 	if c.p.SessionData().VectorizeMode == sessiondatapb.VectorizeOff {
+		return false
+	}
+	// Columnar vector index encoding is not yet supported.
+	if len(table.VectorIndexes()) > 0 {
+		return false
+	}
+	forcePut := table.GetPrimaryIndex().ForcePut()
+	secondaryIndexes := table.WritableNonPrimaryIndexes()
+	for i := 0; !forcePut && i < len(secondaryIndexes); i++ {
+		forcePut = secondaryIndexes[i].ForcePut()
+	}
+	if forcePut {
+		// Even though the vector encoder supports ForcePut behavior, testing
+		// COPY with a concurrent ALTER PRIMARY KEY has resulted in different
+		// corruption scenarios. The non-vectorized COPY doesn't hit those, so
+		// we choose to fall back.
+		// TODO(#157198): investigate this.
 		return false
 	}
 	// Vectorized COPY doesn't support foreign key checks, no reason it couldn't
@@ -518,7 +541,7 @@ func (c *copyMachine) initMonitoring(ctx context.Context, parentMon *mon.BytesMo
 	// Create a monitor for the COPY command so it can be tracked separate from transaction or session.
 	memMetrics := &MemoryMetrics{}
 	c.copyMon = mon.NewMonitor(mon.Options{
-		Name:     "copy",
+		Name:     mon.MakeName("copy"),
 		CurCount: memMetrics.CurBytesCount,
 		MaxHist:  memMetrics.MaxBytesHist,
 		Settings: c.p.ExecCfg().Settings,
@@ -1055,6 +1078,7 @@ func (p *planner) preparePlannerForCopy(
 	p.autoCommit = autoCommit && !p.execCfg.TestingKnobs.DisableAutoCommitDuringExec
 
 	return func(ctx context.Context, prevErr error) error {
+		defer p.execMon.Stop(ctx)
 		// Ensure that we commit the transaction if atomic copy is off. If it's
 		// on, the conn executor will commit the transaction.
 		if implicitTxn && !p.SessionData().CopyFromAtomicEnabled {
@@ -1068,7 +1092,7 @@ func (p *planner) preparePlannerForCopy(
 						if rollbackErr := txnOpt.txn.Rollback(ctx); rollbackErr != nil {
 							// Since we failed to roll back the txn, we don't
 							// know whether retrying this batch wouldn't corrupt
-							// the data, so we return this non-retriable error.
+							// the data, so we return this non-retryable error.
 							return errors.Wrap(rollbackErr, "non-atomic COPY couldn't roll back its txn")
 						}
 						// The rollback succeeded, so we can simply attempt to
@@ -1080,7 +1104,7 @@ func (p *planner) preparePlannerForCopy(
 			} else if rollbackErr := txnOpt.txn.Rollback(ctx); rollbackErr != nil {
 				// Since we failed to roll back the txn, we don't know whether
 				// retrying this batch wouldn't corrupt the data, so we return
-				// this non-retriable error.
+				// this non-retryable error.
 				return errors.Wrap(rollbackErr, "non-atomic COPY couldn't roll back its txn")
 			}
 
@@ -1143,8 +1167,8 @@ func (c *copyMachine) insertRows(ctx context.Context, finalBatch bool) error {
 			// for the next batch.
 			return c.doneWithRows(ctx)
 		} else {
-			if errIsRetriable(err) {
-				log.SqlExec.Infof(ctx, "%s failed on attempt %d and with retriable error %+v", c.copyFromAST.String(), r.CurrentAttempt(), err)
+			if ErrIsRetryable(err) {
+				log.SqlExec.Infof(ctx, "%s failed on attempt %d and with retryable error %+v", c.copyFromAST.String(), r.CurrentAttempt(), err)
 				// It is currently only safe to retry if we are not in atomic copy
 				// mode & we are in an implicit transaction.
 				//
@@ -1163,13 +1187,13 @@ func (c *copyMachine) insertRows(ctx context.Context, finalBatch bool) error {
 					log.SqlExec.Infof(
 						ctx,
 						"%s is not retrying; "+
-							"implicit: %v; copy_from_atomic_enabled: %v; copy_from_retriable_enabled %v",
+							"implicit: %v; copy_from_atomic_enabled: %v; copy_from_retryable_enabled %v",
 						c.copyFromAST.String(), c.implicitTxn,
 						c.p.SessionData().CopyFromAtomicEnabled, c.p.SessionData().CopyFromRetriesEnabled,
 					)
 				}
 			} else {
-				log.SqlExec.Infof(ctx, "%s failed on attempt %d and with non-retriable error %+v", c.copyFromAST.String(), r.CurrentAttempt(), err)
+				log.SqlExec.Infof(ctx, "%s failed on attempt %d and with non-retryable error %+v", c.copyFromAST.String(), r.CurrentAttempt(), err)
 			}
 			return err
 		}
@@ -1206,6 +1230,11 @@ func (c *copyMachine) insertRowsInternal(ctx context.Context, finalBatch bool) (
 	var vc tree.SelectStatement
 	if c.copyFastPath {
 		if c.vectorized {
+			if buildutil.CrdbTestBuild {
+				if c.txnOpt.txn.BufferedWritesEnabled() {
+					return errors.AssertionFailedf("buffered writes should have been disabled for COPY")
+				}
+			}
 			b := tree.VectorRows{Batch: c.batch}
 			vc = &tree.LiteralValuesClause{Rows: &b}
 		} else {
@@ -1238,6 +1267,12 @@ func (c *copyMachine) insertRowsInternal(ctx context.Context, finalBatch bool) (
 		},
 		Returning: tree.AbsentReturningClause,
 	}
+
+	// Initialize annotations for the statement. This is required for proper
+	// error handling and logging during plan optimization. Since this is a
+	// synthetic INSERT statement, we provide an empty annotations array.
+	c.p.semaCtx.Annotations = tree.MakeAnnotations(0)
+	c.p.extendedEvalCtx.Annotations = &c.p.semaCtx.Annotations
 
 	// TODO(cucaroach): We shouldn't need to do this for every batch.
 	if err := c.p.makeOptimizerPlan(ctx); err != nil {

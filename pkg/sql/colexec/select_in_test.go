@@ -68,7 +68,7 @@ func TestSelectInInt64(t *testing.T) {
 	}
 
 	for _, c := range testCases {
-		log.Infof(context.Background(), "%s", c.desc)
+		log.Dev.Infof(context.Background(), "%s", c.desc)
 		opConstructor := func(input []colexecop.Operator) (colexecop.Operator, error) {
 			op := selectInOpInt64{
 				OneInputHelper: colexecop.MakeOneInputHelper(input[0]),
@@ -137,7 +137,7 @@ func benchmarkSelectInInt64(b *testing.B, useSelectionVector bool, hasNulls bool
 	b.SetBytes(int64(8 * coldata.BatchSize()))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		inOp.Next()
+		colexecop.NextNoMeta(inOp)
 	}
 }
 
@@ -210,7 +210,7 @@ func TestProjectInInt64(t *testing.T) {
 	}
 
 	for _, c := range testCases {
-		log.Infof(ctx, "%s", c.desc)
+		log.Dev.Infof(ctx, "%s", c.desc)
 		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{c.inputTuples}, c.outputTuples, colexectestutils.OrderedVerifier,
 			func(input []colexecop.Operator) (colexecop.Operator, error) {
 				return colexectestutils.CreateTestProjectingOperator(

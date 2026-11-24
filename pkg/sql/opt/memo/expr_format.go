@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treewindow"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -151,7 +152,9 @@ type ExprFmtCtx struct {
 	// data from the formatted expression with redaction markers, including spans.
 	RedactableValues bool
 
-	// Memo must contain any expression that is formatted.
+	// Memo must contain any expression that is formatted. It is not used for
+	// scalar expressions. If it is nil for relational expressions, formatting may
+	// result in a nil-pointer panic.
 	Memo *Memo
 
 	// Catalog must be set unless the ExprFmtHideQualifications flag is set.
@@ -163,9 +166,13 @@ type ExprFmtCtx struct {
 	// with the session variable `save_tables_prefix` set to the same value.
 	nameGen *ExprNameGenerator
 
-	// seenUDFs is used to ensure that formatting of recursive UDFs does not
-	// infinitely recurse.
+	// seenUDFs is used to ensure that formatting of repetitive UDF calls does
+	// not grow the output exponentially.
 	seenUDFs map[*UDFDefinition]struct{}
+
+	// withinUDFs is used to track within invocations of which UDFs we are when
+	// formatting.
+	withinUDFs map[*UDFDefinition]struct{}
 
 	// tailCalls allows for quick lookup of all the routines in tail-call position
 	// when the last body statement of a routine is formatted.
@@ -211,6 +218,7 @@ func MakeExprFmtCtxBuffer(
 		Catalog:          catalog,
 		nameGen:          nameGen,
 		seenUDFs:         make(map[*UDFDefinition]struct{}),
+		withinUDFs:       make(map[*UDFDefinition]struct{}),
 	}
 }
 
@@ -274,10 +282,11 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 
 	case *ScanExpr, *PlaceholderScanExpr, *IndexJoinExpr, *ShowTraceForSessionExpr,
 		*InsertExpr, *UpdateExpr, *UpsertExpr, *DeleteExpr, *LockExpr, *SequenceSelectExpr,
-		*WindowExpr, *OpaqueRelExpr, *OpaqueMutationExpr, *OpaqueDDLExpr,
-		*AlterTableSplitExpr, *AlterTableUnsplitExpr, *AlterTableUnsplitAllExpr,
-		*AlterTableRelocateExpr, *AlterRangeRelocateExpr, *ControlJobsExpr, *CancelQueriesExpr,
-		*CancelSessionsExpr, *CreateViewExpr, *ExportExpr, *ShowCompletionsExpr:
+		*WindowExpr, *VectorSearchExpr, *VectorMutationSearchExpr, *OpaqueRelExpr,
+		*OpaqueMutationExpr, *OpaqueDDLExpr, *AlterTableSplitExpr, *AlterTableUnsplitExpr,
+		*AlterTableUnsplitAllExpr, *AlterTableRelocateExpr, *AlterRangeRelocateExpr,
+		*ControlJobsExpr, *CancelQueriesExpr, *CancelSessionsExpr, *CreateViewExpr,
+		*ExportExpr, *ShowCompletionsExpr:
 		fmt.Fprintf(f.Buffer, "%v", e.Op())
 		FormatPrivate(f, e.Private(), required)
 
@@ -449,7 +458,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			partialIndexPredicates := tab.PartialIndexPredicatesUnsafe()
 			if partialIndexPredicates != nil {
 				c := tp.Child("partial index predicates")
-				indexOrds := make([]cat.IndexOrdinal, 0, len(partialIndexPredicates))
+				indexOrds := make(cat.IndexOrdinals, 0, len(partialIndexPredicates))
 				for ord := range partialIndexPredicates {
 					indexOrds = append(indexOrds, ord)
 				}
@@ -479,7 +488,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		if ic := private.InvertedConstraint; ic != nil {
 			idx := md.Table(private.Table).Index(private.Index)
 			var b strings.Builder
-			for i := idx.NonInvertedPrefixColumnCount(); i < idx.KeyColumnCount(); i++ {
+			for i := idx.PrefixColumnCount(); i < idx.KeyColumnCount(); i++ {
 				b.WriteRune('/')
 				b.WriteString(fmt.Sprintf("%d", private.Table.ColumnID(idx.Column(i).Ordinal())))
 			}
@@ -513,6 +522,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			}
 			if private.Flags.NoFullScan {
 				b.WriteString(" no-full-scan")
+			}
+			if private.Flags.AvoidFullScan {
+				b.WriteString(" avoid-full-scan")
 			}
 			if private.Flags.ForceZigzag {
 				if private.Flags.ZigzagIndexes.Empty() {
@@ -645,6 +657,8 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			f.formatMutationCols(e, tp, "return-mapping:", t.ReturnCols, t.Table)
 			f.formatOptionalColList(e, tp, "check columns:", t.CheckCols)
 			f.formatOptionalColList(e, tp, "partial index put columns:", t.PartialIndexPutCols)
+			f.formatOptionalColList(e, tp, "vector index put partition columns:", t.VectorIndexPutPartitionCols)
+			f.formatOptionalColList(e, tp, "vector index put quantized vector columns:", t.VectorIndexPutQuantizedVecCols)
 			f.formatBeforeTriggers(tp, t.Table, tree.TriggerEventInsert)
 			f.formatMutationCommon(tp, &t.MutationPrivate)
 		}
@@ -662,6 +676,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			f.formatOptionalColList(e, tp, "check columns:", t.CheckCols)
 			f.formatOptionalColList(e, tp, "partial index put columns:", t.PartialIndexPutCols)
 			f.formatOptionalColList(e, tp, "partial index del columns:", t.PartialIndexDelCols)
+			f.formatOptionalColList(e, tp, "vector index del partition columns:", t.VectorIndexDelPartitionCols)
+			f.formatOptionalColList(e, tp, "vector index put partition columns:", t.VectorIndexPutPartitionCols)
+			f.formatOptionalColList(e, tp, "vector index put quantized vector columns:", t.VectorIndexPutQuantizedVecCols)
 			f.formatBeforeTriggers(tp, t.Table, tree.TriggerEventUpdate)
 			f.formatMutationCommon(tp, &t.MutationPrivate)
 		}
@@ -686,6 +703,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			f.formatOptionalColList(e, tp, "check columns:", t.CheckCols)
 			f.formatOptionalColList(e, tp, "partial index put columns:", t.PartialIndexPutCols)
 			f.formatOptionalColList(e, tp, "partial index del columns:", t.PartialIndexDelCols)
+			f.formatOptionalColList(e, tp, "vector index del partition columns:", t.VectorIndexDelPartitionCols)
+			f.formatOptionalColList(e, tp, "vector index put partition columns:", t.VectorIndexPutPartitionCols)
+			f.formatOptionalColList(e, tp, "vector index put quantized vector columns:", t.VectorIndexPutQuantizedVecCols)
 			f.formatBeforeTriggers(tp, t.Table, tree.TriggerEventInsert, tree.TriggerEventUpdate)
 			f.formatMutationCommon(tp, &t.MutationPrivate)
 		}
@@ -699,6 +719,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			f.formatMutationCols(e, tp, "return-mapping:", t.ReturnCols, t.Table)
 			f.formatOptionalColList(e, tp, "passthrough columns", opt.OptionalColList(t.PassthroughCols))
 			f.formatOptionalColList(e, tp, "partial index del columns:", t.PartialIndexDelCols)
+			f.formatOptionalColList(e, tp, "vector index del partition columns:", t.VectorIndexDelPartitionCols)
 			f.formatBeforeTriggers(tp, t.Table, tree.TriggerEventDelete)
 			f.formatMutationCommon(tp, &t.MutationPrivate)
 		}
@@ -729,6 +750,34 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			}
 		}
 
+	case *VectorSearchExpr:
+		tp.Childf("target nearest neighbors: %d", t.TargetNeighborCount)
+		if t.PrefixConstraint != nil {
+			n := tp.Childf("prefix constraint: %s", t.PrefixConstraint.Columns.String())
+			for i := 0; i < t.PrefixConstraint.Spans.Count(); i++ {
+				spanString := t.PrefixConstraint.Spans.Get(i).String()
+				n.Child(cat.MaybeMarkRedactable(spanString, f.RedactableValues))
+			}
+		}
+
+	case *VectorMutationSearchExpr:
+		if t.IsIndexPut {
+			tp.Childf("index put")
+		} else {
+			tp.Childf("index del")
+		}
+		if len(t.PrefixKeyCols) > 0 {
+			tp.Childf("prefix key columns: %v", t.PrefixKeyCols)
+		}
+		tp.Childf("query vector column: %s", f.ColumnString(t.QueryVectorCol))
+		if len(t.SuffixKeyCols) > 0 {
+			tp.Childf("suffix key columns: %v", t.SuffixKeyCols)
+		}
+		tp.Childf("partition col: %s", f.ColumnString(t.PartitionCol))
+		if t.QuantizedVectorCol != 0 {
+			tp.Childf("quantized vector col: %s", f.ColumnString(t.QuantizedVectorCol))
+		}
+
 	case *CreateTableExpr:
 		fmtFlags := tree.FmtSimple
 		if f.RedactableValues {
@@ -751,7 +800,7 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			f.formatCol(col.Alias, col.ID, opt.ColSet{} /* notNullCols */)
 		}
 		tp.Child(f.Buffer.String())
-		f.formatDependencies(tp, t.Deps, t.TypeDeps)
+		f.formatDependencies(tp, t.Deps, t.TypeDeps, t.FuncDeps)
 
 	case *CreateFunctionExpr:
 		fmtFlags := tree.FmtSimple
@@ -759,11 +808,11 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			fmtFlags = tree.FmtMarkRedactionNode | tree.FmtOmitNameRedaction
 		}
 		tp.Child(tree.AsStringWithFlags(t.Syntax, fmtFlags))
-		f.formatDependencies(tp, t.Deps, t.TypeDeps)
+		f.formatDependencies(tp, t.Deps, t.TypeDeps, t.FuncDeps)
 
 	case *CreateTriggerExpr:
 		tp.Child(t.Syntax.String())
-		f.formatDependencies(tp, t.Deps, t.TypeDeps)
+		f.formatDependencies(tp, t.Deps, t.TypeDeps, t.FuncDeps)
 
 	case *CreateStatisticsExpr:
 		tp.Child(t.Syntax.String())
@@ -841,6 +890,21 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		if relational.HasPlaceholder {
 			writeFlag("has-placeholder")
 		}
+		if p, ok := e.Private().(*JoinPrivate); ok {
+			if !p.ParameterizedCols.Empty() {
+				tp.Childf("parameterized columns: %s", p.ParameterizedCols)
+			}
+		}
+		if lookupJoin, ok := e.(*LookupJoinExpr); ok {
+			// For lookup joins, indicate whether reverse scans are required to
+			// satisfy the ordering.
+			if lookupJoinMustUseReverseScans(md, lookupJoin, &required.Ordering) {
+				writeFlag("reverse-scans")
+			}
+			if !lookupJoin.ParameterizedCols.Empty() {
+				tp.Childf("parameterized columns: %s", lookupJoin.ParameterizedCols)
+			}
+		}
 
 		if f.Buffer.Len() != 0 {
 			tp.Child(f.Buffer.String())
@@ -857,8 +921,25 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 
 	if !f.HasFlags(ExprFmtHideCost) {
 		cost := e.Cost()
-		if cost != 0 {
-			tp.Childf("cost: %.9g", cost)
+		if cost.C != 0 {
+			tp.Childf("cost: %.9g", cost.C)
+		}
+		if cost.Penalties != NoPenalties {
+			var b strings.Builder
+			b.WriteString("cost-flags:")
+			if cost.Penalties&FullScanPenalty != 0 {
+				b.WriteString(" full-scan-penalty")
+			}
+			if cost.Penalties&HugeCostPenalty != 0 {
+				b.WriteString(" huge-cost-penalty")
+			}
+			if cost.Penalties&PlanGramMismatchPenalty != 0 {
+				b.WriteString(" plangram-mismatch")
+			}
+			if cost.Penalties&UnboundedCardinalityPenalty != 0 {
+				b.WriteString(" unbounded-cardinality")
+			}
+			tp.Child(b.String())
 		}
 	}
 
@@ -965,6 +1046,26 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 	}
 }
 
+// lookupJoinMustUseReverseScans returns true if the given lookup join must use
+// reverse scans in its lookups in order to satisfy the required ordering.
+// It assumes that the required ordering *can* be satisfied by the lookup join.
+func lookupJoinMustUseReverseScans(
+	md *opt.Metadata, lookupJoin *LookupJoinExpr, requiredOrdering *props.OrderingChoice,
+) bool {
+	inputCols := lookupJoin.Input.Relational().OutputCols
+	for _, ordColChoice := range requiredOrdering.Columns {
+		if ordColChoice.Group.Intersects(inputCols) {
+			// This is part of the prefix that can be satisfied by the input.
+			continue
+		}
+		// Forward scans if the index is ordered in the same direction as the
+		// required ordering, reverse scans otherwise.
+		idx := md.Table(lookupJoin.Table).Index(lookupJoin.Index)
+		return ordColChoice.Descending != idx.Column(0).Descending
+	}
+	return false
+}
+
 func (f *ExprFmtCtx) formatScalar(scalar opt.ScalarExpr, tp treeprinter.Node) {
 	f.formatScalarWithLabel("", scalar, tp)
 }
@@ -974,30 +1075,53 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 ) {
 	formatUDFDefinition := func(def *UDFDefinition, tp treeprinter.Node) {
 		if _, seen := f.seenUDFs[def]; !seen {
-			// Ensure that the definition of the UDF is not printed out again if it
-			// is recursively called.
+			// Ensure that the definition of the UDF is not printed out again if
+			// it has already been seen.
 			f.seenUDFs[def] = struct{}{}
+			f.withinUDFs[def] = struct{}{}
 			if len(def.Params) > 0 {
 				f.formatColList(tp, "params:", def.Params, opt.ColSet{} /* notNullCols */)
 			}
-			n := tp.Child("body")
-			for i := range def.Body {
-				stmtNode := n
-				if i == 0 && def.CursorDeclaration != nil {
-					// The first statement is opening a cursor.
-					stmtNode = n.Child("open-cursor")
+			if def.Body != nil {
+				n := tp.Child("body")
+				for i := range def.Body {
+					stmtNode := n
+					if i == 0 {
+						if def.FirstStmtOutput.CursorDeclaration != nil {
+							// The first statement is opening a cursor.
+							stmtNode = n.Child("open-cursor")
+						} else if def.FirstStmtOutput.TargetBufferID != 0 {
+							// The first statement is writing to a target buffer.
+							stmtNode = n.Child("add-to-srf-result")
+						}
+					}
+					prevTailCalls := f.tailCalls
+
+					// Routine calls in the last body statement may be tail calls if
+					// ResultBufferID is unset. If it is set, the result of the last
+					// body statement is not directly used as the result of the UDF
+					// call, so it cannot contain tail calls.
+					if i == len(def.Body)-1 && def.ResultBufferID == 0 {
+						f.tailCalls = make(map[opt.ScalarExpr]struct{})
+						ExtractTailCalls(def.Body[i], f.tailCalls)
+					}
+					f.formatExpr(def.Body[i], stmtNode)
+					f.tailCalls = prevTailCalls
 				}
-				prevTailCalls := f.tailCalls
-				if i == len(def.Body)-1 {
-					f.tailCalls = make(map[opt.ScalarExpr]struct{})
-					ExtractTailCalls(def.Body[i], f.tailCalls)
+			} else {
+				// Deferred-build routine: body is not yet built. Show ASTs.
+				n := tp.Child("body (deferred)")
+				for i, ast := range def.BodyASTs {
+					if ast != nil {
+						n.Childf("stmt%d: %s", i+1, tree.AsString(ast))
+					}
 				}
-				f.formatExpr(def.Body[i], stmtNode)
-				f.tailCalls = prevTailCalls
 			}
-			delete(f.seenUDFs, def)
-		} else {
+			delete(f.withinUDFs, def)
+		} else if _, recursive := f.withinUDFs[def]; recursive {
 			tp.Child("recursive-call")
+		} else {
+			tp.Child("repetitive-call")
 		}
 		if def.ExceptionBlock != nil {
 			n := tp.Child("exception-handler")
@@ -1042,9 +1166,11 @@ func (f *ExprFmtCtx) formatScalarWithLabel(
 		f.Buffer.WriteString(": ")
 	}
 	switch scalar.Op() {
-	case opt.ProjectionsOp, opt.AggregationsOp, opt.UniqueChecksOp, opt.FKChecksOp, opt.KVOptionsOp, opt.FastPathUniqueChecksOp:
+	case opt.ProjectionsOp, opt.AggregationsOp, opt.UniqueChecksOp, opt.FKChecksOp, opt.KVOptionsOp,
+		opt.FastPathUniqueChecksOp:
 		// Omit empty lists (except filters) and special-purpose fast path check expressions.
-		if scalar.ChildCount() == 0 || (scalar.Op() == opt.FastPathUniqueChecksOp && f.HasFlags(ExprFmtHideFastPathChecks)) {
+		if scalar.ChildCount() == 0 ||
+			(scalar.Op() == opt.FastPathUniqueChecksOp && f.HasFlags(ExprFmtHideFastPathChecks)) {
 			return
 		}
 
@@ -1416,8 +1542,11 @@ func (f *ExprFmtCtx) formatIndex(tabID opt.TableID, idxOrd cat.IndexOrdinal, rev
 	if reverse {
 		f.Buffer.WriteString(",rev")
 	}
-	if index.IsInverted() {
+	switch index.Type() {
+	case idxtype.INVERTED:
 		f.Buffer.WriteString(",inverted")
+	case idxtype.VECTOR:
+		f.Buffer.WriteString(",vector")
 	}
 	if _, isPartial := index.Predicate(); isPartial {
 		f.Buffer.WriteString(",partial")
@@ -1627,6 +1756,7 @@ func (f *ExprFmtCtx) formatColSimple(label string, id opt.ColumnID) {
 func (f *ExprFmtCtx) formatColSimpleToBuffer(buf *bytes.Buffer, label string, id opt.ColumnID) {
 	if label == "" {
 		if f.Memo != nil {
+			//nolint metadata will never be locked here.
 			md := f.Memo.metadata
 			fullyQualify := !f.HasFlags(ExprFmtHideQualifications)
 			label = md.QualifiedAlias(f.Ctx, id, fullyQualify, false /* alwaysQualify */, f.Catalog)
@@ -1735,9 +1865,12 @@ func (f *ExprFmtCtx) formatLockingWithPrefix(
 
 // formatDependencies adds a new treeprinter child for schema dependencies.
 func (f *ExprFmtCtx) formatDependencies(
-	tp treeprinter.Node, deps opt.SchemaDeps, typeDeps opt.SchemaTypeDeps,
+	tp treeprinter.Node,
+	deps opt.SchemaDeps,
+	typeDeps opt.SchemaTypeDeps,
+	funcDeps opt.SchemaFunctionDeps,
 ) {
-	if len(deps) == 0 && typeDeps.Empty() {
+	if len(deps) == 0 && typeDeps.Empty() && funcDeps.Empty() {
 		tp.Child("no dependencies")
 		return
 	}
@@ -1767,6 +1900,11 @@ func (f *ExprFmtCtx) formatDependencies(
 			n.Child(typ.Name())
 		}
 	}
+	funcDeps.ForEach(func(routineID int) {
+		// TODO(drewk): format using the routine name.
+		ref := tree.FunctionOID{OID: catid.FuncIDToOID(catid.DescID(routineID))}
+		n.Child(ref.String())
+	})
 }
 
 // ScanIsReverseFn is a callback that is used to figure out if a scan needs to
@@ -1801,6 +1939,9 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 		fmt.Fprintf(f.Buffer, " %s", seq.Name())
 
 	case *MutationPrivate:
+		if t.Swap {
+			fmt.Fprint(f.Buffer, " (swap)")
+		}
 		f.formatIndex(t.Table, cat.PrimaryIndex, false /* reverse */)
 
 	case *LockPrivate:
@@ -1857,6 +1998,12 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 		if !t.Ordering.Any() {
 			fmt.Fprintf(f.Buffer, " ordering=%s", t.Ordering)
 		}
+
+	case *VectorSearchPrivate:
+		f.formatIndex(t.Table, t.Index, false /* reverse */)
+
+	case *VectorMutationSearchPrivate:
+		f.formatIndex(t.Table, t.Index, false /* reverse */)
 
 	case *props.OrderingChoice:
 		if !t.Any() {

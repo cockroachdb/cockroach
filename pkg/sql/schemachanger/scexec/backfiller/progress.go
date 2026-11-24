@@ -8,6 +8,8 @@
 package backfiller
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -15,6 +17,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
 	"github.com/cockroachdb/errors"
 )
+
+// backfillSSTManifestsInfoKeyPrefix is the prefix for all backfill SST manifest
+// info keys. Used for range-based cleanup.
+const backfillSSTManifestsInfoKeyPrefix = "~backfill/sst-manifests/"
+
+// BackfillSSTManifestsInfoKey returns the job info key used to store SST
+// manifests for a declarative schema changer backfill identified by the given
+// table ID and source index ID.
+func BackfillSSTManifestsInfoKey(tableID descpb.ID, sourceIndexID descpb.IndexID) string {
+	return fmt.Sprintf("%s%d-%d.binpb", backfillSSTManifestsInfoKeyPrefix, tableID, sourceIndexID)
+}
 
 func convertToJobBackfillProgress(
 	codec keys.SQLCodec, progresses []scexec.BackfillProgress,
@@ -25,12 +38,18 @@ func convertToJobBackfillProgress(
 		if err != nil {
 			return nil, err
 		}
+		// Note: SSTManifests are stored separately in job info keys, not in the
+		// proto payload.
 		ret = append(ret, jobspb.BackfillProgress{
-			TableID:        bp.TableID,
-			SourceIndexID:  bp.SourceIndexID,
-			DestIndexIDs:   bp.DestIndexIDs,
-			WriteTimestamp: bp.MinimumWriteTimestamp,
-			CompletedSpans: strippedSpans,
+			TableID:                      bp.TableID,
+			SourceIndexID:                bp.SourceIndexID,
+			DestIndexIDs:                 bp.DestIndexIDs,
+			WriteTimestamp:               bp.MinimumWriteTimestamp,
+			CompletedSpans:               strippedSpans,
+			SSTStoragePrefixes:           bp.SSTStoragePrefixes,
+			DistributedMergePhase:        bp.DistributedMergePhase,
+			MergeIterationTasksTotal:     bp.MergeIterationTasksTotal,
+			MergeIterationCompletedTasks: bp.MergeIterationCompletedTasks,
 		})
 	}
 	return ret, nil
@@ -41,14 +60,20 @@ func convertFromJobBackfillProgress(
 ) []scexec.BackfillProgress {
 	ret := make([]scexec.BackfillProgress, 0, len(progresses))
 	for _, bp := range progresses {
+		// Note: SSTManifests are read separately from job info keys by the
+		// caller and populated on the returned progress entries.
 		ret = append(ret, scexec.BackfillProgress{
 			Backfill: scexec.Backfill{
 				TableID:       bp.TableID,
 				SourceIndexID: bp.SourceIndexID,
 				DestIndexIDs:  bp.DestIndexIDs,
 			},
-			MinimumWriteTimestamp: bp.WriteTimestamp,
-			CompletedSpans:        addTenantPrefixToSpans(codec, bp.CompletedSpans),
+			MinimumWriteTimestamp:        bp.WriteTimestamp,
+			CompletedSpans:               addTenantPrefixToSpans(codec, bp.CompletedSpans),
+			SSTStoragePrefixes:           bp.SSTStoragePrefixes,
+			DistributedMergePhase:        bp.DistributedMergePhase,
+			MergeIterationTasksTotal:     bp.MergeIterationTasksTotal,
+			MergeIterationCompletedTasks: bp.MergeIterationCompletedTasks,
 		})
 	}
 	return ret
@@ -132,6 +157,9 @@ func removeTenantPrefixFromSpans(
 	return ret, nil
 }
 
+// stripTenantPrefixFromSSTManifests normalizes SST manifest metadata by
+// removing tenant prefixes before persisting it in job state. This matches
+// the CompletedSpans handling and keeps job progress tenant-agnostic.
 func newBackfillProgress(codec keys.SQLCodec, bp scexec.BackfillProgress) *backfillProgress {
 	indexPrefix := codec.IndexPrefix(uint32(bp.TableID), uint32(bp.SourceIndexID))
 	indexSpan := roachpb.Span{
@@ -139,8 +167,9 @@ func newBackfillProgress(codec keys.SQLCodec, bp scexec.BackfillProgress) *backf
 		EndKey: indexPrefix.PrefixEnd(),
 	}
 	return &backfillProgress{
-		BackfillProgress: bp,
-		totalSpan:        indexSpan,
+		BackfillProgress:                   bp,
+		totalSpan:                          indexSpan,
+		lastPersistedDistributedMergePhase: bp.DistributedMergePhase,
 	}
 }
 
@@ -163,6 +192,12 @@ type backfillProgress struct {
 	// totalSpan represents the complete span of the source index being
 	// backfilled.
 	totalSpan roachpb.Span
+
+	// lastPersistedDistributedMergePhase tracks the last successfully persisted
+	// DistributedMergePhase value. Used to detect when phase transitions have
+	// been committed to the database. This enables lazy cleanup of SST files from
+	// previous phases.
+	lastPersistedDistributedMergePhase int32
 }
 
 func (p backfillProgress) matches(bf scexec.Backfill) error {

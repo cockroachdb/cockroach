@@ -92,6 +92,12 @@ func NewEntryDecoderWithFormat(
 		}
 		decoder.scanner.Split(decoder.split)
 		d = decoder
+	case "v1-zip-upload":
+		decoder := &entryDecoderV1ZipUpload{
+			reader:          bufio.NewReader(in),
+			sensitiveEditor: getEditor(editMode),
+		}
+		d = decoder
 	case "json":
 		d = &entryDecoderJSON{
 			decoder:         json.NewDecoder(in),
@@ -122,7 +128,7 @@ func ReadFormatFromLogFile(in io.Reader) (read io.Reader, format string, err err
 	var buf bytes.Buffer
 	rest := bufio.NewReader(in)
 	r := io.TeeReader(rest, &buf)
-	const headerBytes = 8096
+	const headerBytes = 4 * 8192
 	header := make([]byte, headerBytes)
 	n, err := r.Read(header)
 	if err != nil {
@@ -167,3 +173,4 @@ func getLogFormat(data []byte) (string, error) {
 }
 
 var ErrMalformedLogEntry = errors.New("malformed log entry")
+var ErrMalformedJSON = errors.New("malformed JSON log entry")

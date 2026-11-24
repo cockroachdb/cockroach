@@ -21,7 +21,7 @@ $$;
 ops
 DROP FUNCTION f;
 ----
-StatementPhase stage 1 of 1 with 14 MutationType ops
+StatementPhase stage 1 of 1 with 15 MutationType ops
   transitions:
     [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 109, Name: admin}, ABSENT], PUBLIC] -> ABSENT
@@ -34,6 +34,7 @@ StatementPhase stage 1 of 1 with 14 MutationType ops
     [[FunctionLeakProof:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
     [[FunctionNullInputBehavior:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
     [[FunctionSecurity:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
+    [[FunctionParams:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
     [[FunctionBody:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
@@ -56,6 +57,9 @@ StatementPhase stage 1 of 1 with 14 MutationType ops
     *scop.NotImplementedForPublicObjects
       DescID: 109
       ElementType: scpb.FunctionSecurity
+    *scop.NotImplementedForPublicObjects
+      DescID: 109
+      ElementType: scpb.FunctionParams
     *scop.RemoveBackReferenceInTypes
       BackReferencedDescriptorID: 109
       TypeIDs:
@@ -71,9 +75,8 @@ StatementPhase stage 1 of 1 with 14 MutationType ops
       - 105
     *scop.RemoveBackReferenceInFunctions
       BackReferencedDescriptorID: 109
-    *scop.NotImplementedForPublicObjects
-      DescID: 109
-      ElementType: scpb.Owner
+    *scop.RemoveOwner
+      DescriptorID: 109
     *scop.RemoveUserPrivileges
       DescriptorID: 109
       User: admin
@@ -96,11 +99,12 @@ PreCommitPhase stage 1 of 2 with 1 MutationType op
     [[FunctionLeakProof:{DescID: 109}, ABSENT], ABSENT] -> PUBLIC
     [[FunctionNullInputBehavior:{DescID: 109}, ABSENT], ABSENT] -> PUBLIC
     [[FunctionSecurity:{DescID: 109}, ABSENT], ABSENT] -> PUBLIC
+    [[FunctionParams:{DescID: 109}, ABSENT], ABSENT] -> PUBLIC
     [[FunctionBody:{DescID: 109}, ABSENT], ABSENT] -> PUBLIC
   ops:
     *scop.UndoAllInTxnImmediateMutationOpSideEffects
       {}
-PreCommitPhase stage 2 of 2 with 21 MutationType ops
+PreCommitPhase stage 2 of 2 with 22 MutationType ops
   transitions:
     [[Owner:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
     [[UserPrivileges:{DescID: 109, Name: admin}, ABSENT], PUBLIC] -> ABSENT
@@ -113,6 +117,7 @@ PreCommitPhase stage 2 of 2 with 21 MutationType ops
     [[FunctionLeakProof:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
     [[FunctionNullInputBehavior:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
     [[FunctionSecurity:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
+    [[FunctionParams:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
     [[FunctionBody:{DescID: 109}, ABSENT], PUBLIC] -> ABSENT
   ops:
     *scop.MarkDescriptorAsDropped
@@ -135,6 +140,9 @@ PreCommitPhase stage 2 of 2 with 21 MutationType ops
     *scop.NotImplementedForPublicObjects
       DescID: 109
       ElementType: scpb.FunctionSecurity
+    *scop.NotImplementedForPublicObjects
+      DescID: 109
+      ElementType: scpb.FunctionParams
     *scop.RemoveBackReferenceInTypes
       BackReferencedDescriptorID: 109
       TypeIDs:
@@ -150,9 +158,8 @@ PreCommitPhase stage 2 of 2 with 21 MutationType ops
       - 105
     *scop.RemoveBackReferenceInFunctions
       BackReferencedDescriptorID: 109
-    *scop.NotImplementedForPublicObjects
-      DescID: 109
-      ElementType: scpb.Owner
+    *scop.RemoveOwner
+      DescriptorID: 109
     *scop.RemoveUserPrivileges
       DescriptorID: 109
       User: admin
@@ -193,10 +200,10 @@ PreCommitPhase stage 2 of 2 with 21 MutationType ops
       - 109
       JobID: 1
       NonCancelable: true
-      RunningStatus: PostCommitNonRevertiblePhase stage 1 of 1 with 1 MutationType op pending
+      RunningStatus: 'Pending: Updating schema metadata (1 operation) — PostCommitNonRevertible phase (stage 1 of 1).'
       Statements:
       - statement: DROP FUNCTION f
-        redactedstatement: DROP FUNCTION ‹""›.‹""›.‹f›
+        redactedstatement: DROP FUNCTION ""."".f
         statementtag: DROP FUNCTION
 PostCommitNonRevertiblePhase stage 1 of 1 with 8 MutationType ops
   transitions:

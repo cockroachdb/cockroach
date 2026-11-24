@@ -91,7 +91,7 @@ the maximum number of statements was reached in the console.`;
   const blockingExecutions: ContentionEvent[] = contentionDetails
     ?.filter(e => e.contentionType === "LOCK_WAIT")
     .map(event => {
-      const stmtInsight = statements.find(
+      const stmtInsight = statements?.find(
         stmt => stmt.statementExecutionID === event.waitingStmtID,
       );
       return {

@@ -16,6 +16,7 @@ import (
 )
 
 type commentOnDatabaseNode struct {
+	zeroInputPlanNode
 	n      *tree.CommentOnDatabase
 	dbDesc catalog.DatabaseDescriptor
 }

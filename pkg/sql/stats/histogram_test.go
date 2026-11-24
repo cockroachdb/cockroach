@@ -940,6 +940,31 @@ func TestAdjustCounts(t *testing.T) {
 				{NumRange: 0, NumEq: 100, DistinctRange: 0, UpperBound: d(-60)},
 			},
 		},
+		{ // Over-estimate of distinct count for bools when both values were
+			// already sampled.
+			h: []cat.HistogramBucket{
+				{NumRange: 0, NumEq: 1, DistinctRange: 0, UpperBound: tree.DBoolFalse},
+				{NumRange: 0, NumEq: 1, DistinctRange: 0, UpperBound: tree.DBoolTrue},
+			},
+			rowCount:      4,
+			distinctCount: 4,
+			expected: []cat.HistogramBucket{
+				{NumRange: 0, NumEq: 2, DistinctRange: 0, UpperBound: tree.DBoolFalse},
+				{NumRange: 0, NumEq: 2, DistinctRange: 0, UpperBound: tree.DBoolTrue},
+			},
+		},
+		{ // Over-estimate of distinct count for bools when only 'false' was
+			// already sampled (#142022).
+			h: []cat.HistogramBucket{
+				{NumRange: 0, NumEq: 1, DistinctRange: 0, UpperBound: tree.DBoolFalse},
+			},
+			rowCount:      4,
+			distinctCount: 4,
+			expected: []cat.HistogramBucket{
+				{NumRange: 0, NumEq: 2, DistinctRange: 0, UpperBound: tree.DBoolFalse},
+				{NumRange: 0, NumEq: 2, DistinctRange: 0, UpperBound: tree.DBoolTrue},
+			},
+		},
 	}
 
 	ctx := context.Background()
@@ -1240,6 +1265,7 @@ func TestUpperBoundsRoundTrip(t *testing.T) {
 	h.buckets = make([]cat.HistogramBucket, numBuckets)
 	for i := 0; i < numBuckets; i++ {
 		h.buckets[i].UpperBound = upperBounds[i]
+		h.buckets[i].NumEq = 1
 	}
 	hd, err := h.toHistogramData(context.Background(), typ, st)
 	if err != nil {
@@ -1249,7 +1275,7 @@ func TestUpperBoundsRoundTrip(t *testing.T) {
 	// original ones.
 	var stat TableStatistic
 	stat.HistogramData = &hd
-	if err = DecodeHistogramBuckets(&stat); err != nil {
+	if err = DecodeHistogramBuckets(context.Background(), &stat); err != nil {
 		t.Fatal(err)
 	}
 	evalCtx := eval.MakeTestingEvalContext(st)

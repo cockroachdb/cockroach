@@ -8,13 +8,16 @@ package ts
 import (
 	"context"
 	"math"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvtenant"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
+	"github.com/cockroachdb/cockroach/pkg/ts/tsutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -26,6 +29,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"storj.io/drpc"
 )
 
 const (
@@ -42,6 +46,14 @@ const (
 	// dumpBatchSize is the number of keys processed in each batch by the dump
 	// command.
 	dumpBatchSize = 100
+)
+
+var CombinedBatchEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"timeseries.query.combine_read_batches.enabled",
+	"if true, multiple time series queries in a single request share a "+
+		"combined KV batch to reduce RPC overhead",
+	true,
 )
 
 // ClusterNodeCountFn is a function that returns the number of nodes active on
@@ -119,18 +131,52 @@ func (t *TenantServer) Query(
 	ctx = t.AnnotateCtx(ctx)
 	// Currently, secondary tenants are only able to view their own metrics.
 	for i, q := range req.Queries {
-		// Tenant-scoped metrics get marked with the tenantID, otherwise we
-		// leave the request as-is for system-level metrics.
-		if t.tenantRegistry.Contains(q.Name) {
+		// Tenant-scoped metrics get marked with the tenantID. This includes both
+		// app-level metrics (in tenantRegistry) and store-level tenant metrics
+		// (identified by isStoreTenantMetric).
+		//
+		// Histogram metrics are stored in TSDB under suffixed names (e.g.
+		// "cr.node.sql.service.latency-p99") but registered under the base name
+		// ("sql.service.latency"). Strip the suffix so both the registry lookup
+		// and the store metric check use the base metric name.
+		baseName := stripHistogramSuffix(q.Name)
+		storeMetricName := strings.TrimPrefix(baseName, "cr.store.")
+		if t.tenantRegistry.Contains(baseName) || isStoreTenantMetric(storeMetricName) {
 			req.Queries[i].TenantID = t.tenantID
 		}
 	}
 	return t.tenantConnect.Query(ctx, req)
 }
 
+// storeTenantMetrics mirrors kvbase.TenantsStorageMetricsSet. We maintain a
+// hardcoded copy here to avoid import cycles with kvbase.
+var storeTenantMetrics = map[string]struct{}{
+	"livebytes": {}, "sysbytes": {}, "keybytes": {}, "valbytes": {},
+	"rangekeybytes": {}, "rangevalbytes": {}, "totalbytes": {},
+	"intentbytes": {}, "lockbytes": {}, "livecount": {}, "keycount": {},
+	"valcount": {}, "rangekeycount": {}, "rangevalcount": {},
+	"intentcount": {}, "lockcount": {}, "lockage": {}, "gcbytesage": {},
+	"syscount": {}, "abortspanbytes": {},
+}
+
+// isStoreTenantMetric returns true if name is in storeTenantMetrics.
+func isStoreTenantMetric(name string) bool {
+	_, ok := storeTenantMetrics[name]
+	return ok
+}
+
 // RegisterService registers the GRPC service.
 func (s *TenantServer) RegisterService(g *grpc.Server) {
 	tspb.RegisterTimeSeriesServer(g, s)
+}
+
+type drpcTenantServer struct {
+	*TenantServer
+}
+
+// RegisterService registers the DRPC service.
+func (s *TenantServer) RegisterDRPCService(d drpc.Mux) error {
+	return tspb.DRPCRegisterTimeSeries(d, &drpcTenantServer{TenantServer: s})
 }
 
 // RegisterGateway starts the gateway (i.e. reverse proxy) that proxies HTTP requests
@@ -185,13 +231,13 @@ func MakeServer(
 		stopper:        stopper,
 		nodeCountFn:    nodeCountFn,
 		workerMemMonitor: mon.NewMonitorInheritWithLimit(
-			"timeseries-workers",
+			mon.MakeName("timeseries-workers"),
 			queryMemoryMax*2,
 			memoryMonitor,
 			true, /* longLiving */
 		),
 		resultMemMonitor: mon.NewMonitorInheritWithLimit(
-			"timeseries-results",
+			mon.MakeName("timeseries-results"),
 			math.MaxInt64,
 			memoryMonitor,
 			true, /* longLiving */
@@ -210,6 +256,15 @@ func (s *Server) RegisterService(g *grpc.Server) {
 	tspb.RegisterTimeSeriesServer(g, s)
 }
 
+type drpcServer struct {
+	*Server
+}
+
+// RegisterService registers the DRPC service.
+func (s *Server) RegisterDRPCService(d drpc.Mux) error {
+	return tspb.DRPCRegisterTimeSeries(d, &drpcServer{Server: s})
+}
+
 // RegisterGateway starts the gateway (i.e. reverse proxy) that proxies HTTP requests
 // to the appropriate gRPC endpoints.
 func (s *Server) RegisterGateway(
@@ -220,6 +275,20 @@ func (s *Server) RegisterGateway(
 
 // Query is an endpoint that returns data for one or more metrics over a
 // specific time span.
+//
+// The implementation uses a two-phase approach to reduce RPC overhead:
+//
+// Phase 1 (combined read): Eligible queries' KV read operations are collected
+// into a single kv.Batch and executed with one db.Run() call. DistSender
+// splits the batch into per-range RPCs, so queries targeting the same time
+// series ranges share RPCs instead of each issuing independent ones.
+//
+// Phase 2 (parallel processing): The read results are distributed to per-query
+// goroutines for post-processing (key-to-span conversion, downsampling,
+// aggregation). This CPU-bound work benefits from parallelism.
+//
+// Queries that require memory-based chunking (timespan exceeds budget) fall
+// back to the original per-query read path via db.Query().
 func (s *Server) Query(
 	ctx context.Context, request *tspb.TimeSeriesQueryRequest,
 ) (*tspb.TimeSeriesQueryResponse, error) {
@@ -257,10 +326,6 @@ func (s *Server) Query(
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	// Channel which workers use to report their result, which is either an
-	// error or nil (when successful).
-	workerOutput := make(chan error)
-
 	// Create a separate memory management context for each query, allowing them
 	// to be run in parallel.
 	memContexts := make([]QueryMemoryContext, len(request.Queries))
@@ -276,18 +341,110 @@ func (s *Server) Query(
 		SampleDurationNanos: sampleNanos,
 		NowNanos:            timeutil.Now().UnixNano(),
 	}
+	timespan.normalize()
 
+	if err := timespan.verifyBounds(); err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "%s", err)
+	}
+	if err := timespan.verifyDiskResolution(Resolution10s); err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "%s", err)
+	}
+	if err := timespan.adjustForCurrentTime(Resolution10s); err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "%s", err)
+	}
+
+	// Validate all queries upfront.
+	for _, query := range request.Queries {
+		if err := verifySourceAggregator(query.GetSourceAggregator()); err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "%s", err)
+		}
+		if err := verifyDownsampler(query.GetDownsampler()); err != nil {
+			return nil, status.Errorf(codes.InvalidArgument, "%s", err)
+		}
+	}
+
+	// Determine whether rollup data may exist for this timespan. The combined
+	// batch only reads Resolution10s and would miss rolled-up data at coarser
+	// resolutions, so queries eligible for rollup must fall back to DB.Query.
+	rollupRes, hasRollup := Resolution10s.TargetRollupResolution()
+	needsRollup := hasRollup && timespan.verifyDiskResolution(rollupRes) == nil
+
+	// Check whether the combined-batch optimization is enabled.
+	combineEnabled := CombinedBatchEnabled.Get(&s.db.st.SV)
+
+	// Initialize memory contexts and determine which queries can participate
+	// in the combined batch (single-chunk) vs. which need individual chunked
+	// processing.
+	canCombine := make([]bool, len(request.Queries))
+	for i, query := range request.Queries {
+		var estimatedSourceCount int64
+		if len(query.Sources) > 0 {
+			estimatedSourceCount = int64(len(query.Sources))
+		} else {
+			estimatedSourceCount = estimatedClusterNodeCount
+		}
+		memContexts[i] = MakeQueryMemoryContext(
+			s.workerMemMonitor,
+			s.resultMemMonitor,
+			QueryMemoryOptions{
+				BudgetBytes:             s.queryMemoryMax / int64(s.queryWorkerMax),
+				EstimatedSources:        estimatedSourceCount,
+				InterpolationLimitNanos: interpolationLimit,
+				Columnar:                s.db.WriteColumnar(),
+			},
+		)
+		if !combineEnabled || needsRollup {
+			canCombine[i] = false
+			continue
+		}
+		maxWidth, err := memContexts[i].GetMaxTimespan(Resolution10s)
+		if err != nil {
+			// Insufficient memory budget; will fall back to per-query path
+			// which will return the same error.
+			canCombine[i] = false
+			continue
+		}
+		canCombine[i] = maxWidth > timespan.width()
+	}
+
+	// Phase 1: Build a combined KV batch for all combinable queries.
+	batch := &kv.Batch{}
+	plans := make([]queryReadPlan, len(request.Queries))
+	for i, query := range request.Queries {
+		if !canCombine[i] {
+			continue
+		}
+		plans[i] = s.db.addQueryReadOps(
+			batch, query, Resolution10s, timespan, interpolationLimit,
+		)
+	}
+
+	// Execute the combined batch in a single db.Run() call. DistSender
+	// splits this into per-range RPCs, so queries targeting overlapping
+	// ranges share RPCs.
+	if len(batch.Results) > 0 {
+		if err := s.db.runBatch(ctx, batch); err != nil {
+			return nil, err
+		}
+	}
+
+	// Phase 2: Process results in parallel. Combined-batch queries extract
+	// their data from the shared batch; fallback queries use the original
+	// per-query read path.
+	//
+	// Concurrency safety: after runBatch returns, the shared batch is never
+	// mutated. Each goroutine reads a disjoint range of batch.Results
+	// (determined by its queryReadPlan) and writes to its own
+	// response.Results[queryIdx], so no synchronization is needed.
+	workerOutput := make(chan error)
 	// Start a task which is itself responsible for starting per-query worker
-	// tasks. This is needed because RunAsyncTaskEx can block; in the
-	// case where a single request has more queries than the semaphore limit,
-	// a deadlock would occur because queries cannot complete until
-	// they have written their result to the "output" channel, which is
-	// processed later in the main function.
+	// tasks. This is needed because RunAsyncTaskEx can block; in the case
+	// where a single request has more queries than the semaphore limit, a
+	// deadlock would occur because queries cannot complete until they have
+	// written their result to the "output" channel, which is processed
+	// later in the main function.
 	if err := s.stopper.RunAsyncTask(ctx, "ts.Server: queries", func(ctx context.Context) {
 		for queryIdx, query := range request.Queries {
-			queryIdx := queryIdx
-			query := query
-
 			if err := s.stopper.RunAsyncTaskEx(
 				ctx,
 				stop.TaskOpts{
@@ -296,40 +453,32 @@ func (s *Server) Query(
 					WaitForSem: true,
 				},
 				func(ctx context.Context) {
-					// Estimated source count is either the count of requested sources
-					// *or* the estimated cluster node count if no sources are specified.
-					var estimatedSourceCount int64
-					if len(query.Sources) > 0 {
-						estimatedSourceCount = int64(len(query.Sources))
+					var err error
+					var result tspb.TimeSeriesQueryResponse_Result
+					if canCombine[queryIdx] {
+						result, err = s.processFromBatch(
+							ctx, batch, plans[queryIdx], query,
+							Resolution10s, timespan, memContexts[queryIdx],
+						)
 					} else {
-						estimatedSourceCount = estimatedClusterNodeCount
-					}
-
-					// Create a memory account for the results of this query.
-					memContexts[queryIdx] = MakeQueryMemoryContext(
-						s.workerMemMonitor,
-						s.resultMemMonitor,
-						QueryMemoryOptions{
-							BudgetBytes:             s.queryMemoryMax / int64(s.queryWorkerMax),
-							EstimatedSources:        estimatedSourceCount,
-							InterpolationLimitNanos: interpolationLimit,
-							Columnar:                s.db.WriteColumnar(),
-						},
-					)
-
-					datapoints, sources, err := s.db.Query(
-						ctx,
-						query,
-						Resolution10s,
-						timespan,
-						memContexts[queryIdx],
-					)
-					if err == nil {
-						response.Results[queryIdx] = tspb.TimeSeriesQueryResponse_Result{
-							Query:      query,
-							Datapoints: datapoints,
+						// Fallback: per-query read when combined batching is
+						// disabled or the query needs memory-based chunking.
+						var datapoints []tspb.TimeSeriesDatapoint
+						var sources []string
+						datapoints, sources, err = s.db.Query(
+							ctx, query, Resolution10s, timespan,
+							memContexts[queryIdx],
+						)
+						if err == nil {
+							result = tspb.TimeSeriesQueryResponse_Result{
+								Query:      query,
+								Datapoints: datapoints,
+							}
+							result.Sources = sources
 						}
-						response.Results[queryIdx].Sources = sources
+					}
+					if err == nil {
+						response.Results[queryIdx] = result
 					}
 					select {
 					case workerOutput <- err:
@@ -337,8 +486,8 @@ func (s *Server) Query(
 					}
 				},
 			); err != nil {
-				// Stopper has been closed and is draining. Return an error and
-				// exit the worker-spawning loop.
+				// Stopper has been closed and is draining. Return an error
+				// and exit the worker-spawning loop.
 				select {
 				case workerOutput <- err:
 				case <-ctx.Done():
@@ -367,6 +516,41 @@ func (s *Server) Query(
 	return &response, nil
 }
 
+// processFromBatch extracts a single query's KV data from a shared batch and
+// runs the post-processing pipeline.
+func (s *Server) processFromBatch(
+	ctx context.Context,
+	batch *kv.Batch,
+	plan queryReadPlan,
+	query tspb.Query,
+	diskResolution Resolution,
+	timespan QueryTimespan,
+	mem QueryMemoryContext,
+) (tspb.TimeSeriesQueryResponse_Result, error) {
+	data, err := extractReadResults(batch, plan)
+	if err != nil {
+		return tspb.TimeSeriesQueryResponse_Result{}, err
+	}
+
+	datapoints, sourceSet, err := s.db.processQueryData(
+		ctx, data, query, diskResolution, timespan, mem,
+	)
+	if err != nil {
+		return tspb.TimeSeriesQueryResponse_Result{}, err
+	}
+
+	sources := make([]string, 0, len(sourceSet))
+	for source := range sourceSet {
+		sources = append(sources, source)
+	}
+	result := tspb.TimeSeriesQueryResponse_Result{
+		Query:      query,
+		Datapoints: datapoints,
+	}
+	result.Sources = sources
+	return result, nil
+}
+
 // Dump returns a stream of raw timeseries data that has been stored on the
 // server. Only data from the 10-second resolution is returned; rollup data is
 // not currently returned. Data is returned in the order it is read from disk,
@@ -377,6 +561,16 @@ func (s *Server) Query(
 // set up a KV store and write some keys into it (`MakeDataKey`) to do so without
 // setting up a `*Server`.
 func (s *Server) Dump(req *tspb.DumpRequest, stream tspb.TimeSeries_DumpServer) error {
+	return s.dump(req, stream)
+}
+
+// Dump returns a stream of raw timeseries data that has been stored on the
+// server.
+func (s *drpcServer) Dump(req *tspb.DumpRequest, stream tspb.DRPCTimeSeries_DumpStream) error {
+	return s.dump(req, stream)
+}
+
+func (s *Server) dump(req *tspb.DumpRequest, stream tspb.RPCTimeSeries_DumpStream) error {
 	d := DefaultDumper{stream.Send}.Dump
 	return dumpImpl(stream.Context(), s.db.db, req, d)
 
@@ -384,8 +578,50 @@ func (s *Server) Dump(req *tspb.DumpRequest, stream tspb.TimeSeries_DumpServer) 
 
 // DumpRaw is like Dump, but it returns a stream of raw KV pairs.
 func (s *Server) DumpRaw(req *tspb.DumpRequest, stream tspb.TimeSeries_DumpRawServer) error {
+	return s.dumpRaw(req, stream)
+}
+
+// DumpRaw is like Dump, but it returns a stream of raw KV pairs.
+func (s *drpcServer) DumpRaw(
+	req *tspb.DumpRequest, stream tspb.DRPCTimeSeries_DumpRawStream,
+) error {
+	return s.dumpRaw(req, stream)
+}
+
+func (s *Server) dumpRaw(req *tspb.DumpRequest, stream tspb.RPCTimeSeries_DumpRawStream) error {
 	d := rawDumper{stream}.Dump
 	return dumpImpl(stream.Context(), s.db.db, req, d)
+}
+
+// DumpRaw is like Dump, but it returns a stream of raw KV pairs.
+func (s *drpcTenantServer) DumpRaw(_ *tspb.DumpRequest, _ tspb.DRPCTimeSeries_DumpRawStream) error {
+	return s.dumpRaw()
+}
+
+func (t *TenantServer) DumpRaw(_ *tspb.DumpRequest, _ tspb.TimeSeries_DumpRawServer) error {
+	return t.dumpRaw()
+}
+
+func (t *TenantServer) dumpRaw() error {
+	return status.Errorf(codes.Unimplemented, "DumpRaw is not implemented for virtual clusters. "+
+		"If you are attempting to take a tsdump, please connect to the system virtual cluster, "+
+		"not an application virtual cluster. System virtual clusters will dump all persisted "+
+		"metrics from all virtual clusters.")
+}
+
+func (s *drpcTenantServer) Dump(_ *tspb.DumpRequest, _ tspb.DRPCTimeSeries_DumpStream) error {
+	return s.dump()
+}
+
+func (t *TenantServer) Dump(_ *tspb.DumpRequest, _ tspb.TimeSeries_DumpServer) error {
+	return t.dump()
+}
+
+func (t *TenantServer) dump() error {
+	return status.Errorf(codes.Unimplemented, "Dump is not implemented for virtual clusters. "+
+		"If you are attempting to take a tsdump, please connect to the system virtual cluster, "+
+		"not an application virtual cluster. System virtual clusters will dump all persisted "+
+		"metrics from all virtual clusters.")
 }
 
 func dumpImpl(
@@ -410,13 +646,65 @@ func dumpImpl(
 				ResolutionFromProto(res),
 				req.StartNanos,
 				req.EndNanos,
+				false,
 				d,
 			); err != nil {
 				return err
 			}
 		}
 	}
+
+	// Dump child metrics only for allowed metrics at 1M resolution.
+	//
+	// req.Names contains both unsuffixed series (counters, gauges) and
+	// histogram-expanded series (e.g. "cr.node.foo-count", "cr.node.foo-p99").
+	// Labeled child metrics are stored with the labels appended to the base
+	// metric name -- counters/gauges as "cr.node.foo{labels}", histogram
+	// children as "cr.node.foo{labels}-anysuffix". A scan span keyed on the
+	// suffixed name "cr.node.foo-count" therefore misses every labeled
+	// histogram child: '{' (0x7B) > '-' (0x2D), so "cr.node.foo{...}-count"
+	// sorts after the span's end key "cr.node.foo-count|".
+	//
+	// Strip any histogram suffix to recover the base name and scan once per
+	// unique allowed base. The span [base, base|) covers labeled
+	// counters/gauges ("base{labels}") and labeled histogram children
+	// ("base{labels}-anysuffix") in a single pass, since '{' < '|'.
+	seenBases := make(map[string]struct{})
+	for _, seriesName := range req.Names {
+		base := stripHistogramSuffix(seriesName)
+		if !tsutil.IsAllowedChildMetric(base) {
+			continue
+		}
+		if _, ok := seenBases[base]; ok {
+			continue
+		}
+		seenBases[base] = struct{}{}
+		if err := dumpTimeseriesAllSources(
+			ctx,
+			db,
+			base,
+			Resolution1m,
+			req.StartNanos,
+			req.EndNanos,
+			true,
+			d,
+		); err != nil {
+			return err
+		}
+	}
 	return nil
+}
+
+// stripHistogramSuffix returns name with any HistogramMetricComputers suffix
+// removed. Used to recover the base metric name from a histogram-expanded name
+// like "cr.node.foo-p99". Returns name unchanged if no suffix matches.
+func stripHistogramSuffix(name string) string {
+	for _, c := range metric.HistogramMetricComputers {
+		if strings.HasSuffix(name, c.Suffix) {
+			return strings.TrimSuffix(name, c.Suffix)
+		}
+	}
+	return name
 }
 
 // DefaultDumper translates *roachpb.KeyValue into TimeSeriesData.
@@ -452,7 +740,7 @@ func (dd DefaultDumper) Dump(kv *roachpb.KeyValue) error {
 }
 
 type rawDumper struct {
-	stream tspb.TimeSeries_DumpRawServer
+	stream tspb.RPCTimeSeries_DumpRawStream
 }
 
 func (rd rawDumper) Dump(kv *roachpb.KeyValue) error {
@@ -465,6 +753,7 @@ func dumpTimeseriesAllSources(
 	seriesName string,
 	diskResolution Resolution,
 	startNanos, endNanos int64,
+	includeChildMetrics bool,
 	dump func(*roachpb.KeyValue) error,
 ) error {
 	if endNanos == 0 {
@@ -477,12 +766,20 @@ func dumpTimeseriesAllSources(
 		endNanos += delta
 	}
 
+	var endKeyName string
+	if includeChildMetrics {
+		// Create a span that covers the metric's children.
+		endKeyName = seriesName + string(rune(0x7C)) // '|' is the next char after '{'
+	} else {
+		endKeyName = seriesName
+	}
+
 	span := &roachpb.Span{
 		Key: MakeDataKey(
 			seriesName, "" /* source */, diskResolution, startNanos,
 		),
 		EndKey: MakeDataKey(
-			seriesName, "" /* source */, diskResolution, endNanos,
+			endKeyName, "" /* source */, diskResolution, endNanos,
 		),
 	}
 

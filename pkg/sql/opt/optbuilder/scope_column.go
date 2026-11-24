@@ -52,6 +52,13 @@ type scopeColumn struct {
 	// This field is only used for ordering columns.
 	descending bool
 
+	// nonDefaultNullsOrder is true when this ORDER BY column requires
+	// non-default NULLS ordering (e.g., NULLS LAST for ASC, or NULLS FIRST
+	// for DESC). When true, an additional IS NULL column will be generated
+	// to implement the correct NULL ordering semantics.
+	// This field is only used for ordering columns.
+	nonDefaultNullsOrder bool
+
 	// paramOrd is the 1-based ordinal of the parameter of the function that
 	// the column corresponds to. It is used to resolve placeholders (e.g., $1)
 	// in function bodies that are references to function arguments. If the
@@ -70,6 +77,11 @@ type scopeColumn struct {
 	// exprStr contains a stringified representation of expr, or the original
 	// column name if expr is nil. It is populated lazily inside getExprStr().
 	exprStr string
+
+	// resolveErr, if non-nil, is the error to be returned when the column is
+	// successfully resolved. This is used to provide a helpful error message for
+	// a column that is not allowed to be referenced.
+	resolveErr error
 }
 
 // columnVisibility is an extension of cat.ColumnVisibility.
@@ -140,9 +152,9 @@ func (c *scopeColumn) getParamOrd() int {
 }
 
 // funcParamReferencedBy returns true if the scopeColumn is a function parameter
-// column that can be referenced by the given placeholder.
-func (c *scopeColumn) funcParamReferencedBy(idx tree.PlaceholderIdx) bool {
-	return c.paramOrd > 0 && tree.PlaceholderIdx(c.paramOrd-1) == idx
+// column that can be referenced by the given 0-based ordinal.
+func (c *scopeColumn) funcParamReferencedBy(ord int) bool {
+	return c.paramOrd > 0 && int(c.paramOrd-1) == ord
 }
 
 // clearName sets the empty table and column name. This is used to make the

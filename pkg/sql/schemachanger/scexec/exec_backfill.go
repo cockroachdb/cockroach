@@ -41,7 +41,7 @@ func executeBackfillOps(ctx context.Context, deps Dependencies, execute []scop.O
 		return err
 	}
 	if err := runBackfiller(ctx, deps, tracker, backfillProgresses, mergeProgresses, deps.TransactionalJobRegistry().CurrentJob(), tables); err != nil {
-		if errors.HasType(err, &kvpb.InsufficientSpaceError{}) {
+		if errors.HasType(err, (*kvpb.InsufficientSpaceError)(nil)) {
 			return jobs.MarkPauseRequestError(errors.UnwrapAll(err))
 		}
 		return err
@@ -317,13 +317,13 @@ func runBackfiller(
 ) error {
 	if deps.GetTestingKnobs() != nil &&
 		deps.GetTestingKnobs().RunBeforeBackfill != nil {
-		err := deps.GetTestingKnobs().RunBeforeBackfill()
+		err := deps.GetTestingKnobs().RunBeforeBackfill(backfillProgresses)
 		if err != nil {
 			return err
 		}
 	}
 	stop := deps.PeriodicProgressFlusher().StartPeriodicUpdates(ctx, tracker)
-	defer func() { _ = stop() }()
+	defer stop()
 	ib := deps.IndexBackfiller()
 	im := deps.IndexMerger()
 	const op = "run backfills and merges"
@@ -342,15 +342,15 @@ func runBackfiller(
 			pgCode == pgcode.NotNullViolation ||
 			pgCode == pgcode.IntegrityConstraintViolation {
 			deps.Telemetry().IncrementSchemaChangeErrorType("constraint_violation")
-		} else {
-			// We ran into an  uncategorized schema change error.
-			deps.Telemetry().IncrementSchemaChangeErrorType("uncategorized")
+			return scerrors.SchemaChangerUserError(err)
 		}
-		return scerrors.SchemaChangerUserError(err)
-	}
-	if err := stop(); err != nil {
+		// We ran into an  uncategorized schema change error.
+		deps.Telemetry().IncrementSchemaChangeErrorType("uncategorized")
 		return err
 	}
+	// Stop the periodic flusher before the final flush to ensure no in-flight
+	// periodic writes can overwrite the final checkpoint state.
+	stop()
 	if err := tracker.FlushFractionCompleted(ctx); err != nil {
 		return err
 	}

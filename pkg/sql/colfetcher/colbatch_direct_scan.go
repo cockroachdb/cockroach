@@ -7,7 +7,6 @@ package colfetcher
 
 import (
 	"context"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
@@ -18,11 +17,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
-	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 )
 
@@ -36,10 +33,6 @@ type ColBatchDirectScan struct {
 	spec        *fetchpb.IndexFetchSpec
 	resultTypes []*types.T
 	hasDatumVec bool
-
-	// cpuStopWatch tracks the CPU time spent by this ColBatchDirectScan while
-	// fulfilling KV requests *in the current goroutine*.
-	cpuStopWatch *timeutil.CPUStopWatch
 
 	deserializer            colexecutils.Deserializer
 	deserializerInitialized bool
@@ -66,18 +59,28 @@ func (s *ColBatchDirectScan) Init(ctx context.Context) {
 }
 
 // Next implements the colexecop.Operator interface.
-func (s *ColBatchDirectScan) Next() (ret coldata.Batch) {
+func (s *ColBatchDirectScan) Next() (ret coldata.Batch, metadata *execinfrapb.ProducerMetadata) {
+	// Check if it is time to emit a progress update.
+	if s.getRowsReadSinceLastMeta() >= scanProgressFrequency {
+		meta := execinfrapb.GetProducerMeta()
+		meta.Metrics = execinfrapb.GetMetricsMeta()
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		meta.Metrics.RowsRead = s.mu.rowsReadSinceLastMeta
+		meta.Metrics.StageID = s.stageID
+		s.mu.rowsReadSinceLastMeta = 0
+		return nil, meta
+	}
+
 	var res row.KVBatchFetcherResponse
 	var err error
 	for {
-		s.cpuStopWatch.Start()
 		res, err = s.fetcher.NextBatch(s.Ctx)
-		s.cpuStopWatch.Stop()
 		if err != nil {
 			colexecerror.InternalError(convertFetchError(s.spec, err))
 		}
 		if !res.MoreKVs {
-			return coldata.ZeroBatch
+			return coldata.ZeroBatch, nil
 		}
 		if res.KVs != nil {
 			colexecerror.InternalError(errors.AssertionFailedf("unexpectedly encountered KVs in a direct scan"))
@@ -97,7 +100,7 @@ func (s *ColBatchDirectScan) Next() (ret coldata.Batch) {
 			s.mu.Unlock()
 			// Note that this batch has already been accounted for by the
 			// KVBatchFetcher, so we don't need to do that.
-			return res.ColBatch
+			return res.ColBatch, nil
 		}
 		if res.BatchResponse != nil {
 			break
@@ -116,8 +119,9 @@ func (s *ColBatchDirectScan) Next() (ret coldata.Batch) {
 	batch := s.deserializer.Deserialize(res.BatchResponse)
 	s.mu.Lock()
 	s.mu.rowsRead += int64(batch.Length())
+	s.mu.rowsReadSinceLastMeta += int64(batch.Length())
 	s.mu.Unlock()
-	return batch
+	return batch, nil
 }
 
 // DrainMeta is part of the colexecop.MetadataSource interface.
@@ -126,7 +130,10 @@ func (s *ColBatchDirectScan) DrainMeta() []execinfrapb.ProducerMetadata {
 	meta := execinfrapb.GetProducerMeta()
 	meta.Metrics = execinfrapb.GetMetricsMeta()
 	meta.Metrics.BytesRead = s.GetBytesRead()
-	meta.Metrics.RowsRead = s.GetRowsRead()
+	meta.Metrics.RowsRead = s.getRowsReadSinceLastMeta()
+	meta.Metrics.KVCPUTime = s.GetKVResponseCPUTime()
+	meta.Metrics.LocalKVCPUTime = s.GetLocalKVCPUTime()
+	meta.Metrics.StageID = s.stageID
 	trailingMeta = append(trailingMeta, *meta)
 	return trailingMeta
 }
@@ -141,6 +148,11 @@ func (s *ColBatchDirectScan) GetKVPairsRead() int64 {
 	return s.fetcher.GetKVPairsRead()
 }
 
+// GetKVResponseCPUTime is part of the colexecop.KVReader interface.
+func (s *ColBatchDirectScan) GetKVResponseCPUTime() int64 {
+	return s.fetcher.GetKVCPUTime()
+}
+
 // GetBatchRequestsIssued is part of the colexecop.KVReader interface.
 func (s *ColBatchDirectScan) GetBatchRequestsIssued() int64 {
 	return s.fetcher.GetBatchRequestsIssued()
@@ -149,12 +161,9 @@ func (s *ColBatchDirectScan) GetBatchRequestsIssued() int64 {
 // TODO(yuzefovich): check whether GetScanStats and GetConsumedRU should be
 // reimplemented.
 
-// GetKVCPUTime is part of the colexecop.KVReader interface.
-//
-// Note that this KV CPU time, unlike for the ColBatchScan, includes the
-// decoding time done by the cFetcherWrapper.
-func (s *ColBatchDirectScan) GetKVCPUTime() time.Duration {
-	return s.cpuStopWatch.Elapsed()
+// GetLocalKVCPUTime is part of the colexecop.KVReader interface.
+func (s *ColBatchDirectScan) GetLocalKVCPUTime() int64 {
+	return s.fetcher.GetLocalKVCPUTime()
 }
 
 // Release implements the execreleasable.Releasable interface.
@@ -181,12 +190,13 @@ func NewColBatchDirectScan(
 	kvFetcherMemAcc *mon.BoundAccount,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
+	stageID int32,
 	spec *execinfrapb.TableReaderSpec,
 	post *execinfrapb.PostProcessSpec,
 	typeResolver *descs.DistSQLTypeResolver,
 ) (*ColBatchDirectScan, []*types.T, error) {
 	base, bsHeader, tableArgs, err := newColBatchScanBase(
-		ctx, kvFetcherMemAcc, flowCtx, processorID, spec, post, typeResolver,
+		ctx, kvFetcherMemAcc, flowCtx, processorID, stageID, spec, post, typeResolver,
 	)
 	if err != nil {
 		return nil, nil, err
@@ -217,6 +227,8 @@ func NewColBatchDirectScan(
 		kvFetcherMemAcc,
 		flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
 		spec.FetchSpec.External,
+		flowCtx.EvalCtx.WorkloadID,
+		flowCtx.EvalCtx.WorkloadType,
 	)
 	var hasDatumVec bool
 	for _, t := range tableArgs.typs {
@@ -225,10 +237,6 @@ func NewColBatchDirectScan(
 			break
 		}
 	}
-	var cpuStopWatch *timeutil.CPUStopWatch
-	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
-		cpuStopWatch = timeutil.NewCPUStopWatch()
-	}
 	return &ColBatchDirectScan{
 		colBatchScanBase: base,
 		fetcher:          fetcher,
@@ -236,6 +244,5 @@ func NewColBatchDirectScan(
 		spec:             &fetchSpec,
 		resultTypes:      tableArgs.typs,
 		hasDatumVec:      hasDatumVec,
-		cpuStopWatch:     cpuStopWatch,
 	}, tableArgs.typs, nil
 }

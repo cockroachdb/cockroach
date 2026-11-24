@@ -12,11 +12,12 @@ import (
 	"math"
 	"math/rand"
 	"reflect"
-	"sort"
+	"slices"
 	"testing"
 	"testing/quick"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -56,7 +57,7 @@ func TestMVCCKeys(t *testing.T) {
 	sortKeys := make(mvccKeys, len(keys))
 	copy(sortKeys, keys)
 	shuffle.Shuffle(sortKeys)
-	sort.Sort(sortKeys)
+	slices.SortFunc(sortKeys, MVCCKey.Compare)
 	if !reflect.DeepEqual(sortKeys, keys) {
 		t.Errorf("expected keys to sort in order %s, but got %s", keys, sortKeys)
 	}
@@ -94,8 +95,8 @@ func TestMVCCKeyCompare(t *testing.T) {
 
 			// Comparators on encoded keys should be identical.
 			aEnc, bEnc := EncodeMVCCKey(tc.a), EncodeMVCCKey(tc.b)
-			require.Equal(t, tc.expect, EngineKeyCompare(aEnc, bEnc))
-			require.Equal(t, tc.expect == 0, EngineKeyEqual(aEnc, bEnc))
+			require.Equal(t, tc.expect, EngineComparer.Compare(aEnc, bEnc))
+			require.Equal(t, tc.expect == 0, EngineComparer.Equal(aEnc, bEnc))
 		})
 	}
 }
@@ -108,9 +109,9 @@ func TestMVCCKeyCompareRandom(t *testing.T) {
 		aEnc, bEnc := EncodeMVCCKey(a), EncodeMVCCKey(b)
 
 		cmp := a.Compare(b)
-		cmpEnc := EngineKeyCompare(aEnc, bEnc)
+		cmpEnc := EngineComparer.Compare(aEnc, bEnc)
 		eq := a.Equal(b)
-		eqEnc := EngineKeyEqual(aEnc, bEnc)
+		eqEnc := EngineComparer.Equal(aEnc, bEnc)
 		lessAB := a.Less(b)
 		lessBA := b.Less(a)
 
@@ -180,9 +181,9 @@ func TestEncodeDecodeMVCCKeyAndTimestampWithLength(t *testing.T) {
 
 			encoded := EncodeMVCCKey(mvccKey)
 			require.Equal(t, expect, encoded)
-			require.Equal(t, len(encoded), encodedMVCCKeyLength(mvccKey))
+			require.Equal(t, len(encoded), mvccencoding.EncodedMVCCKeyLength(mvccKey.Key, mvccKey.Timestamp))
 			require.Equal(t, len(encoded),
-				EncodedMVCCKeyPrefixLength(mvccKey.Key)+EncodedMVCCTimestampSuffixLength(mvccKey.Timestamp))
+				mvccencoding.EncodedMVCCKeyPrefixLength(mvccKey.Key)+mvccencoding.EncodedMVCCTimestampSuffixLength(mvccKey.Timestamp))
 
 			decoded, err := DecodeMVCCKey(encoded)
 			require.NoError(t, err)
@@ -192,7 +193,7 @@ func TestEncodeDecodeMVCCKeyAndTimestampWithLength(t *testing.T) {
 			expectPrefix, err := hex.DecodeString(tc.encoded[:2*len(tc.key)+2])
 			require.NoError(t, err)
 			require.Equal(t, expectPrefix, EncodeMVCCKeyPrefix(roachpb.Key(tc.key)))
-			require.Equal(t, len(expectPrefix), EncodedMVCCKeyPrefixLength(roachpb.Key(tc.key)))
+			require.Equal(t, len(expectPrefix), mvccencoding.EncodedMVCCKeyPrefixLength(roachpb.Key(tc.key)))
 
 			// Test Encode/DecodeMVCCTimestampSuffix too, since we can trivially do so.
 			expectTS, err := hex.DecodeString(tc.encoded[2*len(tc.key)+2:])
@@ -201,24 +202,24 @@ func TestEncodeDecodeMVCCKeyAndTimestampWithLength(t *testing.T) {
 				expectTS = nil
 			}
 
-			encodedTS := EncodeMVCCTimestampSuffix(tc.ts)
+			encodedTS := mvccencoding.EncodeMVCCTimestampSuffix(tc.ts)
 			require.Equal(t, expectTS, encodedTS)
-			require.Equal(t, len(encodedTS), EncodedMVCCTimestampSuffixLength(tc.ts))
+			require.Equal(t, len(encodedTS), mvccencoding.EncodedMVCCTimestampSuffixLength(tc.ts))
 
-			decodedTS, err := DecodeMVCCTimestampSuffix(encodedTS)
+			decodedTS, err := mvccencoding.DecodeMVCCTimestampSuffix(encodedTS)
 			require.NoError(t, err)
 			require.Equal(t, tc.ts, decodedTS)
 
-			// Test encode/decodeMVCCTimestamp as well, for completeness.
+			// Test Encode/DecodeMVCCTimestamp as well, for completeness.
 			if len(expectTS) > 0 {
 				expectTS = expectTS[:len(expectTS)-1]
 			}
 
 			encodedTS = encodeMVCCTimestamp(tc.ts)
 			require.Equal(t, expectTS, encodedTS)
-			require.Equal(t, len(encodedTS), encodedMVCCTimestampLength(tc.ts))
+			require.Equal(t, len(encodedTS), mvccencoding.EncodedMVCCTimestampLength(tc.ts))
 
-			decodedTS, err = decodeMVCCTimestamp(encodedTS)
+			decodedTS, err = mvccencoding.DecodeMVCCTimestamp(encodedTS)
 			require.NoError(t, err)
 			require.Equal(t, tc.ts, decodedTS)
 
@@ -291,8 +292,8 @@ func TestDecodeUnnormalizedMVCCKey(t *testing.T) {
 			// Re-encode the key into its normal form.
 			reencoded := EncodeMVCCKey(decoded)
 			require.NotEqual(t, encoded, reencoded)
-			require.Equal(t, tc.equalToNormal, EngineKeyEqual(encoded, reencoded))
-			require.Equal(t, tc.equalToNormal, EngineKeyCompare(encoded, reencoded) == 0)
+			require.Equal(t, tc.equalToNormal, EngineComparer.Equal(encoded, reencoded))
+			require.Equal(t, tc.equalToNormal, EngineComparer.Compare(encoded, reencoded) == 0)
 		})
 	}
 }
@@ -336,7 +337,7 @@ func TestDecodeMVCCTimestampSuffixErrors(t *testing.T) {
 			encoded, err := hex.DecodeString(tc.encoded)
 			require.NoError(t, err)
 
-			_, err = DecodeMVCCTimestampSuffix(encoded)
+			_, err = mvccencoding.DecodeMVCCTimestampSuffix(encoded)
 			require.Error(t, err)
 			require.Contains(t, err.Error(), tc.expectErr)
 		})
@@ -418,7 +419,7 @@ func TestMVCCRangeKeyClone(t *testing.T) {
 		Bounds: roachpb.Span{Key: roachpb.Key("abc"), EndKey: roachpb.Key("def")},
 		Versions: MVCCRangeKeyVersions{
 			{Timestamp: hlc.Timestamp{WallTime: 5, Logical: 1}, Value: nil,
-				EncodedTimestampSuffix: EncodeMVCCTimestampSuffix(hlc.Timestamp{WallTime: 5, Logical: 1})},
+				EncodedTimestampSuffix: mvccencoding.EncodeMVCCTimestampSuffix(hlc.Timestamp{WallTime: 5, Logical: 1})},
 			{Timestamp: hlc.Timestamp{WallTime: 3, Logical: 4}, Value: []byte{1, 2, 3}},
 			{Timestamp: hlc.Timestamp{WallTime: 1, Logical: 2}, Value: nil},
 		},
@@ -450,7 +451,7 @@ func TestMVCCRangeKeyCloneInto(t *testing.T) {
 		Versions: MVCCRangeKeyVersions{
 			{Timestamp: hlc.Timestamp{WallTime: 3, Logical: 4}, Value: []byte{1, 2, 3}},
 			{Timestamp: hlc.Timestamp{WallTime: 1, Logical: 2}, Value: nil,
-				EncodedTimestampSuffix: EncodeMVCCTimestampSuffix(hlc.Timestamp{WallTime: 1, Logical: 2})},
+				EncodedTimestampSuffix: mvccencoding.EncodeMVCCTimestampSuffix(hlc.Timestamp{WallTime: 1, Logical: 2})},
 		},
 	}
 
@@ -977,8 +978,8 @@ func BenchmarkMVCCRangeKeyStack_Clone(b *testing.B) {
 			}
 			stack.Versions = append(stack.Versions, version)
 		}
-		sort.Slice(stack.Versions, func(i, j int) bool {
-			return stack.Versions[i].Timestamp.Less(stack.Versions[j].Timestamp)
+		slices.SortFunc(stack.Versions, func(i, j MVCCRangeKeyVersion) int {
+			return i.Timestamp.Compare(j.Timestamp)
 		})
 		return stack
 	}
@@ -1050,7 +1051,7 @@ func rangeKey(start, end string, ts int) MVCCRangeKey {
 		StartKey:               roachpb.Key(start),
 		EndKey:                 roachpb.Key(end),
 		Timestamp:              wallTS(ts),
-		EncodedTimestampSuffix: EncodeMVCCTimestampSuffix(wallTS(ts)),
+		EncodedTimestampSuffix: mvccencoding.EncodeMVCCTimestampSuffix(wallTS(ts)),
 	}
 }
 
@@ -1081,7 +1082,7 @@ func rangeKeyVersions(v map[int]MVCCValue) MVCCRangeKeyVersions {
 	for i := range v {
 		timestamps = append(timestamps, i)
 	}
-	sort.Ints(timestamps)
+	slices.Sort(timestamps)
 	for i, ts := range timestamps {
 		versions[len(versions)-1-i] = rangeKeyVersion(ts, v[ts])
 	}
@@ -1104,5 +1105,5 @@ func wallTS(ts int) hlc.Timestamp {
 }
 
 func wallTSRaw(ts int) []byte {
-	return EncodeMVCCTimestampSuffix(wallTS(ts))
+	return mvccencoding.EncodeMVCCTimestampSuffix(wallTS(ts))
 }

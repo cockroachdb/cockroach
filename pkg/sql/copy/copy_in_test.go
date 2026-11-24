@@ -11,10 +11,10 @@ import (
 	"io"
 	"math"
 	"math/rand"
-	"net/url"
 	"reflect"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -26,6 +26,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -647,49 +651,51 @@ func TestCopyTransaction(t *testing.T) {
 	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
-	if _, err := db.Exec(`
+	_, err := db.Exec(`
 		CREATE DATABASE d;
 		SET DATABASE = d;
 		CREATE TABLE t (
 			i INT PRIMARY KEY
 		);
-	`); err != nil {
-		t.Fatal(err)
-	}
+	`)
+	require.NoError(t, err)
 
 	txn, err := db.Begin()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
-	// Note that, at least with lib/pq, this doesn't actually send a Parse msg
-	// (which we wouldn't support, as we don't support Copy-in in extended
-	// protocol mode). lib/pq has magic for recognizing a Copy.
-	stmt, err := txn.Prepare(pq.CopyIn("t", "i"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	// Run COPY twice with the first one being rolled back via savepoints.
+	for val, doSavepoint := range []bool{true, false} {
+		func() {
+			if doSavepoint {
+				_, err = txn.Exec("SAVEPOINT s")
+				require.NoError(t, err)
+				defer func() {
+					_, err = txn.Exec("ROLLBACK TO SAVEPOINT s")
+					require.NoError(t, err)
+				}()
+			}
+			// Note that, at least with lib/pq, this doesn't actually send a
+			// Parse msg (which we wouldn't support, as we don't support Copy-in
+			// in extended protocol mode). lib/pq has magic for recognizing a
+			// Copy.
+			stmt, err := txn.Prepare(pq.CopyIn("t", "i"))
+			require.NoError(t, err)
 
-	const val = 2
+			_, err = stmt.Exec(val)
+			require.NoError(t, err)
 
-	_, err = stmt.Exec(val)
-	if err != nil {
-		t.Fatal(err)
-	}
+			err = stmt.Close()
+			require.NoError(t, err)
 
-	if err = stmt.Close(); err != nil {
-		t.Fatal(err)
+			var i int
+			err = txn.QueryRow("SELECT i FROM d.t").Scan(&i)
+			require.NoError(t, err)
+			if i != val {
+				t.Fatalf("expected %d, got %d", val, i)
+			}
+		}()
 	}
-
-	var i int
-	if err := txn.QueryRow("SELECT i FROM d.t").Scan(&i); err != nil {
-		t.Fatal(err)
-	} else if i != val {
-		t.Fatalf("expected 1, got %d", i)
-	}
-	if err := txn.Commit(); err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, txn.Commit())
 }
 
 // TestCopyFromFKCheck verifies that foreign keys are checked during COPY.
@@ -778,10 +784,107 @@ func TestCopyInReleasesLeases(t *testing.T) {
 	select {
 	case err := <-alterErr:
 		require.NoError(t, err)
-	case <-time.After(testutils.DefaultSucceedsSoonDuration):
+	case <-time.After(testutils.SucceedsSoonDuration()):
 		t.Fatal("alter did not complete")
 	}
 	require.NoError(t, conn.Close(ctx))
+}
+
+// TestCopyDuringNullableAddColumn is a regression test for #169583. It
+// reproduces the user-facing path that produced the Sentry crash on v25.4.4:
+// a text-format COPY FROM running while ALTER TABLE ADD COLUMN ... NULL is
+// in WRITE_ONLY status.
+//
+// This scenario slips past the canSupportVectorized ForcePut guard added in
+// PR #148549 because a nullable ADD COLUMN with no default doesn't require a
+// backfill, so no new mutation primary index is created and no writable
+// index has ForcePut set. The vec encoder is therefore selected, the
+// optimizer's addSynthesizedColsForInsert pulls the WRITE_ONLY column into
+// insCols, and (without the fix) encodePK panics with "index out of range".
+func TestCopyDuringNullableAddColumn(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+
+	pauseCh := make(chan struct{})
+	continueCh := make(chan struct{})
+	var paused atomic.Bool
+
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
+				BeforeStage: func(p scplan.Plan, stageIdx int) error {
+					if stageIdx >= len(p.Stages) {
+						return nil
+					}
+					stage := p.Stages[stageIdx]
+					if stage.Phase < scop.PostCommitPhase {
+						return nil
+					}
+					promotesWriteOnly := false
+					for i := range stage.Before {
+						if stage.Before[i] == scpb.Status_WRITE_ONLY &&
+							stage.After[i] == scpb.Status_PUBLIC {
+							promotesWriteOnly = true
+							break
+						}
+					}
+					if promotesWriteOnly && paused.CompareAndSwap(false, true) {
+						close(pauseCh)
+						<-continueCh
+					}
+					return nil
+				},
+			},
+		},
+	})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
+
+	if _, err := db.Exec(`CREATE TABLE t (k INT PRIMARY KEY, c1 INT)`); err != nil {
+		t.Fatal(err)
+	}
+
+	alterErr := make(chan error, 1)
+	go func() {
+		_, err := db.Exec(`ALTER TABLE t ADD COLUMN c2 INT`)
+		alterErr <- err
+	}()
+	select {
+	case <-pauseCh:
+	case <-time.After(testutils.SucceedsSoonDuration()):
+		t.Fatal("schema change didn't pause")
+	}
+	defer func() {
+		close(continueCh)
+		require.NoError(t, <-alterErr)
+	}()
+
+	// Use clisqlclient (text-format COPY) — pgx.CopyFromRows uses binary, which
+	// canSupportVectorized rejects, so it doesn't exercise the vec path.
+	pgURL, cleanup := s.PGUrl(t,
+		serverutils.CertsDirPrefix(t.Name()),
+		serverutils.User(username.RootUser),
+	)
+	defer cleanup()
+	var sqlConnCtx clisqlclient.Context
+	conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, pgURL.String())
+	defer func() { _ = conn.Close() }()
+
+	for _, stmt := range []string{
+		`SET copy_fast_path_enabled = true`,
+		`SET vectorize = on`,
+	} {
+		require.NoError(t, conn.Exec(ctx, stmt))
+	}
+
+	_, err := conn.GetDriverConn().CopyFrom(
+		ctx,
+		strings.NewReader("1\t10\n2\t20\n"),
+		"COPY t (k, c1) FROM STDIN",
+	)
+	require.NoError(t, err)
 }
 
 func TestMessageSizeTooBig(t *testing.T) {
@@ -791,8 +894,9 @@ func TestMessageSizeTooBig(t *testing.T) {
 	ctx := context.Background()
 	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
-	url, cleanup := sqlutils.PGUrl(t, srv.ApplicationLayer().AdvSQLAddr(), "copytest", url.User(username.RootUser))
+	url, cleanup := s.PGUrl(t, serverutils.CertsDirPrefix("copytest"), serverutils.User(username.RootUser))
 	defer cleanup()
 	var sqlConnCtx clisqlclient.Context
 	conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, url.String())
@@ -840,7 +944,7 @@ func TestCopyExceedsSQLMemory(t *testing.T) {
 
 					s := srv.ApplicationLayer()
 
-					url, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), "copytest", url.User(username.RootUser))
+					url, cleanup := s.PGUrl(t, serverutils.CertsDirPrefix("copytest"), serverutils.User(username.RootUser))
 					defer cleanup()
 					var sqlConnCtx clisqlclient.Context
 					conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, url.String())

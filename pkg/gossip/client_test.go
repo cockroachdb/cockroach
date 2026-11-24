@@ -244,7 +244,7 @@ func TestClientGossipMetrics(t *testing.T) {
 					s.nodeMetrics.BytesReceived,
 				} {
 					if count := counter.Count(); count <= 0 {
-						return errors.Errorf("%d: expected metrics counter %q > 0; = %d", i, counter.GetName(), count)
+						return errors.Errorf("%d: expected metrics counter %q > 0; = %d", i, counter.GetName(false /* useStaticLabels */), count)
 					}
 				}
 			}
@@ -570,7 +570,7 @@ func TestClientSendsHighStampsDiff(t *testing.T) {
 	conn, err := rCtx.GRPCUnvalidatedDial(c.addr.String(), roachpb.Locality{}).Connect(ctxNew)
 	require.NoError(t, err)
 
-	stream, err := NewGossipClient(conn).Gossip(ctx)
+	stream, err := NewGRPCGossipClientAdapter(conn).Gossip(ctx)
 	require.NoError(t, err)
 
 	// Add an info to generate some deltas and allow the request to be sent.

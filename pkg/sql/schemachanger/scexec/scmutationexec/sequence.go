@@ -7,6 +7,7 @@ package scmutationexec
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -48,9 +49,9 @@ func (i *immediateVisitor) CreateSequenceDescriptor(
 	return nil
 }
 
-func (i *immediateVisitor) SetSequenceOptions(
-	ctx context.Context, op scop.SetSequenceOptions,
-) error {
+// SetSequenceOption sets a sequence option to the provided value. It updates
+// the current value of the sequence on restart.
+func (i *immediateVisitor) SetSequenceOption(ctx context.Context, op scop.SetSequenceOption) error {
 	sc, err := i.checkOutTable(ctx, op.SequenceID)
 	if err != nil {
 		return err
@@ -73,19 +74,84 @@ func (i *immediateVisitor) SetSequenceOptions(
 	sequenceOptionMeta := map[string]struct {
 		SetFunc func(Value string) error
 	}{
-		tree.SeqOptIncrement: {SetFunc: setIntValue(&sc.SequenceOpts.Increment)},
-		tree.SeqOptMinValue:  {SetFunc: setIntValue(&sc.SequenceOpts.MinValue)},
-		tree.SeqOptMaxValue:  {SetFunc: setIntValue(&sc.SequenceOpts.MaxValue)},
-		tree.SeqOptStart:     {SetFunc: setIntValue(&sc.SequenceOpts.Start)},
-		tree.SeqOptCache:     {SetFunc: setIntValue(&sc.SequenceOpts.CacheSize)},
-		tree.SeqOptCacheNode: {SetFunc: setIntValue(&sc.SequenceOpts.NodeCacheSize)},
-		tree.SeqOptVirtual:   {SetFunc: setBoolValue(&sc.SequenceOpts.Virtual)},
+		tree.SeqOptIncrement:    {SetFunc: setIntValue(&sc.SequenceOpts.Increment)},
+		tree.SeqOptMinValue:     {SetFunc: setIntValue(&sc.SequenceOpts.MinValue)},
+		tree.SeqOptMaxValue:     {SetFunc: setIntValue(&sc.SequenceOpts.MaxValue)},
+		tree.SeqOptStart:        {SetFunc: setIntValue(&sc.SequenceOpts.Start)},
+		tree.SeqOptCacheSession: {SetFunc: setIntValue(&sc.SequenceOpts.SessionCacheSize)},
+		tree.SeqOptCacheNode:    {SetFunc: setIntValue(&sc.SequenceOpts.NodeCacheSize)},
+		tree.SeqOptVirtual:      {SetFunc: setBoolValue(&sc.SequenceOpts.Virtual)},
 		tree.SeqOptAs: {SetFunc: func(Value string) error {
 			sc.SequenceOpts.AsIntegerType = Value
 			return nil
 		}},
 	}
+
+	switch key := op.Key; key {
+	case tree.SeqOptRestart:
+		restartWith, err := strconv.ParseInt(op.Value, 10, 64)
+		if err != nil {
+			return err
+		}
+		i.ImmediateMutationStateUpdater.SetSequence(op.SequenceID, restartWith)
+		return nil
+	}
+
 	return sequenceOptionMeta[op.Key].SetFunc(op.Value)
+}
+
+// UnsetSequenceOption sets a sequence option to its default.
+func (i *immediateVisitor) UnsetSequenceOption(
+	ctx context.Context, op scop.UnsetSequenceOption,
+) error {
+	defaultOpts := schemaexpr.DefaultSequenceOptions()
+
+	setOp := scop.SetSequenceOption{
+		SequenceID: op.SequenceID,
+		Key:        op.Key,
+	}
+
+	switch op.Key {
+
+	case tree.SeqOptAs:
+		setOp.Value = defaultOpts.AsIntegerType
+	case tree.SeqOptCacheNode:
+		setOp.Value = fmt.Sprintf("%d", defaultOpts.NodeCacheSize)
+	case tree.SeqOptCacheSession:
+		setOp.Value = fmt.Sprintf("%d", defaultOpts.SessionCacheSize)
+	case tree.SeqOptIncrement:
+		setOp.Value = fmt.Sprintf("%d", defaultOpts.Increment)
+	case tree.SeqOptMinValue:
+		setOp.Value = fmt.Sprintf("%d", defaultOpts.MinValue)
+	case tree.SeqOptMaxValue:
+		setOp.Value = fmt.Sprintf("%d", defaultOpts.MaxValue)
+	case tree.SeqOptStart:
+		setOp.Value = fmt.Sprintf("%d", defaultOpts.Start)
+	case tree.SeqOptRestart:
+		// Noop on unsetting a transient element.
+		return nil
+	case tree.SeqOptVirtual:
+		setOp.Value = fmt.Sprintf("%t", defaultOpts.Virtual)
+	default:
+		panic(fmt.Sprintf("unexpected sequence option: %s", op.Key))
+	}
+
+	return i.SetSequenceOption(ctx, setOp)
+}
+
+// MaybeUpdateSequenceValue updates the value of the sequence when changes to
+// the sequence options demand it. It is best effort.
+func (i *immediateVisitor) MaybeUpdateSequenceValue(
+	ctx context.Context, op scop.MaybeUpdateSequenceValue,
+) error {
+	_, err := i.checkOutTable(ctx, op.SequenceID)
+	if err != nil {
+		return err
+	}
+
+	i.ImmediateMutationStateUpdater.MaybeUpdateSequenceValue(op.SequenceID, op)
+
+	return nil
 }
 
 func (i *immediateVisitor) InitSequence(ctx context.Context, op scop.InitSequence) error {

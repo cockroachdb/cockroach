@@ -5,7 +5,10 @@
 
 package scop
 
-import "github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/redact"
+)
 
 //go:generate go run ./generate_visitor.go scop Validation validation.go validation_visitor_generated.go
 
@@ -23,6 +26,10 @@ type ValidateIndex struct {
 	IndexID descpb.IndexID
 }
 
+func (ValidateIndex) Description() redact.RedactableString {
+	return "Validating index"
+}
+
 // ValidateConstraint validates a check constraint on a table's columns.
 type ValidateConstraint struct {
 	validationOp
@@ -31,12 +38,33 @@ type ValidateConstraint struct {
 	IndexIDForValidation descpb.IndexID
 }
 
+func (ValidateConstraint) Description() redact.RedactableString {
+	return "Validating CHECK constraint"
+}
+
 // ValidateColumnNotNull validates a NOT NULL constraint on a table's column.
 type ValidateColumnNotNull struct {
 	validationOp
 	TableID              descpb.ID
 	ColumnID             descpb.ColumnID
 	IndexIDForValidation descpb.IndexID
+}
+
+func (ValidateColumnNotNull) Description() redact.RedactableString {
+	return "Validating NOT NULL constraint"
+}
+
+// ValidateEnumTypeValueRemoval validates that an enum value is unused before
+// it's removed.
+type ValidateEnumTypeValueRemoval struct {
+	validationOp
+	TypeID                 descpb.ID
+	PhysicalRepresentation []byte
+	LogicalRepresentation  string
+}
+
+func (ValidateEnumTypeValueRemoval) Description() redact.RedactableString {
+	return "Validating removal of enum type value"
 }
 
 // Make sure baseOp is used for linter.

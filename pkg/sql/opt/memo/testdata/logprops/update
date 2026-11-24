@@ -63,6 +63,7 @@ update abcde
       │    │    │    │    │              │    ├── variable: b:10 [type=int]
       │    │    │    │    │              │    └── variable: c:11 [type=int]
       │    │    │    │    │              └── const: 1 [type=int]
+      │    │    │    │    ├── flags: avoid-full-scan
       │    │    │    │    ├── key: (13)
       │    │    │    │    ├── fd: (13)-->(9-12,14-16), (10,11)-->(12)
       │    │    │    │    ├── prune: (9-16)
@@ -141,6 +142,7 @@ project
            │    │    │    │    │              │    ├── variable: b:10 [type=int]
            │    │    │    │    │              │    └── variable: c:11 [type=int]
            │    │    │    │    │              └── const: 1 [type=int]
+           │    │    │    │    ├── flags: avoid-full-scan
            │    │    │    │    ├── key: (13)
            │    │    │    │    ├── fd: (13)-->(9-12,14-16), (10,11)-->(12)
            │    │    │    │    ├── prune: (9-16)
@@ -222,6 +224,7 @@ project
            │    │    │    │    │              │    ├── variable: b:10 [type=int]
            │    │    │    │    │              │    └── variable: c:11 [type=int]
            │    │    │    │    │              └── const: 1 [type=int]
+           │    │    │    │    ├── flags: avoid-full-scan
            │    │    │    │    ├── key: (13)
            │    │    │    │    ├── fd: (13)-->(9-12,14-16), (10,11)-->(12)
            │    │    │    │    ├── prune: (9-16)
@@ -248,7 +251,7 @@ UPDATE abcde SET a=1 WHERE b=c RETURNING *;
 project
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int)
  ├── volatile, mutations
- ├── fd: ()-->(1), (2)==(3), (3)==(2), (2)-->(4)
+ ├── fd: ()-->(1), (2)-->(4), (2)==(3), (3)==(2)
  ├── prune: (1-4)
  └── update abcde
       ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int) rowid:5(int!null)
@@ -264,12 +267,12 @@ project
       │    └── rowid:13 => rowid:5
       ├── volatile, mutations
       ├── key: (5)
-      ├── fd: ()-->(1), (2)==(3), (3)==(2), (5)-->(2-4), (2)-->(4)
+      ├── fd: ()-->(1), (5)-->(2-4), (2)-->(4), (2)==(3), (3)==(2)
       └── project
            ├── columns: d_comp:19(int!null) a:9(int!null) b:10(int!null) c:11(int!null) d:12(int) rowid:13(int!null) e:14(int) crdb_internal_mvcc_timestamp:15(decimal) tableoid:16(oid) a_new:17(int!null) e_default:18(int!null)
            ├── immutable
            ├── key: (13)
-           ├── fd: ()-->(17,18), (13)-->(9-12,14-16), (10,11)-->(12), (10)==(11), (11)==(10), (11)-->(19)
+           ├── fd: ()-->(17,18), (13)-->(9-12,14-16), (10,11)-->(12), (11)-->(19), (10)==(11), (11)==(10)
            ├── prune: (9-19)
            ├── interesting orderings: (+13 opt(17,18))
            ├── project
@@ -299,6 +302,7 @@ project
            │    │    │    │    │              │    ├── variable: b:10 [type=int]
            │    │    │    │    │              │    └── variable: c:11 [type=int]
            │    │    │    │    │              └── const: 1 [type=int]
+           │    │    │    │    ├── flags: avoid-full-scan
            │    │    │    │    ├── key: (13)
            │    │    │    │    ├── fd: (13)-->(9-12,14-16), (10,11)-->(12)
            │    │    │    │    ├── prune: (9-16)

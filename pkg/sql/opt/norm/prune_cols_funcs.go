@@ -68,6 +68,9 @@ func (c *CustomFuncs) neededMutationCols(
 		addCols(private.PartialIndexPutCols)
 		addCols(private.PartialIndexDelCols)
 	}
+	addCols(private.VectorIndexPutPartitionCols)
+	addCols(private.VectorIndexPutQuantizedVecCols)
+	addCols(private.VectorIndexDelPartitionCols)
 	addCols(private.ReturnCols)
 	addCols(opt.OptionalColList(private.PassthroughCols))
 	if private.CanaryCol != 0 {
@@ -120,6 +123,19 @@ func (c *CustomFuncs) NeededMutationFetchCols(
 			if famCols.Intersects(updateCols) {
 				cols.UnionWith(famCols)
 			}
+		}
+	}
+
+	// For swap mutations, include all columns in the primary index.
+	if private.Swap {
+		primaryIndex := tabMeta.Table.Index(cat.PrimaryIndex)
+		for i := 0; i < primaryIndex.ColumnCount(); i++ {
+			col := primaryIndex.Column(i)
+			if col.Kind() == cat.System {
+				continue
+			}
+			ord := col.Ordinal()
+			cols.Add(tabMeta.MetaID.ColumnID(ord))
 		}
 	}
 
@@ -179,7 +195,11 @@ func (c *CustomFuncs) NeededMutationFetchCols(
 				predFilters := *pred.(*memo.FiltersExpr)
 				indexAndPredCols.UnionWith(predFilters.OuterCols())
 			}
-			if !indexAndPredCols.Intersects(updateCols) {
+			// If a secondary index is being built, then there will be points where
+			// all values will be forced with a Put. As a result, runtime expects temporary
+			// mutated indexes to always have values available for writes during index
+			// construction, even if the mutation does not touch those columns.
+			if !indexAndPredCols.Intersects(updateCols) && !cat.IsTemporaryMutationIndex(tabMeta.Table, i) {
 				continue
 			}
 

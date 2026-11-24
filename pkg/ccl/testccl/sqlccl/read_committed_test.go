@@ -8,6 +8,7 @@ package sqlccl_test
 import (
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -18,8 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/isolation"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/concurrency/lock"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -53,18 +55,31 @@ func TestReadCommittedStmtRetry(t *testing.T) {
 			return nil
 		}
 		for _, arg := range ba.Requests {
-			if req := arg.GetInner(); req.Method() == kvpb.Put {
-				put := req.(*kvpb.PutRequest)
-				// Only count writes to the kv table.
-				_, tableID, err := codec.DecodeTablePrefix(put.Key)
-				if err != nil || tableID != kvTableId {
-					return nil
+			req := arg.GetInner()
+			var key roachpb.Key
+			switch t := req.(type) {
+			case *kvpb.PutRequest:
+				key = t.Key
+			case *kvpb.GetRequest:
+				// With write buffering, writes are decomposed into locking
+				// Get requests (to acquire locks) and buffered writes. Intercept
+				// locking Gets in addition to Puts.
+				if t.KeyLockingStrength != lock.Exclusive {
+					continue
 				}
-				trappedReadCommittedWritesOnce.Do(func() {
-					close(finishedReadCommittedScans)
-					<-finishedExternalTxn
-				})
+				key = t.Key
+			default:
+				continue
 			}
+			// Only count writes to the kv table.
+			_, tableID, err := codec.DecodeTablePrefix(key)
+			if err != nil || tableID != kvTableId {
+				return nil
+			}
+			trappedReadCommittedWritesOnce.Do(func() {
+				close(finishedReadCommittedScans)
+				<-finishedExternalTxn
+			})
 		}
 
 		return nil
@@ -153,14 +168,34 @@ func TestReadCommittedReadTimestampNotSteppedOnCommit(t *testing.T) {
 	// Keep track of the read timestamps of the read committed transaction during
 	// each KV operation.
 	var txnReadTimestamps []hlc.Timestamp
+	var txnShouldParallelCommit bool
 	filterFunc := func(ctx context.Context, ba *kvpb.BatchRequest, _ *kvpb.BatchResponse) *kvpb.Error {
 		if ba.Txn == nil || ba.Txn.IsoLevel != isolation.ReadCommitted {
 			return nil
 		}
-		req := ba.Requests[0]
-		method := req.GetInner().Method()
-		if method == kvpb.ConditionalPut || (method == kvpb.EndTxn && req.GetEndTxn().IsParallelCommit()) {
+		req := ba.Requests[len(ba.Requests)-1]
+
+		var recordRead bool
+		switch req.GetInner().Method() {
+		case kvpb.ConditionalPut:
+			recordRead = true
+			txnShouldParallelCommit = true
+		case kvpb.Get:
+			recordRead = req.GetGet().KeyLockingStrength == lock.Exclusive
+		case kvpb.EndTxn:
+			if txnShouldParallelCommit {
+				recordRead = req.GetEndTxn().IsParallelCommit()
+			} else {
+				recordRead = true
+			}
+		default:
+			recordRead = false
+		}
+		if recordRead {
+			t.Logf("recording timestamp for %s", req)
 			txnReadTimestamps = append(txnReadTimestamps, ba.Txn.ReadTimestamp)
+		} else {
+			t.Logf("not recording timestamp for %s", req)
 		}
 		return nil
 	}
@@ -175,12 +210,26 @@ func TestReadCommittedReadTimestampNotSteppedOnCommit(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(ctx)
 
-	_, err := sqlDB.Exec(`CREATE TABLE kv (k TEXT, v INT) WITH (sql_stats_automatic_collection_enabled = false);`)
+	// Pin the write buffer size to the default (4MB). With a small metamorphic
+	// value, the buffer can overflow mid-transaction, causing a flush that
+	// prevents parallel commit and breaks the filter's EndTxn detection.
+	_, err := sqlDB.Exec(`SET CLUSTER SETTING kv.transaction.write_buffering.max_buffer_size = '4MB'`)
+	require.NoError(t, err)
+
+	_, err = sqlDB.Exec(`CREATE TABLE kv (k TEXT, v INT) WITH (sql_stats_automatic_collection_enabled = false);`)
+	require.NoError(t, err)
+
+	// Use a dedicated connection so we can collect a KV trace on failure.
+	conn, err := sqlDB.Conn(ctx)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, conn.Close()) }()
+
+	_, err = conn.ExecContext(ctx, "SET TRACING = on, kv")
 	require.NoError(t, err)
 
 	// Create a read committed transaction that writes to three rows in three
 	// different statements and then commits.
-	tx, err := sqlDB.BeginTx(ctx, &gosql.TxOptions{Isolation: gosql.LevelReadCommitted})
+	tx, err := conn.BeginTx(ctx, &gosql.TxOptions{Isolation: gosql.LevelReadCommitted})
 	require.NoError(t, err)
 	_, err = tx.Exec(`INSERT INTO kv VALUES ('a', 1);`)
 	require.NoError(t, err)
@@ -189,6 +238,19 @@ func TestReadCommittedReadTimestampNotSteppedOnCommit(t *testing.T) {
 	_, err = tx.Exec(`INSERT INTO kv VALUES ('c', 3);`)
 	require.NoError(t, err)
 	require.NoError(t, tx.Commit())
+
+	_, err = conn.ExecContext(ctx, "SET TRACING = off")
+	require.NoError(t, err)
+
+	// Collect KV trace for debugging on failure.
+	traceRows := sqlutils.MakeSQLRunner(conn).QueryStr(t, "SHOW KV TRACE FOR SESSION")
+	defer func() {
+		if t.Failed() {
+			for _, row := range traceRows {
+				t.Logf("trace: %s", strings.Join(row, "\t"))
+			}
+		}
+	}()
 
 	// Verify that the transaction's read timestamp was not stepped on commit but
 	// was stepped between every other statement.
@@ -207,15 +269,42 @@ func TestReadCommittedVolatileUDF(t *testing.T) {
 
 	ctx := context.Background()
 	var readCommittedRetryCount atomic.Int64
-	params := base.TestServerArgs{}
-	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
-		OnReadCommittedStmtRetry: func(retryReason error) {
-			// Track retries since we don't want them to happen in this test, since
-			// they would change the read timestamp.
-			readCommittedRetryCount.Add(1)
+	var trapRCTxn atomic.Bool
+	var tableID int
+	rcTxnBlocked, unblockRCTxn := make(chan struct{}, 1), make(chan struct{})
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			SQLExecutor: &sql.ExecutorTestingKnobs{
+				OnReadCommittedStmtRetry: func(retryReason error) {
+					// Track retries since we don't want them to happen in this
+					// test, since they would change the read timestamp.
+					readCommittedRetryCount.Add(1)
+				},
+			},
+			Store: &kvserver.StoreTestingKnobs{
+				TestingRequestFilter: func(_ context.Context, req *kvpb.BatchRequest) *kvpb.Error {
+					if !trapRCTxn.Load() {
+						return nil
+					}
+					if len(req.Requests) != 2 {
+						return nil
+					}
+					for _, r := range req.Requests {
+						get, ok := r.GetInner().(*kvpb.GetRequest)
+						if !ok {
+							return nil
+						}
+						if !strings.Contains(get.Key.String(), fmt.Sprintf("/Table/%d", tableID)) {
+							return nil
+						}
+					}
+					rcTxnBlocked <- struct{}{}
+					<-unblockRCTxn
+					return nil
+				},
+			},
 		},
-	}
-	s, sqlDB, _ := serverutils.StartServer(t, params)
+	})
 	defer s.Stopper().Stop(ctx)
 
 	_, err := sqlDB.Exec(`CREATE TABLE kv (k TEXT PRIMARY KEY, v INT) WITH (sql_stats_automatic_collection_enabled = false);`)
@@ -223,6 +312,8 @@ func TestReadCommittedVolatileUDF(t *testing.T) {
 	_, err = sqlDB.Exec(`INSERT INTO kv VALUES ('a', 10);`)
 	require.NoError(t, err)
 	_, err = sqlDB.Exec(`CREATE FUNCTION f() RETURNS INT AS $$ SELECT v FROM kv WHERE k = 'a' OR k = 'b' ORDER BY v LIMIT 1 FOR SHARE $$ LANGUAGE SQL VOLATILE;`)
+	require.NoError(t, err)
+	err = sqlDB.QueryRow("SELECT 'kv'::REGCLASS::OID").Scan(&tableID)
 	require.NoError(t, err)
 
 	g := ctxgroup.WithContext(ctx)
@@ -236,6 +327,7 @@ func TestReadCommittedVolatileUDF(t *testing.T) {
 
 	// Start a READ COMMITTED transaction that is blocked on txSerializable, and
 	// which tries to read a key that does not exist yet using a UDF.
+	trapRCTxn.Store(true)
 	txReadCommitted, err := sqlDB.BeginTx(ctx, &gosql.TxOptions{Isolation: gosql.LevelReadCommitted})
 	require.NoError(t, err)
 	var executedUDF atomic.Bool
@@ -259,18 +351,9 @@ func TestReadCommittedVolatileUDF(t *testing.T) {
 	// In a third transaction, add another row to the table after confirming that
 	// txReadCommitted is blocked. This row should not be visible to
 	// txReadCommitted's UDF.
-	testutils.SucceedsSoon(t, func() error {
-		var blockedCount int
-		if err := sqlDB.QueryRow(
-			`SELECT count(*) FROM crdb_internal.cluster_locks WHERE table_name = 'kv'`,
-		).Scan(&blockedCount); err != nil {
-			return err
-		}
-		if blockedCount == 0 {
-			return errors.Newf("expected to find blocked transaction")
-		}
-		return nil
-	})
+	<-rcTxnBlocked
+	trapRCTxn.Store(false)
+	close(unblockRCTxn)
 	_, err = sqlDB.Exec(`INSERT INTO kv VALUES ('b', 2)`)
 	require.NoError(t, err)
 

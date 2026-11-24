@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -21,8 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -134,7 +133,6 @@ func newSplitQueue(store *Store, db *kv.DB) *splitQueue {
 			acceptsUnsplitRanges: true,
 			successes:            store.metrics.SplitQueueSuccesses,
 			failures:             store.metrics.SplitQueueFailures,
-			storeFailures:        store.metrics.StoreFailures,
 			pending:              store.metrics.SplitQueuePending,
 			processingNanos:      store.metrics.SplitQueueProcessingNanos,
 			purgatory:            store.metrics.SplitQueuePurgatory,
@@ -154,7 +152,7 @@ func shouldSplitRange(
 ) (shouldQ bool, priority float64) {
 	needsSplit, err := confReader.NeedsSplit(ctx, desc.StartKey, desc.EndKey)
 	if err != nil {
-		log.Warningf(ctx, "unable to compute NeedsSpilt (%v); skipping range %s", err, desc.RangeID)
+		log.KvDistribution.Warningf(ctx, "unable to compute NeedsSpilt (%v); skipping range %s", err, desc.RangeID)
 		return false, 0
 	}
 	if needsSplit {
@@ -219,15 +217,20 @@ var _ PurgatoryError = unsplittableRangeError{}
 
 // process synchronously invokes admin split for each proposed split key.
 func (sq *splitQueue) process(
-	ctx context.Context, r *Replica, confReader spanconfig.StoreReader,
+	ctx context.Context, r *Replica, confReader spanconfig.StoreReader, _ float64,
 ) (processed bool, err error) {
+	ctx = kv.ContextWithWorkloadInfo(
+		ctx,
+		uint64(workloadid.WORKLOAD_ID_SPLIT_QUEUE),
+		workloadid.WorkloadTypeSystem,
+	)
 	processed, err = sq.processAttemptWithTracing(ctx, r, confReader)
 	if errors.HasType(err, (*kvpb.ConditionFailedError)(nil)) {
 		// ConditionFailedErrors are an expected outcome for range split
 		// attempts because splits can race with other descriptor modifications.
 		// On seeing a ConditionFailedError, don't return an error and enqueue
 		// this replica again in case it still needs to be split.
-		log.Infof(ctx, "split saw concurrent descriptor modification; maybe retrying; err: %v", err)
+		log.KvDistribution.Infof(ctx, "split saw concurrent descriptor modification; maybe retrying; err: %v", err)
 		sq.MaybeAddAsync(ctx, r, sq.store.Clock().NowAsClockTimestamp())
 		return false, nil
 	}
@@ -242,35 +245,28 @@ func (sq *splitQueue) processAttemptWithTracing(
 	ctx context.Context, r *Replica, confReader spanconfig.StoreReader,
 ) (processed bool, _ error) {
 	processStart := r.Clock().PhysicalTime()
-	startTracing := log.ExpensiveLogEnabled(ctx, 1)
-	var opts []tracing.SpanOption
-	if startTracing {
-		opts = append(opts, tracing.WithRecording(tracingpb.RecordingVerbose))
-	}
-	ctx, sp := tracing.EnsureChildSpan(ctx, sq.Tracer, "split", opts...)
-	defer sp.Finish()
+	recordVerbose := log.ExpensiveLogEnabled(ctx, 1)
 
-	processed, err := sq.processAttempt(ctx, r, confReader)
+	processed, rec, err := withTraceCollection(ctx, sq.Tracer, "split", recordVerbose,
+		func(ctx context.Context) (bool, error) {
+			return sq.processAttempt(ctx, r, confReader)
+		},
+	)
+
+	// Determine if we should log the trace.
 	processDuration := r.Clock().PhysicalTime().Sub(processStart)
-	exceededDuration := sq.logTracesThreshold > time.Duration(0) && processDuration > sq.logTracesThreshold
-	var traceOutput redact.RedactableString
-	if startTracing {
-		// Utilize a new background context (properly annotated) to avoid writing
-		// traces from a child context into its parent.
-		ctx = r.AnnotateCtx(sq.AnnotateCtx(context.Background()))
+	exceededDuration := sq.logTracesThreshold > 0 && processDuration > sq.logTracesThreshold
 
-		traceLoggingNeeded := (err != nil || exceededDuration)
-		if traceLoggingNeeded {
-			// Add any trace filtering here if the output is too verbose.
-			rec := sp.GetConfiguredRecording()
-			traceOutput = redact.Sprintf("\ntrace:\n%s", rec)
+	if recordVerbose && (err != nil || exceededDuration) {
+		// Use fresh context to avoid duplicating trace into parent span.
+		logCtx := r.AnnotateCtx(sq.AnnotateCtx(context.Background()))
+		traceOutput := redact.Sprintf("\ntrace:\n%s", rec)
+		if err != nil {
+			log.KvDistribution.Infof(logCtx, "error during range split: %v%s", err, traceOutput)
+		} else {
+			log.KvDistribution.Infof(logCtx, "range split took %s, exceeding threshold of %s%s",
+				processDuration, sq.logTracesThreshold, traceOutput)
 		}
-	}
-	if err != nil {
-		log.Infof(ctx, "error during range split: %v%s", err, traceOutput)
-	} else if exceededDuration {
-		log.Infof(ctx, "range split took %s, exceeding threshold of %s%s",
-			processDuration, sq.logTracesThreshold, traceOutput)
 	}
 
 	return processed, err
@@ -303,6 +299,9 @@ func (sq *splitQueue) processAttempt(
 			return false, errors.Wrapf(err, "unable to split %s at key %q", r, splitKey)
 		}
 		sq.metrics.SpanConfigBasedSplitCount.Inc(1)
+
+		// Reset the splitter now that the bounds of the range changed.
+		r.loadBasedSplitter.Reset(sq.store.Clock().PhysicalTime())
 		return true, nil
 	}
 
@@ -328,6 +327,9 @@ func (sq *splitQueue) processAttempt(
 			return false, err
 		}
 		sq.metrics.SizeBasedSplitCount.Inc(1)
+
+		// Reset the splitter now that the bounds of the range changed.
+		r.loadBasedSplitter.Reset(sq.store.Clock().PhysicalTime())
 		return true, nil
 	}
 
@@ -377,7 +379,8 @@ func (sq *splitQueue) processAttempt(
 			reason,
 			true, /* findFirstSafeSplitKey */
 		); pErr != nil {
-			return false, errors.Wrapf(pErr, "unable to split %s at key %q", r, splitByLoadKey)
+			return false, errors.Wrapf(pErr, "unable to split %s at key %q (attempted because: %v)", r, splitByLoadKey,
+				reason)
 		}
 
 		telemetry.Inc(sq.loadBasedCount)

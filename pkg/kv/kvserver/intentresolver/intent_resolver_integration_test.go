@@ -373,7 +373,7 @@ func TestIntentResolutionUnavailableRange(t *testing.T) {
 
 	// This test sometimes times out trying to replicate 3 tables t1, t2, t3 with
 	// replication factor 1 located on different servers under stress.
-	skip.UnderStress(t)
+	skip.UnderDuress(t)
 
 	ctx := context.Background()
 

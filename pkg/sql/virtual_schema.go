@@ -41,10 +41,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 )
@@ -127,7 +129,9 @@ type virtualSchemaTable struct {
 	// generator, if non-nil, is a function that is used when creating a
 	// virtualTableNode. This function returns a virtualTableGenerator function
 	// which generates the next row of the virtual table when called.
-	generator func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error)
+	//
+	// Limit is the hard limit of the scan, a limit of 0 means no limit.
+	generator func(ctx context.Context, p *planner, db catalog.DatabaseDescriptor, limit int64, stopper *stop.Stopper) (virtualTableGenerator, cleanupFunc, error)
 
 	// unimplemented indicates that we do not yet implement the contents of this
 	// table. If the stub_catalog_tables session variable is enabled, the table
@@ -198,8 +202,8 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 		nil,
 		sc,
 		id,
-		nil,       /* regionConfig */
-		startTime, /* creationTime */
+		nil, /* regionConfig */
+		virtualTableCreationTime,
 		catpb.NewPrivilegeDescriptor(
 			username.PublicRoleName(),
 			privilege.List{privilege.SELECT},
@@ -215,6 +219,7 @@ func (t virtualSchemaTable) initVirtualTableDesc(
 		&eval.Context{Settings: st}, /* evalCtx */
 		&sessiondata.SessionData{},  /* sessionData */
 		tree.PersistencePermanent,
+		nil, /* colToSequenceRefs */
 	)
 	if err != nil {
 		err = errors.Wrapf(err, "initVirtualDesc problem with schema: \n%s", t.schema)
@@ -323,7 +328,10 @@ func (t virtualSchemaTable) preferIndexOverGenerator(
 func maybeAdjustVirtualIndexScanForExplain(
 	ctx context.Context, evalCtx *eval.Context, index cat.Index, params exec.ScanParams,
 ) (_ cat.Index, _ exec.ScanParams, extraAttribute string) {
-	idx := index.(*optVirtualIndex)
+	idx, ok := index.(*optVirtualIndex)
+	if !ok {
+		return index, params, extraAttribute
+	}
 	if idx.idx != nil && idx.idx.GetID() != 1 && params.IndexConstraint != nil {
 		// If we picked the virtual index, check that we can actually use it.
 		spans := params.IndexConstraint.Spans
@@ -380,7 +388,7 @@ func (v virtualSchemaView) initVirtualTableDesc(
 		sc.GetID(),
 		id,
 		columns,
-		startTime,
+		virtualTableCreationTime,
 		catpb.NewPrivilegeDescriptor(
 			username.PublicRoleName(),
 			privilege.List{privilege.SELECT},
@@ -422,7 +430,7 @@ var virtualSchemas = map[descpb.ID]virtualSchema{
 	catconstants.PgExtensionSchemaID: pgExtension,
 }
 
-var startTime = hlc.Timestamp{
+var virtualTableCreationTime = hlc.Timestamp{
 	WallTime: time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC).UnixNano(),
 }
 
@@ -443,9 +451,6 @@ type VirtualSchemaHolder struct {
 	orderedNames  []string
 
 	catalogCache nstree.MutableCatalog
-	// Needed for backward-compat on crdb_internal.ranges{_no_leases}.
-	// Remove in v23.2.
-	st *cluster.Settings
 }
 
 var _ VirtualTabler = (*VirtualSchemaHolder)(nil)
@@ -631,10 +636,11 @@ func (e *virtualDefEntry) validateRow(datums tree.Datums, columns colinfo.Result
 func (e *virtualDefEntry) getPlanInfo(
 	table catalog.TableDescriptor,
 	index catalog.Index,
-	idxConstraint *constraint.Constraint,
+	scanParams exec.ScanParams,
 	stopper *stop.Stopper,
 ) (colinfo.ResultColumns, virtualTableConstructor) {
 	var columns colinfo.ResultColumns
+	idxConstraint := scanParams.IndexConstraint
 	for _, col := range e.desc.PublicColumns() {
 		columns = append(columns, colinfo.ResultColumn{
 			Name:           col.GetName(),
@@ -665,7 +671,7 @@ func (e *virtualDefEntry) getPlanInfo(
 			}
 
 			if def.generator != nil && !def.preferIndexOverGenerator(ctx, p, index, idxConstraint) {
-				next, cleanup, err := def.generator(ctx, p, dbDesc, stopper)
+				next, cleanup, err := def.generator(ctx, p, dbDesc, scanParams.HardLimit, stopper)
 				if err != nil {
 					return nil, err
 				}
@@ -929,10 +935,6 @@ func NewVirtualSchemaHolder(
 		schemasByID:   make(map[descpb.ID]*virtualSchemaEntry, len(virtualSchemas)),
 		orderedNames:  make([]string, len(virtualSchemas)),
 		defsByID:      make(map[descpb.ID]*virtualDefEntry, math.MaxUint32-catconstants.MinVirtualID),
-
-		// Needed for backward-compat on crdb_internal.ranges{_no_leases}.
-		// Remove in v23.2.
-		st: st,
 	}
 
 	order := 0
@@ -984,16 +986,29 @@ func NewVirtualSchemaHolder(
 			return tableDesc, entry, nil
 		}
 
+		// Initialize virtual tables concurrently. This happens all at once during
+		// server startup, which is a bottleneck for startup time, especially in
+		// the TestServer used by unit tests. Adding concurrency here speeds up
+		// TestServer startup by about 7% in SharedTenant mode.
+		g := ctxgroup.WithContext(ctx)
+		var mu syncutil.Mutex
 		for id, def := range schema.tableDefs {
-			tableDesc, entry, err := doTheWork(id, def, false /* bumpVersion */)
-			if err != nil {
-				return nil, err
-			}
-			defs[tableDesc.Name] = entry
-			vs.defsByID[tableDesc.ID] = entry
-			orderedDefNames = append(orderedDefNames, tableDesc.Name)
+			g.GoCtx(func(ctx context.Context) error {
+				tableDesc, entry, err := doTheWork(id, def, false /* bumpVersion */)
+				if err != nil {
+					return err
+				}
+				mu.Lock()
+				defer mu.Unlock()
+				defs[tableDesc.Name] = entry
+				vs.defsByID[tableDesc.ID] = entry
+				orderedDefNames = append(orderedDefNames, tableDesc.Name)
+				return nil
+			})
 		}
-
+		if err := g.Wait(); err != nil {
+			return nil, err
+		}
 		sort.Strings(orderedDefNames)
 
 		vse := &virtualSchemaEntry{
@@ -1070,9 +1085,7 @@ func (vs *VirtualSchemaHolder) getVirtualSchemaEntry(name string) (*virtualSchem
 // a specific table. It will return an error if the name references a virtual database
 // but the table is non-existent.
 // getVirtualTableEntry is part of the VirtualTabler interface.
-func (vs *VirtualSchemaHolder) getVirtualTableEntry(
-	tn *tree.TableName, ns eval.ClientNoticeSender,
-) (*virtualDefEntry, error) {
+func (vs *VirtualSchemaHolder) getVirtualTableEntry(tn *tree.TableName) (*virtualDefEntry, error) {
 	if db, ok := vs.getVirtualSchemaEntry(tn.Schema()); ok {
 		tableName := tn.Table()
 		if t, ok := db.defs[tableName]; ok {
@@ -1095,8 +1108,8 @@ func (vs *VirtualSchemaHolder) getVirtualTableEntry(
 
 // VirtualTabler is used to fetch descriptors for virtual tables and databases.
 type VirtualTabler interface {
-	getVirtualTableDesc(tn *tree.TableName, ns eval.ClientNoticeSender) (catalog.TableDescriptor, error)
-	getVirtualTableEntry(tn *tree.TableName, ns eval.ClientNoticeSender) (*virtualDefEntry, error)
+	getVirtualTableDesc(tn *tree.TableName) (catalog.TableDescriptor, error)
+	getVirtualTableEntry(tn *tree.TableName) (*virtualDefEntry, error)
 	getSchemas() map[string]*virtualSchemaEntry
 	getSchemaNames() []string
 }
@@ -1105,9 +1118,9 @@ type VirtualTabler interface {
 // pair, and returns its descriptor if it does.
 // getVirtualTableDesc is part of the VirtualTabler interface.
 func (vs *VirtualSchemaHolder) getVirtualTableDesc(
-	tn *tree.TableName, ns eval.ClientNoticeSender,
+	tn *tree.TableName,
 ) (catalog.TableDescriptor, error) {
-	t, err := vs.getVirtualTableEntry(tn, ns)
+	t, err := vs.getVirtualTableEntry(tn)
 	if err != nil || t == nil {
 		return nil, err
 	}

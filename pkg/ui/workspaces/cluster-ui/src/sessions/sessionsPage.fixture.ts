@@ -4,24 +4,15 @@
 // included in the /LICENSE file.
 
 import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
-import { createMemoryHistory } from "history";
 import Long from "long";
 import { util } from "protobufjs";
 
-import {
-  CancelQueryRequestMessage,
-  CancelSessionRequestMessage,
-} from "src/api/terminateQueryApi";
+import { Filters } from "../queryFilter";
 
-import { defaultFilters, Filters } from "../queryFilter";
-
-import { SessionsPageProps } from "./sessionsPage";
 import { SessionInfo } from "./sessionsTable";
 
 const Status = cockroach.server.serverpb.Session.Status;
 const Phase = cockroach.server.serverpb.ActiveQuery.Phase;
-
-const history = createMemoryHistory({ initialEntries: ["/sessions"] });
 
 const toUuid = function (s: string): Uint8Array {
   const buf = util.newBuffer(util.base64.length(s));
@@ -75,7 +66,7 @@ export const idleTransactionSession: SessionInfo = {
         nanos: 134293000,
       },
       txn_description:
-        '"sql txn" meta={id=2c3ce6bc key=/Min pri=0.04688813 epo=0 ts=1596816673.134285000,0 min=1596816673.134285000,0 seq=0} lock=false stat=PENDING rts=1596816673.134285000,0 wto=false max=1596816673.634285000,0',
+        '"sql txn" meta={id=2c3ce6bc key=/Min pri=0.04688813 epo=0 ts=1596816673.134285000,0 min=1596816673.134285000,0 seq=0} lock=false stat=PENDING rts=1596816673.134285000,0 max=1596816673.634285000,0',
       num_statements_executed: 2,
       deadline: {
         seconds: Long.fromNumber(-62135596800),
@@ -84,6 +75,7 @@ export const idleTransactionSession: SessionInfo = {
       implicit: false,
       num_retries: 5,
       num_auto_retries: 3,
+      isolation_level: "SERIALIZABLE",
     },
     last_active_query_no_constants: "SHOW database",
     active_queries: [],
@@ -113,6 +105,7 @@ export const activeSession: SessionInfo = {
         phase: Phase.EXECUTING,
         txn_id: toUuid("e8NTvpOvScO1tSMreygtcg=="),
         sql_no_constants: "SELECT pg_sleep(_)",
+        isolation_level: "SERIALIZABLE",
       },
     ],
     start: {
@@ -130,7 +123,7 @@ export const activeSession: SessionInfo = {
         nanos: 320351000,
       },
       txn_description:
-        '"sql txn" meta={id=7bc353be key=/Min pri=0.05293838 epo=0 ts=1596816677.320344000,0 min=1596816677.320344000,0 seq=0} lock=false stat=PENDING rts=1596816677.320344000,0 wto=false max=1596816677.820344000,0',
+        '"sql txn" meta={id=7bc353be key=/Min pri=0.05293838 epo=0 ts=1596816677.320344000,0 min=1596816677.320344000,0 seq=0} lock=false stat=PENDING rts=1596816677.320344000,0 max=1596816677.820344000,0',
       num_statements_executed: 4,
       deadline: {
         seconds: Long.fromNumber(-62135596800),
@@ -141,6 +134,7 @@ export const activeSession: SessionInfo = {
       implicit: true,
       num_retries: 5,
       num_auto_retries: 3,
+      isolation_level: "SERIALIZABLE",
     },
     last_active_query_no_constants: "SHOW database",
     status: Status.ACTIVE,
@@ -181,75 +175,10 @@ export const closedSession: SessionInfo = {
   },
 };
 
-const sessionsList: SessionInfo[] = [
-  idleSession,
-  idleTransactionSession,
-  activeSession,
-  closedSession,
-];
-
 export const filters: Filters = {
   app: "",
   timeNumber: "0",
   timeUnit: "seconds",
   regions: "",
   nodes: "",
-};
-
-export const sessionsPagePropsFixture: SessionsPageProps = {
-  filters: defaultFilters,
-  history,
-  location: {
-    pathname: "/sessions",
-    search: "",
-    hash: "",
-    state: null,
-  },
-  match: {
-    path: "/sessions",
-    url: "/sessions",
-    isExact: true,
-    params: {},
-  },
-  sessions: sessionsList,
-  sessionsError: null,
-  sortSetting: {
-    ascending: false,
-    columnTitle: "statementAge",
-  },
-  columns: null,
-  internalAppNamePrefix: "$ internal",
-  refreshSessions: () => {},
-  cancelSession: (_req: CancelSessionRequestMessage) => {},
-  cancelQuery: (_req: CancelQueryRequestMessage) => {},
-  onSortingChange: () => {},
-};
-
-export const sessionsPagePropsEmptyFixture: SessionsPageProps = {
-  filters: defaultFilters,
-  history,
-  location: {
-    pathname: "/sessions",
-    search: "",
-    hash: "",
-    state: null,
-  },
-  match: {
-    path: "/sessions",
-    url: "/sessions",
-    isExact: true,
-    params: {},
-  },
-  sessions: [],
-  sessionsError: null,
-  sortSetting: {
-    ascending: false,
-    columnTitle: "statementAge",
-  },
-  columns: null,
-  internalAppNamePrefix: "$ internal",
-  refreshSessions: () => {},
-  cancelSession: (_req: CancelSessionRequestMessage) => {},
-  cancelQuery: (_req: CancelQueryRequestMessage) => {},
-  onSortingChange: () => {},
 };

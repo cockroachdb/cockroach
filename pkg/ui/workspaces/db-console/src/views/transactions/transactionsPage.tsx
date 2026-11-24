@@ -6,60 +6,22 @@
 import {
   Filters,
   defaultFilters,
-  util,
   TransactionsPageStateProps,
-  ActiveTransactionsViewDispatchProps,
-  ActiveTransactionsViewStateProps,
   TransactionsPageDispatchProps,
   TransactionsPageRoot,
   TransactionsPageRootProps,
+  TimeScale,
   api,
 } from "@cockroachlabs/cluster-ui";
 import { connect } from "react-redux";
 import { RouteComponentProps, withRouter } from "react-router-dom";
 import { bindActionCreators } from "redux";
-import { createSelector } from "reselect";
 
-import { trackApplySearchCriteriaAction } from "src/redux/analyticsActions";
-import {
-  createSelectorForCachedDataField,
-  refreshNodes,
-  refreshTxns,
-  refreshUserSQLRoles,
-} from "src/redux/apiReducers";
+import { analytics } from "src/redux/analytics";
 import { LocalSetting } from "src/redux/localsettings";
-import { nodeRegionsByIDSelector } from "src/redux/nodes";
-import { resetSQLStatsAction } from "src/redux/sqlStats";
 import { AdminUIState } from "src/redux/state";
 import { setGlobalTimeScaleAction } from "src/redux/statements";
 import { selectTimeScale } from "src/redux/timeScale";
-import { selectHasAdminRole } from "src/redux/user";
-import { PrintTime } from "src/views/reports/containers/range/print";
-
-import {
-  activeTransactionsPageActionCreators,
-  mapStateToActiveTransactionsPageProps,
-} from "./activeTransactionsSelectors";
-
-// selectLastReset returns a string displaying the last time the statement
-// statistics were reset.
-export const selectLastReset = createSelector(
-  (state: AdminUIState) => state.cachedData.transactions,
-  state => {
-    if (!state?.data) {
-      return "unknown";
-    }
-
-    return PrintTime(util.TimestampToMoment(state.data.last_reset));
-  },
-);
-
-const selectOldestDate = createSelector(
-  (state: AdminUIState) => state.cachedData.transactions,
-  txns => {
-    return txns?.data?.oldest_aggregated_ts_returned;
-  },
-);
 
 export const sortSettingLocalSetting = new LocalSetting(
   "sortSetting/TransactionsPage",
@@ -103,14 +65,7 @@ export const limitSetting = new LocalSetting(
   api.DEFAULT_STATS_REQ_OPTIONS.limit,
 );
 
-export const selectTxns =
-  createSelectorForCachedDataField<api.SqlStatsResponse>("transactions");
-
 const fingerprintsPageActions = {
-  refreshData: refreshTxns,
-  refreshNodes,
-  refreshUserSQLRoles,
-  resetSQLStats: resetSQLStatsAction,
   onTimeScaleChange: setGlobalTimeScaleAction,
   // We use `null` when the value was never set and it will show all columns.
   // If the user modifies the selection and no columns are selected,
@@ -133,18 +88,28 @@ const fingerprintsPageActions = {
   onSearchComplete: (query: string) => searchLocalSetting.set(query),
   onChangeLimit: (newLimit: number) => limitSetting.set(newLimit),
   onChangeReqSort: (sort: api.SqlStatsSortType) => reqSortSetting.set(sort),
-  onApplySearchCriteria: trackApplySearchCriteriaAction,
+  onApplySearchCriteria: (ts: TimeScale, limit: number, sort: string) => {
+    return () => {
+      analytics?.track({
+        event: "Apply Search Criteria",
+        properties: {
+          page: "Transactions",
+          tsValue: ts.key,
+          limit,
+          sort,
+        },
+      });
+    };
+  },
   onRequestTimeChange: (t: moment.Moment) => requestTimeLocalSetting.set(t),
 };
 
 type StateProps = {
   fingerprintsPageProps: TransactionsPageStateProps & RouteComponentProps;
-  activePageProps: ActiveTransactionsViewStateProps;
 };
 
 type DispatchProps = {
   fingerprintsPageProps: TransactionsPageDispatchProps;
-  activePageProps: ActiveTransactionsViewDispatchProps;
 };
 
 const TransactionsPageConnected = withRouter(
@@ -159,28 +124,18 @@ const TransactionsPageConnected = withRouter(
       fingerprintsPageProps: {
         ...props,
         columns: transactionColumnsLocalSetting.selectorToArray(state),
-        txnsResp: selectTxns(state),
         timeScale: selectTimeScale(state),
         filters: filtersLocalSetting.selector(state),
-        lastReset: selectLastReset(state),
-        nodeRegions: nodeRegionsByIDSelector(state),
         search: searchLocalSetting.selector(state),
         sortSetting: sortSettingLocalSetting.selector(state),
-        hasAdminRole: selectHasAdminRole(state),
         limit: limitSetting.selector(state),
         reqSortSetting: reqSortSetting.selector(state),
         requestTime: requestTimeLocalSetting.selector(state),
-        oldestDataAvailable: selectOldestDate(state),
       },
-      activePageProps: mapStateToActiveTransactionsPageProps(state),
     }),
     dispatch => ({
       fingerprintsPageProps: bindActionCreators(
         fingerprintsPageActions,
-        dispatch,
-      ),
-      activePageProps: bindActionCreators(
-        activeTransactionsPageActionCreators,
         dispatch,
       ),
     }),
@@ -188,10 +143,6 @@ const TransactionsPageConnected = withRouter(
       fingerprintsPageProps: {
         ...stateProps.fingerprintsPageProps,
         ...dispatchProps.fingerprintsPageProps,
-      },
-      activePageProps: {
-        ...stateProps.activePageProps,
-        ...dispatchProps.activePageProps,
       },
     }),
   )(TransactionsPageRoot),

@@ -49,6 +49,12 @@ export const DROP_VIEW = "drop_view";
 export const CREATE_TYPE = "create_type";
 // Recorded when a type is altered.
 export const ALTER_TYPE = "alter_type";
+// Recorded when a value is added to an enum type.
+export const ALTER_TYPE_ADD_VALUE = "alter_type_add_value";
+// Recorded when a value in an enum type is renamed.
+export const ALTER_TYPE_RENAME_VALUE = "alter_type_rename_value";
+// Recorded when a value is dropped from an enum type.
+export const ALTER_TYPE_DROP_VALUE = "alter_type_drop_value";
 // Recorded when a type's owner is changed.
 export const ALTER_TYPE_OWNER = "alter_type_owner";
 // Recorded when a database's comment is changed.
@@ -137,6 +143,9 @@ export const DISK_SLOWNESS_DETECTED = "disk_slowness_detected";
 // Recorded when a disk slowness event is no longer detected on a store
 // after having been detected and reported previously.
 export const DISK_SLOWNESS_CLEARED = "disk_slowness_cleared";
+// Recorded when a disk is running low on available space (recorded
+// periodically).
+export const LOW_DISK_SPACE = "low_disk_space";
 
 // Node Event Types
 export const nodeEvents = [
@@ -147,6 +156,7 @@ export const nodeEvents = [
   NODE_RECOMMISSIONED,
   DISK_SLOWNESS_DETECTED,
   DISK_SLOWNESS_CLEARED,
+  LOW_DISK_SPACE,
 ];
 export const databaseEvents = [CREATE_DATABASE, DROP_DATABASE];
 export const tableEvents = [

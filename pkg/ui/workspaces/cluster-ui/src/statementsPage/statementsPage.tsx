@@ -10,16 +10,29 @@ import groupBy from "lodash/groupBy";
 import isString from "lodash/isString";
 import merge from "lodash/merge";
 import moment from "moment-timezone";
-import React from "react";
+import React, {
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+} from "react";
 import { RouteComponentProps } from "react-router-dom";
 
+import { useDatabasesList } from "src/api/databasesApi";
+import { useNodes } from "src/api/nodesApi";
+import { useResetSQLStats } from "src/api/sqlStatsApi";
+import {
+  useCancelDiagnosticsReport,
+  useCreateDiagnosticsReport,
+  useStatementDiagnostics,
+} from "src/api/statementDiagnosticsApi";
 import {
   SqlStatsSortType,
-  StatementsRequest,
-  createCombinedStmtsRequest,
   SqlStatsSortOptions,
+  useCombinedStatementStats,
 } from "src/api/statementsApi";
-import { RequestState } from "src/api/types";
+import { useUserSQLRoles } from "src/api/userApi";
 import { isSelectedColumn } from "src/columnsSelector/utils";
 import { Delayed } from "src/delayed";
 import { getValidErrorsList, Loading } from "src/loading";
@@ -38,7 +51,7 @@ import {
   ActivateStatementDiagnosticsModal,
 } from "src/statementsDiagnostics";
 import { TimeScaleLabel } from "src/timeScaleDropdown/timeScaleLabel";
-import { Timestamp, TimestampToMoment, syncHistory, unique } from "src/util";
+import { TimestampToMoment, syncHistory, unique } from "src/util";
 import {
   STATS_LONG_LOADING_DURATION,
   getSortLabel,
@@ -47,14 +60,10 @@ import {
   getReqSortColumn,
 } from "src/util/sqlActivityConstants";
 
-import {
-  InsertStmtDiagnosticRequest,
-  StatementDiagnosticsReport,
-  SqlStatsResponse,
-  StatementDiagnosticsResponse,
-} from "../api";
+import { StatementDiagnosticsReport } from "../api";
 import ColumnsSelector from "../columnsSelector/columnsSelector";
 import { commonStyles } from "../common";
+import { ClusterDetailsContext } from "../contexts";
 import { SelectOption } from "../multiSelectCheckbox/multiSelectCheckbox";
 import {
   calculateActiveFilters,
@@ -83,12 +92,10 @@ import {
   getLabel,
   StatisticTableColumnKeys,
 } from "../statsTableUtil/statsTableUtil";
-import { UIConfigState } from "../store";
 import {
   getValidOption,
   TimeScale,
   timeScale1hMinOptions,
-  toRoundedDateRange,
 } from "../timeScaleDropdown";
 import timeScaleStyles from "../timeScaleDropdown/timeScale.module.scss";
 
@@ -100,23 +107,14 @@ const cx = classNames.bind(styles);
 const sortableTableCx = classNames.bind(sortableTableStyles);
 const timeScaleStylesCx = classNames.bind(timeScaleStyles);
 
-// Most of the props are supposed to be provided as connected props
-// from redux store.
-// StatementsPageDispatchProps, StatementsPageStateProps, and StatementsPageOuterProps interfaces
-// provide convenient definitions for `mapDispatchToProps`, `mapStateToProps` and props that
-// have to be provided by parent component.
+// StatementsPageDispatchProps defines callbacks for analytics tracking
+// and UI state updates, provided by the connected wrapper.
+// Data fetching is handled internally via SWR hooks.
 export interface StatementsPageDispatchProps {
-  refreshDatabases: (timeout?: moment.Duration) => void;
-  refreshStatements: (req: StatementsRequest) => void;
-  refreshStatementDiagnosticsRequests: () => void;
-  refreshNodes: () => void;
-  refreshUserSQLRoles: () => void;
-  resetSQLStats: () => void;
-  dismissAlertMessage: () => void;
-  onActivateStatementDiagnostics: (
-    insertStmtDiagnosticsRequest: InsertStmtDiagnosticRequest,
+  onActivateStatementDiagnosticsAnalytics?: (
+    statementFingerprint: string,
   ) => void;
-  onDiagnosticsModalOpen?: (statement: string) => void;
+  onDiagnosticsModalOpenAnalytics?: (statement: string) => void;
   onSearchComplete?: (query: string) => void;
   onPageChanged?: (newPage: number) => void;
   onSortingChange?: (
@@ -124,7 +122,7 @@ export interface StatementsPageDispatchProps {
     columnTitle: string,
     ascending: boolean,
   ) => void;
-  onSelectDiagnosticsReportDropdownOption?: (
+  onDiagnosticsReportDropdownOptionAnalytics?: (
     report: StatementDiagnosticsReport,
   ) => void;
   onFilterChange?: (value: Filters) => void;
@@ -137,23 +135,14 @@ export interface StatementsPageDispatchProps {
   onRequestTimeChange: (t: moment.Moment) => void;
 }
 export interface StatementsPageStateProps {
-  statementsResponse: RequestState<SqlStatsResponse>;
   timeScale: TimeScale;
   limit: number;
   reqSortSetting: SqlStatsSortType;
-  databases: string[];
   columns: string[];
-  nodeRegions: { [key: string]: string };
   sortSetting: SortSetting;
   filters: Filters;
   search: string;
-  isTenant?: UIConfigState["isTenant"];
-  hasViewActivityRedactedRole?: UIConfigState["hasViewActivityRedactedRole"];
-  hasAdminRole?: UIConfigState["hasAdminRole"];
-  stmtsTotalRuntimeSecs: number;
-  statementDiagnostics: StatementDiagnosticsResponse | null;
   requestTime: moment.Moment;
-  oldestDataAvailable: Timestamp;
 }
 
 export interface StatementsPageState {
@@ -169,53 +158,81 @@ export type StatementsPageProps = StatementsPageDispatchProps &
   StatementsPageStateProps &
   RouteComponentProps<unknown>;
 
-type RequestParams = Pick<
-  StatementsPageState,
-  "limit" | "reqSortSetting" | "timeScale"
->;
+export function StatementsPage(props: StatementsPageProps): React.ReactElement {
+  const {
+    history,
+    search,
+    sortSetting,
+    filters: propsFilters,
+    onSearchComplete,
+    onFilterChange,
+    onSortingChange,
+    onActivateStatementDiagnosticsAnalytics,
+    onDiagnosticsModalOpenAnalytics,
+    onPageChanged,
+    onDiagnosticsReportDropdownOptionAnalytics,
+    onStatementClick,
+    columns: userSelectedColumnsToShow,
+    onColumnsChange,
+    onTimeScaleChange,
+    onChangeLimit: onChangeLimitProp,
+    onChangeReqSort: onChangeReqSortProp,
+    onApplySearchCriteria,
+    onRequestTimeChange,
+    timeScale: propsTimeScale,
+    limit: propsLimit,
+    reqSortSetting: propsReqSortSetting,
+    requestTime,
+  } = props;
 
-function stmtsRequestFromParams(params: RequestParams): StatementsRequest {
-  const [start, end] = toRoundedDateRange(params.timeScale);
-  return createCombinedStmtsRequest({
-    start,
-    end,
-    limit: params.limit,
-    sort: params.reqSortSetting,
-  });
-}
+  const { isTenant } = useContext(ClusterDetailsContext);
 
-export class StatementsPage extends React.Component<
-  StatementsPageProps,
-  StatementsPageState
-> {
-  activateDiagnosticsRef: React.RefObject<ActivateDiagnosticsModalRef>;
+  const {
+    data: statementsData,
+    error: statementsError,
+    isLoading: statementsLoading,
+  } = useCombinedStatementStats(
+    propsTimeScale,
+    propsLimit,
+    propsReqSortSetting,
+  );
+  const { data: statementDiagnostics } = useStatementDiagnostics();
+  const { createReport: activateStatementDiagnostics } =
+    useCreateDiagnosticsReport();
+  const { cancelReport: cancelStatementDiagnostic } =
+    useCancelDiagnosticsReport();
+  const { databases } = useDatabasesList();
+  const { nodeRegionsByID: nodeRegions } = useNodes();
+  const { data: userRoles } = useUserSQLRoles();
+  const { reset: resetSQLStats } = useResetSQLStats();
 
-  constructor(props: StatementsPageProps) {
-    super(props);
-    const defaultState = {
+  const hasViewActivityRedactedRole =
+    userRoles?.roles?.includes("VIEWACTIVITYREDACTED") ?? false;
+  const hasAdminRole = userRoles?.roles?.includes("ADMIN") ?? false;
+  const stmtsTotalRuntimeSecs = statementsData?.stmts_total_runtime_secs ?? 0;
+  const oldestDataAvailable = statementsData?.oldest_aggregated_ts_returned;
+
+  const activateDiagnosticsRef = useRef<ActivateDiagnosticsModalRef>(null);
+
+  // Ref to hold latest value for mount effect, avoiding stale closure
+  // while preserving "run once on mount" semantics.
+  const propsTimeScaleRef = useRef(propsTimeScale);
+
+  // Keep ref up to date on each render.
+  propsTimeScaleRef.current = propsTimeScale;
+
+  // Compute initial state from history once
+  const getInitialState = (): StatementsPageState => {
+    const defaultState: StatementsPageState = {
       pagination: {
         pageSize: 50,
         current: 1,
       },
-      limit: this.props.limit,
-      timeScale: this.props.timeScale,
-      reqSortSetting: this.props.reqSortSetting,
+      limit: propsLimit,
+      timeScale: propsTimeScale,
+      reqSortSetting: propsReqSortSetting,
     };
-    const stateFromHistory = this.getStateFromHistory();
-    this.state = merge(defaultState, stateFromHistory);
-    this.activateDiagnosticsRef = React.createRef();
-  }
 
-  getStateFromHistory = (): Partial<StatementsPageState> => {
-    const {
-      history,
-      search,
-      sortSetting,
-      filters,
-      onSearchComplete,
-      onFilterChange,
-      onSortingChange,
-    } = this.props;
     const searchParams = new URLSearchParams(history.location.search);
 
     // Search query.
@@ -235,133 +252,126 @@ export class StatementsPage extends React.Component<
     // Filters.
     const latestFilter = handleFiltersFromQueryString(
       history,
-      filters,
+      propsFilters,
       onFilterChange,
     );
 
-    return {
+    const stateFromHistory: Partial<StatementsPageState> = {
       filters: latestFilter,
       activeFilters: calculateActiveFilters(latestFilter),
     };
+
+    return merge(defaultState, stateFromHistory);
   };
 
-  changeSortSetting = (ss: SortSetting): void => {
-    syncHistory(
-      {
-        ascending: ss.ascending.toString(),
-        columnTitle: ss.columnTitle,
-      },
-      this.props.history,
-    );
-    if (this.props.onSortingChange) {
-      this.props.onSortingChange("Statements", ss.columnTitle, ss.ascending);
-    }
-  };
+  const [pagination, setPagination] = useState<ISortedTablePagination>(
+    () => getInitialState().pagination,
+  );
+  const [filters, setFilters] = useState<Filters | undefined>(
+    () => getInitialState().filters,
+  );
+  const [activeFilters, setActiveFilters] = useState<number | undefined>(
+    () => getInitialState().activeFilters,
+  );
+  const [localTimeScale, setLocalTimeScale] = useState<TimeScale>(
+    () => getInitialState().timeScale,
+  );
+  const [localLimit, setLocalLimit] = useState<number>(
+    () => getInitialState().limit,
+  );
+  const [localReqSortSetting, setLocalReqSortSetting] =
+    useState<SqlStatsSortType>(() => getInitialState().reqSortSetting);
 
-  isSortSettingSameAsReqSort = (): boolean => {
-    return (
-      getSortColumn(this.props.reqSortSetting) ===
-      this.props.sortSetting.columnTitle
-    );
-  };
+  // Track pending update for setState callback pattern
+  const pendingUpdateRef = useRef<(() => void) | null>(null);
 
-  changeTimeScale = (ts: TimeScale): void => {
-    this.setState(prevState => ({
-      ...prevState,
-      timeScale: ts,
+  const resetPagination = (): void => {
+    setPagination(prev => ({
+      current: 1,
+      pageSize: prev.pageSize,
     }));
   };
 
-  updateRequestParams = (): void => {
-    if (this.props.limit !== this.state.limit) {
-      this.props.onChangeLimit(this.state.limit);
+  const changeSortSetting = useCallback(
+    (ss: SortSetting): void => {
+      syncHistory(
+        {
+          ascending: ss.ascending.toString(),
+          columnTitle: ss.columnTitle,
+        },
+        history,
+      );
+      if (onSortingChange) {
+        onSortingChange("Statements", ss.columnTitle, ss.ascending);
+      }
+    },
+    [history, onSortingChange],
+  );
+
+  const isSortSettingSameAsReqSort = (): boolean => {
+    return getSortColumn(propsReqSortSetting) === sortSetting.columnTitle;
+  };
+
+  const changeTimeScale = (ts: TimeScale): void => {
+    setLocalTimeScale(ts);
+  };
+
+  const updateRequestParams = useCallback((): void => {
+    if (propsLimit !== localLimit) {
+      onChangeLimitProp(localLimit);
     }
 
-    if (this.props.reqSortSetting !== this.state.reqSortSetting) {
-      this.props.onChangeReqSort(this.state.reqSortSetting);
+    if (propsReqSortSetting !== localReqSortSetting) {
+      onChangeReqSortProp(localReqSortSetting);
     }
 
-    if (this.props.timeScale !== this.state.timeScale) {
-      this.props.onTimeScaleChange(this.state.timeScale);
+    if (propsTimeScale !== localTimeScale) {
+      onTimeScaleChange(localTimeScale);
     }
-    if (this.props.onApplySearchCriteria) {
-      this.props.onApplySearchCriteria(
-        this.state.timeScale,
-        this.state.limit,
-        getSortLabel(this.state.reqSortSetting, "Statement"),
+    if (onApplySearchCriteria) {
+      onApplySearchCriteria(
+        localTimeScale,
+        localLimit,
+        getSortLabel(localReqSortSetting, "Statement"),
       );
     }
-    this.props.onRequestTimeChange(moment());
-    this.refreshStatements();
+    onRequestTimeChange(moment());
+
     const ss: SortSetting = {
       ascending: false,
-      columnTitle: getSortColumn(this.state.reqSortSetting),
+      columnTitle: getSortColumn(localReqSortSetting),
     };
-    this.changeSortSetting(ss);
-  };
+    changeSortSetting(ss);
+  }, [
+    propsLimit,
+    localLimit,
+    propsReqSortSetting,
+    localReqSortSetting,
+    propsTimeScale,
+    localTimeScale,
+    onChangeLimitProp,
+    onChangeReqSortProp,
+    onTimeScaleChange,
+    onApplySearchCriteria,
+    onRequestTimeChange,
+    changeSortSetting,
+  ]);
 
-  onUpdateSortSettingAndApply = (): void => {
-    this.setState(
-      {
-        reqSortSetting: getReqSortColumn(this.props.sortSetting.columnTitle),
-      },
-      () => {
-        this.updateRequestParams();
-      },
-    );
-  };
+  const onUpdateSortSettingAndApply = useCallback((): void => {
+    setLocalReqSortSetting(getReqSortColumn(sortSetting.columnTitle));
+    pendingUpdateRef.current = updateRequestParams;
+  }, [sortSetting.columnTitle, updateRequestParams]);
 
-  resetPagination = (): void => {
-    this.setState(prevState => {
-      return {
-        pagination: {
-          current: 1,
-          pageSize: prevState.pagination.pageSize,
-        },
-      };
-    });
-  };
-
-  refreshStatements = (): void => {
-    const req = stmtsRequestFromParams(this.state);
-    this.props.refreshStatements(req);
-  };
-
-  refreshDatabases = (): void => {
-    this.props.refreshDatabases();
-  };
-
-  resetSQLStats = (): void => {
-    this.props.resetSQLStats();
-  };
-
-  componentDidMount(): void {
-    this.refreshDatabases();
-    // In case the user selected a option not available on this page,
-    // force a selection of a valid option. This is necessary for the case
-    // where the value 10/30 min is selected on the Metrics page.
-    const ts = getValidOption(this.props.timeScale, timeScale1hMinOptions);
-    if (ts !== this.props.timeScale) {
-      this.changeTimeScale(ts);
-    } else if (
-      !this.props.statementsResponse.valid ||
-      !this.props.statementsResponse.data ||
-      !this.props.statementsResponse.lastUpdated
-    ) {
-      this.refreshStatements();
+  // Execute pending update after state changes
+  useEffect(() => {
+    if (pendingUpdateRef.current) {
+      pendingUpdateRef.current();
+      pendingUpdateRef.current = null;
     }
+  }, [localReqSortSetting]);
 
-    this.props.refreshUserSQLRoles();
-    if (!this.props.isTenant) {
-      this.props.refreshNodes();
-    }
-    if (!this.props.hasViewActivityRedactedRole) {
-      this.props.refreshStatementDiagnosticsRequests();
-    }
-  }
-
-  updateQueryParams(): void {
-    const { history, search, sortSetting } = this.props;
+  // Sync query params when search, filters, or sort settings change.
+  useEffect(() => {
     const tab = "Statements";
 
     // Search.
@@ -378,7 +388,7 @@ export class StatementsPage extends React.Component<
     }
 
     // Filters.
-    updateFiltersQueryParamsOnTab(tab, this.state.filters, history);
+    updateFiltersQueryParamsOnTab(tab, filters, history);
 
     // Sort Setting.
     updateSortSettingQueryParamsOnTab(
@@ -390,95 +400,73 @@ export class StatementsPage extends React.Component<
       },
       history,
     );
-  }
+  }, [history, search, filters, sortSetting]);
 
-  componentDidUpdate = (): void => {
-    this.updateQueryParams();
-    if (!this.props.isTenant) {
-      this.props.refreshNodes();
-    }
-    if (!this.props.hasViewActivityRedactedRole) {
-      this.props.refreshStatementDiagnosticsRequests();
+  const onChangePage = (current: number, pageSize: number): void => {
+    setPagination(prev => ({ ...prev, current, pageSize }));
+    if (onPageChanged) {
+      onPageChanged(current);
     }
   };
 
-  componentWillUnmount(): void {
-    this.props.dismissAlertMessage();
-  }
-
-  onChangePage = (current: number): void => {
-    const { pagination } = this.state;
-    this.setState(prevState => ({
-      ...prevState,
-      pagination: { ...pagination, current },
-    }));
-    if (this.props.onPageChanged) {
-      this.props.onPageChanged(current);
+  const onSubmitSearchField = (searchValue: string): void => {
+    if (onSearchComplete) {
+      onSearchComplete(searchValue);
     }
-  };
-
-  onSubmitSearchField = (search: string): void => {
-    if (this.props.onSearchComplete) {
-      this.props.onSearchComplete(search);
-    }
-    this.resetPagination();
+    resetPagination();
     syncHistory(
       {
-        q: search,
+        q: searchValue,
       },
-      this.props.history,
+      history,
     );
   };
 
-  onSubmitFilters = (filters: Filters): void => {
-    if (this.props.onFilterChange) {
-      this.props.onFilterChange(filters);
+  const onSubmitFilters = (newFilters: Filters): void => {
+    if (onFilterChange) {
+      onFilterChange(newFilters);
     }
 
-    this.setState({
-      filters: filters,
-      activeFilters: calculateActiveFilters(filters),
-    });
+    setFilters(newFilters);
+    setActiveFilters(calculateActiveFilters(newFilters));
 
-    this.resetPagination();
+    resetPagination();
     syncHistory(
       {
-        app: filters.app,
-        timeNumber: filters.timeNumber,
-        timeUnit: filters.timeUnit,
-        fullScan: filters.fullScan.toString(),
-        sqlType: filters.sqlType,
-        database: filters.database,
-        regions: filters.regions,
-        nodes: filters.nodes,
+        app: newFilters.app,
+        timeNumber: newFilters.timeNumber,
+        timeUnit: newFilters.timeUnit,
+        fullScan: newFilters.fullScan.toString(),
+        sqlType: newFilters.sqlType,
+        database: newFilters.database,
+        regions: newFilters.regions,
+        nodes: newFilters.nodes,
       },
-      this.props.history,
+      history,
     );
   };
 
-  onClearSearchField = (): void => {
-    if (this.props.onSearchComplete) {
-      this.props.onSearchComplete("");
+  const onClearSearchField = (): void => {
+    if (onSearchComplete) {
+      onSearchComplete("");
     }
     syncHistory(
       {
         q: undefined,
       },
-      this.props.history,
+      history,
     );
   };
 
-  onClearFilters = (): void => {
-    if (this.props.onFilterChange) {
-      this.props.onFilterChange(defaultFilters);
+  const onClearFilters = (): void => {
+    if (onFilterChange) {
+      onFilterChange(defaultFilters);
     }
 
-    this.setState({
-      filters: defaultFilters,
-      activeFilters: 0,
-    });
+    setFilters(defaultFilters);
+    setActiveFilters(0);
 
-    this.resetPagination();
+    resetPagination();
     syncHistory(
       {
         app: undefined,
@@ -490,51 +478,54 @@ export class StatementsPage extends React.Component<
         regions: undefined,
         nodes: undefined,
       },
-      this.props.history,
+      history,
     );
   };
 
-  onChangeLimit = (newLimit: number): void => {
-    this.setState(prevState => ({ ...prevState, limit: newLimit }));
+  const onChangeLimit = (newLimit: number): void => {
+    setLocalLimit(newLimit);
   };
 
-  onChangeReqSort = (newSort: SqlStatsSortType): void => {
-    this.setState(prevState => ({ ...prevState, reqSortSetting: newSort }));
+  const onChangeReqSort = (newSort: SqlStatsSortType): void => {
+    setLocalReqSortSetting(newSort);
   };
 
-  hasReqSortOption = (): boolean => {
+  const hasReqSortOption = (): boolean => {
     let found = false;
     Object.values(SqlStatsSortOptions).forEach(option => {
       const optionString = isString(option) ? option : getSortColumn(option);
-      if (optionString === this.props.sortSetting.columnTitle) {
+      if (optionString === sortSetting.columnTitle) {
         found = true;
       }
     });
     return found;
   };
 
-  renderStatements = (
+  useEffect(() => {
+    // In case the user selected a option not available on this page,
+    // force a selection of a valid option. This is necessary for the case
+    // where the value 10/30 min is selected on the Metrics page.
+    const ts = getValidOption(propsTimeScaleRef.current, timeScale1hMinOptions);
+    if (ts !== propsTimeScaleRef.current) {
+      changeTimeScale(ts);
+    }
+  }, []);
+
+  const handleDiagnosticsDropdownOption = (
+    report: StatementDiagnosticsReport,
+  ): void => {
+    if (!report.completed) {
+      cancelStatementDiagnostic({ requestId: report.id }).catch(() => {});
+    }
+    onDiagnosticsReportDropdownOptionAnalytics?.(report);
+  };
+
+  const renderStatements = (
     statements: AggregateStatistics[],
   ): React.ReactElement => {
-    const { pagination, filters, activeFilters } = this.state;
-    const {
-      onSelectDiagnosticsReportDropdownOption,
-      onStatementClick,
-      columns: userSelectedColumnsToShow,
-      onColumnsChange,
-      nodeRegions,
-      isTenant,
-      hasViewActivityRedactedRole,
-      sortSetting,
-      search,
-      databases,
-      hasAdminRole,
-    } = this.props;
     const data = filterStatementsData(filters, search, statements, isTenant);
 
-    const apps = getAppsFromStmtsResponseMemoized(
-      this.props.statementsResponse?.data,
-    );
+    const apps = getAppsFromStmtsResponseMemoized(statementsData);
 
     const isEmptySearchResults = statements?.length > 0 && search?.length > 0;
     const nodes = Object.keys(nodeRegions)
@@ -555,14 +546,14 @@ export class StatementsPage extends React.Component<
     // hiding columns that won't be displayed for virtual clusters.
     const columns = makeStatementsColumns(
       statements,
-      filters.app?.split(","),
-      this.props.stmtsTotalRuntimeSecs,
+      filters?.app?.split(","),
+      stmtsTotalRuntimeSecs,
       "statement",
       isTenant,
       hasViewActivityRedactedRole,
       search,
-      this.activateDiagnosticsRef,
-      onSelectDiagnosticsReportDropdownOption,
+      activateDiagnosticsRef,
+      handleDiagnosticsDropdownOption,
       onStatementClick,
     )
       .filter(c => !(c.name === "regions" && regions.length < 2))
@@ -587,32 +578,29 @@ export class StatementsPage extends React.Component<
       isSelectedColumn(userSelectedColumnsToShow, c),
     );
 
-    const sortSettingLabel = getSortLabel(
-      this.props.reqSortSetting,
-      "Statement",
-    );
+    const sortSettingLabel = getSortLabel(propsReqSortSetting, "Statement");
     const showSortWarning =
-      !this.isSortSettingSameAsReqSort() &&
-      this.hasReqSortOption() &&
-      data.length === this.props.limit;
+      !isSortSettingSameAsReqSort() &&
+      hasReqSortOption() &&
+      data.length === propsLimit;
 
     return (
       <>
         <h5 className={`${commonStyles("base-heading")} ${cx("margin-top")}`}>
-          {`Results - Top ${this.props.limit} Statement Fingerprints by ${sortSettingLabel}`}
+          {`Results - Top ${propsLimit} Statement Fingerprints by ${sortSettingLabel}`}
         </h5>
         <section className={cx("filter-area")}>
           <PageConfig className={cx("float-left")}>
             <PageConfigItem>
               <Search
-                onSubmit={this.onSubmitSearchField}
-                onClear={this.onClearSearchField}
+                onSubmit={onSubmitSearchField}
+                onClear={onClearSearchField}
                 defaultValue={search}
               />
             </PageConfigItem>
             <PageConfigItem>
               <Filter
-                onSubmitFilters={this.onSubmitFilters}
+                onSubmitFilters={onSubmitFilters}
                 appNames={apps}
                 dbNames={databases}
                 regions={regions}
@@ -637,11 +625,11 @@ export class StatementsPage extends React.Component<
             <PageConfigItem>
               <p className={timeScaleStylesCx("time-label")}>
                 <TimeScaleLabel
-                  timeScale={this.props.timeScale}
-                  requestTime={moment(this.props.requestTime)}
+                  timeScale={propsTimeScale}
+                  requestTime={moment(requestTime)}
                   oldestDataTime={
-                    this.props.oldestDataAvailable &&
-                    TimestampToMoment(this.props.oldestDataAvailable)
+                    oldestDataAvailable &&
+                    TimestampToMoment(oldestDataAvailable)
                   }
                 />
                 {", "}
@@ -659,7 +647,7 @@ export class StatementsPage extends React.Component<
                 )} `}
               >
                 <ClearStats
-                  resetSQLStats={this.resetSQLStats}
+                  resetSQLStats={resetSQLStats}
                   tooltipType="statement"
                 />
               </PageConfigItem>
@@ -669,18 +657,18 @@ export class StatementsPage extends React.Component<
         <section className={sortableTableCx("cl-table-container")}>
           <SelectedFilters
             filters={filters}
-            onRemoveFilter={this.onSubmitFilters}
-            onClearFilters={this.onClearFilters}
+            onRemoveFilter={onSubmitFilters}
+            onClearFilters={onClearFilters}
           />
           {showSortWarning && (
             <InlineAlert
               intent="warning"
               title={getSubsetWarning(
                 "statement",
-                this.props.limit,
+                propsLimit,
                 sortSettingLabel,
-                this.props.sortSetting.columnTitle as StatisticTableColumnKeys,
-                this.onUpdateSortSettingAndApply,
+                sortSetting.columnTitle as StatisticTableColumnKeys,
+                onUpdateSortSettingAndApply,
               )}
               className={cx("margin-bottom")}
             />
@@ -690,7 +678,7 @@ export class StatementsPage extends React.Component<
             data={data}
             columns={displayColumns}
             sortSetting={sortSetting}
-            onChangeSortSetting={this.changeSortSetting}
+            onChangeSortSetting={changeSortSetting}
             renderNoResult={
               <EmptyStatementsPlaceholder
                 isEmptySearchResults={isEmptySearchResults}
@@ -704,83 +692,79 @@ export class StatementsPage extends React.Component<
           pageSize={pagination.pageSize}
           current={pagination.current}
           total={data.length}
-          onChange={this.onChangePage}
+          onChange={onChangePage}
+          onShowSizeChange={onChangePage}
         />
       </>
     );
   };
 
-  render(): React.ReactElement {
-    const {
-      refreshStatementDiagnosticsRequests,
-      onActivateStatementDiagnostics,
-      onDiagnosticsModalOpen,
-      statementDiagnostics,
-    } = this.props;
+  const diagnosticsByStatement = groupBy(
+    statementDiagnostics,
+    sd => sd.statement_fingerprint,
+  );
 
-    const diagnosticsByStatement = groupBy(
-      statementDiagnostics,
-      sd => sd.statement_fingerprint,
-    );
+  const statements = convertRawStmtsToAggregateStatisticsMemoized(
+    statementsData?.statements,
+  ).map(
+    (s): AggregateStatistics => ({
+      ...s,
+      diagnosticsReports: diagnosticsByStatement[s.label] || [],
+    }),
+  );
 
-    const statements = convertRawStmtsToAggregateStatisticsMemoized(
-      this.props.statementsResponse?.data?.statements,
-    ).map(
-      (s): AggregateStatistics => ({
-        ...s,
-        diagnosticsReports: diagnosticsByStatement[s.label] || [],
-      }),
-    );
+  const longLoadingMessage = (
+    <Delayed delay={STATS_LONG_LOADING_DURATION}>
+      <InlineAlert
+        intent="info"
+        title="If the selected time interval contains a large amount of data, this page might take a few minutes to load."
+      />
+    </Delayed>
+  );
 
-    const longLoadingMessage = (
-      <Delayed delay={STATS_LONG_LOADING_DURATION}>
-        <InlineAlert
-          intent="info"
-          title="If the selected time interval contains a large amount of data, this page might take a few minutes to load."
+  return (
+    <div className={cx("root")}>
+      <SearchCriteria
+        searchType="Statement"
+        topValue={localLimit}
+        byValue={localReqSortSetting}
+        currentScale={localTimeScale}
+        onChangeTop={onChangeLimit}
+        onChangeBy={onChangeReqSort}
+        onChangeTimeScale={changeTimeScale}
+        onApply={updateRequestParams}
+      />
+      <div className={cx("table-area")}>
+        <Loading
+          loading={statementsLoading}
+          page={"statements"}
+          error={statementsError}
+          render={() => renderStatements(statements)}
+          renderError={() =>
+            LoadingError({
+              statsType: "statements",
+              error: statementsError,
+              sourceTables: statementsData?.stmts_source_table && [
+                statementsData?.stmts_source_table,
+              ],
+            })
+          }
         />
-      </Delayed>
-    );
-
-    return (
-      <div className={cx("root")}>
-        <SearchCriteria
-          searchType="Statement"
-          topValue={this.state.limit}
-          byValue={this.state.reqSortSetting}
-          currentScale={this.state.timeScale}
-          onChangeTop={this.onChangeLimit}
-          onChangeBy={this.onChangeReqSort}
-          onChangeTimeScale={this.changeTimeScale}
-          onApply={this.updateRequestParams}
+        {statementsLoading &&
+          getValidErrorsList(statementsError) == null &&
+          longLoadingMessage}
+        <ActivateStatementDiagnosticsModal
+          ref={activateDiagnosticsRef}
+          activate={req => {
+            activateStatementDiagnostics(req)
+              .then(() =>
+                onActivateStatementDiagnosticsAnalytics?.(req.stmtFingerprint),
+              )
+              .catch(() => {});
+          }}
+          onOpenModal={onDiagnosticsModalOpenAnalytics}
         />
-        <div className={cx("table-area")}>
-          <Loading
-            loading={this.props.statementsResponse.inFlight}
-            page={"statements"}
-            error={this.props.statementsResponse.error}
-            render={() => this.renderStatements(statements)}
-            renderError={() =>
-              LoadingError({
-                statsType: "statements",
-                error: this.props.statementsResponse?.error,
-                sourceTables: this.props.statementsResponse?.data
-                  ?.stmts_source_table && [
-                  this.props.statementsResponse?.data?.stmts_source_table,
-                ],
-              })
-            }
-          />
-          {this.props.statementsResponse.inFlight &&
-            getValidErrorsList(this.props.statementsResponse.error) == null &&
-            longLoadingMessage}
-          <ActivateStatementDiagnosticsModal
-            ref={this.activateDiagnosticsRef}
-            activate={onActivateStatementDiagnostics}
-            refreshDiagnosticsReports={refreshStatementDiagnosticsRequests}
-            onOpenModal={onDiagnosticsModalOpen}
-          />
-        </div>
       </div>
-    );
-  }
+    </div>
+  );
 }

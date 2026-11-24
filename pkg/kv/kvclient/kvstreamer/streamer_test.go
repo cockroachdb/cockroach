@@ -43,15 +43,18 @@ func getStreamer(
 	s serverutils.ApplicationLayerInterface,
 	limitBytes int64,
 	acc *mon.BoundAccount,
+	reverse bool,
 ) *kvstreamer.Streamer {
 	rootTxn := kv.NewTxn(ctx, s.DB(), s.DistSQLPlanningNodeID())
-	leafInputState, err := rootTxn.GetLeafTxnInputState(ctx)
+	leafInputState, err := rootTxn.GetLeafTxnInputState(ctx, nil /* readsTree */)
 	if err != nil {
 		panic(err)
 	}
-	leafTxn := kv.NewLeafTxn(ctx, s.DB(), s.DistSQLPlanningNodeID(), leafInputState)
+	leafTxn := kv.NewLeafTxn(ctx, s.DB(), s.DistSQLPlanningNodeID(), leafInputState, nil /* header */)
+	metrics := kvstreamer.MakeMetrics()
 	return kvstreamer.NewStreamer(
 		s.DistSenderI().(*kvcoord.DistSender),
+		&metrics,
 		s.AppStopper(),
 		leafTxn,
 		func(ctx context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, error) {
@@ -67,8 +70,12 @@ func getStreamer(
 		limitBytes,
 		acc,
 		nil, /* kvPairsRead */
+		nil, /* kvCPUTime */
 		lock.None,
 		lock.Unreplicated,
+		reverse,
+		0, /* workloadID */
+		0, /* workloadType */
 	)
 }
 
@@ -85,7 +92,7 @@ func TestStreamerLimitations(t *testing.T) {
 	s := srv.ApplicationLayer()
 
 	getStreamer := func() *kvstreamer.Streamer {
-		return getStreamer(ctx, s, math.MaxInt64, mon.NewStandaloneUnlimitedAccount())
+		return getStreamer(ctx, s, math.MaxInt64, mon.NewStandaloneUnlimitedAccount(), false /* reverse */)
 	}
 
 	t.Run("non-unique requests unsupported", func(t *testing.T) {
@@ -113,9 +120,11 @@ func TestStreamerLimitations(t *testing.T) {
 	})
 
 	t.Run("unexpected RootTxn", func(t *testing.T) {
+		metrics := kvstreamer.MakeMetrics()
 		require.Panics(t, func() {
 			kvstreamer.NewStreamer(
 				s.DistSenderI().(*kvcoord.DistSender),
+				&metrics,
 				s.AppStopper(),
 				kv.NewTxn(ctx, s.DB(), s.DistSQLPlanningNodeID()),
 				nil, /* sendFn */
@@ -125,8 +134,12 @@ func TestStreamerLimitations(t *testing.T) {
 				math.MaxInt64, /* limitBytes */
 				nil,           /* acc */
 				nil,           /* kvPairsRead */
+				nil,           /* kvCpuTime */
 				lock.None,
 				lock.Unreplicated,
+				false, /* reverse */
+				0,     /* workloadID */
+				0,     /* workloadType */
 			)
 		})
 	})
@@ -189,7 +202,7 @@ func TestStreamerBudgetErrorInEnqueue(t *testing.T) {
 	// Imitate a root SQL memory monitor with 1MiB size.
 	const rootPoolSize = 1 << 20 /* 1MiB */
 	rootMemMonitor := mon.NewMonitor(mon.Options{
-		Name:     "root",
+		Name:     mon.MakeName("root"),
 		Settings: cluster.MakeTestingClusterSettings(),
 	})
 	rootMemMonitor.Start(ctx, nil /* pool */, mon.NewStandaloneBudget(rootPoolSize))
@@ -201,7 +214,7 @@ func TestStreamerBudgetErrorInEnqueue(t *testing.T) {
 	const limitBytes = 30
 	getStreamer := func() *kvstreamer.Streamer {
 		acc.Clear(ctx)
-		s := getStreamer(ctx, s, limitBytes, &acc)
+		s := getStreamer(ctx, s, limitBytes, &acc, false /* reverse */)
 		s.Init(kvstreamer.OutOfOrder, kvstreamer.Hints{UniqueRequests: true}, 1 /* maxKeysPerRow */, nil /* diskBuffer */)
 		return s
 	}
@@ -258,7 +271,7 @@ func TestStreamerCorrectlyDiscardsResponses(t *testing.T) {
 	// request by the Streamer will be numRowsPerRange x InitialAvgResponseSize,
 	// so we pick the blob size such that about half of rows are included in the
 	// partial responses.
-	const blobSize = 2 * kvstreamer.InitialAvgResponseSize
+	const blobSize = 2 * kvstreamer.DefaultInitialAvgResponseSize
 	const numRows = 20
 	const numRowsPerRange = 4
 
@@ -288,9 +301,9 @@ func TestStreamerCorrectlyDiscardsResponses(t *testing.T) {
 	// the budget. This includes 4/3 factor since the vectorized ColIndexJoin
 	// gives 3/4 of the workmem limit to the Streamer.
 	for _, workmem := range []int{
-		3 * kvstreamer.InitialAvgResponseSize * numRows / 2,
-		7 * kvstreamer.InitialAvgResponseSize * numRows / 4,
-		2 * kvstreamer.InitialAvgResponseSize * numRows,
+		3 * kvstreamer.DefaultInitialAvgResponseSize * numRows / 2,
+		7 * kvstreamer.DefaultInitialAvgResponseSize * numRows / 4,
+		2 * kvstreamer.DefaultInitialAvgResponseSize * numRows,
 	} {
 		t.Run(fmt.Sprintf("workmem=%s", humanize.Bytes(uint64(workmem))), func(t *testing.T) {
 			_, err = db.Exec(fmt.Sprintf("SET distsql_workmem = '%dB'", workmem))
@@ -317,7 +330,7 @@ func TestStreamerWideRows(t *testing.T) {
 	})
 	defer s.Stopper().Stop(context.Background())
 
-	const blobSize = 10 * kvstreamer.InitialAvgResponseSize
+	const blobSize = 10 * kvstreamer.DefaultInitialAvgResponseSize
 	const numRows = 2
 
 	_, err := db.Exec("CREATE TABLE t (pk INT PRIMARY KEY, k INT, blob1 STRING, blob2 STRING, INDEX (k), FAMILY (pk, k, blob1), FAMILY (blob2))")
@@ -386,19 +399,27 @@ func TestStreamerWideRows(t *testing.T) {
 	}
 }
 
-func makeScanRequest(codec keys.SQLCodec, tableID uint32, start, end int) kvpb.RequestUnion {
+func makeScanRequest(
+	codec keys.SQLCodec, tableID uint32, start, end int, reverse bool,
+) kvpb.RequestUnion {
 	var res kvpb.RequestUnion
-	var scan kvpb.ScanRequest
-	var union kvpb.RequestUnion_Scan
 	makeKey := func(pk int) []byte {
 		// These numbers essentially make a key like '/t/primary/pk'.
 		return append(codec.IndexPrefix(tableID, 1), byte(136+pk))
 	}
-	scan.Key = makeKey(start)
-	scan.EndKey = makeKey(end)
-	scan.ScanFormat = kvpb.BATCH_RESPONSE
-	union.Scan = &scan
-	res.Value = &union
+	if reverse {
+		var scan kvpb.ReverseScanRequest
+		scan.Key = makeKey(start)
+		scan.EndKey = makeKey(end)
+		scan.ScanFormat = kvpb.BATCH_RESPONSE
+		res.Value = &kvpb.RequestUnion_ReverseScan{ReverseScan: &scan}
+	} else {
+		var scan kvpb.ScanRequest
+		scan.Key = makeKey(start)
+		scan.EndKey = makeKey(end)
+		scan.ScanFormat = kvpb.BATCH_RESPONSE
+		res.Value = &kvpb.RequestUnion_Scan{Scan: &scan}
+	}
 	return res
 }
 
@@ -438,46 +459,54 @@ func TestStreamerEmptyScans(t *testing.T) {
 	_, err = db.Exec("SELECT count(*) from t")
 	require.NoError(t, err)
 
-	getStreamer := func() *kvstreamer.Streamer {
-		s := getStreamer(ctx, ts, math.MaxInt64, mon.NewStandaloneUnlimitedAccount())
+	getStreamer := func(reverse bool) *kvstreamer.Streamer {
+		s := getStreamer(ctx, ts, math.MaxInt64, mon.NewStandaloneUnlimitedAccount(), reverse)
 		// There are two column families in the table.
 		s.Init(kvstreamer.OutOfOrder, kvstreamer.Hints{UniqueRequests: true}, 2 /* maxKeysPerRow */, nil /* diskBuffer */)
 		return s
 	}
 
 	t.Run("scan single range", func(t *testing.T) {
-		streamer := getStreamer()
-		defer streamer.Close(ctx)
+		for _, reverse := range []bool{false, true} {
+			t.Run("reverse="+strconv.FormatBool(reverse), func(t *testing.T) {
+				streamer := getStreamer(reverse)
+				defer streamer.Close(ctx)
 
-		// Scan the row with pk=0.
-		reqs := make([]kvpb.RequestUnion, 1)
-		reqs[0] = makeScanRequest(codec, tableID, 0, 1)
-		require.NoError(t, streamer.Enqueue(ctx, reqs))
-		results, err := streamer.GetResults(ctx)
-		require.NoError(t, err)
-		// We expect a single empty Scan response.
-		require.Equal(t, 1, len(results))
+				// Scan the row with pk=0.
+				reqs := make([]kvpb.RequestUnion, 1)
+				reqs[0] = makeScanRequest(codec, tableID, 0, 1, reverse)
+				require.NoError(t, streamer.Enqueue(ctx, reqs))
+				results, err := streamer.GetResults(ctx)
+				require.NoError(t, err)
+				// We expect a single empty Scan response.
+				require.Equal(t, 1, len(results))
+			})
+		}
 	})
 
 	t.Run("scan multiple ranges", func(t *testing.T) {
-		streamer := getStreamer()
-		defer streamer.Close(ctx)
+		for _, reverse := range []bool{false, true} {
+			t.Run("reverse="+strconv.FormatBool(reverse), func(t *testing.T) {
+				streamer := getStreamer(reverse)
+				defer streamer.Close(ctx)
 
-		// Scan the rows with pk in range [1, 4).
-		reqs := make([]kvpb.RequestUnion, 1)
-		reqs[0] = makeScanRequest(codec, tableID, 1, 4)
-		require.NoError(t, streamer.Enqueue(ctx, reqs))
-		// We expect an empty response for each range.
-		var numResults int
-		for {
-			results, err := streamer.GetResults(ctx)
-			require.NoError(t, err)
-			numResults += len(results)
-			if len(results) == 0 {
-				break
-			}
+				// Scan the rows with pk in range [1, 4).
+				reqs := make([]kvpb.RequestUnion, 1)
+				reqs[0] = makeScanRequest(codec, tableID, 1, 4, reverse)
+				require.NoError(t, streamer.Enqueue(ctx, reqs))
+				// We expect an empty response for each range.
+				var numResults int
+				for {
+					results, err := streamer.GetResults(ctx)
+					require.NoError(t, err)
+					numResults += len(results)
+					if len(results) == 0 {
+						break
+					}
+				}
+				require.Equal(t, 3, numResults)
+			})
 		}
-		require.Equal(t, 3, numResults)
 	})
 }
 
@@ -600,7 +629,7 @@ ALTER TABLE t SPLIT AT SELECT generate_series(1, 30000, 3000);
 		for i := 0; i < 2; i++ {
 			gRPCCalls := -1
 			var err error
-			rows := runner.QueryStr(t, `EXPLAIN ANALYZE SELECT length(blob) FROM t@t_v_idx WHERE v = '1';`)
+			rows := runner.QueryStr(t, `EXPLAIN ANALYZE (VERBOSE) SELECT length(blob) FROM t@t_v_idx WHERE v = '1';`)
 			for _, row := range rows {
 				if matches := kvGRPCCallsRegex.FindStringSubmatch(row[0]); len(matches) > 0 {
 					gRPCCalls, err = strconv.Atoi(strings.ReplaceAll(matches[1], ",", ""))
@@ -661,6 +690,11 @@ ALTER TABLE t SPLIT AT SELECT i*2000 FROM generate_series(0, 2) AS g(i);
 	// extremely suboptimal).
 	kvGRPCCallsRegex := regexp.MustCompile(`KV gRPC calls: ([\d,]+)`)
 	for i := 0; i < 10; i++ {
+		// Clear the pool so that each iteration gets a fresh helper with no
+		// retained allocations from previous iterations. Reused helpers with
+		// large slices eat into the workmem budget, forcing smaller TargetBytes
+		// and more gRPC batches.
+		kvcoord.TestingResetBatchTruncationHelperPool()
 		// Pick random workmem limit in [2MiB; 16MiB] range.
 		workmem := 2<<20 + rng.Intn(14<<20)
 		runner.Exec(t, fmt.Sprintf("SET distsql_workmem = '%dB'", workmem))
@@ -668,7 +702,7 @@ ALTER TABLE t SPLIT AT SELECT i*2000 FROM generate_series(0, 2) AS g(i);
 			runner.Exec(t, `SET streamer_always_maintain_ordering = $1;`, inOrder)
 			gRPCCalls := -1
 			var err error
-			rows := runner.QueryStr(t, `EXPLAIN ANALYZE SELECT * FROM t@v_idx WHERE v > 0`)
+			rows := runner.QueryStr(t, `EXPLAIN ANALYZE (VERBOSE) SELECT * FROM t@v_idx WHERE v > 0`)
 			for _, row := range rows {
 				if matches := kvGRPCCallsRegex.FindStringSubmatch(row[0]); len(matches) > 0 {
 					gRPCCalls, err = strconv.Atoi(strings.ReplaceAll(matches[1], ",", ""))

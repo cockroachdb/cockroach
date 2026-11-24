@@ -12,7 +12,6 @@ query T
 EXPLAIN (DISTSQL) SELECT data1.a, sum(data1.d) FROM data AS data1 INNER HASH JOIN data AS data2 ON data1.a = data2.c GROUP BY data1.a
 ----
 distribution: local
-vectorized: true
 ·
 • group (hash)
 │ group by: a
@@ -40,7 +39,6 @@ query T
 EXPLAIN (DISTSQL) SELECT data1.a, sum(data1.d) FROM data AS data1 INNER HASH JOIN data AS data2 ON data1.a = data2.c GROUP BY data1.a
 ----
 distribution: local
-vectorized: true
 ·
 • group (hash)
 │ group by: a

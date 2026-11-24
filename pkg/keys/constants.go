@@ -80,6 +80,8 @@ var (
 	// LocalRangeAppliedStateSuffix is the suffix for the range applied state
 	// key.
 	LocalRangeAppliedStateSuffix = []byte("rask")
+	// LocalRangeForceFlushSuffix is the suffix for the range force flush key.
+	LocalRangeForceFlushSuffix = []byte("rffk")
 	// This was previously used for the replicated RaftTruncatedState. It is no
 	// longer used and this key has been removed via a migration. See
 	// LocalRaftTruncatedStateSuffix for the corresponding unreplicated
@@ -161,6 +163,7 @@ var (
 	//
 	// LocalStorePrefix is the prefix identifying per-store data.
 	LocalStorePrefix = makeKey(LocalPrefix, roachpb.Key("s"))
+	LocalStoreMax    = roachpb.Key(LocalStorePrefix).PrefixEnd()
 	// localStoreClusterVersionSuffix stores the cluster-wide version
 	// information for this store, updated any time the operator
 	// updates the minimum cluster version.
@@ -224,6 +227,8 @@ var (
 	// SupporterMeta stores the highest timestamp at which support has been
 	// withdrawn.
 	localStoreLivenessSupporterMeta = []byte("slsm")
+	// localStoreWAGNodeSuffix is the suffix for WAG nodes.
+	localStoreWAGNodeSuffix = []byte("wagn")
 	// localStoreLivenessSupportFor stores the Store Liveness support by the local
 	// store for a store in the cluster. It includes the epoch and expiration of
 	// support.
@@ -370,6 +375,10 @@ var (
 	NamespaceTableMin = SystemSQLCodec.TablePrefix(NamespaceTableID)
 	// NamespaceTableMax is the end key of system.namespace.
 	NamespaceTableMax = SystemSQLCodec.TablePrefix(NamespaceTableID + 1)
+	// SpanConfigTableMin is the start key of system.span_configurations.
+	SpanConfigTableMin = SystemSQLCodec.TablePrefix(SpanConfigurationsTableID)
+	// SpanConfigTableMax is the end key of system.span_configurations.
+	SpanConfigTableMax = SystemSQLCodec.TablePrefix(SpanConfigurationsTableID + 1)
 
 	// 4. Non-system tenant SQL keys
 	//
@@ -418,9 +427,14 @@ const (
 	ZonesTableConfigColumnID = 2
 	ZonesTableConfigColFamID = 2
 
-	DescriptorTablePrimaryKeyIndexID         = 1
-	DescriptorTableDescriptorColID           = 2
-	DescriptorTableDescriptorColFamID        = 2
+	DescriptorTablePrimaryKeyIndexID  = 1
+	DescriptorTableDescriptorColID    = 2
+	DescriptorTableDescriptorColFamID = 2
+	// DescriptorTableDescriptorUpdateIndexID is not a real index. It is a special
+	// ID used to construct index entries that inform the lease subsystem of
+	// descriptor updates within a transaction. The value for such an entry is a
+	// descpb.DescriptorUpdates message.
+	DescriptorTableDescriptorUpdateIndexID   = 2
 	TenantsTablePrimaryKeyIndexID            = 1
 	SpanConfigurationsTablePrimaryKeyIndexID = 1
 	CommentsTablePrimaryKeyIndexID           = 1

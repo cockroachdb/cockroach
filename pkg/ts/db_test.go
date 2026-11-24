@@ -74,11 +74,11 @@ type testModelRunner struct {
 func newTestModelRunner(t *testing.T) testModelRunner {
 	st := cluster.MakeTestingClusterSettings()
 	workerMonitor := mon.NewUnlimitedMonitor(context.Background(), mon.Options{
-		Name:     "timeseries-test-worker",
+		Name:     mon.MakeName("timeseries-test-worker"),
 		Settings: st,
 	})
 	resultMonitor := mon.NewUnlimitedMonitor(context.Background(), mon.Options{
-		Name:     "timeseries-test-result",
+		Name:     mon.MakeName("timeseries-test-result"),
 		Settings: st,
 	})
 	return testModelRunner{
@@ -105,7 +105,7 @@ func (tm *testModelRunner) getActualData() map[string]roachpb.Value {
 	// Scan over all TS Keys stored in the engine
 	startKey := keys.TimeseriesPrefix
 	endKey := startKey.PrefixEnd()
-	res, err := storage.MVCCScan(context.Background(), tm.Eng, startKey, endKey, tm.Clock.Now(), storage.MVCCScanOptions{})
+	res, err := storage.MVCCScan(context.Background(), tm.Eng.StateEngine(), startKey, endKey, tm.Clock.Now(), storage.MVCCScanOptions{})
 	if err != nil {
 		tm.t.Fatalf("error scanning TS data from engine: %s", err)
 	}
@@ -388,7 +388,7 @@ func (tm *testModelRunner) rollupWithMemoryContext(
 // maintain calls the same operation called by the TS maintenance queue,
 // simulating the effects in the model at the same time.
 func (tm *testModelRunner) maintain(nowNanos int64) {
-	snap := tm.Store.TODOEngine().NewSnapshot()
+	snap := tm.Store.StateEngine().NewSnapshot()
 	defer snap.Close()
 	if err := tm.DB.MaintainTimeSeries(
 		context.Background(),
@@ -667,7 +667,7 @@ type modelDataSource struct {
 // set of TimeSeriesData to subsequent calls. It stores each TimeSeriesData
 // object in the test model before returning it. If all TimeSeriesData objects
 // have been returned, this method will stop the provided Stopper.
-func (mds *modelDataSource) GetTimeSeriesData() []tspb.TimeSeriesData {
+func (mds *modelDataSource) GetTimeSeriesData(childMetrics bool) []tspb.TimeSeriesData {
 	if len(mds.datasets) == 0 {
 		// Stop on goroutine to prevent deadlock.
 		go mds.once.Do(func() { mds.stopper.Stop(context.Background()) })
@@ -762,7 +762,7 @@ func TestPollSource(t *testing.T) {
 		}
 
 		ambient := log.MakeTestingAmbientContext(tr)
-		tm.DB.PollSource(ambient, &testSource, time.Millisecond, Resolution10s, testSource.stopper)
+		tm.DB.PollSource(ambient, &testSource, time.Millisecond, Resolution10s, testSource.stopper, false)
 		<-testSource.stopper.IsStopped()
 		if a, e := testSource.calledCount, 2; a != e {
 			t.Errorf("testSource was called %d times, expected %d", a, e)
@@ -815,7 +815,7 @@ func TestDisableStorage(t *testing.T) {
 		}
 
 		ambient := log.MakeTestingAmbientCtxWithNewTracer()
-		tm.DB.PollSource(ambient, &testSource, time.Millisecond, Resolution10s, testSource.stopper)
+		tm.DB.PollSource(ambient, &testSource, time.Millisecond, Resolution10s, testSource.stopper, false)
 		select {
 		case <-testSource.stopper.IsStopped():
 			t.Error("testSource data exhausted when polling should have been enabled")

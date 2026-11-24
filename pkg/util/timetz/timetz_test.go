@@ -226,7 +226,10 @@ func TestParseTimeTZ(t *testing.T) {
 		{str: "", expectedError: true},
 		{str: "foo", expectedError: true},
 		{str: "01", expectedError: true},
-		{str: "01:00=wat", expectedError: true},
+		// "wat" is now recognized as the WAT (West Africa Time) abbreviation
+		// via pg_timezone_abbrevs (offset +01:00, stored with negated sign).
+		// Matches PostgreSQL behavior.
+		{str: "01:00=wat", precision: time.Microsecond, expected: MakeTimeTZ(timeofday.New(1, 0, 0, 0), -3600), expectedDepOnCtx: false},
 		{str: "00:00-1600", expectedError: true},
 		{str: "00:00+1600", expectedError: true},
 		{str: "00:00+24:00", expectedError: true},

@@ -31,7 +31,7 @@ func runManySplits(ctx context.Context, t test.Test, c cluster.Cluster) {
 	err := roachtestutil.WaitFor3XReplication(ctx, t.L(), db)
 	require.NoError(t, err)
 
-	m := c.NewMonitor(ctx, c.All())
+	m := c.NewDeprecatedMonitor(ctx, c.All())
 	m.Go(func(ctx context.Context) error {
 		const numRanges = 2000
 		t.L().Printf("creating %d ranges...", numRanges)

@@ -12,6 +12,7 @@ go_library(
         "//pkg/jobs/jobspb",
         "//pkg/keys",
         "//pkg/kv",
+        "//pkg/multitenant/mtinfo",
         "//pkg/roachpb",
         "//pkg/security/username",
         "//pkg/server/license",
@@ -50,7 +51,6 @@ go_test(
     deps = [
         ":upgrademanager",
         "//pkg/base",
-        "//pkg/ccl/kvccl/kvtenantccl",
         "//pkg/clusterversion",
         "//pkg/jobs",
         "//pkg/jobs/jobspb",

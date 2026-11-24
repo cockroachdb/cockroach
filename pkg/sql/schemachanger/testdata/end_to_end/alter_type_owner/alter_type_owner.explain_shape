@@ -1,0 +1,10 @@
+/* setup */
+CREATE TYPE greeting AS ENUM('hello', 'hi');
+CREATE USER newowner;
+GRANT CREATE ON SCHEMA public TO newowner;
+
+/* test */
+EXPLAIN (DDL, SHAPE) ALTER TYPE greeting OWNER TO newowner;
+----
+Schema change plan for ALTER TYPE ‹defaultdb›.‹public›.‹greeting› OWNER TO newowner;
+ └── execute 1 system table mutations transaction

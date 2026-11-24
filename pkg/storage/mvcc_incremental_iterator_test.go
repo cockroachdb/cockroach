@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble/objstorage"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -207,7 +208,7 @@ func assertExportedErrs(
 		MaxLockConflicts:        uint64(MaxConflictsPerLockConflictError.Default()),
 		TargetLockConflictBytes: uint64(TargetBytesPerLockConflictError.Default()),
 		StopMidKey:              false,
-	}, &bytes.Buffer{})
+	}, &objstorage.MemObj{})
 	require.Error(t, err)
 
 	if lcErr := (*kvpb.LockConflictError)(nil); errors.As(err, &lcErr) {
@@ -233,7 +234,7 @@ func assertExportedKVs(
 	expected []MVCCKeyValue,
 ) {
 	const big = 1 << 30
-	var sstFile bytes.Buffer
+	var sstFile objstorage.MemObj
 	st := cluster.MakeTestingClusterSettings()
 	_, _, err := MVCCExportToSST(context.Background(), st, e, MVCCExportOptions{
 		StartKey:           MVCCKey{Key: startKey},
@@ -246,7 +247,7 @@ func assertExportedKVs(
 		StopMidKey:         false,
 	}, &sstFile)
 	require.NoError(t, err)
-	data := sstFile.Bytes()
+	data := sstFile.Data()
 	if data == nil {
 		require.Nil(t, expected)
 		return
@@ -1291,7 +1292,7 @@ func TestMVCCIncrementalIteratorIntentDeletion(t *testing.T) {
 	_, err = MVCCPut(ctx, db, kC, txnC1.ReadTimestamp, vC1, MVCCWriteOptions{Txn: txnC1})
 	require.NoError(t, err)
 	require.NoError(t, db.Flush())
-	require.NoError(t, db.Compact())
+	require.NoError(t, db.Compact(ctx))
 	_, _, _, _, err = MVCCResolveWriteIntent(ctx, db, nil, intent(txnA1), MVCCResolveWriteIntentOptions{})
 	require.NoError(t, err)
 	_, _, _, _, err = MVCCResolveWriteIntent(ctx, db, nil, intent(txnB1), MVCCResolveWriteIntentOptions{})
@@ -1542,13 +1543,13 @@ func collectMatchingWithMVCCIterator(
 }
 
 func runIncrementalBenchmark(b *testing.B, ts hlc.Timestamp, opts mvccBenchData) {
-	eng := getInitialStateEngine(context.Background(), b, opts, false /* inMemory */)
+	eng := getInitialStateEngine(b.Context(), b, opts, false /* inMemory */)
 	defer eng.Close()
 	{
 		// Pull all of the sstables into the cache.  This
 		// probably defeats a lot of the benefits of the
 		// time-based optimization.
-		_, err := ComputeStats(context.Background(), eng, keys.LocalMax, roachpb.KeyMax, 0)
+		_, err := ComputeStats(b.Context(), eng, fs.UnknownReadCategory, keys.LocalMax, roachpb.KeyMax, 0)
 		if err != nil {
 			b.Fatalf("stats failed: %s", err)
 		}
@@ -1654,7 +1655,7 @@ func BenchmarkMVCCIncrementalIteratorForOldData(b *testing.B) {
 		if err := eng.Flush(); err != nil {
 			b.Fatal(err)
 		}
-		if err := eng.Compact(); err != nil {
+		if err := eng.Compact(context.Background()); err != nil {
 			b.Fatal(err)
 		}
 	}

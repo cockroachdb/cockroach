@@ -22,6 +22,8 @@ func (r Resolution) String() string {
 		return "10s"
 	case Resolution30m:
 		return "30m"
+	case Resolution1m:
+		return "1m"
 	case resolution1ns:
 		return "1ns"
 	case resolution50ns:
@@ -41,6 +43,8 @@ const (
 	// Resolution30m stores roll-up data from a higher resolution at a sample
 	// resolution of 30 minutes.
 	Resolution30m Resolution = 2
+	// Resolution1m stores child metrics data with a sample resolution of 1 minute.
+	Resolution1m Resolution = 3
 	// resolution1ns stores data with a sample resolution of 1 nanosecond. Used
 	// only for testing.
 	resolution1ns Resolution = 998
@@ -59,6 +63,7 @@ const (
 var sampleDurationByResolution = map[Resolution]int64{
 	Resolution10s:     int64(time.Second * 10),
 	Resolution30m:     int64(time.Minute * 30),
+	Resolution1m:      int64(time.Minute),
 	resolution1ns:     1,  // 1ns resolution only for tests.
 	resolution50ns:    50, // 50ns rollup only for tests.
 	resolutionInvalid: 10, // Invalid resolution.
@@ -71,6 +76,7 @@ var sampleDurationByResolution = map[Resolution]int64{
 var slabDurationByResolution = map[Resolution]int64{
 	Resolution10s:     int64(time.Hour),
 	Resolution30m:     int64(time.Hour * 24),
+	Resolution1m:      int64(time.Hour),
 	resolution1ns:     10,   // 1ns resolution only for tests.
 	resolution50ns:    1000, // 50ns rollup only for tests.
 	resolutionInvalid: 11,
@@ -97,6 +103,26 @@ func (r Resolution) SlabDuration() int64 {
 	return duration
 }
 
+// Duration returns the time.Duration corresponding to the Resolution
+func (r Resolution) Duration() time.Duration {
+	switch r {
+	case Resolution10s:
+		return time.Second * 10
+	case Resolution30m:
+		return time.Minute * 30
+	case Resolution1m:
+		return time.Minute
+	case resolution1ns:
+		return time.Nanosecond
+	case resolution50ns:
+		return time.Nanosecond * 50
+	default:
+		// it will never reach here because this is an enum. The user is never
+		// expected to construct a Resolution value directly. But just in case.
+		return time.Duration(r)
+	}
+}
+
 // IsRollup returns true if this resolution contains rollup data: statistical
 // values about a large number of samples taken over a long period, such as
 // the min, max and sum.
@@ -110,6 +136,8 @@ func (r Resolution) IsRollup() bool {
 func (r Resolution) TargetRollupResolution() (Resolution, bool) {
 	switch r {
 	case Resolution10s:
+		return Resolution30m, true
+	case Resolution1m:
 		return Resolution30m, true
 	case resolution1ns:
 		return resolution50ns, true
@@ -133,6 +161,8 @@ func ResolutionFromProto(r tspb.TimeSeriesResolution) Resolution {
 		return Resolution10s
 	case tspb.TimeSeriesResolution_RESOLUTION_30M:
 		return Resolution30m
+	case tspb.TimeSeriesResolution_RESOLUTION_1M:
+		return Resolution1m
 	default:
 	}
 	return resolutionInvalid

@@ -214,7 +214,7 @@ statement ok
 ALTER ROLE test_set_role RESET application_name
 
 # However, even with CREATEROLE, testuser cannot do RESET ALL.
-statement error only users with the admin role are allowed to ALTER ROLE ALL
+statement error only users with the admin role or the owner of the database is allowed to ALTER ROLE ALL IN DATABASE SET ..
 ALTER ROLE ALL IN DATABASE test_set_db RESET application_name
 
 # Verify that testuser can't edit an ADMIN, even after getting CREATEROLE.
@@ -374,3 +374,60 @@ use_declarative_schema_changer  off                NULL     true
 # We shouldn't be able to leave the role unspecified
 statement error pq: at or near "]": syntax error
 SELECT * FROM [SHOW DEFAULT SESSION VARIABLES FOR ROLE]
+
+statement ok
+CREATE USER testuser2
+
+# Set owner to a user that is not admin.
+statement ok
+ALTER DATABASE test_db OWNER TO testuser2
+
+user testuser2
+
+# Verify that owner can set default session variables for a database.
+statement ok
+ALTER ROLE ALL IN DATABASE test_db SET application_name = 'abc'
+
+user root
+
+query TTT
+SELECT * FROM [SHOW DEFAULT SESSION VARIABLES FOR ROLE ALL] WHERE database='test_db' ORDER BY 1, 2
+----
+application_name    abc     test_db
+
+user testuser2
+
+# Verify that DB owner can reset default session variables for a database.
+statement ok
+ALTER ROLE ALL IN DATABASE test_db RESET application_name
+
+user root
+
+query TTT colnames
+SELECT * FROM [SHOW DEFAULT SESSION VARIABLES FOR ROLE ALL] WHERE database='test_db' ORDER BY 1, 2
+----
+session_variables  default_values  database
+
+statement ok
+CREATE DATABASE test_db2
+
+user testuser2
+
+# Verify that DB owner cannot set default session variables for a database that they do not own.
+statement error only users with the admin role or the owner of the database is allowed to ALTER ROLE ALL IN DATABASE SET
+ALTER ROLE ALL IN DATABASE test_db2 SET application_name = 'abc'
+
+user root
+
+statement ok
+DROP DATABASE test_db2
+
+user testuser2
+
+# Verify that DB owner cannot alter a specific role.
+statement error pq: ALTER ROLE ... SET requires MODIFYCLUSTERSETTING, MODIFYSQLCLUSTERSETTING or CREATEROLE
+ALTER ROLE roach IN DATABASE test_db SET application_name = 'abc'
+
+# Verify that DB owner cannot ALTER ROLE ALL.
+statement error pq: only users with the admin role are allowed to ALTER ROLE ALL ... SET
+ALTER ROLE ALL SET application_name = 'abc'

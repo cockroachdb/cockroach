@@ -9,7 +9,6 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
-	"net/url"
 	"strconv"
 	"strings"
 	"testing"
@@ -17,8 +16,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdctest"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedpb"
-	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobstest"
@@ -65,7 +64,7 @@ func newTestHelper(t *testing.T) (*testHelper, func()) {
 			jobstest.UseSystemTables, timeutil.Now(), tree.ScheduledChangefeedExecutor),
 	}
 
-	s, db, stopServer := startTestFullServer(t, makeOptions(withSchedulerHelper(sh)))
+	s, db, stopServer := startTestFullServer(t, makeOptions(t, withSchedulerHelper(sh)))
 	sh.db = db
 	sh.sqlDB = sqlutils.MakeSQLRunner(db)
 	sh.server = s
@@ -127,7 +126,7 @@ func (h *testHelper) waitForSuccessfulScheduledJob(
 		h.server.JobRegistry().(*jobs.Registry).TestingNudgeAdoptionQueue()
 
 		return h.sqlDB.DB.QueryRowContext(context.Background(),
-			query, jobs.StatusSucceeded, jobs.CreatedByScheduledJobs, scheduleID).Scan(&jobID)
+			query, jobs.StateSucceeded, jobs.CreatedByScheduledJobs, scheduleID).Scan(&jobID)
 	})
 
 	return jobID
@@ -303,8 +302,7 @@ func TestCreateChangefeedScheduleChecksPermissionsDuringDryRun(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
-		DefaultTestTenant: base.TODOTestTenantDisabled,
+	srv, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 			DistSQL: &execinfra.TestingKnobs{
@@ -319,28 +317,20 @@ func TestCreateChangefeedScheduleChecksPermissionsDuringDryRun(t *testing.T) {
 			},
 		},
 	})
-	defer s.Stopper().Stop(ctx)
-	rootDB := sqlutils.MakeSQLRunner(db)
-	rootDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
-	enableEnterprise := utilccl.TestingDisableEnterprise()
-	enableEnterprise()
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
-	rootDB.Exec(t, `CREATE TABLE table_a (i int)`)
-	rootDB.Exec(t, `CREATE USER testuser WITH PASSWORD 'test'`)
+	sysDB := sqlutils.MakeSQLRunner(srv.SystemLayer().SQLConn(t))
+	sysDB.Exec(t, "SET CLUSTER SETTING kv.rangefeed.enabled = true")
 
-	pgURL := url.URL{
-		Scheme: "postgres",
-		User:   url.UserPassword("testuser", "test"),
-		Host:   s.SQLAddr(),
-	}
-	db2, err := gosql.Open("postgres", pgURL.String())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db2.Close()
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `CREATE TABLE table_a (i int)`)
+	sqlDB.Exec(t, `CREATE USER testuser WITH PASSWORD 'test'`)
+
+	db2 := s.SQLConn(t, serverutils.UserPassword("testuser", "test"))
 	userDB := sqlutils.MakeSQLRunner(db2)
 
-	userDB.ExpectErr(t, "Failed to dry run create changefeed: user testuser requires the CHANGEFEED privilege on all target tables to be able to run an enterprise changefeed",
+	userDB.ExpectErr(t, `Failed to dry run create changefeed: user "testuser" requires the CHANGEFEED privilege on all target tables to be able to run an enterprise changefeed`,
 		"CREATE SCHEDULE FOR CHANGEFEED TABLE table_a INTO 'somewhere' WITH initial_scan = 'only' RECURRING '@daily'")
 }
 
@@ -400,6 +390,7 @@ func TestCreateChangefeedScheduleInExplicitTxnRollback(t *testing.T) {
 	require.NoError(t, res.Err())
 
 	th.sqlDB.Exec(t, "BEGIN;")
+	th.sqlDB.Exec(t, "SET LOCAL autocommit_before_ddl = false;")
 	th.sqlDB.Exec(t, "CREATE SCHEDULE FOR CHANGEFEED TABLE t1 INTO 'null://' WITH initial_scan = 'only' RECURRING '@daily';")
 	th.sqlDB.Exec(t, "ROLLBACK;")
 
@@ -425,7 +416,7 @@ CREATE TABLE t2(b INT PRIMARY KEY, c STRING);
 INSERT INTO t2 VALUES (3, 'three'), (2, 'two'), (1, 'one');
 `)
 
-	getFeed := func(isBare bool, db *gosql.DB) (string, *webhookFeed, func()) {
+	getFeed := func(envelopeType changefeedbase.EnvelopeType, db *gosql.DB) (string, *webhookFeed, func()) {
 		cert, _, err := cdctest.NewCACertBase64Encoded()
 		require.NoError(t, err)
 		sinkDest, err := cdctest.StartMockWebhookSink(cert)
@@ -441,7 +432,7 @@ INSERT INTO t2 VALUES (3, 'three'), (2, 'two'), (1, 'one');
 		feed := &webhookFeed{
 			seenTrackerMap: make(map[string]struct{}),
 			mockSink:       sinkDest,
-			isBare:         isBare,
+			envelopeType:   envelopeType,
 			jobFeed:        newJobFeed(db, dummyWrapper),
 		}
 
@@ -453,7 +444,7 @@ INSERT INTO t2 VALUES (3, 'three'), (2, 'two'), (1, 'one');
 		name            string
 		scheduleStmt    string
 		expectedPayload []string
-		isBare          bool
+		envelopeType    changefeedbase.EnvelopeType
 	}{
 		{
 			name:         "one-table",
@@ -463,7 +454,7 @@ INSERT INTO t2 VALUES (3, 'three'), (2, 'two'), (1, 'one');
 				`t1: [10]->{"after": {"a": 10, "b": "ten"}}`,
 				`t1: [100]->{"after": {"a": 100, "b": "hundred"}}`,
 			},
-			isBare: false,
+			envelopeType: changefeedbase.OptEnvelopeWrapped,
 		},
 		{
 			name:         "two-table",
@@ -476,7 +467,7 @@ INSERT INTO t2 VALUES (3, 'three'), (2, 'two'), (1, 'one');
 				`t2: [2]->{"after": {"b": 2, "c": "two"}}`,
 				`t2: [1]->{"after": {"b": 1, "c": "one"}}`,
 			},
-			isBare: false,
+			envelopeType: changefeedbase.OptEnvelopeWrapped,
 		},
 		{
 			name: "changefeed-expressions",
@@ -487,13 +478,13 @@ INSERT INTO t2 VALUES (3, 'three'), (2, 'two'), (1, 'one');
 				`t1: [10]->{"b": "ten"}`,
 				`t1: [100]->{"b": "hundred"}`,
 			},
-			isBare: true,
+			envelopeType: changefeedbase.OptEnvelopeBare,
 		},
 	}
 
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
-			sinkURI, feed, cleanup := getFeed(test.isBare, th.db)
+			sinkURI, feed, cleanup := getFeed(test.envelopeType, th.db)
 			defer cleanup()
 
 			sj, err := th.createChangefeedSchedule(
@@ -532,7 +523,7 @@ CREATE TABLE t2(b INT PRIMARY KEY, c STRING);
 INSERT INTO t2 VALUES (3, 'three'), (2, 'two'), (1, 'one');
 `)
 
-	getFeed := func(isBare bool, db *gosql.DB) (string, *webhookFeed, func()) {
+	getFeed := func(envelopeType changefeedbase.EnvelopeType, db *gosql.DB) (string, *webhookFeed, func()) {
 		cert, _, err := cdctest.NewCACertBase64Encoded()
 		require.NoError(t, err)
 		sinkDest, err := cdctest.StartMockWebhookSink(cert)
@@ -548,7 +539,7 @@ INSERT INTO t2 VALUES (3, 'three'), (2, 'two'), (1, 'one');
 		feed := &webhookFeed{
 			seenTrackerMap: make(map[string]struct{}),
 			mockSink:       sinkDest,
-			isBare:         isBare,
+			envelopeType:   envelopeType,
 			jobFeed:        newJobFeed(db, dummyWrapper),
 		}
 
@@ -560,7 +551,7 @@ INSERT INTO t2 VALUES (3, 'three'), (2, 'two'), (1, 'one');
 		name            string
 		scheduleStmt    string
 		expectedPayload []string
-		isBare          bool
+		envelopeType    changefeedbase.EnvelopeType
 	}{
 		name:         "one-table",
 		scheduleStmt: "CREATE SCHEDULE FOR changefeed TABLE t1 INTO $1 RECURRING '@hourly'",
@@ -569,11 +560,11 @@ INSERT INTO t2 VALUES (3, 'three'), (2, 'two'), (1, 'one');
 			`t1: [10]->{"after": {"a": 10, "b": "ten"}}`,
 			`t1: [100]->{"after": {"a": 100, "b": "hundred"}}`,
 		},
-		isBare: false,
+		envelopeType: changefeedbase.OptEnvelopeWrapped,
 	}
 
 	t.Run(testCase.name, func(t *testing.T) {
-		sinkURI, feed, cleanup := getFeed(testCase.isBare, th.db)
+		sinkURI, feed, cleanup := getFeed(testCase.envelopeType, th.db)
 		defer cleanup()
 
 		sj, err := th.createChangefeedSchedule(
@@ -839,6 +830,11 @@ func TestCheckScheduleAlreadyExists(t *testing.T) {
 	present, err = schedulebase.CheckScheduleAlreadyExists(ctx, p.(sql.PlanHookState), "not-existing")
 	require.NoError(t, err)
 	require.Equal(t, present, false)
+
+	// Verify a label containing a quote is handled safely (#167602).
+	present, err = schedulebase.CheckScheduleAlreadyExists(ctx, p.(sql.PlanHookState), "it's a label")
+	require.NoError(t, err)
+	require.Equal(t, present, false)
 }
 
 func TestFullyQualifyTables(t *testing.T) {
@@ -868,7 +864,7 @@ func TestFullyQualifyTables(t *testing.T) {
 	defer cleanupPlanHook()
 
 	tablePatterns := make([]tree.TablePattern, 0)
-	for _, target := range createChangeFeedStmt.Targets {
+	for _, target := range createChangeFeedStmt.TableTargets {
 		tablePatterns = append(tablePatterns, target.TableName)
 	}
 

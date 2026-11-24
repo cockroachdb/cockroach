@@ -71,14 +71,19 @@ func (c *CustomFuncs) IsInt(scalar opt.ScalarExpr) bool {
 	return scalar.DataType().Family() == types.IntFamily
 }
 
+// IsTuple returns true if the given scalar expression is a tuple type.
+func (c *CustomFuncs) IsTuple(scalar opt.ScalarExpr) bool {
+	return scalar.DataType().Family() == types.TupleFamily
+}
+
 // BoolType returns the boolean SQL type.
 func (c *CustomFuncs) BoolType() *types.T {
 	return types.Bool
 }
 
-// AnyType returns the wildcard Any type.
+// AnyType returns the wildcard AnyElement type.
 func (c *CustomFuncs) AnyType() *types.T {
-	return types.Any
+	return types.AnyElement
 }
 
 // CanConstructBinary returns true if (op left right) has a valid binary op
@@ -105,6 +110,12 @@ func (c *CustomFuncs) BinaryType(op opt.Operator, left, right opt.ScalarExpr) *t
 // TypeOf returns the type of the expression.
 func (c *CustomFuncs) TypeOf(e opt.ScalarExpr) *types.T {
 	return e.DataType()
+}
+
+// IdenticalTypes returns true if the two types are identical. See
+// (*types.T).Identical.
+func (c *CustomFuncs) IdenticalTypes(left, right *types.T) bool {
+	return left.Identical(right)
 }
 
 // IsConstArray returns true if the expression is a constant array.
@@ -600,6 +611,81 @@ func (c *CustomFuncs) PrimaryKeyCols(table opt.TableID) opt.ColSet {
 	return tabMeta.IndexKeyColumns(cat.PrimaryIndex)
 }
 
+// KeyCols returns a column set consisting of the columns that make up the
+// candidate key for the input expression (a key must be present).
+func (c *CustomFuncs) KeyCols(in memo.RelExpr) opt.ColSet {
+	keyCols, ok := c.CandidateKey(in)
+	if !ok {
+		panic(errors.AssertionFailedf("expected expression to have key"))
+	}
+	return keyCols
+}
+
+// NonKeyCols returns a column set consisting of the output columns of the given
+// input, minus the columns that make up its candidate key (which it must have).
+func (c *CustomFuncs) NonKeyCols(in memo.RelExpr) opt.ColSet {
+	keyCols, ok := c.CandidateKey(in)
+	if !ok {
+		panic(errors.AssertionFailedf("expected expression to have key"))
+	}
+	return c.OutputCols(in).Difference(keyCols)
+}
+
+// EnsureKey finds the shortest strong key for the input expression. If no
+// strong key exists and the input expression is a Scan or a Scan wrapped in a
+// Select, EnsureKey returns a new Scan (possibly wrapped in a Select) with the
+// preexisting primary key for the table. If the input is not a Scan or
+// Select(Scan), EnsureKey wraps the input in an Ordinality operator, which
+// provides a key column by uniquely numbering the rows. EnsureKey returns the
+// input expression (perhaps augmented with a key column(s) or wrapped by
+// Ordinality).
+func (c *CustomFuncs) EnsureKey(in memo.RelExpr) memo.RelExpr {
+	// Try to add the preexisting primary key if the input is a Scan or Scan
+	// wrapped in a Select.
+	if res, ok := c.tryFindExistingKey(in); ok {
+		return res
+	}
+
+	// Otherwise, wrap the input in an Ordinality operator.
+	colID := c.f.Metadata().AddColumn("rownum", types.Int)
+	private := memo.OrdinalityPrivate{ColID: colID, ForDuplicateRemoval: true}
+	return c.f.ConstructOrdinality(in, &private)
+}
+
+// tryFindExistingKey attempts to find an existing key for the input expression.
+// It may modify the expression in order to project the key column.
+func (c *CustomFuncs) tryFindExistingKey(in memo.RelExpr) (_ memo.RelExpr, ok bool) {
+	_, hasKey := c.CandidateKey(in)
+	if hasKey {
+		return in, true
+	}
+	switch t := in.(type) {
+	case *memo.ProjectExpr:
+		input, foundKey := c.tryFindExistingKey(t.Input)
+		if foundKey {
+			return c.f.ConstructProject(input, t.Projections, input.Relational().OutputCols), true
+		}
+
+	case *memo.ScanExpr:
+		private := t.ScanPrivate
+		tableID := private.Table
+		table := c.f.Metadata().Table(tableID)
+		if !table.IsVirtualTable() {
+			keyCols := c.PrimaryKeyCols(tableID)
+			private.Cols = private.Cols.Union(keyCols)
+			return c.f.ConstructScan(&private), true
+		}
+
+	case *memo.SelectExpr:
+		input, foundKey := c.tryFindExistingKey(t.Input)
+		if foundKey {
+			return c.f.ConstructSelect(input, t.Filters), true
+		}
+	}
+
+	return nil, false
+}
+
 // ----------------------------------------------------------------------
 //
 // Property functions
@@ -612,6 +698,13 @@ func (c *CustomFuncs) PrimaryKeyCols(table opt.TableID) opt.ColSet {
 // set are assumed to be non-NULL. See memo.ExprIsNeverNull.
 func (c *CustomFuncs) ExprIsNeverNull(e opt.ScalarExpr, notNullCols opt.ColSet) bool {
 	return memo.ExprIsNeverNull(e, notNullCols)
+}
+
+// EitherExprIsNeverNull returns true if either of the two provided scalar
+// expressions is guaranteed to be non-NULL, given the set of outer columns that
+// are known to be not null.
+func (c *CustomFuncs) EitherExprIsNeverNull(a, b opt.ScalarExpr, notNullCols opt.ColSet) bool {
+	return memo.ExprIsNeverNull(a, notNullCols) || memo.ExprIsNeverNull(b, notNullCols)
 }
 
 // sharedProps returns the shared logical properties for the given expression.
@@ -633,6 +726,46 @@ func (c *CustomFuncs) sharedProps(e opt.Expr) *props.Shared {
 // FuncDeps retrieves the FuncDepSet for the given expression.
 func (c *CustomFuncs) FuncDeps(expr memo.RelExpr) *props.FuncDepSet {
 	return &expr.Relational().FuncDeps
+}
+
+// IsLeakproof returns true if the given expression is leakproof.
+func (c *CustomFuncs) IsLeakproof(expr memo.RelExpr) bool {
+	return expr.Relational().VolatilitySet.IsLeakproof()
+}
+
+// ----------------------------------------------------------------------
+//
+// ScalarListExpr functions
+//   General functions related to ScalarListExpr.
+//
+// ----------------------------------------------------------------------
+
+// LenGT returns true if the given scalar expression list has length greater
+// than x.
+func (c *CustomFuncs) LenGT(list memo.ScalarListExpr, x int) bool {
+	return len(list) > x
+}
+
+// ScalarExprAt returns the ScalarExpr in the i-th position in the given list.
+// Returns ok=false if i is out of bounds.
+func (c *CustomFuncs) ScalarExprAt(list memo.ScalarListExpr, i int) (_ opt.ScalarExpr, ok bool) {
+	if i >= 0 && i < len(list) {
+		return list[i], true
+	}
+	return nil, false
+}
+
+// ScalarPair returns the two expressions in the given list. Returns ok=false if
+// the length of the list is not two.
+func (c *CustomFuncs) ScalarPair(list memo.ScalarListExpr) (_, _ opt.ScalarExpr, ok bool) {
+	if len(list) != 2 {
+		return nil, nil, false
+	}
+	return list[0], list[1], true
+}
+
+func (c *CustomFuncs) DropLast(list memo.ScalarListExpr) memo.ScalarListExpr {
+	return list[:len(list)-1]
 }
 
 // ----------------------------------------------------------------------
@@ -767,6 +900,17 @@ func (c *CustomFuncs) RemoveFiltersItem(
 	filters memo.FiltersExpr, search *memo.FiltersItem,
 ) memo.FiltersExpr {
 	return filters.RemoveFiltersItem(search)
+}
+
+// AppendFiltersItem returns a new list that is a copy of the given list, except
+// that the given item has been appended to the end of the list.
+func (c *CustomFuncs) AppendFiltersItem(
+	filters memo.FiltersExpr, toAppend opt.ScalarExpr,
+) memo.FiltersExpr {
+	newFilters := make(memo.FiltersExpr, len(filters)+1)
+	copy(newFilters, filters)
+	newFilters[len(filters)] = c.f.ConstructFiltersItem(toAppend)
+	return newFilters
 }
 
 // ReplaceFiltersItem returns a new list that is a copy of the given list,
@@ -1434,6 +1578,17 @@ func (c *CustomFuncs) NoJoinHints(p *memo.JoinPrivate) bool {
 //
 // ----------------------------------------------------------------------
 
+// If returns the given boolean value. This function is useful in matching
+// expressions that have a boolean field.
+func (c *CustomFuncs) If(val bool) bool {
+	return val
+}
+
+// EqualsBool returns true if the given boolean values are equal.
+func (c *CustomFuncs) EqualsBool(left, right bool) bool {
+	return left == right
+}
+
 // IsPositiveInt is true if the given Datum value is greater than zero.
 func (c *CustomFuncs) IsPositiveInt(datum tree.Datum) bool {
 	val := int64(*datum.(*tree.DInt))
@@ -1495,9 +1650,38 @@ func (c *CustomFuncs) CanAddConstInts(first tree.Datum, second tree.Datum) bool 
 	return ok
 }
 
+// DInt returns a new *tree.DInt with the given integer value.
+func (c *CustomFuncs) DInt(i tree.DInt) *tree.DInt {
+	return tree.NewDInt(i)
+}
+
 // IntConst constructs a Const holding a DInt.
 func (c *CustomFuncs) IntConst(d *tree.DInt) opt.ScalarExpr {
 	return c.f.ConstructConst(d, types.Int)
+}
+
+// StringFromConst extracts a string from a Const expression. It returns the
+// string and a boolean indicating whether the extraction was successful.
+func (c *CustomFuncs) StringFromConst(expr opt.ScalarExpr) (string, bool) {
+	if constExpr, ok := expr.(*memo.ConstExpr); ok {
+		datum := tree.UnwrapDOidWrapper(constExpr.Value)
+		switch d := datum.(type) {
+		case *tree.DString:
+			return string(*d), true
+		case *tree.DCollatedString:
+			return d.Contents, true
+		}
+	}
+	return "", false
+}
+
+// ConstStringEquals returns true if e is a constant string expression and is
+// equal to other.
+func (c *CustomFuncs) ConstStringEquals(e opt.ScalarExpr, other string) bool {
+	if eStr, ok := c.StringFromConst(e); ok {
+		return eStr == other
+	}
+	return false
 }
 
 // IsGreaterThan returns true if the first datum compares as greater than the
@@ -1548,4 +1732,48 @@ func (c *CustomFuncs) DuplicateJoinPrivate(jp *memo.JoinPrivate) *memo.JoinPriva
 		Flags:            jp.Flags,
 		SkipReorderJoins: jp.SkipReorderJoins,
 	}
+}
+
+// SplitLeakproofFilters separates a list of filters into two groups: those that
+// are leakproof and those that are not. Leakproof filters are expressions that
+// do not reveal information about underlying data through their evaluation
+// behavior.
+//
+// This function is typically used to determine which filters can be safely
+// reordered or pushed past a Barrier marked as LeakproofPermeable. It returns
+// the leakproof filters, the remaining filters, and a boolean indicating
+// whether any leakproof filters were found.
+func (c *CustomFuncs) SplitLeakproofFilters(
+	filters memo.FiltersExpr,
+) (leakproofFilters, remainingFilters memo.FiltersExpr, hasLeakproofFilters bool) {
+	numLeakproof := 0
+	for i := range filters {
+		if filters[i].ScalarProps().VolatilitySet.IsLeakproof() {
+			numLeakproof++
+		}
+	}
+	if numLeakproof == 0 {
+		// Return early if there are no leakproof filters.
+		return nil, nil, false
+	}
+	leakproofFilters = make(memo.FiltersExpr, 0, numLeakproof)
+	remainingFilters = make(memo.FiltersExpr, 0, len(filters)-numLeakproof)
+	for i := range filters {
+		if filters[i].ScalarProps().VolatilitySet.IsLeakproof() {
+			leakproofFilters = append(leakproofFilters, filters[i])
+		} else {
+			remainingFilters = append(remainingFilters, filters[i])
+		}
+	}
+	return leakproofFilters, remainingFilters, true
+}
+
+// HasAllLeakProofFilters returns true if every filter given is leakproof.
+func (c *CustomFuncs) HasAllLeakProofFilters(filters memo.FiltersExpr) bool {
+	for i := range filters {
+		if !filters[i].ScalarProps().VolatilitySet.IsLeakproof() {
+			return false
+		}
+	}
+	return true
 }

@@ -25,11 +25,13 @@ import (
 func TestPreserveDowngradeOptionRandomizerMutator(t *testing.T) {
 	numUpgrades := 3
 	mvt := newBasicUpgradeTest(NumUpgrades(numUpgrades))
+	assertValidTest(mvt, t.Fatal)
 	plan, err := mvt.plan()
 	require.NoError(t, err)
 
 	var mut preserveDowngradeOptionRandomizerMutator
-	mutations := mut.Generate(newRand(), plan)
+	mutations, err := mut.Generate(newRand(), plan, nil)
+	require.NoError(t, err)
 	require.NotEmpty(t, mutations)
 	require.True(t, len(mutations)%2 == 0, "should produce even number of mutations") // one removal and one insertion per upgrade
 
@@ -91,13 +93,17 @@ func TestClusterSettingMutator(t *testing.T) {
 		numUpgrades int, possibleValues []interface{}, options []clusterSettingMutatorOption,
 	) bool {
 		mvt := newBasicUpgradeTest(NumUpgrades(numUpgrades))
-
+		// N.B. Since this test has hardcoded v24.2.12 as the current version, we must lower the minimum bootstrap
+		// version to allow for up to 6 upgrades.
+		mvt.options.minimumBootstrapVersion = clusterupgrade.MustParseVersion("v21.2.1")
+		assertValidTest(mvt, t.Fatal)
 		plan, err := mvt.plan()
 		require.NoError(t, err)
 
 		const settingName = "test_cluster_setting"
 		mut := newClusterSettingMutator(settingName, possibleValues, options...)
-		mutations := mut.Generate(newRand(), plan)
+		mutations, err := mut.Generate(newRand(), plan, nil)
+		require.NoError(t, err)
 
 		// Number of mutations should be 1 <= n <= maxChanges
 		require.GreaterOrEqual(t, len(mutations), 1, "plan:\n%s", plan.PrettyPrint())

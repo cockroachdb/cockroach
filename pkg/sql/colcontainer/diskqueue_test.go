@@ -104,7 +104,7 @@ func TestDiskQueue(t *testing.T) {
 					// since that is the common pattern.
 					dest := coldata.NewMemBatch(typs, testColumnFactory)
 					for {
-						src := op.Next()
+						src := colexecop.NextNoMeta(op)
 						require.NoError(t, q.Enqueue(ctx, src))
 						if src.Length() == 0 {
 							break
@@ -191,7 +191,8 @@ func TestDiskQueueCloseOnErr(t *testing.T) {
 		t.Run(fmt.Sprintf("diskLimit=%s", humanizeutil.IBytes(diskLimit)), func(t *testing.T) {
 			serverCfg := &execinfra.ServerConfig{}
 			serverCfg.TestingKnobs.MemoryLimitBytes = diskLimit
-			diskMon := execinfra.NewLimitedMonitorNoFlowCtx(ctx, testDiskMonitor, serverCfg, nil /* sd */, "test-disk")
+			diskMon := execinfra.NewLimitedMonitorNoFlowCtx(ctx, testDiskMonitor, serverCfg,
+				nil /* sd */, mon.MakeName("test-disk"))
 			defer diskMon.Stop(ctx)
 			diskAcc := diskMon.MakeBoundAccount()
 			defer diskAcc.Close(ctx)
@@ -258,7 +259,7 @@ func BenchmarkDiskQueue(b *testing.B) {
 		q, err := colcontainer.NewDiskQueue(ctx, typs, queueCfg, testDiskAcc, testMemAcc)
 		require.NoError(b, err)
 		for {
-			batchToEnqueue := op.Next()
+			batchToEnqueue := colexecop.NextNoMeta(op)
 			if err := q.Enqueue(ctx, batchToEnqueue); err != nil {
 				b.Fatal(err)
 			}

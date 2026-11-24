@@ -12,9 +12,8 @@
 // this library.
 //
 // Batching assumes that data with the same key can be sent in a single batch.
-// The initial implementation uses rangeID as the key explicitly to avoid
-// creating an overly general solution without motivation but interested readers
-// should recognize that it would be easy to extend this package to accept an
+// The implementation here uses rangeID and admission priority to construct
+// batches. This may be extended, or generalized, in the future by accepting a
 // arbitrary comparable key.
 package requestbatcher
 
@@ -26,7 +25,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -131,6 +133,14 @@ type Config struct {
 	// enforced. It is inadvisable to disable both MaxIdle and MaxWait.
 	MaxIdle time.Duration
 
+	// WorkloadID, if non-zero, is set as the WorkloadID on every
+	// BatchRequest constructed by this batcher. This allows internal
+	// subsystems (e.g. intent resolution, GC) to attribute their KV
+	// traffic in ASH samples. The WorkloadType is automatically set to
+	// WorkloadTypeSystem since the batcher is only used for internal
+	// system operations.
+	WorkloadID workloadid.WorkloadID
+
 	// MaxTimeout limits the amount of time that a BatchRequest can run for
 	// before timing out. When the work for a batch is paginated into multiple
 	// BatchRequests, due to MaxKeysPerBatchReq or TargetBytesPerBatchReq, this
@@ -162,8 +172,8 @@ type Config struct {
 	// RequestBatcher -- a BatchRequest on that range will timeout, which will
 	// timeout and fail the entire batch.
 	//
-	// TODO(sumeer): once intent resolution is subject to admission control, we
-	// could have timeouts even though a range is available. Is that desirable?
+	// TODO(sumeer): we could have timeouts even though a range is available. Is
+	// that desirable?
 	MaxTimeout time.Duration
 
 	// InFlightBackpressureLimit is the number of batches in flight above which
@@ -241,9 +251,16 @@ func New(cfg Config) *RequestBatcher {
 	}
 	b.sendBatchOpName = redact.Sprintf("%s.sendBatch", b.cfg.Name)
 	bgCtx := cfg.AmbientCtx.AnnotateCtx(context.Background())
-	if err := cfg.Stopper.RunAsyncTask(bgCtx, b.cfg.Name.StripMarkers(), b.run); err != nil {
+	bgCtx, hdl, err := cfg.Stopper.GetHandle(bgCtx, stop.TaskOpts{
+		TaskName: b.cfg.Name.StripMarkers(),
+	})
+	if err != nil {
 		panic(err)
 	}
+	go func(ctx context.Context) {
+		defer hdl.Activate(ctx).Release(ctx)
+		b.run(ctx)
+	}(bgCtx)
 	return b
 }
 
@@ -341,7 +358,7 @@ func (b *RequestBatcher) sendDone(ba *batch) {
 }
 
 func (b *RequestBatcher) sendBatch(ctx context.Context, ba *batch) {
-	if err := b.cfg.Stopper.RunAsyncTask(ctx, "send-batch", func(ctx context.Context) {
+	work := func(ctx context.Context) {
 		defer b.sendDone(ba)
 		var batchRequest *kvpb.BatchRequest
 		var br *kvpb.BatchResponse
@@ -397,7 +414,7 @@ func (b *RequestBatcher) sendBatch(ctx context.Context, ba *batch) {
 					if prevResps != nil {
 						prevResp := prevResps[i]
 						if cErr := kvpb.CombineResponses(ctx, prevResp, resp, batchRequest); cErr != nil {
-							log.Fatalf(ctx, "%v", cErr)
+							log.Dev.Fatalf(ctx, "%v", cErr)
 						}
 						resp = prevResp
 					}
@@ -425,9 +442,19 @@ func (b *RequestBatcher) sendBatch(ctx context.Context, ba *batch) {
 			}
 			ba.reqs, prevResps = nextReqs, nextPrevResps
 		}
-	}); err != nil {
-		b.sendDone(ba)
 	}
+
+	ctx, hdl, err := b.cfg.Stopper.GetHandle(ctx, stop.TaskOpts{
+		TaskName: "send-batch",
+	})
+	if err != nil {
+		b.sendDone(ba)
+		return
+	}
+	go func(ctx context.Context) {
+		defer hdl.Activate(ctx).Release(ctx)
+		work(ctx)
+	}(ctx)
 }
 
 func (b *RequestBatcher) sendResponse(req *request, resp Response) {
@@ -437,6 +464,11 @@ func (b *RequestBatcher) sendResponse(req *request, resp Response) {
 }
 
 func addRequestToBatch(cfg *Config, now time.Time, ba *batch, r *request) (shouldSend bool) {
+	testingAssert(ba.empty() || admissionPriority(ba.admissionHeader()) == admissionPriority(r.header),
+		"requests with different admission headers shouldn't be added to the same batch")
+	testingAssert(ba.empty() || ba.rangeID() == r.rangeID,
+		"requests with different range IDs shouldn't be added to the same batch")
+
 	// Update the deadline for the batch if this requests's deadline is later
 	// than the current latest.
 	rDeadline, rHasDeadline := r.ctx.Deadline()
@@ -521,7 +553,7 @@ func (b *RequestBatcher) run(ctx context.Context) {
 		}
 		handleRequest = func(req *request) {
 			now := b.now()
-			ba, existsInQueue := b.batches.get(req.rangeID)
+			ba, existsInQueue := b.batches.get(req.rangeID, req.header)
 			if !existsInQueue {
 				ba = b.pool.newBatch(now)
 			}
@@ -564,7 +596,6 @@ func (b *RequestBatcher) run(ctx context.Context) {
 			handleRequest(req)
 			maybeSetTimer(false)
 		case <-timer.Ch():
-			timer.MarkRead()
 			sendBatch(b.batches.popFront())
 			maybeSetTimer(true)
 		case <-b.sendDoneChan:
@@ -615,19 +646,41 @@ func (b *batch) rangeID() roachpb.RangeID {
 	return b.reqs[0].rangeID
 }
 
-func (b *batch) batchRequest(cfg *Config) *kvpb.BatchRequest {
-	req := &kvpb.BatchRequest{
-		// Preallocate the Requests slice.
-		Requests: make([]kvpb.RequestUnion, 0, len(b.reqs)),
+// admissionPriority returns the priority with which to bucket requests with
+// the supplied header.
+func admissionPriority(header kvpb.AdmissionHeader) int32 {
+	if header.Source == kvpb.AdmissionHeader_OTHER {
+		// AdmissionHeader_OTHER bypass admission control, so bucket them separately
+		// and treat them as the highest priority.
+		return int32(admissionpb.OneAboveHighPri)
 	}
+	return header.Priority
+}
+
+func (b *batch) admissionHeader() kvpb.AdmissionHeader {
+	testingAssert(len(b.reqs) != 0, "admission header should not be called on an empty batch")
 	var admissionHeader kvpb.AdmissionHeader
 	for i, r := range b.reqs {
-		req.Add(r.req)
 		if i == 0 {
 			admissionHeader = r.header
 		} else {
 			admissionHeader = kv.MergeAdmissionHeaderForBatch(admissionHeader, r.header)
 		}
+	}
+	return admissionHeader
+}
+
+func (b *batch) empty() bool {
+	return len(b.reqs) == 0
+}
+
+func (b *batch) batchRequest(cfg *Config) *kvpb.BatchRequest {
+	req := &kvpb.BatchRequest{
+		// Preallocate the Requests slice.
+		Requests: make([]kvpb.RequestUnion, 0, len(b.reqs)),
+	}
+	for _, r := range b.reqs {
+		req.Add(r.req)
 	}
 	if cfg.MaxKeysPerBatchReq > 0 {
 		req.MaxSpanRequestKeys = int64(cfg.MaxKeysPerBatchReq)
@@ -635,7 +688,11 @@ func (b *batch) batchRequest(cfg *Config) *kvpb.BatchRequest {
 	if cfg.TargetBytesPerBatchReq > 0 {
 		req.TargetBytes = cfg.TargetBytesPerBatchReq
 	}
-	req.AdmissionHeader = admissionHeader
+	req.AdmissionHeader = b.admissionHeader()
+	if cfg.WorkloadID != 0 {
+		req.Header.WorkloadID = uint64(cfg.WorkloadID)
+		req.Header.WorkloadType = workloadid.WorkloadTypeSystem.ToUint32()
+	}
 	return req
 }
 
@@ -706,6 +763,23 @@ func (p *pool) putBatch(b *batch) {
 	p.batchPool.Put(b)
 }
 
+// rangePriorityTuple is a container for a RangeID and admission priority pair.
+// It's intended to allow the batchQueue to build per-range, per-priority
+// batches.
+type rangePriorityPair struct {
+	rangeID  roachpb.RangeID
+	priority int32
+}
+
+// makeRangePriorityPair returns a new  rangePriorityPair for the supplied
+// rangeID and admission header.
+func makeRangePriorityPair(rangeID roachpb.RangeID, header kvpb.AdmissionHeader) rangePriorityPair {
+	return rangePriorityPair{
+		rangeID:  rangeID,
+		priority: admissionPriority(header),
+	}
+}
+
 // batchQueue is a container for batch objects which offers O(1) get based on
 // rangeID and peekFront as well as O(log(n)) upsert, removal, popFront.
 // Batch structs are heap ordered inside of the batches slice based on their
@@ -718,14 +792,14 @@ func (p *pool) putBatch(b *batch) {
 // per RequestBatcher.
 type batchQueue struct {
 	batches []*batch
-	byRange map[roachpb.RangeID]*batch
+	byRange map[rangePriorityPair]*batch
 }
 
 var _ heap.Interface = (*batchQueue)(nil)
 
 func makeBatchQueue() batchQueue {
 	return batchQueue{
-		byRange: map[roachpb.RangeID]*batch{},
+		byRange: map[rangePriorityPair]*batch{},
 	}
 }
 
@@ -743,8 +817,8 @@ func (q *batchQueue) popFront() *batch {
 	return heap.Pop(q).(*batch)
 }
 
-func (q *batchQueue) get(id roachpb.RangeID) (*batch, bool) {
-	b, exists := q.byRange[id]
+func (q *batchQueue) get(id roachpb.RangeID, header kvpb.AdmissionHeader) (*batch, bool) {
+	b, exists := q.byRange[makeRangePriorityPair(id, header)]
 	return b, exists
 }
 
@@ -772,16 +846,24 @@ func (q *batchQueue) Swap(i, j int) {
 
 func (q *batchQueue) Less(i, j int) bool {
 	idl, jdl := q.batches[i].deadline, q.batches[j].deadline
-	if before := idl.Before(jdl); before || !idl.Equal(jdl) {
-		return before
+	if !idl.Equal(jdl) {
+		return idl.Before(jdl)
 	}
+	iPri, jPri := admissionPriority(q.batches[i].admissionHeader()), admissionPriority(q.batches[j].admissionHeader())
+	if iPri != jPri {
+		// NB: We've got a min-heap, so we want to prefer higher AC priorities. In
+		// practice, this doesn't matter, because the batcher sends out all batches
+		// with the same deadline in parallel. See RequestBatcher.run.
+		return iPri > jPri
+	}
+	// Equal AC priorities; arbitrarily sort by rangeID.
 	return q.batches[i].rangeID() < q.batches[j].rangeID()
 }
 
 func (q *batchQueue) Push(v interface{}) {
 	ba := v.(*batch)
 	ba.idx = len(q.batches)
-	q.byRange[ba.rangeID()] = ba
+	q.byRange[makeRangePriorityPair(ba.rangeID(), ba.admissionHeader())] = ba
 	q.batches = append(q.batches, ba)
 }
 
@@ -789,7 +871,15 @@ func (q *batchQueue) Pop() interface{} {
 	ba := q.batches[len(q.batches)-1]
 	q.batches[len(q.batches)-1] = nil // for GC
 	q.batches = q.batches[:len(q.batches)-1]
-	delete(q.byRange, ba.rangeID())
+	delete(q.byRange, makeRangePriorityPair(ba.rangeID(), ba.admissionHeader()))
 	ba.idx = -1
 	return ba
+}
+
+// testingAssert panics with the supplied message if the conditional doesn't
+// hold.
+func testingAssert(cond bool, msg string) {
+	if buildutil.CrdbTestBuild && !cond {
+		panic(msg)
+	}
 }

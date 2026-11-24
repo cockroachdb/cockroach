@@ -69,3 +69,67 @@ granted: returned 15
 empty
 ----
 true
+
+# Test minRate functionality: timer fires before grant.
+# When tryGet returns false and minRate is set, after the timer fires
+# (count/minRate seconds), the request proceeds via tookWithoutPermission.
+init
+----
+
+set-try-get-return-value v=false
+----
+
+# Set minRate to 10 bytes/s. With count=5, wait time = 5/10 = 500ms
+set-min-rate v=10
+----
+
+admit id=10 count=5 create-time-millis=100
+----
+tryGet: returning false
+
+# Advance time by 501ms to trigger the minRate timer.
+advance-time millis=501
+----
+tookWithoutPermission 5
+id 10: admit succeeded
+
+# Note: empty returns false because cancelled items remain in the queue
+# (see TODO in snapshot_queue.go). The granted() method skips them.
+empty
+----
+false
+
+# Calling granted cleans up the cancelled item by skipping it.
+granted
+----
+granted: returned 0
+
+empty
+----
+true
+
+# Test minRate functionality: grant before timer fires.
+# When tokens are granted before the timer fires, tookWithoutPermission is NOT called.
+init
+----
+
+set-try-get-return-value v=false
+----
+
+set-min-rate v=10
+----
+
+admit id=11 count=5 create-time-millis=200
+----
+tryGet: returning false
+
+# Grant before the timer fires (don't advance time).
+# tookWithoutPermission should NOT be called.
+granted
+----
+id 11: admit succeeded
+granted: returned 5
+
+empty
+----
+true

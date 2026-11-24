@@ -1,5 +1,0 @@
-ARG FROM_IMAGE
-FROM $FROM_IMAGE
-RUN apt-get update
-RUN --mount=source=./packages,target=/tmp/packages apt-get install -y /tmp/packages/*.deb 
-RUN apt-get clean

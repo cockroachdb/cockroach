@@ -91,7 +91,7 @@ func (mf *memoFormatter) format() string {
 			c := tpChild.Childf("%s", s.required)
 			mf.formatBest(s.best, s.required)
 			c.Childf("best: %s", mf.buf.String())
-			c.Childf("cost: %.2f", s.cost)
+			c.Childf("cost: %.2f", s.cost.C)
 		}
 	}
 

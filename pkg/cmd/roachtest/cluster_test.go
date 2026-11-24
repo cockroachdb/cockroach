@@ -8,31 +8,33 @@ package main
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
-	test2 "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
+	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/vm/azure"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
-	"github.com/stretchr/testify/assert"
+	"github.com/cockroachdb/version"
 	"github.com/stretchr/testify/require"
 )
 
 func TestClusterNodes(t *testing.T) {
-	c := &clusterImpl{spec: spec.MakeClusterSpec(10, spec.WorkloadNode())}
-	c2 := &clusterImpl{spec: spec.MakeClusterSpec(10, spec.WorkloadNodeCount(0))}
-	c3 := &clusterImpl{spec: spec.MakeClusterSpec(10, spec.WorkloadNodeCount(1))}
-	c4 := &clusterImpl{spec: spec.MakeClusterSpec(10, spec.WorkloadNodeCount(4))}
+	c := &roachprodCluster{spec: spec.MakeClusterSpec(10, spec.WorkloadNode())}
+	c2 := &roachprodCluster{spec: spec.MakeClusterSpec(10, spec.WorkloadNodeCount(0))}
+	c3 := &roachprodCluster{spec: spec.MakeClusterSpec(10, spec.WorkloadNodeCount(1))}
+	c4 := &roachprodCluster{spec: spec.MakeClusterSpec(10, spec.WorkloadNodeCount(4))}
 	opts := func(opts ...option.Option) []option.Option {
 		return opts
 	}
@@ -68,6 +70,35 @@ func TestClusterNodes(t *testing.T) {
 	}
 }
 
+func TestSeededRandGroups(t *testing.T) {
+	rng := rand.New(rand.NewSource(1))
+	testCases := []struct {
+		numNodes  int
+		numGroups int
+		expected  []string
+	}{
+		{numNodes: 1, numGroups: 1, expected: []string{":1"}},
+		{numNodes: 10, numGroups: 1, expected: []string{":1-10"}},
+		{numNodes: 10, numGroups: 2, expected: []string{":1,3,8,10", ":2,4-7,9"}},
+		{numNodes: 3, numGroups: 3, expected: []string{":3", ":2", ":1"}},
+		{numNodes: 5, numGroups: 3, expected: []string{":2", ":1,3-4", ":5"}},
+	}
+	for _, tc := range testCases {
+		t.Run("", func(t *testing.T) {
+			c := &roachprodCluster{spec: spec.MakeClusterSpec(tc.numNodes)}
+			nodes := c.All()
+			groups, err := nodes.SeededRandGroups(rng, tc.numGroups)
+			require.NoError(t, err)
+			for i, group := range groups {
+				nodeList := c.MakeNodes(group)
+				if tc.expected[i] != nodeList {
+					t.Errorf("expected %s, but found %s", tc.expected[i], nodeList)
+				}
+			}
+		})
+	}
+}
+
 type testWrapper struct {
 	*testing.T
 	l *logger.Logger
@@ -75,6 +106,10 @@ type testWrapper struct {
 
 func (t testWrapper) GetRunId() string {
 	return "mock-run-id"
+}
+
+func (t testWrapper) Owner() string {
+	return "mock-owner"
 }
 
 func (t testWrapper) ExportOpenmetrics() bool {
@@ -144,7 +179,19 @@ func (t testWrapper) Go(_ task.Func, _ ...task.Option) {
 	panic("implement me")
 }
 
-var _ test2.Test = testWrapper{}
+func (t testWrapper) NewGroup(_ ...task.Option) task.Group {
+	panic("implement me")
+}
+
+func (t testWrapper) NewErrorGroup(_ ...task.Option) task.ErrorGroup {
+	panic("implement me")
+}
+
+func (t testWrapper) Monitor() test.Monitor {
+	panic("implement me")
+}
+
+var _ test.Test = testWrapper{}
 
 // ArtifactsDir is part of the test.Test interface.
 func (t testWrapper) ArtifactsDir() string {
@@ -213,12 +260,18 @@ func TestClusterMachineType(t *testing.T) {
 		{"n2-highmem-8", 8},
 		{"n2-highcpu-16-2048", 16},
 		{"n2-custom-32-65536", 32},
-		{"t2a-standard-2", 2},
-		{"t2a-standard-4", 4},
-		{"t2a-standard-8", 8},
-		{"t2a-standard-16", 16},
-		{"t2a-standard-32", 32},
-		{"t2a-standard-48", 48},
+		{"c4a-standard-2", 2},
+		{"c4a-standard-4", 4},
+		{"c4a-standard-8", 8},
+		{"c4a-standard-16", 16},
+		{"c4a-standard-32", 32},
+		{"c4a-standard-48", 48},
+		{"c4a-standard-64", 64},
+		{"c4a-standard-72", 72},
+		{"c4a-highmem-8", 8},
+		{"c4a-highmem-32", 32},
+		{"c4a-highcpu-4", 4},
+		{"c4a-highcpu-16", 16},
 	}
 	// Azure machine types
 	for i := 2; i <= 96; i *= 2 {
@@ -444,6 +497,8 @@ func TestGCEMachineType(t *testing.T) {
 	addARM := func(mem spec.MemPerCPU) {
 		fallback := false
 		var series string
+		armSeries := "c4a"
+		maxArmCPUs := 72
 
 		switch mem {
 		case spec.Auto:
@@ -451,9 +506,9 @@ func TestGCEMachineType(t *testing.T) {
 		case spec.Standard:
 			series = "standard"
 		case spec.High:
-			fallback = true
 			series = "highmem"
 		case spec.Low:
+			// Low always falls back to n2 (C4A highcpu is 2 GB/vCPU, not 1 GB).
 			fallback = true
 			series = "highcpu"
 		}
@@ -463,10 +518,14 @@ func TestGCEMachineType(t *testing.T) {
 				fmt.Sprintf("n2-%s-%d", series, 2), vm.ArchAMD64})
 		} else {
 			testCases = append(testCases, machineTypeTestCase{1, mem, false, vm.ArchARM64,
-				fmt.Sprintf("t2a-%s-%d", series, 1), vm.ArchARM64})
+				fmt.Sprintf("%s-%s-%d", armSeries, series, 1), vm.ArchARM64})
 		}
-		for _, i := range []int{2, 4, 8, 16, 32, 64, 96, 128} {
-			fallback = fallback || i > 48 || (i > 16 && mem == spec.Auto)
+		for _, i := range []int{2, 4, 8, 16, 32, 48, 64, 72, 96, 128} {
+			expectedArmSeries := series
+			if mem == spec.Auto && i > 16 && i <= maxArmCPUs {
+				expectedArmSeries = "highcpu"
+			}
+			fallback = fallback || i > maxArmCPUs
 
 			if fallback {
 				expectedMachineType := fmt.Sprintf("n2-%s-%d", series, i)
@@ -478,12 +537,12 @@ func TestGCEMachineType(t *testing.T) {
 						expectedMachineType = fmt.Sprintf("n2-custom-%d-%d", i, i*2048)
 					}
 				}
-				// Expect fallback to AMD64.
+				// Expect fallback to AMD64
 				testCases = append(testCases, machineTypeTestCase{i, mem, false, vm.ArchARM64,
 					expectedMachineType, vm.ArchAMD64})
 			} else {
 				testCases = append(testCases, machineTypeTestCase{i, mem, false, vm.ArchARM64,
-					fmt.Sprintf("t2a-%s-%d", series, i), vm.ArchARM64})
+					fmt.Sprintf("%s-%s-%d", armSeries, expectedArmSeries, i), vm.ArchARM64})
 			}
 		}
 	}
@@ -599,6 +658,134 @@ func TestAzureMachineType(t *testing.T) {
 	require.Error(t, err2)
 }
 
+func TestIBMMachineType(t *testing.T) {
+	testCases := []struct {
+		name            string
+		cpus            int
+		mem             spec.MemPerCPU
+		arch            vm.CPUArch
+		expectedMachine string
+		expectedArch    vm.CPUArch
+		expectedError   string
+	}{}
+
+	// Helper function to generate the expected machine type string
+	ibmMachineType := func(series string, cpus int, ramRatio int) string {
+		return fmt.Sprintf("%s-%dx%d", series, cpus, cpus*ramRatio)
+	}
+
+	// IBM Z only supports s390x architecture
+	arch := vm.ArchS390x
+
+	// Add test cases for each memory configuration
+	addTestCases := func(mem spec.MemPerCPU) {
+		var series string
+		var ramRatio int
+
+		switch mem {
+		case spec.Auto, spec.Standard:
+			series = "bz2" // balanced
+			ramRatio = 4
+		case spec.High:
+			series = "mz2" // memory optimized
+			ramRatio = 8
+		case spec.Low:
+			series = "cz2" // compute optimized
+			ramRatio = 2
+		}
+
+		// IBM Z only supports 2, 4, 8, or 16 CPUs
+		for _, cpus := range []int{2, 4, 8, 16} {
+			testName := fmt.Sprintf("valid_%dcpu_%s", cpus, mem)
+			testCases = append(testCases, struct {
+				name            string
+				cpus            int
+				mem             spec.MemPerCPU
+				arch            vm.CPUArch
+				expectedMachine string
+				expectedArch    vm.CPUArch
+				expectedError   string
+			}{
+				name:            testName,
+				cpus:            cpus,
+				mem:             mem,
+				arch:            arch,
+				expectedMachine: ibmMachineType(series, cpus, ramRatio),
+				expectedArch:    arch,
+				expectedError:   "",
+			})
+		}
+
+		// Add test cases for unsupported CPU counts
+		invalidCPUs := []int{1, 6, 10, 32, 96, 128}
+		for _, cpus := range invalidCPUs {
+			testName := fmt.Sprintf("invalid_%dcpu_%s", cpus, mem)
+			testCases = append(testCases, struct {
+				name            string
+				cpus            int
+				mem             spec.MemPerCPU
+				arch            vm.CPUArch
+				expectedMachine string
+				expectedArch    vm.CPUArch
+				expectedError   string
+			}{
+				name:            testName,
+				cpus:            cpus,
+				mem:             mem,
+				arch:            arch,
+				expectedMachine: "",
+				expectedArch:    arch,
+				expectedError:   fmt.Sprintf("invalid number of cpus %d for IBM", cpus),
+			})
+		}
+	}
+
+	// Add test cases for each memory configuration
+	for _, mem := range []spec.MemPerCPU{spec.Auto, spec.Standard, spec.High, spec.Low} {
+		addTestCases(mem)
+	}
+
+	// Add test cases for unsupported architectures
+	for _, invalidArch := range []vm.CPUArch{vm.ArchAMD64, vm.ArchARM64, vm.ArchFIPS} {
+		testName := fmt.Sprintf("invalid_arch_%s", invalidArch)
+		testCases = append(testCases, struct {
+			name            string
+			cpus            int
+			mem             spec.MemPerCPU
+			arch            vm.CPUArch
+			expectedMachine string
+			expectedArch    vm.CPUArch
+			expectedError   string
+		}{
+			name:            testName,
+			cpus:            4,
+			mem:             spec.Auto,
+			arch:            invalidArch,
+			expectedMachine: "",
+			expectedArch:    invalidArch,
+			expectedError:   fmt.Sprintf("invalid architecture %q for IBM", invalidArch),
+		})
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			machineType, selectedArch, err := spec.SelectIBMMachineType(tc.cpus, tc.mem, tc.arch)
+
+			if tc.expectedError != "" {
+				// We expect a specific error
+				require.Error(t, err)
+				require.Equal(t, tc.expectedError, err.Error())
+				require.Equal(t, tc.expectedMachine, machineType)
+				require.Equal(t, tc.expectedArch, selectedArch)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, tc.expectedMachine, machineType)
+				require.Equal(t, tc.expectedArch, selectedArch)
+			}
+		})
+	}
+}
+
 func TestMachineTypes(t *testing.T) {
 	datadriven.Walk(t, datapathutils.TestDataPath(t, "cluster_test"), func(t *testing.T, path string) {
 		datadriven.RunTest(t, path, func(t *testing.T, d *datadriven.TestData) string {
@@ -670,19 +857,296 @@ func TestMachineTypes(t *testing.T) {
 	})
 }
 
-func TestCmdLogFileName(t *testing.T) {
-	ts := time.Date(2000, 1, 1, 15, 4, 12, 0, time.Local)
+func TestGCEBenchmarkStorageArchGuards(t *testing.T) {
+	origPreferLocalSSD := roachtestflags.PreferLocalSSD
+	defer func() {
+		roachtestflags.PreferLocalSSD = origPreferLocalSSD
+	}()
 
-	const exp = `run_150412.000000000_n1,3-4,9_cockroach-bla-foo-ba`
-	nodes := option.NodeListOption{1, 3, 4, 9}
-	assert.Equal(t,
-		exp,
-		cmdLogFileName(ts, nodes, "./cockroach", "bla", "--foo", "bar"),
-	)
-	assert.Equal(t,
-		exp,
-		cmdLogFileName(ts, nodes, "./cockroach bla --foo bar"),
-	)
+	tests := []struct {
+		name           string
+		testSpec       registry.TestSpec
+		preferLocalSSD bool
+		expectedKind   spec.GCEStorageKind
+	}{
+		{
+			name: "benchmark default prefers local SSD",
+			testSpec: registry.TestSpec{
+				Benchmark: true,
+				Cluster:   spec.MakeClusterSpec(4),
+			},
+			preferLocalSSD: true,
+			expectedKind:   spec.GCEStorageLocalSSD,
+		},
+		{
+			name: "benchmark default with local SSD flag disabled preserves pd-ssd",
+			testSpec: registry.TestSpec{
+				Benchmark: true,
+				Cluster:   spec.MakeClusterSpec(4),
+			},
+			expectedKind: spec.GCEStoragePDSSD,
+		},
+		{
+			name: "benchmark disabling local SSD preserves pd-ssd",
+			testSpec: registry.TestSpec{
+				Benchmark: true,
+				Cluster:   spec.MakeClusterSpec(4, spec.DisableLocalSSD()),
+			},
+			preferLocalSSD: true,
+			expectedKind:   spec.GCEStoragePDSSD,
+		},
+		{
+			name: "benchmark volume size preserves pd-ssd",
+			testSpec: registry.TestSpec{
+				Benchmark: true,
+				Cluster:   spec.MakeClusterSpec(4, spec.VolumeSize(500)),
+			},
+			preferLocalSSD: true,
+			expectedKind:   spec.GCEStoragePDSSD,
+		},
+		{
+			name: "explicit pd-ssd always requires pd-ssd-compatible machine",
+			testSpec: registry.TestSpec{
+				Cluster: spec.MakeClusterSpec(4, spec.VolumeType("pd-ssd")),
+			},
+			preferLocalSSD: true,
+			expectedKind:   spec.GCEStoragePDSSD,
+		},
+		{
+			name: "explicit local SSD needs local SSD even when default flag disabled",
+			testSpec: registry.TestSpec{
+				Benchmark: true,
+				Cluster:   spec.MakeClusterSpec(4, spec.VolumeType("local-ssd")),
+			},
+			expectedKind: spec.GCEStorageLocalSSD,
+		},
+		{
+			name: "randomized storage does not trigger benchmark continuity guard",
+			testSpec: registry.TestSpec{
+				Benchmark: true,
+				Cluster:   spec.MakeClusterSpec(4, spec.RandomizeVolumeType()),
+			},
+			preferLocalSSD: true,
+			expectedKind:   spec.GCEStorageRandomized,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			roachtestflags.PreferLocalSSD = tc.preferLocalSSD
+			decision := tc.testSpec.Cluster.GCEStorageDecision(
+				tc.testSpec.Benchmark, roachtestflags.PreferLocalSSD,
+			)
+			require.Equal(t, tc.expectedKind, decision.Kind)
+		})
+	}
+}
+
+func TestArchForTestFallsBackForUnsupportedExplicitC4AZone(t *testing.T) {
+	origCloud := roachtestflags.Cloud
+	origARM64Probability := roachtestflags.ARM64Probability
+	origFIPSProbability := roachtestflags.FIPSProbability
+	origPreferLocalSSD := roachtestflags.PreferLocalSSD
+	origInstanceType := roachtestflags.InstanceType
+	origZones := roachtestflags.Zones
+	origPRNG := prng
+	defer func() {
+		roachtestflags.Cloud = origCloud
+		roachtestflags.ARM64Probability = origARM64Probability
+		roachtestflags.FIPSProbability = origFIPSProbability
+		roachtestflags.PreferLocalSSD = origPreferLocalSSD
+		roachtestflags.InstanceType = origInstanceType
+		roachtestflags.Zones = origZones
+		prng = origPRNG
+	}()
+
+	roachtestflags.Cloud = spec.GCE
+	roachtestflags.ARM64Probability = 1
+	roachtestflags.FIPSProbability = 0
+	roachtestflags.PreferLocalSSD = true
+	roachtestflags.InstanceType = ""
+	roachtestflags.Zones = ""
+	prng = rand.New(rand.NewSource(1))
+
+	testSpec := registry.TestSpec{
+		Name:      "test/c4a-explicit-zone-fallback",
+		Benchmark: true,
+		Cluster: spec.MakeClusterSpec(
+			4,
+			spec.Geo(),
+			spec.GCEZones("us-east1-b,us-west1-b"),
+		),
+	}
+	require.Equal(t, vm.ArchAMD64, archForTest(context.Background(), nilLogger(), testSpec))
+}
+
+func TestArchForTestLocalSSDPrecedence(t *testing.T) {
+	origCloud := roachtestflags.Cloud
+	origARM64Probability := roachtestflags.ARM64Probability
+	origFIPSProbability := roachtestflags.FIPSProbability
+	origPreferLocalSSD := roachtestflags.PreferLocalSSD
+	origInstanceType := roachtestflags.InstanceType
+	origZones := roachtestflags.Zones
+	origPRNG := prng
+	defer func() {
+		roachtestflags.Cloud = origCloud
+		roachtestflags.ARM64Probability = origARM64Probability
+		roachtestflags.FIPSProbability = origFIPSProbability
+		roachtestflags.PreferLocalSSD = origPreferLocalSSD
+		roachtestflags.InstanceType = origInstanceType
+		roachtestflags.Zones = origZones
+		prng = origPRNG
+	}()
+
+	testCases := []struct {
+		name             string
+		opts             []spec.Option
+		benchmark        bool
+		preferLocalSSD   bool
+		expectedArch     vm.CPUArch
+		expectedDecision spec.GCEStorageKind
+	}{
+		{
+			name:             "global default local SSD preference preserves ARM64",
+			opts:             []spec.Option{spec.CPU(32)},
+			preferLocalSSD:   true,
+			expectedArch:     vm.ArchARM64,
+			expectedDecision: spec.GCEStorageLocalSSD,
+		},
+		{
+			name:             "benchmark global default local SSD preference falls back to AMD64",
+			opts:             []spec.Option{spec.CPU(32)},
+			benchmark:        true,
+			preferLocalSSD:   true,
+			expectedArch:     vm.ArchAMD64,
+			expectedDecision: spec.GCEStorageLocalSSD,
+		},
+		{
+			name:             "non-benchmark explicit local SSD preference preserves ARM64",
+			opts:             []spec.Option{spec.CPU(32), spec.PreferLocalSSD()},
+			expectedArch:     vm.ArchARM64,
+			expectedDecision: spec.GCEStorageLocalSSD,
+		},
+		{
+			name:             "explicit local SSD volume type falls back to AMD64",
+			opts:             []spec.Option{spec.CPU(32), spec.VolumeType("local-ssd")},
+			expectedArch:     vm.ArchAMD64,
+			expectedDecision: spec.GCEStorageLocalSSD,
+		},
+		{
+			name:             "benchmark explicit local SSD preference falls back to AMD64",
+			opts:             []spec.Option{spec.CPU(32), spec.PreferLocalSSD()},
+			benchmark:        true,
+			expectedArch:     vm.ArchAMD64,
+			expectedDecision: spec.GCEStorageLocalSSD,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			roachtestflags.Cloud = spec.GCE
+			roachtestflags.ARM64Probability = 1
+			roachtestflags.FIPSProbability = 0
+			roachtestflags.PreferLocalSSD = tc.preferLocalSSD
+			roachtestflags.InstanceType = ""
+			roachtestflags.Zones = ""
+			prng = rand.New(rand.NewSource(1))
+
+			testSpec := registry.TestSpec{
+				Name:      tc.name,
+				Benchmark: tc.benchmark,
+				Cluster:   spec.MakeClusterSpec(4, tc.opts...),
+			}
+			decision := testSpec.Cluster.GCEStorageDecision(
+				testSpec.Benchmark, roachtestflags.PreferLocalSSD,
+			)
+			require.Equal(t, tc.expectedDecision, decision.Kind)
+			require.Equal(t, tc.expectedArch, archForTest(context.Background(), nilLogger(), testSpec))
+		})
+	}
+}
+
+func TestArchForTestHonorsExplicitGCEMachineType(t *testing.T) {
+	origCloud := roachtestflags.Cloud
+	origARM64Probability := roachtestflags.ARM64Probability
+	origFIPSProbability := roachtestflags.FIPSProbability
+	origPreferLocalSSD := roachtestflags.PreferLocalSSD
+	origInstanceType := roachtestflags.InstanceType
+	origZones := roachtestflags.Zones
+	origPRNG := prng
+	defer func() {
+		roachtestflags.Cloud = origCloud
+		roachtestflags.ARM64Probability = origARM64Probability
+		roachtestflags.FIPSProbability = origFIPSProbability
+		roachtestflags.PreferLocalSSD = origPreferLocalSSD
+		roachtestflags.InstanceType = origInstanceType
+		roachtestflags.Zones = origZones
+		prng = origPRNG
+	}()
+
+	testCases := []struct {
+		name             string
+		machineType      string
+		flagInstanceType string
+		compatibleArchs  spec.ArchSet
+		armProbability   float64
+		fipsProbability  float64
+		expectedArch     vm.CPUArch
+	}{
+		{
+			name:            "explicit n2 excludes arm64",
+			machineType:     "n2-standard-8",
+			compatibleArchs: spec.AllExceptFIPS,
+			armProbability:  1,
+			expectedArch:    vm.ArchAMD64,
+		},
+		{
+			name:             "flag n2 excludes arm64",
+			flagInstanceType: "n2-standard-8",
+			compatibleArchs:  spec.AllExceptFIPS,
+			armProbability:   1,
+			expectedArch:     vm.ArchAMD64,
+		},
+		{
+			name:            "explicit n2 still allows fips",
+			machineType:     "n2-standard-8",
+			armProbability:  0,
+			fipsProbability: 1,
+			expectedArch:    vm.ArchFIPS,
+		},
+		{
+			name:            "explicit c4a forces arm64",
+			machineType:     "c4a-standard-8",
+			compatibleArchs: spec.AllExceptFIPS,
+			armProbability:  0,
+			expectedArch:    vm.ArchARM64,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			roachtestflags.Cloud = spec.GCE
+			roachtestflags.ARM64Probability = tc.armProbability
+			roachtestflags.FIPSProbability = tc.fipsProbability
+			roachtestflags.PreferLocalSSD = true
+			roachtestflags.InstanceType = tc.flagInstanceType
+			roachtestflags.Zones = ""
+			prng = rand.New(rand.NewSource(1))
+
+			opts := []spec.Option{spec.CPU(8)}
+			if tc.machineType != "" {
+				opts = append(opts, spec.GCEMachineType(tc.machineType))
+			}
+			if !tc.compatibleArchs.IsEmpty() {
+				opts = append(opts, spec.Arch(tc.compatibleArchs))
+			}
+			testSpec := registry.TestSpec{
+				Name:    tc.name,
+				Cluster: spec.MakeClusterSpec(1, opts...),
+			}
+			require.Equal(t, tc.expectedArch, archForTest(context.Background(), nilLogger(), testSpec))
+		})
+	}
 }
 
 func TestVerifyLibraries(t *testing.T) {
@@ -748,6 +1212,238 @@ func TestVerifyLibraries(t *testing.T) {
 			} else {
 				require.NotNil(t, actualError)
 				require.EqualError(t, actualError, tc.expectedError.Error())
+			}
+		})
+	}
+}
+
+// TestStartFlagsInjection tests that --start-env and --start-setting flags
+// correctly inject values into ClusterSettings before cluster start.
+func TestStartFlagsInjection(t *testing.T) {
+	// Save original flag values and restore after test
+	origStartEnv := roachtestflags.StartEnv
+	origStartSettings := roachtestflags.StartSettings
+	defer func() {
+		roachtestflags.StartEnv = origStartEnv
+		roachtestflags.StartSettings = origStartSettings
+	}()
+
+	t.Run("env_injection", func(t *testing.T) {
+		// Simulate flag values
+		roachtestflags.StartEnv = []string{"GODEBUG=gctrace=1", "COCKROACH_SCAN_INTERVAL=100ms"}
+		roachtestflags.StartSettings = nil
+
+		// Create settings with some pre-existing env vars
+		settings := install.ClusterSettings{
+			Env:             []string{"EXISTING_VAR=existing"},
+			ClusterSettings: make(map[string]string),
+		}
+
+		// Apply the same injection logic as StartE()
+		if len(roachtestflags.StartEnv) > 0 {
+			settings.Env = append(settings.Env, roachtestflags.StartEnv...)
+		}
+		for name, value := range roachtestflags.StartSettings {
+			settings.ClusterSettings[name] = value
+		}
+
+		// Verify env vars are appended after existing
+		require.Equal(t, []string{
+			"EXISTING_VAR=existing",
+			"GODEBUG=gctrace=1",
+			"COCKROACH_SCAN_INTERVAL=100ms",
+		}, settings.Env)
+	})
+
+	t.Run("settings_injection", func(t *testing.T) {
+		// Simulate flag values
+		roachtestflags.StartEnv = nil
+		roachtestflags.StartSettings = map[string]string{
+			"kv.range_split.by_load_enabled":         "false",
+			"sql.stats.automatic_collection.enabled": "false",
+		}
+
+		// Create settings with an existing cluster setting
+		settings := install.ClusterSettings{
+			Env:             nil,
+			ClusterSettings: map[string]string{"existing.setting": "existing_value"},
+		}
+
+		// Apply the same injection logic as StartE()
+		if len(roachtestflags.StartEnv) > 0 {
+			settings.Env = append(settings.Env, roachtestflags.StartEnv...)
+		}
+		for name, value := range roachtestflags.StartSettings {
+			settings.ClusterSettings[name] = value
+		}
+
+		// Verify cluster settings are merged
+		require.Equal(t, "existing_value", settings.ClusterSettings["existing.setting"])
+		require.Equal(t, "false", settings.ClusterSettings["kv.range_split.by_load_enabled"])
+		require.Equal(t, "false", settings.ClusterSettings["sql.stats.automatic_collection.enabled"])
+	})
+
+	t.Run("both_injection", func(t *testing.T) {
+		// Simulate both flags
+		roachtestflags.StartEnv = []string{"MY_VAR=value"}
+		roachtestflags.StartSettings = map[string]string{"my.setting": "my_value"}
+
+		settings := install.ClusterSettings{
+			Env:             nil,
+			ClusterSettings: make(map[string]string),
+		}
+
+		// Apply the same injection logic as StartE()
+		if len(roachtestflags.StartEnv) > 0 {
+			settings.Env = append(settings.Env, roachtestflags.StartEnv...)
+		}
+		for name, value := range roachtestflags.StartSettings {
+			settings.ClusterSettings[name] = value
+		}
+
+		require.Equal(t, []string{"MY_VAR=value"}, settings.Env)
+		require.Equal(t, "my_value", settings.ClusterSettings["my.setting"])
+	})
+
+	t.Run("empty_flags_no_effect", func(t *testing.T) {
+		// No flags set
+		roachtestflags.StartEnv = nil
+		roachtestflags.StartSettings = nil
+
+		settings := install.ClusterSettings{
+			Env:             []string{"ORIGINAL=value"},
+			ClusterSettings: map[string]string{"original.setting": "original"},
+		}
+		origEnvLen := len(settings.Env)
+		origSettingsLen := len(settings.ClusterSettings)
+
+		// Apply the same injection logic as StartE()
+		if len(roachtestflags.StartEnv) > 0 {
+			settings.Env = append(settings.Env, roachtestflags.StartEnv...)
+		}
+		for name, value := range roachtestflags.StartSettings {
+			settings.ClusterSettings[name] = value
+		}
+
+		// Original values unchanged, no new additions
+		require.Equal(t, origEnvLen, len(settings.Env))
+		require.Equal(t, origSettingsLen, len(settings.ClusterSettings))
+		require.Equal(t, "ORIGINAL=value", settings.Env[0])
+		require.Equal(t, "original", settings.ClusterSettings["original.setting"])
+	})
+}
+
+func TestRandomArchProbabilities(t *testing.T) {
+	ctx := context.Background()
+
+	tests := []struct {
+		validArchs           spec.ArchSet
+		arm64Probability     float64
+		fipsProbability      float64
+		expectedDistribution map[vm.CPUArch]float64
+	}{
+		{
+			validArchs:       spec.AllArchs,
+			arm64Probability: 0.3,
+			fipsProbability:  0.2,
+			expectedDistribution: map[vm.CPUArch]float64{
+				vm.ArchAMD64: 0.56,
+				vm.ArchARM64: 0.3,
+				vm.ArchFIPS:  0.14,
+			},
+		},
+		{
+			validArchs:       spec.AllExceptFIPS,
+			arm64Probability: 0.4,
+			fipsProbability:  0.1,
+			expectedDistribution: map[vm.CPUArch]float64{
+				vm.ArchAMD64: 0.57447,
+				vm.ArchARM64: 0.42553,
+			},
+		},
+		{
+			validArchs:       spec.OnlyAMD64,
+			arm64Probability: 0.5,
+			fipsProbability:  0.3,
+			expectedDistribution: map[vm.CPUArch]float64{
+				vm.ArchAMD64: 1.0, // Only valid architecture
+			},
+		},
+		{
+			validArchs:       spec.OnlyARM64,
+			arm64Probability: 0.5,
+			fipsProbability:  0.3,
+			expectedDistribution: map[vm.CPUArch]float64{
+				vm.ArchARM64: 1.0, // Only valid architecture
+			},
+		},
+		{
+			validArchs:       spec.OnlyFIPS,
+			arm64Probability: 0.2,
+			fipsProbability:  0.0,
+			expectedDistribution: map[vm.CPUArch]float64{
+				vm.ArchAMD64: 1.0, // Should fall back to AMD64
+			},
+		},
+		{
+			validArchs:       spec.AllExceptFIPS,
+			arm64Probability: 0.0,
+			fipsProbability:  1.0,
+			expectedDistribution: map[vm.CPUArch]float64{
+				vm.ArchAMD64: 1.0, // Should fall back to AMD64
+			},
+		},
+		{
+			validArchs:       spec.AllExceptFIPS,
+			arm64Probability: 0.5,
+			fipsProbability:  1.0,
+			expectedDistribution: map[vm.CPUArch]float64{
+				vm.ArchARM64: 1.0,
+			},
+		},
+		{
+			validArchs:       spec.Archs(spec.ArchAMD64, spec.ArchFIPS),
+			arm64Probability: 0.3,
+			fipsProbability:  0.4,
+			expectedDistribution: map[vm.CPUArch]float64{
+				vm.ArchAMD64: 0.6,
+				vm.ArchFIPS:  0.4,
+			},
+		},
+		{
+			validArchs:       spec.Archs(spec.ArchARM64, spec.ArchFIPS),
+			arm64Probability: 0.6,
+			fipsProbability:  0.2,
+			expectedDistribution: map[vm.CPUArch]float64{
+				vm.ArchARM64: 0.88235,
+				vm.ArchFIPS:  0.11765,
+			},
+		},
+	}
+
+	// Since this is a statistical test, we want to use a fixed seed to avoid flakes,
+	// i.e. a 99% confidence interval would be expected to fail when stressed 100 times.
+	//
+	// We can run this manually with a random seed for more confidence in our distribution:
+	// prng, _ := randutil.NewTestRand()
+	prng := rand.New(rand.NewSource(12345))
+	for _, test := range tests {
+		t.Run(fmt.Sprintf("%s/arm=%d%%/fips=%d%%", test.validArchs, int(test.arm64Probability*100), int(test.fipsProbability*100)), func(t *testing.T) {
+			const numSamples = 10000
+			counts := make(map[vm.CPUArch]int)
+
+			// Generate samples
+			for i := 0; i < numSamples; i++ {
+				arch := randomArch(ctx, nilLogger(), test.validArchs, prng, test.arm64Probability, test.fipsProbability)
+				counts[arch]++
+			}
+
+			for expectedArch, expectedProb := range test.expectedDistribution {
+				actualCount := float64(counts[expectedArch])
+				actualProb := actualCount / float64(numSamples)
+
+				tolerance := 0.02
+				require.InDelta(t, expectedProb, actualProb, tolerance)
 			}
 		})
 	}

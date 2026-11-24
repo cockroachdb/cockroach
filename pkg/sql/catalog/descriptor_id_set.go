@@ -7,6 +7,7 @@ package catalog
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/redact"
 	"github.com/cockroachdb/redact/interfaces"
@@ -141,4 +142,24 @@ func (s *ConstraintIDSet) Ordered() []descpb.ConstraintID {
 		result = append(result, descpb.ConstraintID(i))
 	})
 	return result
+}
+
+// TriggerIDSet stores an unordered set of trigger ids.
+type TriggerIDSet struct {
+	set intsets.Fast
+}
+
+// Add adds an id to the set. No-op if the id is already in the set.
+func (s *TriggerIDSet) Add(id catid.TriggerID) {
+	s.set.Add(int(id))
+}
+
+// Empty returns true if the set is empty.
+func (s *TriggerIDSet) Empty() bool {
+	return s.set.Empty()
+}
+
+// Contains checks if the set contains the given id.
+func (s *TriggerIDSet) Contains(id catid.TriggerID) bool {
+	return s.set.Contains(int(id))
 }

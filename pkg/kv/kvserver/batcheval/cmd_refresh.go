@@ -40,7 +40,7 @@ func Refresh(
 	if h.Timestamp != h.Txn.WriteTimestamp {
 		// We're expecting the read and write timestamp to have converged before the
 		// Refresh request was sent.
-		log.Fatalf(ctx, "expected provisional commit ts %s == read ts %s. txn: %s", h.Timestamp,
+		log.KvExec.Fatalf(ctx, "expected provisional commit ts %s == read ts %s. txn: %s", h.Timestamp,
 			h.Txn.WriteTimestamp, h.Txn)
 	}
 	refreshTo := h.Timestamp
@@ -62,8 +62,8 @@ func Refresh(
 
 	if err != nil {
 		return result.Result{}, err
-	} else if res.Value != nil {
-		if ts := res.Value.Timestamp; refreshFrom.Less(ts) {
+	} else if res.Value.Exists() {
+		if ts := res.Value.Value.Timestamp; refreshFrom.Less(ts) {
 			return result.Result{},
 				kvpb.NewRefreshFailedError(ctx, kvpb.RefreshFailedError_REASON_COMMITTED_VALUE, args.Key, ts)
 		}

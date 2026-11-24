@@ -8,24 +8,24 @@ package rpc
 import (
 	"context"
 	"fmt"
-	"runtime/pprof"
+	"net"
 	"time"
 
 	"github.com/VividCortex/ewma"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/circuit"
 	"github.com/cockroachdb/cockroach/pkg/util/grpcutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/pprofutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/sysutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/status"
 )
 
@@ -38,7 +38,7 @@ const (
 	peerStatusDeleted
 )
 
-func (p *peer) setHealthyLocked() {
+func (p *peer[Conn]) setHealthyLocked() {
 	if p.mu.peerStatus == peerStatusDeleted {
 		return
 	}
@@ -54,13 +54,15 @@ func (p *peer) setHealthyLocked() {
 	p.mu.peerStatus = peerStatusHealthy
 }
 
-func (p *peer) setUnhealthyLocked(connUnhealthyFor int64) {
+func (p *peer[Conn]) setUnhealthyLocked(connUnhealthyFor int64) {
 	if p.mu.peerStatus == peerStatusDeleted {
 		return
 	}
 	p.ConnectionHealthyFor.Update(0)
 	p.ConnectionUnhealthyFor.Update(connUnhealthyFor)
 	p.AvgRoundTripLatency.Update(0)
+	p.TCPRTT.Update(0)
+	p.TCPRTTVar.Update(0)
 
 	switch p.mu.peerStatus {
 	case peerStatusHealthy:
@@ -73,13 +75,15 @@ func (p *peer) setUnhealthyLocked(connUnhealthyFor int64) {
 	p.mu.peerStatus = peerStatusUnhealthy
 }
 
-func (p *peer) setInactiveLocked() {
+func (p *peer[Conn]) setInactiveLocked() {
 	if p.mu.peerStatus == peerStatusDeleted {
 		return
 	}
 	p.ConnectionHealthyFor.Update(0)
 	p.ConnectionUnhealthyFor.Update(0)
 	p.AvgRoundTripLatency.Update(0)
+	p.TCPRTT.Update(0)
+	p.TCPRTTVar.Update(0)
 
 	switch p.mu.peerStatus {
 	case peerStatusHealthy:
@@ -92,7 +96,7 @@ func (p *peer) setInactiveLocked() {
 	p.mu.peerStatus = peerStatusInactive
 }
 
-func (p *peer) releaseMetricsLocked() {
+func (p *peer[Conn]) releaseMetricsLocked() {
 	if p.mu.peerStatus == peerStatusDeleted {
 		return
 	}
@@ -118,13 +122,15 @@ func (p *peer) releaseMetricsLocked() {
 // of its surrounding rpc.Context and will no longer probe; see
 // (*peer).maybeDelete.
 // See (*peer).launch for details on the probe (heartbeat loop) itself.
-type peer struct {
+type peer[Conn rpcConn] struct {
 	peerMetrics
-	k                 peerKey
-	opts              *ContextOptions
-	heartbeatInterval time.Duration
-	heartbeatTimeout  time.Duration
-	dial              func(ctx context.Context, target string, class ConnectionClass) (*grpc.ClientConn, error)
+	k                  peerKey
+	opts               *ContextOptions
+	newHeartbeatClient heartbeatClientConstructor[Conn]
+	heartbeatInterval  time.Duration
+	heartbeatTimeout   time.Duration
+	connOptions        *ConnectionOptions[Conn]
+
 	// b maintains connection health. This breaker's async probe is always
 	// active - it is the heartbeat loop and manages `mu.c.` (including
 	// recreating it after the connection fails and has to be redialed).
@@ -137,18 +143,18 @@ type peer struct {
 		syncutil.Mutex
 		// Copies of PeerSnap may be leaked outside of lock, since the memory within
 		// is never mutated in place.
-		PeerSnap
+		PeerSnap[Conn]
 		peerStatus peerStatus
 	}
 	remoteClocks *RemoteClockMonitor
 	// NB: lock order: peers.mu then peers.mu.m[k].mu (but better to avoid
 	// overlapping critical sections)
-	peers *peerMap
+	peers *peerMap[Conn]
 }
 
 // PeerSnap is the state of a peer.
-type PeerSnap struct {
-	c *Connection // never nil, only mutated in the breaker probe
+type PeerSnap[Conn rpcConn] struct {
+	c *Connection[Conn] // never nil, only mutated in the breaker probe
 
 	// Timestamp of latest successful initial heartbeat on `c`. This
 	// is never cleared: it only ever moves forward. If the peer is
@@ -197,12 +203,26 @@ type PeerSnap struct {
 	// INVARIANT: deleted once => deleted forever
 	// INVARIANT: deleted      => deleteAfter > 0
 	deleted bool
+	// tcpConn is the raw TCP network connection when available.
+	//
+	// We store the *net.TCPConn rather than the raw file descriptor so that we
+	// can invoke syscall.RawConn.Control() on it, which guarantees an
+	// up-to-date file descriptor.
+	tcpConn *net.TCPConn
 }
 
-func (p *peer) snap() PeerSnap {
+func (p *peer[Conn]) snap() PeerSnap[Conn] {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return p.mu.PeerSnap
+}
+
+type peerOptions[Conn rpcConn] struct {
+	locality           roachpb.Locality
+	pm                 peerMetrics
+	newHeartbeatClient heartbeatClientConstructor[Conn]
+	connOptions        *ConnectionOptions[Conn]
+	peers              *peerMap[Conn]
 }
 
 // newPeer returns circuit breaker that trips when connection (associated
@@ -224,7 +244,7 @@ func (p *peer) snap() PeerSnap {
 // map, the next attempt to dial the node will start from a blank slate. In
 // other words, even with this theoretical race, the situation will sort itself
 // out quickly.
-func (rpcCtx *Context) newPeer(k peerKey, locality roachpb.Locality) *peer {
+func newPeer[Conn rpcConn](rpcCtx *Context, k peerKey, peerOpts *peerOptions[Conn]) *peer[Conn] {
 	// Initialization here is a bit circular. The peer holds the breaker. The
 	// breaker probe references the peer because it needs to replace the one-shot
 	// Connection when it makes a new connection in the probe. And (all but the
@@ -232,21 +252,17 @@ func (rpcCtx *Context) newPeer(k peerKey, locality roachpb.Locality) *peer {
 	// Connect method needs to do the short-circuiting (if a Connection is created
 	// while the breaker is tripped, we want to block in Connect only once we've
 	// seen the first heartbeat succeed).
-	pm, lm := rpcCtx.metrics.acquire(k, locality)
-	p := &peer{
-		peerMetrics:        pm,
+	p := &peer[Conn]{
+		peerMetrics:        peerOpts.pm,
 		logDisconnectEvery: log.Every(time.Minute),
 		k:                  k,
 		remoteClocks:       rpcCtx.RemoteClocks,
 		opts:               &rpcCtx.ContextOptions,
-		peers:              &rpcCtx.peers,
-		dial: func(ctx context.Context, target string, class ConnectionClass) (*grpc.ClientConn, error) {
-			additionalDialOpts := []grpc.DialOption{grpc.WithStatsHandler(&statsTracker{lm})}
-			additionalDialOpts = append(additionalDialOpts, rpcCtx.testingDialOpts...)
-			return rpcCtx.grpcDialRaw(ctx, target, class, additionalDialOpts...)
-		},
-		heartbeatInterval: rpcCtx.RPCHeartbeatInterval,
-		heartbeatTimeout:  rpcCtx.RPCHeartbeatTimeout,
+		peers:              peerOpts.peers,
+		connOptions:        peerOpts.connOptions,
+		newHeartbeatClient: peerOpts.newHeartbeatClient,
+		heartbeatInterval:  rpcCtx.RPCHeartbeatInterval,
+		heartbeatTimeout:   rpcCtx.RPCHeartbeatTimeout,
 	}
 	var b *circuit.Breaker
 
@@ -254,19 +270,21 @@ func (rpcCtx *Context) newPeer(k peerKey, locality roachpb.Locality) *peer {
 	b = circuit.NewBreaker(circuit.Options{
 		Name: "breaker", // log tags already represent `k`
 		AsyncProbe: func(report func(error), done func()) {
-			pprof.Do(ctx, pprof.Labels("tags", logtags.FromContext(ctx).String()), func(ctx context.Context) {
+			pprofutil.Do(ctx, func(ctx context.Context) {
 				p.launch(ctx, report, done)
-			})
+			},
+				workloadid.ProfileTag, workloadid.WORKLOAD_NAME_RPC_HEARTBEAT,
+				"tags", logtags.FromContext(ctx).String())
 		},
 	})
 	p.b = b
-	c := newConnectionToNodeID(k, b.Signal)
-	p.mu.PeerSnap = PeerSnap{c: c}
+	c := newConnectionToNodeID(p.opts, k, b.Signal, p.connOptions)
+	p.mu.PeerSnap = PeerSnap[Conn]{c: c}
 
 	return p
 }
 
-func (p *peer) breakerDisabled() bool {
+func (p *peer[Conn]) breakerDisabled() bool {
 	return !enableRPCCircuitBreakers.Get(&p.opts.Settings.SV)
 }
 
@@ -285,7 +303,7 @@ func (p *peer) breakerDisabled() bool {
 // an entry point into the code. In brief, if an unhealthy peer is suspected of
 // being obsolete, the probe only runs when the breaker is checked by a caller.
 // After a generous timeout, the peer is removed if still unhealthy.
-func (p *peer) launch(ctx context.Context, report func(error), done func()) {
+func (p *peer[Conn]) launch(ctx context.Context, report func(error), done func()) {
 	// Acquire mu just to show that we can, as the caller is supposed
 	// to not hold the lock.
 	p.mu.Lock()
@@ -307,7 +325,7 @@ func (p *peer) launch(ctx context.Context, report func(error), done func()) {
 //
 // INVARIANT: p.mu.c is a "fresh" connection (i.e. unresolved connFuture)
 // whenever `run` is invoked.
-func (p *peer) run(ctx context.Context, report func(error), done func()) {
+func (p *peer[Conn]) run(ctx context.Context, report func(error), done func()) {
 	var t timeutil.Timer
 	defer t.Stop()
 	defer done()
@@ -325,7 +343,6 @@ func (p *peer) run(ctx context.Context, report func(error), done func()) {
 			p.onQuiesce(report)
 			return
 		case <-t.C:
-			t.Read = true
 			// Retry every second. Note that if runHeartbeatUntilFailure takes >1, we'll
 			// retry immediately once it returns. This means that a connection breaking
 			// for the first time is usually followed by an immediate redial attempt.
@@ -361,7 +378,7 @@ func (p *peer) run(ctx context.Context, report func(error), done func()) {
 		func() {
 			p.mu.Lock()
 			defer p.mu.Unlock()
-			p.mu.c = newConnectionToNodeID(p.k, p.mu.c.breakerSignalFn)
+			p.mu.c = newConnectionToNodeID(p.opts, p.k, p.mu.c.breakerSignalFn, p.connOptions)
 		}()
 
 		if p.snap().deleteAfter != 0 {
@@ -373,8 +390,8 @@ func (p *peer) run(ctx context.Context, report func(error), done func()) {
 	}
 }
 
-func (p *peer) runOnce(ctx context.Context, report func(error)) error {
-	cc, err := p.dial(ctx, p.k.TargetAddr, p.k.Class)
+func (p *peer[Conn]) runOnce(ctx context.Context, report func(error)) error {
+	cc, err := p.connOptions.dial(ctx, p.k.TargetAddr, p.k.Class)
 	if err != nil {
 		return err
 	}
@@ -385,8 +402,7 @@ func (p *peer) runOnce(ctx context.Context, report func(error)) error {
 	// Set up notifications on a channel when gRPC tears down, so that we
 	// can trigger another instant heartbeat for expedited circuit breaker
 	// tripping.
-	connFailedCh := make(chan connectivity.State, 1)
-	launchConnStateWatcher(ctx, p.opts.Stopper, cc, connFailedCh)
+	connClosedCh := p.connOptions.newCloseNotifier(p.opts.Stopper, cc).CloseNotify(ctx)
 
 	if p.remoteClocks != nil {
 		p.remoteClocks.OnConnect(ctx, p.k.NodeID)
@@ -394,19 +410,26 @@ func (p *peer) runOnce(ctx context.Context, report func(error)) error {
 	}
 
 	if err := runSingleHeartbeat(
-		ctx, NewHeartbeatClient(cc), p.k, p.peerMetrics.roundTripLatency, nil /* no remote clocks */, p.opts, p.heartbeatTimeout, PingRequest_BLOCKING,
+		ctx,
+		p.newHeartbeatClient(cc),
+		p.k,
+		p.peerMetrics.roundTripLatency,
+		nil, /* no remote clocks */
+		p.opts,
+		p.heartbeatTimeout,
+		PingRequest_BLOCKING,
 	); err != nil {
 		return err
 	}
 
 	p.onInitialHeartbeatSucceeded(ctx, p.opts.Clock.Now(), cc, report)
 
-	return p.runHeartbeatUntilFailure(ctx, connFailedCh)
+	return p.runHeartbeatUntilFailure(ctx, connClosedCh)
 }
 
 func runSingleHeartbeat(
 	ctx context.Context,
-	heartbeatClient HeartbeatClient,
+	heartbeatClient RPCHeartbeatClient,
 	k peerKey,
 	roundTripLatency ewma.MovingAverage,
 	remoteClocks *RemoteClockMonitor, // nil if no RemoteClocks update should be made
@@ -494,7 +517,7 @@ func runSingleHeartbeat(
 	pingDuration, _, err := updateClockOffsetTracking(
 		ctx, remoteClocks, k.NodeID,
 		sendTime, timeutil.Unix(0, response.ServerTime), receiveTime,
-		opts.ToleratedOffset,
+		opts.ToleratedOffset, k.Class,
 	)
 	if err != nil {
 		if opts.FatalOnOffsetViolation {
@@ -511,8 +534,8 @@ func runSingleHeartbeat(
 // RPC connection, returning once a heartbeat fails. The ctx passed as argument
 // must be derived from rpcCtx.masterCtx, so that it respects the same
 // cancellation policy.
-func (p *peer) runHeartbeatUntilFailure(
-	ctx context.Context, connFailedCh <-chan connectivity.State,
+func (p *peer[Conn]) runHeartbeatUntilFailure(
+	ctx context.Context, connClosedCh <-chan struct{},
 ) error {
 	var heartbeatTimer timeutil.Timer
 	defer heartbeatTimer.Stop()
@@ -523,20 +546,19 @@ func (p *peer) runHeartbeatUntilFailure(
 	// If we get here, we know `connFuture` has been resolved (due to the
 	// initial heartbeat having succeeded), so we have a Conn() we can
 	// use.
-	heartbeatClient := NewHeartbeatClient(p.snap().c.connFuture.Conn())
+	heartbeatClient := p.newHeartbeatClient(p.snap().c.connFuture.Conn())
 
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err() // likely server shutdown
 		case <-heartbeatTimer.C:
-			heartbeatTimer.Read = true
-		case <-connFailedCh:
-			// gRPC has signaled that the connection is now failed, which implies that
-			// we will need to start a new connection (since we set things up that way
-			// using onlyOnceDialer). But we go through the motions and run the
-			// heartbeat so that there is a unified path that reports the error,
-			// in order to provide a good UX.
+		case <-connClosedCh:
+			// receive a signal that the rpc connection is now failed, which
+			// implies that we will need to start a new connection (since we
+			// set things up that way using onlyOnceDialer). But we go through
+			// the motions and run the heartbeat so that there is a unified
+			// path that reports the error, in order to provide a good UX.
 		}
 
 		if err := runSingleHeartbeat(
@@ -562,8 +584,8 @@ func logOnHealthy(ctx context.Context, disconnected, now time.Time) {
 	log.Health.InfofDepth(ctx, 1, "%s", buf)
 }
 
-func (p *peer) onInitialHeartbeatSucceeded(
-	ctx context.Context, now time.Time, cc *grpc.ClientConn, report func(err error),
+func (p *peer[Conn]) onInitialHeartbeatSucceeded(
+	ctx context.Context, now time.Time, cc Conn, report func(err error),
 ) {
 	// First heartbeat succeeded. By convention we update the breaker
 	// before updating the peer. The other way is fine too, just the
@@ -582,6 +604,11 @@ func (p *peer) onInitialHeartbeatSucceeded(
 	p.ConnectionHeartbeats.Inc(1)
 	// ConnectionFailures is not updated here.
 
+	// Bind the connection's stream pool to the active gRPC connection. Do this
+	// ahead of signaling the connFuture, so that the stream pool is ready for use
+	// by the time the connFuture is resolved.
+	p.mu.c.batchStreamPool.Bind(ctx, cc)
+
 	// Close the channel last which is helpful for unit tests that
 	// first waitOrDefault for a healthy conn to then check metrics.
 	p.mu.c.connFuture.Resolve(cc, nil /* err */)
@@ -589,11 +616,13 @@ func (p *peer) onInitialHeartbeatSucceeded(
 	logOnHealthy(ctx, p.mu.disconnected, now)
 }
 
-func (p *peer) onSubsequentHeartbeatSucceeded(_ context.Context, now time.Time) {
+func (p *peer[Conn]) onSubsequentHeartbeatSucceeded(_ context.Context, now time.Time) {
+	snap := p.snap()
+
 	// Gauge updates.
 	// ConnectionHealthy is already one.
 	// ConnectionUnhealthy is already zero.
-	p.ConnectionHealthyFor.Update(now.Sub(p.snap().connected).Nanoseconds() + 1) // add 1ns for unit tests w/ manual clock
+	p.ConnectionHealthyFor.Update(now.Sub(snap.connected).Nanoseconds() + 1) // add 1ns for unit tests w/ manual clock
 	// ConnectionInactive is already zero.
 	// ConnectionUnhealthyFor is already zero.
 	p.AvgRoundTripLatency.Update(int64(p.roundTripLatency.Value()) + 1) // add 1ns for unit tests w/ manual clock
@@ -601,13 +630,18 @@ func (p *peer) onSubsequentHeartbeatSucceeded(_ context.Context, now time.Time) 
 	// Counter updates.
 	p.ConnectionHeartbeats.Inc(1)
 	// ConnectionFailures is not updated here.
+
+	if rttInfo, ok := sysutil.GetRTTInfo(snap.tcpConn); ok {
+		p.TCPRTT.Update(rttInfo.RTT.Nanoseconds())
+		p.TCPRTTVar.Update(rttInfo.RTTVar.Nanoseconds())
+	}
 }
 
-func maybeLogOnFailedHeartbeat(
+func maybeLogOnFailedHeartbeat[Conn rpcConn](
 	ctx context.Context,
 	now time.Time,
 	err, prevErr error,
-	snap PeerSnap, // already accounting for `err`
+	snap PeerSnap[Conn], // already accounting for `err`
 	every *log.EveryN,
 ) {
 	if errors.Is(err, errQuiescing) {
@@ -665,7 +699,7 @@ func maybeLogOnFailedHeartbeat(
 	}
 }
 
-func (p *peer) onHeartbeatFailed(
+func (p *peer[Conn]) onHeartbeatFailed(
 	ctx context.Context, err error, now time.Time, report func(err error),
 ) {
 	prevErr := p.b.Signal().Err()
@@ -701,8 +735,13 @@ func (p *peer) onHeartbeatFailed(
 		// someone might be waiting on it in ConnectNoBreaker who is not paying
 		// attention to the circuit breaker.
 		err = &netutil.InitialHeartbeatFailedError{WrappedErr: err}
-		ls.c.connFuture.Resolve(nil /* cc */, err)
+		var nilConn Conn
+		ls.c.connFuture.Resolve(nilConn, err)
 	}
+
+	// Close down the stream pool that was bound to this connection.
+	ls.c.batchStreamPool.Close()
+
 	// By convention, we stick to updating breaker before updating peer
 	// to make it easier to write non-flaky tests.
 	report(err)
@@ -731,16 +770,17 @@ func (p *peer) onHeartbeatFailed(
 
 // onQuiesce is called when the probe exits or refuses to start due to
 // quiescing.
-func (p *peer) onQuiesce(report func(error)) {
+func (p *peer[Conn]) onQuiesce(report func(error)) {
+	var cc Conn
 	// Stopper quiescing, node shutting down.
 	report(errQuiescing)
 	// NB: it's important that connFuture is resolved, or a caller sitting on
 	// `c.ConnectNoBreaker` would never be unblocked; after all, the probe won't
 	// start again in the future.
-	p.snap().c.connFuture.Resolve(nil, errQuiescing)
+	p.snap().c.connFuture.Resolve(cc, errQuiescing)
 }
 
-func (p PeerSnap) deletable(now time.Time) bool {
+func (p PeerSnap[Conn]) deletable(now time.Time) bool {
 	if p.deleteAfter == 0 {
 		return false
 	}
@@ -755,7 +795,7 @@ func (p PeerSnap) deletable(now time.Time) bool {
 // In both cases, if such a conn exists that became healthy *after* ours became
 // unhealthy, `healthy` will be true. If no such conn exists, (false, false) is
 // returned.
-func hasSiblingConn(peers map[peerKey]*peer, self peerKey) (healthy, ok bool) {
+func hasSiblingConn[Conn rpcConn](peers map[peerKey]*peer[Conn], self peerKey) (healthy, ok bool) {
 	for other, otherPeer := range peers {
 		if self == other {
 			continue // exclude self
@@ -806,7 +846,7 @@ func hasSiblingConn(peers map[peerKey]*peer, self peerKey) (healthy, ok bool) {
 	return healthy, ok
 }
 
-func (peers *peerMap) shouldDeleteAfter(myKey peerKey, err error) time.Duration {
+func (peers *peerMap[Conn]) shouldDeleteAfter(myKey peerKey, err error) time.Duration {
 	peers.mu.RLock()
 	defer peers.mu.RUnlock()
 
@@ -842,7 +882,7 @@ func (peers *peerMap) shouldDeleteAfter(myKey peerKey, err error) time.Duration 
 	return deleteAfter
 }
 
-func touchOldPeers(peers *peerMap, now time.Time) {
+func touchOldPeers[Conn rpcConn](peers *peerMap[Conn], now time.Time) {
 	sigs := func() (sigs []circuit.Signal) {
 		peers.mu.RLock()
 		defer peers.mu.RUnlock()
@@ -867,7 +907,7 @@ func touchOldPeers(peers *peerMap, now time.Time) {
 	}
 }
 
-func (p *peer) maybeDelete(ctx context.Context, now time.Time) {
+func (p *peer[Conn]) maybeDelete(ctx context.Context, now time.Time) {
 	// If the peer can be deleted, delete it now.
 	//
 	// Also delete unconditionally if circuit breakers are (now) disabled. We want
@@ -901,29 +941,4 @@ func (p *peer) maybeDelete(ctx context.Context, now time.Time) {
 	defer p.mu.Unlock()
 	p.mu.deleted = true
 	p.releaseMetricsLocked()
-}
-
-func launchConnStateWatcher(
-	ctx context.Context, stopper *stop.Stopper, grpcConn *grpc.ClientConn, ch chan connectivity.State,
-) {
-	// The connection should be `Ready` now since we just used it for a
-	// heartbeat RPC. Any additional state transition indicates that we need
-	// to remove it, and we want to do so reactively. Unfortunately, gRPC
-	// forces us to spin up a separate goroutine for this purpose even
-	// though it internally uses a channel.
-	// Note also that the implementation of this in gRPC is clearly racy,
-	// so consider this somewhat best-effort.
-	_ = stopper.RunAsyncTask(ctx, "conn state watcher", func(ctx context.Context) {
-		st := connectivity.Ready
-		for {
-			if !grpcConn.WaitForStateChange(ctx, st) {
-				return
-			}
-			st = grpcConn.GetState()
-			if st == connectivity.TransientFailure || st == connectivity.Shutdown {
-				ch <- st
-				return
-			}
-		}
-	})
 }

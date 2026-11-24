@@ -7,21 +7,18 @@ package server
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/apiutil"
 	"github.com/cockroachdb/cockroach/pkg/server/authserver"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/srverrors"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -51,6 +48,7 @@ const (
 	MetadataNotStale JobStatusMessage = "Not enough time has elapsed since last job run"
 	JobRunning       JobStatusMessage = "Job is already running"
 	JobTriggered     JobStatusMessage = "Job triggered successfully"
+	JobUnclaimed     JobStatusMessage = "Job is unclaimed"
 )
 
 const (
@@ -136,10 +134,6 @@ func (a *apiV2Server) GetTableMetadata(w http.ResponseWriter, r *http.Request) {
 	// TODO (kyle): build http method handling directly into route registration
 	if r.Method != http.MethodGet {
 		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
-		return
-	}
-
-	if !checkVersion(ctx, w, a.sqlServer.execCfg.Settings) {
 		return
 	}
 
@@ -268,9 +262,6 @@ func (a *apiV2Server) GetTableMetadataWithDetails(w http.ResponseWriter, r *http
 	}
 
 	ctx := a.sqlServer.AnnotateCtx(r.Context())
-	if !checkVersion(ctx, w, a.sqlServer.execCfg.Settings) {
-		return
-	}
 	sqlUser := authserver.UserFromHTTPAuthInfoContext(ctx)
 	pathVars := mux.Vars(r)
 	tableId, err := strconv.Atoi(pathVars["table_id"])
@@ -290,7 +281,7 @@ func (a *apiV2Server) GetTableMetadataWithDetails(w http.ResponseWriter, r *http
 		return
 	}
 
-	createStatement, err := a.getTableCreateStatement(ctx, tmd.DbName, tmd.TableName)
+	createStatement, err := a.getTableCreateStatement(ctx, tmd.DbName, tmd.SchemaName, tmd.TableName)
 	if err != nil {
 		srverrors.APIV2InternalError(ctx, err, w)
 		return
@@ -325,17 +316,18 @@ func (a *apiV2Server) getTableMetadataForId(
 }
 
 func (a *apiV2Server) getTableCreateStatement(
-	ctx context.Context, dbName, tableName string,
+	ctx context.Context, dbName, schemaName, tableName string,
 ) (string, error) {
 	escTableName := tree.NameString(tableName)
+	escSchemaName := tree.NameString(schemaName)
 	escDbName := tree.NameString(dbName)
 	query := safesql.NewQuery()
-	query.Append(fmt.Sprintf(`SELECT create_statement FROM [SHOW CREATE TABLE %s.%s]`, escDbName, escTableName))
+	query.Append(fmt.Sprintf(`SELECT create_statement FROM [SHOW CREATE TABLE %s.%s.%s]`, escDbName, escSchemaName, escTableName))
 	row, types, err := a.sqlServer.internalExecutor.QueryRowExWithCols(ctx, "get-table-create-statement", nil,
 		sessiondata.NodeUserSessionDataOverride, query.String(), query.QueryArguments()...)
 	if err != nil {
 		statementError := fmt.Sprintf("Unable to retrieve create statement for %s.%s", escDbName, escTableName)
-		log.Warningf(ctx, "%v", errors.Wrapf(err, "%s", statementError))
+		log.Dev.Warningf(ctx, "%v", errors.Wrapf(err, "%s", statementError))
 		return statementError, nil
 	}
 	scanner := makeResultScanner(types)
@@ -456,14 +448,14 @@ func getTableMetadataBaseQuery(userName string) *safesql.Query {
   		tbm.table_id,
   		tbm.schema_name,
 			tbm.table_name,
-			tbm.replication_size_bytes, 
-			tbm.total_ranges, 
-			tbm.total_columns, 
-			tbm.total_indexes, 
+			tbm.replication_size_bytes,
+			tbm.total_ranges,
+			tbm.total_columns,
+			tbm.total_indexes,
 			tbm.perc_live_data,
 			tbm.total_live_data_bytes,
 			tbm.total_data_bytes,
-			tbm.store_ids, 
+			tbm.store_ids,
 			COALESCE((tbm.details->>'auto_stats_enabled')::BOOL, csc.auto_stats_enabled) as auto_stats_enabled,
 			parse_timestamp(tbm.details->>'stats_last_updated') as stats_last_updated,
 			COALESCE((tbm.details->>'replica_count')::INT, 0) as replica_count,
@@ -471,17 +463,37 @@ func getTableMetadataBaseQuery(userName string) *safesql.Query {
 			tbm.last_updated,
 			count(*) OVER() as total_row_count
 		FROM system.table_metadata tbm,
-		     (SELECT "sql.stats.automatic_collection.enabled" as auto_stats_enabled 
+		     (SELECT "sql.stats.automatic_collection.enabled" as auto_stats_enabled
 		  		FROM [SHOW CLUSTER SETTING sql.stats.automatic_collection.enabled]) csc
-		LEFT JOIN system.role_members rm ON rm.role = 'admin' AND member = $
-		WHERE (rm.role = 'admin' OR tbm.db_name IN (
+		WHERE (
+			$ = 'admin'
+			OR EXISTS (
+				SELECT 1
+				FROM system.role_members rm
+				WHERE rm.member = $
+					AND rm.role = 'admin'
+			)
+			OR tbm.db_name IN (
 	  			SELECT cdp.database_name
 	  			FROM "".crdb_internal.cluster_database_privileges cdp
-	  			WHERE (grantee = $ OR grantee = 'public')
-	  			AND privilege_type = 'CONNECT'
-	  		))
+	  			WHERE cdp.privilege_type = 'CONNECT'
+	  			AND (cdp.grantee = $ OR cdp.grantee = 'public'
+	  				OR cdp.grantee IN (
+	  					SELECT role FROM (
+	  						WITH RECURSIVE user_roles(role) AS (
+	  							SELECT role FROM system.role_members WHERE member = $:::STRING
+	  							UNION
+	  							SELECT rm.role FROM system.role_members rm
+	  							JOIN user_roles ur ON rm.member = ur.role
+	  						)
+	  						SELECT role FROM user_roles
+	  					)
+	  				)
+	  			)
+	  		)
+		)
 		AND tbm.table_type = 'TABLE'
-		`, userName, userName)
+		`, userName, userName, userName, userName)
 
 	return query
 }
@@ -611,9 +623,6 @@ func (a *apiV2Server) GetDbMetadata(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, http.StatusText(http.StatusMethodNotAllowed), http.StatusMethodNotAllowed)
 		return
 	}
-	if !checkVersion(ctx, w, a.sqlServer.execCfg.Settings) {
-		return
-	}
 	queryValues := r.URL.Query()
 
 	dbName := queryValues.Get(nameKey)
@@ -723,9 +732,6 @@ func (a *apiV2Server) GetDbMetadataWithDetails(w http.ResponseWriter, r *http.Re
 	}
 
 	ctx := a.sqlServer.AnnotateCtx(r.Context())
-	if !checkVersion(ctx, w, a.sqlServer.execCfg.Settings) {
-		return
-	}
 	sqlUser := authserver.UserFromHTTPAuthInfoContext(ctx)
 	pathVars := mux.Vars(r)
 	databaseId, err := strconv.Atoi(pathVars["database_id"])
@@ -862,8 +868,9 @@ func getDatabaseMetadataBaseQuery(userName string) *safesql.Query {
 
 	// Base query aggregates table metadata by db_id. It joins on a subquery which flattens
 	// and deduplicates all store ids for tables in a database into a single array. This query
-	// will only return databases that the provided sql user has CONNECT privileges to. If they
-	// are an admin, they have access to all databases.
+	// will only return databases that the provided sql user has CONNECT privileges to, either
+	// directly or through role membership. If they are an admin, they have access to all
+	// databases.
 	query.Append(`SELECT
 		n.id as db_id,
 		n.name as db_name,
@@ -873,22 +880,42 @@ func getDatabaseMetadataBaseQuery(userName string) *safesql.Query {
 		COALESCE(s.store_ids, ARRAY[]) as store_ids,
 		count(*) OVER() as total_row_count
 		FROM system.namespace n
-		LEFT JOIN  system.table_metadata tbm ON n.id = tbm.db_id
-		LEFT JOIN system.role_members rm ON rm.role = 'admin' AND member = $
+		LEFT JOIN system.table_metadata tbm ON n.id = tbm.db_id
 		LEFT JOIN (
 			SELECT db_id, array_agg(DISTINCT unnested_ids) as store_ids
 			FROM system.table_metadata, unnest(store_ids) as unnested_ids
 			GROUP BY db_id
 		) s ON s.db_id = tbm.db_id
-		WHERE (rm.role = 'admin' OR n.name IN (
-	  			SELECT cdp.database_name
-	  			FROM "".crdb_internal.cluster_database_privileges cdp
-	  			WHERE (grantee = $ OR grantee = 'public')
-	  			AND privilege_type = 'CONNECT'
-		))
+		WHERE (
+			$ = 'admin'
+			OR EXISTS (
+				SELECT 1
+				FROM system.role_members rm
+				WHERE rm.member = $
+					AND rm.role = 'admin'
+			)
+			OR n.name IN (
+				SELECT cdp.database_name
+				FROM "".crdb_internal.cluster_database_privileges AS cdp
+				WHERE cdp.privilege_type = 'CONNECT'
+				AND (cdp.grantee = $ OR cdp.grantee = 'public'
+					OR cdp.grantee IN (
+						SELECT role FROM (
+							WITH RECURSIVE user_roles(role) AS (
+								SELECT role FROM system.role_members WHERE member = $:::STRING
+								UNION
+								SELECT rm.role FROM system.role_members rm
+								JOIN user_roles ur ON rm.member = ur.role
+							)
+							SELECT role FROM user_roles
+						)
+					)
+				)
+			)
+		)
 		AND n."parentID" = 0
 		AND n."parentSchemaID" = 0
-`, userName, userName)
+`, userName, userName, userName, userName)
 
 	return query
 }
@@ -932,9 +959,6 @@ func rowToDatabaseMetadata(scanner resultScanner, row tree.Datums) (dbm dbMetada
 func (a *apiV2Server) TableMetadataJob(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	ctx = a.sqlServer.AnnotateCtx(ctx)
-	if !checkVersion(ctx, w, a.sqlServer.execCfg.Settings) {
-		return
-	}
 	sqlUser := authserver.UserFromHTTPAuthInfoContext(ctx)
 	authorized, err := a.updateTableMetadataJobAuthorized(ctx, sqlUser)
 	if err != nil {
@@ -1042,8 +1066,12 @@ func (a *apiV2Server) triggerTableMetadataUpdateJob(
 	if err != nil {
 		st, ok := status.FromError(err)
 		if ok {
-			if st.Code() == codes.Aborted {
+			switch st.Code() {
+			case codes.Aborted:
 				return tmJobTriggeredResponse{JobTriggered: false, Message: JobRunning}, nil
+			case codes.Unavailable:
+				return tmJobTriggeredResponse{JobTriggered: false, Message: JobUnclaimed}, nil
+			default:
 			}
 		}
 		return tmJobTriggeredResponse{}, err
@@ -1061,12 +1089,24 @@ func (a *apiV2Server) updateTableMetadataJobAuthorized(
 	FROM (
 	  SELECT 1 FROM system.role_members WHERE member = $ AND role = 'admin'
 		UNION
-		SELECT 1 
+		SELECT 1
 		FROM "".crdb_internal.cluster_database_privileges cdp
-	 	WHERE (cdp.grantee = $ OR cdp.grantee = 'public') 
-	 	AND cdp.privilege_type = 'CONNECT' 
+		WHERE cdp.privilege_type = 'CONNECT'
+		AND (cdp.grantee = $ OR cdp.grantee = 'public'
+			OR cdp.grantee IN (
+				SELECT role FROM (
+					WITH RECURSIVE user_roles(role) AS (
+						SELECT role FROM system.role_members WHERE member = $:::STRING
+						UNION
+						SELECT rm.role FROM system.role_members rm
+						JOIN user_roles ur ON rm.member = ur.role
+					)
+					SELECT role FROM user_roles
+				)
+			)
+		)
 	)
-`, sqlUserStr, sqlUserStr)
+`, sqlUserStr, sqlUserStr, sqlUserStr)
 
 	row, colTypes, err := a.sqlServer.internalExecutor.QueryRowExWithCols(
 		ctx, "check-updatejob-authorized", nil, /* txn */
@@ -1084,30 +1124,6 @@ func (a *apiV2Server) updateTableMetadataJobAuthorized(
 		return false, err
 	}
 	return count > 0, nil
-}
-
-func checkVersion(ctx context.Context, w http.ResponseWriter, settings *cluster.Settings) bool {
-	if !settings.Version.IsActive(context.TODO(), clusterversion.V24_3_AddTableMetadataCols) {
-		message := "This API is not accessible on this version of CockroachDB."
-		resp := versionConflictResponse{
-			Version: settings.Version.ActiveVersion(ctx).Version.String(),
-			Message: message,
-		}
-		b, err := json.Marshal(&resp)
-		if err != nil {
-			srverrors.APIV2InternalError(ctx, err, w)
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusConflict)
-		_, err = w.Write(b)
-		if err != nil {
-			log.Warningf(ctx, "HTTP short write: %v", err)
-		}
-		return false
-	}
-
-	return true
 }
 
 type PaginatedResponse[T any] struct {
@@ -1175,9 +1191,4 @@ type tableMetadataWithDetailsResponse struct {
 
 type dbMetadataWithDetailsResponse struct {
 	Metadata dbMetadata `json:"metadata"`
-}
-
-type versionConflictResponse struct {
-	Version string
-	Message string
 }

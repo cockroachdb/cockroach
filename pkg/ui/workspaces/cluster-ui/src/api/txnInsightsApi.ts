@@ -11,8 +11,9 @@ import {
   TransactionStatus,
   TxnInsightEvent,
 } from "src/insights";
+import { TimeScale, timeScaleRangeToObj } from "src/timeScaleDropdown";
 
-import { INTERNAL_APP_NAME_PREFIX } from "../util";
+import { INTERNAL_APP_NAME_PREFIX, useSwrWithClusterId } from "../util";
 
 import {
   executeInternalSql,
@@ -189,6 +190,30 @@ export type TxnInsightsRequest = {
   start?: moment.Moment;
   end?: moment.Moment;
 };
+
+export function useTxnInsights(timeScale: TimeScale) {
+  const shouldPoll = timeScale?.key !== "Custom";
+  return useSwrWithClusterId<SqlApiResponse<TxnInsightEvent[]>>(
+    timeScale
+      ? {
+          name: "txnInsights",
+          tsKey: timeScale.key,
+          tsEnd: timeScale.fixedWindowEnd
+            ? timeScale.fixedWindowEnd.toISOString()
+            : undefined,
+        }
+      : null,
+    () => {
+      const { start, end } = timeScaleRangeToObj(timeScale);
+      return getTxnInsightsApi({ start, end });
+    },
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+      refreshInterval: shouldPoll ? 10_000 : 0,
+    },
+  );
+}
 
 export async function getTxnInsightsApi(
   req?: TxnInsightsRequest,

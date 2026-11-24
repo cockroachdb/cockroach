@@ -28,6 +28,7 @@ import (
 )
 
 type alterSchemaNode struct {
+	zeroInputPlanNode
 	n    *tree.AlterSchema
 	db   *dbdesc.Mutable
 	desc *schemadesc.Mutable

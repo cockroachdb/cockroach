@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
-	"github.com/cockroachdb/cockroach/pkg/util/startup"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil/singleflight"
@@ -100,6 +99,8 @@ type serverController struct {
 
 	disableTLSForHTTP bool
 
+	insecure bool
+
 	mu struct {
 		syncutil.RWMutex
 
@@ -136,6 +137,7 @@ func newServerController(
 	watcher *tenantcapabilitieswatcher.Watcher,
 	disableSQLServer bool,
 	disableTLSForHTTP bool,
+	insecure bool,
 ) *serverController {
 	c := &serverController{
 		AmbientContext:      ambientCtx,
@@ -150,6 +152,7 @@ func newServerController(
 		drainCh:             make(chan struct{}),
 		disableSQLServer:    disableSQLServer,
 		disableTLSForHTTP:   disableTLSForHTTP,
+		insecure:            insecure,
 	}
 	c.orchestrator = newChannelOrchestrator(parentStopper, c)
 	c.mu.servers = map[roachpb.TenantName]*serverState{
@@ -168,21 +171,17 @@ func (s *serverController) SetDraining() {
 	}
 }
 
+func (s *serverController) IsDraining() bool {
+	return s.draining.Load()
+}
+
 // start monitors changes to the service mode and updates
 // the running servers accordingly.
-func (c *serverController) start(ctx context.Context, ie isql.Executor) error {
-	// If the SQL server is disabled there are no initial secondary tenants to
-	// start.
-	if !c.disableSQLServer {
-		// We perform one round of updates synchronously, to ensure that
-		// any tenants already in service mode SHARED get a chance to boot
-		// up before we signal readiness.
-		if err := c.startInitialSecondaryTenantServers(ctx, ie); err != nil {
-			return err
-		}
-	}
-
+func (c *serverController) start(ctx context.Context) error {
 	// Run the detection of which servers should be started or stopped.
+	// Secondary tenant servers are started asynchronously to avoid blocking
+	// the system tenant's startup if a tenant fails to initialize.
+	// See https://github.com/cockroachdb/cockroach/issues/96547.
 	return c.stopper.RunAsyncTask(ctx, "mark-tenant-services", func(ctx context.Context) {
 		// We receieve updates from the tenantcapabilities
 		// watcher, but we also refresh our state at a fixed
@@ -203,14 +202,13 @@ func (c *serverController) start(ctx context.Context, ie isql.Executor) error {
 		for {
 			allTenants, updateCh := c.watcher.GetAllTenants()
 			if err := c.startMissingServers(ctx, allTenants); err != nil {
-				log.Warningf(ctx, "cannot update running tenant services: %v", err)
+				log.Dev.Warningf(ctx, "cannot update running tenant services: %v", err)
 			}
 
 			timer.Reset(watchInterval)
 			select {
 			case <-updateCh:
 			case <-timer.C:
-				timer.Read = true
 			case <-c.stopper.ShouldQuiesce():
 				// Expedited server shutdown of outer server.
 				return
@@ -221,33 +219,6 @@ func (c *serverController) start(ctx context.Context, ie isql.Executor) error {
 			}
 		}
 	})
-}
-
-// startInitialSecondaryTenantServers starts the servers for secondary tenants
-// that should be started during server initialization.
-func (c *serverController) startInitialSecondaryTenantServers(
-	ctx context.Context, ie isql.Executor,
-) error {
-	// The list of tenants that should have a running server.
-	reqTenants, err := startup.RunIdempotentWithRetryEx(ctx,
-		c.stopper.ShouldQuiesce(),
-		"get expected running tenants",
-		func(ctx context.Context) ([]roachpb.TenantName, error) {
-			return c.getExpectedRunningTenants(ctx, ie)
-		})
-	if err != nil {
-		return err
-	}
-	for _, name := range reqTenants {
-		if name == catconstants.SystemTenantName {
-			// We already pre-initialize the entry for the system tenant.
-			continue
-		}
-		if _, err := c.startAndWaitForRunningServer(ctx, name); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func (c *serverController) startMissingServers(
@@ -270,7 +241,7 @@ func (c *serverController) startMissingServers(
 
 		name := t.Name
 		if _, ok := c.mu.servers[name]; !ok {
-			log.Infof(ctx, "tenant %q has changed service mode, should now start", name)
+			log.Dev.Infof(ctx, "tenant %q has changed service mode, should now start", name)
 			// Mark the server for async creation.
 			if _, err := c.createServerEntryLocked(ctx, name); err != nil {
 				return err
@@ -406,7 +377,7 @@ func (c *serverController) newServerForOrchestrator(
 // Close implements the stop.Closer interface.
 func (c *serverController) Close() {
 	ctx := c.AnnotateCtx(context.Background())
-	log.Infof(ctx, "server controller shutting down")
+	log.Dev.Infof(ctx, "server controller shutting down")
 	entries := c.getAllEntries()
 	// Request immediate shutdown. This is probably not needed; the
 	// server should already be sensitive to the parent stopper
@@ -415,7 +386,7 @@ func (c *serverController) Close() {
 		e.requestImmediateShutdown(ctx)
 	}
 
-	log.Infof(ctx, "waiting for tenant servers to report stopped")
+	log.Dev.Infof(ctx, "waiting for tenant servers to report stopped")
 	for _, e := range entries {
 		<-e.stopped()
 	}
@@ -434,7 +405,7 @@ func (c *serverController) drain(ctx context.Context) (stillRunning int) {
 		select {
 		case <-e.stopped():
 		default:
-			log.Infof(ctx, "server for tenant %q still running", e.nameContainer())
+			log.Dev.Infof(ctx, "server for tenant %q still running", e.nameContainer())
 			notStopped++
 		}
 	}

@@ -25,8 +25,8 @@ else
     echo "Confirmed that git branch is $GIT_BRANCH matches build branch $TC_BUILD_BRANCH"
 fi
 
-bazel build //pkg/cmd/bazci --config=ci
-BAZEL_BIN=$(bazel info bazel-bin --config=ci)
+bazel build //pkg/cmd/bazci
+BAZEL_BIN=$(bazel info bazel-bin)
 ARTIFACTS_DIR=/artifacts
 
 if [[ ! -z $(bazel query "attr(tags, \"integration\", $TARGET)") ]]

@@ -4,6 +4,7 @@ go_library(
     name = "physical",
     srcs = [
         "distribution.go",
+        "plangram.go",
         "provided.go",
         "required.go",
     ],
@@ -19,6 +20,7 @@ go_library(
         "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sqlerrors",
+        "@com_github_cockroachdb_errors//:errors",
     ],
 )
 
@@ -27,6 +29,7 @@ go_test(
     size = "small",
     srcs = [
         "distribution_test.go",
+        "plangram_test.go",
         "required_test.go",
     ],
     embed = [":physical"],
@@ -38,6 +41,7 @@ go_test(
         "//pkg/sql/opt/props",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "@com_github_stretchr_testify//require",
         "@in_gopkg_yaml_v2//:yaml_v2",
     ],
 )

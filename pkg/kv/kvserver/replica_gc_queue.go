@@ -7,18 +7,19 @@ package kvserver
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/errors"
 )
@@ -35,6 +36,13 @@ const (
 	// collection. See replicaIsSuspect() for details on what makes a replica
 	// suspect.
 	ReplicaGCQueueSuspectCheckInterval = 3 * time.Second
+
+	// replicaGCPurgatoryCheckInterval is the interval at which replicas in
+	// purgatory are retried. The primary use case is merged-away replicas
+	// waiting for their left neighbor to be GC'd first. Each retry involves a
+	// meta2 lookup, so keep the interval moderate to limit load when many
+	// replicas are pending (e.g. a chain of merges).
+	replicaGCPurgatoryCheckInterval = 5 * time.Second
 )
 
 // Priorities for the replica GC queue.
@@ -78,17 +86,51 @@ func makeReplicaGCQueueMetrics() ReplicaGCQueueMetrics {
 // ranges that have been rebalanced away from this store.
 type replicaGCQueue struct {
 	*baseQueue
-	metrics ReplicaGCQueueMetrics
-	db      *kv.DB
+	metrics  ReplicaGCQueueMetrics
+	db       *kv.DB
+	purgChan <-chan time.Time
 }
+
+// replicaGCDelayedDueToLeftNeighborError indicates that a replica GC attempt
+// could not proceed because the left neighbor's descriptor doesn't match meta2
+// (e.g. it hasn't learned about a merge or its own removal). The replica is
+// placed in purgatory for automatic retry.
+type replicaGCDelayedDueToLeftNeighborError struct {
+	cause error
+}
+
+var _ PurgatoryError = (*replicaGCDelayedDueToLeftNeighborError)(nil)
+var _ errors.SafeFormatter = (*replicaGCDelayedDueToLeftNeighborError)(nil)
+var _ fmt.Formatter = (*replicaGCDelayedDueToLeftNeighborError)(nil)
+var _ errors.Wrapper = (*replicaGCDelayedDueToLeftNeighborError)(nil)
+
+// SafeFormatError implements errors.SafeFormatter.
+func (e *replicaGCDelayedDueToLeftNeighborError) SafeFormatError(p errors.Printer) error {
+	p.Printf("replica GC delayed due to left neighbor: %s", e.cause)
+	return nil
+}
+
+// Format implements fmt.Formatter.
+func (e *replicaGCDelayedDueToLeftNeighborError) Format(s fmt.State, verb rune) {
+	errors.FormatError(e, s, verb)
+}
+
+// Error implements error.
+func (e *replicaGCDelayedDueToLeftNeighborError) Error() string { return fmt.Sprint(e) }
+
+// Unwrap implements errors.Wrapper.
+func (e *replicaGCDelayedDueToLeftNeighborError) Unwrap() error { return e.cause }
+
+func (*replicaGCDelayedDueToLeftNeighborError) PurgatoryErrorMarker() {}
 
 var _ queueImpl = &replicaGCQueue{}
 
 // newReplicaGCQueue returns a new instance of replicaGCQueue.
 func newReplicaGCQueue(store *Store, db *kv.DB) *replicaGCQueue {
 	rgcq := &replicaGCQueue{
-		metrics: makeReplicaGCQueueMetrics(),
-		db:      db,
+		metrics:  makeReplicaGCQueueMetrics(),
+		db:       db,
+		purgChan: time.NewTicker(replicaGCPurgatoryCheckInterval).C,
 	}
 	store.metrics.registry.AddMetricStruct(&rgcq.metrics)
 	rgcq.baseQueue = newBaseQueue(
@@ -101,9 +143,9 @@ func newReplicaGCQueue(store *Store, db *kv.DB) *replicaGCQueue {
 			processDestroyedReplicas: true,
 			successes:                store.metrics.ReplicaGCQueueSuccesses,
 			failures:                 store.metrics.ReplicaGCQueueFailures,
-			storeFailures:            store.metrics.StoreFailures,
 			pending:                  store.metrics.ReplicaGCQueuePending,
 			processingNanos:          store.metrics.ReplicaGCQueueProcessingNanos,
+			purgatory:                store.metrics.ReplicaGCQueuePurgatory,
 			disabledConfig:           kvserverbase.ReplicaGCQueueEnabled,
 		},
 	)
@@ -119,12 +161,20 @@ func newReplicaGCQueue(store *Store, db *kv.DB) *replicaGCQueue {
 func (rgcq *replicaGCQueue) shouldQueue(
 	ctx context.Context, now hlc.ClockTimestamp, repl *Replica, _ spanconfig.StoreReader,
 ) (shouldQueue bool, priority float64) {
+	// Merge-pending replicas should be GC'd promptly. The scanner now offers
+	// these to us; treat them with suspect priority so they bypass the 12-hour
+	// check interval. The local descriptor still shows this store as a member
+	// (since the merge was never applied locally), so the currentMember check
+	// below would otherwise gate us on the long interval.
+	if reason, err := repl.IsDestroyed(); err != nil && reason == destroyReasonMergePending {
+		return true, replicaGCPrioritySuspect
+	}
 	if _, currentMember := repl.Desc().GetReplicaDescriptor(repl.store.StoreID()); !currentMember {
 		return true, replicaGCPriorityRemoved
 	}
 	lastCheck, err := repl.GetLastReplicaGCTimestamp(ctx)
 	if err != nil {
-		log.Errorf(ctx, "could not read last replica GC timestamp: %+v", err)
+		log.KvDistribution.Errorf(ctx, "could not read last replica GC timestamp: %+v", err)
 		return false, 0
 	}
 	isSuspect := replicaIsSuspect(repl)
@@ -216,7 +266,7 @@ func replicaGCShouldQueueImpl(now, lastCheck hlc.Timestamp, isSuspect bool) (boo
 // process performs a consistent lookup on the range descriptor to see if we are
 // still a member of the range.
 func (rgcq *replicaGCQueue) process(
-	ctx context.Context, repl *Replica, _ spanconfig.StoreReader,
+	ctx context.Context, repl *Replica, _ spanconfig.StoreReader, _ float64,
 ) (processed bool, err error) {
 	// Note that the Replicas field of desc is probably out of date, so
 	// we should only use `desc` for its static fields like RangeID and
@@ -300,28 +350,17 @@ func (rgcq *replicaGCQueue) process(
 			// snapshot for *each* of them. This typically happens for the last
 			// range:
 			// [n1,replicaGC,s1,r33/1:/{Table/53/1/3…-Max}] removing replica [...]
-			log.Infof(ctx, "removing replica with pending split; will incur Raft snapshot for right hand side")
+			log.KvDistribution.Infof(ctx, "removing replica with pending split; will incur Raft snapshot for right hand side")
 		}
 
 		rgcq.metrics.RemoveReplicaCount.Inc(1)
 		log.VEventf(ctx, 1, "destroying local data")
 
 		nextReplicaID := replyDesc.NextReplicaID
-		// Note that this seems racy - we didn't hold any locks between reading
-		// the range descriptor above and deciding to remove the replica - but
-		// we pass in the NextReplicaID to detect situations in which the
-		// replica became "non-gc'able" in the meantime by checking (with raftMu
-		// held throughout) whether the replicaID is still smaller than the
-		// NextReplicaID. Given non-zero replica IDs don't change, this is only
-		// possible if we currently think we're processing a pre-emptive snapshot
-		// but discover in RemoveReplica that this range has since been added and
-		// knows that.
-		if err := repl.store.RemoveReplica(ctx, repl, nextReplicaID, RemoveOptions{
-			DestroyData: true,
-		}); err != nil {
-			// Should never get an error from RemoveReplica.
-			const format = "error during replicaGC: %v"
-			logcrash.ReportOrPanic(ctx, &repl.store.ClusterSettings().SV, format, err)
+		// NB: since we didn't hold any locks between reading the range descriptor
+		// above and deciding to remove the replica, it could have been removed
+		// concurrently. RemoveReplica gracefully returns nil in this case.
+		if err := repl.store.RemoveReplica(ctx, repl, nextReplicaID, "replica GC queue"); err != nil {
 			return false, err
 		}
 	} else {
@@ -350,19 +389,24 @@ func (rgcq *replicaGCQueue) process(
 			if leftReplyDesc := &rs[0]; !leftDesc.Equal(leftReplyDesc) {
 				log.VEventf(ctx, 1, "left neighbor %s not up-to-date with meta descriptor %s; cannot safely GC range yet",
 					leftDesc, leftReplyDesc)
-				// Chances are that the left replica needs to be GC'd. Since we don't
-				// have definitive proof, queue it with a low priority.
+				// The left neighbor hasn't caught up with meta yet (e.g. it hasn't
+				// learned about the merge or its own removal from the range). Queue
+				// it so it gets GC'd, and place ourselves in purgatory so we retry
+				// automatically once it's gone.
 				rgcq.AddAsync(ctx, leftRepl, replicaGCPriorityDefault)
-				return false, nil
+				return false, &replicaGCDelayedDueToLeftNeighborError{
+					cause: errors.Errorf("left neighbor %s not up-to-date with meta descriptor %s",
+						leftDesc, leftReplyDesc),
+				}
 			}
 		}
 
-		// A tombstone is written with a value of mergedTombstoneReplicaID because
+		// A tombstone is written with a value of MergedTombstoneReplicaID because
 		// we know the range to have been merged. See the Merge case of
 		// runPreApplyTriggers() for details.
-		if err := repl.store.RemoveReplica(ctx, repl, mergedTombstoneReplicaID, RemoveOptions{
-			DestroyData: true,
-		}); err != nil {
+		if err := repl.store.RemoveReplica(
+			ctx, repl, kvstorage.MergedTombstoneReplicaID, "dangling subsume via replica GC queue",
+		); err != nil {
 			return false, err
 		}
 	}
@@ -378,9 +422,8 @@ func (*replicaGCQueue) timer(_ time.Duration) time.Duration {
 	return replicaGCQueueTimerDuration
 }
 
-// purgatoryChan returns nil.
-func (*replicaGCQueue) purgatoryChan() <-chan time.Time {
-	return nil
+func (rgcq *replicaGCQueue) purgatoryChan() <-chan time.Time {
+	return rgcq.purgChan
 }
 
 func (*replicaGCQueue) updateChan() <-chan time.Time {

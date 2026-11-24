@@ -14,10 +14,13 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/apd/v3"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
@@ -37,6 +40,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
@@ -177,6 +182,19 @@ func (m colIdxMap) Swap(i, j int) {
 	m.ords[i], m.ords[j] = m.ords[j], m.ords[i]
 }
 
+// Get returns the ordinal for the given column ID, returning -1 if the column
+// ID is not in the map.
+func (m colIdxMap) Get(id descpb.ColumnID) int {
+	// Binary search for the column id.
+	idx := sort.Search(len(m.vals), func(i int) bool {
+		return m.vals[i] >= id
+	})
+	if idx < len(m.vals) && m.vals[idx] == id {
+		return m.ords[idx]
+	}
+	return -1
+}
+
 type cFetcherArgs struct {
 	// memoryLimit determines the maximum memory footprint of the output batch.
 	memoryLimit int64
@@ -202,6 +220,15 @@ type cFetcherArgs struct {
 	// the last one returned on the NextBatch calls if the caller wishes to keep
 	// multiple batches at the same time.
 	alwaysReallocate bool
+	// Txn is the txn for the fetch. It might be nil.
+	txn *kv.Txn
+
+	// tenantID is required in some places for AC/bookkeeping.
+	tenantID roachpb.TenantID
+	// workloadID is used for ASH sampling.
+	workloadID uint64
+	// workloadType distinguishes the kind of workload for ASH sampling.
+	workloadType workloadid.WorkloadType
 }
 
 // noOutputColumn is a sentinel value to denote that a system column is not
@@ -249,20 +276,23 @@ type cFetcher struct {
 	// stableKVs indicates whether the KVs returned by nextKVer are stable (i.e.
 	// are not invalidated) across NextKV() calls.
 	stableKVs bool
-	// bytesRead, kvPairsRead, and batchRequestsIssued store the total number of
-	// bytes read, key-values pairs read, and of BatchRequests issued,
-	// respectively, by this cFetcher throughout its lifetime in case when the
-	// underlying row.KVFetcher has already been closed and nil-ed out.
+	// bytesRead, kvPairsRead, kvCPUTime, localKVCPUTime, and
+	// batchRequestsIssued store the total number of bytes read, key-value
+	// pairs read, KV-server CPU time reported by BatchResponses, SQL goroutine
+	// CPU time spent inside KV calls (measured via grunning), and
+	// BatchRequests issued, respectively, by this cFetcher throughout its
+	// lifetime in case when the underlying row.KVFetcher has already been
+	// closed and nil-ed out.
 	//
 	// The fields should not be accessed directly by the users of the cFetcher -
-	// getBytesRead(), getKVPairsRead(), and getBatchRequestsIssued() should be
-	// used instead.
+	// getBytesRead(), getKVPairsRead(), getKVCPUTime(), getLocalKVCPUTime(),
+	// and getBatchRequestsIssued() should be used instead.
 	bytesRead           int64
 	kvPairsRead         int64
+	kvCPUTime           int64
+	localKVCPUTime      int64
 	batchRequestsIssued int64
-	// cpuStopWatch tracks the CPU time spent by this cFetcher while fulfilling KV
-	// requests *in the current goroutine*.
-	cpuStopWatch *timeutil.CPUStopWatch
+	pacer               *admission.Pacer
 
 	// machine contains fields that get updated during the run of the fetcher.
 	machine struct {
@@ -384,7 +414,7 @@ func (cf *cFetcher) Init(
 		return errors.AssertionFailedf("unsupported IndexFetchSpec version %d", tableArgs.spec.Version)
 	}
 	table := newCTableInfo()
-	nCols := tableArgs.ColIdxMap.Len()
+	nCols := len(tableArgs.spec.FetchedColumns)
 	if cap(table.orderedColIdxMap.vals) < nCols {
 		table.orderedColIdxMap.vals = make(descpb.ColumnIDs, 0, nCols)
 		table.orderedColIdxMap.ords = make([]int, 0, nCols)
@@ -392,7 +422,7 @@ func (cf *cFetcher) Init(
 	for i := range tableArgs.spec.FetchedColumns {
 		id := tableArgs.spec.FetchedColumns[i].ColumnID
 		table.orderedColIdxMap.vals = append(table.orderedColIdxMap.vals, id)
-		table.orderedColIdxMap.ords = append(table.orderedColIdxMap.ords, tableArgs.ColIdxMap.GetDefault(id))
+		table.orderedColIdxMap.ords = append(table.orderedColIdxMap.ords, i)
 	}
 	sort.Sort(table.orderedColIdxMap)
 	*table = cTableInfo{
@@ -440,6 +470,23 @@ func (cf *cFetcher) Init(
 		}
 	}
 
+	// Disable buffered writes if any system columns are needed that require
+	// MVCC decoding.
+	if cf.mvccDecodeStrategy == storage.MVCCDecodingRequired {
+		if cf.txn != nil && cf.txn.BufferedWritesEnabled() {
+			if cf.txn.Type() == kv.LeafTxn {
+				// We're only allowed to disable buffered writes on the RootTxn.
+				// If we have a LeafTxn, we'll return an assertion error instead
+				// of crashing.
+				//
+				// Note that we might have a LeafTxn with no buffered writes, in
+				// which case BufferedWritesEnabled() is false.
+				return errors.AssertionFailedf("got LeafTxn when MVCC decoding is required")
+			}
+			cf.txn.SetBufferedWritesEnabled(false /* enabled */)
+		}
+	}
+
 	fullColumns := table.spec.KeyFullColumns()
 
 	nIndexCols := len(fullColumns)
@@ -453,10 +500,9 @@ func (cf *cFetcher) Init(
 	needToDecodeDecimalKey := false
 	for i := range fullColumns {
 		col := &fullColumns[i]
-		colIdx, ok := tableArgs.ColIdxMap.Get(col.ColumnID)
-		if ok {
-			//gcassert:bce
-			indexColOrdinals[i] = colIdx
+		//gcassert:bce
+		indexColOrdinals[i] = table.orderedColIdxMap.Get(col.ColumnID)
+		if colIdx := indexColOrdinals[i]; colIdx >= 0 {
 			cf.mustDecodeIndexKey = true
 			needToDecodeDecimalKey = needToDecodeDecimalKey || tableArgs.spec.FetchedColumns[colIdx].Type.Family() == types.DecimalFamily
 			// A composite column might also have a value encoding which must be
@@ -466,9 +512,6 @@ func (cf *cFetcher) Init(
 			} else {
 				table.neededValueColsByIdx.Remove(colIdx)
 			}
-		} else {
-			//gcassert:bce
-			indexColOrdinals[i] = -1
 		}
 	}
 	if needToDecodeDecimalKey && cap(cf.scratch.decoding) < 64 {
@@ -485,8 +528,7 @@ func (cf *cFetcher) Init(
 		suffixCols := table.spec.KeySuffixColumns()
 		for i := range suffixCols {
 			id := suffixCols[i].ColumnID
-			colIdx, ok := tableArgs.ColIdxMap.Get(id)
-			if ok {
+			if colIdx := table.orderedColIdxMap.Get(id); colIdx >= 0 {
 				if suffixCols[i].IsComposite {
 					table.compositeIndexColOrdinals.Add(colIdx)
 					// Note: we account for these composite columns separately: we add
@@ -510,14 +552,8 @@ func (cf *cFetcher) Init(
 		extraValColOrdinals := table.extraValColOrdinals
 		_ = extraValColOrdinals[len(suffixCols)-1]
 		for i := range suffixCols {
-			idx, ok := tableArgs.ColIdxMap.Get(suffixCols[i].ColumnID)
-			if ok {
-				//gcassert:bce
-				extraValColOrdinals[i] = idx
-			} else {
-				//gcassert:bce
-				extraValColOrdinals[i] = -1
-			}
+			//gcassert:bce
+			extraValColOrdinals[i] = table.orderedColIdxMap.Get(suffixCols[i].ColumnID)
 		}
 	}
 
@@ -528,9 +564,21 @@ func (cf *cFetcher) Init(
 	}
 	cf.stableKVs = nextKVer.Init(cf.getFirstKeyOfRow)
 	cf.accountingHelper.Init(allocator, cf.memoryLimit, cf.table.typs, cf.alwaysReallocate)
-	if cf.cFetcherArgs.collectStats {
-		cf.cpuStopWatch = timeutil.NewCPUStopWatch()
+	if cf.txn != nil {
+		if pri := admissionpb.WorkPriority(cf.txn.AdmissionHeader().Priority); pri <= admissionpb.BulkNormalPri {
+			cf.pacer = cf.txn.DB().AdmissionPacerFactory.NewPacer(
+				50*time.Millisecond, // Request a realistic per-batch amount.
+				admission.WorkInfo{
+					TenantID:     cf.tenantID,
+					Priority:     pri,
+					CreateTime:   timeutil.Now().UnixNano(),
+					WorkloadID:   cf.workloadID,
+					WorkloadType: cf.workloadType,
+				},
+			)
+		}
 	}
+
 	cf.machine.state[0] = stateResetBatch
 	cf.machine.state[1] = stateInitFetch
 
@@ -575,15 +623,15 @@ func cFetcherFirstBatchLimit(limitHint rowinfra.RowLimit, maxKeysPerRow uint32) 
 func (cf *cFetcher) StartScan(
 	ctx context.Context,
 	spans roachpb.Spans,
-	limitBatches bool,
+	parallelize bool,
 	batchBytesLimit rowinfra.BytesLimit,
 	limitHint rowinfra.RowLimit,
 ) error {
 	if len(spans) == 0 {
 		return errors.AssertionFailedf("no spans")
 	}
-	if !limitBatches && batchBytesLimit != rowinfra.NoBytesLimit {
-		return errors.AssertionFailedf("batchBytesLimit set without limitBatches")
+	if parallelize && batchBytesLimit != rowinfra.NoBytesLimit {
+		return errors.AssertionFailedf("TargetBytes limit requested with parallelize=true")
 	}
 
 	firstBatchLimit := cFetcherFirstBatchLimit(limitHint, cf.table.spec.MaxKeysPerRow)
@@ -711,20 +759,27 @@ func (cf *cFetcher) setNextKV(kv roachpb.KeyValue) {
 // rows, the Batch.Length is 0.
 func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 	for {
+		// While Pace() is nil-safe, its contract does not require it be a total
+		// no-op when nil. We, however, are using its nil-ness specifically to
+		// reflect our prior determination of the scan's priority, so this call to
+		// Pace() should be explicitly conditional on Pacer's non-nilness.
+		if cf.pacer != nil {
+			if _, err := cf.pacer.Pace(ctx); err != nil {
+				return nil, err
+			}
+		}
 		if debugState {
-			log.Infof(ctx, "State %s", cf.machine.state[0])
+			log.Dev.Infof(ctx, "State %s", cf.machine.state[0])
 		}
 		switch cf.machine.state[0] {
 		case stateInvalid:
 			return nil, errors.AssertionFailedf("invalid fetcher state")
 		case stateInitFetch:
 			cf.machine.firstKeyOfRow = nil
-			cf.cpuStopWatch.Start()
 			// Here we ignore partialRow return parameter because it can only be
 			// true when moreKVs is false, in which case we have already
 			// finalized the last row and will emit the batch as is.
 			moreKVs, _, kv, err := cf.nextKVer.NextKV(ctx, cf.mvccDecodeStrategy)
-			cf.cpuStopWatch.Stop()
 			if err != nil {
 				return nil, convertFetchError(&cf.table.spec, err)
 			}
@@ -774,7 +829,7 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			var foundNull bool
 			if cf.mustDecodeIndexKey {
 				if debugState {
-					log.Infof(ctx, "decoding first key %s", cf.machine.nextKV.Key)
+					log.Dev.Infof(ctx, "decoding first key %s", cf.machine.nextKV.Key)
 				}
 				var (
 					key []byte
@@ -889,9 +944,7 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			cf.machine.state[0] = stateFetchNextKVWithUnfinishedRow
 
 		case stateFetchNextKVWithUnfinishedRow:
-			cf.cpuStopWatch.Start()
 			moreKVs, partialRow, kv, err := cf.nextKVer.NextKV(ctx, cf.mvccDecodeStrategy)
-			cf.cpuStopWatch.Stop()
 			if err != nil {
 				return nil, convertFetchError(&cf.table.spec, err)
 			}
@@ -912,7 +965,7 @@ func (cf *cFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 				continue
 			}
 			if debugState {
-				log.Infof(ctx, "decoding next key %s", kv.Key)
+				log.Dev.Infof(ctx, "decoding next key %s", kv.Key)
 			}
 
 			// TODO(yuzefovich): optimize this prefix check by skipping logical
@@ -1085,6 +1138,11 @@ func (cf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) 
 	if cf.traceKV {
 		defer func() {
 			if err == nil {
+				if cf.table.spec.MaxKeysPerRow > 1 {
+					// If the index has more than one column family, then
+					// include the column family ID.
+					prettyKey = fmt.Sprintf("%s:cf=%d", prettyKey, familyID)
+				}
 				log.VEventf(ctx, 2, "fetched: %s -> %s", prettyKey, prettyValue)
 			}
 		}()
@@ -1126,7 +1184,7 @@ func (cf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) 
 			if err != nil {
 				break
 			}
-			prettyKey, prettyValue, err = cf.processValueBytes(ctx, table, tupleBytes, prettyKey)
+			prettyKey, prettyValue, err = cf.processValueBytes(table, tupleBytes, prettyKey)
 
 		default:
 			// If familyID is 0, this is the row sentinel (in the legacy pre-family format),
@@ -1134,21 +1192,23 @@ func (cf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) 
 			if familyID == 0 {
 				break
 			}
-			// Find the default column ID for the family.
-			var defaultColumnID descpb.ColumnID
+			// Find the default column for the family.
+			var defaultColumnIdx int
+			found := false
 			for _, f := range table.spec.FamilyDefaultColumns {
 				if f.FamilyID == familyID {
-					defaultColumnID = f.DefaultColumnID
+					defaultColumnIdx = table.orderedColIdxMap.Get(f.DefaultColumnID)
+					found = true
 					break
 				}
 			}
-			if defaultColumnID == 0 {
+			if !found {
 				return scrub.WrapError(
 					scrub.IndexKeyDecodingError,
-					errors.AssertionFailedf("single entry value with no default column id"),
+					errors.AssertionFailedf("single entry value with no default column"),
 				)
 			}
-			prettyKey, prettyValue, err = cf.processValueSingle(ctx, table, defaultColumnID, prettyKey)
+			prettyKey, prettyValue, err = cf.processValueSingle(table, defaultColumnIdx, prettyKey)
 		}
 		if err != nil {
 			return scrub.WrapError(scrub.IndexValueDecodingError, err)
@@ -1198,9 +1258,7 @@ func (cf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) 
 		}
 
 		if len(valueBytes) > 0 {
-			prettyKey, prettyValue, err = cf.processValueBytes(
-				ctx, table, valueBytes, prettyKey,
-			)
+			prettyKey, prettyValue, err = cf.processValueBytes(table, valueBytes, prettyKey)
 			if err != nil {
 				return scrub.WrapError(scrub.IndexValueDecodingError, err)
 			}
@@ -1218,46 +1276,40 @@ func (cf *cFetcher) processValue(ctx context.Context, familyID descpb.FamilyID) 
 // value in cf.machine.colvecs accordingly.
 // The key is only used for logging.
 func (cf *cFetcher) processValueSingle(
-	ctx context.Context, table *cTableInfo, colID descpb.ColumnID, prettyKeyPrefix string,
+	table *cTableInfo, idx int, prettyKeyPrefix string,
 ) (prettyKey string, prettyValue string, err error) {
 	prettyKey = prettyKeyPrefix
 
-	if idx, ok := table.ColIdxMap.Get(colID); ok {
-		if cf.traceKV {
-			prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.spec.FetchedColumns[idx].Name)
-		}
-		val := cf.machine.nextKV.Value
-		if !val.IsPresent() {
-			return prettyKey, "", nil
-		}
-		typ := cf.table.spec.FetchedColumns[idx].Type
-		err := colencoding.UnmarshalColumnValueToCol(
-			&table.da, &cf.machine.colvecs, idx, cf.machine.rowIdx, typ, val,
-		)
-		if err != nil {
-			return "", "", err
-		}
-		cf.machine.remainingValueColsByIdx.Remove(idx)
-
-		if cf.traceKV {
-			prettyValue = cf.getDatumAt(idx, cf.machine.rowIdx).String()
-		}
-		if row.DebugRowFetch {
-			log.Infof(ctx, "Scan %s -> %v", cf.machine.nextKV.Key, "?")
-		}
+	if idx < 0 {
+		// No need to unmarshal the column value. Either the column was part of
+		// the index key or it isn't needed.
 		return prettyKey, prettyValue, nil
 	}
 
-	// No need to unmarshal the column value. Either the column was part of
-	// the index key or it isn't needed.
-	if row.DebugRowFetch {
-		log.Infof(ctx, "Scan %s -> [%d] (skipped)", cf.machine.nextKV.Key, colID)
+	if cf.traceKV {
+		prettyKey = fmt.Sprintf("%s/%s", prettyKey, table.spec.FetchedColumns[idx].Name)
+	}
+	val := cf.machine.nextKV.Value
+	if !val.IsPresent() {
+		return prettyKey, "", nil
+	}
+	typ := cf.table.spec.FetchedColumns[idx].Type
+	err = colencoding.UnmarshalColumnValueToCol(
+		&table.da, &cf.machine.colvecs, idx, cf.machine.rowIdx, typ, val,
+	)
+	if err != nil {
+		return "", "", err
+	}
+	cf.machine.remainingValueColsByIdx.Remove(idx)
+
+	if cf.traceKV {
+		prettyValue = cf.getDatumAt(idx, cf.machine.rowIdx).String()
 	}
 	return prettyKey, prettyValue, nil
 }
 
 func (cf *cFetcher) processValueBytes(
-	ctx context.Context, table *cTableInfo, valueBytes []byte, prettyKeyPrefix string,
+	table *cTableInfo, valueBytes []byte, prettyKeyPrefix string,
 ) (prettyKey string, prettyValue string, err error) {
 	prettyKey = prettyKeyPrefix
 	if cf.traceKV {
@@ -1274,7 +1326,7 @@ func (cf *cFetcher) processValueBytes(
 	cf.machine.remainingValueColsByIdx.UnionWith(cf.table.compositeIndexColOrdinals)
 
 	var (
-		colIDDiff      uint32
+		colIDDelta     uint32
 		lastColID      descpb.ColumnID
 		dataOffset     int
 		typ            encoding.Type
@@ -1286,11 +1338,11 @@ func (cf *cFetcher) processValueBytes(
 	// it's expensive to keep calling .Len() in the loop.
 	remainingValueCols := cf.machine.remainingValueColsByIdx.Len()
 	for len(valueBytes) > 0 && remainingValueCols > 0 {
-		_, dataOffset, colIDDiff, typ, err = encoding.DecodeValueTag(valueBytes)
+		_, dataOffset, colIDDelta, typ, err = encoding.DecodeValueTag(valueBytes)
 		if err != nil {
 			return "", "", err
 		}
-		colID := lastColID + descpb.ColumnID(colIDDiff)
+		colID := lastColID + descpb.ColumnID(colIDDelta)
 		lastColID = colID
 		vecIdx := -1
 		// Find the ordinal into table.cols for the column ID we just decoded,
@@ -1315,9 +1367,6 @@ func (cf *cFetcher) processValueBytes(
 				return "", "", err
 			}
 			valueBytes = valueBytes[len:]
-			if row.DebugRowFetch {
-				log.Infof(ctx, "Scan %s -> [%d] (skipped)", cf.machine.nextKV.Key, colID)
-			}
 			continue
 		}
 
@@ -1394,8 +1443,12 @@ func (cf *cFetcher) finalizeBatch() {
 // getCurrentColumnFamilyID returns the column family id of the key in
 // cf.machine.nextKV.Key.
 func (cf *cFetcher) getCurrentColumnFamilyID() (descpb.FamilyID, error) {
-	// If the table only has 1 column family, and its ID is 0, we know that the
+	// If the index only has 1 column family, and its ID is 0, we know that the
 	// key has to be the 0th column family.
+	// TODO(drewk): once we know all nodes are at least 26.2, we can perform this
+	// optimization whenever cf.table.spec.MaxKeysPerRow == 1, since at that point
+	// MaxFamilyID is always for the just index being scanned, not the whole
+	// table.
 	if cf.table.spec.MaxFamilyID == 0 {
 		return 0, nil
 	}
@@ -1439,6 +1492,26 @@ func (cf *cFetcher) getKVPairsRead() int64 {
 	return cf.kvPairsRead
 }
 
+// getKVCPUTime returns the CPU time as reported by KV BatchResponses processed
+// by the cFetcher throughout its lifetime so far.
+func (cf *cFetcher) getKVCPUTime() int64 {
+	if cf.fetcher != nil {
+		return cf.fetcher.GetKVCPUTime()
+	}
+	return cf.kvCPUTime
+}
+
+// getLocalKVCPUTime returns the SQL goroutine CPU time spent inside KV calls,
+// measured via grunning deltas around txn.Send. This is the portion of SQL
+// goroutine CPU that overlapped with KV work, not the CPU consumed on KV
+// servers (see getKVCPUTime for that).
+func (cf *cFetcher) getLocalKVCPUTime() int64 {
+	if cf.fetcher != nil {
+		return cf.fetcher.GetLocalKVCPUTime()
+	}
+	return cf.localKVCPUTime
+}
+
 // getBatchRequestsIssued returns the number of BatchRequests issued by the
 // cFetcher throughout its lifetime so far.
 func (cf *cFetcher) getBatchRequestsIssued() int64 {
@@ -1471,10 +1544,14 @@ func (cf *cFetcher) Release() {
 
 func (cf *cFetcher) Close(ctx context.Context) {
 	if cf != nil {
+		cf.pacer.Close()
+		cf.pacer = nil
 		cf.nextKVer = nil
 		if cf.fetcher != nil {
 			cf.bytesRead = cf.fetcher.GetBytesRead()
 			cf.kvPairsRead = cf.fetcher.GetKVPairsRead()
+			cf.kvCPUTime = cf.fetcher.GetKVCPUTime()
+			cf.localKVCPUTime = cf.fetcher.GetLocalKVCPUTime()
 			cf.batchRequestsIssued = cf.fetcher.GetBatchRequestsIssued()
 			cf.fetcher.Close(ctx)
 			cf.fetcher = nil

@@ -1,0 +1,20 @@
+// Copyright 2026 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+@import 'src/components/core/index.scss';
+
+.email-subscription-form {
+  display: flex;
+  flex-direction: row;
+
+  &__input {
+    margin-right: $spacing-smaller;
+    width: 258px;
+  }
+
+  &__submit-button {
+    min-width: 80px;
+  }
+}

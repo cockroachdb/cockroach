@@ -35,6 +35,7 @@ const (
 	testArgsFlag     = "test-args"
 	vModuleFlag      = "vmodule"
 	showDiffFlag     = "show-diff"
+	coverageFlag     = "coverage"
 )
 
 // List of bazel integration tests that will fail when running `dev test pkg/...`
@@ -63,7 +64,7 @@ pkg/kv/kvserver:kvserver_test) instead.`,
     dev test pkg/... -v
         Increase test verbosity. Shows bazel and go test process output.
 
-    dev test pkg/spanconfig/... pkg/ccl/spanconfigccl/...
+    dev test pkg/spanconfig/... pkg/ccl/kvccl/...
         Test multiple packages recursively
 
     dev test --race --count 250 ...
@@ -96,6 +97,12 @@ pkg/kv/kvserver:kvserver_test) instead.`,
 
     dev test pkg/server -- --test_env=COCKROACH_RANDOM_SEED=1234
         Run a test with a specified seed by passing the --test_env flag directly to bazel
+
+    Test-relevant environment variables:
+        COCKROACH_RANDOM_SEED=n                             Set a seed for the random number generator.
+        COCKROACH_TEST_TENANT=(shared|external|disabled)    Specify or disable randomized tenant testing.
+        COCKROACH_TEST_DRPC=(enabled|disabled)              Enable/Disable DRPC (gRPC replacement).
+        COCKROACH_FORCE_RUN_SKIPPED_TESTS=true              Ignore skip.UnderStress and friends.
 `,
 		Args: cobra.MinimumNArgs(0),
 		RunE: runE,
@@ -125,6 +132,7 @@ pkg/kv/kvserver:kvserver_test) instead.`,
 	testCmd.Flags().String(testArgsFlag, "", "additional arguments to pass to the go test binary")
 	testCmd.Flags().String(vModuleFlag, "", "comma-separated list of pattern=N settings for file-filtered logging")
 	testCmd.Flags().Bool(showDiffFlag, false, "generate a diff for expectation mismatches when possible")
+	testCmd.Flags().Bool(coverageFlag, false, "run tests with code coverage and produce an lcov report")
 	return testCmd
 }
 
@@ -168,26 +176,24 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 		count        = mustGetFlagInt(cmd, countFlag)
 		vModule      = mustGetFlagString(cmd, vModuleFlag)
 		showDiff     = mustGetFlagBool(cmd, showDiffFlag)
+		coverage     = mustGetFlagBool(cmd, coverageFlag)
 
 		// These are tests that require access to another directory for
 		// --rewrite. These can either be single directories or
 		// recursive directories ending in /...
 		extraRewritablePaths = []struct{ pkg, path string }{
-			{"pkg/ccl/logictestccl", "pkg/sql/logictest"},
-			{"pkg/ccl/logictestccl", "pkg/sql/opt/exec/execbuilder"},
 			{"pkg/ccl/schemachangerccl", "pkg/sql/schemachanger/testdata"},
 			{"pkg/sql/opt/memo", "pkg/sql/opt/testutils/opttester/testfixtures"},
 			{"pkg/sql/opt/norm", "pkg/sql/opt/testutils/opttester/testfixtures"},
 			{"pkg/sql/opt/xform", "pkg/sql/opt/testutils/opttester/testfixtures"},
 			{"pkg/sql/opt/exec/explain", "pkg/sql/opt/testutils/opttester/testfixtures"},
+			{"pkg/sql/sem/tree", "pkg/sql/sem/tree/testdata/pretty"},
 		}
 
 		logicTestPaths = []string{
 			"pkg/sql/logictest/tests",
-			"pkg/ccl/logictestccl/tests",
 			"pkg/sql/opt/exec/execbuilder/tests",
 			"pkg/sql/sqlitelogictest/tests",
-			"pkg/ccl/sqlitelogictestccl/tests",
 		}
 	)
 
@@ -210,6 +216,9 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	if stress && streamOutput {
 		return fmt.Errorf("cannot combine --%s and --%s", stressFlag, streamOutputFlag)
 	}
+	if coverage && stress {
+		return fmt.Errorf("cannot combine --%s and --%s", coverageFlag, stressFlag)
+	}
 
 	if rewrite {
 		ignoreCache = true
@@ -224,10 +233,12 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 
 	var args []string
 	var goTags []string
-	args = append(args, "test")
-	if numCPUs != 0 {
-		args = append(args, fmt.Sprintf("--local_cpu_resources=%d", numCPUs))
+	if coverage {
+		args = append(args, "coverage")
+	} else {
+		args = append(args, "test")
 	}
+	addCommonBazelArguments(&args)
 	if race {
 		args = append(args, "--config=race", "--test_sharding_strategy=disabled")
 	}
@@ -244,29 +255,15 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 			continue
 		}
 
-		pkg = strings.TrimPrefix(pkg, "//")
-		pkg = strings.TrimPrefix(pkg, "./")
-		pkg = strings.TrimRight(pkg, "/")
-
-		if !strings.HasPrefix(pkg, "pkg/") && !strings.HasPrefix(pkg, "pkg:") {
-			return fmt.Errorf("malformed package %q, expecting %q", pkg, "pkg/{...}")
-		}
-
-		if !strings.Contains(pkg, ":") && !strings.HasSuffix(pkg, "/...") {
-			pkg = fmt.Sprintf("%s:all", pkg)
-		}
-		// Filter out only test targets.
-		queryArgs := []string{"query", fmt.Sprintf("kind(.*_test, %s)", pkg)}
-		labelsBytes, err := d.exec.CommandContextSilent(ctx, "bazel", queryArgs...)
+		labels, err := d.getTestTargets(ctx, pkg)
 		if err != nil {
-			return fmt.Errorf("could not query for tests within %s: got error %w", pkg, err)
+			return err
 		}
-		labels := strings.TrimSpace(string(labelsBytes))
-		if labels == "" {
+		if len(labels) == 0 {
 			log.Printf("WARNING: no test targets were found matching %s", pkg)
 			continue
 		}
-		testTargets = append(testTargets, strings.Split(labels, "\n")...)
+		testTargets = append(testTargets, labels...)
 	}
 
 	for _, target := range testTargets {
@@ -290,6 +287,13 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 
 	args = append(args, testTargets...)
 	args = append(args, "--test_env=GOTRACEBACK=all")
+	if coverage {
+		args = append(args,
+			"--@io_bazel_rules_go//go/config:cover_format=lcov",
+			"--combined_report=lcov",
+			"--instrumentation_filter=//pkg/...",
+		)
+	}
 
 	if rewrite {
 		if stress {
@@ -388,9 +392,6 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 	args = append(args, d.getTestOutputArgs(verbose, showLogs, streamOutput)...)
 	args = append(args, additionalBazelArgs...)
 	logCommand("bazel", args...)
-	if stress {
-		d.warnAboutChangeInStressBehavior(timeout)
-	}
 
 	// Do not log --build_event_binary_file=... because it is not relevant to the actual call
 	// from the user perspective.
@@ -409,6 +410,18 @@ func (d *dev) test(cmd *cobra.Command, commandLine []string) error {
 			log.Printf("WARNING: the build succeeded but no tests were found.")
 			err = nil
 		}
+	}
+
+	if coverage && err == nil {
+		outputPath, pathErr := d.getBazelInfo(ctx, "output_path", nil)
+		if pathErr != nil {
+			return pathErr
+		}
+		lcovFile := filepath.Join(outputPath, "_coverage", "_coverage_report.dat")
+		log.Printf("Coverage report: %s", lcovFile)
+		log.Printf("To generate an HTML report, run:")
+		log.Printf("  genhtml --exclude 'external/*' %s -o coverage-html && open coverage-html/index.html", lcovFile)
+		log.Printf("Install genhtml via: brew install lcov")
 	}
 
 	return err
@@ -532,4 +545,33 @@ func (d *dev) determineAffectedTargets(ctx context.Context) ([]string, error) {
 		return nil, err
 	}
 	return strings.Split(strings.TrimSpace(string(tests)), "\n"), nil
+}
+
+// Given a named test target like pkg/cmd/dev, pkg/..., pkg/cmd/dev:dev_test,
+// etc., return the Bazel labels corresponding to the test target
+// (like //pkg/cmd/dev:dev_test).
+func (d *dev) getTestTargets(ctx context.Context, pkg string) ([]string, error) {
+	pkg = strings.TrimPrefix(pkg, "//")
+	pkg = strings.TrimPrefix(pkg, "./")
+	pkg = strings.TrimRight(pkg, "/")
+
+	if !strings.HasPrefix(pkg, "pkg/") && !strings.HasPrefix(pkg, "pkg:") {
+		return nil, fmt.Errorf("malformed package %q, expecting %q", pkg, "pkg/{...}")
+	}
+
+	if !strings.Contains(pkg, ":") && !strings.HasSuffix(pkg, "/...") {
+		pkg = fmt.Sprintf("%s:all", pkg)
+	}
+	// Filter out only test targets.
+	queryArgs := []string{"query", fmt.Sprintf("kind(.*_test, %s)", pkg)}
+	labelsBytes, err := d.exec.CommandContextSilent(ctx, "bazel", queryArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("could not query for tests within %s: got error %w", pkg, err)
+	}
+	labels := strings.TrimSpace(string(labelsBytes))
+	if labels == "" {
+		return nil, nil
+	}
+
+	return strings.Split(labels, "\n"), nil
 }

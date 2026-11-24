@@ -378,6 +378,48 @@ SELECT count(*) FROM (SELECT DISTINCT ON (x) x, y FROM xyz WHERE x = 1 ORDER BY 
 ----
 1
 
+#########################
+# DISTINCT with filters #
+#########################
+
+# Filter on a non-grouping column. The filter constrains which row is picked per
+# group, making the result deterministic: only rows with y=2 are available, so
+# groups x=1 and x=2 each produce exactly one output row.
+query II rowsort
+SELECT * FROM (SELECT DISTINCT ON (x) x, y FROM xyz) WHERE y = 2
+----
+1  2
+2  2
+
+# Filter on a grouping column.
+query II
+SELECT * FROM (SELECT DISTINCT ON (x) x, y FROM xyz) WHERE x = 2
+----
+2  2
+
+# Ordered DISTINCT ON: filter must NOT be evaluated before the DISTINCT ON,
+# since the ordering determines which row is picked. Verify the result is
+# correct.
+query II rowsort
+SELECT * FROM (SELECT DISTINCT ON (x) x, y FROM xyz ORDER BY x, y) WHERE y = 1
+----
+1  1
+4  1
+
+# Correlated EXISTS with a filter inside the DISTINCT ON that references a
+# grouping column and an outer column.
+query II rowsort
+SELECT x, y FROM xyz AS o WHERE EXISTS(
+    SELECT 1 FROM (SELECT DISTINCT ON (x) x FROM xyz AS i WHERE i.x > o.y)
+)
+----
+1  1
+1  1
+1  1
+1  2
+2  2
+4  1
+
 # Regression test for #90763. Ensure NULLS LAST works with DISTINCT ON.
 statement ok
 CREATE TABLE author (

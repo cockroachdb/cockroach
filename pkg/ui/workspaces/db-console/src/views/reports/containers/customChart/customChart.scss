@@ -1,0 +1,91 @@
+// Copyright 2026 The Cockroach Authors.
+//
+// Use of this software is governed by the CockroachDB Software License
+// included in the /LICENSE file.
+
+@import "styl/base/palette.scss";
+@import "src/components/core/index.scss";
+
+.metric-table-dropdown {
+  line-height: 17px;
+  padding: 6px 12px;
+  vertical-align: middle;
+  border-radius: 2px;
+  padding-right: 10px;
+  color: $body-color;
+
+  &:hover {
+    background-color: $colors--neutral-1;
+  }
+
+  &__title {
+    vertical-align: middle;
+    display: inline-block;
+  }
+
+  &__select {
+    display: inline-block;
+    vertical-align: middle;
+    white-space: nowrap;
+
+    &:hover {
+      background-color: $colors--neutral-1;
+    }
+
+    .Select-menu-outer {
+      margin-top: $spacing-base;
+    }
+  }
+
+  .Select-control {
+    width: 100% !important;
+  }
+
+  .Select-placeholder {
+    padding-left: 10px !important;
+  }
+}
+
+button.edit-button {
+  padding: 12px 24px;
+  margin: 0px 9px;
+  background-color: inherit;
+  text-transform: uppercase;
+  color: $link-color;
+  font-size: 14px;
+  letter-spacing: 2px;
+  border: 1px solid $button-border-color;
+  border-radius: 3px;
+  vertical-align: middle;
+  cursor: pointer;
+}
+
+.metric-edit-button {
+  &--add {
+    margin: 17px 9px;
+  }
+}
+
+.metric-table {
+  &__header {
+    background: white;
+    padding: 10px 20px;
+    font-family: $font-family--base;
+    font-size: 12px;
+    font-weight: bold;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    text-align: left;
+    color: $body-color;
+  }
+
+  &__cell {
+    text-align: center;
+  }
+}
+
+.custom-metric__chart-controls-container {
+  display: flex;
+  flex-direction: row;
+  margin-bottom: $spacing-medium;
+}

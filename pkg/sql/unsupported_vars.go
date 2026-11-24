@@ -8,6 +8,7 @@ package sql
 import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessionmutator"
 )
 
 // DummyVars contains a list of dummy vars we do not support that
@@ -20,7 +21,7 @@ var DummyVars = map[string]sessionVar{
 		func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().EnableSeqScan), nil
 		},
-		func(m sessionDataMutator, v bool) {
+		func(m sessionmutator.SessionDataMutator, v bool) {
 			m.SetEnableSeqScan(v)
 		},
 		func(sv *settings.Values) string { return "on" },
@@ -30,7 +31,7 @@ var DummyVars = map[string]sessionVar{
 		func(evalCtx *extendedEvalContext, _ *kv.Txn) (string, error) {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData().SynchronousCommit), nil
 		},
-		func(m sessionDataMutator, v bool) {
+		func(m sessionmutator.SessionDataMutator, v bool) {
 			m.SetSynchronousCommit(v)
 		},
 		func(sv *settings.Values) string { return "on" },
@@ -163,9 +164,9 @@ var UnsupportedVars = func(ss ...string) map[string]struct{} {
 	// "statement_timeout",
 	// "synchronize_seqscans",
 	// "synchronous_commit",
-	"tcp_keepalives_count",
-	"tcp_keepalives_idle",
-	"tcp_keepalives_interval",
+	// "tcp_keepalives_count",
+	// "tcp_keepalives_idle",
+	// "tcp_keepalives_interval",
 	"temp_buffers",
 	"temp_file_limit",
 	"temp_tablespaces",

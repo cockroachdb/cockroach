@@ -11,6 +11,7 @@ CREATE TABLE bits (
   FAMILY "primary" (a, b, c, d, rowid)
 )
 
+onlyif config schema-locked-disabled
 query TT colnames
 SHOW CREATE TABLE bits
 ----
@@ -22,7 +23,21 @@ bits        CREATE TABLE public.bits (
               d VARBIT(4) NULL,
               rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
               CONSTRAINT bits_pkey PRIMARY KEY (rowid ASC)
-            )
+            );
+
+skipif config schema-locked-disabled
+query TT colnames
+SHOW CREATE TABLE bits
+----
+table_name  create_statement
+bits        CREATE TABLE public.bits (
+              a BIT NULL,
+              b BIT(4) NULL,
+              c VARBIT NULL,
+              d VARBIT(4) NULL,
+              rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+              CONSTRAINT bits_pkey PRIMARY KEY (rowid ASC)
+            ) WITH (schema_locked = true);
 
 subtest bit_fixed1
 
@@ -153,8 +168,11 @@ SELECT x.b, ~x.b AS comp FROM bits x WHERE b IS NOT NULL
 0110  1001
 0011  1100
 
+statement count 17
+DELETE FROM bits
+
 statement ok
-DELETE FROM bits; INSERT INTO bits(c) VALUES (B'0'), (B'1')
+INSERT INTO bits(c) VALUES (B'0'), (B'1')
 
 query TT rowsort
 SELECT x.c, ~x.c AS comp FROM bits x
@@ -176,9 +194,11 @@ FROM bits x, bits y
 
 subtest bit_ordering
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE obits(x VARBIT);
- INSERT INTO obits(x) VALUES
+
+statement ok
+INSERT INTO obits(x) VALUES
  (B'0'),
  (B'1'),
  (B'0000'),
@@ -243,9 +263,11 @@ SELECT ARRAY[B'101011'] AS a, '{111001}'::VARBIT[] AS b
 a         b
 {101011}  {111001}
 
-statement ok
+statement disable-cf-mutator ok
 CREATE TABLE obitsa(x VARBIT(20)[]);
- INSERT INTO obitsa(x) VALUES
+
+statement ok
+INSERT INTO obitsa(x) VALUES
  (ARRAY[B'01', B'']),
  (ARRAY[B'01', B'0']),
  (ARRAY[B'01', B'1']),
@@ -262,6 +284,7 @@ CREATE TABLE obitsa(x VARBIT(20)[]);
  (ARRAY[B'01', B'01001001010101']),
  (ARRAY[B'01', B'11001001010101'])
 
+onlyif config schema-locked-disabled
 query T
 SELECT create_statement FROM [SHOW CREATE obitsa]
 ----
@@ -269,7 +292,17 @@ CREATE TABLE public.obitsa (
   x VARBIT(20)[] NULL,
   rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
   CONSTRAINT obitsa_pkey PRIMARY KEY (rowid ASC)
-)
+);
+
+skipif config schema-locked-disabled
+query T
+SELECT create_statement FROM [SHOW CREATE obitsa]
+----
+CREATE TABLE public.obitsa (
+  x VARBIT(20)[] NULL,
+  rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
+  CONSTRAINT obitsa_pkey PRIMARY KEY (rowid ASC)
+) WITH (schema_locked = true);
 
 # Check unindexed ordering.
 query T rowsort

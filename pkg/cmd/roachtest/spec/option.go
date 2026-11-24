@@ -5,24 +5,20 @@
 
 package spec
 
-import (
-	"time"
-
-	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
-)
+import "time"
 
 // Option for MakeClusterSpec.
 type Option func(spec *ClusterSpec)
 
-// Arch requests a specific CPU architecture.
+// Arch requests specific CPU architecture(s).
 //
 // Note that it is not guaranteed that this architecture will be used (e.g. if
 // the requested machine size isn't available in this architecture).
 //
 // TODO(radu): add a flag to indicate whether it's a preference or a requirement.
-func Arch(arch vm.CPUArch) Option {
+func Arch(as ArchSet) Option {
 	return func(spec *ClusterSpec) {
-		spec.Arch = arch
+		spec.CompatibleArchs = as
 	}
 }
 
@@ -57,6 +53,15 @@ func WorkloadNodeCPU(n int) Option {
 	}
 }
 
+// WorkloadRequiresDisk should be used if the workload nodes should have the
+// exact same disk configuration as the rest of the cluster. Otherwise, all
+// workload nodes only have a boot disk.
+func WorkloadRequiresDisk() Option {
+	return func(spec *ClusterSpec) {
+		spec.WorkloadRequiresDisk = true
+	}
+}
+
 // Mem requests nodes with low/standard/high ratio of memory per CPU.
 func Mem(level MemPerCPU) Option {
 	return func(spec *ClusterSpec) {
@@ -71,10 +76,19 @@ func VolumeSize(n int) Option {
 	}
 }
 
-// SSD is a node option which requests nodes with the specified number of SSDs.
-func SSD(n int) Option {
+// VolumeType sets the volume type.
+func VolumeType(volumeType string) Option {
 	return func(spec *ClusterSpec) {
-		spec.SSDs = n
+		spec.VolumeType = volumeType
+	}
+}
+
+// Disks sets the number of data disks per node. The disk type (local SSD vs
+// persistent disk) is determined by other options like PreferLocalSSD(),
+// DisableLocalSSD(), VolumeType(), or RandomizeVolumeType().
+func Disks(n int) Option {
+	return func(spec *ClusterSpec) {
+		spec.DiskCount = n
 	}
 }
 
@@ -169,8 +183,14 @@ func ReuseTagged(tag string) Option {
 	}
 }
 
-// PreferLocalSSD specifies that we use instance-local SSDs whenever possible
-// (depending on other constraints on machine type).
+// PreferLocalSSD specifies that we prefer instance-local SSDs whenever possible
+// (depending on other constraints on machine type). It is stronger than the
+// global --local-ssd default because it is a test-level preference, but it is
+// still not the same as VolumeType("local-ssd"): on GCE ARM64, non-benchmark
+// tests may keep C4A and fall back to a compatible remote disk when the selected
+// C4A shape has no compatible -lssd variant. Benchmarks preserve local SSD by
+// falling back to AMD64 in that case, whether local SSD came from this option or
+// from the global --local-ssd default.
 //
 // By default, a test cluster may or may not use a local SSD depending on
 // --local-ssd flag and machine type.
@@ -187,6 +207,25 @@ func PreferLocalSSD() Option {
 func DisableLocalSSD() Option {
 	return func(spec *ClusterSpec) {
 		spec.LocalSSD = LocalSSDDisable
+	}
+}
+
+// RandomizeVolumeType is an Option which randomly picks the volume type
+// to be used. Unless SSD is forced, the volume type is picked randomly
+// between the available types for a provider:
+//   - GCE: local-ssd, plus one machine-compatible remote disk type. When both
+//     pd-ssd and hyperdisk are available, keep only pd-ssd for now to avoid
+//     splitting roachperf benchmark history; reevaluate once those runs can
+//     compare storage types explicitly.
+//   - AWS: gp3, io2, local-ssd
+//   - Azure: premium-ssd, premium-ssd-v2, ultra-disk, local-ssd
+//   - IBM: 10iops-tier
+//
+// Note: this option has no effect if VolumeType is explicitly set
+// or PreferLocalSSD/DisableLocalSSD is used.
+func RandomizeVolumeType() Option {
+	return func(spec *ClusterSpec) {
+		spec.RandomizeVolumeType = true
 	}
 }
 
@@ -221,10 +260,18 @@ func SetFileSystem(fs fileSystemType) Option {
 // RandomlyUseZfs is an Option which randomly picks
 // the file system to be used, and sets it to zfs,
 // about 20% of the time.
-// Zfs is only picked if the cloud is gce.
 func RandomlyUseZfs() Option {
 	return func(spec *ClusterSpec) {
 		spec.RandomlyUseZfs = true
+	}
+}
+
+// RandomlyUseXfs is an Option which randomly picks
+// the file system to be used, and sets it to xfs,
+// about 20% of the time.
+func RandomlyUseXfs() Option {
+	return func(spec *ClusterSpec) {
+		spec.RandomlyUseXfs = true
 	}
 }
 
@@ -239,13 +286,6 @@ func GCEMachineType(machineType string) Option {
 func GCEMinCPUPlatform(platform string) Option {
 	return func(spec *ClusterSpec) {
 		spec.GCE.MinCPUPlatform = platform
-	}
-}
-
-// GCEVolumeType sets the volume type when the cluster is on GCE.
-func GCEVolumeType(volumeType string) Option {
-	return func(spec *ClusterSpec) {
-		spec.GCE.VolumeType = volumeType
 	}
 }
 
@@ -275,6 +315,14 @@ func AWSVolumeThroughput(throughput int) Option {
 	}
 }
 
+// AWSVolumeIOPS sets the provisioned IOPS for EBS volumes when the cluster is
+// on AWS.
+func AWSVolumeIOPS(iops int) Option {
+	return func(spec *ClusterSpec) {
+		spec.AWS.VolumeIOPS = iops
+	}
+}
+
 // AWSZones is a node option which requests Geo-distributed nodes; only applies
 // when the test runs on AWS.
 //
@@ -298,5 +346,38 @@ func AWSZones(zones string) Option {
 func AzureZones(zones string) Option {
 	return func(spec *ClusterSpec) {
 		spec.Azure.Zones = zones
+	}
+}
+
+// AzureVolumeIOPS sets the provisioned IOPS for ultra-disk volumes
+// when the cluster is on Azure.
+func AzureVolumeIOPS(iops int) Option {
+	return func(spec *ClusterSpec) {
+		spec.Azure.VolumeIOPS = iops
+	}
+}
+
+// IBMMachineType sets the machine (instance) type when the cluster is on IBM.
+func IBMMachineType(machineType string) Option {
+	return func(spec *ClusterSpec) {
+		spec.IBM.MachineType = machineType
+	}
+}
+
+// IBMVolumeIOPS sets the IOPS when the cluster is on IBM.
+func IBMVolumeIOPS(iops int) Option {
+	return func(spec *ClusterSpec) {
+		spec.IBM.VolumeIOPS = iops
+	}
+}
+
+// IBMZones is a node option which requests Geo-distributed nodes; only applies
+// when the test runs on IBM.
+//
+// Note that this overrides the --zones flag and is useful for tests that
+// require running on specific zones.
+func IBMZones(zones string) Option {
+	return func(spec *ClusterSpec) {
+		spec.IBM.Zones = zones
 	}
 }

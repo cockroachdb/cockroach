@@ -36,6 +36,16 @@ func MakeSetFromRawData(data []float32, dims int) Set {
 	}
 }
 
+// Clone performs a deep copy of the vector set. Changes to the original or
+// clone will not affect the other.
+func (vs *Set) Clone() Set {
+	return Set{
+		Dims:  vs.Dims,
+		Count: vs.Count,
+		Data:  slices.Clone(vs.Data),
+	}
+}
+
 // AsMatrix returns this set as a matrix, to be used with the num32 package.
 // NB: The underlying float32 slice is shared by the resulting matrix, so any
 // changes will affect both the vector set and matrix.
@@ -82,6 +92,31 @@ func (vs *Set) SplitAt(offset int) Set {
 	return other
 }
 
+// Slice returns a vector set that contains a subset of "count" vectors,
+// starting at the given offset.
+//
+// NOTE: Slice returns a set that references the same memory as this set.
+// Modifications to one set may be visible in the other set, so callers should
+// typically ensure that both sets are immutable after calling Slice.
+func (vs *Set) Slice(offset, count int) Set {
+	if offset > vs.Count {
+		panic(errors.AssertionFailedf(
+			"slice start %d cannot be greater than set size %d", offset, vs.Count))
+	}
+	if offset+count > vs.Count {
+		panic(errors.AssertionFailedf(
+			"slice end %d cannot be greater than set size %d", offset+count, vs.Count))
+	}
+
+	start := offset * vs.Dims
+	end := (offset + count) * vs.Dims
+	return Set{
+		Dims:  vs.Dims,
+		Count: count,
+		Data:  vs.Data[start:end:end],
+	}
+}
+
 // Add appends a new vector to the set.
 func (vs *Set) Add(v T) {
 	if vs.Dims != len(v) {
@@ -93,7 +128,7 @@ func (vs *Set) Add(v T) {
 }
 
 // AddSet appends all vectors from the given set to this set.
-func (vs *Set) AddSet(vectors *Set) {
+func (vs *Set) AddSet(vectors Set) {
 	if vs.Dims != vectors.Dims {
 		panic(errors.AssertionFailedf(
 			"cannot add vector set with %d dimensions to a set with %d dimensions",
@@ -180,4 +215,14 @@ func (vs *Set) Centroid(centroid T) T {
 	}
 	num32.Scale(1/float32(vs.Count), centroid)
 	return centroid
+}
+
+// Equal returns true if this set is equal to the other set. Two sets are equal
+// if they have the same number of dimensions, the same number of vectors, and
+// the same values in the same order.
+func (vs *Set) Equal(other *Set) bool {
+	if vs.Dims != other.Dims || vs.Count != other.Count {
+		return false
+	}
+	return slices.Equal(vs.Data, other.Data)
 }

@@ -12,6 +12,7 @@ import (
 	"sort"
 	"time"
 
+	rpgrafana "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/grafana"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/grafana"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
@@ -20,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/prometheus"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/maps"
 )
@@ -82,6 +84,30 @@ func registerMultiTenantFairness(r registry.Registry) {
 			maxOps:      1000,
 			query:       "UPSERT INTO kv(k, v)",
 		},
+		// Concurrency is set much higher than the non-cpu-time-token
+		// variants (3500 vs 250) to push CPU utilization into the range
+		// where admission control actively queues requests. Without
+		// sufficient load, AC never engages and the test wouldn't
+		// exercise fairness under queueing.
+		//
+		// TODO(joshimhoff): Do the non-cpu-time-token variants above
+		// actually saturate the KV node enough to trigger AC queueing?
+		// If not, they may not be testing what they claim. They also
+		// only log results rather than asserting on them, and neither
+		// does this cpu-time-token variant. The isolation tests in
+		// admission_control_multitenant_isolation.go do make hard
+		// assertions.
+		{
+			name:           "read-heavy/even/cpu-time-tokens",
+			concurrency:    func(int) int { return 3500 },
+			blockSize:      5,
+			readPercent:    95,
+			duration:       20 * time.Minute,
+			batch:          100,
+			maxOps:         100_000,
+			query:          "SELECT k, v FROM kv",
+			cpuTimeTokenAC: true,
+		},
 	}
 
 	for _, s := range specs {
@@ -102,20 +128,30 @@ func registerMultiTenantFairness(r registry.Registry) {
 }
 
 type multiTenantFairnessSpec struct {
-	name  string
-	query string // query for which we'll check statistics for
+	name string
 
-	readPercent int           // --read-percent
-	blockSize   int           // --min-block-bytes, --max-block-bytes
-	duration    time.Duration // --duration
-	concurrency func(int) int // --concurrency
-	batch       int           // --batch
-	maxOps      int           // --max-ops
+	readPercent    int           // --read-percent
+	blockSize      int           // --min-block-bytes, --max-block-bytes
+	duration       time.Duration // --duration
+	concurrency    func(int) int // --concurrency
+	batch          int           // --batch
+	maxOps         int           // --max-ops
+	cpuTimeTokenAC bool
+
+	query string // statement fingerprint to filter in statement_statistics
 }
 
 func runMultiTenantFairness(
 	ctx context.Context, t test.Test, c cluster.Cluster, s multiTenantFairnessSpec,
 ) {
+	annotatePhase := func(text string) {
+		if err := c.AddGrafanaAnnotation(
+			ctx, t.L(), rpgrafana.AddAnnotationRequest{Text: text},
+		); err != nil {
+			t.L().Printf("annotation error: %v", err)
+		}
+	}
+
 	crdbNode := c.Node(1)
 	if c.IsLocal() {
 		s.duration = 30 * time.Second
@@ -144,6 +180,9 @@ func runMultiTenantFairness(
 	promCfg.WithNodeExporter(crdbNode.InstallNodes())
 	promCfg.WithCluster(crdbNode.InstallNodes())
 	promCfg.WithGrafanaDashboardJSON(grafana.MultiTenantFairnessGrafanaJSON)
+	if s.cpuTimeTokenAC {
+		logCPUTimeTokenDashboardLink(t, c)
+	}
 
 	systemConn := c.Conn(ctx, t.L(), crdbNode[0])
 	defer systemConn.Close()
@@ -175,7 +214,7 @@ func runMultiTenantFairness(
 		node := virtualClusters[name]
 		c.StartServiceForVirtualCluster(
 			ctx, t.L(),
-			option.StartVirtualClusterOpts(name, node),
+			option.StartVirtualClusterOpts(name, node, option.NoBackupSchedule),
 			install.MakeClusterSettings(),
 		)
 
@@ -206,12 +245,17 @@ func runMultiTenantFairness(
 		c.Run(ctx, option.WithNodes(node), initKV)
 	}
 
-	t.L().Printf("setting up prometheus/grafana (<%s)", 2*time.Minute)
-	_, cleanupFunc := setupPrometheusForRoachtest(ctx, t, c, promCfg, nil)
-	defer cleanupFunc()
+	if s.cpuTimeTokenAC {
+		if _, err := systemConn.ExecContext(
+			ctx, `SET CLUSTER SETTING admission.cpu_time_tokens.enabled = true`,
+		); err != nil {
+			t.Fatalf("failed to enable cpu time tokens: %v", err)
+		}
+	}
 
 	t.L().Printf("loading per-tenant data (<%s)", 10*time.Minute)
-	m1 := c.NewMonitor(ctx, c.All())
+	annotatePhase("loading data")
+	m1 := c.NewDeprecatedMonitor(ctx, c.All())
 	for name, node := range virtualClusters {
 		pgurl := fmt.Sprintf("{pgurl:%d:%s}", node[0], name)
 		name := name
@@ -250,10 +294,13 @@ func runMultiTenantFairness(
 
 	waitDur := 2 * time.Minute
 	t.L().Printf("loaded data for all tenants, sleeping (<%s)", waitDur)
+	annotatePhase("data loaded")
 	time.Sleep(waitDur)
 
 	t.L().Printf("running virtual cluster workloads (<%s)", s.duration+time.Minute)
-	m2 := c.NewMonitor(ctx, crdbNode)
+	annotatePhase("running workloads")
+	workloadStart := timeutil.Now()
+	m2 := c.NewDeprecatedMonitor(ctx, crdbNode)
 	var n int
 	for name, node := range virtualClusters {
 		pgurl := fmt.Sprintf("{pgurl:%d:%s}", node[0], name)
@@ -272,6 +319,11 @@ func runMultiTenantFairness(
 				Flag("read-percent", s.readPercent).
 				Flag("concurrency", s.concurrency(n)).
 				Arg("%s", pgurl)
+			// With cpu-time-token AC the cluster runs near CPU capacity,
+			// so AC throttling may cause some workload errors.
+			if s.cpuTimeTokenAC {
+				cmd.Option("tolerate-errors")
+			}
 
 			if err := c.RunE(ctx, option.WithNodes(node), cmd.String()); err != nil {
 				return err
@@ -282,6 +334,11 @@ func runMultiTenantFairness(
 		})
 	}
 	m2.Wait()
+	workloadEnd := timeutil.Now()
+
+	if s.cpuTimeTokenAC {
+		verifyCPUUtilization(ctx, c, t, crdbNode, workloadStart, workloadEnd)
+	}
 
 	// Pull workload performance from crdb_internal.statement_statistics. We
 	// could alternatively get these from the workload itself but this was
@@ -299,7 +356,6 @@ func runMultiTenantFairness(
 		node := virtualClusters[name]
 
 		vcdb := c.Conn(ctx, t.L(), node[0], option.VirtualClusterName(name))
-		defer vcdb.Close()
 
 		_, err := vcdb.ExecContext(ctx, "USE kv")
 		// Retry once, since this can fail sometimes due the cluster running hot.
@@ -330,8 +386,8 @@ func runMultiTenantFairness(
 		} else {
 			t.Fatal("no query results")
 		}
-
 		require.NoError(t, rows.Err())
+		vcdb.Close()
 	}
 
 	failThreshold := .3
@@ -345,13 +401,17 @@ func runMultiTenantFairness(
 		// TODO(irfansharif): This is a weak assertion. Variation occurs when
 		// there are workload differences during periods where AC is not
 		// inducing any queuing. Remove?
+		// TODO(josh): Consider making this fail the test for cpu-time-token
+		// variants.
 		t.L().Printf("throughput not within expectations: %f > %f %v", maxThroughputDelta, failThreshold, throughput)
 	}
 
 	ok, maxLatencyDelta := floatsWithinPercentage(meanLatencies, failThreshold)
-	t.L().Printf("max-latency-delta=%d% mean-latency-per-tenant=%v\n", int(maxLatencyDelta*100), meanLatencies)
+	t.L().Printf("max-latency-delta=%d%% mean-latency-per-tenant=%v\n", int(maxLatencyDelta*100), meanLatencies)
 	if !ok {
 		// TODO(irfansharif): Same as above -- this is a weak assertion.
+		// TODO(josh): Consider only testing latency isolation from
+		// admission_control_multitenant_isolation.go.
 		t.L().Printf("latency not within expectations: %f > %f %v", maxLatencyDelta, failThreshold, meanLatencies)
 	}
 

@@ -196,16 +196,22 @@ func checkRecordingWithRedact(t T, rec tracingpb.Recording, expected string, red
 		// 	 After  |  [operation]
 		re = regexp.MustCompile(`: .*]`)
 		rec = string(re.ReplaceAll([]byte(rec), []byte("]")))
-		// 5. Change all tabs to four spaces.
+		// 5. Strip out goroutine IDs from operation lines.
+		//
+		// 	 Before |  "=== operation:foo gid:123 _verbose:‹1›"
+		// 	 After  |  "=== operation:foo _verbose:‹1›"
+		re = regexp.MustCompile(` gid:\d+`)
+		rec = string(re.ReplaceAll([]byte(rec), nil))
+		// 6. Change all tabs to four spaces.
 		rec = strings.ReplaceAll(rec, "\t", "    ")
-		// 6. Compute the outermost indentation.
+		// 7. Compute the outermost indentation.
 		indent := strings.Repeat(" ", len(rec)-len(strings.TrimLeft(rec, " ")))
-		// 7. Outdent each line by that amount.
+		// 8. Outdent each line by that amount.
 		var lines []string
 		for _, line := range strings.Split(rec, "\n") {
 			lines = append(lines, strings.TrimPrefix(line, indent))
 		}
-		// 8. Stitch everything together.
+		// 9. Stitch everything together.
 		return strings.Join(lines, "\n")
 	}
 

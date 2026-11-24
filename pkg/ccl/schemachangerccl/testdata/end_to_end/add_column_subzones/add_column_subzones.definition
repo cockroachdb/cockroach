@@ -1,0 +1,29 @@
+setup
+CREATE TABLE t (
+  k INT PRIMARY KEY,
+  V STRING
+);
+----
+
+stage-exec phase=PostCommitPhase stage=:
+INSERT INTO t VALUES ($stageKey);
+INSERT INTO t VALUES ($stageKey * -1);
+DELETE FROM t WHERE k = $stageKey;
+----
+
+stage-query phase=PostCommitPhase stage=:
+SELECT (
+    SELECT count(DISTINCT (subzone->>'indexId')::INT)
+    FROM jsonb_array_elements(crdb_internal.pb_to_json('cockroach.config.zonepb.ZoneConfig',config)->'subzones') AS subzone
+    WHERE (subzone->>'indexId')::INT IN (1, 2, 3)
+) = 3
+FROM system.zones
+WHERE id = 't'::regclass::oid;
+----
+true
+
+test
+ALTER INDEX t@t_pkey CONFIGURE ZONE USING gc.ttlseconds = 1;
+ALTER TABLE t CONFIGURE ZONE USING gc.ttlseconds = 1;
+ALTER TABLE t ADD COLUMN w TEXT NOT NULL DEFAULT 's';
+----

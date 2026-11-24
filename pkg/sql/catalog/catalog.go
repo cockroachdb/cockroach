@@ -13,6 +13,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
+// DescriptorRewriteFn maps an old descriptor ID to a new one. It is called by
+// MutableDescriptor.Rewrite for every ID reference within a descriptor.
+type DescriptorRewriteFn func(id descpb.ID) (newID descpb.ID, err error)
+
 // MutableDescriptor represents a descriptor undergoing in-memory mutations
 // as part of a schema change.
 type MutableDescriptor interface {
@@ -47,6 +51,14 @@ type MutableDescriptor interface {
 	// SetDeclarativeSchemaChangerState sets the state of the declarative
 	// schema change currently operating on this descriptor.
 	SetDeclarativeSchemaChangerState(*scpb.DescriptorState)
+
+	// Rewrite visits all descriptor ID references within the descriptor
+	// and remaps them using the provided DescriptorRewriteFn callback.
+	// Rewrite mutates the descriptor so it appears as a new descriptor
+	// (e.g. resetting the version). It should be called only for descriptors
+	// that are being ingested into a cluster, not rewriting an existing
+	// descriptor in place.
+	Rewrite(rewriter DescriptorRewriteFn) error
 }
 
 // VirtualSchemas is a collection of VirtualSchemas.

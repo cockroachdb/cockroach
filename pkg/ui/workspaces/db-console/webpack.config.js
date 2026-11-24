@@ -36,9 +36,11 @@ module.exports = (env, argv) => {
   }
 
   let plugins = [
-    new CopyWebpackPlugin([
-      { from: path.resolve(__dirname, "favicon.ico"), to: "favicon.ico" },
-    ]),
+    new CopyWebpackPlugin({
+      patterns: [
+        { from: path.resolve(__dirname, "favicon.ico"), to: "favicon.ico" },
+      ],
+    }),
     // use WebpackBar instead of webpack dashboard to fit multiple webpack dev server outputs (db-console and cluster-ui)
     new WebpackBar({
       name: "db-console",
@@ -47,14 +49,20 @@ module.exports = (env, argv) => {
       profile: true,
     }),
 
-    // Use MomentTimezoneDataPlugin to remove timezone data that we don't need.
+    // Use MomentTimezoneDataPlugin to include all timezone data
     new MomentTimezoneDataPlugin({
-      matchZones: ["Etc/UTC", "America/New_York"],
       startYear: 2021,
       endYear: currentYear + 10,
       // We have to tell the plugin where to store the pruned file
       // otherwise webpack can't find it.
       cacheDir: path.resolve(__dirname, "timezones"),
+    }),
+
+    // Webpack 5 no longer provides Node.js polyfills automatically.
+    // Provide Buffer and process globals for libraries that expect them.
+    new webpack.ProvidePlugin({
+      Buffer: ["buffer", "Buffer"],
+      process: "process/browser",
     }),
   ];
 
@@ -66,24 +74,45 @@ module.exports = (env, argv) => {
   ];
 
   const config = {
+    devtool: "cheap-source-map",
     context: __dirname,
     entry: [ "./src/index.tsx"],
     output: {
       filename: "bundle.js",
       path: path.resolve(env.output || `../../dist${env.dist}`, "assets"),
     },
-
     mode: argv.mode || "production",
 
     resolve: {
       // Add resolvable extensions.
-      extensions: [".ts", ".tsx", ".js", ".json", ".styl", ".css"],
+      extensions: [".ts", ".tsx", ".js", ".json", ".scss", ".css"],
       modules: modules,
       alias: {
         oss: __dirname,
         ccl: path.resolve(__dirname, "ccl"),
         "src/js/protos": "@cockroachlabs/crdb-protobuf-client",
         "ccl/src/js/protos": "@cockroachlabs/crdb-protobuf-client-ccl",
+        // Webpack 5 doesn't polyfill Node.js built-ins automatically.
+        // Some packages import these subpaths explicitly.
+        "process/browser": require.resolve("process/browser"),
+      },
+      // Webpack 5 no longer auto-polyfills Node.js built-ins
+      fallback: {
+        "path": require.resolve("path-browserify"),
+        "fs": false,
+        "buffer": require.resolve("buffer/"),
+        "stream": require.resolve("stream-browserify"),
+        "assert": require.resolve("assert/"),
+        "crypto": false,
+        "util": require.resolve("util/"),
+        "events": require.resolve("events/"),
+        "process": require.resolve("process/browser"),
+        "string_decoder": require.resolve("string_decoder/"),
+        "http": false,
+        "https": false,
+        "os": false,
+        "url": false,
+        "vm": false,
       },
     },
 
@@ -121,9 +150,8 @@ module.exports = (env, argv) => {
           test: /\.less$/,
         },
         {
-          test: /\.module\.styl$/,
+          test: /\.module\.scss$/,
           use: [
-            "cache-loader",
             "style-loader",
             {
               loader: "css-loader",
@@ -133,39 +161,35 @@ module.exports = (env, argv) => {
                 },
               },
             },
-            {
-              loader: "stylus-loader",
-              options: {
-                use: [require("nib")()],
-              },
-            },
+            "sass-loader",
           ],
         },
         {
-          test: /(?<!\.module)\.styl$/,
+          test: /(?<!\.module)\.scss$/,
           use: [
-            "cache-loader",
             "style-loader",
             "css-loader",
-            {
-              loader: "stylus-loader",
-              options: {
-                use: [require("nib")()],
-              },
-            },
+            "sass-loader",
           ],
         },
         {
           test: /\.(png|jpg|gif|svg|eot|ttf|woff|woff2)$/,
-          loader: "url-loader",
-          options: {
-            limit: 10000,
+          type: "asset",
+          parser: {
+            dataUrlCondition: {
+              maxSize: 10 * 1024, // 10kb
+            },
+          },
+          generator: {
             // Preserve the original filename instead of using hash
             // in order to play nice with bazel.
-            name: "[name].[ext]",
+            filename: "[name][ext]",
           },
         },
-        { test: /\.html$/, loader: "file-loader" },
+        {
+          test: /\.html$/,
+          type: "asset/resource",
+        },
         {
           test: /\.js$/,
           include: localRoots,
@@ -234,17 +258,25 @@ module.exports = (env, argv) => {
     stats: "errors-only",
 
     devServer: {
-      contentBase: path.join(__dirname, `dist${env.dist}`),
-      index: "",
-      proxy: {
-        "/": {
+      static: {
+        directory: path.join(__dirname, `dist${env.dist}`),
+      },
+      client: {
+        overlay: false,
+      },
+      devMiddleware: {
+        index: false,
+      },
+      proxy: [
+        {
+          context: ["/"],
           secure: false,
           target: env.target || process.env.TARGET,
           headers: {
             "CRDB-Development": "true",
           },
         },
-      },
+      ],
     },
 
     watchOptions: {
@@ -273,7 +305,7 @@ module.exports = (env, argv) => {
       loader: StringReplacePlugin.replace({
         replacements: [
           {
-            pattern: /import rootSaga from ".\/sagas";/gi, // match last 'import' expression in module.
+            pattern: /import { DataFromServer } from "src\/util\/dataFromServer";/gi, // match last 'import' expression in module.
             replacement: function(match, p) {
               return `${match}\nimport { fakeMetricsDataGenerationMiddleware } from "src/test-utils/fakeMetricsDataGenerationMiddleware";`;
             },

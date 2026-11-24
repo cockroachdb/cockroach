@@ -20,6 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflagcfg"
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
+	"github.com/cockroachdb/cockroach/pkg/internal/codeowners"
+	"github.com/cockroachdb/cockroach/pkg/internal/metricscan"
+	"github.com/cockroachdb/cockroach/pkg/internal/reporoot"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -33,9 +36,40 @@ import (
 	slugify "github.com/mozillazg/go-slugify"
 	"github.com/spf13/cobra"
 	"github.com/spf13/cobra/doc"
+	"gopkg.in/yaml.v2"
 )
 
+type MetricInfo struct {
+	Name         string `yaml:"name"`
+	ExportedName string `yaml:"exported_name"`
+	LabeledName  string `yaml:"labeled_name,omitempty"`
+	Description  string `yaml:"description"`
+	YAxisLabel   string `yaml:"y_axis_label"`
+	Type         string `yaml:"type"`
+	Unit         string `yaml:"unit"`
+	Aggregation  string `yaml:"aggregation"`
+	Derivative   string `yaml:"derivative"`
+	HowToUse     string `yaml:"how_to_use,omitempty"`
+	Visibility   string `yaml:"visibility,omitempty"`
+	Owner        string `yaml:"owner,omitempty"`
+}
+
+type Category struct {
+	Name    string
+	Metrics []MetricInfo
+}
+
+type Layer struct {
+	Name       string
+	Categories []Category
+}
+
+type YAMLOutput struct {
+	Layers []*Layer
+}
+
 var manPath string
+var metricOwnersFile string
 
 var genManCmd = &cobra.Command{
 	Use:   "man",
@@ -146,6 +180,16 @@ var showSettingClass bool
 var classHeaderLabel string
 var classLabels []string
 
+// vCPUDependentClusterSettings contains all cluster settings which have default
+// values computed based on the number of vCPUs.
+var vCPUDependentClusterSettings = map[settings.InternalKey]struct{}{
+	"kv.dist_sender.concurrency_limit":                 {},
+	"kv.streamer.concurrency_limit":                    {},
+	"sql.distsql.num_runners":                          {},
+	"sql.distsql.parallelize_checks.concurrency_limit": {},
+	"sql.stats.automatic_full_concurrency_limit":       {},
+}
+
 var genSettingsListCmd = &cobra.Command{
 	Use:   "settings-list",
 	Short: "output a list of available cluster settings",
@@ -205,6 +249,10 @@ Output the list of cluster settings known to this binary.
 				defaultVal = setting.String(&s.SV)
 				if override, ok := upgrades.SettingsDefaultOverrides[key]; ok {
 					defaultVal = override
+				} else if _, ok := vCPUDependentClusterSettings[key]; ok {
+					// These cluster settings are special, so we hard-code
+					// a custom default value.
+					defaultVal = "See description."
 				}
 			}
 
@@ -268,99 +316,30 @@ var genMetricListCmd = &cobra.Command{
 Output the list of metrics typical for a node.
 `,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		ctx := context.Background()
-
-		// Use a testserver. We presume that all relevant metrics exist in
-		// test servers too.
-		sArgs := base.TestServerArgs{
-			Insecure:          true,
-			DefaultTestTenant: base.ExternalTestTenantAlwaysEnabled,
-		}
-		s, err := server.TestServerFactory.New(sArgs)
+		layers, err := generateMetricList(context.Background(), false /* skipFiltering */)
 		if err != nil {
 			return err
 		}
-		srv := s.(serverutils.TestServerInterfaceRaw)
-		defer srv.Stopper().Stop(ctx)
 
-		// We want to only return after the server is ready.
-		readyCh := make(chan struct{})
-		srv.SetReadyFn(func(bool) {
-			close(readyCh)
-		})
+		output := YAMLOutput{}
 
-		// Start the server.
-		if err := srv.Start(ctx); err != nil {
+		var layerNames []string
+		for name := range layers {
+			layerNames = append(layerNames, name)
+		}
+		sort.Strings(layerNames)
+
+		for _, layer := range layerNames {
+			output.Layers = append(output.Layers, layers[layer])
+		}
+
+		// Output YAML
+		yamlData, err := yaml.Marshal(output)
+		if err != nil {
 			return err
 		}
-
-		// Wait until the server is ready to action.
-		select {
-		case <-readyCh:
-		case <-time.After(5 * time.Second):
-			return errors.AssertionFailedf("could not initialize server in time")
-		}
-
-		var sections []catalog.ChartSection
-
-		// Retrieve the chart catalog (metric list) for the system tenant over RPC.
-		retrieve := func(layer serverutils.ApplicationLayerInterface, predicate func(catalog.MetricLayer) bool) error {
-			conn, err := layer.RPCClientConnE(username.RootUserName())
-			if err != nil {
-				return err
-			}
-			client := serverpb.NewAdminClient(conn)
-
-			resp, err := client.ChartCatalog(ctx, &serverpb.ChartCatalogRequest{})
-			if err != nil {
-				return err
-			}
-			for _, section := range resp.Catalog {
-				if !predicate(section.MetricLayer) {
-					continue
-				}
-				sections = append(sections, section)
-			}
-			return nil
-		}
-
-		if err := retrieve(srv, func(layer catalog.MetricLayer) bool {
-			return layer != catalog.MetricLayer_APPLICATION
-		}); err != nil {
-			return err
-		}
-		if err := retrieve(srv.TestTenant(), func(layer catalog.MetricLayer) bool {
-			return layer == catalog.MetricLayer_APPLICATION
-		}); err != nil {
-			return err
-		}
-
-		// Sort by layer then metric name.
-		sort.Slice(sections, func(i, j int) bool {
-			return sections[i].MetricLayer < sections[j].MetricLayer ||
-				(sections[i].MetricLayer == sections[j].MetricLayer &&
-					sections[i].Title < sections[j].Title)
-		})
-
-		// Populate the resulting table.
-		cols := []string{"Layer", "Metric", "Description", "Y-Axis Label", "Type", "Unit", "Aggregation", "Derivative"}
-		var rows [][]string
-		for _, section := range sections {
-			rows = append(rows,
-				[]string{
-					section.MetricLayer.String(),
-					section.Title,
-					section.Charts[0].Metrics[0].Help,
-					section.Charts[0].AxisLabel,
-					section.Charts[0].Metrics[0].MetricType.String(),
-					section.Charts[0].Units.String(),
-					section.Charts[0].Aggregator.String(),
-					section.Charts[0].Derivative.String(),
-				})
-		}
-		align := "dddddddd"
-		sliceIter := clisqlexec.NewRowSliceIter(rows, align)
-		return sqlExecCtx.PrintQueryOutput(os.Stdout, stderr, cols, sliceIter)
+		fmt.Fprintf(os.Stdout, "%s", yamlData)
+		return nil
 	},
 }
 
@@ -379,6 +358,8 @@ var genCmds = []*cobra.Command{
 	genHAProxyCmd,
 	genSettingsListCmd,
 	genMetricListCmd,
+	genEncryptionKeyCmd,
+	genDashboardCmd,
 }
 
 func init() {
@@ -389,6 +370,8 @@ func init() {
 	genHAProxyCmd.PersistentFlags().StringVar(&haProxyPath, "out", "haproxy.cfg",
 		"path to generated haproxy configuration file")
 	cliflagcfg.VarFlag(genHAProxyCmd.Flags(), &haProxyLocality, cliflags.Locality)
+	cliflagcfg.BoolFlag(genHAProxyCmd.Flags(), &baseCfg.UseDRPC, cliflags.UseNewRPC)
+	_ = genHAProxyCmd.Flags().MarkHidden(cliflags.UseNewRPC.Name)
 
 	f := genSettingsListCmd.PersistentFlags()
 	f.BoolVar(&includeAllSettings, "all-settings", false,
@@ -403,5 +386,207 @@ func init() {
 		[]string{"system-only", "system-visible", "application"},
 		"label to use in the output for the various setting classes")
 
+	genMetricListCmd.Flags().Bool("essential", false, "only emit essential metrics")
+	genMetricListCmd.Flags().StringVar(&metricOwnersFile, "metric-owners", "",
+		"path to pre-computed metric owners YAML file (avoids AST scan + CODEOWNERS)")
+
 	GenCmd.AddCommand(genCmds...)
+}
+
+// loadMetricOwners fetches a mapping from metric name to owning team.
+// When --metric-owners is provided (Bazel genrule), the pre-computed
+// file is loaded directly. Otherwise, the mapping is built from an
+// AST scan of Go sources combined with CODEOWNERS.
+func loadMetricOwners() *metricscan.MetricOwners {
+	if metricOwnersFile != "" {
+		data, err := os.ReadFile(metricOwnersFile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr,
+				"reading metric owners failed (owner will be omitted): %v\n", err)
+			return nil
+		}
+		mo, err := metricscan.LoadMetricOwners(data)
+		if err != nil {
+			fmt.Fprintf(os.Stderr,
+				"parsing metric owners failed (owner will be omitted): %v\n", err)
+			return nil
+		}
+		return mo
+	}
+	repoRoot := reporoot.Get()
+	if repoRoot == "" {
+		return nil
+	}
+	scanResult, scanErr := metricscan.Scan(repoRoot)
+	if scanErr != nil {
+		fmt.Fprintf(os.Stderr,
+			"metric source scan failed (owner will be omitted): %v\n", scanErr)
+		return nil
+	}
+	owners, ownersErr := codeowners.DefaultLoadCodeOwners()
+	if ownersErr != nil {
+		fmt.Fprintf(os.Stderr,
+			"CODEOWNERS load failed (owner will be omitted): %v\n", ownersErr)
+		return nil
+	}
+	return metricscan.BuildMetricOwners(scanResult, func(file string) string {
+		teams := owners.Match(file)
+		if len(teams) > 0 {
+			return string(teams[0].Name())
+		}
+		return ""
+	})
+}
+
+func generateMetricList(ctx context.Context, skipFiltering bool) (map[string]*Layer, error) {
+	metricOwners := loadMetricOwners()
+
+	sArgs := base.TestServerArgs{
+		Insecure:          true,
+		DefaultTestTenant: base.ExternalTestTenantAlwaysEnabled,
+	}
+	s, err := server.TestServerFactory.New(sArgs)
+	if err != nil {
+		return nil, err
+	}
+	srv := s.(serverutils.TestServerInterfaceRaw)
+	defer srv.Stopper().Stop(ctx)
+
+	// We want to only return after the server is ready.
+	readyCh := make(chan struct{})
+	srv.SetReadyFn(func(bool) {
+		close(readyCh)
+	})
+
+	// Start the server.
+	if err := srv.Start(ctx); err != nil {
+		return nil, err
+	}
+
+	// Wait until the server is ready to action.
+	select {
+	case <-readyCh:
+	case <-time.After(5 * time.Second):
+		return nil, errors.AssertionFailedf("could not initialize server in time")
+	}
+
+	var sections []catalog.ChartSection
+
+	// Retrieve the chart catalog (metric list) for the system tenant over RPC.
+	retrieve := func(layer serverutils.ApplicationLayerInterface, predicate func(catalog.MetricLayer) bool) error {
+		conn, err := layer.RPCClientConnE(username.RootUserName())
+		if err != nil {
+			return err
+		}
+		client := conn.NewAdminClient()
+
+		resp, err := client.ChartCatalog(ctx, &serverpb.ChartCatalogRequest{})
+		if err != nil {
+			return err
+		}
+		for _, section := range resp.Catalog {
+			if !predicate(section.MetricLayer) {
+				continue
+			}
+			sections = append(sections, section)
+		}
+		return nil
+	}
+
+	if err := retrieve(srv, func(layer catalog.MetricLayer) bool {
+		if skipFiltering {
+			return true
+		}
+		return layer != catalog.MetricLayer_APPLICATION
+	}); err != nil {
+		return nil, err
+	}
+	if err := retrieve(srv.TestTenant(), func(layer catalog.MetricLayer) bool {
+		if skipFiltering {
+			return true
+		}
+		return layer == catalog.MetricLayer_APPLICATION
+	}); err != nil {
+		return nil, err
+	}
+
+	// Sort by layer then category name.
+	sort.Slice(sections, func(i, j int) bool {
+		return sections[i].MetricLayer < sections[j].MetricLayer ||
+			(sections[i].MetricLayer == sections[j].MetricLayer &&
+				sections[i].Title < sections[j].Title)
+	})
+
+	// Structure for file is:
+	// layers:
+	//  - name: APPLICATION
+	//    categories:
+	//      - name: SQL
+	//        metrics:
+	//          - name: sql.statements.active
+	//            exported_name: sql_statements_active
+	//            description: Number of currently active user SQL statements
+	//            y_axis_label: Active Statements
+
+	layers := make(map[string]*Layer)
+	for _, section := range sections {
+		// Get or create the layer that the current section is in
+		layerName := section.MetricLayer.String()
+		layer, ok := layers[layerName]
+		if !ok {
+			layer = &Layer{
+				Name:       layerName,
+				Categories: []Category{},
+			}
+			layers[layerName] = layer
+		}
+
+		// Every section is a separate category
+		category := Category{
+			Name: section.Title,
+		}
+
+		for _, chart := range section.Charts {
+			// There are many charts, but only 1 metric per chart.
+			visibility := chart.Metrics[0].Visibility
+			// Only include visibility if it's not the default INTERNAL value
+			if visibility == "INTERNAL" {
+				visibility = ""
+			}
+			// Resolve the owning team for this metric.
+			var owner string
+			if metricOwners != nil {
+				exportedName := chart.Metrics[0].ExportedName
+				owner, _ = metricOwners.Resolve(exportedName)
+			}
+			metric := MetricInfo{
+				Name:         chart.Metrics[0].Name,
+				ExportedName: chart.Metrics[0].ExportedName,
+				LabeledName:  chart.Metrics[0].LabeledName,
+				Description:  strings.TrimSpace(chart.Metrics[0].Help),
+				YAxisLabel:   chart.AxisLabel,
+				Type:         chart.Metrics[0].MetricType.String(),
+				Unit:         chart.Units.String(),
+				Aggregation:  chart.Aggregator.String(),
+				Derivative:   chart.Derivative.String(),
+				HowToUse:     strings.TrimSpace(chart.Metrics[0].HowToUse),
+				Visibility:   visibility,
+				Owner:        owner,
+			}
+			category.Metrics = append(category.Metrics, metric)
+		}
+
+		layer.Categories = append(layer.Categories, category)
+	}
+
+	// Sort metrics within each layer by name
+	for _, layer := range layers {
+		for _, cat := range layer.Categories {
+			sort.Slice(cat.Metrics, func(i, j int) bool {
+				return cat.Metrics[i].Name < cat.Metrics[j].Name
+			})
+		}
+	}
+
+	return layers, nil
 }

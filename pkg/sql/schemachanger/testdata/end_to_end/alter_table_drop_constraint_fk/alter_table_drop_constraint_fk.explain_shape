@@ -6,4 +6,4 @@ CREATE TABLE t1 (i INT PRIMARY KEY REFERENCES t2(i));
 EXPLAIN (DDL, SHAPE) ALTER TABLE t1 DROP CONSTRAINT t1_i_fkey;
 ----
 Schema change plan for ALTER TABLE ‹defaultdb›.‹public›.‹t1› DROP CONSTRAINT ‹t1_i_fkey›;
- └── execute 2 system table mutations transactions
+ └── execute 3 system table mutations transactions

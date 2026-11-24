@@ -11,11 +11,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
 func TestReduceBatchSizeWhenAutoRetryLimitExhausted(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
 	for _, tc := range []struct {
 		name                   string
 		kvErrs                 []error

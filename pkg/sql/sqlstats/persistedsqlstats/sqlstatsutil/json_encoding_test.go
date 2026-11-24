@@ -41,7 +41,6 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
   "querySummary": "{{.String}}",
   "db":           "{{.String}}",
   "distsql": {{.Bool}},
-  "implicitTxn": {{.Bool}},
   "vec":         {{.Bool}},
   "fullScan":    {{.Bool}}
 }
@@ -53,6 +52,8 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
          "cnt": {{.Int64}},
          "firstAttemptCnt": {{.Int64}},
          "failureCount":    {{.Int64}},
+         "genericCount":    {{.Int64}},
+         "stmtHintsCount":  {{.Int64}},
          "maxRetries":      {{.Int64}},
          "lastExecAt":      "{{stringifyTime .Time}}",
          "numRows": {
@@ -95,6 +96,10 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
            "mean": {{.Float}},
            "sqDiff": {{.Float}}
          },
+         "kvCPUTimeNanos": {
+           "mean": {{.Float}},
+           "sqDiff": {{.Float}}
+         },
          "nodes": [{{joinInts .IntArray}}],
          "kvNodeIds": [{{joinInt32s .Int32Array}}],
          "regions": [{{joinStrings .StringArray}}],
@@ -103,12 +108,32 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
          "indexes": [{{joinStrings .StringArray}}],
          "latencyInfo": {
            "min": {{.Float}},
-           "max": {{.Float}},
-           "p50": {{.Float}},
-           "p90": {{.Float}},
-           "p99": {{.Float}}
+           "max": {{.Float}}
          },
-         "lastErrorCode": "{{.String}}"
+         "lastErrorCode": "{{.String}}",
+				 "sqlType": "{{.String}}",
+				 "canaryStats": {
+				   "count": {{.Int64}},
+				   "runLat": {
+				     "mean": {{.Float}},
+				     "sqDiff": {{.Float}}
+				   },
+				   "planLat": {
+				     "mean": {{.Float}},
+				     "sqDiff": {{.Float}}
+				   }
+				 },
+				 "stableStats": {
+				   "count": {{.Int64}},
+				   "runLat": {
+				     "mean": {{.Float}},
+				     "sqDiff": {{.Float}}
+				   },
+				   "planLat": {
+				     "mean": {{.Float}},
+				     "sqDiff": {{.Float}}
+				   }
+				 }
        },
        "execution_statistics": {
          "cnt": {{.Int64}},
@@ -133,6 +158,10 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
            "sqDiff": {{.Float}}
          },
          "cpuSQLNanos": {
+           "mean": {{.Float}},
+           "sqDiff": {{.Float}}
+         },
+         "admissionWaitTime": {
            "mean": {{.Float}},
            "sqDiff": {{.Float}}
          },
@@ -215,10 +244,86 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
 		// Strip the monononic part of timestamps, as it doesn't roundtrip. UTC()
 		// has that stripping side-effect.
 		input.Stats.LastExecTimestamp = input.Stats.LastExecTimestamp.UTC()
+		// We are no longer setting the latency percentiles.
+		input.Stats.LatencyInfo.P50 = 0
+		input.Stats.LatencyInfo.P90 = 0
+		input.Stats.LatencyInfo.P99 = 0
 
 		err = DecodeStmtStatsStatisticsJSON(actualStatisticsJSON, &actualJSONUnmarshalled.Stats)
 		require.NoError(t, err)
 		require.Equal(t, input, actualJSONUnmarshalled)
+	})
+
+	// Verify that when CanaryCount and StableCount are zero, the canary/stable
+	// fields are omitted from the JSON encoding to save storage, and that
+	// decoding such JSON back produces the correct zero-valued fields.
+	t.Run("statement_statistics zero canary and stable roundtrip", func(t *testing.T) {
+		input := appstatspb.StatementStatistics{
+			Count:             5,
+			FirstAttemptCount: 3,
+			// CanaryCount and StableCount are zero — fields should be omitted.
+		}
+
+		statsJSON, err := BuildStmtStatisticsJSON(&input)
+		require.NoError(t, err)
+
+		// Verify canary and stable fields are absent from the encoded JSON.
+		statsField, err := statsJSON.FetchValKey("statistics")
+		require.NoError(t, err)
+		canaryStats, err := statsField.FetchValKey("canaryStats")
+		require.NoError(t, err)
+		require.Nil(t, canaryStats, "canaryStats should be omitted when zero")
+		stableStats, err := statsField.FetchValKey("stableStats")
+		require.NoError(t, err)
+		require.Nil(t, stableStats, "stableStats should be omitted when zero")
+
+		// Decode and verify roundtrip produces zero values.
+		var decoded appstatspb.StatementStatistics
+		err = DecodeStmtStatsStatisticsJSON(statsJSON, &decoded)
+		require.NoError(t, err)
+		require.Equal(t, appstatspb.ExperimentStatsInfo{}, decoded.CanaryStats)
+		require.Equal(t, appstatspb.ExperimentStatsInfo{}, decoded.StableStats)
+	})
+
+	// Verify that when CanaryStats and StableStats have non-zero counts, the
+	// fields are present in the encoded JSON and survive a roundtrip.
+	t.Run("statement_statistics non-zero canary and stable roundtrip", func(t *testing.T) {
+		input := appstatspb.StatementStatistics{
+			Count:             10,
+			FirstAttemptCount: 8,
+			CanaryStats: appstatspb.ExperimentStatsInfo{
+				Count:   3,
+				RunLat:  appstatspb.NumericStat{Mean: 0.05, SquaredDiffs: 0.001},
+				PlanLat: appstatspb.NumericStat{Mean: 0.02, SquaredDiffs: 0.0005},
+			},
+			StableStats: appstatspb.ExperimentStatsInfo{
+				Count:   7,
+				RunLat:  appstatspb.NumericStat{Mean: 0.08, SquaredDiffs: 0.003},
+				PlanLat: appstatspb.NumericStat{Mean: 0.03, SquaredDiffs: 0.001},
+			},
+		}
+
+		statsJSON, err := BuildStmtStatisticsJSON(&input)
+		require.NoError(t, err)
+
+		// Verify canary and stable fields are present in the encoded JSON.
+		statsField, err := statsJSON.FetchValKey("statistics")
+		require.NoError(t, err)
+		canaryStats, err := statsField.FetchValKey("canaryStats")
+		require.NoError(t, err)
+		require.NotNil(t, canaryStats, "canaryStats should be present when non-zero")
+		stableStats, err := statsField.FetchValKey("stableStats")
+		require.NoError(t, err)
+		require.NotNil(t, stableStats, "stableStats should be present when non-zero")
+
+		// Decode and verify roundtrip.
+		var decoded appstatspb.StatementStatistics
+		err = DecodeStmtStatsStatisticsJSON(statsJSON, &decoded)
+		require.NoError(t, err)
+		require.Equal(t, input.CanaryStats.Count, decoded.CanaryStats.Count)
+		require.Equal(t, input.StableStats.Count, decoded.StableStats.Count)
+		require.InEpsilon(t, input.CanaryStats.RunLat.Mean, decoded.CanaryStats.RunLat.Mean, 0.0000001)
+		require.InEpsilon(t, input.StableStats.RunLat.Mean, decoded.StableStats.RunLat.Mean, 0.0000001)
 	})
 
 	// When a new statistic is added to a statement payload, older versions won't have the
@@ -236,7 +341,6 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
 				"db":           "{{.String}}",
 				"distsql": {{.Bool}},
 				"failed":  {{.Bool}},
-				"implicitTxn": {{.Bool}},
 				"vec":         {{.Bool}},
 				"fullScan":    {{.Bool}}
 			}
@@ -290,10 +394,7 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
          "planGists": [{{joinStrings .StringArray}}],
          "latencyInfo": {
            "min": {{.Float}},
-           "max": {{.Float}},
-           "p50": {{.Float}},
-           "p90": {{.Float}},
-           "p99": {{.Float}},
+           "max": {{.Float}}
          },
          "errorCode": "{{.String}}"
        },
@@ -320,6 +421,10 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
            "sqDiff": {{.Float}}
          },
          "cpuSQLNanos": {
+           "mean": {{.Float}},
+           "sqDiff": {{.Float}}
+         },
+         "admissionWaitTime": {
            "mean": {{.Float}},
            "sqDiff": {{.Float}}
          },
@@ -404,6 +509,10 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
 		// Strip the monononic part of timestamps, as it doesn't roundtrip. UTC()
 		// has that stripping side-effect.
 		expectedStatistics.Stats.LastExecTimestamp = expectedStatistics.Stats.LastExecTimestamp.UTC()
+		// We no longer set the percentile latencies.
+		expectedStatistics.Stats.LatencyInfo.P50 = 0
+		expectedStatistics.Stats.LatencyInfo.P90 = 0
+		expectedStatistics.Stats.LatencyInfo.P99 = 0
 
 		err = DecodeStmtStatsStatisticsJSON(actualStatisticsJSON, &actualJSONUnmarshalled.Stats)
 		require.NoError(t, err)
@@ -465,6 +574,10 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
     "rowsWritten": {
       "mean": {{.Float}},
       "sqDiff": {{.Float}}
+    },
+    "kvCPUTimeNanos": {
+      "mean": {{.Float}},
+      "sqDiff": {{.Float}}
     }
   },
   "execution_statistics": {
@@ -490,6 +603,10 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
       "sqDiff": {{.Float}}
     },
     "cpuSQLNanos": {
+      "mean": {{.Float}},
+      "sqDiff": {{.Float}}
+    },
+    "admissionWaitTime": {
       "mean": {{.Float}},
       "sqDiff": {{.Float}}
     },
@@ -583,7 +700,6 @@ func TestSQLStatsJsonEncoding(t *testing.T) {
   "query": "{{.String}}",
   "formattedQuery": "{{.String}}",
   "querySummary": "{{.String}}",
-  "implicitTxn": {{.Bool}},
   "distSQLCount": {{.Int64}},
   "vecCount": {{.Int64}},
   "fullScanCount": {{.Int64}},

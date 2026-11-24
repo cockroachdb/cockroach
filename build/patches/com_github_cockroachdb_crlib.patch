@@ -1,0 +1,28 @@
+diff --git a/crsync/BUILD.bazel b/crsync/BUILD.bazel
+index e787597..0c25863 100644
+--- a/crsync/BUILD.bazel
++++ b/crsync/BUILD.bazel
+@@ -4,13 +4,22 @@ go_library(
+     name = "crsync",
+     srcs = [
+         "counters.go",
+-        "sharding_vanilla.go",
++        ":gen-sharding_crdb",
+         "typed_atomic.go",
+     ],
+     importpath = "github.com/cockroachdb/crlib/crsync",
+     visibility = ["//visibility:public"],
+ )
+ 
++REMOVE_GO_BUILD_CONSTRAINTS = "cat $< | grep -v '//go:build' | grep -v '// +build' > $@"
++
++genrule(
++    name = "gen-sharding_crdb",
++    srcs = ["sharding_crdb.go"],
++    outs = ["gen-sharding_crdb.go"],
++    cmd = REMOVE_GO_BUILD_CONSTRAINTS,
++)
++
+ alias(
+     name = "go_default_library",
+     actual = ":crsync",

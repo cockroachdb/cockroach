@@ -5,10 +5,7 @@
 
 package kvflowcontrolpb
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
-	"github.com/cockroachdb/redact"
-)
+import "github.com/cockroachdb/redact"
 
 func (p RaftLogPosition) String() string {
 	return redact.StringWithoutMarkers(p)
@@ -39,24 +36,6 @@ func (p *RaftLogPosition) LessEq(o RaftLogPosition) bool {
 	return p.Less(o) || p.Equal(o)
 }
 
-func (a AdmittedRaftLogEntries) String() string {
-	return redact.StringWithoutMarkers(a)
-}
-
-// SafeFormat implements the redact.SafeFormatter interface.
-func (a AdmittedRaftLogEntries) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("admitted-entries (r%s s%s pri=%s up-to-%s)",
-		a.RangeID, a.StoreID, admissionpb.WorkPriority(a.AdmissionPriority), a.UpToRaftLogPosition)
-}
-
-func (a AdmittedResponseForRange) String() string {
-	return redact.StringWithoutMarkers(a)
-}
-
-func (a AdmittedResponseForRange) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Printf("admitted-response (s%s r%s %s)", a.LeaderStoreID, a.RangeID, a.Msg.String())
-}
-
 func (a AdmittedState) String() string {
 	return redact.StringWithoutMarkers(a)
 }
@@ -71,5 +50,5 @@ func (a PiggybackedAdmittedState) String() string {
 
 func (a PiggybackedAdmittedState) SafeFormat(w redact.SafePrinter, _ rune) {
 	w.Printf("[r%s,s%s,%d->%d] %s",
-		a.RangeID, a.ToStoreID, a.FromReplicaID, a.ToReplicaID, a.Admitted.String())
+		a.RangeID, a.ToStoreID, a.FromReplicaID, a.ToReplicaID, a.Admitted)
 }

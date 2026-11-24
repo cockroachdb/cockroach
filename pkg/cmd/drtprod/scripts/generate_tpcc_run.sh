@@ -5,9 +5,11 @@
 # Use of this software is governed by the CockroachDB Software License
 # included in the /LICENSE file.
 
-# This script sets up the tpcc run workload script in the workload nodes
-# The --warehouses flag is passed as argument to this script
-# NOTE - This uses CLUSTER and WORKLOAD_CLUSTER environment variable, if not set the script fails
+# Sets up TPCC workload script across nodes with optional client side data partitioning.
+# Usage: <script_suffix> <execute:true|false> [workload flags]
+# Requires: CLUSTER, WORKLOAD_CLUSTER, WORKLOAD_NODES env vars
+# Optional: TOTAL_PARTITIONS (defaults to WORKLOAD_NODES if WORKLOAD_NODES>1)
+# Optional: PARTITION_TYPE (defaults to client-partitions)
 if [ "$#" -lt 2 ]; then
   echo "Usage: $0 <script_suffix> <execute:true|false> <flags to init:--warehouses,--db>"
   exit 1
@@ -44,49 +46,116 @@ if [ -z "${CLUSTER_NODES}" ]; then
   exit 1
 fi
 
-absolute_path=$(roachprod run "${WORKLOAD_CLUSTER}":1 -- "realpath ./cockroach")
-pwd=$(roachprod run "${WORKLOAD_CLUSTER}":1 -- "dirname ${absolute_path}")
 
-# Calculate the number of PGURLS each workload node should get
-PGURL_PER_NODE=$((CLUSTER_NODES / WORKLOAD_NODES))
-REMAINDER_NODE=$((CLUSTER_NODES % WORKLOAD_NODES))
+# Set TOTAL_PARTITIONS equal to WORKLOAD_NODES if not set
+if [ -z "${TOTAL_PARTITIONS}" ] && [ "${WORKLOAD_NODES}" -gt 1 ]; then
+  TOTAL_PARTITIONS=$WORKLOAD_NODES
+  echo "TOTAL_PARTITIONS not set and WORKLOAD_NODES > 1, defaulting to WORKLOAD_NODES ($WORKLOAD_NODES)"
+fi
 
-# Distribute the PGURLS among the workload nodes
+# Ensure TOTAL_PARTITIONS is not less than WORKLOAD_NODES
+if [ -n "${TOTAL_PARTITIONS}" ] && [ "${TOTAL_PARTITIONS}" -lt "${WORKLOAD_NODES}" ]; then
+  echo "TOTAL_PARTITIONS ($TOTAL_PARTITIONS) must be greater than or equal to WORKLOAD_NODES ($WORKLOAD_NODES)"
+  exit 1
+fi
+ 
+# If PARTITION_TYPE is not set default to client-partitions
+if [ -z "${PARTITION_TYPE}" ]; then
+  PARTITION_TYPE="client-partitions"
+fi
+
+export ROACHPROD_DISABLED_PROVIDERS=IBM
+# Clusters created via drtprod default to secure mode. This script is intended to
+# run on secure clusters. In the past we have run into compatibility issues
+# between roachprod and drtprod. To make this script resilient to incompatibility
+# and allow use with insecure clusters, we can configure this env variable.
+export COCKROACH_ROACHPROD_INSECURE="${COCKROACH_ROACHPROD_INSECURE:-false}"
+
+get_partitions_in_range() {
+    local start=$(($1 - 1))
+    local end=$(($2 - 1))
+
+    if [[ -z "$start" || -z "$end" || "$start" -lt 0 || "$end" -ge $TOTAL_PARTITIONS || "$start" -gt "$end" ]]; then
+        echo "Invalid range. Provide values between 0 and $((TOTAL_PARTITIONS - 1)), with start <= end."
+        return 1
+    fi
+
+    local result=""
+    for (( i=start; i<=end; i++ )); do
+        if [ -z "$result" ]; then
+            result="$i"
+        else
+            result="${result},$i"
+        fi
+    done
+
+    echo "$result"
+}
+
+absolute_path=$(drtprod run "${WORKLOAD_CLUSTER}":1 -- "realpath ./cockroach")
+pwd=$(drtprod run "${WORKLOAD_CLUSTER}":1 -- "dirname ${absolute_path}")
+
 for ((NODE=0; NODE<WORKLOAD_NODES; NODE++)); do
-  START_OFFSET=$((NODE * PGURL_PER_NODE + (NODE < REMAINDER_NODE ? NODE : REMAINDER_NODE) + 1))
-  END_OFFSET=$((START_OFFSET + PGURL_PER_NODE + (NODE < REMAINDER_NODE ? 1 : 0) - 1))
+  # Calculate node range for this workload node (if PARTITION_TYPE is partitions, we use the selected_nodes)
+  NODES_PER_WORKLOAD=$((CLUSTER_NODES / WORKLOAD_NODES))
+  NODES_REMAINDER=$((CLUSTER_NODES % WORKLOAD_NODES))
+  NODE_START=$((NODE * NODES_PER_WORKLOAD + (NODE < NODES_REMAINDER ? NODE : NODES_REMAINDER) + 1))
+  NODE_END=$((NODE_START + NODES_PER_WORKLOAD + (NODE < NODES_REMAINDER ? 1 : 0) - 1))  
+  selected_nodes="${NODE_START}-${NODE_END}"
 
-  # Print or use the PGURLS for the current workload node
-  echo "pgurl for Nodes ${START_OFFSET}:${END_OFFSET}"
-  PGURLS=$(roachprod pgurl $CLUSTER:$START_OFFSET-$END_OFFSET)
+  # Handle partitioning if TOTAL_PARTITIONS is set
+  partition_args=""
+  if [ -n "${TOTAL_PARTITIONS}" ]; then
+    PARTITION_PER_NODE=$((TOTAL_PARTITIONS / WORKLOAD_NODES))
+    PARTITION_REMAINDER_NODE=$((TOTAL_PARTITIONS % WORKLOAD_NODES))
 
+    PARTITION_START_OFFSET=$((NODE * PARTITION_PER_NODE + (NODE < PARTITION_REMAINDER_NODE ? NODE : PARTITION_REMAINDER_NODE) + 1))
+    PARTITION_END_OFFSET=$((PARTITION_START_OFFSET + PARTITION_PER_NODE + (NODE < PARTITION_REMAINDER_NODE ? 1 : 0) - 1))
+
+    parts=$(get_partitions_in_range ${PARTITION_START_OFFSET} ${PARTITION_END_OFFSET})
+    if [ $? -ne 0 ]; then
+        echo "Failed to get partitions in range"
+        exit 1
+    fi
+    echo "Partition assignment: $parts"
+    partition_args="--$PARTITION_TYPE=$TOTAL_PARTITIONS --partition-affinity=$parts"
+  fi
 
   # Create the workload script
   cat <<EOF >/tmp/tpcc_run_${suffix}.sh
 #!/usr/bin/env bash
 
-j=0
-while true; do
-    echo ">> Starting tpcc workload"
-    ((j++))
-    LOG=./tpcc_\$j.txt
-    ./cockroach workload run tpcc $@ \
-        --tolerate-errors \
-        --families \
-         $PGURLS  | tee \$LOG
-    if [ \$? -eq 0 ]; then
-        rm "\$LOG"
+export ROACHPROD_DISABLED_PROVIDERS=IBM
+export ROACHPROD_GCE_DEFAULT_PROJECT=$ROACHPROD_GCE_DEFAULT_PROJECT
+export COCKROACH_ROACHPROD_INSECURE="${COCKROACH_ROACHPROD_INSECURE:-false}"
+./drtprod sync
+
+PGURLS=\$(./drtprod load-balancer pgurl $CLUSTER | sed s/\'//g)
+if [ -z "\$PGURLS" ]; then
+    echo ">> No load-balancer configured; falling back to direct pgurl"
+    if [ "$PARTITION_TYPE" = "partitions" ]; then
+        PGURLS=\$(./drtprod pgurl $CLUSTER:$selected_nodes | sed s/\'//g)
+    else
+        PGURLS=\$(./drtprod pgurl $CLUSTER | sed s/\'//g)
     fi
-    sleep 1
-done
+fi
+read -r -a PGURLS_ARR <<< "\$PGURLS"
+echo ">> Starting tpcc workload"
+LOG=./tpcc_log.txt
+./cockroach workload run tpcc $@ \
+    $partition_args \
+    --tolerate-errors \
+    --families \
+    --duration 0 \
+    \${PGURLS_ARR[@]} 2>&1 | tee \$LOG
 EOF
 
-#   Upload the script to the workload cluster
-  roachprod put $WORKLOAD_CLUSTER:$((NODE + 1)) /tmp/tpcc_run_${suffix}.sh
-  roachprod ssh $WORKLOAD_CLUSTER:$((NODE + 1)) -- "chmod +x tpcc_run_${suffix}.sh"
+  # Upload the script to the workload cluster
+  drtprod put $WORKLOAD_CLUSTER:$((NODE + 1)) /tmp/tpcc_run_${suffix}.sh
+  drtprod ssh $WORKLOAD_CLUSTER:$((NODE + 1)) -- "chmod +x tpcc_run_${suffix}.sh"
   if [ "$execute_script" = "true" ]; then
-      roachprod run "${WORKLOAD_CLUSTER}":1 -- "sudo systemd-run --unit tpcc_run_${suffix} --same-dir --uid \$(id -u) --gid \$(id -g) bash ${pwd}/tpcc_run_${suffix}.sh"
+      drtprod run "${WORKLOAD_CLUSTER}":$((NODE + 1)) -- "sudo systemd-run --unit tpcc_run_${suffix} --same-dir --uid \$(id -u) --gid \$(id -g) bash ${pwd}/tpcc_run_${suffix}.sh"
   else
-    echo "Run --> roachprod run "${WORKLOAD_CLUSTER}":$((NODE + 1)) -- \"sudo systemd-run --unit tpcc_run_${suffix} --same-dir --uid \\\$(id -u) --gid \\\$(id -g) bash ${pwd}/tpcc_run_${suffix}.sh\""
-    fi
+    echo "Run --> drtprod run "${WORKLOAD_CLUSTER}":$((NODE + 1)) -- \"sudo systemd-run --unit tpcc_run_${suffix} --same-dir --uid \\\$(id -u) --gid \\\$(id -g) bash ${pwd}/tpcc_run_${suffix}.sh\""
+  fi
 done

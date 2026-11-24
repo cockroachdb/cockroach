@@ -151,3 +151,16 @@ DETAIL: source SQL:
 DECLARE
   x STRING := $foo$ foo;
            ^
+
+pretty
+DECLARE
+x STRING := e'1GW\'';
+BEGIN
+INSERT INTO tab SELECT e'1GW\'';
+END
+----
+DECLARE
+	x STRING := e'1GW\'';
+BEGIN
+	INSERT INTO tab SELECT e'1GW\'';
+END;

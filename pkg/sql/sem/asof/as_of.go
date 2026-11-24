@@ -83,6 +83,7 @@ func resolveFuncType(
 
 type evalOptions struct {
 	allowBoundedStaleness bool
+	allowFutureTimestamp  bool
 }
 
 // EvalOption is an option to pass into Eval.
@@ -94,6 +95,13 @@ var OptionAllowBoundedStaleness EvalOption = func(
 	o evalOptions,
 ) evalOptions {
 	o.allowBoundedStaleness = true
+	return o
+}
+
+var OptionAllowFutureTimestamp EvalOption = func(
+	o evalOptions,
+) evalOptions {
+	o.allowFutureTimestamp = true
 	return o
 }
 
@@ -206,7 +214,11 @@ func Eval(
 	}
 
 	stmtTimestamp := evalCtx.GetStmtTimestamp()
-	ret.Timestamp, err = DatumToHLC(evalCtx, stmtTimestamp, d, AsOf)
+	usage := AsOf
+	if o.allowFutureTimestamp {
+		usage = AsOfFuture
+	}
+	ret.Timestamp, err = DatumToHLC(evalCtx, stmtTimestamp, d, usage)
 	if err != nil {
 		return eval.AsOfSystemTime{}, errors.Wrap(err, "AS OF SYSTEM TIME")
 	}
@@ -253,6 +265,9 @@ const (
 	// ALTER VIRTUAL CLUSTER ... COMPLETE REPLICATION statement.
 	ReplicationCutover
 
+	// AsOfFuture is like AsOf, except the timestamp is allowed to be in the future.
+	AsOfFuture
+
 	// ShowTenantFingerprint is when the DatumToHLC() is used for an SHOW
 	// EXPERIMENTAL_FINGERPRINTS FROM TENANT ... WITH START TIMESTAMP statement.
 	//
@@ -261,7 +276,9 @@ const (
 	ShowTenantFingerprint = AsOf
 )
 
-// DatumToHLC performs the conversion from a Datum to an HLC timestamp.
+// DatumToHLC performs the conversion from a Datum to an HLC timestamp. If the
+// timestamp is used for 'AS OF SYSTEM TIME', it ensures the timestamp is not in
+// the future.
 func DatumToHLC(
 	evalCtx *eval.Context, stmtTimestamp time.Time, d tree.Datum, usage DatumToHLCUsage,
 ) (hlc.Timestamp, error) {
@@ -290,9 +307,11 @@ func DatumToHLC(
 		// Attempt to parse as an interval.
 		if iv, err := tree.ParseIntervalWithTypeMetadata(evalCtx.GetIntervalStyle(), s, types.DefaultIntervalTypeMetadata); err == nil {
 			if (iv == duration.Duration{}) {
-				convErr = errors.Errorf("interval value %v too small, absolute value must be >= %v", d, time.Microsecond)
+				convErr = pgerror.Newf(pgcode.InvalidParameterValue, "interval value %v too small, absolute value must be >= %v", d, time.Microsecond)
+			} else if (usage == AsOf && iv.Compare(duration.Duration{}) > 0) {
+				convErr = pgerror.Newf(pgcode.InvalidParameterValue, "interval value %v is in the future", d)
 			} else if (usage == Split && iv.Compare(duration.Duration{}) < 0) {
-				convErr = errors.Errorf("interval value %v too small, SPLIT AT interval must be >= %v", d, time.Microsecond)
+				convErr = pgerror.Newf(pgcode.InvalidParameterValue, "interval value %v too small, SPLIT AT interval must be >= %v", d, time.Microsecond)
 			}
 			ts.WallTime = duration.Add(stmtTimestamp, iv).UnixNano()
 			break
@@ -308,12 +327,14 @@ func DatumToHLC(
 		ts, convErr = hlc.DecimalToHLC(&d.Decimal)
 	case *tree.DInterval:
 		if (usage == Split && d.Duration.Compare(duration.Duration{}) < 0) {
-			convErr = errors.Errorf("interval value %v too small, SPLIT interval must be >= %v", d, time.Microsecond)
+			convErr = pgerror.Newf(pgcode.InvalidParameterValue, "interval value %v too small, SPLIT interval must be >= %v", d, time.Microsecond)
+		} else if (usage == AsOf && d.Duration.Compare(duration.Duration{}) > 0) {
+			convErr = pgerror.Newf(pgcode.InvalidParameterValue, "interval value %v is in the future", d)
 		}
 		ts.WallTime = duration.Add(stmtTimestamp, d.Duration).UnixNano()
 	default:
 		convErr = errors.WithSafeDetails(
-			errors.Errorf("expected timestamp, decimal, or interval, got %s", d.ResolvedType()),
+			pgerror.Newf(pgcode.InvalidParameterValue, "expected timestamp, decimal, or interval, got %s", d.ResolvedType()),
 			"go type: %T", d)
 	}
 	if convErr != nil {
@@ -321,9 +342,32 @@ func DatumToHLC(
 	}
 	zero := hlc.Timestamp{}
 	if ts == zero {
-		return ts, errors.Errorf("zero timestamp is invalid")
+		return ts, pgerror.Newf(pgcode.InvalidParameterValue, "zero timestamp is invalid")
 	} else if ts.Less(zero) {
-		return ts, errors.Errorf("timestamp before 1970-01-01T00:00:00Z is invalid")
+		return ts, pgerror.Newf(pgcode.InvalidParameterValue, "timestamp before 1970-01-01T00:00:00Z is invalid")
+	} else if usage == AsOf {
+		// Disallow fixed timestamps too far in the future. Allow some tolerance
+		// for clock skew and internal transaction contexts.
+
+		const hardCodedSkewTolerance = 500 * time.Millisecond
+		maxAllowedWallTime := stmtTimestamp.Add(hardCodedSkewTolerance).UnixNano()
+
+		if evalCtx.Txn != nil && evalCtx.Txn.DB() != nil {
+			// Allow additional tolerance based on actual clock offset.
+			clockSkew := evalCtx.Txn.DB().Clock().MaxOffset()
+			maxAllowedWallTime = max(maxAllowedWallTime,
+				stmtTimestamp.Add(clockSkew).UnixNano())
+
+			// For certain internal queries (e.g., lease counting), allow up to the
+			// provisional commit timestamp.
+			maxAllowedWallTime = max(maxAllowedWallTime,
+				evalCtx.Txn.ProvisionalCommitTimestamp().WallTime)
+		}
+
+		if ts.WallTime > maxAllowedWallTime {
+			return ts, pgerror.Newf(pgcode.InvalidParameterValue, "timestamp %v is in the future", d)
+		}
 	}
+
 	return ts, nil
 }

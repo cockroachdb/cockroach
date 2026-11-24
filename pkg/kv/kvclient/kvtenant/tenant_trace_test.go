@@ -64,7 +64,12 @@ func testTenantTracesAreRedactedImpl(t *testing.T, redactable bool) {
 			SQLExecutor: &sql.ExecutorTestingKnobs{
 				WithStatementTrace: func(trace tracingpb.Recording, stmt string) {
 					if stmt == testStmt {
-						recCh <- trace
+						select {
+						case recCh <- trace:
+						default:
+							t.Logf("WithStatementTrace: dropping duplicate trace for %q"+
+								" (likely implicit txn auto-retry)", stmt)
+						}
 					}
 				},
 			},
@@ -87,17 +92,8 @@ func testTenantTracesAreRedactedImpl(t *testing.T, redactable bool) {
 		trace := <-recCh
 
 		require.NotEmpty(t, trace)
-		var found bool
-		for _, rs := range trace {
-			for _, s := range rs.Logs {
-				if strings.Contains(s.Msg().StripMarkers(), sensitiveString) {
-					found = true
-				}
-			}
-		}
-		require.True(t, found, "did not find '%q' in trace:\n%s",
-			sensitiveString, trace,
-		)
+		require.True(t, traceContains(trace, sensitiveString),
+			"did not find %q in trace:\n%s", sensitiveString, trace)
 	})
 
 	t.Run("regular-tenant", func(t *testing.T) {
@@ -111,34 +107,36 @@ func testTenantTracesAreRedactedImpl(t *testing.T, redactable bool) {
 		trace := <-recCh
 
 		require.NotEmpty(t, trace)
-		var found bool
-		for _, rs := range trace {
-			for _, s := range rs.Logs {
-				if strings.Contains(s.Msg().StripMarkers(), sensitiveString) {
-					t.Fatalf(
-						"trace for tenant contained KV-level trace message '%q':\n%s",
-						sensitiveString, trace,
-					)
-				}
-				if strings.Contains(s.Msg().StripMarkers(), visibleString) {
-					found = true
-				}
-			}
-		}
+		require.False(t, traceContains(trace, sensitiveString),
+			"trace for tenant contained KV-level trace message %q:\n%s",
+			sensitiveString, trace)
 
 		// In both cases we don't expect to see the `TraceRedactedMarker`
 		// since that's only shown when the server is in an inconsistent
 		// state or if there's a version mismatch between client and server.
 		if redactable {
-			// If redaction was on, we expect the tenant to see safe information in its
-			// trace.
-			require.True(t, found, "did not see expected trace message '%q':\n%s",
-				visibleString, trace)
+			// If redaction was on, KV-level spans are present but redacted. The
+			// safe visible string survives redaction.
+			require.True(t, traceContains(trace, visibleString),
+				"did not see expected trace message %q:\n%s", visibleString, trace)
 		} else {
-			// Otherwise, expect the opposite: not even safe information makes it through,
-			// because it gets replaced with foundRedactedMarker.
-			require.False(t, found, "unexpectedly saw message '%q':\n%s",
-				visibleString, trace)
+			// Otherwise, KV-level spans are stripped entirely, so nothing makes
+			// it through.
+			require.False(t, traceContains(trace, visibleString),
+				"unexpectedly saw message %q:\n%s", visibleString, trace)
 		}
 	})
+}
+
+// traceContains returns true if any log message in the trace contains substr
+// (after stripping redaction markers).
+func traceContains(trace tracingpb.Recording, substr string) bool {
+	for _, rs := range trace {
+		for _, s := range rs.Logs {
+			if strings.Contains(s.Msg().StripMarkers(), substr) {
+				return true
+			}
+		}
+	}
+	return false
 }

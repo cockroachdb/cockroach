@@ -22,14 +22,14 @@ func (b *Builder) buildLimit(limit *tree.Limit, parentScope, inScope *scope) {
 	if limit.Offset != nil {
 		input := inScope.expr
 		offset := b.resolveAndBuildScalar(
-			limit.Offset, types.Int, exprKindOffset, tree.RejectSpecial, parentScope,
+			limit.Offset, types.Int, exprKindOffset, tree.RejectSpecial, parentScope, nil, /* colRefs */
 		)
 		inScope.expr = b.factory.ConstructOffset(input, offset, inScope.makeOrderingChoice())
 	}
 	if limit.Count != nil {
 		input := inScope.expr
 		limit := b.resolveAndBuildScalar(
-			limit.Count, types.Int, exprKindLimit, tree.RejectSpecial, parentScope,
+			limit.Count, types.Int, exprKindLimit, tree.RejectSpecial, parentScope, nil, /* colRefs */
 		)
 		inScope.expr = b.factory.ConstructLimit(input, limit, inScope.makeOrderingChoice())
 	}

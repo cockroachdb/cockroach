@@ -63,9 +63,6 @@ type TestClusterConfig struct {
 	// If set to "Random", the default randomization logic will be used.
 	UseSecondaryTenant TenantMode
 
-	// IsCCLConfig should be true for any config that can only be run with a CCL
-	// binary.
-	IsCCLConfig bool
 	// localities is set if nodes should be set to a particular locality.
 	// Nodes are 1-indexed.
 	Localities map[int]roachpb.Locality
@@ -90,6 +87,11 @@ type TestClusterConfig struct {
 	// restart/upgrade nodes. This always bootstraps with the predecessor version
 	// of the current commit, and upgrades to the current commit.
 	UseCockroachGoTestserver bool
+	// DisableSchemaLockedByDefault prevents tables from being created
+	// with schema_locked by default.
+	DisableSchemaLockedByDefault bool
+	// PrepareQueries executes queries and statements with Prepare and Execute.
+	PrepareQueries bool
 }
 
 // TenantMode is the type of the UseSecondaryTenant field in TestClusterConfig.
@@ -279,7 +281,7 @@ var LogicTestConfigs = []TestClusterConfig{
 		// local is the configuration where we run all tests which have bad
 		// interactions with the default test tenant.
 		//
-		// TODO(#76378): We should review this choice. Why can't we use "Random"
+		// TODO(#156124): We should review this choice. Why can't we use "Random"
 		// here? If there are specific tests that are incompatible, we can
 		// flag them to run only in a separate config.
 		UseSecondaryTenant:          Never,
@@ -290,6 +292,7 @@ var LogicTestConfigs = []TestClusterConfig{
 		NumNodes:                        1,
 		OverrideDistSQLMode:             "off",
 		DisableDeclarativeSchemaChanger: true,
+		DisableSchemaLockedByDefault:    true,
 	},
 	{
 		Name:                "local-vec-off",
@@ -301,15 +304,19 @@ var LogicTestConfigs = []TestClusterConfig{
 		Name:                        "local-read-committed",
 		NumNodes:                    1,
 		OverrideDistSQLMode:         "off",
-		IsCCLConfig:                 true,
 		EnableDefaultIsolationLevel: tree.ReadCommittedIsolation,
 	},
 	{
 		Name:                        "local-repeatable-read",
 		NumNodes:                    1,
 		OverrideDistSQLMode:         "off",
-		IsCCLConfig:                 true,
 		EnableDefaultIsolationLevel: tree.RepeatableReadIsolation,
+	},
+	{
+		Name:                "local-prepared",
+		NumNodes:            1,
+		OverrideDistSQLMode: "off",
+		PrepareQueries:      true,
 	},
 	{
 		Name:                "fakedist",
@@ -341,7 +348,7 @@ var LogicTestConfigs = []TestClusterConfig{
 		// restrictive in the way we allow zone configs to be modified by
 		// secondary tenants. See #100787 for more info.
 		//
-		// TODO(#76378): We should review this choice. Zone configs have
+		// TODO(#156124): We should review this choice. Zone configs have
 		// been supported for secondary tenants since v22.2.
 		// Should this config use "Random" instead?
 		UseSecondaryTenant: Never,
@@ -358,11 +365,10 @@ var LogicTestConfigs = []TestClusterConfig{
 		// can only be run with a CCL binary, so is a noop if run through the normal
 		// logictest command.
 		// To run a logic test with this config as a directive, run:
-		// dev testlogic ccl --files 3node-tenant --subtest $SUBTEST
+		// dev testlogic base --files 3node-tenant --subtest $SUBTEST
 		Name:                        threeNodeTenantConfigName,
 		NumNodes:                    3,
 		UseSecondaryTenant:          Always,
-		IsCCLConfig:                 true,
 		OverrideDistSQLMode:         "on",
 		DeclarativeCorpusCollection: true,
 	},
@@ -372,11 +378,10 @@ var LogicTestConfigs = []TestClusterConfig{
 		// be run with a CCL binary, so is a noop if run through the normal
 		// logictest command.
 		// To run a logic test with this config as a directive, run:
-		// dev testlogic ccl --files 3node-tenant-multiregion --subtests $SUBTESTS
+		// dev testlogic base --files 3node-tenant-multiregion --subtests $SUBTESTS
 		Name:                        "3node-tenant-multiregion",
 		NumNodes:                    3,
 		UseSecondaryTenant:          Always,
-		IsCCLConfig:                 true,
 		OverrideDistSQLMode:         "on",
 		DeclarativeCorpusCollection: true,
 		Localities: map[int]roachpb.Locality{
@@ -453,7 +458,7 @@ var LogicTestConfigs = []TestClusterConfig{
 		// locality optimized search working in multi-tenant configurations.
 		// Tracked with #80678.
 		//
-		// TODO(#76378): We've fixed that issue. Review this choice. Can
+		// TODO(#156124): We've fixed that issue. Review this choice. Can
 		// it be "Random" instead? Then we can merge it with the next
 		// config below.
 		UseSecondaryTenant:          Never,
@@ -484,39 +489,57 @@ var LogicTestConfigs = []TestClusterConfig{
 		Localities: multiregion15node5region3azsLocalities,
 	},
 	{
-		// This config runs tests using 24.2 cluster version, simulating a node that
+		// This config runs tests using 25.4 cluster version, simulating a node that
 		// is operating in a mixed-version cluster.
-		Name:                        "local-mixed-24.2",
+		Name:                        "local-mixed-25.4",
 		NumNodes:                    1,
 		OverrideDistSQLMode:         "off",
-		BootstrapVersion:            clusterversion.V24_2,
+		BootstrapVersion:            clusterversion.V25_4,
+		DisableUpgrade:              true,
+		DeclarativeCorpusCollection: true,
+	},
+	{
+		// This config runs tests using 26.1 cluster version, simulating a node that
+		// is operating in a mixed-version cluster.
+		Name:                        "local-mixed-26.1",
+		NumNodes:                    1,
+		OverrideDistSQLMode:         "off",
+		BootstrapVersion:            clusterversion.V26_1,
+		DisableUpgrade:              true,
+		DeclarativeCorpusCollection: true,
+	},
+	{
+		// This config runs tests using 26.2 cluster version, simulating a node that
+		// is operating in a mixed-version cluster.
+		Name:                        "local-mixed-26.2",
+		NumNodes:                    1,
+		OverrideDistSQLMode:         "off",
+		BootstrapVersion:            clusterversion.V26_2,
 		DisableUpgrade:              true,
 		DeclarativeCorpusCollection: true,
 	},
 	{
 		// This config runs a cluster with 3 nodes, with a separate process per
-		// node. The nodes initially start on v24.2.
-		Name:                     "cockroach-go-testserver-24.2",
+		// node. The nodes initially start on v25.4.
+		Name:                     "cockroach-go-testserver-25.4",
 		UseCockroachGoTestserver: true,
-		BootstrapVersion:         clusterversion.V24_2,
+		BootstrapVersion:         clusterversion.V25_4,
 		NumNodes:                 3,
 	},
 	{
-		// This config runs tests using 24.3 cluster version, simulating a node that
-		// is operating in a mixed-version cluster.
-		Name:                        "local-mixed-24.3",
-		NumNodes:                    1,
-		OverrideDistSQLMode:         "off",
-		BootstrapVersion:            clusterversion.V24_3,
-		DisableUpgrade:              true,
-		DeclarativeCorpusCollection: true,
+		// This config runs a cluster with 3 nodes, with a separate process per
+		// node. The nodes initially start on v26.1.
+		Name:                     "cockroach-go-testserver-26.1",
+		UseCockroachGoTestserver: true,
+		BootstrapVersion:         clusterversion.V26_1,
+		NumNodes:                 3,
 	},
 	{
 		// This config runs a cluster with 3 nodes, with a separate process per
-		// node. The nodes initially start on v24.2.
-		Name:                     "cockroach-go-testserver-24.3",
+		// node. The nodes initially start on v26.2.
+		Name:                     "cockroach-go-testserver-26.2",
 		UseCockroachGoTestserver: true,
-		BootstrapVersion:         clusterversion.V24_3,
+		BootstrapVersion:         clusterversion.V26_2,
 		NumNodes:                 3,
 	},
 }
@@ -602,11 +625,14 @@ var DefaultConfigSets = map[string]ConfigSet{
 		"local-vec-off",
 		"local-read-committed",
 		"local-repeatable-read",
+		"local-prepared",
 		"fakedist",
 		"fakedist-vec-off",
 		"fakedist-disk",
-		"local-mixed-24.2",
-		"local-mixed-24.3",
+		"3node-tenant",
+		"local-mixed-25.4",
+		"local-mixed-26.1",
+		"local-mixed-26.2",
 	),
 
 	// Special alias for all 5 node configs.
@@ -634,6 +660,18 @@ var DefaultConfigSets = map[string]ConfigSet{
 	"weak-iso-level-configs": makeConfigSet(
 		"local-read-committed",
 		"local-repeatable-read",
+	),
+
+	// Special alias for all testserver configs (for mixed-version testing).
+	"cockroach-go-testserver-configs": makeConfigSet(
+		"cockroach-go-testserver-25.4",
+		"cockroach-go-testserver-26.1",
+		"cockroach-go-testserver-26.2",
+	),
+
+	// Special alias for configs where schema locked is disabled.
+	"schema-locked-disabled": makeConfigSet(
+		"local-legacy-schema-changer",
 	),
 }
 
@@ -788,6 +826,9 @@ func processConfigs(
 		// config list.
 		names := getDefaultConfigListNames(blockedConfig)
 		if len(names) == 0 {
+			if !ConfigExists(blockedConfig) && blockedConfig != "metamorphic-batch-sizes" {
+				panic(fmt.Sprintf("attempted to block logic test config that doesn't exist: %s", blockedConfig))
+			}
 			blocklist[blockedConfig] = issueNo
 		} else {
 			for _, name := range names {
@@ -825,7 +866,26 @@ func processConfigs(
 		}
 	}
 
-	return configs, nonMetamorphicBatchSizes
+	return dedupConfigs(configs), nonMetamorphicBatchSizes
+}
+
+// dedupConfigs removes duplicate config indices from a ConfigSet, preserving
+// the order of first occurrence.
+//
+// TODO(butler): when a test file explicitly names a config that is already part
+// of a default config set (e.g. `default-configs 3node-tenant`), the explicit
+// mention should guarantee a CI run for that config instead of being selected
+// metamorphically.
+func dedupConfigs(configs ConfigSet) ConfigSet {
+	seen := make(map[ConfigIdx]struct{}, len(configs))
+	deduped := make(ConfigSet, 0, len(configs))
+	for _, idx := range configs {
+		if _, ok := seen[idx]; !ok {
+			seen[idx] = struct{}{}
+			deduped = append(deduped, idx)
+		}
+	}
+	return deduped
 }
 
 // applyBlocklistToConfigs applies the given blocklist to configs, returning the
@@ -880,17 +940,27 @@ func getDefaultConfigListNames(name string) []string {
 	return DefaultConfigSets[name].ConfigNames()
 }
 
-// ConfigCalculator is used to enumerate a map of configuration -> file.
-type ConfigCalculator struct {
-	ConfigOverrides, ConfigFilterOverrides []string
-	RunCCLConfigs                          bool
+var allConfigNames = make(map[string]struct{}, len(LogicTestConfigs))
+
+func init() {
+	for _, cfg := range LogicTestConfigs {
+		allConfigNames[cfg.Name] = struct{}{}
+	}
 }
 
-// Enumerate produces the list of all configuration/file pairs from the input
-// list of file globs. The return value is a list of the same length as
+// ConfigExists returns whether the given name matches either a config or an
+// alias.
+func ConfigExists(name string) bool {
+	_, config := allConfigNames[name]
+	_, alias := DefaultConfigSets[name]
+	return config || alias
+}
+
+// EnumerateConfigs produces the list of all configuration/file pairs from the
+// input list of file globs. The return value is a list of the same length as
 // LogicTestConfigs, and each sub-list is the path to a file run under that
 // configuration.
-func (c ConfigCalculator) Enumerate(globs ...string) ([][]string, error) {
+func EnumerateConfigs(globs ...string) ([][]string, error) {
 	var paths []string
 	for _, g := range globs {
 		match, err := filepath.Glob(g)
@@ -901,45 +971,11 @@ func (c ConfigCalculator) Enumerate(globs ...string) ([][]string, error) {
 	}
 
 	logger := stdlogger{}
-	// Read the configuration directives from all the files and accumulate a list
-	// of paths per config.
 	configPaths := make([][]string, len(LogicTestConfigs))
-	var configFilter map[string]struct{}
 	configDefaults := DefaultConfigSets[DefaultConfigSet]
-	if len(c.ConfigOverrides) > 0 {
-		// If a config override is provided, we use it to replace the default
-		// config set. This ensures that the overrides are used for files where:
-		// 1. no config directive is present, or
-		// 2. a config directive containing only a blocklist is present.
-		//
-		// We also create a filter to restrict configs to only those in the
-		// override list.
-		configDefaults = makeConfigSet(c.ConfigOverrides...)
-		configFilter = make(map[string]struct{})
-		for _, name := range c.ConfigOverrides {
-			configFilter[name] = struct{}{}
-		}
-	}
-	// If a config filter override is provided, add them to the filter to
-	// also run tests with them as a config directive. This is in addition to
-	// any configs added via the config override.
-	for _, name := range c.ConfigFilterOverrides {
-		configFilter[name] = struct{}{}
-	}
 	for _, path := range paths {
 		configs, _ := ReadTestFileConfigs(logger, path, configDefaults)
 		for _, idx := range configs {
-			config := LogicTestConfigs[idx]
-			configName := config.Name
-			if _, ok := configFilter[configName]; configFilter != nil && !ok {
-				// Config filter present but not containing test.
-				continue
-			}
-			if config.IsCCLConfig && !c.RunCCLConfigs {
-				// Config is a CCL config and the caller specified that CCL configs
-				// should not be run.
-				continue
-			}
 			configPaths[idx] = append(configPaths[idx], path)
 		}
 	}

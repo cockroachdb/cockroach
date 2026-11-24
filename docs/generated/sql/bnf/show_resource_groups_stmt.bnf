@@ -1,0 +1,2 @@
+show_resource_groups_stmt ::=
+	'SHOW' 'RESOURCE' 'GROUPS'

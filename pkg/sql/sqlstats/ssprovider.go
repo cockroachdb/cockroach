@@ -11,89 +11,20 @@ package sqlstats
 import (
 	"context"
 	"time"
+	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/appstatspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
 	"github.com/cockroachdb/cockroach/pkg/sql/execstats"
+	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlcommenter"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/crlib/crtime"
 )
-
-// Writer is the interface that provides methods to record statement and
-// transaction stats.
-type Writer interface {
-	// RecordStatement records statistics for a statement.
-	RecordStatement(ctx context.Context, key appstatspb.StatementStatisticsKey, value RecordedStmtStats) (appstatspb.StmtFingerprintID, error)
-
-	// RecordStatementExecStats records execution statistics for a statement.
-	// This is sampled and not recorded for every single statement.
-	RecordStatementExecStats(key appstatspb.StatementStatisticsKey, stats execstats.QueryLevelStats) error
-
-	// ShouldSample returns two booleans, the first one indicates whether we
-	// ever sampled (i.e. collected statistics for) the given combination of
-	// statement metadata, and the second one whether we should save the logical
-	// plan description for it.
-	ShouldSample(fingerprint string, implicitTxn bool, database string) (previouslySampled, savePlanForStats bool)
-
-	// RecordTransaction records statistics for a transaction.
-	RecordTransaction(ctx context.Context, key appstatspb.TransactionFingerprintID, value RecordedTxnStats) error
-}
-
-// Reader provides methods to retrieve transaction/statement statistics from
-// the Storage.
-type Reader interface {
-	// IterateStatementStats iterates through all the collected statement statistics
-	// by using StatementVisitor. Caller can specify iteration behavior, such
-	// as ordering, through IteratorOptions argument. StatementVisitor can return
-	// error, if an error is returned after the execution of the visitor, the
-	// iteration is aborted.
-	IterateStatementStats(context.Context, IteratorOptions, StatementVisitor) error
-
-	// IterateTransactionStats iterates through all the collected transaction
-	// statistics by using TransactionVisitor. It behaves similarly to
-	// IterateStatementStats.
-	IterateTransactionStats(context.Context, IteratorOptions, TransactionVisitor) error
-
-	// IterateAggregatedTransactionStats iterates through all the collected app-level
-	// transactions statistics. It behaves similarly to IterateStatementStats.
-	IterateAggregatedTransactionStats(context.Context, IteratorOptions, AggregatedTransactionVisitor) error
-}
-
-// ApplicationStats is an interface to read from or write to the statistics
-// belongs to an application.
-type ApplicationStats interface {
-	Reader
-	Writer
-
-	// MergeApplicationStatementStats merges the other application's statement
-	// statistics into the current ApplicationStats. It returns how many number
-	// of statistics were being discarded due to memory constraint. The
-	// TransactionFingerprintID of all other's statement statistics keys is
-	// updated to the provided one.
-	MergeApplicationStatementStats(
-		ctx context.Context,
-		other ApplicationStats,
-		transactionFingerprintID appstatspb.TransactionFingerprintID,
-	) uint64
-
-	// MaybeLogDiscardMessage is used to possibly log a message when statistics
-	// are being discarded because of memory limits.
-	MaybeLogDiscardMessage(ctx context.Context)
-
-	// NewApplicationStatsWithInheritedOptions returns a new ApplicationStats
-	// interface that inherits all memory limits of the existing
-	NewApplicationStatsWithInheritedOptions() ApplicationStats
-
-	// Free frees the current ApplicationStats and zeros out the memory counts
-	// and fingerprint counts.
-	Free(context.Context)
-
-	// Clear is like Free but also prepares the container for reuse.
-	Clear(context.Context)
-}
 
 // IteratorOptions provides the ability to the caller to change how it iterates
 // the statements and transactions.
@@ -127,65 +58,103 @@ type TransactionVisitor func(context.Context, *appstatspb.CollectedTransactionSt
 // the visitor, the iteration is aborted.
 type AggregatedTransactionVisitor func(appName string, statistics *appstatspb.TxnStats) error
 
-// Storage provides clients with interface to perform read and write operations
-// to sql statistics.
-type Storage interface {
-	Reader
-
-	// GetLastReset returns the last time when the sqlstats is being reset.
-	GetLastReset() time.Time
-
-	// GetApplicationStats returns an ApplicationStats instance for the given
-	// application name.
-	GetApplicationStats(appName string) ApplicationStats
-
-	// Reset resets all the statistics stored in-memory in the current Storage.
-	Reset(context.Context) error
-}
-
-// Provider is a wrapper around sqlstats subsystem for external consumption.
-type Provider interface {
-	Storage
-
-	Start(ctx context.Context, stopper *stop.Stopper)
-}
-
 // RecordedStmtStats stores the statistics of a statement to be recorded.
 type RecordedStmtStats struct {
-	SessionID            clusterunique.ID
-	StatementID          clusterunique.ID
-	TransactionID        uuid.UUID
-	AutoRetryCount       int
-	Failed               bool
-	AutoRetryReason      error
-	RowsAffected         int
-	IdleLatencySec       float64
-	ParseLatencySec      float64
-	PlanLatencySec       float64
-	RunLatencySec        float64
-	ServiceLatencySec    float64
-	OverheadLatencySec   float64
-	BytesRead            int64
-	RowsRead             int64
-	RowsWritten          int64
-	Nodes                []int64
-	KVNodeIDs            []int32
-	StatementType        tree.StatementType
-	Plan                 *appstatspb.ExplainTreePlanNode
-	PlanGist             string
-	StatementError       error
-	IndexRecommendations []string
-	Query                string
-	StartTime            time.Time
-	EndTime              time.Time
-	FullScan             bool
-	ExecStats            *execstats.QueryLevelStats
-	Indexes              []string
-	Database             string
+	FingerprintID            appstatspb.StmtFingerprintID
+	Query                    string
+	App                      string
+	DistSQL                  bool
+	Vec                      bool
+	FullScan                 bool
+	Database                 string
+	PlanHash                 uint64
+	QuerySummary             string
+	TransactionFingerprintID appstatspb.TransactionFingerprintID
+	SessionID                clusterunique.ID
+	StatementID              clusterunique.ID
+	AutoRetryCount           int
+	Failed                   bool
+	Generic                  bool
+	AppliedStmtHints         bool
+	AutoRetryReason          error
+	RowsAffected             int
+	IdleLatencySec           float64
+	ParseLatencySec          float64
+	PlanLatencySec           float64
+	RunLatencySec            float64
+	ServiceLatencySec        float64
+	OverheadLatencySec       float64
+	BytesRead                int64
+	RowsRead                 int64
+	RowsWritten              int64
+	KVCPUTimeNanos           int64
+	Nodes                    []int64
+	KVNodeIDs                []int32
+	StatementType            tree.StatementType
+	Plan                     *appstatspb.ExplainTreePlanNode
+	PlanGist                 string
+	StatementError           error
+	IndexRecommendations     []string
+	StartTime                time.Time
+	EndTime                  time.Time
+	ExecStats                *execstats.QueryLevelStats
+	Indexes                  []string
+	QueryTags                []sqlcommenter.QueryTag
+	UnderOuterTxn            bool
+	StatsRollout             eval.StatsRolloutSelection
+
+	// AggregatedTs and AggInterval, when non-zero, override the Container's
+	// own computation so that all statements in a transaction share the same
+	// aggregation window as the transaction itself.
+	AggregatedTs time.Time
+	AggInterval  time.Duration
+}
+
+var recordedStmtStatsSize = int64(unsafe.Sizeof(RecordedStmtStats{}))
+
+// Size returns the approximate memory footprint of RecordedStmtStats.
+func (r *RecordedStmtStats) Size() int64 {
+	size := recordedStmtStatsSize
+
+	// Account for variable-length string fields.
+	size += int64(len(r.Query))
+	size += int64(len(r.App))
+	size += int64(len(r.Database))
+	size += int64(len(r.QuerySummary))
+	size += int64(len(r.PlanGist))
+
+	// Account for slices.
+	size += int64(cap(r.Nodes)) * memsize.Int64
+	size += int64(cap(r.KVNodeIDs)) * memsize.Int32
+	size += int64(cap(r.IndexRecommendations)) * memsize.String
+	for _, rec := range r.IndexRecommendations {
+		size += int64(len(rec))
+	}
+	size += int64(cap(r.Indexes)) * memsize.String
+	for _, idx := range r.Indexes {
+		size += int64(len(idx))
+	}
+
+	size += int64(cap(r.QueryTags)) * int64(unsafe.Sizeof(sqlcommenter.QueryTag{}))
+	for _, tag := range r.QueryTags {
+		size += int64(len(tag.Key))
+		size += int64(len(tag.Value))
+	}
+
+	// Account for pointer fields.
+	if r.Plan != nil {
+		size += int64(r.Plan.Size())
+	}
+	if r.ExecStats != nil {
+		size += int64(unsafe.Sizeof(*r.ExecStats))
+	}
+
+	return size
 }
 
 // RecordedTxnStats stores the statistics of a transaction to be recorded.
 type RecordedTxnStats struct {
+	FingerprintID           appstatspb.TransactionFingerprintID
 	SessionID               clusterunique.ID
 	TransactionID           uuid.UUID
 	TransactionTimeSec      float64
@@ -206,7 +175,361 @@ type RecordedTxnStats struct {
 	RowsRead                int64
 	RowsWritten             int64
 	BytesRead               int64
+	KVCPUTimeNanos          time.Duration
 	Priority                roachpb.UserPriority
-	SessionData             *sessiondata.SessionData
 	TxnErr                  error
+	Application             string
+	// Normalized user name.
+	UserNormalized   string
+	InternalExecutor bool
+
+	// AggregatedTs and AggInterval, when non-zero, override the Container's
+	// own computation so that all statements in a transaction share the same
+	// aggregation window as the transaction itself.
+	AggregatedTs time.Time
+	AggInterval  time.Duration
+}
+
+// SSDrainer is the interface for draining or resetting sql stats.
+type SSDrainer interface {
+	// DrainStats Stats that are drained will permanently be removed from their
+	// source. Once the stats are drained, they cannot be processed again.
+	// DrainStats returns the collected statement and transaction statistics, as
+	// well as the total number of fingerprints drained.
+	DrainStats(ctx context.Context) (
+		[]*appstatspb.CollectedStatementStatistics,
+		[]*appstatspb.CollectedTransactionStatistics,
+		int64,
+	)
+	// Reset will reset all the stats in the drainer. Once reset, the stats will
+	// be lost.
+	Reset(ctx context.Context) error
+}
+
+type StatementLatencyRecorder interface {
+	RunLatency() time.Duration
+	IdleLatency() time.Duration
+	ServiceLatency() time.Duration
+	ParsingLatency() time.Duration
+	PlanningLatency() time.Duration
+	ExecOverheadLatency() time.Duration
+	StartTime() time.Time
+	EndTime() time.Time
+}
+
+// RecordedStatementStatsBuilder is a builder for RecordedStmtStats that
+// provides a constructor and chained methods for setting optional fields or
+// fields that may not be accessible at the time of construction. To build,
+// PlanMetadata and LatencyRecorder must have been set.
+type RecordedStatementStatsBuilder struct {
+	stmtStats         *RecordedStmtStats
+	planMetadataSet   bool
+	latenciesRecorded bool
+}
+
+func NewRecordedStatementStatsBuilder(
+	fingerprintId appstatspb.StmtFingerprintID,
+	database string,
+	fingerprint string,
+	summary string,
+	stmtType tree.StatementType,
+	appName string,
+) *RecordedStatementStatsBuilder {
+	return &RecordedStatementStatsBuilder{
+		stmtStats: &RecordedStmtStats{
+			FingerprintID: fingerprintId,
+			QuerySummary:  summary,
+			StatementType: stmtType,
+			Query:         fingerprint,
+			Database:      database,
+			App:           appName,
+		},
+	}
+}
+
+func (b *RecordedStatementStatsBuilder) PlanMetadata(
+	generic bool, distSQL bool, vectorized bool, fullScan bool,
+) *RecordedStatementStatsBuilder {
+	if b == nil {
+		return b
+	}
+	b.stmtStats.Generic = generic
+	b.stmtStats.DistSQL = distSQL
+	b.stmtStats.Vec = vectorized
+	b.stmtStats.FullScan = fullScan
+	b.planMetadataSet = true
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder) PlanGist(
+	gist string, hash uint64,
+) *RecordedStatementStatsBuilder {
+	if b == nil {
+		return b
+	}
+	b.stmtStats.PlanGist = gist
+	b.stmtStats.PlanHash = hash
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder) LatencyRecorder(
+	recorder StatementLatencyRecorder,
+) *RecordedStatementStatsBuilder {
+	if b == nil {
+		return b
+	}
+	b.stmtStats.RunLatencySec = recorder.RunLatency().Seconds()
+	b.stmtStats.IdleLatencySec = recorder.IdleLatency().Seconds()
+	b.stmtStats.ServiceLatencySec = recorder.ServiceLatency().Seconds()
+	b.stmtStats.ParseLatencySec = recorder.ParsingLatency().Seconds()
+	b.stmtStats.PlanLatencySec = recorder.PlanningLatency().Seconds()
+	b.stmtStats.OverheadLatencySec = recorder.ExecOverheadLatency().Seconds()
+	b.stmtStats.StartTime = recorder.StartTime()
+	b.stmtStats.EndTime = recorder.EndTime()
+	b.latenciesRecorded = true
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder) QueryLevelStats(
+	bytesRead int64, rowsRead int64, rowsWritten int64, kvCPUTime int64,
+) *RecordedStatementStatsBuilder {
+	if b == nil {
+		return b
+	}
+	b.stmtStats.BytesRead = bytesRead
+	b.stmtStats.RowsRead = rowsRead
+	b.stmtStats.RowsWritten = rowsWritten
+	b.stmtStats.KVCPUTimeNanos = kvCPUTime
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder) ExecStats(
+	execStats *execstats.QueryLevelStats,
+) *RecordedStatementStatsBuilder {
+	if b == nil {
+		return b
+	}
+	if execStats == nil {
+		return b
+	}
+
+	var sqlInstanceIDs []int64
+	var kvNodeIDs []int32
+	sqlInstanceIDs = make([]int64, 0, len(execStats.SQLInstanceIDs))
+	for _, sqlInstanceID := range execStats.SQLInstanceIDs {
+		sqlInstanceIDs = append(sqlInstanceIDs, int64(sqlInstanceID))
+	}
+	kvNodeIDs = execStats.KVNodeIDs
+	b.stmtStats.KVNodeIDs = kvNodeIDs
+	b.stmtStats.Nodes = sqlInstanceIDs
+	b.stmtStats.ExecStats = execStats
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder) Indexes(indexes []string) *RecordedStatementStatsBuilder {
+	if b == nil {
+		return b
+	}
+	b.stmtStats.Indexes = indexes
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder) StatementError(
+	stmtErr error,
+) *RecordedStatementStatsBuilder {
+	if b == nil {
+		return b
+	}
+	if stmtErr == nil {
+		return b
+	}
+	b.stmtStats.StatementError = stmtErr
+	b.stmtStats.Failed = true
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder) AutoRetry(
+	autoRetryCount int, autoRetryReason error,
+) *RecordedStatementStatsBuilder {
+	if b == nil {
+		return b
+	}
+	b.stmtStats.AutoRetryCount = autoRetryCount
+	b.stmtStats.AutoRetryReason = autoRetryReason
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder) RowsAffected(
+	rowsAffected int,
+) *RecordedStatementStatsBuilder {
+	if b == nil {
+		return b
+	}
+	b.stmtStats.RowsAffected = rowsAffected
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder) IndexRecommendations(
+	idxRecommendations []string,
+) *RecordedStatementStatsBuilder {
+	if b == nil {
+		return b
+	}
+	b.stmtStats.IndexRecommendations = idxRecommendations
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder) UnderOuterTxn() *RecordedStatementStatsBuilder {
+	if b == nil {
+		return b
+	}
+	b.stmtStats.UnderOuterTxn = true
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder) QueryTags(
+	queryTags []sqlcommenter.QueryTag,
+) *RecordedStatementStatsBuilder {
+	if b == nil {
+		return b
+	}
+	b.stmtStats.QueryTags = queryTags
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder) QueryID(
+	queryID clusterunique.ID,
+) *RecordedStatementStatsBuilder {
+	if b == nil {
+		return b
+	}
+	b.stmtStats.StatementID = queryID
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder) SessionID(
+	sessionID clusterunique.ID,
+) *RecordedStatementStatsBuilder {
+	if b == nil {
+		return b
+	}
+	b.stmtStats.SessionID = sessionID
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder) AppliedStatementHints() *RecordedStatementStatsBuilder {
+	if b == nil {
+		return b
+	}
+	b.stmtStats.AppliedStmtHints = true
+	return b
+}
+
+func (b *RecordedStatementStatsBuilder) CanaryStatsRollout(
+	sel eval.StatsRolloutSelection,
+) *RecordedStatementStatsBuilder {
+	if b == nil {
+		return b
+	}
+	b.stmtStats.StatsRollout = sel
+	return b
+}
+
+// Build returns the final RecordedStmtStats struct. It returns nil if not all
+// required fields have been set or if the builder itself is nil. In test
+// builds, it panics if not all required fields have been set.
+func (b *RecordedStatementStatsBuilder) Build() *RecordedStmtStats {
+	if !b.validate() {
+		if buildutil.CrdbTestBuild {
+			panic("RecordedStatementStatsBuilder: not all required fields set. " +
+				"plan metadata and latencies are required.")
+		}
+		return nil
+	}
+	return b.stmtStats
+}
+
+func (b *RecordedStatementStatsBuilder) validate() bool {
+	if b == nil {
+		return false
+	}
+
+	return b.planMetadataSet && b.latenciesRecorded
+}
+
+type StatsBuilderWithLatencyRecorder struct {
+	StatsBuilder    *RecordedStatementStatsBuilder
+	LatencyRecorder *LatencyRecorder
+}
+
+type StatementPhase int
+
+const (
+	StatementStarted StatementPhase = iota
+	StatementStartParsing
+	StatementEndParsing
+	StatementStartPlanning
+	StatementEndPlanning
+	StatementStartExec
+	StatementEndExec
+	StatementEnd
+	statementNumPhases
+)
+
+type LatencyRecorder struct {
+	times [statementNumPhases]crtime.Mono
+}
+
+var _ StatementLatencyRecorder = &LatencyRecorder{}
+
+func NewStatementLatencyRecorder() *LatencyRecorder {
+	return &LatencyRecorder{}
+}
+
+func (r *LatencyRecorder) Reset() {
+	*r = LatencyRecorder{}
+}
+
+func (r *LatencyRecorder) RecordPhase(phase StatementPhase, time crtime.Mono) {
+	r.times[phase] = time
+}
+
+func (r *LatencyRecorder) RunLatency() time.Duration {
+	return r.times[StatementEndExec].Sub(r.times[StatementStartExec])
+}
+
+func (r *LatencyRecorder) IdleLatency() time.Duration {
+	return 0
+}
+
+func (r *LatencyRecorder) ServiceLatency() time.Duration {
+	return r.times[StatementEndExec].Sub(r.times[StatementStarted])
+}
+func (r *LatencyRecorder) ParsingLatency() time.Duration {
+	return r.times[StatementEndParsing].Sub(r.times[StatementStartParsing])
+}
+func (r *LatencyRecorder) PlanningLatency() time.Duration {
+	return r.times[StatementEndPlanning].Sub(r.times[StatementStartPlanning])
+}
+
+func (r *LatencyRecorder) ProcessingLatency() time.Duration {
+	return r.ParsingLatency() + r.PlanningLatency() + r.RunLatency()
+}
+
+func (r *LatencyRecorder) ExecOverheadLatency() time.Duration {
+	return r.ServiceLatency() - r.ProcessingLatency()
+}
+
+func (r *LatencyRecorder) StartTime() time.Time {
+	return r.times[StatementStarted].ToUTC()
+}
+
+func (r *LatencyRecorder) EndTime() time.Time {
+	return r.times[StatementEnd].ToUTC()
+}
+
+func RecordStatementPhase(r *LatencyRecorder, phase StatementPhase) {
+	if r != nil {
+		r.RecordPhase(phase, crtime.NowMono())
+	}
 }

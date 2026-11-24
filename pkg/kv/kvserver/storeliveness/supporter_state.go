@@ -10,20 +10,37 @@ import (
 	"sync/atomic"
 
 	slpb "github.com/cockroachdb/cockroach/pkg/kv/kvserver/storeliveness/storelivenesspb"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
+// supportState contains state pertaining to support provided to a single remote
+// store.
+type supportState struct {
+	// SupportState contains all fields that must be persisted to disk.
+	slpb.SupportState
+
+	// lastSupportWithdrawnTime is the timestamp at which support was last
+	// withdrawn for the remote store.
+	lastSupportWithdrawnTime hlc.ClockTimestamp
+}
+
+// empty returns true if the supportState is empty.
+func (ss supportState) empty() bool {
+	return ss == supportState{}
+}
+
 // supporterState stores the core data structures for providing support.
 type supporterState struct {
 	// meta stores the SupporterMeta, including the max timestamp at which this
 	// store has withdrawn support.
 	meta slpb.SupporterMeta
-	// supportFor stores the SupportState for each remote store for which this
+	// supportFor stores the supportState for each remote store for which this
 	// store has provided support.
-	supportFor map[slpb.StoreIdent]slpb.SupportState
+	supportFor map[slpb.StoreIdent]supportState
 }
 
 // supporterStateHandler is the main interface for handling support for other
@@ -63,7 +80,7 @@ func newSupporterStateHandler() *supporterStateHandler {
 	ssh := &supporterStateHandler{
 		supporterState: supporterState{
 			meta:       slpb.SupporterMeta{},
-			supportFor: make(map[slpb.StoreIdent]slpb.SupportState),
+			supportFor: make(map[slpb.StoreIdent]supportState),
 		},
 	}
 	ssh.update.Store(
@@ -71,7 +88,7 @@ func newSupporterStateHandler() *supporterStateHandler {
 			checkedIn: &ssh.supporterState,
 			inProgress: supporterState{
 				meta:       slpb.SupporterMeta{},
-				supportFor: make(map[slpb.StoreIdent]slpb.SupportState),
+				supportFor: make(map[slpb.StoreIdent]supportState),
 			},
 		},
 	)
@@ -95,9 +112,9 @@ type supporterStateForUpdate struct {
 	inProgress supporterState
 }
 
-// getSupportFor returns the SupportState corresponding to the given store in
+// getSupportFor returns the supportState corresponding to the given store in
 // supporterState.supportFor.
-func (ssh *supporterStateHandler) getSupportFor(id slpb.StoreIdent) slpb.SupportState {
+func (ssh *supporterStateHandler) getSupportFor(id slpb.StoreIdent) supportState {
 	ssh.mu.RLock()
 	defer ssh.mu.RUnlock()
 	return ssh.supporterState.supportFor[id]
@@ -110,16 +127,19 @@ func (ssh *supporterStateHandler) getNumSupportFor() int {
 	return len(ssh.supporterState.supportFor)
 }
 
-// exportAllSupportFor exports a copy of all SupportStates from the
+// exportAllSupportFor exports a copy of all InspectSupportForStates from the
 // supporterState.supportFor map.
-func (ssh *supporterStateHandler) exportAllSupportFor() []slpb.SupportState {
+func (ssh *supporterStateHandler) exportAllSupportFor() []slpb.InspectSupportForState {
 	ssh.mu.RLock()
 	defer ssh.mu.RUnlock()
-	supportStates := make([]slpb.SupportState, len(ssh.supporterState.supportFor))
+	supportForStates := make([]slpb.InspectSupportForState, 0, len(ssh.supporterState.supportFor))
 	for _, ss := range ssh.supporterState.supportFor {
-		supportStates = append(supportStates, ss)
+		supportForStates = append(supportForStates, slpb.InspectSupportForState{
+			SupportState:             ss.SupportState,
+			LastSupportWithdrawnTime: ss.lastSupportWithdrawnTime.ToTimestamp(),
+		})
 	}
-	return supportStates
+	return supportForStates
 }
 
 // Functions for handling supporterState updates.
@@ -145,13 +165,11 @@ func (ssfu *supporterStateForUpdate) getMeta() slpb.SupporterMeta {
 	return ssfu.checkedIn.meta
 }
 
-// getSupportFor returns the SupportState from the inProgress view; if not
-// present, it falls back to the SupportState from the checkedIn view.
+// getSupportFor returns the supportState from the inProgress view; if not
+// present, it falls back to the supportState from the checkedIn view.
 // The returned boolean indicates whether the store is present in the supportFor
 // map; it does NOT indicate whether support is provided.
-func (ssfu *supporterStateForUpdate) getSupportFor(
-	storeID slpb.StoreIdent,
-) (slpb.SupportState, bool) {
+func (ssfu *supporterStateForUpdate) getSupportFor(storeID slpb.StoreIdent) (supportState, bool) {
 	ss, ok := ssfu.inProgress.supportFor[storeID]
 	if !ok {
 		ss, ok = ssfu.checkedIn.supportFor[storeID]
@@ -179,7 +197,8 @@ func (ssfu *supporterStateForUpdate) write(ctx context.Context, b storage.Batch)
 		}
 	}
 	for _, ss := range ssfu.inProgress.supportFor {
-		if err := writeSupportForState(ctx, b, ss); err != nil {
+		// Only write the persistent SupportState to disk.
+		if err := writeSupportForState(ctx, b, ss.SupportState); err != nil {
 			return err
 		}
 	}
@@ -200,9 +219,9 @@ func (ssh *supporterStateHandler) read(ctx context.Context, r storage.Reader) er
 	ssh.mu.Lock()
 	defer ssh.mu.Unlock()
 	ssh.supporterState.meta = meta
-	ssh.supporterState.supportFor = make(map[slpb.StoreIdent]slpb.SupportState, len(supportFor))
+	ssh.supporterState.supportFor = make(map[slpb.StoreIdent]supportState, len(supportFor))
 	for _, s := range supportFor {
-		ssh.supporterState.supportFor[s.Target] = s
+		ssh.supporterState.supportFor[s.Target] = supportState{SupportState: s}
 	}
 	return nil
 }
@@ -255,12 +274,15 @@ func (ssfu *supporterStateForUpdate) handleHeartbeat(
 	from := msg.From
 	ss, ok := ssfu.getSupportFor(from)
 	if !ok {
-		ss = slpb.SupportState{Target: from}
+		ss = supportState{SupportState: slpb.SupportState{Target: from}}
 	}
 	ssNew := handleHeartbeat(ss, msg)
+	assert(ss.lastSupportWithdrawnTime == ssNew.lastSupportWithdrawnTime,
+		"lastSupportWithdrawnTime changed on successful heartbeat",
+	)
 	if ss != ssNew {
 		ssfu.inProgress.supportFor[from] = ssNew
-		logSupportForChange(ctx, ss, ssNew)
+		logSupportForChange(ctx, ss.SupportState, ssNew.SupportState)
 	}
 	return slpb.Message{
 		Type:       slpb.MsgHeartbeatResp,
@@ -273,7 +295,7 @@ func (ssfu *supporterStateForUpdate) handleHeartbeat(
 
 // handleHeartbeat contains the core logic for updating the epoch and expiration
 // of a support requester upon receiving a heartbeat.
-func handleHeartbeat(ss slpb.SupportState, msg *slpb.Message) slpb.SupportState {
+func handleHeartbeat(ss supportState, msg *slpb.Message) supportState {
 	assert(!msg.Expiration.IsEmpty(), "requested support with zero expiration")
 	if ss.Epoch == msg.Epoch {
 		ss.Expiration.Forward(msg.Expiration)
@@ -291,10 +313,10 @@ func logSupportForChange(ctx context.Context, ss slpb.SupportState, ssNew slpb.S
 	assert(!ssNew.Expiration.IsEmpty(), "requested support with zero expiration")
 	if ss.Epoch == ssNew.Epoch && !ss.Expiration.IsEmpty() {
 		if log.ExpensiveLogEnabled(ctx, 3) {
-			log.VInfof(ctx, 3, "extended support for %s", supportChangeStr(ss, ssNew))
+			log.KvExec.VInfof(ctx, 3, "extended support for %s", supportChangeStr(ss, ssNew))
 		}
 	} else {
-		log.Infof(ctx, "provided support for %s", supportChangeStr(ss, ssNew))
+		log.KvExec.Infof(ctx, "provided support for %s", supportChangeStr(ss, ssNew))
 	}
 }
 
@@ -302,37 +324,42 @@ func logSupportForChange(ctx context.Context, ss slpb.SupportState, ssNew slpb.S
 
 // withdrawSupport handles a single support withdrawal. It updates the
 // inProgress view of supporterStateForUpdate only if there are any changes.
-// The function returns the number of stores for which support was withdrawn.
+// The function returns the store IDs for which support was withdrawn.
 func (ssfu *supporterStateForUpdate) withdrawSupport(
 	ctx context.Context, now hlc.ClockTimestamp,
-) (numWithdrawn int) {
+) (supportWithdrawnForStoreIDs map[roachpb.StoreID]struct{}) {
 	// Assert that there are no updates in ssfu.inProgress.supportFor to make
 	// sure we can iterate over ssfu.checkedIn.supportFor in the loop below.
 	assert(
 		len(ssfu.inProgress.supportFor) == 0, "reading from supporterStateForUpdate."+
 			"checkedIn.supportFor while supporterStateForUpdate.inProgress.supportFor is not empty",
 	)
+	supportWithdrawnForStoreIDs = make(map[roachpb.StoreID]struct{})
 	for id, ss := range ssfu.checkedIn.supportFor {
-		ssNew := maybeWithdrawSupport(ss, now)
-		if ss != ssNew {
+		ssNew, withdrawn := maybeWithdrawSupport(ss, now)
+		if withdrawn {
 			ssfu.inProgress.supportFor[id] = ssNew
-			log.Infof(ctx, "withdrew support for %s", supportChangeStr(ss, ssNew))
+			log.KvExec.Infof(ctx, "withdrew support for %s", supportChangeStr(ss.SupportState, ssNew.SupportState))
 			meta := ssfu.getMeta()
 			if meta.MaxWithdrawn.Forward(now) {
 				ssfu.inProgress.meta = meta
 			}
-			numWithdrawn++
+			supportWithdrawnForStoreIDs[id.StoreID] = struct{}{}
 		}
 	}
-	return numWithdrawn
+	return supportWithdrawnForStoreIDs
 }
 
 // maybeWithdrawSupport contains the core logic for updating the epoch and
-// expiration of a support requester when withdrawing support.
-func maybeWithdrawSupport(ss slpb.SupportState, now hlc.ClockTimestamp) slpb.SupportState {
+// expiration of a support requester when withdrawing support. If support is
+// withdrawn, lastSupportWithdrawnTime is updated to the current timestamp and
+// a boolean indicating as such is returned.
+func maybeWithdrawSupport(ss supportState, now hlc.ClockTimestamp) (supportState, bool) {
 	if !ss.Expiration.IsEmpty() && ss.Expiration.LessEq(now.ToTimestamp()) {
 		ss.Epoch++
 		ss.Expiration = hlc.Timestamp{}
+		ss.lastSupportWithdrawnTime = now
+		return ss, true
 	}
-	return ss
+	return ss, false
 }

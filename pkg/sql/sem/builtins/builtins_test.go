@@ -7,18 +7,15 @@ package builtins
 
 import (
 	"bytes"
-	"cmp"
 	"context"
 	"fmt"
 	"math"
-	"math/bits"
 	"math/rand"
-	"sort"
-	"strconv"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinsregistry"
@@ -57,176 +54,6 @@ func TestCategory(t *testing.T) {
 	}
 }
 
-// TestGenerateUniqueIDOrder verifies the expected ordering of
-// GenerateUniqueID.
-func TestGenerateUniqueIDOrder(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	tests := []tree.DInt{
-		GenerateUniqueID(0, 0),
-		GenerateUniqueID(1, 0),
-		GenerateUniqueID(2<<15, 0),
-		GenerateUniqueID(0, 1),
-		GenerateUniqueID(0, 10000),
-		GenerateUniqueInt(0),
-	}
-	prev := tests[0]
-	for _, tc := range tests[1:] {
-		if tc <= prev {
-			t.Fatalf("%d > %d", tc, prev)
-		}
-	}
-}
-
-// sorterWithSwapCount implements sort.Interface and wraps a slice of data
-// with a counter that tracks the number of swaps performed during sorting.
-type sorterWithSwapCount[T cmp.Ordered] struct {
-	data      []T
-	swapCount int
-}
-
-func (s *sorterWithSwapCount[_]) Len() int {
-	return len(s.data)
-}
-
-func (s *sorterWithSwapCount[_]) Less(i, j int) bool {
-	return s.data[i] < s.data[j]
-}
-
-func (s *sorterWithSwapCount[_]) Swap(i, j int) {
-	s.data[i], s.data[j] = s.data[j], s.data[i]
-	s.swapCount += 1
-}
-
-var _ sort.Interface = &sorterWithSwapCount[tree.DInt]{}
-
-// TestGenerateUniqueUnorderedIDOrder verifies the expected lack of ordering
-// for IDs produced by GenerateUniqueUnorderedID.
-func TestGenerateUniqueUnorderedIDOrder(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	// Our null hypothesis is that the mean number of swaps required to sort a
-	// slice of generated IDs is the same as the mean number of swaps required to
-	// sort a slice (of the same length) of random numbers.
-	//
-	// We determined experimentally (by using the same test as below but with
-	// rand.Int63() instead of GenerateUniqueUnorderedID and numTrials = 100000)
-	// that the number of swaps required to sort a slice of 101 (numGensPerTrial)
-	// random numbers fits a normal distribution with the following mean and
-	// standard deviation:
-	const (
-		distMean   = 271
-		distStdDev = 21
-	)
-
-	// We test our null hypothesis by running 100 trials and then performing
-	// a z-test (https://en.wikipedia.org/wiki/Z-test) for the observed mean
-	// number of swaps.
-	const (
-		numTrials       = 100
-		numGensPerTrial = 101
-	)
-
-	// We then compare it against the critical value of +-2.58,
-	// which corresponds to a confidence level of 99%.
-	const (
-		confidenceLevel = 0.99
-		pValue          = 1 - confidenceLevel
-		criticalVal     = 2.58
-	)
-
-	// Run trials.
-	swapCounts := make([]int, numTrials)
-	{
-		for i := 0; i < numTrials; i++ {
-			gens := make([]tree.DInt, numGensPerTrial)
-			for i := range gens {
-				gens[i] = GenerateUniqueUnorderedID(1 /* instanceID */)
-			}
-			s := &sorterWithSwapCount[tree.DInt]{
-				data: gens,
-			}
-			sort.Sort(s)
-			swapCounts[i] = s.swapCount
-		}
-
-		t.Logf("swap counts: %#v", swapCounts)
-	}
-
-	// Compute z-score.
-	var zScore float64
-	{
-		swapCountsSum := 0
-		for _, c := range swapCounts {
-			swapCountsSum += c
-		}
-		swapCountsMean := float64(swapCountsSum) / float64(numTrials)
-
-		t.Logf("mean: %f", swapCountsMean)
-
-		stdErr := float64(distStdDev) / math.Sqrt(numTrials)
-		zScore = (swapCountsMean - float64(distMean)) / stdErr
-
-		t.Logf("z-score: %f", zScore)
-	}
-
-	// Compare z-score to critical value.
-	if zScore < -criticalVal || zScore > criticalVal {
-		t.Fatalf("there is evidence that the generated IDs are not unordered (p < %s)",
-			strconv.FormatFloat(pValue, 'f' /* fmt */, -1 /* prec */, 64 /* bitSize */))
-	}
-}
-
-func TestMapToUnorderedUniqueInt(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
-
-	t.Run("preserves number of one bits", func(t *testing.T) {
-		for i := 0; i < 30; i++ {
-			// RandInput is [0][63 random bits].
-			randInput := uint64(rand.Int63())
-			output := mapToUnorderedUniqueInt(randInput)
-
-			inputOnesCount := bits.OnesCount64(randInput)
-			outputOnesCount := bits.OnesCount64(output)
-			require.Equalf(t, inputOnesCount, outputOnesCount, "input: %b, output: "+
-				"%b\nExpected: %d, got: %d", randInput, output, inputOnesCount,
-				outputOnesCount)
-		}
-	})
-
-	t.Run("correctly reverses timestamp", func(t *testing.T) {
-		for name, tc := range map[string]struct {
-			input    uint64
-			expected uint64
-		}{
-			"asymmetrical timestamp": {
-				input:    0b0101100000000000000000000000000000000000000000000000000000000001,
-				expected: 0b0000000000000000000000000000000000000000000001101000000000000001,
-			},
-			"symmetrical timestamp": {
-				input:    0b0100000000000000000000000000000000000000000000001000000000000101,
-				expected: 0b0100000000000000000000000000000000000000000000001000000000000101,
-			},
-			"max timestamp": {
-				input:    0b0111111111111111111111111111111111111111111111111000000000000001,
-				expected: 0b0111111111111111111111111111111111111111111111111000000000000001,
-			},
-		} {
-			t.Run(name, func(t *testing.T) {
-				actual := mapToUnorderedUniqueInt(tc.input)
-				require.Equalf(t,
-					tc.expected, actual,
-					"actual unordered unique int does not match expected:\n"+
-						"%064b (expected)\n"+
-						"%064b (actual)",
-					tc.expected, actual,
-				)
-			})
-		}
-	})
-}
-
 // TestSerialNormalizationWithUniqueUnorderedID makes sure that serial
 // normalization can use the unordered_rowid mode and a large number of
 // insertions (80k) results in a (somewhat) uniform distribution of the data.
@@ -260,8 +87,17 @@ func TestSerialNormalizationWithUniqueUnorderedID(t *testing.T) {
 					},
 				},
 			}
-			s, db, _ := serverutils.StartServer(t, params)
-			defer s.Stopper().Stop(ctx)
+			srv, db, _ := serverutils.StartServer(t, params)
+			defer srv.Stopper().Stop(ctx)
+
+			if srv.DeploymentMode().IsExternal() {
+				// If we're in the external-process mode, then disable rate
+				// limiting for it (we're going to slam the server with load,
+				// and we don't want for queries to be artificially delayed).
+				require.NoError(t, srv.GrantTenantCapabilities(
+					ctx, serverutils.TestTenantID(),
+					map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.ExemptFromRateLimiting: "true"}))
+			}
 
 			tdb := sqlutils.MakeSQLRunner(db)
 			// Create a new table with serial primary key i (unordered_rowid) and int j (index).
@@ -852,6 +688,7 @@ func TestTruncateTimestamp(t *testing.T) {
 
 func TestPGBuiltinsCalledOnNull(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
 	params := base.TestServerArgs{}
@@ -927,6 +764,107 @@ func TestPGBuiltinsCalledOnNull(t *testing.T) {
 	for i, tc := range testCases {
 		res := tdb.QueryStr(t, tc.sql)
 		require.Equalf(t, [][]string{{"NULL"}}, res, "failed test case %d", i+1)
+	}
+}
+
+// TestAclDefaultPublicPrivileges verifies that the public role's default
+// privileges returned by acldefault match the actual privileges that
+// CockroachDB grants to the public role on newly created objects.
+func TestAclDefaultPublicPrivileges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	tdb := sqlutils.MakeSQLRunner(db)
+
+	// Create a non-root user to own objects.
+	tdb.Exec(t, "CREATE USER testowner")
+	tdb.Exec(t, "GRANT ALL ON DATABASE defaultdb TO testowner WITH GRANT OPTION")
+
+	// Create test objects as testowner with default privileges.
+	tdb.Exec(t, "SET ROLE testowner")
+	tdb.Exec(t, "CREATE TABLE test_acl_t (id INT PRIMARY KEY)")
+	tdb.Exec(t, "CREATE SEQUENCE test_acl_seq")
+	tdb.Exec(t, "CREATE SCHEMA test_acl_s")
+	tdb.Exec(t, "CREATE FUNCTION test_acl_fn() RETURNS INT LANGUAGE SQL AS 'SELECT 1'")
+	tdb.Exec(t, "CREATE TYPE test_acl_type AS ENUM ('a', 'b')")
+	tdb.Exec(t, "SET ROLE root")
+
+	// For each object type, extract the public role's privileges from
+	// acldefault (via aclexplode) and compare against the actual
+	// privileges from SHOW GRANTS.
+	testCases := []struct {
+		name     string
+		typeChar string
+		// grantsQuery returns (privilege_type, is_grantable) for the
+		// public role on the object.
+		grantsQuery string
+	}{
+		{
+			name:     "table",
+			typeChar: "r",
+			grantsQuery: `SELECT privilege_type, is_grantable
+				FROM [SHOW GRANTS ON TABLE test_acl_t]
+				WHERE grantee = 'public'
+				ORDER BY privilege_type`,
+		},
+		{
+			name:     "sequence",
+			typeChar: "s",
+			grantsQuery: `SELECT privilege_type, is_grantable
+				FROM [SHOW GRANTS ON SEQUENCE test_acl_seq]
+				WHERE grantee = 'public'
+				ORDER BY privilege_type`,
+		},
+		{
+			name:     "schema",
+			typeChar: "n",
+			grantsQuery: `SELECT privilege_type, is_grantable
+				FROM [SHOW GRANTS ON SCHEMA test_acl_s]
+				WHERE grantee = 'public'
+				ORDER BY privilege_type`,
+		},
+		{
+			name:     "function",
+			typeChar: "f",
+			grantsQuery: `SELECT privilege_type, is_grantable
+				FROM [SHOW GRANTS ON FUNCTION test_acl_fn]
+				WHERE grantee = 'public'
+				ORDER BY privilege_type`,
+		},
+		{
+			name:     "type",
+			typeChar: "T",
+			grantsQuery: `SELECT privilege_type, is_grantable
+				FROM [SHOW GRANTS ON TYPE test_acl_type]
+				WHERE grantee = 'public'
+				ORDER BY privilege_type`,
+		},
+	}
+
+	ownerOID := tdb.QueryStr(t,
+		"SELECT oid FROM pg_roles WHERE rolname = 'testowner'")
+	require.Len(t, ownerOID, 1)
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Extract public role privileges from acldefault.
+			acldefaultQuery := fmt.Sprintf(`
+				SELECT a.privilege_type,
+					CASE WHEN a.is_grantable THEN 'true' ELSE 'false' END
+				FROM aclexplode(acldefault('%s'::"char", %s::oid)) a
+				WHERE a.grantee = 0
+				ORDER BY a.privilege_type`,
+				tc.typeChar, ownerOID[0][0])
+			expected := tdb.QueryStr(t, acldefaultQuery)
+			actual := tdb.QueryStr(t, tc.grantsQuery)
+			require.Equal(t, expected, actual,
+				"acldefault('%s') public role privileges do not match "+
+					"actual defaults", tc.typeChar)
+		})
 	}
 }
 

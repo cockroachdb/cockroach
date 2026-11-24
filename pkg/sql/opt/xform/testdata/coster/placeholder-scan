@@ -1,0 +1,1265 @@
+# This tests in this file compare the cost of a scan to the cost of a generic
+# placeholder-scan. The costs should be the same or similar when histograms are
+# not present.
+
+exec-ddl
+CREATE TABLE t (
+  k INT PRIMARY KEY,
+  a INT,
+  b INT,
+  c INT,
+  INDEX (a, b)
+)
+----
+
+# --------------------------------------------------
+# Without Histograms
+# --------------------------------------------------
+
+exec-ddl
+ALTER TABLE t INJECT STATISTICS '[
+  {
+    "columns": ["k"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 100000,
+    "distinct_count": 100000
+  },
+  {
+    "columns": ["a"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 100000,
+    "distinct_count": 100
+  },
+  {
+    "columns": ["b"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 100000,
+    "distinct_count": 100000
+  },
+  {
+    "columns": ["c"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 100000,
+    "distinct_count": 100000
+  }
+]'
+----
+
+# --------------------------------------------------
+# Q1
+# --------------------------------------------------
+
+opt
+SELECT k FROM t WHERE k = 1
+----
+scan t
+ ├── columns: k:1!null
+ ├── constraint: /1: [/1 - /1]
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0]
+ ├── cost: 9.06
+ ├── key: ()
+ └── fd: ()-->(1)
+
+opt
+SELECT k FROM t WHERE k = $1
+----
+placeholder-scan t
+ ├── columns: k:1!null
+ ├── cardinality: [0 - 1]
+ ├── has-placeholder
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0]
+ ├── cost: 9.06
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── span
+      └── $1
+
+# --------------------------------------------------
+# Q2
+# --------------------------------------------------
+
+opt
+SELECT * FROM t WHERE k = 1
+----
+scan t
+ ├── columns: k:1!null a:2 b:3 c:4
+ ├── constraint: /1: [/1 - /1]
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0]
+ ├── cost: 9.09
+ ├── key: ()
+ └── fd: ()-->(1-4)
+
+opt
+SELECT * FROM t WHERE k = $1
+----
+placeholder-scan t
+ ├── columns: k:1!null a:2 b:3 c:4
+ ├── cardinality: [0 - 1]
+ ├── has-placeholder
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0]
+ ├── cost: 9.09
+ ├── key: ()
+ ├── fd: ()-->(1-4)
+ └── span
+      └── $1
+
+# --------------------------------------------------
+# Q3
+# --------------------------------------------------
+
+opt
+SELECT k FROM t WHERE a = 1
+----
+project
+ ├── columns: k:1!null
+ ├── stats: [rows=1000]
+ ├── cost: 1078.04001
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ └── scan t@t_a_b_idx
+      ├── columns: k:1!null a:2!null
+      ├── constraint: /2/3/1: [/1 - /1]
+      ├── stats: [rows=1000, distinct(2)=1, null(2)=0]
+      ├── cost: 1068.02001
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (1)
+      └── fd: ()-->(2)
+
+opt
+SELECT k FROM t WHERE a = $1
+----
+project
+ ├── columns: k:1!null
+ ├── has-placeholder
+ ├── stats: [rows=1000]
+ ├── cost: 1078.04001
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ └── placeholder-scan t@t_a_b_idx
+      ├── columns: k:1!null a:2!null
+      ├── has-placeholder
+      ├── stats: [rows=1000, distinct(2)=1, null(2)=0]
+      ├── cost: 1068.02001
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (1)
+      ├── fd: ()-->(2)
+      └── span
+           └── $1
+
+# --------------------------------------------------
+# Q4
+# --------------------------------------------------
+
+opt
+SELECT k FROM t WHERE a = 1 ORDER BY b
+----
+project
+ ├── columns: k:1!null  [hidden: b:3]
+ ├── stats: [rows=1000]
+ ├── cost: 1088.04001
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ ├── fd: (1)-->(3)
+ ├── ordering: +3
+ └── scan t@t_a_b_idx
+      ├── columns: k:1!null a:2!null b:3
+      ├── constraint: /2/3/1: [/1 - /1]
+      ├── stats: [rows=1000, distinct(2)=1, null(2)=0]
+      ├── cost: 1078.02001
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (1)
+      ├── fd: ()-->(2), (1)-->(3)
+      └── ordering: +3 opt(2) [actual: +3]
+
+# NOTE: Placeholder scans do not provide any orderings, so a sort is added.
+opt
+SELECT k FROM t WHERE a = $1 ORDER BY b
+----
+sort
+ ├── columns: k:1!null  [hidden: b:3]
+ ├── has-placeholder
+ ├── stats: [rows=1000]
+ ├── cost: 1327.52195
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ ├── fd: (1)-->(3)
+ ├── ordering: +3
+ └── project
+      ├── columns: k:1!null b:3
+      ├── has-placeholder
+      ├── stats: [rows=1000]
+      ├── cost: 1088.04001
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (1)
+      ├── fd: (1)-->(3)
+      └── placeholder-scan t@t_a_b_idx
+           ├── columns: k:1!null a:2!null b:3
+           ├── has-placeholder
+           ├── stats: [rows=1000, distinct(2)=1, null(2)=0]
+           ├── cost: 1078.02001
+           ├── cost-flags: unbounded-cardinality
+           ├── key: (1)
+           ├── fd: ()-->(2), (1)-->(3)
+           └── span
+                └── $1
+
+# --------------------------------------------------
+# Q5
+# --------------------------------------------------
+
+opt
+SELECT k FROM t WHERE a = 1 ORDER BY b DESC
+----
+project
+ ├── columns: k:1!null  [hidden: b:3]
+ ├── stats: [rows=1000]
+ ├── cost: 1187.69785
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ ├── fd: (1)-->(3)
+ ├── ordering: -3
+ └── scan t@t_a_b_idx,rev
+      ├── columns: k:1!null a:2!null b:3
+      ├── constraint: /2/3/1: [/1 - /1]
+      ├── stats: [rows=1000, distinct(2)=1, null(2)=0]
+      ├── cost: 1177.67785
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (1)
+      ├── fd: ()-->(2), (1)-->(3)
+      └── ordering: -3 opt(2) [actual: -3]
+
+# NOTE: Placeholder scans do not provide any orderings, so a sort is added.
+opt
+SELECT k FROM t WHERE a = $1 ORDER BY b DESC
+----
+sort
+ ├── columns: k:1!null  [hidden: b:3]
+ ├── has-placeholder
+ ├── stats: [rows=1000]
+ ├── cost: 1327.52195
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ ├── fd: (1)-->(3)
+ ├── ordering: -3
+ └── project
+      ├── columns: k:1!null b:3
+      ├── has-placeholder
+      ├── stats: [rows=1000]
+      ├── cost: 1088.04001
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (1)
+      ├── fd: (1)-->(3)
+      └── placeholder-scan t@t_a_b_idx
+           ├── columns: k:1!null a:2!null b:3
+           ├── has-placeholder
+           ├── stats: [rows=1000, distinct(2)=1, null(2)=0]
+           ├── cost: 1078.02001
+           ├── cost-flags: unbounded-cardinality
+           ├── key: (1)
+           ├── fd: ()-->(2), (1)-->(3)
+           └── span
+                └── $1
+
+# --------------------------------------------------
+# Q6
+# --------------------------------------------------
+
+opt
+SELECT k FROM t WHERE a = 1 LIMIT 2
+----
+project
+ ├── columns: k:1!null
+ ├── cardinality: [0 - 2]
+ ├── stats: [rows=2]
+ ├── cost: 10.14
+ ├── key: (1)
+ └── scan t@t_a_b_idx
+      ├── columns: k:1!null a:2!null
+      ├── constraint: /2/3/1: [/1 - /1]
+      ├── limit: 2
+      ├── stats: [rows=2]
+      ├── cost: 10.11
+      ├── key: (1)
+      └── fd: ()-->(2)
+
+# NOTE: Placeholder scans do not yet support limited scans.
+opt
+SELECT k FROM t WHERE a = $1 LIMIT 2
+----
+project
+ ├── columns: k:1!null
+ ├── cardinality: [0 - 2]
+ ├── has-placeholder
+ ├── stats: [rows=2]
+ ├── cost: 20.18
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ └── limit
+      ├── columns: k:1!null a:2!null
+      ├── cardinality: [0 - 2]
+      ├── has-placeholder
+      ├── stats: [rows=2]
+      ├── cost: 20.15
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (1)
+      ├── fd: ()-->(2)
+      ├── placeholder-scan t@t_a_b_idx
+      │    ├── columns: k:1!null a:2!null
+      │    ├── has-placeholder
+      │    ├── stats: [rows=1000, distinct(2)=1, null(2)=0]
+      │    ├── cost: 20.12
+      │    ├── cost-flags: unbounded-cardinality
+      │    ├── key: (1)
+      │    ├── fd: ()-->(2)
+      │    ├── limit hint: 2.00
+      │    └── span
+      │         └── $1
+      └── 2
+
+# --------------------------------------------------
+# Q7
+# --------------------------------------------------
+
+opt
+SELECT k FROM t WHERE a > 1 AND a < 10
+----
+project
+ ├── columns: k:1!null
+ ├── stats: [rows=8000]
+ ├── cost: 8498.04001
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ └── scan t@t_a_b_idx
+      ├── columns: k:1!null a:2!null
+      ├── constraint: /2/3/1: [/2 - /9]
+      ├── stats: [rows=8000, distinct(2)=8, null(2)=0]
+      ├── cost: 8418.02001
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (1)
+      └── fd: (1)-->(2)
+
+# A generic query plan likely will not be used for queries like this. A
+# placeholder scan is not generated for this query, and without knowing the
+# bounds of the range it is difficult to make an accurate row count estimate.
+opt
+SELECT k FROM t WHERE a > $1 AND a < $2
+----
+project
+ ├── columns: k:1!null
+ ├── has-placeholder
+ ├── stats: [rows=11111.1]
+ ├── cost: 68912.9899
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ └── project
+      ├── columns: k:1!null a:2!null
+      ├── has-placeholder
+      ├── stats: [rows=11111.1, distinct(2)=100, null(2)=0]
+      ├── cost: 68801.8588
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      └── inner-join (lookup t@t_a_b_idx)
+           ├── columns: k:1!null a:2!null "$1":7!null "$2":8!null
+           ├── flags: disallow merge join
+           ├── lookup expression
+           │    └── filters
+           │         └── a:2 > "$1":7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+           ├── parameterized columns: (7,8)
+           ├── has-placeholder
+           ├── stats: [rows=11111.1, distinct(2)=100, null(2)=0, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0, distinct(7,8)=1, null(7,8)=0]
+           ├── cost: 68690.7277
+           ├── cost-flags: unbounded-cardinality
+           ├── key: (1)
+           ├── fd: ()-->(7,8), (1)-->(2)
+           ├── values
+           │    ├── columns: "$1":7 "$2":8
+           │    ├── cardinality: [1 - 1]
+           │    ├── has-placeholder
+           │    ├── stats: [rows=1, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0, distinct(7,8)=1, null(7,8)=0]
+           │    ├── cost: 0.02
+           │    ├── key: ()
+           │    ├── fd: ()-->(7,8)
+           │    └── ($1, $2)
+           └── filters
+                └── a:2 < "$2":8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
+
+# --------------------------------------------------
+# Q8
+# --------------------------------------------------
+
+opt
+SELECT k FROM t WHERE a = 1 AND b = 2
+----
+project
+ ├── columns: k:1!null
+ ├── stats: [rows=1]
+ ├── cost: 19.11
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ └── scan t@t_a_b_idx
+      ├── columns: k:1!null a:2!null b:3!null
+      ├── constraint: /2/3/1: [/1/2 - /1/2]
+      ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0]
+      ├── cost: 19.08
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (1)
+      └── fd: ()-->(2,3)
+
+opt
+SELECT k FROM t WHERE a = $1 AND b = $2
+----
+project
+ ├── columns: k:1!null
+ ├── has-placeholder
+ ├── stats: [rows=1]
+ ├── cost: 19.11
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ └── placeholder-scan t@t_a_b_idx
+      ├── columns: k:1!null a:2!null b:3!null
+      ├── has-placeholder
+      ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0]
+      ├── cost: 19.08
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (1)
+      ├── fd: ()-->(2,3)
+      └── span
+           ├── $1
+           └── $2
+
+# --------------------------------------------------
+# Q9
+# --------------------------------------------------
+
+opt
+SELECT k, a, b FROM t WHERE a = 1 AND b = 2
+----
+scan t@t_a_b_idx
+ ├── columns: k:1!null a:2!null b:3!null
+ ├── constraint: /2/3/1: [/1/2 - /1/2]
+ ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0]
+ ├── cost: 19.08
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ └── fd: ()-->(2,3)
+
+opt
+SELECT k, a, b FROM t WHERE a = $1 AND b = $2
+----
+placeholder-scan t@t_a_b_idx
+ ├── columns: k:1!null a:2!null b:3!null
+ ├── has-placeholder
+ ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0]
+ ├── cost: 19.08
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ ├── fd: ()-->(2,3)
+ └── span
+      ├── $1
+      └── $2
+
+# --------------------------------------------------
+# Q10
+# --------------------------------------------------
+
+opt
+SELECT * FROM t WHERE a = 1 AND b = 2
+----
+index-join t
+ ├── columns: k:1!null a:2!null b:3!null c:4
+ ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0]
+ ├── cost: 25.16
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ ├── fd: ()-->(2,3), (1)-->(4)
+ └── scan t@t_a_b_idx
+      ├── columns: k:1!null a:2!null b:3!null
+      ├── constraint: /2/3/1: [/1/2 - /1/2]
+      ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0]
+      ├── cost: 19.08
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (1)
+      └── fd: ()-->(2,3)
+
+# TODO(mgartner): This query does not yet use a placeholder scan, but could.
+opt
+SELECT * FROM t WHERE a = $1 AND b = $2
+----
+project
+ ├── columns: k:1!null a:2!null b:3!null c:4
+ ├── has-placeholder
+ ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0]
+ ├── cost: 36.22
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ ├── fd: ()-->(2,3), (1)-->(4)
+ └── inner-join (lookup t)
+      ├── columns: k:1!null a:2!null b:3!null c:4 "$1":7!null "$2":8!null
+      ├── key columns: [1] = [1]
+      ├── lookup columns are key
+      ├── has-placeholder
+      ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0, distinct(2,3)=1, null(2,3)=0]
+      ├── cost: 36.19
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (1)
+      ├── fd: ()-->(2,3,7,8), (1)-->(4), (2)==(7), (7)==(2), (3)==(8), (8)==(3)
+      ├── inner-join (lookup t@t_a_b_idx)
+      │    ├── columns: k:1!null a:2!null b:3!null "$1":7!null "$2":8!null
+      │    ├── flags: disallow merge join
+      │    ├── key columns: [7 8] = [2 3]
+      │    ├── parameterized columns: (7,8)
+      │    ├── has-placeholder
+      │    ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0, distinct(2,3)=1, null(2,3)=0]
+      │    ├── cost: 26.11
+      │    ├── cost-flags: unbounded-cardinality
+      │    ├── key: (1)
+      │    ├── fd: ()-->(2,3,7,8), (2)==(7), (7)==(2), (3)==(8), (8)==(3)
+      │    ├── values
+      │    │    ├── columns: "$1":7 "$2":8
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── has-placeholder
+      │    │    ├── stats: [rows=1, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0]
+      │    │    ├── cost: 0.02
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(7,8)
+      │    │    └── ($1, $2)
+      │    └── filters (true)
+      └── filters (true)
+
+# --------------------------------------------------
+# Q11 - Limit hint
+# --------------------------------------------------
+
+# Disable PushLimitIntoFilteredScan to prevent the limit from being pushed into
+# the scan.
+opt disable=PushLimitIntoFilteredScan
+SELECT k FROM t WHERE a = 1 LIMIT 100
+----
+project
+ ├── columns: k:1!null
+ ├── cardinality: [0 - 100]
+ ├── stats: [rows=100]
+ ├── cost: 125.04
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ └── limit
+      ├── columns: k:1!null a:2!null
+      ├── cardinality: [0 - 100]
+      ├── stats: [rows=100]
+      ├── cost: 124.03
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (1)
+      ├── fd: ()-->(2)
+      ├── scan t@t_a_b_idx
+      │    ├── columns: k:1!null a:2!null
+      │    ├── constraint: /2/3/1: [/1 - /1]
+      │    ├── stats: [rows=1000, distinct(2)=1, null(2)=0]
+      │    ├── cost: 123.02
+      │    ├── cost-flags: unbounded-cardinality
+      │    ├── key: (1)
+      │    ├── fd: ()-->(2)
+      │    └── limit hint: 100.00
+      └── 100
+
+opt
+SELECT k FROM t WHERE a = $1 LIMIT 100
+----
+project
+ ├── columns: k:1!null
+ ├── cardinality: [0 - 100]
+ ├── has-placeholder
+ ├── stats: [rows=100]
+ ├── cost: 125.04
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ └── limit
+      ├── columns: k:1!null a:2!null
+      ├── cardinality: [0 - 100]
+      ├── has-placeholder
+      ├── stats: [rows=100]
+      ├── cost: 124.03
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (1)
+      ├── fd: ()-->(2)
+      ├── placeholder-scan t@t_a_b_idx
+      │    ├── columns: k:1!null a:2!null
+      │    ├── has-placeholder
+      │    ├── stats: [rows=1000, distinct(2)=1, null(2)=0]
+      │    ├── cost: 123.02
+      │    ├── cost-flags: unbounded-cardinality
+      │    ├── key: (1)
+      │    ├── fd: ()-->(2)
+      │    ├── limit hint: 100.00
+      │    └── span
+      │         └── $1
+      └── 100
+
+# --------------------------------------------------
+# Q12 - virtual table scan
+# --------------------------------------------------
+
+opt
+SELECT * FROM pg_catalog.pg_attribute WHERE attrelid = 1
+----
+scan pg_attribute@pg_attribute_attrelid_idx
+ ├── columns: attrelid:2!null attname:3 atttypid:4 attstattarget:5 attlen:6 attnum:7 attndims:8 attcacheoff:9 atttypmod:10 attbyval:11 attstorage:12 attcompression:13 attalign:14 attnotnull:15 atthasdef:16 attidentity:17 attgenerated:18 attisdropped:19 attislocal:20 attinhcount:21 attcollation:22 attacl:23 attoptions:24 attfdwoptions:25 atthasmissing:26 attmissingval:27 attishidden:28
+ ├── constraint: /2/1: [/1 - /1]
+ ├── stats: [rows=10, distinct(2)=1, null(2)=0]
+ ├── cost: 133.52
+ ├── cost-flags: unbounded-cardinality
+ └── fd: ()-->(2)
+
+opt
+SELECT * FROM pg_catalog.pg_attribute WHERE attrelid = $1
+----
+placeholder-scan pg_attribute@pg_attribute_attrelid_idx
+ ├── columns: attrelid:2!null attname:3 atttypid:4 attstattarget:5 attlen:6 attnum:7 attndims:8 attcacheoff:9 atttypmod:10 attbyval:11 attstorage:12 attcompression:13 attalign:14 attnotnull:15 atthasdef:16 attidentity:17 attgenerated:18 attisdropped:19 attislocal:20 attinhcount:21 attcollation:22 attacl:23 attoptions:24 attfdwoptions:25 atthasmissing:26 attmissingval:27 attishidden:28
+ ├── has-placeholder
+ ├── stats: [rows=10, distinct(2)=1, null(2)=0]
+ ├── cost: 133.52
+ ├── cost-flags: unbounded-cardinality
+ ├── fd: ()-->(2)
+ └── span
+      └── $1
+
+# --------------------------------------------------
+# With Histograms
+# --------------------------------------------------
+
+exec-ddl
+ALTER TABLE t INJECT STATISTICS '[
+  {
+    "columns": ["k"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100000,
+    "distinct_count": 100000,
+    "avg_size": 2,
+    "histo_col_type": "int",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 1, "num_range": 19999, "distinct_range": 19999, "upper_bound": "20000"},
+      {"num_eq": 1, "num_range": 19999, "distinct_range": 19999, "upper_bound": "40000"},
+      {"num_eq": 1, "num_range": 19999, "distinct_range": 19999, "upper_bound": "60000"},
+      {"num_eq": 1, "num_range": 19999, "distinct_range": 19999, "upper_bound": "80000"},
+      {"num_eq": 1, "num_range": 19999, "distinct_range": 19999, "upper_bound": "100000"}
+    ]
+  },
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100000,
+    "distinct_count": 100,
+    "avg_size": 2,
+    "histo_col_type": "int",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 1000, "num_range": 19000, "distinct_range": 19, "upper_bound": "20"},
+      {"num_eq": 1000, "num_range": 19000, "distinct_range": 19, "upper_bound": "40"},
+      {"num_eq": 1000, "num_range": 19000, "distinct_range": 19, "upper_bound": "60"},
+      {"num_eq": 1000, "num_range": 19000, "distinct_range": 19, "upper_bound": "80"},
+      {"num_eq": 1000, "num_range": 19000, "distinct_range": 19, "upper_bound": "100"}
+    ]
+  },
+  {
+    "columns": ["b"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 100000,
+    "distinct_count": 100000,
+    "avg_size": 2,
+    "histo_col_type": "int",
+    "histo_buckets": [
+      {"num_eq": 0, "num_range": 0, "distinct_range": 0, "upper_bound": "0"},
+      {"num_eq": 1, "num_range": 19999, "distinct_range": 19999, "upper_bound": "20000"},
+      {"num_eq": 1, "num_range": 19999, "distinct_range": 19999, "upper_bound": "40000"},
+      {"num_eq": 1, "num_range": 19999, "distinct_range": 19999, "upper_bound": "60000"},
+      {"num_eq": 1, "num_range": 19999, "distinct_range": 19999, "upper_bound": "80000"},
+      {"num_eq": 1, "num_range": 19999, "distinct_range": 19999, "upper_bound": "100000"}
+    ]
+  }
+]'
+----
+
+# --------------------------------------------------
+# Q1
+# --------------------------------------------------
+
+opt
+SELECT k FROM t WHERE k = 1
+----
+scan t
+ ├── columns: k:1!null
+ ├── constraint: /1: [/1 - /1]
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0]
+ │   histogram(1)=  0  1
+ │                <--- 1
+ ├── cost: 9.04
+ ├── key: ()
+ └── fd: ()-->(1)
+
+opt
+SELECT k FROM t WHERE k = $1
+----
+placeholder-scan t
+ ├── columns: k:1!null
+ ├── cardinality: [0 - 1]
+ ├── has-placeholder
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0]
+ ├── cost: 9.04
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── span
+      └── $1
+
+# --------------------------------------------------
+# Q2
+# --------------------------------------------------
+
+opt
+SELECT * FROM t WHERE k = 1
+----
+scan t
+ ├── columns: k:1!null a:2 b:3 c:4
+ ├── constraint: /1: [/1 - /1]
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0]
+ │   histogram(1)=  0  1
+ │                <--- 1
+ ├── cost: 9.06
+ ├── key: ()
+ └── fd: ()-->(1-4)
+
+opt
+SELECT * FROM t WHERE k = $1
+----
+placeholder-scan t
+ ├── columns: k:1!null a:2 b:3 c:4
+ ├── cardinality: [0 - 1]
+ ├── has-placeholder
+ ├── stats: [rows=1, distinct(1)=1, null(1)=0]
+ ├── cost: 9.06
+ ├── key: ()
+ ├── fd: ()-->(1-4)
+ └── span
+      └── $1
+
+# --------------------------------------------------
+# Q3
+# --------------------------------------------------
+
+opt
+SELECT k FROM t WHERE a = 1
+----
+project
+ ├── columns: k:1!null
+ ├── stats: [rows=1000]
+ ├── cost: 1053.04001
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ └── scan t@t_a_b_idx
+      ├── columns: k:1!null a:2!null
+      ├── constraint: /2/3/1: [/1 - /1]
+      ├── stats: [rows=1000, distinct(2)=1, null(2)=0]
+      │   histogram(2)=  0 1000
+      │                <--- 1 -
+      ├── cost: 1043.02001
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (1)
+      └── fd: ()-->(2)
+
+opt
+SELECT k FROM t WHERE a = $1
+----
+project
+ ├── columns: k:1!null
+ ├── has-placeholder
+ ├── stats: [rows=1000]
+ ├── cost: 1053.04001
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ └── placeholder-scan t@t_a_b_idx
+      ├── columns: k:1!null a:2!null
+      ├── has-placeholder
+      ├── stats: [rows=1000, distinct(2)=1, null(2)=0]
+      ├── cost: 1043.02001
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (1)
+      ├── fd: ()-->(2)
+      └── span
+           └── $1
+
+# --------------------------------------------------
+# Q4
+# --------------------------------------------------
+
+opt
+SELECT k FROM t WHERE a = 1 ORDER BY b
+----
+project
+ ├── columns: k:1!null  [hidden: b:3]
+ ├── stats: [rows=1000]
+ ├── cost: 1058.04001
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ ├── fd: (1)-->(3)
+ ├── ordering: +3
+ └── scan t@t_a_b_idx
+      ├── columns: k:1!null a:2!null b:3
+      ├── constraint: /2/3/1: [/1 - /1]
+      ├── stats: [rows=1000, distinct(2)=1, null(2)=0]
+      │   histogram(2)=  0 1000
+      │                <--- 1 -
+      ├── cost: 1048.02001
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (1)
+      ├── fd: ()-->(2), (1)-->(3)
+      └── ordering: +3 opt(2) [actual: +3]
+
+# NOTE: Placeholder scans do not provide any orderings, so a sort is added.
+opt
+SELECT k FROM t WHERE a = $1 ORDER BY b
+----
+sort
+ ├── columns: k:1!null  [hidden: b:3]
+ ├── has-placeholder
+ ├── stats: [rows=1000]
+ ├── cost: 1297.52195
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ ├── fd: (1)-->(3)
+ ├── ordering: +3
+ └── project
+      ├── columns: k:1!null b:3
+      ├── has-placeholder
+      ├── stats: [rows=1000]
+      ├── cost: 1058.04001
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (1)
+      ├── fd: (1)-->(3)
+      └── placeholder-scan t@t_a_b_idx
+           ├── columns: k:1!null a:2!null b:3
+           ├── has-placeholder
+           ├── stats: [rows=1000, distinct(2)=1, null(2)=0]
+           ├── cost: 1048.02001
+           ├── cost-flags: unbounded-cardinality
+           ├── key: (1)
+           ├── fd: ()-->(2), (1)-->(3)
+           └── span
+                └── $1
+
+# --------------------------------------------------
+# Q5
+# --------------------------------------------------
+
+opt
+SELECT k FROM t WHERE a = 1 ORDER BY b DESC
+----
+project
+ ├── columns: k:1!null  [hidden: b:3]
+ ├── stats: [rows=1000]
+ ├── cost: 1157.69785
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ ├── fd: (1)-->(3)
+ ├── ordering: -3
+ └── scan t@t_a_b_idx,rev
+      ├── columns: k:1!null a:2!null b:3
+      ├── constraint: /2/3/1: [/1 - /1]
+      ├── stats: [rows=1000, distinct(2)=1, null(2)=0]
+      │   histogram(2)=  0 1000
+      │                <--- 1 -
+      ├── cost: 1147.67785
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (1)
+      ├── fd: ()-->(2), (1)-->(3)
+      └── ordering: -3 opt(2) [actual: -3]
+
+# NOTE: Placeholder scans do not provide any orderings, so a sort is added.
+opt
+SELECT k FROM t WHERE a = $1 ORDER BY b DESC
+----
+sort
+ ├── columns: k:1!null  [hidden: b:3]
+ ├── has-placeholder
+ ├── stats: [rows=1000]
+ ├── cost: 1297.52195
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ ├── fd: (1)-->(3)
+ ├── ordering: -3
+ └── project
+      ├── columns: k:1!null b:3
+      ├── has-placeholder
+      ├── stats: [rows=1000]
+      ├── cost: 1058.04001
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (1)
+      ├── fd: (1)-->(3)
+      └── placeholder-scan t@t_a_b_idx
+           ├── columns: k:1!null a:2!null b:3
+           ├── has-placeholder
+           ├── stats: [rows=1000, distinct(2)=1, null(2)=0]
+           ├── cost: 1048.02001
+           ├── cost-flags: unbounded-cardinality
+           ├── key: (1)
+           ├── fd: ()-->(2), (1)-->(3)
+           └── span
+                └── $1
+
+# --------------------------------------------------
+# Q6
+# --------------------------------------------------
+
+opt
+SELECT k FROM t WHERE a = 1 LIMIT 2
+----
+project
+ ├── columns: k:1!null
+ ├── cardinality: [0 - 2]
+ ├── stats: [rows=2]
+ ├── cost: 10.09
+ ├── key: (1)
+ └── scan t@t_a_b_idx
+      ├── columns: k:1!null a:2!null
+      ├── constraint: /2/3/1: [/1 - /1]
+      ├── limit: 2
+      ├── stats: [rows=2]
+      ├── cost: 10.06
+      ├── key: (1)
+      └── fd: ()-->(2)
+
+# NOTE: Placeholder scans do not yet support limited scans.
+opt
+SELECT k FROM t WHERE a = $1 LIMIT 2
+----
+project
+ ├── columns: k:1!null
+ ├── cardinality: [0 - 2]
+ ├── has-placeholder
+ ├── stats: [rows=2]
+ ├── cost: 20.13
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ └── limit
+      ├── columns: k:1!null a:2!null
+      ├── cardinality: [0 - 2]
+      ├── has-placeholder
+      ├── stats: [rows=2]
+      ├── cost: 20.1
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (1)
+      ├── fd: ()-->(2)
+      ├── placeholder-scan t@t_a_b_idx
+      │    ├── columns: k:1!null a:2!null
+      │    ├── has-placeholder
+      │    ├── stats: [rows=1000, distinct(2)=1, null(2)=0]
+      │    ├── cost: 20.07
+      │    ├── cost-flags: unbounded-cardinality
+      │    ├── key: (1)
+      │    ├── fd: ()-->(2)
+      │    ├── limit hint: 2.00
+      │    └── span
+      │         └── $1
+      └── 2
+
+# --------------------------------------------------
+# Q7
+# --------------------------------------------------
+
+opt
+SELECT k FROM t WHERE a > 1 AND a < 10
+----
+project
+ ├── columns: k:1!null
+ ├── stats: [rows=8000]
+ ├── cost: 8298.04001
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ └── scan t@t_a_b_idx
+      ├── columns: k:1!null a:2!null
+      ├── constraint: /2/3/1: [/2 - /9]
+      ├── stats: [rows=8000, distinct(2)=8, null(2)=0]
+      │   histogram(2)=  0  0  7000 1000
+      │                <--- 1 ------ 9 -
+      ├── cost: 8218.02001
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (1)
+      └── fd: (1)-->(2)
+
+# A generic query plan likely will not be used for queries like this. A
+# placeholder scan is not generated for this query, and without knowing the
+# bounds of the range it is difficult to make an accurate row count estimate.
+opt
+SELECT k FROM t WHERE a > $1 AND a < $2
+----
+project
+ ├── columns: k:1!null
+ ├── has-placeholder
+ ├── stats: [rows=11111.1]
+ ├── cost: 68079.6566
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ └── project
+      ├── columns: k:1!null a:2!null
+      ├── has-placeholder
+      ├── stats: [rows=11111.1, distinct(2)=100, null(2)=0]
+      ├── cost: 67968.5254
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      └── inner-join (lookup t@t_a_b_idx)
+           ├── columns: k:1!null a:2!null "$1":7!null "$2":8!null
+           ├── flags: disallow merge join
+           ├── lookup expression
+           │    └── filters
+           │         └── a:2 > "$1":7 [outer=(2,7), constraints=(/2: (/NULL - ]; /7: (/NULL - ])]
+           ├── parameterized columns: (7,8)
+           ├── has-placeholder
+           ├── stats: [rows=11111.1, distinct(2)=100, null(2)=0, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0, distinct(7,8)=1, null(7,8)=0]
+           ├── cost: 67857.3943
+           ├── cost-flags: unbounded-cardinality
+           ├── key: (1)
+           ├── fd: ()-->(7,8), (1)-->(2)
+           ├── values
+           │    ├── columns: "$1":7 "$2":8
+           │    ├── cardinality: [1 - 1]
+           │    ├── has-placeholder
+           │    ├── stats: [rows=1, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0, distinct(7,8)=1, null(7,8)=0]
+           │    ├── cost: 0.02
+           │    ├── key: ()
+           │    ├── fd: ()-->(7,8)
+           │    └── ($1, $2)
+           └── filters
+                └── a:2 < "$2":8 [outer=(2,8), constraints=(/2: (/NULL - ]; /8: (/NULL - ])]
+
+# --------------------------------------------------
+# Q8
+# --------------------------------------------------
+
+opt
+SELECT k FROM t WHERE a = 1 AND b = 2
+----
+project
+ ├── columns: k:1!null
+ ├── stats: [rows=1]
+ ├── cost: 19.08
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ └── scan t@t_a_b_idx
+      ├── columns: k:1!null a:2!null b:3!null
+      ├── constraint: /2/3/1: [/1/2 - /1/2]
+      ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0]
+      │   histogram(2)=  0  1
+      │                <--- 1
+      │   histogram(3)=  0  1
+      │                <--- 2
+      ├── cost: 19.05
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (1)
+      └── fd: ()-->(2,3)
+
+opt
+SELECT k FROM t WHERE a = $1 AND b = $2
+----
+project
+ ├── columns: k:1!null
+ ├── has-placeholder
+ ├── stats: [rows=1]
+ ├── cost: 19.08
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ └── placeholder-scan t@t_a_b_idx
+      ├── columns: k:1!null a:2!null b:3!null
+      ├── has-placeholder
+      ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0]
+      ├── cost: 19.05
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (1)
+      ├── fd: ()-->(2,3)
+      └── span
+           ├── $1
+           └── $2
+
+# --------------------------------------------------
+# Q9
+# --------------------------------------------------
+
+opt
+SELECT k, a, b FROM t WHERE a = 1 AND b = 2
+----
+scan t@t_a_b_idx
+ ├── columns: k:1!null a:2!null b:3!null
+ ├── constraint: /2/3/1: [/1/2 - /1/2]
+ ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0]
+ │   histogram(2)=  0  1
+ │                <--- 1
+ │   histogram(3)=  0  1
+ │                <--- 2
+ ├── cost: 19.05
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ └── fd: ()-->(2,3)
+
+opt
+SELECT k, a, b FROM t WHERE a = $1 AND b = $2
+----
+placeholder-scan t@t_a_b_idx
+ ├── columns: k:1!null a:2!null b:3!null
+ ├── has-placeholder
+ ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0]
+ ├── cost: 19.05
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ ├── fd: ()-->(2,3)
+ └── span
+      ├── $1
+      └── $2
+
+# --------------------------------------------------
+# Q10
+# --------------------------------------------------
+
+opt
+SELECT * FROM t WHERE a = 1 AND b = 2
+----
+index-join t
+ ├── columns: k:1!null a:2!null b:3!null c:4
+ ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0]
+ │   histogram(2)=  0  1
+ │                <--- 1
+ │   histogram(3)=  0  1
+ │                <--- 2
+ ├── cost: 25.115
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ ├── fd: ()-->(2,3), (1)-->(4)
+ └── scan t@t_a_b_idx
+      ├── columns: k:1!null a:2!null b:3!null
+      ├── constraint: /2/3/1: [/1/2 - /1/2]
+      ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0]
+      │   histogram(2)=  0  1
+      │                <--- 1
+      │   histogram(3)=  0  1
+      │                <--- 2
+      ├── cost: 19.05
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (1)
+      └── fd: ()-->(2,3)
+
+# TODO(mgartner): This query does not yet use a placeholder scan, but could.
+opt
+SELECT * FROM t WHERE a = $1 AND b = $2
+----
+project
+ ├── columns: k:1!null a:2!null b:3!null c:4
+ ├── has-placeholder
+ ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(2,3)=1, null(2,3)=0]
+ ├── cost: 36.175
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ ├── fd: ()-->(2,3), (1)-->(4)
+ └── inner-join (lookup t)
+      ├── columns: k:1!null a:2!null b:3!null c:4 "$1":7!null "$2":8!null
+      ├── key columns: [1] = [1]
+      ├── lookup columns are key
+      ├── has-placeholder
+      ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0, distinct(2,3)=1, null(2,3)=0]
+      ├── cost: 36.145
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (1)
+      ├── fd: ()-->(2,3,7,8), (1)-->(4), (2)==(7), (7)==(2), (3)==(8), (8)==(3)
+      ├── inner-join (lookup t@t_a_b_idx)
+      │    ├── columns: k:1!null a:2!null b:3!null "$1":7!null "$2":8!null
+      │    ├── flags: disallow merge join
+      │    ├── key columns: [7 8] = [2 3]
+      │    ├── parameterized columns: (7,8)
+      │    ├── has-placeholder
+      │    ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0, distinct(2,3)=1, null(2,3)=0]
+      │    ├── cost: 26.08
+      │    ├── cost-flags: unbounded-cardinality
+      │    ├── key: (1)
+      │    ├── fd: ()-->(2,3,7,8), (2)==(7), (7)==(2), (3)==(8), (8)==(3)
+      │    ├── values
+      │    │    ├── columns: "$1":7 "$2":8
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── has-placeholder
+      │    │    ├── stats: [rows=1, distinct(7)=1, null(7)=0, distinct(8)=1, null(8)=0]
+      │    │    ├── cost: 0.02
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(7,8)
+      │    │    └── ($1, $2)
+      │    └── filters (true)
+      └── filters (true)
+
+# --------------------------------------------------
+# Q11 - Limit hint
+# --------------------------------------------------
+
+# Disable PushLimitIntoFilteredScan to prevent the limit from being pushed into
+# the scan.
+opt disable=PushLimitIntoFilteredScan
+SELECT k FROM t WHERE a = 1 LIMIT 100
+----
+project
+ ├── columns: k:1!null
+ ├── cardinality: [0 - 100]
+ ├── stats: [rows=100]
+ ├── cost: 122.54
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ └── limit
+      ├── columns: k:1!null a:2!null
+      ├── cardinality: [0 - 100]
+      ├── stats: [rows=100]
+      ├── cost: 121.53
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (1)
+      ├── fd: ()-->(2)
+      ├── scan t@t_a_b_idx
+      │    ├── columns: k:1!null a:2!null
+      │    ├── constraint: /2/3/1: [/1 - /1]
+      │    ├── stats: [rows=1000, distinct(2)=1, null(2)=0]
+      │    │   histogram(2)=  0 1000
+      │    │                <--- 1 -
+      │    ├── cost: 120.52
+      │    ├── cost-flags: unbounded-cardinality
+      │    ├── key: (1)
+      │    ├── fd: ()-->(2)
+      │    └── limit hint: 100.00
+      └── 100
+
+opt
+SELECT k FROM t WHERE a = $1 LIMIT 100
+----
+project
+ ├── columns: k:1!null
+ ├── cardinality: [0 - 100]
+ ├── has-placeholder
+ ├── stats: [rows=100]
+ ├── cost: 122.54
+ ├── cost-flags: unbounded-cardinality
+ ├── key: (1)
+ └── limit
+      ├── columns: k:1!null a:2!null
+      ├── cardinality: [0 - 100]
+      ├── has-placeholder
+      ├── stats: [rows=100]
+      ├── cost: 121.53
+      ├── cost-flags: unbounded-cardinality
+      ├── key: (1)
+      ├── fd: ()-->(2)
+      ├── placeholder-scan t@t_a_b_idx
+      │    ├── columns: k:1!null a:2!null
+      │    ├── has-placeholder
+      │    ├── stats: [rows=1000, distinct(2)=1, null(2)=0]
+      │    ├── cost: 120.52
+      │    ├── cost-flags: unbounded-cardinality
+      │    ├── key: (1)
+      │    ├── fd: ()-->(2)
+      │    ├── limit hint: 100.00
+      │    └── span
+      │         └── $1
+      └── 100

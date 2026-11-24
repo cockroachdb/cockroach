@@ -10,6 +10,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcostmodel"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/quotapool"
 	"github.com/cockroachdb/errors"
@@ -18,14 +20,24 @@ import (
 // maybeRateLimitBatch may block the batch waiting to be rate-limited. Note that
 // the replica must be initialized and thus there is no synchronization issue
 // on the tenantRateLimiter.
-func (r *Replica) maybeRateLimitBatch(ctx context.Context, ba *kvpb.BatchRequest) error {
+func (r *Replica) maybeRateLimitBatch(
+	ctx context.Context, ba *kvpb.BatchRequest, tenantIDOrZero roachpb.TenantID,
+) error {
 	if r.tenantLimiter == nil {
 		return nil
 	}
-	tenantID, ok := roachpb.ClientTenantFromContext(ctx)
-	if !ok || tenantID == roachpb.SystemTenantID {
+	if !tenantIDOrZero.IsSet() || tenantIDOrZero.IsSystem() {
 		return nil
 	}
+	cleanup := ash.SetWorkState(
+		tenantIDOrZero, ash.WorkloadInfo{
+			WorkloadID:    ba.WorkloadID,
+			AppNameID:     ba.AppNameID,
+			GatewayNodeID: ba.GatewayNodeID,
+			WorkloadType:  workloadid.WorkloadType(ba.WorkloadType),
+		},
+		ash.WorkOther, "TenantRateLimit")
+	defer cleanup()
 
 	var info tenantcostmodel.BatchInfo
 	for i := range ba.Requests {

@@ -25,12 +25,14 @@ intersect
  ├── internal-ordering: +1,+2,+3
  ├── stats: [rows=1000, distinct(1-3)=1000, null(1-3)=0.001]
  ├── cost: 2469.0043
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1-3)
  ├── interesting orderings: (+1,+2,+3)
  ├── scan t.public.abc@abc_idx
  │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
  │    ├── stats: [rows=1000, distinct(1-3)=1000, null(1-3)=0.001]
  │    ├── cost: 1098.72
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── ordering: +1,+2,+3
  │    ├── prune: (1-3)
  │    └── interesting orderings: (+1,+2,+3)
@@ -38,12 +40,14 @@ intersect
       ├── columns: t.public.def.d:7(int) t.public.def.e:8(int) t.public.def.f:9(int)
       ├── stats: [rows=1000, distinct(7-9)=1000, null(7-9)=0.001]
       ├── cost: 1360.2643
+      ├── cost-flags: unbounded-cardinality
       ├── ordering: +7,+8,+9
       ├── prune: (7-9)
       └── scan t.public.def
            ├── columns: t.public.def.d:7(int) t.public.def.e:8(int) t.public.def.f:9(int)
            ├── stats: [rows=1000, distinct(7-9)=1000, null(7-9)=0.001]
            ├── cost: 1098.72
+           ├── cost-flags: unbounded-cardinality
            └── prune: (7-9)
 
 expr
@@ -63,16 +67,19 @@ intersect
  ├── right columns: t.public.def.d:7(int) t.public.def.e:8(int) t.public.def.f:9(int)
  ├── stats: [rows=1000, distinct(1-3)=1000, null(1-3)=0.001]
  ├── cost: 2227.89875
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1-3)
  ├── interesting orderings: (+1,+2,+3)
  ├── scan t.public.abc@abc_idx
  │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
  │    ├── stats: [rows=1000, distinct(1-3)=1000, null(1-3)=0.001]
  │    ├── cost: 1098.72
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── prune: (1-3)
  │    └── interesting orderings: (+1,+2,+3)
  └── scan t.public.def
       ├── columns: t.public.def.d:7(int) t.public.def.e:8(int) t.public.def.f:9(int)
       ├── stats: [rows=1000, distinct(7-9)=1000, null(7-9)=0.001]
       ├── cost: 1098.72
+      ├── cost-flags: unbounded-cardinality
       └── prune: (7-9)

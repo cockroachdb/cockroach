@@ -27,11 +27,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/datadriven"
 	"github.com/pmezard/go-difflib/difflib"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/assert"
@@ -294,7 +297,6 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 	anySQL := []string{"sql"}
 	sqlShell := []string{"sql"}
 	anyNonSQLShell := []string{"node drain"}
-	anyImportCmd := []string{"import db pgdump", "import table pgdump"}
 
 	testData := []struct {
 		cmds       []string
@@ -312,7 +314,6 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 		{anyCmd, []string{"--url=postgresql://:12345"}, []string{"--port=12345"}, "", ""},
 
 		{sqlShell, []string{"--url=postgresql:///foo"}, []string{"--database=foo"}, "", ""},
-		{anyImportCmd, []string{"--url=postgresql:///foo"}, []string{"--database=foo"}, "", ""},
 		{anyNonSQLShell, []string{"--url=postgresql://foo/bar"}, []string{"--host=foo" /*db ignored*/}, "", ""},
 
 		{anySQL, []string{"--url=postgresql://foo@"}, []string{"--user=foo"}, "", ""},
@@ -341,7 +342,6 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 		{anyCmd, []string{"--port=12345", "--url=postgresql://foo"}, []string{"--host=foo", "--port=12345"}, "", ""},
 		{anyCmd, []string{"--port=baz", "--url=postgresql://foo"}, []string{"--host=foo", "--port=baz"}, "", `invalid port ":baz" after host`},
 		{sqlShell, []string{"--database=baz", "--url=postgresql://foo"}, []string{"--host=foo", "--database=baz"}, "", ""},
-		{anyImportCmd, []string{"--database=baz", "--url=postgresql://"}, []string{"--database=baz"}, "", ""},
 		{anySQL, []string{"--user=baz", "--url=postgresql://foo"}, []string{"--host=foo", "--user=baz"}, "", ""},
 
 		{anyCmd, []string{"--insecure=false", "--url=postgresql://foo"}, []string{"--host=foo", "--insecure=false"}, "", ""},
@@ -353,7 +353,6 @@ func TestClientURLFlagEquivalence(t *testing.T) {
 		{anyCmd, []string{"--port=baz", "--url=postgresql://foo:12345"}, []string{"--host=foo", "--port=12345"}, "", ""},
 		{anyCmd, []string{"--port=baz", "--url=postgresql://foo:bar"}, nil, `invalid port ":bar" after host`, ""},
 		{sqlShell, []string{"--database=baz", "--url=postgresql://foo/bar"}, []string{"--host=foo", "--database=bar"}, "", ""},
-		{anyImportCmd, []string{"--database=baz", "--url=postgresql:///bar"}, []string{"--database=bar"}, "", ""},
 		{anySQL, []string{"--user=baz", "--url=postgresql://bar@foo"}, []string{"--host=foo", "--user=bar"}, "", ""},
 
 		{anyNonSQL, []string{"--insecure=false", "--url=postgresql://foo?sslmode=disable"}, []string{"--host=foo", "--insecure"}, "", ""},
@@ -867,6 +866,39 @@ func TestLocalityAdvAddrFlag(t *testing.T) {
 	}
 }
 
+func TestCertSANFlags(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Avoid leaking configuration changes after the tests end.
+	defer initCLIDefaults()
+
+	f := startCmd.Flags()
+	testData := []struct {
+		args []string
+	}{
+		{[]string{"start", "--root-cert-san", "DNS=example.com"}},
+		{[]string{"start", "--node-cert-san", "DNS=node.example.com"}},
+		{[]string{"start", "--root-cert-san", "URI=spiffe://example.org/root"}},
+		{[]string{"start", "--node-cert-san", "IP=192.168.1.1"}},
+		{[]string{"start", "--root-cert-san", "DNS=example.com,URI=spiffe://example.org"}},
+		{[]string{"start", "--root-cert-san", "DNS=example.com", "--node-cert-san", "DNS=node.example.com"}},
+		{[]string{"start", "--root-cert-san", "DNS=*.example.com,IP=192.168.1.1,URI=spiffe://example.org/service"}},
+	}
+
+	for _, td := range testData {
+		t.Run(strings.Join(td.args, " "), func(t *testing.T) {
+			initCLIDefaults()
+			if err := f.Parse(td.args); err != nil {
+				t.Fatalf("Parse(%#v) got unexpected error: %v", td.args, err)
+			}
+			if err := extraServerFlagInit(startCmd); err != nil {
+				t.Fatalf("extraServerFlagInit() got unexpected error: %v", err)
+			}
+		})
+	}
+}
+
 func TestLocalityFileFlag(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -1325,7 +1357,6 @@ Available Commands:
 
   nodelocal         upload and delete nodelocal files
   userfile          upload, list and delete user scoped files
-  import            import a db or table from a local PGDUMP or MYSQLDUMP file
   demo              open a demo sql shell
   convert-url       convert a SQL connection string for use with various client drivers
   gen               generate auxiliary files
@@ -1333,10 +1364,10 @@ Available Commands:
   debug             debugging commands
   sqlfmt            format SQL statements
   workload          generators for data and query loads
-  encode-uri        encode a CRDB connection URL
   help              Help about any command
 
 Flags:
+      --enterprise-require-fips-ready      abort if FIPS readiness checks fail
   -h, --help                               help for cockroach
       --log <string>                       
                                             Logging configuration, expressed using YAML syntax. For example, you can
@@ -1491,8 +1522,7 @@ func TestSQLPodStorageDefaults(t *testing.T) {
 				require.NoError(t, err)
 				assert.Equal(t, td.storePath, serverCfg.Stores.Specs[0].Path)
 				for _, s := range serverCfg.Stores.Specs {
-					assert.Zero(t, s.BallastSize.InBytes)
-					assert.Zero(t, s.BallastSize.Percent)
+					assert.Zero(t, s.BallastSize.Bytes())
 				}
 			} else {
 				require.EqualError(t, err, td.expectedErr)
@@ -1736,4 +1766,236 @@ func TestTenantIDFromFile(t *testing.T) {
 			require.Eventually(t, func() bool { return watcherEventCount.Load() > 0 }, 10*time.Second, 10*time.Millisecond)
 			require.Eventually(t, func() bool { return runSuccessfuly.Load() }, 10*time.Second, 10*time.Millisecond)
 		})
+}
+
+// TestParseEncryptionSpec verifies that the --enterprise-encryption arguments
+// are correctly parsed into storeEncryptionSpecs.
+func TestParseEncryptionSpec(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	absDataPath, err := filepath.Abs("data")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	testCases := []struct {
+		value       string
+		expectedErr string
+		expected    storeEncryptionSpec
+	}{
+		// path
+		{value: ",", expectedErr: "no path specified"},
+		{expectedErr: "no path specified"},
+		{value: "/mnt/hda1", expectedErr: "field not in the form <key>=<value>: /mnt/hda1"},
+		{value: "path=", expectedErr: "no value specified for path"},
+		{value: "path=~/data", expectedErr: "path cannot start with '~': ~/data"},
+		{value: "path=data,path=data2", expectedErr: "path field was used twice in encryption definition"},
+
+		// The same logic applies to key and old-key, don't repeat everything.
+		{value: "path=data", expectedErr: "no key specified"},
+		{value: "path=data,key=new.key", expectedErr: "no old key specified"},
+
+		// Rotation period.
+		{value: "path=data,key=new.key,old-key=old.key,rotation-period", expectedErr: "field not in the form <key>=<value>: rotation-period"},
+		{value: "path=data,key=new.key,old-key=old.key,rotation-period=", expectedErr: "no value specified for rotation-period"},
+		{value: "path=data,key=new.key,old-key=old.key,rotation-period=1", expectedErr: `could not parse rotation-duration value: 1: time: missing unit in duration "1"`},
+		{value: "path=data,key=new.key,old-key=old.key,rotation-period=1d", expectedErr: `could not parse rotation-duration value: 1d: time: unknown unit "d" in duration "1d"`},
+		{value: "path=data,key=new.key,old-key=old.key,rotation-period=1ms", expectedErr: `invalid rotation period 1ms`},
+
+		// Good values. Note that paths get absolutized so we start most of them
+		// with / so we can used fixed expected values.
+		{
+			value: "path=/data,key=/new.key,old-key=/old.key",
+			expected: storeEncryptionSpec{
+				Path: "/data",
+				Options: storageconfig.EncryptionOptions{
+					KeyFiles:       &storageconfig.EncryptionKeyFiles{CurrentKey: "/new.key", OldKey: "/old.key"},
+					RotationPeriod: storageconfig.DefaultRotationPeriod,
+				},
+			},
+		},
+		{
+			value: "path=/data,key=/new.key,old-key=/old.key,rotation-period=1h",
+			expected: storeEncryptionSpec{
+				Path: "/data",
+				Options: storageconfig.EncryptionOptions{
+					KeyFiles:       &storageconfig.EncryptionKeyFiles{CurrentKey: "/new.key", OldKey: "/old.key"},
+					RotationPeriod: time.Hour,
+				},
+			},
+		},
+		{
+			value: "path=/data,key=plain,old-key=/old.key,rotation-period=1h",
+			expected: storeEncryptionSpec{
+				Path: "/data",
+				Options: storageconfig.EncryptionOptions{
+					KeyFiles:       &storageconfig.EncryptionKeyFiles{CurrentKey: "plain", OldKey: "/old.key"},
+					RotationPeriod: time.Hour,
+				},
+			},
+		},
+		{
+			value: "path=/data,key=/new.key,old-key=plain,rotation-period=1h",
+			expected: storeEncryptionSpec{
+				Path: "/data",
+				Options: storageconfig.EncryptionOptions{
+					KeyFiles:       &storageconfig.EncryptionKeyFiles{CurrentKey: "/new.key", OldKey: "plain"},
+					RotationPeriod: time.Hour,
+				},
+			},
+		},
+
+		// One relative path to test absolutization.
+		{
+			value: "path=data,key=/new.key,old-key=/old.key",
+			expected: storeEncryptionSpec{
+				Path: absDataPath,
+				Options: storageconfig.EncryptionOptions{
+					KeyFiles:       &storageconfig.EncryptionKeyFiles{CurrentKey: "/new.key", OldKey: "/old.key"},
+					RotationPeriod: storageconfig.DefaultRotationPeriod,
+				},
+			},
+		},
+
+		// Special path * is not absolutized.
+		{
+			value: "path=*,key=/new.key,old-key=/old.key",
+			expected: storeEncryptionSpec{
+				Path: "*",
+				Options: storageconfig.EncryptionOptions{
+					KeyFiles:       &storageconfig.EncryptionKeyFiles{CurrentKey: "/new.key", OldKey: "/old.key"},
+					RotationPeriod: storageconfig.DefaultRotationPeriod,
+				},
+			},
+		},
+	}
+
+	for i, testCase := range testCases {
+		storeEncryptionSpec, err := parseStoreEncryptionSpec(testCase.value)
+		if err != nil {
+			if len(testCase.expectedErr) == 0 {
+				t.Errorf("%d(%s): no expected error, got %s", i, testCase.value, err)
+			}
+			if testCase.expectedErr != fmt.Sprint(err) {
+				t.Errorf("%d(%s): expected error \"%s\" does not match actual \"%s\"", i, testCase.value,
+					testCase.expectedErr, err)
+			}
+			continue
+		}
+		if len(testCase.expectedErr) > 0 {
+			t.Errorf("%d(%s): expected error %s but there was none", i, testCase.value, testCase.expectedErr)
+			continue
+		}
+		if !reflect.DeepEqual(testCase.expected, storeEncryptionSpec) {
+			t.Errorf("%d(%s): actual doesn't match expected\nactual:   %+v\nexpected: %+v", i,
+				testCase.value, storeEncryptionSpec, testCase.expected)
+		}
+
+		// Now test String() to make sure the result can be parsed.
+		storeEncryptionSpecString := storeEncryptionSpec.String()
+		storeEncryptionSpec2, err := parseStoreEncryptionSpec(storeEncryptionSpecString)
+		if err != nil {
+			t.Errorf("%d(%s): error parsing String() result: %s", i, testCase.value, err)
+			continue
+		}
+		// Compare strings to deal with floats not matching exactly.
+		if !reflect.DeepEqual(storeEncryptionSpecString, storeEncryptionSpec2.String()) {
+			t.Errorf("%d(%s): actual doesn't match expected\nactual:   %#+v\nexpected: %#+v", i, testCase.value,
+				storeEncryptionSpec, storeEncryptionSpec2)
+		}
+	}
+}
+
+func TestWALFailoverWrapperRoundtrip(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "wal-failover-config"), func(t *testing.T, d *datadriven.TestData) string {
+		var buf bytes.Buffer
+		for _, l := range strings.Split(d.Input, "\n") {
+			cfg := walFailoverWrapper{cfg: &storageconfig.WALFailover{}}
+			if err := cfg.Set(l); err != nil {
+				fmt.Fprintf(&buf, "err: %s\n", err)
+				continue
+			}
+			fmt.Fprintln(&buf, cfg.String())
+		}
+		return buf.String()
+	})
+}
+
+// TestUseNewRPC verifies that the --use-new-rpc flag is properly configured
+// on all commands that support DRPC for inter-node communication.
+func TestUseNewRPC(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	// Avoid leaking configuration changes after the test ends.
+	defer initCLIDefaults()
+
+	// List of all commands that should have the --use-new-rpc flag.
+	// These commands were modified to support DRPC for inter-node communication.
+	testCommands := []*cobra.Command{
+		initCmd,       // init
+		genHAProxyCmd, // gen haproxy
+		demoCmd,       // demo
+
+		// debug commands
+		debugGossipValuesCmd,
+		debugTimeSeriesDumpCmd,
+		debugZipCmd,
+		debugListFilesCmd,
+		debugSendKVBatchCmd,
+		debugResetQuorumCmd,
+		debugRecoverCollectInfoCmd,
+		debugRecoverPlanCmd,
+		debugRecoverExecuteCmd,
+		debugRecoverVerifyCmd,
+
+		// node commands
+		decommissionNodeCmd,
+		recommissionNodeCmd,
+		drainNodeCmd,
+	}
+
+	testCases := []struct {
+		name        string
+		args        []string
+		expectedVal bool
+	}{
+		{"default", []string{}, false},
+		{"enabled", []string{"--use-new-rpc"}, true},
+		{"explicitly_enabled", []string{"--use-new-rpc=true"}, true},
+		{"explicitly_disabled", []string{"--use-new-rpc=false"}, false},
+	}
+
+	for _, cmd := range testCommands {
+		cmdName := cmd.Use
+		t.Run(cmdName, func(t *testing.T) {
+			for _, tc := range testCases {
+				t.Run(tc.name, func(t *testing.T) {
+					// Reset to defaults before each test
+					initCLIDefaults()
+
+					f := cmd.Flags()
+					if err := f.Parse(tc.args); err != nil {
+						t.Fatal(err)
+					}
+
+					// Verify the flag exists
+					flag := f.Lookup(cliflags.UseNewRPC.Name)
+					if flag == nil {
+						t.Fatalf("command %s is missing --%s flag", cmdName, cliflags.UseNewRPC.Name)
+					}
+
+					// Verify the flag is hidden
+					require.True(t, flag.Hidden, "flag --%s should be hidden on command %s", cliflags.UseNewRPC.Name, cmdName)
+
+					// Verify the flag has the correct value
+					if baseCfg.UseDRPC != tc.expectedVal {
+						t.Errorf("command %s: expected --%s=%v, but got %v", cmdName, cliflags.UseNewRPC.Name, tc.expectedVal, baseCfg.UseDRPC)
+					}
+				})
+			}
+		})
+	}
 }

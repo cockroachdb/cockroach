@@ -37,12 +37,12 @@ import (
 //     {regular,elastic} tokens.
 //
 //   - "admit" tenant=t<int> pri=<string> create-time=<duration> \
-//     size=<bytes> range=r<int> log-position=<int>/<int> origin=n<int> \
+//     size=<bytes> range=r<int> log-position=<int>/<int> \
 //     [ingested=<bool>]
 //     Admit a replicated write request from the given tenant, of the given
 //     priority/size/create-time, writing to the given log position for the
-//     specified raft group. Also specified is the node where this request
-//     originated and whether it was ingested (i.e. as sstables).
+//     specified raft group. Also specified is whether this request was
+//     ingested (i.e. as sstables).
 //
 //   - "granter" [class={regular,elastic}] adjust-tokens={-,+}<bytes>
 //     Adjust the available {regular,elastic} tokens. If no class is specified,
@@ -53,12 +53,9 @@ import (
 //     requests waiting. If no class is specified, we grant admission across
 //     both classes.
 //
-//   - "tenant-weights" [t<int>=<int>]...
-//     Set weights for each tenant.
-//
 //   - "print"
 //     Pretty-print work queue internal state (waiting requests, consumed tokens
-//     per-tenant, physical admission statistics, tenant weights, etc).
+//     per-tenant, physical admission statistics).
 func TestReplicatedWriteAdmission(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -90,7 +87,7 @@ func TestReplicatedWriteAdmission(t *testing.T) {
 				elasticMetrics := makeWorkQueueMetrics("elastic", registry)
 				workQueueMetrics := [admissionpb.NumWorkClasses]*WorkQueueMetrics{regMetrics, elasticMetrics}
 				opts := makeWorkQueueOptions(KVWork)
-				opts.usesTokens = true
+				opts.mode = usesTokens
 				opts.timeSource = timeutil.NewManualTime(tzero)
 				opts.disableEpochClosingGoroutine = true
 				knobs := &TestingKnobs{
@@ -105,9 +102,9 @@ func TestReplicatedWriteAdmission(t *testing.T) {
 						if rwi.Ingested {
 							ingested = " ingested"
 						}
-						buf.printf("admitted [tenant=t%d pri=%s create-time=%s size=%s range=r%s origin=n%s log-position=%s%s]",
+						buf.printf("admitted [tenant=t%d pri=%s create-time=%s size=%s range=r%s log-position=%s%s]",
 							tenantID.ToUint64(), pri, timeutil.FromUnixNanos(createTime).Sub(tzero),
-							printTrimmedBytes(originalTokens), rwi.RangeID, rwi.Origin, rwi.LogPosition, ingested)
+							printTrimmedBytes(originalTokens), rwi.RangeID, rwi.LogPosition, ingested)
 					},
 				}
 				var mockCoordMu syncutil.Mutex
@@ -150,12 +147,6 @@ func TestReplicatedWriteAdmission(t *testing.T) {
 				require.NoError(t, err)
 				rangeID := roachpb.RangeID(ri)
 
-				// Parse origin=n<int>.
-				d.ScanArgs(t, "origin", &arg)
-				ni, err := strconv.Atoi(strings.TrimPrefix(arg, "n"))
-				require.NoError(t, err)
-				nodeID := roachpb.NodeID(ni)
-
 				// Parse log-position=<int>/<int>.
 				logPosition := parseLogPosition(t, d)
 
@@ -182,7 +173,6 @@ func TestReplicatedWriteAdmission(t *testing.T) {
 						ReplicatedWorkInfo: ReplicatedWorkInfo{
 							Enabled:     true,
 							RangeID:     rangeID,
-							Origin:      nodeID,
 							LogPosition: logPosition,
 							Ingested:    ingested,
 						},
@@ -219,18 +209,6 @@ func TestReplicatedWriteAdmission(t *testing.T) {
 					tg[wc].tokens += delta
 				}
 				return printTestGranterTokens(tg)
-
-			case "tenant-weights":
-				weightMap := make(map[uint64]uint32)
-				for _, cmdArg := range d.CmdArgs {
-					tenantID, err := strconv.Atoi(strings.TrimPrefix(cmdArg.Key, "t"))
-					require.NoError(t, err)
-					weight, err := strconv.Atoi(cmdArg.Vals[0])
-					require.NoError(t, err)
-					weightMap[uint64(tenantID)] = uint32(weight)
-				}
-				storeWorkQueue.SetTenantWeights(weightMap)
-				return ""
 
 			case "grant":
 				var wcs []admissionpb.WorkClass
@@ -318,28 +296,33 @@ func printWorkQueue(q *WorkQueue) string {
 	var buf strings.Builder
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	buf.WriteString(fmt.Sprintf("len(tenant-heap)=%d", len(q.mu.tenantHeap)))
-	if len(q.mu.tenantHeap) > 0 {
-		buf.WriteString(fmt.Sprintf(" top-tenant=t%d", q.mu.tenantHeap[0].id))
+	buf.WriteString(fmt.Sprintf("len(group-heap)=%d", len(q.mu.groupHeap)))
+	if len(q.mu.groupHeap) > 0 {
+		buf.WriteString(fmt.Sprintf(" top-group=%s", q.mu.groupHeap[0].groupKey))
 	}
-	var ids []uint64
-	for id := range q.mu.tenants {
-		ids = append(ids, id)
+	var keys []groupKey
+	for k := range q.mu.groups {
+		keys = append(keys, k)
 	}
-	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
-	for _, id := range ids {
-		tenant := q.mu.tenants[id]
-		buf.WriteString(fmt.Sprintf("\n tenant=t%d weight=%d fifo-threshold=%s used=%s",
-			tenant.id,
-			tenant.weight,
-			admissionpb.WorkPriority(tenant.fifoPriorityThreshold),
-			printTrimmedBytes(int64(tenant.used)),
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i].tenantID != keys[j].tenantID {
+			return keys[i].tenantID < keys[j].tenantID
+		}
+		return keys[i].groupID < keys[j].groupID
+	})
+	for _, k := range keys {
+		group := q.mu.groups[k]
+		buf.WriteString(fmt.Sprintf("\n group=%s weight=%d fifo-threshold=%s used=%s",
+			group.groupKey,
+			group.weight,
+			admissionpb.WorkPriority(group.fifoPriorityThreshold),
+			printTrimmedBytes(int64(group.used)),
 		))
-		if len(tenant.waitingWorkHeap) > 0 {
+		if len(group.waitingWorkHeap) > 0 {
 			buf.WriteString("\n")
 
-			for i := range tenant.waitingWorkHeap {
-				w := tenant.waitingWorkHeap[i]
+			for i := range group.waitingWorkHeap {
+				w := group.waitingWorkHeap[i]
 				if i != 0 {
 					buf.WriteString("\n")
 				}
@@ -349,12 +332,11 @@ func printWorkQueue(q *WorkQueue) string {
 					ingested = " ingested "
 				}
 
-				buf.WriteString(fmt.Sprintf("  [%d: pri=%s create-time=%s size=%s range=r%d origin=n%d log-position=%s%s]", i,
+				buf.WriteString(fmt.Sprintf("  [%d: pri=%s create-time=%s size=%s range=r%d log-position=%s%s]", i,
 					w.priority,
 					timeutil.FromUnixNanos(w.createTime).Sub(tzero),
 					printTrimmedBytes(w.requestedCount),
 					w.replicated.RangeID,
-					w.replicated.Origin,
 					w.replicated.LogPosition,
 					ingested,
 				))
@@ -388,11 +370,8 @@ func newTestReplicatedWriteGranter(
 		buf: buf,
 	}
 }
-func (tg *testReplicatedWriteGranter) grantKind() grantKind {
-	return token
-}
 
-func (tg *testReplicatedWriteGranter) tryGet(count int64) bool {
+func (tg *testReplicatedWriteGranter) tryGet(_ burstQualification, count int64) bool {
 	if count > tg.tokens {
 		tg.buf.printf("[%s] try-get=%s available=%s => insufficient tokens",
 			tg.wc, printTrimmedBytes(count), printTrimmedBytes(tg.tokens))
@@ -422,7 +401,8 @@ func (tg *testReplicatedWriteGranter) grant() {
 		if tg.tokens <= 0 {
 			return // nothing left to do
 		}
-		if !tg.r.hasWaitingRequests() {
+		hasWaiting, _ := tg.r.hasWaitingRequests()
+		if !hasWaiting {
 			return // nothing left to do
 		}
 		_ = tg.r.granted(0 /* unused */)

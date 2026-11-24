@@ -79,16 +79,30 @@ type InternalExecutorOverride struct {
 	OriginTimestampForLogicalDataReplication hlc.Timestamp
 	// PlanCacheMode, if set, overrides the plan_cache_mode session variable.
 	PlanCacheMode *sessiondatapb.PlanCacheMode
-	// GrowStackSize, if true, indicates that the connExecutor goroutine stack
-	// should be grown to 32KiB right away.
-	GrowStackSize bool
 	// DisablePlanGists, if true, overrides the disable_plan_gists session var.
 	DisablePlanGists bool
+	// BufferedWritesEnabled, if set, controls whether the buffered writes KV transaction
+	// protocol is used for user queries on the current session.
+	BufferedWritesEnabled *bool
+	// AlwaysDistributeFullScans, if true, overrides the
+	// always_distribute_full_scans session variable.
+	AlwaysDistributeFullScans bool
+	// PreventPartitioningSoftLimitedScans, if set, overrides the
+	// distsql_prevent_partitioning_soft_limited_scans session variable.
+	PreventPartitioningSoftLimitedScans *bool
+	// DistSQLMode, if set, overrides the distsql session variable.
+	DistSQLMode *sessiondatapb.DistSQLExecMode
+	// NewSchemaChangerMode, if set, overrides the use_declarative_schema_changer
+	// session variable.
+	NewSchemaChangerMode *sessiondatapb.NewSchemaChangerMode
 }
 
 // NoSessionDataOverride is the empty InternalExecutorOverride which does not
 // override any session data.
 var NoSessionDataOverride = InternalExecutorOverride{}
+
+// False is a helper variable for setting *bool fields in InternalExecutorOverride.
+var False = false
 
 // NodeUserSessionDataOverride is an InternalExecutorOverride which overrides
 // the user to the NodeUser.

@@ -68,6 +68,14 @@ func NewScheduledJob(env scheduledjobs.JobSchedulerEnv) *ScheduledJob {
 	}
 }
 
+// JobSchedulerEnv returns JobSchedulerEnv.
+func JobSchedulerEnv(knobs *TestingKnobs) scheduledjobs.JobSchedulerEnv {
+	if knobs != nil && knobs.JobSchedulerEnv != nil {
+		return knobs.JobSchedulerEnv
+	}
+	return scheduledjobs.ProdJobSchedulerEnv
+}
+
 // scheduledJobNotFoundError is returned from load when the scheduled job does
 // not exist.
 type scheduledJobNotFoundError struct {
@@ -171,12 +179,21 @@ func (j *ScheduledJob) ExecutionArgs() *jobspb.ExecutionArguments {
 	return &j.rec.ExecutionArgs
 }
 
-// SetSchedule updates periodicity of this schedule, and updates this schedules
+// SetScheduleAndNextRun updates periodicity of this schedule, and updates this schedules
 // next run time.
-func (j *ScheduledJob) SetSchedule(scheduleExpr string) error {
+func (j *ScheduledJob) SetScheduleAndNextRun(scheduleExpr string) error {
+	if j.rec.ScheduleExpr == scheduleExpr {
+		return nil
+	}
 	j.rec.ScheduleExpr = scheduleExpr
 	j.markDirty("schedule_expr")
 	return j.ScheduleNextRun()
+}
+
+// SetScheduleExpr updates schedule expression for this schedule without updating next run time.
+func (j *ScheduledJob) SetScheduleExpr(scheduleExpr string) {
+	j.rec.ScheduleExpr = scheduleExpr
+	j.markDirty("schedule_expr")
 }
 
 // HasRecurringSchedule returns true if this schedule job runs periodically.

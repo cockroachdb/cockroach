@@ -11,8 +11,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/bulkutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/descmetadata"
@@ -54,7 +56,15 @@ func (n *newSchemaChangeResumer) DumpTraceAfterRun() bool {
 }
 
 func (n *newSchemaChangeResumer) Resume(ctx context.Context, execCtxI interface{}) (err error) {
-	return n.run(ctx, execCtxI)
+	execCtx := execCtxI.(sql.JobExecContext)
+	err = n.run(ctx, execCtx)
+	if err != nil {
+		return err
+	}
+	// Cleanup temp storage on success. Otherwise, they may be needed for retry of
+	// the job. If the job failed, we attempt cleanup in OnFailOrCancel instead.
+	n.cleanupTempStorage(ctx, execCtx.ExecCfg())
+	return nil
 }
 
 func (n *newSchemaChangeResumer) OnFailOrCancel(
@@ -65,8 +75,8 @@ func (n *newSchemaChangeResumer) OnFailOrCancel(
 	// Permanent error has been hit, so there is no rollback
 	// from here. Only if the status is reverting will these be
 	// treated as fatal.
-	if jobs.IsPermanentJobError(err) && n.job.Status() == jobs.StatusReverting {
-		log.Warningf(ctx, "schema change will not rollback; permanent error detected: %v", err)
+	if jobs.IsPermanentJobError(err) && n.job.State() == jobs.StateReverting {
+		log.Dev.Warningf(ctx, "schema change will not rollback; permanent error detected: %v", err)
 		return nil
 	}
 	n.rollbackCause = err
@@ -74,9 +84,11 @@ func (n *newSchemaChangeResumer) OnFailOrCancel(
 	// Clean up any protected timestamps as a last resort, in case the job
 	// execution never did itself.
 	if err := execCfg.ProtectedTimestampManager.Unprotect(ctx, n.job); err != nil {
-		log.Warningf(ctx, "unable to revert protected timestamp %v", err)
+		log.Dev.Warningf(ctx, "unable to revert protected timestamp %v", err)
 	}
-	return n.run(ctx, execCtx)
+	runErr := n.run(ctx, execCtx)
+	n.cleanupTempStorage(ctx, execCfg)
+	return runErr
 }
 
 // CollectProfile writes the current phase's explain output, captured earlier,
@@ -93,7 +105,8 @@ func (n *newSchemaChangeResumer) CollectProfile(ctx context.Context, execCtx int
 func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) error {
 	execCtx := execCtxI.(sql.JobExecContext)
 	execCfg := execCtx.ExecCfg()
-	if err := n.job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+	if err := n.job.DeprecatedNoTxn().Update(ctx, func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 		return nil
 	}); err != nil {
 		// TODO(ajwerner): Detect transient errors and classify as retriable here or
@@ -127,13 +140,18 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 				descriptors,
 				&execCfg.Settings.SV,
 				execCtx.SessionData(),
+				execCfg.Settings,
+				execCfg.JobsKnobs(),
+				execCfg.NodeInfo.LogicalClusterID(),
 			)
 		},
 		execCfg.StatsRefresher,
+		execCfg.TableStatsCache,
 		execCfg.DeclarativeSchemaChangerTestingKnobs,
 		payload.Statement,
 		execCtx.SessionData(),
 		execCtx.ExtendedEvalContext().Tracing.KVTracingEnabled(),
+		execCfg.DistSQLSrv.ExternalStorageFromURI,
 	)
 
 	// If there are no descriptors left, then we can short circuit here.
@@ -141,11 +159,13 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 		return nil
 	}
 
+	startTime := timeutil.FromUnixMicros(payload.StartedMicros)
 	err := scrun.RunSchemaChangesInJob(
 		ctx,
 		execCfg.DeclarativeSchemaChangerTestingKnobs,
 		n.deps,
 		n.job.ID(),
+		startTime,
 		payload.DescriptorIDs,
 		n.rollbackCause,
 	)
@@ -154,7 +174,11 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 		// If a descriptor can't be found, we additionally mark the error as a
 		// permanent job error, so that non-cancelable jobs don't get retried. If a
 		// descriptor has gone missing, it isn't likely to come back.
-		if errors.IsAny(err, catalog.ErrDescriptorNotFound, catalog.ErrDescriptorDropped, catalog.ErrReferencedDescriptorNotFound) {
+		// We also mark assertion errors as permanent job errors, since they are
+		// never expected.
+		if errors.IsAny(
+			err, catalog.ErrDescriptorNotFound, catalog.ErrDescriptorDropped, catalog.ErrReferencedDescriptorNotFound,
+		) || errors.HasAssertionFailure(err) {
 			return jobs.MarkAsPermanentJobError(err)
 		}
 		return err
@@ -163,4 +187,38 @@ func (n *newSchemaChangeResumer) run(ctx context.Context, execCtxI interface{}) 
 		return jobs.MarkAsRetryJobError(err)
 	}
 	return nil
+}
+
+// cleanupTempStorage best-effort deletes job-scoped temporary files produced by
+// schema change backfills using the distributed merge pipeline. The storage
+// prefixes should omit the "/job/<job-id>/" suffix; this helper will scope
+// cleanup to the current job ID automatically.
+//
+// This should only be called once the job is finishing (successfully or after
+// cancellation), to avoid deleting files needed for retry.
+func (n *newSchemaChangeResumer) cleanupTempStorage(
+	ctx context.Context, execCfg *sql.ExecutorConfig,
+) {
+	if execCfg == nil || execCfg.DistSQLSrv == nil || execCfg.DistSQLSrv.ExternalStorageFromURI == nil {
+		return
+	}
+	payload := n.job.Payload()
+	details := payload.GetNewSchemaChange()
+	if details == nil {
+		return
+	}
+	var prefixes []string
+	for _, bp := range details.BackfillProgress {
+		prefixes = append(prefixes, bp.SSTStoragePrefixes...)
+	}
+
+	cleaner := bulkutil.NewBulkJobCleaner(execCfg.DistSQLSrv.ExternalStorageFromURI, username.NodeUserName())
+	defer func() {
+		if err := cleaner.Close(); err != nil {
+			log.Dev.Warningf(ctx, "job %d: closing bulk job cleaner: %v", n.job.ID(), err)
+		}
+	}()
+	if err := cleaner.CleanupJobDirectories(ctx, n.job.ID(), prefixes); err != nil {
+		log.Dev.Warningf(ctx, "job %d: cleaning up temporary SST files: %v", n.job.ID(), err)
+	}
 }

@@ -10,6 +10,7 @@ import (
 	"math"
 	"math/rand"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 	"unsafe"
@@ -68,20 +69,13 @@ func TestInterner(t *testing.T) {
 		Typ: tupleTyp3,
 	}
 
-	arr1 := tree.NewDArray(tupTyp1)
-	arr1.Array = tree.Datums{tup1, tup2}
-	arr2 := tree.NewDArray(tupTyp2)
-	arr2.Array = tree.Datums{tup2, tup1}
-	arr3 := tree.NewDArray(tupTyp3)
-	arr3.Array = tree.Datums{tup2, tup3}
-	arr4 := tree.NewDArray(types.Int)
-	arr4.Array = tree.Datums{tree.DNull}
-	arr5 := tree.NewDArray(types.String)
-	arr5.Array = tree.Datums{tree.DNull}
-	arr6 := tree.NewDArray(types.Int)
-	arr6.Array = tree.Datums{}
-	arr7 := tree.NewDArray(types.String)
-	arr7.Array = tree.Datums{}
+	arr1 := tree.NewDArrayFromDatums(tupTyp1, tree.Datums{tup1, tup2})
+	arr2 := tree.NewDArrayFromDatums(tupTyp2, tree.Datums{tup2, tup1})
+	arr3 := tree.NewDArrayFromDatums(tupTyp3, tree.Datums{tup2, tup3})
+	arr4 := tree.NewDArrayFromDatums(types.Int, tree.Datums{tree.DNull})
+	arr5 := tree.NewDArrayFromDatums(types.String, tree.Datums{tree.DNull})
+	arr6 := tree.NewDArrayFromDatums(types.Int, tree.Datums{})
+	arr7 := tree.NewDArrayFromDatums(types.String, tree.Datums{})
 
 	dec1, _ := tree.ParseDDecimal("1.0")
 	dec2, _ := tree.ParseDDecimal("1.0")
@@ -402,7 +396,7 @@ func TestInterner(t *testing.T) {
 		{hashFn: in.hasher.HashScanFlags, eqFn: in.hasher.IsScanFlagsEqual, variations: []testVariation{
 			// Use unnamed fields so that compilation fails if a new field is
 			// added to ScanFlags.
-			{val1: ScanFlags{false, false, false, false, false, false, false, 0, 0, intsets.Fast{}}, val2: ScanFlags{}, equal: true},
+			{val1: ScanFlags{false, false, false, false, false, false, false, false, 0, 0, intsets.Fast{}}, val2: ScanFlags{}, equal: true},
 			{val1: ScanFlags{}, val2: ScanFlags{}, equal: true},
 			{val1: ScanFlags{NoIndexJoin: false}, val2: ScanFlags{NoIndexJoin: true}, equal: false},
 			{val1: ScanFlags{NoIndexJoin: true}, val2: ScanFlags{NoIndexJoin: true}, equal: true},
@@ -417,6 +411,8 @@ func TestInterner(t *testing.T) {
 			{val1: ScanFlags{NoIndexJoin: true, Index: 1}, val2: ScanFlags{NoIndexJoin: false, Index: 1}, equal: false},
 			{val1: ScanFlags{NoFullScan: true}, val2: ScanFlags{NoFullScan: false}, equal: false},
 			{val1: ScanFlags{NoFullScan: true}, val2: ScanFlags{NoFullScan: true}, equal: true},
+			{val1: ScanFlags{AvoidFullScan: true}, val2: ScanFlags{AvoidFullScan: false}, equal: false},
+			{val1: ScanFlags{AvoidFullScan: true}, val2: ScanFlags{AvoidFullScan: true}, equal: true},
 			{val1: ScanFlags{ForceInvertedIndex: true}, val2: ScanFlags{ForceInvertedIndex: false}, equal: false},
 			{val1: ScanFlags{ForceInvertedIndex: true}, val2: ScanFlags{ForceInvertedIndex: true}, equal: true},
 			{
@@ -968,6 +964,40 @@ func TestInternerPhysProps(t *testing.T) {
 		LimitHint:    1,
 		Distribution: physical.Distribution{Regions: []string{"us-east", "us-west"}},
 	}
+	physProps10 := physical.Required{
+		Presentation: physical.Presentation{{Alias: "c", ID: 1}},
+		Ordering:     props.ParseOrderingChoice("+(1|2),+3 opt(4,5)"),
+		RemoteBranch: true,
+	}
+	physProps11 := physical.Required{
+		Presentation: physical.Presentation{{Alias: "c", ID: 1}},
+		Ordering:     props.ParseOrderingChoice("+(1|2),+3 opt(4,5)"),
+		RemoteBranch: true,
+	}
+
+	planGramScan, err := physical.ParsePlanGram(strings.NewReader("root: (Scan);"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	planGramSelect, err := physical.ParsePlanGram(strings.NewReader("root: (Select);"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	physProps12 := physical.Required{
+		Presentation: physical.Presentation{{Alias: "c", ID: 1}},
+		Ordering:     props.ParseOrderingChoice("+(1|2),+3 opt(4,5)"),
+		PlanGram:     planGramScan,
+	}
+	physProps13 := physical.Required{
+		Presentation: physical.Presentation{{Alias: "c", ID: 1}},
+		Ordering:     props.ParseOrderingChoice("+(1|2),+3 opt(4,5)"),
+		PlanGram:     planGramSelect,
+	}
+	physProps14 := physical.Required{
+		Presentation: physical.Presentation{{Alias: "c", ID: 1}},
+		Ordering:     props.ParseOrderingChoice("+(1|2),+3 opt(4,5)"),
+		PlanGram:     planGramScan,
+	}
 
 	testCases := []struct {
 		phys    *physical.Required
@@ -983,6 +1013,11 @@ func TestInternerPhysProps(t *testing.T) {
 		{phys: &physProps7, inCache: false},
 		{phys: &physProps8, inCache: false},
 		{phys: &physProps9, inCache: true},
+		{phys: &physProps10, inCache: false},
+		{phys: &physProps11, inCache: true},
+		{phys: &physProps12, inCache: false},
+		{phys: &physProps13, inCache: false},
+		{phys: &physProps14, inCache: true},
 	}
 
 	inCache := make(map[*physical.Required]bool)

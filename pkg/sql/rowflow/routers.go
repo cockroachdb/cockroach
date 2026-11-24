@@ -23,9 +23,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
@@ -47,7 +49,7 @@ type router interface {
 func makeRouter(
 	spec *execinfrapb.OutputRouterSpec,
 	streams []execinfra.RowReceiver,
-	memoryMonitors, diskMonitors []*mon.BytesMonitor,
+	memoryMonitors, unlimitedMemMonitors, diskMonitors []*mon.BytesMonitor,
 ) (router, error) {
 	if len(streams) == 0 {
 		return nil, errors.Errorf("no streams in router")
@@ -60,7 +62,7 @@ func makeRouter(
 	}
 
 	var rb routerBase
-	rb.setupStreams(spec, streams, memoryMonitors, diskMonitors)
+	rb.setupStreams(spec, streams, memoryMonitors, unlimitedMemMonitors, diskMonitors)
 
 	switch spec.Type {
 	case execinfrapb.OutputRouterSpec_BY_HASH:
@@ -109,8 +111,9 @@ type routerOutput struct {
 
 	stats execinfrapb.ComponentStats
 
-	// memoryMonitor and diskMonitor are mu.rowContainer's monitors.
-	memoryMonitor, diskMonitor *mon.BytesMonitor
+	// memoryMonitor, unlimitedMemMonitor, and diskMonitor are mu.rowContainer's
+	// monitors.
+	memoryMonitor, unlimitedMemMonitor, diskMonitor *mon.BytesMonitor
 
 	rowAlloc            rowenc.EncDatumRowAlloc
 	rowBufToPushFrom    [routerRowBufSize]rowenc.EncDatumRow
@@ -244,7 +247,7 @@ func (rb *routerBase) aggStatus() execinfra.ConsumerStatus {
 func (rb *routerBase) setupStreams(
 	spec *execinfrapb.OutputRouterSpec,
 	streams []execinfra.RowReceiver,
-	memoryMonitors, diskMonitors []*mon.BytesMonitor,
+	memoryMonitors, unlimitedMemMonitors, diskMonitors []*mon.BytesMonitor,
 ) {
 	rb.numNonDrainingStreams = int32(len(streams))
 	n := len(streams)
@@ -264,6 +267,7 @@ func (rb *routerBase) setupStreams(
 		ro.mu.cond = sync.NewCond(&ro.mu.Mutex)
 		ro.mu.streamStatus = execinfra.NeedMoreRows
 		ro.memoryMonitor = memoryMonitors[i]
+		ro.unlimitedMemMonitor = unlimitedMemMonitors[i]
 		ro.diskMonitor = diskMonitors[i]
 	}
 }
@@ -293,6 +297,7 @@ func (rb *routerBase) init(
 			flowCtx.EvalCtx,
 			flowCtx.Cfg.TempStorage,
 			rb.outputs[i].memoryMonitor,
+			rb.outputs[i].unlimitedMemMonitor,
 			rb.outputs[i].diskMonitor,
 		)
 
@@ -308,6 +313,16 @@ func (rb *routerBase) Start(ctx context.Context, wg *sync.WaitGroup, _ context.C
 	wg.Add(len(rb.outputs))
 	for i := range rb.outputs {
 		go func(ctx context.Context, rb *routerBase, ro *routerOutput) {
+			if cpuHandle := admission.SQLCPUHandleFromContext(ctx); cpuHandle != nil {
+				gh := cpuHandle.RegisterGoroutine()
+				defer gh.Close(ctx)
+			}
+			// Measure this goroutine's grunning so that the buffer-pop and
+			// stream-push work it performs is attributed to the query's SQL CPU
+			// time. The value is emitted as Metrics.RawSQLCPUTime alongside the
+			// trace metadata when the producer signals done.
+			var cpuStopWatch timeutil.CPUStopWatch
+			cpuStopWatch.Start()
 			defer wg.Done()
 			var span *tracing.Span
 			if rb.statsCollectionEnabled {
@@ -375,7 +390,7 @@ func (rb *routerBase) Start(ctx context.Context, wg *sync.WaitGroup, _ context.C
 				// No rows or metadata buffered; see if the producer is done.
 				if ro.mu.producerDone {
 					if rb.statsCollectionEnabled {
-						ro.stats.Exec.MaxAllocatedMem.Set(uint64(ro.memoryMonitor.MaximumBytes()))
+						ro.stats.Exec.MaxAllocatedMem.Set(uint64(ro.memoryMonitor.MaximumBytes() + ro.unlimitedMemMonitor.MaximumBytes()))
 						ro.stats.Exec.MaxAllocatedDisk.Set(uint64(ro.diskMonitor.MaximumBytes()))
 						span.RecordStructured(&ro.stats)
 						if meta := execinfra.GetTraceDataAsMetadata(rb.flowCtx, span); meta != nil {
@@ -386,6 +401,17 @@ func (rb *routerBase) Start(ctx context.Context, wg *sync.WaitGroup, _ context.C
 							<-rb.semaphore
 							ro.mu.Lock()
 						}
+					}
+					if delta := cpuStopWatch.Stop(); delta > 0 {
+						grunningMeta := &execinfrapb.ProducerMetadata{}
+						grunningMeta.Metrics = execinfrapb.GetMetricsMeta()
+						grunningMeta.Metrics.RawSQLCPUTime = int64(delta)
+						ro.mu.Unlock()
+						rb.semaphore <- struct{}{}
+						status := ro.stream.Push(nil /* row */, grunningMeta)
+						rb.updateStreamState(&streamStatus, status)
+						<-rb.semaphore
+						ro.mu.Lock()
 					}
 					ro.stream.ProducerDone()
 					break
@@ -442,7 +468,7 @@ func (rb *routerBase) updateStreamState(
 // Note: fwdMetadata should be called without holding the lock.
 func (rb *routerBase) fwdMetadata(meta *execinfrapb.ProducerMetadata) {
 	if meta == nil {
-		log.Fatalf(context.TODO(), "asked to fwd empty metadata")
+		log.Dev.Fatalf(context.TODO(), "asked to fwd empty metadata")
 		return
 	}
 
@@ -592,9 +618,6 @@ var crc32Table = crc32.MakeTable(crc32.Castagnoli)
 func makeHashRouter(rb routerBase, hashCols []uint32) (router, error) {
 	if len(rb.outputs) < 2 {
 		return nil, errors.Errorf("need at least two streams for hash router")
-	}
-	if len(hashCols) == 0 {
-		return nil, errors.Errorf("no hash columns for BY_HASH router")
 	}
 	return &hashRouter{hashCols: hashCols, routerBase: rb}, nil
 }

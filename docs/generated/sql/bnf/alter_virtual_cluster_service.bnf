@@ -1,0 +1,3 @@
+alter_virtual_cluster_service_stmt ::=
+	'ALTER' virtual_cluster virtual_cluster_spec 'START' 'SERVICE' 'SHARED'
+	| 'ALTER' virtual_cluster virtual_cluster_spec 'STOP' 'SERVICE'

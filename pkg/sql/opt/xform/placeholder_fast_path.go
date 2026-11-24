@@ -10,6 +10,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
@@ -27,24 +28,10 @@ const maxRowCountForPlaceholderFastPath = 10
 // PlaceholderScan.
 //
 // If this function succeeds, the memo will be considered fully optimized.
-func (o *Optimizer) TryPlaceholderFastPath() (_ opt.Expr, ok bool, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			// This code allows us to propagate internal errors without having to add
-			// error checks everywhere throughout the code. This is only possible
-			// because the code does not update shared state and does not manipulate
-			// locks.
-			if shouldCatch, e := errorutil.ShouldCatch(r); shouldCatch {
-				err = e
-			} else {
-				// Other panic objects can't be considered "safe" and thus are
-				// propagated as crashes that terminate the session.
-				panic(r)
-			}
-		}
-	}()
+func (o *Optimizer) TryPlaceholderFastPath() (ok bool, retErr error) {
+	defer errorutil.MaybeCatchPanic(&retErr, nil /* errCallback */)
 
-	root := o.mem.RootExpr().(memo.RelExpr)
+	root := o.mem.RootExpr()
 
 	rootRelProps := root.Relational()
 	// We are dealing with a memo that still contains placeholders. The statistics
@@ -55,13 +42,13 @@ func (o *Optimizer) TryPlaceholderFastPath() (_ opt.Expr, ok bool, err error) {
 	// estimated row count is small; typically this will happen when we constrain
 	// columns that form a key and we know there will be at most one row.
 	if rootRelProps.Statistics().RowCount > maxRowCountForPlaceholderFastPath {
-		return nil, false, nil
+		return false, nil
 	}
 
 	rootPhysicalProps := o.mem.RootProps()
 
 	if !rootPhysicalProps.Ordering.Any() {
-		return nil, false, nil
+		return false, nil
 	}
 
 	// TODO(radu): if we want to support more cases, we should use optgen to write
@@ -73,18 +60,23 @@ func (o *Optimizer) TryPlaceholderFastPath() (_ opt.Expr, ok bool, err error) {
 	expr := root
 	if proj, isProject := expr.(*memo.ProjectExpr); isProject {
 		if len(proj.Projections) != 0 {
-			return nil, false, nil
+			return false, nil
 		}
 		expr = proj.Input
 	}
 
 	sel, isSelect := expr.(*memo.SelectExpr)
 	if !isSelect {
-		return nil, false, nil
+		return false, nil
 	}
 	scan, isScan := sel.Input.(*memo.ScanExpr)
 	if !isScan {
-		return nil, false, nil
+		return false, nil
+	}
+
+	if scan.Flags.ForceInvertedIndex || scan.Flags.ForceZigzag {
+		// We don't support inverted or zigzag indexes in the fast path.
+		return false, nil
 	}
 
 	var constrainedCols opt.ColSet
@@ -94,18 +86,18 @@ func (o *Optimizer) TryPlaceholderFastPath() (_ opt.Expr, ok bool, err error) {
 		cond := sel.Filters[i].Condition
 		eq, isEq := cond.(*memo.EqExpr)
 		if !isEq {
-			return nil, false, nil
+			return false, nil
 		}
 		v, isVar := eq.Left.(*memo.VariableExpr)
 		if !isVar {
-			return nil, false, nil
+			return false, nil
 		}
 		if !opt.IsConstValueOp(eq.Right) && eq.Right.Op() != opt.PlaceholderOp {
-			return nil, false, nil
+			return false, nil
 		}
 		if constrainedCols.Contains(v.Col) {
 			// The same variable is part of multiple equalities.
-			return nil, false, nil
+			return false, nil
 		}
 		constrainedCols.Add(v.Col)
 	}
@@ -121,7 +113,12 @@ func (o *Optimizer) TryPlaceholderFastPath() (_ opt.Expr, ok bool, err error) {
 	var foundIndex cat.Index
 	for ord, n := 0, tabMeta.Table.IndexCount(); ord < n; ord++ {
 		index := tabMeta.Table.Index(ord)
-		if index.IsInverted() {
+		if index.Type() != idxtype.FORWARD {
+			// Skip inverted and vector indexes.
+			continue
+		}
+		if scan.Flags.ForceIndex && scan.ScanPrivate.Flags.Index != ord {
+			// If an index is forced, skip all other indexes.
 			continue
 		}
 
@@ -137,7 +134,7 @@ func (o *Optimizer) TryPlaceholderFastPath() (_ opt.Expr, ok bool, err error) {
 			predFilters := pred.(*memo.FiltersExpr)
 			for i := range *predFilters {
 				if (*predFilters)[i].ScalarProps().OuterCols.Intersects(constrainedCols) {
-					return nil, false, nil
+					return false, nil
 				}
 			}
 			if !predFilters.IsTrue() {
@@ -174,13 +171,13 @@ func (o *Optimizer) TryPlaceholderFastPath() (_ opt.Expr, ok bool, err error) {
 		if foundIndex != nil {
 			// We found multiple candidate indexes. Choosing the best index (e.g.
 			// fewer columns) requires costing.
-			return nil, false, nil
+			return false, nil
 		}
 		foundIndex = index
 	}
 
 	if foundIndex == nil {
-		return nil, false, nil
+		return false, nil
 	}
 
 	// Success!
@@ -195,7 +192,7 @@ func (o *Optimizer) TryPlaceholderFastPath() (_ opt.Expr, ok bool, err error) {
 			eq := sel.Filters[j].Condition.(*memo.EqExpr)
 			if v := eq.Left.(*memo.VariableExpr); v.Col == col {
 				if !verifyType(o.mem.Metadata(), col, eq.Right.DataType()) {
-					return nil, false, nil
+					return false, nil
 				}
 				span[i] = eq.Right
 				break
@@ -203,7 +200,7 @@ func (o *Optimizer) TryPlaceholderFastPath() (_ opt.Expr, ok bool, err error) {
 		}
 		if span[i] == nil {
 			// We checked above that the constrained columns match the index prefix.
-			return nil, false, errors.AssertionFailedf("no span value")
+			return false, errors.AssertionFailedf("no span value")
 		}
 	}
 	placeholderScan := &memo.PlaceholderScanExpr{
@@ -211,14 +208,14 @@ func (o *Optimizer) TryPlaceholderFastPath() (_ opt.Expr, ok bool, err error) {
 		ScanPrivate: newPrivate,
 	}
 	placeholderScan = o.mem.AddPlaceholderScanToGroup(placeholderScan, root)
-	o.mem.SetBestProps(placeholderScan, rootPhysicalProps, &physical.Provided{}, 1.0 /* cost */)
+	o.mem.SetBestProps(placeholderScan, rootPhysicalProps, &physical.Provided{}, memo.Cost{C: 1.0})
 	o.mem.SetRoot(placeholderScan, rootPhysicalProps)
 
 	if buildutil.CrdbTestBuild && !o.mem.IsOptimized() {
-		return nil, false, errors.AssertionFailedf("IsOptimized() should be true")
+		return false, errors.AssertionFailedf("IsOptimized() should be true")
 	}
 
-	return placeholderScan, true, nil
+	return true, nil
 }
 
 // verifyType checks that the type of the index column col matches the

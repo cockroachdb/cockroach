@@ -15,9 +15,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/allocatorimpl"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/load"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/allocator/storepool"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -32,12 +32,18 @@ var (
 		Help:        "Number of lease transfers motivated by store-level load imbalances",
 		Measurement: "Lease Transfers",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_REPLICATION,
+		HowToUse:    `Used to identify when there has been more rebalancing activity triggered by imbalance between stores (of QPS or CPU). If this is high (when the count is rated), it indicates that more rebalancing activity is taking place due to load imbalance between stores.`,
 	}
 	metaStoreRebalancerRangeRebalanceCount = metric.Metadata{
 		Name:        "rebalancing.range.rebalances",
 		Help:        "Number of range rebalance operations motivated by store-level load imbalances",
 		Measurement: "Range Rebalances",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_REPLICATION,
+		HowToUse:    `Used to identify when there has been more rebalancing activity triggered by imbalance between stores (of QPS or CPU). If this is high (when the count is rated), it indicates that more rebalancing activity is taking place due to load imbalance between stores.`,
 	}
 	metaStoreRebalancerImbalancedOverfullOptionsExhausted = metric.Metadata{
 		Name: "rebalancing.state.imbalanced_overfull_options_exhausted",
@@ -62,37 +68,6 @@ func makeStoreRebalancerMetrics() StoreRebalancerMetrics {
 		ImbalancedStateOverfullOptionsExhausted: metric.NewCounter(metaStoreRebalancerImbalancedOverfullOptionsExhausted),
 	}
 }
-
-// LoadBasedRebalancingMode controls whether range rebalancing takes
-// additional variables such as write load and disk usage into account.
-// If disabled, rebalancing is done purely based on replica count.
-var LoadBasedRebalancingMode = settings.RegisterEnumSetting(
-	settings.SystemOnly,
-	"kv.allocator.load_based_rebalancing",
-	"whether to rebalance based on the distribution of load across stores",
-	"leases and replicas",
-	map[LBRebalancingMode]string{
-		LBRebalancingOff:               "off",
-		LBRebalancingLeasesOnly:        "leases",
-		LBRebalancingLeasesAndReplicas: "leases and replicas",
-	},
-	settings.WithPublic)
-
-// LBRebalancingMode controls if and when we do store-level rebalancing
-// based on load.
-type LBRebalancingMode int64
-
-const (
-	// LBRebalancingOff means that we do not do store-level rebalancing
-	// based on load statistics.
-	LBRebalancingOff LBRebalancingMode = iota
-	// LBRebalancingLeasesOnly means that we rebalance leases based on
-	// store-level load imbalances.
-	LBRebalancingLeasesOnly
-	// LBRebalancingLeasesAndReplicas means that we rebalance both leases and
-	// replicas based on store-level load imbalances.
-	LBRebalancingLeasesAndReplicas
-)
 
 // RebalanceSearchOutcome returns the result of a rebalance target search. It
 // is used to determine whether to transition from lease to range based
@@ -149,7 +124,7 @@ type StoreRebalancer struct {
 	processTimeoutFn        func(replica CandidateReplica) time.Duration
 	objectiveProvider       RebalanceObjectiveProvider
 	subscribedToSpanConfigs func() bool
-	disabled                func() bool
+	disabled                func(ctx context.Context) bool
 }
 
 // NewStoreRebalancer creates a StoreRebalancer to work in tandem with the
@@ -192,8 +167,9 @@ func NewStoreRebalancer(
 			}
 			return !rq.store.cfg.SpanConfigSubscriber.LastUpdated().IsEmpty()
 		},
-		disabled: func() bool {
-			return LoadBasedRebalancingMode.Get(&st.SV) == LBRebalancingOff ||
+		disabled: func(ctx context.Context) bool {
+			mode := kvserverbase.GetLoadBasedRebalancingMode(ctx, st)
+			return mode == kvserverbase.LBRebalancingOff || kvserverbase.LoadBasedRebalancingModeIsMMA(ctx, st) ||
 				rq.store.cfg.TestingKnobs.DisableStoreRebalancer
 		},
 	}
@@ -231,16 +207,16 @@ type RebalanceContext struct {
 	loadDimension                      load.Dimension
 	maxThresholds                      load.Load
 	options                            *allocatorimpl.LoadScorerOptions
-	mode                               LBRebalancingMode
+	mode                               kvserverbase.LBRebalancingMode
 	allStoresList                      storepool.StoreList
 	hottestRanges, rebalanceCandidates []CandidateReplica
 	leftoverCandidates                 []CandidateReplica
 }
 
 // RebalanceMode returns the mode of the store rebalancer. See
-// LoadBasedRebalancingMode.
-func (sr *StoreRebalancer) RebalanceMode() LBRebalancingMode {
-	return LoadBasedRebalancingMode.Get(&sr.st.SV)
+// kvserverbase.GetLoadBasedRebalancingMode.
+func (sr *StoreRebalancer) RebalanceMode(ctx context.Context) kvserverbase.LBRebalancingMode {
+	return kvserverbase.GetLoadBasedRebalancingMode(ctx, sr.st)
 }
 
 // RebalanceDimension returns the dimension the store rebalancer is balancing.
@@ -310,10 +286,9 @@ func (sr *StoreRebalancer) Start(ctx context.Context, stopper *stop.Stopper) {
 			case <-stopper.ShouldQuiesce():
 				return
 			case <-timer.C:
-				timer.Read = true
 				timer.Reset(jitteredInterval(allocator.LoadBasedRebalanceInterval.Get(&sr.st.SV)))
 			}
-			if sr.disabled() {
+			if sr.disabled(ctx) {
 				continue
 			}
 			// Once the rebalance mode and rebalance objective are defined for
@@ -325,12 +300,12 @@ func (sr *StoreRebalancer) Start(ctx context.Context, stopper *stop.Stopper) {
 			}
 			objective := sr.RebalanceObjective()
 			sr.AddLogTag("obj", objective)
-			ctx = sr.AnnotateCtx(ctx)
+			sCtx := sr.AnnotateCtx(ctx)
 
 			hottestRanges := sr.replicaRankings.TopLoad(objective.ToDimension())
-			options := sr.scorerOptions(ctx, objective.ToDimension())
-			rctx := sr.NewRebalanceContext(ctx, options, hottestRanges, sr.RebalanceMode())
-			sr.rebalanceStore(ctx, rctx)
+			options := sr.scorerOptions(sCtx, objective.ToDimension())
+			rctx := sr.NewRebalanceContext(sCtx, options, hottestRanges, sr.RebalanceMode(sCtx))
+			sr.rebalanceStore(sCtx, rctx)
 		}
 	})
 }
@@ -344,9 +319,11 @@ func (sr *StoreRebalancer) scorerOptions(
 	ctx context.Context, lbDimension load.Dimension,
 ) *allocatorimpl.LoadScorerOptions {
 	return &allocatorimpl.LoadScorerOptions{
-		IOOverloadOptions:            sr.allocator.IOOverloadOptions(),
-		DiskOptions:                  sr.allocator.DiskOptions(),
-		Deterministic:                sr.storePool.IsDeterministic(),
+		BaseScorerOptions: allocatorimpl.BaseScorerOptions{
+			IOOverload:    sr.allocator.IOOverloadOptions(),
+			DiskCapacity:  sr.allocator.DiskOptions(),
+			Deterministic: sr.storePool.IsDeterministic(),
+		},
 		LoadDims:                     []load.Dimension{lbDimension},
 		LoadThreshold:                allocatorimpl.LoadThresholds(&sr.st.SV, lbDimension),
 		MinLoadThreshold:             allocatorimpl.LoadMinThresholds(lbDimension),
@@ -362,7 +339,7 @@ func (sr *StoreRebalancer) NewRebalanceContext(
 	ctx context.Context,
 	options *allocatorimpl.LoadScorerOptions,
 	hottestRanges []CandidateReplica,
-	rebalancingMode LBRebalancingMode,
+	rebalancingMode kvserverbase.LBRebalancingMode,
 ) *RebalanceContext {
 	allStoresList, _, _ := sr.storePool.GetStoreList(storepool.StoreFilterSuspect)
 	// Find the store descriptor for the local store.
@@ -481,6 +458,14 @@ func (sr *StoreRebalancer) ShouldRebalanceStore(ctx context.Context, rctx *Rebal
 		return false
 	}
 
+	if !(rctx.mode == kvserverbase.LBRebalancingLeasesOnly || rctx.mode == kvserverbase.LBRebalancingLeasesAndReplicas) {
+		// There's nothing to do, the store rebalancer is disabled. Note that this
+		// is redundant when called via the store rebalancer's Start method, but
+		// it's necessary when called from tests, which don't start the store
+		// rebalancer loop, such as the asim pkg.
+		return false
+	}
+
 	// We only bother rebalancing stores that are fielding more than the
 	// cluster-level overfull threshold of load.
 	if rctx.LessThanMaxThresholds() {
@@ -550,8 +535,14 @@ func (sr *StoreRebalancer) applyLeaseRebalance(
 		return sr.rr.TransferLease(
 			ctx,
 			candidateReplica,
-			candidateReplica.StoreID(),
-			target.StoreID,
+			roachpb.ReplicationTarget{
+				NodeID:  candidateReplica.NodeID(),
+				StoreID: candidateReplica.StoreID(),
+			},
+			roachpb.ReplicationTarget{
+				NodeID:  target.NodeID,
+				StoreID: target.StoreID,
+			},
 			candidateReplica.RangeUsageInfo(),
 		)
 	}); err != nil {
@@ -626,7 +617,7 @@ func (sr *StoreRebalancer) TransferToRebalanceRanges(
 		return false
 	}
 
-	if rctx.mode != LBRebalancingLeasesAndReplicas {
+	if rctx.mode != kvserverbase.LBRebalancingLeasesAndReplicas {
 		log.KvDistribution.Infof(ctx,
 			"ran out of leases worth transferring and load %s is still above desired threshold %s",
 			rctx.LocalDesc.Capacity.Load(), rctx.maxThresholds)
@@ -767,6 +758,12 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 ) (CandidateReplica, roachpb.ReplicaDescriptor, []CandidateReplica) {
 	var considerForRebalance []CandidateReplica
 	now := sr.storePool.Clock().NowAsClockTimestamp()
+	// candidatesConsidered and loadConsidered track the number and cumulative
+	// load of lease-holding candidates we've looked at (and held the lease
+	// for). These include the candidate we ultimately pick (if any), so the log
+	// message subtracts it back out to report what was skipped.
+	var candidatesConsidered int
+	var loadConsidered load.Load = load.Vector{}
 	for {
 		if len(rctx.hottestRanges) == 0 {
 			return nil, roachpb.ReplicaDescriptor{}, considerForRebalance
@@ -784,11 +781,14 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 			continue
 		}
 
+		candidateImpact := candidateReplica.RangeUsageInfo().TransferImpact()
+		candidatesConsidered++
+		loadConsidered = load.Add(loadConsidered, candidateImpact)
+
 		// Don't bother moving leases whose load is below some small fraction of the
 		// store's load. It's just unnecessary churn with no benefit to move leases
 		// responsible for, for example, 1 load unit on a store with 5000 load units.
-		if candidateReplica.RangeUsageInfo().TransferImpact().Dim(rctx.loadDimension) <
-			rctx.LocalDesc.Capacity.Load().Dim(rctx.loadDimension)*minLeaseLoadFraction {
+		if candidateImpact.Dim(rctx.loadDimension) < rctx.LocalDesc.Capacity.Load().Dim(rctx.loadDimension)*minLeaseLoadFraction {
 			log.KvDistribution.VEventf(ctx, 3, "r%d's %s load is too little to matter relative to s%d's %s total load",
 				candidateReplica.GetRangeID(), candidateReplica.RangeUsageInfo().TransferImpact(),
 				rctx.LocalDesc.StoreID, rctx.LocalDesc.Capacity.Load())
@@ -823,7 +823,6 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 			candidates,
 			candidateReplica,
 			candidateReplica.RangeUsageInfo(),
-			true, /* forceDecisionWithoutStats */
 			allocator.TransferLeaseOptions{
 				Goal:             allocator.LoadConvergence,
 				ExcludeLeaseRepl: false,
@@ -862,13 +861,16 @@ func (sr *StoreRebalancer) chooseLeaseToTransfer(
 		if targetStore, ok := rctx.allStoresList.FindStoreByID(candidate.StoreID); ok {
 			log.KvDistribution.Infof(
 				ctx,
-				"transferring lease for r%d load=%s to store s%d load=%s from local store s%d load=%s",
+				"transferring lease for r%d load=%s to store s%d load=%s from local store s%d load=%s"+
+					" (skipped %d candidates with load=%s)",
 				desc.RangeID,
-				candidateReplica.RangeUsageInfo().TransferImpact(),
+				candidateImpact,
 				targetStore.StoreID,
 				targetStore.Capacity.Load(),
 				rctx.LocalDesc.StoreID,
 				rctx.LocalDesc.Capacity.Load(),
+				candidatesConsidered-1,
+				load.Sub(loadConsidered, candidateImpact),
 			)
 		}
 		return candidateReplica, candidate, considerForRebalance

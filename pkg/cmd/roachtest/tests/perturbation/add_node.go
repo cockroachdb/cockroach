@@ -21,7 +21,7 @@ type addNode struct{}
 var _ perturbation = addNode{}
 
 func (a addNode) setup() variations {
-	return setup(a, 5.0)
+	return setup(a, defaultThresholds())
 }
 
 func (a addNode) setupMetamorphic(rng *rand.Rand) variations {
@@ -29,8 +29,8 @@ func (a addNode) setupMetamorphic(rng *rand.Rand) variations {
 	v = v.randomize(rng)
 	//TODO(#133606): With high vcpu and large writes, the test can fail due to
 	//the disk becoming saturated leading to 1-2s of fsync stall.
-	if v.vcpu >= 16 && v.maxBlockBytes == 4096 {
-		v.maxBlockBytes = 1024
+	if v.vcpu >= 16 && v.blockSize == 4096 {
+		v.blockSize = 1024
 	}
 	return v
 }

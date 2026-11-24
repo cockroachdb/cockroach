@@ -15,11 +15,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/featureflag"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/exprutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
+	"github.com/cockroachdb/cockroach/pkg/sql/physicalplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -30,20 +32,24 @@ import (
 )
 
 type exportNode struct {
+	singleInputPlanNode
 	optColumnsSlot
+	exportPlanningInfo
+}
 
-	source planNode
-
+type exportPlanningInfo struct {
 	// destination represents the destination URI for the export,
 	// typically a directory
 	destination string
 	// fileNamePattern represents the file naming pattern for the
 	// export, typically to be appended to the destination URI
-	fileNamePattern string
-	format          roachpb.IOFileFormat
-	chunkRows       int
-	chunkSize       int64
-	colNames        []string
+	fileNamePattern     string
+	format              roachpb.IOFileFormat
+	chunkRows           int
+	chunkSize           int64
+	colNames            []string
+	headerRow           bool
+	finalizeLastStageCb func(*physicalplan.PhysicalPlan) // will be nil in the spec factory
 }
 
 func (e *exportNode) startExec(params runParams) error {
@@ -59,7 +65,7 @@ func (e *exportNode) Values() tree.Datums {
 }
 
 func (e *exportNode) Close(ctx context.Context) {
-	e.source.Close(ctx)
+	e.input.Close(ctx)
 }
 
 const (
@@ -69,9 +75,11 @@ const (
 	exportOptionChunkSize   = "chunk_size"
 	exportOptionFileName    = "filename"
 	exportOptionCompression = "compression"
+	exportOptionHeaderRow   = "header_row"
 
 	exportChunkSizeDefault = int64(32 << 20) // 32 MB
 	exportChunkRowsDefault = 100000
+	exportHeaderRowDefault = false
 
 	exportFilePatternPart = "%part%"
 	exportGzipCodec       = "gzip"
@@ -87,6 +95,7 @@ var exportOptionExpectValues = map[string]exprutil.KVStringOptValidate{
 	exportOptionNullAs:      exprutil.KVStringOptRequireValue,
 	exportOptionCompression: exprutil.KVStringOptRequireValue,
 	exportOptionChunkSize:   exprutil.KVStringOptRequireValue,
+	exportOptionHeaderRow:   exprutil.KVStringOptRequireNoValue,
 }
 
 // featureExportEnabled is used to enable and disable the EXPORT feature.
@@ -105,10 +114,31 @@ func (ef *execFactory) ConstructExport(
 	options []exec.KVOption,
 	notNullCols exec.NodeColumnOrdinalSet,
 ) (exec.Node, error) {
-	ef.planner.BufferClientNotice(ef.ctx, pgnotice.Newf("EXPORT is not the recommended way to move data out "+
+	planInfo, err := buildExportPlanningInfo(
+		ef.ctx, ef.planner, planColumns(input.(planNode)), fileName, fileSuffix, options, notNullCols,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &exportNode{
+		singleInputPlanNode: singleInputPlanNode{input.(planNode)},
+		exportPlanningInfo:  *planInfo,
+	}, nil
+}
+
+func buildExportPlanningInfo(
+	ctx context.Context,
+	planner *planner,
+	inputCols colinfo.ResultColumns,
+	fileName tree.TypedExpr,
+	fileSuffix string,
+	options []exec.KVOption,
+	notNullCols exec.NodeColumnOrdinalSet,
+) (*exportPlanningInfo, error) {
+	planner.BufferClientNotice(ctx, pgnotice.Newf("EXPORT is not the recommended way to move data out "+
 		"of CockroachDB and may be deprecated in the future. Please consider exporting data with changefeeds instead: "+
 		"https://www.cockroachlabs.com/docs/stable/export-data-with-changefeeds"))
-	if !featureExportEnabled.Get(&ef.planner.ExecCfg().Settings.SV) {
+	if !featureExportEnabled.Get(&planner.ExecCfg().Settings.SV) {
 		return nil, pgerror.Newf(
 			pgcode.OperatorIntervention,
 			"feature EXPORT was disabled by the database administrator",
@@ -117,15 +147,15 @@ func (ef *execFactory) ConstructExport(
 	fileSuffix = strings.ToLower(fileSuffix)
 
 	if err := featureflag.CheckEnabled(
-		ef.ctx,
-		ef.planner.execCfg,
+		ctx,
+		planner.execCfg,
 		featureExportEnabled,
 		"EXPORT",
 	); err != nil {
 		return nil, err
 	}
 
-	if !ef.planner.ExtendedEvalContext().TxnIsSingleStmt {
+	if !planner.ExtendedEvalContext().TxnIsSingleStmt {
 		return nil, errors.Errorf("EXPORT cannot be used inside a multi-statement transaction")
 	}
 
@@ -133,7 +163,7 @@ func (ef *execFactory) ConstructExport(
 		return nil, errors.Errorf("unsupported export format: %q", fileSuffix)
 	}
 
-	destinationDatum, err := eval.Expr(ef.ctx, ef.planner.EvalContext(), fileName)
+	destinationDatum, err := eval.Expr(ctx, planner.EvalContext(), fileName)
 	if err != nil {
 		return nil, err
 	}
@@ -142,21 +172,21 @@ func (ef *execFactory) ConstructExport(
 	if !ok {
 		return nil, errors.Errorf("expected string value for the file location")
 	}
-	admin, err := ef.planner.HasAdminRole(ef.ctx)
+	admin, err := planner.HasAdminRole(ctx)
 	if err != nil {
 		panic(err)
 	}
 	// TODO(adityamaru): Ideally we'd use
-	// `cloudprivilege.CheckDestinationPrivileges privileges here, but because of
+	// `sql.CheckDestinationPrivileges privileges here, but because of
 	// a ciruclar dependancy with `pkg/sql` this is not possible. Consider moving
 	// this file into `pkg/sql/importer` to get around this.
-	hasExternalIOImplicitAccess := ef.planner.CheckPrivilege(
-		ef.ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.EXTERNALIOIMPLICITACCESS,
+	hasExternalIOImplicitAccess := planner.CheckPrivilege(
+		ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.EXTERNALIOIMPLICITACCESS,
 	) == nil
 	if !admin &&
-		!ef.planner.ExecCfg().ExternalIODirConfig.EnableNonAdminImplicitAndArbitraryOutbound &&
+		!planner.ExecCfg().ExternalIODirConfig.EnableNonAdminImplicitAndArbitraryOutbound &&
 		!hasExternalIOImplicitAccess {
-		conf, err := cloud.ExternalStorageConfFromURI(string(*destination), ef.planner.User())
+		conf, err := cloud.ExternalStorageConfFromURI(string(*destination), planner.User())
 		if err != nil {
 			return nil, err
 		}
@@ -167,20 +197,26 @@ func (ef *execFactory) ConstructExport(
 					"are allowed to access the specified %s URI", conf.Provider.String()))
 		}
 	}
-	exprEval := ef.planner.ExprEvaluator("EXPORT")
+	exprEval := planner.ExprEvaluator("EXPORT")
 	treeOptions := make(tree.KVOptions, len(options))
 	for i, o := range options {
-		treeOptions[i] = tree.KVOption{Key: tree.Name(o.Key), Value: o.Value}
+		var val tree.TypedExpr
+		if _, ok := o.Value.(*tree.CastExpr); ok && o.Value.(*tree.CastExpr).Expr == tree.DNull {
+			val = nil
+		} else {
+			val = o.Value
+		}
+
+		treeOptions[i] = tree.KVOption{Key: tree.Name(o.Key), Value: val}
 	}
-	optVals, err := exprEval.KVOptions(ef.ctx, treeOptions, exportOptionExpectValues)
+	optVals, err := exprEval.KVOptions(ctx, treeOptions, exportOptionExpectValues)
 	if err != nil {
 		return nil, err
 	}
 
-	cols := planColumns(input.(planNode))
-	colNames := make([]string, len(cols))
-	colNullability := make([]bool, len(cols))
-	for i, col := range cols {
+	colNames := make([]string, len(inputCols))
+	colNullability := make([]bool, len(inputCols))
+	for i, col := range inputCols {
 		colNames[i] = col.Name
 		colNullability[i] = !notNullCols.Contains(i)
 	}
@@ -246,16 +282,24 @@ func (ef *execFactory) ConstructExport(
 		format.Compression = codec
 	}
 
-	exportID := ef.planner.stmt.QueryID.String()
+	headerRow := exportHeaderRowDefault
+	if _, ok := optVals[exportOptionHeaderRow]; ok {
+		headerRow = true
+		if fileSuffix != csvSuffix {
+			return nil, pgerror.Newf(pgcode.InvalidParameterValue, "header row is only supported for csv file format")
+		}
+	}
+
+	exportID := planner.stmt.QueryID.String()
 	exportFilePattern := exportFilePatternPart + "." + fileSuffix
 	namePattern := fmt.Sprintf("export%s-%s", exportID, exportFilePattern)
-	return &exportNode{
-		source:          input.(planNode),
+	return &exportPlanningInfo{
 		destination:     string(*destination),
 		fileNamePattern: namePattern,
 		format:          format,
 		chunkRows:       chunkRows,
 		chunkSize:       chunkSize,
 		colNames:        colNames,
+		headerRow:       headerRow,
 	}, nil
 }

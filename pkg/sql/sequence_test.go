@@ -38,7 +38,7 @@ func BenchmarkSequenceIncrement(b *testing.B) {
 
 			sqlDB := cluster.ServerConn(0)
 			if _, err := sqlDB.Exec(fmt.Sprintf(`
-				CREATE SEQUENCE seq CACHE %d;
+				CREATE SEQUENCE seq PER SESSION CACHE %d;
 				CREATE TABLE tbl (
 					id INT PRIMARY KEY DEFAULT nextval('seq'),
 					foo text
@@ -118,11 +118,12 @@ func TestSequenceOwnershipDependencies(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	params := base.TestServerArgs{}
-	s, sqlConn, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
+	srv, sqlConn, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	if _, err := sqlConn.Exec(`
+SET create_table_with_schema_locked=false;
 CREATE DATABASE t;
 CREATE TABLE t.test(a INT PRIMARY KEY, b INT)`); err != nil {
 		t.Fatal(err)
@@ -132,89 +133,96 @@ CREATE TABLE t.test(a INT PRIMARY KEY, b INT)`); err != nil {
 	if _, err := sqlConn.Exec("CREATE SEQUENCE t.seq1 OWNED BY t.test.a"); err != nil {
 		t.Fatal(err)
 	}
-	assertColumnOwnsSequences(t, kvDB, "t", "test", 0 /* colIdx */, []string{"seq1"})
-	assertColumnOwnsSequences(t, kvDB, "t", "test", 1 /* colIdx */, nil /* seqNames */)
+	assertColumnOwnsSequences(t, s.Codec(), kvDB, "t", "test", 0 /* colIdx */, []string{"seq1"})
+	assertColumnOwnsSequences(t, s.Codec(), kvDB, "t", "test", 1 /* colIdx */, nil /* seqNames */)
 
 	if _, err := sqlConn.Exec("ALTER SEQUENCE t.seq1 OWNED BY t.test.b"); err != nil {
 		t.Fatal(err)
 	}
-	assertColumnOwnsSequences(t, kvDB, "t", "test", 0 /* colIdx */, nil /* seqNames */)
-	assertColumnOwnsSequences(t, kvDB, "t", "test", 1 /* colIdx */, []string{"seq1"})
+	assertColumnOwnsSequences(t, s.Codec(), kvDB, "t", "test", 0 /* colIdx */, nil /* seqNames */)
+	assertColumnOwnsSequences(t, s.Codec(), kvDB, "t", "test", 1 /* colIdx */, []string{"seq1"})
 
 	if _, err := sqlConn.Exec("ALTER SEQUENCE t.seq1 OWNED BY t.test.a"); err != nil {
 		t.Fatal(err)
 	}
-	assertColumnOwnsSequences(t, kvDB, "t", "test", 0 /* colIdx */, []string{"seq1"})
-	assertColumnOwnsSequences(t, kvDB, "t", "test", 1 /* colIdx */, nil /* seqNames */)
+	assertColumnOwnsSequences(t, s.Codec(), kvDB, "t", "test", 0 /* colIdx */, []string{"seq1"})
+	assertColumnOwnsSequences(t, s.Codec(), kvDB, "t", "test", 1 /* colIdx */, nil /* seqNames */)
 
 	// Add a second sequence in the mix and switch its ownership.
 	if _, err := sqlConn.Exec("CREATE SEQUENCE t.seq2 OWNED BY t.test.a"); err != nil {
 		t.Fatal(err)
 	}
-	assertColumnOwnsSequences(t, kvDB, "t", "test", 0 /* colIdx */, []string{"seq1", "seq2"})
-	assertColumnOwnsSequences(t, kvDB, "t", "test", 1 /* colIdx */, nil /* seqNames */)
+	assertColumnOwnsSequences(t, s.Codec(), kvDB, "t", "test", 0 /* colIdx */, []string{"seq1", "seq2"})
+	assertColumnOwnsSequences(t, s.Codec(), kvDB, "t", "test", 1 /* colIdx */, nil /* seqNames */)
 
 	if _, err := sqlConn.Exec("ALTER SEQUENCE t.seq2 OWNED BY t.test.b"); err != nil {
 		t.Fatal(err)
 	}
-	assertColumnOwnsSequences(t, kvDB, "t", "test", 0 /* colIdx */, []string{"seq1"})
-	assertColumnOwnsSequences(t, kvDB, "t", "test", 1 /* colIdx */, []string{"seq2"})
+	assertColumnOwnsSequences(t, s.Codec(), kvDB, "t", "test", 0 /* colIdx */, []string{"seq1"})
+	assertColumnOwnsSequences(t, s.Codec(), kvDB, "t", "test", 1 /* colIdx */, []string{"seq2"})
 
 	if _, err := sqlConn.Exec("ALTER SEQUENCE t.seq2 OWNED BY t.test.a"); err != nil {
 		t.Fatal(err)
 	}
-	assertColumnOwnsSequences(t, kvDB, "t", "test", 0 /* colIdx */, []string{"seq1", "seq2"})
-	assertColumnOwnsSequences(t, kvDB, "t", "test", 1 /* colIdx */, nil /* seqNames */)
+	assertColumnOwnsSequences(t, s.Codec(), kvDB, "t", "test", 0 /* colIdx */, []string{"seq1", "seq2"})
+	assertColumnOwnsSequences(t, s.Codec(), kvDB, "t", "test", 1 /* colIdx */, nil /* seqNames */)
 
 	// Ensure dropping sequences removes the ownership dependencies.
 	if _, err := sqlConn.Exec("DROP SEQUENCE t.seq1"); err != nil {
 		t.Fatal(err)
 	}
-	assertColumnOwnsSequences(t, kvDB, "t", "test", 0 /* colIdx */, []string{"seq2"})
-	assertColumnOwnsSequences(t, kvDB, "t", "test", 1 /* colIdx */, nil /* seqNames */)
+	assertColumnOwnsSequences(t, s.Codec(), kvDB, "t", "test", 0 /* colIdx */, []string{"seq2"})
+	assertColumnOwnsSequences(t, s.Codec(), kvDB, "t", "test", 1 /* colIdx */, nil /* seqNames */)
 
 	// Ensure removing an owner removes the ownership dependency.
 	if _, err := sqlConn.Exec("ALTER SEQUENCE t.seq2 OWNED BY NONE"); err != nil {
 		t.Fatal(err)
 	}
-	assertColumnOwnsSequences(t, kvDB, "t", "test", 0 /* colIdx */, nil /* seqNames */)
-	assertColumnOwnsSequences(t, kvDB, "t", "test", 1 /* colIdx */, nil /* seqNames */)
+	assertColumnOwnsSequences(t, s.Codec(), kvDB, "t", "test", 0 /* colIdx */, nil /* seqNames */)
+	assertColumnOwnsSequences(t, s.Codec(), kvDB, "t", "test", 1 /* colIdx */, nil /* seqNames */)
 
 	// Ensure identity column owns a sequence
 	if _, err := sqlConn.Exec("CREATE TABLE t.test2(a INT GENERATED ALWAYS AS IDENTITY, b INT NOT NULL)"); err != nil {
 		t.Fatal(err)
 	}
-	assertColumnOwnsSequences(t, kvDB, "t", "test2", 0 /* colIdx */, []string{"test2_a_seq"})
-	assertColumnOwnsSequences(t, kvDB, "t", "test2", 1 /* colIdx */, nil /* seqNames */)
+	assertColumnOwnsSequences(t, s.Codec(), kvDB, "t", "test2", 0 /* colIdx */, []string{"test2_a_seq"})
+	assertColumnOwnsSequences(t, s.Codec(), kvDB, "t", "test2", 1 /* colIdx */, nil /* seqNames */)
 
 	// Ensure adding identity column owns a sequence
 	if _, err := sqlConn.Exec("ALTER TABLE t.test2 ALTER COLUMN b ADD GENERATED ALWAYS AS IDENTITY;"); err != nil {
 		t.Fatal(err)
 	}
-	assertColumnOwnsSequences(t, kvDB, "t", "test2", 0 /* colIdx */, []string{"test2_a_seq"})
-	assertColumnOwnsSequences(t, kvDB, "t", "test2", 1 /* colIdx */, []string{"test2_b_seq"})
+	assertColumnOwnsSequences(t, s.Codec(), kvDB, "t", "test2", 0 /* colIdx */, []string{"test2_a_seq"})
+	assertColumnOwnsSequences(t, s.Codec(), kvDB, "t", "test2", 1 /* colIdx */, []string{"test2_b_seq"})
 
 	// Ensure dropping identity column owns no sequence
 	if _, err := sqlConn.Exec("ALTER TABLE t.test2 ALTER COLUMN b DROP IDENTITY"); err != nil {
 		t.Fatal(err)
 	}
-	assertColumnOwnsSequences(t, kvDB, "t", "test2", 0 /* colIdx */, []string{"test2_a_seq"})
-	assertColumnOwnsSequences(t, kvDB, "t", "test2", 1 /* colIdx */, nil /* seqNames */)
+	assertColumnOwnsSequences(t, s.Codec(), kvDB, "t", "test2", 0 /* colIdx */, []string{"test2_a_seq"})
+	assertColumnOwnsSequences(t, s.Codec(), kvDB, "t", "test2", 1 /* colIdx */, nil /* seqNames */)
 }
 
 // assertColumnOwnsSequences ensures that the column at (DbName, tbName, colIdx)
 // owns all the sequences passed to it (in order) by looking up descriptors in
 // kvDB.
 func assertColumnOwnsSequences(
-	t *testing.T, kvDB *kv.DB, dbName string, tbName string, colIdx int, seqNames []string,
+	t *testing.T,
+	codec keys.SQLCodec,
+	kvDB *kv.DB,
+	dbName string,
+	tbName string,
+	colIdx int,
+	seqNames []string,
 ) {
-	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, dbName, tbName)
+	t.Helper()
+	tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, dbName, tbName)
 	col := tableDesc.PublicColumns()[colIdx]
 	var seqDescs []catalog.TableDescriptor
 	for _, seqName := range seqNames {
 		seqDescs = append(
 			seqDescs,
-			desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, dbName, seqName),
+			desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, dbName, seqName),
 		)
 	}
 
@@ -251,7 +259,7 @@ func TestInvalidOwnedDescriptorsAreDroppable(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	testCases := []struct {
 		name string
-		test func(*testing.T, *kv.DB, *sqlutils.SQLRunner)
+		test func(*testing.T, keys.SQLCodec, *kv.DB, *sqlutils.SQLRunner)
 	}{
 		// Tests simulating #50711 by breaking the invariant that sequences are owned
 		// by at most one column at a time.
@@ -260,9 +268,9 @@ func TestInvalidOwnedDescriptorsAreDroppable(t *testing.T) {
 		// state. The owned sequence should also be dropped.
 		{
 			name: "#50711 drop table",
-			test: func(t *testing.T, kvDB *kv.DB, sqlDB *sqlutils.SQLRunner) {
-				addOwnedSequence(t, kvDB, "t", "test", 0, "seq")
-				addOwnedSequence(t, kvDB, "t", "test", 1, "seq")
+			test: func(t *testing.T, codec keys.SQLCodec, kvDB *kv.DB, sqlDB *sqlutils.SQLRunner) {
+				addOwnedSequence(t, codec, kvDB, "t", "test", 0, "seq")
+				addOwnedSequence(t, codec, kvDB, "t", "test", 1, "seq")
 
 				sqlDB.Exec(t, "DROP TABLE t.test")
 				// The sequence should have been dropped as well.
@@ -273,9 +281,9 @@ func TestInvalidOwnedDescriptorsAreDroppable(t *testing.T) {
 		},
 		{
 			name: "#50711 drop sequence followed by drop table",
-			test: func(t *testing.T, kvDB *kv.DB, sqlDB *sqlutils.SQLRunner) {
-				addOwnedSequence(t, kvDB, "t", "test", 0, "seq")
-				addOwnedSequence(t, kvDB, "t", "test", 1, "seq")
+			test: func(t *testing.T, codec keys.SQLCodec, kvDB *kv.DB, sqlDB *sqlutils.SQLRunner) {
+				addOwnedSequence(t, codec, kvDB, "t", "test", 0, "seq")
+				addOwnedSequence(t, codec, kvDB, "t", "test", 1, "seq")
 
 				sqlDB.Exec(t, "DROP SEQUENCE t.seq")
 				sqlDB.Exec(t, "SELECT * FROM t.valid_seq")
@@ -290,12 +298,12 @@ func TestInvalidOwnedDescriptorsAreDroppable(t *testing.T) {
 			// on objects lexicographically -- owned sequences can be dropped both as a
 			// regular sequence drop and as a side effect of the owner table being dropped.
 			name: "#50711 drop database cascade",
-			test: func(t *testing.T, kvDB *kv.DB, sqlDB *sqlutils.SQLRunner) {
-				addOwnedSequence(t, kvDB, "t", "test", 0, "seq")
-				addOwnedSequence(t, kvDB, "t", "test", 1, "seq")
+			test: func(t *testing.T, codec keys.SQLCodec, kvDB *kv.DB, sqlDB *sqlutils.SQLRunner) {
+				addOwnedSequence(t, codec, kvDB, "t", "test", 0, "seq")
+				addOwnedSequence(t, codec, kvDB, "t", "test", 1, "seq")
 
-				addOwnedSequence(t, kvDB, "t", "test", 0, "useq")
-				addOwnedSequence(t, kvDB, "t", "test", 1, "useq")
+				addOwnedSequence(t, codec, kvDB, "t", "test", 0, "useq")
+				addOwnedSequence(t, codec, kvDB, "t", "test", 1, "useq")
 
 				sqlDB.Exec(t, "DROP DATABASE t CASCADE")
 			},
@@ -306,8 +314,8 @@ func TestInvalidOwnedDescriptorsAreDroppable(t *testing.T) {
 
 		{
 			name: "#50781 drop table followed by drop sequence",
-			test: func(t *testing.T, kvDB *kv.DB, sqlDB *sqlutils.SQLRunner) {
-				breakOwnershipMapping(t, kvDB, "t", "test", "seq")
+			test: func(t *testing.T, codec keys.SQLCodec, kvDB *kv.DB, sqlDB *sqlutils.SQLRunner) {
+				breakOwnershipMapping(t, codec, kvDB, "t", "test", "seq")
 
 				sqlDB.Exec(t, "DROP TABLE t.test")
 				// The valid sequence should have also been dropped.
@@ -317,8 +325,8 @@ func TestInvalidOwnedDescriptorsAreDroppable(t *testing.T) {
 		},
 		{
 			name: "#50781 drop sequence followed by drop table",
-			test: func(t *testing.T, kvDB *kv.DB, sqlDB *sqlutils.SQLRunner) {
-				breakOwnershipMapping(t, kvDB, "t", "test", "seq")
+			test: func(t *testing.T, codec keys.SQLCodec, kvDB *kv.DB, sqlDB *sqlutils.SQLRunner) {
+				breakOwnershipMapping(t, codec, kvDB, "t", "test", "seq")
 
 				sqlDB.Exec(t, "DROP SEQUENCE t.seq")
 				sqlDB.Exec(t, "DROP TABLE t.test")
@@ -332,18 +340,18 @@ func TestInvalidOwnedDescriptorsAreDroppable(t *testing.T) {
 		// regular sequence drop and as a side effect of the owner table being dropped.
 		{
 			name: "#50781 drop database cascade",
-			test: func(t *testing.T, kvDB *kv.DB, sqlDB *sqlutils.SQLRunner) {
-				breakOwnershipMapping(t, kvDB, "t", "test", "seq")
-				breakOwnershipMapping(t, kvDB, "t", "test", "useq")
+			test: func(t *testing.T, codec keys.SQLCodec, kvDB *kv.DB, sqlDB *sqlutils.SQLRunner) {
+				breakOwnershipMapping(t, codec, kvDB, "t", "test", "seq")
+				breakOwnershipMapping(t, codec, kvDB, "t", "test", "useq")
 				sqlDB.Exec(t, "DROP DATABASE t CASCADE")
 			},
 		},
 		{
 			name: "combined #50711 #50781 drop table followed by sequence",
-			test: func(t *testing.T, kvDB *kv.DB, sqlDB *sqlutils.SQLRunner) {
-				addOwnedSequence(t, kvDB, "t", "test", 0, "seq")
-				addOwnedSequence(t, kvDB, "t", "test", 1, "seq")
-				breakOwnershipMapping(t, kvDB, "t", "test", "seq")
+			test: func(t *testing.T, codec keys.SQLCodec, kvDB *kv.DB, sqlDB *sqlutils.SQLRunner) {
+				addOwnedSequence(t, codec, kvDB, "t", "test", 0, "seq")
+				addOwnedSequence(t, codec, kvDB, "t", "test", 1, "seq")
+				breakOwnershipMapping(t, codec, kvDB, "t", "test", "seq")
 
 				sqlDB.Exec(t, "DROP TABLE t.test")
 				// The valid sequence should have also been dropped.
@@ -353,10 +361,10 @@ func TestInvalidOwnedDescriptorsAreDroppable(t *testing.T) {
 		},
 		{
 			name: "combined #50711 #50781 drop sequence followed by table",
-			test: func(t *testing.T, kvDB *kv.DB, sqlDB *sqlutils.SQLRunner) {
-				addOwnedSequence(t, kvDB, "t", "test", 0, "seq")
-				addOwnedSequence(t, kvDB, "t", "test", 1, "seq")
-				breakOwnershipMapping(t, kvDB, "t", "test", "seq")
+			test: func(t *testing.T, codec keys.SQLCodec, kvDB *kv.DB, sqlDB *sqlutils.SQLRunner) {
+				addOwnedSequence(t, codec, kvDB, "t", "test", 0, "seq")
+				addOwnedSequence(t, codec, kvDB, "t", "test", 1, "seq")
+				breakOwnershipMapping(t, codec, kvDB, "t", "test", "seq")
 
 				sqlDB.Exec(t, "DROP SEQUENCE t.seq")
 				sqlDB.Exec(t, "DROP TABLE t.test")
@@ -369,14 +377,14 @@ func TestInvalidOwnedDescriptorsAreDroppable(t *testing.T) {
 		// regular sequence drop and as a side effect of the owner table being dropped.
 		{
 			name: "combined #50711 #50781 drop database cascade",
-			test: func(t *testing.T, kvDB *kv.DB, sqlDB *sqlutils.SQLRunner) {
-				addOwnedSequence(t, kvDB, "t", "test", 0, "seq")
-				addOwnedSequence(t, kvDB, "t", "test", 1, "seq")
-				breakOwnershipMapping(t, kvDB, "t", "test", "seq")
+			test: func(t *testing.T, codec keys.SQLCodec, kvDB *kv.DB, sqlDB *sqlutils.SQLRunner) {
+				addOwnedSequence(t, codec, kvDB, "t", "test", 0, "seq")
+				addOwnedSequence(t, codec, kvDB, "t", "test", 1, "seq")
+				breakOwnershipMapping(t, codec, kvDB, "t", "test", "seq")
 
-				addOwnedSequence(t, kvDB, "t", "test", 0, "useq")
-				addOwnedSequence(t, kvDB, "t", "test", 1, "useq")
-				breakOwnershipMapping(t, kvDB, "t", "test", "useq")
+				addOwnedSequence(t, codec, kvDB, "t", "test", 0, "useq")
+				addOwnedSequence(t, codec, kvDB, "t", "test", 1, "useq")
+				breakOwnershipMapping(t, codec, kvDB, "t", "test", "useq")
 
 				sqlDB.Exec(t, "DROP DATABASE t CASCADE")
 			},
@@ -386,9 +394,9 @@ func TestInvalidOwnedDescriptorsAreDroppable(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
-			params := base.TestServerArgs{}
-			s, sqlConn, kvDB := serverutils.StartServer(t, params)
-			defer s.Stopper().Stop(ctx)
+			srv, sqlConn, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+			defer srv.Stopper().Stop(ctx)
+			s := srv.ApplicationLayer()
 			sqlDB := sqlutils.MakeSQLRunner(sqlConn)
 			// While these scenarios are interesting, for declarative schema changer
 			// from a correctness view point it's okay for them to fail. It's better to
@@ -402,7 +410,7 @@ CREATE SEQUENCE t.seq OWNED BY t.test.a;
 CREATE SEQUENCE t.useq OWNED BY t.test.a;
 CREATE SEQUENCE t.valid_seq OWNED BY t.test.a`)
 
-			tc.test(t, kvDB, sqlDB)
+			tc.test(t, s.Codec(), kvDB, sqlDB)
 		})
 	}
 }
@@ -450,7 +458,7 @@ func TestCachedSequences(t *testing.T) {
 			test: func(t *testing.T) {
 				execStmt(t, `
 				CREATE SEQUENCE s
-									CACHE 5
+									PER SESSION CACHE 5
 				   INCREMENT BY 2
 					   START WITH 2
 			  `)
@@ -502,14 +510,14 @@ func TestCachedSequences(t *testing.T) {
 			test: func(t *testing.T) {
 				execStmt(t, `
 				CREATE SEQUENCE s1
-									CACHE 5
+									PER SESSION CACHE 5
 				   INCREMENT BY 2
 					   START WITH 2
 			  `)
 
 				execStmt(t, `
 				CREATE SEQUENCE s2
-									CACHE 4
+									PER SESSION CACHE 4
 				   INCREMENT BY 3
 					   START WITH 3
 			  `)
@@ -1110,8 +1118,9 @@ func TestSequencesZeroCacheSize(t *testing.T) {
 
 	ctx := context.Background()
 	params := base.TestServerArgs{}
-	s, sqlConn, kvDB := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(ctx)
+	srv, sqlConn, kvDB := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
 	sqlDB := sqlutils.MakeSQLRunner(sqlConn)
 
@@ -1121,11 +1130,11 @@ func TestSequencesZeroCacheSize(t *testing.T) {
   `)
 
 	// Alter the descriptor to have a cache size of 0.
-	seqDesc := desctestutils.TestingGetMutableExistingTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "seq")
-	seqDesc.SequenceOpts.CacheSize = 0
+	seqDesc := desctestutils.TestingGetMutableExistingTableDescriptor(kvDB, s.Codec(), "test", "seq")
+	seqDesc.SequenceOpts.SessionCacheSize = 0
 	err := kvDB.Put(
 		context.Background(),
-		catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, seqDesc.GetID()),
+		catalogkeys.MakeDescMetadataKey(s.Codec(), seqDesc.GetID()),
 		seqDesc.DescriptorProto(),
 	)
 	require.NoError(t, err)
@@ -1140,18 +1149,24 @@ func TestSequencesZeroCacheSize(t *testing.T) {
 // addOwnedSequence adds the sequence referenced by seqName to the
 // ownsSequenceIDs of the column referenced by (dbName, tableName, colIdx).
 func addOwnedSequence(
-	t *testing.T, kvDB *kv.DB, dbName string, tableName string, colIdx int, seqName string,
+	t *testing.T,
+	codec keys.SQLCodec,
+	kvDB *kv.DB,
+	dbName string,
+	tableName string,
+	colIdx int,
+	seqName string,
 ) {
-	seqDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, dbName, seqName)
+	seqDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, dbName, seqName)
 	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(
-		kvDB, keys.SystemSQLCodec, dbName, tableName)
+		kvDB, codec, dbName, tableName)
 
 	tableDesc.GetColumns()[colIdx].OwnsSequenceIds = append(
 		tableDesc.GetColumns()[colIdx].OwnsSequenceIds, seqDesc.GetID())
 
 	err := kvDB.Put(
 		context.Background(),
-		catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.GetID()),
+		catalogkeys.MakeDescMetadataKey(codec, tableDesc.GetID()),
 		tableDesc.DescriptorProto(),
 	)
 	require.NoError(t, err)
@@ -1161,11 +1176,11 @@ func addOwnedSequence(
 // to a non-existent tableID and setting the column's `ownsSequenceID` to a
 // non-existent sequenceID.
 func breakOwnershipMapping(
-	t *testing.T, kvDB *kv.DB, dbName string, tableName string, seqName string,
+	t *testing.T, codec keys.SQLCodec, kvDB *kv.DB, dbName string, tableName string, seqName string,
 ) {
-	seqDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, dbName, seqName)
+	seqDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, dbName, seqName)
 	tableDesc := desctestutils.TestingGetMutableExistingTableDescriptor(
-		kvDB, keys.SystemSQLCodec, dbName, tableName)
+		kvDB, codec, dbName, tableName)
 
 	for colIdx := range tableDesc.GetColumns() {
 		for i := range tableDesc.GetColumns()[colIdx].OwnsSequenceIds {
@@ -1178,14 +1193,14 @@ func breakOwnershipMapping(
 
 	err := kvDB.Put(
 		context.Background(),
-		catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, tableDesc.GetID()),
+		catalogkeys.MakeDescMetadataKey(codec, tableDesc.GetID()),
 		tableDesc.DescriptorProto(),
 	)
 	require.NoError(t, err)
 
 	err = kvDB.Put(
 		context.Background(),
-		catalogkeys.MakeDescMetadataKey(keys.SystemSQLCodec, seqDesc.GetID()),
+		catalogkeys.MakeDescMetadataKey(codec, seqDesc.GetID()),
 		seqDesc.DescriptorProto(),
 	)
 	require.NoError(t, err)

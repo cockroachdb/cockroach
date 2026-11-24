@@ -10,8 +10,6 @@ go_library(
         "//pkg/sql/catalog/catenumpb",
         "//pkg/sql/opt/cat",
         "//pkg/sql/opt/constraint",
-        "//pkg/sql/pgwire/pgcode",
-        "//pkg/sql/pgwire/pgerror",
         "//pkg/sql/sem/eval",
         "//pkg/sql/sem/tree",
         "//pkg/sql/sem/tree/treecmp",

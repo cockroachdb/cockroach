@@ -20,7 +20,6 @@ go_binary(
     name = "generate-logictest",
     testonly = 1,
     data = [
-        "//pkg/ccl/logictestccl:testdata",
         "//pkg/sql/logictest:testdata",
         "//pkg/sql/opt/exec/execbuilder:testdata",
         "@com_github_cockroachdb_sqllogictest//:testfiles",

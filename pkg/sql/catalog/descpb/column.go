@@ -98,11 +98,11 @@ func (desc *ColumnDescriptor) SQLStringNotHumanReadable() string {
 	}
 	if desc.DefaultExpr != nil {
 		f.WriteString(" DEFAULT ")
-		f.WriteString(*desc.DefaultExpr)
+		f.WriteString(string(*desc.DefaultExpr))
 	}
 	if desc.IsComputed() {
 		f.WriteString(" AS (")
-		f.WriteString(*desc.ComputeExpr)
+		f.WriteString(string(*desc.ComputeExpr))
 		f.WriteString(") STORED")
 	}
 	return f.CloseAndGetString()

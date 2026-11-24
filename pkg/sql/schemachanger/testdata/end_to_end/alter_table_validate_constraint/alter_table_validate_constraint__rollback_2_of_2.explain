@@ -6,7 +6,7 @@ ALTER TABLE t ADD CHECK (i > 0) NOT VALID;
 ALTER TABLE t VALIDATE CONSTRAINT check_i;
 EXPLAIN (DDL) rollback at post-commit stage 2 of 2;
 ----
-Schema change plan for rolling back ALTER TABLE ‹defaultdb›.public.‹t› VALIDATE CONSTRAINT ‹check_i›;
+Schema change plan for rolling back ALTER TABLE defaultdb.public.t VALIDATE CONSTRAINT check_i;
  └── PostCommitNonRevertiblePhase
       └── Stage 1 of 1 in PostCommitNonRevertiblePhase
            ├── 2 elements transitioning toward PUBLIC

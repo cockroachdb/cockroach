@@ -10,6 +10,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec/colexecutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
 	"github.com/cockroachdb/cockroach/pkg/sql/colmem"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
@@ -42,10 +43,13 @@ func NewOrdinalityOp(
 	return c
 }
 
-func (c *ordinalityOp) Next() coldata.Batch {
-	bat := c.Input.Next()
+func (c *ordinalityOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	bat, meta := c.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	if bat.Length() == 0 {
-		return coldata.ZeroBatch
+		return coldata.ZeroBatch, nil
 	}
 
 	outputVec := bat.ColVec(c.outputIdx)
@@ -67,5 +71,5 @@ func (c *ordinalityOp) Next() coldata.Batch {
 		}
 	}
 
-	return bat
+	return bat, nil
 }

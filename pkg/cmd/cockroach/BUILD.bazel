@@ -8,7 +8,6 @@ go_library(
     visibility = ["//visibility:private"],
     deps = [
         "//pkg/ccl",
-        "//pkg/ccl/cliccl",
         "//pkg/cli",
         "//pkg/ui/distccl",
     ],
@@ -18,6 +17,7 @@ disallowed_imports_test(
     "cockroach_lib",
     [
         "//pkg/sql/randgen",
+        "//pkg/testutils",
         "//pkg/testutils/testcluster",
     ],
 )

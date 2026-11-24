@@ -20,14 +20,14 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/rditer"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/stretchr/testify/require"
@@ -173,7 +173,7 @@ func assertRangeStats(
 ) {
 	t.Helper()
 
-	ms, err := stateloader.Make(rangeID).LoadMVCCStats(context.Background(), r)
+	ms, err := kvstorage.MakeStateLoader(rangeID).LoadMVCCStats(context.Background(), r)
 	require.NoError(t, err)
 	// When used with a real wall clock these will not be the same, since it
 	// takes time to load stats.
@@ -183,7 +183,7 @@ func assertRangeStats(
 	require.Equal(t, expMS, ms, "%s: stats differ", name)
 }
 
-func assertRecomputedStats(
+func assertRecomputedStatsExceptSys(
 	t *testing.T,
 	name string,
 	r storage.Reader,
@@ -193,7 +193,7 @@ func assertRecomputedStats(
 ) {
 	t.Helper()
 
-	ms, err := rditer.ComputeStatsForRange(context.Background(), desc, r, nowNanos)
+	ms, err := rditer.ComputeStatsForRange(context.Background(), desc, r, fs.UnknownReadCategory, nowNanos)
 	require.NoError(t, err)
 
 	// When used with a real wall clock these will not be the same, since it
@@ -202,23 +202,28 @@ func assertRecomputedStats(
 	// Recomputing stats always has ContainsEstimates = 0, while on-disk stats may
 	// have a non-zero value. ContainsEstimates should be asserted separately.
 	ms.ContainsEstimates = expMS.ContainsEstimates
+	// Ignore SysBytes/SysCount/AbortSpanBytes: these can race with lease updates
+	// since RequestLease doesn't acquire latches. See:
+	// https://github.com/cockroachdb/cockroach/issues/93896.
+	expMS.SysBytes, expMS.SysCount, expMS.AbortSpanBytes = 0, 0, 0
+	ms.SysBytes, ms.SysCount, ms.AbortSpanBytes = 0, 0, 0
 	require.Equal(t, expMS, ms, "%s: recomputed stats diverge", name)
 }
 
 func waitForTombstone(
 	t *testing.T, reader storage.Reader, rangeID roachpb.RangeID,
 ) (tombstone kvserverpb.RangeTombstone) {
+	t.Helper()
+	sl := kvstorage.MakeStateLoader(rangeID)
 	testutils.SucceedsSoon(t, func() error {
-		tombstoneKey := keys.RangeTombstoneKey(rangeID)
-		ok, err := storage.MVCCGetProto(
-			context.Background(), reader, tombstoneKey, hlc.Timestamp{}, &tombstone, storage.MVCCGetOptions{},
-		)
-		if err != nil {
-			t.Fatalf("failed to read tombstone: %v", err)
-		}
-		if !ok {
+		mark, err := sl.LoadReplicaMark(context.Background(), reader)
+		require.NoError(t, err)
+		// TOOD(pav-kv): some tests should check mark.Destroyed(replicaID) instead
+		// of just waiting for any tombstone.
+		if mark.NextReplicaID == 0 {
 			return fmt.Errorf("tombstone not found for range %d", rangeID)
 		}
+		tombstone = mark.RangeTombstone
 		return nil
 	})
 	return tombstone

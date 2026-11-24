@@ -639,7 +639,7 @@ PREPARE new_table_in_search_path_2 AS
 query TT
 EXECUTE new_table_in_search_path_2
 ----
-_bit _bit
+_aclitem  _aclitem
 
 statement ok
 CREATE TABLE pg_type(typname STRING); INSERT INTO pg_type VALUES('test')
@@ -647,7 +647,7 @@ CREATE TABLE pg_type(typname STRING); INSERT INTO pg_type VALUES('test')
 query TT
 EXECUTE new_table_in_search_path_2
 ----
-test _bit
+test  _aclitem
 
 statement ok
 DROP TABLE pg_type
@@ -1182,8 +1182,9 @@ EXECUTE e
 select
  ├── columns: k:1 str:2
  ├── immutable
- ├── stats: [rows=333.3333]
+ ├── stats: [rows=333.333]
  ├── cost: 1118.85
+ ├── cost-flags: unbounded-cardinality
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── prune: (2)
@@ -1191,6 +1192,7 @@ select
  │    ├── columns: k:1 str:2
  │    ├── stats: [rows=1000]
  │    ├── cost: 1108.82
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── prune: (1,2)
@@ -1629,14 +1631,18 @@ INSERT INTO prep_stmts SELECT 2, name FROM pg_catalog.pg_prepared_statements;
 SELECT IF(nextval('s') <= 3, crdb_internal.force_retry('1 hour'), 0);
 COMMIT
 
+statement ok
+INSERT INTO prep_stmts SELECT 3, name FROM pg_catalog.pg_prepared_statements
+
 # Validate that the transaction was actually tried multiple times.
 query I
 SELECT currval('s')
 ----
 4
 
-# Validate that the LRU list was correct before and after the PREPAREs, even
-# after multiple retries.
+# Validate that the LRU list was correct before and after the PREPAREs, and
+# after the COMMIT, even after multiple retries. Notice that evictions only
+# occur once the transaction successfully commits.
 query IT
 SELECT which, name FROM prep_stmts ORDER BY which, name
 ----
@@ -1646,10 +1652,17 @@ SELECT which, name FROM prep_stmts ORDER BY which, name
 1  pscs16
 1  pscs17
 2  pscs11
+2  pscs14
+2  pscs15
 2  pscs16
 2  pscs17
 2  pscs18
 2  pscs19
+3  pscs11
+3  pscs16
+3  pscs17
+3  pscs18
+3  pscs19
 
 statement ok
 DROP TABLE prep_stmts
@@ -1681,8 +1694,15 @@ statement ok
 PREPARE s_114867 AS INSERT INTO test_114867(colors) VALUES (ARRAY[$1::text]::color[]);
 EXECUTE s_114867('red')
 
+
+statement ok
+ALTER TABLE test_114867 SET (schema_locked=false)
+
 statement ok
 TRUNCATE TABLE test_114867 CASCADE
+
+statement ok
+ALTER TABLE test_114867 RESET (schema_locked)
 
 statement ok
 EXECUTE s_114867('red')
@@ -1721,3 +1741,51 @@ statement ok
 EXECUTE p(120)
 
 subtest end
+
+# Regression test for #152664. Correctly type placeholders with UNKNOWN type
+# hints.
+statement ok
+PREPARE p152664 (BOOL, UNKNOWN, DECIMAL) AS SELECT IF($1, $2, $3) IS NOT NAN
+
+query B
+EXECUTE p152664(false, NULL, 4)
+----
+true
+
+statement ok
+DEALLOCATE p152664
+
+statement ok
+PREPARE p152664 (BOOL, DECIMAL, UNKNOWN) AS SELECT IF($1, $2, $3) IS NOT NAN
+
+query B
+EXECUTE p152664(true, 4, NULL)
+----
+true
+
+# Regression tests for #159043.
+statement ok
+CREATE TABLE t159043a (a INT)
+
+statement ok
+CREATE TABLE t159043b (b INT)
+
+statement ok
+INSERT INTO t159043b VALUES (33)
+
+statement ok
+PREPARE p159043 AS
+SELECT 1 FROM t159043b CROSS JOIN (SELECT min(1) FROM t159043a OFFSET $1) GROUP BY b
+
+query empty
+EXECUTE p159043(10)
+
+statement ok
+DEALLOCATE p159043
+
+statement ok
+PREPARE p159043 AS
+SELECT 1 FROM t159043b CROSS JOIN (SELECT min(1) FROM t159043a LIMIT $1) GROUP BY b
+
+statement error negative value for LIMIT
+EXECUTE p159043(-1)

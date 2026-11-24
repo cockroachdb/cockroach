@@ -8,19 +8,25 @@ package sql_test
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"regexp"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -31,11 +37,12 @@ type queryCounter struct {
 	selectCount                     int64
 	selectExecutedCount             int64
 	distSQLSelectCount              int64
-	fallbackCount                   int64
 	updateCount                     int64
 	insertCount                     int64
 	deleteCount                     int64
 	ddlCount                        int64
+	callSPCount                     int64
+	callSPExecutedCount             int64
 	miscCount                       int64
 	miscExecutedCount               int64
 	copyCount                       int64
@@ -47,13 +54,15 @@ type queryCounter struct {
 	restartSavepointCount           int64
 	releaseRestartSavepointCount    int64
 	rollbackToRestartSavepointCount int64
+	statementTimeoutCount           int64
+	transactionTimeoutCount         int64
 }
 
 func TestQueryCounts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParams()
+	var params base.TestServerArgs
 	params.Knobs = base.TestingKnobs{
 		SQLLeaseManager: &lease.ManagerTestingKnobs{
 			// Disable SELECT called for delete orphaned leases to keep
@@ -64,6 +73,10 @@ func TestQueryCounts(t *testing.T) {
 	srv, sqlDB, _ := serverutils.StartServer(t, params)
 	defer srv.Stopper().Stop(context.Background())
 	s := srv.ApplicationLayer()
+
+	if _, err := sqlDB.Exec("CREATE PROCEDURE p_select() LANGUAGE SQL AS 'SELECT 1'"); err != nil {
+		t.Fatal(err)
+	}
 
 	var testcases = []queryCounter{
 		// The counts are deltas for each query.
@@ -104,6 +117,19 @@ func TestQueryCounts(t *testing.T) {
 		{query: "CREATE TABLE mt.n (num INTEGER PRIMARY KEY)", ddlCount: 1},
 		{query: "UPDATE mt.n SET num = num + 1", updateCount: 1},
 		{query: "COPY mt.n(num) FROM STDIN", copyCount: 1, expectError: true},
+		{
+			query:       "BEGIN; SET LOCAL statement_timeout = '100ms'; SELECT pg_sleep(10)",
+			expectError: true, txnBeginCount: 1, selectCount: 1, miscCount: 1,
+			miscExecutedCount: 1, failureCount: 1, statementTimeoutCount: 1,
+			txnRollbackCount: 1, txnAbortCount: 1,
+		},
+		{
+			query:       "BEGIN; SET LOCAL transaction_timeout = '100ms'; SELECT pg_sleep(10)",
+			expectError: true, txnBeginCount: 1, selectCount: 1, miscCount: 1,
+			miscExecutedCount: 1, failureCount: 1, transactionTimeoutCount: 1,
+			txnRollbackCount: 1, txnAbortCount: 1,
+		},
+		{query: "CALL p_select()", callSPCount: 1, callSPExecutedCount: 1},
 	}
 
 	accum := initializeQueryCounter(s)
@@ -112,6 +138,13 @@ func TestQueryCounts(t *testing.T) {
 		t.Run(tc.query, func(t *testing.T) {
 			if _, err := sqlDB.Exec(tc.query); err != nil && !tc.expectError {
 				t.Fatalf("unexpected error executing '%s': %s'", tc.query, err)
+			}
+			// If the query included a BEGIN statement and failed, we need to abort the transaction
+			// to set up for the next test.
+			if tc.txnBeginCount > 0 && tc.expectError {
+				if _, err := sqlDB.Exec("ABORT"); err != nil {
+					t.Fatalf("unexpected error when attempting to abort opened txn: %s'", err)
+				}
 			}
 
 			// Force metric snapshot refresh.
@@ -129,7 +162,7 @@ func TestQueryCounts(t *testing.T) {
 			if accum.txnRollbackCount, err = checkCounterDelta(s, sql.MetaTxnRollbackStarted, accum.txnRollbackCount, tc.txnRollbackCount); err != nil {
 				t.Errorf("%q: %s", tc.query, err)
 			}
-			if accum.txnAbortCount, err = checkCounterDelta(s, sql.MetaTxnAbort, accum.txnAbortCount, 0); err != nil {
+			if accum.txnAbortCount, err = checkCounterDelta(s, sql.MetaTxnAbort, accum.txnAbortCount, tc.txnAbortCount); err != nil {
 				t.Errorf("%q: %s", tc.query, err)
 			}
 			if accum.selectCount, err = checkCounterDelta(s, sql.MetaSelectStarted, accum.selectCount, tc.selectCount); err != nil {
@@ -150,6 +183,12 @@ func TestQueryCounts(t *testing.T) {
 			if accum.ddlCount, err = checkCounterDelta(s, sql.MetaDdlStarted, accum.ddlCount, tc.ddlCount); err != nil {
 				t.Errorf("%q: %s", tc.query, err)
 			}
+			if accum.callSPCount, err = checkCounterDelta(s, sql.MetaCallStoredProcStarted, accum.callSPCount, tc.callSPCount); err != nil {
+				t.Errorf("%q: %s", tc.query, err)
+			}
+			if accum.callSPExecutedCount, err = checkCounterDelta(s, sql.MetaCallStoredProcExecuted, accum.callSPExecutedCount, tc.callSPExecutedCount); err != nil {
+				t.Errorf("%q: %s", tc.query, err)
+			}
 			if accum.miscCount, err = checkCounterDelta(s, sql.MetaMiscStarted, accum.miscCount, tc.miscCount); err != nil {
 				t.Errorf("%q: %s", tc.query, err)
 			}
@@ -162,8 +201,155 @@ func TestQueryCounts(t *testing.T) {
 			if accum.failureCount, err = checkCounterDelta(s, sql.MetaFailure, accum.failureCount, tc.failureCount); err != nil {
 				t.Errorf("%q: %s", tc.query, err)
 			}
-			if accum.fallbackCount, err = checkCounterDelta(s, sql.MetaSQLOptFallback, accum.fallbackCount, tc.fallbackCount); err != nil {
+			if accum.statementTimeoutCount, err = checkCounterDelta(s, sql.MetaStatementTimeout, accum.statementTimeoutCount, tc.statementTimeoutCount); err != nil {
 				t.Errorf("%q: %s", tc.query, err)
+			}
+			if accum.transactionTimeoutCount, err = checkCounterDelta(s, sql.MetaTransactionTimeout, accum.transactionTimeoutCount, tc.transactionTimeoutCount); err != nil {
+				t.Errorf("%q: %s", tc.query, err)
+			}
+		})
+	}
+}
+
+func TestStatementMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	rng, _ := randutil.NewTestRand()
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+	s := srv.ApplicationLayer()
+
+	testCases := []struct {
+		query            string
+		rowsRead         int64
+		indexRowsWritten int64
+		// If true, then skip metamorphic testing for this query.
+		skipMetamorphic bool
+		// If true, then this is a deletion case, in which case indexBytesWritten
+		// is expected to be zero.
+		isDelete bool
+	}{
+		// Read-only statements.
+		{query: `SELECT * FROM db.t WHERE x = 1`, rowsRead: 1},
+		{query: `SELECT * FROM db.t WHERE x <= 2`, rowsRead: 2},
+		{query: `SELECT * FROM db.t WHERE a @> ARRAY['apple']`, rowsRead: 4},
+		{
+			query:    `SELECT * FROM db.t@t_a_idx t1, db.t t2 WHERE t1.a @> t2.a`,
+			rowsRead: 12,
+			// Skip this variation under metamorphic testing because the inverted
+			// joiner batch size can affect number of rows read.
+			skipMetamorphic: true,
+		},
+		{query: `SELECT * FROM db.t ORDER BY v <-> '[2, 2]' LIMIT 1`, rowsRead: 3},
+
+		// Mutation statements.
+		{query: `INSERT INTO db.t VALUES (4, 40, ARRAY['orange', 'cherry'], '[7, 8]')`, indexRowsWritten: 5},
+		{
+			query:            `INSERT INTO db.t VALUES (5, 50, ARRAY['orange', 'cherry']), (6, 60, NULL)`,
+			indexRowsWritten: 6,
+		},
+		// Expect to read 2 rows - one in secondary index, one in primary index.
+		// Expect to write 3 rows - update primary index, delete and insert in
+		// "y" secondary index.
+		{query: `UPDATE db.t SET y = 100 WHERE y = 40`, rowsRead: 2, indexRowsWritten: 3},
+		// Expect to read 4 rows - two in secondary index, two in primary index.
+		// Expect to write 5 rows - update primary index, delete and insert two
+		// rows in "y" secondary index.
+		{query: `UPDATE db.t SET y = 100 WHERE y >= 10 AND y <= 20`, rowsRead: 4, indexRowsWritten: 6},
+		// Same scenario as above but the UPDATE is executed in a CTE.
+		{
+			query:            `WITH cte (c) AS (UPDATE db.t SET y = 100 WHERE y >= 50 AND y <= 60 RETURNING x) SELECT c FROM cte`,
+			rowsRead:         4,
+			indexRowsWritten: 6,
+		},
+		{
+			query:            `UPSERT INTO db.t VALUES (6, 100, ARRAY['date'], '[100, 110]')`,
+			rowsRead:         1,
+			indexRowsWritten: 3,
+		},
+		{
+			query:            `INSERT INTO db.t VALUES (6, 600) ON CONFLICT (x) DO UPDATE SET a = ARRAY['strawberry']`,
+			rowsRead:         1,
+			indexRowsWritten: 3,
+		},
+		{query: `DELETE FROM db.t WHERE x = 2`, rowsRead: 1, indexRowsWritten: 4, isDelete: true},
+		{
+			query:            `DELETE FROM db.t WHERE a @> ARRAY['apple']`,
+			rowsRead:         4,
+			indexRowsWritten: 11,
+			isDelete:         true,
+		},
+		// CREATE TABLE does not count rows or bytes written.
+		{query: `CREATE TABLE db.t2 (x, y) AS SELECT 1, 10 UNION SELECT 2, 20`},
+	}
+
+	for _, vectorized := range []string{"off", "on"} {
+		t.Run(fmt.Sprintf("vectorize = %s", vectorized), func(t *testing.T) {
+			runner.Exec(t, "SET vectorize = $1", vectorized)
+			runner.Exec(t, `DROP DATABASE IF EXISTS db`)
+			runner.Exec(t, `CREATE DATABASE db`)
+			runner.Exec(t, `CREATE TABLE db.t (x INT PRIMARY KEY, y INT, a STRING[], v VECTOR(2))`)
+			runner.Exec(t, `CREATE INDEX ON db.t (y)`)
+			runner.Exec(t, `CREATE INVERTED INDEX ON db.t (a)`)
+			runner.Exec(t, `CREATE VECTOR INDEX ON db.t (v)`)
+			runner.Exec(t, `INSERT INTO db.t VALUES (1, 10, ARRAY['apple', 'orange'], '[1, 2]')`)
+			runner.Exec(t, `INSERT INTO db.t VALUES (2, 20, ARRAY['banana'], '[3, 4]')`)
+			runner.Exec(t, `INSERT INTO db.t VALUES (3, 30, ARRAY['apple', 'pear', 'mango'], '[5, 6]')`)
+
+			// Randomize whether we disable txn sampling or not (if it's
+			// disabled, then we don't collect execution stats, which could have
+			// an impact on the metrics' updates).
+			if rng.Float64() < 0.5 {
+				runner.Exec(t, `SET CLUSTER SETTING sql.txn_stats.sample_rate = 0`)
+			}
+
+			for _, tc := range testCases {
+				t.Run(tc.query, func(t *testing.T) {
+					if tc.skipMetamorphic && metamorphic.IsMetamorphicBuild() {
+						return
+					}
+
+					// Get initial values of the counters.
+					lastRowsRead := s.MustGetSQLCounter(sql.MetaStatementRowsRead.Name)
+					lastBytesRead := s.MustGetSQLCounter(sql.MetaStatementBytesRead.Name)
+					lastRowsWritten := s.MustGetSQLCounter(sql.MetaStatementIndexRowsWritten.Name)
+					lastBytesWritten := s.MustGetSQLCounter(sql.MetaStatementIndexBytesWritten.Name)
+
+					runner.Exec(t, tc.query)
+
+					// Test the rows read metric.
+					_, err := checkCounterDelta(
+						s, sql.MetaStatementRowsRead, lastRowsRead, tc.rowsRead)
+					require.NoError(t, err)
+
+					// If there were rows read, then expect bytes read to have
+					// increased. Don't check for a specific value, since there are
+					// too many factors that can change this.
+					if tc.rowsRead > 0 {
+						currBytesRead := s.MustGetSQLCounter(sql.MetaStatementBytesRead.Name)
+						require.Greater(t, currBytesRead, lastBytesRead)
+					}
+
+					// Test the rows written metric.
+					_, err = checkCounterDelta(
+						s, sql.MetaStatementIndexRowsWritten, lastRowsWritten, tc.indexRowsWritten)
+					require.NoError(t, err)
+
+					// If there were index rows written, then expect bytes written
+					// to have increased (or not in the delete case). Don't check
+					// for a specific value, since there are too many factors that
+					// can change this.
+					if tc.indexRowsWritten > 0 {
+						currBytesWritten := s.MustGetSQLCounter(sql.MetaStatementIndexBytesWritten.Name)
+						if !tc.isDelete {
+							require.Greater(t, currBytesWritten, lastBytesWritten)
+						} else {
+							require.Equal(t, currBytesWritten, lastBytesWritten)
+						}
+					}
+				})
 			}
 		})
 	}
@@ -174,11 +360,23 @@ func TestAbortCountConflictingWrites(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	testutils.RunTrueAndFalse(t, "retry loop", func(t *testing.T, retry bool) {
-		params, cmdFilters := createTestServerParams()
+		var cmdFilters tests.CommandFilters
+		params := base.TestServerArgs{}
+		params.Knobs.Store = &kvserver.StoreTestingKnobs{
+			EvalKnobs: kvserverbase.BatchEvalTestingKnobs{
+				TestingEvalFilter: cmdFilters.RunFilters,
+			},
+		}
 		s, sqlDB, _ := serverutils.StartServer(t, params)
 		defer s.Stopper().Stop(context.Background())
 
 		accum := initializeQueryCounter(s)
+
+		// The test injects a retry error after the interceptors, so we need to
+		// disable write buffers for the request to make it to the server.
+		if _, err := sqlDB.Exec("SET kv_transaction_buffered_writes_enabled = false"); err != nil {
+			t.Fatal(err)
+		}
 
 		if _, err := sqlDB.Exec("CREATE DATABASE db"); err != nil {
 			t.Fatal(err)
@@ -279,8 +477,8 @@ func TestAbortCountConflictingWrites(t *testing.T) {
 func TestAbortCountErrorDuringTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	params, _ := createTestServerParams()
-	s, sqlDB, _ := serverutils.StartServer(t, params)
+
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	accum := initializeQueryCounter(s)
@@ -314,8 +512,7 @@ func TestSavepointMetrics(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParams()
-	s, sqlDB, _ := serverutils.StartServer(t, params)
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	accum := initializeQueryCounter(s)

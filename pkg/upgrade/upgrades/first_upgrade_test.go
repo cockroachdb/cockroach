@@ -79,7 +79,8 @@ func TestFirstUpgrade(t *testing.T) {
 		"USE test",
 		"CREATE TABLE foo (i INT PRIMARY KEY, j INT, INDEX idx(j))",
 	)
-
+	// Select a timestamp for when the tables were created.
+	startTime := testServer.Clock().Now()
 	// Corrupt the table descriptor in an unrecoverable manner. We are not able to automatically repair this
 	// descriptor.
 	tbl := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "test", "foo")
@@ -87,6 +88,7 @@ func TestFirstUpgrade(t *testing.T) {
 	require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		mut := tabledesc.NewBuilder(tbl.TableDesc()).BuildExistingMutableTable()
 		mut.NextIndexID = 1
+		mut.MaybeIncrementVersion()
 		return txn.Put(ctx, descKey, mut.DescriptorProto())
 	}))
 
@@ -106,6 +108,8 @@ func TestFirstUpgrade(t *testing.T) {
 	require.NoError(t, kvDB.Txn(ctx, func(ctx context.Context, txn *kv.Txn) error {
 		mut := tabledesc.NewBuilder(tbl.TableDesc()).BuildExistingMutableTable()
 		mut.ModificationTime = hlc.Timestamp{}
+		mut.Indexes[0].NotVisible = true
+		mut.Version += 2 // Increment by 2 because we wrote a version above.
 		return txn.Put(ctx, descKey, mut.DescriptorProto())
 	}))
 
@@ -127,8 +131,9 @@ func TestFirstUpgrade(t *testing.T) {
 	// the MVCC timestamp.
 	require.False(t, readDescFromStorage().GetModificationTime().IsEmpty())
 	changes := readDescFromStorage().GetPostDeserializationChanges()
-	require.Equal(t, changes.Len(), 1)
+	require.Equal(t, 2, changes.Len())
 	require.True(t, changes.Contains(catalog.SetModTimeToMVCCTimestamp))
+	require.True(t, changes.Contains(catalog.SetIndexInvisibility))
 
 	// Wait long enough for precondition check to see the unbroken table descriptor.
 	execStmts(t, "CREATE DATABASE test3")
@@ -137,12 +142,18 @@ func TestFirstUpgrade(t *testing.T) {
 	// Upgrade the cluster version.
 	tdb.Exec(t, qUpgrade)
 
-	// The table descriptor protobuf should still have the modification time set;
-	// the only post-deserialization change should be SetModTimeToMVCCTimestamp.
+	// Run a schema change on the bar table.
+	tdb.Exec(t, "ALTER TABLE foo ADD COLUMN z INT")
+
+	// The only post-deserialization change should be SetModTimeToMVCCTimestamp,
+	// because the MVCC timestamp gets on each write.
 	require.False(t, readDescFromStorage().GetModificationTime().IsEmpty())
 	changes = readDescFromStorage().GetPostDeserializationChanges()
-	require.Equal(t, changes.Len(), 1)
+	require.Equal(t, 1, changes.Len())
 	require.True(t, changes.Contains(catalog.SetModTimeToMVCCTimestamp))
+	// Validate we can read bar before this upgrade. The lease manager should see
+	// distinct version numbers in the history. Otherwise, it can panic.
+	tdb.Exec(t, fmt.Sprintf("SELECT * FROM foo AS OF SYSTEM TIME '%s'", startTime.AsOfSystemTime()))
 }
 
 // TestFirstUpgradeRepair tests the correct repair behavior of upgrade
@@ -206,6 +217,8 @@ func TestFirstUpgradeRepair(t *testing.T) {
 		"CREATE SCHEMA bar",
 		"CREATE TYPE bar.bar AS ENUM ('hello')",
 		"CREATE FUNCTION bar.bar(a INT) RETURNS INT AS 'SELECT a*a' LANGUAGE SQL",
+		// Insert an invalid object into the system.comments table
+		"INSERT INTO system.comments VALUES(0, 4124323, 0, 'comment for dead object')",
 	)
 
 	dbDesc := desctestutils.TestingGetDatabaseDescriptor(kvDB, keys.SystemSQLCodec, "test")
@@ -233,12 +246,14 @@ func TestFirstUpgradeRepair(t *testing.T) {
 			ConstraintID:        tbl.NextConstraintID,
 		}}
 		tbl.NextConstraintID++
+		tbl.MaybeIncrementVersion()
 		b.Put(catalogkeys.MakeDescMetadataKey(codec, tbl.GetID()), tbl.DescriptorProto())
 		fn := funcdesc.NewBuilder(fooFn.FuncDesc()).BuildExistingMutableFunction()
 		fn.DependedOnBy = []descpb.FunctionDescriptor_Reference{{
 			ID:        123456789,
 			ColumnIDs: []descpb.ColumnID{1},
 		}}
+		fn.MaybeIncrementVersion()
 		b.Put(catalogkeys.MakeDescMetadataKey(codec, fn.GetID()), fn.DescriptorProto())
 		return txn.Run(ctx, b)
 	}))
@@ -269,19 +284,18 @@ func TestFirstUpgradeRepair(t *testing.T) {
 	tdb.CheckQueryResults(t, "SELECT test.public.f()", [][]string{{"1"}})
 
 	// The corruption should interfere with DDL statements.
-	const errRE = "relation \"foo\" \\(106\\): invalid foreign key backreference: missing table=123456789: referenced table ID 123456789: referenced descriptor not found"
+	const errRE = "referenced descriptor ID 123456789: looking up ID 123456789: descriptor not found"
 	tdb.ExpectErr(t, errRE, "ALTER TABLE test.public.foo RENAME TO bar")
-	const errReForFunction = " function \"f\" \\(107\\): referenced descriptor ID 123456789: referenced descriptor not found"
-	tdb.ExpectErr(t, errReForFunction, "ALTER FUNCTION test.public.f RENAME TO g")
+	tdb.ExpectErr(t, `function "f" \(\d+\): referenced descriptor ID 123456789: referenced descriptor not found`, "ALTER FUNCTION test.public.f RENAME TO g")
 
 	// Check that the corruption is detected by invalid_objects.
 	const qDetectCorruption = `SELECT count(*) FROM "".crdb_internal.invalid_objects`
-	tdb.CheckQueryResults(t, qDetectCorruption, [][]string{{"2"}})
+	tdb.CheckQueryResults(t, qDetectCorruption, [][]string{{"3"}})
 
 	// Check that the corruption is detected by kv_repairable_catalog_corruptions.
 	const qDetectRepairableCorruption = `
 		SELECT count(*) FROM "".crdb_internal.kv_repairable_catalog_corruptions`
-	tdb.CheckQueryResults(t, qDetectRepairableCorruption, [][]string{{"2"}})
+	tdb.CheckQueryResults(t, qDetectRepairableCorruption, [][]string{{"3"}})
 
 	// Wait long enough for precondition check to be effective.
 	tdb.Exec(t, "CREATE DATABASE test2")
@@ -332,18 +346,34 @@ func TestFirstUpgradeRepair(t *testing.T) {
 	tdb.CheckQueryResults(t, qDetectRepairableCorruption, [][]string{{"0"}})
 	close(upgradeCompleted)
 	require.NoError(t, grp.Wait())
+	expectedVersionBump := 1
+	// Upgrades from before 25.4 will round-trip all descriptors once, so we
+	// expect two version bumps. Once for the repair and the next for the
+	// round trip.
+	if v0.Less(clusterversion.V25_4.Version()) {
+		expectedVersionBump += 1
+	}
 	// Assert that a version upgrade is reflected for repaired descriptors (stricly one version upgrade).
 	for _, d := range corruptDescs {
 		descId := d.GetID()
 		desc := readDescFromStorage(descId)
-		require.Equalf(t, descOldVersionMap[descId]+1, desc.GetVersion(), desc.GetName())
+		require.Equalf(t, descOldVersionMap[descId]+descpb.DescriptorVersion(expectedVersionBump), desc.GetVersion(), desc.GetName())
 	}
 
 	// Assert that no version upgrade is reflected for non-repaired descriptors.
+	expectedVersionBump = 0
+	// Upgrading from before 25.4 all non-database descriptors will be round tripped.
+	if v0.Less(clusterversion.V25_4.Version()) {
+		expectedVersionBump += 1
+	}
 	for _, d := range nonCorruptDescs {
 		descId := d.GetID()
 		desc := readDescFromStorage(descId)
-		require.Equalf(t, descOldVersionMap[descId], desc.GetVersion(), desc.GetName())
+		if desc.DescriptorType() != catalog.Database {
+			require.Equalf(t, descOldVersionMap[descId]+descpb.DescriptorVersion(expectedVersionBump), desc.GetVersion(), desc.GetName())
+		} else {
+			require.Equalf(t, descOldVersionMap[descId], desc.GetVersion(), desc.GetName())
+		}
 	}
 
 	// Check that the repaired table and function are OK.
@@ -396,6 +426,8 @@ func TestFirstUpgradeRepairBatchSize(t *testing.T) {
 	sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
 	idb := testServer.InternalDB().(*sql.InternalDB)
 	tx := sqlRunner.Begin(t)
+	_, err := tx.Exec("SET LOCAL autocommit_before_ddl = false")
+	require.NoError(t, err)
 	const batchSize = 100
 	lastCommit := 0
 	commitFn := func(startIdx int) {
@@ -439,6 +471,8 @@ func TestFirstUpgradeRepairBatchSize(t *testing.T) {
 			return
 		}
 		tx = sqlRunner.Begin(t)
+		_, err = tx.Exec("SET LOCAL autocommit_before_ddl = false")
+		require.NoError(t, err)
 	}
 	for i := 0; i < totalDescriptorsToTest; i++ {
 		if i%batchSize == 0 {

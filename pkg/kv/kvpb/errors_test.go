@@ -171,6 +171,8 @@ func TestErrorRedaction(t *testing.T) {
 			hlc.ClockTimestamp{WallTime: 1, Logical: 2},
 		))
 		txn := roachpb.MakeTransaction("foo", roachpb.Key("bar"), isolation.Serializable, 1, hlc.Timestamp{WallTime: 1}, 1, 99, 0, false /* omitInRangefeeds */)
+		txn.UpdateObservedTimestamp(1, hlc.ClockTimestamp{WallTime: 111, Logical: 1})
+		txn.UpdateObservedTimestamp(2, hlc.ClockTimestamp{WallTime: 222, Logical: 2})
 		txn.ID = uuid.Nil
 		txn.Priority = 1234
 		wrappedPErr.UnexposedTxn = &txn
@@ -180,7 +182,7 @@ func TestErrorRedaction(t *testing.T) {
 		var s redact.StringBuilder
 		s.Print(r)
 		act := s.RedactableString().Redact()
-		const exp = "ReadWithinUncertaintyIntervalError: read at time 0.000000001,0 encountered previous write with future timestamp 0.000000002,0 (local=0.000000001,2) within uncertainty interval `t <= (local=0.000000002,2, global=0.000000003,0)`; observed timestamps: [{12 0.000000004,0}]: \"foo\" meta={id=00000000 key=‹×› iso=Serializable pri=0.00005746 epo=0 ts=0.000000001,0 min=0.000000001,0 seq=0} lock=true stat=PENDING rts=0.000000001,0 wto=false gul=0.000000002,0"
+		const exp = "ReadWithinUncertaintyIntervalError: read at time 0.000000001,0 encountered previous write with future timestamp 0.000000002,0 (local=0.000000001,2) within uncertainty interval `t <= (local=0.000000002,2, global=0.000000003,0)`; observed timestamps: [{12 0.000000004,0}]: \"foo\" meta={id=00000000 key=‹×› iso=Serializable pri=0.00005746 epo=0 ts=0.000000001,0 min=0.000000001,0 seq=0} lock=true stat=PENDING rts=0.000000001,0 gul=0.000000002,0 obs={n1@0.000000111,1 n2@0.000000222,2}"
 		require.Equal(t, exp, string(act))
 	})
 
@@ -213,7 +215,7 @@ func TestErrorRedaction(t *testing.T) {
 		},
 		{
 			err:    &TransactionPushError{},
-			expect: "failed to push meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0} lock=false stat=PENDING rts=0,0 wto=false gul=0,0",
+			expect: "failed to push meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0} lock=false stat=PENDING rts=0,0 gul=0,0",
 		},
 		{
 			err:    &TransactionRetryError{},
@@ -253,10 +255,6 @@ func TestErrorRedaction(t *testing.T) {
 			expect: "raft group deleted",
 		},
 		{
-			err:    &ReplicaCorruptionError{},
-			expect: "replica corruption (processed=false)",
-		},
-		{
 			err:    &ReplicaTooOldError{},
 			expect: "sender replica too old, discarding message",
 		},
@@ -282,7 +280,7 @@ func TestErrorRedaction(t *testing.T) {
 		},
 		{
 			err:    &BatchTimestampBeforeGCError{},
-			expect: "batch timestamp 0,0 must be after replica GC threshold 0,0 (r0: ‹/Min›)",
+			expect: "batch timestamp 0,0 must be after replica GC threshold 0,0 (r0: /Min)",
 		},
 		{
 			err:    &TxnAlreadyEncounteredErrorError{},
@@ -302,7 +300,7 @@ func TestErrorRedaction(t *testing.T) {
 		},
 		{
 			err:    &IndeterminateCommitError{},
-			expect: "found txn in indeterminate STAGING state meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0} lock=false stat=PENDING rts=0,0 wto=false gul=0,0",
+			expect: "found txn in indeterminate STAGING state meta={id=00000000 key=/Min iso=Serializable pri=0.00000000 epo=0 ts=0,0 min=0,0 seq=0} lock=false stat=PENDING rts=0,0 gul=0,0",
 		},
 		{
 			err:    &InvalidLeaseError{},
@@ -322,7 +320,7 @@ func TestErrorRedaction(t *testing.T) {
 		},
 		{
 			err:    &MVCCHistoryMutationError{},
-			expect: "unexpected MVCC history mutation in span ‹/Min›",
+			expect: "unexpected MVCC history mutation in span /Min",
 		},
 		{
 			err:    &UnhandledRetryableError{},
@@ -380,7 +378,7 @@ func TestNotLeaseholderError(t *testing.T) {
 		err *NotLeaseHolderError
 	}{
 		{
-			exp: `[NotLeaseHolderError] r1: replica not lease holder; current lease is repl=(n1,s1):1 seq=2 start=0.000000002,0 epo=1 min-exp=0.000000003,0 pro=0.000000001,0 acq=Transfer`,
+			exp: `[NotLeaseHolderError] r1: replica not lease holder; current lease is repl=(n1,s1):1 seq=2 start=0.000000002,0 type=LeaseEpoch epo=1 min-exp=0.000000003,0 pro=0.000000001,0 acq=Transfer`,
 			err: &NotLeaseHolderError{
 				RangeID: 1,
 				Lease: &roachpb.Lease{

@@ -13,10 +13,12 @@ import (
 	"net/url"
 	"path"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/aws/ratelimit"
 	"github.com/aws/aws-sdk-go-v2/aws/retry"
 	awshttp "github.com/aws/aws-sdk-go-v2/aws/transport/http"
 	"github.com/aws/aws-sdk-go-v2/config"
@@ -28,6 +30,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/aws/smithy-go"
 	"github.com/aws/smithy-go/logging"
+	smithymiddleware "github.com/aws/smithy-go/middleware"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/cloud/cloudpb"
@@ -54,6 +57,12 @@ const (
 	AWSTempTokenParam = "AWS_SESSION_TOKEN"
 	// AWSEndpointParam is the query parameter for the 'endpoint' in an AWS URI.
 	AWSEndpointParam = "AWS_ENDPOINT"
+	// AWSEndpointParam is the query parameter for UsePathStyle in S3 options.
+	AWSUsePathStyle = "AWS_USE_PATH_STYLE"
+	// AWSSkipChecksumParam is the query parameter for SkipChecksum in S3 options.
+	AWSSkipChecksumParam = "AWS_SKIP_CHECKSUM"
+	// AWSSkipTLSVerify is the query parameter for skipping certificate verification.
+	AWSSkipTLSVerify = "AWS_SKIP_TLS_VERIFY"
 
 	// AWSServerSideEncryptionMode is the query parameter in an AWS URI, for the
 	// mode to be used for server side encryption. It can either be AES256 or
@@ -106,45 +115,16 @@ type s3Storage struct {
 	bucket         *string
 	conf           *cloudpb.ExternalStorage_S3
 	ioConf         base.ExternalIODirConfig
+	middleware     cloud.HttpMiddleware
 	settings       *cluster.Settings
 	prefix         string
 	metrics        *cloud.Metrics
 	storageOptions cloud.ExternalStorageOptions
+	uri            string // original URI used to construct this storage
 
 	opts   s3ClientConfig
 	cached *s3Client
 }
-
-// customRetryer implements the `request.Retryer` interface and allows for
-// customization of the retry behaviour of an AWS client.
-type customRetryer struct{}
-
-// isErrReadConnectionReset returns true if the underlying error is a read
-// connection reset error.
-//
-// NB: A read connection reset error is thrown when the SDK is unable to read
-// the response of an underlying API request due to a connection reset. The
-// DefaultRetryer in the AWS SDK does not treat this error as a retryable error
-// since the SDK does not have knowledge about the idempotence of the request,
-// and whether it is safe to retry -
-// https://github.com/aws/aws-sdk-go/pull/2926#issuecomment-553637658.
-//
-// In CRDB all operations with s3 (read, write, list) are considered idempotent,
-// and so we can treat the read connection reset error as retryable too.
-func isErrReadConnectionReset(err error) bool {
-	// The error string must match the one in
-	// github.com/aws/aws-sdk-go/aws/request/connection_reset_error.go. This is
-	// unfortunate but the only solution until the SDK exposes a specialized error
-	// code or type for this class of errors.
-	return err != nil && strings.Contains(err.Error(), "read: connection reset")
-}
-
-// IsErrorRetryable implements the retry.IsErrorRetryable interface.
-func (sr *customRetryer) IsErrorRetryable(e error) aws.Ternary {
-	return aws.BoolTernary(isErrReadConnectionReset(e))
-}
-
-var _ retry.IsErrorRetryable = &customRetryer{}
 
 // s3Client wraps an SDK client and uploader for a given session.
 type s3Client struct {
@@ -165,6 +145,59 @@ var usePutObject = settings.RegisterBoolSetting(
 	"construct files in memory before uploading via PutObject (may cause crashes due to memory usage)",
 	false,
 )
+
+var maxRetries = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"cloudstorage.s3.max_retries",
+	"the maximum number of retries per S3 operation",
+	10)
+
+// The v2 S3 client includes a client side retry token bucket. The high level
+// behavior of the token bucket is:
+//
+// 1. The token bucket starts full with 500 tokens.
+// 2. Each request that completes on the first attempt adds 1 token to the bucket.
+// 3. Each failed retry consumes 5 tokens from the bucket.
+//
+// When the token bucket runs out, the only way to make forward progress is to
+// start a new request that succeeds on the first attempt. This is sensible for
+// an RPC service that can bubble up a retryable error to the RPC client, but
+// it doesn't make sense in the context of something like backup/restrore,
+// where we have a fixed number of workers that are sending requests until they
+// complete all of their work. Since there are no client side requests to
+// refill the token bucket, a handful of errors can permanently exhaust the
+// token bucket.
+//
+// TODO(jeffswenson): consider deleting this after we've had time to evaluate
+// it in production. This setting mostly exists so we can keep it turned on by
+// default in the backport.
+var enableClientRetryTokenBucket = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"cloudstorage.s3.client_retry_token_bucket.enabled",
+	"enable the client side retry token bucket in the AWS S3 client",
+	false)
+
+// credsCacheOptions configures any aws.CredentialsCache that this package
+// wraps around a refreshable credentials provider (the implicit-auth path's
+// default-chain providers, AssumeRole providers, etc.).
+//
+// aws-sdk-go-v2 defaults CredentialsCacheOptions.ExpiryWindow to zero, which
+// means the cache only refreshes credentials after they have already expired.
+// On long-running operations like a cluster-wide BACKUP, a request can be
+// signed in the last few hundred ms before expiry and arrive at the AWS
+// service already-expired, surfacing as ExpiredToken / ExpiredTokenException
+// and failing the operation. The SDK's docstring on ExpiryWindow describes
+// exactly this race.
+//
+// 30s is comfortably more than the in-flight time of any single signed
+// request, which is what bounds the race; the jitter randomizes the
+// refresh point within the window so a fleet of nodes does not stampede
+// STS on the same instant. Refresh frequency is set by the credentials'
+// own lifetime, not by the window size.
+func credsCacheOptions(o *aws.CredentialsCacheOptions) {
+	o.ExpiryWindow = 30 * time.Second
+	o.ExpiryWindowJitterFrac = 0.5
+}
 
 // roleProvider contains fields about the role that needs to be assumed
 // in order to access the external storage.
@@ -193,11 +226,26 @@ func makeRoleProvider(provider cloudpb.ExternalStorage_AssumeRoleProvider) roleP
 type s3ClientConfig struct {
 	// copied from ExternalStorage_S3.
 	endpoint, region, bucket, accessKey, secret, tempToken, auth string
+	usePathStyle                                                 bool
 	assumeRoleProvider                                           roleProvider
 	delegateRoleProviders                                        []roleProvider
 
-	// log.V(2) decides session init params so include it in key.
-	verbose bool
+	skipChecksum  bool
+	skipTLSVerify bool
+	logMode       aws.ClientLogMode
+}
+
+func getLogMode() aws.ClientLogMode {
+	switch {
+	case log.VDepth(3, 1):
+		return awsVLevel3Logging
+	case log.VDepth(2, 1):
+		return awsVLevel2Logging
+	case log.VDepth(1, 1):
+		return awsVLevel1Logging
+	default:
+		return 0
+	}
 }
 
 func clientConfig(conf *cloudpb.ExternalStorage_S3) s3ClientConfig {
@@ -227,13 +275,16 @@ func clientConfig(conf *cloudpb.ExternalStorage_S3) s3ClientConfig {
 
 	return s3ClientConfig{
 		endpoint:              conf.Endpoint,
+		usePathStyle:          conf.UsePathStyle,
+		skipChecksum:          conf.SkipChecksum,
+		skipTLSVerify:         conf.SkipTLSVerify,
 		region:                conf.Region,
 		bucket:                conf.Bucket,
 		accessKey:             conf.AccessKey,
 		secret:                conf.Secret,
 		tempToken:             conf.TempToken,
 		auth:                  conf.Auth,
-		verbose:               log.V(2),
+		logMode:               getLogMode(),
 		assumeRoleProvider:    assumeRoleProvider,
 		delegateRoleProviders: delegateRoleProviders,
 	}
@@ -272,6 +323,12 @@ func S3URI(bucket, path string, conf *cloudpb.ExternalStorage_S3) string {
 	setIf(AWSServerSideEncryptionMode, conf.ServerEncMode)
 	setIf(AWSServerSideEncryptionKMSID, conf.ServerKMSID)
 	setIf(S3StorageClassParam, conf.StorageClass)
+	if conf.UsePathStyle {
+		q.Set(AWSUsePathStyle, "true")
+	}
+	if conf.SkipChecksum {
+		q.Set(AWSSkipChecksumParam, "true")
+	}
 	if conf.AssumeRoleProvider.Role != "" {
 		roleProviderStrings := make([]string, 0, len(conf.DelegateRoleProviders)+1)
 		for _, p := range conf.DelegateRoleProviders {
@@ -299,6 +356,7 @@ func parseS3URL(uri *url.URL) (cloudpb.ExternalStorage, error) {
 	}
 
 	conf.Provider = cloudpb.ExternalStorageProvider_s3
+	conf.URI = uri.String()
 
 	// TODO(rui): currently the value of AssumeRoleParam is written into both of
 	// the RoleARN fields and the RoleProvider fields in order to support a mixed
@@ -308,6 +366,33 @@ func parseS3URL(uri *url.URL) (cloudpb.ExternalStorage, error) {
 	assumeRoleProvider, delegateRoleProviders := cloud.ParseRoleProvidersString(assumeRoleValue)
 	assumeRole, delegateRoles := cloud.ParseRoleString(assumeRoleValue)
 
+	pathStyleStr := s3URL.ConsumeParam(AWSUsePathStyle)
+	pathStyleBool := false
+	if pathStyleStr != "" {
+		var err error
+		pathStyleBool, err = strconv.ParseBool(pathStyleStr)
+		if err != nil {
+			return cloudpb.ExternalStorage{}, errors.Wrapf(err, "cannot parse %s as bool", AWSUsePathStyle)
+		}
+	}
+	skipChecksumStr := s3URL.ConsumeParam(AWSSkipChecksumParam)
+	skipChecksumBool := false
+	if skipChecksumStr != "" {
+		var err error
+		skipChecksumBool, err = strconv.ParseBool(skipChecksumStr)
+		if err != nil {
+			return cloudpb.ExternalStorage{}, errors.Wrapf(err, "cannot parse %s as bool", AWSSkipChecksumParam)
+		}
+	}
+	skipTLSVerifyStr := s3URL.ConsumeParam(AWSSkipTLSVerify)
+	skipTLSVerifyBool := false
+	if skipTLSVerifyStr != "" {
+		var err error
+		skipTLSVerifyBool, err = strconv.ParseBool(skipTLSVerifyStr)
+		if err != nil {
+			return cloudpb.ExternalStorage{}, errors.Wrapf(err, "cannot parse %s as bool", AWSSkipTLSVerify)
+		}
+	}
 	conf.S3Config = &cloudpb.ExternalStorage_S3{
 		Bucket:                s3URL.Host,
 		Prefix:                s3URL.Path,
@@ -315,6 +400,9 @@ func parseS3URL(uri *url.URL) (cloudpb.ExternalStorage, error) {
 		Secret:                s3URL.ConsumeParam(AWSSecretParam),
 		TempToken:             s3URL.ConsumeParam(AWSTempTokenParam),
 		Endpoint:              s3URL.ConsumeParam(AWSEndpointParam),
+		UsePathStyle:          pathStyleBool,
+		SkipChecksum:          skipChecksumBool,
+		SkipTLSVerify:         skipTLSVerifyBool,
 		Region:                s3URL.ConsumeParam(S3RegionParam),
 		Auth:                  s3URL.ConsumeParam(cloud.AuthParam),
 		ServerEncMode:         s3URL.ConsumeParam(AWSServerSideEncryptionMode),
@@ -450,11 +538,13 @@ func MakeS3Storage(
 		bucket:         aws.String(conf.Bucket),
 		conf:           conf,
 		ioConf:         args.IOConf,
+		middleware:     args.HttpMiddleware,
 		prefix:         conf.Prefix,
 		metrics:        args.MetricsRecorder,
 		settings:       args.Settings,
 		opts:           clientConfig(conf),
 		storageOptions: args.ExternalStorageOptions(),
+		uri:            dest.URI,
 	}
 
 	reuse := reuseSession.Get(&args.Settings.SV)
@@ -489,7 +579,7 @@ type awsLogAdapter struct {
 }
 
 func (l *awsLogAdapter) Logf(_ logging.Classification, format string, v ...interface{}) {
-	log.Infof(l.ctx, format, v...)
+	log.Dev.Infof(l.ctx, format, v...)
 }
 
 func newLogAdapter(ctx context.Context) *awsLogAdapter {
@@ -498,7 +588,9 @@ func newLogAdapter(ctx context.Context) *awsLogAdapter {
 	}
 }
 
-var awsVerboseLogging = aws.LogRequestEventMessage | aws.LogResponseEventMessage | aws.LogRetries | aws.LogSigning
+const awsVLevel1Logging = aws.LogRetries | aws.LogDeprecatedUsage
+const awsVLevel2Logging = awsVLevel1Logging | aws.LogRequestEventMessage | aws.LogResponseEventMessage | aws.LogRequest | aws.LogResponse
+const awsVLevel3Logging = awsVLevel2Logging | aws.LogSigning
 
 func constructEndpointURI(endpoint string) (string, error) {
 	parsedURL, err := url.Parse(endpoint)
@@ -524,6 +616,8 @@ func constructEndpointURI(endpoint string) (string, error) {
 // configures the client with it as well as returning it (so the caller can
 // remember it for future calls).
 func (s *s3Storage) newClient(ctx context.Context) (s3Client, string, error) {
+	// TODO(jeffswenson): we should include the settings in the cache key so that
+	// changing the cluster settings invalidates the cached instance.
 
 	// Open a span if client creation will do IO/RPCs to find creds/bucket region.
 	if s.opts.region == "" || s.opts.auth == cloud.AuthParamImplicit {
@@ -537,38 +631,64 @@ func (s *s3Storage) newClient(ctx context.Context) (s3Client, string, error) {
 		loadOptions = append(loadOptions, option)
 	}
 
-	client, err := cloud.MakeHTTPClient(s.settings, s.metrics, "aws", s.opts.bucket, s.storageOptions.ClientName)
+	client, err := cloud.MakeHTTPClient(s.settings, s.metrics,
+		cloud.HTTPClientConfig{
+			Bucket:             s.opts.bucket,
+			Client:             s.storageOptions.ClientName,
+			Cloud:              "aws",
+			InsecureSkipVerify: s.opts.skipTLSVerify,
+			HttpMiddleware:     s.middleware,
+		})
 	if err != nil {
 		return s3Client{}, "", err
 	}
 	addLoadOption(config.WithHTTPClient(client))
-
-	// TODO(yevgeniy): Revisit retry logic.  Retrying 10 times seems arbitrary.
-	retryMaxAttempts := 10
-	addLoadOption(config.WithRetryMaxAttempts(retryMaxAttempts))
-
 	addLoadOption(config.WithLogger(newLogAdapter(ctx)))
-	if s.opts.verbose {
-		addLoadOption(config.WithClientLogMode(awsVerboseLogging))
+	if s.opts.logMode != 0 {
+		addLoadOption(config.WithClientLogMode(s.opts.logMode))
 	}
-
-	config.WithRetryer(func() aws.Retryer {
-		return retry.NewStandard(func(opts *retry.StandardOptions) {
-			opts.MaxAttempts = retryMaxAttempts
-			opts.Retryables = append(opts.Retryables, &customRetryer{})
+	addLoadOption(config.WithRetryer(func() aws.Retryer {
+		standard := retry.NewStandard(func(opts *retry.StandardOptions) {
+			opts.MaxAttempts = int(maxRetries.Get(&s.settings.SV))
+			if !enableClientRetryTokenBucket.Get(&s.settings.SV) {
+				opts.RateLimiter = ratelimit.None
+			}
 		})
-	})
+		// Treat credential-expiry errors as retryable. When the configured
+		// credentials provider issues short-lived tokens, a long-running upload
+		// can race their expiry: a request signed just before the credentials
+		// expire can arrive at S3 just after, surfacing as ExpiredToken /
+		// ExpiredTokenException / RequestExpired and failing the operation. The
+		// v1 SDK swallowed this race by classifying these codes as retryable
+		// (aws-sdk-go aws/request/retryer.go: credsExpiredCodes); aws-sdk-go-v2's
+		// default retryable set dropped them, so what was a transparent retry in
+		// v1 became a hard, user-visible failure in v2. Restore the v1 behavior.
+		// The codes mirror v1's credsExpiredCodes set exactly. The cache itself
+		// notices it is past Expires by the time the retry's backoff completes,
+		// so an explicit Invalidate() is not required to force a fresh retrieve.
+		return retry.AddWithErrorCodes(standard,
+			"ExpiredToken", "ExpiredTokenException", "RequestExpired")
+	}))
 
 	switch s.opts.auth {
 	case "", cloud.AuthParamSpecified:
 		addLoadOption(config.WithCredentialsProvider(
 			aws.NewCredentialsCache(credentials.NewStaticCredentialsProvider(s.opts.accessKey, s.opts.secret, s.opts.tempToken))))
 	case cloud.AuthParamImplicit:
+		// Tune the cache that LoadDefaultConfig will wrap around whichever
+		// refreshable provider the default chain selects; see credsCacheOptions
+		// for the rationale.
+		addLoadOption(config.WithCredentialsCacheOptions(credsCacheOptions))
 	}
 
 	cfg, err := config.LoadDefaultConfig(ctx, loadOptions...)
 	if err != nil {
 		return s3Client{}, "", errors.Wrap(err, "could not initialize an aws config")
+	}
+
+	if s.opts.skipChecksum {
+		cfg.ResponseChecksumValidation = aws.ResponseChecksumValidationWhenRequired
+		cfg.RequestChecksumCalculation = aws.RequestChecksumCalculationWhenRequired
 	}
 
 	var endpointURI string
@@ -588,7 +708,7 @@ func (s *s3Storage) newClient(ctx context.Context) (s3Client, string, error) {
 				}
 			})
 			intermediateCreds := stscreds.NewAssumeRoleProvider(client, delegateProvider.roleARN, withExternalID(delegateProvider.externalID))
-			cfg.Credentials = aws.NewCredentialsCache(intermediateCreds)
+			cfg.Credentials = aws.NewCredentialsCache(intermediateCreds, credsCacheOptions)
 		}
 
 		client := sts.NewFromConfig(cfg, func(options *sts.Options) {
@@ -598,7 +718,10 @@ func (s *s3Storage) newClient(ctx context.Context) (s3Client, string, error) {
 		})
 
 		creds := stscreds.NewAssumeRoleProvider(client, s.opts.assumeRoleProvider.roleARN, withExternalID(s.opts.assumeRoleProvider.externalID))
-		cfg.Credentials = creds
+		// NOTE: It's critical to wrap all credentials in a CredentialCache to
+		// prevent DDoS'ing STS API endpoints:
+		// https://pkg.go.dev/github.com/aws/aws-sdk-go-v2/aws#CredentialsCache
+		cfg.Credentials = aws.NewCredentialsCache(creds, credsCacheOptions)
 	}
 
 	region := s.opts.region
@@ -610,6 +733,9 @@ func (s *s3Storage) newClient(ctx context.Context) (s3Client, string, error) {
 			region, err = manager.GetBucketRegion(ctx, s3.NewFromConfig(cfg, func(options *s3.Options) {
 				if endpointURI != "" {
 					options.BaseEndpoint = aws.String(endpointURI)
+				}
+				if s.opts.usePathStyle {
+					options.UsePathStyle = true
 				}
 			}), s.opts.bucket)
 			return err
@@ -623,9 +749,17 @@ func (s *s3Storage) newClient(ctx context.Context) (s3Client, string, error) {
 		if endpointURI != "" {
 			options.BaseEndpoint = aws.String(endpointURI)
 		}
+		if s.opts.usePathStyle {
+			options.UsePathStyle = true
+		}
 	})
 	u := manager.NewUploader(c, func(uploader *manager.Uploader) {
 		uploader.PartSize = cloud.WriteChunkSize.Get(&s.settings.SV)
+		if s.opts.skipChecksum {
+			uploader.ClientOptions = append(uploader.ClientOptions, func(o *s3.Options) {
+				o.APIOptions = append(o.APIOptions, addClearChecksumMiddleware)
+			})
+		}
 	})
 	return s3Client{client: c, uploader: u}, region, nil
 }
@@ -662,6 +796,7 @@ func (s *s3Storage) Conf() cloudpb.ExternalStorage {
 	return cloudpb.ExternalStorage{
 		Provider: cloudpb.ExternalStorageProvider_s3,
 		S3Config: s.conf,
+		URI:      s.uri,
 	}
 }
 
@@ -700,7 +835,7 @@ func (s *s3Storage) putUploader(ctx context.Context, basename string) (io.WriteC
 
 	buf := bytes.NewBuffer(make([]byte, 0, 4<<20))
 
-	return &putUploader{
+	uploader := &putUploader{
 		b: buf,
 		input: &s3.PutObjectInput{
 			Bucket:               s.bucket,
@@ -711,7 +846,34 @@ func (s *s3Storage) putUploader(ctx context.Context, basename string) (io.WriteC
 			ChecksumAlgorithm:    checksumAlgorithm,
 		},
 		client: client,
-	}, nil
+	}
+	if s.conf.SkipChecksum {
+		uploader.input.ChecksumAlgorithm = ""
+	}
+	return uploader, nil
+}
+
+func addClearChecksumMiddleware(stack *smithymiddleware.Stack) error {
+	return stack.Initialize.Add(smithymiddleware.InitializeMiddlewareFunc(
+		"ClearChecksumAlgorithm",
+		func(
+			ctx context.Context,
+			in smithymiddleware.InitializeInput,
+			next smithymiddleware.InitializeHandler,
+		) (smithymiddleware.InitializeOutput, smithymiddleware.Metadata, error) {
+			switch v := in.Parameters.(type) {
+			case *s3.CreateMultipartUploadInput:
+				v.ChecksumAlgorithm = ""
+			case *s3.UploadPartInput:
+				v.ChecksumAlgorithm = ""
+			case *s3.CompleteMultipartUploadInput:
+				v.ChecksumType = ""
+			case *s3.PutObjectInput:
+				v.ChecksumAlgorithm = ""
+			}
+			return next.HandleInitialize(ctx, in)
+		},
+	), smithymiddleware.Before)
 }
 
 func (s *s3Storage) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
@@ -729,8 +891,7 @@ func (s *s3Storage) Writer(ctx context.Context, basename string) (io.WriteCloser
 	return cloud.BackgroundPipe(ctx, func(ctx context.Context, r io.Reader) error {
 		defer sp.Finish()
 		// Upload the file to S3.
-		// TODO(dt): test and tune the uploader parameters.
-		_, err := uploader.Upload(ctx, &s3.PutObjectInput{
+		input := &s3.PutObjectInput{
 			Bucket:               s.bucket,
 			Key:                  aws.String(path.Join(s.prefix, basename)),
 			Body:                 r,
@@ -738,7 +899,13 @@ func (s *s3Storage) Writer(ctx context.Context, basename string) (io.WriteCloser
 			SSEKMSKeyId:          nilIfEmpty(s.conf.ServerKMSID),
 			StorageClass:         types.StorageClass(s.conf.StorageClass),
 			ChecksumAlgorithm:    checksumAlgorithm,
-		})
+		}
+
+		if s.conf.SkipChecksum {
+			input.ChecksumAlgorithm = ""
+		}
+
+		_, err := uploader.Upload(ctx, input)
 		err = interpretAWSError(err)
 		err = errors.Wrap(err, "upload failed")
 		// Mark with ctx's error for upstream code to not interpret this as
@@ -759,7 +926,9 @@ func (s *s3Storage) openStreamAt(
 	if err != nil {
 		return nil, err
 	}
-	req := &s3.GetObjectInput{Bucket: s.bucket, Key: aws.String(path.Join(s.prefix, basename))}
+	req := &s3.GetObjectInput{
+		Bucket: s.bucket, Key: aws.String(path.Join(s.prefix, basename)),
+	}
 	if endPos != 0 {
 		if pos >= endPos {
 			return nil, io.EOF
@@ -817,7 +986,7 @@ func (s *s3Storage) ReadFile(
 			}
 		} else {
 			if stream.ContentLength == nil {
-				log.Warningf(ctx, "Content length missing from S3 GetObject (is this actually s3?); attempting to lookup size with separate call...")
+				log.Dev.Warningf(ctx, "Content length missing from S3 GetObject (is this actually s3?); attempting to lookup size with separate call...")
 				// Some not-actually-s3 services may not set it, or set it in a way the
 				// official SDK finds it (e.g. if they don't use the expected checksummer)
 				// so try a Size() request.
@@ -842,12 +1011,15 @@ func (s *s3Storage) ReadFile(
 		cloud.ResumingReaderRetryOnErrFnForSettings(ctx, s.settings), s3ErrDelay), fileSize, nil
 }
 
-func (s *s3Storage) List(ctx context.Context, prefix, delim string, fn cloud.ListingFn) error {
+func (s *s3Storage) List(
+	ctx context.Context, prefix string, opts cloud.ListOptions, fn cloud.ListingFn,
+) error {
 	ctx, sp := tracing.ChildSpan(ctx, "s3.List")
 	defer sp.Finish()
 
 	dest := cloud.JoinPathPreservingTrailingSlash(s.prefix, prefix)
 	sp.SetTag("path", attribute.StringValue(dest))
+	afterKey := opts.CanonicalAfterKey(s.prefix)
 
 	client, err := s.getClient(ctx)
 	if err != nil {
@@ -860,9 +1032,18 @@ func (s *s3Storage) List(ctx context.Context, prefix, delim string, fn cloud.Lis
 	// s3 clones which return s3://<prefix>/ as the first result of listing
 	// s3://<prefix> to exclude that result.
 	if envutil.EnvOrDefaultBool("COCKROACH_S3_LIST_WITH_PREFIX_SLASH_MARKER", false) {
-		s3Input = &s3.ListObjectsV2Input{Bucket: s.bucket, Prefix: aws.String(dest), Delimiter: nilIfEmpty(delim), StartAfter: aws.String(dest + "/")}
+		s3Input = &s3.ListObjectsV2Input{
+			Bucket:     s.bucket,
+			Prefix:     aws.String(dest),
+			Delimiter:  nilIfEmpty(opts.Delimiter),
+			StartAfter: aws.String(dest + "/"),
+		}
 	} else {
-		s3Input = &s3.ListObjectsV2Input{Bucket: s.bucket, Prefix: aws.String(dest), Delimiter: nilIfEmpty(delim)}
+		s3Input = &s3.ListObjectsV2Input{
+			Bucket:    s.bucket,
+			Prefix:    aws.String(dest),
+			Delimiter: nilIfEmpty(opts.Delimiter),
+		}
 	}
 
 	paginator := s3.NewListObjectsV2Paginator(client, s3Input)
@@ -880,12 +1061,18 @@ func (s *s3Storage) List(ctx context.Context, prefix, delim string, fn cloud.Lis
 		}
 
 		for _, x := range page.CommonPrefixes {
+			if *x.Prefix <= afterKey {
+				continue
+			}
 			if err := fn(strings.TrimPrefix(*x.Prefix, dest)); err != nil {
 				return err
 			}
 		}
 
 		for _, fileObject := range page.Contents {
+			if *fileObject.Key <= afterKey {
+				continue
+			}
 			if err := fn(strings.TrimPrefix(*fileObject.Key, dest)); err != nil {
 				return err
 			}

@@ -4,4 +4,3 @@
 // included in the /LICENSE file.
 
 export * from "./statementsActions";
-export * from "./statementsSagas";

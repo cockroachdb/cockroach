@@ -19,7 +19,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metamorphic"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -51,7 +50,7 @@ type kmsURIParams struct {
 	auth                  string
 	roleProvider          roleProvider
 	delegateRoleProviders []roleProvider
-	verbose               bool
+	logMode               aws.ClientLogMode
 }
 
 var reuseKMSSession = settings.RegisterBoolSetting(
@@ -85,7 +84,7 @@ func resolveKMSURIParams(kmsURI cloud.ConsumeURL) (kmsURIParams, error) {
 		auth:                  kmsURI.ConsumeParam(cloud.AuthParam),
 		roleProvider:          assumeRoleProvider,
 		delegateRoleProviders: delegateProviders,
-		verbose:               log.V(2),
+		logMode:               getLogMode(),
 	}
 
 	// Validate that all the passed in parameters are supported.
@@ -134,8 +133,8 @@ func MakeAWSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 		loadOptions = append(loadOptions, option)
 	}
 	addLoadOption(config.WithLogger(newLogAdapter(ctx)))
-	if kmsURIParams.verbose {
-		addLoadOption(config.WithClientLogMode(awsVerboseLogging))
+	if kmsURIParams.logMode != 0 {
+		addLoadOption(config.WithClientLogMode(kmsURIParams.logMode))
 	}
 
 	var endpointURI string
@@ -144,7 +143,11 @@ func MakeAWSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 			return nil, errors.New(
 				"custom endpoints disallowed for aws kms due to --aws-kms-disable-http flag")
 		}
-		client, err := cloud.MakeHTTPClient(env.ClusterSettings(), cloud.NilMetrics, "aws", "KMS", "")
+		client, err := cloud.MakeHTTPClient(env.ClusterSettings(), cloud.NilMetrics,
+			cloud.HTTPClientConfig{
+				Bucket: "KMS",
+				Cloud:  "aws",
+			})
 		if err != nil {
 			return nil, err
 		}
@@ -185,6 +188,10 @@ func MakeAWSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 			return nil, errors.New(
 				"implicit credentials disallowed for s3 due to --external-io-disable-implicit-credentials flag")
 		}
+		// Tune the cache that LoadDefaultConfig will wrap around whichever
+		// refreshable provider the default chain selects; see credsCacheOptions
+		// for the rationale.
+		addLoadOption(config.WithCredentialsCacheOptions(credsCacheOptions))
 	default:
 		return nil, errors.Errorf("unsupported value %s for %s", kmsURIParams.auth, cloud.AuthParam)
 	}
@@ -206,7 +213,7 @@ func MakeAWSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 				}
 			})
 			intermediateCreds := stscreds.NewAssumeRoleProvider(client, delegateProvider.roleARN, withExternalID(delegateProvider.externalID))
-			cfg.Credentials = intermediateCreds
+			cfg.Credentials = aws.NewCredentialsCache(intermediateCreds, credsCacheOptions)
 		}
 
 		client := sts.NewFromConfig(cfg, func(options *sts.Options) {
@@ -215,7 +222,7 @@ func MakeAWSKMS(ctx context.Context, uri string, env cloud.KMSEnv) (cloud.KMS, e
 			}
 		})
 		creds := stscreds.NewAssumeRoleProvider(client, kmsURIParams.roleProvider.roleARN, withExternalID(kmsURIParams.roleProvider.externalID))
-		cfg.Credentials = creds
+		cfg.Credentials = aws.NewCredentialsCache(creds, credsCacheOptions)
 	}
 
 	reuse := reuseKMSSession.Get(&env.ClusterSettings().SV)

@@ -1,0 +1,37 @@
+/* setup */
+CREATE DATABASE multiregion_db PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3";
+CREATE TABLE multiregion_db.public.t (
+  pk INT PRIMARY KEY,
+  i INT NOT NULL,
+  j INT NOT NULL UNIQUE,
+  INDEX idx(i)
+) LOCALITY REGIONAL BY TABLE IN "us-east2";
+
+/* test */
+EXPLAIN (DDL, SHAPE) ALTER TABLE multiregion_db.public.t SET LOCALITY REGIONAL BY ROW;
+----
+Schema change plan for ALTER TABLE ‹multiregion_db›.‹public›.‹t› SET LOCALITY REGIONAL BY ROW;
+ ├── execute 2 system table mutations transactions
+ ├── backfill using primary index t_pkey- in relation t
+ │    └── into t_pkey~ (pk; i, j, crdb_region+)
+ ├── execute 2 system table mutations transactions
+ ├── merge temporary indexes into backfilled indexes in relation t
+ │    └── from t@[9] into t_pkey~
+ ├── execute 1 system table mutations transaction
+ ├── validate UNIQUE constraint backed by index t_pkey~ in relation t
+ ├── execute 2 system table mutations transactions
+ ├── backfill using primary index t_pkey~ in relation t
+ │    ├── into t_j_key+ (crdb_region+, j: pk)
+ │    ├── into idx+ (i, crdb_region+: pk)
+ │    └── into t_pkey+ (crdb_region+, pk; i, j)
+ ├── execute 2 system table mutations transactions
+ ├── merge temporary indexes into backfilled indexes in relation t
+ │    ├── from t@[5] into t_j_key+
+ │    ├── from t@[7] into idx+
+ │    └── from t@[11] into t_pkey+
+ ├── execute 1 system table mutations transaction
+ ├── validate UNIQUE constraint backed by index t_pkey+ in relation t
+ ├── validate NOT NULL constraint on column crdb_region+ in index t_pkey+ in relation t
+ ├── validate UNIQUE constraint backed by index t_j_key+ in relation t
+ ├── validate UNIQUE constraint backed by index idx+ in relation t
+ └── execute 5 system table mutations transactions

@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/syntheticprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/zoneconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -37,14 +38,13 @@ import (
 )
 
 type setZoneConfigNode struct {
+	zeroInputPlanNode
 	stmt          *tree.SetZoneConfig
 	zoneSpecifier tree.ZoneSpecifier
 	allIndexes    bool
 	yamlConfig    tree.TypedExpr
 	options       map[tree.Name]zone.OptionValue
 	setDefault    bool
-
-	run setZoneConfigRun
 }
 
 func (p *planner) getUpdatedZoneConfigYamlConfig(
@@ -172,6 +172,19 @@ func checkPrivilegeForSetZoneConfig(ctx context.Context, p *planner, zs tree.Zon
 	// an admin. Otherwise we require CREATE privileges on the database or table
 	// in question.
 	if zs.NamedZone != "" {
+		// Only block privileges for non-root users if this is the default range
+		// for a secondary tenant with
+		// sql.zone_configs.default_range_modifiable_by_non_root.enabled set to
+		// false; other ranges just need the REPAIRCLUSTER privilege.
+		if zonepb.NamedZone(zs.NamedZone.String()) == zonepb.DefaultZoneName && !p.execCfg.Codec.ForSystemTenant() &&
+			!zonepb.DefaultRangeModifiableByNonRoot.Get(&p.execCfg.Settings.SV) {
+			if !p.EvalContext().SessionData().User().IsRootUser() {
+				return pgerror.New(
+					pgcode.InsufficientPrivilege,
+					"only root users are allowed to modify the default range",
+				)
+			}
+		}
 		return p.CheckPrivilege(ctx, syntheticprivilege.GlobalPrivilegeObject, privilege.REPAIRCLUSTER)
 	}
 	if zs.Database != "" {
@@ -214,11 +227,6 @@ func checkPrivilegeForSetZoneConfig(ctx context.Context, p *planner, zs tree.Zon
 
 	return sqlerrors.NewInsufficientPrivilegeOnDescriptorError(p.SessionData().User(),
 		[]privilege.Kind{privilege.ZONECONFIG, privilege.CREATE}, string(tableDesc.DescriptorType()), tableDesc.GetName())
-}
-
-// setZoneConfigRun contains the run-time state of setZoneConfigNode during local execution.
-type setZoneConfigRun struct {
-	numAffected int
 }
 
 // ReadingOwnWrites implements the planNodeReadingOwnWrites interface.
@@ -288,13 +296,8 @@ func evaluateZoneOptions(
 				return nil, nil, nil, pgerror.Newf(pgcode.InvalidParameterValue,
 					"unsupported NULL value for %q", tree.ErrString(name))
 			}
-			opt := zone.SupportedZoneConfigOptions[*name]
-			if opt.CheckAllowed != nil {
-				if err := opt.CheckAllowed(params.ctx, params.ExecCfg().Settings, datum); err != nil {
-					return nil, nil, nil, err
-				}
-			}
-			setter := opt.Setter
+
+			setter := zone.SupportedZoneConfigOptions[*name].Setter
 			setters = append(setters, func(c *zonepb.ZoneConfig) { setter(c, datum) })
 			optionsStr = append(optionsStr, fmt.Sprintf("%s = %s", name, datum))
 		}
@@ -333,7 +336,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 	}
 
 	// Disallow schema changes if it's a table and its schema is locked.
-	if err = checkSchemaChangeIsAllowed(table, n.stmt); err != nil {
+	if err = params.p.checkSchemaChangeIsAllowed(params.ctx, table, n.stmt); err != nil {
 		return err
 	}
 
@@ -463,17 +466,17 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		// config that exists on targetID and instead skip to the inherited
 		// default (whichever applies -- a database if targetID is a table,
 		// default if targetID is a database, etc.). For this, we use the last
-		// parameter getInheritedDefault to GetZoneConfigInTxn().
+		// parameter getInheritedDefault to zoneconfig.GetInTxn().
 		// These zones are only used for validations. The merged zone will
 		// not be written.
-		_, completeZone, completeSubzone, err := GetZoneConfigInTxn(
+		_, completeZone, completeSubzone, err := zoneconfig.GetInTxn(
 			params.ctx, params.p.txn, params.p.Descriptors(), targetID, index, partition, n.setDefault,
 		)
 
 		if errors.Is(err, sqlerrors.ErrNoZoneConfigApplies) {
 			// No zone config yet.
 			//
-			// GetZoneConfigInTxn will fail with ErrNoZoneConfigApplies when
+			// zoneconfig.GetInTxn will fail with ErrNoZoneConfigApplies when
 			// the target ID is not a database object, i.e. one of the system
 			// ranges (liveness, meta, etc.), and did not have a zone config
 			// already.
@@ -499,7 +502,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 				// inherit from its parent. We do this by using an empty zoneConfig
 				// and completing at the level of the current zone.
 				zoneInheritedFields := zonepb.ZoneConfig{}
-				if err := completeZoneConfig(
+				if err := zoneconfig.Complete(
 					params.ctx, &zoneInheritedFields, params.p.Txn(), zcHelper, targetID,
 				); err != nil {
 					return err
@@ -509,7 +512,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 				// If we are operating on a subZone, we need to inherit all remaining
 				// unset fields in its parent zone, which is partialZone.
 				zoneInheritedFields := *partialZone
-				if err := completeZoneConfig(
+				if err := zoneconfig.Complete(
 					params.ctx, &zoneInheritedFields, params.p.Txn(), zcHelper, targetID,
 				); err != nil {
 					return err
@@ -652,7 +655,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 				}
 			} else {
 				// If the zone config for targetID was a subzone placeholder, it'll have
-				// been skipped over by GetZoneConfigInTxn. We need to load it regardless
+				// been skipped over by zoneconfig.GetInTxn. We need to load it regardless
 				// to avoid blowing away other subzones.
 
 				// TODO(ridwanmsharif): How is this supposed to change? getZoneConfigRaw
@@ -733,7 +736,7 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 		zoneToWrite := partialZone
 		// TODO(ajwerner): This is extremely fragile because we accept a nil table
 		// all the way down here.
-		n.run.numAffected, err = writeZoneConfig(
+		err = writeZoneConfig(
 			params.ctx,
 			params.p.InternalSQLTxn(),
 			targetID,
@@ -781,8 +784,6 @@ func (n *setZoneConfigNode) startExec(params runParams) error {
 func (n *setZoneConfigNode) Next(runParams) (bool, error) { return false, nil }
 func (n *setZoneConfigNode) Values() tree.Datums          { return nil }
 func (*setZoneConfigNode) Close(context.Context)          {}
-
-func (n *setZoneConfigNode) FastPathResults() (int, bool) { return n.run.numAffected, true }
 
 type nodeGetter func(context.Context, *serverpb.NodesRequest) (*serverpb.NodesResponse, error)
 type regionsGetter func(context.Context) (*serverpb.RegionsResponse, error)
@@ -940,6 +941,9 @@ func validateZoneLocalitiesForSecondaryTenants(
 	settings *cluster.Settings,
 ) error {
 	toValidate := accumulateNewUniqueConstraints(currentZone, newZone)
+	if err := zonepb.ValidateNewUniqueConstraintsForSecondaryTenants(&settings.SV, currentZone, newZone); err != nil {
+		return err
+	}
 
 	// rs and zs will be lazily populated with regions and zones, respectively.
 	// These should not be accessed directly - use getRegionsAndZones helper
@@ -1041,41 +1045,38 @@ func writeZoneConfig(
 	execCfg *ExecutorConfig,
 	hasNewSubzones bool,
 	kvTrace bool,
-) (numAffected int, err error) {
+) error {
 	update, err := prepareZoneConfigWrites(ctx, execCfg, targetID, table, zone, expectedExistingRawBytes, hasNewSubzones)
 	if err != nil {
-		return 0, err
+		return err
 	}
 	return writeZoneConfigUpdate(ctx, txn, kvTrace, update)
 }
 
 func writeZoneConfigUpdate(
 	ctx context.Context, txn descs.Txn, kvTrace bool, update *zoneConfigUpdate,
-) (numAffected int, err error) {
+) error {
 	b := txn.KV().NewBatch()
 	if update.zoneConfig == nil {
-		err = txn.Descriptors().DeleteZoneConfigInBatch(ctx, kvTrace, b, update.id)
+		err := txn.Descriptors().DeleteZoneConfigInBatch(ctx, kvTrace, b, update.id)
+		if err != nil {
+			return err
+		}
 	} else {
-		numAffected = 1
-		err = txn.Descriptors().WriteZoneConfigToBatch(ctx, kvTrace, b, update.id, update.zoneConfig)
-	}
-	if err != nil {
-		return 0, err
+		err := txn.Descriptors().WriteZoneConfigToBatch(ctx, kvTrace, b, update.id, update.zoneConfig)
+		if err != nil {
+			return err
+		}
 	}
 
 	if err := txn.KV().Run(ctx, b); err != nil {
-		return 0, err
+		return err
 	}
 	r := b.Results[0]
 	if r.Err != nil {
 		panic("run succeeded even through the result has an error")
 	}
-	// We don't really care how many keys are affected since this function always
-	// write one single zone config.
-	if len(r.Keys) > 0 {
-		numAffected = 1
-	}
-	return numAffected, err
+	return nil
 }
 
 // RemoveIndexZoneConfigs removes the zone configurations for some
@@ -1122,7 +1123,7 @@ func RemoveIndexZoneConfigs(
 
 	if zcRewriteNecessary {
 		// Ignore CCL required error to allow schema change to progress.
-		_, err = writeZoneConfig(
+		err = writeZoneConfig(
 			ctx, txn, tableDesc.GetID(), tableDesc, zone,
 			zoneWithRaw.GetRawBytesInStorage(), execCfg,
 			false /* hasNewSubzones */, kvTrace,

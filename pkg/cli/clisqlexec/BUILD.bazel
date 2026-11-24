@@ -47,6 +47,7 @@ go_test(
     ],
     embed = [":clisqlexec"],
     deps = [
+        "//pkg/base",
         "//pkg/build",
         "//pkg/cli",
         "//pkg/cli/clisqlclient",
@@ -54,8 +55,8 @@ go_test(
         "//pkg/server",
         "//pkg/sql/lexbase",
         "//pkg/sql/sem/tree",
+        "//pkg/testutils/pgurlutils",
         "//pkg/testutils/serverutils",
-        "//pkg/testutils/sqlutils",
         "//pkg/util/leaktest",
         "//pkg/util/log",
     ],

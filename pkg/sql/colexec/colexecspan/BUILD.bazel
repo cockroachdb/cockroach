@@ -60,6 +60,7 @@ go_test(
         "//pkg/sql/colconv",
         "//pkg/sql/colexec/colexectestutils",
         "//pkg/sql/colexecerror",
+        "//pkg/sql/colexecop",
         "//pkg/sql/colmem",
         "//pkg/sql/execinfra",
         "//pkg/sql/rowenc",

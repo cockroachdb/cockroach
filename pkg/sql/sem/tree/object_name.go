@@ -335,6 +335,61 @@ func (u *UnresolvedObjectName) HasExplicitCatalog() bool {
 	return u.NumParts >= 3
 }
 
+// equals returns true if the unresolved object name is equal to the given name,
+// that is, they have the same number of parts and all parts are equal.
+// Annotations are ignored.
+func (u *UnresolvedObjectName) equals(other *UnresolvedObjectName) bool {
+	if u.NumParts != other.NumParts {
+		return false
+	}
+	for i := 0; i < u.NumParts; i++ {
+		if u.Parts[i] != other.Parts[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// UnresolvedObjectNameSet is a set of distinct unresolved object names. Two
+// unresolved object names are considered non-distinct if they have the same
+// number of parts and all parts are equal. Annotations are ignored.
+//
+// UnresolvedObjectNameSet is designed for small sets. Add is has O(n)
+// complexity where n is the number of names in the set and all the names in the
+// set must be examined, using Len and Get, to test for containment in the set.
+type UnresolvedObjectNameSet struct {
+	names []*UnresolvedObjectName
+}
+
+// MakeUnresolvedObjectNameSet creates an UnresolvedObjectNameSet with the
+// given initial capacity.
+func MakeUnresolvedObjectNameSet(cap int) UnresolvedObjectNameSet {
+	return UnresolvedObjectNameSet{
+		names: make([]*UnresolvedObjectName, 0, cap),
+	}
+}
+
+// Add adds the given name to the set. No-op if the name is already in the set.
+// The complexity is O(n) where n = u.Len().
+func (u *UnresolvedObjectNameSet) Add(name *UnresolvedObjectName) {
+	for _, n := range u.names {
+		if n.equals(name) {
+			return
+		}
+	}
+	u.names = append(u.names, name)
+}
+
+// Len returns the number of names in the set.
+func (u *UnresolvedObjectNameSet) Len() int {
+	return len(u.names)
+}
+
+// Get returns the i-th name in the set. Panics if i is out of bounds.
+func (u *UnresolvedObjectNameSet) Get(i int) *UnresolvedObjectName {
+	return u.names[i]
+}
+
 // UnresolvedRoutineName is an unresolved function or procedure name. The two
 // implementations of this interface are used to differentiate between the two
 // types of routines for things like error messages.

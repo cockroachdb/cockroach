@@ -15,6 +15,7 @@ go_library(
         "//pkg/col/typeconv",  # keep
         "//pkg/sql/colexecerror",  # keep
         "//pkg/sql/execinfra/execreleasable",  # keep
+        "//pkg/sql/oidext",  # keep
         "//pkg/sql/rowenc",  # keep
         "//pkg/sql/sem/tree",  # keep
         "//pkg/sql/types",  # keep

@@ -16,14 +16,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
+	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
-	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtestutils"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
@@ -115,11 +115,50 @@ func TestStructuredEventLogging(t *testing.T) {
 	}
 }
 
+func TestStructuredEventLogging_txnReadTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	appLogsSpy := logtestutils.NewStructuredLogSpy(
+		t,
+		[]logpb.Channel{logpb.Channel_SQL_SCHEMA},
+		[]string{"create_table"},
+		logtestutils.FromLogEntry[eventpb.CreateTable],
+	)
+
+	cleanup := log.InterceptWith(ctx, appLogsSpy)
+	defer cleanup()
+
+	s, conn, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	runner := sqlutils.MakeSQLRunner(conn)
+	runner.Exec(t, "CREATE TABLE test (id INT PRIMARY KEY)")
+	runner.Exec(t, "BEGIN")
+	runner.Exec(t, "SET autocommit_before_ddl = false")
+	runner.Exec(t, "CREATE TABLE test1 (id INT PRIMARY KEY)")
+	runner.Exec(t, "CREATE TABLE test2 (id INT PRIMARY KEY)")
+	runner.Exec(t, "COMMIT")
+
+	createTables := appLogsSpy.GetLogs(logpb.Channel_SQL_SCHEMA)
+	require.Len(t, createTables, 3)
+	// Not created in the same transaction, so transaction read timestamps are different
+	require.NotEqual(t, createTables[0].TxnReadTimestamp, createTables[1].TxnReadTimestamp)
+	// Created in the same transaction, so transaction read timestamps are the same
+	require.Equal(t, createTables[1].TxnReadTimestamp, createTables[2].TxnReadTimestamp)
+}
+
 var execLogRe = regexp.MustCompile(`event_log.go`)
 
 // Test the SQL_PERF and SQL_INTERNAL_PERF logging channels.
 func TestPerfLogging(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	// CheckRowSize rate-limits LargeRow emissions process-wide. This test
+	// drives one query per case and expects a deterministic emission for
+	// each; disable the limiter so unrelated emissions in the same binary
+	// don't steal the window.
+	defer row.TestingDisableLargeRowRateLimit()()
 
 	var testCases = []struct {
 		// Query to execute. query might be empty if setup is not empty, in
@@ -132,277 +171,242 @@ func TestPerfLogging(t *testing.T) {
 		// Whether we expect to find any log messages matching logRe.
 		logExpected bool
 		breakHere   bool
-		// Logging channel all log messages matching logRe must be in.
-		channel logpb.Channel
 		// Optional queries to execute before/after running query.
 		setup, cleanup string
 	}{
 		{
 			query:       `SELECT pg_sleep(0.256)`,
 			errRe:       ``,
-			logRe:       `"EventType":"slow_query","Statement":"SELECT pg_sleep\(‹0.256›\)","Tag":"SELECT","User":"root","ExecMode":"exec","NumRows":1`,
+			logRe:       `"EventType":"slow_query","Statement":"SELECT pg_sleep\(‹0.256›\)","Tag":"SELECT","User":"root","TxnReadTimestamp":.*,"ExecMode":"exec","NumRows":1`,
 			logExpected: true,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			query:       `INSERT INTO t VALUES (1, pg_sleep(0.256), 'x')`,
 			errRe:       ``,
-			logRe:       `"EventType":"slow_query","Statement":"INSERT INTO .*‹t› VALUES \(‹1›, pg_sleep\(‹0.256›\), ‹'x'›\)","Tag":"INSERT","User":"root"`,
+			logRe:       `"EventType":"slow_query","Statement":"INSERT INTO .*\.t VALUES \(‹1›, pg_sleep\(‹0.256›\), ‹'x'›\)","Tag":"INSERT","User":"root"`,
 			logExpected: true,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			query:       `INSERT INTO t VALUES (1, pg_sleep(0.256), 'x')`,
 			errRe:       `duplicate key`,
-			logRe:       `"EventType":"slow_query","Statement":"INSERT INTO .*‹t› VALUES \(‹1›, ‹pg_sleep›\(‹0.256›\), ‹'x'›\)","Tag":"INSERT","User":"root"`,
+			logRe:       `"EventType":"slow_query","Statement":"INSERT INTO .*\.t VALUES \(‹1›, pg_sleep\(‹0.256›\), ‹'x'›\)","Tag":"INSERT","User":"root"`,
 			logExpected: true,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			query:       `INSERT INTO t VALUES (2, pg_sleep(0.256), 'x')`,
 			errRe:       ``,
-			logRe:       `"EventType":"slow_query","Statement":"INSERT INTO .*‹t› VALUES \(‹2›, pg_sleep\(‹0.256›\), ‹'x'›\)","Tag":"INSERT","User":"root","ExecMode":"exec","NumRows":1`,
+			logRe:       `"EventType":"slow_query","Statement":"INSERT INTO .*\.t VALUES \(‹2›, pg_sleep\(‹0.256›\), ‹'x'›\)","Tag":"INSERT","User":"root","TxnReadTimestamp":.*,"ExecMode":"exec","NumRows":1`,
 			logExpected: true,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			query:       `INSERT INTO t VALUES (3, false, repeat('x', 1024))`,
 			errRe:       ``,
-			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹/Table/\d+/1/3/0›"`,
+			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹(/Tenant/\d+)?/Table/\d+/1/3/0›"`,
 			logExpected: true,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			query:       `INSERT INTO t VALUES (4, pg_sleep(0.256), repeat('x', 1024))`,
 			errRe:       ``,
-			logRe:       `"EventType":"slow_query","Statement":"INSERT INTO .*‹t› VALUES \(‹4›, pg_sleep\(‹0.256›\), repeat\(‹'x'›, ‹1024›\)\)","Tag":"INSERT","User":"root","ExecMode":"exec","NumRows":1`,
+			logRe:       `"EventType":"slow_query","Statement":"INSERT INTO .*\.t VALUES \(‹4›, pg_sleep\(‹0.256›\), repeat\(‹'x'›, ‹1024›\)\)","Tag":"INSERT","User":"root","TxnReadTimestamp":.*,"ExecMode":"exec","NumRows":1`,
 			logExpected: true,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			query:       `INSERT INTO t VALUES (5, false, repeat('x', 2048))`,
-			errRe:       `row larger than max row size: table \d+ family 0 primary key /Table/\d+/1/5/0 size \d+`,
-			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹/Table/\d+/1/5/0›"`,
+			errRe:       `row larger than max row size: table \d+ family 0 primary key (/Tenant/\d+)?/Table/\d+/1/5/0 size \d+`,
+			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹(/Tenant/\d+)?/Table/\d+/1/5/0›"`,
 			logExpected: true,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			query:       `SELECT *, pg_sleep(0.064) FROM t`,
 			errRe:       ``,
-			logRe:       `"EventType":"slow_query","Statement":"SELECT \*, pg_sleep\(‹0.064›\) FROM .*‹t›","Tag":"SELECT","User":"root","ExecMode":"exec","NumRows":4`,
+			logRe:       `"EventType":"slow_query","Statement":"SELECT \*, pg_sleep\(‹0.064›\) FROM .*\.t","Tag":"SELECT","User":"root","TxnReadTimestamp":.*,"ExecMode":"exec","NumRows":4`,
 			logExpected: true,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			query:       `SELECT *, pg_sleep(0.064) FROM t`,
 			errRe:       ``,
 			logRe:       `"EventType":"large_row"`,
 			logExpected: false,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			query:       `INSERT INTO t VALUES (2, false, repeat('x', 2048)) ON CONFLICT (i) DO NOTHING`,
 			errRe:       ``,
 			logRe:       `"EventType":"large_row"`,
 			logExpected: false,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			query:       `INSERT INTO t VALUES (2, false, 'x') ON CONFLICT (i) DO UPDATE SET s = repeat('x', 1024)`,
 			errRe:       ``,
-			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹/Table/\d+/1/2/0›"`,
+			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹(/Tenant/\d+)?/Table/\d+/1/2/0›"`,
 			logExpected: true,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			query:       `INSERT INTO t VALUES (2, false, 'x') ON CONFLICT (i) DO UPDATE SET s = repeat('x', 2048)`,
-			errRe:       `row larger than max row size: table \d+ family 0 primary key /Table/\d+/1/2/0 size \d+`,
-			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹/Table/\d+/1/2/0›"`,
+			errRe:       `row larger than max row size: table \d+ family 0 primary key (/Tenant/\d+)?/Table/\d+/1/2/0 size \d+`,
+			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹(/Tenant/\d+)?/Table/\d+/1/2/0›"`,
 			logExpected: true,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			query:       `INSERT INTO t VALUES (2, false, repeat('x', 2048)) ON CONFLICT (i) DO UPDATE SET s = 'x'`,
 			errRe:       ``,
 			logRe:       `"EventType":"large_row"`,
 			logExpected: false,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			query:       `UPSERT INTO t VALUES (2, false, repeat('x', 1024))`,
 			errRe:       ``,
-			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹/Table/\d+/1/2/0›"`,
+			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹(/Tenant/\d+)?/Table/\d+/1/2/0›"`,
 			logExpected: true,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			query:       `UPSERT INTO t VALUES (2, false, repeat('x', 2048))`,
-			errRe:       `row larger than max row size: table \d+ family 0 primary key /Table/\d+/1/2/0 size \d+`,
-			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹/Table/\d+/1/2/0›"`,
+			errRe:       `row larger than max row size: table \d+ family 0 primary key (/Tenant/\d+)?/Table/\d+/1/2/0 size \d+`,
+			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹(/Tenant/\d+)?/Table/\d+/1/2/0›"`,
 			logExpected: true,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			query:       `UPSERT INTO t VALUES (2, false, 'x')`,
 			errRe:       ``,
 			logRe:       `"EventType":"large_row"`,
 			logExpected: false,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			query:       `UPDATE t SET s = repeat('x', 1024) WHERE i = 2`,
 			errRe:       ``,
-			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹/Table/\d+/1/2/0›"`,
+			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹(/Tenant/\d+)?/Table/\d+/1/2/0›"`,
 			logExpected: true,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			query:       `UPDATE t SET s = repeat('x', 2048) WHERE i = 2`,
-			errRe:       `row larger than max row size: table \d+ family 0 primary key /Table/\d+/1/2/0 size \d+`,
-			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹/Table/\d+/1/2/0›"`,
+			errRe:       `row larger than max row size: table \d+ family 0 primary key (/Tenant/\d+)?/Table/\d+/1/2/0 size \d+`,
+			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹(/Tenant/\d+)?/Table/\d+/1/2/0›"`,
 			logExpected: true,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			query:       `UPDATE t SET s = 'x' WHERE i = 2`,
 			errRe:       ``,
 			logRe:       `"EventType":"large_row"`,
 			logExpected: false,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			query:       `DELETE FROM t WHERE i = 2`,
 			errRe:       ``,
 			logRe:       `"EventType":"large_row"`,
 			logExpected: false,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			query:       `DELETE FROM t WHERE i = 3`,
 			errRe:       ``,
 			logRe:       `"EventType":"large_row"`,
 			logExpected: false,
-			channel:     channel.SQL_PERF,
 		},
 		{
-			query:       `ALTER TABLE t ADD COLUMN f FLOAT DEFAULT 99.999`,
-			errRe:       ``,
-			logRe:       `"EventType":"large_row_internal","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹/Table/\d+/1/4/0›"`,
+			query: `ALTER TABLE t ADD COLUMN f FLOAT DEFAULT 99.999`,
+			errRe: ``,
+			// Schema-change backfills emit one large_row_internal per
+			// CheckRowSize call; CheckRowSize rate-limits per RowHelper, so
+			// only the first row whose CF size exceeds the threshold gets
+			// logged. The PK of that row depends on iteration order, so
+			// match any value rather than a specific one.
+			logRe:       `"EventType":"large_row_internal","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹(/Tenant/\d+)?/Table/\d+/1/\d+/0›"`,
 			logExpected: true,
 			breakHere:   true,
-			channel:     channel.SQL_INTERNAL_PERF,
 		},
 		{
 			query:       `CREATE TABLE t2 (i, s, PRIMARY KEY (i)) AS SELECT i, s FROM t`,
 			errRe:       ``,
-			logRe:       `"EventType":"large_row_internal","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹/Table/\d+/1/4/0›"`,
+			logRe:       `"EventType":"large_row_internal","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹(/Tenant/\d+)?/Table/\d+/1/\d+/0›"`,
 			logExpected: true,
-			channel:     channel.SQL_INTERNAL_PERF,
 		},
 		{
 			query:       `ALTER TABLE t2 ADD COLUMN z STRING DEFAULT repeat('z', 2048)`,
 			errRe:       ``,
-			logRe:       `"EventType":"large_row_internal","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹/Table/\d+/1/4/0›"`,
+			logRe:       `"EventType":"large_row_internal","RowSize":\d+,"TableID":\d+,"PrimaryKey":"‹(/Tenant/\d+)?/Table/\d+/1/\d+/0›"`,
 			logExpected: true,
-			channel:     channel.SQL_INTERNAL_PERF,
 		},
 		{
 			query:       `SELECT * FROM t2`,
 			errRe:       ``,
 			logRe:       `"EventType":"large_row"`,
 			logExpected: false,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			query:       `DROP TABLE t2`,
 			errRe:       ``,
 			logRe:       `"EventType":"large_row"`,
 			logExpected: false,
-			channel:     channel.SQL_INTERNAL_PERF,
 		},
 		{
 			query:       `TRUNCATE t`,
 			errRe:       ``,
 			logRe:       `"EventType":"large_row"`,
 			logExpected: false,
-			channel:     channel.SQL_INTERNAL_PERF,
 		},
 		{
 			query:       `INSERT INTO u VALUES (1, 1, repeat('x', 1024))`,
 			errRe:       ``,
-			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"FamilyID":1,"PrimaryKey":"‹/Table/\d+/1/1/1/1›"`,
+			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"FamilyID":1,"PrimaryKey":"‹(/Tenant/\d+)?/Table/\d+/1/1/1/1›"`,
 			logExpected: true,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			query:       `INSERT INTO u VALUES (2, 2, repeat('x', 2048))`,
-			errRe:       `pq: row larger than max row size: table \d+ family 1 primary key /Table/\d+/1/2/1/1 size \d+`,
-			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"FamilyID":1,"PrimaryKey":"‹/Table/\d+/1/2/1/1›"`,
+			errRe:       `pq: row larger than max row size: table \d+ family 1 primary key (/Tenant/\d+)?/Table/\d+/1/2/1/1 size \d+`,
+			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"FamilyID":1,"PrimaryKey":"‹(/Tenant/\d+)?/Table/\d+/1/2/1/1›"`,
 			logExpected: true,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			query:       `UPDATE u SET j = j + 1 WHERE i = 1`,
 			errRe:       ``,
 			logRe:       `"EventType":"large_row"`,
 			logExpected: false,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			query:       `UPDATE u SET i = i + 1 WHERE i = 1`,
 			errRe:       ``,
-			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"FamilyID":1,"PrimaryKey":"‹/Table/\d+/1/2/1/1›"`,
+			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"FamilyID":1,"PrimaryKey":"‹(/Tenant/\d+)?/Table/\d+/1/2/1/1›"`,
 			logExpected: true,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			query:       `UPDATE u SET s = 'x' WHERE i = 2`,
 			errRe:       ``,
 			logRe:       `"EventType":"large_row"`,
 			logExpected: false,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			query:       `UPDATE u SET s = repeat('x', 2048) WHERE i = 2`,
-			errRe:       `pq: row larger than max row size: table \d+ family 1 primary key /Table/\d+/1/2/1/1 size \d+`,
-			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"FamilyID":1,"PrimaryKey":"‹/Table/\d+/1/2/1/1›"`,
+			errRe:       `pq: row larger than max row size: table \d+ family 1 primary key (/Tenant/\d+)?/Table/\d+/1/2/1/1 size \d+`,
+			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"FamilyID":1,"PrimaryKey":"‹(/Tenant/\d+)?/Table/\d+/1/2/1/1›"`,
 			logExpected: true,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			query:       `CREATE TABLE u2 (i, j, s, PRIMARY KEY (i), FAMILY f1 (i, j), FAMILY f2 (s)) AS SELECT i, j, repeat(s, 2048) FROM u`,
 			errRe:       ``,
-			logRe:       `"EventType":"large_row_internal","RowSize":\d+,"TableID":\d+,"FamilyID":1,"PrimaryKey":"‹/Table/\d+/1/2/1/1›"`,
+			logRe:       `"EventType":"large_row_internal","RowSize":\d+,"TableID":\d+,"FamilyID":1,"PrimaryKey":"‹(/Tenant/\d+)?/Table/\d+/1/2/1/1›"`,
 			logExpected: true,
-			channel:     channel.SQL_INTERNAL_PERF,
 		},
 		{
 			query:       `UPDATE u2 SET j = j + 1 WHERE i = 2`,
 			errRe:       ``,
 			logRe:       `"EventType":"large_row"`,
 			logExpected: false,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			query:       `UPDATE u2 SET i = i + 1 WHERE i = 2`,
-			errRe:       `row larger than max row size: table \d+ family 1 primary key /Table/\d+/1/3/1/1 size \d+`,
-			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"FamilyID":1,"PrimaryKey":"‹/Table/\d+/1/3/1/1›"`,
+			errRe:       `row larger than max row size: table \d+ family 1 primary key (/Tenant/\d+)?/Table/\d+/1/3/1/1 size \d+`,
+			logRe:       `"EventType":"large_row","RowSize":\d+,"TableID":\d+,"FamilyID":1,"PrimaryKey":"‹(/Tenant/\d+)?/Table/\d+/1/3/1/1›"`,
 			logExpected: true,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			query:       `UPDATE u2 SET s = 'x' WHERE i = 2`,
 			errRe:       ``,
 			logRe:       `"EventType":"large_row"`,
 			logExpected: false,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			query:       `DROP TABLE u2`,
 			errRe:       ``,
 			logRe:       `"EventType":"large_row"`,
 			logExpected: false,
-			channel:     channel.SQL_INTERNAL_PERF,
 		},
 
 		// Tests for the limits on the number of txn rows written/read.
@@ -423,140 +427,123 @@ func TestPerfLogging(t *testing.T) {
 		{
 			query:       `INSERT INTO t(i) VALUES (6)`,
 			errRe:       ``,
-			logRe:       `"EventType":"txn_rows_written_limit","Statement":"INSERT INTO.*","TxnID":".*","SessionID":".*"`,
+			logRe:       `"EventType":"txn_rows_written_limit","Statement":"INSERT INTO.*","TxnReadTimestamp":.*,"TxnID":".*","SessionID":".*"`,
 			logExpected: false,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			query:       `INSERT INTO t(i) VALUES (7), (8), (9)`,
 			errRe:       ``,
-			logRe:       `"EventType":"txn_rows_written_limit","Statement":"INSERT INTO.*","TxnID":".*","SessionID":".*"`,
+			logRe:       `"EventType":"txn_rows_written_limit","Statement":"INSERT INTO.*","TxnReadTimestamp":.*,"TxnID":".*","SessionID":".*"`,
 			logExpected: true,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			setup:       `INSERT INTO t(i) VALUES (-1), (-2), (-3)`,
 			query:       `UPDATE t SET i = i - 10 WHERE i < 0`,
 			errRe:       ``,
-			logRe:       `"EventType":"txn_rows_written_limit","Statement":"UPDATE.*","TxnID":".*","SessionID":".*"`,
+			logRe:       `"EventType":"txn_rows_written_limit","Statement":"UPDATE.*","TxnReadTimestamp":.*,"TxnID":".*","SessionID":".*"`,
 			logExpected: true,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			setup:       `BEGIN`,
 			cleanup:     `COMMIT`,
 			query:       `INSERT INTO t(i) VALUES (10); INSERT INTO t(i) VALUES (11), (12);`,
 			errRe:       ``,
-			logRe:       `"EventType":"txn_rows_written_limit","Statement":"INSERT INTO.*","TxnID":".*","SessionID":".*"`,
+			logRe:       `"EventType":"txn_rows_written_limit","Statement":"INSERT INTO.*","TxnReadTimestamp":.*,"TxnID":".*","SessionID":".*"`,
 			logExpected: true,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			setup:       `SET transaction_rows_written_log = 1`,
 			cleanup:     `RESET transaction_rows_written_log`,
 			query:       `INSERT INTO t(i) VALUES (13), (14)`,
 			errRe:       ``,
-			logRe:       `"EventType":"txn_rows_written_limit","Statement":"INSERT INTO.*","TxnID":".*","SessionID":".*"`,
+			logRe:       `"EventType":"txn_rows_written_limit","Statement":"INSERT INTO.*","TxnReadTimestamp":.*,"TxnID":".*","SessionID":".*"`,
 			logExpected: true,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			query:       `INSERT INTO t(i) VALUES (15), (16), (17), (18)`,
 			errRe:       `pq: txn has written 4 rows, which is above the limit: TxnID .* SessionID .*`,
-			logRe:       `"EventType":"txn_rows_written_limit","Statement":"INSERT INTO.*","TxnID":".*","SessionID":".*"`,
+			logRe:       `"EventType":"txn_rows_written_limit","Statement":"INSERT INTO.*","TxnReadTimestamp":.*,"TxnID":".*","SessionID":".*"`,
 			logExpected: true,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			setup: `INSERT INTO t(i) VALUES (-1)`,
 			// We now have 4 negative values in the table t.
 			query:       `DELETE FROM t WHERE i < 0`,
 			errRe:       `pq: txn has written 4 rows, which is above the limit: TxnID .* SessionID .*`,
-			logRe:       `"EventType":"txn_rows_written_limit","Statement":"DELETE.*","TxnID":".*","SessionID":".*"`,
+			logRe:       `"EventType":"txn_rows_written_limit","Statement":"DELETE.*","TxnReadTimestamp":.*,"TxnID":".*","SessionID":".*"`,
 			logExpected: true,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			query:       `UPSERT INTO t(i) VALUES (-2), (-3), (-4), (-5)`,
 			errRe:       `pq: txn has written 4 rows, which is above the limit: TxnID .* SessionID .*`,
-			logRe:       `"EventType":"txn_rows_written_limit","Statement":"UPSERT INTO.*","TxnID":".*","SessionID":".*","NumRows":4`,
+			logRe:       `"EventType":"txn_rows_written_limit","Statement":"UPSERT INTO.*","TxnReadTimestamp":.*,"TxnID":".*","SessionID":".*","NumRows":4`,
 			logExpected: true,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			setup:       `BEGIN`,
 			cleanup:     `ROLLBACK`,
 			query:       `INSERT INTO t(i) VALUES (15), (16), (17); INSERT INTO t(i) VALUES (18);`,
 			errRe:       `pq: txn has written 4 rows, which is above the limit: TxnID .* SessionID .*`,
-			logRe:       `"EventType":"txn_rows_written_limit","Statement":"INSERT INTO.*","TxnID":".*","SessionID":".*","NumRows":3`,
+			logRe:       `"EventType":"txn_rows_written_limit","Statement":"INSERT INTO.*","TxnReadTimestamp":.*,"TxnID":".*","SessionID":".*","NumRows":3`,
 			logExpected: true,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			setup:       `SET transaction_rows_written_err = 1`,
 			cleanup:     `RESET transaction_rows_written_err`,
 			query:       `INSERT INTO t(i) VALUES (15), (16)`,
 			errRe:       `pq: txn has written 2 rows, which is above the limit: TxnID .* SessionID .*`,
-			logRe:       `"EventType":"txn_rows_written_limit","Statement":"INSERT INTO.*","TxnID":".*","SessionID":".*"`,
+			logRe:       `"EventType":"txn_rows_written_limit","Statement":"INSERT INTO.*","TxnReadTimestamp":.*,"TxnID":".*","SessionID":".*"`,
 			logExpected: false,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			query:       `SELECT * FROM t WHERE i = 6`,
 			errRe:       ``,
-			logRe:       `"EventType":"txn_rows_read_limit","Statement":"SELECT \* FROM .*‹t› WHERE ‹i› = ‹6›","Tag":"SELECT","User":"root","TxnID":.*,"SessionID":.*`,
+			logRe:       `"EventType":"txn_rows_read_limit","Statement":"SELECT \* FROM .*\.t WHERE i = ‹6›","Tag":"SELECT","User":"root","TxnReadTimestamp":.*,"TxnID":.*,"SessionID":.*`,
 			logExpected: false,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			query:       `SELECT * FROM t WHERE i IN (6, 7, 8)`,
 			errRe:       ``,
-			logRe:       `"EventType":"txn_rows_read_limit","Statement":"SELECT \* FROM .*‹t› WHERE ‹i› IN \(‹6›, ‹7›, ‹8›\)","Tag":"SELECT","User":"root","TxnID":.*,"SessionID":.*,"NumRows":3`,
+			logRe:       `"EventType":"txn_rows_read_limit","Statement":"SELECT \* FROM .*\.t WHERE i IN \(‹6›, ‹7›, ‹8›\)","Tag":"SELECT","User":"root","TxnReadTimestamp":.*,"TxnID":.*,"SessionID":.*,"NumRows":3`,
 			logExpected: true,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			setup:       `BEGIN`,
 			cleanup:     `COMMIT`,
 			query:       `SELECT * FROM t WHERE i = 6; SELECT * FROM t WHERE i = 7; SELECT * FROM t WHERE i = 8;`,
 			errRe:       ``,
-			logRe:       `"EventType":"txn_rows_read_limit","Statement":"SELECT \* FROM .*‹t› WHERE ‹i› = ‹8›","Tag":"SELECT","User":"root","TxnID":.*,"SessionID":.*,"NumRows":3`,
+			logRe:       `"EventType":"txn_rows_read_limit","Statement":"SELECT \* FROM .*\.t WHERE i = ‹8›","Tag":"SELECT","User":"root","TxnReadTimestamp":.*,"TxnID":.*,"SessionID":.*,"NumRows":3`,
 			logExpected: true,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			setup:       `SET transaction_rows_read_log = 1`,
 			cleanup:     `RESET transaction_rows_read_log`,
 			query:       `SELECT * FROM t WHERE i IN (6, 7)`,
 			errRe:       ``,
-			logRe:       `"EventType":"txn_rows_read_limit","Statement":"SELECT \* FROM .*‹t› WHERE ‹i› IN \(‹6›, ‹7›\)","Tag":"SELECT","User":"root","TxnID":.*,"SessionID":.*,"NumRows":2`,
+			logRe:       `"EventType":"txn_rows_read_limit","Statement":"SELECT \* FROM .*\.t WHERE i IN \(‹6›, ‹7›\)","Tag":"SELECT","User":"root","TxnReadTimestamp":.*,"TxnID":.*,"SessionID":.*,"NumRows":2`,
 			logExpected: true,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			query:       `SELECT * FROM t WHERE i IN (6, 7, 8, 9)`,
 			errRe:       `pq: txn has read 4 rows, which is above the limit: TxnID .* SessionID .*`,
-			logRe:       `"EventType":"txn_rows_read_limit","Statement":"SELECT \* FROM .*‹t› WHERE ‹i› IN \(‹6›, ‹7›, ‹8›, ‹9›\)","Tag":"SELECT","User":"root","TxnID":.*,"SessionID":.*,"NumRows":4`,
+			logRe:       `"EventType":"txn_rows_read_limit","Statement":"SELECT \* FROM .*\.t WHERE i IN \(‹6›, ‹7›, ‹8›, ‹9›\)","Tag":"SELECT","User":"root","TxnReadTimestamp":.*,"TxnID":.*,"SessionID":.*,"NumRows":4`,
 			logExpected: true,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			setup:       `BEGIN`,
 			cleanup:     `ROLLBACK`,
 			query:       `SELECT * FROM t WHERE i IN (6, 7); SELECT * FROM t WHERE i IN (8, 9)`,
 			errRe:       `pq: txn has read 4 rows, which is above the limit: TxnID .* SessionID .*`,
-			logRe:       `"EventType":"txn_rows_read_limit","Statement":"SELECT \* FROM .*‹t› WHERE ‹i› IN \(‹8›, ‹9›\)","Tag":"SELECT","User":"root","TxnID":.*,"SessionID":.*,"NumRows":4`,
+			logRe:       `"EventType":"txn_rows_read_limit","Statement":"SELECT \* FROM .*\.t WHERE i IN \(‹8›, ‹9›\)","Tag":"SELECT","User":"root","TxnReadTimestamp":.*,"TxnID":.*,"SessionID":.*,"NumRows":4`,
 			logExpected: true,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			setup:       `SET transaction_rows_read_err = 1`,
 			cleanup:     `RESET transaction_rows_read_err`,
 			query:       `SELECT * FROM t WHERE i = 6 OR i = 7`,
 			errRe:       `pq: txn has read 2 rows, which is above the limit: TxnID .* SessionID .*`,
-			logRe:       `"EventType":"txn_rows_read_limit","Statement":"SELECT \* FROM .*‹t› WHERE ‹i› = ‹6› OR ‹i› = ‹7›","Tag":"SELECT","User":"root","TxnID":.*,"SessionID":.*`,
+			logRe:       `"EventType":"txn_rows_read_limit","Statement":"SELECT \* FROM .*\.t WHERE i = ‹6› OR ‹i› = ‹7›","Tag":"SELECT","User":"root","TxnReadTimestamp":.*,"TxnID":.*,"SessionID":.*`,
 			logExpected: false,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			// Temporarily disable the "written" limits so that we can check
@@ -565,87 +552,76 @@ func TestPerfLogging(t *testing.T) {
 			cleanup:     `SET transaction_rows_written_log = 2; SET transaction_rows_written_err = 3;`,
 			query:       `UPDATE t SET i = i - 10 WHERE i < 0`,
 			errRe:       `pq: txn has read 4 rows, which is above the limit: TxnID .* SessionID .*`,
-			logRe:       `"EventType":"txn_rows_read_limit","Statement":"UPDATE.*","TxnID":".*","SessionID":".*"`,
+			logRe:       `"EventType":"txn_rows_read_limit","Statement":"UPDATE.*","TxnReadTimestamp":.*,"TxnID":".*","SessionID":".*"`,
 			logExpected: true,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			cleanup:     `DROP TABLE t_copy`,
 			query:       `CREATE TABLE t_copy (i PRIMARY KEY) AS SELECT i FROM t`,
 			errRe:       ``,
-			logRe:       `"EventType":"txn_rows_written_limit","Statement":"CREATE.*","TxnID":".*","SessionID":".*"`,
+			logRe:       `"EventType":"txn_rows_written_limit","Statement":"CREATE.*","TxnReadTimestamp":.*,"TxnID":".*","SessionID":".*"`,
 			logExpected: false,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			cleanup:     `DROP TABLE t_copy`,
 			query:       `CREATE TABLE t_copy (i PRIMARY KEY) AS SELECT i FROM t`,
 			errRe:       ``,
-			logRe:       `"EventType":"txn_rows_read_limit","Statement":"CREATE.*","TxnID":".*","SessionID":".*"`,
+			logRe:       `"EventType":"txn_rows_read_limit","Statement":"CREATE.*","TxnReadTimestamp":.*,"TxnID":".*","SessionID":".*"`,
 			logExpected: false,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			cleanup:     `DROP TABLE t_copy`,
 			query:       `CREATE TABLE t_copy (i PRIMARY KEY) AS SELECT i FROM t`,
 			errRe:       ``,
-			logRe:       `"EventType":"txn_rows_written_limit","Statement":"CREATE.*","TxnID":".*","SessionID":".*"`,
+			logRe:       `"EventType":"txn_rows_written_limit","Statement":"CREATE.*","TxnReadTimestamp":.*,"TxnID":".*","SessionID":".*"`,
 			logExpected: false,
-			channel:     channel.SQL_INTERNAL_PERF,
 		},
 		{
 			cleanup:     `DROP TABLE t_copy`,
 			query:       `CREATE TABLE t_copy (i PRIMARY KEY) AS SELECT i FROM t`,
 			errRe:       ``,
-			logRe:       `"EventType":"txn_rows_read_limit","Statement":"CREATE.*","TxnID":".*","SessionID":".*"`,
+			logRe:       `"EventType":"txn_rows_read_limit","Statement":"CREATE.*","TxnReadTimestamp":.*,"TxnID":".*","SessionID":".*"`,
 			logExpected: false,
-			channel:     channel.SQL_INTERNAL_PERF,
 		},
 		{
 			setup:       `CREATE TABLE t_copy (i PRIMARY KEY) AS SELECT i FROM t`,
 			query:       `DROP TABLE t_copy`,
 			errRe:       ``,
-			logRe:       `"EventType":"txn_rows_written_limit","Statement":"DROP.*","TxnID":".*","SessionID":".*"`,
+			logRe:       `"EventType":"txn_rows_written_limit","Statement":"DROP.*","TxnReadTimestamp":.*,"TxnID":".*","SessionID":".*"`,
 			logExpected: false,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			setup:       `CREATE TABLE t_copy (i PRIMARY KEY) AS SELECT i FROM t`,
 			query:       `DROP TABLE t_copy`,
 			errRe:       ``,
-			logRe:       `"EventType":"txn_rows_read_limit","Statement":"DROP.*","TxnID":".*","SessionID":".*"`,
+			logRe:       `"EventType":"txn_rows_read_limit","Statement":"DROP.*","TxnReadTimestamp":.*,"TxnID":".*","SessionID":".*"`,
 			logExpected: false,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			setup:       `CREATE TABLE t_copy (i PRIMARY KEY) AS SELECT i FROM t`,
 			query:       `DROP TABLE t_copy`,
 			errRe:       ``,
-			logRe:       `"EventType":"txn_rows_written_limit","Statement":"DROP.*","TxnID":".*","SessionID":".*"`,
+			logRe:       `"EventType":"txn_rows_written_limit","Statement":"DROP.*","TxnReadTimestamp":.*,"TxnID":".*","SessionID":".*"`,
 			logExpected: false,
-			channel:     channel.SQL_INTERNAL_PERF,
 		},
 		{
 			setup:       `CREATE TABLE t_copy (i PRIMARY KEY) AS SELECT i FROM t`,
 			query:       `DROP TABLE t_copy`,
 			errRe:       ``,
-			logRe:       `"EventType":"txn_rows_read_limit","Statement":"DROP.*","TxnID":".*","SessionID":".*"`,
+			logRe:       `"EventType":"txn_rows_read_limit","Statement":"DROP.*","TxnReadTimestamp":.*,"TxnID":".*","SessionID":".*"`,
 			logExpected: false,
-			channel:     channel.SQL_INTERNAL_PERF,
 		},
 		{
 			query:       `ANALYZE t`,
 			errRe:       ``,
-			logRe:       `"EventType":"txn_rows_read_limit","Statement":"ANALYZE.*","TxnID":".*","SessionID":".*"`,
+			logRe:       `"EventType":"txn_rows_read_limit","Statement":"ANALYZE.*","TxnReadTimestamp":.*,"TxnID":".*","SessionID":".*"`,
 			logExpected: false,
-			channel:     channel.SQL_PERF,
 		},
 		{
 			query:       `ANALYZE t`,
 			errRe:       ``,
-			logRe:       `"EventType":"txn_rows_read_limit","Statement":"ANALYZE.*","TxnID":".*","SessionID":".*"`,
+			logRe:       `"EventType":"txn_rows_read_limit","Statement":"ANALYZE.*","TxnReadTimestamp":.*,"TxnID":".*","SessionID":".*"`,
 			logExpected: false,
-			channel:     channel.SQL_INTERNAL_PERF,
 		},
 		{
 			// Disable the relevant cluster settings and reset the session
@@ -661,38 +637,84 @@ func TestPerfLogging(t *testing.T) {
                 RESET transaction_rows_read_err;
             `,
 		},
+
+		// Tests for the failed query log.
+		{
+			// A failing query is not logged when the setting is off.
+			query:       `SELECT 1/0`,
+			errRe:       `division by zero`,
+			logRe:       `"EventType":"failed_query"`,
+			logExpected: false,
+		},
+		{
+			setup: `SET CLUSTER SETTING sql.log.failed_query.enabled = true`,
+		},
+		{
+			// Runtime error: division by zero (SQLSTATE 22012).
+			query:       `SELECT 1/0`,
+			errRe:       `division by zero`,
+			logRe:       `"EventType":"failed_query","Statement":"SELECT ‹1› / ‹0›".*"SQLSTATE":"22012","ErrorText":"division by zero"`,
+			logExpected: true,
+		},
+		{
+			// Planning-time error: undefined relation (SQLSTATE 42P01).
+			query:       `SELECT * FROM nonexistent_table_for_failed_query_test`,
+			errRe:       `does not exist`,
+			logRe:       `"EventType":"failed_query","Statement":"SELECT \* FROM .*nonexistent_table_for_failed_query_test".*"SQLSTATE":"42P01"`,
+			logExpected: true,
+		},
+		{
+			// Successful queries do not emit failed_query events.
+			query:       `SELECT 1`,
+			errRe:       ``,
+			logRe:       `"EventType":"failed_query"`,
+			logExpected: false,
+		},
+		{
+			setup: `SET CLUSTER SETTING sql.log.failed_query.enabled = DEFAULT`,
+		},
+		{
+			// Once disabled, failures are no longer logged.
+			query:       `SELECT 1/0`,
+			errRe:       `division by zero`,
+			logRe:       `"EventType":"failed_query"`,
+			logExpected: false,
+		},
 	}
 
 	// Make file sinks for the SQL perf logs.
 	sc := log.ScopeWithoutShowLogs(t)
 	defer sc.Close(t)
-	log.TestingResetActive()
-	cfg := logconfig.DefaultConfig()
-	auditable := true
-	cfg.Sinks.FileGroups = map[string]*logconfig.FileSinkConfig{
-		"sql-slow": {
-			FileDefaults: logconfig.FileDefaults{
-				CommonSinkConfig: logconfig.CommonSinkConfig{Auditable: &auditable},
-			},
-			Channels: logconfig.SelectChannels(channel.SQL_PERF, channel.SQL_INTERNAL_PERF),
+
+	logSpy := logtestutils.NewStructuredLogSpy(
+		t,
+		[]logpb.Channel{logpb.Channel_SQL_PERF, logpb.Channel_SQL_INTERNAL_PERF, logpb.Channel_SQL_EXEC},
+		[]string{
+			"txn_rows_written_limit",
+			"txn_rows_written_limit_internal",
+			"txn_rows_read_limit",
+			"txn_rows_read_limit_internal",
+			"large_row",
+			"large_row_internal",
+			"slow_query",
+			"slow_query_internal",
+			"failed_query",
+			"failed_query_internal",
 		},
-	}
-	dir := sc.GetDirectory()
-	if err := cfg.Validate(&dir); err != nil {
-		t.Fatal(err)
-	}
-	cleanup, err := log.ApplyConfig(cfg, nil /* fileSinkMetricsForDir */, nil /* fatalOnLogStall */)
-	if err != nil {
-		t.Fatal(err)
-	}
+		func(entry logpb.Entry) (logpb.Entry, error) {
+			entry.Message = entry.Message[entry.StructuredStart:entry.StructuredEnd]
+			return entry, nil
+		},
+	)
+	cleanup := log.InterceptWith(ctx, logSpy)
 	defer cleanup()
 
 	// Start a SQL server.
-	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(context.Background())
+	srv, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
 	// TODO(fqazi): Enable with MVCC back filler support, since max_row_size is
 	// not properly enforced right now.
-	_, err = sqlDB.Exec("SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer='off'")
+	_, err := sqlDB.Exec("SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer='off'")
 	require.NoError(t, err)
 	_, err = sqlDB.Exec("SET use_declarative_schema_changer='off'")
 	require.NoError(t, err)
@@ -707,6 +729,7 @@ func TestPerfLogging(t *testing.T) {
 	defer db.Exec(t, `SET CLUSTER SETTING sql.log.slow_query.latency_threshold = DEFAULT`)
 
 	// Test schema.
+	db.Exec(t, "SET create_table_with_schema_locked=false")
 	db.Exec(t, `CREATE TABLE t (i INT PRIMARY KEY, b BOOL, s STRING)`)
 	db.Exec(t, `CREATE TABLE u (i INT PRIMARY KEY, j INT, s STRING, FAMILY f1 (i, j), FAMILY f2 (s))`)
 	defer db.Exec(t, `DROP TABLE t, u`)
@@ -723,7 +746,6 @@ func TestPerfLogging(t *testing.T) {
 			t.Log("FOUND")
 		}
 		t.Log(tc.query)
-		start := timeutil.Now().UnixNano()
 		if tc.errRe != "" {
 			db.ExpectErr(t, tc.errRe, tc.query)
 		} else {
@@ -731,15 +753,15 @@ func TestPerfLogging(t *testing.T) {
 		}
 
 		var logRe = regexp.MustCompile(tc.logRe)
-		log.FlushFiles()
-		entries, err := log.FetchEntriesFromFiles(
-			start, math.MaxInt64, 1000, logRe, log.WithMarkedSensitiveData,
-		)
-		if err != nil {
-			t.Fatal(err)
+		events := logSpy.GetUnreadLogs(logpb.Channel_SQL_EXEC)
+		var entries []logpb.Entry
+		for _, e := range events {
+			if logRe.Match([]byte(e.Message)) {
+				entries = append(entries, e)
+			}
 		}
 		for _, l := range entries {
-			log.Infof(context.Background(), "%s", l.Message)
+			log.Dev.Infof(context.Background(), "%s", l.Message)
 		}
 
 		if (len(entries) > 0) != tc.logExpected {
@@ -751,15 +773,6 @@ func TestPerfLogging(t *testing.T) {
 				"%v log messages for query `%s` matching `%s`, expected %s",
 				len(entries), tc.query, tc.logRe, expected,
 			))
-		}
-
-		for _, entry := range entries {
-			t.Log(entry)
-			if entry.Channel != tc.channel {
-				t.Fatal(errors.Newf(
-					"log message on channel %v, expected channel %v: %v", entry.Channel, tc.channel, entry,
-				))
-			}
 		}
 
 		if tc.cleanup != "" {

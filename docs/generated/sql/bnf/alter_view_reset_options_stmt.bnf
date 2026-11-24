@@ -1,0 +1,3 @@
+alter_view_reset_options_stmt ::=
+	'ALTER' 'VIEW' relation_expr 'RESET' '(' 'SECURITY_INVOKER' ')'
+	| 'ALTER' 'VIEW' 'IF' 'EXISTS' relation_expr 'RESET' '(' 'SECURITY_INVOKER' ')'

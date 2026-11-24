@@ -10,7 +10,7 @@ import React, {
   useState,
 } from "react";
 
-import { ICancelSessionRequest } from "src/store/terminateQuery";
+import { CancelSessionRequestMessage as ICancelSessionRequest } from "src/api/terminateQueryApi";
 
 import { Modal } from "../modal";
 import { Text } from "../text";

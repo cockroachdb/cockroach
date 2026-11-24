@@ -21,6 +21,15 @@ import "github.com/lib/pq/oid"
 // used when converting between stable ID's and type/function OIDs.
 const CockroachPredefinedOIDMax = 100000
 
+// IsMaybeHashedOid returns true if the OID value is in the range that the
+// pg_catalog OID hasher uses for synthesized OIDs (indexes, columns,
+// constraints, etc.). Note that user-defined type/function descriptor IDs
+// also exceed CockroachPredefinedOIDMax, so a true result does not uniquely
+// imply a hashed OID — it only rules out the predefined-OID range.
+func IsMaybeHashedOid(o oid.Oid) bool {
+	return o > CockroachPredefinedOIDMax
+}
+
 // OIDs in this block are extensions of postgres, thus having no official OID.
 const (
 	T_geometry   = oid.Oid(90000)
@@ -31,6 +40,18 @@ const (
 	T__box2d     = oid.Oid(90005)
 	T_pgvector   = oid.Oid(90006)
 	T__pgvector  = oid.Oid(90007)
+	T_citext     = oid.Oid(90008)
+	T__citext    = oid.Oid(90009)
+	T_ltree      = oid.Oid(90010)
+	T__ltree     = oid.Oid(90011)
+)
+
+// OIDs in this block are not extensions of postgres, but are not supported in
+// github.com/lib/pq/oid. See postgres/src/include/catalog/pg_type.dat for oids.
+const (
+	T_aclitem   = oid.Oid(1033)
+	T_jsonpath  = oid.Oid(4072)
+	T__jsonpath = oid.Oid(4073)
 )
 
 // ExtensionTypeName returns a mapping from extension oids
@@ -44,6 +65,12 @@ var ExtensionTypeName = map[oid.Oid]string{
 	T__box2d:     "_BOX2D",
 	T_pgvector:   "VECTOR",
 	T__pgvector:  "_VECTOR",
+	T_jsonpath:   "JSONPATH",
+	T__jsonpath:  "_JSONPATH",
+	T_citext:     "CITEXT",
+	T__citext:    "_CITEXT",
+	T_ltree:      "LTREE",
+	T__ltree:     "_LTREE",
 }
 
 // TypeName checks the name for a given type by first looking up oid.TypeName

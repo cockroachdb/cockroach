@@ -1,0 +1,127 @@
+# Sanity-check: put creates an intent, get reads back the value.
+new-txn txn=t1
+----
+
+put txn=t1 k=a v=bar
+----
+
+print-in-memory-lock-table
+----
+num=0
+
+print-replicated-lock-table start=a end=z
+----
+key: "\xfaa", str: Intent, txn: t1
+
+get txn=t1 k=a
+----
+get: "\xfaa"="bar"
+
+commit txn=t1
+----
+
+# Unreplicated locking get request for non-existent key without lock-non-existing set.
+new-txn txn=t2
+----
+
+get txn=t2 k=a0 lock=Exclusive dur=Unreplicated
+----
+get: "\xfaa0"=nil
+
+print-in-memory-lock-table
+----
+num=0
+
+print-replicated-lock-table start=a0 end=z
+----
+
+commit txn=t2
+----
+
+# Replicated locking get request for non-existent key without lock-non-existing set.
+new-txn txn=t3
+----
+
+get txn=t3 k=a1 lock=Exclusive dur=Replicated
+----
+get: "\xfaa1"=nil
+
+print-in-memory-lock-table
+----
+num=0
+
+print-replicated-lock-table start=a1 end=z
+----
+
+commit txn=t3
+----
+
+# Unreplicated locking get request for non-existing key with lock-non-existing
+new-txn txn=t4
+----
+
+get txn=t4 k=a4 lock=Exclusive dur=Unreplicated lock-non-existing
+----
+get: "\xfaa4"=nil
+
+print-in-memory-lock-table
+----
+num=1
+ lock: "\xfaa4"
+  holder: txn: t4 epoch: 0, iso: Serializable, ts: <stripped>, info: unrepl [(str: Exclusive seq: 0)]
+
+print-replicated-lock-table start=a4 end=z
+----
+
+commit txn=t4
+----
+
+# Replicated locking get request for non-existing key with experimental setting
+new-txn txn=t5
+----
+
+get txn=t5 k=a5 lock=Exclusive dur=Replicated lock-non-existing
+----
+get: "\xfaa5"=nil
+
+print-replicated-lock-table start=a5 end=z
+----
+key: "\xfaa5", str: Exclusive, txn: t5
+
+# This lock is uncontended so it doesn't end up in the in-memory lock table.
+print-in-memory-lock-table
+----
+num=0
+
+commit txn=t5
+----
+
+# Replicated lock on non-existing key is found by concurrent write.
+new-txn txn=t6
+----
+
+new-txn txn=t7
+----
+
+get txn=t6 k=a1 lock=Exclusive dur=Replicated lock-non-existing
+----
+get: "\xfaa1"=nil
+
+print-replicated-lock-table start=a1 end=z
+----
+key: "\xfaa1", str: Exclusive, txn: t6
+
+# This lock is uncontended so it doesn't end up in the in-memory lock table.
+print-in-memory-lock-table
+----
+num=0
+
+put txn=t7 k=a1 v=v1 wait=Error
+----
+error: conflicting locks on "\xfaa1" [reason=wait_policy]
+
+commit txn=t6
+----
+
+rollback txn=t7
+----

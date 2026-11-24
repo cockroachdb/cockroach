@@ -259,10 +259,10 @@ func TestResolveIntentAfterPartialRollback(t *testing.T) {
 		if res.Intent != nil {
 			t.Errorf("%s: found intent, expected none: %+v", k, res.Intent)
 		}
-		if res.Value == nil {
+		if !res.Value.Exists() {
 			t.Errorf("%s: no value found, expected one", k)
 		} else {
-			s, err := res.Value.GetBytes()
+			s, err := res.Value.Value.GetBytes()
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -366,8 +366,8 @@ func TestResolveIntentWithTargetBytes(t *testing.T) {
 
 				valueRes, err := storage.MVCCGet(ctx, batch, testKeys[0], ts, storage.MVCCGetOptions{})
 				require.NoError(t, err)
-				require.Equal(t, values[0].RawBytes, valueRes.Value.RawBytes,
-					"the value %s in get result does not match the value %s in request", values[0].RawBytes, valueRes.Value.RawBytes)
+				require.Equal(t, values[0].RawBytes, valueRes.Value.Value.RawBytes,
+					"the value %s in get result does not match the value %s in request", values[0].RawBytes, valueRes.Value.Value.RawBytes)
 			}
 		} else {
 			// Resolve an intent range for testKeys[0], testKeys[1], ...,
@@ -435,8 +435,8 @@ func TestResolveIntentWithTargetBytes(t *testing.T) {
 
 				valueRes, err := storage.MVCCGet(ctx, batch, testKeys[2], ts, storage.MVCCGetOptions{})
 				require.NoError(t, err)
-				require.Equal(t, values[2].RawBytes, valueRes.Value.RawBytes,
-					"the value %s in get result does not match the value %s in request", values[2].RawBytes, valueRes.Value.RawBytes)
+				require.Equal(t, values[2].RawBytes, valueRes.Value.Value.RawBytes,
+					"the value %s in get result does not match the value %s in request", values[2].RawBytes, valueRes.Value.Value.RawBytes)
 				_, err = storage.MVCCGet(ctx, batch, testKeys[3], ts, storage.MVCCGetOptions{})
 				require.Error(t, err)
 			}
@@ -469,8 +469,8 @@ func TestResolveIntentWithTargetBytes(t *testing.T) {
 
 				valueRes, err := storage.MVCCGet(ctx, batch, testKeys[nKeys-1], ts, storage.MVCCGetOptions{})
 				require.NoError(t, err)
-				require.Equal(t, values[nKeys-1].RawBytes, valueRes.Value.RawBytes,
-					"the value %s in get result does not match the value %s in request", values[nKeys-1].RawBytes, valueRes.Value.RawBytes)
+				require.Equal(t, values[nKeys-1].RawBytes, valueRes.Value.Value.RawBytes,
+					"the value %s in get result does not match the value %s in request", values[nKeys-1].RawBytes, valueRes.Value.Value.RawBytes)
 			}
 		}
 	})

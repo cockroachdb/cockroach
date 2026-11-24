@@ -7,24 +7,20 @@ package kvserver
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/closedts/tracker"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowhandle"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/leases"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -117,14 +113,8 @@ type propBuf struct {
 	}
 }
 
-type admitEntHandle struct {
-	handle *kvflowcontrolpb.RaftAdmissionMeta
-	pCtx   context.Context
-}
-
 type singleBatchProposer interface {
 	getReplicaID() roachpb.ReplicaID
-	flowControlHandle(ctx context.Context) kvflowcontrol.Handle
 	onErrProposalDropped([]raftpb.Entry, []*ProposalData, raftpb.StateType)
 	registerForTracing(*ProposalData, raftpb.Entry) bool
 }
@@ -180,17 +170,7 @@ func (b *propBuf) Init(
 	b.clock = clock
 	b.evalTracker = tracker
 	b.settings = settings
-	b.assignedLAI = p.leaseAppliedIndex()
-
-	// Reserve LAI 1 for out-of-order proposals in tests. A bunch of tests
-	// override proposal's LAI to 1, in order to force reproposals. If these
-	// modified proposals race with a "real" proposal with LAI 1, this can cause a
-	// closed timestamp regression.
-	//
-	// https://github.com/cockroachdb/cockroach/issues/70894#issuecomment-1881165404
-	if b.testing.leaseIndexFilter != nil {
-		b.forwardAssignedLAILocked(1)
-	}
+	b.assignedLAI = max(p.leaseAppliedIndex(), kvstorage.InitialLeaseAppliedIndex)
 }
 
 // AllocatedIdx returns the highest index that was allocated. This generally
@@ -256,7 +236,7 @@ func (b *propBuf) Insert(ctx context.Context, p *ProposalData, tok TrackedReques
 	}
 
 	if log.V(4) {
-		log.Infof(p.Context(), "submitting proposal %x", p.idKey)
+		log.KvExec.Infof(p.Context(), "submitting proposal %x", p.idKey)
 	}
 
 	// Insert the proposal into the buffer's array. The buffer now takes ownership
@@ -412,10 +392,6 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 	// and apply them.
 
 	ents := make([]raftpb.Entry, 0, used)
-	// Use this slice to track, for each entry that's proposed to raft, whether
-	// it's subject to replication admission control. Updated in tandem with
-	// slice above.
-	admitHandles := make([]admitEntHandle, 0, used)
 	// INVARIANT: buf[firstProp:nextProp] lines up with the ents slice.
 	firstProp, nextProp := 0, 0
 	buf := b.arr.asSlice()[:used]
@@ -437,7 +413,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 	var firstErr error
 	for i, p := range buf {
 		if p == nil {
-			log.Fatalf(ctx, "unexpected nil proposal in buffer")
+			log.KvExec.Fatalf(ctx, "unexpected nil proposal in buffer")
 			return 0, nil // unreachable, for linter
 		}
 		reproposal := !p.tok.stillTracked()
@@ -460,7 +436,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			lb := b.evalTracker.LowerBound(ctx)
 			if wts.Less(lb) {
 				wts, lb := wts, lb // copies escape to heap
-				log.Fatalf(ctx, "%v", errorutil.UnexpectedWithIssueErrorf(72428,
+				log.KvExec.Fatalf(ctx, "%v", errorutil.UnexpectedWithIssueErrorf(72428,
 					"request writing below tracked lower bound: wts: %s < lb: %s; ba: %s; lease: %s.",
 					wts, lb, p.Request, b.p.leaseDebugRLocked()))
 			}
@@ -509,7 +485,7 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			// Flush any previously batched (non-conf change) proposals to
 			// preserve the correct ordering or proposals. Later proposals
 			// will start a new batch.
-			propErr := proposeBatch(ctx, b.p, raftGroup, ents, admitHandles, buf[firstProp:nextProp])
+			propErr := proposeBatch(b.p, raftGroup, ents, buf[firstProp:nextProp])
 			if propErr != nil {
 				firstErr = propErr
 				continue
@@ -517,7 +493,6 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 
 			ents = ents[len(ents):]
 			firstProp, nextProp = i+1, i+1
-			admitHandles = admitHandles[len(admitHandles):]
 
 			confChangeCtx := kvserverpb.ConfChangeContext{
 				CommandID: string(p.idKey),
@@ -541,15 +516,13 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 				continue
 			}
 			sl := []raftpb.Entry{{Type: typ, Data: data}}
-			// Send config change in a single-element batch. We go through
-			// proposeBatch since there's observability in there.
-			//
-			// TODO(replication): we can construct a proper admitEntHandle here by
-			// pulling the initialization code from the "regular" branch to the top so
-			// that it can be shared. For now, this is fine since conf changes are
-			// internal commands anyway and unlikely to be sent at significant volume.
+			// Config change entries must be proposed alone in a MsgProp, not
+			// batched with other entries. The raft leader relies on this
+			// invariant to reject invalid config changes via ErrProposalDropped
+			// (see stepLeader in pkg/raft/raft.go). We go through proposeBatch
+			// since there's observability in there.
 			if err := proposeBatch(
-				ctx, b.p, raftGroup, sl, []admitEntHandle{{}}, []*ProposalData{p},
+				b.p, raftGroup, sl, []*ProposalData{p},
 			); err != nil && !errors.Is(err, raft.ErrProposalDropped) {
 				// Silently ignore dropped proposals (they were always silently
 				// ignored prior to the introduction of ErrProposalDropped).
@@ -573,25 +546,13 @@ func (b *propBuf) FlushLockedWithRaftGroup(
 			})
 			nextProp++
 			log.VEvent(p.Context(), 2, "flushing proposal to Raft")
-
-			// We don't want deduct flow tokens for reproposed commands, and of
-			// course for proposals that didn't integrate with kvflowcontrol.
-			shouldAdmit := !reproposal && p.raftAdmissionMeta != nil
-			if !shouldAdmit {
-				admitHandles = append(admitHandles, admitEntHandle{})
-			} else {
-				admitHandles = append(admitHandles, admitEntHandle{
-					handle: p.raftAdmissionMeta,
-					pCtx:   p.Context(),
-				})
-			}
 		}
 	}
 	if firstErr != nil {
 		return 0, firstErr
 	}
 
-	propErr := proposeBatch(ctx, b.p, raftGroup, ents, admitHandles, buf[firstProp:nextProp])
+	propErr := proposeBatch(b.p, raftGroup, ents, buf[firstProp:nextProp])
 	return used, propErr
 }
 
@@ -663,7 +624,7 @@ func (b *propBuf) maybeRejectUnsafeProposalLocked(
 				const format = "campaigning because Raft leader (id=%d) not live in node liveness map"
 				lead := raftGroup.BasicStatus().Lead
 				if logCampaignOnRejectLease.ShouldLog() {
-					log.Infof(ctx, format, lead)
+					log.KvExec.Infof(ctx, format, lead)
 				} else {
 					log.VEventf(ctx, 2, format, lead)
 				}
@@ -732,6 +693,7 @@ func (b *propBuf) allocateLAIAndClosedTimestampLocked(
 	// applies. The command application side doesn't bother protecting against
 	// such regressions. Besides, the considerations for brand new leases below
 	// also apply.
+	//
 	// - For a brand new lease, one might think that the lease start time can be
 	// considered a closed timestamp(*) since, if this replica gets the lease, it
 	// will not evaluate writes at lower timestamps. Unfortunately, there's a
@@ -740,14 +702,24 @@ func (b *propBuf) allocateLAIAndClosedTimestampLocked(
 	// happen that the range is in the process of merging with its left neighbor.
 	// If this range has already been Subsumed as the RHS of a merge then, after
 	// merge, the joint range will allow writes to the former RHS's key space at
-	// timestamps above the RHS's freeze start (which is below the start time of
-	// this lease). Thus, if this lease were to close its start timestamp while
-	// subsumed, then it'd be possible for follower reads to be served before the
-	// merge finalizes at timestamps that would become un-closed after the merge.
+	// timestamps above the RHS's closed timestamp (say t1) at freeze start
+	// (which is below the start time of this lease, say t2). Thus, if this
+	// lease were to close its start timestamp (t2) while subsumed, then it'd be
+	// possible for follower reads to be served before the merge finalizes at
+	// timestamps that would become un-closed after the merge, i.e., interval
+	// (t1, t2].
+	//
 	// Since this scenario is about subsumed ranges, we could make a distinction
 	// between brand new leases for subsumed ranges versus other brand new leases,
 	// and let the former category close the lease start time. But, for
 	// simplicity, we don't close timestamps on any lease requests.
+	//
+	// The same logic applies to SubsumeRequest (when it performs a write): the
+	// closed timestamp it gathers in SubsumeResponse.ClosedTimestamp is t1, but
+	// if the proposal of the SubsumeRequest advances the closed timestamp to
+	// t2, reads would be allowed over the interval (t1, t2] which would
+	// subsequently become un-closed. So SubsumeRequests also don't advance the
+	// closed timestamp.
 	//
 	// As opposed to lease requests, lease transfers behave like regular
 	// proposals: they get a closed timestamp based on closedTSTarget. Note that
@@ -763,7 +735,7 @@ func (b *propBuf) allocateLAIAndClosedTimestampLocked(
 	// timestamps carried by lease requests, make sure to resurrect the old
 	// TestRejectedLeaseDoesntDictateClosedTimestamp and protect against that
 	// scenario.
-	if p.Request.IsSingleRequestLeaseRequest() {
+	if p.Request.IsSingleRequestLeaseRequest() || p.Request.IsSingleSubsumeRequest() {
 		return lai, hlc.Timestamp{}, nil
 	}
 
@@ -845,12 +817,7 @@ func (b *propBuf) forwardClosedTimestampLocked(closedTS hlc.Timestamp) bool {
 }
 
 func proposeBatch(
-	ctx context.Context,
-	p singleBatchProposer,
-	raftGroup proposerRaft,
-	ents []raftpb.Entry,
-	handles []admitEntHandle,
-	props []*ProposalData,
+	p singleBatchProposer, raftGroup proposerRaft, ents []raftpb.Entry, props []*ProposalData,
 ) (_ error) {
 	if len(ents) != len(props) {
 		return errors.AssertionFailedf("ents and props don't match up: %v and %v", ents, props)
@@ -878,16 +845,6 @@ func proposeBatch(
 	if err != nil {
 		return err
 	}
-	// Now that we know what raft log position[1] this proposal is to end up
-	// in, deduct flow tokens for it. This is done without blocking (we've
-	// already waited for available flow tokens pre-evaluation). The tokens
-	// will later be returned once we're informed of the entry being
-	// admitted below raft.
-	//
-	// [1]: We're relying on an undocumented side effect of upstream raft
-	//      API where it populates the index and term for the passed in
-	//      slice of entries. See etcd-io/raft#57.
-	maybeDeductFlowTokens(ctx, p.flowControlHandle(ctx), handles, ents)
 
 	// Register the proposal with rafttrace. This will add the trace to the raft
 	// lifecycle. We trace at most one entry per batch, so break after the first
@@ -900,46 +857,6 @@ func proposeBatch(
 	return nil
 }
 
-func maybeDeductFlowTokens(
-	ctx context.Context, h kvflowcontrol.Handle, admitHandles []admitEntHandle, ents []raftpb.Entry,
-) {
-	if len(admitHandles) != len(ents) || cap(admitHandles) != cap(ents) {
-		panic(
-			fmt.Sprintf("mismatched slice sizes: len(admit)=%d len(ents)=%d cap(admit)=%d cap(ents)=%d",
-				len(admitHandles), len(ents), cap(admitHandles), cap(ents)),
-		)
-	}
-	for i, admitHandle := range admitHandles {
-		if admitHandle.handle == nil {
-			continue // nothing to do
-		}
-		if ents[i].Term == 0 && ents[i].Index == 0 {
-			// It's possible to have lost raft leadership right before stepping
-			// proposals through raft. They'll get forwarded to the new raft
-			// leader, and for flow token purposes, there's no tracking
-			// necessary. The token deductions below asserts on monotonic
-			// observations of log positions, which this empty position would
-			// otherwise violate. There's integration code elsewhere that will
-			// free up all tracked tokens as a result of this leadership change.
-			return
-		}
-		log.VInfof(ctx, 1, "bound index/log terms for proposal entry: %s",
-			raft.DescribeEntry(ents[i], func(bytes []byte) string {
-				return "<omitted>"
-			}),
-		)
-		h.DeductTokensFor(
-			admitHandle.pCtx,
-			admissionpb.WorkPriority(admitHandle.handle.AdmissionPriority),
-			kvflowcontrolpb.RaftLogPosition{
-				Term:  ents[i].Term,
-				Index: ents[i].Index,
-			},
-			kvflowcontrol.Tokens(int64(len(ents[i].Data))),
-		)
-	}
-}
-
 // FlushLockedWithoutProposing is like FlushLockedWithRaftGroup but it does not
 // attempt to propose any of the commands that it is flushing. Instead, it is
 // used exclusively to flush all entries in the buffer into the proposals map.
@@ -950,7 +867,7 @@ func maybeDeductFlowTokens(
 // into the proposals map before canceling all proposals.
 func (b *propBuf) FlushLockedWithoutProposing(ctx context.Context) {
 	if _, err := b.FlushLockedWithRaftGroup(ctx, nil /* raftGroup */); err != nil {
-		log.Fatalf(ctx, "unexpected error: %+v", err)
+		log.KvExec.Fatalf(ctx, "unexpected error: %+v", err)
 	}
 }
 
@@ -1039,7 +956,7 @@ func (t *TrackedRequestToken) stillTracked() bool {
 // neutered; calling DoneIfNotMoved on it becomes a no-op.
 func (t *TrackedRequestToken) Move(ctx context.Context) TrackedRequestToken {
 	if t.done {
-		log.Fatalf(ctx, "attempting to Move() after Done() call")
+		log.KvExec.Fatalf(ctx, "attempting to Move() after Done() call")
 	}
 	cpy := *t
 	t.done = true
@@ -1169,7 +1086,7 @@ func (rp *replicaProposer) getReplicaID() roachpb.ReplicaID {
 }
 
 func (rp *replicaProposer) destroyed() destroyStatus {
-	return rp.mu.destroyStatus
+	return rp.shMu.destroyStatus
 }
 
 func (rp *replicaProposer) leaseAppliedIndex() kvpb.LeaseAppliedIndex {
@@ -1220,7 +1137,7 @@ func (rp *replicaProposer) registerProposalLocked(p *ProposalData) {
 	}
 	rp.mu.lastProposalAtTicks = rp.mu.ticks // monotonically increasing
 	if prev := rp.mu.proposals[p.idKey]; prev != nil && prev != p {
-		log.Fatalf(rp.store.AnnotateCtx(context.Background()), "two proposals under same ID:\n%+v,\n%+v", prev, p)
+		log.KvExec.Fatalf(rp.store.AnnotateCtx(context.Background()), "two proposals under same ID:\n%+v,\n%+v", prev, p)
 	}
 	// NB: we can see finished proposals inserted here. We don't like it but
 	// it's currently possible.
@@ -1247,14 +1164,6 @@ func (rp *replicaProposer) campaignLocked(ctx context.Context) {
 	(*Replica)(rp).campaignLocked(ctx)
 }
 
-func (rp *replicaProposer) flowControlHandle(ctx context.Context) kvflowcontrol.Handle {
-	handle, found := rp.mu.replicaFlowControlIntegration.handle()
-	if !found {
-		return kvflowhandle.Noop{}
-	}
-	return handle
-}
-
 func (rp *replicaProposer) verifyLeaseRequestSafetyRLocked(
 	ctx context.Context,
 	raftGroup proposerRaft,
@@ -1269,12 +1178,18 @@ func (rp *replicaProposer) verifyLeaseRequestSafetyRLocked(
 		LocalReplicaID:     r.ReplicaID(),
 		Desc:               r.descRLocked(),
 		RaftStatus:         &raftStatus,
-		RaftFirstIndex:     r.raftFirstIndexRLocked(),
+		RaftCompacted:      r.raftCompactedIndexRLocked(),
 		PrevLease:          prevLease,
 		PrevLeaseExpired:   !r.ownsValidLeaseRLocked(ctx, r.Clock().NowAsClockTimestamp()),
 		NextLeaseHolder:    nextLease.Replica,
 		BypassSafetyChecks: bypassSafetyChecks,
+		DesiredLeaseType:   r.desiredLeaseType(r.descRLocked()),
 	}
+	// NOTE: we do NOT check send-queue status here. Calling SendStreamStats
+	// is unsafe under repl.mu (lock ordering: rcReferenceUpdateMu < repl.mu).
+	// The above-raft check in InitOrJoinRequest handles the send-queue check
+	// before lease revocation. The proposal buffer retains the airtight
+	// snapshot check via ReplicaMayNeedSnapshot in leases.Verify.
 	if err := leases.Verify(ctx, st, in); err != nil {
 		if in.Transfer() {
 			// The lease transfer is deemed to be unsafe. The intended consequence of

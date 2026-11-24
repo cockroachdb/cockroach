@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"math"
 	"reflect"
 	"unsafe"
 
@@ -17,11 +18,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/col/typeconv"
 	"github.com/cockroachdb/cockroach/pkg/sql/memsize"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/errors"
+	"github.com/dustin/go-humanize"
 )
 
 // ConversionMode describes how ArrowBatchConverter will be utilized.
@@ -261,8 +265,8 @@ func (c *ArrowBatchConverter) BatchToArrow(
 
 			case types.TimestampTZFamily:
 				timestamps := vec.Timestamp()[:n]
-				// See implementation of time.MarshalBinary.
-				const timestampSize = 14
+				// See implementation of time.AppendBinary.
+				const timestampSize = 16
 				if cap(values) < n*timestampSize {
 					values = make([]byte, 0, n*timestampSize)
 				}
@@ -271,11 +275,11 @@ func (c *ArrowBatchConverter) BatchToArrow(
 					if nulls != nil && nulls.NullAt(i) {
 						continue
 					}
-					marshaled, err := timestamps[i].MarshalBinary()
+					var err error
+					values, err = timestamps[i].AppendBinary(values)
 					if err != nil {
 						return nil, err
 					}
-					values = append(values, marshaled...)
 				}
 				offsets = append(offsets, int32(len(values)))
 				unsafeCastOffsetsArray(offsets, &offsetsBytes)
@@ -307,8 +311,27 @@ func (c *ArrowBatchConverter) BatchToArrow(
 				panic(fmt.Sprintf("unsupported type for conversion to arrow data %s", typ))
 			}
 
+			// If the serialized representation is larger than int32 range, then
+			// we'll fail to properly deserialize it (offsets will effectively
+			// contain corrupted information), so we return an early error
+			// instead.
+			if len(values) > math.MaxInt32 {
+				// Return an error with a pgcode so that it's not considered
+				// "internal" by the vectorized panic catcher.
+				return nil, pgerror.Newf(
+					pgcode.OutOfMemory, "serialized representation of %s column is too large: %s",
+					typ, humanize.IBytes(uint64(len(values))),
+				)
+			}
+
 			// Store the serialized slices as scratch space for the next call.
-			c.scratch.values[vecIdx] = values
+			// The only exception is when the values slice becomes too large, in
+			// which case we keep the scratch space unchanged (meaning that
+			// we'll keep the space from the previous call, if any).
+			const maxKeptSize = 32 << 20 /* 32 MiB */
+			if cap(values) <= maxKeptSize {
+				c.scratch.values[vecIdx] = values
+			}
 			c.scratch.offsets[vecIdx] = offsets
 		}
 
@@ -401,7 +424,7 @@ func (c *ArrowBatchConverter) ArrowToBatch(
 
 		case types.JsonFamily:
 			valueBytes, offsets := getValueBytesAndOffsets(d, vec.Nulls(), batchLength)
-			vec.JSON().Bytes.Deserialize(valueBytes, offsets)
+			vec.JSON().Deserialize(valueBytes, offsets)
 
 		case types.DecimalFamily:
 			// TODO(yuzefovich): this serialization is quite inefficient - improve

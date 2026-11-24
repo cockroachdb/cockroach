@@ -40,13 +40,13 @@ func (r *systemTableIDResolver) LookupSystemTableID(
 	if err := r.db.DescsTxn(ctx, func(
 		ctx context.Context, txn Txn,
 	) (err error) {
-		ni := &descpb.NameInfo{
+		ni := descpb.NameInfo{
 			ParentID:       keys.SystemDatabaseID,
 			ParentSchemaID: keys.SystemPublicSchemaID,
 			Name:           tableName,
 		}
 		read, err := txn.Descriptors().cr.GetByNames(
-			ctx, txn.KV(), []descpb.NameInfo{*ni},
+			ctx, txn.KV(), []descpb.NameInfo{ni},
 		)
 		if err != nil {
 			return err

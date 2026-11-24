@@ -16,13 +16,15 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/security/password"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/clusterunique"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/identmap"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
@@ -45,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
 	"github.com/cockroachdb/redact"
@@ -93,6 +96,15 @@ var logVerboseSessionAuth = settings.RegisterBoolSetting(
 	false,
 	settings.WithPublic)
 
+var maxRepeatedErrorCount = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"sql.pgwire.max_repeated_error_count",
+	"the maximum number of times an error can be received while reading from a "+
+		"network connection before the server aborts the connection",
+	1<<8, // 256
+	settings.PositiveInt,
+)
+
 const (
 	// ErrSSLRequired is returned when a client attempts to connect to a
 	// secure server in cleartext.
@@ -113,12 +125,18 @@ var (
 		Help:        "Number of open SQL connections",
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_SQL,
+		HowToUse:    `This metric shows the number of connections as well as the distribution, or balancing, of connections across cluster nodes. An imbalance can lead to nodes becoming overloaded. Review Connection Pooling.`,
 	}
 	MetaNewConns = metric.Metadata{
 		Name:        "sql.new_conns",
 		Help:        "Number of SQL connections created",
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_SQL,
+		HowToUse:    `The rate of this metric shows how frequently new connections are being established. This can be useful in determining if a high rate of incoming new connections is causing additional load on the server due to a misconfigured application.`,
 	}
 	MetaConnsWaitingToHash = metric.Metadata{
 		Name:        "sql.conns_waiting_to_hash",
@@ -143,12 +161,18 @@ var (
 		Help:        "Latency to establish and authenticate a SQL connection",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_SQL,
+		HowToUse:    "These metrics characterize the database connection latency which can affect the application performance, for example, by having slow startup times. Connection failures are not recorded in these metrics.",
 	}
 	MetaConnFailures = metric.Metadata{
 		Name:        "sql.conn.failures",
 		Help:        "Number of SQL connection failures",
 		Measurement: "Connections",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_SQL,
+		HowToUse:    "This metric is incremented whenever a connection attempt fails for any reason, including timeouts.",
 	}
 	MetaPGWireCancelTotal = metric.Metadata{
 		Name:        "sql.pgwire_cancel.total",
@@ -180,36 +204,107 @@ var (
 		Help:        "Latency to establish and authenticate a SQL connection using JWT Token",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_SQL,
+		HowToUse:    `See Description.`,
 	}
 	AuthCertConnLatency = metric.Metadata{
 		Name:        "auth.cert.conn.latency",
 		Help:        "Latency to establish and authenticate a SQL connection using certificate",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_SQL,
+		HowToUse:    `See Description.`,
 	}
 	AuthPassConnLatency = metric.Metadata{
 		Name:        "auth.password.conn.latency",
 		Help:        "Latency to establish and authenticate a SQL connection using password",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_SQL,
+		HowToUse:    `See Description.`,
 	}
 	AuthLDAPConnLatency = metric.Metadata{
 		Name:        "auth.ldap.conn.latency",
 		Help:        "Latency to establish and authenticate a SQL connection using LDAP",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_SQL,
+		HowToUse:    `See Description.`,
 	}
 	AuthGSSConnLatency = metric.Metadata{
 		Name:        "auth.gss.conn.latency",
 		Help:        "Latency to establish and authenticate a SQL connection using GSS",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_SQL,
+		HowToUse:    `See Description.`,
 	}
 	AuthScramConnLatency = metric.Metadata{
 		Name:        "auth.scram.conn.latency",
 		Help:        "Latency to establish and authenticate a SQL connection using SCRAM",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_SQL,
+		HowToUse:    `See Description.`,
+	}
+	AuthLDAPConnLatencyInternal = metric.Metadata{
+		Name:        "auth.ldap.conn.latency.internal",
+		Help:        "Internal Auth Latency to establish and authenticate a SQL connection using LDAP(excludes external LDAP calls)",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_SQL,
+		HowToUse:    `See Description.`,
+	}
+	AuthCertSANConnTotal = metric.Metadata{
+		Name:        "auth.cert.san.conn.total",
+		Help:        "Total number of SQL connection attempts using SAN-based certificate authentication",
+		Measurement: "Connections",
+		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_SQL,
+		HowToUse:    "This metric tracks all authentication attempts when SAN-based certificate validation is enabled. Compare with auth.cert.san.conn.success to calculate failure rate.",
+	}
+	AuthCertSANConnSuccess = metric.Metadata{
+		Name:        "auth.cert.san.conn.success",
+		Help:        "Number of successful SQL connections using SAN-based certificate authentication",
+		Measurement: "Connections",
+		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_SQL,
+		HowToUse:    "This metric tracks successful authentications when SAN-based certificate validation is enabled. Use this to monitor adoption and success rate of SAN authentication. Failure rate = auth.cert.san.conn.total - auth.cert.san.conn.success.",
+	}
+	MetaPasswordEncryptionIsSCRAM = metric.Metadata{
+		Name: "auth.password_encryption.is_scram",
+		Help: "Whether server.user_login.password_encryption is set " +
+			"to scram-sha-256 (1) or crdb-bcrypt (0)",
+		Measurement: "State",
+		Unit:        metric.Unit_CONST,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_SQL,
+		HowToUse: "Use this metric to verify that SCRAM-SHA-256 password " +
+			"encryption is enabled across your cluster. A value of 0 " +
+			"indicates crdb-bcrypt is in use and the cluster has not " +
+			"adopted the stronger SCRAM-SHA-256 hashing method.",
+	}
+	MetaMinPasswordLength = metric.Metadata{
+		Name: "auth.min_password_length",
+		Help: "The configured minimum password length " +
+			"(server.user_login.min_password_length)",
+		Measurement: "Characters",
+		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_SQL,
+		HowToUse: "Use this metric to confirm minimum password length " +
+			"policy is enforced. Alert if the value drops below your " +
+			"organization's required minimum to detect configuration " +
+			"drift.",
 	}
 )
 
@@ -224,7 +319,11 @@ const (
 	//
 	// See: https://www.postgresql.org/docs/current/protocol-message-formats.html
 
-	version30     = 196608   // (3 << 16) + 0
+	// Protocol version components.
+	versionMajor          = 3
+	versionSupportedMinor = 0
+	version30             = (versionMajor << 16) + versionSupportedMinor
+
 	versionCancel = 80877102 // (1234 << 16) + 5678
 	versionSSL    = 80877103 // (1234 << 16) + 5679
 	versionGSSENC = 80877104 // (1234 << 16) + 5680
@@ -263,6 +362,10 @@ type Server struct {
 
 	destinationMetrics destinationAggMetrics
 
+	// lastLoginUpdater handles updating the last login time for SQL users
+	// with deduplication to reduce concurrent updates for the same user.
+	lastLoginUpdater *lastLoginUpdater
+
 	mu struct {
 		syncutil.Mutex
 		// connCancelMap entries represent connections started when the server
@@ -286,6 +389,8 @@ type Server struct {
 		// destinations tracks the metrics for each destination.
 		destinations map[string]*destinationMetrics
 	}
+	// limit the number of rejectNewConnection errors
+	connectionErrorLogEveryN log.EveryN
 
 	auth struct {
 		syncutil.RWMutex
@@ -360,10 +465,15 @@ type tenantSpecificMetrics struct {
 	AuthLDAPConnLatency         metric.IHistogram
 	AuthGSSConnLatency          metric.IHistogram
 	AuthScramConnLatency        metric.IHistogram
+	AuthLDAPConnLatencyInternal metric.IHistogram
+	AuthCertSANConnTotal        *metric.Counter
+	AuthCertSANConnSuccess      *metric.Counter
+	PasswordEncryptionIsSCRAM   *metric.FunctionalGauge
+	MinPasswordLength           *metric.FunctionalGauge
 }
 
 func newTenantSpecificMetrics(
-	sqlMemMetrics sql.MemoryMetrics, histogramWindow time.Duration,
+	sqlMemMetrics sql.MemoryMetrics, histogramWindow time.Duration, sv *settings.Values,
 ) *tenantSpecificMetrics {
 	return &tenantSpecificMetrics{
 		Conns:               metric.NewGauge(MetaConns),
@@ -394,6 +504,21 @@ func newTenantSpecificMetrics(
 			getHistogramOptionsForIOLatency(AuthGSSConnLatency, histogramWindow)),
 		AuthScramConnLatency: metric.NewHistogram(
 			getHistogramOptionsForIOLatency(AuthScramConnLatency, histogramWindow)),
+		AuthLDAPConnLatencyInternal: metric.NewHistogram(
+			getHistogramOptionsForIOLatency(AuthLDAPConnLatencyInternal, histogramWindow)),
+		AuthCertSANConnTotal:   metric.NewCounter(AuthCertSANConnTotal),
+		AuthCertSANConnSuccess: metric.NewCounter(AuthCertSANConnSuccess),
+		PasswordEncryptionIsSCRAM: metric.NewFunctionalGauge(
+			MetaPasswordEncryptionIsSCRAM, func() int64 {
+				if security.GetConfiguredPasswordHashMethod(sv) == password.HashSCRAMSHA256 {
+					return 1
+				}
+				return 0
+			}),
+		MinPasswordLength: metric.NewFunctionalGauge(
+			MetaMinPasswordLength, func() int64 {
+				return security.MinPasswordLength.Get(sv)
+			}),
 	}
 }
 
@@ -426,14 +551,15 @@ func MakeServer(
 		cfg:        cfg,
 		execCfg:    executorConfig,
 
-		tenantMetrics: newTenantSpecificMetrics(sqlMemMetrics, histogramWindow),
+		tenantMetrics: newTenantSpecificMetrics(sqlMemMetrics, histogramWindow, &st.SV),
 		destinationMetrics: destinationAggMetrics{
 			BytesInCount:  aggmetric.NewCounter(MetaBytesIn, "remote"),
 			BytesOutCount: aggmetric.NewCounter(MetaBytesOut, "remote"),
 		},
+		lastLoginUpdater: newLastLoginUpdater(executorConfig),
 	}
 	server.sqlMemoryPool = mon.NewMonitor(mon.Options{
-		Name: "sql",
+		Name: mon.MakeName("sql"),
 		// Note that we don't report metrics on this monitor. The reason for this is
 		// that we report metrics on the sum of all the child monitors of this pool.
 		// This monitor is the "main sql" monitor. It's a child of the root memory
@@ -449,7 +575,7 @@ func MakeServer(
 	server.SQLServer = sql.NewServer(executorConfig, server.sqlMemoryPool)
 
 	server.tenantSpecificConnMonitor = mon.NewMonitor(mon.Options{
-		Name:       "conn",
+		Name:       mon.MakeName("conn"),
 		CurCount:   server.tenantMetrics.ConnMemMetrics.CurBytesCount,
 		MaxHist:    server.tenantMetrics.ConnMemMetrics.MaxBytesHist,
 		Increment:  int64(connReservationBatchSize) * baseSQLMemoryBudget,
@@ -463,6 +589,7 @@ func MakeServer(
 	server.mu.drainCh = make(chan struct{})
 	server.mu.destinations = make(map[string]*destinationMetrics)
 	server.mu.Unlock()
+	server.connectionErrorLogEveryN = log.Every(10 * time.Second)
 	executorConfig.CidrLookup.SetOnChange(server.onCidrChange)
 
 	connAuthConf.SetOnChange(&st.SV, func(ctx context.Context) {
@@ -470,6 +597,16 @@ func MakeServer(
 	})
 	ConnIdentityMapConf.SetOnChange(&st.SV, func(ctx context.Context) {
 		loadLocalIdentityMapUponRemoteSettingChange(ctx, server, st)
+	})
+
+	// Track SAN authentication feature enablement.
+	security.ClientCertSANRequired.SetOnChange(&st.SV, func(ctx context.Context) {
+		if security.ClientCertSANRequired.Get(&st.SV) {
+			telemetry.Inc(sqltelemetry.CertSANEnableCounter)
+			log.Ops.Infof(ctx, "SAN-based certificate authentication has been enabled")
+		} else {
+			log.Ops.Infof(ctx, "SAN-based certificate authentication has been disabled")
+		}
 	})
 
 	return server
@@ -523,6 +660,7 @@ func (s *Server) Metrics() []interface{} {
 		&s.SQLServer.ServerMetrics.StatsMetrics,
 		&s.SQLServer.ServerMetrics.ContentionSubsystemMetrics,
 		&s.SQLServer.ServerMetrics.InsightsMetrics,
+		&s.SQLServer.ServerMetrics.IngesterMetrics,
 	}
 }
 
@@ -867,10 +1005,11 @@ func (s *Server) ServeConn(
 	defer onCloseFn()
 
 	sessionID := s.execCfg.GenerateID()
+	remoteAddr := conn.RemoteAddr().String()
 	connDetails := eventpb.CommonConnectionDetails{
 		InstanceID:    int32(s.execCfg.NodeInfo.NodeID.SQLInstanceID()),
 		Network:       conn.RemoteAddr().Network(),
-		RemoteAddress: conn.RemoteAddr().String(),
+		RemoteAddress: redact.Sprintf("%s", redact.HashString(remoteAddr)),
 		SessionID:     sessionID.String(),
 	}
 
@@ -903,7 +1042,9 @@ func (s *Server) ServeConn(
 	st := s.execCfg.Settings
 	// If the server is shutting down, terminate the connection early.
 	if rejectNewConnections {
-		log.Ops.Info(ctx, "rejecting new connection while server is draining")
+		if s.connectionErrorLogEveryN.ShouldLog() {
+			log.Ops.Info(ctx, "rejecting new connection while server is draining")
+		}
 		return s.sendErr(ctx, st, conn, newAdminShutdownErr(ErrDrainingNewConn))
 	}
 
@@ -922,12 +1063,15 @@ func (s *Server) ServeConn(
 	// shared struct for structured logging.
 	// Only now do we know the remote client address for sure (it may have
 	// been overridden by a status parameter).
-	connDetails.RemoteAddress = sArgs.RemoteAddr.String()
+	remoteAddr = sArgs.RemoteAddr.String()
+	connDetails.RemoteAddress = redact.Sprintf("%s", redact.HashString(remoteAddr))
 	sp := tracing.SpanFromContext(ctx)
-	ctx = logtags.AddTag(ctx, "client", log.SafeOperational(connDetails.RemoteAddress))
-	ctx = logtags.AddTag(ctx, preServeStatus.ConnType.String(), nil)
+	tags := logtags.BuildBuffer()
+	tags.Add("client", log.SafeOperational(remoteAddr))
+	tags.Add(preServeStatus.ConnType.String(), nil)
+	ctx = logtags.AddTags(ctx, tags.Finish())
 	sp.SetTag("conn_type", attribute.StringValue(preServeStatus.ConnType.String()))
-	sp.SetTag("client", attribute.StringValue(connDetails.RemoteAddress))
+	sp.SetTag("client", attribute.StringValue(remoteAddr))
 
 	// If a test is hooking in some authentication option, load it.
 	var testingAuthHook func(context.Context) error
@@ -940,7 +1084,7 @@ func (s *Server) ServeConn(
 	// Defer the rest of the processing to the connection handler.
 	// This includes authentication.
 	if log.V(2) {
-		log.Infof(ctx, "new connection with options: %+v", sArgs)
+		log.Dev.Infof(ctx, "new connection with options: %+v", sArgs)
 	}
 
 	ctx, cancelConn := context.WithCancel(ctx)
@@ -1043,11 +1187,6 @@ func (s *Server) newConn(
 	c.errWriter.msgBuilder = &c.msgBuilder
 	return c
 }
-
-// maxRepeatedErrorCount is the number of times an error can be received
-// while reading from the network connection before the server decides to give
-// up and abort the connection.
-const maxRepeatedErrorCount = 1 << 15
 
 // serveImpl continuously reads from the network connection and pushes execution
 // instructions into a sql.StmtBuf, from where they'll be processed by a command
@@ -1197,7 +1336,7 @@ func (s *Server) serveImpl(
 				ctx,
 				authOpt,
 				authPipe,
-				sqlServer,
+				s,
 				reserved,
 				onDefaultIntSizeChange,
 				sessionID,
@@ -1247,7 +1386,7 @@ func (s *Server) serveImpl(
 			isSimpleQuery := typ == pgwirebase.ClientMsgSimpleQuery
 			if err != nil {
 				if pgwirebase.IsMessageTooBigError(err) {
-					log.VInfof(ctx, 1, "pgwire: found big error message; attempting to slurp bytes and return error: %s", err)
+					log.Dev.VInfof(ctx, 1, "pgwire: found big error message; attempting to slurp bytes and return error: %s", err)
 
 					// Slurp the remaining bytes.
 					slurpN, slurpErr := c.readBuf.SlurpBytes(&c.rd, pgwirebase.GetMessageTooBigSize(err))
@@ -1282,12 +1421,12 @@ func (s *Server) serveImpl(
 				// packet) and instead return a broken pipe or io.EOF error message.
 				return false, isSimpleQuery, errors.Wrap(err, "pgwire: error reading input")
 			}
-			timeReceived := timeutil.Now()
+			timeReceived := crtime.NowMono()
 			log.VEventf(ctx, 2, "pgwire: processing %s", typ)
 
 			if ignoreUntilSync {
 				if typ != pgwirebase.ClientMsgSync {
-					log.VInfof(ctx, 1, "pgwire: skipping non-sync message after encountering error")
+					log.Dev.VInfof(ctx, 1, "pgwire: skipping non-sync message after encountering error")
 					return false, isSimpleQuery, nil
 				}
 				ignoreUntilSync = false
@@ -1322,7 +1461,7 @@ func (s *Server) serveImpl(
 				return true, isSimpleQuery, c.writeErr(ctx, err, &c.writerState.buf)
 			case pgwirebase.ClientMsgSimpleQuery:
 				if err = c.handleSimpleQuery(
-					ctx, &c.readBuf, timeReceived, parser.NakedIntTypeFromDefaultIntSize(atomic.LoadInt32(atomicUnqualifiedIntSize)),
+					ctx, &c.readBuf, timeReceived, parserutils.NakedIntTypeFromDefaultIntSize(atomic.LoadInt32(atomicUnqualifiedIntSize)),
 				); err != nil {
 					return false, isSimpleQuery, err
 				}
@@ -1353,7 +1492,7 @@ func (s *Server) serveImpl(
 				if err := c.prohibitUnderReplicationMode(ctx); err != nil {
 					return false, isSimpleQuery, err
 				}
-				return false, isSimpleQuery, c.handleParse(ctx, parser.NakedIntTypeFromDefaultIntSize(atomic.LoadInt32(atomicUnqualifiedIntSize)))
+				return false, isSimpleQuery, c.handleParse(ctx, parserutils.NakedIntTypeFromDefaultIntSize(atomic.LoadInt32(atomicUnqualifiedIntSize)))
 
 			case pgwirebase.ClientMsgDescribe:
 				if err := c.prohibitUnderReplicationMode(ctx); err != nil {
@@ -1416,11 +1555,13 @@ func (s *Server) serveImpl(
 			// If we can't read data because of any one of the following conditions,
 			// then we should break:
 			// 1. the connection was closed.
-			// 2. the context was canceled (e.g. during authentication).
-			// 3. we reached an arbitrary threshold of repeated errors.
+			// 2. a returned error maps to context.Canceled (e.g. during authentication).
+			// 3. the context was canceled or exceeded its deadline (checked directly).
+			// 4. we reached an arbitrary threshold of repeated errors.
 			if netutil.IsClosedConnection(err) ||
 				errors.Is(err, context.Canceled) ||
-				repeatedErrorCount > maxRepeatedErrorCount {
+				ctx.Err() != nil ||
+				repeatedErrorCount > int(maxRepeatedErrorCount.Get(&s.execCfg.Settings.SV)) {
 				break
 			}
 		} else {

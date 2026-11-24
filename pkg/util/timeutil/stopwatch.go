@@ -8,8 +8,8 @@ package timeutil
 import (
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/crlib/crtime"
 )
 
 // StopWatch is a utility stop watch that can be safely started and stopped
@@ -21,41 +21,42 @@ type StopWatch struct {
 		// stopped after that.
 		started bool
 		// startedAt is the time when the stop watch was started.
-		startedAt time.Time
+		startedAt crtime.Mono
 		// elapsed is the total time measured by the stop watch (i.e. between
 		// all Starts and Stops).
 		elapsed time.Duration
 		// timeSource is the source of time used by the stop watch. It is always
-		// timeutil.Now except for tests.
-		timeSource func() time.Time
-		// cpuStopWatch is used to track CPU usage. It may be nil, in which case any
-		// operations on it are no-ops.
-		cpuStopWatch *cpuStopWatch
+		// crtime.NowMono except for tests.
+		timeSource func() crtime.Mono
+		// cpuStopWatch tracks goroutine CPU time when trackCPU is true.
+		cpuStopWatch CPUStopWatch
+		// cpuElapsed is the accumulated CPU time across all Start/Stop cycles.
+		cpuElapsed time.Duration
+		// trackCPU is true if this StopWatch was created with NewStopWatchWithCPU.
+		trackCPU bool
 	}
 }
 
 // NewStopWatch creates a new StopWatch.
 func NewStopWatch() *StopWatch {
-	return newStopWatch(Now)
+	return newStopWatch(crtime.NowMono)
 }
 
 // NewStopWatchWithCPU creates a new StopWatch that will track CPU usage in
 // addition to wall-clock time.
 func NewStopWatchWithCPU() *StopWatch {
-	w := newStopWatch(Now)
-	if grunning.Supported() {
-		w.mu.cpuStopWatch = &cpuStopWatch{}
-	}
+	w := NewStopWatch()
+	w.mu.trackCPU = true
 	return w
 }
 
 // NewTestStopWatch create a new StopWatch with the given time source. It is
 // used for testing only.
-func NewTestStopWatch(timeSource func() time.Time) *StopWatch {
+func NewTestStopWatch(timeSource func() crtime.Mono) *StopWatch {
 	return newStopWatch(timeSource)
 }
 
-func newStopWatch(timeSource func() time.Time) *StopWatch {
+func newStopWatch(timeSource func() crtime.Mono) *StopWatch {
 	w := &StopWatch{}
 	w.mu.timeSource = timeSource
 	return w
@@ -68,7 +69,9 @@ func (w *StopWatch) Start() {
 	if !w.mu.started {
 		w.mu.started = true
 		w.mu.startedAt = w.mu.timeSource()
-		w.mu.cpuStopWatch.start()
+		if w.mu.trackCPU {
+			w.mu.cpuStopWatch.Start()
+		}
 	}
 }
 
@@ -80,8 +83,12 @@ func (w *StopWatch) Stop() {
 	defer w.mu.Unlock()
 	if w.mu.started {
 		w.mu.started = false
+		// We don't use w.mu.startedAt.Elapsed() here so that testing time sources
+		// work correctly.
 		w.mu.elapsed += w.mu.timeSource().Sub(w.mu.startedAt)
-		w.mu.cpuStopWatch.stop()
+		if w.mu.trackCPU {
+			w.mu.cpuElapsed += w.mu.cpuStopWatch.Stop()
+		}
 	}
 }
 
@@ -93,43 +100,48 @@ func (w *StopWatch) Elapsed() time.Duration {
 }
 
 // ElapsedCPU returns the total CPU time measured by the stop watch so far. It
-// returns zero if cpuStopWatch is nil (which is the case if NewStopWatchWithCPU
-// was not called or the platform does not support grunning).
+// returns zero if the StopWatch was not created with NewStopWatchWithCPU or
+// the platform does not support grunning.
 func (w *StopWatch) ElapsedCPU() time.Duration {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	return w.mu.cpuStopWatch.elapsed()
+	return w.mu.cpuElapsed
 }
 
-// LastStartedAt returns the time the stopwatch was last started, and a bool
+// CurrentElapsed returns the duration the stopwatch has been started and a bool
 // indicating if the stopwatch is currently started.
-func (w *StopWatch) LastStartedAt() (startedAt time.Time, started bool) {
+func (w *StopWatch) CurrentElapsed() (elapsed time.Duration, started bool) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	return w.mu.startedAt, w.mu.started
+	return w.mu.startedAt.Elapsed(), w.mu.started
 }
 
 // TestTimeSource is a source of time that remembers when it was created (in
 // terms of the real time) and returns the time based on its creation time and
 // the number of "advances" it has had. It is used for testing only.
 type TestTimeSource struct {
-	initTime time.Time
+	initTime crtime.Mono
 	counter  int64
 }
 
 // NewTestTimeSource create a new TestTimeSource.
 func NewTestTimeSource() *TestTimeSource {
-	return &TestTimeSource{initTime: Now()}
+	return &TestTimeSource{initTime: crtime.NowMono()}
 }
 
 // Now tells the current time according to t.
-func (t *TestTimeSource) Now() time.Time {
+func (t *TestTimeSource) NowMono() crtime.Mono {
 	return t.initTime.Add(time.Duration(t.counter))
 }
 
 // Advance advances the current time according to t by 1 nanosecond.
 func (t *TestTimeSource) Advance() {
 	t.counter++
+}
+
+// AdvanceBy advances the current time according to t by the given duration.
+func (t *TestTimeSource) AdvanceBy(d time.Duration) {
+	t.counter += int64(d)
 }
 
 // Elapsed returns how much time has passed since t has been created. Note that

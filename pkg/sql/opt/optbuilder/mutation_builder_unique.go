@@ -42,22 +42,23 @@ func (mb *mutationBuilder) buildUniqueChecksForInsert() {
 
 	buildFastPathCheck := true
 	for i, n := 0, mb.tab.UniqueCount(); i < n; i++ {
-		// If this constraint is already enforced by an index, we don't need to plan
-		// a check.
+		// If this constraint is already enforced by an index or the user has
+		// indicated they are not necessary via skip_unique_checks, we don't need to
+		// plan a check.
 		u := mb.tab.Unique(i)
-		if !u.WithoutIndex() || u.UniquenessGuaranteedByAnotherIndex() {
+		if !u.WithoutIndex() || u.CanElideUniqueCheck() {
 			continue
 		}
 
 		// For non-serializable transactions, we guarantee uniqueness by writing tombstones in all
 		// partitions of a unique index with implicit partitioning columns.
 		if mb.b.evalCtx.TxnIsoLevel != isolation.Serializable {
-			if !mb.tab.Unique(i).CanUseTombstones() {
-				panic(unimplemented.NewWithIssue(126592,
-					"unique without index constraint under non-serializable isolation levels"))
+			if indexOrdinal, ok := u.TombstoneIndexOrdinal(); ok {
+				mb.uniqueWithTombstoneIndexes.Add(indexOrdinal)
+				continue
 			}
-			mb.uniqueWithTombstoneIndexes.Add(i)
-			continue
+			panic(unimplemented.NewWithIssue(126592,
+				"unique without index constraint under non-serializable isolation levels"))
 		}
 
 		// If this constraint is an arbiter of an INSERT ... ON CONFLICT ... DO
@@ -97,10 +98,11 @@ func (mb *mutationBuilder) buildUniqueChecksForUpdate() {
 	h := &mb.uniqueCheckHelper
 
 	for i, n := 0, mb.tab.UniqueCount(); i < n; i++ {
-		// If this constraint is already enforced by an index, we don't need to plan
-		// a check.
+		// If this constraint is already enforced by an index or the user has
+		// indicated they are not necessary via skip_unique_checks, we don't need to
+		// plan a check.
 		u := mb.tab.Unique(i)
-		if !u.WithoutIndex() || u.UniquenessGuaranteedByAnotherIndex() {
+		if !u.WithoutIndex() || u.CanElideUniqueCheck() {
 			continue
 		}
 		// If this constraint doesn't include the updated columns we don't need to
@@ -111,13 +113,14 @@ func (mb *mutationBuilder) buildUniqueChecksForUpdate() {
 		// For non-serializable transactions, we guarantee uniqueness by writing tombstones in all
 		// partitions of a unique index with implicit partitioning columns.
 		if mb.b.evalCtx.TxnIsoLevel != isolation.Serializable {
-			if !mb.tab.Unique(i).CanUseTombstones() {
-				panic(unimplemented.NewWithIssue(126592,
-					"unique without index constraint under non-serializable isolation levels"))
+			if indexOrdinal, ok := u.TombstoneIndexOrdinal(); ok {
+				mb.uniqueWithTombstoneIndexes.Add(indexOrdinal)
+				continue
 			}
-			mb.uniqueWithTombstoneIndexes.Add(i)
-			continue
+			panic(unimplemented.NewWithIssue(126592,
+				"unique without index constraint under non-serializable isolation levels"))
 		}
+
 		if h.init(mb, i) {
 			// The insertion check works for updates too since it simply checks that
 			// the unique columns in the newly inserted or updated rows do not match
@@ -143,22 +146,24 @@ func (mb *mutationBuilder) buildUniqueChecksForUpsert() {
 	h := &mb.uniqueCheckHelper
 
 	for i, n := 0, mb.tab.UniqueCount(); i < n; i++ {
-		// If this constraint is already enforced by an index, we don't need to plan
-		// a check.
+		// If this constraint is already enforced by an index or the user has
+		// indicated they are not necessary via skip_unique_checks, we don't need to
+		// plan a check.
 		u := mb.tab.Unique(i)
-		if !u.WithoutIndex() || u.UniquenessGuaranteedByAnotherIndex() {
+		if !u.WithoutIndex() || u.CanElideUniqueCheck() {
 			continue
 		}
 		// For non-serializable transactions, we guarantee uniqueness by writing tombstones in all
 		// partitions of a unique index with implicit partitioning columns.
 		if mb.b.evalCtx.TxnIsoLevel != isolation.Serializable {
-			if !mb.tab.Unique(i).CanUseTombstones() {
-				panic(unimplemented.NewWithIssue(126592,
-					"unique without index constraint under non-serializable isolation levels"))
+			if indexOrdinal, ok := u.TombstoneIndexOrdinal(); ok {
+				mb.uniqueWithTombstoneIndexes.Add(indexOrdinal)
+				continue
 			}
-			mb.uniqueWithTombstoneIndexes.Add(i)
-			continue
+			panic(unimplemented.NewWithIssue(126592,
+				"unique without index constraint under non-serializable isolation levels"))
 		}
+
 		// If this constraint is an arbiter of an INSERT ... ON CONFLICT ... DO
 		// UPDATE clause and not updated by the DO UPDATE clause, we don't need to
 		// plan a check (ON CONFLICT ... DO NOTHING does not go through this code
@@ -190,7 +195,7 @@ func (mb *mutationBuilder) buildUniqueChecksForUpsert() {
 func (mb *mutationBuilder) hasUniqueWithoutIndexConstraints() bool {
 	for i, n := 0, mb.tab.UniqueCount(); i < n; i++ {
 		u := mb.tab.Unique(i)
-		if u.WithoutIndex() && !u.UniquenessGuaranteedByAnotherIndex() {
+		if u.WithoutIndex() && !u.CanElideUniqueCheck() {
 			return true
 		}
 	}
@@ -651,15 +656,21 @@ func (h *uniqueCheckHelper) buildTableScan() (outScope *scope, ordinals []int) {
 			},
 		}
 	}
+	// After the update we can't guarantee that the constraints are unique
+	// (which is why we need the uniqueness checks in the first place).
+	indexFlags := &tree.IndexFlags{IgnoreUniqueWithoutIndexKeys: true}
+	if h.mb.b.evalCtx.SessionData().AvoidFullTableScansInMutations {
+		indexFlags.AvoidFullScan = true
+	}
+	// The scan is exempt from RLS to maintain data integrity.
 	return h.mb.b.buildScan(
 		tabMeta,
 		ordinals,
-		// After the update we can't guarantee that the constraints are unique
-		// (which is why we need the uniqueness checks in the first place).
-		&tree.IndexFlags{IgnoreUniqueWithoutIndexKeys: true},
+		indexFlags,
 		locking,
 		h.mb.b.allocScope(),
 		true, /* disableNotVisibleIndex */
+		cat.PolicyScopeExempt,
 	), ordinals
 }
 

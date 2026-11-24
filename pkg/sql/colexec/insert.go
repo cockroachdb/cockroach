@@ -45,6 +45,11 @@ type vectorInserter struct {
 	mutationQuota int
 	// If auto commit is true we'll commit the last batch.
 	autoCommit bool
+	// rowsWritten tracks the number of rows written by the vectorInserter so
+	// far.
+	rowsWritten int
+	// statsRefresherNotified is set once we notify the stats refresher.
+	statsRefresherNotified bool
 }
 
 var _ colexecop.Operator = &vectorInserter{}
@@ -119,15 +124,26 @@ func (v *vectorInserter) getPartialIndexMap(b coldata.Batch) map[catid.IndexID][
 	return partialIndexColMap
 }
 
-func (v *vectorInserter) Next() coldata.Batch {
-	ctx := v.Ctx
-	b := v.Input.Next()
+func (v *vectorInserter) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	b, meta := v.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	if b.Length() == 0 {
-		return coldata.ZeroBatch
+		if !v.statsRefresherNotified {
+			// We've just exhausted the input, so let's notify the stats
+			// refresher.
+			// TODO(yuzefovich): when auto-commit enabled, the inserted rows
+			// will be visible sooner than at the end. Is it worth notifying the
+			// stats refresher earlier in that case?
+			v.flowCtx.Cfg.StatsRefresher.NotifyMutation(v.Ctx, v.desc, v.rowsWritten)
+			v.statsRefresherNotified = true
+		}
+		return coldata.ZeroBatch, nil
 	}
 
 	if !v.checkOrds.Empty() {
-		if err := v.checkMutationInput(ctx, b); err != nil {
+		if err := v.checkMutationInput(v.Ctx, b); err != nil {
 			colexecerror.ExpectedError(err)
 		}
 	}
@@ -136,18 +152,21 @@ func (v *vectorInserter) Next() coldata.Batch {
 	kvba := row.KVBatchAdapter{}
 	var p row.Putter = &kvba
 	if v.flowCtx.TraceKV {
-		p = &row.TracePutter{Putter: p, Ctx: ctx}
+		p = &row.TracePutter{Putter: p, Ctx: v.Ctx}
 	}
 	// In the future we could sort across multiple goroutines, not worth it yet,
 	// time here is minimal compared to time spent executing batch.
 	p = &row.SortingPutter{Putter: p}
-	enc := colenc.MakeEncoder(v.flowCtx.Codec(), v.desc, &v.flowCtx.Cfg.Settings.SV, b, v.insertCols, v.flowCtx.GetRowMetrics(), partialIndexColMap,
+	enc := colenc.MakeEncoder(
+		v.flowCtx.Codec(), v.desc, v.flowCtx.EvalCtx.SessionData(), &v.flowCtx.Cfg.Settings.SV,
+		b, v.insertCols, v.flowCtx.GetRowMetrics(), partialIndexColMap,
 		func() error {
 			if kvba.Batch.ApproximateMutationBytes() > v.mutationQuota {
 				return colenc.ErrOverMemLimit
 			}
 			return nil
-		})
+		},
+	)
 	// PrepareBatch is called in a loop to partially insert till everything is
 	// done, if there are a ton of secondary indexes we could hit raft
 	// command limit building kv batch so we need to be able to do
@@ -156,9 +175,9 @@ func (v *vectorInserter) Next() coldata.Batch {
 	start := 0
 	for start < b.Length() {
 		kvba.Batch = v.flowCtx.Txn.NewBatch()
-		if err := enc.PrepareBatch(ctx, p, start, end); err != nil {
+		if err := enc.PrepareBatch(v.Ctx, p, start, end); err != nil {
 			if errors.Is(err, colenc.ErrOverMemLimit) {
-				log.VEventf(ctx, 2, "vector insert memory limit err %d, numrows: %d", start, end)
+				log.VEventf(v.Ctx, 2, "vector insert memory limit err %d, numrows: %d", start, end)
 				end /= 2
 				// If one row blows out memory limit, just do one row at a time.
 				if end <= start {
@@ -173,15 +192,23 @@ func (v *vectorInserter) Next() coldata.Batch {
 			}
 			colexecerror.ExpectedError(err)
 		}
-		log.VEventf(ctx, 2, "copy running batch, autocommit: %v, final: %v, numrows: %d", v.autoCommit, end == b.Length(), end-start)
+		// Similar to tableWriterBase.finalize, we examine whether it's likely
+		// that we'll be able to auto-commit. If it seems unlikely based on the
+		// deadlie, we won't auto-commit which might allow the connExecutor to
+		// get a fresh deadline before committing.
+		autoCommit := v.autoCommit && end == b.Length() &&
+			!v.flowCtx.Txn.DeadlineLikelySufficient()
+		log.VEventf(v.Ctx, 2, "copy running batch, autocommit: %v, numrows: %d", autoCommit, end-start)
 		var err error
-		if v.autoCommit && end == b.Length() {
-			err = v.flowCtx.Txn.CommitInBatch(ctx, kvba.Batch)
+		if autoCommit {
+			err = v.flowCtx.Txn.CommitInBatch(v.Ctx, kvba.Batch)
 		} else {
-			err = v.flowCtx.Txn.Run(ctx, kvba.Batch)
+			err = v.flowCtx.Txn.Run(v.Ctx, kvba.Batch)
 		}
 		if err != nil {
-			colexecerror.ExpectedError(row.ConvertBatchError(ctx, v.desc, kvba.Batch))
+			colexecerror.ExpectedError(row.ConvertBatchError(
+				v.Ctx, v.desc, kvba.Batch, false, /* alwaysConvertCondFailed */
+			))
 		}
 		numRows := end - start
 		start = end
@@ -195,13 +222,13 @@ func (v *vectorInserter) Next() coldata.Batch {
 	v.retBatch.ColVec(0).Int64()[0] = int64(b.Length())
 	v.retBatch.SetLength(1)
 
-	v.flowCtx.Cfg.StatsRefresher.NotifyMutation(v.desc, b.Length())
+	v.rowsWritten += b.Length()
 
-	return v.retBatch
+	return v.retBatch, nil
 }
 
 func (v *vectorInserter) checkMutationInput(ctx context.Context, b coldata.Batch) error {
-	checks := v.desc.EnforcedCheckConstraints()
+	checks := v.desc.EnforcedCheckValidators()
 	colIdx := 0
 	for i, ch := range checks {
 		if !v.checkOrds.Contains(i) {
@@ -211,7 +238,7 @@ func (v *vectorInserter) checkMutationInput(ctx context.Context, b coldata.Batch
 		bools := vec.Bool()
 		nulls := vec.Nulls()
 		for r := 0; r < b.Length(); r++ {
-			if !bools[r] && !nulls.NullAt(r) {
+			if ch.IsCheckFailed(bools[r], nulls.NullAt(r)) {
 				return row.CheckFailed(ctx, v.flowCtx.EvalCtx, v.semaCtx, v.flowCtx.EvalCtx.SessionData(), v.desc, ch)
 			}
 		}

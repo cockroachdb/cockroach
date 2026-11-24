@@ -81,6 +81,12 @@ export function getEventDescription(e: clusterUiApi.EventColumns): string {
       return `Type Created: User ${info.User} created type ${info.TypeName}`;
     case eventTypes.ALTER_TYPE:
       return `Type Altered: User ${info.User} altered type ${info.TypeName}`;
+    case eventTypes.ALTER_TYPE_ADD_VALUE:
+      return `Type Value Added: User ${info.User} added value ${info.Value} to type ${info.TypeName}`;
+    case eventTypes.ALTER_TYPE_RENAME_VALUE:
+      return `Type Value Renamed: User ${info.User} renamed value ${info.OldValue} to ${info.NewValue} on type ${info.TypeName}`;
+    case eventTypes.ALTER_TYPE_DROP_VALUE:
+      return `Type Value Dropped: User ${info.User} dropped value ${info.Value} from type ${info.TypeName}`;
     case eventTypes.ALTER_TYPE_OWNER:
       return `Type Owner Altered: User ${info.User} altered the owner of the type ${info.TypeName} to ${info.Owner}`;
     case eventTypes.DROP_TYPE:
@@ -210,6 +216,8 @@ export function getEventDescription(e: clusterUiApi.EventColumns): string {
       return `Disk Slowness Detected: Node ${info.NodeID} Store ${info.StoreID} is experiencing a slow disk`;
     case eventTypes.DISK_SLOWNESS_CLEARED:
       return `Disk Slowness Cleared: Node ${info.NodeID} Store ${info.StoreID} is no longer experiencing a slow disk`;
+    case eventTypes.LOW_DISK_SPACE:
+      return `Available disk space below ${info.PercentThreshold}%: Node ${info.NodeID} Store ${info.StoreID}`;
     default:
       return `Event: ${e.eventType}, content: ${JSON.stringify(info, null, 2)}`;
   }
@@ -251,6 +259,8 @@ export interface EventInfo {
   TypeName?: string;
   User: string;
   Value?: string;
+  OldValue?: string;
+  NewValue?: string;
   ViewName?: string;
   // The following are three names for the same key (it was renamed twice).
   // All ar included for backwards compatibility.
@@ -273,6 +283,9 @@ export interface EventInfo {
   PreviousDescriptor?: string;
   NewDescriptor?: string;
   StoreID?: string;
+  PercentThreshold?: string;
+  AvailableBytes?: string;
+  TotalBytes?: string;
 }
 
 export function getDroppedObjectsText(eventInfo: EventInfo): string {

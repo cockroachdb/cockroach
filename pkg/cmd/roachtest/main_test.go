@@ -6,8 +6,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	cryptorand "crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
 	gosql "database/sql"
+	"encoding/pem"
 	"fmt"
 	"math"
 	"math/rand"
@@ -114,27 +119,46 @@ func Test_updateSpecForSelectiveTests(t *testing.T) {
 	var mock sqlmock.Sqlmock
 	var db *gosql.DB
 	var err error
-	_ = os.Setenv("SFUSER", "dummy_user")
-	_ = os.Setenv("SFPASSWORD", "dummy_password")
+	_ = os.Setenv("SNOWFLAKE_USER", "dummy_user")
+	_ = os.Setenv("SNOWFLAKE_PVT_KEY", createPrivateKey(t))
 	testselector.SqlConnectorFunc = func(_, _ string) (*gosql.DB, error) {
 		return db, err
 	}
-	t.Run("expect CategoriseTests to fail which causes fall back to run all tests", func(t *testing.T) {
-		// The failure of the CategoriseTests does not cause any failure. It falls back to run all the tests in the spec
+	t.Run("expect CategoriseTests to fail which causes random fallback selection", func(t *testing.T) {
+		// When CategoriseTests fails, we fall back to randomly selecting a
+		// subset of tests using SuccessfulTestsSelectPct instead of running
+		// everything (which risks timeouts).
 		db, mock, err = sqlmock.New()
 		require.Nil(t, err)
+		savedPct := roachtestflags.SuccessfulTestsSelectPct
+		roachtestflags.SuccessfulTestsSelectPct = 0.35
+		t.Cleanup(func() { roachtestflags.SuccessfulTestsSelectPct = savedPct })
 		specs, _ := getTestSelectionMockData()
 		mock.ExpectPrepare(regexp.QuoteMeta(testselector.PreparedQuery)).WillReturnError(fmt.Errorf("failed to prepare"))
 		updateSpecForSelectiveTests(ctx, specs, func(format string, args ...interface{}) {
 			t.Logf(format, args...)
 		})
+		// Count eligible (non-pre-skipped) specs and verify the fallback
+		// selected the right number.
+		eligible := 0
+		selected := 0
 		for _, s := range specs {
-			if !strings.Contains(s.Name, "skipped") {
-				require.Empty(t, s.Skip)
-			} else {
-				require.Equal(t, "test spec skip", s.Skip)
+			switch {
+			case s.Skip == "test spec skip":
+				// Already-skipped tests keep their original skip reason.
+				require.Contains(t, s.Name, "skipped")
+			case s.Skip == "":
+				eligible++
+				selected++
+			default:
+				eligible++
+				// Tests skipped by the fallback.
+				require.Equal(t, "test selector", s.Skip)
+				require.Contains(t, s.SkipDetails, "random fallback")
 			}
 		}
+		expectedSelected := int(math.Ceil(float64(eligible) * roachtestflags.SuccessfulTestsSelectPct))
+		require.Equal(t, expectedSelected, selected)
 	})
 	t.Run("expect no failure", func(t *testing.T) {
 		db, mock, err = sqlmock.New()
@@ -482,4 +506,40 @@ func shuffleStrings(r *rand.Rand, strings []string) []string {
 		strings[i], strings[j] = strings[j], strings[i]
 	})
 	return strings
+}
+
+func TestSkippedSelectSpecs(t *testing.T) {
+	specs := []registry.TestSpec{}
+	for i := range 5 {
+		specs = append(specs, registry.TestSpec{Name: fmt.Sprintf("t%d", i+1)})
+	}
+
+	rng := randutil.NewTestRandWithSeed(0)
+	buf := bytes.NewBuffer(nil)
+	_ = selectSpecs(specs, rng, 0.1, false, buf)
+
+	containsTestSkip := func(testName string) bool {
+		return strings.Contains(buf.String(), fmt.Sprintf("--- SKIP: %s", testName))
+	}
+
+	// With the fixed random seed above, these are the expected skipped tests.
+	expectedSkippedTests := []string{"t1", "t2", "t3", "t5"}
+	for _, testName := range expectedSkippedTests {
+		assert.True(t, containsTestSkip(testName), "Expected skip message for %s not found in buffer", testName)
+	}
+	// With the fixed random seed above, the test t4 should not be skipped.
+	testName := "t4"
+	assert.False(t, containsTestSkip(testName), "Expected no skip message for %s but found in buffer", testName)
+}
+
+// create a private key for testing
+func createPrivateKey(t *testing.T) string {
+	privateKey, err := rsa.GenerateKey(cryptorand.Reader, 2048)
+	require.Nil(t, err)
+	// Convert private key to PKCS#1 ASN.1 PEM
+	pemBlock := &pem.Block{
+		Type:  "RSA PRIVATE KEY",
+		Bytes: x509.MarshalPKCS1PrivateKey(privateKey),
+	}
+	return string(pem.EncodeToMemory(pemBlock))
 }

@@ -10,6 +10,7 @@ import { RequestError } from "../util";
 
 import {
   executeInternalSql,
+  LARGE_RESULT_SIZE,
   SqlExecutionRequest,
   sqlResultsAreEmpty,
 } from "./sqlApi";
@@ -73,6 +74,7 @@ export function getSchedules(req: {
         arguments: args,
       },
     ],
+    max_result_size: LARGE_RESULT_SIZE,
     execute: true,
   };
   return executeInternalSql<ScheduleColumns>(request).then(result => {
@@ -123,19 +125,11 @@ export function getSchedule(id: Long): Promise<Schedule> {
     const txnResults = result.execution.txn_results;
     if (txnResults.length === 0 || !txnResults[0].rows) {
       // No data.
-      throw new RequestError(
-        "Bad Request",
-        400,
-        "No schedule found with this ID.",
-      );
+      throw new RequestError(400, "No schedule found with this ID.");
     }
 
     if (txnResults[0].rows.length > 1) {
-      throw new RequestError(
-        "Internal Server Error",
-        500,
-        "Multiple schedules found for ID.",
-      );
+      throw new RequestError(500, "Multiple schedules found for ID.");
     }
     const row = txnResults[0].rows[0];
     return {

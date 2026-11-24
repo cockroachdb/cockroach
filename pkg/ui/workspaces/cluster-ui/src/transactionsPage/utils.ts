@@ -94,7 +94,6 @@ export const aggregateStatements = (
         label: s.statement,
         summary: s.statement_summary,
         aggregatedTs: s.aggregated_ts,
-        implicitTxn: s.implicit_txn,
         database: s.database,
         applicationName: s.app,
         fullScan: s.full_scan,

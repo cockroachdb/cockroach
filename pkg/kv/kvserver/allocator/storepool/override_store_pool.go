@@ -93,66 +93,59 @@ func (o *OverrideStorePool) String() string {
 
 // SafeFormat implements the redact.SafeFormatter interface.
 func (o *OverrideStorePool) SafeFormat(w redact.SafePrinter, _ rune) {
-	w.Print(o.sp.statusString(o.overrideNodeLivenessFn))
+	w.Print(o.sp.statusString(o.overrideNodeLivenessFn, o.sp.StoreLivenessFn))
 }
 
 // IsStoreReadyForRoutineReplicaTransfer implements the AllocatorStorePool interface.
 func (o *OverrideStorePool) IsStoreReadyForRoutineReplicaTransfer(
 	ctx context.Context, targetStoreID roachpb.StoreID,
 ) bool {
-	return o.sp.isStoreReadyForRoutineReplicaTransferInternal(ctx, targetStoreID, o.overrideNodeLivenessFn)
+	return o.sp.isStoreReadyForRoutineReplicaTransferInternal(ctx, targetStoreID, o.overrideNodeLivenessFn, o.sp.StoreLivenessFn)
 }
 
 // DecommissioningReplicas implements the AllocatorStorePool interface.
 func (o *OverrideStorePool) DecommissioningReplicas(
 	repls []roachpb.ReplicaDescriptor,
 ) []roachpb.ReplicaDescriptor {
-	return o.sp.decommissioningReplicasWithLiveness(repls, o.overrideNodeLivenessFn)
+	return o.sp.decommissioningReplicasWithLiveness(repls, o.overrideNodeLivenessFn, o.sp.StoreLivenessFn)
 }
 
 // GetStoreList implements the AllocatorStorePool interface.
 func (o *OverrideStorePool) GetStoreList(
 	filter StoreFilter,
 ) (StoreList, int, ThrottledStoreReasons) {
-	o.sp.DetailsMu.Lock()
-	defer o.sp.DetailsMu.Unlock()
-
 	var storeIDs roachpb.StoreIDSlice
-	for storeID := range o.sp.DetailsMu.StoreDetails {
+	o.sp.Details.StoreDetails.Range(func(storeID roachpb.StoreID, _ *StoreDetailMu) bool {
 		storeIDs = append(storeIDs, storeID)
-	}
-	return o.sp.getStoreListFromIDsLocked(storeIDs, o.overrideNodeLivenessFn, filter)
+		return true
+	})
+	return o.sp.getStoreListFromIDs(storeIDs, o.overrideNodeLivenessFn, o.sp.StoreLivenessFn, filter)
 }
 
 // GetStoreListFromIDs implements the AllocatorStorePool interface.
 func (o *OverrideStorePool) GetStoreListFromIDs(
 	storeIDs roachpb.StoreIDSlice, filter StoreFilter,
 ) (StoreList, int, ThrottledStoreReasons) {
-	o.sp.DetailsMu.Lock()
-	defer o.sp.DetailsMu.Unlock()
-	return o.sp.getStoreListFromIDsLocked(storeIDs, o.overrideNodeLivenessFn, filter)
+	return o.sp.getStoreListFromIDs(storeIDs, o.overrideNodeLivenessFn, o.sp.StoreLivenessFn, filter)
 }
 
 // GetStoreListForTargets implements the AllocatorStorePool interface.
 func (o *OverrideStorePool) GetStoreListForTargets(
 	candidates []roachpb.ReplicationTarget, filter StoreFilter,
 ) (StoreList, int, ThrottledStoreReasons) {
-	o.sp.DetailsMu.Lock()
-	defer o.sp.DetailsMu.Unlock()
-
 	storeIDs := make(roachpb.StoreIDSlice, 0, len(candidates))
 	for _, tgt := range candidates {
 		storeIDs = append(storeIDs, tgt.StoreID)
 	}
 
-	return o.sp.getStoreListFromIDsLocked(storeIDs, o.overrideNodeLivenessFn, filter)
+	return o.sp.getStoreListFromIDs(storeIDs, o.overrideNodeLivenessFn, o.sp.StoreLivenessFn, filter)
 }
 
 // LiveAndDeadReplicas implements the AllocatorStorePool interface.
 func (o *OverrideStorePool) LiveAndDeadReplicas(
 	repls []roachpb.ReplicaDescriptor, includeSuspectAndDrainingStores bool,
 ) (liveReplicas, deadReplicas []roachpb.ReplicaDescriptor) {
-	return o.sp.liveAndDeadReplicasWithLiveness(repls, o.overrideNodeLivenessFn, includeSuspectAndDrainingStores)
+	return o.sp.liveAndDeadReplicasWithLiveness(repls, o.overrideNodeLivenessFn, o.sp.StoreLivenessFn, includeSuspectAndDrainingStores)
 }
 
 // ClusterNodeCount implements the AllocatorStorePool interface.

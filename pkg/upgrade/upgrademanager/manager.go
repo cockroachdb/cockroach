@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfo"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/license"
@@ -119,10 +120,16 @@ func safeToUpgradeTenant(
 	codec keys.SQLCodec,
 	overrides cluster.OverridesInformer,
 	tenantClusterVersion clusterversion.ClusterVersion,
+	tenantInfoAccessor mtinfo.ReadFromTenantInfoAccessor,
 ) (bool, error) {
 	if codec.ForSystemTenant() {
 		// Unconditionally run upgrades for the system tenant.
 		return true, nil
+	}
+	if tenantInfoAccessor != nil {
+		if id, _, _ := tenantInfoAccessor.ReadFromTenantInfo(ctx); id.IsSet() {
+			return false, errors.Newf("reader virtual clusters cannot be upgraded. Instead, drop the current read only virtual cluster, and recreate a new one via ALTER VIRTUAL CLUSTER...")
+		}
 	}
 	// The overrides informer can be nil, but only in a system tenant.
 	if overrides == nil {
@@ -153,7 +160,7 @@ func safeToUpgradeTenant(
 
 	// The cluster version of the tenant is less than that of the storage
 	// cluster. It's safe to run the upgrade.
-	log.Infof(ctx, "safe to upgrade tenant: storage cluster at version %v, tenant at version"+
+	log.Dev.Infof(ctx, "safe to upgrade tenant: storage cluster at version %v, tenant at version"+
 		" %v", storageClusterVersion, tenantClusterVersion)
 	return true, nil
 }
@@ -168,7 +175,7 @@ func safeToUpgradeTenant(
 // non-permanent upgrades for versions <= v1 are not run at all; they're assumed
 // to be baked into the bootstrap metadata.
 func (m *Manager) RunPermanentUpgrades(ctx context.Context, upToVersion roachpb.Version) error {
-	log.Infof(ctx, "running permanent upgrades up to version: %v", upToVersion)
+	log.Dev.Infof(ctx, "running permanent upgrades up to version: %v", upToVersion)
 	defer func() {
 		if fn := m.knobs.AfterRunPermanentUpgrades; fn != nil {
 			fn()
@@ -213,7 +220,6 @@ func (m *Manager) RunPermanentUpgrades(ctx context.Context, upToVersion roachpb.
 	// because upgrades run in order.
 	latest := permanentUpgrades[len(permanentUpgrades)-1]
 	lastVer := latest.Version()
-	enterpriseEnabled := base.CCLDistributionAndEnterpriseEnabled(m.settings)
 	lastUpgradeCompleted, err := startup.RunIdempotentWithRetryEx(ctx,
 		m.deps.Stopper.ShouldQuiesce(),
 		"check if migration completed",
@@ -223,26 +229,25 @@ func (m *Manager) RunPermanentUpgrades(ctx context.Context, upToVersion roachpb.
 				// We'll do a follower read. This is all best effort anyway, and the
 				// follower read should keep the startup time low in the common case where
 				// all upgrades have run a long time ago before this node start.
-				enterpriseEnabled,
 				migrationstable.StaleRead)
 		})
 	if err != nil {
 		return err
 	}
 	if lastUpgradeCompleted {
-		log.Infof(ctx,
+		log.Dev.Infof(ctx,
 			"detected the last permanent upgrade (v%s) to have already completed; no permanent upgrades will run",
 			lastVer)
 		return nil
 	} else {
 		// The stale read said that the upgrades had not run. Let's try a consistent read too since
-		log.Infof(ctx,
+		log.Dev.Infof(ctx,
 			"the last permanent upgrade (v%s) does not appear to have completed; attempting to run all upgrades",
 			lastVer)
 	}
 
 	for _, u := range permanentUpgrades {
-		log.Infof(ctx, "running permanent upgrade for version %s", u.Version())
+		log.Dev.Infof(ctx, "running permanent upgrade for version %s", u.Version())
 		if err := m.runMigration(ctx, u, user, u.Version(), !m.knobs.DontUseJobs); err != nil {
 			return err
 		}
@@ -260,7 +265,7 @@ func (m *Manager) RunPermanentUpgrades(ctx context.Context, upToVersion roachpb.
 func (m *Manager) runPermanentMigrationsWithoutJobsForTests(
 	ctx context.Context, user username.SQLUsername,
 ) error {
-	log.Infof(ctx, "found test configuration that eliminated all upgrades; running permanent upgrades anyway")
+	log.Dev.Infof(ctx, "found test configuration that eliminated all upgrades; running permanent upgrades anyway")
 	vers := clusterversion.ListBetween(roachpb.Version{}, clusterversion.VBootstrapMax.Version())
 	for _, v := range vers {
 		upg, exists := upgrades.GetUpgrade(v)
@@ -275,7 +280,7 @@ func (m *Manager) runPermanentMigrationsWithoutJobsForTests(
 }
 
 func (m *Manager) postToPauseChannelAndWaitForResume(ctx context.Context) {
-	log.Infof(ctx, "pausing at pause point %d", m.knobs.InterlockPausePoint)
+	log.Dev.Infof(ctx, "pausing at pause point %d", m.knobs.InterlockPausePoint)
 	// To handle the case where the pause point is hit on every migration (which
 	// is the common case), reset the interlock pause point when woken up so
 	// that we won't sleep again.
@@ -307,13 +312,13 @@ func (m *Manager) Migrate(
 	ctx = logtags.AddTag(ctx, "migration-mgr", nil)
 	defer func() {
 		if returnErr != nil {
-			log.Warningf(ctx, "error encountered during version upgrade: %v", returnErr)
+			log.Dev.Warningf(ctx, "error encountered during version upgrade: %v", returnErr)
 		}
 	}()
 
 	if from == to {
 		// Nothing to do here.
-		log.Infof(ctx, "no need to migrate, cluster already at newest version")
+		log.Dev.Infof(ctx, "no need to migrate, cluster already at newest version")
 		return nil
 	}
 
@@ -331,12 +336,12 @@ func (m *Manager) Migrate(
 	}
 
 	// Determine whether it's safe to perform the upgrade for secondary tenants.
-	if safe, err := safeToUpgradeTenant(ctx, m.codec, m.settings.OverridesInformer, from); !safe {
+	if safe, err := safeToUpgradeTenant(ctx, m.codec, m.settings.OverridesInformer, from, m.deps.TenantInfoAccessor); !safe {
 		return err
 	}
 
 	clusterVersions := m.listBetween(from.Version, to.Version)
-	log.Infof(ctx, "migrating cluster from %s to %s (stepping through %s)", from, to, clusterVersions)
+	log.Dev.Infof(ctx, "migrating cluster from %s to %s (stepping through %s)", from, to, clusterVersions)
 	if len(clusterVersions) == 0 {
 		if buildutil.CrdbTestBuild && from.Version != to.Version {
 			// This suggests a test is using bogus versions and didn't set up
@@ -461,7 +466,7 @@ func (m *Manager) Migrate(
 	// version, and by design also supports the actual version (which is
 	// the direct successor of the fence).
 	for _, clusterVersion := range clusterVersions {
-		log.Infof(ctx, "stepping through %s", clusterVersion)
+		log.Dev.Infof(ctx, "stepping through %s", clusterVersion)
 
 		cv := clusterversion.ClusterVersion{Version: clusterVersion}
 
@@ -579,7 +584,7 @@ func bumpClusterVersion(
 	req := &serverpb.BumpClusterVersionRequest{ClusterVersion: &clusterVersion}
 	op := fmt.Sprintf("bump-cluster-version=%s", req.ClusterVersion.PrettyPrint())
 	return forEveryNodeUntilClusterStable(ctx, op, c, func(
-		ctx context.Context, client serverpb.MigrationClient,
+		ctx context.Context, client serverpb.RPCMigrationClient,
 	) error {
 		_, err := client.BumpClusterVersion(ctx, req)
 		return err
@@ -594,7 +599,7 @@ func validateTargetClusterVersion(
 	req := &serverpb.ValidateTargetClusterVersionRequest{ClusterVersion: &clusterVersion}
 	op := fmt.Sprintf("validate-cluster-version=%s", req.ClusterVersion.PrettyPrint())
 	return forEveryNodeUntilClusterStable(ctx, op, c, func(
-		tx context.Context, client serverpb.MigrationClient,
+		tx context.Context, client serverpb.RPCMigrationClient,
 	) error {
 		_, err := client.ValidateTargetClusterVersion(ctx, req)
 		// The tenant upgrade interlock is new in 23.1, as a result, before
@@ -617,9 +622,9 @@ func forEveryNodeUntilClusterStable(
 	ctx context.Context,
 	op string,
 	c upgrade.Cluster,
-	f func(ctx context.Context, client serverpb.MigrationClient) error,
+	f func(ctx context.Context, client serverpb.RPCMigrationClient) error,
 ) error {
-	log.Infof(ctx, "executing operation %s", redact.Safe(op))
+	log.Dev.Infof(ctx, "executing operation %s", redact.Safe(op))
 	return c.UntilClusterStable(ctx, retry.Options{
 		InitialBackoff: 1 * time.Second,
 		MaxBackoff:     1 * time.Second,
@@ -650,7 +655,7 @@ func (m *Manager) runMigration(
 		ctx := startup.WithoutChecks(ctx)
 		v := mig.Version()
 		alreadyCompleted, err := migrationstable.CheckIfMigrationCompleted(
-			ctx, version, nil /* txn */, m.ie, false /* enterpriseEnabled */, migrationstable.ConsistentRead,
+			ctx, version, nil /* txn */, m.ie, migrationstable.ConsistentRead,
 		)
 		if alreadyCompleted || err != nil {
 			return err
@@ -713,14 +718,14 @@ func (m *Manager) runMigration(
 			return err
 		}
 		if alreadyExisting {
-			log.Infof(ctx, "waiting for %s", redact.Safe(mig.Name()))
+			log.Dev.Infof(ctx, "waiting for %s", redact.Safe(mig.Name()))
 			return startup.RunIdempotentWithRetry(ctx,
 				m.deps.Stopper.ShouldQuiesce(),
 				"upgrade wait jobs", func(ctx context.Context) error {
 					return m.jr.WaitForJobs(ctx, []jobspb.JobID{id})
 				})
 		} else {
-			log.Infof(ctx, "running %s", redact.Safe(mig.Name()))
+			log.Dev.Infof(ctx, "running %s", redact.Safe(mig.Name()))
 			return startup.RunIdempotentWithRetry(ctx,
 				m.deps.Stopper.ShouldQuiesce(),
 				"upgrade run jobs", func(ctx context.Context) error {
@@ -735,12 +740,11 @@ func (m *Manager) getOrCreateMigrationJob(
 ) (alreadyCompleted, alreadyExisting bool, jobID jobspb.JobID, _ error) {
 	newJobID := m.jr.MakeJobID()
 	if err := m.deps.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) (err error) {
-		enterpriseEnabled := base.CCLDistributionAndEnterpriseEnabled(m.settings)
 		alreadyCompleted, err = migrationstable.CheckIfMigrationCompleted(
-			ctx, version, txn.KV(), txn, enterpriseEnabled, migrationstable.ConsistentRead,
+			ctx, version, txn.KV(), txn, migrationstable.ConsistentRead,
 		)
 		if err != nil && ctx.Err() == nil {
-			log.Warningf(ctx, "failed to check if migration already completed: %v", err)
+			log.Dev.Warningf(ctx, "failed to check if migration already completed: %v", err)
 		}
 		if err != nil || alreadyCompleted {
 			return err
@@ -768,7 +772,7 @@ WITH
 running_migration_jobs AS (
     SELECT id, status
     FROM system.jobs
-    WHERE status IN ` + jobs.NonTerminalStatusTupleString + `
+    WHERE status IN ` + jobs.NonTerminalStateTupleString + `
     AND job_type = 'MIGRATION'
 ),
 payloads AS (
@@ -800,15 +804,15 @@ func (m *Manager) getRunningMigrationJob(
 	if err != nil {
 		return false, 0, err
 	}
-	parseRow := func(row tree.Datums) (id jobspb.JobID, status jobs.Status) {
-		return jobspb.JobID(*row[0].(*tree.DInt)), jobs.Status(*row[1].(*tree.DString))
+	parseRow := func(row tree.Datums) (id jobspb.JobID, status jobs.State) {
+		return jobspb.JobID(*row[0].(*tree.DInt)), jobs.State(*row[1].(*tree.DString))
 	}
 	switch len(rows) {
 	case 0:
 		return false, 0, nil
 	case 1:
 		id, status := parseRow(rows[0])
-		log.Infof(ctx, "found existing migration job %d for version %v in status %s, waiting",
+		log.Dev.Infof(ctx, "found existing migration job %d for version %v in status %s, waiting",
 			id, &version, status)
 		return true, id, nil
 	default:
@@ -821,14 +825,21 @@ func (m *Manager) getRunningMigrationJob(
 			id, status := parseRow(row)
 			buf.Printf("(%d, %s)", id, redact.Safe(status))
 		}
-		log.Errorf(ctx, "%s", buf)
+		log.Dev.Errorf(ctx, "%s", buf)
 		return false, 0, errors.AssertionFailedf("%s", buf)
 	}
 }
 
 func (m *Manager) listBetween(from roachpb.Version, to roachpb.Version) []roachpb.Version {
 	if m.knobs.ListBetweenOverride != nil {
-		return m.knobs.ListBetweenOverride(from, to)
+		result := m.knobs.ListBetweenOverride(from, to)
+		// Sanity check result to catch invalid overrides.
+		for _, v := range result {
+			if !(from.Cmp(v) < 0 && v.Cmp(to) <= 0) {
+				panic(fmt.Sprintf("ListBetweenOverride(%s, %s) returned invalid version %s", from, to, v))
+			}
+		}
+		return result
 	}
 	return clusterversion.ListBetween(from, to)
 }

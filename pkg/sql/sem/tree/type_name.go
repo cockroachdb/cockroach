@@ -174,6 +174,10 @@ func (ctx *FmtCtx) FormatTypeReference(ref ResolvableTypeReference) {
 		// We may need the three-part name to properly detect cross-database access.
 		if ctx.HasFlags(FmtAlwaysQualifyUserDefinedTypeNames) {
 			ctx.WriteString(t.SQLStringFullyQualified())
+		} else if ctx.HasFlags(fmtPGCatalog) {
+			// Use PostgreSQL-compatible type names (e.g. "text" instead of
+			// "STRING", "regclass" instead of "REGCLASS") for pg_catalog output.
+			ctx.WriteString(t.SQLStandardName())
 		} else {
 			ctx.WriteString(t.SQLString())
 		}

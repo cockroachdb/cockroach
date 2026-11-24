@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/tracing/tracingpb"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	"github.com/cockroachdb/redact"
 )
 
 const putValue = "thekvproberwrotethis"
@@ -144,7 +145,7 @@ type Metrics struct {
 	WriteProbeAttempts                 *metric.Counter
 	WriteProbeFailures                 *metric.Counter
 	WriteProbeLatency                  metric.IHistogram
-	WriteProbeQuarantineOldestDuration *metric.Gauge
+	WriteProbeQuarantineOldestDuration *metric.FunctionalGauge
 	ProbePlanAttempts                  *metric.Counter
 	ProbePlanFailures                  *metric.Counter
 }
@@ -325,7 +326,6 @@ func (p *Prober) Start(ctx context.Context, stopper *stop.Stopper) error {
 			for {
 				select {
 				case <-t.C:
-					t.Read = true
 					// Jitter added to de-synchronize different nodes' probe loops.
 					t.Reset(d())
 				case <-stopper.ShouldQuiesce():
@@ -368,6 +368,7 @@ func (p *Prober) readProbeImpl(ctx context.Context, ops proberOpsI, txns proberT
 	var probeCtx = ctx
 
 	isTracingEnabled := tracingEnabled.Get(&p.settings.SV)
+	logTracingOnPlanFailureEnabled := isTracingEnabled && logTracingOnPlanFailureEnabled.Get(&p.settings.SV)
 	if isTracingEnabled {
 		probeCtx, finishAndGetRecording = tracing.ContextWithRecordingSpan(ctx, p.tracer, "read probe")
 	}
@@ -380,7 +381,11 @@ func (p *Prober) readProbeImpl(ctx context.Context, ops proberOpsI, txns proberT
 		if errorIsExpectedDuringNormalOperation(err) {
 			log.Health.Warningf(ctx, "making a plan failed with expected error: %v", err)
 		} else {
-			log.Health.Errorf(ctx, "can't make a plan: %v", err)
+			if logTracingOnPlanFailureEnabled {
+				log.Health.Errorf(ctx, "can't make a plan: %v, recorded trace: %s", err, finishAndGetRecording())
+			} else {
+				log.Health.Errorf(ctx, "can't make a plan: %v", err)
+			}
 			p.metrics.ProbePlanFailures.Inc(1)
 		}
 		return
@@ -453,6 +458,7 @@ func (p *Prober) writeProbeImpl(ctx context.Context, ops proberOpsI, txns prober
 	var probeCtx = ctx
 
 	isTracingEnabled := tracingEnabled.Get(&p.settings.SV)
+	logTracingOnPlanFailureEnabled := isTracingEnabled && logTracingOnPlanFailureEnabled.Get(&p.settings.SV)
 	if isTracingEnabled {
 		probeCtx, finishAndGetRecording = tracing.ContextWithRecordingSpan(ctx, p.tracer, "write probe")
 	}
@@ -467,7 +473,11 @@ func (p *Prober) writeProbeImpl(ctx context.Context, ops proberOpsI, txns prober
 		if errorIsExpectedDuringNormalOperation(err) {
 			log.Health.Warningf(ctx, "making a plan failed with expected error: %v", err)
 		} else {
-			log.Health.Errorf(ctx, "can't make a plan: %v", err)
+			if logTracingOnPlanFailureEnabled {
+				log.Health.Errorf(ctx, "can't make a plan: %v, recorded trace: %s", err, finishAndGetRecording())
+			} else {
+				log.Health.Errorf(ctx, "can't make a plan: %v", err)
+			}
 			p.metrics.ProbePlanFailures.Inc(1)
 		}
 		return
@@ -533,7 +543,7 @@ func (p *Prober) quarantineProbe(ctx context.Context, pl planner) {
 // log messages indicating leaseholder information, extracts leaseholder
 // node ID, and returns this information. Returns an empty string if
 // leaseholder information is not found.
-func (p *Prober) returnLeaseholderInfo(recording tracingpb.Recording) string {
+func (p *Prober) returnLeaseholderInfo(recording tracingpb.Recording) redact.SafeString {
 	// The leaseholder is determined by the kvclient in dist_sender.go,
 	// which decides the node to handle the request and sends it. The log
 	// entry with "node received request" shows the leaseholder acknowledging
@@ -551,7 +561,7 @@ func (p *Prober) returnLeaseholderInfo(recording tracingpb.Recording) string {
 		leaseholder := leaseRegex.FindStringSubmatch(informationLog)
 		// Return leaseholder node ID if found.
 		if len(leaseholder) == 2 {
-			return leaseholder[1]
+			return redact.SafeString(leaseholder[1])
 		}
 	}
 	return ""

@@ -30,7 +30,6 @@ var QueryResolvedTimestampIntentCleanupAge = settings.RegisterDurationSetting(
 	"kv.query_resolved_timestamp.intent_cleanup_age",
 	"minimum intent age that QueryResolvedTimestamp requests will consider for async intent cleanup",
 	10*time.Second,
-	settings.NonNegativeDuration,
 )
 
 func init() {

@@ -4,10 +4,12 @@ postgres://somehost
 pq URL: postgresql://somehost/
 DSN:    host=somehost
 JDBC:   jdbc:postgresql://somehost/
+CRDB:   postgresql://somehost/
 --defaults filled--
 pq URL: postgresql://defaultuser@somehost:26257/defaultdb
 DSN:    database=defaultdb user=defaultuser host=somehost port=26257
 JDBC:   jdbc:postgresql://somehost:26257/defaultdb?user=defaultuser
+CRDB:   postgresql://defaultuser@somehost:26257/defaultdb
 
 # Empty host.
 url
@@ -16,10 +18,12 @@ postgres:///somedb
 pq URL: postgresql:///somedb
 DSN:    database=somedb
 JDBC:   jdbc:postgresql:///somedb
+CRDB:   postgresql:///somedb
 --defaults filled--
 pq URL: postgresql://defaultuser@defaulthost:26257/somedb
 DSN:    database=somedb user=defaultuser host=defaulthost port=26257
 JDBC:   jdbc:postgresql://defaulthost:26257/somedb?user=defaultuser
+CRDB:   postgresql://defaultuser@defaulthost:26257/somedb
 
 # Empty everything.
 url
@@ -28,10 +32,12 @@ postgres:///
 pq URL: postgresql:///
 DSN:    
 JDBC:   jdbc:postgresql:///
+CRDB:   postgresql:///
 --defaults filled--
 pq URL: postgresql://defaultuser@defaulthost:26257/defaultdb
 DSN:    database=defaultdb user=defaultuser host=defaulthost port=26257
 JDBC:   jdbc:postgresql://defaulthost:26257/defaultdb?user=defaultuser
+CRDB:   postgresql://defaultuser@defaulthost:26257/defaultdb
 
 url
 postgres://somehost:123/
@@ -39,10 +45,12 @@ postgres://somehost:123/
 pq URL: postgresql://somehost:123/
 DSN:    host=somehost port=123
 JDBC:   jdbc:postgresql://somehost:123/
+CRDB:   postgresql://somehost:123/
 --defaults filled--
 pq URL: postgresql://defaultuser@somehost:123/defaultdb
 DSN:    database=defaultdb user=defaultuser host=somehost port=123
 JDBC:   jdbc:postgresql://somehost:123/defaultdb?user=defaultuser
+CRDB:   postgresql://defaultuser@somehost:123/defaultdb
 
 url
 postgres://somehost/somedb
@@ -50,10 +58,12 @@ postgres://somehost/somedb
 pq URL: postgresql://somehost/somedb
 DSN:    database=somedb host=somehost
 JDBC:   jdbc:postgresql://somehost/somedb
+CRDB:   postgresql://somehost/somedb
 --defaults filled--
 pq URL: postgresql://defaultuser@somehost:26257/somedb
 DSN:    database=somedb user=defaultuser host=somehost port=26257
 JDBC:   jdbc:postgresql://somehost:26257/somedb?user=defaultuser
+CRDB:   postgresql://defaultuser@somehost:26257/somedb
 
 url
 postgres://someuser@somehost/somedb
@@ -61,10 +71,12 @@ postgres://someuser@somehost/somedb
 pq URL: postgresql://someuser@somehost/somedb
 DSN:    database=somedb user=someuser host=somehost
 JDBC:   jdbc:postgresql://somehost/somedb?user=someuser
+CRDB:   postgresql://someuser@somehost/somedb
 --defaults filled--
 pq URL: postgresql://someuser@somehost:26257/somedb
 DSN:    database=somedb user=someuser host=somehost port=26257
 JDBC:   jdbc:postgresql://somehost:26257/somedb?user=someuser
+CRDB:   postgresql://someuser@somehost:26257/somedb
 
 url
 postgres://someuser:somepass@somehost/somedb
@@ -72,10 +84,12 @@ postgres://someuser:somepass@somehost/somedb
 pq URL: postgresql://someuser:somepass@somehost/somedb
 DSN:    database=somedb user=someuser host=somehost password=somepass
 JDBC:   jdbc:postgresql://somehost/somedb?password=somepass&user=someuser
+CRDB:   postgresql://someuser:somepass@somehost/somedb
 --defaults filled--
 pq URL: postgresql://someuser:somepass@somehost:26257/somedb
 DSN:    database=somedb user=someuser host=somehost port=26257 password=somepass
 JDBC:   jdbc:postgresql://somehost:26257/somedb?password=somepass&user=someuser
+CRDB:   postgresql://someuser:somepass@somehost:26257/somedb
 
 url
 postgres://someuser:somepass@somehost/somedb?application_name=myapp
@@ -83,20 +97,24 @@ postgres://someuser:somepass@somehost/somedb?application_name=myapp
 pq URL: postgresql://someuser:somepass@somehost/somedb?application_name=myapp
 DSN:    database=somedb user=someuser host=somehost password=somepass application_name=myapp
 JDBC:   jdbc:postgresql://somehost/somedb?application_name=myapp&password=somepass&user=someuser
+CRDB:   postgresql://someuser:somepass@somehost/somedb?application_name=myapp
 --defaults filled--
 pq URL: postgresql://someuser:somepass@somehost:26257/somedb?application_name=myapp
 DSN:    database=somedb user=someuser host=somehost port=26257 password=somepass application_name=myapp
 JDBC:   jdbc:postgresql://somehost:26257/somedb?application_name=myapp&password=somepass&user=someuser
+CRDB:   postgresql://someuser:somepass@somehost:26257/somedb?application_name=myapp
 
 insecure
 ----
 pq URL: postgresql:///?sslmode=disable
 DSN:    sslmode=disable
 JDBC:   jdbc:postgresql:///?sslmode=disable
+CRDB:   postgresql:///?sslmode=disable
 --defaults filled--
 pq URL: postgresql://defaultuser@defaulthost:26257/defaultdb?sslmode=disable
 DSN:    database=defaultdb user=defaultuser host=defaulthost port=26257 sslmode=disable
 JDBC:   jdbc:postgresql://defaulthost:26257/defaultdb?sslmode=disable&user=defaultuser
+CRDB:   postgresql://defaultuser@defaulthost:26257/defaultdb?sslmode=disable
 
 subtest redundant
 
@@ -106,10 +124,12 @@ postgres://user1@host/?user=user2
 pq URL: postgresql://user2@host/
 DSN:    user=user2 host=host
 JDBC:   jdbc:postgresql://host/?user=user2
+CRDB:   postgresql://user2@host/
 --defaults filled--
 pq URL: postgresql://user2@host:26257/defaultdb
 DSN:    database=defaultdb user=user2 host=host port=26257
 JDBC:   jdbc:postgresql://host:26257/defaultdb?user=user2
+CRDB:   postgresql://user2@host:26257/defaultdb
 
 url
 postgres://user1@host/?user=user2&user=user3
@@ -117,10 +137,12 @@ postgres://user1@host/?user=user2&user=user3
 pq URL: postgresql://user3@host/
 DSN:    user=user3 host=host
 JDBC:   jdbc:postgresql://host/?user=user3
+CRDB:   postgresql://user3@host/
 --defaults filled--
 pq URL: postgresql://user3@host:26257/defaultdb
 DSN:    database=defaultdb user=user3 host=host port=26257
 JDBC:   jdbc:postgresql://host:26257/defaultdb?user=user3
+CRDB:   postgresql://user3@host:26257/defaultdb
 
 url
 postgres://user1:pw1@host/?password=pw2
@@ -128,10 +150,12 @@ postgres://user1:pw1@host/?password=pw2
 pq URL: postgresql://user1:pw2@host/
 DSN:    user=user1 host=host password=pw2
 JDBC:   jdbc:postgresql://host/?password=pw2&user=user1
+CRDB:   postgresql://user1:pw2@host/
 --defaults filled--
 pq URL: postgresql://user1:pw2@host:26257/defaultdb
 DSN:    database=defaultdb user=user1 host=host port=26257 password=pw2
 JDBC:   jdbc:postgresql://host:26257/defaultdb?password=pw2&user=user1
+CRDB:   postgresql://user1:pw2@host:26257/defaultdb
 
 url
 postgres://host1/?host=host2
@@ -139,10 +163,12 @@ postgres://host1/?host=host2
 pq URL: postgresql://host2/
 DSN:    host=host2
 JDBC:   jdbc:postgresql://host2/
+CRDB:   postgresql://host2/
 --defaults filled--
 pq URL: postgresql://defaultuser@host2:26257/defaultdb
 DSN:    database=defaultdb user=defaultuser host=host2 port=26257
 JDBC:   jdbc:postgresql://host2:26257/defaultdb?user=defaultuser
+CRDB:   postgresql://defaultuser@host2:26257/defaultdb
 
 subtest end
 
@@ -154,10 +180,12 @@ postgres://host/?k=v1&k=v2&k=v3
 pq URL: postgresql://host/?k=v1&k=v2&k=v3
 DSN:    host=host k=v1 k=v2 k=v3
 JDBC:   jdbc:postgresql://host/?k=v1&k=v2&k=v3
+CRDB:   postgresql://host/?k=v1&k=v2&k=v3
 --defaults filled--
 pq URL: postgresql://defaultuser@host:26257/defaultdb?k=v1&k=v2&k=v3
 DSN:    database=defaultdb user=defaultuser host=host port=26257 k=v1 k=v2 k=v3
 JDBC:   jdbc:postgresql://host:26257/defaultdb?k=v1&k=v2&k=v3&user=defaultuser
+CRDB:   postgresql://defaultuser@host:26257/defaultdb?k=v1&k=v2&k=v3
 
 subtest end
 
@@ -170,10 +198,12 @@ postgres://user:@foo
 pq URL: postgresql://user:@foo/
 DSN:    user=user host=foo password=
 JDBC:   jdbc:postgresql://foo/?password=&user=user
+CRDB:   postgresql://user:@foo/
 --defaults filled--
 pq URL: postgresql://user:@foo:26257/defaultdb
 DSN:    database=defaultdb user=user host=foo port=26257 password=
 JDBC:   jdbc:postgresql://foo:26257/defaultdb?password=&user=user
+CRDB:   postgresql://user:@foo:26257/defaultdb
 
 # Password with special characters.
 url
@@ -182,10 +212,12 @@ postgres://user:pw%5ca'b@foo
 pq URL: postgresql://user:pw%5Ca%27b@foo/
 DSN:    user=user host=foo password=pw\\a\'b
 JDBC:   jdbc:postgresql://foo/?password=pw%5Ca%27b&user=user
+CRDB:   postgresql://user:pw%5Ca%27b@foo/
 --defaults filled--
 pq URL: postgresql://user:pw%5Ca%27b@foo:26257/defaultdb
 DSN:    database=defaultdb user=user host=foo port=26257 password=pw\\a\'b
 JDBC:   jdbc:postgresql://foo:26257/defaultdb?password=pw%5Ca%27b&user=user
+CRDB:   postgresql://user:pw%5Ca%27b@foo:26257/defaultdb
 
 # DB with special characters.
 url
@@ -194,10 +226,12 @@ postgres://foo/bar%5c-'baz
 pq URL: postgresql://foo/bar%5C-%27baz
 DSN:    database=bar\\-\'baz host=foo
 JDBC:   jdbc:postgresql://foo/bar%5C-%27baz
+CRDB:   postgresql://foo/bar%5C-%27baz
 --defaults filled--
 pq URL: postgresql://defaultuser@foo:26257/bar%5C-%27baz
 DSN:    database=bar\\-\'baz user=defaultuser host=foo port=26257
 JDBC:   jdbc:postgresql://foo:26257/bar%5C-%27baz?user=defaultuser
+CRDB:   postgresql://defaultuser@foo:26257/bar%5C-%27baz
 
 
 # kwarg with special characters.
@@ -207,10 +241,12 @@ postgres://foo/bar?baz=a'-%5ce
 pq URL: postgresql://foo/bar?baz=a%27-%5Ce
 DSN:    database=bar host=foo baz=a\'-\\e
 JDBC:   jdbc:postgresql://foo/bar?baz=a%27-%5Ce
+CRDB:   postgresql://foo/bar?baz=a%27-%5Ce
 --defaults filled--
 pq URL: postgresql://defaultuser@foo:26257/bar?baz=a%27-%5Ce
 DSN:    database=bar user=defaultuser host=foo port=26257 baz=a\'-\\e
 JDBC:   jdbc:postgresql://foo:26257/bar?baz=a%27-%5Ce&user=defaultuser
+CRDB:   postgresql://defaultuser@foo:26257/bar?baz=a%27-%5Ce
 
 subtest end
 
@@ -231,10 +267,12 @@ Username cannot be empty when a password is provided.
 pq URL: postgresql://:pwd@host/
 DSN:    host=host password=pwd
 JDBC:   jdbc:postgresql://host/?password=pwd
+CRDB:   postgresql://:pwd@host/
 --defaults filled--
 pq URL: postgresql://defaultuser:pwd@host:26257/defaultdb
 DSN:    database=defaultdb user=defaultuser host=host port=26257 password=pwd
 JDBC:   jdbc:postgresql://host:26257/defaultdb?password=pwd&user=defaultuser
+CRDB:   postgresql://defaultuser:pwd@host:26257/defaultdb
 
 url
 postgres:///somedb?host=/tmp&sslmode=require
@@ -246,10 +284,12 @@ Cannot specify TLS settings when using unix sockets.
 pq URL: postgresql:///somedb?host=%2Ftmp&sslmode=require
 DSN:    database=somedb host=/tmp sslmode=require
 JDBC:   jdbc:postgresql:///somedb?host=%2Ftmp&sslmode=require
+CRDB:   postgresql:///somedb?host=%2Ftmp&sslmode=require
 --defaults filled--
 pq URL: postgresql://defaultuser@/somedb?host=%2Ftmp&port=26257&sslmode=require
 DSN:    database=somedb user=defaultuser host=/tmp port=26257 sslmode=require
 JDBC:   jdbc:postgresql:///somedb?host=%2Ftmp&port=26257&sslmode=require&user=defaultuser
+CRDB:   postgresql://defaultuser@/somedb?host=%2Ftmp&port=26257&sslmode=require
 
 url
 postgres:///somedb?sslmode=disable&sslcert=/a/b/c
@@ -262,9 +302,53 @@ Client key missing.
 pq URL: postgresql:///somedb?sslcert=%2Fa%2Fb%2Fc&sslkey=&sslmode=disable
 DSN:    database=somedb sslcert=/a/b/c sslkey= sslmode=disable
 JDBC:   jdbc:postgresql:///somedb?sslcert=%2Fa%2Fb%2Fc&sslkey=&sslmode=disable
+CRDB:   postgresql:///somedb?sslcert=%2Fa%2Fb%2Fc&sslkey=&sslmode=disable
 --defaults filled--
 pq URL: postgresql://defaultuser@defaulthost:26257/somedb?sslcert=%2Fa%2Fb%2Fc&sslkey=&sslmode=disable
 DSN:    database=somedb user=defaultuser host=defaulthost port=26257 sslcert=/a/b/c sslkey= sslmode=disable
 JDBC:   jdbc:postgresql://defaulthost:26257/somedb?sslcert=%2Fa%2Fb%2Fc&sslkey=&sslmode=disable&user=defaultuser
+CRDB:   postgresql://defaultuser@defaulthost:26257/somedb?sslcert=%2Fa%2Fb%2Fc&sslkey=&sslmode=disable
+
+# SSLInline with specified CA, client cert, and client key.
+url
+postgres://root@host?sslmode=verify-full&sslrootcert=certs%2Fca.crt&sslcert=certs%2Fclient.root.crt&sslkey=certs%2Fclient.root.key&sslinline=true
+----
+pq URL: postgresql://root@host/?sslcert=certs%2Fclient.root.crt&sslinline=true&sslkey=certs%2Fclient.root.key&sslmode=verify-full&sslrootcert=certs%2Fca.crt
+DSN:    user=root host=host sslcert=certs/client.root.crt sslkey=certs/client.root.key sslrootcert=certs/ca.crt sslmode=verify-full sslinline=true
+JDBC:   jdbc:postgresql://host/?sslcert=certs%2Fclient.root.crt&sslinline=true&sslkey=certs%2Fclient.root.key&sslmode=verify-full&sslrootcert=certs%2Fca.crt&user=root
+CRDB:   postgresql://root@host/?sslcert=clientCertContents&sslinline=true&sslkey=clientKeyContents&sslmode=verify-full&sslrootcert=caCertContents
+--defaults filled--
+pq URL: postgresql://root@host:26257/defaultdb?sslcert=certs%2Fclient.root.crt&sslinline=true&sslkey=certs%2Fclient.root.key&sslmode=verify-full&sslrootcert=certs%2Fca.crt
+DSN:    database=defaultdb user=root host=host port=26257 sslcert=certs/client.root.crt sslkey=certs/client.root.key sslrootcert=certs/ca.crt sslmode=verify-full sslinline=true
+JDBC:   jdbc:postgresql://host:26257/defaultdb?sslcert=certs%2Fclient.root.crt&sslinline=true&sslkey=certs%2Fclient.root.key&sslmode=verify-full&sslrootcert=certs%2Fca.crt&user=root
+CRDB:   postgresql://root@host:26257/defaultdb?sslcert=clientCertContents&sslinline=true&sslkey=clientKeyContents&sslmode=verify-full&sslrootcert=caCertContents
+
+# SSLInline with certs but no CA specified.
+url
+postgres://foo@host?sslmode=verify-full&sslinline=true&sslcert=certs%2Fclient.root.crt&sslkey=certs%2Fclient.root.key
+----
+pq URL: postgresql://foo@host/?sslcert=certs%2Fclient.root.crt&sslinline=true&sslkey=certs%2Fclient.root.key&sslmode=verify-full
+DSN:    user=foo host=host sslcert=certs/client.root.crt sslkey=certs/client.root.key sslmode=verify-full sslinline=true
+JDBC:   jdbc:postgresql://host/?sslcert=certs%2Fclient.root.crt&sslinline=true&sslkey=certs%2Fclient.root.key&sslmode=verify-full&user=foo
+CRDB:   postgresql://foo@host/?sslcert=clientCertContents&sslinline=true&sslkey=clientKeyContents&sslmode=verify-full
+--defaults filled--
+pq URL: postgresql://foo@host:26257/defaultdb?sslcert=certs%2Fclient.root.crt&sslinline=true&sslkey=certs%2Fclient.root.key&sslmode=verify-full
+DSN:    database=defaultdb user=foo host=host port=26257 sslcert=certs/client.root.crt sslkey=certs/client.root.key sslmode=verify-full sslinline=true
+JDBC:   jdbc:postgresql://host:26257/defaultdb?sslcert=certs%2Fclient.root.crt&sslinline=true&sslkey=certs%2Fclient.root.key&sslmode=verify-full&user=foo
+CRDB:   postgresql://foo@host:26257/defaultdb?sslcert=clientCertContents&sslinline=true&sslkey=clientKeyContents&sslmode=verify-full
+
+# SSLInline but certs point to non-existent files.
+url
+postgres://foo@host?sslmode=verify-full&sslinline=true&sslrootcert=certs%2Fca.crt&sslcert=certs%2Fclient.foo.crt&sslkey=certs%2Fclient.foo.key
+----
+pq URL: postgresql://foo@host/?sslcert=certs%2Fclient.foo.crt&sslinline=true&sslkey=certs%2Fclient.foo.key&sslmode=verify-full&sslrootcert=certs%2Fca.crt
+DSN:    user=foo host=host sslcert=certs/client.foo.crt sslkey=certs/client.foo.key sslrootcert=certs/ca.crt sslmode=verify-full sslinline=true
+JDBC:   jdbc:postgresql://host/?sslcert=certs%2Fclient.foo.crt&sslinline=true&sslkey=certs%2Fclient.foo.key&sslmode=verify-full&sslrootcert=certs%2Fca.crt&user=foo
+CRDB:   (err: open certs/client.foo.crt: no such file or directory)
+--defaults filled--
+pq URL: postgresql://foo@host:26257/defaultdb?sslcert=certs%2Fclient.foo.crt&sslinline=true&sslkey=certs%2Fclient.foo.key&sslmode=verify-full&sslrootcert=certs%2Fca.crt
+DSN:    database=defaultdb user=foo host=host port=26257 sslcert=certs/client.foo.crt sslkey=certs/client.foo.key sslrootcert=certs/ca.crt sslmode=verify-full sslinline=true
+JDBC:   jdbc:postgresql://host:26257/defaultdb?sslcert=certs%2Fclient.foo.crt&sslinline=true&sslkey=certs%2Fclient.foo.key&sslmode=verify-full&sslrootcert=certs%2Fca.crt&user=foo
+CRDB:   (err: open certs/client.foo.crt: no such file or directory)
 
 subtest end

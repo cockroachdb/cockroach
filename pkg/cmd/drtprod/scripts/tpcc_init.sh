@@ -36,20 +36,28 @@ if [ -z "${WORKLOAD_CLUSTER}" ]; then
   exit 1
 fi
 
-absolute_path=$(roachprod run "${WORKLOAD_CLUSTER}":1 -- "realpath ./cockroach")
-pwd=$(roachprod run "${WORKLOAD_CLUSTER}":1 -- "dirname ${absolute_path}")
-PGURLS=$(roachprod pgurl "${CLUSTER}":1)
+export ROACHPROD_DISABLED_PROVIDERS=IBM
+export COCKROACH_ROACHPROD_INSECURE="${COCKROACH_ROACHPROD_INSECURE:-false}"
+
+absolute_path=$(drtprod run "${WORKLOAD_CLUSTER}":1 -- "realpath ./cockroach")
+pwd=$(drtprod run "${WORKLOAD_CLUSTER}":1 -- "dirname ${absolute_path}")
+PGURLS=$(drtprod pgurl "${CLUSTER}":1)
 
 # script is responsible for importing the tpcc database for workload
-roachprod ssh "${WORKLOAD_CLUSTER}":1 -- "tee tpcc_init_${suffix}.sh > /dev/null << 'EOF'
+drtprod ssh "${WORKLOAD_CLUSTER}":1 -- "tee tpcc_init_${suffix}.sh > /dev/null << 'EOF'
 #!/bin/bash
 
 ${pwd}/cockroach workload fixtures import tpcc $PGURLS $@ --checks=false
 EOF"
-roachprod ssh "${WORKLOAD_CLUSTER}":1 -- "chmod +x tpcc_init_${suffix}.sh"
+drtprod ssh "${WORKLOAD_CLUSTER}":1 -- "chmod +x tpcc_init_${suffix}.sh"
+
+WARNING="DISABLE VALIDATION CONSTRAINT CHECK BEFORE RUNNING IMPORT. TO DISABLE SET THIS CLUSTER SETTING:
+SET CLUSTER SETTING bulkio.import.constraint_validation.unsafe.enabled=false;"
+# Print the warning message in capital bold letters and highlighted in red
+echo -e "\033[1;31m$WARNING\033[0m"
 
 if [ "$execute_script" = "true" ]; then
-  roachprod run "${WORKLOAD_CLUSTER}":1 -- "sudo systemd-run --unit tpcc_init_${suffix} --same-dir --uid \$(id -u) --gid \$(id -g) bash ${pwd}/tpcc_init_${suffix}.sh"
+  drtprod run "${WORKLOAD_CLUSTER}":1 -- "sudo systemd-run --unit tpcc_init_${suffix} --same-dir --uid \$(id -u) --gid \$(id -g) bash ${pwd}/tpcc_init_${suffix}.sh"
 else
-  echo "Run --> roachprod run "${WORKLOAD_CLUSTER}":1 -- \"sudo systemd-run --unit tpcc_init_${suffix} --same-dir --uid \\\$(id -u) --gid \\\$(id -g) bash ${pwd}/tpch_init_${suffix}.sh\""
+  echo "Run --> drtprod run "${WORKLOAD_CLUSTER}":1 -- \"sudo systemd-run --unit tpcc_init_${suffix} --same-dir --uid \\\$(id -u) --gid \\\$(id -g) bash ${pwd}/tpcc_init_${suffix}.sh\""
 fi

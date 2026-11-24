@@ -15,6 +15,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
+	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -51,15 +52,12 @@ func TestMain(m *testing.M) {
 			}
 		}
 	}
+	defer ccl.TestingEnableEnterprise()()
 	securityassets.SetLoader(securitytest.EmbeddedAssets)
 	randutil.SeedForTests()
-	serverutils.InitTestServerFactory(server.TestServerFactory)
+	serverutils.InitTestServerFactory(server.TestServerFactory,
+		serverutils.WithTenantOption(base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(156124)))
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
-
-	defer serverutils.TestingSetDefaultTenantSelectionOverride(
-		base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(76378),
-	)()
-
 	os.Exit(m.Run())
 }
 
@@ -77,7 +75,8 @@ func runSqliteLogicTest(t *testing.T, file string) {
 		DisableUseMVCCRangeTombstonesForPointDeletes: true,
 		// Some sqlite tests with very low bytes limit value are too slow, so
 		// ensure 3 KiB lower bound.
-		BatchBytesLimitLowerBound: 3 << 10, // 3 KiB
+		BatchBytesLimitLowerBound:     3 << 10, // 3 KiB
+		DisableOptimizerPerturbations: true,
 	}
 	logictest.RunLogicTest(t, serverArgs, configIdx, filepath.Join(sqliteLogicTestDir, file))
 }

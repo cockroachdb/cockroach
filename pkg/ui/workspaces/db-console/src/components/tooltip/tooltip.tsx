@@ -10,7 +10,7 @@ import {
 import cn from "classnames";
 import * as React from "react";
 
-import "./tooltip.styl";
+import "./tooltip.scss";
 
 export interface TooltipProps {
   children: React.ReactNode | string;

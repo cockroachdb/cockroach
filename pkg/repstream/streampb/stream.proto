@@ -1,3 +1,4 @@
+
 // Copyright 2021 The Cockroach Authors.
 //
 // Use of this software is governed by the CockroachDB Software License
@@ -14,11 +15,13 @@ import "roachpb/data.proto";
 import "jobs/jobspb/jobs.proto";
 import "roachpb/metadata.proto";
 import "util/hlc/timestamp.proto";
+import "util/rangescanstats/rangescanstatspb/stats.proto";
 import "util/unresolved_addr.proto";
 import "gogoproto/gogo.proto";
 import "google/protobuf/duration.proto";
 import "roachpb/span_config.proto";
 import "sql/catalog/descpb/structured.proto";
+import "sql/catalog/externalcatalog/externalpb/external.proto";
 
 // ReplicationProducerSpec is the specification returned by the replication
 // producer job when it is created.
@@ -44,15 +47,10 @@ message ReplicationProducerSpec {
     (gogoproto.nullable) = false,
     (gogoproto.customname) = "SourceTenantID"
   ];
-
-  // TableDescriptors are the descriptors for the tables in the
-  // ReplicationProducerRequest.
-  //
-  // TODO(ssd): We likely want to remove this one-time table
-  // descriptor fetch with a schemafeed that the consumer starts.
-  map<string, cockroach.sql.sqlbase.TableDescriptor> table_descriptors = 7 [(gogoproto.nullable) = false];
-
-  repeated cockroach.sql.sqlbase.TypeDescriptor type_descriptors = 8 [(gogoproto.nullable) = false];
+  
+  reserved 7;
+  reserved 8;
+  sql.catalog.externalcatalog.externalpb.ExternalCatalog external_catalog = 9 [(gogoproto.nullable) = false];
 }
 
 // ReplicationProducerRequest is sent by the consuming cluster when
@@ -87,6 +85,11 @@ message ReplicationProducerRequest {
   // TableNames, if set, are the names of the individual tables that a
   // logical replication ingestion processor are interested in.
   repeated string table_names = 4;
+
+  bool allow_offline = 5;
+  
+  // Sent during bidirectional LDR setup to validate the reverse stream URI.
+  string unvalidated_reverse_stream_uri = 6 [(gogoproto.customname) = "UnvalidatedReverseStreamURI"];
 }
 
 enum ReplicationType {
@@ -148,7 +151,11 @@ message StreamPartitionSpec {
 
   ReplicationType type = 12;
 
-  // NEXT ID: 13.
+  // When true and type is LOGICAL (LDR), the producer buffers rangefeed KVs and
+  // emits in (timestamp, key) order on frontier advancement.
+  bool with_mvcc_ordering = 13;
+
+  // NEXT ID: 14.
 }
 
 // SpanConfigEventStreamSpec is the span config event stream specification.
@@ -168,6 +175,8 @@ message LogicalReplicationPlanRequest {
     repeated int32 table_ids = 1 [(gogoproto.customname) = "TableIDs"];
     // PlanAsOf is the time as of which the plan should be produced.
     util.hlc.Timestamp plan_as_of = 2 [(gogoproto.nullable) = false];
+    bool use_table_span = 3;
+    int64 stream_id = 4 [(gogoproto.customname) = "StreamID", (gogoproto.casttype) = "StreamID"];
 }
 
 // SourcePartition contains per partition information for a replication plan.
@@ -233,19 +242,17 @@ message StreamEvent {
     repeated KV kvs = 6 [(gogoproto.nullable) = false, (gogoproto.customname) = "KVs"];
   }
 
+  // RangeStats contains statistics about ranges being scanned during initial
+  // and catchup scans. This message is kept for mixed-version compatibility
+  // with 26.1 nodes which marshal this type via MarshalAny/UnmarshalAny in
+  // DistSQL progress metadata. The canonical definition has moved to
+  // rangescanstatspb.RangeStats; this copy must remain until all nodes in
+  // the cluster are running 26.2.
+  //
+  // TODO(kev-cao): Remove when deleting the 26.2 version gates.
   message RangeStats {
-    // RangeCount is the number of ranges covered by the spans specified when
-    // starting the event stream. The number of ranges is counted per requested
-    // span, so the count will be an overestimate if a range is shared between
-    // multiple requested spans.
     int64 range_count = 1;
-
-    // ScanningRangeCount is the number of ranges that have yet to complete the
-    // initial scan. ScanningRangeCount <= RangeCount.
     int64 scanning_range_count = 2;
-    
-    // LaggingRangeCount is the number of ranges that are signficantly behind,
-    // after completing the initial scan.
     int64 lagging_range_count = 3;
   }
 
@@ -253,7 +260,7 @@ message StreamEvent {
   message StreamCheckpoint {
     reserved 1;
     repeated cockroach.sql.jobs.jobspb.ResolvedSpan resolved_spans = 2  [(gogoproto.nullable) = false];
-    RangeStats range_stats = 3;
+    cockroach.util.rangescanstatspb.RangeStats range_stats = 3;
   }
 
   // Only 1 field ought to be set.

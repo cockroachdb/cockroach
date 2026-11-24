@@ -27,10 +27,15 @@ func (ec *Builtins) EncodeTableIndexKey(
 	rowDatums *tree.DTuple,
 	performCast func(context.Context, tree.Datum, *types.T) (tree.Datum, error),
 ) ([]byte, error) {
-	// Get the referenced table and index.
-	tableDesc, err := ec.dc.ByIDWithLeased(ec.txn).WithoutNonPublic().Get().Table(ctx, tableID)
+	// Get the referenced table and index. Use ByIDWithoutLeased to avoid
+	// acquiring descriptor leases that could interfere with concurrent schema changes.
+	// Use MaybeGet to return nil instead of an error if the table is not found.
+	tableDesc, err := ec.dc.ByIDWithoutLeased(ec.txn).WithoutNonPublic().MaybeGet().Table(ctx, tableID)
 	if err != nil {
 		return nil, err
+	}
+	if tableDesc == nil {
+		return nil, pgerror.Newf(pgcode.UndefinedTable, "table with ID %d does not exist", tableID)
 	}
 	index, err := catalog.MustFindIndexByID(tableDesc, indexID)
 	if err != nil {

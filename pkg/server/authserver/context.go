@@ -111,7 +111,7 @@ func UserFromIncomingRPCContext(ctx context.Context) (res username.SQLUsername, 
 		return username.RootUserName(), nil
 	}
 	if len(usernames) != 1 {
-		log.Warningf(ctx, "context's incoming metadata contains unexpected number of usernames: %+v ", md)
+		log.Dev.Warningf(ctx, "context's incoming metadata contains unexpected number of usernames: %+v ", md)
 		return res, fmt.Errorf(
 			"context's incoming metadata contains unexpected number of usernames: %+v ", md)
 	}
@@ -119,4 +119,10 @@ func UserFromIncomingRPCContext(ctx context.Context) (res username.SQLUsername, 
 	// the username has been normalized already.
 	username := username.MakeSQLUsernameFromPreNormalizedString(usernames[0])
 	return username, nil
+}
+
+// getWebSessionID retrieves the web session ID from the context.
+func getWebSessionID(ctx context.Context) (int64, bool) {
+	id, ok := ctx.Value(webSessionIDKey{}).(int64)
+	return id, ok
 }

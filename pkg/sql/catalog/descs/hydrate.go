@@ -14,10 +14,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
@@ -67,7 +69,7 @@ func (tc *Collection) hydrateDescriptors(
 
 	// hydrate mutable hydratable descriptors of the slice in-place.
 	if !hydratableMutableIndexes.Empty() {
-		typeFn := makeMutableTypeLookupFunc(tc, txn, descs)
+		typeFn := makeMutableTypeLookupFunc(tc, txn, flags, descs)
 		for _, i := range hydratableMutableIndexes.Ordered() {
 			if err := hydrate(ctx, descs[i], typeFn); err != nil {
 				return err
@@ -108,7 +110,7 @@ func (tc *Collection) hydrateDescriptors(
 }
 
 func makeMutableTypeLookupFunc(
-	tc *Collection, txn *kv.Txn, descs []catalog.Descriptor,
+	tc *Collection, txn *kv.Txn, flags getterFlags, descs []catalog.Descriptor,
 ) typedesc.TypeLookupFunc {
 	var mc nstree.MutableCatalog
 	for _, desc := range descs {
@@ -131,20 +133,50 @@ func makeMutableTypeLookupFunc(
 		if id == catconstants.PublicSchemaID {
 			return schemadesc.GetPublicSchema(), nil
 		}
-		flags := getterFlags{
+		f := getterFlags{
 			contextFlags: contextFlags{
-				isMutable: true,
+				isMutable: !skipHydration, // Immutable descriptors are fine for non-hydrated cases.
 			},
 			layerFilters: layerFilters{
 				withoutSynthetic: true,
 				withoutLeased:    true,
 				withoutHydration: skipHydration,
 			},
+			descFilters: descFilters{
+				// For hydration, we will allow offline descriptors for lookups
+				// of type descriptors. A descriptor can be offline either due to:
+				// 1) IMPORT in which case we are looking at an implicit record type
+				// 2) RESTORE which will always pick a new object to restore into, so
+				//    only the restore code paths can enter here, which will include
+				//    offline descriptors explicitly.
+				withoutOffline: false,
+			},
 		}
-		g := ByIDGetter(makeGetterBase(txn, tc, flags))
-		return g.Desc(ctx, id)
+		g := ByIDGetter(makeGetterBase(txn, tc, f))
+		desc, err := g.Desc(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		// Sanity: If offline descriptors were asked to be ignored, then we should
+		// only observe ones caused by IMPORT.
+		if flags.descFilters.withoutOffline &&
+			(desc.GetOfflineReason() != "" && desc.GetOfflineReason() != tabledesc.OfflineReasonImporting) {
+			if buildutil.CrdbTestBuild {
+				return nil, errors.AssertionFailedf("unexpected offline descriptor %s(%d): %s",
+					desc.GetName(),
+					desc.GetID(),
+					desc.GetOfflineReason())
+			}
+			// For release builds surface an offline descriptor error.
+			return nil, catalog.FilterOfflineDescriptor(desc)
+		}
+		return desc, nil
 	}
-	return makeTypeLookupFuncForHydration(mc, mutableLookupFunc)
+	resolveTempSchemas := func(ctx context.Context, dbDesc catalog.DatabaseDescriptor) error {
+		_, err := tc.cr.ScanNamespaceForDatabaseSchemas(ctx, txn, dbDesc)
+		return err
+	}
+	return makeTypeLookupFuncForHydration(mc, mutableLookupFunc, resolveTempSchemas)
 }
 
 func makeImmutableTypeLookupFunc(
@@ -161,6 +193,10 @@ func makeImmutableTypeLookupFunc(
 		mc.UpsertDescriptor(desc)
 	}
 	immutableLookupFunc := func(ctx context.Context, id descpb.ID, skipHydration bool) (catalog.Descriptor, error) {
+		withoutDropped := true
+		if !flags.layerFilters.withoutLeased {
+			withoutDropped = false
+		}
 		f := getterFlags{
 			layerFilters: layerFilters{
 				withoutSynthetic: true,
@@ -168,14 +204,62 @@ func makeImmutableTypeLookupFunc(
 				withoutHydration: skipHydration,
 			},
 			descFilters: descFilters{
-				withoutDropped: true,
-				withoutOffline: flags.descFilters.withoutOffline,
+				withoutDropped: withoutDropped,
+				// For hydration, we will allow offline descriptors for lookups
+				// of type descriptors. A descriptor can be offline either due to:
+				// 1) IMPORT in which case we are looking at an implicit record type
+				// 2) RESTORE which will always pick a new object to restore into, so
+				//    only the restore code paths can enter here, which will include
+				//    offline descriptors explicitly.
+				withoutOffline: false,
 			},
 		}
 		g := ByIDGetter(makeGetterBase(txn, tc, f))
-		return g.Desc(ctx, id)
+		desc, err := g.Desc(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		// If the descriptor is dropped, and we are using leased descriptors,
+		// then check if its valid against our lease timestamp. If our lease timestamp is
+		// before the drop, force a retry error, which should cause us to see a
+		// newer version of the dependent object.
+		// Note: This is a special case because type hydration cannot tolerate
+		// dropped descriptors. This already could occur by leasing any schema
+		// with type references that are being dropped.
+		if !withoutDropped && !flags.layerFilters.withoutLeased && desc.Dropped() {
+			if tc.leased.leaseTimestampSet &&
+				tc.leased.leaseTimestamp.GetTimestamp().Less(desc.GetModificationTime()) {
+				return nil, &retryOnModifiedDescriptor{
+					descID:        desc.GetID(),
+					descName:      desc.GetName(),
+					expiration:    desc.GetModificationTime(),
+					readTimestamp: txn.ReadTimestamp(),
+					// Force a retry, so that the txn epoch gets bumped for us.
+					forcedErr: txn.GenerateForcedRetryableErr(ctx, "forcing txn to retry due to dropped type descriptor"),
+				}
+			}
+			return nil, catalog.FilterDroppedDescriptor(desc)
+		}
+		// Sanity: If offline descriptors were asked to be ignored, then we should
+		// only observe ones caused by IMPORT.
+		if flags.descFilters.withoutOffline &&
+			(desc.GetOfflineReason() != "" && desc.GetOfflineReason() != tabledesc.OfflineReasonImporting) {
+			if buildutil.CrdbTestBuild {
+				return nil, errors.AssertionFailedf("unexpected offline descriptor %s(%d): %s",
+					desc.GetName(),
+					desc.GetID(),
+					desc.GetOfflineReason())
+			}
+			// For release builds surface an offline descriptor error.
+			return nil, catalog.FilterOfflineDescriptor(desc)
+		}
+		return desc, nil
 	}
-	return makeTypeLookupFuncForHydration(mc, immutableLookupFunc)
+	resolveTempSchemas := func(ctx context.Context, dbDesc catalog.DatabaseDescriptor) error {
+		_, err := tc.cr.ScanNamespaceForDatabaseSchemas(ctx, txn, dbDesc)
+		return err
+	}
+	return makeTypeLookupFuncForHydration(mc, immutableLookupFunc, resolveTempSchemas)
 }
 
 // HydrateCatalog installs type metadata in the type.T objects present for all
@@ -187,7 +271,10 @@ func HydrateCatalog(ctx context.Context, c nstree.MutableCatalog) error {
 	fakeLookupFunc := func(_ context.Context, id descpb.ID, skipHydration bool) (catalog.Descriptor, error) {
 		return nil, catalog.NewDescriptorNotFoundError(id)
 	}
-	typeLookupFunc := makeTypeLookupFuncForHydration(c, fakeLookupFunc)
+	fakeResolveTempSchema := func(_ context.Context, dbDesc catalog.DatabaseDescriptor) error {
+		return nil
+	}
+	typeLookupFunc := makeTypeLookupFuncForHydration(c, fakeLookupFunc, fakeResolveTempSchema)
 	var hydratable []catalog.Descriptor
 	_ = c.ForEachDescriptor(func(desc catalog.Descriptor) error {
 		if isHydratable(desc) {
@@ -219,6 +306,10 @@ func (tc *Collection) canUseHydratedDescriptorCache(id descpb.ID) bool {
 // descriptors and their parent schemas and databases when hydrating an object.
 type hydrationLookupFunc func(ctx context.Context, id descpb.ID, skipHydration bool) (catalog.Descriptor, error)
 
+// hydrationResolveTemporarySchemas is used to prime any temporary schemas for future calls to
+// the lookup function.
+type hydrationResolveTemporarySchemas func(ctx context.Context, dbDesc catalog.DatabaseDescriptor) error
+
 // isHydratable returns false iff the descriptor definitely does not require
 // hydration
 func isHydratable(desc catalog.Descriptor) bool {
@@ -246,7 +337,9 @@ func hydrate(
 // looked up in the nstree.Catalog object before being looked up via the
 // hydrationLookupFunc.
 func makeTypeLookupFuncForHydration(
-	c nstree.MutableCatalog, lookupFn hydrationLookupFunc,
+	c nstree.MutableCatalog,
+	lookupFn hydrationLookupFunc,
+	resolveTempSchemas hydrationResolveTemporarySchemas,
 ) typedesc.TypeLookupFunc {
 	var typeLookupFunc func(ctx context.Context, id descpb.ID) (tn tree.TypeName, typ catalog.TypeDescriptor, err error)
 
@@ -292,18 +385,31 @@ func makeTypeLookupFuncForHydration(
 			}
 			c.UpsertDescriptor(dbDesc)
 		}
-		if _, err = catalog.AsDatabaseDescriptor(dbDesc); err != nil {
+		var resolvedDbDesc catalog.DatabaseDescriptor
+		if resolvedDbDesc, err = catalog.AsDatabaseDescriptor(dbDesc); err != nil {
 			return tree.TypeName{}, nil, err
 		}
 		scDesc := c.LookupDescriptor(typ.GetParentSchemaID())
 		if scDesc == nil {
 			scDesc, err = lookupFn(ctx, typ.GetParentSchemaID(), true /* skipHydration */)
-			if err != nil {
-				if errors.Is(err, catalog.ErrDescriptorNotFound) {
-					n := fmt.Sprintf("[%d]", typ.GetParentSchemaID())
-					return tree.TypeName{}, nil, sqlerrors.NewUndefinedSchemaError(n)
-				}
+			if err != nil && !errors.Is(err, catalog.ErrDescriptorNotFound) {
 				return tree.TypeName{}, nil, err
+			}
+			// Attempt to resolve temporary schemas via the database as a last resort.
+			if scDesc == nil {
+				err := resolveTempSchemas(ctx, resolvedDbDesc)
+				if err != nil {
+					return tree.TypeName{}, nil, err
+				}
+				// If name resolution fails, then the schema isn't a temporary one either.
+				scDesc, err = lookupFn(ctx, typ.GetParentSchemaID(), true /* skipHydration */)
+				if err != nil {
+					if errors.Is(err, catalog.ErrDescriptorNotFound) {
+						n := fmt.Sprintf("[%d]", typ.GetParentSchemaID())
+						return tree.TypeName{}, nil, sqlerrors.NewUndefinedSchemaError(n)
+					}
+					return tree.TypeName{}, nil, err
+				}
 			}
 			c.UpsertDescriptor(scDesc)
 		}

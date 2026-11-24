@@ -1,50 +1,53 @@
-diff --git a/staticcheck/lint.go b/staticcheck/lint.go
-index 85bcb21..9fb4cc0 100644
---- a/staticcheck/lint.go
-+++ b/staticcheck/lint.go
-@@ -3080,6 +3080,9 @@ func CheckDeprecated(pass *analysis.Pass) (interface{}, error) {
+diff --git a/staticcheck/sa1019/sa1019.go b/staticcheck/sa1019/sa1019.go
+index 50a40066..c5f9de8b 100644
+--- a/staticcheck/sa1019/sa1019.go
++++ b/staticcheck/sa1019/sa1019.go
+@@ -56,6 +56,10 @@ func run(pass *analysis.Pass) (interface{}, error) {
  	}
  
  	handleDeprecation := func(depr *deprecated.IsDeprecated, node ast.Node, deprecatedObjName string, pkgPath string, tfn types.Object) {
 +		if depr == nil && !isStdlibPath(pkgPath) {
 +			panic(`Cannot pass nil "depr" object if the deprecated object is not from the standard library`)
 +		}
- 		// Note: gopls doesn't correctly run analyzers on
- 		// dependencies, so we'll never be able to find deprecated
- 		// objects in imported code. We've experimented with
-@@ -3136,16 +3139,16 @@ func CheckDeprecated(pass *analysis.Pass) (interface{}, error) {
++
+ 		std, ok := knowledge.StdlibDeprecations[deprecatedObjName]
+ 		if !ok && isStdlibPath(pkgPath) {
+ 			// Deprecated object in the standard library, but we don't know the details of the deprecation.
+@@ -98,16 +102,16 @@ func run(pass *analysis.Pass) (interface{}, error) {
  			switch std.AlternativeAvailableSince {
  			case knowledge.DeprecatedNeverUse:
  				report.Report(pass, node,
--					fmt.Sprintf("%s has been deprecated since Go 1.%d because it shouldn't be used: %s",
--						report.Render(pass, node), std.DeprecatedSince, depr.Msg))
-+					fmt.Sprintf("%s has been deprecated since Go 1.%d because it shouldn't be used",
-+						report.Render(pass, node), std.DeprecatedSince))
+-					fmt.Sprintf("%s has been deprecated since %s because it shouldn't be used: %s",
+-						report.Render(pass, node), formatGoVersion(std.DeprecatedSince), depr.Msg))
++					fmt.Sprintf("%s has been deprecated since %s because it shouldn't be used",
++						report.Render(pass, node), formatGoVersion(std.DeprecatedSince)))
  			case std.DeprecatedSince, knowledge.DeprecatedUseNoLonger:
  				report.Report(pass, node,
--					fmt.Sprintf("%s has been deprecated since Go 1.%d: %s",
--						report.Render(pass, node), std.DeprecatedSince, depr.Msg))
-+					fmt.Sprintf("%s has been deprecated since Go 1.%d",
-+						report.Render(pass, node), std.DeprecatedSince))
+-					fmt.Sprintf("%s has been deprecated since %s: %s",
+-						report.Render(pass, node), formatGoVersion(std.DeprecatedSince), depr.Msg))
++					fmt.Sprintf("%s has been deprecated since %s",
++						report.Render(pass, node), formatGoVersion(std.DeprecatedSince)))
  			default:
  				report.Report(pass, node,
--					fmt.Sprintf("%s has been deprecated since Go 1.%d and an alternative has been available since Go 1.%d: %s",
--						report.Render(pass, node), std.DeprecatedSince, std.AlternativeAvailableSince, depr.Msg))
-+					fmt.Sprintf("%s has been deprecated since Go 1.%d and an alternative has been available since Go 1.%d",
-+						report.Render(pass, node), std.DeprecatedSince, std.AlternativeAvailableSince))
+-					fmt.Sprintf("%s has been deprecated since %s and an alternative has been available since %s: %s",
+-						report.Render(pass, node), formatGoVersion(std.DeprecatedSince), formatGoVersion(std.AlternativeAvailableSince), depr.Msg))
++					fmt.Sprintf("%s has been deprecated since %s and an alternative has been available since %s",
++						report.Render(pass, node), formatGoVersion(std.DeprecatedSince), formatGoVersion(std.AlternativeAvailableSince)))
  			}
  		} else {
  			report.Report(pass, node, fmt.Sprintf("%s is deprecated: %s", report.Render(pass, node), depr.Msg))
-@@ -3185,6 +3188,8 @@ func CheckDeprecated(pass *analysis.Pass) (interface{}, error) {
+@@ -167,7 +171,10 @@ func run(pass *analysis.Pass) (interface{}, error) {
  
  		if depr, ok := deprs.Objects[obj]; ok {
  			handleDeprecation(depr, sel, code.SelectorName(pass, sel), obj.Pkg().Path(), tfn)
 +		} else if _, ok := knowledge.StdlibDeprecations[code.SelectorName(pass, sel)]; ok {
 +			handleDeprecation(nil, sel, code.SelectorName(pass, sel), obj.Pkg().Path(), tfn)
  		}
++
  		return true
  	}
-@@ -3209,6 +3214,8 @@ func CheckDeprecated(pass *analysis.Pass) (interface{}, error) {
+ 
+@@ -204,6 +211,8 @@ func run(pass *analysis.Pass) (interface{}, error) {
  			}
  
  			handleDeprecation(depr, spec.Path, path, path, nil)

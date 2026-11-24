@@ -6,28 +6,41 @@
 package changefeedccl
 
 import (
+	"cmp"
 	"context"
+	"maps"
+	"slices"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/cdcutils"
+	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/checkpoint"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/schemafeed"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/timers"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant"
+	"github.com/cockroachdb/cockroach/pkg/obs/clustermetrics/cmmetrics"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/cidr"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/metric/aggmetric"
+	"github.com/cockroachdb/cockroach/pkg/util/rangescanstats/rangescanstatspb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/crlib/crstrings"
+	"github.com/cockroachdb/crlib/crtime"
+	prometheusgo "github.com/prometheus/client_model/go"
 	"github.com/rcrowley/go-metrics"
 )
 
@@ -38,6 +51,7 @@ const (
 	changefeedIOQueueMaxLatency        = 5 * time.Minute
 	admitLatencyMaxValue               = 1 * time.Minute
 	commitLatencyMaxValue              = 10 * time.Minute
+	backpressureMaxValue               = 10 * time.Minute
 	kafkaThrottlingTimeMaxValue        = 5 * time.Minute
 )
 
@@ -47,6 +61,14 @@ const maxSLIScopeNameLen = 128
 // defaultSLIScope is the name of the default SLI scope -- i.e. the set of metrics
 // keeping track of all changefeeds which did not have explicit sli scope specified.
 const defaultSLIScope = "default"
+
+func normalizeSLIScope(scope string) string {
+	scope = strings.TrimSpace(strings.ToLower(scope))
+	if scope == "" {
+		return defaultSLIScope
+	}
+	return scope
+}
 
 // AggMetrics are aggregated metrics keeping track of aggregated changefeed performance
 // indicators, combined with a limited number of per-changefeed indicators.
@@ -65,7 +87,9 @@ type AggMetrics struct {
 	ParallelIOPendingRows       *aggmetric.AggGauge
 	ParallelIOResultQueueNanos  *aggmetric.AggHistogram
 	ParallelIOInFlightKeys      *aggmetric.AggGauge
+	ParallelIOWorkers           *aggmetric.AggGauge
 	SinkIOInflight              *aggmetric.AggGauge
+	SinkBackpressureNanos       *aggmetric.AggHistogram
 	CommitLatency               *aggmetric.AggHistogram
 	BackfillCount               *aggmetric.AggGauge
 	BackfillPendingRanges       *aggmetric.AggGauge
@@ -76,13 +100,16 @@ type AggMetrics struct {
 	InternalRetryMessageCount   *aggmetric.AggGauge
 	SchemaRegistrations         *aggmetric.AggCounter
 	SchemaRegistryRetries       *aggmetric.AggCounter
-	AggregatorProgress          *aggmetric.AggGauge
-	CheckpointProgress          *aggmetric.AggGauge
+	AggregatorProgress          *aggmetric.AggFunctionalGauge
+	CheckpointProgress          *aggmetric.AggFunctionalGauge
 	LaggingRanges               *aggmetric.AggGauge
 	TotalRanges                 *aggmetric.AggGauge
 	CloudstorageBufferedBytes   *aggmetric.AggGauge
 	KafkaThrottlingNanos        *aggmetric.AggHistogram
 	SinkErrors                  *aggmetric.AggCounter
+	MaxBehindNanos              *aggmetric.AggFunctionalGauge
+	SpanProgressSkew            *aggmetric.AggFunctionalGauge
+	TableProgressSkew           *aggmetric.AggFunctionalGauge
 
 	Timers *timers.Timers
 
@@ -95,6 +122,8 @@ type AggMetrics struct {
 	// TODO(#130358): This doesn't really belong here, but is easier than
 	// threading the NetMetrics through all the other places.
 	NetMetrics *cidr.NetMetrics
+
+	CheckpointMetrics *checkpoint.AggMetrics
 }
 
 const (
@@ -110,7 +139,7 @@ type metricsRecorder interface {
 	recordMessageSize(int64)
 	recordInternalRetry(int64, bool)
 	recordOneMessage() recordOneMessageCallback
-	recordEmittedBatch(startTime time.Time, numMessages int, mvcc hlc.Timestamp, bytes int, compressedBytes int)
+	recordEmittedBatch(startTime crtime.Mono, numMessages int, mvcc hlc.Timestamp, bytes int, compressedBytes int)
 	recordResolvedCallback() func()
 	recordFlushRequestCallback() func()
 	getBackfillCallback() func() func()
@@ -118,6 +147,8 @@ type metricsRecorder interface {
 	recordSizeBasedFlush()
 	newParallelIOMetricsRecorder() parallelIOMetricsRecorder
 	recordSinkIOInflightChange(int64)
+	recordParallelIOWorkers(int64)
+	recordSinkBackpressure(time.Duration)
 	makeCloudstorageFileAllocCallback() func(delta int64)
 	getKafkaThrottlingMetrics(*cluster.Settings) metrics.Histogram
 	netMetrics() *cidr.NetMetrics
@@ -147,7 +178,9 @@ type sliMetrics struct {
 	ParallelIOPendingRows       *aggmetric.Gauge
 	ParallelIOResultQueueNanos  *aggmetric.Histogram
 	ParallelIOInFlightKeys      *aggmetric.Gauge
+	ParallelIOWorkers           *aggmetric.Gauge
 	SinkIOInflight              *aggmetric.Gauge
+	SinkBackpressureNanos       *aggmetric.Histogram
 	CommitLatency               *aggmetric.Histogram
 	ErrorRetries                *aggmetric.Counter
 	AdmitLatency                *aggmetric.Histogram
@@ -158,13 +191,16 @@ type sliMetrics struct {
 	InternalRetryMessageCount   *aggmetric.Gauge
 	SchemaRegistrations         *aggmetric.Counter
 	SchemaRegistryRetries       *aggmetric.Counter
-	AggregatorProgress          *aggmetric.Gauge
-	CheckpointProgress          *aggmetric.Gauge
+	AggregatorProgress          *aggmetric.FunctionalGauge
+	CheckpointProgress          *aggmetric.FunctionalGauge
 	LaggingRanges               *aggmetric.Gauge
 	TotalRanges                 *aggmetric.Gauge
 	CloudstorageBufferedBytes   *aggmetric.Gauge
 	KafkaThrottlingNanos        *aggmetric.Histogram
 	SinkErrors                  *aggmetric.Counter
+	MaxBehindNanos              *aggmetric.FunctionalGauge
+	SpanProgressSkew            *aggmetric.FunctionalGauge
+	TableProgressSkew           *aggmetric.FunctionalGauge
 
 	Timers *timers.ScopedTimers
 
@@ -173,8 +209,12 @@ type sliMetrics struct {
 		id         int64
 		resolved   map[int64]hlc.Timestamp
 		checkpoint map[int64]hlc.Timestamp
+		spanSkew   map[int64]int64
+		tableSkew  map[int64]int64
 	}
 	NetMetrics *cidr.NetMetrics
+
+	CheckpointMetrics *checkpoint.Metrics
 }
 
 // closeId unregisters an id. The id can still be used after its closed, but
@@ -184,6 +224,8 @@ func (m *sliMetrics) closeId(id int64) {
 	defer m.mu.Unlock()
 	delete(m.mu.checkpoint, id)
 	delete(m.mu.resolved, id)
+	delete(m.mu.spanSkew, id)
+	delete(m.mu.tableSkew, id)
 }
 
 // setResolved writes a resolved timestamp entry for the given id.
@@ -204,6 +246,18 @@ func (m *sliMetrics) setCheckpoint(id int64, ts hlc.Timestamp) {
 	}
 }
 
+// setProgressSkew saves the span skew/table skew for a given ID.
+func (m *sliMetrics) setProgressSkew(id int64, spanSkew int64, tableSkew int64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if _, ok := m.mu.spanSkew[id]; ok {
+		m.mu.spanSkew[id] = spanSkew
+	}
+	if _, ok := m.mu.tableSkew[id]; ok {
+		m.mu.tableSkew[id] = tableSkew
+	}
+}
+
 // claimId claims a unique ID.
 func (m *sliMetrics) claimId() int64 {
 	m.mu.Lock()
@@ -213,6 +267,8 @@ func (m *sliMetrics) claimId() int64 {
 	// ignored until a nonzero timestamp is written.
 	m.mu.checkpoint[id] = hlc.Timestamp{}
 	m.mu.resolved[id] = hlc.Timestamp{}
+	m.mu.spanSkew[id] = 0
+	m.mu.tableSkew[id] = 0
 	m.mu.id++
 	return id
 }
@@ -228,7 +284,7 @@ func (m *sliMetrics) recordOneMessage() recordOneMessageCallback {
 		return func(mvcc hlc.Timestamp, bytes int, compressedBytes int) {}
 	}
 
-	start := timeutil.Now()
+	start := crtime.NowMono()
 	return func(mvcc hlc.Timestamp, bytes int, compressedBytes int) {
 		m.MessageSize.RecordValue(int64(bytes))
 		m.recordEmittedBatch(start, 1, mvcc, bytes, compressedBytes)
@@ -262,12 +318,12 @@ func (m *sliMetrics) recordInternalRetry(numMessages int64, reducedBatchSize boo
 }
 
 func (m *sliMetrics) recordEmittedBatch(
-	startTime time.Time, numMessages int, mvcc hlc.Timestamp, bytes int, compressedBytes int,
+	startTime crtime.Mono, numMessages int, mvcc hlc.Timestamp, bytes int, compressedBytes int,
 ) {
 	if m == nil {
 		return
 	}
-	emitNanos := timeutil.Since(startTime).Nanoseconds()
+	emitNanos := startTime.Elapsed().Nanoseconds()
 	m.EmittedRowMessages.Inc(int64(numMessages))
 	m.EmittedBytes.Inc(int64(bytes))
 	m.EmittedBatchSizes.RecordValue(int64(numMessages))
@@ -286,9 +342,9 @@ func (m *sliMetrics) recordResolvedCallback() func() {
 		return func() {}
 	}
 
-	start := timeutil.Now()
+	start := crtime.NowMono()
 	return func() {
-		emitNanos := timeutil.Since(start).Nanoseconds()
+		emitNanos := start.Elapsed().Nanoseconds()
 		m.EmittedResolvedMessages.Inc(1)
 		m.BatchHistNanos.RecordValue(emitNanos)
 		m.EmittedBatchSizes.RecordValue(int64(1))
@@ -300,9 +356,9 @@ func (m *sliMetrics) recordFlushRequestCallback() func() {
 		return func() {}
 	}
 
-	start := timeutil.Now()
+	start := crtime.NowMono()
 	return func() {
-		flushNanos := timeutil.Since(start).Nanoseconds()
+		flushNanos := start.Elapsed().Nanoseconds()
 		m.Flushes.Inc(1)
 		m.FlushHistNanos.RecordValue(flushNanos)
 	}
@@ -374,7 +430,7 @@ func (m *sliMetrics) timers() *timers.ScopedTimers {
 // components because they don't support reliable deregistration, which is
 // desirable in this use-case.
 type JobScopedUsageMetrics struct {
-	UsageTableBytes    *metric.Gauge
+	UsageTableBytes    *metric.FunctionalGauge
 	UsageErrorCount    *metric.Counter
 	UsageQueryDuration metric.IHistogram
 
@@ -519,8 +575,8 @@ func (k *kafkaHistogramAdapter) Variance() (_ float64) {
 }
 
 type parallelIOMetricsRecorder interface {
-	recordPendingQueuePush(numKeys int64)
-	recordPendingQueuePop(numKeys int64, latency time.Duration)
+	recordPendingQueuePush(numMessages int64)
+	recordPendingQueuePop(numMessages int64, latency time.Duration)
 	recordResultQueueLatency(latency time.Duration)
 	setInFlightKeys(n int64)
 }
@@ -591,6 +647,22 @@ func (m *sliMetrics) recordSinkIOInflightChange(delta int64) {
 	m.SinkIOInflight.Inc(delta)
 }
 
+func (m *sliMetrics) recordParallelIOWorkers(n int64) {
+	if m == nil {
+		return
+	}
+
+	m.ParallelIOWorkers.Update(n)
+}
+
+func (m *sliMetrics) recordSinkBackpressure(duration time.Duration) {
+	if m == nil {
+		return
+	}
+
+	m.SinkBackpressureNanos.RecordValue(duration.Nanoseconds())
+}
+
 type wrappingCostController struct {
 	ctx      context.Context
 	inner    metricsRecorder
@@ -624,7 +696,7 @@ func (w *wrappingCostController) recordOneMessage() recordOneMessageCallback {
 }
 
 func (w *wrappingCostController) recordEmittedBatch(
-	startTime time.Time, numMessages int, mvcc hlc.Timestamp, bytes int, compressedBytes int,
+	startTime crtime.Mono, numMessages int, mvcc hlc.Timestamp, bytes int, compressedBytes int,
 ) {
 	w.recordExternalIO(bytes, compressedBytes)
 	w.inner.recordEmittedBatch(startTime, numMessages, mvcc, bytes, compressedBytes)
@@ -669,6 +741,14 @@ func (w *wrappingCostController) recordSinkIOInflightChange(delta int64) {
 	w.inner.recordSinkIOInflightChange(delta)
 }
 
+func (w *wrappingCostController) recordParallelIOWorkers(n int64) {
+	w.inner.recordParallelIOWorkers(n)
+}
+
+func (w *wrappingCostController) recordSinkBackpressure(duration time.Duration) {
+	w.inner.recordSinkBackpressure(duration)
+}
+
 func (w *wrappingCostController) newParallelIOMetricsRecorder() parallelIOMetricsRecorder {
 	return w.inner.newParallelIOMetricsRecorder()
 }
@@ -693,18 +773,36 @@ var (
 		Help:        "Resolved timestamps forwarded from the change aggregator to the change frontier",
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
+		Category:    metric.Metadata_CHANGEFEEDS,
 	}
 	metaChangefeedErrorRetries = metric.Metadata{
 		Name:        "changefeed.error_retries",
 		Help:        "Total retryable errors encountered by all changefeeds",
 		Measurement: "Errors",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_CHANGEFEEDS,
+		HowToUse: crstrings.UnwrapText(`
+			This metric tracks transient changefeed errors. Alert on "too many"
+			errors, such as 50 retries in 15 minutes. For example, during a rolling
+			upgrade this counter will increase because the changefeed jobs will
+			restart following node restarts. There is an exponential backoff, up to 10
+			minutes. But if there is no rolling upgrade in process or other cluster
+			maintenance, and the error rate is high, investigate the changefeed job.
+		`),
 	}
 	metaChangefeedFailures = metric.Metadata{
 		Name:        "changefeed.failures",
 		Help:        "Total number of changefeed jobs which have failed",
 		Measurement: "Errors",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_CHANGEFEEDS,
+		HowToUse: crstrings.UnwrapText(`
+			This metric tracks the permanent changefeed job failures that the jobs
+			system will not try to restart. Any increase in this counter should be
+			investigated. An alert on this metric is recommended.
+		`),
 	}
 
 	metaEventQueueTime = metric.Metadata{
@@ -712,24 +810,15 @@ var (
 		Help:        "Time KV event spent waiting to be processed",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Category:    metric.Metadata_CHANGEFEEDS,
 	}
 
 	metaChangefeedCheckpointHistNanos = metric.Metadata{
 		Name:        "changefeed.checkpoint_hist_nanos",
 		Help:        "Time spent checkpointing changefeed progress",
-		Measurement: "Changefeeds",
-		Unit:        metric.Unit_NANOSECONDS,
-	}
-
-	// TODO(dan): This was intended to be a measure of the minimum distance of
-	// any changefeed ahead of its gc ttl threshold, but keeping that correct in
-	// the face of changing zone configs is much harder, so this will have to do
-	// for now.
-	metaChangefeedMaxBehindNanos = metric.Metadata{
-		Name:        "changefeed.max_behind_nanos",
-		Help:        "(Deprecated in favor of checkpoint_progress) The most any changefeed's persisted checkpoint is behind the present",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Category:    metric.Metadata_CHANGEFEEDS,
 	}
 
 	metaChangefeedFrontierUpdates = metric.Metadata{
@@ -737,56 +826,107 @@ var (
 		Help:        "Number of change frontier updates across all feeds",
 		Measurement: "Updates",
 		Unit:        metric.Unit_COUNT,
+		Category:    metric.Metadata_CHANGEFEEDS,
 	}
 	metaChangefeedEventConsumerFlushNanos = metric.Metadata{
 		Name:        "changefeed.nprocs_flush_nanos",
 		Help:        "Total time spent idle waiting for the parallel consumer to flush",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Category:    metric.Metadata_CHANGEFEEDS,
 	}
 	metaChangefeedEventConsumerConsumeNanos = metric.Metadata{
 		Name:        "changefeed.nprocs_consume_event_nanos",
 		Help:        "Total time spent waiting to add an event to the parallel consumer",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Category:    metric.Metadata_CHANGEFEEDS,
 	}
 	metaChangefeedEventConsumerInFlightEvents = metric.Metadata{
 		Name:        "changefeed.nprocs_in_flight_count",
 		Help:        "Number of buffered events in the parallel consumer",
 		Measurement: "Count of Events",
 		Unit:        metric.Unit_COUNT,
+		Category:    metric.Metadata_CHANGEFEEDS,
 	}
 	metaChangefeedTableBytes = metric.Metadata{
 		Name:        "changefeed.usage.table_bytes",
 		Help:        "Aggregated number of bytes of data per table watched by changefeeds",
 		Measurement: "Storage",
 		Unit:        metric.Unit_BYTES,
+		Category:    metric.Metadata_CHANGEFEEDS,
 	}
 	metaChangefeedUsageErrorCount = metric.Metadata{
 		Name:        "changefeed.usage.error_count",
 		Help:        "Count of errors encountered while generating usage metrics for changefeeds",
 		Measurement: "Errors",
 		Unit:        metric.Unit_COUNT,
+		Category:    metric.Metadata_CHANGEFEEDS,
 	}
 	metaChangefeedUsageQueryDuration = metric.Metadata{
 		Name:        "changefeed.usage.query_duration",
 		Help:        "Time taken by the queries used to generate usage metrics for changefeeds",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Category:    metric.Metadata_CHANGEFEEDS,
 	}
 	metaNetworkBytesIn = metric.Metadata{
 		Name:        "changefeed.network.bytes_in",
 		Help:        "The number of bytes received from the network by changefeeds",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_COUNT,
+		Category:    metric.Metadata_CHANGEFEEDS,
 	}
 	metaNetworkBytesOut = metric.Metadata{
 		Name:        "changefeed.network.bytes_out",
 		Help:        "The number of bytes sent over the network by changefeeds",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_COUNT,
+		Category:    metric.Metadata_CHANGEFEEDS,
+	}
+	metaCheckpointLag = metric.Metadata{
+		Name:        "changefeed.checkpoint_lag",
+		Help:        "Time elapsed since a changefeed's most recently persisted checkpoint.",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+		Category:    metric.Metadata_CHANGEFEEDS,
+		MetricType:  prometheusgo.MetricType_GAUGE,
 	}
 )
+
+// ClusterMetrics groups all per-job cluster metrics emitted by the
+// changefeed package. New cluster metrics should be added by extending
+// this struct.
+type ClusterMetrics struct {
+	CheckpointLag *cmmetrics.WriteStopwatchVec
+}
+
+// RegisterWith attaches all cluster metrics to the given writer.
+func (cm *ClusterMetrics) RegisterClusterMetric(writer sql.ClusterMetricAdder) {
+	if writer == nil {
+		return
+	}
+	writer.AddMetricStruct(cm)
+}
+
+// SetCheckpointLag records the resolved-frontier nanos of the most
+// recent persisted checkpoint for the given job.
+func (cm *ClusterMetrics) SetCheckpointLag(jobID jobspb.JobID, scope string, frontierNanos int64) {
+	cm.CheckpointLag.UpdateStartTime(jobIDAndScopeLabels(jobID, scope), frontierNanos)
+}
+
+// DeleteJob drops all cluster metric entries belonging to the given
+// job.
+func (cm *ClusterMetrics) DeleteJob(jobID jobspb.JobID, scope string) {
+	cm.CheckpointLag.Delete(jobIDAndScopeLabels(jobID, scope))
+}
+
+func jobIDAndScopeLabels(jobID jobspb.JobID, scope string) map[string]string {
+	return map[string]string{
+		"job_id": strconv.FormatInt(int64(jobID), 10),
+		"scope":  normalizeSLIScope(scope),
+	}
+}
 
 func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *AggMetrics {
 	metaChangefeedEmittedMessages := metric.Metadata{
@@ -794,197 +934,305 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 		Help:        "Messages emitted by all feeds",
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_CHANGEFEEDS,
+		HowToUse: crstrings.UnwrapText(`
+			This metric provides a useful context when assessing the state of
+			changefeeds. This metric characterizes the rate of changes being streamed
+			from the CockroachDB cluster.
+		`),
 	}
 	metaChangefeedEmittedBatchSizes := metric.Metadata{
 		Name:        "changefeed.emitted_batch_sizes",
 		Help:        "Size of batches emitted emitted by all feeds",
 		Measurement: "Number of Messages in Batch",
 		Unit:        metric.Unit_COUNT,
+		Category:    metric.Metadata_CHANGEFEEDS,
 	}
 	metaChangefeedFilteredMessages := metric.Metadata{
 		Name: "changefeed.filtered_messages",
-		Help: "Messages filtered out by all feeds. " +
-			"This count does not include the number of messages that may be filtered " +
-			"due to the range constraints.",
+		Help: crstrings.UnwrapText(`
+			Messages filtered out by all feeds. This count does not include the number
+			of messages that may be filtered due to the range constraints.
+		`),
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
+		Category:    metric.Metadata_CHANGEFEEDS,
 	}
 	metaChangefeedEmittedBytes := metric.Metadata{
 		Name:        "changefeed.emitted_bytes",
 		Help:        "Bytes emitted by all feeds",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_CHANGEFEEDS,
+		HowToUse: crstrings.UnwrapText(`
+			This metric provides a useful context when assessing the state of
+			changefeeds. This metric characterizes the throughput bytes being streamed
+			from the CockroachDB cluster.
+		`),
 	}
 	metaChangefeedFlushedBytes := metric.Metadata{
-		Name:        "changefeed.flushed_bytes",
-		Help:        "Bytes emitted by all feeds; maybe different from changefeed.emitted_bytes when compression is enabled",
+		Name: "changefeed.flushed_bytes",
+		Help: crstrings.UnwrapText(`
+			Bytes emitted by all feeds; maybe different from changefeed.emitted_bytes
+			when compression is enabled
+		`),
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
+		Category:    metric.Metadata_CHANGEFEEDS,
 	}
 	metaChangefeedFlushes := metric.Metadata{
 		Name:        "changefeed.flushes",
-		Help:        "Total flushes across all feeds",
+		Help:        "Total flushes across all feeds.",
 		Measurement: "Flushes",
 		Unit:        metric.Unit_COUNT,
+		Category:    metric.Metadata_CHANGEFEEDS,
 	}
 	metaSizeBasedFlushes := metric.Metadata{
 		Name:        "changefeed.size_based_flushes",
-		Help:        "Total size based flushes across all feeds",
+		Help:        "Total size based flushes across all feeds.",
 		Measurement: "Flushes",
 		Unit:        metric.Unit_COUNT,
+		Category:    metric.Metadata_CHANGEFEEDS,
 	}
 	metaChangefeedBatchHistNanos := metric.Metadata{
 		Name:        "changefeed.sink_batch_hist_nanos",
-		Help:        "Time spent batched in the sink buffer before being flushed and acknowledged",
+		Help:        "Time spent batched in the sink buffer before being flushed and acknowledged.",
 		Measurement: "Changefeeds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Category:    metric.Metadata_CHANGEFEEDS,
 	}
 	metaChangefeedFlushHistNanos := metric.Metadata{
 		Name:        "changefeed.flush_hist_nanos",
 		Help:        "Time spent flushing messages across all changefeeds",
 		Measurement: "Changefeeds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Category:    metric.Metadata_CHANGEFEEDS,
 	}
 	metaCommitLatency := metric.Metadata{
 		Name: "changefeed.commit_latency",
-		Help: "Event commit latency: a difference between event MVCC timestamp " +
-			"and the time it was acknowledged by the downstream sink.  If the sink batches events, " +
-			" then the difference between the oldest event in the batch and acknowledgement is recorded; " +
-			"Excludes latency during backfill",
+		Help: crstrings.UnwrapText(`
+			Event commit latency: a difference between event MVCC timestamp and the
+			time it was acknowledged by the downstream sink. If the sink batches
+			events, then the difference between the oldest event in the batch and
+			acknowledgement is recorded. Excludes latency during backfill.
+		`),
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_CHANGEFEEDS,
+		HowToUse: crstrings.UnwrapText(`
+			This metric provides a useful context when assessing the state of
+			changefeeds. This metric characterizes the end-to-end lag between a
+			committed change and that change applied at the destination.
+		`),
 	}
 	metaAdmitLatency := metric.Metadata{
 		Name: "changefeed.admit_latency",
-		Help: "Event admission latency: a difference between event MVCC timestamp " +
-			"and the time it was admitted into changefeed pipeline; " +
-			"Note: this metric includes the time spent waiting until event can be processed due " +
-			"to backpressure or time spent resolving schema descriptors. " +
-			"Also note, this metric excludes latency during backfill",
+		Help: crstrings.UnwrapText(`
+			Event admission latency: a difference between event MVCC timestamp
+			and the time it was admitted into changefeed pipeline;
+			Note: this metric includes the time spent waiting until event can be processed due
+			to backpressure or time spent resolving schema descriptors.
+			Also note, this metric excludes latency during backfill
+		`),
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Category:    metric.Metadata_CHANGEFEEDS,
 	}
 	metaChangefeedBackfillCount := metric.Metadata{
 		Name:        "changefeed.backfill_count",
 		Help:        "Number of changefeeds currently executing backfill",
 		Measurement: "Count",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_SUPPORT,
+		Category:    metric.Metadata_CHANGEFEEDS,
 	}
 	metaChangefeedBackfillPendingRanges := metric.Metadata{
 		Name:        "changefeed.backfill_pending_ranges",
 		Help:        "Number of ranges in an ongoing backfill that are yet to be fully emitted",
 		Measurement: "Count",
 		Unit:        metric.Unit_COUNT,
+		Category:    metric.Metadata_CHANGEFEEDS,
 	}
 	metaChangefeedRunning := metric.Metadata{
 		Name:        "changefeed.running",
 		Help:        "Number of currently running changefeeds, including sinkless",
 		Measurement: "Changefeeds",
 		Unit:        metric.Unit_COUNT,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_CHANGEFEEDS,
+		HowToUse:    `This metric tracks the total number of all running changefeeds.`,
 	}
 	metaMessageSize := metric.Metadata{
 		Name:        "changefeed.message_size_hist",
 		Help:        "Message size histogram",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_BYTES,
+		Category:    metric.Metadata_CHANGEFEEDS,
 	}
 	metaBatchReductionCount := metric.Metadata{
 		Name:        "changefeed.batch_reduction_count",
 		Help:        "Number of times a changefeed aggregator node attempted to reduce the size of message batches it emitted to the sink",
 		Measurement: "Batch Size Reductions",
 		Unit:        metric.Unit_COUNT,
+		Category:    metric.Metadata_CHANGEFEEDS,
 	}
 	metaInternalRetryMessageCount := metric.Metadata{
 		Name:        "changefeed.internal_retry_message_count",
-		Help:        "Number of messages for which an attempt to retry them within an aggregator node was made",
+		Help:        "Number of messages for which an attempt to retry them within an aggregator node was made.",
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
+		Category:    metric.Metadata_CHANGEFEEDS,
 	}
 	metaSchemaRegistryRetriesCount := metric.Metadata{
 		Name:        "changefeed.schema_registry.retry_count",
-		Help:        "Number of retries encountered when sending requests to the schema registry",
+		Help:        "Number of retries encountered when sending requests to the schema registry.",
 		Measurement: "Retries",
 		Unit:        metric.Unit_COUNT,
+		Category:    metric.Metadata_CHANGEFEEDS,
 	}
 	metaSchemaRegistryRegistrations := metric.Metadata{
 		Name:        "changefeed.schema_registry.registrations",
-		Help:        "Number of registration attempts with the schema registry",
+		Help:        "Number of registration attempts with the schema registry.",
 		Measurement: "Registrations",
 		Unit:        metric.Unit_COUNT,
+		Category:    metric.Metadata_CHANGEFEEDS,
 	}
 	metaChangefeedParallelIOQueueNanos := metric.Metadata{
 		Name: "changefeed.parallel_io_queue_nanos",
-		Help: "Time that outgoing requests to the sink spend waiting in a queue due to" +
-			" in-flight requests with conflicting keys",
+		Help: crstrings.UnwrapText(`
+			Time that outgoing requests to the sink spend waiting in a queue due to
+			in-flight requests with conflicting keys.
+		`),
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Category:    metric.Metadata_CHANGEFEEDS,
 	}
 	metaChangefeedParallelIOPendingRows := metric.Metadata{
 		Name:        "changefeed.parallel_io_pending_rows",
-		Help:        "Number of rows which are blocked from being sent due to conflicting in-flight keys",
-		Measurement: "Keys",
+		Help:        "Number of rows which are blocked from being sent due to conflicting in-flight keys.",
+		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
+		Category:    metric.Metadata_CHANGEFEEDS,
 	}
 	metaChangefeedParallelIOResultQueueNanos := metric.Metadata{
 		Name: "changefeed.parallel_io_result_queue_nanos",
-		Help: "Time that incoming results from the sink spend waiting in parallel io emitter" +
-			" before they are acknowledged by the changefeed",
+		Help: crstrings.UnwrapText(`
+			Time that incoming results from the sink spend waiting in parallel io emitter
+			before they are acknowledged by the changefeed
+		`),
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Category:    metric.Metadata_CHANGEFEEDS,
 	}
 	metaChangefeedParallelIOInFlightKeys := metric.Metadata{
 		Name:        "changefeed.parallel_io_in_flight_keys",
 		Help:        "The number of keys currently in-flight which may contend with batches pending to be emitted",
 		Measurement: "Keys",
 		Unit:        metric.Unit_COUNT,
+		Category:    metric.Metadata_CHANGEFEEDS,
+	}
+	metaChangefeedParallelIOWorkers := metric.Metadata{
+		Name:        "changefeed.parallel_io_workers",
+		Help:        "The number of workers in the ParallelIO",
+		Measurement: "Workers",
+		Unit:        metric.Unit_COUNT,
+		Category:    metric.Metadata_CHANGEFEEDS,
 	}
 	metaChangefeedSinkIOInflight := metric.Metadata{
 		Name:        "changefeed.sink_io_inflight",
 		Help:        "The number of keys currently inflight as IO requests being sent to the sink",
 		Measurement: "Messages",
 		Unit:        metric.Unit_COUNT,
+		Category:    metric.Metadata_CHANGEFEEDS,
+	}
+	metaChangefeedSinkBackpressureNanos := metric.Metadata{
+		Name: "changefeed.sink_backpressure_nanos",
+		Help: crstrings.UnwrapText(`
+			Time spent waiting for quota when emitting to the sink (back-pressure).
+			Only populated for sinks using the batching_sink wrapper. As of writing,
+			this includes Kafka (v2), Pub/Sub (v2), and Webhook (v2).
+		`),
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+		Category:    metric.Metadata_CHANGEFEEDS,
 	}
 	metaAggregatorProgress := metric.Metadata{
 		Name:        "changefeed.aggregator_progress",
 		Help:        "The earliest timestamp up to which any aggregator is guaranteed to have emitted all values for",
 		Measurement: "Unix Timestamp Nanoseconds",
 		Unit:        metric.Unit_TIMESTAMP_NS,
+		Category:    metric.Metadata_CHANGEFEEDS,
 	}
 	metaCheckpointProgress := metric.Metadata{
 		Name:        "changefeed.checkpoint_progress",
 		Help:        "The earliest timestamp of any changefeed's persisted checkpoint (values prior to this timestamp will never need to be re-emitted)",
 		Measurement: "Unix Timestamp Nanoseconds",
 		Unit:        metric.Unit_TIMESTAMP_NS,
+		Category:    metric.Metadata_CHANGEFEEDS,
 	}
 	metaLaggingRanges := metric.Metadata{
 		Name:        "changefeed.lagging_ranges",
 		Help:        "The number of ranges considered to be lagging behind",
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
+		Category:    metric.Metadata_CHANGEFEEDS,
 	}
 	metaTotalRanges := metric.Metadata{
 		Name:        "changefeed.total_ranges",
 		Help:        "The total number of ranges being watched by changefeed aggregators",
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
+		Category:    metric.Metadata_CHANGEFEEDS,
 	}
 	metaCloudstorageBufferedBytes := metric.Metadata{
 		Name:        "changefeed.cloudstorage_buffered_bytes",
 		Help:        "The number of bytes buffered in cloudstorage sink files which have not been emitted yet",
 		Measurement: "Bytes",
 		Unit:        metric.Unit_COUNT,
+		Category:    metric.Metadata_CHANGEFEEDS,
 	}
 	metaChangefeedKafkaThrottlingNanos := metric.Metadata{
 		Name:        "changefeed.kafka_throttling_hist_nanos",
 		Help:        "Time spent in throttling due to exceeding kafka quota",
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
+		Category:    metric.Metadata_CHANGEFEEDS,
 	}
 	metaSinkErrors := metric.Metadata{
 		Name:        "changefeed.sink_errors",
 		Help:        "Number of changefeed errors caused by the sink",
 		Measurement: "Count",
 		Unit:        metric.Unit_COUNT,
+		Category:    metric.Metadata_CHANGEFEEDS,
+	}
+	// TODO(dan): This was intended to be a measure of the minimum distance of
+	// any changefeed ahead of its gc ttl threshold, but keeping that correct in
+	// the face of changing zone configs is much harder, so this will have to do
+	// for now.
+	metaChangefeedMaxBehindNanos := metric.Metadata{
+		Name:        "changefeed.max_behind_nanos",
+		Help:        "The most any changefeed's persisted checkpoint is behind the present",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_SUPPORT,
+		Category:    metric.Metadata_CHANGEFEEDS,
+	}
+	metaChangefeedSpanProgressSkew := metric.Metadata{
+		Name:        "changefeed.progress_skew.span",
+		Help:        "The time difference between the fastest and slowest span's resolved timestamp",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+		Category:    metric.Metadata_CHANGEFEEDS,
+	}
+	metaChangefeedTableProgressSkew := metric.Metadata{
+		Name:        "changefeed.progress_skew.table",
+		Help:        "The time difference between the fastest and slowest table's resolved timestamp",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+		Category:    metric.Metadata_CHANGEFEEDS,
 	}
 
 	functionalGaugeMinFn := func(childValues []int64) int64 {
@@ -995,6 +1243,13 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 			}
 		}
 		return min
+	}
+
+	functionalGaugeMaxFn := func(childValues []int64) int64 {
+		if len(childValues) == 0 {
+			return 0
+		}
+		return slices.Max(childValues)
 	}
 
 	// NB: When adding new histograms, use sigFigs = 1.  Older histograms
@@ -1028,7 +1283,7 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 			Duration:     histogramWindow,
 			MaxVal:       changefeedIOQueueMaxLatency.Nanoseconds(),
 			SigFigs:      2,
-			BucketConfig: metric.BatchProcessLatencyBuckets,
+			BucketConfig: metric.ChangefeedBatchLatencyBuckets,
 		}),
 		ParallelIOPendingRows: b.Gauge(metaChangefeedParallelIOPendingRows),
 		ParallelIOResultQueueNanos: b.Histogram(metric.HistogramOptions{
@@ -1036,37 +1291,45 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 			Duration:     histogramWindow,
 			MaxVal:       changefeedIOQueueMaxLatency.Nanoseconds(),
 			SigFigs:      2,
-			BucketConfig: metric.BatchProcessLatencyBuckets,
+			BucketConfig: metric.ChangefeedBatchLatencyBuckets,
 		}),
 		ParallelIOInFlightKeys: b.Gauge(metaChangefeedParallelIOInFlightKeys),
 		SinkIOInflight:         b.Gauge(metaChangefeedSinkIOInflight),
+		SinkBackpressureNanos: b.Histogram(metric.HistogramOptions{
+			Metadata:     metaChangefeedSinkBackpressureNanos,
+			Duration:     histogramWindow,
+			MaxVal:       backpressureMaxValue.Nanoseconds(),
+			SigFigs:      2,
+			BucketConfig: metric.ChangefeedBatchLatencyBuckets,
+		}),
+		ParallelIOWorkers: b.Gauge(metaChangefeedParallelIOWorkers),
 		BatchHistNanos: b.Histogram(metric.HistogramOptions{
 			Metadata:     metaChangefeedBatchHistNanos,
 			Duration:     histogramWindow,
 			MaxVal:       changefeedBatchHistMaxLatency.Nanoseconds(),
 			SigFigs:      1,
-			BucketConfig: metric.BatchProcessLatencyBuckets,
+			BucketConfig: metric.ChangefeedBatchLatencyBuckets,
 		}),
 		FlushHistNanos: b.Histogram(metric.HistogramOptions{
 			Metadata:     metaChangefeedFlushHistNanos,
 			Duration:     histogramWindow,
 			MaxVal:       changefeedFlushHistMaxLatency.Nanoseconds(),
 			SigFigs:      2,
-			BucketConfig: metric.BatchProcessLatencyBuckets,
+			BucketConfig: metric.ChangefeedBatchLatencyBuckets,
 		}),
 		CommitLatency: b.Histogram(metric.HistogramOptions{
 			Metadata:     metaCommitLatency,
 			Duration:     histogramWindow,
 			MaxVal:       commitLatencyMaxValue.Nanoseconds(),
 			SigFigs:      1,
-			BucketConfig: metric.BatchProcessLatencyBuckets,
+			BucketConfig: metric.ChangefeedPipelineLatencyBuckets,
 		}),
 		AdmitLatency: b.Histogram(metric.HistogramOptions{
 			Metadata:     metaAdmitLatency,
 			Duration:     histogramWindow,
 			MaxVal:       admitLatencyMaxValue.Nanoseconds(),
 			SigFigs:      1,
-			BucketConfig: metric.BatchProcessLatencyBuckets,
+			BucketConfig: metric.ChangefeedPipelineLatencyBuckets,
 		}),
 		BackfillCount:             b.Gauge(metaChangefeedBackfillCount),
 		BackfillPendingRanges:     b.Gauge(metaChangefeedBackfillPendingRanges),
@@ -1085,11 +1348,15 @@ func newAggregateMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) *Ag
 			Duration:     histogramWindow,
 			MaxVal:       kafkaThrottlingTimeMaxValue.Nanoseconds(),
 			SigFigs:      2,
-			BucketConfig: metric.BatchProcessLatencyBuckets,
+			BucketConfig: metric.ChangefeedBatchLatencyBuckets,
 		}),
-		SinkErrors: b.Counter(metaSinkErrors),
-		Timers:     timers.New(histogramWindow),
-		NetMetrics: lookup.MakeNetMetrics(metaNetworkBytesOut, metaNetworkBytesIn, "sink"),
+		SinkErrors:        b.Counter(metaSinkErrors),
+		MaxBehindNanos:    b.FunctionalGauge(metaChangefeedMaxBehindNanos, functionalGaugeMaxFn),
+		SpanProgressSkew:  b.FunctionalGauge(metaChangefeedSpanProgressSkew, functionalGaugeMaxFn),
+		TableProgressSkew: b.FunctionalGauge(metaChangefeedTableProgressSkew, functionalGaugeMaxFn),
+		Timers:            timers.New(histogramWindow),
+		NetMetrics:        lookup.MakeNetMetrics(metaNetworkBytesOut, metaNetworkBytesIn, "sink"),
+		CheckpointMetrics: checkpoint.NewAggMetrics(b),
 	}
 	a.mu.sliMetrics = make(map[string]*sliMetrics)
 	_, err := a.getOrCreateScope(defaultSLIScope)
@@ -1104,11 +1371,7 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
-	scope = strings.TrimSpace(strings.ToLower(scope))
-
-	if scope == "" {
-		scope = defaultSLIScope
-	}
+	scope = normalizeSLIScope(scope)
 
 	if len(scope) > maxSLIScopeNameLen {
 		return nil, pgerror.Newf(pgcode.ConfigurationLimitExceeded,
@@ -1143,7 +1406,9 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 		ParallelIOPendingRows:       a.ParallelIOPendingRows.AddChild(scope),
 		ParallelIOResultQueueNanos:  a.ParallelIOResultQueueNanos.AddChild(scope),
 		ParallelIOInFlightKeys:      a.ParallelIOInFlightKeys.AddChild(scope),
+		ParallelIOWorkers:           a.ParallelIOWorkers.AddChild(scope),
 		SinkIOInflight:              a.SinkIOInflight.AddChild(scope),
+		SinkBackpressureNanos:       a.SinkBackpressureNanos.AddChild(scope),
 		CommitLatency:               a.CommitLatency.AddChild(scope),
 		ErrorRetries:                a.ErrorRetries.AddChild(scope),
 		AdmitLatency:                a.AdmitLatency.AddChild(scope),
@@ -1165,9 +1430,13 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 		// TODO(#130358): Again, this doesn't belong here, but it's the most
 		// convenient way to feed this metric to changefeeds.
 		NetMetrics: a.NetMetrics,
+
+		CheckpointMetrics: a.CheckpointMetrics.AddChild(scope),
 	}
 	sm.mu.resolved = make(map[int64]hlc.Timestamp)
 	sm.mu.checkpoint = make(map[int64]hlc.Timestamp)
+	sm.mu.spanSkew = make(map[int64]int64)
+	sm.mu.tableSkew = make(map[int64]int64)
 	sm.mu.id = 1 // start the first id at 1 so we can detect intiialization
 
 	minTimestampGetter := func(m map[int64]hlc.Timestamp) func() int64 {
@@ -1187,17 +1456,40 @@ func (a *AggMetrics) getOrCreateScope(scope string) (*sliMetrics, error) {
 			return minTs
 		}
 	}
-	sm.AggregatorProgress = a.AggregatorProgress.AddFunctionalChild(minTimestampGetter(sm.mu.resolved), scope)
-	sm.CheckpointProgress = a.CheckpointProgress.AddFunctionalChild(minTimestampGetter(sm.mu.checkpoint), scope)
+
+	maxBehindNanosGetter := func(m map[int64]hlc.Timestamp) func() int64 {
+		return func() int64 {
+			minTs := minTimestampGetter(m)()
+			if minTs == 0 {
+				return 0
+			}
+			return timeutil.Now().UnixNano() - minTs
+		}
+	}
+
+	maxTimestampSkewGetter := func(m map[int64]int64) func() int64 {
+		return func() int64 {
+			sm.mu.Lock()
+			defer sm.mu.Unlock()
+			return iterutil.MaxFunc(maps.Values(m), cmp.Compare)
+		}
+	}
+
+	sm.AggregatorProgress = a.AggregatorProgress.AddChild(minTimestampGetter(sm.mu.resolved), scope)
+	sm.CheckpointProgress = a.CheckpointProgress.AddChild(minTimestampGetter(sm.mu.checkpoint), scope)
+	sm.MaxBehindNanos = a.MaxBehindNanos.AddChild(maxBehindNanosGetter(sm.mu.resolved), scope)
+	sm.SpanProgressSkew = a.SpanProgressSkew.AddChild(
+		maxTimestampSkewGetter(sm.mu.spanSkew), scope)
+	sm.TableProgressSkew = a.TableProgressSkew.AddChild(
+		maxTimestampSkewGetter(sm.mu.tableSkew), scope)
 
 	a.mu.sliMetrics[scope] = sm
 	return sm, nil
 }
 
-// getLaggingRangesCallback returns a function which can be called to update the
-// lagging ranges metric. It should be called with the current number of lagging
-// ranges.
-func (s *sliMetrics) getLaggingRangesCallback() func(lagging int64, total int64) {
+// getRangeStatsCallback returns a function which can be called to update our
+// range stats metrics: lagging ranges, scanning ranges, and total ranges.
+func (m *sliMetrics) getRangeStatsCallback() func(stats *rangescanstatspb.RangeStats) {
 	// Because this gauge is shared between changefeeds in the same metrics scope,
 	// we must instead modify it using `Inc` and `Dec` (as opposed to `Update`) to
 	// ensure values written by others are not overwritten. The code below is used
@@ -1217,14 +1509,20 @@ func (s *sliMetrics) getLaggingRangesCallback() func(lagging int64, total int64)
 		lagging int64
 		total   int64
 	}{}
-	return func(lagging int64, total int64) {
+	return func(stats *rangescanstatspb.RangeStats) {
+		total, scanning, lagging := stats.RangeCount, stats.ScanningRangeCount, stats.LaggingRangeCount
+		// We don't want to report lagging ranges during an initial scan.
+		if scanning > 0 {
+			lagging = 0
+		}
+
 		last.Lock()
 		defer last.Unlock()
 
-		s.LaggingRanges.Dec(last.lagging - lagging)
+		m.LaggingRanges.Dec(last.lagging - lagging)
 		last.lagging = lagging
 
-		s.TotalRanges.Dec(last.total - total)
+		m.TotalRanges.Dec(last.total - total)
 		last.total = total
 	}
 }
@@ -1244,15 +1542,12 @@ type Metrics struct {
 	ParallelConsumerFlushNanos     metric.IHistogram
 	ParallelConsumerConsumeNanos   metric.IHistogram
 	ParallelConsumerInFlightEvents *metric.Gauge
+	ClusterMetrics                 *ClusterMetrics
 
-	// This map and the MaxBehindNanos metric are deprecated in favor of
-	// CheckpointProgress which is stored in the sliMetrics.
 	mu struct {
 		syncutil.Mutex
-		id       int
-		resolved map[int]hlc.Timestamp
+		id int
 	}
-	MaxBehindNanos *metric.Gauge
 }
 
 // MetricStruct implements the metric.Struct interface.
@@ -1297,22 +1592,15 @@ func MakeMetrics(histogramWindow time.Duration, lookup *cidr.Lookup) metric.Stru
 			Mode:         metric.HistogramModePrometheus,
 		}),
 		ParallelConsumerInFlightEvents: metric.NewGauge(metaChangefeedEventConsumerInFlightEvents),
+		ClusterMetrics: &ClusterMetrics{
+			CheckpointLag: cmmetrics.NewWriteStopwatchVec(
+				metaCheckpointLag, timeutil.DefaultTimeSource{}, "job_id", "scope",
+			),
+		},
 	}
 
-	m.mu.resolved = make(map[int]hlc.Timestamp)
 	m.mu.id = 1 // start the first id at 1 so we can detect initialization
-	m.MaxBehindNanos = metric.NewFunctionalGauge(metaChangefeedMaxBehindNanos, func() int64 {
-		now := timeutil.Now()
-		var maxBehind time.Duration
-		m.mu.Lock()
-		defer m.mu.Unlock()
-		for _, resolved := range m.mu.resolved {
-			if behind := now.Sub(resolved.GoTime()); behind > maxBehind {
-				maxBehind = behind
-			}
-		}
-		return maxBehind.Nanoseconds()
-	})
+
 	return m
 }
 
@@ -1352,6 +1640,11 @@ func MakeMemoryMetrics(
 }
 
 func init() {
+	// Register metric so cmreader on other nodes knows this metric exists
+	// before any node constructs it.
+	cmmetrics.RegisterLabeledClusterMetric(
+		metaCheckpointLag.Name, metaCheckpointLag, []string{"job_id", "scope"},
+	)
 	jobs.MakeChangefeedMetricsHook = MakeMetrics
 	jobs.MakeChangefeedMemoryMetricsHook = MakeMemoryMetrics
 }

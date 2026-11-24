@@ -7,6 +7,7 @@ package changefeedccl
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
@@ -18,6 +19,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/RaduBerinde/btreemap"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/changefeedbase"
 	"github.com/cockroachdb/cockroach/pkg/ccl/changefeedccl/kvevent"
@@ -32,9 +34,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/crlib/crtime"
 	"github.com/cockroachdb/errors"
-	"github.com/google/btree"
 	// Placeholder for pgzip and zdstd.
 	_ "github.com/klauspost/compress/zstd"
 	_ "github.com/klauspost/pgzip"
@@ -65,13 +67,33 @@ func cloudStorageFormatTime(ts hlc.Timestamp) string {
 	return fmt.Sprintf(`%s%09d%010d`, t.Format(f), t.Nanosecond(), ts.Logical)
 }
 
+// byteBufferWithTrackedLength is a bytes.Buffer that also tracks its length
+// separately and atomically. This is useful for codecs that write to the buffer
+// asynchronously, such as pgzip/zstd, because we can't safely call `buf.Len()`
+// while the codec is open, because buf.Write() may be called after
+// codec.Write() returns.
+type byteBufferWithTrackedLength struct {
+	bytes.Buffer
+	len atomic.Int64
+}
+
+func (b *byteBufferWithTrackedLength) Write(p []byte) (n int, err error) {
+	n, err = b.Buffer.Write(p)
+	b.len.Add(int64(n))
+	return n, err
+}
+
+func (b *byteBufferWithTrackedLength) Len() int {
+	return int(b.len.Load())
+}
+
 type cloudStorageSinkFile struct {
 	cloudStorageSinkKey
-	created       time.Time
+	created       crtime.Mono
 	codec         io.WriteCloser
 	rawSize       int
 	numMessages   int
-	buf           bytes.Buffer
+	buf           byteBufferWithTrackedLength
 	alloc         kvevent.Alloc
 	oldestMVCC    hlc.Timestamp
 	parquetCodec  *parquetWriter
@@ -320,7 +342,7 @@ type cloudStorageSink struct {
 	// These are fields to track information needed to output files based on the naming
 	// convention described above. See comment on cloudStorageSink above for more details.
 	fileID int64
-	files  *btree.BTree // of *cloudStorageSinkFile
+	files  *btreemap.BTreeMap[cloudStorageSinkKey, *cloudStorageSinkFile]
 
 	timestampOracle timestampLowerBoundOracle
 	jobSessionID    string
@@ -340,6 +362,10 @@ type cloudStorageSink struct {
 
 	// testingKnobs may be nil if no knobs are set.
 	testingKnobs *TestingKnobs
+
+	// csvHeaderRow, when true with .csv extension, writes csvColumnHeader bytes once at
+	// the start of each in-memory file buffer (before the first data row).
+	csvHeaderRow bool
 }
 
 type flushRequest struct {
@@ -377,7 +403,7 @@ const flushQueueDepth = 256
 
 func makeCloudStorageSink(
 	ctx context.Context,
-	u sinkURL,
+	u *changefeedbase.SinkURL,
 	srcID base.SQLInstanceID,
 	settings *cluster.Settings,
 	encodingOpts changefeedbase.EncodingOptions,
@@ -388,7 +414,7 @@ func makeCloudStorageSink(
 	testingKnobs *TestingKnobs,
 ) (Sink, error) {
 	var targetMaxFileSize int64 = 16 << 20 // 16MB
-	if fileSizeParam := u.consumeParam(changefeedbase.SinkParamFileSize); fileSizeParam != `` {
+	if fileSizeParam := u.ConsumeParam(changefeedbase.SinkParamFileSize); fileSizeParam != `` {
 		var err error
 		if targetMaxFileSize, err = humanizeutil.ParseBytes(fileSizeParam); err != nil {
 			return nil, pgerror.Wrapf(err, pgcode.Syntax, `parsing %s`, fileSizeParam)
@@ -416,7 +442,7 @@ func makeCloudStorageSink(
 		sinkID:            sinkID,
 		settings:          settings,
 		targetMaxFileSize: targetMaxFileSize,
-		files:             btree.New(8),
+		files:             btreemap.New[cloudStorageSinkKey, *cloudStorageSinkFile](8, keyCmp),
 		partitionFormat:   defaultPartitionFormat,
 		timestampOracle:   timestampOracle,
 		// TODO(dan,ajwerner): Use the jobs framework's session ID once that's available.
@@ -431,7 +457,7 @@ func makeCloudStorageSink(
 	}
 	s.flushGroup.GoCtx(s.asyncFlusher)
 
-	if partitionFormat := u.consumeParam(changefeedbase.SinkParamPartitionFormat); partitionFormat != "" {
+	if partitionFormat := u.ConsumeParam(changefeedbase.SinkParamPartitionFormat); partitionFormat != "" {
 		dateFormat, ok := partitionDateFormats[partitionFormat]
 		if !ok {
 			return nil, errors.Errorf("invalid partition_format of %s", partitionFormat)
@@ -455,6 +481,7 @@ func makeCloudStorageSink(
 		// would require a bit of refactoring.
 		s.ext = `.csv`
 		s.rowDelimiter = []byte{'\n'}
+		s.csvHeaderRow = encodingOpts.CsvHeader
 	case changefeedbase.OptFormatParquet:
 		s.ext = `.parquet`
 		s.rowDelimiter = nil
@@ -464,7 +491,7 @@ func makeCloudStorageSink(
 	}
 
 	switch encodingOpts.Envelope {
-	case changefeedbase.OptEnvelopeWrapped, changefeedbase.OptEnvelopeBare:
+	case changefeedbase.OptEnvelopeWrapped, changefeedbase.OptEnvelopeBare, changefeedbase.OptEnvelopeEnriched:
 	default:
 		return nil, errors.Errorf(`this sink is incompatible with %s=%s`,
 			changefeedbase.OptEnvelope, encodingOpts.Envelope)
@@ -516,15 +543,14 @@ func (s *cloudStorageSink) getOrCreateFile(
 ) (*cloudStorageSinkFile, error) {
 	name, _ := s.topicNamer.Name(topic)
 	key := cloudStorageSinkKey{name, int64(topic.GetVersion())}
-	if item := s.files.Get(key); item != nil {
-		f := item.(*cloudStorageSinkFile)
+	if _, f, _ := s.files.Get(key); f != nil {
 		if eventMVCC.Less(f.oldestMVCC) {
 			f.oldestMVCC = eventMVCC
 		}
 		return f, nil
 	}
 	f := &cloudStorageSinkFile{
-		created:             timeutil.Now(),
+		created:             crtime.NowMono(),
 		cloudStorageSinkKey: key,
 		oldestMVCC:          eventMVCC,
 		allocCallback:       s.metrics.makeCloudstorageFileAllocCallback(),
@@ -537,7 +563,7 @@ func (s *cloudStorageSink) getOrCreateFile(
 		}
 		f.codec = codec
 	}
-	s.files.ReplaceOrInsert(f)
+	s.files.ReplaceOrInsert(f.cloudStorageSinkKey, f)
 	return f, nil
 }
 
@@ -546,8 +572,10 @@ func (s *cloudStorageSink) EmitRow(
 	ctx context.Context,
 	topic TopicDescriptor,
 	key, value []byte,
+	csvColumnHeader []byte,
 	updated, mvcc hlc.Timestamp,
 	alloc kvevent.Alloc,
+	headers rowHeaders,
 ) (retErr error) {
 	if s.files == nil {
 		return errors.New(`cannot EmitRow on a closed sink`)
@@ -570,12 +598,21 @@ func (s *cloudStorageSink) EmitRow(
 		}
 	}()
 
-	s.metrics.recordMessageSize(int64(len(key) + len(value)))
+	s.metrics.recordMessageSize(int64(len(key) + len(value) + headersLen(headers)))
 	file, err := s.getOrCreateFile(topic, mvcc)
 	if err != nil {
 		return err
 	}
 	file.mergeAlloc(&alloc)
+
+	if s.csvHeaderRow && file.numMessages == 0 && len(csvColumnHeader) > 0 {
+		if _, err := file.Write(csvColumnHeader); err != nil {
+			return err
+		}
+		if _, err := file.Write(s.rowDelimiter); err != nil {
+			return err
+		}
+	}
 
 	if _, err := file.Write(value); err != nil {
 		return err
@@ -622,7 +659,7 @@ func (s *cloudStorageSink) EmitResolvedTimestamp(
 	part := resolved.GoTime().Format(s.partitionFormat)
 	filename := fmt.Sprintf(`%s.RESOLVED`, cloudStorageFormatTime(resolved))
 	if log.V(1) {
-		log.Infof(ctx, "writing file %s %s", filename, resolved.AsOfSystemTime())
+		log.Changefeed.Infof(ctx, "writing file %s %s", filename, resolved.AsOfSystemTime())
 	}
 	return cloud.WriteFile(ctx, s.es, filepath.Join(part, filename), bytes.NewReader(payload))
 }
@@ -645,20 +682,17 @@ func (s *cloudStorageSink) EmitResolvedTimestamp(
 // on cloudStorageSink)
 func (s *cloudStorageSink) flushTopicVersions(
 	ctx context.Context, topic string, maxVersionToFlush int64,
-) (err error) {
+) error {
 	var toRemoveAlloc [2]int64    // generally avoid allocating
 	toRemove := toRemoveAlloc[:0] // schemaIDs of flushed files
 	gte := cloudStorageSinkKey{topic: topic}
 	lt := cloudStorageSinkKey{topic: topic, schemaID: maxVersionToFlush + 1}
-	s.files.AscendRange(gte, lt, func(i btree.Item) (wantMore bool) {
-		f := i.(*cloudStorageSinkFile)
-		if err = s.flushFile(ctx, f); err == nil {
-			toRemove = append(toRemove, f.schemaID)
+
+	for _, f := range s.files.Ascend(btreemap.GE(gte), btreemap.LT(lt)) {
+		if err := s.flushFile(ctx, f); err != nil {
+			return err
 		}
-		return err == nil
-	})
-	if err != nil {
-		return err
+		toRemove = append(toRemove, f.schemaID)
 	}
 
 	// Allow synchronization with the async flusher to happen.
@@ -671,8 +705,7 @@ func (s *cloudStorageSink) flushTopicVersions(
 	// flushed files may not be removed from s.files. This is ok, since
 	// the error will trigger the sink to be closed, and we will only use
 	// s.files to ensure that the codecs are closed before deallocating it.
-	err = s.waitAsyncFlush(ctx)
-	if err != nil {
+	if err := s.waitAsyncFlush(ctx); err != nil {
 		return err
 	}
 
@@ -681,7 +714,7 @@ func (s *cloudStorageSink) flushTopicVersions(
 	for _, v := range toRemove {
 		s.files.Delete(cloudStorageSinkKey{topic: topic, schemaID: v})
 	}
-	return err
+	return nil
 }
 
 // Flush implements the Sink interface.
@@ -692,13 +725,10 @@ func (s *cloudStorageSink) Flush(ctx context.Context) error {
 
 	s.metrics.recordFlushRequestCallback()()
 
-	var err error
-	s.files.Ascend(func(i btree.Item) (wantMore bool) {
-		err = s.flushFile(ctx, i.(*cloudStorageSinkFile))
-		return err == nil
-	})
-	if err != nil {
-		return err
+	for _, f := range s.files.Ascend(btreemap.Min[cloudStorageSinkKey](), btreemap.Max[cloudStorageSinkKey]()) {
+		if err := s.flushFile(ctx, f); err != nil {
+			return err
+		}
 	}
 	// Allow synchronization with the async flusher to happen.
 	if s.testingKnobs != nil && s.testingKnobs.AsyncFlushSync != nil {
@@ -710,8 +740,7 @@ func (s *cloudStorageSink) Flush(ctx context.Context) error {
 	// flushed files may not be removed from s.files. This is ok, since
 	// the error will trigger the sink to be closed, and we will only use
 	// s.files to ensure that the codecs are closed before deallocating it.
-	err = s.waitAsyncFlush(ctx)
-	if err != nil {
+	if err := s.waitAsyncFlush(ctx); err != nil {
 		return err
 	}
 	// Files need to be cleared after the flush completes, otherwise file resources
@@ -763,6 +792,9 @@ var logQueueDepth = log.Every(30 * time.Second)
 // flushFile flushes file to the cloud storage.
 // file should not be used after flushing.
 func (s *cloudStorageSink) flushFile(ctx context.Context, file *cloudStorageSinkFile) error {
+	ctx, sp := tracing.ChildSpan(ctx, "changefeed.cloudstorage_sink.flush_file")
+	defer sp.Finish()
+
 	asyncFlushEnabled := enableAsyncFlush.Get(&s.settings.SV)
 	if s.asyncFlushActive && !asyncFlushEnabled {
 		// Async flush behavior was turned off --  drain any active flush requests
@@ -816,7 +848,7 @@ func (s *cloudStorageSink) flushFile(ctx context.Context, file *cloudStorageSink
 		return nil
 	default:
 		if logQueueDepth.ShouldLog() {
-			log.Infof(ctx, "changefeed flush queue is full; ~%d bytes to flush",
+			log.Changefeed.Infof(ctx, "changefeed flush queue is full; ~%d bytes to flush",
 				flushQueueDepth*s.targetMaxFileSize)
 		}
 	}
@@ -862,7 +894,7 @@ func (s *cloudStorageSink) asyncFlusher(ctx context.Context) error {
 			flushDone()
 
 			if err != nil {
-				log.Errorf(ctx, "error flushing file to storage: %s", err)
+				log.Changefeed.Errorf(ctx, "error flushing file to storage: %s", err)
 				s.asyncFlushErr = err
 				return err
 			}
@@ -875,7 +907,7 @@ func (f *cloudStorageSinkFile) flushToStorage(
 	ctx context.Context, es cloud.ExternalStorage, dest string, m metricsRecorder,
 ) error {
 	defer f.releaseAlloc(ctx)
-	defer m.timers().DownstreamClientSend.Start()()
+	defer m.timers().DownstreamClientSend.Start().End()
 
 	if f.rawSize == 0 {
 		// This method shouldn't be called with an empty file, but be defensive
@@ -887,6 +919,8 @@ func (f *cloudStorageSinkFile) flushToStorage(
 		if err := f.codec.Close(); err != nil {
 			return err
 		}
+		// Reset reference to underlying codec to prevent accidental reuse.
+		f.codec = nil
 	}
 
 	compressedBytes := f.buf.Len()
@@ -906,8 +940,7 @@ func (s *cloudStorageSink) closeAllCodecs() (err error) {
 	// Codecs need to be closed because of the klauspost compression library implementation
 	// details where it spins up go routines to perform compression in parallel.
 	// Those go routines are cleaned up when the compression codec is closed.
-	s.files.Ascend(func(i btree.Item) (wantMore bool) {
-		f := i.(*cloudStorageSinkFile)
+	for _, f := range s.files.Ascend(btreemap.Min[cloudStorageSinkKey](), btreemap.Max[cloudStorageSinkKey]()) {
 		if f.codec != nil {
 			cErr := f.codec.Close()
 			f.codec = nil
@@ -915,8 +948,7 @@ func (s *cloudStorageSink) closeAllCodecs() (err error) {
 				err = cErr
 			}
 		}
-		return true
-	})
+	}
 	return err
 }
 
@@ -940,22 +972,11 @@ type cloudStorageSinkKey struct {
 	schemaID int64
 }
 
-func (k cloudStorageSinkKey) Less(other btree.Item) bool {
-	switch other := other.(type) {
-	case *cloudStorageSinkFile:
-		return keyLess(k, other.cloudStorageSinkKey)
-	case cloudStorageSinkKey:
-		return keyLess(k, other)
-	default:
-		panic(errors.Errorf("unexpected item type %T", other))
+func keyCmp(a, b cloudStorageSinkKey) int {
+	if a.topic != b.topic {
+		return cmp.Compare(a.topic, b.topic)
 	}
-}
-
-func keyLess(a, b cloudStorageSinkKey) bool {
-	if a.topic == b.topic {
-		return a.schemaID < b.schemaID
-	}
-	return a.topic < b.topic
+	return cmp.Compare(a.schemaID, b.schemaID)
 }
 
 // generateChangefeedSessionID generates a unique string that is used to

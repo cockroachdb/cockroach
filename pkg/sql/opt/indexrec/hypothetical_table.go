@@ -11,8 +11,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 )
 
@@ -23,7 +25,7 @@ import (
 // cat.StableID to its constructed HypotheticalTable. These tables will be used
 // to update the table query metadata when making index recommendations.
 func BuildOptAndHypTableMaps(
-	c cat.Catalog, indexCandidates map[cat.Table][][]cat.IndexColumn,
+	c cat.Catalog, indexCandidates map[cat.Table][][]cat.IndexColumn, attrs IndexCandidateAttrs,
 ) (optTables, hypTables map[cat.StableID]cat.Table) {
 	numTables := len(indexCandidates)
 	hypTables = make(map[cat.StableID]cat.Table, numTables)
@@ -35,33 +37,38 @@ func BuildOptAndHypTableMaps(
 		hypTable.init(c, t)
 
 		for _, indexCols := range indexes {
-			indexOrd := hypTable.Table.IndexCount() + len(hypIndexes)
 			lastKeyCol := indexCols[len(indexCols)-1]
-			// TODO (Shivam): Index recommendations should not only allow JSON columns
-			// to be part of inverted indexes since they are also forward indexable.
-			inverted := !colinfo.ColumnTypeIsIndexable(lastKeyCol.DatumType()) ||
-				lastKeyCol.DatumType().Family() == types.JsonFamily
-			if inverted {
+
+			// Vector indexes: create one hypothetical index per distance
+			// metric observed for this column. The same column may have been
+			// used with different distance operators (e.g., v <-> x and
+			// v <=> x).
+			if lastKeyCol.DatumType().Family() == types.PGVectorFamily {
+				for _, distMetric := range attrs.VectorDistMetrics[lastKeyCol.ColID()] {
+					hypIndexes = hypTable.maybeAddHypIndex(
+						hypIndexes, indexCols, idxtype.VECTOR, t.Zone(),
+						&vecpb.Config{DistanceMetric: distMetric},
+					)
+				}
+
+				continue
+			}
+
+			// TODO (Shivam): Index recommendations should not only allow JSON
+			// columns to be part of inverted indexes since they are also
+			// forward indexable.
+			indexType := idxtype.FORWARD
+			if !colinfo.ColumnTypeIsIndexable(lastKeyCol.DatumType()) ||
+				lastKeyCol.DatumType().Family() == types.JsonFamily {
+				indexType = idxtype.INVERTED
+
 				invertedCol := hypTable.addInvertedCol(lastKeyCol.Column)
 				indexCols[len(indexCols)-1] = cat.IndexColumn{Column: invertedCol}
 			}
-			var hypIndex hypotheticalIndex
-			hypIndex.init(
-				&hypTable,
-				tree.Name(fmt.Sprintf("_hyp_%d", indexOrd)),
-				indexCols,
-				indexOrd,
-				inverted,
-				t.Zone(),
-			)
 
-			// Do not add hypothetical inverted indexes for which there is an existing
-			// index with the same key. Inverted indexes do not have stored columns,
-			// so we should not make a recommendation if the same index already
-			// exists.
-			if !inverted || hypTable.existingRedundantIndex(&hypIndex) == nil {
-				hypIndexes = append(hypIndexes, hypIndex)
-			}
+			hypIndexes = hypTable.maybeAddHypIndex(
+				hypIndexes, indexCols, indexType, t.Zone(), nil, /* vecConfig */
+			)
 		}
 
 		hypTable.hypotheticalIndexes = hypIndexes
@@ -70,6 +77,41 @@ func BuildOptAndHypTableMaps(
 	}
 
 	return optTables, hypTables
+}
+
+// maybeAddHypIndex creates a hypothetical index and appends it to hypIndexes
+// if it is not redundant with an existing index on the table. The vecConfig
+// parameter provides vector index configuration; it is nil for non-vector
+// indexes.
+func (ht *HypotheticalTable) maybeAddHypIndex(
+	hypIndexes []hypotheticalIndex,
+	indexCols []cat.IndexColumn,
+	indexType idxtype.T,
+	zone cat.Zone,
+	vecConfig *vecpb.Config,
+) []hypotheticalIndex {
+	indexOrd := ht.Table.IndexCount() + len(hypIndexes)
+
+	var hypIndex hypotheticalIndex
+	hypIndex.init(
+		ht,
+		tree.Name(fmt.Sprintf("_hyp_%d", indexOrd)),
+		indexCols,
+		indexOrd,
+		indexType,
+		zone,
+		vecConfig,
+	)
+
+	// Do not add hypothetical inverted or vector indexes for which there is
+	// an existing index with the same key. These index types do not have
+	// stored columns, so we should not make a recommendation if the same
+	// index already exists.
+	if (indexType != idxtype.INVERTED && indexType != idxtype.VECTOR) || ht.existingRedundantIndex(&hypIndex) == nil {
+		hypIndexes = append(hypIndexes, hypIndex)
+	}
+
+	return hypIndexes
 }
 
 // HypotheticalTable is a wrapper around cat.Table, used for creating index
@@ -159,9 +201,10 @@ func (ht *HypotheticalTable) FullyQualifiedName(ctx context.Context) (cat.DataSo
 func (ht *HypotheticalTable) existingRedundantIndex(index *hypotheticalIndex) cat.Index {
 	for i, n := 0, ht.Table.IndexCount(); i < n; i++ {
 		existingIndex := ht.Table.Index(i)
-		indexExists := index.hasSameExplicitCols(existingIndex, index.IsInverted())
+		indexExists := index.hasSameExplicitCols(existingIndex)
 		_, isPartialIndex := existingIndex.Predicate()
-		if indexExists && !isPartialIndex && existingIndex.GetInvisibility() == 0.0 {
+		if indexExists && !isPartialIndex && existingIndex.GetInvisibility() == 0.0 &&
+			index.isVecConfigCompatible(existingIndex) {
 			return existingIndex
 		}
 	}
@@ -183,4 +226,9 @@ func (ht *HypotheticalTable) addInvertedCol(invertedSourceCol *cat.Column) *cat.
 
 	ht.invertedCols = append(ht.invertedCols, &invertedCol)
 	return &invertedCol
+}
+
+// Version is part of the cat.Object interface.
+func (ht *HypotheticalTable) Version() uint64 {
+	return 1
 }

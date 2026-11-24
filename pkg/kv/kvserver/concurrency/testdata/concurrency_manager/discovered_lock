@@ -23,7 +23,7 @@ sequence req=req1
 handle-lock-conflict-error req=req1 lease-seq=1
   lock txn=txn1 key=k
 ----
-[2] handle lock conflict error req1: handled conflicting locks on ‹"k"›, released latches
+[2] handle lock conflict error req1: added 1 discovered lock(s) to lock table: conflicting locks on ‹"k"›
 
 debug-lock-table
 ----
@@ -47,7 +47,7 @@ on-txn-updated txn=txn1 status=aborted
 [-] update txn: aborting txn1
 [3] sequence req1: resolving intent ‹"k"› for txn 00000001 with ABORTED status
 [3] sequence req1: lock wait-queue event: done waiting
-[3] sequence req1: conflicted with ‹00000001-0000-0000-0000-000000000000› on ‹"k"› for 0.000s
+[3] sequence req1: conflicted with 00000001-0000-0000-0000-000000000000 on ‹"k"› for 0.000s
 [3] sequence req1: acquiring latches
 [3] sequence req1: scanning lock table for conflicting locks
 [3] sequence req1: sequencing complete, returned guard
@@ -90,8 +90,7 @@ sequence req=req1
 handle-lock-conflict-error req=req1 lease-seq=2
   lock txn=txn1 key=k
 ----
-[2] handle lock conflict error req1: intent on ‹"k"› discovered but not added to disabled lock table
-[2] handle lock conflict error req1: handled conflicting locks on ‹"k"›, released latches
+[2] handle lock conflict error req1: discovered lock on ‹"k"› not added to disabled lock table
 
 sequence req=req1
 ----
@@ -139,8 +138,7 @@ sequence req=req1
 handle-lock-conflict-error req=req1 lease-seq=2
   lock txn=txn1 key=k
 ----
-[2] handle lock conflict error req1: intent on ‹"k"› discovered but not added to disabled lock table
-[2] handle lock conflict error req1: handled conflicting locks on ‹"k"›, released latches
+[2] handle lock conflict error req1: discovered lock on ‹"k"› not added to disabled lock table
 
 sequence req=req1
 ----

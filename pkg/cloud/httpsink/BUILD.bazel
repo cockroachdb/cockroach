@@ -38,6 +38,7 @@ go_test(
         "//pkg/util/ioctx",
         "//pkg/util/leaktest",
         "//pkg/util/retry",
+        "@com_github_cockroachdb_errors//oserror",
         "@com_github_stretchr_testify//require",
     ],
 )

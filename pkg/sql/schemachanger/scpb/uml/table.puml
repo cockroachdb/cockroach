@@ -57,6 +57,18 @@ ColumnFamily :  TableID
 ColumnFamily :  FamilyID
 ColumnFamily :  Name
 
+object ColumnGeneratedAsIdentity
+
+ColumnGeneratedAsIdentity :  TableID
+ColumnGeneratedAsIdentity :  ColumnID
+ColumnGeneratedAsIdentity :  Type
+ColumnGeneratedAsIdentity :  SequenceOption
+
+object ColumnHidden
+
+ColumnHidden :  TableID
+ColumnHidden :  ColumnID
+
 object ColumnName
 
 ColumnName :  TableID
@@ -81,8 +93,6 @@ ColumnType :  TableID
 ColumnType :  FamilyID
 ColumnType :  ColumnID
 ColumnType :  TypeT
-ColumnType :  IsNullable
-ColumnType :  ComputeExpr
 ColumnType :  IsVirtual
 ColumnType :  ElementCreationMetadata
 ColumnType :  ColumnFamilyOrderFollowsColumnID
@@ -143,6 +153,40 @@ DatabaseZoneConfig :  DatabaseID
 DatabaseZoneConfig :  ZoneConfig
 DatabaseZoneConfig :  SeqNum
 
+object DomainCheckConstraint
+
+DomainCheckConstraint :  TypeID
+DomainCheckConstraint :  ConstraintID
+DomainCheckConstraint :  Expression
+
+object DomainCheckConstraintUnvalidated
+
+DomainCheckConstraintUnvalidated :  TypeID
+DomainCheckConstraintUnvalidated :  ConstraintID
+DomainCheckConstraintUnvalidated :  Expression
+
+object DomainConstraintName
+
+DomainConstraintName :  TypeID
+DomainConstraintName :  ConstraintID
+DomainConstraintName :  Name
+
+object DomainDefault
+
+DomainDefault :  TypeID
+DomainDefault :  Expression
+
+object DomainNotNull
+
+DomainNotNull :  TypeID
+DomainNotNull :  ConstraintID
+
+object DomainType
+
+DomainType :  TypeID
+DomainType :  ArrayTypeID
+DomainType :  BaseTypeT
+
 object EnumType
 
 EnumType :  TypeID
@@ -197,6 +241,11 @@ FunctionBody : []UsesSequenceIDs
 FunctionBody : []UsesTypeIDs
 FunctionBody : []UsesFunctionIDs
 
+object FunctionComment
+
+FunctionComment :  FunctionID
+FunctionComment :  Comment
+
 object FunctionLeakProof
 
 FunctionLeakProof :  FunctionID
@@ -211,6 +260,12 @@ object FunctionNullInputBehavior
 
 FunctionNullInputBehavior :  FunctionID
 FunctionNullInputBehavior :  NullInputBehavior
+
+object FunctionParams
+
+FunctionParams :  FunctionID
+FunctionParams : []Params
+FunctionParams :  ReturnType
 
 object FunctionSecurity
 
@@ -263,6 +318,7 @@ IndexZoneConfig :  IndexID
 IndexZoneConfig :  Subzone
 IndexZoneConfig : []SubzoneSpans
 IndexZoneConfig :  SeqNum
+IndexZoneConfig :  OldIdxRef
 
 object LDRJobIDs
 
@@ -295,16 +351,66 @@ PartitionZoneConfig :  PartitionName
 PartitionZoneConfig :  Subzone
 PartitionZoneConfig : []SubzoneSpans
 PartitionZoneConfig :  SeqNum
+PartitionZoneConfig :  OldIdxRef
+
+object Policy
+
+Policy :  TableID
+Policy :  PolicyID
+Policy :  Type
+Policy :  Command
+
+object PolicyDeps
+
+PolicyDeps :  TableID
+PolicyDeps :  PolicyID
+PolicyDeps : []UsesTypeIDs
+PolicyDeps : []UsesRelationIDs
+PolicyDeps : []UsesFunctionIDs
+
+object PolicyName
+
+PolicyName :  TableID
+PolicyName :  PolicyID
+PolicyName :  Name
+
+object PolicyRole
+
+PolicyRole :  TableID
+PolicyRole :  PolicyID
+PolicyRole :  RoleName
+
+object PolicyUsingExpr
+
+PolicyUsingExpr :  TableID
+PolicyUsingExpr :  PolicyID
+PolicyUsingExpr :  Expression
+
+object PolicyWithCheckExpr
+
+PolicyWithCheckExpr :  TableID
+PolicyWithCheckExpr :  PolicyID
+PolicyWithCheckExpr :  Expression
 
 object PrimaryIndex
 
 PrimaryIndex :  Index
+
+object RowLevelSecurityEnabled
+
+RowLevelSecurityEnabled :  TableID
+
+object RowLevelSecurityForced
+
+RowLevelSecurityForced :  TableID
+RowLevelSecurityForced :  IsForced
 
 object RowLevelTTL
 
 RowLevelTTL :  TableID
 RowLevelTTL :  RowLevelTTL
 RowLevelTTL :  TTLExpr
+RowLevelTTL :  SeqNum
 
 object Schema
 
@@ -333,12 +439,8 @@ object SecondaryIndex
 SecondaryIndex :  Index
 SecondaryIndex :  EmbeddedExpr
 SecondaryIndex :  RecreateSourceIndexID
-
-object SecondaryIndexPartial
-
-SecondaryIndexPartial :  TableID
-SecondaryIndexPartial :  IndexID
-SecondaryIndexPartial :  Expression
+SecondaryIndex :  RecreateTargetIndexID
+SecondaryIndex :  HideForPrimaryKeyRecreated
 
 object Sequence
 
@@ -358,6 +460,18 @@ object SequenceOwner
 SequenceOwner :  SequenceID
 SequenceOwner :  TableID
 SequenceOwner :  ColumnID
+
+object SequenceValue
+
+SequenceValue :  SequenceID
+SequenceValue :  PrevIncrement
+SequenceValue :  UpdatedIncrement
+SequenceValue :  PrevMinValue
+SequenceValue :  UpdatedMinValue
+SequenceValue :  PrevMaxValue
+SequenceValue :  UpdatedMaxValue
+SequenceValue :  PrevStart
+SequenceValue :  UpdatedStart
 
 object Table
 
@@ -387,6 +501,11 @@ object TableLocalityRegionalByRow
 TableLocalityRegionalByRow :  TableID
 TableLocalityRegionalByRow :  As
 
+object TableLocalityRegionalByRowUsingConstraint
+
+TableLocalityRegionalByRowUsingConstraint :  TableID
+TableLocalityRegionalByRowUsingConstraint :  ConstraintID
+
 object TableLocalitySecondaryRegion
 
 TableLocalitySecondaryRegion :  TableID
@@ -400,6 +519,12 @@ TablePartitioning :  TableID
 object TableSchemaLocked
 
 TableSchemaLocked :  TableID
+
+object TableStorageParam
+
+TableStorageParam :  TableID
+TableStorageParam :  Name
+TableStorageParam :  Value
 
 object TableZoneConfig
 
@@ -423,6 +548,7 @@ object TriggerDeps
 TriggerDeps :  TableID
 TriggerDeps :  TriggerID
 TriggerDeps : []UsesRelationIDs
+TriggerDeps : []UsesRelations
 TriggerDeps : []UsesTypeIDs
 TriggerDeps : []UsesRoutineIDs
 
@@ -430,7 +556,6 @@ object TriggerEnabled
 
 TriggerEnabled :  TableID
 TriggerEnabled :  TriggerID
-TriggerEnabled :  Enabled
 
 object TriggerEvents
 
@@ -504,6 +629,7 @@ object View
 View :  ViewID
 View : []UsesTypeIDs
 View : []UsesRelationIDs
+View : []UsesRoutineIDs
 View : []ForwardReferences
 View :  IsTemporary
 View :  IsMaterialized
@@ -516,6 +642,8 @@ Column <|-- ColumnComment
 Column <|-- ColumnComputeExpression
 Column <|-- ColumnDefaultExpression
 Table <|-- ColumnFamily
+Column <|-- ColumnGeneratedAsIdentity
+Column <|-- ColumnHidden
 Column <|-- ColumnName
 Column <|-- ColumnNotNull
 Column <|-- ColumnOnUpdateExpression
@@ -527,6 +655,7 @@ SecondaryIndex <|-- ConstraintComment
 UniqueWithoutIndexConstraint <|-- ConstraintComment
 CheckConstraint <|-- ConstraintComment
 ForeignKeyConstraint <|-- ConstraintComment
+DomainCheckConstraint <|-- ConstraintComment
 UniqueWithoutIndexConstraint <|-- ConstraintWithoutIndexName
 CheckConstraint <|-- ConstraintWithoutIndexName
 ForeignKeyConstraint <|-- ConstraintWithoutIndexName
@@ -535,13 +664,22 @@ Database <|-- DatabaseData
 Database <|-- DatabaseRegionConfig
 Database <|-- DatabaseRoleSetting
 Database <|-- DatabaseZoneConfig
+DomainType <|-- DomainCheckConstraint
+DomainType <|-- DomainCheckConstraintUnvalidated
+DomainCheckConstraint <|-- DomainConstraintName
+DomainCheckConstraintUnvalidated <|-- DomainConstraintName
+DomainNotNull <|-- DomainConstraintName
+DomainType <|-- DomainDefault
+DomainType <|-- DomainNotNull
 EnumType <|-- EnumTypeValue
 Table <|-- ForeignKeyConstraint
 Table <|-- ForeignKeyConstraintUnvalidated
 Function <|-- FunctionBody
+Function <|-- FunctionComment
 Function <|-- FunctionLeakProof
 Function <|-- FunctionName
 Function <|-- FunctionNullInputBehavior
+Function <|-- FunctionParams
 Function <|-- FunctionSecurity
 Function <|-- FunctionVolatility
 PrimaryIndex <|-- IndexColumn
@@ -566,6 +704,7 @@ Database <|-- Namespace
 Schema <|-- Namespace
 AliasType <|-- Namespace
 EnumType <|-- Namespace
+DomainType <|-- Namespace
 Table <|-- Owner
 View <|-- Owner
 Sequence <|-- Owner
@@ -573,12 +712,22 @@ Database <|-- Owner
 Schema <|-- Owner
 AliasType <|-- Owner
 EnumType <|-- Owner
+DomainType <|-- Owner
 TablePartitioning <|-- PartitionZoneConfig
+Table <|-- Policy
+Policy <|-- PolicyDeps
+Policy <|-- PolicyName
+Policy <|-- PolicyRole
+Policy <|-- PolicyUsingExpr
+Policy <|-- PolicyWithCheckExpr
 Table <|-- PrimaryIndex
 View <|-- PrimaryIndex
+Table <|-- RowLevelSecurityEnabled
+Table <|-- RowLevelSecurityForced
 Table <|-- RowLevelTTL
 AliasType <|-- SchemaChild
 EnumType <|-- SchemaChild
+DomainType <|-- SchemaChild
 Table <|-- SchemaChild
 View <|-- SchemaChild
 Sequence <|-- SchemaChild
@@ -586,9 +735,9 @@ Schema <|-- SchemaComment
 Schema <|-- SchemaParent
 Table <|-- SecondaryIndex
 View <|-- SecondaryIndex
-SecondaryIndex <|-- SecondaryIndexPartial
 Sequence <|-- SequenceOption
 Column <|-- SequenceOwner
+Sequence <|-- SequenceValue
 Table <|-- TableComment
 View <|-- TableComment
 Sequence <|-- TableComment
@@ -598,9 +747,11 @@ Sequence <|-- TableData
 Table <|-- TableLocalityGlobal
 Table <|-- TableLocalityPrimaryRegion
 Table <|-- TableLocalityRegionalByRow
+Table <|-- TableLocalityRegionalByRowUsingConstraint
 Table <|-- TableLocalitySecondaryRegion
 Table <|-- TablePartitioning
 Table <|-- TableSchemaLocked
+Table <|-- TableStorageParam
 Table <|-- TableZoneConfig
 View <|-- TableZoneConfig
 Table <|-- TemporaryIndex
@@ -615,7 +766,7 @@ Trigger <|-- TriggerName
 Trigger <|-- TriggerTiming
 Trigger <|-- TriggerTransition
 Trigger <|-- TriggerWhen
-CompositeType,EnumType <|-- TypeComment
+CompositeType,EnumType,DomainType <|-- TypeComment
 Table <|-- UniqueWithoutIndexConstraint
 Table <|-- UniqueWithoutIndexConstraintUnvalidated
 Table <|-- UserPrivileges
@@ -625,4 +776,5 @@ Database <|-- UserPrivileges
 Schema <|-- UserPrivileges
 AliasType <|-- UserPrivileges
 EnumType <|-- UserPrivileges
+DomainType <|-- UserPrivileges
 @enduml

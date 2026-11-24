@@ -1,0 +1,15 @@
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['build',
+         '--tag', 'us-central1-docker.pkg.dev/cockroach-testeng-infra/roachprod/roachprod-centralized:$_SHA',
+         '--build-arg', 'SHA=$_SHA',
+         '--build-arg', 'OWNER=$_OWNER',
+         '--build-arg', 'REPO=$_REPO',
+         '--build-arg', 'BAZEL_IMAGE=$_BAZEL_IMAGE',
+         '--build-arg', 'BAZEL_CONFIG=crosslinux',
+         '--target', 'final-remote',
+         '.']
+images:
+  - 'us-central1-docker.pkg.dev/cockroach-testeng-infra/roachprod/roachprod-centralized:$_SHA'
+options:
+  machineType: 'E2_HIGHCPU_8'

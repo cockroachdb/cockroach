@@ -60,7 +60,6 @@ func TestReplicaUpdateLastReplicaAdded(t *testing.T) {
 			var r Replica
 			r.shMu.state.Desc = &c.oldDesc
 			r.mu.lastReplicaAdded = c.lastReplicaAdded
-			r.mu.replicaFlowControlIntegration = newReplicaFlowControlIntegration((*replicaFlowControl)(&r), nil, nil)
 			r.flowControlV2 = noopProcessor{}
 			r.store = tc.store
 			r.concMgr = tc.repl.concMgr

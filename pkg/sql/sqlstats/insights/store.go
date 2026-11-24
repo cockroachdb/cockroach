@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlstats/insightspb"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -25,7 +26,7 @@ type LockingStore struct {
 	}
 }
 
-func (s *LockingStore) addInsight(insight *Insight) {
+func (s *LockingStore) addInsight(insight *insightspb.Insight) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.stmtCount.Add(int64(len(insight.Statements)))
@@ -33,12 +34,12 @@ func (s *LockingStore) addInsight(insight *Insight) {
 }
 
 func (s *LockingStore) IterateInsights(
-	ctx context.Context, visitor func(context.Context, *Insight),
+	ctx context.Context, visitor func(context.Context, *insightspb.Insight),
 ) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	s.mu.insights.Do(func(e *cache.Entry) {
-		visitor(ctx, e.Value.(*Insight))
+		visitor(ctx, e.Value.(*insightspb.Insight))
 	})
 }
 
@@ -50,7 +51,7 @@ func newStore(st *cluster.Settings) *LockingStore {
 			return s.stmtCount.Load() > ExecutionInsightsCapacity.Get(&st.SV)
 		},
 		OnEvicted: func(_, value interface{}) {
-			i := value.(*Insight)
+			i := value.(*insightspb.Insight)
 			s.stmtCount.Add(-int64(len(i.Statements)))
 			releaseInsight(i)
 		},

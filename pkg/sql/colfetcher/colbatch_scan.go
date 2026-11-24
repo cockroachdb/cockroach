@@ -8,7 +8,6 @@ package colfetcher
 import (
 	"context"
 	"sync"
-	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -38,6 +37,7 @@ type colBatchScanBase struct {
 
 	flowCtx                *execinfra.FlowCtx
 	processorID            int32
+	stageID                int32
 	limitHint              rowinfra.RowLimit
 	batchBytesLimit        rowinfra.BytesLimit
 	parallelize            bool
@@ -53,6 +53,9 @@ type colBatchScanBase struct {
 		// rowsRead contains the number of total rows this ColBatchScan has
 		// returned so far.
 		rowsRead int64
+		// rowsReadSinceLastMeta contains the number of rows this ColBatchScan
+		// has returned since the last RowsRead metrics metadata was emitted.
+		rowsReadSinceLastMeta int64
 	}
 }
 
@@ -83,6 +86,12 @@ func (s *colBatchScanBase) GetRowsRead() int64 {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.mu.rowsRead
+}
+
+func (s *colBatchScanBase) getRowsReadSinceLastMeta() int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.mu.rowsReadSinceLastMeta
 }
 
 // UsedStreamer is part of the colexecop.KVReader interface.
@@ -122,6 +131,7 @@ func newColBatchScanBase(
 	kvFetcherMemAcc *mon.BoundAccount,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
+	stageID int32,
 	spec *execinfrapb.TableReaderSpec,
 	post *execinfrapb.PostProcessSpec,
 	typeResolver *descs.DistSQLTypeResolver,
@@ -169,14 +179,14 @@ func newColBatchScanBase(
 		s.MakeSpansCopy()
 	}
 
-	if spec.LimitHint > 0 || spec.BatchBytesLimit > 0 {
+	if spec.LimitHint > 0 {
 		// Parallelize shouldn't be set when there's a limit hint, but double-check
 		// just in case.
 		spec.Parallelize = false
 	}
 	var batchBytesLimit rowinfra.BytesLimit
 	if !spec.Parallelize {
-		batchBytesLimit = rowinfra.BytesLimit(spec.BatchBytesLimit)
+		batchBytesLimit = rowinfra.BytesLimit(flowCtx.Cfg.TestingKnobs.TableReaderBatchBytesLimit)
 		if batchBytesLimit == 0 {
 			batchBytesLimit = rowinfra.GetDefaultBatchBytesLimit(flowCtx.EvalCtx.TestingKnobs.ForceProductionValues)
 		}
@@ -186,6 +196,7 @@ func newColBatchScanBase(
 		SpansWithCopy:          s.SpansWithCopy,
 		flowCtx:                flowCtx,
 		processorID:            processorID,
+		stageID:                stageID,
 		limitHint:              limitHint,
 		batchBytesLimit:        batchBytesLimit,
 		parallelize:            spec.Parallelize,
@@ -221,11 +232,10 @@ func (s *ColBatchScan) Init(ctx context.Context) {
 		s.Ctx, s.flowCtx, "colbatchscan", s.processorID,
 		&s.ContentionEventsListener, &s.ScanStatsListener, &s.TenantConsumptionListener,
 	)
-	limitBatches := !s.parallelize
 	if err := s.cf.StartScan(
 		s.Ctx,
 		s.Spans,
-		limitBatches,
+		s.parallelize,
 		s.batchBytesLimit,
 		s.limitHint,
 	); err != nil {
@@ -233,8 +243,29 @@ func (s *ColBatchScan) Init(ctx context.Context) {
 	}
 }
 
+// Emit scan progress metadata after about 20 batches.
+var scanProgressFrequency int64 = 20000
+
+func TestingSetScanProgressFrequency(val int64) func() {
+	oldVal := scanProgressFrequency
+	scanProgressFrequency = val
+	return func() { scanProgressFrequency = oldVal }
+}
+
 // Next is part of the colexecop.Operator interface.
-func (s *ColBatchScan) Next() coldata.Batch {
+func (s *ColBatchScan) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	// Check if it is time to emit a progress update.
+	if s.getRowsReadSinceLastMeta() >= scanProgressFrequency {
+		meta := execinfrapb.GetProducerMeta()
+		meta.Metrics = execinfrapb.GetMetricsMeta()
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		meta.Metrics.RowsRead = s.mu.rowsReadSinceLastMeta
+		meta.Metrics.StageID = s.stageID
+		s.mu.rowsReadSinceLastMeta = 0
+		return nil, meta
+	}
+
 	bat, err := s.cf.NextBatch(s.Ctx)
 	if err != nil {
 		colexecerror.InternalError(err)
@@ -244,8 +275,9 @@ func (s *ColBatchScan) Next() coldata.Batch {
 	}
 	s.mu.Lock()
 	s.mu.rowsRead += int64(bat.Length())
+	s.mu.rowsReadSinceLastMeta += int64(bat.Length())
 	s.mu.Unlock()
-	return bat
+	return bat, nil
 }
 
 // DrainMeta is part of the colexecop.MetadataSource interface.
@@ -254,7 +286,10 @@ func (s *ColBatchScan) DrainMeta() []execinfrapb.ProducerMetadata {
 	meta := execinfrapb.GetProducerMeta()
 	meta.Metrics = execinfrapb.GetMetricsMeta()
 	meta.Metrics.BytesRead = s.GetBytesRead()
-	meta.Metrics.RowsRead = s.GetRowsRead()
+	meta.Metrics.RowsRead = s.getRowsReadSinceLastMeta()
+	meta.Metrics.KVCPUTime = s.GetKVResponseCPUTime()
+	meta.Metrics.LocalKVCPUTime = s.GetLocalKVCPUTime()
+	meta.Metrics.StageID = s.stageID
 	trailingMeta = append(trailingMeta, *meta)
 	return trailingMeta
 }
@@ -273,6 +308,13 @@ func (s *ColBatchScan) GetKVPairsRead() int64 {
 	return s.cf.getKVPairsRead()
 }
 
+// GetKVResponseCPUTime is part of the colexecop.KVReader interface.
+func (s *ColBatchScan) GetKVResponseCPUTime() int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.cf.getKVCPUTime()
+}
+
 // GetBatchRequestsIssued is part of the colexecop.KVReader interface.
 func (s *ColBatchScan) GetBatchRequestsIssued() int64 {
 	s.mu.Lock()
@@ -280,9 +322,11 @@ func (s *ColBatchScan) GetBatchRequestsIssued() int64 {
 	return s.cf.getBatchRequestsIssued()
 }
 
-// GetKVCPUTime is part of the colexecop.KVReader interface.
-func (s *ColBatchScan) GetKVCPUTime() time.Duration {
-	return s.cf.cpuStopWatch.Elapsed()
+// GetLocalKVCPUTime is part of the colexecop.KVReader interface.
+func (s *ColBatchScan) GetLocalKVCPUTime() int64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.cf.getLocalKVCPUTime()
 }
 
 // Release implements the execreleasable.Releasable interface.
@@ -313,13 +357,14 @@ func NewColBatchScan(
 	kvFetcherMemAcc *mon.BoundAccount,
 	flowCtx *execinfra.FlowCtx,
 	processorID int32,
+	stageID int32,
 	spec *execinfrapb.TableReaderSpec,
 	post *execinfrapb.PostProcessSpec,
 	estimatedRowCount uint64,
 	typeResolver *descs.DistSQLTypeResolver,
 ) (*ColBatchScan, []*types.T, error) {
 	base, bsHeader, tableArgs, err := newColBatchScanBase(
-		ctx, kvFetcherMemAcc, flowCtx, processorID, spec, post, typeResolver,
+		ctx, kvFetcherMemAcc, flowCtx, processorID, stageID, spec, post, typeResolver,
 	)
 	if err != nil {
 		return nil, nil, err
@@ -337,19 +382,31 @@ func NewColBatchScan(
 		kvFetcherMemAcc,
 		flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
 		spec.FetchSpec.External,
+		flowCtx.EvalCtx.WorkloadID,
+		flowCtx.EvalCtx.WorkloadType,
 	)
 	fetcher := cFetcherPool.Get().(*cFetcher)
+	shouldCollectStats := execstats.ShouldCollectStats(ctx, flowCtx.CollectStats)
 	fetcher.cFetcherArgs = cFetcherArgs{
 		execinfra.GetWorkMemLimit(flowCtx),
 		estimatedRowCount,
 		flowCtx.TraceKV,
 		true, /* singleUse */
-		execstats.ShouldCollectStats(ctx, flowCtx.CollectStats),
+		shouldCollectStats,
 		false, /* alwaysReallocate */
+		flowCtx.Txn,
+		flowCtx.Codec().TenantID,
+		flowCtx.EvalCtx.WorkloadID,
+		flowCtx.EvalCtx.WorkloadType,
 	}
 	if err = fetcher.Init(fetcherAllocator, kvFetcher, tableArgs); err != nil {
 		fetcher.Release()
 		return nil, nil, err
+	}
+	if shouldCollectStats {
+		if flowTxn := flowCtx.EvalCtx.Txn; flowTxn != nil {
+			base.ContentionEventsListener.Init(flowTxn.ID())
+		}
 	}
 	return &ColBatchScan{
 		colBatchScanBase: base,

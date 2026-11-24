@@ -51,13 +51,10 @@ var errRetry = errors.New("retry: orphaned replica")
 //
 // The caller must not hold the store's lock.
 func (s *Store) getOrCreateReplica(
-	ctx context.Context,
-	rangeID roachpb.RangeID,
-	replicaID roachpb.ReplicaID,
-	creatingReplica *roachpb.ReplicaDescriptor,
+	ctx context.Context, id roachpb.FullReplicaID, creatingReplica *roachpb.ReplicaDescriptor,
 ) (_ *Replica, created bool, _ error) {
-	if replicaID == 0 {
-		log.Fatalf(ctx, "cannot construct a Replica for range %d with 0 id", rangeID)
+	if id.ReplicaID == 0 {
+		log.KvExec.Fatalf(ctx, "cannot construct a Replica for range %d with 0 id", id.RangeID)
 	}
 	// We need a retry loop as the replica we find in the map may be in the
 	// process of being removed or may need to be removed. Retries in the loop
@@ -71,12 +68,7 @@ func (s *Store) getOrCreateReplica(
 	})
 	for {
 		r.Next()
-		r, created, err := s.tryGetOrCreateReplica(
-			ctx,
-			rangeID,
-			replicaID,
-			creatingReplica,
-		)
+		r, created, err := s.tryGetOrCreateReplica(ctx, id, creatingReplica)
 		if errors.Is(err, errRetry) {
 			continue
 		}
@@ -92,62 +84,54 @@ func (s *Store) getOrCreateReplica(
 // removed. Returns errRetry error if the replica is in a transitional state and
 // its retrieval needs to be retried. Other errors are permanent.
 func (s *Store) tryGetReplica(
-	ctx context.Context,
-	rangeID roachpb.RangeID,
-	replicaID roachpb.ReplicaID,
-	creatingReplica *roachpb.ReplicaDescriptor,
+	ctx context.Context, id roachpb.FullReplicaID, creatingReplica *roachpb.ReplicaDescriptor,
 ) (*Replica, error) {
-	repl, found := s.mu.replicasByRangeID.Load(rangeID)
+	repl, found := s.mu.replicasByRangeID.Load(id.RangeID)
 	if !found {
 		return nil, nil
 	}
-
 	repl.raftMu.Lock() // not unlocked on success
-	repl.mu.RLock()
 
 	// The current replica is removed, go back around.
-	if repl.mu.destroyStatus.Removed() {
-		repl.mu.RUnlock()
+	if repl.shMu.destroyStatus.Removed() {
 		repl.raftMu.Unlock()
 		return nil, errRetry
 	}
 
 	// Drop messages from replicas we know to be too old.
-	if fromReplicaIsTooOldRLocked(repl, creatingReplica) {
-		repl.mu.RUnlock()
+	if fromReplicaIsTooOldRaftMuLocked(repl, creatingReplica) {
 		repl.raftMu.Unlock()
 		return nil, kvpb.NewReplicaTooOldError(creatingReplica.ReplicaID)
 	}
 
 	// The current replica needs to be removed, remove it and go back around.
-	if toTooOld := repl.replicaID < replicaID; toTooOld {
+	if toTooOld := repl.replicaID < id.ReplicaID; toTooOld {
 		if shouldLog := log.V(1); shouldLog {
-			log.Infof(ctx, "found message for replica ID %d which is newer than %v",
-				replicaID, repl)
+			log.KvExec.Infof(ctx, "found message for replica ID %d which is newer than %v",
+				id.ReplicaID, repl)
 		}
 
-		repl.mu.RUnlock()
-		if err := s.removeReplicaRaftMuLocked(ctx, repl, replicaID, RemoveOptions{
-			DestroyData: true,
-		}); err != nil {
-			log.Fatalf(ctx, "failed to remove replica: %v", err)
+		if err := s.removeReplicaRaftMuLocked(
+			ctx, repl, id.ReplicaID, "superseded by newer Replica",
+		); err != nil {
+			repl.raftMu.Unlock()
+			return nil, err
 		}
 		repl.raftMu.Unlock()
 		return nil, errRetry
 	}
-	defer repl.mu.RUnlock()
 
-	if repl.replicaID > replicaID {
+	if repl.replicaID > id.ReplicaID {
 		// The sender is behind and is sending to an old replica.
 		// We could silently drop this message but this way we'll inform the
 		// sender that they may no longer exist.
 		repl.raftMu.Unlock()
 		return nil, &kvpb.RaftGroupDeletedError{}
 	}
-	if repl.replicaID != replicaID {
+	if repl.replicaID != id.ReplicaID {
 		// This case should have been caught by handleToReplicaTooOld.
-		log.Fatalf(ctx, "intended replica id %d unexpectedly does not match the current replica %v",
-			replicaID, repl)
+		log.KvExec.Fatalf(ctx, "intended replica id %d unexpectedly does not match the current replica %v",
+			id.ReplicaID, repl)
 	}
 	return repl, nil
 }
@@ -159,13 +143,10 @@ func (s *Store) tryGetReplica(
 // tryGetOrCreateReplica will likely succeed, hence the loop in
 // getOrCreateReplica.
 func (s *Store) tryGetOrCreateReplica(
-	ctx context.Context,
-	rangeID roachpb.RangeID,
-	replicaID roachpb.ReplicaID,
-	creatingReplica *roachpb.ReplicaDescriptor,
+	ctx context.Context, id roachpb.FullReplicaID, creatingReplica *roachpb.ReplicaDescriptor,
 ) (_ *Replica, created bool, _ error) {
 	// The common case: look up an existing replica.
-	if repl, err := s.tryGetReplica(ctx, rangeID, replicaID, creatingReplica); err != nil {
+	if repl, err := s.tryGetReplica(ctx, id, creatingReplica); err != nil {
 		return nil, false, err
 	} else if repl != nil {
 		return repl, false, nil
@@ -175,24 +156,24 @@ func (s *Store) tryGetOrCreateReplica(
 	// be racing at this point, so grab a "lock" over this rangeID (represented by
 	// s.mu.creatingReplicas[rangeID]) by one goroutine, and retry others.
 	s.mu.Lock()
-	if _, ok := s.mu.creatingReplicas[rangeID]; ok {
+	if _, ok := s.mu.creatingReplicas[id.RangeID]; ok {
 		// Lost the race - another goroutine is currently creating that replica. Let
 		// the caller retry so that they can eventually see it.
 		s.mu.Unlock()
 		return nil, false, errRetry
 	}
-	s.mu.creatingReplicas[rangeID] = struct{}{}
+	s.mu.creatingReplicas[id.RangeID] = struct{}{}
 	s.mu.Unlock()
 	defer func() {
 		s.mu.Lock()
-		delete(s.mu.creatingReplicas, rangeID)
+		delete(s.mu.creatingReplicas, id.RangeID)
 		s.mu.Unlock()
 	}()
 	// Now we are the only goroutine trying to create a replica for this rangeID.
 
 	// Repeat the quick path in case someone has overtaken us while we were
 	// grabbing the "lock".
-	if repl, err := s.tryGetReplica(ctx, rangeID, replicaID, creatingReplica); err != nil {
+	if repl, err := s.tryGetReplica(ctx, id, creatingReplica); err != nil {
 		return nil, false, err
 	} else if repl != nil {
 		return repl, false, nil
@@ -203,16 +184,24 @@ func (s *Store) tryGetOrCreateReplica(
 	// be accessed by someone holding a reference to, or currently creating a
 	// Replica for this rangeID, and that's us.
 
+	// Use a read-write batch (not a write-only batch) because
+	// CreateUninitializedReplica needs to read back the RaftReplicaID it writes
+	// as part of its LoadReplicaState verification step.
+	b := s.batchFactory.NewBatch()
+	defer b.Close()
 	if err := kvstorage.CreateUninitializedReplica(
-		// TODO(sep-raft-log): needs both engines due to tombstone (which lives on
-		// statemachine).
-		ctx, s.TODOEngine(), s.StoreID(), rangeID, replicaID,
+		ctx, kvstorage.WrapState(b.State()),
+		kvstorage.RaftRO(s.LogEngine()),
+		b.WagWriter(), s.StoreID(), id,
 	); err != nil {
+		return nil, false, err
+	}
+	if err := b.Commit(true /* sync */); err != nil {
 		return nil, false, err
 	}
 
 	// Create a new uninitialized replica and lock it for raft processing.
-	repl, err := newUninitializedReplica(s, rangeID, replicaID)
+	repl, err := newUninitializedReplica(s, id)
 	if err != nil {
 		return nil, false, err
 	}
@@ -237,11 +226,15 @@ func (s *Store) tryGetOrCreateReplica(
 	return repl, true, nil
 }
 
-// fromReplicaIsTooOldRLocked returns true if the creatingReplica is deemed to
-// be a member of the range which has been removed.
-// Assumes toReplica.mu is locked for (at least) reading.
-func fromReplicaIsTooOldRLocked(toReplica *Replica, fromReplica *roachpb.ReplicaDescriptor) bool {
-	toReplica.mu.AssertRHeld()
+// fromReplicaIsTooOldRaftMuLocked returns true if the creatingReplica is deemed
+// to be a member of the range which has been removed.
+//
+// Assumes toReplica.raftMu is locked. This could be relaxed to Replica.mu
+// locked for reads, but the only user of it holds raftMu.
+func fromReplicaIsTooOldRaftMuLocked(
+	toReplica *Replica, fromReplica *roachpb.ReplicaDescriptor,
+) bool {
+	toReplica.raftMu.AssertHeld()
 	if fromReplica == nil {
 		return false
 	}
@@ -264,13 +257,13 @@ func (s *Store) addToReplicasByKeyLocked(repl *Replica, desc *roachpb.RangeDescr
 	if got := s.GetReplicaIfExists(repl.RangeID); got != repl { // NB: got can be nil too
 		return errors.Errorf("%s: replica %s not in replicasByRangeID; got %s", s, repl, got)
 	}
-	if it := s.getOverlappingKeyRangeLocked(desc); it.item != nil {
+	if it := s.getOverlappingKeyRangeLocked(desc); !it.isEmpty() {
 		return errors.Errorf(
 			"%s: cannot add to replicasByKey: range %s overlaps with %s", s, repl, it.Desc())
 	}
-	if it := s.mu.replicasByKey.ReplaceOrInsertReplica(context.Background(), repl); it.item != nil {
+	if it := s.mu.replicasByKey.ReplaceOrInsertReplica(context.Background(), repl); !it.isEmpty() {
 		return errors.Errorf(
-			"%s: cannot add to replicasByKey: key %v already exists in the btree", s, it.item.key())
+			"%s: cannot add to replicasByKey: key %v already exists in the btree", s, it.key())
 	}
 	return nil
 }
@@ -279,8 +272,8 @@ func (s *Store) addToReplicasByKeyLocked(repl *Replica, desc *roachpb.RangeDescr
 // and the raftMu of the replica whose place is being held are locked.
 func (s *Store) addPlaceholderLocked(placeholder *ReplicaPlaceholder) error {
 	rangeID := placeholder.Desc().RangeID
-	if it := s.mu.replicasByKey.ReplaceOrInsertPlaceholder(context.Background(), placeholder); it.item != nil {
-		return errors.Errorf("%s overlaps with existing replicaOrPlaceholder %+v in replicasByKey btree", placeholder, it.item)
+	if it := s.mu.replicasByKey.ReplaceOrInsertPlaceholder(context.Background(), placeholder); !it.isEmpty() {
+		return errors.Errorf("%s overlaps with existing replicaOrPlaceholder %+v in replicasByKey btree", placeholder, it.item())
 	}
 	if exRng, ok := s.mu.replicaPlaceholders[rangeID]; ok {
 		return errors.Errorf("%s has ID collision with placeholder %+v", placeholder, exRng)

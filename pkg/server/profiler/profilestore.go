@@ -67,7 +67,7 @@ func (s *profileStore) makeNewFileName(timestamp time.Time, curHeap int64) strin
 
 // PreFilter is part of the dumpstore.Dumper interface.
 func (s *profileStore) PreFilter(
-	ctx context.Context, files []os.FileInfo, cleanupFn func(fileName string) error,
+	ctx context.Context, files []os.DirEntry, cleanupFn func(fileName string) error,
 ) (preserved map[int]bool, _ error) {
 	maxP := maxProfiles.Get(&s.st.SV)
 	preserved = s.cleanupLastRampup(ctx, files, maxP, cleanupFn)
@@ -75,7 +75,7 @@ func (s *profileStore) PreFilter(
 }
 
 // CheckOwnsFile is part of the dumpstore.Dumper interface.
-func (s *profileStore) CheckOwnsFile(ctx context.Context, fi os.FileInfo) bool {
+func (s *profileStore) CheckOwnsFile(ctx context.Context, fi os.DirEntry) bool {
 	ok, _, _ := s.parseFileName(ctx, fi.Name())
 	return ok
 }
@@ -91,7 +91,7 @@ func (s *profileStore) CheckOwnsFile(ctx context.Context, fi os.FileInfo) bool {
 // The preserved return value contains the indexes in files
 // corresponding to the last ramp-up that were not passed to fn.
 func (s *profileStore) cleanupLastRampup(
-	ctx context.Context, files []os.FileInfo, maxP int64, fn func(string) error,
+	ctx context.Context, files []os.DirEntry, maxP int64, fn func(string) error,
 ) (preserved map[int]bool) {
 	preserved = make(map[int]bool)
 	curMaxHeap := uint64(math.MaxUint64)
@@ -117,7 +117,7 @@ func (s *profileStore) cleanupLastRampup(
 		if numFiles > maxP {
 			// Yes: clean this up.
 			if err := fn(files[i].Name()); err != nil {
-				log.Warningf(ctx, "%v", err)
+				log.Dev.Warningf(ctx, "%v", err)
 			}
 		} else {
 			// No: we preserve this file.
@@ -142,12 +142,12 @@ func (s *profileStore) parseFileName(
 	var err error
 	timestamp, err = time.Parse(timestampFormat, maybeTimestamp)
 	if err != nil {
-		log.Warningf(ctx, "%v", errors.Wrapf(err, "%s", fileName))
+		log.Dev.Warningf(ctx, "%v", errors.Wrapf(err, "%s", fileName))
 		return
 	}
 	heapUsage, err = strconv.ParseUint(parts[3], 10, 64)
 	if err != nil {
-		log.Warningf(ctx, "%v", errors.Wrapf(err, "%s", fileName))
+		log.Dev.Warningf(ctx, "%v", errors.Wrapf(err, "%s", fileName))
 		return
 	}
 	ok = true

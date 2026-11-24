@@ -10,6 +10,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexec"
@@ -37,6 +38,7 @@ func TestNonVectorizedPanicDoesntHangServer(t *testing.T) {
 		EvalCtx: &evalCtx,
 		Mon:     evalCtx.TestingMon,
 		Cfg:     &execinfra.ServerConfig{Settings: cluster.MakeTestingClusterSettings()},
+		NodeID:  base.TestingIDContainer,
 	}
 	base := flowinfra.NewFlowBase(
 		flowCtx,

@@ -1,0 +1,28 @@
+/* setup */
+CREATE DATABASE db;
+
+/* test */
+ALTER DATABASE db CONFIGURE ZONE USING num_replicas = 7, gc.ttlseconds = 10000;
+EXPLAIN (DDL) ALTER DATABASE db CONFIGURE ZONE USING num_replicas = 8;
+----
+Schema change plan for ALTER DATABASE ‹db› CONFIGURE ZONE USING ‹num_replicas› = ‹8›; following ALTER DATABASE ‹db› CONFIGURE ZONE USING ‹num_replicas› = ‹7›, ‹"gc.ttlseconds"› = ‹10000›;
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 1 element transitioning toward PUBLIC
+ │         │    └── ABSENT → PUBLIC DatabaseZoneConfig:{DescID: 104 (db), SeqNum: 2}
+ │         └── 1 Mutation operation
+ │              └── AddDatabaseZoneConfig {"DatabaseID":104}
+ └── PreCommitPhase
+      ├── Stage 1 of 2 in PreCommitPhase
+      │    ├── 2 elements transitioning toward PUBLIC
+      │    │    ├── PUBLIC → ABSENT DatabaseZoneConfig:{DescID: 104 (db), SeqNum: 1}
+      │    │    └── PUBLIC → ABSENT DatabaseZoneConfig:{DescID: 104 (db), SeqNum: 2}
+      │    └── 1 Mutation operation
+      │         └── UndoAllInTxnImmediateMutationOpSideEffects
+      └── Stage 2 of 2 in PreCommitPhase
+           ├── 2 elements transitioning toward PUBLIC
+           │    ├── ABSENT → PUBLIC DatabaseZoneConfig:{DescID: 104 (db), SeqNum: 1}
+           │    └── ABSENT → PUBLIC DatabaseZoneConfig:{DescID: 104 (db), SeqNum: 2}
+           └── 2 Mutation operations
+                ├── AddDatabaseZoneConfig {"DatabaseID":104}
+                └── AddDatabaseZoneConfig {"DatabaseID":104}

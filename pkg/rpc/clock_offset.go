@@ -8,10 +8,13 @@ package rpc
 import (
 	"context"
 	"math"
+	"sort"
 	"time"
 
 	"github.com/VividCortex/ewma"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -22,9 +25,15 @@ import (
 
 // RemoteClockMetrics is the collection of metrics for the clock monitor.
 type RemoteClockMetrics struct {
-	ClockOffsetMeanNanos   *metric.Gauge
-	ClockOffsetStdDevNanos *metric.Gauge
-	RoundTripLatency       metric.IHistogram
+	ClockOffsetMeanNanos           *metric.Gauge
+	ClockOffsetStdDevNanos         *metric.Gauge
+	ClockOffsetMedianNanos         *metric.Gauge
+	ClockOffsetMedianAbsDevNanos   *metric.Gauge
+	RoundTripLatency               metric.IHistogram
+	RoundTripDefaultClassLatency   metric.IHistogram
+	RoundTripSystemClassLatency    metric.IHistogram
+	RoundTripRangefeedClassLatency metric.IHistogram
+	RoundTripRaftClassLatency      metric.IHistogram
 }
 
 // avgLatencyMeasurementAge determines how to exponentially weight the
@@ -40,6 +49,9 @@ var (
 		Help:        "Mean clock offset with other nodes",
 		Measurement: "Clock Offset",
 		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_ESSENTIAL,
+		Category:    metric.Metadata_NETWORKING,
+		HowToUse:    "This metric gives the node's clock skew. In a well-configured environment, the actual clock skew would be in the sub-millisecond range. A skew exceeding 5 ms is likely due to a NTP service mis-configuration. Reducing the actual clock skew reduces the probability of uncertainty related conflicts and corresponding retires which has a positive impact on workload performance. Conversely, a larger actual clock skew increases the probability of retries due to uncertainty conflicts, with potentially measurable adverse effects on workload performance.",
 	}
 	metaClockOffsetStdDevNanos = metric.Metadata{
 		Name:        "clock-offset.stddevnanos",
@@ -47,7 +59,24 @@ var (
 		Measurement: "Clock Offset",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
-
+	metaClockOffsetMedianNanos = metric.Metadata{
+		// An outlier resistant measure of centrality, useful for
+		// diagnosing unhealthy nodes.
+		// Demo: https://docs.google.com/spreadsheets/d/1gmzQxEVYDKb_b-Mn50ZTje-LqZw6TZwUxxUPY2rG69M/edit?gid=0#gid=0
+		Name:        "clock-offset.mediannanos",
+		Help:        "Median clock offset with other nodes",
+		Measurement: "Clock Offset",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaClockOffsetMedianAbsDevNanos = metric.Metadata{
+		// An outlier resistant measure of dispersion, see
+		// https://en.wikipedia.org/wiki/Median_absolute_deviation
+		// and demo above.
+		Name:        "clock-offset.medianabsdevnanos",
+		Help:        "Median Absolute Deviation (MAD) with other nodes",
+		Measurement: "Clock Offset",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 	metaConnectionRoundTripLatency = metric.Metadata{
 		// NB: the name is legacy and should not be changed since customers
 		// rely on it.
@@ -61,6 +90,44 @@ can similarly elevate this metric. The operator should look towards OS-level
 metrics such as packet loss, retransmits, etc, to conclusively diagnose network
 issues. Heartbeats are not very frequent (~seconds), so they may not capture
 rare or short-lived degradations.
+`,
+		Measurement: "Round-trip time",
+		Unit:        metric.Unit_NANOSECONDS,
+		Visibility:  metric.Metadata_SUPPORT,
+	}
+
+	metaDefaultConnectionRoundTripLatency = metric.Metadata{
+		Name: "round-trip-default-class-latency",
+		Help: `Distribution of round-trip latencies with other nodes.
+
+Similar to round-trip-latency, but only for default class connections.
+`,
+		Measurement: "Round-trip time",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaSystemConnectionRoundTripLatency = metric.Metadata{
+		Name: "round-trip-system-class-latency",
+		Help: `Distribution of round-trip latencies with other nodes.
+
+Similar to round-trip-latency, but only for system class connections.
+`,
+		Measurement: "Round-trip time",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaRangefeedConnectionRoundTripLatency = metric.Metadata{
+		Name: "round-trip-rangefeed-class-latency",
+		Help: `Distribution of round-trip latencies with other nodes.
+
+Similar to round-trip-latency, but only for rangefeed class connections.
+`,
+		Measurement: "Round-trip time",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
+	metaRaftConnectionRoundTripLatency = metric.Metadata{
+		Name: "round-trip-raft-class-latency",
+		Help: `Distribution of round-trip latencies with other nodes.
+
+Similar to round-trip-latency, but only for raft class connections.
 `,
 		Measurement: "Round-trip time",
 		Unit:        metric.Unit_NANOSECONDS,
@@ -108,7 +175,8 @@ type RemoteClockMonitor struct {
 		connCount    map[roachpb.NodeID]uint
 	}
 
-	metrics RemoteClockMetrics
+	uncertainOffsetLog log.EveryN
+	metrics            RemoteClockMetrics
 }
 
 // TestingResetLatencyInfos will clear all latency info from the clock monitor.
@@ -122,6 +190,20 @@ func (r *RemoteClockMonitor) TestingResetLatencyInfos() {
 	}
 }
 
+// createRoundtripLatencyMetricHelper is a helper function to create a histogram
+// metric for an RTT metric with the given metadata and histogram window
+// interval.
+func createRoundtripLatencyMetricHelper(
+	meta metric.Metadata, histogramWindowInterval time.Duration,
+) metric.IHistogram {
+	return metric.NewHistogram(metric.HistogramOptions{
+		Mode:         metric.HistogramModePreferHdrLatency,
+		Metadata:     meta,
+		Duration:     histogramWindowInterval,
+		BucketConfig: metric.IOLatencyBuckets,
+	})
+}
+
 // newRemoteClockMonitor returns a monitor with the given server clock. A
 // toleratedOffset of 0 disables offset checking and metrics, but still records
 // latency metrics.
@@ -132,9 +214,10 @@ func newRemoteClockMonitor(
 	histogramWindowInterval time.Duration,
 ) *RemoteClockMonitor {
 	r := RemoteClockMonitor{
-		clock:           clock,
-		toleratedOffset: toleratedOffset,
-		offsetTTL:       offsetTTL,
+		clock:              clock,
+		toleratedOffset:    toleratedOffset,
+		offsetTTL:          offsetTTL,
+		uncertainOffsetLog: log.Every(time.Second * 10),
 	}
 	r.mu.offsets = make(map[roachpb.NodeID]RemoteOffset)
 	r.mu.latencyInfos = make(map[roachpb.NodeID]*latencyInfo)
@@ -143,17 +226,20 @@ func newRemoteClockMonitor(
 		histogramWindowInterval = time.Duration(math.MaxInt64)
 	}
 	r.metrics = RemoteClockMetrics{
-		ClockOffsetMeanNanos:   metric.NewGauge(metaClockOffsetMeanNanos),
-		ClockOffsetStdDevNanos: metric.NewGauge(metaClockOffsetStdDevNanos),
-		RoundTripLatency: metric.NewHistogram(metric.HistogramOptions{
-			Mode:     metric.HistogramModePreferHdrLatency,
-			Metadata: metaConnectionRoundTripLatency,
-			Duration: histogramWindowInterval,
-			// NB: the choice of IO over Network buckets is somewhat debatable, but
-			// it's fine. Heartbeats can take >1s which the IO buckets can represent,
-			// but the Network buckets top out at 1s.
-			BucketConfig: metric.IOLatencyBuckets,
-		}),
+		ClockOffsetMeanNanos:         metric.NewGauge(metaClockOffsetMeanNanos),
+		ClockOffsetStdDevNanos:       metric.NewGauge(metaClockOffsetStdDevNanos),
+		ClockOffsetMedianNanos:       metric.NewGauge(metaClockOffsetMedianNanos),
+		ClockOffsetMedianAbsDevNanos: metric.NewGauge(metaClockOffsetMedianAbsDevNanos),
+		RoundTripLatency: createRoundtripLatencyMetricHelper(metaConnectionRoundTripLatency,
+			histogramWindowInterval),
+		RoundTripDefaultClassLatency: createRoundtripLatencyMetricHelper(metaDefaultConnectionRoundTripLatency,
+			histogramWindowInterval),
+		RoundTripSystemClassLatency: createRoundtripLatencyMetricHelper(metaSystemConnectionRoundTripLatency,
+			histogramWindowInterval),
+		RoundTripRangefeedClassLatency: createRoundtripLatencyMetricHelper(metaRangefeedConnectionRoundTripLatency,
+			histogramWindowInterval),
+		RoundTripRaftClassLatency: createRoundtripLatencyMetricHelper(metaRaftConnectionRoundTripLatency,
+			histogramWindowInterval),
 	}
 	return &r
 }
@@ -225,7 +311,11 @@ func (r *RemoteClockMonitor) OnDisconnect(_ context.Context, nodeID roachpb.Node
 //
 // Pass a roundTripLatency of 0 or less to avoid recording the latency.
 func (r *RemoteClockMonitor) UpdateOffset(
-	ctx context.Context, id roachpb.NodeID, offset RemoteOffset, roundTripLatency time.Duration,
+	ctx context.Context,
+	id roachpb.NodeID,
+	offset RemoteOffset,
+	roundTripLatency time.Duration,
+	rpcClass rpcbase.ConnectionClass,
 ) {
 	emptyOffset := offset == RemoteOffset{}
 	// At startup the remote node's id may not be set. Skip recording latency.
@@ -273,6 +363,22 @@ func (r *RemoteClockMonitor) UpdateOffset(
 		prevAvg := info.avgNanos.Value()
 		info.avgNanos.Add(newLatencyf)
 		r.metrics.RoundTripLatency.RecordValue(roundTripLatency.Nanoseconds())
+		switch rpcClass {
+		case rpcbase.DefaultClass:
+			r.metrics.RoundTripDefaultClassLatency.RecordValue(roundTripLatency.Nanoseconds())
+		case rpcbase.SystemClass:
+			r.metrics.RoundTripSystemClassLatency.RecordValue(roundTripLatency.Nanoseconds())
+		case rpcbase.RangefeedClass:
+			r.metrics.RoundTripRangefeedClassLatency.RecordValue(roundTripLatency.Nanoseconds())
+		case rpcbase.RaftClass:
+			r.metrics.RoundTripRaftClassLatency.RecordValue(roundTripLatency.Nanoseconds())
+		default:
+			log.Dev.Warningf(ctx, "unknown RPC class: %s", rpcClass)
+			if buildutil.CrdbTestBuild {
+				panic(errors.AssertionFailedf("unknown RPC class: %s", rpcClass))
+			}
+
+		}
 
 		// See: https://github.com/cockroachdb/cockroach/issues/96262
 		// See: https://github.com/cockroachdb/cockroach/issues/98066
@@ -316,7 +422,7 @@ func (r *RemoteClockMonitor) VerifyClockOffset(ctx context.Context) error {
 
 	now := r.clock.Now()
 	healthyOffsetCount := 0
-
+	sum := float64(0)
 	offsets, numClocks := func() (stats.Float64Data, int) {
 		r.mu.Lock()
 		defer r.mu.Unlock()
@@ -327,25 +433,36 @@ func (r *RemoteClockMonitor) VerifyClockOffset(ctx context.Context) error {
 				delete(r.mu.offsets, id)
 				continue
 			}
-			offs = append(offs, float64(offset.Offset+offset.Uncertainty))
-			offs = append(offs, float64(offset.Offset-offset.Uncertainty))
-			if offset.isHealthy(ctx, r.toleratedOffset) {
+			off1 := float64(offset.Offset + offset.Uncertainty)
+			off2 := float64(offset.Offset - offset.Uncertainty)
+			sum += off1 + off2
+			offs = append(offs, off1, off2)
+			switch h := offset.isHealthy(r.toleratedOffset); h {
+
+			case definitelyHealthy, ambiguousHealth:
+				// NB: We err on the side of not spuriously killing nodes when the health is ambiguous.
 				healthyOffsetCount++
+				if h == ambiguousHealth && r.uncertainOffsetLog.ShouldLog() {
+					log.Health.Warningf(ctx, "n%d has uncertain remote offset %s for maximum tolerated offset %s, treating as healthy",
+						id, offset, r.toleratedOffset)
+				}
+			default:
 			}
 		}
 		return offs, len(r.mu.offsets)
 	}()
 
-	mean, err := offsets.Mean()
-	if err != nil && !errors.Is(err, stats.EmptyInput) {
-		return err
-	}
-	stdDev, err := offsets.StandardDeviation()
-	if err != nil && !errors.Is(err, stats.EmptyInput) {
-		return err
-	}
+	sort.Float64s(offsets)
+
+	mean := sum / float64(len(offsets))
+	stdDev := StandardDeviationPopulationKnownMean(offsets, mean)
+	median := MedianSortedInput(offsets)
+	medianAbsoluteDeviation := MedianAbsoluteDeviationPopulationSortedInput(offsets)
+
 	r.metrics.ClockOffsetMeanNanos.Update(int64(mean))
 	r.metrics.ClockOffsetStdDevNanos.Update(int64(stdDev))
+	r.metrics.ClockOffsetMedianNanos.Update(int64(median))
+	r.metrics.ClockOffsetMedianAbsDevNanos.Update(int64(medianAbsoluteDeviation))
 
 	if numClocks > 0 && healthyOffsetCount <= numClocks/2 {
 		return errors.Errorf(
@@ -359,7 +476,18 @@ func (r *RemoteClockMonitor) VerifyClockOffset(ctx context.Context) error {
 	return nil
 }
 
-func (r RemoteOffset) isHealthy(ctx context.Context, toleratedOffset time.Duration) bool {
+type remoteHealth int8
+
+const (
+	// definitelyHealthy means that the maximum possible true offset does not exceed the tolerated offset.
+	definitelyHealthy remoteHealth = iota
+	// definitelyUnhealthy means that the minimum possible true offset exceeds the tolerated offset.
+	definitelyUnhealthy
+	// ambiguousHealth means that the tolerated offset is in the uncertainty window of the measured offset.
+	ambiguousHealth
+)
+
+func (r RemoteOffset) isHealthy(toleratedOffset time.Duration) remoteHealth {
 	// Offset may be negative, but Uncertainty is always positive.
 	absOffset := r.Offset
 	if absOffset < 0 {
@@ -367,21 +495,14 @@ func (r RemoteOffset) isHealthy(ctx context.Context, toleratedOffset time.Durati
 	}
 	switch {
 	case time.Duration(absOffset-r.Uncertainty)*time.Nanosecond > toleratedOffset:
-		// The minimum possible true offset exceeds the tolerated offset; definitely
-		// unhealthy.
-		return false
-
+		// The minimum possible true offset exceeds the tolerated offset.
+		return definitelyUnhealthy
 	case time.Duration(absOffset+r.Uncertainty)*time.Nanosecond < toleratedOffset:
-		// The maximum possible true offset does not exceed the tolerated offset;
-		// definitely healthy.
-		return true
-
+		// The maximum possible true offset does not exceed the tolerated offset.
+		return definitelyHealthy
 	default:
-		// The tolerated offset is in the uncertainty window of the measured offset;
-		// health is ambiguous. For now, we err on the side of not spuriously
-		// killing nodes.
-		log.Health.Warningf(ctx, "uncertain remote offset %s for maximum tolerated offset %s, treating as healthy", r, toleratedOffset)
-		return true
+		// The tolerated offset is in the uncertainty window of the measured offset.
+		return ambiguousHealth
 	}
 }
 
@@ -398,6 +519,7 @@ func updateClockOffsetTracking(
 	nodeID roachpb.NodeID,
 	sendTime, serverTime, receiveTime time.Time,
 	toleratedOffset time.Duration,
+	rpcClass rpcbase.ConnectionClass,
 ) (time.Duration, RemoteOffset, error) {
 	pingDuration := receiveTime.Sub(sendTime)
 	if remoteClocks == nil {
@@ -412,15 +534,116 @@ func updateClockOffsetTracking(
 	var offset RemoteOffset
 	if pingDuration <= maximumPingDurationMult*toleratedOffset {
 		// Offset and error are measured using the remote clock reading
-		// technique described in
-		// http://se.inf.tu-dresden.de/pubs/papers/SRDS1994.pdf, page 6.
-		// However, we assume that drift and min message delay are 0, for
-		// now.
+		// technique described in section 3.1 of
+		//
+		// F. Cristian and C. Fetzer, "Probabilistic internal clock
+		// synchronization," in Proceedings of IEEE 13th Symposium on Reliable
+		// Distributed Systems, Dana Point, CA, USA, 1994
+		//
+		// However, we assume that drift and min message delay are 0, for now and,
+		// as a result, the transmission delay from the remote node to our node is
+		// half the ping duration.
 		offset.MeasuredAt = receiveTime.UnixNano()
 		offset.Uncertainty = (pingDuration / 2).Nanoseconds()
 		remoteTimeNow := serverTime.Add(pingDuration / 2)
 		offset.Offset = remoteTimeNow.Sub(receiveTime).Nanoseconds()
 	}
-	remoteClocks.UpdateOffset(ctx, nodeID, offset, pingDuration)
+	remoteClocks.UpdateOffset(ctx, nodeID, offset, pingDuration, rpcClass)
 	return pingDuration, offset, remoteClocks.VerifyClockOffset(ctx)
+}
+
+// The following statistics functions are re-implementations of similar
+// functions provided by github.com/montanaflynn/stats. Those original functions
+// were originally offered under:
+//
+//	The MIT License (MIT)
+//
+//	Copyright (c) 2014-2023 Montana Flynn (https://montanaflynn.com)
+//
+//	Permission is hereby granted, free of charge, to any person obtaining a copy
+//	of this software and associated documentation files (the "Software"), to deal
+//	in the Software without restriction, including without limitation the rights
+//	to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+//	copies of the Software, and to permit persons to whom the Software is
+//	furnished to do so, subject to the following conditions:
+//
+//	The above copyright notice and this permission notice shall be included in all
+//	copies or substantial portions of the Software.
+//
+
+// StandardDeviationPopulationKnownMean calculates the standard deviation
+// assuming the input is the population and that the given mean is the mean of
+// the input.
+func StandardDeviationPopulationKnownMean(input stats.Float64Data, mean float64) float64 {
+	if input.Len() == 0 {
+		return math.NaN()
+	}
+	return math.Sqrt(PopulationVarianceKnownMean(input, mean))
+}
+
+// PopulationVarianceKnownMean calculates the variance assuming the input is the
+// population and that the given mean is the mean of the input.
+func PopulationVarianceKnownMean(input stats.Float64Data, mean float64) float64 {
+	if input.Len() == 0 {
+		return math.NaN()
+	}
+	variance := float64(0)
+	for _, n := range input {
+		diff := n - mean
+		variance += diff * diff
+	}
+	return variance / float64(input.Len())
+}
+
+// MedianSortedInput calculates the median of the input, assuming it is already
+// sorted.
+func MedianSortedInput(sortedInput stats.Float64Data) float64 {
+	if buildutil.CrdbTestBuild {
+		if !sort.IsSorted(sortedInput) {
+			panic("MedianSortedInput expects sorted input")
+		}
+	}
+
+	l := len(sortedInput)
+	if l == 0 {
+		return math.NaN()
+	} else if l%2 == 0 {
+		return (sortedInput[(l/2)-1] + sortedInput[(l/2)]) / 2.0
+	} else {
+		return sortedInput[l/2]
+	}
+}
+
+// MedianAbsoluteDeviationPopulationSortedInput calculates the median absolute
+// deviation from a pre-sorted population.
+func MedianAbsoluteDeviationPopulationSortedInput(sortedInput stats.Float64Data) float64 {
+	switch sortedInput.Len() {
+	case 0:
+		return math.NaN()
+	case 1:
+		return 0
+	}
+
+	m := MedianSortedInput(sortedInput)
+	a := sortedInput
+
+	// Peal off the largest difference on either end until we reach the midpoint(s).
+	last := 0.0
+	for len(a) > (len(sortedInput) / 2) {
+		leftDiff := m - a[0]
+		rightDiff := a[len(a)-1] - m
+		if leftDiff >= rightDiff {
+			last = leftDiff
+			a = a[1:]
+		} else {
+			last = rightDiff
+			a = a[:len(a)-1]
+		}
+	}
+
+	if len(sortedInput)%2 == 1 {
+		return last
+	} else {
+		return (max(m-a[0], a[len(a)-1]-m) + last) * 0.5
+	}
 }

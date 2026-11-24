@@ -15,6 +15,10 @@ CREATE TABLE c (a BOOL, b BOOL, c BOOL, d BOOL, e BOOL)
 ----
 
 exec-ddl
+CREATE TABLE d (k INT PRIMARY KEY, a INT NOT NULL, b INT, c INT, d FLOAT)
+----
+
+exec-ddl
 CREATE TABLE e
 (
     k INT PRIMARY KEY,
@@ -23,6 +27,30 @@ CREATE TABLE e
     tz TIMESTAMPTZ,
     d DATE
 )
+----
+
+exec-ddl
+CREATE TABLE rls (x INT PRIMARY KEY, y INT, alice_has_access BOOL);
+----
+
+exec-ddl
+CREATE INDEX ON rls(y);
+----
+
+exec-ddl
+ALTER TABLE rls ENABLE ROW LEVEL SECURITY;
+----
+
+exec-ddl
+CREATE POLICY select_policy_alice
+ON rls
+FOR SELECT
+TO alice
+USING (alice_has_access);
+----
+
+exec-ddl
+CREATE ROLE alice;
 ----
 
 # --------------------------------------------------
@@ -307,7 +335,7 @@ inner-join (hash)
  ├── cardinality: [0 - 1]
  ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
  ├── key: ()
- ├── fd: ()-->(1-5,8-12), (8)==(1), (1)==(8)
+ ├── fd: ()-->(1-5,8-12), (1)==(8), (8)==(1)
  ├── select
  │    ├── columns: a.k:1!null a.i:2 f:3 s:4 j:5
  │    ├── cardinality: [0 - 1]
@@ -1322,12 +1350,12 @@ SELECT * FROM (SELECT k, i, max(s) m FROM a GROUP BY k, i) a WHERE i=k AND m='fo
 select
  ├── columns: k:1!null i:2!null m:8!null
  ├── key: (1)
- ├── fd: ()-->(8), (1)==(2), (2)==(1), (1)-->(2)
+ ├── fd: ()-->(8), (1)-->(2), (1)==(2), (2)==(1)
  ├── group-by (hash)
  │    ├── columns: k:1!null i:2!null max:8
  │    ├── grouping columns: k:1!null
  │    ├── key: (1)
- │    ├── fd: (1)==(2), (2)==(1), (1)-->(2,8)
+ │    ├── fd: (1)-->(2,8), (1)==(2), (2)==(1)
  │    ├── select
  │    │    ├── columns: k:1!null i:2!null s:4
  │    │    ├── key: (1)
@@ -1423,6 +1451,170 @@ select
  └── filters
       ├── $1 < '2000-01-01T10:00:00'
       └── count_rows:8 = 0 [outer=(8), constraints=(/8: [/0 - /0]; tight), fd=()-->(8)]
+
+# --------------------------------------------------
+# PushSelectIntoUnorderedDistinctOn
+# --------------------------------------------------
+
+# Push down filter on a non-grouping column (first-agg column) into an
+# unordered DistinctOn. This is valid because an unordered DistinctOn can
+# choose any row from a group, so filtering first is correct.
+norm expect=PushSelectIntoUnorderedDistinctOn
+SELECT * FROM (SELECT DISTINCT ON (i) i, s FROM a) WHERE s='foo'
+----
+distinct-on
+ ├── columns: i:2 s:4!null
+ ├── grouping columns: i:2
+ ├── key: (2)
+ ├── fd: ()-->(4)
+ ├── select
+ │    ├── columns: i:2 s:4!null
+ │    ├── fd: ()-->(4)
+ │    ├── scan a
+ │    │    └── columns: i:2 s:4
+ │    └── filters
+ │         └── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+ └── aggregations
+      └── first-agg [as=s:4, outer=(4)]
+           └── s:4
+
+# Push down filter on a non-grouping column with multiple aggregated columns.
+norm expect=PushSelectIntoUnorderedDistinctOn
+SELECT * FROM (SELECT DISTINCT ON (i) i, s, f FROM a) WHERE s='foo'
+----
+distinct-on
+ ├── columns: i:2 s:4!null f:3
+ ├── grouping columns: i:2
+ ├── key: (2)
+ ├── fd: ()-->(4), (2)-->(3,4)
+ ├── select
+ │    ├── columns: i:2 f:3 s:4!null
+ │    ├── fd: ()-->(4)
+ │    ├── scan a
+ │    │    └── columns: i:2 f:3 s:4
+ │    └── filters
+ │         └── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+ └── aggregations
+      ├── first-agg [as=s:4, outer=(4)]
+      │    └── s:4
+      └── first-agg [as=f:3, outer=(3)]
+           └── f:3
+
+# Push down multiple filters that all reference grouping input columns.
+norm expect=PushSelectIntoUnorderedDistinctOn
+SELECT * FROM (SELECT DISTINCT ON (i) i, s, f FROM a) WHERE s='foo' AND f > 1.0
+----
+distinct-on
+ ├── columns: i:2 s:4!null f:3!null
+ ├── grouping columns: i:2
+ ├── key: (2)
+ ├── fd: ()-->(4), (2)-->(3,4)
+ ├── select
+ │    ├── columns: i:2 f:3!null s:4!null
+ │    ├── fd: ()-->(4)
+ │    ├── scan a
+ │    │    └── columns: i:2 f:3 s:4
+ │    └── filters
+ │         ├── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+ │         └── f:3 > 1.0 [outer=(3), constraints=(/3: [/1.0000000000000002 - ]; tight)]
+ └── aggregations
+      ├── first-agg [as=s:4, outer=(4)]
+      │    └── s:4
+      └── first-agg [as=f:3, outer=(3)]
+           └── f:3
+
+# Do *not* push down into an ordered DistinctOn when the filter references a
+# non-grouping, non-const-agg column. An ordered DistinctOn must pick a specific
+# row (determined by the ordering), so filtering before could change the result.
+norm expect-not=PushSelectIntoUnorderedDistinctOn
+SELECT * FROM (SELECT DISTINCT ON (i) i, s FROM a ORDER BY i, s) WHERE s='foo'
+----
+select
+ ├── columns: i:2 s:4!null
+ ├── key: (2)
+ ├── fd: ()-->(4)
+ ├── distinct-on
+ │    ├── columns: i:2 s:4
+ │    ├── grouping columns: i:2
+ │    ├── internal-ordering: +4 opt(2)
+ │    ├── key: (2)
+ │    ├── fd: (2)-->(4)
+ │    ├── sort
+ │    │    ├── columns: i:2 s:4
+ │    │    ├── ordering: +4 opt(2) [actual: +4]
+ │    │    └── scan a
+ │    │         └── columns: i:2 s:4
+ │    └── aggregations
+ │         └── first-agg [as=s:4, outer=(4)]
+ │              └── s:4
+ └── filters
+      └── s:4 = 'foo' [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+
+# Push down filter that references a column from a join input under unordered
+# DistinctOn.
+norm expect=PushSelectIntoUnorderedDistinctOn
+SELECT * FROM (SELECT DISTINCT ON (i) i, x FROM a JOIN xy ON k=x) WHERE x > 5
+----
+distinct-on
+ ├── columns: i:2 x:8!null
+ ├── grouping columns: i:2
+ ├── key: (8)
+ ├── fd: (8)-->(2), (2)-->(8)
+ ├── inner-join (hash)
+ │    ├── columns: k:1!null i:2 x:8!null
+ │    ├── multiplicity: left-rows(zero-or-one), right-rows(zero-or-one)
+ │    ├── key: (8)
+ │    ├── fd: (1)-->(2), (1)==(8), (8)==(1)
+ │    ├── select
+ │    │    ├── columns: k:1!null i:2
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(2)
+ │    │    ├── scan a
+ │    │    │    ├── columns: k:1!null i:2
+ │    │    │    ├── key: (1)
+ │    │    │    └── fd: (1)-->(2)
+ │    │    └── filters
+ │    │         └── k:1 > 5 [outer=(1), constraints=(/1: [/6 - ]; tight)]
+ │    ├── select
+ │    │    ├── columns: x:8!null
+ │    │    ├── key: (8)
+ │    │    ├── scan xy
+ │    │    │    ├── columns: x:8!null
+ │    │    │    └── key: (8)
+ │    │    └── filters
+ │    │         └── x:8 > 5 [outer=(8), constraints=(/8: [/6 - ]; tight)]
+ │    └── filters
+ │         └── k:1 = x:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
+ └── aggregations
+      └── first-agg [as=x:8, outer=(8)]
+           └── x:8
+
+# Do *not* push down a filter that references outer columns.
+norm expect-not=PushSelectIntoUnorderedDistinctOn
+SELECT * FROM a AS outer_a WHERE EXISTS(
+  SELECT * FROM (SELECT DISTINCT ON (i) i, s FROM a) AS inner_a WHERE inner_a.s = outer_a.s
+)
+----
+semi-join (hash)
+ ├── columns: k:1!null i:2 f:3 s:4 j:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan a [as=outer_a]
+ │    ├── columns: outer_a.k:1!null outer_a.i:2 outer_a.f:3 outer_a.s:4 outer_a.j:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ ├── distinct-on
+ │    ├── columns: a.i:9 a.s:11
+ │    ├── grouping columns: a.i:9
+ │    ├── key: (9)
+ │    ├── fd: (9)-->(11)
+ │    ├── scan a
+ │    │    └── columns: a.i:9 a.s:11
+ │    └── aggregations
+ │         └── first-agg [as=a.s:11, outer=(11)]
+ │              └── a.s:11
+ └── filters
+      └── a.s:11 = outer_a.s:4 [outer=(4,11), constraints=(/4: (/NULL - ]; /11: (/NULL - ]), fd=(4)==(11), (11)==(4)]
 
 # --------------------------------------------------
 # RemoveNotNullCondition
@@ -1613,6 +1805,502 @@ scan b
 exec-ddl
 DROP INDEX partial_idx
 ----
+
+# --------------------------------------------------
+# SimplifyIsCondition
+# --------------------------------------------------
+
+norm expect=SimplifyIsCondition
+SELECT * FROM d WHERE a = 1 AND k IS NOT DISTINCT FROM 1 AND d = 1.0
+----
+select
+ ├── columns: k:1!null a:2!null b:3 c:4 d:5!null
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-5)
+ ├── scan d
+ │    ├── columns: k:1!null a:2!null b:3 c:4 d:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      ├── a:2 = 1 [outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+      ├── k:1 = 1 [outer=(1), constraints=(/1: [/1 - /1]; tight), fd=()-->(1)]
+      └── d:5 = 1.0 [outer=(5), constraints=(/5: [/1.0 - /1.0]; tight), fd=()-->(5)]
+
+# The rule applies if at least one of the operands is non-nullable.
+norm expect=SimplifyIsCondition
+SELECT * FROM d WHERE a IS NOT DISTINCT FROM b
+----
+select
+ ├── columns: k:1!null a:2!null b:3!null c:4 d:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5), (2)==(3), (3)==(2)
+ ├── scan d
+ │    ├── columns: k:1!null a:2!null b:3 c:4 d:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── a:2 = b:3 [outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ]), fd=(2)==(3), (3)==(2)]
+
+# The rule does not apply if both operands are nullable.
+norm expect-not=SimplifyIsCondition
+SELECT * FROM d WHERE b IS NOT DISTINCT FROM NULL
+----
+select
+ ├── columns: k:1!null a:2!null b:3 c:4 d:5
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2,4,5)
+ ├── scan d
+ │    ├── columns: k:1!null a:2!null b:3 c:4 d:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── b:3 IS NULL [outer=(3), constraints=(/3: [/NULL - /NULL]; tight), fd=()-->(3)]
+
+norm expect-not=SimplifyIsCondition
+SELECT * FROM d WHERE NULL IS NOT DISTINCT FROM b
+----
+select
+ ├── columns: k:1!null a:2!null b:3 c:4 d:5
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2,4,5)
+ ├── scan d
+ │    ├── columns: k:1!null a:2!null b:3 c:4 d:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── b:3 IS NULL [outer=(3), constraints=(/3: [/NULL - /NULL]; tight), fd=()-->(3)]
+
+norm expect-not=SimplifyIsCondition
+SELECT * FROM d WHERE b IS NOT DISTINCT FROM c
+----
+select
+ ├── columns: k:1!null a:2!null b:3 c:4 d:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan d
+ │    ├── columns: k:1!null a:2!null b:3 c:4 d:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── b:3 IS NOT DISTINCT FROM c:4 [outer=(3,4)]
+
+norm expect-not=SimplifyIsCondition
+SELECT * FROM d WHERE b IS NULL
+----
+select
+ ├── columns: k:1!null a:2!null b:3 c:4 d:5
+ ├── key: (1)
+ ├── fd: ()-->(3), (1)-->(2,4,5)
+ ├── scan d
+ │    ├── columns: k:1!null a:2!null b:3 c:4 d:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── b:3 IS NULL [outer=(3), constraints=(/3: [/NULL - /NULL]; tight), fd=()-->(3)]
+
+# The rule does not apply if the operands are tuples.
+norm expect-not=SimplifyIsCondition
+SELECT * FROM d WHERE (k, a) IS NOT DISTINCT FROM (a, k)
+----
+select
+ ├── columns: k:1!null a:2!null b:3 c:4 d:5
+ ├── immutable
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan d
+ │    ├── columns: k:1!null a:2!null b:3 c:4 d:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── (k:1, a:2) IS NOT DISTINCT FROM (a:2, k:1) [outer=(1,2), immutable]
+
+# The rule does not apply if the operands do not have identical types.
+norm expect-not=SimplifyIsCondition
+SELECT * FROM d WHERE a IS NOT DISTINCT FROM 1.23
+----
+select
+ ├── columns: k:1!null a:2!null b:3 c:4 d:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan d
+ │    ├── columns: k:1!null a:2!null b:3 c:4 d:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── a:2 IS NOT DISTINCT FROM 1.23 [outer=(2)]
+
+norm expect-not=SimplifyIsCondition
+SELECT * FROM d WHERE a IS NOT DISTINCT FROM d
+----
+select
+ ├── columns: k:1!null a:2!null b:3 c:4 d:5
+ ├── key: (1)
+ ├── fd: (1)-->(2-5)
+ ├── scan d
+ │    ├── columns: k:1!null a:2!null b:3 c:4 d:5
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2-5)
+ └── filters
+      └── a:2 IS NOT DISTINCT FROM d:5 [outer=(2,5)]
+
+
+# --------------------------------------------------
+# EliminateCaseTrailingFalsyBranch
+# --------------------------------------------------
+
+norm expect=EliminateCaseTrailingFalsyBranch
+SELECT k FROM a WHERE CASE WHEN i > 0 THEN f > 0 WHEN s = 'foo' THEN false END
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null i:2 f:3
+      ├── key: (1)
+      ├── fd: (1)-->(2,3)
+      ├── scan a
+      │    ├── columns: k:1!null i:2 f:3
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2,3)
+      └── filters
+           └── CASE WHEN i:2 > 0 THEN f:3 > 0.0 ELSE CAST(NULL AS BOOL) END [outer=(2,3)]
+
+norm expect=EliminateCaseTrailingFalsyBranch
+SELECT k FROM a WHERE CASE WHEN i > 0 THEN f > 0 WHEN s = 'foo' THEN false ELSE false END
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null i:2 f:3
+      ├── key: (1)
+      ├── fd: (1)-->(2,3)
+      ├── scan a
+      │    ├── columns: k:1!null i:2 f:3
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2,3)
+      └── filters
+           └── CASE WHEN i:2 > 0 THEN f:3 > 0.0 ELSE false END [outer=(2,3)]
+
+norm expect=EliminateCaseTrailingFalsyBranch
+SELECT k FROM a WHERE CASE WHEN i > 0 THEN f > 0 WHEN s = 'foo' THEN NULL ELSE NULL END
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null i:2 f:3
+      ├── key: (1)
+      ├── fd: (1)-->(2,3)
+      ├── scan a
+      │    ├── columns: k:1!null i:2 f:3
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2,3)
+      └── filters
+           └── CASE WHEN i:2 > 0 THEN f:3 > 0.0 ELSE CAST(NULL AS BOOL) END [outer=(2,3)]
+
+norm expect-not=EliminateCaseTrailingFalsyBranch
+SELECT k FROM a WHERE CASE WHEN s = 'foo' THEN false ELSE false END
+----
+values
+ ├── columns: k:1!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1)
+
+norm expect-not=EliminateCaseTrailingFalsyBranch
+SELECT k FROM a WHERE CASE WHEN i > 0 THEN f > 0 WHEN s = 'foo' THEN false ELSE true END
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null i:2 f:3 s:4
+      ├── key: (1)
+      ├── fd: (1)-->(2-4)
+      ├── scan a
+      │    ├── columns: k:1!null i:2 f:3 s:4
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-4)
+      └── filters
+           └── CASE WHEN i:2 > 0 THEN f:3 > 0.0 WHEN s:4 = 'foo' THEN false ELSE true END [outer=(2-4)]
+
+norm expect-not=EliminateCaseTrailingFalsyBranch
+SELECT k FROM a WHERE CASE WHEN i > 0 THEN f > 0 WHEN s = 'foo' THEN false ELSE s = 'bar' END
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null i:2 f:3 s:4
+      ├── key: (1)
+      ├── fd: (1)-->(2-4)
+      ├── scan a
+      │    ├── columns: k:1!null i:2 f:3 s:4
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-4)
+      └── filters
+           └── CASE WHEN i:2 > 0 THEN f:3 > 0.0 WHEN s:4 = 'foo' THEN false ELSE s:4 = 'bar' END [outer=(2-4)]
+
+norm expect-not=EliminateCaseTrailingFalsyBranch
+SELECT k FROM a WHERE CASE WHEN i > 0 THEN f > 0 WHEN s = 'foo' THEN false WHEN s = 'bar' THEN true END
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null i:2 f:3 s:4
+      ├── key: (1)
+      ├── fd: (1)-->(2-4)
+      ├── scan a
+      │    ├── columns: k:1!null i:2 f:3 s:4
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-4)
+      └── filters
+           └── CASE WHEN i:2 > 0 THEN f:3 > 0.0 WHEN s:4 = 'foo' THEN false WHEN s:4 = 'bar' THEN true ELSE CAST(NULL AS BOOL) END [outer=(2-4)]
+
+norm expect-not=EliminateCaseTrailingFalsyBranch
+SELECT k FROM a WHERE CASE s = 'baz' WHEN i > 0 THEN f > 0 WHEN s = 'foo' THEN false END
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null i:2 f:3 s:4
+      ├── key: (1)
+      ├── fd: (1)-->(2-4)
+      ├── scan a
+      │    ├── columns: k:1!null i:2 f:3 s:4
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2-4)
+      └── filters
+           └── CASE s:4 = 'baz' WHEN i:2 > 0 THEN f:3 > 0.0 WHEN s:4 = 'foo' THEN false ELSE CAST(NULL AS BOOL) END [outer=(2-4)]
+
+
+# --------------------------------------------------
+# SimplifyCaseSingleFalsyBranch
+# --------------------------------------------------
+
+norm expect=SimplifyCaseSingleFalsyBranch
+SELECT k FROM a WHERE CASE WHEN i > 0 THEN false END
+----
+values
+ ├── columns: k:1!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1)
+
+norm expect=SimplifyCaseSingleFalsyBranch
+SELECT k FROM a WHERE CASE WHEN i > 0 THEN false ELSE false END
+----
+values
+ ├── columns: k:1!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1)
+
+norm expect=SimplifyCaseSingleFalsyBranch
+SELECT k FROM a WHERE CASE WHEN i > 0 THEN NULL ELSE NULL END
+----
+values
+ ├── columns: k:1!null
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(1)
+
+norm expect-not=SimplifyCaseSingleFalsyBranch
+SELECT k FROM a WHERE CASE WHEN i > 0 THEN NULL ELSE true END
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null i:2
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      ├── scan a
+      │    ├── columns: k:1!null i:2
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── filters
+           └── CASE WHEN i:2 > 0 THEN CAST(NULL AS BOOL) ELSE true END [outer=(2)]
+
+norm expect-not=SimplifyCaseSingleFalsyBranch
+SELECT k FROM a WHERE CASE WHEN i > 0 THEN NULL ELSE f > 0 END
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null i:2 f:3
+      ├── key: (1)
+      ├── fd: (1)-->(2,3)
+      ├── scan a
+      │    ├── columns: k:1!null i:2 f:3
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2,3)
+      └── filters
+           └── CASE WHEN i:2 > 0 THEN CAST(NULL AS BOOL) ELSE f:3 > 0.0 END [outer=(2,3)]
+
+norm expect-not=SimplifyCaseSingleFalsyBranch
+SELECT k FROM a WHERE CASE WHEN i > 0 THEN false WHEN f > 0 THEN true END
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null i:2 f:3
+      ├── key: (1)
+      ├── fd: (1)-->(2,3)
+      ├── scan a
+      │    ├── columns: k:1!null i:2 f:3
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2,3)
+      └── filters
+           └── CASE WHEN i:2 > 0 THEN false WHEN f:3 > 0.0 THEN true ELSE CAST(NULL AS BOOL) END [outer=(2,3)]
+
+norm expect-not=SimplifyCaseSingleFalsyBranch
+SELECT k FROM a WHERE CASE s = 'baz' WHEN i > 0 THEN false END
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null i:2 s:4
+      ├── key: (1)
+      ├── fd: (1)-->(2,4)
+      ├── scan a
+      │    ├── columns: k:1!null i:2 s:4
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2,4)
+      └── filters
+           └── CASE s:4 = 'baz' WHEN i:2 > 0 THEN false ELSE CAST(NULL AS BOOL) END [outer=(2,4)]
+
+
+# --------------------------------------------------
+# SimplifyCaseSingleTruthyBranch
+# --------------------------------------------------
+
+norm expect=SimplifyCaseSingleTruthyBranch
+SELECT k FROM a WHERE CASE WHEN i > 0 THEN true END
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null i:2!null
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      ├── scan a
+      │    ├── columns: k:1!null i:2
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── filters
+           └── i:2 > 0 [outer=(2), constraints=(/2: [/1 - ]; tight)]
+
+norm expect=SimplifyCaseSingleTruthyBranch
+SELECT k FROM a WHERE CASE WHEN i > 0 THEN true ELSE false END
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null i:2!null
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      ├── scan a
+      │    ├── columns: k:1!null i:2
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── filters
+           └── i:2 > 0 [outer=(2), constraints=(/2: [/1 - ]; tight)]
+
+norm expect=SimplifyCaseSingleTruthyBranch
+SELECT k FROM a WHERE CASE WHEN i > 0 THEN true ELSE NULL END
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null i:2!null
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      ├── scan a
+      │    ├── columns: k:1!null i:2
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── filters
+           └── i:2 > 0 [outer=(2), constraints=(/2: [/1 - ]; tight)]
+
+norm expect-not=SimplifyCaseSingleTruthyBranch
+SELECT k FROM a WHERE CASE WHEN i > 0 THEN true ELSE true END
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null i:2
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      ├── scan a
+      │    ├── columns: k:1!null i:2
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── filters
+           └── CASE WHEN i:2 > 0 THEN true ELSE true END [outer=(2)]
+
+norm expect-not=SimplifyCaseSingleTruthyBranch
+SELECT k FROM a WHERE CASE WHEN i > 0 THEN true ELSE f > 0 END
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null i:2 f:3
+      ├── key: (1)
+      ├── fd: (1)-->(2,3)
+      ├── scan a
+      │    ├── columns: k:1!null i:2 f:3
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2,3)
+      └── filters
+           └── CASE WHEN i:2 > 0 THEN true ELSE f:3 > 0.0 END [outer=(2,3)]
+
+norm expect-not=SimplifyCaseSingleTruthyBranch
+SELECT k FROM a WHERE CASE WHEN i > 0 THEN true WHEN f > 0 THEN true END
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null i:2 f:3
+      ├── key: (1)
+      ├── fd: (1)-->(2,3)
+      ├── scan a
+      │    ├── columns: k:1!null i:2 f:3
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2,3)
+      └── filters
+           └── CASE WHEN i:2 > 0 THEN true WHEN f:3 > 0.0 THEN true ELSE CAST(NULL AS BOOL) END [outer=(2,3)]
+
+norm expect-not=SimplifyCaseSingleTruthyBranch
+SELECT k FROM a WHERE CASE s = 'baz' WHEN i > 0 THEN true END
+----
+project
+ ├── columns: k:1!null
+ ├── key: (1)
+ └── select
+      ├── columns: k:1!null i:2 s:4
+      ├── key: (1)
+      ├── fd: (1)-->(2,4)
+      ├── scan a
+      │    ├── columns: k:1!null i:2 s:4
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2,4)
+      └── filters
+           └── CASE s:4 = 'baz' WHEN i:2 > 0 THEN true ELSE CAST(NULL AS BOOL) END [outer=(2,4)]
+
 
 # --------------------------------------------------
 # PushSelectIntoProjectSet
@@ -2246,9 +2934,9 @@ project
       │         │         ├── columns: tr.id:12!null tr.trid:13!null
       │         │         ├── fd: (12)-->(13)
       │         │         └── left-join (hash)
-      │         │              ├── columns: tr.id:12!null tr.trid:13!null tr.str16:15!null trid:18
+      │         │              ├── columns: r.id:1 r.str16:4 tq.trid:8 tr.id:12!null tr.trid:13!null tr.str16:15!null
       │         │              ├── multiplicity: left-rows(one-or-more), right-rows(zero-or-one)
-      │         │              ├── fd: ()-->(15), (12)-->(13)
+      │         │              ├── fd: ()-->(15), (12)-->(13), (1)==(8), (8)==(1)
       │         │              ├── select
       │         │              │    ├── columns: tr.id:12!null tr.trid:13!null tr.str16:15!null
       │         │              │    ├── key: (12)
@@ -2259,30 +2947,26 @@ project
       │         │              │    │    └── fd: (12)-->(13,15)
       │         │              │    └── filters
       │         │              │         └── tr.str16:15 = '12345' [outer=(15), constraints=(/15: [/'12345' - /'12345']; tight), fd=()-->(15)]
-      │         │              ├── project
-      │         │              │    ├── columns: trid:18!null
-      │         │              │    ├── inner-join (hash)
-      │         │              │    │    ├── columns: r.id:1!null r.str16:4!null tq.trid:8!null
-      │         │              │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
-      │         │              │    │    ├── fd: ()-->(4), (1)==(8), (8)==(1)
-      │         │              │    │    ├── select
-      │         │              │    │    │    ├── columns: r.id:1!null r.str16:4!null
+      │         │              ├── inner-join (hash)
+      │         │              │    ├── columns: r.id:1!null r.str16:4!null tq.trid:8!null
+      │         │              │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+      │         │              │    ├── fd: ()-->(4), (1)==(8), (8)==(1)
+      │         │              │    ├── select
+      │         │              │    │    ├── columns: r.id:1!null r.str16:4!null
+      │         │              │    │    ├── key: (1)
+      │         │              │    │    ├── fd: ()-->(4)
+      │         │              │    │    ├── scan trrec [as=r]
+      │         │              │    │    │    ├── columns: r.id:1!null r.str16:4
       │         │              │    │    │    ├── key: (1)
-      │         │              │    │    │    ├── fd: ()-->(4)
-      │         │              │    │    │    ├── scan trrec [as=r]
-      │         │              │    │    │    │    ├── columns: r.id:1!null r.str16:4
-      │         │              │    │    │    │    ├── key: (1)
-      │         │              │    │    │    │    └── fd: (1)-->(4)
-      │         │              │    │    │    └── filters
-      │         │              │    │    │         └── r.str16:4 = '12345' [outer=(4), constraints=(/4: [/'12345' - /'12345']; tight), fd=()-->(4)]
-      │         │              │    │    ├── scan trtab4 [as=tq]
-      │         │              │    │    │    └── columns: tq.trid:8!null
+      │         │              │    │    │    └── fd: (1)-->(4)
       │         │              │    │    └── filters
-      │         │              │    │         └── r.id:1 = tq.trid:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
-      │         │              │    └── projections
-      │         │              │         └── tq.trid:8 [as=trid:18, outer=(8)]
+      │         │              │    │         └── r.str16:4 = '12345' [outer=(4), constraints=(/4: [/'12345' - /'12345']; tight), fd=()-->(4)]
+      │         │              │    ├── scan trtab4 [as=tq]
+      │         │              │    │    └── columns: tq.trid:8!null
+      │         │              │    └── filters
+      │         │              │         └── r.id:1 = tq.trid:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
       │         │              └── filters
-      │         │                   └── tr.id:12 = trid:18 [outer=(12,18), constraints=(/12: (/NULL - ]; /18: (/NULL - ]), fd=(12)==(18), (18)==(12)]
+      │         │                   └── tr.id:12 = tq.trid:8 [outer=(8,12), constraints=(/8: (/NULL - ]; /12: (/NULL - ]), fd=(8)==(12), (12)==(8)]
       │         ├── scan trm [as=m]
       │         │    └── columns: m.trid:21!null m.ts12:22!null
       │         └── filters
@@ -2347,9 +3031,9 @@ project
       │         │         ├── columns: tr.id:12!null tr.trid:13!null
       │         │         ├── fd: (12)-->(13)
       │         │         └── inner-join (hash)
-      │         │              ├── columns: tr.id:12!null tr.trid:13!null tr.str16:15!null trid:18!null
+      │         │              ├── columns: r.id:1!null r.str16:4!null tq.trid:8!null tr.id:12!null tr.trid:13!null tr.str16:15!null
       │         │              ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
-      │         │              ├── fd: ()-->(15), (12)-->(13), (12)==(18), (18)==(12)
+      │         │              ├── fd: ()-->(4,15), (12)-->(13), (1)==(8,12), (8)==(1,12), (12)==(1,8), (4)==(15), (15)==(4)
       │         │              ├── select
       │         │              │    ├── columns: tr.id:12!null tr.trid:13!null tr.str16:15!null
       │         │              │    ├── key: (12)
@@ -2360,30 +3044,26 @@ project
       │         │              │    │    └── fd: (12)-->(13,15)
       │         │              │    └── filters
       │         │              │         └── tr.str16:15 = '12345' [outer=(15), constraints=(/15: [/'12345' - /'12345']; tight), fd=()-->(15)]
-      │         │              ├── project
-      │         │              │    ├── columns: trid:18!null
-      │         │              │    ├── inner-join (hash)
-      │         │              │    │    ├── columns: r.id:1!null r.str16:4!null tq.trid:8!null
-      │         │              │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
-      │         │              │    │    ├── fd: ()-->(4), (1)==(8), (8)==(1)
-      │         │              │    │    ├── select
-      │         │              │    │    │    ├── columns: r.id:1!null r.str16:4!null
+      │         │              ├── inner-join (hash)
+      │         │              │    ├── columns: r.id:1!null r.str16:4!null tq.trid:8!null
+      │         │              │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+      │         │              │    ├── fd: ()-->(4), (1)==(8), (8)==(1)
+      │         │              │    ├── select
+      │         │              │    │    ├── columns: r.id:1!null r.str16:4!null
+      │         │              │    │    ├── key: (1)
+      │         │              │    │    ├── fd: ()-->(4)
+      │         │              │    │    ├── scan trrec [as=r]
+      │         │              │    │    │    ├── columns: r.id:1!null r.str16:4
       │         │              │    │    │    ├── key: (1)
-      │         │              │    │    │    ├── fd: ()-->(4)
-      │         │              │    │    │    ├── scan trrec [as=r]
-      │         │              │    │    │    │    ├── columns: r.id:1!null r.str16:4
-      │         │              │    │    │    │    ├── key: (1)
-      │         │              │    │    │    │    └── fd: (1)-->(4)
-      │         │              │    │    │    └── filters
-      │         │              │    │    │         └── r.str16:4 = '12345' [outer=(4), constraints=(/4: [/'12345' - /'12345']; tight), fd=()-->(4)]
-      │         │              │    │    ├── scan trtab4 [as=tq]
-      │         │              │    │    │    └── columns: tq.trid:8!null
+      │         │              │    │    │    └── fd: (1)-->(4)
       │         │              │    │    └── filters
-      │         │              │    │         └── r.id:1 = tq.trid:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
-      │         │              │    └── projections
-      │         │              │         └── tq.trid:8 [as=trid:18, outer=(8)]
+      │         │              │    │         └── r.str16:4 = '12345' [outer=(4), constraints=(/4: [/'12345' - /'12345']; tight), fd=()-->(4)]
+      │         │              │    ├── scan trtab4 [as=tq]
+      │         │              │    │    └── columns: tq.trid:8!null
+      │         │              │    └── filters
+      │         │              │         └── r.id:1 = tq.trid:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
       │         │              └── filters
-      │         │                   └── tr.id:12 = trid:18 [outer=(12,18), constraints=(/12: (/NULL - ]; /18: (/NULL - ]), fd=(12)==(18), (18)==(12)]
+      │         │                   └── tr.id:12 = tq.trid:8 [outer=(8,12), constraints=(/8: (/NULL - ]; /12: (/NULL - ]), fd=(8)==(12), (12)==(8)]
       │         ├── scan trm [as=m]
       │         │    └── columns: m.trid:21!null m.ts12:22!null
       │         └── filters
@@ -2444,9 +3124,9 @@ project
       │    │    │         ├── columns: tr.id:12!null tr.trid:13!null
       │    │    │         ├── fd: (12)-->(13)
       │    │    │         └── inner-join (hash)
-      │    │    │              ├── columns: tr.id:12!null tr.trid:13!null tr.str16:15!null trid:18!null
+      │    │    │              ├── columns: r.id:1!null r.str16:4!null tq.trid:8!null tr.id:12!null tr.trid:13!null tr.str16:15!null
       │    │    │              ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
-      │    │    │              ├── fd: ()-->(15), (12)-->(13), (12)==(18), (18)==(12)
+      │    │    │              ├── fd: ()-->(4,15), (12)-->(13), (1)==(8,12), (8)==(1,12), (12)==(1,8), (4)==(15), (15)==(4)
       │    │    │              ├── select
       │    │    │              │    ├── columns: tr.id:12!null tr.trid:13!null tr.str16:15!null
       │    │    │              │    ├── key: (12)
@@ -2457,30 +3137,26 @@ project
       │    │    │              │    │    └── fd: (12)-->(13,15)
       │    │    │              │    └── filters
       │    │    │              │         └── tr.str16:15 = '12345' [outer=(15), constraints=(/15: [/'12345' - /'12345']; tight), fd=()-->(15)]
-      │    │    │              ├── project
-      │    │    │              │    ├── columns: trid:18!null
-      │    │    │              │    ├── inner-join (hash)
-      │    │    │              │    │    ├── columns: r.id:1!null r.str16:4!null tq.trid:8!null
-      │    │    │              │    │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
-      │    │    │              │    │    ├── fd: ()-->(4), (1)==(8), (8)==(1)
-      │    │    │              │    │    ├── select
-      │    │    │              │    │    │    ├── columns: r.id:1!null r.str16:4!null
+      │    │    │              ├── inner-join (hash)
+      │    │    │              │    ├── columns: r.id:1!null r.str16:4!null tq.trid:8!null
+      │    │    │              │    ├── multiplicity: left-rows(zero-or-more), right-rows(zero-or-one)
+      │    │    │              │    ├── fd: ()-->(4), (1)==(8), (8)==(1)
+      │    │    │              │    ├── select
+      │    │    │              │    │    ├── columns: r.id:1!null r.str16:4!null
+      │    │    │              │    │    ├── key: (1)
+      │    │    │              │    │    ├── fd: ()-->(4)
+      │    │    │              │    │    ├── scan trrec [as=r]
+      │    │    │              │    │    │    ├── columns: r.id:1!null r.str16:4
       │    │    │              │    │    │    ├── key: (1)
-      │    │    │              │    │    │    ├── fd: ()-->(4)
-      │    │    │              │    │    │    ├── scan trrec [as=r]
-      │    │    │              │    │    │    │    ├── columns: r.id:1!null r.str16:4
-      │    │    │              │    │    │    │    ├── key: (1)
-      │    │    │              │    │    │    │    └── fd: (1)-->(4)
-      │    │    │              │    │    │    └── filters
-      │    │    │              │    │    │         └── r.str16:4 = '12345' [outer=(4), constraints=(/4: [/'12345' - /'12345']; tight), fd=()-->(4)]
-      │    │    │              │    │    ├── scan trtab4 [as=tq]
-      │    │    │              │    │    │    └── columns: tq.trid:8!null
+      │    │    │              │    │    │    └── fd: (1)-->(4)
       │    │    │              │    │    └── filters
-      │    │    │              │    │         └── r.id:1 = tq.trid:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
-      │    │    │              │    └── projections
-      │    │    │              │         └── tq.trid:8 [as=trid:18, outer=(8)]
+      │    │    │              │    │         └── r.str16:4 = '12345' [outer=(4), constraints=(/4: [/'12345' - /'12345']; tight), fd=()-->(4)]
+      │    │    │              │    ├── scan trtab4 [as=tq]
+      │    │    │              │    │    └── columns: tq.trid:8!null
+      │    │    │              │    └── filters
+      │    │    │              │         └── r.id:1 = tq.trid:8 [outer=(1,8), constraints=(/1: (/NULL - ]; /8: (/NULL - ]), fd=(1)==(8), (8)==(1)]
       │    │    │              └── filters
-      │    │    │                   └── tr.id:12 = trid:18 [outer=(12,18), constraints=(/12: (/NULL - ]; /18: (/NULL - ]), fd=(12)==(18), (18)==(12)]
+      │    │    │                   └── tr.id:12 = tq.trid:8 [outer=(8,12), constraints=(/8: (/NULL - ]; /12: (/NULL - ]), fd=(8)==(12), (12)==(8)]
       │    │    ├── scan trm [as=m]
       │    │    │    └── columns: m.trid:21!null m.ts12:22!null
       │    │    └── filters
@@ -2489,3 +3165,122 @@ project
       │         └── row-number [as=row_num:25]
       └── filters
            └── row_num:25 <= 100 [outer=(25), constraints=(/25: (/NULL - /100]; tight)]
+
+# --------------------------------------------------
+# PushLeakproofFiltersIntoPermeableBarrier
+# --------------------------------------------------
+
+exec-ddl
+SET ROLE alice;
+----
+
+# The 'y/0 = 0' predicate is not leakproof, so it should exist outside of the
+# barrier that includes the injected RLS filter.
+norm expect=PushLeakproofFiltersIntoPermeableBarrier
+SELECT * FROM rls WHERE y = 20 AND y/0 = 0;
+----
+project
+ ├── columns: x:1!null y:2!null alice_has_access:3!null
+ ├── immutable
+ ├── key: (1)
+ ├── fd: ()-->(2,3)
+ └── select
+      ├── columns: x:1!null y:2!null alice_has_access:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+      ├── immutable
+      ├── key: (1)
+      ├── fd: ()-->(2,3), (1)-->(4,5)
+      ├── barrier
+      │    ├── columns: x:1!null y:2!null alice_has_access:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+      │    ├── key: (1)
+      │    ├── fd: ()-->(2,3), (1)-->(4,5)
+      │    └── select
+      │         ├── columns: x:1!null y:2!null alice_has_access:3!null crdb_internal_mvcc_timestamp:4 tableoid:5
+      │         ├── key: (1)
+      │         ├── fd: ()-->(2,3), (1)-->(4,5)
+      │         ├── scan rls
+      │         │    ├── columns: x:1!null y:2 alice_has_access:3 crdb_internal_mvcc_timestamp:4 tableoid:5
+      │         │    ├── key: (1)
+      │         │    └── fd: (1)-->(2-5)
+      │         └── filters
+      │              ├── alice_has_access:3 [outer=(3), constraints=(/3: [/true - /true]; tight), fd=()-->(3)]
+      │              └── y:2 = 20 [outer=(2), constraints=(/2: [/20 - /20]; tight), fd=()-->(2)]
+      └── filters
+           └── (20 / 0) = 0 [immutable]
+
+# All filters are leakproof, so barrier pushed entirely out of the select.
+norm expect=PushLeakproofFiltersIntoPermeableBarrier
+SELECT * FROM rls WHERE y = 20;
+----
+select
+ ├── columns: x:1!null y:2!null alice_has_access:3!null
+ ├── key: (1)
+ ├── fd: ()-->(2,3)
+ ├── scan rls
+ │    ├── columns: x:1!null y:2 alice_has_access:3
+ │    ├── key: (1)
+ │    └── fd: (1)-->(2,3)
+ └── filters
+      ├── alice_has_access:3 [outer=(3), constraints=(/3: [/true - /true]; tight), fd=()-->(3)]
+      └── y:2 = 20 [outer=(2), constraints=(/2: [/20 - /20]; tight), fd=()-->(2)]
+
+# --------------------------------------------------
+# NormalizeLikeAny
+# --------------------------------------------------
+
+exec-ddl
+CREATE TABLE str_matching_test (
+  s STRING NOT NULL,
+  cs STRING COLLATE en_US NOT NULL,
+  name NAME NOT NULL,
+  sn STRING NULL,
+  csn STRING COLLATE en_US NULL,
+  namen NAME NULL
+)
+----
+
+norm expect=NormalizeLikeAny
+SELECT * FROM str_matching_test WHERE s LIKE '%' AND cs LIKE '%' COLLATE en_US AND name LIKE '%'::NAME AND s LIKE 'foo';
+----
+select
+ ├── columns: s:1!null cs:2!null name:3!null sn:4 csn:5 namen:6
+ ├── fd: ()-->(1)
+ ├── scan str_matching_test
+ │    └── columns: s:1!null cs:2!null name:3!null sn:4 csn:5 namen:6
+ └── filters
+      └── s:1 LIKE 'foo' [outer=(1), constraints=(/1: [/'foo' - /'foo']; tight), fd=()-->(1)]
+
+norm expect=NormalizeLikeAny
+SELECT * FROM str_matching_test WHERE sn LIKE '%' AND csn LIKE '%' COLLATE en_US AND namen LIKE '%'::NAME AND sn LIKE 'foo';
+----
+select
+ ├── columns: s:1!null cs:2!null name:3!null sn:4!null csn:5!null namen:6!null
+ ├── fd: ()-->(4)
+ ├── scan str_matching_test
+ │    └── columns: s:1!null cs:2!null name:3!null sn:4 csn:5 namen:6
+ └── filters
+      ├── (sn:4 LIKE 'foo') AND (sn:4 IS NOT NULL) [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+      ├── csn:5 IS NOT NULL [outer=(5), constraints=(/5: (/NULL - ]; tight)]
+      └── namen:6 IS NOT NULL [outer=(6), constraints=(/6: (/NULL - ]; tight)]
+
+norm expect=NormalizeLikeAny
+SELECT * FROM str_matching_test WHERE s ILIKE '%' AND name ILIKE '%'::NAME AND s ILIKE 'foo';
+----
+select
+ ├── columns: s:1!null cs:2!null name:3!null sn:4 csn:5 namen:6
+ ├── scan str_matching_test
+ │    └── columns: s:1!null cs:2!null name:3!null sn:4 csn:5 namen:6
+ └── filters
+      └── s:1 ILIKE 'foo' [outer=(1), constraints=(/1: (/NULL - ])]
+
+norm expect=NormalizeLikeAny
+SELECT * FROM str_matching_test WHERE  sn LIKE '%' AND csn LIKE '%' COLLATE en_US AND namen LIKE '%'::NAME AND sn LIKE 'foo';
+----
+select
+ ├── columns: s:1!null cs:2!null name:3!null sn:4!null csn:5!null namen:6!null
+ ├── fd: ()-->(4)
+ ├── scan str_matching_test
+ │    └── columns: s:1!null cs:2!null name:3!null sn:4 csn:5 namen:6
+ └── filters
+      ├── (sn:4 LIKE 'foo') AND (sn:4 IS NOT NULL) [outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+      ├── csn:5 IS NOT NULL [outer=(5), constraints=(/5: (/NULL - ]; tight)]
+      └── namen:6 IS NOT NULL [outer=(6), constraints=(/6: (/NULL - ]; tight)]

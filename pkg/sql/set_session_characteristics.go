@@ -8,11 +8,11 @@ package sql
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/asof"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessionmutator"
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 )
 
@@ -21,14 +21,13 @@ func (p *planner) SetSessionCharacteristics(
 ) (planNode, error) {
 	allowReadCommitted := allowReadCommittedIsolation.Get(&p.execCfg.Settings.SV)
 	allowRepeatableRead := allowRepeatableReadIsolation.Get(&p.execCfg.Settings.SV)
-	hasLicense := base.CCLDistributionAndEnterpriseEnabled(p.ExecCfg().Settings)
-	if err := p.sessionDataMutatorIterator.applyOnEachMutatorError(func(m sessionDataMutator) error {
+	if err := p.sessionDataMutatorIterator.ApplyOnEachMutatorError(func(m sessionmutator.SessionDataMutator) error {
 		// Note: We also support SET DEFAULT_TRANSACTION_ISOLATION TO ' .... '.
 		if n.Modes.Isolation != tree.UnspecifiedIsolation {
-			level, upgraded, upgradedDueToLicense := n.Modes.Isolation.UpgradeToEnabledLevel(
-				allowReadCommitted, allowRepeatableRead, hasLicense)
-			if f := p.sessionDataMutatorIterator.upgradedIsolationLevel; upgraded && f != nil {
-				f(ctx, n.Modes.Isolation, upgradedDueToLicense)
+			level, upgraded := n.Modes.Isolation.UpgradeToEnabledLevel(
+				allowReadCommitted, allowRepeatableRead)
+			if f := p.sessionDataMutatorIterator.UpgradedIsolationLevel; upgraded && f != nil {
+				f(ctx, n.Modes.Isolation)
 			}
 			m.SetDefaultTransactionIsolationLevel(level)
 		}

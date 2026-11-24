@@ -9,14 +9,15 @@
 # This command is used by bazel as the workspace_status_command
 # to implement build stamping with git information.
 
-# Usage: stamp.sh [target-triple] [build-channel] [build-type]
+# Usage: stamp.sh [-t target-triple] [-c build-channel] [-b build-type] [-g build-tag] [-d telemetry-disabled]
 # All arguments are optional and have appropriate defaults. In this way,
 # stamp.sh with no arguments is appropriate as the `workplace_status_command`
 # for a development build.
-#  target-triple: defaults to the value of `cc -dumpmachine`
-#  build-channel: defaults to `unknown`, but can be `official-binary`
-#  build-type: defaults to `development`, but can be `release`
-#  build-tag: will default to an appropriate value if not passed in, but can be overridden
+#  -t target-triple: defaults to the value of `cc -dumpmachine`
+#  -c build-channel: defaults to `unknown`, but can be `official-binary`
+#  -b build-type: defaults to `development`, but can be `release`
+#  -g build-tag: will default to an appropriate value if not passed in, but can be overridden
+#  -d telemetry-disabled: defaults to `false`, but can be set to `true`.
 
 set -euo pipefail
 
@@ -29,56 +30,38 @@ set -euo pipefail
 # For details, see the "Possible timestamp problems with diff-files?" thread on
 # the Git mailing list (http://marc.info/?l=git&m=131687596307197).
 
-# Handle target-triple.
-if [ -z "${1+x}" ]
-then
-    TARGET_TRIPLE=$(cc -dumpmachine)
-else
-    TARGET_TRIPLE="$1"
-    shift 1
-fi
+# Default values
+TARGET_TRIPLE="$(cc -dumpmachine)"
+BUILD_CHANNEL="unknown"
+BUILD_TYPE="development"
+BUILD_TAG=""
+TELEMETRY_DISABLED=false
 
-# Handle build-channel.
-if [ -z "${1+x}" ]
-then
-    BUILD_CHANNEL="unknown"
-else
-    BUILD_CHANNEL="$1"
-    shift 1
-fi
-
-# Handle build-type.
-if [ -z "${1+x}" ]
-then
-    BUILD_TYPE="development"
-else
-    BUILD_TYPE="$1"
-    shift 1
-fi
+# Parse command line arguments
+while getopts "t:c:b:g:d:" opt; do
+  case $opt in
+    t) TARGET_TRIPLE="$OPTARG" ;;
+    c) BUILD_CHANNEL="$OPTARG" ;;
+    b) BUILD_TYPE="$OPTARG" ;;
+    g) BUILD_TAG="$OPTARG" ;;
+    d) TELEMETRY_DISABLED="$OPTARG" ;;
+    \?) echo "Invalid option -$OPTARG" >&2; exit 1 ;;
+  esac
+done
 
 if [ "$BUILD_TYPE" = "release" ]
 then
-    CRASH_REPORT_ENV=$(cat ./pkg/build/version.txt)
+    CRASH_REPORT_ENV="$(cat ./pkg/build/version.txt)"
 else
     CRASH_REPORT_ENV="development"
 fi
 
-# Handle build-tag.
-if [ -z "${1+x}" ]
-then
-    BUILD_TAG=
-else
-    BUILD_TAG="$1"
-    shift 1
-fi
-
-BUILD_REV=$(git describe --match="" --always --abbrev=40)
+BUILD_REV="$(git describe --match="" --always --abbrev=40)"
 if [[ -n "$(git status -s --ignore-submodules --untracked-files=no)" ]]; then
-    BUILD_REV=$BUILD_REV-dirty
+    BUILD_REV="$BUILD_REV-dirty"
 fi
 
-BUILD_UTCTIME=$(date -u '+%Y/%m/%d %H:%M:%S')
-
+BUILD_UTCTIME="$(date -u '+%Y/%m/%d %H:%M:%S')"
 
 # Variables beginning with "STABLE" will be written to stable-status.txt, and
 # others will be written to volatile-status.txt.
@@ -88,11 +71,12 @@ BUILD_UTCTIME=$(date -u '+%Y/%m/%d %H:%M:%S')
 # * https://docs.bazel.build/versions/main/user-manual.html#workspace_status
 # * https://github.com/bazelbuild/rules_go/blob/master/go/core.rst#defines-and-stamping
 cat <<EOF
-STABLE_BUILD_CHANNEL ${BUILD_CHANNEL-}
-STABLE_BUILD_TAG ${BUILD_TAG-}
-STABLE_BUILD_TARGET_TRIPLE ${TARGET_TRIPLE-}
-STABLE_BUILD_TYPE ${BUILD_TYPE-}
-STABLE_CRASH_REPORT_ENV ${CRASH_REPORT_ENV-}
-BUILD_REV ${BUILD_REV-}
-BUILD_UTCTIME ${BUILD_UTCTIME-}
+STABLE_BUILD_CHANNEL $BUILD_CHANNEL
+STABLE_BUILD_TAG $BUILD_TAG
+STABLE_BUILD_TARGET_TRIPLE $TARGET_TRIPLE
+STABLE_BUILD_TYPE $BUILD_TYPE
+STABLE_CRASH_REPORT_ENV $CRASH_REPORT_ENV
+STABLE_TELEMETRY_DISABLED $TELEMETRY_DISABLED
+BUILD_REV $BUILD_REV
+BUILD_UTCTIME $BUILD_UTCTIME
 EOF

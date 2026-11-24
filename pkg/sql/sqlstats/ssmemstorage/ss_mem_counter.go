@@ -33,19 +33,19 @@ type SQLStatsAtomicCounters struct {
 
 	// uniqueStmtFingerprintCount is the number of unique statement fingerprints
 	// we are storing in memory.
-	uniqueStmtFingerprintCount int64
+	uniqueStmtFingerprintCount atomic.Int64
 
 	// uniqueTxnFingerprintCount is the number of unique transaction fingerprints
 	// we are storing in memory.
-	uniqueTxnFingerprintCount int64
+	uniqueTxnFingerprintCount atomic.Int64
 
 	// discardUniqueStmtFingerprintCount is the number of unique statement
 	// fingerprints that are discard because of memory limitations.
-	discardUniqueStmtFingerprintCount int64
+	discardUniqueStmtFingerprintCount atomic.Int64
 
 	// discardUniqueTxnFingerprintCount is the number of unique transaction
 	// fingerprints that are discard because of memory limitations.
-	discardUniqueTxnFingerprintCount int64
+	discardUniqueTxnFingerprintCount atomic.Int64
 
 	mu struct {
 		syncutil.Mutex
@@ -63,7 +63,6 @@ var DiscardedStatsLogInterval = settings.RegisterDurationSetting(
 	"sql.metrics.discarded_stats_log.interval",
 	"interval between log emissions for discarded statistics due to SQL statistics memory limit",
 	1*time.Minute,
-	settings.NonNegativeDuration,
 	settings.WithVisibility(settings.Reserved))
 
 func NewSQLStatsAtomicCounters(
@@ -83,8 +82,8 @@ func NewSQLStatsAtomicCounters(
 // since the last time the warning was logged. This is necessary to avoid
 // flooding the log with warnings once the limit is hit.
 func (s *SQLStatsAtomicCounters) maybeLogDiscardMessage(ctx context.Context) {
-	discardSmtCnt := atomic.LoadInt64(&s.discardUniqueStmtFingerprintCount)
-	discardTxnCnt := atomic.LoadInt64(&s.discardUniqueTxnFingerprintCount)
+	discardSmtCnt := s.discardUniqueStmtFingerprintCount.Load()
+	discardTxnCnt := s.discardUniqueTxnFingerprintCount.Load()
 	if discardSmtCnt == 0 && discardTxnCnt == 0 {
 		return
 	}
@@ -107,13 +106,13 @@ func (s *SQLStatsAtomicCounters) maybeLogDiscardMessage(ctx context.Context) {
 	// The count being slightly off won't impact users looking at the message. It
 	// also avoids holding a lock on the counts which would block requests until
 	// the log is sent.
-	log.Warningf(ctx, "statistics discarded due to memory limit. transaction discard count: %d with limit: %d, statement discard count: %d with limit: %d, logged at interval: %s, last logged: %s",
+	log.Dev.Warningf(ctx, "statistics discarded due to memory limit. transaction discard count: %d with limit: %d, statement discard count: %d with limit: %d, logged at interval: %s, last logged: %s",
 		discardTxnCnt, stmtLimit, discardSmtCnt, txnLimit, discardLogInterval, s.mu.lastDiscardLogMessageSent)
 	s.mu.lastDiscardLogMessageSent = timeNow
 
 	// Reset the discard count back to 0 since the value was logged
-	atomic.StoreInt64(&s.discardUniqueStmtFingerprintCount, int64(0))
-	atomic.StoreInt64(&s.discardUniqueTxnFingerprintCount, int64(0))
+	s.discardUniqueStmtFingerprintCount.Store(0)
+	s.discardUniqueTxnFingerprintCount.Store(0)
 }
 
 // tryAddStmtFingerprint attempts to add 1 to the server level count for
@@ -124,15 +123,15 @@ func (s *SQLStatsAtomicCounters) tryAddStmtFingerprint() (ok bool) {
 	// We check if we have reached the limit of unique fingerprints we can
 	// store.
 	incrementedFingerprintCount :=
-		atomic.AddInt64(&s.uniqueStmtFingerprintCount, int64(1) /* delts */)
+		s.uniqueStmtFingerprintCount.Add(1)
 
-	// Abort if we have exceeded limit of unique statement fingerprints.
 	if incrementedFingerprintCount < limit {
 		return true
 	}
 
-	atomic.AddInt64(&s.discardUniqueStmtFingerprintCount, int64(1))
-	atomic.AddInt64(&s.uniqueStmtFingerprintCount, -int64(1) /* delts */)
+	// Abort if we have exceeded limit of unique statement fingerprints.
+	s.discardUniqueStmtFingerprintCount.Add(1)
+	s.uniqueStmtFingerprintCount.Add(-1)
 	return false
 }
 
@@ -143,15 +142,14 @@ func (s *SQLStatsAtomicCounters) tryAddTxnFingerprint() (ok bool) {
 
 	// We check if we have reached the limit of unique fingerprints we can
 	// store.
-	incrementedFingerprintCount :=
-		atomic.AddInt64(&s.uniqueTxnFingerprintCount, int64(1) /* delts */)
+	incrementedFingerprintCount := s.uniqueTxnFingerprintCount.Add(1)
 
 	if incrementedFingerprintCount < limit {
 		return true
 	}
 
-	atomic.AddInt64(&s.discardUniqueTxnFingerprintCount, int64(1))
-	atomic.AddInt64(&s.uniqueTxnFingerprintCount, -int64(1) /* delts */)
+	s.discardUniqueTxnFingerprintCount.Add(1)
+	s.uniqueTxnFingerprintCount.Add(-1)
 	return false
 }
 
@@ -161,18 +159,18 @@ func (s *SQLStatsAtomicCounters) tryAddTxnFingerprint() (ok bool) {
 func (s *SQLStatsAtomicCounters) freeByCnt(
 	uniqueStmtFingerprintCount, uniqueTxnFingerprintCount int64,
 ) {
-	atomic.AddInt64(&s.uniqueStmtFingerprintCount, -uniqueStmtFingerprintCount)
-	atomic.AddInt64(&s.uniqueTxnFingerprintCount, -uniqueTxnFingerprintCount)
+	s.uniqueStmtFingerprintCount.Add(-uniqueStmtFingerprintCount)
+	s.uniqueTxnFingerprintCount.Add(-uniqueTxnFingerprintCount)
 }
 
 // GetTotalFingerprintCount returns total number of unique statement and
 // transaction fingerprints stored in the current SQLStats.
 func (s *SQLStatsAtomicCounters) GetTotalFingerprintCount() int64 {
-	return atomic.LoadInt64(&s.uniqueStmtFingerprintCount) + atomic.LoadInt64(&s.uniqueTxnFingerprintCount)
+	return s.uniqueStmtFingerprintCount.Load() + s.uniqueTxnFingerprintCount.Load()
 }
 
 // GetStatementCount returns the number of unique statement fingerprints stored
 // in the current SQLStats.
 func (s *SQLStatsAtomicCounters) GetStatementCount() int64 {
-	return atomic.LoadInt64(&s.uniqueStmtFingerprintCount)
+	return s.uniqueStmtFingerprintCount.Load()
 }

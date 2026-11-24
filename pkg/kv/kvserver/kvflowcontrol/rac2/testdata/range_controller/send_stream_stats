@@ -37,7 +37,7 @@ t1/s3: eval reg=+13 MiB/+16 MiB ela=+5.0 MiB/+8.0 MiB
 
 stream_state range_id=1
 ----
-(n1,s1):1: state=replicate closed=false inflight=[1,4) send_queue=[4,4) precise_q_size=+0 B
+(n1,s1):1: state=replicate closed=false inflight=[1,4) (3.0 MiB) send_queue=[4,4) precise_q_size=+0 B
 eval deducted: reg=+3.0 MiB ela=+0 B
 eval original in send-q: reg=+0 B ela=+0 B
 NormalPri:
@@ -47,7 +47,7 @@ NormalPri:
 ++++
 (n2,s2):2: closed
 ++++
-(n3,s3):3: state=replicate closed=false inflight=[1,2) send_queue=[2,4) precise_q_size=+2.0 MiB
+(n3,s3):3: state=replicate closed=false inflight=[1,2) (1.0 MiB) send_queue=[2,4) precise_q_size=+2.0 MiB
 eval deducted: reg=+3.0 MiB ela=+0 B
 eval original in send-q: reg=+2.0 MiB ela=+0 B
 NormalPri:
@@ -62,15 +62,15 @@ NormalPri:
 # queue size for s2.
 send_stream_stats range_id=1 refresh=false
 ----
-(n1,s1):1: is_state_replicate=true  has_send_queue=false send_queue_size=+0 B / 0 entries
-(n2,s2):2: is_state_replicate=false has_send_queue=true  send_queue_size=+0 B / 0 entries
-(n3,s3):3: is_state_replicate=true  has_send_queue=true  send_queue_size=+0 B / 0 entries
+(n1,s1):1: stream=t1/s1 is_state_replicate=true  has_send_queue=false send_queue_size=+0 B / 0 entries
+(n2,s2):2: stream=t1/s2 is_state_replicate=false has_send_queue=true  send_queue_size=+0 B / 0 entries
+(n3,s3):3: stream=t1/s3 is_state_replicate=true  has_send_queue=true  send_queue_size=+0 B / 0 entries
 
 send_stream_stats range_id=1 refresh=true
 ----
-(n1,s1):1: is_state_replicate=true  has_send_queue=false send_queue_size=+0 B / 0 entries
-(n2,s2):2: is_state_replicate=false has_send_queue=true  send_queue_size=+0 B / 0 entries
-(n3,s3):3: is_state_replicate=true  has_send_queue=true  send_queue_size=+2.0 MiB / 2 entries
+(n1,s1):1: stream=t1/s1 is_state_replicate=true  has_send_queue=false send_queue_size=+0 B / 0 entries
+(n2,s2):2: stream=t1/s2 is_state_replicate=false has_send_queue=true  send_queue_size=+0 B / 0 entries
+(n3,s3):3: stream=t1/s3 is_state_replicate=true  has_send_queue=true  send_queue_size=+2.0 MiB / 2 entries
 
 # Next, add another entry, which will also be queued. We want to see the stats
 # tick over and update by themselves (refresh=false) by ticking the clock the
@@ -94,9 +94,9 @@ t1/s3: eval reg=+1.0 MiB/+16 MiB ela=-7.0 MiB/+8.0 MiB
 # The stats shouldn't have changed, as we haven't refreshed them via ticking.
 send_stream_stats range_id=1 refresh=false
 ----
-(n1,s1):1: is_state_replicate=true  has_send_queue=false send_queue_size=+0 B / 0 entries
-(n2,s2):2: is_state_replicate=false has_send_queue=true  send_queue_size=+0 B / 0 entries
-(n3,s3):3: is_state_replicate=true  has_send_queue=true  send_queue_size=+2.0 MiB / 2 entries
+(n1,s1):1: stream=t1/s1 is_state_replicate=true  has_send_queue=false send_queue_size=+0 B / 0 entries
+(n2,s2):2: stream=t1/s2 is_state_replicate=false has_send_queue=true  send_queue_size=+0 B / 0 entries
+(n3,s3):3: stream=t1/s3 is_state_replicate=true  has_send_queue=true  send_queue_size=+2.0 MiB / 2 entries
 
 tick duration=7s
 ----
@@ -118,16 +118,16 @@ t1/s3: eval reg=+1.0 MiB/+16 MiB ela=-7.0 MiB/+8.0 MiB
 # The stats now should have been populated.
 send_stream_stats range_id=1 refresh=false
 ----
-(n1,s1):1: is_state_replicate=true  has_send_queue=false send_queue_size=+0 B / 0 entries
-(n2,s2):2: is_state_replicate=false has_send_queue=true  send_queue_size=+0 B / 0 entries
-(n3,s3):3: is_state_replicate=true  has_send_queue=true  send_queue_size=+14 MiB / 3 entries
+(n1,s1):1: stream=t1/s1 is_state_replicate=true  has_send_queue=false send_queue_size=+0 B / 0 entries
+(n2,s2):2: stream=t1/s2 is_state_replicate=false has_send_queue=true  send_queue_size=+0 B / 0 entries
+(n3,s3):3: stream=t1/s3 is_state_replicate=true  has_send_queue=true  send_queue_size=+14 MiB / 3 entries
 
 # Sanity check they are the same when refreshing.
 send_stream_stats range_id=1 refresh=true
 ----
-(n1,s1):1: is_state_replicate=true  has_send_queue=false send_queue_size=+0 B / 0 entries
-(n2,s2):2: is_state_replicate=false has_send_queue=true  send_queue_size=+0 B / 0 entries
-(n3,s3):3: is_state_replicate=true  has_send_queue=true  send_queue_size=+14 MiB / 3 entries
+(n1,s1):1: stream=t1/s1 is_state_replicate=true  has_send_queue=false send_queue_size=+0 B / 0 entries
+(n2,s2):2: stream=t1/s2 is_state_replicate=false has_send_queue=true  send_queue_size=+0 B / 0 entries
+(n3,s3):3: stream=t1/s3 is_state_replicate=true  has_send_queue=true  send_queue_size=+14 MiB / 3 entries
 
 close_rcs
 ----

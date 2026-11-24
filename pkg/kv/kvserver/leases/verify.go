@@ -28,8 +28,8 @@ type VerifyInput struct {
 	Desc           *roachpb.RangeDescriptor
 
 	// Information about raft.
-	RaftStatus     *raft.Status
-	RaftFirstIndex kvpb.RaftIndex
+	RaftStatus    *raft.Status
+	RaftCompacted kvpb.RaftIndex
 
 	// Information about the previous lease.
 	PrevLease        roachpb.Lease
@@ -40,6 +40,18 @@ type VerifyInput struct {
 
 	// BypassSafetyChecks configures lease transfers to skip safety checks.
 	BypassSafetyChecks bool
+
+	// TargetHasSendQueue indicates that the lease transfer target has a send
+	// queue, meaning it is behind on its raft log. When true (and
+	// BypassSafetyChecks is false), the lease transfer will be rejected because
+	// the target may cause proportional unavailability until it catches up.
+	// When send stream stats are unavailable (e.g. not the leader, RACv2 not
+	// active), callers should leave this false to conservatively allow the
+	// transfer.
+	TargetHasSendQueue bool
+
+	// DesiredLeaseType is the desired lease type for the replica.
+	DesiredLeaseType roachpb.LeaseType
 }
 
 // toBuildInput converts a VerifyInput to an BuildInput. This is a lossy
@@ -105,7 +117,8 @@ func verifyAcquisition(ctx context.Context, st Settings, i VerifyInput) error {
 	// is this replica that became the leader.
 	//
 	// [^1]: however, if the leader is not known and RejectLeaseOnLeaderUnknown
-	// cluster setting is true, we reject the proposal.
+	// cluster setting is true, or if the replica's desired lease type is a leader
+	// lease, we reject the proposal.
 	// TODO(nathan): make this behaviour default. Right now, it is hidden behind
 	// an experimental cluster setting. See #120073 and #118435. We attempted to
 	// address this in #127082, but there was fallout, so we reverted that change.
@@ -120,7 +133,7 @@ func verifyAcquisition(ctx context.Context, st Settings, i VerifyInput) error {
 	leaderKnown := leader != roachpb.ReplicaID(raft.None)
 	iAmTheLeader := i.RaftStatus.RaftState == raftpb.StateLeader
 	if (leader == i.LocalReplicaID) != iAmTheLeader {
-		log.Fatalf(ctx, "inconsistent Raft state: %s", i.RaftStatus)
+		log.KvExec.Fatalf(ctx, "inconsistent Raft state: %s", i.RaftStatus)
 	}
 
 	// If the local replica is the raft leader, it can proceed with the lease
@@ -176,8 +189,13 @@ func verifyAcquisition(ctx context.Context, st Settings, i VerifyInput) error {
 		}
 	}
 
+	desiresLeaderLease := i.DesiredLeaseType == roachpb.LeaseLeader
 	reject := false
-	if !leaderKnown && st.RejectLeaseOnLeaderUnknown {
+	if !leaderKnown && (desiresLeaderLease || st.RejectLeaseOnLeaderUnknown) {
+		// If a leader lease is desired, and we don't know who the leader is, we do
+		// not try proposing a lease acquisition request. The lease should be
+		// acquired by the leader, so we want the client to try another replica who
+		// might be the leader itself or knows who the leader is.
 		log.VEventf(ctx, 2, "not proposing lease acquisition because we're not the leader; the leader is unknown")
 		reject = true
 	} else if leaderEligibleForLease {
@@ -243,13 +261,25 @@ func verifyTransfer(ctx context.Context, st Settings, i VerifyInput) error {
 	//
 	// We assume that if a lease transfer target is sufficiently caught up on its
 	// log such that it will be able to apply the lease transfer through log entry
-	// application then this unavailability window will be acceptable. This may be
-	// a faulty assumption in cases with severe replication lag, but we must
-	// balance any heuristics here that attempts to determine "too much lag" with
-	// the possibility of starvation of lease transfers under sustained write load
-	// and a resulting sustained replication lag. See #38065 and #42379, which
-	// removed such a heuristic. For now, we don't try to make such a
-	// determination.
+	// application then this unavailability window will be acceptable. Historically,
+	// we did not try to make any determination about sub-snapshot replication lag
+	// (see #38065 and #42379, which removed such a heuristic). This left a gap:
+	// the proposal-buffer check below only prevents snapshot-level lag, but callers
+	// that bypass the allocator (manual lease transfers via AdminTransferLease,
+	// AdminRelocateRange, scatter, etc.) could transfer leases to replicas with
+	// large send queues — thousands of entries behind — causing proportional
+	// unavailability. The allocator paths protect against this via
+	// excludeReplicasInNeedOfCatchup, which filters out replicas with send queues,
+	// but that protection only applies to allocator-routed transfers.
+	//
+	// To close this gap, we now also reject lease transfers to replicas that have
+	// a send queue, as reported by the RACv2 send stream stats. This is the right
+	// signal: it is less strict than requiring Match >= Commit (which would stall
+	// transfers on busy or WAN ranges) while still preventing transfers that
+	// would cause meaningful unavailability. When send stream stats are
+	// unavailable (e.g. the local replica is not the leader, or RACv2 is not
+	// active), we conservatively allow the transfer — matching the allocator's
+	// fallback behavior in excludeReplicasInNeedOfCatchup.
 	//
 	// However, we draw a distinction between lease transfer targets that will be
 	// able to apply the lease transfer through log entry application and those
@@ -287,7 +317,12 @@ func verifyTransfer(ctx context.Context, st Settings, i VerifyInput) error {
 	if i.BypassSafetyChecks {
 		return nil
 	}
-	snapStatus := raftutil.ReplicaMayNeedSnapshot(i.RaftStatus, i.RaftFirstIndex, i.NextLeaseHolder.ReplicaID)
+	if i.TargetHasSendQueue {
+		log.VEventf(ctx, 2, "not initiating lease transfer because the target %s "+
+			"has a send queue", i.NextLeaseHolder)
+		return NewLeaseTransferRejectedBecauseTargetHasSendQueueError(i.NextLeaseHolder)
+	}
+	snapStatus := raftutil.ReplicaMayNeedSnapshot(i.RaftStatus, i.RaftCompacted, i.NextLeaseHolder.ReplicaID)
 	if snapStatus != raftutil.NoSnapshotNeeded {
 		log.VEventf(ctx, 2, "not initiating lease transfer because the target %s may "+
 			"need a snapshot: %s", i.NextLeaseHolder, snapStatus)

@@ -107,7 +107,7 @@ func TestTopKSorter(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	for _, tc := range topKSortTestCases {
-		log.Infof(context.Background(), "%s", tc.description)
+		log.Dev.Infof(context.Background(), "%s", tc.description)
 		colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, tc.expected, colexectestutils.OrderedVerifier, func(input []colexecop.Operator) (colexecop.Operator, error) {
 			return NewTopKSorter(testAllocator, input[0], tc.typs, tc.ordCols, tc.matchLen, tc.k, execinfra.DefaultMemoryLimit), nil
 		})
@@ -142,14 +142,14 @@ func TestTopKSortRandomized(t *testing.T) {
 				oracle := NewSorter(testAllocator, input, typs[:nCols], ordCols, execinfra.DefaultMemoryLimit)
 				oracle.Init(ctx)
 				var expected colexectestutils.Tuples
-				for expectedOut := oracle.Next(); expectedOut.Length() != 0; expectedOut = oracle.Next() {
+				for expectedOut := colexecop.NextNoMeta(oracle); expectedOut.Length() != 0; expectedOut = colexecop.NextNoMeta(oracle) {
 					for i := 0; i < expectedOut.Length(); i++ {
 						expected = append(expected, colexectestutils.GetTupleFromBatch(expectedOut, i))
 					}
 				}
 				for _, k := range []int{1, rng.Intn(nTups) + 1} {
 					name := fmt.Sprintf("nCols=%d/nOrderingCols=%d/matchLen=%d/k=%d", nCols, nOrderingCols, matchLen, k)
-					log.Infof(ctx, "%s", name)
+					log.Dev.Infof(ctx, "%s", name)
 					colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tups}, expected[:k],
 						colexectestutils.OrderedVerifier,
 						func(input []colexecop.Operator) (colexecop.Operator, error) {
@@ -194,7 +194,7 @@ func BenchmarkSortTopK(b *testing.B) {
 								source := colexectestutils.NewFiniteChunksSource(testAllocator, batch, typs, nBatches, matchLen)
 								sorter = NewTopKSorter(testAllocator, source, typs, ordCols, matchLen, k, execinfra.DefaultMemoryLimit)
 								sorter.Init(ctx)
-								for out := sorter.Next(); out.Length() != 0; out = sorter.Next() {
+								for out := colexecop.NextNoMeta(sorter); out.Length() != 0; out = colexecop.NextNoMeta(sorter) {
 								}
 							}
 							b.StopTimer()

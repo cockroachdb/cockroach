@@ -154,13 +154,11 @@ setup_db() {
   create_defaultdb
   create_default_user
 
-  local init_env_query=( --certs-dir="$certs_dir" )
   if [[ -n "$COCKROACH_USER" ]]; then
-    init_env_query+=( -e "GRANT ALL ON DATABASE "$COCKROACH_DATABASE" TO "$COCKROACH_USER"" \
-                      -e "GRANT admin TO "$COCKROACH_USER" " )
+    run_sql_query --certs-dir="$certs_dir" \
+                  -e "GRANT ALL ON DATABASE "$COCKROACH_DATABASE" TO "$COCKROACH_USER"" \
+                  -e "GRANT admin TO "$COCKROACH_USER" "
   fi
-
-  run_sql_query "${init_env_query[@]}"
 }
 
 # process_init_files run all the init scripts from /docker-entrypoint-initdb.d.
@@ -194,7 +192,7 @@ process_init_files() {
 
 # run_sql_query is a helper function to run sql queries.
 run_sql_query() {
-  $cockroach_entrypoint sql --url="$(cat server.url)" "$@"
+  $cockroach_entrypoint sql --url="$(cat server.url)" --database="${COCKROACH_DATABASE}" "$@"
 }
 
 # db_already_exists runs a sql query to check if the database already exists.

@@ -42,20 +42,27 @@ func (f *AtomicFloat64) Add(delta float64) (new float64) {
 }
 
 // StoreIfHigher atomically stores the given value if it is higher than the
-// current value (in which case the given value is returned; otherwise the
-// existing value is returned).
-func (f *AtomicFloat64) StoreIfHigher(new float64) (val float64) {
+// current value. It returns the old value and whether a swap was carried out.
+func (f *AtomicFloat64) StoreIfHigher(new float64) (old float64, stored bool) {
 	newInt := math.Float64bits(new)
 	for {
 		oldInt := f.val.Load()
 		oldFloat := math.Float64frombits(oldInt)
-		if oldFloat > new {
-			return oldFloat
+		if oldFloat >= new {
+			return oldFloat, false
 		}
 		if f.val.CompareAndSwap(oldInt, newInt) {
-			return new
+			return oldFloat, true
 		}
 	}
+}
+
+// CompareAndSwap is atomically replaces the current value with 'new' if the
+// existing value is 'old'. It returns whether this was the case.
+func (f *AtomicFloat64) CompareAndSwap(old, new float64) (swapped bool) {
+	oldInt := math.Float64bits(old)
+	newInt := math.Float64bits(new)
+	return f.val.CompareAndSwap(oldInt, newInt)
 }
 
 // AtomicString gives you atomic-style APIs for string.

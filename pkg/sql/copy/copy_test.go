@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
-	"net/url"
 	"regexp"
 	"sort"
 	"strconv"
@@ -25,12 +24,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/randgen"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -38,18 +39,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgconn"
-	"github.com/jackc/pgtype"
 	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 )
 
@@ -203,7 +202,7 @@ func TestDataDriven(t *testing.T) {
 
 								s := srv.ApplicationLayer()
 
-								url, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), t.Name(), url.User(username.RootUser))
+								url, cleanup := s.PGUrl(t, serverutils.CertsDirPrefix(t.Name()), serverutils.User(username.RootUser))
 								defer cleanup()
 								var sqlConnCtx clisqlclient.Context
 								conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, url.String())
@@ -266,8 +265,11 @@ func TestCopyFromTransaction(t *testing.T) {
 		defer srv.Stopper().Stop(ctx)
 
 		s := srv.ApplicationLayer()
+		// Disable pipelining. Without this, pipelined writes performed as part
+		// of the COPY can be lost, which can then cause the COPY to fail.
+		kvcoord.PipelinedWritesEnabled.Override(ctx, &s.ClusterSettings().SV, false)
 
-		url, cleanup := sqlutils.PGUrl(t, s.AdvSQLAddr(), "copytest", url.User(username.RootUser))
+		url, cleanup := s.PGUrl(t, serverutils.CertsDirPrefix("copytest"), serverutils.User(username.RootUser))
 		defer cleanup()
 		var sqlConnCtx clisqlclient.Context
 
@@ -275,7 +277,7 @@ func TestCopyFromTransaction(t *testing.T) {
 			valToDecimal := func(v driver.Value) *apd.Decimal {
 				mt, ok := v.(pgtype.Numeric)
 				require.True(t, ok)
-				buf, err := mt.EncodeText(nil, nil)
+				buf, err := mt.MarshalJSON()
 				require.NoError(t, err)
 				decimal, _, err := apd.NewFromString(string(buf))
 				require.NoError(t, err)
@@ -372,7 +374,11 @@ func TestCopyFromTransaction(t *testing.T) {
 						lastts = vals[0]
 					}
 				})
-				err := tconn.Exec(ctx, "TRUNCATE TABLE lineitem")
+				err := tconn.Exec(ctx, "ALTER TABLE lineitem SET (schema_locked=false)")
+				require.NoError(t, err)
+				err = tconn.Exec(ctx, "TRUNCATE TABLE lineitem")
+				require.NoError(t, err)
+				err = tconn.Exec(ctx, "ALTER TABLE lineitem SET (schema_locked=true)")
 				require.NoError(t, err)
 			})
 		}
@@ -414,11 +420,10 @@ func TestCopyFromTimeout(t *testing.T) {
 
 	s := srv.ApplicationLayer()
 
-	pgURL, cleanup := sqlutils.PGUrl(
+	pgURL, cleanup := s.PGUrl(
 		t,
-		s.AdvSQLAddr(),
-		"TestCopyFromTimeout",
-		url.User(username.RootUser),
+		serverutils.CertsDirPrefix("TestCopyFromTimeout"),
+		serverutils.User(username.RootUser),
 	)
 	defer cleanup()
 
@@ -479,12 +484,12 @@ func TestShowQueriesIncludesCopy(t *testing.T) {
 
 	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
-	pgURL, cleanup := sqlutils.PGUrl(
+	pgURL, cleanup := s.PGUrl(
 		t,
-		srv.ApplicationLayer().AdvSQLAddr(),
-		"TestShowQueriesIncludesCopy",
-		url.User(username.RootUser),
+		serverutils.CertsDirPrefix("TestShowQueriesIncludesCopy"),
+		serverutils.User(username.RootUser),
 	)
 	defer cleanup()
 
@@ -598,6 +603,10 @@ func TestLargeDynamicRows(t *testing.T) {
 	err = conn.Exec(ctx, "CREATE TABLE t (s STRING)")
 	require.NoError(t, err)
 
+	// Enable tracing for this run to ensure that the vectorized fast-path is
+	// used.
+	require.NoError(t, conn.Exec(ctx, `SET tracing = on`))
+
 	rng, _ := randutil.NewTestRand()
 	str := randutil.RandString(rng, (2<<20)+1, "asdf")
 
@@ -610,6 +619,16 @@ func TestLargeDynamicRows(t *testing.T) {
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, 4, batchNumber)
 	batchNumber = 0
+
+	require.NoError(t, conn.Exec(ctx, `SET tracing = off`))
+	// Examine the trace to sanity-check that the vectorized fast-path is used.
+	// This log message is emitted by the vectorInserter on each BatchRequest,
+	// so we expect to see it at least once.
+	row, err := conn.QueryRow(ctx, `SELECT count(*) FROM [SHOW TRACE FOR SESSION] WHERE message LIKE '%copy running batch%'`)
+	require.NoError(t, err)
+	count, err := strconv.Atoi(row[0].(string))
+	require.NoError(t, err)
+	require.GreaterOrEqualf(t, count, 1, "was vectorized fast-path not used?")
 
 	// Reset and make sure we use 1 batch.
 	kvserverbase.MaxCommandSize.Override(ctx, &s.ClusterSettings().SV, kvserverbase.MaxCommandSizeDefault)
@@ -633,8 +652,9 @@ func TestTinyRows(t *testing.T) {
 
 	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
-	url, cleanup := sqlutils.PGUrl(t, srv.ApplicationLayer().AdvSQLAddr(), "copytest", url.User(username.RootUser))
+	url, cleanup := s.PGUrl(t, serverutils.CertsDirPrefix("copytest"), serverutils.User(username.RootUser))
 	defer cleanup()
 	var sqlConnCtx clisqlclient.Context
 	conn := sqlConnCtx.MakeSQLConn(io.Discard, io.Discard, url.String())
@@ -685,8 +705,9 @@ func TestLargeCopy(t *testing.T) {
 	// This test can cause timeouts.
 	skip.UnderRace(t)
 	ctx := context.Background()
+	rng, _ := randutil.NewPseudoRand()
 
-	srv, _, kvdb := serverutils.StartServer(t, base.TestServerArgs{})
+	srv, sqlDB, kvdb := serverutils.StartServer(t, base.TestServerArgs{})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 
@@ -700,17 +721,69 @@ func TestLargeCopy(t *testing.T) {
 
 	desc := desctestutils.TestingGetPublicTableDescriptor(kvdb, s.Codec(), "defaultdb", "lineitem")
 	require.NotNil(t, desc, "Failed to lookup descriptor")
+	rows := rng.Intn(2000) + 1
+	cr := &copyReader{rng: rng, cols: desc.PublicColumns(), rows: rows}
 
-	err = conn.Exec(ctx, "SET copy_from_atomic_enabled = false")
-	require.NoError(t, err)
+	atomicCopy := true
+	if rng.Float64() < 0.5 {
+		err = conn.Exec(ctx, "SET copy_from_atomic_enabled = false")
+		require.NoError(t, err)
+		atomicCopy = false
+	}
 
-	rng := rand.New(rand.NewSource(0))
-	rows := 100
-	numrows, err := conn.GetDriverConn().CopyFrom(ctx,
-		&copyReader{rng: rng, cols: desc.PublicColumns(), rows: rows},
-		"COPY lineitem FROM STDIN WITH CSV;")
-	require.NoError(t, err)
-	require.Equal(t, int(numrows), rows)
+	// In 50% cases change the primary key concurrently with the COPY.
+	doAlterPK := rng.Float64() < 0.5
+	ignoreErr := func(err error) bool {
+		if err == nil {
+			return true
+		}
+		if atomicCopy {
+			// Ignore retriable errors in atomic COPY mode, since we only have
+			// automatic retries when atomic=false.
+			var pgErr = new(pgconn.PgError)
+			if errors.As(err, &pgErr) && pgcode.MakeCode(pgErr.Code) == pgcode.SerializationFailure {
+				return true
+			}
+		}
+		if !doAlterPK {
+			return false
+		}
+		// We might hit a duplicate key error when changing the primary key
+		// (which seems somewhat expected), so we'll ignore such an error.
+		return strings.Contains(err.Error(), "duplicate key") ||
+			// TODO(yuzefovich): occasionally we get this error, and it's not
+			// clear why. Look into this.
+			strings.Contains(err.Error(), "cannot disable pipelining on a running transaction")
+	}
+	alterPKCh := make(chan error)
+	if doAlterPK {
+		// We'll delay starting the ALTER to exercise different scenarios.
+		sleepMillis := rng.Intn(2000)
+		go func() {
+			defer close(alterPKCh)
+			time.Sleep(time.Duration(sleepMillis) * time.Millisecond)
+			_, err := sqlDB.Exec("ALTER TABLE lineitem ALTER PRIMARY KEY USING COLUMNS (l_orderkey, l_linenumber, l_suppkey);")
+			alterPKCh <- err
+		}()
+		// Delay starting the COPY too.
+		time.Sleep(time.Duration(rng.Intn(2000)) * time.Millisecond)
+	} else {
+		close(alterPKCh)
+	}
+	// TODO(yuzefovich): if we have atomic COPY and get a txn retry error, we
+	// could consider explicitly reruning the COPY command a few times rather
+	// than just ignoring the error.
+	numrows, copyErr := conn.GetDriverConn().CopyFrom(ctx, cr, "COPY lineitem FROM STDIN WITH CSV;")
+	alterErr := <-alterPKCh
+	if !ignoreErr(copyErr) {
+		t.Fatal(copyErr)
+	}
+	if !ignoreErr(alterErr) {
+		t.Fatal(alterErr)
+	}
+	if copyErr == nil {
+		require.Equal(t, int(numrows), rows)
+	}
 }
 
 type copyReader struct {
@@ -792,20 +865,20 @@ func BenchmarkCopyCSVEndToEnd(b *testing.B) {
 	defer log.Scope(b).Close(b)
 
 	ctx := context.Background()
-	s, db, _ := serverutils.StartServer(b, base.TestServerArgs{
+	srv, db, _ := serverutils.StartServer(b, base.TestServerArgs{
 		DefaultTestTenant: base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(83461),
 	})
-	defer s.Stopper().Stop(ctx)
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
-	pgURL, cleanup, err := sqlutils.PGUrlE(
-		s.AdvSQLAddr(),
-		"BenchmarkCopyEndToEnd", /* prefix */
-		url.User(username.RootUser),
+	pgURL, cleanup := s.PGUrl(
+		b,
+		serverutils.CertsDirPrefix("BenchmarkCopyEndToEnd"),
+		serverutils.User(username.RootUser),
 	)
-	require.NoError(b, err)
-	s.Stopper().AddCloser(stop.CloserFn(cleanup))
+	defer cleanup()
 
-	_, err = db.Exec("CREATE TABLE t (i INT PRIMARY KEY, s STRING)")
+	_, err := db.Exec("CREATE TABLE t (i INT PRIMARY KEY, s STRING)")
 	require.NoError(b, err)
 
 	conn, err := pgx.Connect(ctx, pgURL.String())

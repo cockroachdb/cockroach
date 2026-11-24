@@ -170,7 +170,7 @@ func TestDataDriven(t *testing.T) {
 			case "get":
 				d.ScanArgs(t, "key", &keyStr)
 				key, _ := spanconfigtestutils.ParseKey(t, keyStr)
-				config, _, err := store.GetSpanConfigForKey(ctx, roachpb.RKey(key))
+				config, err := store.GetSpanConfigForKey(ctx, roachpb.RKey(key))
 				require.NoError(t, err)
 				return fmt.Sprintf("conf=%s", spanconfigtestutils.PrintSpanConfig(config))
 

@@ -10,7 +10,6 @@ import (
 	"reflect"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -19,39 +18,13 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-// testRangefeedCounter mocks rangefeed metrics for testing.
-type testRangefeedCounter struct {
-	count atomic.Int32
-}
-
-var _ RangefeedMetricsRecorder = &testRangefeedCounter{}
-
-func newTestRangefeedCounter() *testRangefeedCounter {
-	return &testRangefeedCounter{}
-}
-
-func (c *testRangefeedCounter) UpdateMetricsOnRangefeedConnect() {
-	c.count.Add(1)
-}
-
-func (c *testRangefeedCounter) UpdateMetricsOnRangefeedDisconnect() {
-	c.UpdateMetricsOnRangefeedDisconnectBy(1)
-}
-
-func (c *testRangefeedCounter) UpdateMetricsOnRangefeedDisconnectBy(num int64) {
-	c.count.Add(int32(-num))
-}
-
-func (c *testRangefeedCounter) get() int {
-	return int(c.count.Load())
-}
-
-func (c *testRangefeedCounter) waitForRangefeedCount(t *testing.T, count int) {
+func waitForRangefeedCount(t *testing.T, smm *StreamManagerMetrics, count int) {
 	testutils.SucceedsSoon(t, func() error {
-		if c.get() == count {
+		v := smm.ActiveMuxRangeFeed.Value()
+		if v == int64(count) {
 			return nil
 		}
-		return errors.Newf("expected %d rangefeeds, found %d", count, c.get())
+		return errors.Newf("expected %d rangefeeds, found %d", count, v)
 	})
 }
 
@@ -62,7 +35,12 @@ type testServerStream struct {
 	eventsSent int
 	// streamEvents is a map of streamID to a list of events sent to that stream.
 	streamEvents map[int64][]*kvpb.MuxRangeFeedEvent
+
+	// t can optionally set for additional logging.
+	t *testing.T
 }
+
+var _ ServerStreamSender = &testServerStream{}
 
 func newTestServerStream() *testServerStream {
 	return &testServerStream{
@@ -74,6 +52,15 @@ func (s *testServerStream) totalEventsSent() int {
 	s.Lock()
 	defer s.Unlock()
 	return s.eventsSent
+}
+
+func (s *testServerStream) getEventsByStreamID(streamID int64) (res []*kvpb.RangeFeedEvent) {
+	s.Lock()
+	defer s.Unlock()
+	for _, ev := range s.streamEvents[streamID] {
+		res = append(res, &ev.RangeFeedEvent)
+	}
+	return res
 }
 
 func (s *testServerStream) waitForEvent(t *testing.T, ev *kvpb.MuxRangeFeedEvent) {
@@ -106,8 +93,13 @@ func (s *testServerStream) String() string {
 	s.Lock()
 	defer s.Unlock()
 	var str strings.Builder
+	fmt.Fprintf(&str, "Total Streams Sent: %d\n", len(s.streamEvents))
 	for streamID, eventList := range s.streamEvents {
-		fmt.Fprintf(&str, "StreamID:%d, Len:%d\n", streamID, len(eventList))
+		fmt.Fprintf(&str, "\tStreamID:%d, Len:%d", streamID, len(eventList))
+		for _, ev := range eventList {
+			fmt.Fprintf(&str, "\t\t%s", ev.EventType())
+		}
+		fmt.Fprintf(&str, "\n")
 	}
 	return str.String()
 }
@@ -117,6 +109,9 @@ func (s *testServerStream) SendIsThreadSafe() {}
 // Send mocks grpc.ServerStream Send method. It only counts events and stores
 // events by streamID in streamEvents.
 func (s *testServerStream) Send(e *kvpb.MuxRangeFeedEvent) error {
+	if s.t != nil {
+		s.t.Logf("Sending event for StreamID %d: %v", e.StreamID, e)
+	}
 	s.Lock()
 	defer s.Unlock()
 	s.eventsSent++
@@ -165,6 +160,16 @@ func (s *testServerStream) waitForEventCount(t *testing.T, count int) {
 	})
 }
 
+func (s *testServerStream) iterateEventsByStreamID(
+	f func(id int64, events []*kvpb.MuxRangeFeedEvent),
+) {
+	s.Lock()
+	defer s.Unlock()
+	for id, v := range s.streamEvents {
+		f(id, v)
+	}
+}
+
 type cancelCtxDisconnector struct {
 	mu struct {
 		syncutil.Mutex
@@ -188,3 +193,5 @@ func (c *cancelCtxDisconnector) IsDisconnected() bool {
 	defer c.mu.Unlock()
 	return c.mu.disconnected
 }
+
+func (c *cancelCtxDisconnector) Unregister() {}

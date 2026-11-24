@@ -14,6 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/build/bazel"
+	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
@@ -26,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-const configIdx = 8
+const configIdx = 9
 
 var execBuildLogicTestDir string
 
@@ -43,15 +44,12 @@ func init() {
 }
 
 func TestMain(m *testing.M) {
+	defer ccl.TestingEnableEnterprise()()
 	securityassets.SetLoader(securitytest.EmbeddedAssets)
 	randutil.SeedForTests()
-	serverutils.InitTestServerFactory(server.TestServerFactory)
+	serverutils.InitTestServerFactory(server.TestServerFactory,
+		serverutils.WithTenantOption(base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(156124)))
 	serverutils.InitTestClusterFactory(testcluster.TestClusterFactory)
-
-	defer serverutils.TestingSetDefaultTenantSelectionOverride(
-		base.TestIsForStuffThatShouldWorkWithSecondaryTenantsButDoesntYet(76378),
-	)()
-
 	os.Exit(m.Run())
 }
 
@@ -80,7 +78,8 @@ func TestLogic_tmp(t *testing.T) {
 	var glob string
 	glob = filepath.Join(execBuildLogicTestDir, "_*")
 	serverArgs := logictest.TestServerArgs{
-		DisableWorkmemRandomization: true,
+		DisableWorkmemRandomization:   true,
+		DisableOptimizerPerturbations: true,
 	}
 	logictest.RunLogicTests(t, serverArgs, configIdx, glob)
 }
@@ -174,6 +173,13 @@ func TestExecBuild_distsql_ordinality(
 ) {
 	defer leaktest.AfterTest(t)()
 	runExecBuildLogicTest(t, "distsql_ordinality")
+}
+
+func TestExecBuild_distsql_scan(
+	t *testing.T,
+) {
+	defer leaktest.AfterTest(t)()
+	runExecBuildLogicTest(t, "distsql_scan")
 }
 
 func TestExecBuild_distsql_single_flow(

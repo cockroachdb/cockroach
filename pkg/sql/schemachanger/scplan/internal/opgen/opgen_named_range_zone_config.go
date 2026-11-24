@@ -32,8 +32,14 @@ func init() {
 		toAbsent(
 			scpb.Status_PUBLIC,
 			to(scpb.Status_ABSENT,
-				emit(func(this *scpb.NamedRangeZoneConfig) *scop.NotImplementedForPublicObjects {
-					return notImplementedForPublicObjects(this)
+				emit(func(this *scpb.NamedRangeZoneConfig) *scop.DiscardNamedRangeZoneConfig {
+					name, ok := zonepb.NamedZonesByID[uint32(this.RangeID)]
+					if !ok {
+						panic(errors.AssertionFailedf("unknown named zone with id: %d", this.RangeID))
+					}
+					return &scop.DiscardNamedRangeZoneConfig{
+						RangeName: name,
+					}
 				}),
 			),
 		),

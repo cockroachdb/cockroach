@@ -1,0 +1,8 @@
+alter_virtual_cluster_replication_stmt ::=
+	'ALTER' virtual_cluster virtual_cluster_spec 'PAUSE' 'REPLICATION'
+	| 'ALTER' virtual_cluster virtual_cluster_spec 'RESUME' 'REPLICATION'
+	| 'ALTER' virtual_cluster virtual_cluster_spec 'COMPLETE' 'REPLICATION' 'TO' 'SYSTEM' 'TIME' a_expr
+	| 'ALTER' virtual_cluster virtual_cluster_spec 'COMPLETE' 'REPLICATION' 'TO' 'LATEST'
+	| 'ALTER' virtual_cluster virtual_cluster_spec 'SET' 'REPLICATION' replication_options_list
+	| 'ALTER' virtual_cluster virtual_cluster_spec 'SET' 'REPLICATION' 'SOURCE' source_replication_options_list
+	| 'ALTER' virtual_cluster virtual_cluster_spec 'START' 'REPLICATION' 'OF' d_expr 'ON' d_expr opt_with_replication_options

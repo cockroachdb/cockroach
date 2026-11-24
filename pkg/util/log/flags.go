@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/util/debugutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log/channel"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logconfig"
@@ -55,10 +56,36 @@ const redactionPolicyManagedEnvVar = "COCKROACH_REDACTION_POLICY_MANAGED"
 
 var RedactionPolicyManaged = envutil.EnvOrDefaultBool(redactionPolicyManagedEnvVar, false)
 
+// testLogConfigEnvVar is the env var used to specify a custom YAML log configuration
+// for tests. This can be overridden by the -test-log-config command-line flag.
+//
+// Example: To show all log channels (including HEALTH, STORAGE, KV_DISTRIBUTION)
+// inline with -show-logs:
+//
+//	export COCKROACH_TEST_LOG_CONFIG='sinks: {stderr: {channels: all, filter: INFO}}'
+const testLogConfigEnvVar = "COCKROACH_TEST_LOG_CONFIG"
+
+var envTestLogConfig = envutil.EnvOrDefaultString(testLogConfigEnvVar, "")
+
+func applyRedactionHashingConfig(cfg logconfig.HashingConfig) {
+	if cfg.Enabled {
+		if cfg.Salt == "" {
+			fmt.Printf("# WARNING: hash-based redaction enabled without a salt; " +
+				"hashes are more susceptible to brute-force reversal\n")
+			redact.EnableHashing(nil)
+		} else {
+			redact.EnableHashing([]byte(cfg.Salt))
+		}
+	} else {
+		redact.DisableHashing()
+	}
+}
+
 func init() {
 	logflags.InitFlags(
 		&logging.showLogs,
 		&logging.testLogConfig,
+		envTestLogConfig, // default value
 		&logging.vmoduleConfig.mu.vmodule,
 	)
 
@@ -82,7 +109,7 @@ func init() {
 //
 // This is used to assert that configuration is performed
 // before logging has been used for the first time.
-func IsActive() (active bool, firstUse string) {
+func IsActive() (active bool, firstUse debugutil.SafeStack) {
 	logging.mu.Lock()
 	defer logging.mu.Unlock()
 	return logging.mu.active, logging.mu.firstUseStack
@@ -96,10 +123,45 @@ func ApplyConfig(
 	fileSinkMetricsForDir map[string]FileSinkMetrics,
 	fatalOnLogStall func() bool,
 ) (logShutdownFn func(), err error) {
-	// Sanity check.
-	if active, firstUse := IsActive(); active {
-		reportOrPanic(context.Background(), nil /* sv */, "logging already active; first use:\n%s", firstUse)
-	}
+	return applyConfigInternal(config, fileSinkMetricsForDir, fatalOnLogStall, false /* allowReconfig */)
+}
+
+// ApplyConfigForReconfig is like ApplyConfig but allows reconfiguration even
+// when logging is already active. This is used by TestLogScope to safely
+// reconfigure logging without racing with background goroutines that may be
+// logging concurrently.
+//
+// The key difference from calling TestingResetActive() followed by ApplyConfig()
+// is that this function atomically resets the active flag and proceeds with
+// configuration, eliminating the race window where a background goroutine could
+// set the active flag between the reset and the config application.
+func ApplyConfigForReconfig(
+	config logconfig.Config,
+	fileSinkMetricsForDir map[string]FileSinkMetrics,
+	fatalOnLogStall func() bool,
+) (logShutdownFn func(), err error) {
+	return applyConfigInternal(config, fileSinkMetricsForDir, fatalOnLogStall, true /* allowReconfig */)
+}
+
+func applyConfigInternal(
+	config logconfig.Config,
+	fileSinkMetricsForDir map[string]FileSinkMetrics,
+	fatalOnLogStall func() bool,
+	allowReconfig bool,
+) (logShutdownFn func(), err error) {
+	// Sanity check: either we allow reconfiguration (and reset the active flag),
+	// or we check that logging is not yet active. This is done atomically under
+	// a single lock acquisition to prevent races with concurrent logging.
+	func() {
+		logging.mu.Lock()
+		defer logging.mu.Unlock()
+		if allowReconfig {
+			logging.mu.active = false
+			logging.mu.firstUseStack = nil
+		} else if logging.mu.active {
+			reportOrPanic(context.Background(), nil /* sv */, "logging already active; first use:\n%s", logging.mu.firstUseStack)
+		}
+	}()
 
 	// Our own cancellable context to stop the secondary loggers below.
 	//
@@ -118,6 +180,18 @@ func ApplyConfig(
 	fd2CaptureCleanupFn := func() {}
 
 	closer := newBufferedSinkCloser()
+
+	// closes the underlying gRPC connection of OTLP sinks.
+	closeOTLPSinks := func() {
+		for _, fc := range sinkInfos {
+			if sink, ok := fc.sink.(*otlpSink); ok {
+				if err := sink.client.Close(); err != nil {
+					fmt.Fprintf(OrigStderr, "# OTLP Sink Cleanup Warning: %s\n", err.Error())
+				}
+			}
+		}
+	}
+
 	// logShutdownFn is the returned cleanup function, whose purpose
 	// is to tear down the work we are doing here.
 	logShutdownFn = func() {
@@ -126,6 +200,7 @@ func ApplyConfig(
 		logging.setChannelLoggers(make(map[Channel]*loggerT), &si)
 		fd2CaptureCleanupFn()
 		secLoggersCancel()
+		closeOTLPSinks()
 		if err := closer.Close(defaultCloserTimeout); err != nil {
 			fmt.Printf("# WARNING: %s\n", err.Error())
 		}
@@ -135,6 +210,8 @@ func ApplyConfig(
 		for _, l := range sinkInfos {
 			logging.allSinkInfos.del(l)
 		}
+
+		redact.DisableHashing() // Reset hash redaction state.
 	}
 
 	// Call the final value of logShutdownFn immediately if returning with error.
@@ -365,6 +442,19 @@ func ApplyConfig(
 		attachSinkInfo(httpSinkInfo, &fc.Channels)
 	}
 
+	// Create the OpenTelemetry sinks.
+	for _, fc := range config.Sinks.OTLPServers {
+		if fc.Filter == severity.NONE {
+			continue
+		}
+		otplSinkInfo, err := newOTLPSinkInfo(*fc)
+		if err != nil {
+			return nil, err
+		}
+		attachBufferWrapper(otplSinkInfo, fc.CommonSinkConfig.Buffering, closer)
+		attachSinkInfo(otplSinkInfo, &fc.Channels)
+	}
+
 	// Prepend the interceptor sink to all channels.
 	// We prepend it because we want the interceptors
 	// to see every event before they make their way to disk/network.
@@ -373,6 +463,7 @@ func ApplyConfig(
 		l.sinkInfos = append([]*sinkInfo{interceptorSinkInfo}, l.sinkInfos...)
 	}
 
+	applyRedactionHashingConfig(config.Redaction.Hashing)
 	logging.setChannelLoggers(chans, &stderrSinkInfo)
 	setActive()
 
@@ -429,6 +520,22 @@ func newHTTPSinkInfo(c logconfig.HTTPSinkConfig) (*sinkInfo, error) {
 		return nil, err
 	}
 	info.sink = httpSink
+	return info, nil
+}
+
+func newOTLPSinkInfo(c logconfig.OTLPSinkConfig) (*sinkInfo, error) {
+	info := &sinkInfo{}
+
+	if err := info.applyConfig(c.CommonSinkConfig); err != nil {
+		return nil, err
+	}
+	info.applyFilters(c.Channels)
+
+	otlpSink, err := newOTLPSink(c)
+	if err != nil {
+		return nil, err
+	}
+	info.sink = otlpSink
 	return info, nil
 }
 

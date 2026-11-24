@@ -111,7 +111,7 @@ func (os *optSteps) Next() error {
 
 	os.fo = fo
 	os.expr = fo.Optimize()
-	text := os.expr.String()
+	text := fo.o.Memo().String()
 
 	// If the expression text changes, then it must have gotten better.
 	os.better = text != os.best

@@ -23,6 +23,24 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+type testBufferedStream struct {
+	Stream
+}
+
+var _ BufferedStream = (*testBufferedStream)(nil)
+
+func (tb *testBufferedStream) SendBuffered(
+	e *kvpb.RangeFeedEvent, _ *SharedBudgetAllocation,
+) error {
+	// In production code, buffered stream would be responsible for properly using
+	// and releasing the alloc. We just ignore memory accounting here.
+	return tb.SendUnbuffered(e)
+}
+
+func (tb *testBufferedStream) Disconnect(err *kvpb.Error) {
+	tb.Stream.SendError(err)
+}
+
 func makeLogicalOp(val interface{}) enginepb.MVCCLogicalOp {
 	var op enginepb.MVCCLogicalOp
 	op.MustSetValue(val)
@@ -189,11 +207,13 @@ const testProcessorEventCCap = 16
 const testProcessorEventCTimeout = 10 * time.Millisecond
 
 type processorTestHelper struct {
-	span         roachpb.RSpan
-	rts          *resolvedTimestamp
-	syncEventC   func()
-	sendSpanSync func(*roachpb.Span)
-	scheduler    *ClientScheduler
+	span                     roachpb.RSpan
+	rts                      *resolvedTimestamp
+	syncEventC               func()
+	sendSpanSync             func(*roachpb.Span)
+	rawScheduler             *Scheduler
+	scheduler                *ClientScheduler
+	toBufferedStreamIfNeeded func(s Stream) Stream
 }
 
 // syncEventAndRegistrations waits for all previously sent events to be
@@ -233,20 +253,16 @@ func (h *processorTestHelper) triggerTxnPushUntilPushed(t *testing.T, pushedC <-
 	}
 }
 
-type rangefeedTestType bool
+type rangefeedTestType string
 
-var (
-	scheduledProcessorWithUnbufferedSender rangefeedTestType
+const (
+	scheduledProcessorWithUnbufferedSender rangefeedTestType = "unbuffered_sender"
+	scheduledProcessorWithBufferedSender   rangefeedTestType = "buffered_sender"
 )
 
 var testTypes = []rangefeedTestType{
 	scheduledProcessorWithUnbufferedSender,
-}
-
-// NB: When adding new types, please keep make sure existing
-// benchmarks will keep their old name.
-func (t rangefeedTestType) String() string {
-	return "scheduled"
+	scheduledProcessorWithBufferedSender,
 }
 
 type testConfig struct {
@@ -285,8 +301,8 @@ func withMetrics(m *Metrics) option {
 func withRtsScanner(scanner IntentScanner) option {
 	return func(config *testConfig) {
 		if scanner != nil {
-			config.isc = func() IntentScanner {
-				return scanner
+			config.isc = func() (IntentScanner, error) {
+				return scanner, nil
 			}
 		}
 	}
@@ -322,7 +338,7 @@ func withSettings(st *cluster.Settings) option {
 	}
 }
 
-func withPushTxnsIntervalAge(interval, age time.Duration) option {
+func withPushTxnsIntervalAge(age time.Duration) option {
 	return func(config *testConfig) {
 		config.PushTxnsAge = age
 	}
@@ -395,6 +411,7 @@ func newTestProcessor(
 			EventChanCap:     testProcessorEventCCap,
 			Metrics:          NewMetrics(),
 		},
+		feedType: scheduledProcessorWithUnbufferedSender,
 	}
 	for _, o := range opts {
 		o(&cfg)
@@ -425,7 +442,20 @@ func newTestProcessor(
 		h.sendSpanSync = func(span *roachpb.Span) {
 			p.syncSendAndWait(&syncEvent{c: make(chan struct{}), testRegCatchupSpan: span})
 		}
+		h.rawScheduler = sch
 		h.scheduler = &p.scheduler
+		switch cfg.feedType {
+		case scheduledProcessorWithUnbufferedSender:
+			h.toBufferedStreamIfNeeded = func(s Stream) Stream {
+				return s
+			}
+		case scheduledProcessorWithBufferedSender:
+			h.toBufferedStreamIfNeeded = func(s Stream) Stream {
+				return &testBufferedStream{Stream: s}
+			}
+		default:
+			panic("unknown rangefeed test type")
+		}
 	default:
 		panic("unknown processor type")
 	}

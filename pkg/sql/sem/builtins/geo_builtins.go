@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo/twkb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/parserutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins/builtinconstants"
@@ -37,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/errorutil/unimplemented"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/golang/geo/s1"
 	"github.com/twpayne/go-geom"
@@ -253,6 +252,25 @@ var lengthOverloadGeometry1 = geometryOverload1(
 		info: `Returns the length of the given geometry.
 
 Note ST_Length is only valid for LineString - use ST_Perimeter for Polygon.`,
+		libraryUsage: usesGEOS,
+	},
+	volatility.Immutable,
+)
+
+var length3DOverloadGeometry1 = geometryOverload1(
+	func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
+		ret, err := geomfn.Length3D(g.Geometry)
+		if err != nil {
+			return nil, err
+		}
+		return tree.NewDFloat(tree.DFloat(ret)), nil
+	},
+	types.Float,
+	infoBuilder{
+		info: `Returns the 3-dimensional or 2-dimensional length of the geometry.
+
+Note ST_3DLength is only valid for LineString or MultiLineString.
+For 2-D lines it will return the 2-D length (same as ST_Length and ST_Length2D)`,
 		libraryUsage: usesGEOS,
 	},
 	volatility.Immutable,
@@ -890,7 +908,10 @@ var geoBuiltins = map[string]builtinDefinition{
 			ReturnType: tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
 				outer := tree.MustBeDGeometry(args[0])
-				interiorArr := tree.MustBeDArray(args[1])
+				interiorArr, err := checkIfDArrayErrOnDString(args[1])
+				if err != nil {
+					return nil, err
+				}
 				interior := make([]geo.Geometry, len(interiorArr.Array))
 				for i, v := range interiorArr.Array {
 					g, ok := v.(*tree.DGeometry)
@@ -2181,11 +2202,10 @@ Flags shown square brackets after the geometry type have the following meaning:
 		tree.Overload{
 			Types:      tree.ParamTypes{{Name: "geometry", Typ: types.Geometry}, {Name: "npoints", Typ: types.Int4}},
 			ReturnType: tree.FixedReturnType(types.Geometry),
-			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+			Fn: func(_ context.Context, evalCtx *eval.Context, args tree.Datums) (tree.Datum, error) {
 				geometry := tree.MustBeDGeometry(args[0]).Geometry
 				npoints := int(tree.MustBeDInt(args[1]))
-				seed := timeutil.Now().Unix()
-				generatedPoints, err := geomfn.GenerateRandomPoints(geometry, npoints, rand.New(rand.NewSource(seed)))
+				generatedPoints, err := geomfn.GenerateRandomPoints(geometry, npoints, evalCtx.GetRNG())
 				if err != nil {
 					if errors.Is(err, geomfn.ErrGenerateRandomPointsInvalidPoints) {
 						return tree.DNull, nil
@@ -3126,6 +3146,267 @@ The requested number of points must be not larger than 65336.`,
 		defProps(),
 		lengthOverloadGeometry1,
 	),
+	"st_3ddistance": makeBuiltin(
+		defProps(),
+		geometryOverload2(
+			func(_ context.Context, _ *eval.Context, a, b *tree.DGeometry) (tree.Datum, error) {
+				ret, err := geomfn.MinDistance3D(a.Geometry, b.Geometry)
+				if err != nil {
+					if geo.IsEmptyGeometryError(err) {
+						return tree.DNull, nil
+					}
+					return nil, err
+				}
+				return tree.NewDFloat(tree.DFloat(ret)), nil
+			},
+			types.Float,
+			infoBuilder{
+				info: "Returns the 3-dimensional minimum Cartesian distance between two geometries. " +
+					"If either geometry has no Z component, this is equivalent to ST_Distance.",
+			},
+			volatility.Immutable,
+		),
+	),
+	"st_3ddwithin": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "geometry_a", Typ: types.Geometry},
+				{Name: "geometry_b", Typ: types.Geometry},
+				{Name: "distance", Typ: types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(
+				_ context.Context, _ *eval.Context, args tree.Datums,
+			) (tree.Datum, error) {
+				a := tree.MustBeDGeometry(args[0])
+				b := tree.MustBeDGeometry(args[1])
+				dist := tree.MustBeDFloat(args[2])
+				ret, err := geomfn.DWithin3D(a.Geometry, b.Geometry, float64(dist))
+				if err != nil {
+					return nil, err
+				}
+				return tree.MakeDBool(tree.DBool(ret)), nil
+			},
+			Info: infoBuilder{
+				info: "Returns true if any of geometry_a is within distance units of geometry_b, " +
+					"using 3D Euclidean distance.",
+			}.String(),
+			Volatility: volatility.Immutable,
+		},
+	),
+	"_st_3ddwithin": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "geometry_a", Typ: types.Geometry},
+				{Name: "geometry_b", Typ: types.Geometry},
+				{Name: "distance", Typ: types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(
+				_ context.Context, _ *eval.Context, args tree.Datums,
+			) (tree.Datum, error) {
+				a := tree.MustBeDGeometry(args[0])
+				b := tree.MustBeDGeometry(args[1])
+				dist := tree.MustBeDFloat(args[2])
+				ret, err := geomfn.DWithin3D(a.Geometry, b.Geometry, float64(dist))
+				if err != nil {
+					return nil, err
+				}
+				return tree.MakeDBool(tree.DBool(ret)), nil
+			},
+			Info: infoBuilder{
+				info: "Returns true if any of geometry_a is within distance units of geometry_b, " +
+					"using 3D Euclidean distance. This variant does not utilize any spatial index.",
+			}.String(),
+			Volatility: volatility.Immutable,
+		},
+	),
+	"st_3ddfullywithin": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "geometry_a", Typ: types.Geometry},
+				{Name: "geometry_b", Typ: types.Geometry},
+				{Name: "distance", Typ: types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(
+				_ context.Context, _ *eval.Context, args tree.Datums,
+			) (tree.Datum, error) {
+				a := tree.MustBeDGeometry(args[0])
+				b := tree.MustBeDGeometry(args[1])
+				dist := tree.MustBeDFloat(args[2])
+				ret, err := geomfn.DFullyWithin3D(a.Geometry, b.Geometry, float64(dist))
+				if err != nil {
+					return nil, err
+				}
+				return tree.MakeDBool(tree.DBool(ret)), nil
+			},
+			Info: infoBuilder{
+				info: "Returns true if every point in geometry_a is within distance units of geometry_b, " +
+					"using 3D Euclidean distance.",
+			}.String(),
+			Volatility: volatility.Immutable,
+		},
+	),
+	"_st_3ddfullywithin": makeBuiltin(
+		defProps(),
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "geometry_a", Typ: types.Geometry},
+				{Name: "geometry_b", Typ: types.Geometry},
+				{Name: "distance", Typ: types.Float},
+			},
+			ReturnType: tree.FixedReturnType(types.Bool),
+			Fn: func(
+				_ context.Context, _ *eval.Context, args tree.Datums,
+			) (tree.Datum, error) {
+				a := tree.MustBeDGeometry(args[0])
+				b := tree.MustBeDGeometry(args[1])
+				dist := tree.MustBeDFloat(args[2])
+				ret, err := geomfn.DFullyWithin3D(a.Geometry, b.Geometry, float64(dist))
+				if err != nil {
+					return nil, err
+				}
+				return tree.MakeDBool(tree.DBool(ret)), nil
+			},
+			Info: infoBuilder{
+				info: "Returns true if every point in geometry_a is within distance units of geometry_b, " +
+					"using 3D Euclidean distance. This variant does not utilize any spatial index.",
+			}.String(),
+			Volatility: volatility.Immutable,
+		},
+	),
+	"st_3dintersects": makeBuiltin(
+		defProps(),
+		geometryOverload2BinaryPredicate(
+			func(a geo.Geometry, b geo.Geometry) (bool, error) {
+				return geomfn.DWithin3D(a, b, 0)
+			},
+			infoBuilder{
+				info: "Returns true if geometry_a shares any portion of space with geometry_b, " +
+					"using 3D Euclidean distance.",
+			},
+		),
+	),
+	"_st_3dintersects": makeBuiltin(
+		defProps(),
+		geometryOverload2BinaryPredicate(
+			func(a geo.Geometry, b geo.Geometry) (bool, error) {
+				return geomfn.DWithin3D(a, b, 0)
+			},
+			infoBuilder{
+				info: "Returns true if geometry_a shares any portion of space with geometry_b, " +
+					"using 3D Euclidean distance. This variant does not utilize any spatial index.",
+			},
+		),
+	),
+	"st_3dmaxdistance": makeBuiltin(
+		defProps(),
+		geometryOverload2(
+			func(_ context.Context, _ *eval.Context, a, b *tree.DGeometry) (tree.Datum, error) {
+				ret, err := geomfn.MaxDistance3D(a.Geometry, b.Geometry)
+				if err != nil {
+					if geo.IsEmptyGeometryError(err) {
+						return tree.DNull, nil
+					}
+					return nil, err
+				}
+				return tree.NewDFloat(tree.DFloat(ret)), nil
+			},
+			types.Float,
+			infoBuilder{
+				info: "Returns the 3-dimensional maximum Cartesian distance between two geometries. " +
+					"If either geometry has no Z component, this is equivalent to ST_MaxDistance.",
+			},
+			volatility.Immutable,
+		),
+	),
+	"st_3dclosestpoint": makeBuiltin(
+		defProps(),
+		geometryOverload2(
+			func(_ context.Context, _ *eval.Context, a, b *tree.DGeometry) (tree.Datum, error) {
+				ret, err := geomfn.ClosestPoint3D(a.Geometry, b.Geometry)
+				if err != nil {
+					if geo.IsEmptyGeometryError(err) {
+						return tree.DNull, nil
+					}
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info: "Returns the 3-dimensional point on geometry_a that is closest to geometry_b.",
+			},
+			volatility.Immutable,
+		),
+	),
+	"st_3dlength": makeBuiltin(
+		defProps(),
+		length3DOverloadGeometry1,
+	),
+	"st_3dlongestline": makeBuiltin(
+		defProps(),
+		geometryOverload2(
+			func(_ context.Context, _ *eval.Context, a, b *tree.DGeometry) (tree.Datum, error) {
+				ret, err := geomfn.LongestLineString3D(a.Geometry, b.Geometry)
+				if err != nil {
+					if geo.IsEmptyGeometryError(err) {
+						return tree.DNull, nil
+					}
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info: "Returns the 3-dimensional longest line between two geometries.",
+			},
+			volatility.Immutable,
+		),
+	),
+	"st_3dperimeter": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
+				ret, err := geomfn.Perimeter3D(g.Geometry)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDFloat(tree.DFloat(ret)), nil
+			},
+			types.Float,
+			infoBuilder{
+				info: "Returns the 3-dimensional perimeter of the geometry. " +
+					"Note ST_3DPerimeter is only valid for Polygon or MultiPolygon. " +
+					"For 2D geometries it returns the 2D perimeter.",
+			},
+			volatility.Immutable,
+		),
+	),
+	"st_3dshortestline": makeBuiltin(
+		defProps(),
+		geometryOverload2(
+			func(_ context.Context, _ *eval.Context, a, b *tree.DGeometry) (tree.Datum, error) {
+				ret, err := geomfn.ShortestLineString3D(a.Geometry, b.Geometry)
+				if err != nil {
+					if geo.IsEmptyGeometryError(err) {
+						return tree.DNull, nil
+					}
+					return nil, err
+				}
+				return tree.NewDGeometry(ret), nil
+			},
+			types.Geometry,
+			infoBuilder{
+				info: "Returns the 3-dimensional shortest line between two geometries.",
+			},
+			volatility.Immutable,
+		),
+	),
 	"st_perimeter": makeBuiltin(
 		defProps(),
 		append(
@@ -3630,6 +3911,48 @@ The azimuth is angle is referenced from north, and is positive clockwise: North 
 			},
 			volatility.Immutable,
 		),
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "geometry_a", Typ: types.Geometry},
+				{Name: "geometry_b", Typ: types.Geometry},
+				{Name: "spheroid", Typ: types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.Float),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				a := tree.MustBeDGeometry(args[0])
+				b := tree.MustBeDGeometry(args[1])
+				spheroidStr := string(tree.MustBeDString(args[2]))
+				spheroid, err := geogfn.ParseSpheroid(spheroidStr)
+				if err != nil {
+					return nil, err
+				}
+				aGeog, err := a.Geometry.AsGeography()
+				if err != nil {
+					return nil, err
+				}
+				bGeog, err := b.Geometry.AsGeography()
+				if err != nil {
+					return nil, err
+				}
+				ret, err := geogfn.DistanceWithSpheroid(aGeog, bGeog, spheroid)
+				if err != nil {
+					if geo.IsEmptyGeometryError(err) {
+						return tree.DNull, nil
+					}
+					return nil, err
+				}
+				return tree.NewDFloat(tree.DFloat(ret)), nil
+			},
+			Info: infoBuilder{
+				info: "Returns the distance in meters between geometry_a and geometry_b using the supplied " +
+					"spheroid for the geodesic computation. The spheroid argument follows the PostGIS textual " +
+					"format, e.g. `SPHEROID[\"GRS_1980\",6378137,298.257222101]`, where the second number " +
+					"is the semi-major axis in meters and the third is the inverse flattening." +
+					spheroidDistanceMessage,
+				libraryUsage: usesGeographicLib | usesS2,
+			}.String(),
+			Volatility: volatility.Immutable,
+		},
 	),
 	"st_frechetdistance": makeBuiltin(
 		defProps(),
@@ -4595,9 +4918,16 @@ The paths themselves are given in the direction of the first geometry.`,
 				{Name: "geometry", Typ: types.Geometry},
 				{Name: "bbox", Typ: types.Box2D},
 			},
-			ReturnType: tree.FixedReturnType(types.Geometry),
+			CalledOnNullInput: true,
+			ReturnType:        tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return tree.DNull, nil
+				}
 				g := tree.MustBeDGeometry(args[0]).Geometry
+				if args[1] == tree.DNull {
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue, "geometric bounds cannot be null")
+				}
 				bbox := tree.MustBeDBox2D(args[1]).CartesianBoundingBox
 				return asMVTGeometry(g, bbox, 4096, 256, true)
 			},
@@ -4618,10 +4948,20 @@ The rectangular bounds of the tile in the target map coordinate space must be pr
 				{Name: "bbox", Typ: types.Box2D},
 				{Name: "extent", Typ: types.Int},
 			},
-			ReturnType: tree.FixedReturnType(types.Geometry),
+			CalledOnNullInput: true,
+			ReturnType:        tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return tree.DNull, nil
+				}
 				g := tree.MustBeDGeometry(args[0]).Geometry
+				if args[1] == tree.DNull {
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue, "geometric bounds cannot be null")
+				}
 				bbox := tree.MustBeDBox2D(args[1]).CartesianBoundingBox
+				if args[2] == tree.DNull {
+					return tree.DNull, nil
+				}
 				extent := int(tree.MustBeDInt(args[2]))
 				return asMVTGeometry(g, bbox, extent, 256, true)
 			},
@@ -4642,11 +4982,24 @@ The rectangular bounds of the tile in the target map coordinate space must be pr
 				{Name: "extent", Typ: types.Int},
 				{Name: "buffer", Typ: types.Int},
 			},
-			ReturnType: tree.FixedReturnType(types.Geometry),
+			CalledOnNullInput: true,
+			ReturnType:        tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return tree.DNull, nil
+				}
 				g := tree.MustBeDGeometry(args[0]).Geometry
+				if args[1] == tree.DNull {
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue, "geometric bounds cannot be null")
+				}
 				bbox := tree.MustBeDBox2D(args[1]).CartesianBoundingBox
+				if args[2] == tree.DNull {
+					return tree.DNull, nil
+				}
 				extent := int(tree.MustBeDInt(args[2]))
+				if args[3] == tree.DNull {
+					return tree.DNull, nil
+				}
 				buffer := int(tree.MustBeDInt(args[3]))
 				return asMVTGeometry(g, bbox, extent, buffer, true)
 			},
@@ -4667,12 +5020,28 @@ The rectangular bounds of the tile in the target map coordinate space must be pr
 				{Name: "buffer", Typ: types.Int},
 				{Name: "clip", Typ: types.Bool},
 			},
-			ReturnType: tree.FixedReturnType(types.Geometry),
+			CalledOnNullInput: true,
+			ReturnType:        tree.FixedReturnType(types.Geometry),
 			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				if args[0] == tree.DNull {
+					return tree.DNull, nil
+				}
 				g := tree.MustBeDGeometry(args[0]).Geometry
+				if args[1] == tree.DNull {
+					return nil, pgerror.Newf(pgcode.InvalidParameterValue, "geometric bounds cannot be null")
+				}
 				bbox := tree.MustBeDBox2D(args[1]).CartesianBoundingBox
+				if args[2] == tree.DNull {
+					return tree.DNull, nil
+				}
 				extent := int(tree.MustBeDInt(args[2]))
+				if args[3] == tree.DNull {
+					return tree.DNull, nil
+				}
 				buffer := int(tree.MustBeDInt(args[3]))
+				if args[4] == tree.DNull {
+					return tree.DNull, nil
+				}
 				clip := bool(tree.MustBeDBool(args[4]))
 				return asMVTGeometry(g, bbox, extent, buffer, clip)
 			},
@@ -7965,7 +8334,7 @@ func applyGeoindexConfigStorageParams(
 	ctx context.Context, evalCtx *eval.Context, cfg geopb.Config, params string,
 ) (geopb.Config, error) {
 	indexDesc := &descpb.IndexDescriptor{GeoConfig: cfg}
-	stmt, err := parser.ParseOne(
+	stmt, err := parserutils.ParseOne(
 		fmt.Sprintf("CREATE INDEX t_idx ON t USING GIST(geom) WITH (%s)", params),
 	)
 	if err != nil {
@@ -7977,7 +8346,7 @@ func applyGeoindexConfigStorageParams(
 		&semaCtx,
 		evalCtx,
 		stmt.AST.(*tree.CreateIndex).StorageParams,
-		&indexstorageparam.Setter{IndexDesc: indexDesc},
+		&indexstorageparam.Setter{IndexDesc: indexDesc, NewObject: true},
 	); err != nil {
 		return geopb.Config{}, err
 	}

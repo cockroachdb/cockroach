@@ -12,8 +12,20 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble"
 	"github.com/cockroachdb/pebble/objstorage/remote"
 )
+
+// ConfigureForSharedStorage mutates the provided Pebble options to use shared
+// storage using the provided remote storage.
+func ConfigureForSharedStorage(opts *pebble.Options, remoteStorage remote.Storage) error {
+	opts.RemoteStorage = remote.MakeSimpleFactory(map[remote.Locator]remote.Storage{
+		remote.MakeLocator(""): remoteStorage,
+	})
+	opts.CreateOnShared = remote.CreateOnSharedLower
+	opts.CreateOnSharedLocator = remote.MakeLocator("")
+	return nil
+}
 
 // externalStorageReader implements remote.ObjectReader on top of
 // cloud.ExternalStorage..
@@ -128,7 +140,7 @@ func (e *externalStorageWrapper) CreateObject(objName string) (io.WriteCloser, e
 // List implements the remote.Storage interface.
 func (e *externalStorageWrapper) List(prefix, delimiter string) ([]string, error) {
 	var directoryList []string
-	err := e.es.List(e.ctx, prefix, delimiter, func(s string) error {
+	err := e.es.List(e.ctx, prefix, cloud.ListOptions{Delimiter: delimiter}, func(s string) error {
 		directoryList = append(directoryList, s)
 		return nil
 	})

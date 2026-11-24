@@ -8,8 +8,7 @@ package tree
 var _ error = &UnsupportedError{}
 
 // UnsupportedError is an error object which is returned by some unimplemented SQL
-// statements. It is currently only used to skip over PGDUMP statements during
-// an import.
+// statements.
 type UnsupportedError struct {
 	Err         error
 	FeatureName string

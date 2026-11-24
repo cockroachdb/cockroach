@@ -9,10 +9,10 @@ import (
 	"bytes"
 	"context"
 	"sort"
+	"sync/atomic"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/kv"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -27,7 +27,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/rowencpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc/valueside"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
@@ -44,7 +46,28 @@ const (
 	maxRowSizeFloor = 1 << 10
 	// maxRowSizeCeil is the upper bound for sql.guardrails.max_row_size_{log|err}.
 	maxRowSizeCeil = 1 << 30
+	// maxRawPrimaryKeyLen caps the raw key bytes pretty-printed for large-row
+	// events; see keys.PrettyPrintBounded.
+	maxRawPrimaryKeyLen = 1 << 10
 )
+
+// largeRowLogEvery rate-limits LargeRow / LargeRowInternal emissions across
+// all RowHelpers in the process. Suppressions are counted in
+// skippedLargeRows and surfaced on the next emitted event's
+// CommonLargeRowDetails.SkippedLargeRows. A var so tests can lower the
+// interval.
+var largeRowLogEvery = log.Every(time.Second)
+var skippedLargeRows atomic.Uint64
+
+// TestingDisableLargeRowRateLimit disables the process-wide LargeRow rate
+// limit (see largeRowLogEvery) and returns a function that restores the
+// default 1-second interval. Tests exercising CheckRowSize's emission logic
+// should call this when other code in the same test binary may concurrently
+// emit LargeRow events and steal the rate-limit window.
+func TestingDisableLargeRowRateLimit() func() {
+	largeRowLogEvery = log.Every(0)
+	return func() { largeRowLogEvery = log.Every(time.Second) }
+}
 
 var maxRowSizeLog = settings.RegisterByteSizeSetting(
 	settings.ApplicationLevel,
@@ -52,7 +75,11 @@ var maxRowSizeLog = settings.RegisterByteSizeSetting(
 	"maximum size of row (or column family if multiple column families are in use) that SQL can "+
 		"write to the database, above which an event is logged to SQL_PERF (or SQL_INTERNAL_PERF "+
 		"if the mutating statement was internal); use 0 to disable",
-	kvserverbase.MaxCommandSizeDefault,
+	// Default matches sql.conn.max_read_buffer_message_size and
+	// kv.bulk_sst.target_size (both 16 MiB), so that rows approaching the
+	// pgwire message size limit or exceeding the backup SST target size are
+	// logged.
+	16<<20, /* 16 MiB */
 	settings.IntInRangeOrZeroDisable(maxRowSizeFloor, maxRowSizeCeil),
 	settings.WithPublic,
 )
@@ -62,7 +89,9 @@ var maxRowSizeErr = settings.RegisterByteSizeSetting(
 	"sql.guardrails.max_row_size_err",
 	"maximum size of row (or column family if multiple column families are in use) that SQL can "+
 		"write to the database, above which an error is returned; use 0 to disable",
-	512<<20, /* 512 MiB */
+	// Default matches kv.bulk_sst.target_size + kv.bulk_sst.max_allowed_overage
+	// (16 MiB + 64 MiB = 80 MiB), above which rows cannot be backed up.
+	80<<20, /* 80 MiB */
 	settings.IntInRangeOrZeroDisable(maxRowSizeFloor, maxRowSizeCeil),
 	settings.WithPublic,
 )
@@ -90,9 +119,11 @@ type RowHelper struct {
 	UniqueWithTombstoneIndexes intsets.Fast
 	indexEntries               map[catalog.Index][]rowenc.IndexEntry
 
-	// Computed during initialization for pretty-printing.
-	primIndexValDirs []encoding.Direction
-	secIndexValDirs  [][]encoding.Direction
+	// Lazily computed for pretty-printing and CheckRowSize.
+	dirs struct {
+		primary   []encoding.Direction
+		secondary [][]encoding.Direction
+	}
 
 	// Computed and cached.
 	PrimaryIndexKeyPrefix []byte
@@ -105,9 +136,10 @@ type RowHelper struct {
 	// Used to hold the row being written while writing tombstones.
 	tmpRow []tree.Datum
 
+	sd *sessiondata.SessionData
+
 	// Used to check row size.
 	maxRowSizeLog, maxRowSizeErr uint32
-	internal                     bool
 	metrics                      *rowinfra.Metrics
 }
 
@@ -116,36 +148,58 @@ func NewRowHelper(
 	desc catalog.TableDescriptor,
 	indexes []catalog.Index,
 	uniqueWithTombstoneIndexes []catalog.Index,
+	sd *sessiondata.SessionData,
 	sv *settings.Values,
-	internal bool,
 	metrics *rowinfra.Metrics,
 ) RowHelper {
 	var uniqueWithTombstoneIndexesSet intsets.Fast
 	for _, index := range uniqueWithTombstoneIndexes {
 		uniqueWithTombstoneIndexesSet.Add(index.Ordinal())
 	}
-	rh := RowHelper{
+	return RowHelper{
 		Codec:                      codec,
 		TableDesc:                  desc,
 		Indexes:                    indexes,
 		UniqueWithTombstoneIndexes: uniqueWithTombstoneIndexesSet,
-		internal:                   internal,
+		sd:                         sd,
 		metrics:                    metrics,
+		maxRowSizeLog:              uint32(maxRowSizeLog.Get(sv)),
+		maxRowSizeErr:              uint32(maxRowSizeErr.Get(sv)),
 	}
+}
 
-	// Pre-compute the encoding directions of the index key values for
-	// pretty-printing in traces.
-	rh.primIndexValDirs = catalogkeys.IndexKeyValDirs(rh.TableDesc.GetPrimaryIndex())
+// lazyIndexDirs represents encoding directions of an index. Those directions
+// may not have been, and may never be computed. The value of -2 represents
+// empty encoding directions. The value of -1 represents the encoding directions
+// of the primary index, otherwise a value i represents the encoding directions
+// of the i-th secondary index.
+type lazyIndexDirs int
 
-	rh.secIndexValDirs = make([][]encoding.Direction, len(rh.Indexes))
-	for i := range rh.Indexes {
-		rh.secIndexValDirs[i] = catalogkeys.IndexKeyValDirs(rh.Indexes[i])
+const (
+	emptyIndexDirs   lazyIndexDirs = -2
+	primaryIndexDirs lazyIndexDirs = -1
+)
+
+func secondaryIndexDirs(i int) lazyIndexDirs { return lazyIndexDirs(i) }
+
+func (d lazyIndexDirs) compute(rh *RowHelper) []encoding.Direction {
+	switch d {
+	case emptyIndexDirs:
+		return nil
+	case primaryIndexDirs:
+		if rh.dirs.primary == nil {
+			rh.dirs.primary = catalogkeys.IndexKeyValDirs(rh.TableDesc.GetPrimaryIndex())
+		}
+		return rh.dirs.primary
+	default:
+		if rh.dirs.secondary == nil {
+			rh.dirs.secondary = make([][]encoding.Direction, len(rh.Indexes))
+			for i := range rh.Indexes {
+				rh.dirs.secondary[i] = catalogkeys.IndexKeyValDirs(rh.Indexes[i])
+			}
+		}
+		return rh.dirs.secondary[d]
 	}
-
-	rh.maxRowSizeLog = uint32(maxRowSizeLog.Get(sv))
-	rh.maxRowSizeErr = uint32(maxRowSizeErr.Get(sv))
-
-	return rh
 }
 
 // encodeIndexes encodes the primary and secondary index keys. The
@@ -156,6 +210,7 @@ func (rh *RowHelper) encodeIndexes(
 	ctx context.Context,
 	colIDtoRowPosition catalog.TableColMap,
 	values []tree.Datum,
+	vh rowenc.VectorIndexEncodingHelper,
 	ignoreIndexes intsets.Fast,
 	includeEmpty bool,
 ) (
@@ -167,7 +222,9 @@ func (rh *RowHelper) encodeIndexes(
 	if err != nil {
 		return nil, nil, err
 	}
-	secondaryIndexEntries, err = rh.encodeSecondaryIndexes(ctx, colIDtoRowPosition, values, ignoreIndexes, includeEmpty)
+	secondaryIndexEntries, err = rh.encodeSecondaryIndexes(
+		ctx, colIDtoRowPosition, values, vh, ignoreIndexes, includeEmpty,
+	)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -240,7 +297,7 @@ func (rh *RowHelper) encodeTombstonesForIndex(
 	if !index.IsUnique() {
 		return nil, errors.AssertionFailedf("Expected index %s to be unique", index.GetName())
 	}
-	if index.GetType() != descpb.IndexDescriptor_FORWARD {
+	if index.GetType() != idxtype.FORWARD {
 		return nil, errors.AssertionFailedf("Expected index %s to be a forward index", index.GetName())
 	}
 
@@ -271,7 +328,15 @@ func (rh *RowHelper) encodeTombstonesForIndex(
 			}
 			tombstoneTmpForIndex.tmpTombstones = append(tombstoneTmpForIndex.tmpTombstones, key)
 		} else {
-			keys, containsNull, err := rowenc.EncodeSecondaryIndexKey(ctx, rh.Codec, rh.TableDesc, index, colIDtoRowPosition, values)
+			keys, containsNull, err := rowenc.EncodeSecondaryIndexKey(
+				ctx,
+				rh.Codec,
+				rh.TableDesc,
+				index,
+				colIDtoRowPosition,
+				values,
+				rowenc.EmptyVectorIndexEncodingHelper, /* we only place tombstones for forward indexes */
+			)
 			if err != nil {
 				return nil, err
 			}
@@ -302,6 +367,7 @@ func (rh *RowHelper) encodeSecondaryIndexes(
 	ctx context.Context,
 	colIDtoRowPosition catalog.TableColMap,
 	values []tree.Datum,
+	vh rowenc.VectorIndexEncodingHelper,
 	ignoreIndexes intsets.Fast,
 	includeEmpty bool,
 ) (secondaryIndexEntries map[catalog.Index][]rowenc.IndexEntry, err error) {
@@ -317,7 +383,16 @@ func (rh *RowHelper) encodeSecondaryIndexes(
 	for i := range rh.Indexes {
 		index := rh.Indexes[i]
 		if !ignoreIndexes.Contains(int(index.GetID())) {
-			entries, err := rowenc.EncodeSecondaryIndex(ctx, rh.Codec, rh.TableDesc, index, colIDtoRowPosition, values, includeEmpty)
+			entries, err := rowenc.EncodeSecondaryIndex(
+				ctx,
+				rh.Codec,
+				rh.TableDesc,
+				index,
+				colIDtoRowPosition,
+				values,
+				vh,
+				includeEmpty,
+			)
 			if err != nil {
 				return nil, err
 			}
@@ -394,8 +469,10 @@ func (rh *RowHelper) SortedColumnFamily(famID descpb.FamilyID) ([]descpb.ColumnI
 	return colIDs, ok
 }
 
-// CheckRowSize compares the size of a primary key column family against the
-// max_row_size limits.
+// CheckRowSize checks the row size against the max_row_size limits. Over
+// max_row_size_log emits a LargeRow / LargeRowInternal event (rate-limited
+// process-wide; suppressed counts surface in the next event's
+// SkippedLargeRows). Over max_row_size_err returns ProgramLimitExceeded.
 func (rh *RowHelper) CheckRowSize(
 	ctx context.Context, key *roachpb.Key, valueBytes []byte, family descpb.FamilyID,
 ) error {
@@ -405,23 +482,40 @@ func (rh *RowHelper) CheckRowSize(
 	if !shouldLog && !shouldErr {
 		return nil
 	}
-	details := eventpb.CommonLargeRowDetails{
-		RowSize:    size,
-		TableID:    uint32(rh.TableDesc.GetID()),
-		FamilyID:   uint32(family),
-		PrimaryKey: keys.PrettyPrint(rh.primIndexValDirs, *key),
-	}
-	if rh.internal && shouldErr {
+	if rh.sd.Internal && shouldErr {
 		// Internal work should never err and always log if violating either limit.
 		shouldErr = false
 		shouldLog = true
 	}
-	if shouldLog {
-		if rh.metrics != nil {
+	if rh.metrics != nil {
+		if shouldLog {
 			rh.metrics.MaxRowSizeLogCount.Inc(1)
 		}
+		if shouldErr {
+			rh.metrics.MaxRowSizeErrCount.Inc(1)
+		}
+	}
+	// Rate-limit the log path. The error path always proceeds — it builds
+	// details below and the SkippedLargeRows drain there folds in the
+	// suppressed log count regardless.
+	if shouldLog && !shouldErr && !largeRowLogEvery.ShouldLog() {
+		skippedLargeRows.Add(1)
+		return nil
+	}
+
+	// Construct details only when we will actually surface them — either as
+	// a log event or as an error.
+	details := eventpb.CommonLargeRowDetails{
+		RowSize:          size,
+		TableID:          uint32(rh.TableDesc.GetID()),
+		FamilyID:         uint32(family),
+		PrimaryKey:       keys.PrettyPrintBounded(primaryIndexDirs.compute(rh), *key, maxRawPrimaryKeyLen),
+		SkippedLargeRows: skippedLargeRows.Swap(0),
+	}
+
+	if shouldLog {
 		var event logpb.EventPayload
-		if rh.internal {
+		if rh.sd.Internal {
 			event = &eventpb.LargeRowInternal{CommonLargeRowDetails: details}
 		} else {
 			event = &eventpb.LargeRow{CommonLargeRowDetails: details}
@@ -429,9 +523,6 @@ func (rh *RowHelper) CheckRowSize(
 		log.StructuredEvent(ctx, severity.INFO, event)
 	}
 	if shouldErr {
-		if rh.metrics != nil {
-			rh.metrics.MaxRowSizeErrCount.Inc(1)
-		}
 		return pgerror.WithCandidateCode(&details, pgcode.ProgramLimitExceeded)
 	}
 	return nil
@@ -442,41 +533,91 @@ var deleteEncoding protoutil.Message = &rowencpb.IndexValueWrapper{
 	Deleted: true,
 }
 
-func (rh *RowHelper) deleteIndexEntry(
+func delFn(
 	ctx context.Context,
-	batch *kv.Batch,
-	index catalog.Index,
-	valDirs []encoding.Direction,
-	entry *rowenc.IndexEntry,
+	b Putter,
+	key *roachpb.Key,
+	needsLock bool,
 	traceKV bool,
-) error {
-	if index.UseDeletePreservingEncoding() {
+	rh *RowHelper,
+	dirs lazyIndexDirs,
+) {
+	if needsLock {
 		if traceKV {
-			log.VEventf(ctx, 2, "Put (delete) %s", entry.Key)
-		}
-
-		batch.Put(entry.Key, deleteEncoding)
-	} else {
-		if traceKV {
-			if valDirs != nil {
-				log.VEventf(ctx, 2, "Del %s", keys.PrettyPrint(valDirs, entry.Key))
+			if keyEncodingDirs := dirs.compute(rh); keyEncodingDirs != nil {
+				log.VEventf(ctx, 2, "Del (locking) %s", keys.PrettyPrint(keyEncodingDirs, *key))
 			} else {
-				log.VEventf(ctx, 2, "Del %s", entry.Key)
+				log.VEventf(ctx, 2, "Del (locking) %s", *key)
 			}
 		}
+		b.DelMustAcquireExclusiveLock(key)
+	} else {
+		if traceKV {
+			if keyEncodingDirs := dirs.compute(rh); keyEncodingDirs != nil {
+				log.VEventf(ctx, 2, "Del %s", keys.PrettyPrint(keyEncodingDirs, *key))
+			} else {
+				log.VEventf(ctx, 2, "Del %s", *key)
+			}
+		}
+		b.Del(key)
+	}
+}
 
-		batch.Del(entry.Key)
+func delWithCPutFn(
+	ctx context.Context,
+	b Putter,
+	key *roachpb.Key,
+	expVal []byte,
+	traceKV bool,
+	rh *RowHelper,
+	dirs lazyIndexDirs,
+) {
+	if traceKV {
+		if keyEncodingDirs := dirs.compute(rh); keyEncodingDirs != nil {
+			log.VEventf(ctx, 2, "CPut %s -> nil (delete)", keys.PrettyPrint(keyEncodingDirs, *key))
+		} else {
+			log.VEventf(ctx, 2, "CPut %s -> nil (delete)", *key)
+		}
+	}
+	b.CPut(key, nil, expVal)
+}
+
+func (rh *RowHelper) deleteIndexEntry(
+	ctx context.Context,
+	b Putter,
+	index catalog.Index,
+	key *roachpb.Key,
+	alreadyLocked bool,
+	lockNonUnique bool,
+	traceKV bool,
+	dirs lazyIndexDirs,
+) error {
+	needsLock := !alreadyLocked && (index.IsUnique() || lockNonUnique)
+	if index.UseDeletePreservingEncoding() {
+		if traceKV {
+			var suffix string
+			if needsLock {
+				suffix = " (locking)"
+			}
+			log.VEventf(ctx, 2, "Put (delete)%s %s", suffix, *key)
+		}
+		if needsLock {
+			b.PutMustAcquireExclusiveLock(key, deleteEncoding)
+		} else {
+			b.Put(key, deleteEncoding)
+		}
+	} else {
+		delFn(ctx, b, key, needsLock, traceKV, rh, dirs)
 	}
 	return nil
 }
 
-// OriginTimetampCPutHelper is used by callers of Inserter, Updater,
+// OriginTimestampCPutHelper is used by callers of Inserter, Updater,
 // and Deleter when the caller wants updates to the primary key to be
 // constructed using ConditionalPutRequests with the OriginTimestamp
 // option set.
 type OriginTimestampCPutHelper struct {
 	OriginTimestamp hlc.Timestamp
-	ShouldWinTie    bool
 	// PreviousWasDeleted is used to indicate that the expected
 	// value is non-existent. This is helpful in Deleter to
 	// distinguish between a delete of a value that had no columns
@@ -497,18 +638,23 @@ func (oh *OriginTimestampCPutHelper) CPutFn(
 	traceKV bool,
 ) {
 	if traceKV {
-		log.VEventfDepth(ctx, 1, 2, "CPutWithOriginTimestamp %s -> %s @ %s", *key, value.PrettyPrint(), oh.OriginTimestamp)
+		log.VEventfDepth(
+			ctx, 1, 2, "CPutWithOriginTimestamp %s -> %s (swap) @ %s", *key, value.PrettyPrint(),
+			oh.OriginTimestamp,
+		)
 	}
-	b.CPutWithOriginTimestamp(key, value, expVal, oh.OriginTimestamp, oh.ShouldWinTie)
+	b.CPutWithOriginTimestamp(key, value, expVal, oh.OriginTimestamp)
 }
 
 func (oh *OriginTimestampCPutHelper) DelWithCPut(
 	ctx context.Context, b Putter, key *roachpb.Key, expVal []byte, traceKV bool,
 ) {
 	if traceKV {
-		log.VEventfDepth(ctx, 1, 2, "CPutWithOriginTimestamp %s -> nil (delete) @ %s", key, oh.OriginTimestamp)
+		log.VEventfDepth(
+			ctx, 1, 2, "CPutWithOriginTimestamp %s -> nil (delete) @ %s", key, oh.OriginTimestamp,
+		)
 	}
-	b.CPutWithOriginTimestamp(key, nil, expVal, oh.OriginTimestamp, oh.ShouldWinTie)
+	b.CPutWithOriginTimestamp(key, nil, expVal, oh.OriginTimestamp)
 }
 
 func FetchSpecRequiresRawMVCCValues(spec fetchpb.IndexFetchSpec) bool {

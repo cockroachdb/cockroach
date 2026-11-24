@@ -5,10 +5,10 @@
 
 import React from "react";
 
-import "./infoBox.styl";
+import "./infoBox.scss";
 
-export default class InfoBox extends React.Component {
-  render() {
-    return <div className="info-box">{this.props.children}</div>;
-  }
+export default function InfoBox({
+  children,
+}: React.PropsWithChildren<object>): React.ReactElement {
+  return <div className="info-box">{children}</div>;
 }

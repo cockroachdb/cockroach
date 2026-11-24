@@ -7,6 +7,7 @@ package rangefeed
 
 import (
 	"context"
+	"iter"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -14,7 +15,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/cockroachdb/cockroach/pkg/util/span"
 )
 
 // Option configures a RangeFeed.
@@ -184,12 +184,13 @@ func WithRetry(options retry.Options) Option {
 }
 
 // WithOnValues sets up a callback that's invoked whenever a batch of values is
-// passed such as during initial scans, allowing passing it as a batch to the
-// client rather than key-by-key to reduce overhead. This however comes with
-// some limitations: for batches passed this way the rangefeed client will not
-// process individual values and instead leaves this to the caller, meaning that
-// the options WithRowTimestampInInitialScan is implied, and WithDiff is ignored
-// as these are per-key processing that is not performed on batches.
+// passed such as during initial scans or catch-up scans, allowing passing it as
+// a batch to the client rather than key-by-key to reduce overhead. This however
+// comes with some limitations: for batches passed this way the rangefeed client
+// will not process individual values and instead leaves this to the caller,
+// meaning that the option WithRowTimestampInInitialScan is implied. For catch-up
+// scans, PrevValue is available if WithDiff is set; for initial scans, PrevValue
+// is not populated as these are point-in-time snapshots.
 func WithOnValues(fn OnValues) Option {
 	return optionFunc(func(c *config) {
 		c.onValues = fn
@@ -255,10 +256,6 @@ func WithOnMetadata(fn OnMetadata) Option {
 // DeleteRange is called with UseRangeTombstone, but not when the range is
 // deleted using point tombstones). If this callback is not provided, an error
 // is emitted when these are encountered.
-//
-// MVCC range tombstones are currently experimental, and requires the
-// MVCCRangeTombstones version gate. They are only expected during certain
-// operations like schema GC and IMPORT INTO (i.e. not across live tables).
 type OnDeleteRange func(ctx context.Context, value *kvpb.RangeFeedDeleteRange)
 
 // WithOnDeleteRange sets up a callback that's invoked whenever an MVCC range
@@ -284,7 +281,7 @@ func WithOnFrontierAdvance(f OnFrontierAdvance) Option {
 // VisitableFrontier is the subset of the span.Frontier interface required to
 // inspect the content of the frontier.
 type VisitableFrontier interface {
-	Entries(span.Operation)
+	Entries() iter.Seq2[roachpb.Span, hlc.Timestamp]
 }
 
 // FrontierSpanVisitor is called when the frontier is updated by a checkpoint,

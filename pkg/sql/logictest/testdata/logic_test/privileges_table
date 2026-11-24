@@ -33,10 +33,10 @@ INSERT INTO t VALUES (1, 1), (2, 2)
 statement ok
 SELECT * from t
 
-statement ok
+statement count 2
 DELETE FROM t
 
-statement ok
+statement count 0
 DELETE FROM t where k = 1
 
 statement ok
@@ -46,7 +46,13 @@ statement ok
 UPDATE t SET v = 2 WHERE k = 2
 
 statement ok
+ALTER TABLE t SET (schema_locked=false)
+
+statement ok
 TRUNCATE t
+
+statement ok
+ALTER TABLE t RESET (schema_locked)
 
 statement ok
 DROP TABLE t
@@ -103,7 +109,7 @@ UPDATE t SET v = 0
 statement error user testuser does not have UPDATE privilege on relation t
 UPDATE t SET v = 2 WHERE k = 2
 
-statement error user testuser does not have DROP privilege on relation t
+statement error user testuser does not have DROP or TRUNCATE privilege on relation t
 TRUNCATE t
 
 statement error user testuser does not have DROP privilege on relation t
@@ -153,7 +159,7 @@ UPDATE t SET v = 0
 statement error user testuser does not have UPDATE privilege on relation t
 UPDATE t SET v = 2 WHERE k = 2
 
-statement error user testuser does not have DROP privilege on relation t
+statement error user testuser does not have DROP or TRUNCATE privilege on relation t
 TRUNCATE t
 
 statement error user testuser does not have DROP privilege on relation t
@@ -204,7 +210,13 @@ statement error user testuser does not have SELECT privilege on relation t
 UPDATE t SET v = 2 WHERE k = 2
 
 statement ok
+ALTER TABLE t SET (schema_locked=false)
+
+statement ok
 TRUNCATE t
+
+statement ok
+ALTER TABLE t RESET (schema_locked)
 
 statement ok
 DROP TABLE t
@@ -235,10 +247,10 @@ SELECT * FROM t
 statement ok
 SELECT 1
 
-statement ok
+statement count 2
 DELETE FROM t
 
-statement ok
+statement count 0
 DELETE FROM t where k = 1
 
 statement ok
@@ -248,7 +260,13 @@ statement ok
 UPDATE t SET v = 2 WHERE k = 2
 
 statement ok
+ALTER TABLE t SET (schema_locked=false)
+
+statement ok
 TRUNCATE t
+
+statement ok
+ALTER TABLE t RESET (schema_locked)
 
 statement ok
 DROP TABLE t

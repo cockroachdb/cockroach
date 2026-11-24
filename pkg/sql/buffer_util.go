@@ -23,24 +23,22 @@ import (
 // should be used by planNodes (or similar components) whenever they need to
 // buffer data. init or initWithDedup must be called before the first use.
 type rowContainerHelper struct {
-	memMonitor  *mon.BytesMonitor
-	diskMonitor *mon.BytesMonitor
-	rows        *rowcontainer.DiskBackedRowContainer
-	scratch     rowenc.EncDatumRow
+	memMonitor          *mon.BytesMonitor
+	unlimitedMemMonitor *mon.BytesMonitor
+	diskMonitor         *mon.BytesMonitor
+	rows                *rowcontainer.DiskBackedRowContainer
+	scratch             rowenc.EncDatumRow
 }
 
 func (c *rowContainerHelper) Init(
-	ctx context.Context,
-	typs []*types.T,
-	evalContext *extendedEvalContext,
-	opName redact.RedactableString,
+	ctx context.Context, typs []*types.T, evalContext *extendedEvalContext, opName redact.SafeString,
 ) {
 	c.initMonitors(ctx, evalContext, opName)
 	distSQLCfg := &evalContext.DistSQLPlanner.distSQLSrv.ServerConfig
 	c.rows = &rowcontainer.DiskBackedRowContainer{}
 	c.rows.Init(
-		colinfo.NoOrdering, typs, &evalContext.Context,
-		distSQLCfg.TempStorage, c.memMonitor, c.diskMonitor,
+		colinfo.NoOrdering, typs, &evalContext.Context, distSQLCfg.TempStorage,
+		c.memMonitor, c.unlimitedMemMonitor, c.diskMonitor,
 	)
 	c.scratch = make(rowenc.EncDatumRow, len(typs))
 }
@@ -48,10 +46,7 @@ func (c *rowContainerHelper) Init(
 // InitWithDedup is a variant of init that is used if row deduplication
 // functionality is needed (see addRowWithDedup).
 func (c *rowContainerHelper) InitWithDedup(
-	ctx context.Context,
-	typs []*types.T,
-	evalContext *extendedEvalContext,
-	opName redact.RedactableString,
+	ctx context.Context, typs []*types.T, evalContext *extendedEvalContext, opName redact.SafeString,
 ) {
 	c.initMonitors(ctx, evalContext, opName)
 	distSQLCfg := &evalContext.DistSQLPlanner.distSQLSrv.ServerConfig
@@ -65,8 +60,8 @@ func (c *rowContainerHelper) InitWithDedup(
 		ordering[i].Direction = encoding.Ascending
 	}
 	c.rows.Init(
-		ordering, typs, &evalContext.Context,
-		distSQLCfg.TempStorage, c.memMonitor, c.diskMonitor,
+		ordering, typs, &evalContext.Context, distSQLCfg.TempStorage,
+		c.memMonitor, c.unlimitedMemMonitor, c.diskMonitor,
 	)
 	c.rows.DoDeDuplicate()
 	c.scratch = make(rowenc.EncDatumRow, len(typs))
@@ -80,38 +75,43 @@ func (c *rowContainerHelper) InitWithParentMon(
 	typs []*types.T,
 	parent *mon.BytesMonitor,
 	evalContext *extendedEvalContext,
-	opName redact.RedactableString,
+	opName redact.SafeString,
 ) {
 	distSQLCfg := &evalContext.DistSQLPlanner.distSQLSrv.ServerConfig
-	// TODO(yuzefovich): currently the memory usage of c.memMonitor doesn't
-	// count against sql.mem.distsql.current metric. Fix it.
 	c.memMonitor = execinfra.NewLimitedMonitorNoFlowCtx(
 		ctx, parent, distSQLCfg, evalContext.SessionData(),
-		redact.Sprintf("%s-limited", opName),
+		mon.MakeName(opName).Limited(),
 	)
+	c.unlimitedMemMonitor = execinfra.NewMonitor(
+		ctx, parent, mon.MakeName(opName).Unlimited(),
+	)
+	// TODO(yuzefovich): the disk usage against this monitor will not show up in
+	// EXPLAIN ANALYZE since we use the root disk monitor as its parent.
+	// Consider fixing it.
 	c.diskMonitor = execinfra.NewMonitor(
-		ctx, distSQLCfg.ParentDiskMonitor, redact.Sprintf("%s-disk", opName),
+		ctx, distSQLCfg.ParentDiskMonitor, mon.MakeName(opName).Disk(),
 	)
 	c.rows = &rowcontainer.DiskBackedRowContainer{}
 	c.rows.Init(
-		colinfo.NoOrdering, typs, &evalContext.Context,
-		distSQLCfg.TempStorage, c.memMonitor, c.diskMonitor,
+		colinfo.NoOrdering, typs, &evalContext.Context, distSQLCfg.TempStorage,
+		c.memMonitor, c.unlimitedMemMonitor, c.diskMonitor,
 	)
 	c.scratch = make(rowenc.EncDatumRow, len(typs))
 }
 
 func (c *rowContainerHelper) initMonitors(
-	ctx context.Context, evalContext *extendedEvalContext, opName redact.RedactableString,
+	ctx context.Context, evalContext *extendedEvalContext, opName redact.SafeString,
 ) {
 	distSQLCfg := &evalContext.DistSQLPlanner.distSQLSrv.ServerConfig
-	// TODO(yuzefovich): currently the memory usage of c.memMonitor doesn't
-	// count against sql.mem.distsql.current metric. Fix it.
 	c.memMonitor = execinfra.NewLimitedMonitorNoFlowCtx(
-		ctx, evalContext.Planner.Mon(), distSQLCfg, evalContext.SessionData(),
-		redact.Sprintf("%s-limited", opName),
+		ctx, evalContext.Planner.ExecMon(), distSQLCfg, evalContext.SessionData(),
+		mon.MakeName(opName).Limited(),
+	)
+	c.unlimitedMemMonitor = execinfra.NewMonitor(
+		ctx, evalContext.Planner.ExecMon(), mon.MakeName(opName).Unlimited(),
 	)
 	c.diskMonitor = execinfra.NewMonitor(
-		ctx, distSQLCfg.ParentDiskMonitor, redact.Sprintf("%s-disk", opName),
+		ctx, distSQLCfg.ParentDiskMonitor, mon.MakeName(opName).Disk(),
 	)
 }
 
@@ -156,6 +156,7 @@ func (c *rowContainerHelper) Close(ctx context.Context) {
 	if c.rows != nil {
 		c.rows.Close(ctx)
 		c.memMonitor.Stop(ctx)
+		c.unlimitedMemMonitor.Stop(ctx)
 		c.diskMonitor.Stop(ctx)
 		c.rows = nil
 	}

@@ -175,7 +175,7 @@ func (m *mockSpanConfigSubscriber) ComputeSplitKey(
 
 func (m *mockSpanConfigSubscriber) GetSpanConfigForKey(
 	ctx context.Context, key roachpb.RKey,
-) (roachpb.SpanConfig, roachpb.Span, error) {
+) (roachpb.SpanConfig, error) {
 	return m.Store.GetSpanConfigForKey(ctx, key)
 }
 

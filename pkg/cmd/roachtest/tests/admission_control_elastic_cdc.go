@@ -32,7 +32,6 @@ func registerElasticControlForCDC(r registry.Registry) {
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Weekly),
 		Cluster:          r.MakeClusterSpec(4, spec.CPU(8), spec.WorkloadNode()),
-		RequiresLicense:  true,
 		Leases:           registry.MetamorphicLeases,
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			if c.Spec().NodeCount < 4 {
@@ -106,7 +105,7 @@ func registerElasticControlForCDC(r registry.Registry) {
 					stopFeeds(db) // stop stray feeds (from repeated runs against the same cluster for ex.)
 					defer stopFeeds(db)
 
-					m := c.NewMonitor(ctx, c.CRDBNodes())
+					m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 					m.Go(func(ctx context.Context) error {
 						const iters, changefeeds = 5, 10
 						for i := 0; i < iters; i++ {

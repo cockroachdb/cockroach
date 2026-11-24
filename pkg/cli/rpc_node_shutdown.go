@@ -23,24 +23,26 @@ import (
 
 // drainAndShutdown attempts to drain the server and then shut it
 // down.
-func drainAndShutdown(ctx context.Context, c serverpb.AdminClient, targetNode string) (err error) {
+func drainAndShutdown(
+	ctx context.Context, c serverpb.RPCAdminClient, targetNode string,
+) (err error) {
 	hardError, remainingWork, err := doDrain(ctx, c, targetNode)
 	if hardError {
 		return err
 	}
 
 	if remainingWork {
-		log.Warningf(ctx, "graceful shutdown may not have completed successfully; check the node's logs for details.")
+		log.Dev.Warningf(ctx, "graceful shutdown may not have completed successfully; check the node's logs for details.")
 	}
 
 	if err != nil {
-		log.Warningf(ctx, "drain did not complete successfully; hard shutdown may cause disruption")
+		log.Dev.Warningf(ctx, "drain did not complete successfully; hard shutdown may cause disruption")
 	}
 	// We have already performed the drain above, so now go straight to
 	// shutdown. We try twice just in case there is a transient error.
 	hardErr, err := doShutdown(ctx, c, targetNode)
 	if err != nil && !hardErr {
-		log.Warningf(ctx, "hard shutdown attempt failed, retrying: %v", err)
+		log.Dev.Warningf(ctx, "hard shutdown attempt failed, retrying: %v", err)
 		_, err = doShutdown(ctx, c, targetNode)
 	}
 	return errors.Wrap(err, "hard shutdown failed")
@@ -52,7 +54,7 @@ func drainAndShutdown(ctx context.Context, c serverpb.AdminClient, targetNode st
 // proceed with an alternate strategy (it's likely the server has gone
 // away).
 func doDrain(
-	ctx context.Context, c serverpb.AdminClient, targetNode string,
+	ctx context.Context, c serverpb.RPCAdminClient, targetNode string,
 ) (hardError, remainingWork bool, err error) {
 	// The next step is to drain. The timeout is configurable
 	// via --drain-wait.
@@ -69,7 +71,6 @@ func doDrain(
 				string(server.QueryShutdownTimeout.InternalKey()),
 				string(kvserver.LeaseTransferPerIterationTimeout.InternalKey()),
 			},
-			UnredactedValues: true,
 		})
 		if err != nil {
 			return err
@@ -102,7 +103,7 @@ func doDrain(
 		return err
 	})
 	if errors.HasType(err, (*timeutil.TimeoutError)(nil)) || grpcutil.IsTimeout(err) {
-		log.Infof(ctx, "drain timed out: %v", err)
+		log.Dev.Infof(ctx, "drain timed out: %v", err)
 		err = errors.New("drain timeout, consider adjusting --drain-wait, especially under " +
 			"custom server.shutdown cluster settings")
 	}
@@ -110,11 +111,11 @@ func doDrain(
 }
 
 func doDrainNoTimeout(
-	ctx context.Context, c serverpb.AdminClient, targetNode string,
+	ctx context.Context, c serverpb.RPCAdminClient, targetNode string,
 ) (hardError, remainingWork bool, err error) {
 	defer func() {
 		if grpcutil.IsWaitingForInit(err) {
-			log.Infof(ctx, "%v", err)
+			log.Dev.Infof(ctx, "%v", err)
 			err = errors.New("node cannot be drained before it has been initialized")
 		}
 	}()
@@ -151,7 +152,7 @@ func doDrainNoTimeout(
 			if err != nil {
 				// Unexpected error.
 				fmt.Fprintf(stderr, "\n") // finish the line started above.
-				log.Infof(ctx, "graceful drain failed: %v", err)
+				log.Dev.Infof(ctx, "graceful drain failed: %v", err)
 				return false, remaining > 0, err
 			}
 
@@ -180,7 +181,7 @@ func doDrainNoTimeout(
 			if resp.DrainRemainingDescription != "" {
 				// Only show this information in the log; we'd use this for debugging.
 				// (This can be revealed e.g. via --logtostderr.)
-				log.Infof(ctx, "drain details: %s\n", resp.DrainRemainingDescription)
+				log.Dev.Infof(ctx, "drain details: %s\n", resp.DrainRemainingDescription)
 			}
 
 			// Iterate until end of stream, which indicates the drain is
@@ -208,12 +209,12 @@ func doDrainNoTimeout(
 // draining. Use doDrain() prior to perform a drain, or
 // drainAndShutdown() to combine both.
 func doShutdown(
-	ctx context.Context, c serverpb.AdminClient, targetNode string,
+	ctx context.Context, c serverpb.RPCAdminClient, targetNode string,
 ) (hardError bool, err error) {
 	defer func() {
 		if err != nil {
 			if grpcutil.IsWaitingForInit(err) {
-				log.Infof(ctx, "encountered error: %v", err)
+				log.Dev.Infof(ctx, "encountered error: %v", err)
 				err = errors.New("node cannot be shut down before it has been initialized")
 				err = errors.WithHint(err, "You can still stop the process using a service manager or a signal.")
 				hardError = true

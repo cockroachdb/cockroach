@@ -1,10 +1,15 @@
 genrule(
     name = "metrics",
-    outs = ["metrics.html"],
-    cmd = "$(location //pkg/cmd/cockroach-short) gen metric-list --format=unnumbered-html --logtostderr=NONE > $@",
+    srcs = [
+        "//pkg/internal/metricscan:metric_owners.yaml",
+    ],
+    outs = ["metrics.yaml"],
+    cmd = "$(location //pkg/cmd/cockroach-short) gen metric-list --logtostderr=NONE --metric-owners=$(location //pkg/internal/metricscan:metric_owners.yaml) > $@",
     tools = ["//pkg/cmd/cockroach-short"],
     visibility = [
         ":__pkg__",
+        "//pkg/cmd/kv/datadoggen:__pkg__",
         "//pkg/gen:__pkg__",
+        "//pkg/roachprod/agents/opentelemetry:__pkg__",
     ],
 )

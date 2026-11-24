@@ -3,8 +3,6 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { assert } from "chai";
-
 import { summarize, computeOrUseStmtSummary } from "./summarize";
 
 describe("summarize", () => {
@@ -42,7 +40,7 @@ describe("summarize", () => {
       ];
 
       simpleStatements.forEach(s =>
-        assert.equal(s.type, summarize(s.stmt).statement),
+        expect(summarize(s.stmt).statement).toBe(s.type),
       );
     });
 
@@ -63,7 +61,7 @@ describe("summarize", () => {
       ];
 
       simpleStatements.forEach(s =>
-        assert.equal(s.type, summarize(s.stmt).statement),
+        expect(summarize(s.stmt).statement).toBe(s.type),
       );
     });
   });
@@ -91,7 +89,7 @@ describe("summarize", () => {
       ];
 
       simpleStatements.forEach(s =>
-        assert.equal(s.summary, computeOrUseStmtSummary(s.stmt, s.summary)),
+        expect(computeOrUseStmtSummary(s.stmt, s.summary)).toBe(s.summary),
       );
     });
 
@@ -117,7 +115,7 @@ describe("summarize", () => {
       ];
 
       simpleStatements.forEach(s =>
-        assert.equal(s.expected, computeOrUseStmtSummary(s.stmt, s.summary)),
+        expect(computeOrUseStmtSummary(s.stmt, s.summary)).toBe(s.expected),
       );
     });
   });

@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -212,6 +213,7 @@ func TestStreamConnectionTimeout(t *testing.T) {
 	f1 := &FlowBase{}
 	f1.mu.ctxCancel = func() {}
 	streamID1 := execinfrapb.StreamID(1)
+	producerID := base.SQLInstanceID(1)
 	consumer := &distsqlutils.RowBuffer{}
 	wg := &sync.WaitGroup{}
 	wg.Add(1)
@@ -248,7 +250,7 @@ func TestStreamConnectionTimeout(t *testing.T) {
 	serverStream, _ /* clientStream */, cleanup := createDummyStream(t)
 	defer cleanup()
 
-	_, _, _, err := reg.ConnectInboundStream(context.Background(), id1, streamID1, serverStream, jiffy)
+	_, _, _, err := reg.ConnectInboundStream(context.Background(), id1, streamID1, producerID, serverStream, jiffy)
 	if !testutils.IsError(err, "came too late") {
 		t.Fatalf("expected %q, got: %v", "came too late", err)
 	}
@@ -256,7 +258,7 @@ func TestStreamConnectionTimeout(t *testing.T) {
 	// Unregister the flow. Subsequent attempts to connect a stream should result
 	// in a different error than before.
 	reg.UnregisterFlow(id1)
-	_, _, _, err = reg.ConnectInboundStream(context.Background(), id1, streamID1, serverStream, jiffy)
+	_, _, _, err = reg.ConnectInboundStream(context.Background(), id1, streamID1, producerID, serverStream, jiffy)
 	if !testutils.IsError(err, "not found") {
 		t.Fatalf("expected %q, got: %v", "not found", err)
 	}
@@ -289,6 +291,7 @@ func TestHandshake(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			flowID := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 			streamID := execinfrapb.StreamID(1)
+			producerID := base.SQLInstanceID(1)
 
 			serverStream, clientStream, cleanup := createDummyStream(t)
 			defer cleanup()
@@ -298,7 +301,7 @@ func TestHandshake(t *testing.T) {
 				// async because the consumer is not yet there and ConnectInboundStream
 				// is blocking.
 				if _, _, _, err := reg.ConnectInboundStream(
-					context.Background(), flowID, streamID, serverStream, time.Hour,
+					context.Background(), flowID, streamID, producerID, serverStream, time.Hour,
 				); err != nil {
 					t.Error(err)
 				}
@@ -520,7 +523,7 @@ func TestFlowRegistryDrain(t *testing.T) {
 		close(delayCh)
 		injectedErr := errors.New("injected error")
 		serverStream = &delayedErrorServerStream{
-			DistSQL_FlowStreamServer: serverStream,
+			RPCDistSQL_FlowStreamStream: serverStream,
 			// Make rpcCalledCh a buffered channel so that the RPC is not
 			// blocked.
 			rpcCalledCh: make(chan struct{}, 1),
@@ -531,7 +534,10 @@ func TestFlowRegistryDrain(t *testing.T) {
 		// Attempt to connect an inbound stream for which there is no flow in
 		// the registry. In such case we attempt to send a handshake message
 		// which should fail with the injected error.
-		_, _, _, err := reg.ConnectInboundStream(ctx, id, execinfrapb.StreamID(0), serverStream, 0 /* timeout */)
+		producerID := base.SQLInstanceID(1)
+		_, _, _, err := reg.ConnectInboundStream(
+			ctx, id, execinfrapb.StreamID(0), producerID, serverStream, 0, /* timeout */
+		)
 		if !errors.Is(err, injectedErr) {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -705,7 +711,7 @@ func TestFlowCancelPartiallyBlocked(t *testing.T) {
 // allows to block (on delayCh) Send() calls which always result in the
 // provided error.
 type delayedErrorServerStream struct {
-	execinfrapb.DistSQL_FlowStreamServer
+	execinfrapb.RPCDistSQL_FlowStreamStream
 	// rpcCalledCh is sent on in the very beginning of every Send() call.
 	rpcCalledCh chan<- struct{}
 	delayCh     <-chan struct{}
@@ -750,6 +756,7 @@ func TestErrorOnSlowHandshake(t *testing.T) {
 	reg := NewFlowRegistry()
 	flowID := execinfrapb.FlowID{UUID: uuid.MakeV4()}
 	streamID := execinfrapb.StreamID(1)
+	producerID := base.SQLInstanceID(1)
 	cancelCh := make(chan struct{})
 	f := &FlowBase{}
 	f.mu.ctxCancel = func() {
@@ -761,10 +768,10 @@ func TestErrorOnSlowHandshake(t *testing.T) {
 
 	rpcCalledCh, delayCh := make(chan struct{}), make(chan struct{})
 	serverStream = &delayedErrorServerStream{
-		DistSQL_FlowStreamServer: serverStream,
-		rpcCalledCh:              rpcCalledCh,
-		delayCh:                  delayCh,
-		err:                      errors.New("dummy error"),
+		RPCDistSQL_FlowStreamStream: serverStream,
+		rpcCalledCh:                 rpcCalledCh,
+		delayCh:                     delayCh,
+		err:                         errors.New("dummy error"),
 	}
 
 	receiver := &distsqlutils.RowBuffer{}
@@ -789,7 +796,7 @@ func TestErrorOnSlowHandshake(t *testing.T) {
 		if _, _, _, err := reg.ConnectInboundStream(
 			// timeout here doesn't matter since the flow is already present in
 			// the registry.
-			context.Background(), flowID, streamID, serverStream, 0, /* timeout */
+			context.Background(), flowID, streamID, producerID, serverStream, 0, /* timeout */
 		); err != nil {
 			errCh <- err
 		}

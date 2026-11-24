@@ -18,6 +18,7 @@ go_library(
         "//pkg/util/hlc",
         "//pkg/util/timeutil",
         "//pkg/util/uuid",
+        "@com_github_cockroachdb_redact//:redact",
     ],
 )
 

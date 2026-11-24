@@ -12,6 +12,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/mtinfopb"
 	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -121,11 +122,12 @@ func (a *Authorizer) HasCapabilityForBatch(
 	}
 
 	entry, mode := a.getMode(ctx, tenID)
+	if entry.ServiceMode == mtinfopb.ServiceModeNone || entry.ServiceMode == mtinfopb.ServiceModeStopping {
+		return errors.Newf("operation not allowed when in service mode %q", entry.ServiceMode)
+	}
+
 	switch mode {
 	case authorizerModeOn:
-		if entry.ServiceMode == mtinfopb.ServiceModeNone || entry.ServiceMode == mtinfopb.ServiceModeStopping {
-			return errors.Newf("operation not allowed when in service mode %q", entry.ServiceMode)
-		}
 		return a.capCheckForBatch(ctx, tenID, ba, entry)
 	case authorizerModeAllowAll:
 		return nil
@@ -146,8 +148,8 @@ func (a *Authorizer) authBatchNoCap(
 ) error {
 	for _, ru := range ba.Requests {
 		request := ru.GetInner()
-		requiredCap := reqMethodToCap[request.Method()]
-		if requiredCap == noCapCheckNeeded {
+		requiredCap := reqMethodToCap[request.Method()].get(request)
+		if requiredCap == noCapCheckNeededID {
 			continue
 		}
 		switch request.Method() {
@@ -170,11 +172,11 @@ func (a *Authorizer) capCheckForBatch(
 ) error {
 	for _, ru := range ba.Requests {
 		request := ru.GetInner()
-		requiredCap, hasCap := reqMethodToCap[request.Method()]
-		if requiredCap == noCapCheckNeeded {
+		requiredCap := reqMethodToCap[request.Method()].get(request)
+		if requiredCap == noCapCheckNeededID {
 			continue
 		}
-		if !hasCap || requiredCap == onlySystemTenant ||
+		if requiredCap == unknownMethodID || requiredCap == onlySystemTenantID ||
 			!tenantcapabilities.MustGetBoolByID(entry.TenantCapabilities, requiredCap) {
 			// All allowable request types must be explicitly opted into the
 			// reqMethodToCap map. If a request type is missing from the map
@@ -188,19 +190,52 @@ func (a *Authorizer) capCheckForBatch(
 	return nil
 }
 
-func newTenantDoesNotHaveCapabilityError(cap tenantcapabilities.ID, req kvpb.Request) error {
+func newTenantDoesNotHaveCapabilityError(cap tenantcapabilitiespb.ID, req kvpb.Request) error {
 	return errors.Newf("client tenant does not have capability %q (%T)", cap, req)
 }
 
-var (
-	errCannotQueryMetadata   = errors.New("client tenant does not have capability to query cluster node metadata")
-	errCannotQueryTSDB       = errors.New("client tenant does not have capability to query timeseries data")
-	errCannotQueryAllMetrics = errors.New("client tenant does not have capability to query non-tenant metrics")
-	errCannotUseNodelocal    = errors.New("client tenant does not have capability to use nodelocal storage")
-	errCannotDebugProcess    = errors.New("client tenant does not have capability to debug the process")
+// methodCapability associates a KV method with a capability. The capability can
+// either be static for all instances of the method, or it can be determined
+// dynamically by a function based on the request's contents.
+type methodCapability struct {
+	capID tenantcapabilitiespb.ID
+	capFn func(kvpb.Request) tenantcapabilitiespb.ID
+}
+
+func (mc methodCapability) get(req kvpb.Request) tenantcapabilitiespb.ID {
+	if mc.capID == 0 && mc.capFn == nil {
+		return unknownMethodID
+	}
+	if mc.capFn != nil {
+		return mc.capFn(req)
+	}
+	return mc.capID
+}
+
+// staticCap returns a methodCapability that requires a specific capability,
+// regardless of the request's contents.
+func staticCap(capID tenantcapabilitiespb.ID) methodCapability {
+	return methodCapability{capID: capID}
+}
+
+// dynamicCap returns a methodCapability that requires a capability determined
+// by a function based on the request's contents.
+func dynamicCap(capFn func(kvpb.Request) tenantcapabilitiespb.ID) methodCapability {
+	return methodCapability{capFn: capFn}
+}
+
+const (
+	noCapCheckNeededID = iota + tenantcapabilitiespb.MaxCapabilityID + 1
+	onlySystemTenantID
+	unknownMethodID
 )
 
-var reqMethodToCap = map[kvpb.Method]tenantcapabilities.ID{
+var (
+	noCapCheckNeeded = staticCap(noCapCheckNeededID)
+	onlySystemTenant = staticCap(onlySystemTenantID)
+)
+
+var reqMethodToCap = map[kvpb.Method]methodCapability{
 	// The following requests are authorized for all workloads.
 	kvpb.AddSSTable:         noCapCheckNeeded,
 	kvpb.Barrier:            noCapCheckNeeded,
@@ -208,12 +243,11 @@ var reqMethodToCap = map[kvpb.Method]tenantcapabilities.ID{
 	kvpb.ConditionalPut:     noCapCheckNeeded,
 	kvpb.Delete:             noCapCheckNeeded,
 	kvpb.DeleteRange:        noCapCheckNeeded,
-	kvpb.EndTxn:             noCapCheckNeeded,
 	kvpb.Export:             noCapCheckNeeded,
+	kvpb.FlushLockTable:     noCapCheckNeeded,
 	kvpb.Get:                noCapCheckNeeded,
 	kvpb.HeartbeatTxn:       noCapCheckNeeded,
 	kvpb.Increment:          noCapCheckNeeded,
-	kvpb.InitPut:            noCapCheckNeeded,
 	kvpb.IsSpanEmpty:        noCapCheckNeeded,
 	kvpb.LeaseInfo:          noCapCheckNeeded,
 	kvpb.PushTxn:            noCapCheckNeeded,
@@ -231,38 +265,43 @@ var reqMethodToCap = map[kvpb.Method]tenantcapabilities.ID{
 	kvpb.RevertRange:        noCapCheckNeeded,
 	kvpb.Scan:               noCapCheckNeeded,
 
+	// The following have dynamic capabilities, depending on the type of request
+	// and the request's contents.
+	kvpb.EndTxn: dynamicCap(func(req kvpb.Request) tenantcapabilitiespb.ID {
+		et := req.(*kvpb.EndTxnRequest)
+		if et.Prepare {
+			return tenantcapabilitiespb.CanPrepareTxns
+		}
+		return noCapCheckNeededID
+	}),
+
 	// The following are authorized via specific capabilities.
-	kvpb.AdminChangeReplicas: tenantcapabilities.CanAdminRelocateRange,
-	kvpb.AdminScatter:        tenantcapabilities.CanAdminScatter,
-	kvpb.AdminSplit:          tenantcapabilities.CanAdminSplit,
-	kvpb.AdminUnsplit:        tenantcapabilities.CanAdminUnsplit,
-	kvpb.AdminRelocateRange:  tenantcapabilities.CanAdminRelocateRange,
-	kvpb.AdminTransferLease:  tenantcapabilities.CanAdminRelocateRange,
-	kvpb.CheckConsistency:    tenantcapabilities.CanCheckConsistency,
+	kvpb.AdminChangeReplicas: staticCap(tenantcapabilitiespb.CanAdminRelocateRange),
+	kvpb.AdminScatter:        staticCap(tenantcapabilitiespb.CanAdminScatter),
+	kvpb.AdminSplit:          staticCap(tenantcapabilitiespb.CanAdminSplit),
+	kvpb.AdminUnsplit:        staticCap(tenantcapabilitiespb.CanAdminUnsplit),
+	kvpb.AdminRelocateRange:  staticCap(tenantcapabilitiespb.CanAdminRelocateRange),
+	kvpb.AdminTransferLease:  staticCap(tenantcapabilitiespb.CanAdminRelocateRange),
+	kvpb.CheckConsistency:    staticCap(tenantcapabilitiespb.CanCheckConsistency),
 
 	// TODO(knz,arul): Verify with the relevant teams whether secondary
 	// tenants have legitimate access to any of those.
-	kvpb.AdminMerge:                    onlySystemTenant,
-	kvpb.AdminVerifyProtectedTimestamp: onlySystemTenant,
-	kvpb.ComputeChecksum:               onlySystemTenant,
-	kvpb.GC:                            onlySystemTenant,
-	kvpb.Merge:                         onlySystemTenant,
-	kvpb.Migrate:                       onlySystemTenant,
-	kvpb.Probe:                         onlySystemTenant,
-	kvpb.QueryResolvedTimestamp:        onlySystemTenant,
-	kvpb.RecomputeStats:                onlySystemTenant,
-	kvpb.RequestLease:                  onlySystemTenant,
-	kvpb.Subsume:                       onlySystemTenant,
-	kvpb.TransferLease:                 onlySystemTenant,
-	kvpb.TruncateLog:                   onlySystemTenant,
-	kvpb.WriteBatch:                    onlySystemTenant,
-	kvpb.LinkExternalSSTable:           onlySystemTenant,
+	kvpb.AdminMerge:             onlySystemTenant,
+	kvpb.ComputeChecksum:        onlySystemTenant,
+	kvpb.GC:                     onlySystemTenant,
+	kvpb.Merge:                  onlySystemTenant,
+	kvpb.Migrate:                onlySystemTenant,
+	kvpb.Probe:                  onlySystemTenant,
+	kvpb.QueryResolvedTimestamp: onlySystemTenant,
+	kvpb.RecomputeStats:         onlySystemTenant,
+	kvpb.RequestLease:           onlySystemTenant,
+	kvpb.Subsume:                onlySystemTenant,
+	kvpb.TransferLease:          onlySystemTenant,
+	kvpb.TruncateLog:            onlySystemTenant,
+	kvpb.WriteBatch:             onlySystemTenant,
+	kvpb.LinkExternalSSTable:    onlySystemTenant,
+	kvpb.Excise:                 onlySystemTenant,
 }
-
-const (
-	noCapCheckNeeded = iota + tenantcapabilities.MaxCapabilityID + 1
-	onlySystemTenant
-)
 
 // BindReader implements the tenantcapabilities.Authorizer interface.
 func (a *Authorizer) BindReader(reader tenantcapabilities.Reader) {
@@ -271,10 +310,29 @@ func (a *Authorizer) BindReader(reader tenantcapabilities.Reader) {
 	a.capabilitiesReader = reader
 }
 
-func (a *Authorizer) HasNodeStatusCapability(ctx context.Context, tenID roachpb.TenantID) error {
+var (
+	errCannotQueryMetadata   = errors.New("client tenant does not have capability to query cluster node metadata")
+	errCannotQueryTSDB       = errors.New("client tenant does not have capability to query timeseries data")
+	errCannotQueryAllMetrics = errors.New("client tenant does not have capability to query non-tenant metrics")
+	errCannotUseNodelocal    = errors.New("client tenant does not have capability to use nodelocal storage")
+	errCannotDebugProcess    = errors.New("client tenant does not have capability to debug the process")
+)
+
+var insufficientCapErrMap = map[tenantcapabilitiespb.ID]error{
+	tenantcapabilitiespb.CanViewNodeInfo:        errCannotQueryMetadata,
+	tenantcapabilitiespb.CanViewTSDBMetrics:     errCannotQueryTSDB,
+	tenantcapabilitiespb.CanUseNodelocalStorage: errCannotUseNodelocal,
+	tenantcapabilitiespb.CanDebugProcess:        errCannotDebugProcess,
+	tenantcapabilitiespb.CanViewAllMetrics:      errCannotQueryAllMetrics,
+}
+
+func (a *Authorizer) hasCapability(
+	ctx context.Context, tenID roachpb.TenantID, cap tenantcapabilitiespb.ID,
+) error {
 	if tenID.IsSystem() {
 		return nil
 	}
+
 	entry, mode := a.getMode(ctx, tenID)
 	switch mode {
 	case authorizerModeOn:
@@ -282,74 +340,41 @@ func (a *Authorizer) HasNodeStatusCapability(ctx context.Context, tenID roachpb.
 	case authorizerModeAllowAll:
 		return nil
 	case authorizerModeV222:
-		return errCannotQueryMetadata
+		return insufficientCapErrMap[cap]
 	default:
 		err := errors.AssertionFailedf("unknown authorizer mode: %d", mode)
 		logcrash.ReportOrPanic(ctx, &a.settings.SV, "%v", err)
 		return err
 	}
 
-	if !tenantcapabilities.MustGetBoolByID(
-		entry.TenantCapabilities, tenantcapabilities.CanViewNodeInfo,
-	) {
-		return errCannotQueryMetadata
+	if !tenantcapabilities.MustGetBoolByID(entry.TenantCapabilities, cap) {
+		return insufficientCapErrMap[cap]
 	}
 	return nil
 }
 
+func (a *Authorizer) HasNodeStatusCapability(ctx context.Context, tenID roachpb.TenantID) error {
+	return a.hasCapability(ctx, tenID, tenantcapabilitiespb.CanViewNodeInfo)
+}
+
 func (a *Authorizer) HasTSDBQueryCapability(ctx context.Context, tenID roachpb.TenantID) error {
-	if tenID.IsSystem() {
-		return nil
-	}
-
-	entry, mode := a.getMode(ctx, tenID)
-	switch mode {
-	case authorizerModeOn:
-		break
-	case authorizerModeAllowAll:
-		return nil
-	case authorizerModeV222:
-		return errCannotQueryTSDB
-	default:
-		err := errors.AssertionFailedf("unknown authorizer mode: %d", mode)
-		logcrash.ReportOrPanic(ctx, &a.settings.SV, "%v", err)
-		return err
-	}
-
-	if !tenantcapabilities.MustGetBoolByID(
-		entry.TenantCapabilities, tenantcapabilities.CanViewTSDBMetrics,
-	) {
-		return errCannotQueryTSDB
-	}
-	return nil
+	return a.hasCapability(ctx, tenID, tenantcapabilitiespb.CanViewTSDBMetrics)
 }
 
 func (a *Authorizer) HasNodelocalStorageCapability(
 	ctx context.Context, tenID roachpb.TenantID,
 ) error {
-	if tenID.IsSystem() {
-		return nil
-	}
-	entry, mode := a.getMode(ctx, tenID)
-	switch mode {
-	case authorizerModeOn:
-		break
-	case authorizerModeAllowAll:
-		return nil
-	case authorizerModeV222:
-		return errCannotUseNodelocal
-	default:
-		err := errors.AssertionFailedf("unknown authorizer mode: %d", mode)
-		logcrash.ReportOrPanic(ctx, &a.settings.SV, "%v", err)
-		return err
-	}
+	return a.hasCapability(ctx, tenID, tenantcapabilitiespb.CanUseNodelocalStorage)
+}
 
-	if !tenantcapabilities.MustGetBoolByID(
-		entry.TenantCapabilities, tenantcapabilities.CanUseNodelocalStorage,
-	) {
-		return errCannotUseNodelocal
-	}
-	return nil
+func (a *Authorizer) HasProcessDebugCapability(ctx context.Context, tenID roachpb.TenantID) error {
+	return a.hasCapability(ctx, tenID, tenantcapabilitiespb.CanDebugProcess)
+}
+
+func (a *Authorizer) HasTSDBAllMetricsCapability(
+	ctx context.Context, tenID roachpb.TenantID,
+) error {
+	return a.hasCapability(ctx, tenID, tenantcapabilitiespb.CanViewAllMetrics)
 }
 
 // IsExemptFromRateLimiting returns true if the tenant is not subject to rate limiting.
@@ -371,62 +396,7 @@ func (a *Authorizer) IsExemptFromRateLimiting(ctx context.Context, tenID roachpb
 		return false
 	}
 
-	return tenantcapabilities.MustGetBoolByID(entry.TenantCapabilities, tenantcapabilities.ExemptFromRateLimiting)
-}
-
-func (a *Authorizer) HasProcessDebugCapability(ctx context.Context, tenID roachpb.TenantID) error {
-	if tenID.IsSystem() {
-		return nil
-	}
-	entry, mode := a.getMode(ctx, tenID)
-	switch mode {
-	case authorizerModeOn:
-		break
-	case authorizerModeAllowAll:
-		return nil
-	case authorizerModeV222:
-		return errCannotDebugProcess
-	default:
-		err := errors.AssertionFailedf("unknown authorizer mode: %d", mode)
-		logcrash.ReportOrPanic(ctx, &a.settings.SV, "%v", err)
-		return err
-	}
-
-	if !tenantcapabilities.MustGetBoolByID(
-		entry.TenantCapabilities, tenantcapabilities.CanDebugProcess,
-	) {
-		return errCannotDebugProcess
-	}
-	return nil
-}
-
-func (a *Authorizer) HasTSDBAllMetricsCapability(
-	ctx context.Context, tenID roachpb.TenantID,
-) error {
-	if tenID.IsSystem() {
-		return nil
-	}
-
-	entry, mode := a.getMode(ctx, tenID)
-	switch mode {
-	case authorizerModeOn:
-		break
-	case authorizerModeAllowAll:
-		return nil
-	case authorizerModeV222:
-		return errCannotQueryTSDB
-	default:
-		err := errors.AssertionFailedf("unknown authorizer mode: %d", mode)
-		logcrash.ReportOrPanic(ctx, &a.settings.SV, "%v", err)
-		return err
-	}
-
-	if !tenantcapabilities.MustGetBoolByID(
-		entry.TenantCapabilities, tenantcapabilities.CanViewAllMetrics,
-	) {
-		return errCannotQueryAllMetrics
-	}
-	return nil
+	return tenantcapabilities.MustGetBoolByID(entry.TenantCapabilities, tenantcapabilitiespb.ExemptFromRateLimiting)
 }
 
 // getMode retrieves the authorization mode.
@@ -436,38 +406,34 @@ func (a *Authorizer) getMode(
 	// We prioritize what the cluster setting tells us.
 	selectedMode = authorizerMode.Get(&a.settings.SV)
 
-	// If the mode is "on", we need to check the capabilities. Are they
-	// available?
-	if selectedMode == authorizerModeOn {
-		a.Lock()
-		reader := a.capabilitiesReader
-		a.Unlock()
-		if reader == nil {
-			// The server has started but the reader hasn't started/bound
-			// yet. Block requests that would need specific capabilities.
-			if a.logEvery.ShouldLog() {
-				log.Warningf(ctx, "capability check for tenant %s before capability reader exists, assuming capability is unavailable", tid)
-			}
+	a.Lock()
+	reader := a.capabilitiesReader
+	a.Unlock()
+	if reader == nil {
+		// The server has started but the reader hasn't started/bound
+		// yet. Block requests that would need specific capabilities.
+		if a.logEvery.ShouldLog() {
+			log.Dev.Warningf(ctx, "capability check for tenant %s before capability reader exists, assuming capability is unavailable", tid)
+		}
+		selectedMode = authorizerModeV222
+	} else {
+		// We have a reader. Did we get data from the rangefeed yet?
+		var found bool
+		entry, _, found = reader.GetInfo(tid)
+		if !found {
+			// No data from the rangefeed yet. Assume caps are still
+			// unavailable.
+			log.Dev.VInfof(ctx, 2,
+				"no capability information for tenant %s; requests that require capabilities may be denied",
+				tid)
 			selectedMode = authorizerModeV222
-		} else {
-			// We have a reader. Did we get data from the rangefeed yet?
-			var found bool
-			entry, _, found = reader.GetInfo(tid)
-			if !found {
-				// No data from the rangefeed yet. Assume caps are still
-				// unavailable.
-				log.VInfof(ctx, 2,
-					"no capability information for tenant %s; requests that require capabilities may be denied",
-					tid)
-				selectedMode = authorizerModeV222
-			}
-			// Shared service tenants in UA implicitly have all capabilities. If/when
-			// we offer shared service for truly _multi-tenant_ deployments and wish to
-			// restrict some of those tenants, we can add another service mode that is
-			// similar to shared but adds restriction to only granted capabilities.
-			if entry.ServiceMode == mtinfopb.ServiceModeShared {
-				selectedMode = authorizerModeAllowAll
-			}
+		}
+		// Shared service tenants in UA implicitly have all capabilities. If/when
+		// we offer shared service for truly _multi-tenant_ deployments and wish to
+		// restrict some of those tenants, we can add another service mode that is
+		// similar to shared but adds restriction to only granted capabilities.
+		if entry.ServiceMode == mtinfopb.ServiceModeShared {
+			selectedMode = authorizerModeAllowAll
 		}
 	}
 	return entry, selectedMode

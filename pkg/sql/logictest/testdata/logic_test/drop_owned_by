@@ -247,10 +247,11 @@ subtest revoke-privileges-db
 query TTTB rowsort
 SHOW GRANTS ON DATABASE test
 ----
-test  admin     ALL      true
-test  public    CONNECT  false
-test  root      ALL      true
-test  testuser  ALL      true
+test  admin     ALL        true
+test  public    CONNECT    false
+test  public    TEMPORARY  false
+test  root      ALL        true
+test  testuser  ALL        true
 
 user root
 
@@ -260,9 +261,10 @@ DROP OWNED BY testuser
 query TTTB rowsort
 SHOW GRANTS ON DATABASE test
 ----
-test  admin   ALL      true
-test  public  CONNECT  false
-test  root    ALL      true
+test  admin   ALL        true
+test  public  CONNECT    false
+test  public  TEMPORARY  false
+test  root    ALL        true
 
 # REVOKE-PRIVILEGES-SCHEMA: Test that DROP OWNED BY revokes privileges on
 # schemas in the current database.
@@ -393,6 +395,54 @@ DROP OWNED BY root
 statement error pq: cannot drop objects owned by role "admin" because they are required by the database system
 DROP OWNED BY admin
 
+# Regression test for #122901: granting testuser membership IN testuser2's
+# child role should not allow testuser to drop testuser2's objects. Only being
+# a member OF testuser2 (or a parent role of testuser2) should grant that.
+user root
+
+statement ok
+CREATE ROLE child_role;
+
+statement ok
+GRANT child_role TO testuser2
+
+statement ok
+GRANT child_role TO testuser
+
+user testuser
+
+statement error pq: permission denied to drop objects
+DROP OWNED BY testuser2
+
+user root
+
+statement ok
+REVOKE child_role FROM testuser
+
+statement ok
+REVOKE child_role FROM testuser2
+
+statement ok
+DROP ROLE child_role
+
+statement ok
+GRANT ADMIN TO testuser
+
+user testuser 
+
+statement ok
+DROP OWNED BY testuser2
+
+statement error pq: cannot drop objects owned by role "root" because they are required by the database system
+DROP OWNED BY root
+
+user root
+
+statement ok
+REVOKE ADMIN FROM testuser
+
+subtest end
+
 # KITCHEN-SINK: Test DROP OWNED BY when there are multiple databases/schemas.
 # Only objects/privileges in the current database should be dropped.
 subtest kitchen-sink
@@ -507,11 +557,12 @@ s1      t2  table  testuser  0  NULL
 query TTTB rowsort
 SHOW GRANTS ON DATABASE d1
 ----
-d1  admin     ALL      true
-d1  public    CONNECT  false
-d1  root      ALL      true
-d1  testuser  CREATE   true
-d1  testuser  DROP     true
+d1  admin     ALL        true
+d1  public    CONNECT    false
+d1  public    TEMPORARY  false
+d1  root      ALL        true
+d1  testuser  CREATE     true
+d1  testuser  DROP       true
 
 query TTTTB rowsort
 SHOW GRANTS ON SCHEMA d1.s1
@@ -550,9 +601,10 @@ d1  s1  root      ALL     true
 query TTTB rowsort
 SHOW GRANTS ON DATABASE d1
 ----
-d1  admin     ALL      true
-d1  public    CONNECT  false
-d1  root      ALL      true
+d1  admin   ALL        true
+d1  public  CONNECT    false
+d1  public  TEMPORARY  false
+d1  root    ALL        true
 
 statement ok
 SET DATABASE = d2
@@ -576,10 +628,11 @@ public  t1  table  testuser  0  NULL
 query TTTB rowsort
 SHOW GRANTS ON DATABASE d2
 ----
-d2  admin     ALL      true
-d2  public    CONNECT  false
-d2  root      ALL      true
-d2  testuser  ALL      true
+d2  admin     ALL        true
+d2  public    CONNECT    false
+d2  public    TEMPORARY  false
+d2  root      ALL        true
+d2  testuser  ALL        true
 
 statement ok
 DROP OWNED BY testuser
@@ -601,9 +654,10 @@ SHOW TABLES FROM d2
 query TTTB rowsort
 SHOW GRANTS ON DATABASE d2
 ----
-d2  admin     ALL      true
-d2  public    CONNECT  false
-d2  root      ALL      true
+d2  admin   ALL        true
+d2  public  CONNECT    false
+d2  public  TEMPORARY  false
+d2  root    ALL        true
 
 statement ok
 SET DATABASE = d3
@@ -611,10 +665,11 @@ SET DATABASE = d3
 query TTTB rowsort
 SHOW GRANTS ON DATABASE d3
 ----
-d3  admin     ALL      true
-d3  public    CONNECT  false
-d3  root      ALL      true
-d3  testuser  CREATE   true
+d3  admin     ALL        true
+d3  public    CONNECT    false
+d3  public    TEMPORARY  false
+d3  root      ALL        true
+d3  testuser  CREATE     true
 
 statement ok
 DROP OWNED BY testuser
@@ -622,9 +677,10 @@ DROP OWNED BY testuser
 query TTTB rowsort
 SHOW GRANTS ON DATABASE d3
 ----
-d3  admin   ALL      true
-d3  public  CONNECT  false
-d3  root    ALL      true
+d3  admin   ALL        true
+d3  public  CONNECT    false
+d3  public  TEMPORARY  false
+d3  root    ALL        true
 
 # Drop owned by should not work if the user has synthetic privileges.
 

@@ -8,6 +8,7 @@ package gcp
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/errors"
 	"github.com/googleapis/gax-go/v2/apierror"
 	"github.com/stretchr/testify/assert"
@@ -15,6 +16,7 @@ import (
 )
 
 func TestErrorBehaviour(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	orig := &googleapi.Error{
 		Code:    403,
 		Message: "ACCESS DENIED. ALL YOUR BASE ARE BELONG TO US",

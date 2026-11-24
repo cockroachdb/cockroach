@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/operation"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
@@ -22,6 +23,7 @@ import (
 var errOperationFatal = errors.New("o.Fatal() was called")
 
 type operationImpl struct {
+	workerLabel     string
 	spec            *registry.OperationSpec
 	clusterSettings install.ClusterSettings
 	startOpts       option.StartOpts
@@ -45,6 +47,8 @@ type operationImpl struct {
 
 		status string
 	}
+
+	workLoadCluster *roachprodCluster
 }
 
 func (o *operationImpl) ClusterCockroach() string {
@@ -76,7 +80,7 @@ func (o *operationImpl) Status(args ...interface{}) {
 
 	o.mu.status = fmt.Sprint(args...)
 	if !o.L().Closed() {
-		o.L().PrintfCtxDepth(context.TODO(), 3, "operation status: %s", o.mu.status)
+		o.L().PrintfCtxDepth(context.TODO(), 3, "[%s] operation status: %s", o.workerLabel, o.mu.status)
 	}
 }
 
@@ -131,7 +135,7 @@ func (o *operationImpl) addFailure(depth int, format string, args ...interface{}
 	msg := reportFailure.Error()
 
 	failureNum := len(o.mu.failures)
-	o.L().Printf("operation failure #%d: %s", failureNum, msg)
+	o.L().Printf("[%s] operation failure #%d: %s", o.workerLabel, failureNum, msg)
 }
 
 func (o *operationImpl) Failed() bool {
@@ -139,6 +143,21 @@ func (o *operationImpl) Failed() bool {
 	defer o.mu.RUnlock()
 
 	return len(o.mu.failures) > 0
+}
+
+// Failures returns a copy of the recorded failures.
+func (o *operationImpl) Failures() []error {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+	return append([]error(nil), o.mu.failures...)
+}
+
+// WorkloadCluster can return nil if o.workLoadCluster is not set.
+func (o *operationImpl) WorkloadCluster() cluster.Cluster {
+	if o.workLoadCluster == nil {
+		return nil
+	}
+	return o.workLoadCluster
 }
 
 var _ operation.Operation = &operationImpl{}

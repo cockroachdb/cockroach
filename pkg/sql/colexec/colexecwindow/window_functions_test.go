@@ -63,6 +63,8 @@ func TestWindowFunctions(t *testing.T) {
 	defer cleanup()
 	var monitorRegistry colexecargs.MonitorRegistry
 	defer monitorRegistry.Close(ctx)
+	var closerRegistry colexecargs.CloserRegistry
+	defer closerRegistry.Close(ctx)
 
 	dec := func(val string) apd.Decimal {
 		res, _, err := apd.NewFromString(val)
@@ -1032,8 +1034,7 @@ func TestWindowFunctions(t *testing.T) {
 				},
 			},
 		} {
-			log.Infof(ctx, "spillForced=%t/%s", spillForced, tc.windowerSpec.WindowFns[0].Func.String())
-			var toClose []colexecop.Closers
+			log.Dev.Infof(ctx, "spillForced=%t/%s", spillForced, tc.windowerSpec.WindowFns[0].Func.String())
 			var semsToCheck []semaphore.Semaphore
 			colexectestutils.RunTests(t, testAllocator, []colexectestutils.Tuples{tc.tuples}, tc.expected, colexectestutils.UnorderedVerifier, func(sources []colexecop.Operator) (colexecop.Operator, error) {
 				tc.init()
@@ -1069,23 +1070,21 @@ func TestWindowFunctions(t *testing.T) {
 				// FDs.
 				sem := colexecop.NewTestingSemaphore(relativeRankNumRequiredFDs)
 				args := &colexecargs.NewColOperatorArgs{
-					Spec:                spec,
-					Inputs:              colexectestutils.MakeInputs(sources),
-					StreamingMemAccount: testMemAcc,
-					DiskQueueCfg:        queueCfg,
-					FDSemaphore:         sem,
-					MonitorRegistry:     &monitorRegistry,
+					Spec:            spec,
+					Inputs:          colexectestutils.MakeInputs(sources),
+					DiskQueueCfg:    queueCfg,
+					FDSemaphore:     sem,
+					MonitorRegistry: &monitorRegistry,
+					CloserRegistry:  &closerRegistry,
 				}
 				semsToCheck = append(semsToCheck, sem)
 				result, err := colexecargs.TestNewColOperator(ctx, flowCtx, args)
-				toClose = append(toClose, result.ToClose)
 				return result.Root, err
 			})
 			// Close all closers manually (in production this is done on the
 			// flow cleanup).
-			for _, c := range toClose {
-				require.NoError(t, c.Close(ctx))
-			}
+			closerRegistry.Close(ctx)
+			closerRegistry.Reset()
 			for i, sem := range semsToCheck {
 				require.Equal(t, 0, sem.GetCount(), "sem still reports open FDs at index %d", i)
 			}
@@ -1294,7 +1293,7 @@ func BenchmarkWindowFunctions(b *testing.B) {
 										s := getWindowFn(fun, source, partitionInput, orderInput)
 										s.Init(ctx)
 										b.StartTimer()
-										for b := s.Next(); b.Length() != 0; b = s.Next() {
+										for b := colexecop.NextNoMeta(s); b.Length() != 0; b = colexecop.NextNoMeta(s) {
 										}
 										b.StopTimer()
 									}

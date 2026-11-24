@@ -8,7 +8,6 @@ package scbuildstmt
 import (
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -43,14 +42,17 @@ func (dzo *databaseZoneConfigObj) getZoneConfigElemForAdd(
 }
 
 func (dzo *databaseZoneConfigObj) getZoneConfigElemForDrop(
-	_ BuildCtx,
-) (scpb.Element, []scpb.Element) {
-	elem := &scpb.DatabaseZoneConfig{
-		DatabaseID: dzo.databaseID,
-		ZoneConfig: dzo.zoneConfig,
-		SeqNum:     dzo.seqNum,
-	}
-	return elem, nil
+	b BuildCtx,
+) ([]scpb.Element, []scpb.Element) {
+	var elems []scpb.Element
+	// Ensure that we drop all elements associated with this database. This
+	// becomes more relevant in explicit txns -- where there could be multiple
+	// zone config elements associated with this database with increasing seqNums.
+	b.QueryByID(dzo.getTargetID()).FilterDatabaseZoneConfig().
+		ForEach(func(_ scpb.Status, _ scpb.TargetStatus, e *scpb.DatabaseZoneConfig) {
+			elems = append(elems, e)
+		})
+	return elems, nil
 }
 
 func (dzo *databaseZoneConfigObj) checkPrivilegeForSetZoneConfig(
@@ -65,16 +67,7 @@ func (dzo *databaseZoneConfigObj) checkPrivilegeForSetZoneConfig(
 	// Can configure zone of a database if user has either CREATE or ZONECONFIG
 	// privilege on the database.
 	dbElem := b.ResolveDatabase(zs.Database, ResolveParams{}).FilterDatabase().MustGetOneElement()
-	dbCreatePrivilegeErr := b.CheckPrivilege(dbElem, privilege.CREATE)
-	dbZoneConfigPrivilegeErr := b.CheckPrivilege(dbElem, privilege.ZONECONFIG)
-	if dbZoneConfigPrivilegeErr == nil || dbCreatePrivilegeErr == nil {
-		return nil
-	}
-
-	reqNonAdminPrivs := []privilege.Kind{privilege.ZONECONFIG, privilege.CREATE}
-	return sqlerrors.NewInsufficientPrivilegeOnDescriptorError(b.CurrentUser(),
-		reqNonAdminPrivs, string(catalog.Database),
-		mustRetrieveNamespaceElem(b, dbElem.DatabaseID).Name)
+	return b.CheckPrivilege(dbElem, privilege.CREATE, privilege.ZONECONFIG)
 }
 
 func (dzo *databaseZoneConfigObj) checkZoneConfigChangePermittedForMultiRegion(
@@ -102,7 +95,7 @@ func (dzo *databaseZoneConfigObj) checkZoneConfigChangePermittedForMultiRegion(
 		return nil
 	}
 
-	return maybeMultiregionErrorWithHint(b, dzo, options)
+	return maybeMultiregionErrorWithHint(b, dzo, zs, options)
 }
 
 func (dzo *databaseZoneConfigObj) getTargetID() catid.DescID {

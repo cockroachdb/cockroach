@@ -8,16 +8,16 @@ package sql_test
 import (
 	"context"
 	gosql "database/sql"
-	"net/url"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/ccl"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
-	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/stretchr/testify/require"
@@ -40,21 +40,48 @@ func TestTelemetry(t *testing.T) {
 	)
 }
 
+func TestTelemetryMultiRegion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	skip.UnderRace(t, "takes >1min under race")
+	skip.UnderDeadlock(t, "takes >1min under deadlock")
+
+	sqltestutils.TelemetryTest(
+		t,
+		[]base.TestServerArgs{
+			{
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{{Key: "region", Value: "us-east-1"}},
+				},
+			},
+			{
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{{Key: "region", Value: "ca-central-1"}},
+				},
+			},
+			{
+				Locality: roachpb.Locality{
+					Tiers: []roachpb.Tier{{Key: "region", Value: "ap-southeast-2"}},
+				},
+			},
+		},
+		false, /* testTenant */
+		"testdata/telemetry_mr",
+	)
+}
+
 func TestTelemetryRecordCockroachShell(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	cluster := serverutils.StartCluster(
-		t,
-		1,
-		base.TestClusterArgs{},
-	)
-	defer cluster.Stopper().Stop(context.Background())
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
 
-	pgUrl, cleanupFn := sqlutils.PGUrl(
+	pgUrl, cleanupFn := s.PGUrl(
 		t,
-		cluster.Server(0).AdvSQLAddr(),
-		"TestTelemetryRecordCockroachShell",
-		url.User("root"),
+		serverutils.CertsDirPrefix("TestTelemetryRecordCockroachShell"),
+		serverutils.User(username.RootUser),
 	)
 	defer cleanupFn()
 	q := pgUrl.Query()

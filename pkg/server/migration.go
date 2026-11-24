@@ -14,7 +14,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/errors"
@@ -52,7 +51,7 @@ func (m *migrationServer) ValidateTargetClusterVersion(
 	if targetCV.Less(versionSetting.MinSupportedVersion()) {
 		msg := fmt.Sprintf("target cluster version %s less than binary's min supported version %s",
 			targetCV, versionSetting.MinSupportedVersion())
-		log.Warningf(ctx, "%s", msg)
+		log.Dev.Warningf(ctx, "%s", msg)
 		return nil, errors.Newf("%s", redact.Safe(msg))
 	}
 
@@ -71,7 +70,7 @@ func (m *migrationServer) ValidateTargetClusterVersion(
 	if versionSetting.LatestVersion().Less(targetCV.Version) {
 		msg := fmt.Sprintf("binary version %s less than target cluster version %s",
 			versionSetting.LatestVersion(), targetCV)
-		log.Warningf(ctx, "%s", msg)
+		log.Dev.Warningf(ctx, "%s", msg)
 		return nil, errors.Newf("%s", redact.Safe(msg))
 	}
 
@@ -105,7 +104,6 @@ func (m *migrationServer) BumpClusterVersion(
 func bumpClusterVersion(
 	ctx context.Context, st *cluster.Settings, newCV clusterversion.ClusterVersion, engines Engines,
 ) error {
-
 	versionSetting := st.Version
 	prevCV, err := kvstorage.SynthesizeClusterVersionFromEngines(
 		ctx, engines, versionSetting.LatestVersion(),
@@ -127,7 +125,7 @@ func bumpClusterVersion(
 	// Whenever the version changes, we want to persist that update to
 	// wherever the CRDB process retrieved the initial version from
 	// (typically a collection of storage.Engines).
-	if err := kvstorage.WriteClusterVersionToEngines(ctx, engines, newCV); err != nil {
+	if err := kvstorage.WriteClusterVersionToEngines(engines, newCV); err != nil {
 		return err
 	}
 
@@ -143,7 +141,7 @@ func bumpClusterVersion(
 	if err := st.Version.SetActiveVersion(ctx, newCV); err != nil {
 		return err
 	}
-	log.Infof(ctx, "active cluster version setting is now %s (up from %s)",
+	log.Dev.Infof(ctx, "active cluster version setting is now %s (up from %s)",
 		newCV.PrettyPrint(), prevCV.PrettyPrint())
 	return nil
 }
@@ -160,12 +158,11 @@ func (m *migrationServer) SyncAllEngines(
 	if err := m.server.stopper.RunTaskWithErr(ctx, opName, func(
 		ctx context.Context,
 	) error {
-		// Let's be paranoid here and ensure that all stores have been fully
-		// initialized.
+		// Ensure that all stores have been fully initialized.
 		m.server.node.waitForAdditionalStoreInit()
-
+		// Sync all engines on all stores.
 		for _, eng := range m.server.engines {
-			if err := storage.WriteSyncNoop(eng); err != nil {
+			if err := eng.Sync(); err != nil {
 				return err
 			}
 		}
@@ -174,7 +171,7 @@ func (m *migrationServer) SyncAllEngines(
 		return nil, err
 	}
 
-	log.Infof(ctx, "synced %d engines", len(m.server.engines))
+	log.Dev.Infof(ctx, "synced %d engines", len(m.server.engines))
 	resp := &serverpb.SyncAllEnginesResponse{}
 	return resp, nil
 }

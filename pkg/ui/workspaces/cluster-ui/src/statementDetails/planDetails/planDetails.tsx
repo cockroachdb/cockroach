@@ -44,12 +44,16 @@ interface PlanDetailsProps {
   plans: PlanHashStats[];
   statementFingerprintID: string;
   hasAdminRole: boolean;
+  database: string;
+  query: string;
 }
 
 export function PlanDetails({
   plans,
   statementFingerprintID,
   hasAdminRole,
+  database,
+  query,
 }: PlanDetailsProps): React.ReactElement {
   const [plan, setPlan] = useState<PlanHashStats | null>(null);
   const [plansSortSetting, setPlansSortSetting] = useState<SortSetting>({
@@ -76,6 +80,8 @@ export function PlanDetails({
         sortSetting={insightsSortSetting}
         onChangeSortSetting={setInsightsSortSetting}
         hasAdminRole={hasAdminRole}
+        database={database}
+        query={query}
       />
     );
   } else {
@@ -86,6 +92,7 @@ export function PlanDetails({
           handleDetails={handleDetails}
           sortSetting={plansSortSetting}
           onChangeSortSetting={setPlansSortSetting}
+          database={database}
         />
       </div>
     );
@@ -97,6 +104,7 @@ interface PlanTableProps {
   handleDetails: (plan: PlanHashStats) => void;
   sortSetting: SortSetting;
   onChangeSortSetting: (ss: SortSetting) => void;
+  database: string;
 }
 
 function PlanTable({
@@ -104,8 +112,9 @@ function PlanTable({
   handleDetails,
   sortSetting,
   onChangeSortSetting,
+  database,
 }: PlanTableProps): React.ReactElement {
-  const columns = makeExplainPlanColumns(handleDetails);
+  const columns = makeExplainPlanColumns(handleDetails, database);
   return (
     <PlansSortedTable
       columns={columns}
@@ -124,6 +133,8 @@ interface ExplainPlanProps {
   sortSetting: SortSetting;
   onChangeSortSetting: (ss: SortSetting) => void;
   hasAdminRole: boolean;
+  database: string;
+  query: string;
 }
 
 function ExplainPlan({
@@ -133,6 +144,8 @@ function ExplainPlan({
   sortSetting,
   onChangeSortSetting,
   hasAdminRole,
+  database,
+  query,
 }: ExplainPlanProps): React.ReactElement {
   const explainPlan =
     `Plan Gist: ${plan.stats.plan_gists[0]} \n\n` +
@@ -190,6 +203,14 @@ function ExplainPlan({
               )}
             />
             <SummaryCardItem
+              label="Generic Query Plan"
+              value={RenderCount(plan.stats.generic_count, plan.stats.count)}
+            />
+            <SummaryCardItem
+              label="Statement Hints"
+              value={RenderCount(plan.stats.stmt_hints_count, plan.stats.count)}
+            />
+            <SummaryCardItem
               label="Distributed"
               value={RenderCount(
                 plan.metadata.dist_sql_count,
@@ -205,10 +226,7 @@ function ExplainPlan({
             />
             <SummaryCardItem
               label="Used Indexes"
-              value={formatIndexes(
-                plan.stats.indexes,
-                plan.metadata.databases[0],
-              )}
+              value={formatIndexes(plan.stats.indexes, database)}
             />
           </SummaryCard>
         </Col>
@@ -216,9 +234,8 @@ function ExplainPlan({
       {hasInsights && (
         <Insights
           idxRecommendations={plan.stats.index_recommendations}
-          database={plan.metadata.databases[0]}
-          query={plan.metadata.query}
-          implicitTxn={plan.metadata.implicit_txn}
+          database={database}
+          query={query}
           statementFingerprintID={statementFingerprintID}
           sortSetting={sortSetting}
           onChangeSortSetting={onChangeSortSetting}
@@ -233,7 +250,6 @@ function formatIdxRecommendations(
   idxRecs: string[],
   database: string,
   query: string,
-  implicitTxn?: boolean,
   statementFingerprintID?: string,
 ): InsightRecommendation[] {
   const recs = [];
@@ -266,7 +282,6 @@ function formatIdxRecommendations(
         statement: query,
         summary: query.length > 120 ? query.slice(0, 120) + "..." : query,
         fingerprintID: statementFingerprintID,
-        implicit: implicitTxn,
       },
     };
     recs.push(idxRec);
@@ -279,7 +294,6 @@ interface InsightsProps {
   idxRecommendations: string[];
   database: string;
   query: string;
-  implicitTxn?: boolean;
   statementFingerprintID?: string;
   sortSetting?: SortSetting;
   onChangeSortSetting?: (ss: SortSetting) => void;
@@ -290,7 +304,6 @@ export function Insights({
   idxRecommendations,
   database,
   query,
-  implicitTxn,
   statementFingerprintID,
   sortSetting,
   onChangeSortSetting,
@@ -303,7 +316,6 @@ export function Insights({
     idxRecommendations,
     database,
     query,
-    implicitTxn,
     statementFingerprintID,
   );
   return (

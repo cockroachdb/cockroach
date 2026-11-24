@@ -18,7 +18,7 @@
 # _go_proto_srcs which deals with properly sussing out the prefix for those
 # generated go files.
 
-load("@io_bazel_rules_go//go:def.bzl", "GoSource")
+load("@io_bazel_rules_go//go:def.bzl", "GoInfo")
 load(":docs.bzl", "DOCS_SRCS")
 load(":execgen.bzl", "EXECGEN_SRCS")
 load(":gomock.bzl", "GOMOCK_SRCS")
@@ -67,14 +67,14 @@ def _subshell_in_workspace_snippet(cmds = []):
 # irrelevant files.
 _find_relevant = "find ./pkg -name node_modules -prune -o "
 
-# This rule implementation takes PROTOBUF_SRCS, which expose the GoSource
+# This rule implementation takes PROTOBUF_SRCS, which expose the GoInfo
 # provider and map then into a _GeneratedFileInfo which tells _hoist_files
 # how to locate the generated code within the sandbox. Compare this to
 def _go_proto_srcs_impl(ctx):
     generated_files = {}
     for s in ctx.attr._srcs:
-        srcs = s[GoSource]
-        pkg = srcs.library.label.package
+        srcs = s[GoInfo]
+        pkg = srcs.label.package
         if pkg in generated_files:
             generated_files[pkg] = [f for f in srcs.srcs] + generated_files[pkg]
         else:
@@ -95,7 +95,7 @@ def _go_proto_srcs_impl(ctx):
 _go_proto_srcs = rule(
     implementation = _go_proto_srcs_impl,
     attrs = {
-        "_srcs": attr.label_list(providers = [GoSource], default = PROTOBUF_SRCS),
+        "_srcs": attr.label_list(providers = [GoInfo], default = PROTOBUF_SRCS),
     },
 )
 

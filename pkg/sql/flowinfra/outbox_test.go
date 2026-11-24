@@ -72,6 +72,7 @@ func TestOutbox(t *testing.T) {
 			Settings:          st,
 			Stopper:           stopper,
 			SQLInstanceDialer: dialer,
+			RPCContext:        &rpc.Context{ContextOptions: rpc.ContextOptions{}},
 		},
 		NodeID: base.TestingIDContainer,
 	}
@@ -93,7 +94,7 @@ func TestOutbox(t *testing.T) {
 	go func() {
 		producerC <- func() error {
 			row := rowenc.EncDatumRow{
-				rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(0))),
+				rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(tree.DInt(0))),
 			}
 			if consumerStatus := outbox.Push(row, nil /* meta */); consumerStatus != execinfra.NeedMoreRows {
 				return errors.Errorf("expected status: %d, got: %d", execinfra.NeedMoreRows, consumerStatus)
@@ -102,7 +103,7 @@ func TestOutbox(t *testing.T) {
 			// Send rows until the drain request is observed.
 			for {
 				row = rowenc.EncDatumRow{
-					rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(-1))),
+					rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(tree.DInt(-1))),
 				}
 				consumerStatus := outbox.Push(row, nil /* meta */)
 				if consumerStatus == execinfra.DrainRequested {
@@ -114,7 +115,7 @@ func TestOutbox(t *testing.T) {
 			}
 
 			// Now send another row that the outbox will discard.
-			row = rowenc.EncDatumRow{rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(2)))}
+			row = rowenc.EncDatumRow{rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(tree.DInt(2)))}
 			if consumerStatus := outbox.Push(row, nil /* meta */); consumerStatus != execinfra.DrainRequested {
 				return errors.Errorf("expected status: %d, got: %d", execinfra.DrainRequested, consumerStatus)
 			}
@@ -185,10 +186,19 @@ func TestOutbox(t *testing.T) {
 		t.Fatalf("%+v", err)
 	}
 
-	if len(metas) != 2 {
-		t.Fatalf("expected 2 metadata records, got: %d", len(metas))
+	// Filter out the always-on Metrics record carrying the outbox goroutine's
+	// RawSQLCPUTime; only the producer's two error metas should remain.
+	errMetas := metas[:0]
+	for _, m := range metas {
+		if m.Metrics != nil {
+			continue
+		}
+		errMetas = append(errMetas, m)
 	}
-	for i, m := range metas {
+	if len(errMetas) != 2 {
+		t.Fatalf("expected 2 metadata records, got: %d", len(errMetas))
+	}
+	for i, m := range errMetas {
 		expectedStr := fmt.Sprintf("meta %d", i)
 		if !testutils.IsError(m.Err, expectedStr) {
 			t.Fatalf("expected: %q, got: %q", expectedStr, m.Err.Error())
@@ -238,6 +248,7 @@ func TestOutboxInitializesStreamBeforeReceivingAnyRows(t *testing.T) {
 			Settings:          st,
 			Stopper:           stopper,
 			SQLInstanceDialer: dialer,
+			RPCContext:        &rpc.Context{ContextOptions: rpc.ContextOptions{}},
 		},
 		NodeID: base.TestingIDContainer,
 	}
@@ -311,6 +322,7 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 					Settings:          st,
 					Stopper:           stopper,
 					SQLInstanceDialer: dialer,
+					RPCContext:        &rpc.Context{ContextOptions: rpc.ContextOptions{}},
 				},
 				NodeID: base.TestingIDContainer,
 			}
@@ -389,6 +401,7 @@ func TestOutboxCancelsFlowOnError(t *testing.T) {
 			Settings:          st,
 			Stopper:           stopper,
 			SQLInstanceDialer: dialer,
+			RPCContext:        &rpc.Context{ContextOptions: rpc.ContextOptions{}},
 		},
 		NodeID: base.TestingIDContainer,
 	}
@@ -446,6 +459,7 @@ func TestOutboxUnblocksProducers(t *testing.T) {
 			Stopper:  stopper,
 			// a nil SQLInstanceDialer will always fail to connect.
 			SQLInstanceDialer: nil,
+			RPCContext:        &rpc.Context{ContextOptions: rpc.ContextOptions{}},
 		},
 		NodeID: base.TestingIDContainer,
 	}
@@ -504,7 +518,7 @@ func BenchmarkOutbox(b *testing.B) {
 	for _, numCols := range []int{1, 2, 4, 8} {
 		row := rowenc.EncDatumRow{}
 		for i := 0; i < numCols; i++ {
-			row = append(row, rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(2))))
+			row = append(row, rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(tree.DInt(2))))
 		}
 		b.Run(fmt.Sprintf("numCols=%d", numCols), func(b *testing.B) {
 			streamID := execinfrapb.StreamID(42)
@@ -521,6 +535,7 @@ func BenchmarkOutbox(b *testing.B) {
 					Settings:          st,
 					Stopper:           stopper,
 					SQLInstanceDialer: dialer,
+					RPCContext:        &rpc.Context{ContextOptions: rpc.ContextOptions{}},
 				},
 				NodeID: base.TestingIDContainer,
 			}

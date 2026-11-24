@@ -46,7 +46,7 @@ func newColSchema(numCols int) *colSchema {
 // that are not supported by the writer.
 func typSupported(typ *types.T) bool {
 	switch typ.Family() {
-	case types.AnyFamily, types.TSQueryFamily, types.TSVectorFamily, types.PGVectorFamily, types.VoidFamily:
+	case types.AnyFamily, types.TSQueryFamily, types.TSVectorFamily, types.PGVectorFamily, types.VoidFamily, types.JsonpathFamily:
 		return false
 	case types.ArrayFamily:
 		if typ.ArrayContents().Family() == types.ArrayFamily || typ.ArrayContents().Family() == types.TupleFamily {
@@ -119,6 +119,7 @@ func TestRandomDatums(t *testing.T) {
 	fileName := "TestRandomDatums.parquet"
 	f, err := os.CreateTemp("", fileName)
 	require.NoError(t, err)
+	defer removeFileUnlessFailed(t, f)
 
 	schemaDef, err := NewSchema(sch.columnNames, sch.columnTypes)
 	require.NoError(t, err)
@@ -267,12 +268,9 @@ func TestBasicDatums(t *testing.T) {
 				columnNames: []string{"a", "b"},
 			},
 			datums: func() ([][]tree.Datum, error) {
-				da := tree.NewDArray(types.Int)
-				da.Array = tree.Datums{tree.NewDInt(0), tree.NewDInt(1)}
-				da2 := tree.NewDArray(types.Int)
-				da2.Array = tree.Datums{tree.NewDInt(2), tree.DNull}
-				da3 := tree.NewDArray(types.Int)
-				da3.Array = tree.Datums{}
+				da := tree.NewDArrayFromDatums(types.Int, tree.Datums{tree.NewDInt(0), tree.NewDInt(1)})
+				da2 := tree.NewDArrayFromDatums(types.Int, tree.Datums{tree.NewDInt(2), tree.DNull})
+				da3 := tree.NewDArrayFromDatums(types.Int, tree.Datums{})
 				return [][]tree.Datum{
 					{da, da2}, {da3, tree.DNull},
 				}, nil
@@ -321,6 +319,28 @@ func TestBasicDatums(t *testing.T) {
 					return nil, err
 				}
 
+				return [][]tree.Datum{
+					{&tree.DBitArray{BitArray: ba}, tree.DNull},
+				}, nil
+			},
+		},
+		{
+			// Regression test for #137757. The SQL layer produces BIT(0) values
+			// with a non-nil empty words slice, while the parquet decoder's
+			// bitarray.Parse("") returns a nil words slice. Both are semantically
+			// equivalent. Use FromEncodingParts to construct the expected value
+			// with a non-nil empty words slice, matching what the SQL layer
+			// produces.
+			name: "bitarray_empty",
+			sch: &colSchema{
+				columnTypes: []*types.T{types.MakeBit(0), types.MakeBit(0)},
+				columnNames: []string{"a", "b"},
+			},
+			datums: func() ([][]tree.Datum, error) {
+				ba, err := bitarray.FromEncodingParts([]uint64{}, 0)
+				if err != nil {
+					return nil, err
+				}
 				return [][]tree.Datum{
 					{&tree.DBitArray{BitArray: ba}, tree.DNull},
 				}, nil
@@ -465,6 +485,19 @@ func TestBasicDatums(t *testing.T) {
 			},
 		},
 		{
+			name: "ltree",
+			sch: &colSchema{
+				columnTypes: []*types.T{types.LTree, types.LTree},
+				columnNames: []string{"a", "b"},
+			},
+			datums: func() ([][]tree.Datum, error) {
+				dt, _ := tree.ParseDLTree("A.B.C")
+				return [][]tree.Datum{
+					{dt, tree.DNull},
+				}, nil
+			},
+		},
+		{
 			name: "tuple",
 			sch: &colSchema{
 				columnTypes: []*types.T{
@@ -510,6 +543,7 @@ func TestBasicDatums(t *testing.T) {
 			fileName := "TestBasicDatums.parquet"
 			f, err := os.CreateTemp("", fileName)
 			require.NoError(t, err)
+			defer removeFileUnlessFailed(t, f)
 
 			schemaDef, err := NewSchema(tc.sch.columnNames, tc.sch.columnTypes)
 			require.NoError(t, err)
@@ -617,6 +651,7 @@ func optionsTest(t *testing.T, opt Option, testFn func(t *testing.T, reader *fil
 	fileName := "OptionsTest.parquet"
 	f, err := os.CreateTemp("", fileName)
 	require.NoError(t, err)
+	defer removeFileUnlessFailed(t, f)
 
 	writer, err := NewWriter(schemaDef, f, opt)
 	require.NoError(t, err)
@@ -637,6 +672,16 @@ func optionsTest(t *testing.T, opt Option, testFn func(t *testing.T, reader *fil
 
 	err = reader.Close()
 	require.NoError(t, err)
+}
+
+func removeFileUnlessFailed(t *testing.T, f *os.File) {
+	t.Helper()
+	if t.Failed() {
+		return
+	}
+	if err := os.Remove(f.Name()); err != nil {
+		t.Logf("failed to remove file %s: %v", f.Name(), err)
+	}
 }
 
 func TestSquashTuples(t *testing.T) {
@@ -687,9 +732,7 @@ func TestBufferedBytes(t *testing.T) {
 	sch, err := NewSchema([]string{"a", "b", "c", "d"}, []*types.T{types.Int, types.String, tupleTyp, types.IntArray})
 	require.NoError(t, err)
 	makeArray := func(vals ...tree.Datum) *tree.DArray {
-		da := tree.NewDArray(types.Int)
-		da.Array = vals
-		return da
+		return tree.NewDArrayFromDatums(types.Int, vals)
 	}
 
 	for _, tc := range []struct {
@@ -825,4 +868,22 @@ func TestBufferedBytes(t *testing.T) {
 			require.Equal(t, writer.BufferedBytesEstimate(), int64(0))
 		})
 	}
+}
+
+// TestDefaultDataPageSize is a regression test for #140030. The Apache Arrow
+// parquet library internally uses int32 for buffer size calculations
+// (column_writer.go). If the data page size exceeds MaxInt32, the int64-to-int32
+// cast overflows, producing a negative value passed to bytes.Buffer.Grow(),
+// causing a panic. This test asserts that the default data page size is capped
+// to prevent this overflow.
+func TestDefaultDataPageSize(t *testing.T) {
+	schemaDef, err := NewSchema([]string{"a"}, []*types.T{types.Int})
+	require.NoError(t, err)
+
+	var buf bytes.Buffer
+	writer, err := NewWriter(schemaDef, &buf)
+	require.NoError(t, err)
+	defer func() { _ = writer.Close() }()
+
+	require.LessOrEqual(t, writer.cfg.dataPageSize, int64(math.MaxInt32))
 }

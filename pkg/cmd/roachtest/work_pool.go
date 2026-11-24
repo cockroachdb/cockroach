@@ -253,6 +253,21 @@ func (p *workPool) findCompatibleTestsLocked(
 	return tests
 }
 
+// requeueForPreemptionRetry adds spec back to the pool for exactly one
+// additional run. The entry is inserted at the head so workers pick it up
+// promptly. The caller is responsible for any spec adjustments needed to
+// break a retry loop (e.g. setting Cluster.UseSpotVMs=false so the retry
+// can't itself be preempted into another retry).
+func (p *workPool) requeueForPreemptionRetry(
+	ctx context.Context, l *logger.Logger, spec registry.TestSpec,
+) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	l.PrintfCtx(ctx, "requeueing %s for preemption retry (UseSpotVMs=%t)",
+		spec.Name, spec.Cluster.UseSpotVMs)
+	p.mu.tests = append([]testWithCount{{spec: spec, count: 1}}, p.mu.tests...)
+}
+
 // decTestLocked decrements a test's remaining count and removes it
 // from the workPool if it was exhausted.
 func (p *workPool) decTestLocked(ctx context.Context, l *logger.Logger, name string) {

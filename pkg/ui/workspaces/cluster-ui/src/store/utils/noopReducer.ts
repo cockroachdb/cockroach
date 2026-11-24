@@ -6,7 +6,7 @@
 /**
  * noopReducer is a stub function to use with `createSlice` (@redux-toolkit) as a definition
  * for reducer case which should not change state but it has to define an action which might be
- * handled in sagas for instance.
+ * handled by middleware.
  *
  * @example
  * ```

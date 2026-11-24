@@ -18,6 +18,7 @@ go_library(
         "//pkg/sql/privilege",
         "//pkg/sql/roleoption",
         "//pkg/sql/syntheticprivilege",
+        "@com_github_cockroachdb_redact//:redact",
         "@org_golang_google_grpc//codes",
         "@org_golang_google_grpc//status",
     ],
@@ -32,7 +33,6 @@ go_test(
     deps = [
         ":privchecker",
         "//pkg/base",
-        "//pkg/kv/kvclient/kvtenant",
         "//pkg/security/securityassets",
         "//pkg/security/securitytest",
         "//pkg/security/username",
@@ -44,6 +44,7 @@ go_test(
         "//pkg/testutils/testcluster",
         "//pkg/util/leaktest",
         "//pkg/util/log",
+        "@com_github_cockroachdb_redact//:redact",
         "@com_github_stretchr_testify//require",
         "@org_golang_google_grpc//metadata",
     ],

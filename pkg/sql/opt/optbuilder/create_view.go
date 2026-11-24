@@ -11,13 +11,26 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
-	"github.com/cockroachdb/errors"
 )
 
 func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope *scope) {
 	b.DisableMemoReuse = true
-	preFuncResolver := b.semaCtx.FunctionResolver
-	b.semaCtx.FunctionResolver = nil
+
+	isTemp := resolveTemporaryStatus(cv.Name.ObjectNamePrefix, cv.Persistence)
+	if isTemp {
+		// Postgres allows using `pg_temp` as an alias for the session specific temp
+		// schema. In PG, the following are equivalent:
+		// CREATE TEMP TABLE t <=> CREATE TABLE pg_temp.t <=> CREATE TEMP TABLE pg_temp.t
+		//
+		// The temporary schema is created the first time a session creates a
+		// temporary object, so it is possible to use `pg_temp` in a fully qualified
+		// name when the temporary schema does not exist. To allow the name to be
+		// resolved, we unset the explicitly named schema and set the Persistence to
+		// temporary.
+		cv.Name.ObjectNamePrefix.SchemaName = ""
+		cv.Name.ObjectNamePrefix.ExplicitSchema = false
+		cv.Persistence = tree.PersistenceTemporary
+	}
 
 	// We build the select statement to:
 	//  - check the statement semantically,
@@ -32,7 +45,7 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 	}
 
 	viewName := &cv.Name
-	sch, resName := b.resolveSchemaForCreateTable(viewName)
+	sch, resName := b.resolveSchemaForCreateTable(viewName, isTemp)
 	viewName.ObjectNamePrefix = resName
 	schID := b.factory.Metadata().AddSchema(sch)
 
@@ -45,25 +58,6 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 		b.schemaTypeDeps = intsets.Fast{}
 		b.qualifyDataSourceNamesInAST = false
 		delete(b.sourceViews, viewFQString)
-
-		b.semaCtx.FunctionResolver = preFuncResolver
-		switch recErr := recover().(type) {
-		case nil:
-			// No error.
-		case error:
-			if errors.Is(recErr, tree.ErrRoutineUndefined) {
-				panic(
-					errors.WithHint(
-						recErr,
-						"There is probably a typo in function name. Or the intention was to use a user-defined "+
-							"function in the view query, which is currently not supported.",
-					),
-				)
-			}
-			panic(recErr)
-		default:
-			panic(recErr)
-		}
 	}()
 
 	defScope := b.buildStmtAtRoot(cv.AsSource, nil /* desiredTypes */)
@@ -101,17 +95,24 @@ func (b *Builder) buildCreateView(cv *tree.CreateView, inScope *scope) (outScope
 		}
 	}
 
+	// We need the view query to include user-defined types as a 3-part name to
+	// properly detect cross-database type access.
+	fmtFlags := tree.FmtParsable | tree.FmtAlwaysQualifyUserDefinedTypeNames
+	if cv.Materialized {
+		// Don't include any AS OF SYSTEM TIME clauses here: our materialized view
+		// shouldn't get refreshed as of a particular time.
+		fmtFlags = fmtFlags | tree.FmtSkipAsOfSystemTimeClauses
+	}
 	outScope = b.allocScope()
 	outScope.expr = b.factory.ConstructCreateView(
 		&memo.CreateViewPrivate{
-			Syntax: cv,
-			Schema: schID,
-			// We need the view query to include user-defined types as a 3-part name to
-			// properly detect cross-database type access.
-			ViewQuery: tree.AsStringWithFlags(cv.AsSource, tree.FmtParsable|tree.FmtAlwaysQualifyUserDefinedTypeNames),
+			Syntax:    cv,
+			Schema:    schID,
+			ViewQuery: tree.AsStringWithFlags(cv.AsSource, fmtFlags),
 			Columns:   p,
 			Deps:      b.schemaDeps,
 			TypeDeps:  b.schemaTypeDeps,
+			FuncDeps:  b.schemaFunctionDeps,
 		},
 	)
 	return outScope

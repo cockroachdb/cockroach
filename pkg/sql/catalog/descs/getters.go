@@ -41,6 +41,9 @@ func (g ByIDGetter) Descs(ctx context.Context, ids []descpb.ID) ([]catalog.Descr
 func (g ByIDGetter) Desc(ctx context.Context, id descpb.ID) (catalog.Descriptor, error) {
 	var arr [1]catalog.Descriptor
 	if err := getDescriptorsByID(ctx, g.Descriptors(), g.KV(), g.flags, arr[:], id); err != nil {
+		if g.flags.isOptional && errors.Is(err, catalog.ErrDescriptorNotFound) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	return arr[0], nil
@@ -59,6 +62,9 @@ func (g ByIDGetter) Database(
 	}
 	db, ok := desc.(catalog.DatabaseDescriptor)
 	if !ok {
+		if g.flags.isOptional {
+			return nil, nil
+		}
 		return nil, sqlerrors.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", id))
 	}
 	return db, nil
@@ -75,6 +81,9 @@ func (g ByIDGetter) Schema(ctx context.Context, id descpb.ID) (catalog.SchemaDes
 	}
 	sc, ok := desc.(catalog.SchemaDescriptor)
 	if !ok {
+		if g.flags.isOptional {
+			return nil, nil
+		}
 		return nil, sqlerrors.NewUndefinedSchemaError(fmt.Sprintf("[%d]", id))
 	}
 	return sc, nil
@@ -91,6 +100,9 @@ func (g ByIDGetter) Table(ctx context.Context, id descpb.ID) (catalog.TableDescr
 	}
 	tbl, ok := desc.(catalog.TableDescriptor)
 	if !ok {
+		if g.flags.isOptional {
+			return nil, nil
+		}
 		return nil, sqlerrors.NewUndefinedRelationError(&tree.TableRef{TableID: int64(id)})
 	}
 	return tbl, nil
@@ -122,6 +134,9 @@ func (g ByIDGetter) Type(ctx context.Context, id descpb.ID) (catalog.TypeDescrip
 		}
 		return typedesc.CreateImplicitRecordTypeFromTableDesc(t)
 	}
+	if g.flags.isOptional {
+		return nil, nil
+	}
 	return nil, pgerror.Newf(
 		pgcode.UndefinedObject, "type with ID %d does not exist", id)
 }
@@ -146,6 +161,9 @@ func (g ByIDGetter) Function(
 	}
 	fn, ok := desc.(catalog.FunctionDescriptor)
 	if !ok {
+		if g.flags.isOptional {
+			return nil, nil
+		}
 		return nil, errors.Mark(
 			pgerror.Newf(pgcode.UndefinedFunction, "function %d does not exist", id),
 			tree.ErrRoutineUndefined,
@@ -461,6 +479,12 @@ type layerFilters struct {
 	// the hydration of another descriptor which depends on it.
 	// TODO(postamar): untangle the hydration mess
 	withoutHydration bool
+	// withMetadata will read zone configs and comments for lease descriptors.
+	// This is always acquired for descriptors from storage, and may need an extra
+	// round trip.
+	withMetadata bool
+	// withAdding specifies that adding descriptors can be safely included.
+	withAdding bool
 }
 
 type descFilters struct {
@@ -476,6 +500,10 @@ type descFilters struct {
 	// maybeParentID specifies, when set, that the looked-up descriptor
 	// should have the same parent ID, when set.
 	maybeParentID descpb.ID
+	// withoutLockedTimestamp, specifies that leased descriptors should
+	// be resolved at the current timestamp. This is to ensure caches
+	// are up to date.
+	withoutLockedTimestamp bool
 }
 
 func defaultUnleasedFlags() (f getterFlags) {
@@ -526,6 +554,14 @@ func (b ByIDGetterBuilder) WithoutSynthetic() ByIDGetterBuilder {
 	return b
 }
 
+// WithMetaData configures the byIDGetterBuilder to read zone configs and comments
+// for lease descriptors. This is always acquired for descriptors from storage,
+// and may need an extra round trip.
+func (b ByIDGetterBuilder) WithMetaData() ByIDGetterBuilder {
+	b.flags.layerFilters.withMetadata = true
+	return b
+}
+
 // WithoutDropped configures the ByIDGetterBuilder to error on descriptors
 // which are in a dropped state.
 func (b ByIDGetterBuilder) WithoutDropped() ByIDGetterBuilder {
@@ -556,6 +592,13 @@ func (b ByIDGetterBuilder) WithoutOtherParent(parentID catid.DescID) ByIDGetterB
 	return b
 }
 
+// WithoutLockedTimestamp configures the ByIDGetterBuilder to ensure
+// that leased descriptors are looked up at the read timestamp.
+func (b ByIDGetterBuilder) WithoutLockedTimestamp() ByIDGetterBuilder {
+	b.flags.descFilters.withoutLockedTimestamp = true
+	return b
+}
+
 // Get builds a ByIDGetter.
 func (b ByIDGetterBuilder) Get() ByIDGetter {
 	if b.flags.isMutable {
@@ -563,6 +606,13 @@ func (b ByIDGetterBuilder) Get() ByIDGetter {
 		b.flags.isMutable = false
 	}
 	return ByIDGetter(b)
+}
+
+// MaybeGet builds a ByIDGetter which returns a nil descriptor instead of
+// an error when the descriptor is not found.
+func (b ByIDGetterBuilder) MaybeGet() ByIDGetter {
+	b.flags.contextFlags.isOptional = true
+	return b.Get()
 }
 
 // ByName returns a ByNameGetterBuilder set up to look up
@@ -617,6 +667,13 @@ type ByNameGetterBuilder getterBase
 // of offline descriptors.
 func (b ByNameGetterBuilder) WithOffline() ByNameGetterBuilder {
 	b.flags.descFilters.withoutOffline = false
+	return b
+}
+
+// WithoutLockedTimestamp configures the ByNameGetterBuilder to ensure
+// that leased descriptors are looked up at the read timestamp.
+func (b ByNameGetterBuilder) WithoutLockedTimestamp() ByNameGetterBuilder {
+	b.flags.descFilters.withoutLockedTimestamp = true
 	return b
 }
 

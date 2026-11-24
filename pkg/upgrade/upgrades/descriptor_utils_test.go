@@ -35,7 +35,7 @@ func TestCreateSystemTable(t *testing.T) {
 	fakeTableSchema := `CREATE TABLE public.fake_table (
 	id UUID NOT NULL,
 	CONSTRAINT "primary" PRIMARY KEY (id ASC)
-)`
+);`
 	fakeTable := descpb.TableDescriptor{
 		Name:                    "fake_table",
 		ParentID:                keys.SystemDatabaseID,

@@ -6,6 +6,8 @@
 package descs
 
 import (
+	"strings"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
@@ -54,4 +56,24 @@ func (tc *Collection) getTemporarySchemaByID(schemaID descpb.ID) catalog.SchemaD
 		schemaID,
 		dbID,
 	)
+}
+
+// getOtherSessionTemporarySchemaByID checks the catalog reader's cached
+// namespace entries for a temporary schema from another session with the
+// given ID. This is a fallback for when getTemporarySchemaByID returns nil
+// because the schema doesn't belong to the current session.
+func (tc *Collection) getOtherSessionTemporarySchemaByID(id descpb.ID) catalog.SchemaDescriptor {
+	e := tc.cr.Cache().LookupNamespaceEntryByID(id)
+	if e == nil {
+		return nil
+	}
+	// Verify this is actually a schema namespace entry: it must have a valid
+	// parent database ID and no parent schema ID.
+	if e.GetParentID() == descpb.InvalidID || e.GetParentSchemaID() != descpb.InvalidID {
+		return nil
+	}
+	if !strings.HasPrefix(e.GetName(), catconstants.PgTempSchemaName) {
+		return nil
+	}
+	return schemadesc.NewTemporarySchema(e.GetName(), id, e.GetParentID())
 }

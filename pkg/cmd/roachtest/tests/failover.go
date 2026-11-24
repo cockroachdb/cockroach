@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -34,6 +35,33 @@ var rangeLeaseRenewalDuration = func() time.Duration {
 	raftCfg.SetDefaults()
 	return raftCfg.RangeLeaseRenewalDuration()
 }()
+
+var failoverAggregateFunction = func(test string, histogram *roachtestutil.HistogramMetric) (roachtestutil.AggregatedPerfMetrics, error) {
+	totalMax := roachtestutil.MetricPoint(0.0)
+	for _, summary := range histogram.Summaries {
+		for _, value := range summary.Values {
+			if value.Max > totalMax {
+				totalMax = value.Max
+			}
+		}
+	}
+
+	return roachtestutil.AggregatedPerfMetrics{
+		{
+			Name:           fmt.Sprintf("%s_max", test),
+			Value:          totalMax,
+			Unit:           "ms",
+			IsHigherBetter: false,
+		},
+	}, nil
+}
+
+// NB: the liveness range's ID has changed in the past. It used to be 2, now
+// it's 3 (#155554). Using the start key avoids relying on a specific rangeID.
+const (
+	predAllButLiveness = `start_key != '/System/NodeLiveness'`
+	predOnlyLiveness   = `start_key = '/System/NodeLiveness'`
+)
 
 // registerFailover registers a set of failover benchmarks. These tests
 // benchmark the maximum unavailability experienced by clients during various
@@ -83,15 +111,17 @@ func registerFailover(r registry.Registry) {
 			}
 
 			r.Add(registry.TestSpec{
-				Name:                "failover/chaos" + readOnlyStr + leasesStr,
-				Owner:               registry.OwnerKV,
-				Benchmark:           true,
-				Timeout:             90 * time.Minute,
-				Cluster:             r.MakeClusterSpec(10, spec.CPU(2), spec.WorkloadNode(), spec.WorkloadNodeCPU(2), spec.DisableLocalSSD(), spec.ReuseNone()), // uses disk stalls
-				CompatibleClouds:    registry.OnlyGCE,                                                                                                           // dmsetup only configured for gce
-				Suites:              registry.Suites(registry.Nightly),
-				Leases:              leases,
-				SkipPostValidations: registry.PostValidationNoDeadNodes, // cleanup kills nodes
+				Name:      "failover/chaos" + readOnlyStr + leasesStr,
+				Owner:     registry.OwnerKV,
+				Benchmark: true,
+				Timeout:   90 * time.Minute,
+				// TODO(darryl): Enable FIPS once we can upgrade to Ubuntu 22 and lsblk outputs in the same format.
+				Cluster:                r.MakeClusterSpec(10, spec.CPU(2), spec.WorkloadNode(), spec.WorkloadNodeCPU(2), spec.DisableLocalSSD(), spec.ReuseNone(), spec.Arch(spec.AllExceptFIPS)), // uses disk stalls
+				CompatibleClouds:       registry.OnlyGCE,                                                                                                                                          // dmsetup only configured for gce
+				Suites:                 registry.Suites(registry.Nightly),
+				Leases:                 leases,
+				SkipPostValidations:    registry.PostValidationNoDeadNodes, // cleanup kills nodes
+				PostProcessPerfMetrics: failoverAggregateFunction,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runFailoverChaos(ctx, t, c, readOnly)
 				},
@@ -99,45 +129,48 @@ func registerFailover(r registry.Registry) {
 		}
 
 		r.Add(registry.TestSpec{
-			Name:             "failover/partial/lease-gateway" + leasesStr,
-			Owner:            registry.OwnerKV,
-			Benchmark:        true,
-			Timeout:          45 * time.Minute,
-			Cluster:          r.MakeClusterSpec(8, spec.CPU(2), spec.WorkloadNode(), spec.WorkloadNodeCPU(2)),
-			CompatibleClouds: registry.AllExceptAWS,
-			Suites:           registry.Suites(registry.Nightly),
-			Leases:           leases,
-			Run:              runFailoverPartialLeaseGateway,
+			Name:                   "failover/partial/lease-gateway" + leasesStr,
+			Owner:                  registry.OwnerKV,
+			Benchmark:              true,
+			Timeout:                45 * time.Minute,
+			Cluster:                r.MakeClusterSpec(8, spec.CPU(2), spec.WorkloadNode(), spec.WorkloadNodeCPU(2)),
+			CompatibleClouds:       registry.OnlyGCE,
+			Suites:                 registry.Suites(registry.Nightly),
+			Leases:                 leases,
+			PostProcessPerfMetrics: failoverAggregateFunction,
+			Run:                    runFailoverPartialLeaseGateway,
 		})
 
 		r.Add(registry.TestSpec{
-			Name:             "failover/partial/lease-leader" + leasesStr,
-			Owner:            registry.OwnerKV,
-			Benchmark:        true,
-			Timeout:          45 * time.Minute,
-			Cluster:          r.MakeClusterSpec(7, spec.CPU(2), spec.WorkloadNode(), spec.WorkloadNodeCPU(2)),
-			CompatibleClouds: registry.AllExceptAWS,
-			Suites:           registry.Suites(registry.Nightly),
-			Leases:           leases,
-			Run:              runFailoverPartialLeaseLeader,
+			Name:                   "failover/partial/lease-leader" + leasesStr,
+			Owner:                  registry.OwnerKV,
+			Benchmark:              true,
+			Timeout:                45 * time.Minute,
+			Cluster:                r.MakeClusterSpec(7, spec.CPU(2), spec.WorkloadNode(), spec.WorkloadNodeCPU(2)),
+			CompatibleClouds:       registry.OnlyGCE,
+			Suites:                 registry.Suites(registry.Nightly),
+			Leases:                 leases,
+			PostProcessPerfMetrics: failoverAggregateFunction,
+			Run:                    runFailoverPartialLeaseLeader,
 		})
 
 		r.Add(registry.TestSpec{
-			Name:             "failover/partial/lease-liveness" + leasesStr,
-			Owner:            registry.OwnerKV,
-			Benchmark:        true,
-			Timeout:          45 * time.Minute,
-			Cluster:          r.MakeClusterSpec(8, spec.CPU(2), spec.WorkloadNode(), spec.WorkloadNodeCPU(2)),
-			CompatibleClouds: registry.AllExceptAWS,
-			Suites:           registry.Suites(registry.Nightly),
-			Leases:           leases,
-			Run:              runFailoverPartialLeaseLiveness,
+			Name:                   "failover/partial/lease-liveness" + leasesStr,
+			Owner:                  registry.OwnerKV,
+			Benchmark:              true,
+			Timeout:                45 * time.Minute,
+			Cluster:                r.MakeClusterSpec(8, spec.CPU(2), spec.WorkloadNode(), spec.WorkloadNodeCPU(2)),
+			CompatibleClouds:       registry.OnlyGCE,
+			Suites:                 registry.Suites(registry.Nightly),
+			Leases:                 leases,
+			PostProcessPerfMetrics: failoverAggregateFunction,
+			Run:                    runFailoverPartialLeaseLiveness,
 		})
 
 		for _, failureMode := range allFailureModes {
 			clusterOpts := make([]spec.Option, 0)
 			clusterOpts = append(clusterOpts, spec.CPU(2), spec.WorkloadNode(), spec.WorkloadNodeCPU(2))
-			clouds := registry.AllExceptAWS
+			clouds := registry.OnlyGCE
 
 			var postValidation registry.PostValidation
 			if failureMode == failureModeDiskStall {
@@ -147,48 +180,53 @@ func registerFailover(r registry.Registry) {
 				// Don't reuse the cluster for tests that call dmsetup to avoid
 				// spurious flakes from previous runs. See #107865
 				clusterOpts = append(clusterOpts, spec.ReuseNone())
+				// TODO(darryl): Enable FIPS once we can upgrade to Ubuntu 22 and lsblk outputs in the same format.
+				clusterOpts = append(clusterOpts, spec.Arch(spec.AllExceptFIPS))
 				postValidation = registry.PostValidationNoDeadNodes
 				// dmsetup is currently only configured for gce.
 				clouds = registry.OnlyGCE
 			}
 			r.Add(registry.TestSpec{
-				Name:                fmt.Sprintf("failover/non-system/%s%s", failureMode, leasesStr),
-				Owner:               registry.OwnerKV,
-				Benchmark:           true,
-				Timeout:             45 * time.Minute,
-				SkipPostValidations: postValidation,
-				Cluster:             r.MakeClusterSpec(7, clusterOpts...),
-				CompatibleClouds:    clouds,
-				Suites:              registry.Suites(registry.Nightly),
-				Leases:              leases,
+				Name:                   fmt.Sprintf("failover/non-system/%s%s", failureMode, leasesStr),
+				Owner:                  registry.OwnerKV,
+				Benchmark:              true,
+				Timeout:                45 * time.Minute,
+				SkipPostValidations:    postValidation,
+				Cluster:                r.MakeClusterSpec(7, clusterOpts...),
+				CompatibleClouds:       clouds,
+				Suites:                 registry.Suites(registry.Nightly),
+				Leases:                 leases,
+				PostProcessPerfMetrics: failoverAggregateFunction,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runFailoverNonSystem(ctx, t, c, failureMode)
 				},
 			})
 			r.Add(registry.TestSpec{
-				Name:                fmt.Sprintf("failover/liveness/%s%s", failureMode, leasesStr),
-				Owner:               registry.OwnerKV,
-				CompatibleClouds:    registry.AllExceptAWS,
-				Suites:              registry.Suites(registry.Weekly),
-				Benchmark:           true,
-				Timeout:             45 * time.Minute,
-				SkipPostValidations: postValidation,
-				Cluster:             r.MakeClusterSpec(5, clusterOpts...),
-				Leases:              leases,
+				Name:                   fmt.Sprintf("failover/liveness/%s%s", failureMode, leasesStr),
+				Owner:                  registry.OwnerKV,
+				CompatibleClouds:       registry.OnlyGCE,
+				Suites:                 registry.Suites(registry.Weekly),
+				Benchmark:              true,
+				Timeout:                45 * time.Minute,
+				SkipPostValidations:    postValidation,
+				Cluster:                r.MakeClusterSpec(5, clusterOpts...),
+				Leases:                 leases,
+				PostProcessPerfMetrics: failoverAggregateFunction,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runFailoverLiveness(ctx, t, c, failureMode)
 				},
 			})
 			r.Add(registry.TestSpec{
-				Name:                fmt.Sprintf("failover/system-non-liveness/%s%s", failureMode, leasesStr),
-				Owner:               registry.OwnerKV,
-				CompatibleClouds:    registry.AllExceptAWS,
-				Suites:              registry.Suites(registry.Weekly),
-				Benchmark:           true,
-				Timeout:             45 * time.Minute,
-				SkipPostValidations: postValidation,
-				Cluster:             r.MakeClusterSpec(7, clusterOpts...),
-				Leases:              leases,
+				Name:                   fmt.Sprintf("failover/system-non-liveness/%s%s", failureMode, leasesStr),
+				Owner:                  registry.OwnerKV,
+				CompatibleClouds:       registry.OnlyGCE,
+				Suites:                 registry.Suites(registry.Weekly),
+				Benchmark:              true,
+				Timeout:                45 * time.Minute,
+				SkipPostValidations:    postValidation,
+				Cluster:                r.MakeClusterSpec(7, clusterOpts...),
+				Leases:                 leases,
+				PostProcessPerfMetrics: failoverAggregateFunction,
 				Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 					runFailoverSystemNonLiveness(ctx, t, c, failureMode)
 				},
@@ -222,7 +260,7 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 	// breakers for all ranges by default.
 	settings.ClusterSettings["kv.dist_sender.circuit_breakers.mode"] = "all ranges"
 
-	m := c.NewMonitor(ctx, c.CRDBNodes())
+	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 
 	failers := []Failer{}
 	for _, failureMode := range allFailureModes {
@@ -236,20 +274,21 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 			continue
 		}
 		failer.Setup(ctx)
-		defer failer.Cleanup(ctx)
+		defer failer.Cleanup(ctx) //nolint:deferloop
 		failers = append(failers, failer)
 	}
 
 	c.Start(ctx, t.L(), failoverStartOpts(), settings, c.CRDBNodes())
 
 	conn := c.Conn(ctx, t.L(), 1)
+	setMaxLifetime(conn)
 
 	// Place 5 replicas of all ranges on n3-n9, keeping n1-n2 as SQL gateways.
 	configureAllZones(t, ctx, conn, zoneConfig{replicas: 5, onlyNodes: []int{3, 4, 5, 6, 7, 8, 9}})
 
 	// Wait for upreplication.
 	require.NoError(
-		t, roachtestutil.WaitForReplication(ctx, t.L(), conn, 5 /* replicationFactor */, roachtestutil.AtLeastReplicationFactor),
+		t, roachtestutil.WaitForReplication(ctx, t.L(), conn, 5 /* replicationFactor */, roachprod.AtLeastReplicationFactor),
 	)
 
 	// Create the kv database. If this is a read-only workload, populate it with
@@ -272,7 +311,7 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 
 	// Wait for upreplication of the new ranges.
 	require.NoError(
-		t, roachtestutil.WaitForReplication(ctx, t.L(), conn, 5 /* replicationFactor */, roachtestutil.AtLeastReplicationFactor),
+		t, roachtestutil.WaitForReplication(ctx, t.L(), conn, 5 /* replicationFactor */, roachprod.AtLeastReplicationFactor),
 	)
 
 	// Run workload on n10 via n1-n2 gateways until test ends (context cancels).
@@ -286,7 +325,7 @@ func runFailoverChaos(ctx context.Context, t test.Test, c cluster.Cluster, readO
 		err := c.RunE(ctx, option.WithNodes(c.WorkloadNode()), fmt.Sprintf(
 			`./cockroach workload run kv --read-percent %d --write-seq R%d `+
 				`--concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors %s {pgurl:1-2}`, readPercent, insertCount,
-			roachtestutil.GetWorkloadHistogramArgs(t, c, getKVLabels(256, insertCount, readPercent))))
+			roachtestutil.GetWorkloadHistogramString(t, c, getKVLabels(256, insertCount, readPercent), true)))
 		if ctx.Err() != nil {
 			return nil // test requested workload shutdown
 		}
@@ -419,7 +458,7 @@ func runFailoverPartialLeaseGateway(ctx context.Context, t test.Test, c cluster.
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
-	m := c.NewMonitor(ctx, c.CRDBNodes())
+	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 
 	failer := makeFailer(t, c, m, failureModeBlackhole, settings, rng).(PartialFailer)
 	failer.Setup(ctx)
@@ -428,6 +467,7 @@ func runFailoverPartialLeaseGateway(ctx context.Context, t test.Test, c cluster.
 	c.Start(ctx, t.L(), failoverStartOpts(), settings, c.CRDBNodes())
 
 	conn := c.Conn(ctx, t.L(), 1)
+	setMaxLifetime(conn)
 
 	// Place all ranges on n1-n3 to start with.
 	configureAllZones(t, ctx, conn, zoneConfig{replicas: 3, onlyNodes: []int{1, 2, 3}})
@@ -460,7 +500,7 @@ func runFailoverPartialLeaseGateway(ctx context.Context, t test.Test, c cluster.
 	cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
 		err := c.RunE(ctx, option.WithNodes(c.WorkloadNode()), `./cockroach workload run kv --read-percent 50 `+
 			`--concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
-			roachtestutil.GetWorkloadHistogramArgs(t, c, getKVLabels(256, 0, 50))+` {pgurl:6-7}`)
+			roachtestutil.GetWorkloadHistogramString(t, c, getKVLabels(256, 0, 50), true)+` {pgurl:6-7}`)
 		if ctx.Err() != nil {
 			return nil // test requested workload shutdown
 		}
@@ -564,7 +604,7 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 	// breakers for all ranges by default.
 	settings.ClusterSettings["kv.dist_sender.circuit_breakers.mode"] = "all ranges"
 
-	m := c.NewMonitor(ctx, c.CRDBNodes())
+	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 
 	failer := makeFailer(t, c, m, failureModeBlackhole, settings, rng).(PartialFailer)
 	failer.Setup(ctx)
@@ -573,13 +613,14 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 	c.Start(ctx, t.L(), failoverStartOpts(), settings, c.Range(1, 3))
 
 	conn := c.Conn(ctx, t.L(), 1)
+	setMaxLifetime(conn)
 
 	// Place all ranges on n1-n3 to start with, and wait for upreplication.
 	configureAllZones(t, ctx, conn, zoneConfig{replicas: 3, onlyNodes: []int{1, 2, 3}})
 
 	// NB: We want to ensure the system ranges are all down-replicated from their
 	// initial RF of 5, so pass in roachtestutil.ExactlyReplicationFactor below.
-	require.NoError(t, roachtestutil.WaitForReplication(ctx, t.L(), conn, 3, roachtestutil.ExactlyReplicationFactor))
+	require.NoError(t, roachtestutil.WaitForReplication(ctx, t.L(), conn, 3, roachprod.ExactlyReplicationFactor))
 
 	// Now that system ranges are properly placed on n1-n3, start n4-n6.
 	c.Start(ctx, t.L(), failoverStartOpts(), settings, c.Range(4, 6))
@@ -603,7 +644,7 @@ func runFailoverPartialLeaseLeader(ctx context.Context, t test.Test, c cluster.C
 	cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
 		err := c.RunE(ctx, option.WithNodes(c.WorkloadNode()), `./cockroach workload run kv --read-percent 50 `+
 			`--concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
-			roachtestutil.GetWorkloadHistogramArgs(t, c, getKVLabels(256, 0, 50))+` {pgurl:1-3}`)
+			roachtestutil.GetWorkloadHistogramString(t, c, getKVLabels(256, 0, 50), true)+` {pgurl:1-3}`)
 		if ctx.Err() != nil {
 			return nil // test requested workload shutdown
 		}
@@ -685,7 +726,7 @@ func runFailoverPartialLeaseLiveness(ctx context.Context, t test.Test, c cluster
 	settings := install.MakeClusterSettings()
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
-	m := c.NewMonitor(ctx, c.CRDBNodes())
+	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 
 	failer := makeFailer(t, c, m, failureModeBlackhole, settings, rng).(PartialFailer)
 	failer.Setup(ctx)
@@ -694,6 +735,7 @@ func runFailoverPartialLeaseLiveness(ctx context.Context, t test.Test, c cluster
 	c.Start(ctx, t.L(), failoverStartOpts(), settings, c.CRDBNodes())
 
 	conn := c.Conn(ctx, t.L(), 1)
+	setMaxLifetime(conn)
 
 	// Place all ranges on n1-n3, and an extra liveness leaseholder replica on n4.
 	configureAllZones(t, ctx, conn, zoneConfig{replicas: 3, onlyNodes: []int{1, 2, 3}})
@@ -717,7 +759,7 @@ func runFailoverPartialLeaseLiveness(ctx context.Context, t test.Test, c cluster
 	// all nodes regardless.
 	relocateRanges(t, ctx, conn, `database_name = 'kv'`, []int{1, 2, 3, 4}, []int{5, 6, 7})
 	relocateRanges(t, ctx, conn, `database_name != 'kv'`, []int{5, 6, 7}, []int{1, 2, 3, 4})
-	relocateRanges(t, ctx, conn, `range_id != 2`, []int{4}, []int{1, 2, 3})
+	relocateRanges(t, ctx, conn, predAllButLiveness, []int{4}, []int{1, 2, 3})
 
 	// Run workload on n8 using n1-n3 as gateways (not partitioned) until test
 	// ends (context cancels).
@@ -725,7 +767,7 @@ func runFailoverPartialLeaseLiveness(ctx context.Context, t test.Test, c cluster
 	cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
 		err := c.RunE(ctx, option.WithNodes(c.WorkloadNode()), `./cockroach workload run kv --read-percent 50 `+
 			`--concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
-			roachtestutil.GetWorkloadHistogramArgs(t, c, getKVLabels(256, 0, 50))+` {pgurl:1-3}`)
+			roachtestutil.GetWorkloadHistogramString(t, c, getKVLabels(256, 0, 50), true)+` {pgurl:1-3}`)
 		if ctx.Err() != nil {
 			return nil // test requested workload shutdown
 		}
@@ -746,8 +788,8 @@ func runFailoverPartialLeaseLiveness(ctx context.Context, t test.Test, c cluster
 				// them to where they should be.
 				relocateRanges(t, ctx, conn, `database_name = 'kv'`, []int{1, 2, 3, 4}, []int{5, 6, 7})
 				relocateRanges(t, ctx, conn, `database_name != 'kv'`, []int{node}, []int{1, 2, 3})
-				relocateRanges(t, ctx, conn, `range_id = 2`, []int{5, 6, 7}, []int{1, 2, 3, 4})
-				relocateLeases(t, ctx, conn, `range_id = 2`, 4)
+				relocateRanges(t, ctx, conn, predOnlyLiveness, []int{5, 6, 7}, []int{1, 2, 3, 4})
+				relocateLeases(t, ctx, conn, predOnlyLiveness, 4)
 
 				// Randomly sleep up to the lease renewal interval, to vary the time
 				// between the last lease renewal and the failure.
@@ -801,7 +843,7 @@ func runFailoverNonSystem(
 	settings.Env = append(settings.Env, "COCKROACH_ENABLE_UNSAFE_TEST_BUILTINS=true")
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
-	m := c.NewMonitor(ctx, c.CRDBNodes())
+	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 
 	failer := makeFailer(t, c, m, failureMode, settings, rng)
 	failer.Setup(ctx)
@@ -810,6 +852,7 @@ func runFailoverNonSystem(
 	c.Start(ctx, t.L(), failoverStartOpts(), settings, c.CRDBNodes())
 
 	conn := c.Conn(ctx, t.L(), 1)
+	setMaxLifetime(conn)
 
 	// Constrain all existing zone configs to n1-n3.
 	configureAllZones(t, ctx, conn, zoneConfig{replicas: 3, onlyNodes: []int{1, 2, 3}})
@@ -836,7 +879,7 @@ func runFailoverNonSystem(
 	cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
 		err := c.RunE(ctx, option.WithNodes(c.WorkloadNode()), `./cockroach workload run kv --read-percent 50 `+
 			`--concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
-			roachtestutil.GetWorkloadHistogramArgs(t, c, getKVLabels(256, 0, 50))+` {pgurl:1-3}`)
+			roachtestutil.GetWorkloadHistogramString(t, c, getKVLabels(256, 0, 50), true)+` {pgurl:1-3}`)
 		if ctx.Err() != nil {
 			return nil // test requested workload shutdown
 		}
@@ -908,7 +951,7 @@ func runFailoverLiveness(
 	settings.Env = append(settings.Env, "COCKROACH_ENABLE_UNSAFE_TEST_BUILTINS=true")
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
-	m := c.NewMonitor(ctx, c.CRDBNodes())
+	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 
 	failer := makeFailer(t, c, m, failureMode, settings, rng)
 	failer.Setup(ctx)
@@ -917,6 +960,7 @@ func runFailoverLiveness(
 	c.Start(ctx, t.L(), failoverStartOpts(), settings, c.CRDBNodes())
 
 	conn := c.Conn(ctx, t.L(), 1)
+	setMaxLifetime(conn)
 
 	// Constrain all existing zone configs to n1-n3.
 	configureAllZones(t, ctx, conn, zoneConfig{replicas: 3, onlyNodes: []int{1, 2, 3}})
@@ -939,17 +983,17 @@ func runFailoverLiveness(
 	// do it ourselves. Precreating the database/range and moving it to the
 	// correct nodes first is not sufficient, since workload will spread the
 	// ranges across all nodes regardless.
-	relocateRanges(t, ctx, conn, `range_id != 2`, []int{4}, []int{1, 2, 3})
+	relocateRanges(t, ctx, conn, predAllButLiveness, []int{4}, []int{1, 2, 3})
 
-	// We also make sure the lease is located on n4.
-	relocateLeases(t, ctx, conn, `range_id = 2`, 4)
+	// We also make sure the liveness lease is located on n4.
+	relocateLeases(t, ctx, conn, predOnlyLiveness, 4)
 
 	// Run workload on n5 via n1-n3 gateways until test ends (context cancels).
 	t.L().Printf("running workload")
 	cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
 		err := c.RunE(ctx, option.WithNodes(c.WorkloadNode()), `./cockroach workload run kv --read-percent 50 `+
 			`--concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
-			roachtestutil.GetWorkloadHistogramArgs(t, c, getKVLabels(256, 0, 50))+` {pgurl:1-3}`)
+			roachtestutil.GetWorkloadHistogramString(t, c, getKVLabels(256, 0, 50), true)+` {pgurl:1-3}`)
 		if ctx.Err() != nil {
 			return nil // test requested workload shutdown
 		}
@@ -965,8 +1009,8 @@ func runFailoverLiveness(
 
 			// Ranges and leases may occasionally escape their constraints. Move them
 			// to where they should be.
-			relocateRanges(t, ctx, conn, `range_id != 2`, []int{4}, []int{1, 2, 3})
-			relocateLeases(t, ctx, conn, `range_id = 2`, 4)
+			relocateRanges(t, ctx, conn, predAllButLiveness, []int{4}, []int{1, 2, 3})
+			relocateLeases(t, ctx, conn, predOnlyLiveness, 4)
 
 			// Randomly sleep up to the lease renewal interval, to vary the time
 			// between the last lease renewal and the failure.
@@ -981,7 +1025,7 @@ func runFailoverLiveness(
 
 			t.L().Printf("recovering n%d (%s)", 4, failer)
 			failer.Recover(ctx, 4)
-			relocateLeases(t, ctx, conn, `range_id = 2`, 4)
+			relocateLeases(t, ctx, conn, predOnlyLiveness, 4)
 		}
 
 		sleepFor(ctx, t, time.Minute) // let cluster recover
@@ -1021,7 +1065,7 @@ func runFailoverSystemNonLiveness(
 	settings.Env = append(settings.Env, "COCKROACH_ENABLE_UNSAFE_TEST_BUILTINS=true")
 	settings.Env = append(settings.Env, "COCKROACH_SCAN_MAX_IDLE_TIME=100ms") // speed up replication
 
-	m := c.NewMonitor(ctx, c.CRDBNodes())
+	m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 
 	failer := makeFailer(t, c, m, failureMode, settings, rng)
 	failer.Setup(ctx)
@@ -1030,6 +1074,7 @@ func runFailoverSystemNonLiveness(
 	c.Start(ctx, t.L(), failoverStartOpts(), settings, c.CRDBNodes())
 
 	conn := c.Conn(ctx, t.L(), 1)
+	setMaxLifetime(conn)
 
 	// Constrain all existing zone configs to n4-n6, except liveness which is
 	// constrained to n1-n3.
@@ -1051,9 +1096,9 @@ func runFailoverSystemNonLiveness(
 	// n1-n3, so we do it ourselves. Precreating the database/range and moving it
 	// to the correct nodes first is not sufficient, since workload will spread
 	// the ranges across all nodes regardless.
-	relocateRanges(t, ctx, conn, `database_name = 'kv' OR range_id = 2`,
+	relocateRanges(t, ctx, conn, `database_name = 'kv' OR `+predOnlyLiveness,
 		[]int{4, 5, 6}, []int{1, 2, 3})
-	relocateRanges(t, ctx, conn, `database_name != 'kv' AND range_id != 2`,
+	relocateRanges(t, ctx, conn, `database_name != 'kv' AND `+predAllButLiveness,
 		[]int{1, 2, 3}, []int{4, 5, 6})
 
 	// Run workload on n7 via n1-n3 as gateways until test ends (context cancels).
@@ -1061,7 +1106,7 @@ func runFailoverSystemNonLiveness(
 	cancelWorkload := m.GoWithCancel(func(ctx context.Context) error {
 		err := c.RunE(ctx, option.WithNodes(c.WorkloadNode()), `./cockroach workload run kv --read-percent 50 `+
 			`--concurrency 256 --max-rate 2048 --timeout 1m --tolerate-errors `+
-			roachtestutil.GetWorkloadHistogramArgs(t, c, getKVLabels(256, 0, 50))+` {pgurl:1-3}`)
+			roachtestutil.GetWorkloadHistogramString(t, c, getKVLabels(256, 0, 50), true)+` {pgurl:1-3}`)
 		if ctx.Err() != nil {
 			return nil // test requested workload shutdown
 		}
@@ -1078,9 +1123,9 @@ func runFailoverSystemNonLiveness(
 
 				// Ranges may occasionally escape their constraints. Move them
 				// to where they should be.
-				relocateRanges(t, ctx, conn, `database_name != 'kv' AND range_id != 2`,
+				relocateRanges(t, ctx, conn, `database_name != 'kv' AND `+predAllButLiveness,
 					[]int{1, 2, 3}, []int{4, 5, 6})
-				relocateRanges(t, ctx, conn, `database_name = 'kv' OR range_id = 2`,
+				relocateRanges(t, ctx, conn, `database_name = 'kv' OR `+predOnlyLiveness,
 					[]int{4, 5, 6}, []int{1, 2, 3})
 
 				// Randomly sleep up to the lease renewal interval, to vary the time
@@ -1201,7 +1246,7 @@ func makeFailerWithoutLocalNoop(
 			c:             c,
 			m:             m,
 			startSettings: settings,
-			staller:       roachtestutil.MakeDmsetupDiskStaller(t, c),
+			staller:       roachtestutil.MakeDmsetupDiskStaller(t, c, false),
 		}
 	case failureModePause:
 		return &pauseFailer{
@@ -1341,11 +1386,9 @@ func (f *blackholeFailer) Fail(ctx context.Context, nodeID int) {
 // FailPartial creates a partial blackhole failure between the given node and
 // peers.
 func (f *blackholeFailer) FailPartial(ctx context.Context, nodeID int, peerIDs []int) {
-	peerIPs, err := f.c.InternalIP(ctx, f.t.L(), peerIDs)
-	require.NoError(f.t, err)
-
-	for _, peerIP := range peerIPs {
+	for _, peerID := range peerIDs {
 		pgport := fmt.Sprintf("{pgport:%d}", nodeID)
+		peerIP := fmt.Sprintf("{ip:%d}", peerID)
 
 		// When dropping both input and output, make sure we drop packets in both
 		// directions for both the inbound and outbound TCP connections, such that
@@ -1562,18 +1605,24 @@ type diskStallFailer struct {
 	staller       diskStaller
 }
 
-func (f *diskStallFailer) Mode() failureMode           { return failureModeDiskStall }
-func (f *diskStallFailer) String() string              { return string(f.Mode()) }
-func (f *diskStallFailer) CanUseLocal() bool           { return false } // needs dmsetup
-func (f *diskStallFailer) CanUseChaos() bool           { return true }
-func (f *diskStallFailer) CanRunWith(failureMode) bool { return true }
+func (f *diskStallFailer) Mode() failureMode { return failureModeDiskStall }
+func (f *diskStallFailer) String() string    { return string(f.Mode()) }
+func (f *diskStallFailer) CanUseLocal() bool { return false } // needs dmsetup
+func (f *diskStallFailer) CanUseChaos() bool { return true }
+
+// CanRunWith returns false for other disk stalls, as the FI library it uses
+// does not allow concurrent failure modes to be injected without recovering
+// from them first.
+// TODO(darryl): This is a temporary workaround to reduce test failure noise.
+// We should fix this by merging concurrent disk stall failures and injecting
+// them in one shot.
+func (f *diskStallFailer) CanRunWith(other failureMode) bool { return other != failureModeDiskStall }
 
 func (f *diskStallFailer) Setup(ctx context.Context) {
 	f.staller.Setup(ctx)
 }
 
 func (f *diskStallFailer) Cleanup(ctx context.Context) {
-	f.staller.Unstall(ctx, f.c.All())
 	// We have to stop the cluster before cleaning up the staller.
 	f.m.ExpectDeaths(int32(f.c.Spec().NodeCount))
 	f.c.Stop(ctx, f.t.L(), option.DefaultStopOpts(), f.c.All())
@@ -1596,7 +1645,9 @@ func (f *diskStallFailer) Fail(ctx context.Context, nodeID int) {
 }
 
 func (f *diskStallFailer) Recover(ctx context.Context, nodeID int) {
-	f.staller.Unstall(ctx, f.c.Node(nodeID))
+	if err := f.staller.Unstall(ctx, f.c.Node(nodeID)); err != nil {
+		f.t.Fatalf("failed to unstall disk %v", err)
+	}
 	// Pebble's disk stall detector should have terminated the node, but in case
 	// it didn't, we explicitly stop it first.
 	f.c.Stop(ctx, f.t.L(), option.DefaultStopOpts(), f.c.Node(nodeID))
@@ -1835,4 +1886,11 @@ func getKVLabels(concurrency int, insertCount int, readPercent int) map[string]s
 		"insert_count": fmt.Sprintf("%d", insertCount),
 		"read_percent": fmt.Sprintf("%d", readPercent),
 	}
+}
+
+func setMaxLifetime(conn *gosql.DB) {
+	// See https://github.com/cockroachdb/cockroach/issues/143121#issuecomment-2739835367.
+	// This is out of an abundance of caution, since we are often introducing network
+	// issues in failover tests.
+	conn.SetConnMaxLifetime(10 * time.Second)
 }

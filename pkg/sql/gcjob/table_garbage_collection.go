@@ -9,6 +9,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
@@ -35,7 +36,7 @@ func gcTables(
 	ctx context.Context, execCfg *sql.ExecutorConfig, progress *jobspb.SchemaChangeGCProgress,
 ) error {
 	if log.V(2) {
-		log.Infof(ctx, "GC is being considered for tables: %+v", progress.Tables)
+		log.Dev.Infof(ctx, "GC is being considered for tables: %+v", progress.Tables)
 	}
 
 	for _, droppedTable := range progress.Tables {
@@ -52,7 +53,7 @@ func gcTables(
 			if isMissingDescriptorError(err) {
 				// This can happen if another GC job created for the same table got to
 				// the table first. See #50344.
-				log.Warningf(ctx, "table descriptor %d not found while attempting to GC, skipping", droppedTable.ID)
+				log.Dev.Warningf(ctx, "table descriptor %d not found while attempting to GC, skipping", droppedTable.ID)
 				// Update the details payload to indicate that the table was dropped.
 				markTableGCed(ctx, droppedTable.ID, progress, jobspb.SchemaChangeGCProgress_CLEARED)
 				continue
@@ -106,7 +107,7 @@ func ClearTableData(
 	sv *settings.Values,
 	table catalog.TableDescriptor,
 ) error {
-	log.Infof(ctx, "clearing data for table %d", table.GetID())
+	log.Dev.Infof(ctx, "clearing data for table %d", table.GetID())
 	tableKey := roachpb.RKey(codec.TablePrefix(uint32(table.GetID())))
 	tableSpan := roachpb.RSpan{Key: tableKey, EndKey: tableKey.PrefixEnd()}
 	return clearSpanData(ctx, db, distSender, tableSpan)
@@ -171,7 +172,6 @@ func clearSpanData(
 			timer.Reset(waitTime)
 			select {
 			case <-timer.C:
-				timer.Read = true
 			case <-ctx.Done():
 				return ctx.Err()
 			}
@@ -200,7 +200,7 @@ func DeleteAllTableData(
 	codec keys.SQLCodec,
 	table catalog.TableDescriptor,
 ) error {
-	log.Infof(ctx, "deleting data for table %d", table.GetID())
+	log.Dev.Infof(ctx, "deleting data for table %d", table.GetID())
 	tableKey := roachpb.RKey(codec.TablePrefix(uint32(table.GetID())))
 	tableSpan := roachpb.RSpan{Key: tableKey, EndKey: tableKey.PrefixEnd()}
 	return deleteAllSpanData(ctx, db, distSender, tableSpan)
@@ -255,7 +255,7 @@ func deleteAllSpanData(
 			})
 			log.VEventf(ctx, 2, "delete range %s - %s", lastKey, endKey)
 			if err := db.Run(ctx, &b); err != nil {
-				log.Errorf(ctx, "delete range %s - %s failed: %s", span.Key, span.EndKey, err.Error())
+				log.Dev.Errorf(ctx, "delete range %s - %s failed: %s", span.Key, span.EndKey, err.Error())
 				return errors.Wrapf(err, "delete range %s - %s", lastKey, endKey)
 			}
 			n = 0
@@ -273,9 +273,15 @@ func deleteAllSpanData(
 func deleteTableDescriptorsAfterGC(
 	ctx context.Context,
 	execCfg *sql.ExecutorConfig,
+	job *jobs.Job,
 	details *jobspb.SchemaChangeGCDetails,
 	progress *jobspb.SchemaChangeGCProgress,
 ) error {
+	tableDropTimes := make(map[descpb.ID]int64, len(details.Tables))
+	for _, t := range details.Tables {
+		tableDropTimes[t.ID] = t.DropTime
+	}
+
 	checkImmediatelyOnWait := false
 	for _, droppedTable := range progress.Tables {
 		if droppedTable.Status == jobspb.SchemaChangeGCProgress_CLEARED {
@@ -291,7 +297,7 @@ func deleteTableDescriptorsAfterGC(
 			if isMissingDescriptorError(err) {
 				// This can happen if another GC job created for the same table got to
 				// the table first. See #50344.
-				log.Warningf(ctx, "table descriptor %d not found while attempting to GC, skipping", droppedTable.ID)
+				log.Dev.Warningf(ctx, "table descriptor %d not found while attempting to GC, skipping", droppedTable.ID)
 				// Update the details payload to indicate that the table was dropped.
 				markTableGCed(ctx, droppedTable.ID, progress, jobspb.SchemaChangeGCProgress_CLEARED)
 				continue
@@ -305,7 +311,11 @@ func deleteTableDescriptorsAfterGC(
 			continue
 		}
 
-		// First, delete all the table data.
+		// First, wait until the data range becomes empty: the GC job laid
+		// down MVCC range tombstones in deleteData, and KV will eventually
+		// compact them away. Removing the descriptor and zone config before
+		// this is observable is what would let span configuration disappear
+		// out from under in-flight readers.
 		if err := waitForEmptyPrefix(
 			ctx, execCfg.DB, &execCfg.Settings.SV,
 			execCfg.GCJobTestingKnobs.SkipWaitingForMVCCGC,
@@ -317,6 +327,25 @@ func deleteTableDescriptorsAfterGC(
 		// Assume that once one of our tables have completed GC, the next table may
 		// also have completed GC.
 		checkImmediatelyOnWait = true
+
+		// Now wait for any protected timestamp record covering the span to
+		// be released. The descriptor (and the span config record derived
+		// from it) carries the ExcludeDataFromBackup flag that the backup
+		// processor relies on when handling BatchTimestampBeforeGCError;
+		// cleaning either up while a PTS is still held would silently
+		// remove that signal. See protectionScope for the broader story.
+		if err := waitForNoProtectionsBeforeDropTime(
+			ctx, execCfg, job.ID(),
+			table.GetID(), tableDropTimes[table.GetID()],
+			table.TableSpan(execCfg.Codec),
+			func() {
+				persistProgress(ctx, execCfg, job, progress,
+					sql.StatusWaitingForProtectedTimestamp)
+			},
+		); err != nil {
+			return errors.Wrapf(err, "waiting for PTS release on table %d", table.GetID())
+		}
+
 		delta, err := spanconfig.Delta(ctx, execCfg.SpanConfigSplitter, table, nil /* uncommitted */)
 		if err != nil {
 			return err
@@ -352,4 +381,62 @@ func deleteTableDescriptorsAfterGC(
 		}
 	}
 	return nil
+}
+
+// waitForNoProtectionsBeforeDropTime polls until no protected timestamp record
+// covers the span at a wall time earlier than droppedAtTime. Backup-issued PTS
+// records that opt into IgnoreIfExcludedFromBackup are honored here even on
+// excluded spans; see protectionScope for the rationale.
+//
+// onWait is invoked exactly once, just before we begin polling, so callers can
+// surface a meaningful job status. Returns immediately if SkipWaitingForPTSRelease
+// is set.
+func waitForNoProtectionsBeforeDropTime(
+	ctx context.Context,
+	execCfg *sql.ExecutorConfig,
+	jobID jobspb.JobID,
+	descID descpb.ID,
+	droppedAtTime int64,
+	sp roachpb.Span,
+	onWait func(),
+) error {
+	if execCfg.GCJobTestingKnobs.SkipWaitingForPTSRelease {
+		return nil
+	}
+	check := func() (bool, error) {
+		isProtected, err := isProtected(
+			ctx, jobID, droppedAtTime, execCfg.Codec, execCfg.GCJobTestingKnobs,
+			execCfg.SpanConfigKVAccessor, sp, protectionScopeForDescriptorCleanup,
+		)
+		if err != nil {
+			return false, err
+		}
+		if fn := execCfg.GCJobTestingKnobs.RunAfterPTSReleaseCheck; fn != nil {
+			fn(jobID, descID, isProtected)
+		}
+		return !isProtected, nil
+	}
+	if released, err := check(); err != nil || released {
+		return err
+	}
+	if onWait != nil {
+		onWait()
+	}
+	var timer timeutil.Timer
+	defer timer.Stop()
+	for {
+		timer.Reset(EmptySpanPollInterval.Get(&execCfg.Settings.SV))
+		select {
+		case <-timer.C:
+			released, err := check()
+			if err != nil {
+				return err
+			}
+			if released {
+				return nil
+			}
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
 }

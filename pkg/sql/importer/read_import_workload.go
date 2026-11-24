@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cloud"
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/kv"
+	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
@@ -27,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/errors"
@@ -52,9 +54,6 @@ func newWorkloadReader(
 	db *kv.DB,
 ) *workloadReader {
 	return &workloadReader{semaCtx: semaCtx, evalCtx: evalCtx, table: table, kvCh: kvCh, parallelism: parallelism, db: db}
-}
-
-func (w *workloadReader) start(ctx ctxgroup.Group) {
 }
 
 // makeDatumFromColOffset tries to fast-path a few workload-generated types into
@@ -120,6 +119,20 @@ func makeDatumFromColOffset(
 			str := *(*string)(unsafe.Pointer(&data))
 			return rowenc.ParseDatumStringAs(ctx, hint, str, evalCtx, semaCtx)
 		}
+	case types.TimestampFamily, types.TimestampTZFamily:
+		switch hint.Family() {
+		case types.TimestampFamily:
+			// workloads are responsible for rounding their timestamp(s) so skip
+			// MakeDTimestamp here and just directly construct it.
+			return alloc.NewDTimestamp(tree.DTimestamp{Time: col.Timestamp()[rowIdx]}), nil
+
+		case types.TimestampTZFamily:
+			// workloads are responsible for rounding their timestamp(s) so skip
+			// MakeDTimestamp here and just directly construct it.
+			return alloc.NewDTimestampTZ(tree.DTimestampTZ{Time: col.Timestamp()[rowIdx]}), nil
+		}
+	case types.DecimalFamily:
+		return alloc.NewDDecimal(tree.DDecimal{Decimal: col.Decimal()[rowIdx]}), nil
 	}
 	return nil, errors.Errorf(
 		`don't know how to interpret %s column as %s`, col.Type(), hint)
@@ -128,7 +141,7 @@ func makeDatumFromColOffset(
 func (w *workloadReader) readFiles(
 	ctx context.Context,
 	dataFiles map[int32]string,
-	_ map[int32]int64,
+	resumePos map[int32]int64,
 	_ roachpb.IOFileFormat,
 	_ cloud.ExternalStorageFactory,
 	_ username.SQLUsername,
@@ -168,13 +181,25 @@ func (w *workloadReader) readFiles(
 			return errors.Errorf(`unknown table %s for generator %s`, conf.Table, meta.Name)
 		}
 
+		batchBegin := int(conf.BatchBegin)
+		if resumePos != nil {
+			if pos, ok := resumePos[fileID]; ok && pos > int64(batchBegin) {
+				batchBegin = int(pos)
+			}
+		}
+
 		wc := NewWorkloadKVConverter(
-			fileID, w.table, t.InitialRows, int(conf.BatchBegin), int(conf.BatchEnd), w.kvCh, w.db)
+			fileID, w.table, t.InitialRows, batchBegin, int(conf.BatchEnd), w.kvCh, w.db)
 		wcs = append(wcs, wc)
 	}
 
 	for _, wc := range wcs {
-		if err := ctxgroup.GroupWorkers(ctx, w.parallelism, func(ctx context.Context, _ int) error {
+		if err := ctxgroup.GroupWorkers(ctx, w.parallelism, func(ctx context.Context, _ int) (retErr error) {
+			defer func() {
+				if r := recover(); r != nil {
+					retErr = errors.CombineErrors(logcrash.PanicAsError(1, r), retErr)
+				}
+			}()
 			evalCtx := w.evalCtx.Copy()
 			return wc.Worker(ctx, evalCtx, w.semaCtx)
 		}); err != nil {
@@ -186,17 +211,19 @@ func (w *workloadReader) readFiles(
 
 // WorkloadKVConverter converts workload.BatchedTuples to []roachpb.KeyValues.
 type WorkloadKVConverter struct {
-	tableDesc      catalog.TableDescriptor
-	rows           workload.BatchedTuples
-	batchIdxAtomic int64
-	batchEnd       int
-	kvCh           chan row.KVBatch
-	db             *kv.DB
+	tableDesc  catalog.TableDescriptor
+	rows       workload.BatchedTuples
+	batchIdx   atomic.Int64
+	batchStart int
+	batchEnd   int
+	kvCh       chan row.KVBatch
+	db         *kv.DB
 
 	// For progress reporting
-	fileID                int32
-	totalBatches          float32
-	finishedBatchesAtomic int64
+	fileID               int32
+	totalBatches         float32
+	finishedBatchesCount atomic.Int64
+	batchesDone          []atomic.Bool
 }
 
 // NewWorkloadKVConverter returns a WorkloadKVConverter for the given table and
@@ -209,16 +236,34 @@ func NewWorkloadKVConverter(
 	kvCh chan row.KVBatch,
 	db *kv.DB,
 ) *WorkloadKVConverter {
-	return &WorkloadKVConverter{
-		tableDesc:      tableDesc,
-		rows:           rows,
-		batchIdxAtomic: int64(batchStart) - 1,
-		batchEnd:       batchEnd,
-		kvCh:           kvCh,
-		totalBatches:   float32(batchEnd - batchStart),
-		fileID:         fileID,
-		db:             db,
+	numBatches := batchEnd - batchStart
+	if numBatches < 0 {
+		numBatches = 0
 	}
+	wc := &WorkloadKVConverter{
+		tableDesc:  tableDesc,
+		rows:       rows,
+		batchStart: batchStart,
+		batchEnd:   batchEnd,
+		kvCh:       kvCh,
+		db:         db,
+
+		fileID:       fileID,
+		totalBatches: float32(numBatches),
+		batchesDone:  make([]atomic.Bool, numBatches),
+	}
+	wc.batchIdx.Store(int64(batchStart) - 1)
+	return wc
+}
+
+// lowWatermarkBatch returns the batch index of the first incomplete batch.
+func (w *WorkloadKVConverter) lowWatermarkBatch() int64 {
+	for i := range w.batchesDone {
+		if !w.batchesDone[i].Load() {
+			return int64(w.batchStart + i)
+		}
+	}
+	return int64(w.batchEnd)
 }
 
 // Worker can be called concurrently to create multiple workers to process
@@ -234,6 +279,12 @@ func NewWorkloadKVConverter(
 func (w *WorkloadKVConverter) Worker(
 	ctx context.Context, evalCtx *eval.Context, semaCtx *tree.SemaContext,
 ) error {
+	// Workload needs to pace itself explicitly since it manages its own workers
+	// and loops rather than using the "runParallelImport" helper which the other
+	// formats use and which has pacing built-in.
+	pacer := bulk.NewCPUPacer(ctx, w.db, importElasticCPUControlEnabled)
+	defer pacer.Close()
+
 	conv, err := row.NewDatumRowConverter(
 		ctx, semaCtx, w.tableDesc, nil, /* targetColNames */
 		evalCtx, w.kvCh, nil /* seqChunkProvider */, nil /* metrics */, w.db,
@@ -243,20 +294,27 @@ func (w *WorkloadKVConverter) Worker(
 	}
 	conv.KvBatch.Source = w.fileID
 	conv.FractionFn = func() float32 {
-		return float32(atomic.LoadInt64(&w.finishedBatchesAtomic)) / w.totalBatches
+		return float32(w.finishedBatchesCount.Load()) / w.totalBatches
+	}
+	// The callback supplies a batch number rather than a row index.
+	conv.CompletedRowFn = func() int64 {
+		return w.lowWatermarkBatch()
 	}
 	var alloc tree.DatumAlloc
 	var a bufalloc.ByteAllocator
 	cb := coldata.NewMemBatchWithCapacity(nil /* typs */, 0 /* capacity */, coldata.StandardColumnFactory)
 
 	for {
-		batchIdx := int(atomic.AddInt64(&w.batchIdxAtomic, 1))
+		batchIdx := int(w.batchIdx.Add(1))
 		if batchIdx >= w.batchEnd {
 			break
 		}
 		a = a.Truncate()
 		w.rows.FillBatch(batchIdx, cb, &a)
 		for rowIdx, numRows := 0, cb.Length(); rowIdx < numRows; rowIdx++ {
+			if _, err := pacer.Pace(ctx); err != nil {
+				return err
+			}
 			for colIdx, col := range cb.ColVecs() {
 				// TODO(dan): This does a type switch once per-datum. Reduce this to
 				// a one-time switch per column.
@@ -281,7 +339,8 @@ func (w *WorkloadKVConverter) Worker(
 				return err
 			}
 		}
-		atomic.AddInt64(&w.finishedBatchesAtomic, 1)
+		w.batchesDone[batchIdx-w.batchStart].Store(true)
+		w.finishedBatchesCount.Add(1)
 	}
 	return conv.SendBatch(ctx)
 }

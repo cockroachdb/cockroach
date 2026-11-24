@@ -40,14 +40,14 @@ const ProductionKVBatchSize KeyLimit = 100000
 
 // defaultBatchBytesLimit is the maximum number of bytes a scan request can
 // return.
-var defaultBatchBytesLimit = BytesLimit(skip.ClampMetamorphicConstantUnderStress(
+var defaultBatchBytesLimit = BytesLimit(skip.ClampMetamorphicConstantUnderDuress(
 	metamorphic.ConstantWithTestRange(
 		"default-batch-bytes-limit",
 		defaultBatchBytesLimitProductionValue, /* defaultValue */
 		1,                                     /* min */
 		64<<10,                                /* max, 64KiB */
 	),
-	1<<10, /* min, 1KiB */
+	10<<10, /* min, 10KiB */
 ))
 
 const defaultBatchBytesLimitProductionValue = 10 << 20 /* 10MiB */

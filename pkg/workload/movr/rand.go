@@ -7,8 +7,7 @@ package movr
 
 import (
 	"encoding/json"
-
-	"golang.org/x/exp/rand"
+	"math/rand/v2"
 )
 
 const numerals = `1234567890`
@@ -21,7 +20,7 @@ var bikeBrands = [...]string{
 func randString(rng *rand.Rand, length int, alphabet string) string {
 	buf := make([]byte, length)
 	for i := range buf {
-		buf[i] = alphabet[rng.Intn(len(alphabet))]
+		buf[i] = alphabet[rng.IntN(len(alphabet))]
 	}
 	return string(buf)
 }
@@ -31,11 +30,11 @@ func randCreditCard(rng *rand.Rand) string {
 }
 
 func randVehicleType(rng *rand.Rand) string {
-	return vehicleTypes[rng.Intn(len(vehicleTypes))]
+	return vehicleTypes[rng.IntN(len(vehicleTypes))]
 }
 
 func randVehicleStatus(rng *rand.Rand) string {
-	r := rng.Intn(100)
+	r := rng.IntN(100)
 	switch {
 	case r < 40:
 		return `available`
@@ -47,22 +46,22 @@ func randVehicleStatus(rng *rand.Rand) string {
 }
 
 func randLatLong(rng *rand.Rand) (float64, float64) {
-	lat, long := float64(-180+rng.Intn(360)), float64(-90+rng.Intn(180))
+	lat, long := float64(-180+rng.IntN(360)), float64(-90+rng.IntN(180))
 	return lat, long
 }
 
 func randCity(rng *rand.Rand) string {
-	idx := rng.Int31n(int32(len(cities)))
+	idx := rng.Int32N(int32(len(cities)))
 	return cities[idx].city
 }
 
 func randVehicleMetadata(rng *rand.Rand, vehicleType string) string {
 	m := map[string]string{
-		`color`: vehicleColors[rng.Intn(len(vehicleColors))],
+		`color`: vehicleColors[rng.IntN(len(vehicleColors))],
 	}
 	switch vehicleType {
 	case `bike`:
-		m[`brand`] = bikeBrands[rng.Intn(len(bikeBrands))]
+		m[`brand`] = bikeBrands[rng.IntN(len(bikeBrands))]
 	}
 	j, err := json.Marshal(m)
 	if err != nil {

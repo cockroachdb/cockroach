@@ -50,6 +50,12 @@ func TestDeadlockDetection(t *testing.T) {
 	defer srv.Stopper().Stop(ctx)
 	sqlr := sqlutils.MakeSQLRunner(db)
 
+	hostRunner := sqlutils.MakeSQLRunner(srv.SystemLayer().SQLConn(t))
+	// If we happen to enable buffered writes metamorphically, we must have the
+	// split lock reliability enabled (which can be tweaked metamorphically too,
+	// #147217).
+	hostRunner.Exec(t, "SET CLUSTER SETTING kv.lock_table.unreplicated_lock_reliability.split.enabled = true")
+
 	sqlr.Exec(t, "CREATE TABLE test1 (id int, age int)")
 	sqlr.Exec(t, "CREATE TABLE test2 (id int, age int)")
 	sqlr.Exec(t, "INSERT INTO test1 (id, age) VALUES (1, 0)")
@@ -116,7 +122,7 @@ func TestDeadlockDetection(t *testing.T) {
 			wg.Done()
 		}()
 
-		// After executing the next operation, a deadlock is created.  Measure the
+		// After executing the next operation, a deadlock is created. Measure the
 		// time it takes for the deadlock condition to be broken.
 		_, tx1Err := tx1.Exec("UPDATE test2 SET age = 1 WHERE id = 1")
 		wg.Wait()
@@ -127,9 +133,11 @@ func TestDeadlockDetection(t *testing.T) {
 		if tx1Err != nil {
 			require.NoError(t, tx2Err)
 			require.Contains(t, tx1Err.Error(), "TransactionRetryWithProtoRefreshError")
-		} else {
+		} else if tx2Err != nil {
 			require.NoError(t, tx1Err)
 			require.Contains(t, tx2Err.Error(), "TransactionRetryWithProtoRefreshError")
+		} else {
+			t.Fatal("neither txn encountered an error")
 		}
 
 		require.NoError(t, tx1.Rollback())

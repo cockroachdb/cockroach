@@ -8,7 +8,7 @@ package kvserver_test
 import (
 	"context"
 	"fmt"
-	io "io"
+	"io"
 	"math/rand"
 	"path/filepath"
 	"strconv"
@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -40,7 +39,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/cockroach/pkg/util/vfsutil"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/pebble/vfs"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -236,7 +237,8 @@ func TestCheckConsistencyReplay(t *testing.T) {
 
 func TestCheckConsistencyInconsistent(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer log.Scope(t).Close(t)
+	scope := log.Scope(t)
+	defer scope.Close(t)
 
 	// Test expects simple MVCC value encoding.
 	storage.DisableMetamorphicSimpleValueEncoding(t)
@@ -261,7 +263,10 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	}
 
 	serverArgsPerNode := make(map[int]base.TestServerArgs, numStores)
+	var vfsIDs []string
 	for i := 0; i < numStores; i++ {
+		id := strconv.FormatInt(int64(i), 10)
+		vfsIDs = append(vfsIDs, id)
 		serverArgsPerNode[i] = base.TestServerArgs{
 			Knobs: base.TestingKnobs{
 				Store:  &testKnobs,
@@ -269,10 +274,26 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 			},
 			StoreSpecs: []base.StoreSpec{{
 				InMemory:    true,
-				StickyVFSID: strconv.FormatInt(int64(i), 10),
+				StickyVFSID: id,
 			}},
 		}
 	}
+
+	// If the test fails, preserve the in-memory VFSes so that we can poke at them.
+	defer func() {
+		if !t.Failed() {
+			return
+		}
+
+		// NB: scope has a directory even under -show-logs.
+		outDir := filepath.Join(scope.GetDirectory(), "stores")
+		t.Logf("dumping sticky VFS to %s", outDir)
+		for i := 0; i < numStores; i++ {
+			fs := stickyVFSRegistry.Get(vfsIDs[i])
+			dest := filepath.Join(outDir, fmt.Sprintf("s%d", i+1))
+			assert.NoError(t, vfsutil.CopyRecursive(fs, vfs.Default, "/", dest))
+		}
+	}()
 
 	tc = testcluster.StartTestCluster(t, numStores, base.TestClusterArgs{
 		ReplicationMode:   base.ReplicationAuto,
@@ -302,9 +323,9 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	}
 
 	onDiskCheckpointPaths := func(nodeIdx int) []string {
-		fs := stickyVFSRegistry.Get(strconv.FormatInt(int64(nodeIdx), 10))
+		fs := stickyVFSRegistry.Get(vfsIDs[nodeIdx])
 		store := tc.GetFirstStoreFromServer(t, nodeIdx)
-		checkpointPath := filepath.Join(store.TODOEngine().GetAuxiliaryDir(), "checkpoints")
+		checkpointPath := filepath.Join(store.TODOBothEngines().GetAuxiliaryDir(), "checkpoints")
 		checkpoints, _ := fs.List(checkpointPath)
 		var checkpointPaths []string
 		for _, cpDirName := range checkpoints {
@@ -333,11 +354,11 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 
 	// Write some arbitrary data only to store on n2. Inconsistent key "e"!
 	s2 := tc.GetFirstStoreFromServer(t, 1)
-	s2AuxDir := s2.TODOEngine().GetAuxiliaryDir()
+	s2AuxDir := s2.TODOBothEngines().GetAuxiliaryDir()
 	var val roachpb.Value
 	val.SetInt(42)
 	// Put an inconsistent key "e" to s2, and have s1 and s3 still agree.
-	_, err := storage.MVCCPut(context.Background(), s2.TODOEngine(),
+	_, err := storage.MVCCPut(context.Background(), s2.StateEngine(),
 		roachpb.Key("e"), tc.Server(0).Clock().Now(), val, storage.MVCCWriteOptions{})
 	require.NoError(t, err)
 
@@ -384,10 +405,11 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 		// Create a new store on top of checkpoint location inside existing in-mem
 		// VFS to verify its contents.
 		ctx := context.Background()
-		memFS := stickyVFSRegistry.Get(strconv.FormatInt(int64(i), 10))
-		env, err := fs.InitEnv(ctx, memFS, cps[0], fs.EnvConfig{RW: fs.ReadOnly}, nil /* statsCollector */)
+		memFS := stickyVFSRegistry.Get(vfsIDs[i])
+		settings := cluster.MakeClusterSettings()
+		env, err := fs.InitEnv(ctx, memFS, cps[0], fs.EnvConfig{RW: fs.ReadOnly, Version: settings.Version}, nil /* statsCollector */)
 		require.NoError(t, err)
-		cpEng, err := storage.Open(ctx, env, cluster.MakeClusterSettings(),
+		cpEng, err := storage.Open(ctx, env, settings,
 			storage.ForTesting, storage.MustExist, storage.CacheSize(1<<20))
 		if err != nil {
 			require.NoError(t, err)
@@ -396,13 +418,14 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 
 		// Find the problematic range in the storage.
 		var desc *roachpb.RangeDescriptor
-		require.NoError(t, kvstorage.IterateRangeDescriptorsFromDisk(context.Background(), cpEng,
+		require.NoError(t, kvstorage.IterateRangeDescriptorsFromCheckpoint(context.Background(), cpEng,
 			func(rd roachpb.RangeDescriptor) error {
 				if rd.RangeID == resp.Result[0].RangeID {
 					desc = &rd
 				}
 				return nil
-			}))
+			},
+		))
 		require.NotNil(t, desc)
 
 		// Compute a checksum over the content of the problematic range.
@@ -417,8 +440,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 
 	// A death rattle should have been written on s2. Note that the VFSes are
 	// zero-indexed whereas store IDs are one-indexed.
-	fs := stickyVFSRegistry.Get("1")
-	f, err := fs.Open(base.PreventedStartupFile(s2AuxDir))
+	f, err := stickyVFSRegistry.Get(vfsIDs[1]).Open(base.PreventedStartupFile(s2AuxDir))
 	require.NoError(t, err)
 	b, err := io.ReadAll(f)
 	require.NoError(t, err)
@@ -536,7 +558,7 @@ func testConsistencyQueueRecomputeStatsImpl(t *testing.T, hadEstimates bool) {
 		require.NoError(t, err)
 		defer eng.Close()
 
-		rsl := stateloader.Make(rangeID)
+		rsl := kvstorage.MakeStateLoader(rangeID)
 		ms, err := rsl.LoadMVCCStats(ctx, eng)
 		require.NoError(t, err)
 
@@ -606,18 +628,25 @@ func testConsistencyQueueRecomputeStatsImpl(t *testing.T, hadEstimates bool) {
 		t.Fatal(err)
 	}
 
-	// Force a run of the consistency queue, otherwise it might take a while.
-	store := tc.GetFirstStoreFromServer(t, 0)
-	require.NoError(t, store.ForceConsistencyQueueProcess())
+	// When running with leader leases, it might take an extra election interval
+	// for a lease to be established after adding the voters above because the
+	// leader needs to get store liveness support from the followers. The stats
+	// re-computation runs on the leaseholder and will fail if there isn't one.
+	testutils.SucceedsSoon(t, func() error {
+		// Force a run of the consistency queue, otherwise it might take a while.
+		store := tc.GetFirstStoreFromServer(t, 0)
+		require.NoError(t, store.ForceConsistencyQueueProcess())
 
-	// The stats should magically repair themselves. We'll first do a quick check
-	// and then a full recomputation.
-	repl, _, err := tc.Servers[0].GetStores().(*kvserver.Stores).GetReplicaForRangeID(ctx, rangeID)
-	require.NoError(t, err)
-	ms := repl.GetMVCCStats()
-	if ms.SysCount >= sysCountGarbage {
-		t.Fatalf("still have a SysCount of %d", ms.SysCount)
-	}
+		// The stats should magically repair themselves. We'll first do a quick check
+		// and then a full recomputation.
+		repl, _, err := tc.Servers[0].GetStores().(*kvserver.Stores).GetReplicaForRangeID(ctx, rangeID)
+		require.NoError(t, err)
+		ms := repl.GetMVCCStats()
+		if ms.SysCount >= sysCountGarbage {
+			return errors.Newf("still have a SysCount of %d", ms.SysCount)
+		}
+		return nil
+	})
 
 	if delta := computeDelta(db0); delta != (enginepb.MVCCStats{}) {
 		t.Fatalf("stats still in need of adjustment: %+v", delta)

@@ -6,19 +6,21 @@
 package norm
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/volatility"
+	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
 	"github.com/lib/pq/oid"
@@ -181,23 +183,56 @@ func (c *CustomFuncs) IsListOfConstants(elems memo.ScalarListExpr) bool {
 // array as a Const datum with type TArray.
 func (c *CustomFuncs) FoldArray(elems memo.ScalarListExpr, typ *types.T) opt.ScalarExpr {
 	elemType := typ.ArrayContents()
-	a := tree.NewDArray(elemType)
-	a.Array = make(tree.Datums, len(elems))
-	for i := range a.Array {
-		a.Array[i] = memo.ExtractConstDatum(elems[i])
-		if a.Array[i] == tree.DNull {
-			a.HasNulls = true
-		} else {
-			a.HasNonNulls = true
-		}
+	elements := make(tree.Datums, len(elems))
+	for i := range elements {
+		elements[i] = memo.ExtractConstDatum(elems[i])
 	}
-	return c.f.ConstructConst(a, typ)
+	return c.f.ConstructConst(tree.NewDArrayFromDatums(elemType, elements), typ)
 }
 
 // IsConstValueOrGroupOfConstValues returns true if the input is a constant,
 // or an array or tuple with only constant elements.
 func (c *CustomFuncs) IsConstValueOrGroupOfConstValues(input opt.ScalarExpr) bool {
 	return memo.CanExtractConstDatum(input)
+}
+
+// FoldComparisonWithAny evaluates a comparison expression over a constant on
+// the left-hand side and an ANY/SOME clause on the right-hand side.
+// It returns a constant expression if it finds elements in the clause
+// that make the comparison a definite value, and the evaluation causes
+// no error. Otherwise, it returns ok=false.
+func (c *CustomFuncs) FoldComparisonWithAny(
+	cmp opt.Operator, left, right opt.ScalarExpr,
+) (_ opt.ScalarExpr, ok bool) {
+	rightTuple := right.(*memo.TupleExpr)
+	allConst := true
+	hasNull := false
+	for _, expr := range rightTuple.Elems {
+		if !c.IsConstValueOrGroupOfConstValues(expr) {
+			allConst = false
+			continue
+		}
+		folded, ok := c.FoldComparison(cmp, left, expr)
+		if !ok {
+			continue
+		}
+		if _, ok := folded.(*memo.TrueExpr); ok {
+			return folded, true
+		}
+		if _, ok := folded.(*memo.NullExpr); ok {
+			hasNull = true
+		}
+	}
+	if allConst {
+		// In case every element in right tuple is a constant but none of them
+		// made the comparison return TrueExpr, we can safely fold
+		// expression to either FalseExpr or NullExpr.
+		if hasNull {
+			return c.f.ConstructNull(types.Bool), true
+		}
+		return c.f.ConstructFalse(), true
+	}
+	return nil, false
 }
 
 // IsNeverNull returns true if the input is a non-null constant value,
@@ -343,7 +378,7 @@ func (c *CustomFuncs) foldOIDFamilyCast(
 			if err != nil {
 				return nil, false, err
 			}
-			oid, ok := tree.AsDOid(cDatum)
+			oid, ok := cDatum.(*tree.DOid)
 			if !ok {
 				return nil, false, nil
 			}
@@ -368,9 +403,18 @@ func (c *CustomFuncs) foldOIDFamilyCast(
 				return nil, true, err
 			}
 
-			c.mem.Metadata().AddDependency(opt.DepByName(&resName), ds, privilege.SELECT)
+			// Pass an empty user so that re-validation uses the current
+			// session user (this is not a definer context).
+			c.mem.Metadata().AddDependency(opt.DepByName(&resName), ds, privilege.SELECT, username.SQLUsername{})
+			resolvedOid := catconstants.RemapPgCatalogOid(
+				string(resName.SchemaName),
+				uint32(ds.PostgresDescriptorID()),
+				sessiondatapb.IsPgDumpCompatibilityEnabled(
+					c.f.evalCtx.SessionData().PgDumpCompatibility,
+				),
+			)
 			dOid = tree.NewDOidWithTypeAndName(
-				oid.Oid(ds.PostgresDescriptorID()), types.RegClass, string(tn.ObjectName),
+				resolvedOid, types.RegClass, string(tn.ObjectName),
 			)
 
 		default:
@@ -559,7 +603,7 @@ func (c *CustomFuncs) FoldIndirection(input, index opt.ScalarExpr) (_ opt.Scalar
 		return nil, false
 	}
 
-	// Case 2: The input is a constant DArray or DJSON.
+	// Case 2: The input is a constant DArray, DJSON, or Name.
 	if memo.CanExtractConstDatum(input) {
 		var resolvedType *types.T
 		switch input.DataType().Family() {
@@ -567,8 +611,14 @@ func (c *CustomFuncs) FoldIndirection(input, index opt.ScalarExpr) (_ opt.Scalar
 			resolvedType = input.DataType()
 		case types.ArrayFamily:
 			resolvedType = input.DataType().ArrayContents()
+		case types.StringFamily:
+			if input.DataType().Oid() == oid.T_name {
+				resolvedType = types.String
+			} else {
+				panic(errors.AssertionFailedf("expected array, json, or name; found %s", input.DataType().SQLString()))
+			}
 		default:
-			panic(errors.AssertionFailedf("expected array or json; found %s", input.DataType().SQLString()))
+			panic(errors.AssertionFailedf("expected array, json, or name; found %s", input.DataType().SQLString()))
 		}
 		inputD := memo.ExtractConstDatum(input)
 		texpr := tree.NewTypedIndirectionExpr(inputD, indexD, resolvedType)
@@ -668,10 +718,13 @@ func (c *CustomFuncs) FoldFunction(
 	if c.f.evalCtx != nil && c.f.catalog != nil { // Some tests leave those unset.
 		unresolved := tree.MakeUnresolvedName(private.Name)
 		def, err := c.f.catalog.ResolveFunction(
-			context.Background(), tree.MakeUnresolvedFunctionName(&unresolved),
-			&c.f.evalCtx.SessionData().SearchPath)
+			c.f.ctx,
+			tree.MakeUnresolvedFunctionName(&unresolved),
+			&c.f.evalCtx.SessionData().SearchPath,
+		)
 		if err != nil {
-			panic(errors.AssertionFailedf("function %s() not defined", redact.Safe(private.Name)))
+			log.Dev.Warningf(c.f.ctx, "function %s() not defined: %v", redact.Safe(private.Name), err)
+			return nil, false
 		}
 		funcRef = tree.ResolvableFunctionReference{FunctionReference: def}
 	} else {

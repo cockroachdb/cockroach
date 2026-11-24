@@ -8,13 +8,14 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"math"
 	"math/rand"
 	"os"
 	"os/user"
 	"regexp"
-	"sort"
 	"strings"
+	"text/tabwriter"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/build"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/testselector"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/config"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/errors"
 	_ "github.com/lib/pq" // register postgres driver
 	"github.com/spf13/cobra"
@@ -46,12 +48,29 @@ const (
 	// created due to errors during cloud hardware allocation.
 	ExitCodeClusterProvisioningFailed = 11
 
+	// ExitCodeGithubPostFailed is the exit code indicating a failure in posting
+	// results to GitHub successfully.
+	// Note: This error masks the actual roachtest status i.e. this error can
+	// occur with any of the other exit codes.
+	ExitCodeGithubPostFailed = 12
+
+	// ExitCodeStorageInvariantViolation is the exit code indicating that a
+	// storage invariant violation (e.g., raft log corruption, Pebble checksum
+	// mismatch) was detected during a roachtest run.
+	ExitCodeStorageInvariantViolation = 13
+
 	// runnerLogsDir is the dir under the artifacts root where the test runner log
 	// and other runner-related logs (i.e. cluster creation logs) will be written.
 	runnerLogsDir = "_runner-logs"
+
+	// clusterCreateDir is the dir under runnerLogsDir where cluster creation
+	// related logs will be written
+	clusterCreateDir = "cluster-create"
 )
 
 func main() {
+	_ = roachprod.InitProviders()
+
 	cobra.EnableCommandSorting = false
 
 	var rootCmd = &cobra.Command{
@@ -114,12 +133,41 @@ Examples:
 				return errors.Newf("%s", filter.NoMatchesHintString(hint))
 			}
 
+			if roachtestflags.ListDetails {
+				tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+				fmt.Fprintln(tw, "NAME\tOWNER\tTIMEOUT\tRANDOMIZED\tSKIP-POST-VALIDATIONS\tSKIP")
+				for _, s := range specs {
+					timeout := "-"
+					if s.Timeout != 0 {
+						timeout = s.Timeout.String()
+					}
+					fmt.Fprintf(tw, "%s\t%s\t%s\t%t\t%s\t%s\n",
+						s.Name, s.Owner, timeout, s.Randomized, s.SkipPostValidations, s.Skip)
+				}
+				return tw.Flush()
+			}
+
 			for _, s := range specs {
-				var skip string
+				var skip, randomized, timeout string
 				if s.Skip != "" {
 					skip = " (skipped: " + s.Skip + ")"
 				}
-				fmt.Printf("%s [%s]%s\n", s.Name, s.Owner, skip)
+				var prefix, separator string
+				longListing := false
+				if s.Randomized {
+					longListing = true
+					randomized = "randomized"
+					separator = ","
+				}
+				if s.Timeout != 0 {
+					longListing = true
+					timeout = fmt.Sprintf("%stimeout: %s", separator, s.Timeout)
+				}
+				if longListing {
+					// N.B. use a prefix to separate the extended listing.
+					prefix = "  "
+				}
+				fmt.Printf("%s [%s]%s %s%s%s\n", s.Name, s.Owner, skip, prefix, randomized, timeout)
 			}
 			return nil
 		},
@@ -189,12 +237,15 @@ the cluster nodes on start.
 		Long: `Run an automated operation on an existing roachprod cluster.
 If multiple operations are matched by the passed-in regex filter, one operation
 is chosen at random and run. The provided cluster name must already exist in roachprod;
-this command does no setup/teardown of clusters.`,
+this command does no setup/teardown of clusters.
+
+This command can be used to run operation in parallel and infinitely on a cluster. 
+Check --parallelism, --run-forever and --wait-before-next-execution flags`,
 		Args: cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			fmt.Printf("\nRunning operation %s on %s.\n\n", args[1], args[0])
 			cmd.SilenceUsage = true
-			return runOperation(operations.RegisterOperations, args[1], args[0])
+			return runOperations(operations.RegisterOperations, args[1], roachtestflags.SkipOperations, args[0])
 		},
 	}
 	roachtestflags.AddRunOpsFlags(runOperationCmd.Flags())
@@ -203,6 +254,42 @@ this command does no setup/teardown of clusters.`,
 	rootCmd.AddCommand(runCmd)
 	rootCmd.AddCommand(benchCmd)
 	rootCmd.AddCommand(runOperationCmd)
+
+	var listOperationCmd = &cobra.Command{
+		Use:   "list-operations [regex...]",
+		Short: "list all operation names",
+		Long: `List all available operations that can be run with the run-operation command.
+
+This command lists the names of all registered operations.
+
+Example:
+
+   roachtest list-operations
+   roachtest list-operations node-kill/.*m$
+   roachtest list-operations --skip disk-stall
+`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			r := makeTestRegistry()
+			operations.RegisterOperations(&r)
+
+			var skipRegex *regexp.Regexp
+			if roachtestflags.SkipOperations != "" {
+				var err error
+				skipRegex, err = regexp.Compile(roachtestflags.SkipOperations)
+				if err != nil {
+					return err
+				}
+			}
+			ops := r.FilteredOperations(registry.MergeRegEx(args), skipRegex, roachtestflags.Cloud)
+			for _, op := range ops {
+				fmt.Printf("%s\n", op.Name)
+			}
+
+			return nil
+		},
+	}
+	roachtestflags.AddRunOpsFlags(listOperationCmd.Flags())
+	rootCmd.AddCommand(listOperationCmd)
 
 	var err error
 	config.OSUser, err = user.Current()
@@ -220,11 +307,14 @@ this command does no setup/teardown of clusters.`,
 
 	if err := rootCmd.Execute(); err != nil {
 		code := 1
-		if errors.Is(err, errTestsFailed) {
-			code = ExitCodeTestsFailed
-		}
-		if errors.Is(err, errSomeClusterProvisioningFailed) {
+		if errors.Is(err, errStorageInvariantViolation) {
+			code = ExitCodeStorageInvariantViolation
+		} else if errors.Is(err, errGithubPostFailed) {
+			code = ExitCodeGithubPostFailed
+		} else if errors.Is(err, errSomeClusterProvisioningFailed) {
 			code = ExitCodeClusterProvisioningFailed
+		} else if errors.Is(err, errTestsFailed) {
+			code = ExitCodeTestsFailed
 		}
 		// Cobra has already printed the error message.
 		os.Exit(code)
@@ -247,9 +337,7 @@ func testsToRun(
 		return nil, errors.Newf("%s", msg)
 	}
 
-	// selective-tests is considered only if the select-probability is 1.0. This is because select probability already
-	// takes care of running limited tests.
-	if roachtestflags.SelectiveTests && roachtestflags.SelectProbability == 1.0 {
+	if roachtestflags.SelectiveTests {
 		fmt.Printf("selective Test enabled\n")
 		// the test categorization must be complete in 30 seconds
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -268,8 +356,12 @@ func testsToRun(
 				fmt.Fprintf(os.Stdout, "##teamcity[testIgnored name='%s' message='%s']\n",
 					s.Name, TeamCityEscape(s.Skip))
 			}
+			skipDetails := s.Skip
+			if skipDetails != "" {
+				skipDetails = " (" + s.SkipDetails + ")"
+			}
 			if print {
-				fmt.Fprintf(os.Stdout, "--- SKIP: %s (%s)\n\t%s\n", s.Name, "0.00s", s.Skip)
+				fmt.Fprintf(os.Stdout, "--- SKIP: %s (%s)\n\t%s\n", s.Name, "0.00s", skipDetails)
 			}
 		}
 	}
@@ -293,7 +385,12 @@ func testsToRun(
 		}
 	}
 
-	return selectSpecs(notSkipped, selectProbability, true, print), nil
+	var stdout io.Writer
+	if print {
+		stdout = os.Stdout
+	}
+	rng, _ := randutil.NewPseudoRand()
+	return selectSpecs(notSkipped, rng, selectProbability, true, stdout), nil
 }
 
 // updateSpecForSelectiveTests is responsible for updating the test spec skip and skip details
@@ -317,7 +414,37 @@ func updateSpecForSelectiveTests(
 	allTests, err := testselector.CategoriseTests(ctx,
 		testselector.NewDefaultSelectTestsReq(roachtestflags.Cloud, roachtestflags.Suite))
 	if err != nil {
-		logFunc("running all tests! error selecting tests: %v\n", err)
+		// Snowflake is unavailable. Instead of running all tests (which risks
+		// timeouts), randomly select a subset using the same percentage that the
+		// selector would use for stable tests. This keeps the run size in the
+		// same ballpark as a normal selective run. Already-skipped tests are
+		// left untouched and don't count toward the selection budget.
+		fallbackPct := roachtestflags.SuccessfulTestsSelectPct
+		logFunc("error selecting tests: %v\n", err)
+		rand.Shuffle(len(specs), func(i, j int) {
+			specs[i], specs[j] = specs[j], specs[i]
+		})
+		eligible := 0
+		for i := range specs {
+			if specs[i].Skip != "" {
+				continue
+			}
+			eligible++
+		}
+		fallbackCount := int(math.Ceil(float64(eligible) * fallbackPct))
+		selected := 0
+		for i := range specs {
+			if specs[i].Skip != "" {
+				continue
+			}
+			selected++
+			if selected > fallbackCount {
+				specs[i].Skip = "test selector"
+				specs[i].SkipDetails = "test skipped: selector unavailable, random fallback"
+			}
+		}
+		logFunc("falling back to random selection: %d out of %d eligible tests (%.0f%%)\n",
+			fallbackCount, eligible, fallbackPct*100)
 		return
 	}
 
@@ -390,17 +517,19 @@ func testShouldBeSkipped(
 	return td != nil && !td.Selected
 }
 
-func opsToRun(r testRegistryImpl, filter string) ([]registry.OperationSpec, error) {
+func opsToRun(r testRegistryImpl, filter string, skip string) ([]registry.OperationSpec, error) {
 	regex, err := regexp.Compile(filter)
 	if err != nil {
 		return nil, err
 	}
-	var filteredOps []registry.OperationSpec
-	for _, opSpec := range r.AllOperations() {
-		if regex.MatchString(opSpec.Name) {
-			filteredOps = append(filteredOps, opSpec)
+	var skipRegex *regexp.Regexp
+	if skip != "" {
+		skipRegex, err = regexp.Compile(skip)
+		if err != nil {
+			return nil, err
 		}
 	}
+	filteredOps := r.FilteredOperations(regex, skipRegex, roachtestflags.Cloud)
 	if len(filteredOps) == 0 {
 		return nil, errors.New("no matching operations to run")
 	}
@@ -414,14 +543,18 @@ func opsToRun(r testRegistryImpl, filter string) ([]registry.OperationSpec, erro
 // testRegistryImpl.AllTests().
 // TODO(smg260): Perhaps expose `atLeastOnePerPrefix` via CLI
 func selectSpecs(
-	specs []registry.TestSpec, samplePct float64, atLeastOnePerPrefix bool, print bool,
+	specs []registry.TestSpec,
+	rng *rand.Rand,
+	samplePct float64,
+	atLeastOnePerPrefix bool,
+	stdout io.Writer,
 ) []registry.TestSpec {
 	if samplePct == 1 || len(specs) == 0 {
 		return specs
 	}
 
 	var sampled []registry.TestSpec
-	var selectedIdxs []int
+	selectedIndexes := make(map[int]struct{})
 
 	prefix := strings.Split(specs[0].Name, "/")[0]
 	prefixSelected := false
@@ -429,9 +562,9 @@ func selectSpecs(
 
 	// Selects one random spec from the range [start, end) and appends it to sampled.
 	collectRandomSpecFromRange := func(start, end int) {
-		i := start + rand.Intn(end-start)
+		i := start + rng.Intn(end-start)
 		sampled = append(sampled, specs[i])
-		selectedIdxs = append(selectedIdxs, i)
+		selectedIndexes[i] = struct{}{}
 	}
 	for i, s := range specs {
 		if atLeastOnePerPrefix {
@@ -447,9 +580,9 @@ func selectSpecs(
 			}
 		}
 
-		if rand.Float64() < samplePct {
+		if rng.Float64() < samplePct {
 			sampled = append(sampled, s)
-			selectedIdxs = append(selectedIdxs, i)
+			selectedIndexes[i] = struct{}{}
 			prefixSelected = true
 			continue
 		}
@@ -460,27 +593,18 @@ func selectSpecs(
 		}
 	}
 
-	p := 0
-	// The list would already be sorted were it not for the lookback to
-	// ensure at least one test per prefix.
-	if atLeastOnePerPrefix {
-		sort.Ints(selectedIdxs)
-	}
-	// This loop depends on an ordered list as we are essentially
-	// skipping all values in between the selected indexes.
-	for _, i := range selectedIdxs {
-		for j := p; j < i; j++ {
-			s := specs[j]
-			if print && roachtestflags.TeamCity {
-				fmt.Fprintf(os.Stdout, "##teamcity[testIgnored name='%s' message='excluded via sampling']\n",
+	// Print a skip message for all tests that are not selected.
+	for i, s := range specs {
+		if _, ok := selectedIndexes[i]; !ok {
+			if stdout != nil && roachtestflags.TeamCity {
+				fmt.Fprintf(stdout, "##teamcity[testIgnored name='%s' message='excluded via sampling']\n",
 					s.Name)
 			}
 
-			if print {
-				fmt.Fprintf(os.Stdout, "--- SKIP: %s (%s)\n\texcluded via sampling\n", s.Name, "0.00s")
+			if stdout != nil {
+				fmt.Fprintf(stdout, "--- SKIP: %s (%s)\n\texcluded via sampling\n", s.Name, "0.00s")
 			}
 		}
-		p = i + 1
 	}
 
 	return sampled
@@ -512,4 +636,18 @@ func validateAndConfigure(cmd *cobra.Command, args []string) {
 				roachtestflags.UseSpotVM, spotFlagInfo.Name, spotFlagInfo.Usage))
 		}
 	}
+
+	// Test selection and select probability flags are mutually exclusive.
+	selectProbFlagInfo := roachtestflags.Changed(&roachtestflags.SelectProbability)
+	if roachtestflags.SelectiveTests && selectProbFlagInfo != nil {
+		printErrAndExit(fmt.Errorf("select-probability and selective-tests=true are incompatible. Disable one of them"))
+	}
+
+	// --cockroach and --cockroach-stage flags are mutually exclusive.
+	cockroachFlagInfo := roachtestflags.Changed(&roachtestflags.CockroachPath)
+	cockroachStageFlagInfo := roachtestflags.Changed(&roachtestflags.CockroachStage)
+	if cockroachFlagInfo != nil && cockroachStageFlagInfo != nil {
+		printErrAndExit(fmt.Errorf("--cockroach and --cockroach-stage are mutually exclusive. Use one or the other"))
+	}
+
 }

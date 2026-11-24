@@ -15,7 +15,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemaexpr"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scdecomp"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
@@ -24,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 )
 
@@ -53,8 +57,20 @@ type BuildCtx interface {
 	// TRANSIENT_ABSENT.
 	AddTransient(element scpb.Element)
 
+	// DropTransient adds a public element to the BuilderState state targeting
+	// TRANSIENT_PUBLIC.
+	DropTransient(element scpb.Element)
+
 	// Drop sets the ABSENT target on an existing element in the BuilderState.
 	Drop(element scpb.Element)
+
+	// Replace replaces an existing PUBLIC element's content while preserving
+	// its key. It sets initial=ABSENT, current=ABSENT, target=ToPublic so
+	// the planner emits "add" operations that update the already-existing
+	// descriptor.
+	// Note: When the element keys match, Drop/Add is preferred over Replace since
+	// it is idempotent.
+	Replace(element scpb.Element)
 
 	// WithNewSourceElementID wraps BuilderStateWithNewSourceElementID in a
 	// BuildCtx return type.
@@ -82,6 +98,7 @@ type BuilderState interface {
 	NameResolver
 	PrivilegeChecker
 	TableHelpers
+	TypeHelpers
 	FunctionHelpers
 	SchemaHelpers
 
@@ -193,6 +210,10 @@ type Telemetry interface {
 	// IncrementSchemaChangeIndexCounter schema change counters related to index
 	// features during creation.
 	IncrementSchemaChangeIndexCounter(counterType string)
+
+	// IncrementAlterTableLocalityCounter increments the selected ALTER TABLE LOCALITY
+	// counter
+	IncrementAlterTableLocalityCounter(counterTypeFrom, counterTypeTo string)
 }
 
 // SchemaFeatureChecker checks if a schema change feature is allowed by the
@@ -230,7 +251,7 @@ type PrivilegeChecker interface {
 	// to descriptors. However, privileges can also live in the
 	// `system.privileges` table (i.e. system-level privileges) and checking those
 	// global privileges are done by the CheckGlobalPrivilege method below.
-	CheckPrivilege(e scpb.Element, privilege privilege.Kind) error
+	CheckPrivilege(e scpb.Element, privileges ...privilege.Kind) error
 
 	// CheckGlobalPrivilege panics if the current user does not have the specified
 	// global privilege.
@@ -246,6 +267,12 @@ type PrivilegeChecker interface {
 
 	// CurrentUser returns the user of current session.
 	CurrentUser() username.SQLUsername
+
+	// CheckPrivilegeForUser checks that the specified user has the given
+	// privilege on the element's descriptor.
+	CheckPrivilegeForUser(
+		e scpb.Element, priv privilege.Kind, user username.SQLUsername,
+	) error
 
 	// CheckRoleExists returns nil if `role` exists.
 	CheckRoleExists(ctx context.Context, role username.SQLUsername) error
@@ -278,6 +305,10 @@ type TableHelpers interface {
 	// added to this table.
 	NextTableTriggerID(tableID catid.DescID) catid.TriggerID
 
+	// NextTablePolicyID returns the ID that should be used for any new row-level
+	// security policies added to this table.
+	NextTablePolicyID(tableID catid.DescID) catid.PolicyID
+
 	// NextTableTentativeIndexID returns the tentative ID, starting from
 	// scbuild.TABLE_TENTATIVE_IDS_START, that should be used for any new index added to
 	// this table.
@@ -303,7 +334,11 @@ type TableHelpers interface {
 	// ComputedColumnExpression returns a validated computed column expression
 	// and its type.
 	// TODO(postamar): make this more low-level instead of consuming an AST
-	ComputedColumnExpression(tbl *scpb.Table, d *tree.ColumnTableDef) tree.Expr
+	ComputedColumnExpression(
+		tbl *scpb.Table, d *tree.ColumnTableDef, exprContext tree.SchemaExprContext,
+		getAllNonDropColumnsFn func() colinfo.ResultColumns,
+		columnLookupByNameFn schemaexpr.ColumnLookupFn,
+	) (tree.Expr, *types.T)
 
 	// PartialIndexPredicateExpression returns a validated partial predicate
 	// wrapped expression
@@ -313,17 +348,43 @@ type TableHelpers interface {
 
 	// IsTableEmpty returns if the table is empty or not.
 	IsTableEmpty(tbl *scpb.Table) bool
+
+	// TTLExpirationExpression returns a validated TTL expiration expression for
+	// a table's row-level TTL configuration. It verifies that the expression:
+	// - type-checks as a TIMESTAMPTZ.
+	// - is not volatile.
+	// - references valid columns in the table.
+	TTLExpirationExpression(
+		tableID catid.DescID,
+		ttl *catpb.RowLevelTTL,
+		getAllNonDropColumnsFn func() colinfo.ResultColumns,
+		columnLookupByNameFn schemaexpr.ColumnLookupFn,
+	) tree.Expr
 }
 
 type FunctionHelpers interface {
 	BuildReferenceProvider(stmt tree.Statement) ReferenceProvider
 	WrapFunctionBody(fnID descpb.ID, bodyStr string, lang catpb.Function_Language,
-		returnType tree.ResolvableTypeReference, provider ReferenceProvider) *scpb.FunctionBody
+		lazilyEvalSQL bool, provider ReferenceProvider) *scpb.FunctionBody
 	ReplaceSeqTypeNamesInStatements(queryStr string, lang catpb.Function_Language) string
 }
 
 type SchemaHelpers interface {
 	ResolveDatabasePrefix(schemaPrefix *tree.ObjectNamePrefix)
+}
+
+// TypeHelpers exposes builder operations that are specific to user-defined
+// type descriptors (enums, composites, domains).
+type TypeHelpers interface {
+
+	// NextDomainConstraintID returns the ID that should be used for any new
+	// constraint (NOT NULL or CHECK) added to this domain type. The returned ID
+	// is monotonically increasing across the lifetime of the descriptor.
+	NextDomainConstraintID(typeID catid.DescID) catid.ConstraintID
+
+	// DomainConstraintNames returns the set of constraint names currently in
+	// use on the given domain, as recorded in the persisted descriptor.
+	DomainConstraintNames(typeID catid.DescID) []string
 }
 
 type ElementResultSet = *scpb.ElementCollection[scpb.Element]
@@ -431,6 +492,9 @@ type NameResolver interface {
 
 	// ResolveTrigger retrieves a trigger by name and returns its elements.
 	ResolveTrigger(relationID catid.DescID, triggerName tree.Name, p ResolveParams) ElementResultSet
+
+	// ResolvePolicy retrieves a policy by name and returns its elements.
+	ResolvePolicy(relationID catid.DescID, policyName tree.Name, p ResolveParams) ElementResultSet
 }
 
 // ReferenceProvider provides all referenced objects with in current DDL
@@ -480,6 +544,14 @@ type RegionProvider interface {
 	// GetRegions provides access to the set of regions available to the
 	// current tenant.
 	GetRegions(ctx context.Context) (*serverpb.RegionsResponse, error)
+
+	// SynthesizeRegionConfig returns a RegionConfig that describes the
+	// multiregion setup for the given database ID.
+	SynthesizeRegionConfig(
+		ctx context.Context,
+		dbID descpb.ID,
+		opts ...multiregion.SynthesizeRegionConfigOption,
+	) (multiregion.RegionConfig, error)
 }
 
 type ZoneConfigProvider interface {

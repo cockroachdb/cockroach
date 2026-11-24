@@ -15,12 +15,22 @@ var schemaExprContextAllowingUDF = map[tree.SchemaExprContext]clusterversion.Key
 	tree.CheckConstraintExpr:           clusterversion.MinSupported,
 	tree.ColumnDefaultExprInNewTable:   clusterversion.MinSupported,
 	tree.ColumnDefaultExprInSetDefault: clusterversion.MinSupported,
+
+	tree.PolicyUsingExpr:     clusterversion.MinSupported,
+	tree.PolicyWithCheckExpr: clusterversion.MinSupported,
+
+	tree.ColumnDefaultExprInAddColumn: clusterversion.MinSupported,
+	tree.ColumnDefaultExprInNewView:   clusterversion.MinSupported,
+	tree.ColumnOnUpdateExpr:           clusterversion.MinSupported,
+	tree.ExpressionIndexElementExpr:   clusterversion.MinSupported,
+	tree.IndexPredicateExpr:           clusterversion.MinSupported,
+	tree.StoredComputedColumnExpr:     clusterversion.MinSupported,
+	tree.VirtualComputedColumnExpr:    clusterversion.MinSupported,
 }
 
 // MaybeFailOnUDFUsage returns an error if the given expression or any
 // sub-expression used a UDF unless it's explicitly listed as an allowed use
 // case.
-// TODO(chengxiong): remove this function when we start allowing UDF references.
 func MaybeFailOnUDFUsage(
 	expr tree.TypedExpr, exprContext tree.SchemaExprContext, version clusterversion.ClusterVersion,
 ) error {

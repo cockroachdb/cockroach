@@ -1,0 +1,24 @@
+load("@io_bazel_rules_go//go:def.bzl", "go_library", "go_test")
+
+go_library(
+    name = "sqlcommenter",
+    srcs = ["sql_commenter.go"],
+    importpath = "github.com/cockroachdb/cockroach/pkg/sql/sqlcommenter",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//pkg/settings",
+        "//pkg/sql/parser",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
+)
+
+go_test(
+    name = "sqlcommenter_test",
+    srcs = ["sql_commenter_test.go"],
+    data = glob(["testdata/**"]),
+    embed = [":sqlcommenter"],
+    deps = [
+        "//pkg/testutils/datapathutils",
+        "@com_github_cockroachdb_datadriven//:datadriven",
+    ],
+)

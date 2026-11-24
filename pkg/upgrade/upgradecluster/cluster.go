@@ -13,7 +13,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/rpc"
+	"github.com/cockroachdb/cockroach/pkg/rpc/rpcbase"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/redact"
-	"google.golang.org/grpc"
 )
 
 // Cluster mediates interacting with a cockroach cluster.
@@ -37,7 +36,7 @@ type ClusterConfig struct {
 	NodeLiveness livenesspb.NodeVitalityInterface
 
 	// Dialer constructs connections to other nodes.
-	Dialer NodeDialer
+	Dialer rpcbase.NodeDialer
 
 	// RangeDescScanner paginates through all range descriptors.
 	RangeDescScanner rangedesc.Scanner
@@ -48,12 +47,9 @@ type ClusterConfig struct {
 	// to expose only relevant, vetted bits of kv.DB. It'll make our tests less
 	// "integration-ey".
 	DB *kv.DB
-}
 
-// NodeDialer abstracts connecting to other nodes in the cluster.
-type NodeDialer interface {
-	// Dial returns a grpc connection to the given node.
-	Dial(context.Context, roachpb.NodeID, rpc.ConnectionClass) (*grpc.ClientConn, error)
+	// UseDRPC indicates whether to use DRPC for inter-node communication.
+	UseDRPC bool
 }
 
 // New constructs a new Cluster with the provided dependencies.
@@ -82,7 +78,7 @@ func (c *Cluster) UntilClusterStable(
 			}
 
 			if ok, diffs := live.Identical(curLive); !ok || curUnavailable != nil {
-				log.Infof(ctx, "waiting for cluster stability, unavailable: %v, diff: %v", curUnavailable, diffs)
+				log.Dev.Infof(ctx, "waiting for cluster stability, unavailable: %v, diff: %v", curUnavailable, diffs)
 				live = curLive
 				unavailable = curUnavailable
 
@@ -117,7 +113,7 @@ func (c *Cluster) NumNodesOrServers(ctx context.Context) (int, error) {
 
 // ForEveryNodeOrTenantPod is part of the upgrade.Cluster interface.
 func (c *Cluster) ForEveryNodeOrServer(
-	ctx context.Context, op string, fn func(context.Context, serverpb.MigrationClient) error,
+	ctx context.Context, op string, fn func(context.Context, serverpb.RPCMigrationClient) error,
 ) error {
 
 	live, _, err := NodesFromNodeLiveness(ctx, c.c.NodeLiveness)
@@ -127,7 +123,7 @@ func (c *Cluster) ForEveryNodeOrServer(
 
 	// We'll want to rate limit outgoing RPCs (limit pulled out of thin air).
 	qp := quotapool.NewIntPool("every-node", 25)
-	log.Infof(ctx, "executing %s on nodes %s", redact.Safe(op), live)
+	log.Dev.Infof(ctx, "executing %s on nodes %s", redact.Safe(op), live)
 	grp := ctxgroup.WithContext(ctx)
 
 	for _, node := range live {
@@ -139,11 +135,10 @@ func (c *Cluster) ForEveryNodeOrServer(
 		grp.GoCtx(func(ctx context.Context) error {
 			defer alloc.Release()
 
-			conn, err := c.c.Dialer.Dial(ctx, node.ID, rpc.DefaultClass)
+			client, err := serverpb.DialMigrationClient(c.c.Dialer, ctx, node.ID, rpcbase.DefaultClass, c.c.UseDRPC)
 			if err != nil {
 				return err
 			}
-			client := serverpb.NewMigrationClient(conn)
 			return fn(ctx, client)
 		})
 	}

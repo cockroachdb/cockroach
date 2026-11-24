@@ -124,7 +124,7 @@ func TestTimeSeriesMaintenanceQueue(t *testing.T) {
 	for _, k := range splitKeys {
 		repl := store.LookupReplica(roachpb.RKey(k))
 		args := adminSplitArgs(k)
-		if _, pErr := kv.SendWrappedWith(ctx, store, kvpb.Header{
+		if _, pErr := kv.SendWrappedWith(ctx, kvserver.ToSenderForTesting(store), kvpb.Header{
 			RangeID: repl.RangeID,
 		}, args); pErr != nil {
 			t.Fatal(pErr)
@@ -282,7 +282,7 @@ func TestTimeSeriesMaintenanceQueueServer(t *testing.T) {
 	}
 
 	memMon := mon.NewMonitor(mon.Options{
-		Name:     "test",
+		Name:     mon.MakeName("test"),
 		Settings: cluster.MakeTestingClusterSettings(),
 	})
 	memMon.Start(context.Background(), nil /* pool */, mon.NewStandaloneBudget(math.MaxInt64))

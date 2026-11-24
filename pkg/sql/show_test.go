@@ -10,7 +10,6 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math"
-	"net/url"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -29,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/errors"
-	"github.com/jackc/pgx/v4"
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 )
 
@@ -47,7 +46,7 @@ func TestShowCreateTable(t *testing.T) {
 	CHECK (i > 0),
 	FAMILY "primary" (i, v, t, rowid),
 	FAMILY fam_1_s (s)
-)`,
+);`,
 			Expect: `CREATE TABLE public.%[1]s (
 	i INT8 NULL,
 	s STRING NULL,
@@ -58,7 +57,7 @@ func TestShowCreateTable(t *testing.T) {
 	FAMILY "primary" (i, v, t, rowid),
 	FAMILY fam_1_s (s),
 	CONSTRAINT check_i CHECK (i > 0:::INT8)
-)`,
+);`,
 		},
 		{
 			CreateStatement: `CREATE TABLE %s (
@@ -68,7 +67,7 @@ func TestShowCreateTable(t *testing.T) {
 	t TIMESTAMP DEFAULT now():::TIMESTAMP,
 	FAMILY "primary" (i, v, t, rowid),
 	FAMILY fam_1_s (s)
-)`,
+);`,
 			Expect: `CREATE TABLE public.%[1]s (
 	i INT8 NULL,
 	s STRING NULL,
@@ -79,7 +78,7 @@ func TestShowCreateTable(t *testing.T) {
 	FAMILY "primary" (i, v, t, rowid),
 	FAMILY fam_1_s (s),
 	CONSTRAINT check_i CHECK (i > 0:::INT8)
-)`,
+);`,
 		},
 		{
 			CreateStatement: `CREATE TABLE %s (
@@ -88,7 +87,7 @@ func TestShowCreateTable(t *testing.T) {
 	CONSTRAINT ck CHECK (i > 0),
 	FAMILY "primary" (i, rowid),
 	FAMILY fam_1_s (s)
-)`,
+);`,
 			Expect: `CREATE TABLE public.%[1]s (
 	i INT8 NULL,
 	s STRING NULL,
@@ -97,16 +96,16 @@ func TestShowCreateTable(t *testing.T) {
 	FAMILY "primary" (i, rowid),
 	FAMILY fam_1_s (s),
 	CONSTRAINT ck CHECK (i > 0:::INT8)
-)`,
+);`,
 		},
 		{
 			CreateStatement: `CREATE TABLE %s (
 	i INT8 PRIMARY KEY
-)`,
+);`,
 			Expect: `CREATE TABLE public.%[1]s (
 	i INT8 NOT NULL,
 	CONSTRAINT %[1]s_pkey PRIMARY KEY (i ASC)
-)`,
+);`,
 		},
 		{
 			CreateStatement: `
@@ -127,31 +126,31 @@ func TestShowCreateTable(t *testing.T) {
 	UNIQUE INDEX %[1]s_d_key (d ASC),
 	FAMILY "primary" (i, f, d, rowid),
 	FAMILY fam_1_s (s)
-)`,
+);`,
 		},
 		{
 			CreateStatement: `CREATE TABLE %s (
 	"te""st" INT8 NOT NULL,
 	CONSTRAINT "pri""mary" PRIMARY KEY ("te""st" ASC)
-)`,
+);`,
 			Expect: `CREATE TABLE public.%[1]s (
 	"te""st" INT8 NOT NULL,
 	CONSTRAINT "pri""mary" PRIMARY KEY ("te""st" ASC)
-)`,
+);`,
 		},
 		{
 			CreateStatement: `CREATE TABLE %s (
 	a int8,
 	b int8,
 	index c(a asc, b desc)
-)`,
+);`,
 			Expect: `CREATE TABLE public.%[1]s (
 	a INT8 NULL,
 	b INT8 NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
 	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC),
 	INDEX c (a ASC, b DESC)
-)`,
+);`,
 		},
 
 		{
@@ -162,7 +161,7 @@ func TestShowCreateTable(t *testing.T) {
 	pk INT8 NOT NULL,
 	crdb_internal_expiration TIMESTAMPTZ NOT VISIBLE NOT NULL DEFAULT current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL ON UPDATE current_timestamp():::TIMESTAMPTZ + '00:10:00':::INTERVAL,
 	CONSTRAINT %[1]s_pkey PRIMARY KEY (pk ASC)
-) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_job_cron = '@hourly')`,
+) WITH (ttl = 'on', ttl_expire_after = '00:10:00':::INTERVAL, ttl_job_cron = '@hourly');`,
 		},
 		// Check that FK dependencies inside the current database
 		// have their db name omitted.
@@ -172,7 +171,7 @@ func TestShowCreateTable(t *testing.T) {
 	j int8,
 	FOREIGN KEY (i, j) REFERENCES items (a, b),
 	k int REFERENCES items (c)
-)`,
+);`,
 			Expect: `CREATE TABLE public.%[1]s (
 	i INT8 NULL,
 	j INT8 NULL,
@@ -181,7 +180,7 @@ func TestShowCreateTable(t *testing.T) {
 	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC),
 	CONSTRAINT %[1]s_i_j_fkey FOREIGN KEY (i, j) REFERENCES public.items(a, b),
 	CONSTRAINT %[1]s_k_fkey FOREIGN KEY (k) REFERENCES public.items(c)
-)`,
+);`,
 		},
 		// Check that FK dependencies using MATCH FULL on a non-composite key still
 		// show
@@ -191,7 +190,7 @@ func TestShowCreateTable(t *testing.T) {
 	j int8,
 	k int REFERENCES items (c) MATCH FULL,
 	FOREIGN KEY (i, j) REFERENCES items (a, b) MATCH FULL
-)`,
+);`,
 			Expect: `CREATE TABLE public.%[1]s (
 	i INT8 NULL,
 	j INT8 NULL,
@@ -200,7 +199,7 @@ func TestShowCreateTable(t *testing.T) {
 	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC),
 	CONSTRAINT %[1]s_i_j_fkey FOREIGN KEY (i, j) REFERENCES public.items(a, b) MATCH FULL,
 	CONSTRAINT %[1]s_k_fkey FOREIGN KEY (k) REFERENCES public.items(c) MATCH FULL
-)`,
+);`,
 		},
 		// Check that FK dependencies outside of the current database
 		// have their db name prefixed.
@@ -208,13 +207,13 @@ func TestShowCreateTable(t *testing.T) {
 			CreateStatement: `CREATE TABLE %s (
 	x INT8,
 	CONSTRAINT fk_ref FOREIGN KEY (x) REFERENCES o.foo (x)
-)`,
+);`,
 			Expect: `CREATE TABLE public.%[1]s (
 	x INT8 NULL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
 	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC),
 	CONSTRAINT fk_ref FOREIGN KEY (x) REFERENCES o.public.foo(x)
-)`,
+);`,
 		},
 		// Check that FK dependencies using SET NULL or SET DEFAULT
 		// are pretty-printed properly. Regression test for #32529.
@@ -224,7 +223,7 @@ func TestShowCreateTable(t *testing.T) {
 	j int8 DEFAULT 123,
 	FOREIGN KEY (i, j) REFERENCES items (a, b) ON DELETE SET DEFAULT,
 	k int8 REFERENCES items (c) ON DELETE SET NULL
-)`,
+);`,
 			Expect: `CREATE TABLE public.%[1]s (
 	i INT8 NULL DEFAULT 123:::INT8,
 	j INT8 NULL DEFAULT 123:::INT8,
@@ -233,7 +232,7 @@ func TestShowCreateTable(t *testing.T) {
 	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC),
 	CONSTRAINT %[1]s_i_j_fkey FOREIGN KEY (i, j) REFERENCES public.items(a, b) ON DELETE SET DEFAULT,
 	CONSTRAINT %[1]s_k_fkey FOREIGN KEY (k) REFERENCES public.items(c) ON DELETE SET NULL
-)`,
+);`,
 		},
 		// Check that FK dependencies using MATCH FULL and MATCH SIMPLE are both
 		// pretty-printed properly.
@@ -245,7 +244,7 @@ func TestShowCreateTable(t *testing.T) {
 	l int DEFAULT 4,
 	FOREIGN KEY (i, j) REFERENCES items (a, b) MATCH SIMPLE ON DELETE SET DEFAULT,
 	FOREIGN KEY (k, l) REFERENCES items (a, b) MATCH FULL ON UPDATE CASCADE
-)`,
+);`,
 			Expect: `CREATE TABLE public.%[1]s (
 	i INT8 NULL DEFAULT 1:::INT8,
 	j INT8 NULL DEFAULT 2:::INT8,
@@ -255,21 +254,21 @@ func TestShowCreateTable(t *testing.T) {
 	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC),
 	CONSTRAINT %[1]s_i_j_fkey FOREIGN KEY (i, j) REFERENCES public.items(a, b) ON DELETE SET DEFAULT,
 	CONSTRAINT %[1]s_k_l_fkey FOREIGN KEY (k, l) REFERENCES public.items(a, b) MATCH FULL ON UPDATE CASCADE
-)`,
+);`,
 		},
 		// Check hash sharded indexes are round trippable.
 		{
 			CreateStatement: `CREATE TABLE %s (
 				a INT,
 				INDEX (a) USING HASH WITH (bucket_count=8)
-			)`,
+			);`,
 			Expect: `CREATE TABLE public.%[1]s (
 	a INT8 NULL,
 	crdb_internal_a_shard_8 INT8 NOT VISIBLE NOT NULL AS (mod(fnv32(md5(crdb_internal.datums_to_bytes(a))), 8:::INT8)) VIRTUAL,
 	rowid INT8 NOT VISIBLE NOT NULL DEFAULT unique_rowid(),
 	CONSTRAINT %[1]s_pkey PRIMARY KEY (rowid ASC),
 	INDEX %[1]s_a_idx (a ASC) USING HASH WITH (bucket_count=8)
-)`,
+);`,
 		},
 		// Check trigram inverted indexes.
 		{
@@ -277,13 +276,13 @@ func TestShowCreateTable(t *testing.T) {
         id INT PRIMARY KEY,
 				a TEXT,
 				INVERTED INDEX (a gin_trgm_ops)
-			)`,
+			);`,
 			Expect: `CREATE TABLE public.%[1]s (
 	id INT8 NOT NULL,
 	a STRING NULL,
 	CONSTRAINT %[1]s_pkey PRIMARY KEY (id ASC),
 	INVERTED INDEX %[1]s_a_idx (a gin_trgm_ops)
-)`,
+);`,
 		},
 	}
 	sqltestutils.ShowCreateTableTest(t, "" /* extraQuerySetup */, testCases)
@@ -293,8 +292,7 @@ func TestShowCreateView(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParams()
-	s, sqlDB, _ := serverutils.StartServer(t, params)
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
@@ -311,37 +309,37 @@ func TestShowCreateView(t *testing.T) {
 	}{
 		{
 			`CREATE VIEW %s AS SELECT i, s, v, t FROM t`,
-			"CREATE VIEW public.%s (\n\ti,\n\ts,\n\tv,\n\tt\n) AS SELECT i, s, v, t FROM d.public.t",
+			"CREATE VIEW public.%s (\n\ti,\n\ts,\n\tv,\n\tt\n) AS SELECT i, s, v, t FROM d.public.t;",
 		},
 		{
 			`CREATE VIEW %s AS SELECT i, s, t FROM t`,
-			"CREATE VIEW public.%s (\n\ti,\n\ts,\n\tt\n) AS SELECT i, s, t FROM d.public.t",
+			"CREATE VIEW public.%s (\n\ti,\n\ts,\n\tt\n) AS SELECT i, s, t FROM d.public.t;",
 		},
 		{
 			`CREATE VIEW %s AS SELECT t.i, t.s, t.t FROM t`,
-			"CREATE VIEW public.%s (\n\ti,\n\ts,\n\tt\n) AS SELECT t.i, t.s, t.t FROM d.public.t",
+			"CREATE VIEW public.%s (\n\ti,\n\ts,\n\tt\n) AS SELECT t.i, t.s, t.t FROM d.public.t;",
 		},
 		{
 			`CREATE VIEW %s AS SELECT foo.i, foo.s, foo.t FROM t AS foo WHERE foo.i > 3`,
 			"CREATE VIEW public.%s (\n\ti,\n\ts,\n\tt\n) AS " +
-				"SELECT foo.i, foo.s, foo.t FROM d.public.t AS foo WHERE foo.i > 3",
+				"SELECT foo.i, foo.s, foo.t FROM d.public.t AS foo WHERE foo.i > 3;",
 		},
 		{
 			`CREATE VIEW %s AS SELECT count(*) FROM t`,
-			"CREATE VIEW public.%s (\n\tcount\n) AS SELECT count(*) FROM d.public.t",
+			"CREATE VIEW public.%s (\n\tcount\n) AS SELECT count(*) FROM d.public.t;",
 		},
 		{
 			`CREATE VIEW %s AS SELECT s, count(*) FROM t GROUP BY s HAVING count(*) > 3:::INT8`,
 			"CREATE VIEW public.%s (\n\ts,\n\tcount\n) AS " +
-				"SELECT s, count(*) FROM d.public.t GROUP BY s HAVING count(*) > 3:::INT8",
+				"SELECT s, count(*) FROM d.public.t GROUP BY s HAVING count(*) > 3:::INT8;",
 		},
 		{
 			`CREATE VIEW %s (a, b, c, d) AS SELECT i, s, v, t FROM t`,
-			"CREATE VIEW public.%s (\n\ta,\n\tb,\n\tc,\n\td\n) AS SELECT i, s, v, t FROM d.public.t",
+			"CREATE VIEW public.%s (\n\ta,\n\tb,\n\tc,\n\td\n) AS SELECT i, s, v, t FROM d.public.t;",
 		},
 		{
 			`CREATE VIEW %s (a, b) AS SELECT i, v FROM t`,
-			"CREATE VIEW public.%s (\n\ta,\n\tb\n) AS SELECT i, v FROM d.public.t",
+			"CREATE VIEW public.%s (\n\ta,\n\tb\n) AS SELECT i, v FROM d.public.t;",
 		},
 	}
 	for i, test := range tests {
@@ -390,8 +388,7 @@ func TestShowCreateSequence(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParams()
-	s, sqlDB, _ := serverutils.StartServer(t, params)
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(context.Background())
 
 	if _, err := sqlDB.Exec(`
@@ -407,49 +404,49 @@ func TestShowCreateSequence(t *testing.T) {
 	}{
 		{
 			`CREATE SEQUENCE %s`,
-			`CREATE SEQUENCE public.%s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1`,
+			`CREATE SEQUENCE public.%s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;`,
 		},
 		{
 			`CREATE SEQUENCE %s INCREMENT BY 5`,
-			`CREATE SEQUENCE public.%s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 5 START 1`,
+			`CREATE SEQUENCE public.%s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 5 START 1;`,
 		},
 		{
 			`CREATE SEQUENCE %s START WITH 5`,
-			`CREATE SEQUENCE public.%s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 5`,
+			`CREATE SEQUENCE public.%s MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 5;`,
 		},
 		{
 			`CREATE SEQUENCE %s INCREMENT 5 MAXVALUE 10000 START 10 MINVALUE 0`,
-			`CREATE SEQUENCE public.%s MINVALUE 0 MAXVALUE 10000 INCREMENT 5 START 10`,
+			`CREATE SEQUENCE public.%s MINVALUE 0 MAXVALUE 10000 INCREMENT 5 START 10;`,
 		},
 		{
 			`CREATE SEQUENCE %s INCREMENT 5 MAXVALUE 10000 START 10 MINVALUE 0 CACHE 1`,
-			`CREATE SEQUENCE public.%s MINVALUE 0 MAXVALUE 10000 INCREMENT 5 START 10`,
+			`CREATE SEQUENCE public.%s MINVALUE 0 MAXVALUE 10000 INCREMENT 5 START 10;`,
 		},
 		{
 			`CREATE SEQUENCE %s INCREMENT 5 MAXVALUE 10000 START 10 MINVALUE 0 CACHE 10`,
-			`CREATE SEQUENCE public.%s MINVALUE 0 MAXVALUE 10000 INCREMENT 5 START 10 CACHE 10`,
+			`CREATE SEQUENCE public.%s MINVALUE 0 MAXVALUE 10000 INCREMENT 5 START 10 PER NODE CACHE 10;`,
 		},
 		{
 			`CREATE SEQUENCE %s AS smallint`,
-			`CREATE SEQUENCE public.%s AS INT2 MINVALUE 1 MAXVALUE 32767 INCREMENT 1 START 1`,
+			`CREATE SEQUENCE public.%s AS INT2 MINVALUE 1 MAXVALUE 32767 INCREMENT 1 START 1;`,
 		},
 		{
 			`CREATE SEQUENCE %s AS int2`,
-			`CREATE SEQUENCE public.%s AS INT2 MINVALUE 1 MAXVALUE 32767 INCREMENT 1 START 1`,
+			`CREATE SEQUENCE public.%s AS INT2 MINVALUE 1 MAXVALUE 32767 INCREMENT 1 START 1;`,
 		},
 		// Int type is determined by `default_int_size` in cluster settings. Default is int8.
 		{
 			`CREATE SEQUENCE %s AS int`,
-			`CREATE SEQUENCE public.%s AS INT8 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1`,
+			`CREATE SEQUENCE public.%s AS INT8 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;`,
 		},
 		{
 			`CREATE SEQUENCE %s AS bigint`,
-			`CREATE SEQUENCE public.%s AS INT8 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1`,
+			`CREATE SEQUENCE public.%s AS INT8 MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;`,
 		},
 		// Override int/bigint's max value with user configured max value.
 		{
 			`CREATE SEQUENCE %s AS integer MINVALUE -5 MAXVALUE 9001`,
-			`CREATE SEQUENCE public.%s AS INT8 MINVALUE -5 MAXVALUE 9001 INCREMENT 1 START -5`,
+			`CREATE SEQUENCE public.%s AS INT8 MINVALUE -5 MAXVALUE 9001 INCREMENT 1 START -5;`,
 		},
 		{
 			`
@@ -459,7 +456,7 @@ func TestShowCreateSequence(t *testing.T) {
 			MINVALUE -20000
 			MAXVALUE 0
 			CACHE 1;`,
-			`CREATE SEQUENCE public.%s AS INT8 MINVALUE -20000 MAXVALUE 0 INCREMENT -1 START -20000`,
+			`CREATE SEQUENCE public.%s AS INT8 MINVALUE -20000 MAXVALUE 0 INCREMENT -1 START -20000;`,
 		},
 	}
 	for i, test := range tests {
@@ -658,14 +655,14 @@ func TestShowQueriesDelegatesInternal(t *testing.T) {
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
 
-	s := serverutils.StartServerOnly(t, base.TestServerArgs{})
-	defer s.Stopper().Stop(ctx)
+	srv := serverutils.StartServerOnly(t, base.TestServerArgs{})
+	defer srv.Stopper().Stop(ctx)
+	s := srv.ApplicationLayer()
 
-	pgURL, cleanup := sqlutils.PGUrl(
+	pgURL, cleanup := s.PGUrl(
 		t,
-		s.AdvSQLAddr(),
-		"TestShowQueriesDelegatesInternal",
-		url.User(username.RootUser),
+		serverutils.CertsDirPrefix("TestShowQueriesDelegatesInternal"),
+		serverutils.User(username.RootUser),
 	)
 	defer cleanup()
 
@@ -970,11 +967,13 @@ func TestShowSessionPrivileges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParams()
+	var params base.TestServerArgs
 	params.Insecure = true
-	s, rawSQLDBroot, _ := serverutils.StartServer(t, params)
+	srv, rawSQLDBroot, _ := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
+
 	sqlDBroot := sqlutils.MakeSQLRunner(rawSQLDBroot)
-	defer s.Stopper().Stop(context.Background())
 
 	// Create four users: one with no special permissions, one with the
 	// VIEWACTIVITY role option, one with VIEWACTIVITYREDACTED option,
@@ -1000,17 +999,7 @@ func TestShowSessionPrivileges(t *testing.T) {
 		{"adminuser", true, nil},
 	}
 	for i, tc := range users {
-		pgURL := url.URL{
-			Scheme:   "postgres",
-			User:     url.User(tc.username),
-			Host:     s.AdvSQLAddr(),
-			RawQuery: "sslmode=disable",
-		}
-		db, err := gosql.Open("postgres", pgURL.String())
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer db.Close()
+		db := s.SQLConn(t, serverutils.User(tc.username), serverutils.ClientCerts(false))
 		users[i].sqlRunner = sqlutils.MakeSQLRunner(db)
 
 		// Ensure the session is open.
@@ -1053,12 +1042,14 @@ func TestShowRedactedActiveStatements(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParams()
+	var params base.TestServerArgs
 	params.Insecure = true
 	ctx, cancel := context.WithCancel(context.Background())
-	s, rawSQLDBroot, _ := serverutils.StartServer(t, params)
+	srv, rawSQLDBroot, _ := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
+
 	sqlDBroot := sqlutils.MakeSQLRunner(rawSQLDBroot)
-	defer s.Stopper().Stop(context.Background())
 
 	// Create four users: one with no special permissions, one with the
 	// VIEWACTIVITY role option, one with VIEWACTIVITYREDACTED option,
@@ -1092,17 +1083,7 @@ func TestShowRedactedActiveStatements(t *testing.T) {
 		{"bothperms", true, true, nil},
 	}
 	for i, tc := range users {
-		pgURL := url.URL{
-			Scheme:   "postgres",
-			User:     url.User(tc.username),
-			Host:     s.AdvSQLAddr(),
-			RawQuery: "sslmode=disable",
-		}
-		db, err := gosql.Open("postgres", pgURL.String())
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer db.Close()
+		db := s.SQLConn(t, serverutils.User(tc.username), serverutils.ClientCerts(false))
 		users[i].sqlRunner = sqlutils.MakeSQLRunner(db)
 
 		// Ensure the session is open.
@@ -1214,12 +1195,14 @@ func TestShowRedactedSessions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParams()
+	var params base.TestServerArgs
 	params.Insecure = true
 	ctx, cancel := context.WithCancel(context.Background())
-	s, rawSQLDBroot, _ := serverutils.StartServer(t, params)
+	srv, rawSQLDBroot, _ := serverutils.StartServer(t, params)
+	defer srv.Stopper().Stop(context.Background())
+	s := srv.ApplicationLayer()
+
 	sqlDBroot := sqlutils.MakeSQLRunner(rawSQLDBroot)
-	defer s.Stopper().Stop(context.Background())
 
 	// Create four users: one with no special permissions, one with the
 	// VIEWACTIVITY role option, one with VIEWACTIVITYREDACTED option,
@@ -1253,17 +1236,7 @@ func TestShowRedactedSessions(t *testing.T) {
 		{"bothperms", true, true, nil},
 	}
 	for i, tc := range users {
-		pgURL := url.URL{
-			Scheme:   "postgres",
-			User:     url.User(tc.username),
-			Host:     s.AdvSQLAddr(),
-			RawQuery: "sslmode=disable",
-		}
-		db, err := gosql.Open("postgres", pgURL.String())
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer db.Close()
+		db := s.SQLConn(t, serverutils.User(tc.username), serverutils.ClientCerts(false))
 		users[i].sqlRunner = sqlutils.MakeSQLRunner(db)
 
 		// Ensure the session is open.

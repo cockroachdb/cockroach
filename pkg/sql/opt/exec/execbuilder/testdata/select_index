@@ -1,4 +1,4 @@
-# LogicTest: local
+# LogicTest: local !metamorphic-batch-sizes
 
 statement ok
 CREATE TABLE t (
@@ -29,9 +29,9 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/t_pkey/2/'two' -> <undecoded>
-fetched: /t/t_pkey/2/'two'/c -> 22
-fetched: /t/t_pkey/2/'two'/d -> 'bar'
+fetched: /t/t_pkey/2/'two':cf=0 -> <undecoded>
+fetched: /t/t_pkey/2/'two'/c:cf=1 -> 22
+fetched: /t/t_pkey/2/'two'/d:cf=2 -> 'bar'
 output row: [2 'two' 22 'bar']
 
 statement ok
@@ -42,12 +42,12 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/t_pkey/1/'one' -> <undecoded>
-fetched: /t/t_pkey/1/'one'/c -> 11
-fetched: /t/t_pkey/1/'one'/d -> 'foo'
-fetched: /t/t_pkey/3/'three' -> <undecoded>
-fetched: /t/t_pkey/3/'three'/c -> 33
-fetched: /t/t_pkey/3/'three'/d -> 'blah'
+fetched: /t/t_pkey/1/'one':cf=0 -> <undecoded>
+fetched: /t/t_pkey/1/'one'/c:cf=1 -> 11
+fetched: /t/t_pkey/1/'one'/d:cf=2 -> 'foo'
+fetched: /t/t_pkey/3/'three':cf=0 -> <undecoded>
+fetched: /t/t_pkey/3/'three'/c:cf=1 -> 33
+fetched: /t/t_pkey/3/'three'/d:cf=2 -> 'blah'
 output row: [1 'one' 11 'foo']
 output row: [3 'three' 33 'blah']
 
@@ -96,9 +96,9 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/t_pkey/1/'one' -> <undecoded>
-fetched: /t/t_pkey/1/'one'/c -> 11
-fetched: /t/t_pkey/1/'one'/d -> 'foo'
+fetched: /t/t_pkey/1/'one':cf=0 -> <undecoded>
+fetched: /t/t_pkey/1/'one'/c:cf=1 -> 11
+fetched: /t/t_pkey/1/'one'/d:cf=2 -> 'foo'
 output row: [1 'one' 11 'foo']
 
 statement ok
@@ -109,12 +109,12 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/t_pkey/1/'one' -> <undecoded>
-fetched: /t/t_pkey/1/'one'/c -> 11
-fetched: /t/t_pkey/1/'one'/d -> 'foo'
-fetched: /t/t_pkey/2/'two' -> <undecoded>
-fetched: /t/t_pkey/2/'two'/c -> 22
-fetched: /t/t_pkey/2/'two'/d -> 'bar'
+fetched: /t/t_pkey/1/'one':cf=0 -> <undecoded>
+fetched: /t/t_pkey/1/'one'/c:cf=1 -> 11
+fetched: /t/t_pkey/1/'one'/d:cf=2 -> 'foo'
+fetched: /t/t_pkey/2/'two':cf=0 -> <undecoded>
+fetched: /t/t_pkey/2/'two'/c:cf=1 -> 22
+fetched: /t/t_pkey/2/'two'/d:cf=2 -> 'bar'
 output row: [1 'one' 11 'foo']
 output row: [2 'two' 22 'bar']
 
@@ -150,15 +150,15 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/t_pkey/1/'one' -> <undecoded>
-fetched: /t/t_pkey/1/'one'/c -> 11
-fetched: /t/t_pkey/1/'one'/d -> 'foo'
-fetched: /t/t_pkey/2/'two' -> <undecoded>
-fetched: /t/t_pkey/2/'two'/c -> 22
-fetched: /t/t_pkey/2/'two'/d -> 'bar'
-fetched: /t/t_pkey/3/'three' -> <undecoded>
-fetched: /t/t_pkey/3/'three'/c -> 33
-fetched: /t/t_pkey/3/'three'/d -> 'blah'
+fetched: /t/t_pkey/1/'one':cf=0 -> <undecoded>
+fetched: /t/t_pkey/1/'one'/c:cf=1 -> 11
+fetched: /t/t_pkey/1/'one'/d:cf=2 -> 'foo'
+fetched: /t/t_pkey/2/'two':cf=0 -> <undecoded>
+fetched: /t/t_pkey/2/'two'/c:cf=1 -> 22
+fetched: /t/t_pkey/2/'two'/d:cf=2 -> 'bar'
+fetched: /t/t_pkey/3/'three':cf=0 -> <undecoded>
+fetched: /t/t_pkey/3/'three'/c:cf=1 -> 33
+fetched: /t/t_pkey/3/'three'/d:cf=2 -> 'blah'
 output row: [2 'two' 22 'bar']
 
 # Use the descending index
@@ -212,6 +212,7 @@ vectorized: true
     │   │ estimated row count: 10 (missing stats)
     │   │ table: t@t_pkey
     │   │ key columns: a, b
+    │   │ parallel
     │   │
     │   └── • scan
     │         columns: (a, b, c)
@@ -224,6 +225,7 @@ vectorized: true
         │ estimated row count: 10 (missing stats)
         │ table: t@t_pkey
         │ key columns: a, b
+        │ parallel
         │
         └── • scan
               columns: (a, b, c)
@@ -231,8 +233,15 @@ vectorized: true
               table: t@bc
               spans: /"3"-/"3"/PrefixEnd
 
+
+statement ok
+ALTER TABLE t SET (schema_locked=false)
+
 statement ok
 TRUNCATE TABLE t
+
+statement ok
+ALTER TABLE t SET (schema_locked=true)
 
 statement ok
 INSERT INTO t VALUES
@@ -248,7 +257,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/t_pkey/1/'c' -> <undecoded>
+fetched: /t/t_pkey/1/'c':cf=0 -> <undecoded>
 output row: [1 'c' NULL NULL]
 
 statement ok
@@ -259,7 +268,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/t_pkey/1/'c' -> <undecoded>
+fetched: /t/t_pkey/1/'c':cf=0 -> <undecoded>
 output row: [1 'c' NULL NULL]
 
 statement ok
@@ -275,7 +284,6 @@ query T
 EXPLAIN SELECT * FROM t WHERE a > 1 AND a < 2
 ----
 distribution: local
-vectorized: true
 ·
 • norows
 
@@ -287,7 +295,7 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t/t_pkey/1/'b' -> <undecoded>
+fetched: /t/t_pkey/1/'b':cf=0 -> <undecoded>
 output row: [1 'b' NULL NULL]
 
 statement ok
@@ -444,7 +452,6 @@ query T
 EXPLAIN SELECT * FROM t WHERE a = 1 AND false
 ----
 distribution: local
-vectorized: true
 ·
 • norows
 
@@ -452,7 +459,6 @@ query T
 EXPLAIN SELECT * FROM t WHERE a = 1 AND NULL
 ----
 distribution: local
-vectorized: true
 ·
 • norows
 
@@ -460,7 +466,6 @@ query T
 EXPLAIN SELECT * FROM t WHERE a = NULL AND a != NULL
 ----
 distribution: local
-vectorized: true
 ·
 • norows
 
@@ -845,6 +850,7 @@ vectorized: true
 │ estimated row count: 20 (missing stats)
 │ table: test2@test2_pkey
 │ key columns: id
+│ parallel
 │
 └── • revscan
       columns: (id, k)
@@ -902,7 +908,6 @@ GROUP BY resource_key
 ORDER BY total DESC
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ order: -count_rows
@@ -981,7 +986,7 @@ vectorized: true
 • scan
   columns: (a, b, c, d)
   ordering: +c
-  estimated row count: 0 (missing stats)
+  estimated row count: 1 (missing stats)
   table: abcd@abcd
   spans: /1/NULL/1-/1/NULL/10
 
@@ -1148,6 +1153,7 @@ vectorized: true
 │ estimated row count: 10 (missing stats)
 │ table: xy@xy_pkey
 │ key columns: rowid
+│ parallel
 │
 └── • scan
       columns: (y, rowid)
@@ -1166,6 +1172,7 @@ vectorized: true
 │ estimated row count: 10 (missing stats)
 │ table: xy@xy_pkey
 │ key columns: rowid
+│ parallel
 │
 └── • scan
       columns: (y, rowid)
@@ -1187,6 +1194,7 @@ vectorized: true
     │ estimated row count: 10 (missing stats)
     │ table: xy@xy_pkey
     │ key columns: rowid
+    │ parallel
     │
     └── • scan
           columns: (y, rowid)
@@ -1283,7 +1291,6 @@ query T
 EXPLAIN SELECT * FROM noncover WHERE b = 2
 ----
 distribution: local
-vectorized: true
 ·
 • index join
 │ table: noncover@noncover_pkey
@@ -1302,10 +1309,10 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /noncover/b/2/1 -> <undecoded>
-fetched: /noncover/noncover_pkey/1 -> <undecoded>
-fetched: /noncover/noncover_pkey/1/b -> 2
-fetched: /noncover/noncover_pkey/1/c -> 3
-fetched: /noncover/noncover_pkey/1/d -> 4
+fetched: /noncover/noncover_pkey/1:cf=0 -> <undecoded>
+fetched: /noncover/noncover_pkey/1/b:cf=1 -> 2
+fetched: /noncover/noncover_pkey/1/c:cf=2 -> 3
+fetched: /noncover/noncover_pkey/1/d:cf=3 -> 4
 output row: [1 2 3 4]
 
 # Verify that the index join span created doesn't include any potential child
@@ -1320,7 +1327,6 @@ query T
 EXPLAIN SELECT * FROM noncover WHERE c = 6
 ----
 distribution: local
-vectorized: true
 ·
 • index join
 │ table: noncover@noncover_pkey
@@ -1339,10 +1345,10 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
 fetched: /noncover/c/7 -> /5
-fetched: /noncover/noncover_pkey/5 -> <undecoded>
-fetched: /noncover/noncover_pkey/5/b -> 6
-fetched: /noncover/noncover_pkey/5/c -> 7
-fetched: /noncover/noncover_pkey/5/d -> 8
+fetched: /noncover/noncover_pkey/5:cf=0 -> <undecoded>
+fetched: /noncover/noncover_pkey/5/b:cf=1 -> 6
+fetched: /noncover/noncover_pkey/5/c:cf=2 -> 7
+fetched: /noncover/noncover_pkey/5/d:cf=3 -> 8
 output row: [5 6 7 8]
 
 query T
@@ -1413,7 +1419,6 @@ query T
 EXPLAIN SELECT * FROM noncover ORDER BY c
 ----
 distribution: local
-vectorized: true
 ·
 • sort
 │ order: +c
@@ -1427,7 +1432,6 @@ query T
 EXPLAIN SELECT * FROM noncover ORDER BY c LIMIT 5
 ----
 distribution: local
-vectorized: true
 ·
 • index join
 │ table: noncover@noncover_pkey
@@ -1459,7 +1463,6 @@ vectorized: true
           table: noncover@noncover_pkey
           spans: FULL SCAN
 
-# TODO(radu): need to prefer the order-matching index when OFFSET is present.
 query T
 EXPLAIN (VERBOSE) SELECT * FROM noncover ORDER BY c LIMIT 5 OFFSET 5
 ----
@@ -1472,6 +1475,7 @@ vectorized: true
 │ estimated row count: 5 (missing stats)
 │ table: noncover@noncover_pkey
 │ key columns: a
+│ parallel
 │
 └── • limit
     │ columns: (a, c)
@@ -1491,17 +1495,21 @@ EXPLAIN (VERBOSE) SELECT * FROM noncover ORDER BY c LIMIT 1000000
 distribution: local
 vectorized: true
 ·
-• top-k
+• index join
 │ columns: (a, b, c, d)
+│ ordering: +c
 │ estimated row count: 1,000 (missing stats)
-│ order: +c
-│ k: 1000000
+│ table: noncover@noncover_pkey
+│ key columns: a
+│ parallel
 │
 └── • scan
-      columns: (a, b, c, d)
+      columns: (a, c)
+      ordering: +c
       estimated row count: 1,000 (missing stats)
-      table: noncover@noncover_pkey
-      spans: FULL SCAN
+      table: noncover@c
+      spans: LIMITED SCAN
+      limit: 1000000
 
 # ------------------------------------------------------------------------------
 # These tests verify that while we are joining an index with the table, we
@@ -1555,6 +1563,7 @@ vectorized: true
 │ estimated row count: 1
 │ table: t2@t2_pkey
 │ key columns: a
+│ parallel
 │
 └── • filter
     │ columns: (a, b, c)
@@ -1579,10 +1588,10 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
 fetched: /t2/bc/2/1/4 -> <undecoded>
 fetched: /t2/bc/2/2/5 -> <undecoded>
 fetched: /t2/bc/2/3/6 -> <undecoded>
-fetched: /t2/t2_pkey/5 -> <undecoded>
-fetched: /t2/t2_pkey/5/b -> 2
-fetched: /t2/t2_pkey/5/c -> 2
-fetched: /t2/t2_pkey/5/s -> '22'
+fetched: /t2/t2_pkey/5:cf=0 -> <undecoded>
+fetched: /t2/t2_pkey/5/b:cf=1 -> 2
+fetched: /t2/t2_pkey/5/c:cf=2 -> 2
+fetched: /t2/t2_pkey/5/s:cf=3 -> '22'
 output row: [5 2 2 '22']
 
 query T
@@ -1596,6 +1605,7 @@ vectorized: true
 │ estimated row count: 1
 │ table: t2@t2_pkey
 │ key columns: a
+│ parallel
 │
 └── • scan
       columns: (a, b, c)
@@ -1614,14 +1624,14 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
 ----
 fetched: /t2/bc/2/1/4 -> <undecoded>
 fetched: /t2/bc/2/3/6 -> <undecoded>
-fetched: /t2/t2_pkey/4 -> <undecoded>
-fetched: /t2/t2_pkey/4/b -> 2
-fetched: /t2/t2_pkey/4/c -> 1
-fetched: /t2/t2_pkey/4/s -> '21'
-fetched: /t2/t2_pkey/6 -> <undecoded>
-fetched: /t2/t2_pkey/6/b -> 2
-fetched: /t2/t2_pkey/6/c -> 3
-fetched: /t2/t2_pkey/6/s -> '23'
+fetched: /t2/t2_pkey/4:cf=0 -> <undecoded>
+fetched: /t2/t2_pkey/4/b:cf=1 -> 2
+fetched: /t2/t2_pkey/4/c:cf=2 -> 1
+fetched: /t2/t2_pkey/4/s:cf=3 -> '21'
+fetched: /t2/t2_pkey/6:cf=0 -> <undecoded>
+fetched: /t2/t2_pkey/6/b:cf=1 -> 2
+fetched: /t2/t2_pkey/6/c:cf=2 -> 3
+fetched: /t2/t2_pkey/6/s:cf=3 -> '23'
 output row: [4 2 1 '21']
 output row: [6 2 3 '23']
 
@@ -1636,14 +1646,14 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
 ----
 fetched: /t2/bc/2/1/4 -> <undecoded>
 fetched: /t2/bc/2/3/6 -> <undecoded>
-fetched: /t2/t2_pkey/4 -> <undecoded>
-fetched: /t2/t2_pkey/4/b -> 2
-fetched: /t2/t2_pkey/4/c -> 1
-fetched: /t2/t2_pkey/4/s -> '21'
-fetched: /t2/t2_pkey/6 -> <undecoded>
-fetched: /t2/t2_pkey/6/b -> 2
-fetched: /t2/t2_pkey/6/c -> 3
-fetched: /t2/t2_pkey/6/s -> '23'
+fetched: /t2/t2_pkey/4:cf=0 -> <undecoded>
+fetched: /t2/t2_pkey/4/b:cf=1 -> 2
+fetched: /t2/t2_pkey/4/c:cf=2 -> 1
+fetched: /t2/t2_pkey/4/s:cf=3 -> '21'
+fetched: /t2/t2_pkey/6:cf=0 -> <undecoded>
+fetched: /t2/t2_pkey/6/b:cf=1 -> 2
+fetched: /t2/t2_pkey/6/c:cf=2 -> 3
+fetched: /t2/t2_pkey/6/s:cf=3 -> '23'
 output row: [6 2 3 '23']
 
 # We only look up the table rows where c = b+1 or a > b+4: '23', '32', '33'.
@@ -1656,42 +1666,42 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t2/t2_pkey/1 -> <undecoded>
-fetched: /t2/t2_pkey/1/b -> 1
-fetched: /t2/t2_pkey/1/c -> 1
-fetched: /t2/t2_pkey/1/s -> '11'
-fetched: /t2/t2_pkey/2 -> <undecoded>
-fetched: /t2/t2_pkey/2/b -> 1
-fetched: /t2/t2_pkey/2/c -> 2
-fetched: /t2/t2_pkey/2/s -> '12'
-fetched: /t2/t2_pkey/3 -> <undecoded>
-fetched: /t2/t2_pkey/3/b -> 1
-fetched: /t2/t2_pkey/3/c -> 3
-fetched: /t2/t2_pkey/3/s -> '13'
-fetched: /t2/t2_pkey/4 -> <undecoded>
-fetched: /t2/t2_pkey/4/b -> 2
-fetched: /t2/t2_pkey/4/c -> 1
-fetched: /t2/t2_pkey/4/s -> '21'
-fetched: /t2/t2_pkey/5 -> <undecoded>
-fetched: /t2/t2_pkey/5/b -> 2
-fetched: /t2/t2_pkey/5/c -> 2
-fetched: /t2/t2_pkey/5/s -> '22'
-fetched: /t2/t2_pkey/6 -> <undecoded>
-fetched: /t2/t2_pkey/6/b -> 2
-fetched: /t2/t2_pkey/6/c -> 3
-fetched: /t2/t2_pkey/6/s -> '23'
-fetched: /t2/t2_pkey/7 -> <undecoded>
-fetched: /t2/t2_pkey/7/b -> 3
-fetched: /t2/t2_pkey/7/c -> 1
-fetched: /t2/t2_pkey/7/s -> '31'
-fetched: /t2/t2_pkey/8 -> <undecoded>
-fetched: /t2/t2_pkey/8/b -> 3
-fetched: /t2/t2_pkey/8/c -> 2
-fetched: /t2/t2_pkey/8/s -> '32'
-fetched: /t2/t2_pkey/9 -> <undecoded>
-fetched: /t2/t2_pkey/9/b -> 3
-fetched: /t2/t2_pkey/9/c -> 3
-fetched: /t2/t2_pkey/9/s -> '33'
+fetched: /t2/t2_pkey/1:cf=0 -> <undecoded>
+fetched: /t2/t2_pkey/1/b:cf=1 -> 1
+fetched: /t2/t2_pkey/1/c:cf=2 -> 1
+fetched: /t2/t2_pkey/1/s:cf=3 -> '11'
+fetched: /t2/t2_pkey/2:cf=0 -> <undecoded>
+fetched: /t2/t2_pkey/2/b:cf=1 -> 1
+fetched: /t2/t2_pkey/2/c:cf=2 -> 2
+fetched: /t2/t2_pkey/2/s:cf=3 -> '12'
+fetched: /t2/t2_pkey/3:cf=0 -> <undecoded>
+fetched: /t2/t2_pkey/3/b:cf=1 -> 1
+fetched: /t2/t2_pkey/3/c:cf=2 -> 3
+fetched: /t2/t2_pkey/3/s:cf=3 -> '13'
+fetched: /t2/t2_pkey/4:cf=0 -> <undecoded>
+fetched: /t2/t2_pkey/4/b:cf=1 -> 2
+fetched: /t2/t2_pkey/4/c:cf=2 -> 1
+fetched: /t2/t2_pkey/4/s:cf=3 -> '21'
+fetched: /t2/t2_pkey/5:cf=0 -> <undecoded>
+fetched: /t2/t2_pkey/5/b:cf=1 -> 2
+fetched: /t2/t2_pkey/5/c:cf=2 -> 2
+fetched: /t2/t2_pkey/5/s:cf=3 -> '22'
+fetched: /t2/t2_pkey/6:cf=0 -> <undecoded>
+fetched: /t2/t2_pkey/6/b:cf=1 -> 2
+fetched: /t2/t2_pkey/6/c:cf=2 -> 3
+fetched: /t2/t2_pkey/6/s:cf=3 -> '23'
+fetched: /t2/t2_pkey/7:cf=0 -> <undecoded>
+fetched: /t2/t2_pkey/7/b:cf=1 -> 3
+fetched: /t2/t2_pkey/7/c:cf=2 -> 1
+fetched: /t2/t2_pkey/7/s:cf=3 -> '31'
+fetched: /t2/t2_pkey/8:cf=0 -> <undecoded>
+fetched: /t2/t2_pkey/8/b:cf=1 -> 3
+fetched: /t2/t2_pkey/8/c:cf=2 -> 2
+fetched: /t2/t2_pkey/8/s:cf=3 -> '32'
+fetched: /t2/t2_pkey/9:cf=0 -> <undecoded>
+fetched: /t2/t2_pkey/9/b:cf=1 -> 3
+fetched: /t2/t2_pkey/9/c:cf=2 -> 3
+fetched: /t2/t2_pkey/9/s:cf=3 -> '33'
 output row: [9 3 3 '33']
 
 # Check that splitting of the expression filter does not mistakenly
@@ -1731,6 +1741,7 @@ vectorized: true
     │ estimated row count: 90 (missing stats)
     │ table: t3@t3_pkey
     │ key columns: k
+    │ parallel
     │
     └── • scan
           columns: (k, v)
@@ -1767,7 +1778,6 @@ query T
 EXPLAIN SELECT c FROM t4 WHERE a = 10 and b = 20
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   missing stats
@@ -1782,8 +1792,8 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t4/t4_pkey/10/20 -> <undecoded>
-fetched: /t4/t4_pkey/10/20/c -> 30
+fetched: /t4/t4_pkey/10/20:cf=0 -> <undecoded>
+fetched: /t4/t4_pkey/10/20/c:cf=1 -> 30
 output row: [30]
 
 # Point lookup on d does not touch the c or e families.
@@ -1791,7 +1801,6 @@ query T
 EXPLAIN SELECT d FROM t4 WHERE a = 10 and b = 20
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   missing stats
@@ -1806,8 +1815,8 @@ SELECT message FROM [SHOW KV TRACE FOR SESSION] WITH ORDINALITY
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
  ORDER BY message LIKE 'fetched:%' DESC, ordinality ASC
 ----
-fetched: /t4/t4_pkey/10/20 -> <undecoded>
-fetched: /t4/t4_pkey/10/20/d -> 40
+fetched: /t4/t4_pkey/10/20:cf=0 -> <undecoded>
+fetched: /t4/t4_pkey/10/20/d:cf=2 -> 40
 output row: [40]
 
 # Point lookup on both d and e uses a single span for the two adjacent column
@@ -1816,7 +1825,6 @@ query T
 EXPLAIN SELECT d, e FROM t4 WHERE a = 10 and b = 20
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   missing stats
@@ -1828,7 +1836,6 @@ query T
 EXPLAIN UPDATE t4 SET c = 30 WHERE a = 10 and b = 20
 ----
 distribution: local
-vectorized: true
 ·
 • update
 │ table: t4
@@ -1848,7 +1855,6 @@ query T
 EXPLAIN DELETE FROM t4 WHERE a = 10 and b = 20
 ----
 distribution: local
-vectorized: true
 ·
 • delete range
   from: t4
@@ -1860,7 +1866,6 @@ query T
 EXPLAIN SELECT c FROM t4 WHERE a = 10 and b >= 20 and b < 22
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   missing stats
@@ -1872,7 +1877,6 @@ query T
 EXPLAIN SELECT c FROM t4 WHERE a = 10
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   missing stats
@@ -1885,9 +1889,136 @@ query T
 EXPLAIN SELECT a FROM t4 WHERE a in (1, 5) and b in (1, 5)
 ----
 distribution: local
-vectorized: true
 ·
 • scan
   missing stats
   table: t4@t4_pkey
   spans: [/1/1 - /1/1] [/1/5 - /1/5] [/5/1 - /5/1] [/5/5 - /5/5]
+
+# ------------------------------------------------------------------------------
+# Tests for index acceleration on ancestry operators (@> and <@) using
+# LTREE columns
+# ------------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE t5 (a LTREE)
+
+statement ok
+CREATE INDEX t5_a_idx ON t5 (a)
+
+query T
+EXPLAIN SELECT a FROM t5 WHERE a @> 'A.B.C'
+----
+distribution: local
+·
+• scan
+  missing stats
+  table: t5@t5_a_idx
+  spans: [/'' - /''] [/'A' - /'A'] [/'A.B' - /'A.B'] [/'A.B.C' - /'A.B.C']
+
+query T
+EXPLAIN SELECT a FROM t5 WHERE a <@ 'A.B.C'
+----
+distribution: local
+·
+• scan
+  missing stats
+  table: t5@t5_a_idx
+  spans: [/'A.B.C' - /'A.B.C-')
+
+subtest optimizer_span_limit
+
+# Tests for the optimizer_span_limit session setting, which limits the number of
+# index constraint spans generated during optimization. When the cross-product
+# of spans across index columns would exceed the limit, the optimizer stops
+# extending spans and adds remaining filters instead.
+
+statement ok
+CREATE TABLE t167620 (a INT, b INT, c INT, INDEX (a, b, c));
+INSERT INTO t167620 VALUES
+  (1, 2, 7), (1, 4, 9), (3, 6, 11),
+  (5, 2, 9), (3, 4, 7), (1, 6, 11),
+  (1, 2, 99), (1, 3, 7), (2, 2, 7)
+
+# No limit (default): 27 spans for the full 3x3x3 cross-product.
+query T
+EXPLAIN (OPT) SELECT * FROM t167620@t167620_a_b_c_idx WHERE a IN (1, 3, 5) AND b IN (2, 4, 6) AND c IN (7, 9, 11)
+----
+scan t167620@t167620_a_b_c_idx
+ ├── constraint: /1/2/3/4
+ │    ├── [/1/2/7 - /1/2/7]
+ │    ├── [/1/2/9 - /1/2/9]
+ │    ├── [/1/2/11 - /1/2/11]
+ │    ├── [/1/4/7 - /1/4/7]
+ │    ├── [/1/4/9 - /1/4/9]
+ │    ├── [/1/4/11 - /1/4/11]
+ │    ├── [/1/6/7 - /1/6/7]
+ │    ├── [/1/6/9 - /1/6/9]
+ │    ├── [/1/6/11 - /1/6/11]
+ │    ├── [/3/2/7 - /3/2/7]
+ │    ├── [/3/2/9 - /3/2/9]
+ │    ├── [/3/2/11 - /3/2/11]
+ │    ├── [/3/4/7 - /3/4/7]
+ │    ├── [/3/4/9 - /3/4/9]
+ │    ├── [/3/4/11 - /3/4/11]
+ │    ├── [/3/6/7 - /3/6/7]
+ │    ├── [/3/6/9 - /3/6/9]
+ │    ├── [/3/6/11 - /3/6/11]
+ │    ├── [/5/2/7 - /5/2/7]
+ │    ├── [/5/2/9 - /5/2/9]
+ │    ├── [/5/2/11 - /5/2/11]
+ │    ├── [/5/4/7 - /5/4/7]
+ │    ├── [/5/4/9 - /5/4/9]
+ │    ├── [/5/4/11 - /5/4/11]
+ │    ├── [/5/6/7 - /5/6/7]
+ │    ├── [/5/6/9 - /5/6/9]
+ │    └── [/5/6/11 - /5/6/11]
+ └── flags: force-index=t167620_a_b_c_idx
+
+# With limit=10, the final 9*3 cross-product is blocked. We get 9 (a, b) spans
+# with a remaining filter on c.
+statement ok
+SET optimizer_span_limit = 10
+
+query T
+EXPLAIN (OPT) SELECT * FROM t167620@t167620_a_b_c_idx WHERE a IN (1, 3, 5) AND b IN (2, 4, 6) AND c IN (7, 9, 11)
+----
+select
+ ├── scan t167620@t167620_a_b_c_idx
+ │    ├── constraint: /1/2/3/4
+ │    │    ├── [/1/2 - /1/2]
+ │    │    ├── [/1/4 - /1/4]
+ │    │    ├── [/1/6 - /1/6]
+ │    │    ├── [/3/2 - /3/2]
+ │    │    ├── [/3/4 - /3/4]
+ │    │    ├── [/3/6 - /3/6]
+ │    │    ├── [/5/2 - /5/2]
+ │    │    ├── [/5/4 - /5/4]
+ │    │    └── [/5/6 - /5/6]
+ │    └── flags: force-index=t167620_a_b_c_idx
+ └── filters
+      └── c IN (7, 9, 11)
+
+# With limit=8, the 3*3 cross-product for b is also blocked. We get 3 (a) spans
+# with remaining filters on b and c.
+statement ok
+SET optimizer_span_limit = 8
+
+query T
+EXPLAIN (OPT) SELECT * FROM t167620@t167620_a_b_c_idx WHERE a IN (1, 3, 5) AND b IN (2, 4, 6) AND c IN (7, 9, 11)
+----
+select
+ ├── scan t167620@t167620_a_b_c_idx
+ │    ├── constraint: /1/2/3/4
+ │    │    ├── [/1 - /1]
+ │    │    ├── [/3 - /3]
+ │    │    └── [/5 - /5]
+ │    └── flags: force-index=t167620_a_b_c_idx
+ └── filters
+      ├── b IN (2, 4, 6)
+      └── c IN (7, 9, 11)
+
+statement ok
+RESET optimizer_span_limit
+
+subtest end

@@ -12,6 +12,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -218,13 +219,29 @@ func (s *CrossRangeTxnWrapperSender) Send(
 	ctx context.Context, ba *kvpb.BatchRequest,
 ) (*kvpb.BatchResponse, *kvpb.Error) {
 	if ba.Txn != nil {
-		log.Fatalf(ctx, "CrossRangeTxnWrapperSender can't handle transactional requests")
+		log.KvExec.Fatalf(ctx, "CrossRangeTxnWrapperSender can't handle transactional requests")
+	}
+
+	if ba.Header.WorkloadID == 0 {
+		if wid, wtype := WorkloadInfoFromContext(ctx); wid != 0 {
+			ba.Header.WorkloadID = wid
+			ba.Header.WorkloadType = wtype.ToUint32()
+		}
 	}
 
 	br, pErr := s.wrapped.Send(ctx, ba)
 	if _, ok := pErr.GetDetail().(*kvpb.OpRequiresTxnError); !ok {
 		return br, pErr
 	}
+
+	// Before retrying the batch in a transaction, strip the header's timestamp.
+	// It may have been set to try a follower read, but it's not allowed in a txn
+	// (see comment near Header.Timestamp). Currently, this non-transactional API
+	// is used for follower reads only by KVNemesis.
+	//
+	// We can end up here if the batch contains transactional requests and spans
+	// multiple ranges.
+	ba.Header.Timestamp = hlc.Timestamp{}
 
 	err := s.db.Txn(ctx, func(ctx context.Context, txn *Txn) error {
 		txn.SetDebugName("auto-wrap")
@@ -269,6 +286,40 @@ type DB struct {
 	// Especially SettingsValue.
 	SQLKVResponseAdmissionQ *admission.WorkQueue
 	AdmissionPacerFactory   admission.PacerFactory
+
+	SQLCPUProvider admission.SQLCPUProvider
+}
+
+// workloadInfoCtxKey is the context key for workload info propagation.
+type workloadInfoCtxKey struct{}
+
+// workloadInfo bundles the workload ID and type for context
+// propagation.
+type workloadInfo struct {
+	id           uint64
+	workloadType workloadid.WorkloadType
+}
+
+// ContextWithWorkloadInfo returns a new context that carries the given
+// workload ID and type. Transaction creation methods (NewTxn, Txn,
+// TxnWithAdmissionControl, TxnWithSteppingEnabled) automatically
+// extract these values and call SetWorkloadInfo on the new
+// transaction, enabling ASH workload attribution.
+func ContextWithWorkloadInfo(
+	ctx context.Context, id uint64, wType workloadid.WorkloadType,
+) context.Context {
+	return context.WithValue(ctx, workloadInfoCtxKey{}, workloadInfo{
+		id:           id,
+		workloadType: wType,
+	})
+}
+
+// WorkloadInfoFromContext extracts the workload ID and type
+// previously set by ContextWithWorkloadInfo. Returns (0, 0) if no
+// workload info is present.
+func WorkloadInfoFromContext(ctx context.Context) (uint64, workloadid.WorkloadType) {
+	v, _ := ctx.Value(workloadInfoCtxKey{}).(workloadInfo)
+	return v.id, v.workloadType
 }
 
 // NonTransactionalSender returns a Sender that can be used for sending
@@ -474,20 +525,6 @@ func (db *DB) CPutInline(ctx context.Context, key, value interface{}, expValue [
 	return getOneErr(db.Run(ctx, b), b)
 }
 
-// InitPut sets the first value for a key to value. A ConditionFailedError is
-// reported if a value already exists for the key and it's not equal to the
-// value passed in. If failOnTombstones is set to true, tombstones count as
-// mismatched values and will cause a ConditionFailedError.
-//
-// key can be either a byte slice or a string. value can be any key type, a
-// protoutil.Message or any Go primitive type (bool, int, etc). It is illegal to
-// set value to nil.
-func (db *DB) InitPut(ctx context.Context, key, value interface{}, failOnTombstones bool) error {
-	b := &Batch{}
-	b.InitPut(key, value, failOnTombstones)
-	return getOneErr(db.Run(ctx, b), b)
-}
-
 // Inc increments the integer value at key. If the key does not exist it will
 // be created with an initial value of 0 which will then be incremented. If the
 // key exists but was set using Put or CPut an error will be returned.
@@ -513,6 +550,7 @@ func (db *DB) scan(
 	if maxRows > 0 {
 		b.Header.MaxSpanRequestKeys = maxRows
 	}
+	b.Header.IsReverse = isReverse
 	b.scan(begin, end, isReverse, str, dur)
 	r, err := getOneResult(db.Run(ctx, b), b)
 	return r.Rows, err
@@ -628,8 +666,7 @@ func (db *DB) DelRange(
 }
 
 // DelRangeUsingTombstone deletes the rows between begin (inclusive) and end
-// (exclusive) using an MVCC range tombstone. Callers must check the
-// MVCCRangeTombstones version gate before using this.
+// (exclusive) using an MVCC range tombstone.
 func (db *DB) DelRangeUsingTombstone(ctx context.Context, begin, end interface{}) error {
 	b := &Batch{}
 	b.DelRangeUsingTombstone(begin, end)
@@ -682,8 +719,14 @@ func (db *DB) AdminSplit(
 func (db *DB) AdminScatter(
 	ctx context.Context, key roachpb.Key, maxSize int64,
 ) (*kvpb.AdminScatterResponse, error) {
+	return db.sendAdminScatterRequest(ctx, roachpb.Span{Key: key, EndKey: key.Next()}, maxSize)
+}
+
+func (db *DB) sendAdminScatterRequest(
+	ctx context.Context, span roachpb.Span, maxSize int64,
+) (*kvpb.AdminScatterResponse, error) {
 	scatterReq := &kvpb.AdminScatterRequest{
-		RequestHeader:   kvpb.RequestHeaderFromSpan(roachpb.Span{Key: key, EndKey: key.Next()}),
+		RequestHeader:   kvpb.RequestHeaderFromSpan(span),
 		RandomizeLeases: true,
 		MaxSize:         maxSize,
 	}
@@ -696,6 +739,13 @@ func (db *DB) AdminScatter(
 		return nil, errors.Errorf("unexpected response of type %T for AdminScatter", raw)
 	}
 	return resp, nil
+}
+
+// AdminScatterSpan scatters the ranges that overlap the specified span.
+func (db *DB) AdminScatterSpan(
+	ctx context.Context, span roachpb.Span,
+) (*kvpb.AdminScatterResponse, error) {
+	return db.sendAdminScatterRequest(ctx, span, 0 /* maxSize */)
 }
 
 // AdminUnsplit removes the sticky bit of the range specified by splitKey.
@@ -779,22 +829,18 @@ func (db *DB) AdminRelocateRange(
 }
 
 // AddSSTable links a file into the Pebble log-structured merge-tree.
-//
-// The disallowConflicts, disallowShadowingBelow parameters
-// require the MVCCAddSSTable version gate, as they are new in 22.1.
 func (db *DB) AddSSTable(
 	ctx context.Context,
 	begin, end interface{},
 	data []byte,
 	disallowConflicts bool,
-	disallowShadowing bool,
 	disallowShadowingBelow hlc.Timestamp,
 	stats *enginepb.MVCCStats,
 	ingestAsWrites bool,
 	batchTs hlc.Timestamp,
 ) (roachpb.Span, int64, error) {
 	b := &Batch{Header: kvpb.Header{Timestamp: batchTs}}
-	b.addSSTable(begin, end, data, disallowConflicts, disallowShadowing, disallowShadowingBelow,
+	b.addSSTable(begin, end, data, disallowConflicts, disallowShadowingBelow,
 		stats, ingestAsWrites, hlc.Timestamp{} /* sstTimestampToRequestTimestamp */)
 	err := getOneErr(db.Run(ctx, b), b)
 	if err != nil {
@@ -844,23 +890,18 @@ func (db *DB) LinkExternalSSTable(
 // merge-tree. All keys in the SST must have batchTs as their timestamp, but the
 // batch timestamp at which the sst is actually ingested -- and that those keys
 // end up with after it is ingested -- may be updated if the request is pushed.
-//
-// Should only be called after checking the MVCCAddSSTable version gate.
 func (db *DB) AddSSTableAtBatchTimestamp(
 	ctx context.Context,
 	begin, end interface{},
 	data []byte,
 	disallowConflicts bool,
-	disallowShadowing bool,
 	disallowShadowingBelow hlc.Timestamp,
 	stats *enginepb.MVCCStats,
 	ingestAsWrites bool,
 	batchTs hlc.Timestamp,
 ) (hlc.Timestamp, roachpb.Span, int64, error) {
 	b := &Batch{Header: kvpb.Header{Timestamp: batchTs}}
-	b.addSSTable(begin, end, data,
-		disallowConflicts, disallowShadowing, disallowShadowingBelow,
-		stats, ingestAsWrites, batchTs)
+	b.addSSTable(begin, end, data, disallowConflicts, disallowShadowingBelow, stats, ingestAsWrites, batchTs)
 	err := getOneErr(db.Run(ctx, b), b)
 	if err != nil {
 		return hlc.Timestamp{}, roachpb.Span{}, 0, err
@@ -921,6 +962,23 @@ func (db *DB) Barrier(ctx context.Context, begin, end interface{}) (hlc.Timestam
 			b.response.Responses[0].GetInner())
 	}
 	return resp.Timestamp, nil
+}
+
+func (db *DB) FlushLockTable(ctx context.Context, begin, end interface{}) error {
+	b := &Batch{}
+	b.flushLockTable(begin, end)
+	if err := getOneErr(db.Run(ctx, b), b); err != nil {
+		return err
+	}
+	if l := len(b.response.Responses); l != 1 {
+		return errors.Errorf("got %d responses for FlushLockTable", l)
+	}
+	resp := b.response.Responses[0].GetFlushLockTable()
+	if resp == nil {
+		return errors.Errorf("unexpected response %T for FlushLockTable",
+			b.response.Responses[0].GetInner())
+	}
+	return nil
 }
 
 // BarrierWithLAI is like Barrier, but also returns the lease applied index and
@@ -1001,6 +1059,9 @@ func (db *DB) NewTxn(ctx context.Context, debugName string) *Txn {
 	nodeID, _ := db.ctx.NodeID.OptionalNodeID() // zero if not available
 	txn := NewTxn(ctx, db, nodeID)
 	txn.SetDebugName(debugName)
+	if wid, wtype := WorkloadInfoFromContext(ctx); wid != 0 {
+		txn.SetWorkloadInfo(wid, 0 /* appNameID */, wtype)
+	}
 	return txn
 }
 
@@ -1058,6 +1119,9 @@ func (db *DB) TxnWithAdmissionControl(
 	txn := NewTxnWithAdmissionControl(ctx, db, nodeID, source, priority)
 	txn.SetDebugName("unnamed")
 	txn.ConfigureStepping(ctx, steppingMode)
+	if wid, wtype := WorkloadInfoFromContext(ctx); wid != 0 {
+		txn.SetWorkloadInfo(wid, 0 /* appNameID */, wtype)
+	}
 	return runTxn(ctx, txn, retryable)
 }
 
@@ -1077,6 +1141,9 @@ func (db *DB) TxnWithSteppingEnabled(
 	nodeID, _ := db.ctx.NodeID.OptionalNodeID() // zero if not available
 	txn := NewTxnWithSteppingEnabled(ctx, db, nodeID, qualityOfService)
 	txn.SetDebugName("unnamed")
+	if wid, wtype := WorkloadInfoFromContext(ctx); wid != 0 {
+		txn.SetWorkloadInfo(wid, 0 /* appNameID */, wtype)
+	}
 	return runTxn(ctx, txn, retryable)
 }
 
@@ -1110,9 +1177,55 @@ func runTxn(ctx context.Context, txn *Txn, retryable func(context.Context, *Txn)
 	return err
 }
 
+// CommitPrepared commits the prepared transaction.
+func (db *DB) CommitPrepared(ctx context.Context, txn *roachpb.Transaction) error {
+	return db.endPrepared(ctx, txn, true /* commit */)
+}
+
+// RollbackPrepared rolls back the prepared transaction.
+func (db *DB) RollbackPrepared(ctx context.Context, txn *roachpb.Transaction) error {
+	return db.endPrepared(ctx, txn, false /* commit */)
+}
+
+func (db *DB) endPrepared(ctx context.Context, txn *roachpb.Transaction, commit bool) error {
+	if txn.Status != roachpb.PREPARED {
+		return errors.WithContextTags(errors.AssertionFailedf("transaction %v is not in a prepared state", txn), ctx)
+	}
+	if txn.Key == nil {
+		// If the transaction key is nil, the transaction was read-only and never
+		// wrote a transaction record when preparing. Committing or rolling back
+		// such a transaction is a no-op.
+		return nil
+	}
+
+	// NOTE: an EndTxn sent to a prepared transaction does not need a deadline,
+	// because the commit deadline was already checked when the transaction was
+	// prepared and the transaction can not have been pushed to a later commit
+	// timestamp when prepared.
+	et := endTxnReq(commit, hlc.Timestamp{} /* deadline */)
+	et.req.Key = txn.Key
+	// TODO(nvanbenschoten): it's unfortunate that we have to set the txn's
+	// LockSpans here. cmd_end_transaction.go should be able to read them from the
+	// transaction record. Unfortunately, it currently doesn't. Address this
+	// before merging this commit.
+	et.req.LockSpans = txn.LockSpans
+	ba := &kvpb.BatchRequest{Requests: et.unionArr[:]}
+	ba.Txn = txn
+	// NOTE: bypass the CrossRangeTxnWrapperSender, which does not support
+	// transactional requests. Use the underlying sender directly.
+	_, pErr := db.sendUsingSender(ctx, ba, db.factory.NonTransactionalSender())
+	return pErr.GoError()
+}
+
 // send runs the specified calls synchronously in a single batch and returns
 // any errors. Returns (nil, nil) for an empty batch.
 func (db *DB) send(ctx context.Context, ba *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error) {
+	if ba.Header.WorkloadID == 0 {
+		if wid, wtype := WorkloadInfoFromContext(ctx); wid != 0 {
+			ba.Header.WorkloadID = wid
+			ba.Header.WorkloadType = wtype.ToUint32()
+		}
+	}
 	return db.sendUsingSender(ctx, ba, db.NonTransactionalSender())
 }
 
@@ -1133,7 +1246,7 @@ func (db *DB) sendUsingSender(
 	br, pErr := sender.Send(ctx, ba)
 	if pErr != nil {
 		if log.V(1) {
-			log.Infof(ctx, "failed batch: %s", pErr)
+			log.KvExec.Infof(ctx, "failed batch: %s", pErr)
 		}
 		return nil, pErr
 	}

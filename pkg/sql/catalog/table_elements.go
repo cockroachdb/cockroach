@@ -17,9 +17,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/intsets"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
@@ -165,14 +167,16 @@ type Index interface {
 	GetName() string
 	IsPartial() bool
 	IsUnique() bool
+	SkipUniqueChecks() bool
 	IsDisabled() bool
 	IsSharded() bool
 	IsNotVisible() bool
 	IsCreatedExplicitly() bool
 	GetInvisibility() float64
-	GetPredicate() string
-	GetType() descpb.IndexDescriptor_Type
+	GetPredicate() catpb.Expression
+	GetType() idxtype.T
 	GetGeoConfig() geopb.Config
+	GetVecConfig() vecpb.Config
 	GetVersion() descpb.IndexDescriptorVersion
 	GetEncodingType() catenumpb.IndexDescriptorEncodingType
 
@@ -222,6 +226,18 @@ type Index interface {
 	// index.
 	InvertedColumnKind() catpb.InvertedIndexColumnKind
 
+	// VectorColumnName returns the name of the vector column of the vector
+	// index.
+	//
+	// Panics if the index is not a vector index.
+	VectorColumnName() string
+
+	// VectorColumnID returns the ColumnID of the vector column of the vector
+	// index.
+	//
+	// Panics if the index is not a vector index.
+	VectorColumnID() descpb.ColumnID
+
 	NumPrimaryStoredColumns() int
 	NumSecondaryStoredColumns() int
 	GetStoredColumnID(storedColumnOrdinal int) descpb.ColumnID
@@ -234,7 +250,7 @@ type Index interface {
 	NumCompositeColumns() int
 	GetCompositeColumnID(compositeColumnOrdinal int) descpb.ColumnID
 	UseDeletePreservingEncoding() bool
-	// ForcePut forces all writes to use Put rather than CPut or InitPut.
+	// ForcePut forces all writes to use Put rather than CPut.
 	//
 	// Users of this options should take great care as it
 	// effectively mean unique constraints are not respected.
@@ -327,21 +343,21 @@ type Column interface {
 
 	// GetDefaultExpr returns the column default expression if it exists,
 	// empty string otherwise.
-	GetDefaultExpr() string
+	GetDefaultExpr() catpb.Expression
 
 	// HasOnUpdate returns true iff the column has an on update expression set.
 	HasOnUpdate() bool
 
 	// GetOnUpdateExpr returns the column on update expression if it exists,
 	// empty string otherwise.
-	GetOnUpdateExpr() string
+	GetOnUpdateExpr() catpb.Expression
 
 	// IsComputed returns true iff the column is a computed column.
 	IsComputed() bool
 
 	// GetComputeExpr returns the column computed expression if it exists,
 	// empty string otherwise.
-	GetComputeExpr() string
+	GetComputeExpr() catpb.Expression
 
 	// IsHidden returns true iff the column is not visible.
 	IsHidden() bool
@@ -469,7 +485,12 @@ type UniqueConstraint interface {
 
 	// IsValidReferencedUniqueConstraint returns whether the unique constraint can
 	// serve as a referenced unique constraint for a foreign key constraint.
-	IsValidReferencedUniqueConstraint(fk ForeignKeyConstraint) bool
+	//
+	// When asSubset is false, the constraint's columns must be a permutation of
+	// the FK's referenced columns. When true, the constraint validates as a
+	// subset match: a non-partial unique constraint whose columns are a
+	// non-empty subset of the FK's referenced columns is accepted.
+	IsValidReferencedUniqueConstraint(fk ForeignKeyConstraint, asSubset bool) bool
 
 	// NumKeyColumns returns the number of columns in this unique constraint.
 	NumKeyColumns() int
@@ -486,7 +507,7 @@ type UniqueConstraint interface {
 	IsPartial() bool
 
 	// GetPredicate returns the partial predicate if there is one, "" otherwise.
-	GetPredicate() string
+	GetPredicate() catpb.Expression
 }
 
 // UniqueWithIndexConstraint is an interface around a unique constraint
@@ -510,7 +531,7 @@ type CheckConstraint interface {
 	CheckDesc() *descpb.TableDescriptor_CheckConstraint
 
 	// GetExpr returns the check expression as a string.
-	GetExpr() string
+	GetExpr() catpb.Expression
 
 	// NumReferencedColumns returns the number of column references in the check
 	// expression. Note that a column may be referenced multiple times in an
@@ -533,6 +554,26 @@ type CheckConstraint interface {
 	// IsHashShardingConstraint returns true iff this check constraint is
 	// associated with a hash-sharding column in this table.
 	IsHashShardingConstraint() bool
+}
+
+// CheckConstraintValidator interface is designed for evaluating whether check
+// constraints are violated. It represents a subset of the CheckConstraint
+// interface, excluding certain elements that are not applicable to synthetic
+// constraints added for row-level security.
+type CheckConstraintValidator interface {
+	// GetName returns the name of this constraint update mutation.
+	GetName() string
+
+	// GetExpr returns the check expression as a string.
+	GetExpr() catpb.Expression
+
+	// IsRLSConstraint returns true iff ths check constraint is the synthethic one
+	// to enforce row-level security policies.
+	IsRLSConstraint() bool
+
+	// IsCheckFailed returns true if the constraint was violated based on the
+	// input given.
+	IsCheckFailed(boolVal, isNull bool) bool
 }
 
 // ForeignKeyConstraint is an interface around a check constraint.
@@ -765,6 +806,11 @@ func ForEachPartialIndex(desc TableDescriptor, f func(idx Index) error) error {
 	return forEachIndex(desc.PartialIndexes(), f)
 }
 
+// ForEachVectorIndex is like ForEachIndex over VectorIndexes().
+func ForEachVectorIndex(desc TableDescriptor, f func(idx Index) error) error {
+	return forEachIndex(desc.VectorIndexes(), f)
+}
+
 // ForEachNonPrimaryIndex is like ForEachIndex over
 // NonPrimaryIndexes().
 func ForEachNonPrimaryIndex(desc TableDescriptor, f func(idx Index) error) error {
@@ -831,10 +877,16 @@ func FindNonDropIndex(desc TableDescriptor, test func(idx Index) bool) Index {
 	return findIndex(desc.NonDropIndexes(), test)
 }
 
-// FindPartialIndex returns the first index in PartialIndex() for which test
+// FindPartialIndex returns the first index in PartialIndexes() for which test
 // returns true.
 func FindPartialIndex(desc TableDescriptor, test func(idx Index) bool) Index {
 	return findIndex(desc.PartialIndexes(), test)
+}
+
+// FindVectorIndex returns the first index in VectorIndexes() for which test
+// returns true.
+func FindVectorIndex(desc TableDescriptor, test func(idx Index) bool) Index {
+	return findIndex(desc.VectorIndexes(), test)
 }
 
 // FindPublicNonPrimaryIndex returns the first index in PublicNonPrimaryIndex()
@@ -963,20 +1015,6 @@ func ColumnIDToOrdinalMap(columns []Column) TableColMap {
 		m.Set(col.GetID(), col.Ordinal())
 	}
 	return m
-}
-
-// ColumnTypesWithInvertedCol returns the types of all given columns,
-// If invertedCol is non-nil, substitutes the type of the inverted
-// column instead of the column with the same ID.
-func ColumnTypesWithInvertedCol(columns []Column, invertedCol Column) []*types.T {
-	t := make([]*types.T, len(columns))
-	for i, col := range columns {
-		t[i] = col.GetType()
-		if invertedCol != nil && col.GetID() == invertedCol.GetID() {
-			t[i] = invertedCol.GetType()
-		}
-	}
-	return t
 }
 
 // ColumnsByIDs returns a map of Columns keyed by their ID for the given table.
@@ -1179,6 +1217,19 @@ func FindTriggerByID(tbl TableDescriptor, id descpb.TriggerID) *descpb.TriggerDe
 	return nil
 }
 
+// FindPolicyByID traverses the slice returned by the GetPolicies method on the
+// table descriptor and returns the first policy that matches the desired ID,
+// or nil if none was found.
+func FindPolicyByID(tbl TableDescriptor, id descpb.PolicyID) *descpb.PolicyDescriptor {
+	policies := tbl.GetPolicies()
+	for i := range policies {
+		if policies[i].ID == id {
+			return &policies[i]
+		}
+	}
+	return nil
+}
+
 // FindFamilyByID traverses the family descriptors on the table descriptor
 // and returns the first column family with the desired ID, or nil if none was
 // found.
@@ -1331,23 +1382,81 @@ func MustFindPublicColumnByID(desc TableDescriptor, id descpb.ColumnID) (Column,
 	return col, nil
 }
 
-// FindFKReferencedUniqueConstraint finds the first index in the supplied
-// referencedTable that can satisfy a foreign key of the supplied column ids.
-// If no such index exists, attempts to find a unique constraint on the supplied
-// column ids. If neither an index nor unique constraint is found, returns an
-// error.
+// FindFKReferencedUniqueConstraint finds a unique constraint on referencedTable
+// that can satisfy the foreign key. When considerSubsets is true, constraints
+// covering a strict subset of the FK's referenced columns are also candidates;
+// otherwise, only exact matches are considered. An error is returned if no
+// qualifying constraint is found.
+//
+// Preference order when multiple constraints qualify:
+//  1. Exact match over subset match.
+//  2. Unique-with-index over unique-without-index.
+//  3. Among subset matches, prefer the largest key column count (for tighter
+//     subset coverage).
+//  4. Final tiebreaker: prefer the lower constraint ID (for deterministic display).
+//
+// The optimizer picks its own enforcement index; this choice only affects
+// catalog display.
 func FindFKReferencedUniqueConstraint(
-	referencedTable TableDescriptor, fk ForeignKeyConstraint,
+	referencedTable TableDescriptor, fk ForeignKeyConstraint, considerSubsets bool,
 ) (UniqueConstraint, error) {
-	for _, uwi := range referencedTable.UniqueConstraintsWithIndex() {
-		if !uwi.Dropped() && uwi.IsValidReferencedUniqueConstraint(fk) {
-			return uwi, nil
+	// best tracks the best unique constraint found so far based on
+	// the preference order defined above.
+	var best struct {
+		constraint UniqueConstraint
+		subset     bool
+		withIndex  bool
+	}
+	isBetter := func(c UniqueConstraint, subset, withIndex bool) bool {
+		if best.constraint == nil {
+			return true
+		}
+		// 1. Exact beats subset.
+		if best.subset != subset {
+			return !subset
+		}
+		// 2. With-index beats without-index.
+		if best.withIndex != withIndex {
+			return withIndex
+		}
+		// 3. Among two subsets, more columns wins.
+		if subset {
+			if cN, bN := c.NumKeyColumns(), best.constraint.NumKeyColumns(); cN != bN {
+				return cN > bN
+			}
+		}
+		// 4. Final tiebreaker: lower constraint ID.
+		return c.GetConstraintID() < best.constraint.GetConstraintID()
+	}
+	consider := func(c UniqueConstraint, withIndex bool) {
+		if c.Dropped() {
+			return
+		}
+		var subset bool
+		switch {
+		case c.IsValidReferencedUniqueConstraint(fk, false /* asSubset */):
+			// Exact match.
+		case considerSubsets && c.IsValidReferencedUniqueConstraint(fk, true /* asSubset */):
+			// Subset match.
+			subset = true
+		default:
+			// No match.
+			return
+		}
+		if isBetter(c, subset, withIndex) {
+			best.constraint = c
+			best.subset = subset
+			best.withIndex = withIndex
 		}
 	}
+	for _, uwi := range referencedTable.UniqueConstraintsWithIndex() {
+		consider(uwi, true /* withIndex */)
+	}
 	for _, uwoi := range referencedTable.UniqueConstraintsWithoutIndex() {
-		if !uwoi.Dropped() && uwoi.IsValidReferencedUniqueConstraint(fk) {
-			return uwoi, nil
-		}
+		consider(uwoi, false /* withIndex */)
+	}
+	if best.constraint != nil {
+		return best.constraint, nil
 	}
 	return nil, pgerror.Newf(
 		pgcode.ForeignKeyViolation,

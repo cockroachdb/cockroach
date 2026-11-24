@@ -78,7 +78,7 @@ func TestDataDriven(t *testing.T) {
 					&tableID, &statementTimeName)
 				targets.Add(changefeedbase.Target{
 					Type:              jobspb.ChangefeedTargetSpecification_PRIMARY_FAMILY_ONLY,
-					TableID:           tableID,
+					DescID:            tableID,
 					FamilyName:        "primary",
 					StatementTimeName: statementTimeName,
 				})
@@ -118,7 +118,7 @@ func TestDataDriven(t *testing.T) {
 				f := schemafeed.New(ctx, cfg, schemafeed.TestingAllEventFilter, targets, now, nil, changefeedbase.CanHandle{
 					MultipleColumnFamilies: true,
 					VirtualColumns:         true,
-				})
+				}, false)
 				schemaFeeds[i] = f
 
 				go func() {

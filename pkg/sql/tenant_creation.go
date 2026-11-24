@@ -6,10 +6,12 @@
 package sql
 
 import (
+	"cmp"
 	"context"
 	gojson "encoding/json"
 	"fmt"
 	"math"
+	"slices"
 	"strings"
 	"time"
 
@@ -34,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catconstants"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/zoneconfig"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logcrash"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -111,7 +114,7 @@ func (p *planner) createTenantInternal(
 	info.DataState = mtinfopb.DataStateReady
 	info.ServiceMode = serviceMode
 
-	initialTenantZoneConfig, err := GetHydratedZoneConfigForTenantsRange(ctx, p.Txn(), p.Descriptors())
+	initialTenantZoneConfig, err := zoneconfig.GetHydratedForTenantsRange(ctx, p.Txn(), p.Descriptors())
 	if err != nil {
 		return tid, err
 	}
@@ -136,7 +139,7 @@ func (p *planner) createTenantInternal(
 		return tid, nil
 	}
 
-	return BootstrapTenant(ctx, p.execCfg, p.Txn(), info, initialTenantZoneConfig)
+	return BootstrapTenant(ctx, p.execCfg, p.Txn(), info, initialTenantZoneConfig, bootstrap.NoOffset)
 }
 
 // BootstrapTenant bootstraps the span of the newly created tenant identified in
@@ -147,6 +150,7 @@ func BootstrapTenant(
 	txn *kv.Txn,
 	info mtinfopb.TenantInfoWithUsage,
 	zfcg *zonepb.ZoneConfig,
+	dynamicSystemTableIDOffset uint32,
 ) (roachpb.TenantID, error) {
 	tid := roachpb.MustMakeTenantID(info.ID)
 
@@ -169,23 +173,38 @@ func BootstrapTenant(
 		// cluster's bootstrapping logic.
 		tenantVersion.Version = clusterversion.Latest.Version()
 		bootstrapVersionOverride = 0
-	case execCfg.Settings.Version.IsActive(ctx, clusterversion.PreviousRelease):
-		// If the previous major version is active, use that version to create the
-		// tenant and bootstrap it just like the previous major version binary
-		// would, using hardcoded initial values.
-		tenantVersion.Version = clusterversion.PreviousRelease.Version()
-		bootstrapVersionOverride = clusterversion.PreviousRelease
 	default:
-		// Otherwise, use the initial values from the min supported version.
-		tenantVersion.Version = clusterversion.MinSupported.Version()
-		bootstrapVersionOverride = clusterversion.MinSupported
+		// Iterate through supported previous releases in reverse order to find the
+		// appropriate bootstrap version.
+		supportedReleases := clusterversion.SupportedPreviousReleases()
+
+		// Sort to ensure proper ordering (should already be sorted, but being safe).
+		slices.SortFunc(supportedReleases, func(a, b clusterversion.Key) int {
+			return cmp.Compare(a, b)
+		})
+
+		// If no supported release is active, fall back to min supported version.
+		// This should not happen in practice.
+		foundVersion := clusterversion.MinSupported
+		for i := len(supportedReleases) - 1; i >= 0; i-- {
+			k := supportedReleases[i]
+			if execCfg.Settings.Version.IsActive(ctx, k) {
+				// Use the highest active supported release to create the tenant and
+				// bootstrap it with the hardcoded initial values for that version.
+				foundVersion = k
+				break
+			}
+		}
+		tenantVersion.Version = foundVersion.Version()
+		bootstrapVersionOverride = foundVersion
 	}
 
 	initialValuesOpts := bootstrap.InitialValuesOpts{
-		DefaultZoneConfig:       zfcg,
-		DefaultSystemZoneConfig: zfcg,
-		OverrideKey:             bootstrapVersionOverride,
-		Codec:                   codec,
+		DefaultZoneConfig:          zfcg,
+		DefaultSystemZoneConfig:    zfcg,
+		OverrideKey:                bootstrapVersionOverride,
+		Codec:                      codec,
+		DynamicSystemTableIDOffset: dynamicSystemTableIDOffset,
 	}
 	kvs, splits, err := initialValuesOpts.GenerateInitialValues()
 	if err != nil {

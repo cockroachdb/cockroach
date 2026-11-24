@@ -34,6 +34,8 @@ var (
 	HasColumnFamily     = hasColumnFamily
 	CreateSystemTable   = createSystemTable
 	OnlyHasColumnFamily = onlyHasColumnFamily
+	ColumnExists        = columnExists
+	IndexExists         = indexExists
 )
 
 type Schema struct {
@@ -121,6 +123,7 @@ func ValidateSchemaExists(
 	schemas []Schema,
 	expectExists bool,
 ) {
+	t.Helper()
 	// First validate by reading the columns and the index.
 	for _, stmt := range stmts {
 		_, err := sqlDB.Exec(stmt)

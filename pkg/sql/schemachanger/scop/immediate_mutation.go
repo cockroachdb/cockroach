@@ -14,6 +14,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/semenumpb"
+	"github.com/cockroachdb/redact"
 )
 
 //go:generate go run ./generate_visitor.go scop ImmediateMutation immediate_mutation.go immediate_mutation_visitor_generated.go
@@ -24,6 +25,10 @@ type immediateMutationOp struct{ baseOp }
 var _ = immediateMutationOp{baseOp: baseOp{}}
 
 func (immediateMutationOp) Type() Type { return MutationType }
+
+func (immediateMutationOp) Description() redact.RedactableString {
+	return "Updating schema metadata"
+}
 
 // NotImplemented is a placeholder for operations which haven't been defined yet.
 // TODO(postamar): remove all of these
@@ -38,6 +43,7 @@ type NotImplementedForPublicObjects struct {
 	immediateMutationOp
 	ElementType string
 	DescID      catid.DescID
+	TriggerID   catid.TriggerID
 }
 
 // UndoAllInTxnImmediateMutationOpSideEffects undoes the side effects of all
@@ -236,6 +242,33 @@ type AddColumnComputeExpression struct {
 
 // RemoveColumnComputeExpression will remove the compute expression from a column.
 type RemoveColumnComputeExpression struct {
+	immediateMutationOp
+	TableID  descpb.ID
+	ColumnID descpb.ColumnID
+}
+
+// AddColumnGeneratedAsIdentity will add a new generated as identity to a column.
+type AddColumnGeneratedAsIdentity struct {
+	immediateMutationOp
+	GeneratedAsIdentity scpb.ColumnGeneratedAsIdentity
+}
+
+// RemoveColumnGeneratedAsIdentity will remove the generated as identity from a column.
+type RemoveColumnGeneratedAsIdentity struct {
+	immediateMutationOp
+	TableID  descpb.ID
+	ColumnID descpb.ColumnID
+}
+
+// MakeColumnHidden will add the hidden attribute to a column.
+type MakeColumnHidden struct {
+	immediateMutationOp
+	TableID  descpb.ID
+	ColumnID descpb.ColumnID
+}
+
+// MakeColumnHidden will remove the hidden attribute from a column.
+type MakeColumnVisible struct {
 	immediateMutationOp
 	TableID  descpb.ID
 	ColumnID descpb.ColumnID
@@ -540,7 +573,9 @@ type SetTriggerName struct {
 // whether it will be executed in response to a triggering event.
 type SetTriggerEnabled struct {
 	immediateMutationOp
-	Enabled scpb.TriggerEnabled
+	TableID   catid.DescID
+	TriggerID catid.TriggerID
+	Enabled   bool
 }
 
 // SetTriggerTiming sets the timing of a trigger, which indicates when it
@@ -586,6 +621,63 @@ type SetTriggerForwardReferences struct {
 type RemoveTrigger struct {
 	immediateMutationOp
 	Trigger scpb.Trigger
+}
+
+// AddPolicy adds a policy to a table.
+type AddPolicy struct {
+	immediateMutationOp
+	Policy scpb.Policy
+}
+
+// RemovePolicy removes a policy from a table.
+type RemovePolicy struct {
+	immediateMutationOp
+	Policy scpb.Policy
+}
+
+// SetPolicyName sets the name of a policy.
+type SetPolicyName struct {
+	immediateMutationOp
+	TableID  descpb.ID
+	PolicyID descpb.PolicyID
+	Name     string
+}
+
+// AddPolicyRole adds a new role to a policy.
+type AddPolicyRole struct {
+	immediateMutationOp
+	Role scpb.PolicyRole
+}
+
+// RemovePolicyRole removes an existing role from a policy.
+type RemovePolicyRole struct {
+	immediateMutationOp
+	Role scpb.PolicyRole
+}
+
+// SetPolicyUsingExpression will set a new USING expression for a policy.
+type SetPolicyUsingExpression struct {
+	immediateMutationOp
+	TableID   descpb.ID
+	PolicyID  descpb.PolicyID
+	Expr      string
+	ColumnIDs descpb.ColumnIDs
+}
+
+// SetPolicyWithCheckExpression will set a new WITH CHECK expression for a policy.
+type SetPolicyWithCheckExpression struct {
+	immediateMutationOp
+	TableID   descpb.ID
+	PolicyID  descpb.PolicyID
+	Expr      string
+	ColumnIDs descpb.ColumnIDs
+}
+
+// SetPolicyForwardReferences sets new forward references to relations, types,
+// and routines for the expressions in a policy.
+type SetPolicyForwardReferences struct {
+	immediateMutationOp
+	Deps scpb.PolicyDeps
 }
 
 // UpdateTableBackReferencesInTypes updates back references to a table
@@ -674,6 +766,24 @@ type RemoveTableColumnBackReferencesInFunctions struct {
 	FunctionIDs            []descpb.ID
 }
 
+// AddTableIndexBackReferencesInFunctions adds back-references to indexes
+// from referenced functions.
+type AddTableIndexBackReferencesInFunctions struct {
+	immediateMutationOp
+	BackReferencedTableID descpb.ID
+	BackReferencedIndexID descpb.IndexID
+	FunctionIDs           []descpb.ID
+}
+
+// RemoveTableIndexBackReferencesInFunctions removes back-references to indexes
+// from referenced functions.
+type RemoveTableIndexBackReferencesInFunctions struct {
+	immediateMutationOp
+	BackReferencedTableID descpb.ID
+	BackReferencedIndexID descpb.IndexID
+	FunctionIDs           []descpb.ID
+}
+
 // AddTriggerBackReferencesInRoutines adds back references to a trigger from
 // referenced functions.
 type AddTriggerBackReferencesInRoutines struct {
@@ -690,6 +800,24 @@ type RemoveTriggerBackReferencesInRoutines struct {
 	BackReferencedTableID   descpb.ID
 	BackReferencedTriggerID descpb.TriggerID
 	RoutineIDs              []descpb.ID
+}
+
+// AddPolicyBackReferenceInFunctions adds back references to a policy from
+// referenced functions.
+type AddPolicyBackReferenceInFunctions struct {
+	immediateMutationOp
+	BackReferencedTableID  descpb.ID
+	BackReferencedPolicyID descpb.PolicyID
+	FunctionIDs            []descpb.ID
+}
+
+// RemovePolicyBackReferenceInFunctions removes back-references to a policy
+// from referenced functions.
+type RemovePolicyBackReferenceInFunctions struct {
+	immediateMutationOp
+	BackReferencedTableID  descpb.ID
+	BackReferencedPolicyID descpb.PolicyID
+	FunctionIDs            []descpb.ID
 }
 
 // SetColumnName renames a column.
@@ -774,6 +902,22 @@ type UpsertTypeComment struct {
 type RemoveTypeComment struct {
 	immediateMutationOp
 	TypeID descpb.ID
+}
+
+// UpsertFunctionComment is used to add a comment to a function (or
+// procedure). Functions and procedures share descriptor space, so a single
+// op covers both.
+type UpsertFunctionComment struct {
+	immediateMutationOp
+	FunctionID descpb.ID
+	Comment    string
+}
+
+// RemoveFunctionComment is used to delete a comment associated with a
+// function (or procedure).
+type RemoveFunctionComment struct {
+	immediateMutationOp
+	FunctionID descpb.ID
 }
 
 // UpsertDatabaseComment is used to add a comment to a database.
@@ -916,6 +1060,11 @@ type SetFunctionBody struct {
 	Body scpb.FunctionBody
 }
 
+type SetFunctionParams struct {
+	immediateMutationOp
+	Params scpb.FunctionParams
+}
+
 type SetFunctionSecurity struct {
 	immediateMutationOp
 	FunctionID descpb.ID
@@ -937,10 +1086,16 @@ type UpdateFunctionRelationReferences struct {
 	FunctionReferences []descpb.ID
 }
 
-type UpdateTableBackReferencesInRelations struct {
+// UpdateTriggerBackReferencesInRelations updates the DependedOnBy metadata in
+// relation descriptors for triggers. It handles both adding and removing
+// trigger-specific dependencies. The function relies on forward references
+// being set beforehand to determine whether a back-reference should be added
+// or removed.
+type UpdateTriggerBackReferencesInRelations struct {
 	immediateMutationOp
-	TableID     descpb.ID
-	RelationIDs []descpb.ID
+	TableID            descpb.ID
+	TriggerID          descpb.TriggerID
+	RelationReferences []scpb.TriggerDeps_RelationReference
 }
 
 type SetObjectParentID struct {
@@ -958,6 +1113,13 @@ type UpdateOwner struct {
 	Owner scpb.Owner
 }
 
+// RemoveOwner is a noop. The descriptor drop or the UpdateOwner handles the
+// state change.
+type RemoveOwner struct {
+	immediateMutationOp
+	DescriptorID descpb.ID
+}
+
 type CreateSchemaDescriptor struct {
 	immediateMutationOp
 	SchemaID descpb.ID
@@ -969,11 +1131,30 @@ type CreateSequenceDescriptor struct {
 	Temporary  bool
 }
 
-type SetSequenceOptions struct {
+type SetSequenceOption struct {
 	immediateMutationOp
 	SequenceID descpb.ID
 	Key        string
 	Value      string
+}
+
+type UnsetSequenceOption struct {
+	immediateMutationOp
+	SequenceID descpb.ID
+	Key        string
+}
+
+type MaybeUpdateSequenceValue struct {
+	immediateMutationOp
+	SequenceID       descpb.ID
+	PrevIncrement    int64
+	UpdatedIncrement int64
+	PrevMinValue     int64
+	UpdatedMinValue  int64
+	PrevMaxValue     int64
+	UpdatedMaxValue  int64
+	PrevStart        int64
+	UpdatedStart     int64
 }
 
 type InitSequence struct {
@@ -988,11 +1169,17 @@ type CreateDatabaseDescriptor struct {
 	DatabaseID descpb.ID
 }
 
-// AddNamedRangeZoneConfig adds a zone config to a named range..
+// AddNamedRangeZoneConfig adds a zone config to a named range.
 type AddNamedRangeZoneConfig struct {
 	immediateMutationOp
 	RangeName  zonepb.NamedZone
 	ZoneConfig zonepb.ZoneConfig
+}
+
+// DiscardNamedRangeZoneConfig discards a zone config from a named range.
+type DiscardNamedRangeZoneConfig struct {
+	immediateMutationOp
+	RangeName zonepb.NamedZone
 }
 
 // AddDatabaseZoneConfig adds a zone config to a database.
@@ -1002,11 +1189,31 @@ type AddDatabaseZoneConfig struct {
 	ZoneConfig zonepb.ZoneConfig
 }
 
-// DiscardZoneConfig discards the zone config for the given descriptor ID.
+// DiscardZoneConfig discards the zone config for the given ID. For table IDs,
+// we use DiscardTableZoneConfig as some extra work is needed for subzones.
 type DiscardZoneConfig struct {
 	immediateMutationOp
-	DescID     descpb.ID
-	ZoneConfig *zonepb.ZoneConfig
+	DescID descpb.ID
+}
+
+// DiscardTableZoneConfig discards the zone config for the given table ID. If
+// the table has subzones, we mark the table's zone config as a subzone
+// placeholder.
+type DiscardTableZoneConfig struct {
+	immediateMutationOp
+	TableID    descpb.ID
+	ZoneConfig zonepb.ZoneConfig
+}
+
+// DiscardSubzoneConfig discards the subzone config for the given descriptor ID.
+// If this is the only subzone for the table, we delete the entry from
+// system.zones.
+type DiscardSubzoneConfig struct {
+	immediateMutationOp
+	TableID              descpb.ID
+	Subzone              zonepb.Subzone
+	SubzoneSpans         []zonepb.SubzoneSpan
+	SubzoneIndexToDelete int32
 }
 
 // AddTableZoneConfig adds a zone config to a table.
@@ -1019,15 +1226,214 @@ type AddTableZoneConfig struct {
 // AddIndexZoneConfig adds a zone config to an index.
 type AddIndexZoneConfig struct {
 	immediateMutationOp
-	TableID      descpb.ID
-	Subzone      zonepb.Subzone
-	SubzoneSpans []zonepb.SubzoneSpan
+	TableID              descpb.ID
+	Subzone              zonepb.Subzone
+	SubzoneSpans         []zonepb.SubzoneSpan
+	SubzoneIndexToDelete int32
 }
 
 // AddPartitionZoneConfig adds a zone config to a partition.
 type AddPartitionZoneConfig struct {
 	immediateMutationOp
+	TableID              descpb.ID
+	Subzone              zonepb.Subzone
+	SubzoneSpans         []zonepb.SubzoneSpan
+	SubzoneIndexToDelete int32
+}
+
+// EnableRowLevelSecurityMode sets the row-level security mode on a table.
+type EnableRowLevelSecurityMode struct {
+	immediateMutationOp
+	TableID descpb.ID
+	Enabled bool
+}
+
+// ForcedRowLevelSecurityMode configures the force setting of row-level security on a table.
+type ForcedRowLevelSecurityMode struct {
+	immediateMutationOp
+	TableID descpb.ID
+	Forced  bool
+}
+
+// SetTableLocalityGlobal sets the table's locality to GLOBAL.
+type SetTableLocalityGlobal struct {
+	immediateMutationOp
+	TableID descpb.ID
+}
+
+// SetTableLocalityPrimaryRegion sets the table's locality to REGIONAL BY TABLE in the primary region.
+type SetTableLocalityPrimaryRegion struct {
+	immediateMutationOp
+	TableID descpb.ID
+}
+
+// SetTableLocalitySecondaryRegion sets the table's locality to REGIONAL BY TABLE in a specific region.
+type SetTableLocalitySecondaryRegion struct {
+	immediateMutationOp
+	TableID          descpb.ID
+	RegionEnumTypeID descpb.ID
+	RegionName       catpb.RegionName
+}
+
+// SetTableLocalityRegionalByRow sets the table's locality to REGIONAL BY ROW.
+type SetTableLocalityRegionalByRow struct {
+	immediateMutationOp
+	TableID descpb.ID
+	As      string
+}
+
+// UnsetTableLocality removes the table's locality configuration.
+type UnsetTableLocality struct {
+	immediateMutationOp
+	TableID descpb.ID
+}
+
+// MarkRecreatedIndexAsInvisible is used to mark secondary indexes recreated
+// after a primary key swap as invisible. This is to prevent their use before
+// primary key swap is complete.
+type MarkRecreatedIndexAsInvisible struct {
+	immediateMutationOp
+	TableID              descpb.ID
+	IndexID              descpb.IndexID
+	TargetPrimaryIndexID descpb.IndexID
+	SetHideIndexFlag     bool
+}
+
+// MarkRecreatedIndexesAsVisible is used to mark secondary indexes recreated
+// after a primary key swap as visible. This is to allow their use after
+// primary key swap is complete.
+type MarkRecreatedIndexesAsVisible struct {
+	immediateMutationOp
+	TableID           descpb.ID
+	IndexVisibilities map[descpb.IndexID]float64
+}
+
+// MarkRecreatedIndexAsVisible is used to mark secondary index recreated
+// after a primary key swap as visible. This is to allow their use after
+// primary key swap is complete.
+type MarkRecreatedIndexAsVisible struct {
+	immediateMutationOp
+	TableID         descpb.ID
+	IndexID         descpb.IndexID
+	IndexVisibility float64
+}
+
+// SetTableSchemaLocked is used to toggle a table schema as locked.
+type SetTableSchemaLocked struct {
+	immediateMutationOp
+	TableID descpb.ID
+	Locked  bool
+}
+
+// SetTableRBRUsingConstraint sets or clears the RBRUsingConstraint field on the
+// table descriptor. A ConstraintID of 0 clears the field.
+type SetTableRBRUsingConstraint struct {
+	immediateMutationOp
 	TableID      descpb.ID
-	Subzone      zonepb.Subzone
-	SubzoneSpans []zonepb.SubzoneSpan
+	ConstraintID descpb.ConstraintID
+}
+
+// SetTableStorageParam sets a storage parameter on a table.
+type SetTableStorageParam struct {
+	immediateMutationOp
+	Param scpb.TableStorageParam
+}
+
+// ResetTableStorageParam resets a storage parameter on a table to its default.
+type ResetTableStorageParam struct {
+	immediateMutationOp
+	Param scpb.TableStorageParam
+}
+
+// UpsertRowLevelTTL sets the RowLevelTTL on a table descriptor.
+type UpsertRowLevelTTL struct {
+	immediateMutationOp
+	TableID     descpb.ID
+	RowLevelTTL catpb.RowLevelTTL
+	TTLExpr     *scpb.Expression
+}
+
+// AddEnumTypeValue adds an enum value to the type descriptor in the READ_ONLY
+// capability with ADD direction.
+type AddEnumTypeValue struct {
+	immediateMutationOp
+	TypeID                 descpb.ID
+	PhysicalRepresentation []byte
+	LogicalRepresentation  string
+}
+
+// PromoteEnumTypeValue promotes a READ_ONLY/ADD enum value to ALL/NONE, making
+// it fully writable.
+type PromoteEnumTypeValue struct {
+	immediateMutationOp
+	TypeID                 descpb.ID
+	PhysicalRepresentation []byte
+	LogicalRepresentation  string
+}
+
+// DemoteEnumTypeValue demotes a public enum value to READ_ONLY capability
+// with REMOVE direction.
+type DemoteEnumTypeValue struct {
+	immediateMutationOp
+	TypeID                 descpb.ID
+	PhysicalRepresentation []byte
+	LogicalRepresentation  string
+}
+
+// RemoveEnumTypeValue removes an READ_ONLY/REMOVE enum value from the type
+// descriptor.
+type RemoveEnumTypeValue struct {
+	immediateMutationOp
+	TypeID                 descpb.ID
+	PhysicalRepresentation []byte
+	LogicalRepresentation  string
+}
+
+// AddDomainNotNull installs a NOT NULL constraint on a domain type descriptor
+// in the VALIDATING state.
+type AddDomainNotNull struct {
+	immediateMutationOp
+	TypeID       descpb.ID
+	ConstraintID descpb.ConstraintID
+}
+
+// MakeValidatedDomainNotNullPublic transitions a domain's NOT NULL constraint
+// from VALIDATING to ENFORCING.
+type MakeValidatedDomainNotNullPublic struct {
+	immediateMutationOp
+	TypeID       descpb.ID
+	ConstraintID descpb.ConstraintID
+}
+
+// MakePublicDomainNotNullValidated transitions a domain's NOT NULL constraint
+// from ENFORCING to DROPPING.
+type MakePublicDomainNotNullValidated struct {
+	immediateMutationOp
+	TypeID       descpb.ID
+	ConstraintID descpb.ConstraintID
+}
+
+// RemoveDomainNotNull removes the NOT NULL constraint from a domain type
+// descriptor.
+type RemoveDomainNotNull struct {
+	immediateMutationOp
+	TypeID       descpb.ID
+	ConstraintID descpb.ConstraintID
+}
+
+// SetDomainConstraintName sets the name of a constraint on a domain type
+// descriptor.
+type SetDomainConstraintName struct {
+	immediateMutationOp
+	TypeID       descpb.ID
+	ConstraintID descpb.ConstraintID
+	Name         string
+}
+
+// RemoveDomainConstraintName replaces a constraint's name on a domain type
+// descriptor with a placeholder.
+type RemoveDomainConstraintName struct {
+	immediateMutationOp
+	TypeID       descpb.ID
+	ConstraintID descpb.ConstraintID
 }

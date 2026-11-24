@@ -1,4 +1,12 @@
+# LogicTest: default-configs 3node-tenant
+# knob-opt: allow-unsafe
+
 subtest lost_table_data
+
+# This test will intentionally corrupt descriptors, so the initial version
+# can *never* be acquired.
+statement ok
+SET CLUSTER SETTING sql.catalog.descriptor_wait_for_initial_version.enabled=false
 
 statement ok
 CREATE TABLE corruptdesc (v INT8)
@@ -217,7 +225,7 @@ SELECT * FROM corrupt_backref_fk
 ----
 1 a
 
-statement error invalid foreign key backreference
+statement error (invalid foreign key backreference)*(.*referenced descriptor not found.*)*
 DROP TABLE corrupt_backref_fk
 
 statement ok
@@ -241,7 +249,13 @@ SELECT * FROM corrupt_backref_view
 ----
 1 a
 
+onlyif config local-legacy-schema-changer
+
 statement error pgcode XX000 invalid depended-on-by relation back reference
+DROP TABLE corrupt_backref_view
+
+skipif config local-legacy-schema-changer
+statement error pgcode XXUUU .*descriptor not found.*
 DROP TABLE corrupt_backref_view
 
 statement ok
@@ -328,7 +342,7 @@ FROM
 WHERE
 	name = 'kv'
 
-statement error pgcode XX000 internal error: relation "kv" \(\d+\): column "k" invalid ID \(1\) >= next column ID \(1\)
+statement error pgcode XX000 internal error:.* relation "kv" \(\d+\): column "k" invalid ID \(1\) >= next column ID \(1\)
 ALTER TABLE kv RENAME TO kv
 
 statement ok

@@ -15,11 +15,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/protectedts/ptpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/errors"
 )
@@ -54,6 +54,9 @@ func setProtectedTSOnJob(details jobspb.Details, u *uuid.UUID) jobspb.Details {
 	case jobspb.SchemaChangeDetails:
 		v.ProtectedTimestampRecord = u
 		return v
+	case jobspb.InspectDetails:
+		v.ProtectedTimestampRecord = u
+		return v
 	default:
 		panic(errors.AssertionFailedf("not supported %T", details))
 	}
@@ -66,6 +69,8 @@ func getProtectedTSOnJob(details jobspb.Details) *uuid.UUID {
 	case jobspb.NewSchemaChangeDetails:
 		return v.ProtectedTimestampRecord
 	case jobspb.SchemaChangeDetails:
+		return v.ProtectedTimestampRecord
+	case jobspb.InspectDetails:
 		return v.ProtectedTimestampRecord
 	default:
 		panic("not supported")
@@ -101,32 +106,38 @@ func NewManager(
 // timestamp. Note, the function assumes the in-memory job is up to date with
 // the persisted job record.
 func (p *Manager) TryToProtectBeforeGC(
-	ctx context.Context, job *jobs.Job, tableDesc catalog.TableDescriptor, readAsOf hlc.Timestamp,
+	ctx context.Context, job *jobs.Job, tableID descpb.ID, readAsOf hlc.Timestamp,
 ) Cleaner {
 	waitGrp := ctxgroup.WithContext(ctx)
 	protectedTSInstallCancel := make(chan struct{})
 	var unprotectCallback Cleaner
 	waitGrp.GoCtx(func(ctx context.Context) error {
-		// If we are starting up the system config can be nil, we are okay letting
-		// the job restart, due to the GC interval and lack of protected timestamp.
+		// If we are starting up, the system config can be nil. We are okay letting
+		// the job restart due to the GC interval and lack of protected timestamp.
 		systemConfig := p.systemConfig.GetSystemConfig()
 		if systemConfig == nil {
 			return nil
 		}
 		// Determine what the GC interval is on the table, which will help us
-		// figure out when to apply a protected timestamp, as a percentage of this
-		// time.
+		// figure out when to apply a protected timestamp as a percentage of the
+		// time until GC can occur.
 		zoneCfg, err := systemConfig.GetZoneConfigForObject(p.codec,
-			config.ObjectID(tableDesc.GetID()))
+			config.ObjectID(tableID))
 		if err != nil {
 			return err
 		}
-		waitBeforeProtectedTS := time.Duration((time.Duration(zoneCfg.GC.TTLSeconds) * time.Second).Seconds() *
-			timedProtectTimeStampGCPct)
+		waitBeforeProtectedTS := time.Duration(0)
+		now := timeutil.Now()
+		readAsOfTime := timeutil.Unix(0, readAsOf.WallTime)
+		gcTTL := time.Duration(zoneCfg.GC.TTLSeconds) * time.Second
+		if readAsOfTime.Add(gcTTL).After(now) {
+			timeUntilGC := readAsOfTime.Add(gcTTL).Sub(now)
+			waitBeforeProtectedTS = time.Duration(float64(timeUntilGC) * timedProtectTimeStampGCPct)
+		}
 
 		select {
 		case <-time.After(waitBeforeProtectedTS):
-			target := ptpb.MakeSchemaObjectsTarget(descpb.IDs{tableDesc.GetID()})
+			target := ptpb.MakeSchemaObjectsTarget(descpb.IDs{tableID})
 			unprotectCallback, err = p.Protect(ctx, job, target, readAsOf)
 			if err != nil {
 				return err
@@ -165,7 +176,9 @@ func (p *Manager) Protect(
 		return nil, nil
 	}
 	// Set up a new protected timestamp ID and install it on the job.
-	err := job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	//
+	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+	err := job.DeprecatedNoTxn().Update(ctx, func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 		// Check if the protected timestamp is visible in the txn.
 		protectedtsID := getProtectedTSOnJob(md.Payload.UnwrapDetails())
 		// If it's been removed lets create a new one.
@@ -177,7 +190,7 @@ func (p *Manager) Protect(
 			md.Payload.Details = jobspb.WrapPayloadDetails(details)
 			ju.UpdatePayload(md.Payload)
 			rec := MakeRecord(*protectedtsID,
-				int64(job.ID()), readAsOf, nil, Jobs, target)
+				int64(job.ID()), readAsOf, Jobs, target)
 			return pts.Protect(ctx, rec)
 		}
 		// Refresh the existing timestamp, otherwise.
@@ -203,7 +216,9 @@ func (p *Manager) Unprotect(ctx context.Context, job *jobs.Job) error {
 	}
 	// If we do find one then we need to clean up the protected timestamp,
 	// and remove it from the job.
-	return job.NoTxn().Update(ctx, func(txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+	//
+	//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+	return job.DeprecatedNoTxn().Update(ctx, func(txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater) error {
 		// The job will get refreshed, so check one more time the protected
 		// timestamp still exists. The callback returned from Protect works
 		// on a previously cached copy.

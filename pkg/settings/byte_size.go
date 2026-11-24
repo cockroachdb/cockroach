@@ -60,7 +60,7 @@ func RegisterByteSizeSetting(
 			}
 			hasExplicitValidationFn = true
 			if err := opt.validateInt64Fn(v); err != nil {
-				return errors.Wrapf(err, "invalid value for %s", key)
+				return err
 			}
 		}
 		if !hasExplicitValidationFn {
@@ -88,6 +88,17 @@ func ByteSizeWithMinimum(minVal int64) SettingOption {
 		if v < minVal {
 			return errors.Errorf("cannot be set to a value lower than %v",
 				humanizeutil.IBytes(minVal))
+		}
+		return nil
+	})
+}
+
+// ByteSizeWithMaximum can be passed to RegisterByteSizeSetting.
+func ByteSizeWithMaximum(maxVal int64) SettingOption {
+	return WithValidateInt(func(v int64) error {
+		if v > maxVal {
+			return errors.Errorf("cannot be set to a value larger than %v",
+				humanizeutil.IBytes(maxVal))
 		}
 		return nil
 	})

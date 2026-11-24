@@ -57,12 +57,12 @@ func (av AdmittedVector) SafeFormat(w redact.SafePrinter, _ rune) {
 	buf.Printf("term:%d, admitted:[", av.Term)
 	for pri, index := range av.Admitted {
 		if pri > 0 {
-			buf.Printf(",")
+			buf.SafeRune(',')
 		}
 		buf.Printf("%s:%d", raftpb.Priority(pri), index)
 	}
-	buf.Printf("]")
-	w.Printf("%v", buf)
+	buf.SafeRune(']')
+	w.SafeString(redact.SafeString(buf.String()))
 }
 
 // LogTracker tracks the durable and logically admitted state of a raft log.
@@ -349,7 +349,7 @@ func (l *LogTracker) errorf(ctx context.Context, format string, args ...any) {
 	if buildutil.CrdbTestBuild {
 		panic(errors.AssertionFailedf(format, args...))
 	} else {
-		log.Errorf(ctx, format, args...)
+		log.KvDistribution.Errorf(ctx, format, args...)
 	}
 }
 

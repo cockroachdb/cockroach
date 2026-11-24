@@ -1,0 +1,6 @@
+node_id	table_id	name	parent_id	expiration	deleted
+1	3	descriptor	1	2024-12-11 07:44:44.824583	f
+1	53	external_connections	1	2024-12-11 07:44:49.537097	f
+1	36	statement_diagnostics	1	2024-12-11 07:44:24.205086	f
+1	6	settings	1	2024-12-11 07:44:31.289861	f
+1	108	rides	104	2024-12-11 07:44:27.222137	f

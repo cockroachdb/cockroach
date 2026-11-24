@@ -13,10 +13,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catprivilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/dbdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descs"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/nstree"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/schemadesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/typedesc"
@@ -51,7 +54,9 @@ func WriteDescriptors(
 	extra []roachpb.KeyValue,
 	inheritParentName string,
 	includePublicSchemaCreatePriv bool,
+	allowCrossDatabaseRefs bool,
 ) (err error) {
+	var writtenDescs nstree.MutableCatalog
 	ctx, span := tracing.ChildSpan(ctx, "WriteDescriptors")
 	defer span.Finish()
 	defer func() {
@@ -80,8 +85,13 @@ func WriteDescriptors(
 		if updatedPrivileges != nil {
 			if mut, ok := desc.(*dbdesc.Mutable); ok {
 				mut.Privileges = updatedPrivileges
+				// Clear default privileges as well. Like regular privileges, we
+				// reset to defaults rather than selectively filtering since the
+				// backup's user set may not match this cluster's.
+				mut.DefaultPrivileges = catprivilege.MakeDefaultPrivilegeDescriptor(
+					catpb.DefaultPrivilegeDescriptor_DATABASE)
 			} else {
-				log.Fatalf(ctx, "wrong type for database %d, %T, expected Mutable",
+				log.Dev.Fatalf(ctx, "wrong type for database %d, %T, expected Mutable",
 					desc.GetID(), desc)
 			}
 		}
@@ -104,6 +114,7 @@ func WriteDescriptors(
 				return err
 			}
 		}
+		writtenDescs.UpsertDescriptor(desc)
 	}
 
 	// Write namespace and descriptor entries for each schema.
@@ -117,8 +128,13 @@ func WriteDescriptors(
 		if updatedPrivileges != nil {
 			if mut, ok := sc.(*schemadesc.Mutable); ok {
 				mut.Privileges = updatedPrivileges
+				// Clear default privileges as well. Like regular privileges, we
+				// reset to defaults rather than selectively filtering since the
+				// backup's user set may not match this cluster's.
+				mut.DefaultPrivileges = catprivilege.MakeDefaultPrivilegeDescriptor(
+					catpb.DefaultPrivilegeDescriptor_SCHEMA)
 			} else {
-				log.Fatalf(ctx, "wrong type for schema %d, %T, expected Mutable",
+				log.Dev.Fatalf(ctx, "wrong type for schema %d, %T, expected Mutable",
 					sc.GetID(), sc)
 			}
 		}
@@ -133,6 +149,7 @@ func WriteDescriptors(
 		if err := descsCol.InsertNamespaceEntryToBatch(ctx, kvTrace, sc, b); err != nil {
 			return err
 		}
+		writtenDescs.UpsertDescriptor(sc)
 	}
 
 	for i := range tables {
@@ -146,7 +163,7 @@ func WriteDescriptors(
 			if mut, ok := table.(*tabledesc.Mutable); ok {
 				mut.Privileges = updatedPrivileges
 			} else {
-				log.Fatalf(ctx, "wrong type for table %d, %T, expected Mutable",
+				log.Dev.Fatalf(ctx, "wrong type for table %d, %T, expected Mutable",
 					table.GetID(), table)
 			}
 		}
@@ -162,6 +179,7 @@ func WriteDescriptors(
 		if err := descsCol.InsertNamespaceEntryToBatch(ctx, kvTrace, table, b); err != nil {
 			return err
 		}
+		writtenDescs.UpsertDescriptor(table)
 	}
 
 	// Write all type descriptors -- create namespace entries and write to
@@ -177,7 +195,7 @@ func WriteDescriptors(
 			if mut, ok := typ.(*typedesc.Mutable); ok {
 				mut.Privileges = updatedPrivileges
 			} else {
-				log.Fatalf(ctx, "wrong type for type %d, %T, expected Mutable",
+				log.Dev.Fatalf(ctx, "wrong type for type %d, %T, expected Mutable",
 					typ.GetID(), typ)
 			}
 		}
@@ -189,6 +207,7 @@ func WriteDescriptors(
 		if err := descsCol.InsertNamespaceEntryToBatch(ctx, kvTrace, typ, b); err != nil {
 			return err
 		}
+		writtenDescs.UpsertDescriptor(typ)
 	}
 
 	for _, fn := range functions {
@@ -202,7 +221,7 @@ func WriteDescriptors(
 			if mut, ok := fn.(*funcdesc.Mutable); ok {
 				mut.Privileges = updatedPrivileges
 			} else {
-				log.Fatalf(ctx, "wrong type for function %d, %T, expected Mutable", fn.GetID(), fn)
+				log.Dev.Fatalf(ctx, "wrong type for function %d, %T, expected Mutable", fn.GetID(), fn)
 			}
 		}
 		if err := descsCol.WriteDescToBatch(
@@ -211,10 +230,19 @@ func WriteDescriptors(
 			return err
 		}
 		// Function does not have namespace entry.
+		writtenDescs.UpsertDescriptor(fn)
+	}
+
+	// allowCrossDatabaseRefs is only used by code paths that need the ability
+	// to write deprecated cross database references (i.e. RESTORE / IMPORT).
+	if !allowCrossDatabaseRefs {
+		if err := checkForCrossDatabaseReferences(ctx, writtenDescs.Catalog, descsCol, txn); err != nil {
+			return err
+		}
 	}
 
 	for _, kv := range extra {
-		b.InitPut(kv.Key, &kv.Value, false)
+		b.CPut(kv.Key, &kv.Value, nil /* expValue */)
 	}
 	if err := txn.Run(ctx, b); err != nil {
 		if errors.HasType(err, (*kvpb.ConditionFailedError)(nil)) {
@@ -252,4 +280,42 @@ func processTableForMultiRegion(
 		}
 	}
 	return nil
+}
+
+// checkForCrossDatabaseReferences checks if any descriptors written have
+// cross database references. Once cross database references are fully removed this can be
+// a part of descriptor validation.
+func checkForCrossDatabaseReferences(
+	ctx context.Context, descsToCheck nstree.Catalog, descsCol *descs.Collection, txn *kv.Txn,
+) error {
+	return descsToCheck.ForEachDescriptor(func(desc catalog.Descriptor) error {
+		referencedDescs, err := desc.GetReferencedDescIDs(catalog.ValidationLevelAllPreTxnCommit)
+		if err != nil {
+			return err
+		}
+		// Fetch the parent ID of the descriptor. If the object
+		// is already the database its self-referential.
+		parentID := desc.GetParentID()
+		if desc.DescriptorType() == catalog.Database {
+			parentID = desc.GetID()
+		}
+		for _, refID := range referencedDescs.Ordered() {
+			refDesc, err := descsCol.ByIDWithoutLeased(txn).Get().Desc(ctx, refID)
+			if err != nil {
+				return err
+			}
+			otherParentID := refDesc.GetParentID()
+			if refDesc.DescriptorType() == catalog.Database {
+				otherParentID = refDesc.GetID()
+			}
+			if otherParentID != parentID {
+				return pgerror.Newf(
+					pgcode.FeatureNotSupported,
+					"cross database %s references are not supported: %s",
+					refDesc.GetObjectType(),
+					refDesc.GetName())
+			}
+		}
+		return nil
+	})
 }

@@ -17,6 +17,7 @@ import "util/hlc/timestamp.proto";
 message BatchOperation {
   repeated Operation ops = 1 [(gogoproto.nullable) = false];
   Result result = 2 [(gogoproto.nullable) = false];
+  bool follower_read_eligible = 3;
 }
 
 enum ClosureTxnType {
@@ -33,6 +34,9 @@ message ClosureTxnOperation {
   cockroach.kv.kvserver.concurrency.isolation.Level iso_level = 7;
   Result result = 5 [(gogoproto.nullable) = false];
   roachpb.Transaction txn = 6;
+  bool buffered_writes = 8;
+  double user_priority = 9 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.UserPriority"];
+  bool follower_read_eligible = 10;
 }
 
 message GetOperation {
@@ -42,6 +46,7 @@ message GetOperation {
   bool guaranteed_durability = 4;
   bool skip_locked = 5;
   Result result = 6 [(gogoproto.nullable) = false];
+  bool follower_read_eligible = 7;
 }
 
 message ScanOperation {
@@ -53,17 +58,31 @@ message ScanOperation {
   bool skip_locked = 6;
   bool reverse = 7;
   Result result = 8 [(gogoproto.nullable) = false];
+  bool follower_read_eligible = 9;
 }
 
 message PutOperation {
   bytes key = 1;
   uint32 seq = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil.Seq"];
+  bool must_acquire_exclusive_lock = 4;
+
   Result result = 3 [(gogoproto.nullable) = false];
+}
+
+message CPutOperation {
+  bytes key = 1;
+  uint32 seq = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil.Seq"];
+  bytes exp_val = 3;
+  bool allow_if_does_not_exist = 4;
+
+  Result result = 5 [(gogoproto.nullable) = false];
 }
 
 message DeleteOperation {
   bytes key = 1;
   uint32 seq = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/kv/kvnemesis/kvnemesisutil.Seq"];
+  bool must_acquire_exclusive_lock = 4;
+
   Result result = 3 [(gogoproto.nullable) = false];
 }
 
@@ -97,6 +116,12 @@ message BarrierOperation {
   Result result = 4 [(gogoproto.nullable) = false];
 }
 
+message FlushLockTableOperation {
+  bytes key = 1;
+  bytes end_key = 2;
+  Result result = 3 [(gogoproto.nullable) = false];
+}
+
 message SplitOperation {
   bytes key = 1;
   Result result = 2 [(gogoproto.nullable) = false];
@@ -117,6 +142,18 @@ message TransferLeaseOperation {
   bytes key = 1;
   int32 target = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
   Result result = 3 [(gogoproto.nullable) = false];
+}
+
+enum ChangeSettingType {
+  SetLeaseType = 0;
+  ToggleVirtualIntentResolution = 1;
+}
+
+message ChangeSettingOperation {
+  ChangeSettingType type = 1;
+  int32 lease_type = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.LeaseType"];
+  Result result = 3 [(gogoproto.nullable) = false];
+  bool vir_enabled = 4;
 }
 
 enum ChangeZoneType {
@@ -143,6 +180,44 @@ message SavepointRollbackOperation {
   Result result = 2 [(gogoproto.nullable) = false];
 }
 
+message MutateBatchHeaderOperation {
+  int64 max_span_request_keys = 1;
+  int64 target_bytes = 2;
+  Result result = 3 [(gogoproto.nullable) = false];
+}
+
+message AddNetworkPartitionOperation {
+  int32 from_node = 1;
+  int32 to_node = 2;
+  Result result = 3 [(gogoproto.nullable) = false];
+}
+
+message RemoveNetworkPartitionOperation {
+  int32 from_node = 1;
+  int32 to_node = 2;
+  Result result = 3 [(gogoproto.nullable) = false];
+}
+
+message StopNodeOperation {
+  int32 node_id = 1;
+  Result result = 2 [(gogoproto.nullable) = false];
+}
+
+message RestartNodeOperation {
+  int32 node_id = 1;
+  Result result = 2 [(gogoproto.nullable) = false];
+}
+
+message CrashNodeOperation {
+  int32 node_id = 1;
+  Result result = 2 [(gogoproto.nullable) = false];
+}
+
+message MvccGCOperation {
+  bytes key = 1;
+  Result result = 2 [(gogoproto.nullable) = false];
+}
+
 message Operation {
   option (gogoproto.goproto_stringer) = false;
   option (gogoproto.onlyone) = true;
@@ -165,12 +240,22 @@ message Operation {
   MergeOperation merge = 14;
   ChangeReplicasOperation change_replicas = 15;
   TransferLeaseOperation transfer_lease = 16;
-  ChangeZoneOperation change_zone = 17;
-  AddSSTableOperation add_sstable = 18 [(gogoproto.customname) = "AddSSTable"];
-  SavepointCreateOperation savepoint_create = 19;
-  SavepointReleaseOperation savepoint_release = 20;
-  SavepointRollbackOperation savepoint_rollback = 21;
-  BarrierOperation barrier = 22;
+  ChangeSettingOperation change_setting = 17;
+  ChangeZoneOperation change_zone = 18;
+  AddSSTableOperation add_sstable = 19 [(gogoproto.customname) = "AddSSTable"];
+  SavepointCreateOperation savepoint_create = 20;
+  SavepointReleaseOperation savepoint_release = 21;
+  SavepointRollbackOperation savepoint_rollback = 22;
+  BarrierOperation barrier = 23;
+  FlushLockTableOperation flush_lock_table = 24;
+  MutateBatchHeaderOperation mutate_batch_header = 25;
+  CPutOperation cput = 26 [(gogoproto.customname) = "CPut"];
+  AddNetworkPartitionOperation addNetworkPartition = 27;
+  RemoveNetworkPartitionOperation removeNetworkPartition = 28;
+  StopNodeOperation stopNode = 29;
+  RestartNodeOperation restartNode = 30;
+  CrashNodeOperation crashNode = 31;
+  MvccGCOperation mvccGC = 32;
 }
 
 enum ResultType {
@@ -199,6 +284,7 @@ message Result {
   // Only set if Type is ResultType_Values. The RawBytes of a roachpb.Value.
   repeated KeyValue values = 5 [(gogoproto.nullable) = false];
   util.hlc.Timestamp optional_timestamp = 6 [(gogoproto.nullable) = false];
+  roachpb.Span resume_span = 7;
 }
 
 message Step {

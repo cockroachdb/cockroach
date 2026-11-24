@@ -3,7 +3,6 @@
 // Use of this software is governed by the CockroachDB Software License
 // included in the /LICENSE file.
 
-import { cockroach } from "@cockroachlabs/crdb-protobuf-client";
 import { ArrowLeft } from "@cockroachlabs/icons";
 import { InlineAlert, Text } from "@cockroachlabs/ui-components";
 import { Col, Row, Tabs } from "antd";
@@ -11,13 +10,19 @@ import classNames from "classnames/bind";
 import isNil from "lodash/isNil";
 import Long from "long";
 import moment from "moment-timezone";
-import React, { ReactNode, useContext } from "react";
+import React, {
+  ReactNode,
+  useCallback,
+  useContext,
+  useState,
+  useEffect,
+  useMemo,
+  useRef,
+} from "react";
 import { Helmet } from "react-helmet";
 import { Link, RouteComponentProps } from "react-router-dom";
-import { AlignedData, Options } from "uplot";
 
 import { Anchor } from "src/anchor";
-import { StatementDetailsRequest } from "src/api/statementsApi";
 import { Button } from "src/button";
 import { commonStyles } from "src/common";
 import { getValidErrorsList, Loading } from "src/loading";
@@ -42,23 +47,24 @@ import {
   Duration,
   Count,
   longToInt,
+  DurationToNumber,
 } from "src/util";
 
+import { InsightRecommendation, StatementDiagnosticsReport } from "../api";
+import { useNodes } from "../api/nodesApi";
 import {
-  InsertStmtDiagnosticRequest,
-  InsightRecommendation,
-  StatementDiagnosticsReport,
-  StmtInsightsReq,
-} from "../api";
-import { CockroachCloudContext } from "../contexts";
+  useStatementDiagnostics,
+  useCreateDiagnosticsReport,
+  useCancelDiagnosticsReport,
+} from "../api/statementDiagnosticsApi";
+import { useStatementDetails } from "../api/statementsApi";
+import { useStmtFingerprintInsights } from "../api/stmtInsightsApi";
+import { useUserSQLRoles } from "../api/userApi";
+import { CockroachCloudContext, ClusterDetailsContext } from "../contexts";
 import { Delayed } from "../delayed";
 import { AxisUnits } from "../graphs";
-import { BarGraphTimeSeries, XScale } from "../graphs/bargraph";
-import {
-  getStmtInsightRecommendations,
-  InsightType,
-  StmtInsightEvent,
-} from "../insights";
+import { GroupedBarChart, XScale } from "../graphs/groupedBarChart";
+import { getStmtInsightRecommendations, InsightType } from "../insights";
 import {
   InsightsSortedTable,
   makeInsightsColumns,
@@ -69,7 +75,6 @@ import {
   ActivateDiagnosticsModalRef,
   ActivateStatementDiagnosticsModal,
 } from "../statementsDiagnostics";
-import { UIConfigState } from "../store";
 import {
   getValidOption,
   TimeScale,
@@ -83,6 +88,7 @@ import { Timestamp } from "../timestamp";
 import { filterByTimeScale } from "./diagnostics/diagnosticsUtils";
 import { DiagnosticsView } from "./diagnostics/diagnosticsView";
 import { PlanDetails } from "./planDetails";
+import { resolveDatabase, resolveQuery } from "./queryMetadata";
 import styles from "./statementDetails.module.scss";
 import {
   generateContentionTimeseries,
@@ -92,19 +98,20 @@ import {
   generateRowsProcessedTimeseries,
   generateCPUTimeseries,
   generateClientWaitTimeseries,
+  generateCanaryVsStableTimeseries,
+  generatePlanDistributionTimeseries,
+  generateCanaryVsStablePlanDistribution,
+  computeWeightedAvgLatencyByGist,
+  LATENCY_LEGEND_GRADIENT,
 } from "./timeseriesUtils";
-
-type StatementDetailsResponse =
-  cockroach.server.serverpb.StatementDetailsResponse;
 
 const { TabPane } = Tabs;
 
 export type StatementDetailsProps = StatementDetailsOwnProps &
-  RouteComponentProps<{ implicitTxn: string; statement: string }>;
+  RouteComponentProps<{ statement: string }>;
 
 export interface StatementDetailsState {
   currentTab?: string;
-  cardWidth: number;
 
   /**
    * The latest non-null query text associated with the statement fingerprint in the URL.
@@ -121,22 +128,21 @@ export interface StatementDetailsState {
   formattedQuery: string;
 }
 
-export interface StatementDetailsDispatchProps {
-  refreshStatementDetails: (req: StatementDetailsRequest) => void;
-  refreshStatementDiagnosticsRequests: () => void;
-  refreshUserSQLRoles: () => void;
-  refreshNodes: () => void;
-  refreshNodesLiveness: () => void;
-  refreshStatementFingerprintInsights: (req: StmtInsightsReq) => void;
-  createStatementDiagnosticsReport: (
-    insertStmtDiagnosticsRequest: InsertStmtDiagnosticRequest,
-  ) => void;
+export interface StatementDetailsOwnProps {
+  statementFingerprintID: string;
+  timeScale: TimeScale;
+  requestTime: moment.Moment;
   dismissStatementDiagnosticsAlertMessage?: () => void;
   onTabChanged?: (tabName: string) => void;
   onTimeScaleChange: (ts: TimeScale) => void;
   onDiagnosticsModalOpen?: (statementFingerprint: string) => void;
   onDiagnosticBundleDownload?: (statementFingerprint?: string) => void;
-  onDiagnosticCancelRequest?: (report: StatementDiagnosticsReport) => void;
+  onActivateStatementDiagnosticsAnalytics?: (
+    statementFingerprint: string,
+  ) => void;
+  onDiagnosticCancelRequestTracking?: (
+    report: StatementDiagnosticsReport,
+  ) => void;
   onSortingChange?: (
     name: string,
     columnTitle: string,
@@ -146,42 +152,10 @@ export interface StatementDetailsDispatchProps {
   onRequestTimeChange: (t: moment.Moment) => void;
 }
 
-export interface StatementDetailsStateProps {
-  statementFingerprintID: string;
-  statementDetails: StatementDetailsResponse;
-  isLoading: boolean;
-  statementsError: Error | null;
-  lastUpdated: moment.Moment | null;
-  timeScale: TimeScale;
-  nodeRegions: { [nodeId: string]: string };
-  diagnosticsReports: StatementDiagnosticsReport[];
-  uiConfig?: UIConfigState["pages"]["statementDetails"];
-  isTenant?: UIConfigState["isTenant"];
-  hasViewActivityRedactedRole?: UIConfigState["hasViewActivityRedactedRole"];
-  hasAdminRole?: UIConfigState["hasAdminRole"];
-  statementFingerprintInsights?: StmtInsightEvent[];
-  requestTime: moment.Moment;
-}
-
-export type StatementDetailsOwnProps = StatementDetailsDispatchProps &
-  StatementDetailsStateProps;
-
 const cx = classNames.bind(styles);
 const summaryCardStylesCx = classNames.bind(summaryCardStyles);
 const timeScaleStylesCx = classNames.bind(timeScaleStyles);
 const insightsTableCx = classNames.bind(insightTableStyles);
-
-function getStatementDetailsRequestFromProps(
-  props: StatementDetailsProps,
-): cockroach.server.serverpb.StatementDetailsRequest {
-  const [start, end] = toRoundedDateRange(props.timeScale);
-  return new cockroach.server.serverpb.StatementDetailsRequest({
-    fingerprint_id: props.statementFingerprintID,
-    app_names: queryByName(props.location, appNamesAttr)?.split(","),
-    start: Long.fromNumber(start.unix()),
-    end: Long.fromNumber(end.unix()),
-  });
-}
 
 function AppLink(props: { app: string }) {
   if (!props.app) {
@@ -210,293 +184,173 @@ function NodeLink(props: { node: string }) {
   );
 }
 
-function renderTransactionType(implicitTxn: boolean) {
-  if (implicitTxn) {
-    return "Implicit";
-  }
-  return "Explicit";
-}
+export function StatementDetails(
+  props: StatementDetailsProps,
+): React.ReactElement {
+  const {
+    history,
+    location,
+    statementFingerprintID,
+    timeScale,
+    requestTime,
+    dismissStatementDiagnosticsAlertMessage,
+    onTabChanged,
+    onTimeScaleChange,
+    onDiagnosticsModalOpen,
+    onDiagnosticBundleDownload,
+    onActivateStatementDiagnosticsAnalytics,
+    onDiagnosticCancelRequestTracking,
+    onSortingChange,
+    onBackToStatementsClick,
+    onRequestTimeChange,
+  } = props;
 
-export class StatementDetails extends React.Component<
-  StatementDetailsProps,
-  StatementDetailsState
-> {
-  activateDiagnosticsRef: React.RefObject<ActivateDiagnosticsModalRef>;
+  // SWR data hooks.
+  const appNames = queryByName(location, appNamesAttr);
+  const {
+    data: statementDetails,
+    error: statementsError,
+    isLoading,
+  } = useStatementDetails(statementFingerprintID, appNames, timeScale);
 
-  constructor(props: StatementDetailsProps) {
-    super(props);
-    const searchParams = new URLSearchParams(props.history.location.search);
-    this.state = {
-      currentTab: searchParams.get("tab") || "overview",
-      cardWidth: 700,
-      query: this.props.statementDetails?.statement?.metadata?.query,
-      formattedQuery:
-        this.props.statementDetails?.statement?.metadata?.formatted_query,
-    };
-    this.activateDiagnosticsRef = React.createRef();
+  const { data: diagnosticsData } = useStatementDiagnostics();
+  const { createReport } = useCreateDiagnosticsReport();
+  const { cancelReport } = useCancelDiagnosticsReport();
 
-    // In case the user selected a option not available on this page,
-    // force a selection of a valid option. This is necessary for the case
-    // where the value 10/30 min is selected on the Metrics page.
-    const ts = getValidOption(this.props.timeScale, timeScale1hMinOptions);
-    if (ts !== this.props.timeScale) {
-      this.changeTimeScale(ts);
-    }
-  }
+  const { nodeRegionsByID: nodeRegions } = useNodes();
+  const { data: userRoles } = useUserSQLRoles();
+  const { isTenant } = useContext(ClusterDetailsContext);
 
-  hasDiagnosticReports = (): boolean =>
-    this.props.diagnosticsReports.length > 0;
+  const hasAdminRole = userRoles?.roles?.includes("ADMIN") ?? false;
+  const hasViewActivityRedactedRole =
+    userRoles?.roles?.includes("VIEWACTIVITYREDACTED") ?? false;
 
-  changeTimeScale = (ts: TimeScale): void => {
-    if (this.props.onTimeScaleChange) {
-      this.props.onTimeScaleChange(ts);
-    }
-    this.props.onRequestTimeChange(moment());
-  };
+  const { data: insightsResp } = useStmtFingerprintInsights(
+    statementFingerprintID,
+    timeScale,
+  );
+  const statementFingerprintInsights = insightsResp?.results ?? [];
 
-  refreshStatementDetails = (): void => {
-    const req = getStatementDetailsRequestFromProps(this.props);
-    this.props.refreshStatementDetails(req);
-    this.refreshStatementInsights();
-  };
-
-  refreshStatementInsights = (): void => {
-    const [startTime, endTime] = toRoundedDateRange(this.props.timeScale);
-    const id = BigInt(this.props.statementFingerprintID).toString(16);
-    const req: StmtInsightsReq = {
-      start: startTime,
-      end: endTime,
-      stmtFingerprintId: id,
-    };
-    this.props.refreshStatementFingerprintInsights(req);
-  };
-
-  handleResize = (): void => {
-    // Use the same size as the summary card and remove a space for margin (22).
-    const cardWidth = document.getElementById("first-card")
-      ? document.getElementById("first-card")?.offsetWidth - 22
-      : 700;
-    if (cardWidth !== this.state.cardWidth) {
-      this.setState({
-        cardWidth: cardWidth,
-      });
-    }
-  };
-
-  componentDidMount(): void {
-    this.refreshStatementDetails();
-
-    window.addEventListener("resize", this.handleResize);
-    this.handleResize();
-    // For the first data fetch for this page, we refresh if there are:
-    // - Last updated is null (no statement details fetched previously)
-    // - The time interval is not custom, i.e. we have a moving window
-    // in which case we poll every 5 minutes. For the first fetch we will
-    // calculate the next time to refresh based on when the data was last
-    // updated.
-    if (this.props.timeScale.key !== "Custom" || !this.props.lastUpdated) {
-      const now = moment();
-      const nextRefresh =
-        this.props.lastUpdated?.clone().add(5, "minutes") || now;
-      setTimeout(
-        this.refreshStatementDetails,
-        Math.max(0, nextRefresh.diff(now, "milliseconds")),
-      );
-    }
-    this.props.refreshUserSQLRoles();
-    if (!this.props.isTenant) {
-      this.props.refreshNodes();
-      this.props.refreshNodesLiveness();
-    }
-    if (!this.props.hasViewActivityRedactedRole) {
-      this.props.refreshStatementDiagnosticsRequests();
-    }
-  }
-
-  componentDidUpdate(prevProps: StatementDetailsProps): void {
-    this.handleResize();
+  const statementFingerprint = statementDetails?.statement?.metadata?.query;
+  const diagnosticsReports = useMemo(() => {
     if (
-      prevProps.timeScale !== this.props.timeScale ||
-      prevProps.statementFingerprintID !== this.props.statementFingerprintID ||
-      prevProps.location !== this.props.location
+      hasViewActivityRedactedRole ||
+      !diagnosticsData ||
+      !statementFingerprint
     ) {
-      this.refreshStatementDetails();
+      return [];
     }
+    return diagnosticsData.filter(
+      d => d.statement_fingerprint === statementFingerprint,
+    );
+  }, [diagnosticsData, statementFingerprint, hasViewActivityRedactedRole]);
 
-    if (!this.props.isTenant) {
-      this.props.refreshNodes();
-      this.props.refreshNodesLiveness();
-    }
-    if (!this.props.hasViewActivityRedactedRole) {
-      this.props.refreshStatementDiagnosticsRequests();
-    }
+  const activateDiagnosticsRef = useRef<ActivateDiagnosticsModalRef>(null);
 
-    // If a new, non-empty-string query text is available
-    // (derived from the statement details response), save the query text.
-    const newQuery =
-      this.props.statementDetails?.statement?.metadata?.query ||
-      this.state.query;
-    const newFormattedQuery =
-      this.props.statementDetails?.statement?.metadata?.formatted_query ||
-      this.state.formattedQuery;
-    if (
-      newQuery !== this.state.query ||
-      newFormattedQuery !== this.state.formattedQuery
-    ) {
-      this.setState({
-        query: newQuery,
-        formattedQuery: newFormattedQuery,
-      });
-    }
+  const isCockroachCloud = useContext(CockroachCloudContext);
 
-    // If the statementFingerprintID (derived from the URL) changes, invalidate the cached query texts.
-    // This is necessary for when the new statementFingerprintID does not have data for the given time frame.
-    // The new query text and the formatted query text would be an empty string, and we need to invalidate the old
-    // query text and formatted query text.
-    if (
-      this.props.statementFingerprintID !== prevProps.statementFingerprintID
-    ) {
-      this.setState({ query: null, formattedQuery: null });
-    }
-  }
+  const getInitialTab = (): string => {
+    const searchParams = new URLSearchParams(history.location.search);
+    return searchParams.get("tab") || "overview";
+  };
 
-  onTabChange = (tabId: string): void => {
-    const { history } = this.props;
+  const [currentTab, setCurrentTab] = useState<string>(getInitialTab);
+  const [query, setQuery] = useState<string>(resolveQuery(statementDetails));
+  const [formattedQuery, setFormattedQuery] = useState<string>(
+    resolveQuery(statementDetails),
+  );
+
+  const prevStatementFingerprintIDRef = useRef<string>(statementFingerprintID);
+
+  const hasDiagnosticReports = (): boolean => diagnosticsReports.length > 0;
+
+  const changeTimeScale = useCallback(
+    (ts: TimeScale): void => {
+      if (onTimeScaleChange) {
+        onTimeScaleChange(ts);
+      }
+      onRequestTimeChange(moment());
+    },
+    [onRequestTimeChange, onTimeScaleChange],
+  );
+
+  const onTabChange = (tabId: string): void => {
     const searchParams = new URLSearchParams(history.location.search);
     searchParams.set("tab", tabId);
     history.replace({
       ...history.location,
       search: searchParams.toString(),
     });
-    this.setState({
-      currentTab: tabId,
-    });
-    this.props.onTabChanged && this.props.onTabChanged(tabId);
+    setCurrentTab(tabId);
+    onTabChanged && onTabChanged(tabId);
   };
 
-  backToStatementsClick = (): void => {
-    this.props.history.push("/sql-activity?tab=Statements&view=fingerprints");
-    if (this.props.onBackToStatementsClick) {
-      this.props.onBackToStatementsClick();
+  const backToStatementsClick = (): void => {
+    history.push("/sql-activity?tab=Statements&view=fingerprints");
+    if (onBackToStatementsClick) {
+      onBackToStatementsClick();
     }
   };
 
-  render(): React.ReactElement {
-    const {
-      refreshStatementDiagnosticsRequests,
-      createStatementDiagnosticsReport,
-      onDiagnosticsModalOpen,
-    } = this.props;
-    const app = queryByName(this.props.location, appAttr);
-    const longLoadingMessage = this.props.isLoading &&
-      isNil(this.props.statementDetails) &&
-      isNil(getValidErrorsList(this.props.statementsError)) && (
-        <Delayed delay={moment.duration(2, "s")}>
-          <InlineAlert
-            intent="info"
-            title="If the selected time interval contains a large amount of data, this page might take a few minutes to load."
-          />
-        </Delayed>
-      );
+  // Validate time scale on mount.
+  useEffect(() => {
+    const ts = getValidOption(timeScale, timeScale1hMinOptions);
+    if (ts !== timeScale) {
+      changeTimeScale(ts);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-    const hasTimeout = this.props.statementsError?.name
-      ?.toLowerCase()
-      .includes("timeout");
-    const error = hasTimeout ? null : this.props.statementsError;
+  // Update query state when statementDetails changes
+  useEffect(() => {
+    const resolved = resolveQuery(statementDetails);
+    const newQuery = resolved || query || null;
+    const newFormattedQuery = resolved || formattedQuery || null;
+    if (newQuery !== query || newFormattedQuery !== formattedQuery) {
+      setQuery(newQuery);
+      setFormattedQuery(newFormattedQuery);
+    }
+  }, [statementDetails, query, formattedQuery]);
 
-    return (
-      <div className={cx("root")}>
-        <Helmet title={`Details | ${app ? `${app} App |` : ""} Statements`} />
-        <div className={cx("section", "page--header")}>
-          <Button
-            onClick={this.backToStatementsClick}
-            type="unstyled-link"
-            size="small"
-            icon={<ArrowLeft fontSize={"10px"} />}
-            iconPosition="left"
-            className="small-margin"
-          >
-            Statements
-          </Button>
-          <h3 className={commonStyles("base-heading", "no-margin-bottom")}>
-            Statement Fingerprint
-          </h3>
-        </div>
-        <section className={cx("section", "section--container")}>
-          <Loading
-            loading={this.props.isLoading}
-            page={"statement fingerprint"}
-            error={error}
-            render={this.renderTabs}
-            renderError={() =>
-              LoadingError({
-                statsType: "statements",
-                error: error,
-              })
-            }
-          />
-          {longLoadingMessage}
-          <ActivateStatementDiagnosticsModal
-            ref={this.activateDiagnosticsRef}
-            activate={createStatementDiagnosticsReport}
-            refreshDiagnosticsReports={refreshStatementDiagnosticsRequests}
-            onOpenModal={onDiagnosticsModalOpen}
-          />
-        </section>
-      </div>
-    );
-  }
+  // Invalidate cached query texts when statementFingerprintID changes.
+  useEffect(() => {
+    if (
+      prevStatementFingerprintIDRef.current !== statementFingerprintID &&
+      prevStatementFingerprintIDRef.current !== undefined
+    ) {
+      setQuery(null);
+      setFormattedQuery(null);
+    }
+    prevStatementFingerprintIDRef.current = statementFingerprintID;
+  }, [statementFingerprintID]);
 
-  renderTabs = (): React.ReactElement => {
-    const { currentTab } = this.state;
-    const hasTimeout = this.props.statementsError?.name
-      ?.toLowerCase()
-      .includes("timeout");
-    const hasData =
-      Number(this.props.statementDetails?.statement?.stats?.count) > 0;
+  // Extract the aggregation interval from the cluster setting so bar
+  // widths match it exactly.  The value lives on the summary-level
+  // statement entry (same field exists on each per-ts row).
+  // DurationToNumber returns seconds; convert to millis.
+  const aggregationIntervalMillis = useMemo(() => {
+    const dur = statementDetails?.statement?.aggregation_interval;
+    const secs = DurationToNumber(dur);
+    return secs > 0 ? secs * 1e3 : 0;
+  }, [statementDetails]);
 
-    return (
-      <Tabs
-        defaultActiveKey="1"
-        className={commonStyles("cockroach--tabs")}
-        onChange={this.onTabChange}
-        activeKey={currentTab}
-      >
-        <TabPane tab="Overview" key="overview">
-          {this.renderOverviewTabContent(hasTimeout, hasData)}
-        </TabPane>
-        <TabPane tab="Explain Plans" key="explain-plan">
-          {this.renderExplainPlanTabContent(hasTimeout, hasData)}
-        </TabPane>
-        {!this.props.hasViewActivityRedactedRole && (
-          <TabPane
-            tab={`Diagnostics${
-              this.hasDiagnosticReports()
-                ? ` (${
-                    filterByTimeScale(
-                      this.props.diagnosticsReports,
-                      this.props.timeScale,
-                    ).length
-                  })`
-                : ""
-            }`}
-            key="diagnostics"
-          >
-            {this.renderDiagnosticsTabContent(hasData)}
-          </TabPane>
-        )}
-      </Tabs>
-    );
-  };
+  // Shared xScale derived from the user's selected time range.
+  const xScale: XScale = useMemo(() => {
+    const [chartsStart, chartsEnd] = toRoundedDateRange(timeScale);
+    return {
+      graphTsStartMillis: chartsStart.valueOf(),
+      graphTsEndMillis: chartsEnd.valueOf(),
+    };
+  }, [timeScale]);
 
-  renderNoDataTabContent = (): React.ReactElement => (
+  const renderNoDataTabContent = (): React.ReactElement => (
     <>
       <PageConfig>
         <PageConfigItem>
           <TimeScaleDropdown
             options={timeScale1hMinOptions}
-            currentScale={this.props.timeScale}
-            setTimeScale={this.changeTimeScale}
+            currentScale={timeScale}
+            setTimeScale={changeTimeScale}
           />
         </PageConfigItem>
       </PageConfig>
@@ -506,7 +360,7 @@ export class StatementDetails extends React.Component<
     </>
   );
 
-  renderNoDataWithTimeScaleAndSqlBoxTabContent = (
+  const renderNoDataWithTimeScaleAndSqlBoxTabContent = (
     hasTimeout: boolean,
   ): React.ReactElement => (
     <>
@@ -514,17 +368,17 @@ export class StatementDetails extends React.Component<
         <PageConfigItem>
           <TimeScaleDropdown
             options={timeScale1hMinOptions}
-            currentScale={this.props.timeScale}
-            setTimeScale={this.changeTimeScale}
+            currentScale={timeScale}
+            setTimeScale={changeTimeScale}
           />
         </PageConfigItem>
       </PageConfig>
       <section className={cx("section")}>
-        {this.state.formattedQuery && (
+        {formattedQuery && (
           <Row gutter={24}>
             <Col className="gutter-row" span={24}>
               <SqlBox
-                value={this.state.formattedQuery}
+                value={formattedQuery}
                 size={SqlBoxSize.CUSTOM}
                 format={true}
               />
@@ -536,7 +390,7 @@ export class StatementDetails extends React.Component<
             intent="danger"
             title={LoadingError({
               statsType: "statements",
-              error: this.props.statementsError,
+              error: statementsError,
             })}
           />
         )}
@@ -550,30 +404,27 @@ export class StatementDetails extends React.Component<
     </>
   );
 
-  renderOverviewTabContent = (
+  const renderOverviewTabContent = (
     hasTimeout: boolean,
     hasData: boolean,
   ): React.ReactElement => {
     if (!hasData) {
-      return this.renderNoDataWithTimeScaleAndSqlBoxTabContent(hasTimeout);
+      return renderNoDataWithTimeScaleAndSqlBoxTabContent(hasTimeout);
     }
-    const { cardWidth } = this.state;
-    const { nodeRegions, isTenant, statementFingerprintInsights } = this.props;
-    const { stats } = this.props.statementDetails.statement;
+    const { stats } = statementDetails.statement;
     const {
       app_names: appNames,
-      databases,
       fingerprint_id: fingerprintId,
       full_scan_count: fullScanCount,
       vec_count: vecCount,
       total_count: totalCount,
-      implicit_txn: implicitTxn,
-    } = this.props.statementDetails.statement.metadata;
+    } = statementDetails.statement.metadata;
+    const databaseName = resolveDatabase(statementDetails);
     const statementStatisticsPerAggregatedTs =
-      this.props.statementDetails.statement_statistics_per_aggregated_ts;
+      statementDetails.statement_statistics_per_aggregated_ts;
 
     const nodes: string[] = unique(
-      (stats.nodes || []).map(node => node.toString()),
+      (stats.nodes || []).map((node: Long) => node.toString()),
     ).sort();
     // TODO(yuzefovich): use kv_node_ids to show KV regions.
     const regions = unique(
@@ -599,8 +450,8 @@ export class StatementDetails extends React.Component<
     );
     const noSamples = statementSampled ? "" : " (no samples)";
 
-    const db = databases ? (
-      <Text>{databases}</Text>
+    const db = databaseName ? (
+      <Text>{databaseName}</Text>
     ) : (
       <Text className={cx("app-name", "app-name__unset")}>(unset)</Text>
     );
@@ -614,71 +465,27 @@ export class StatementDetails extends React.Component<
             : 0,
     );
 
-    const executionAndPlanningTimeseries: AlignedData =
+    const executionAndPlanningTimeseries =
       generateExecuteAndPlanningTimeseries(statsPerAggregatedTs);
-    const executionAndPlanningOps: Partial<Options> = {
-      axes: [{}, { label: "Time Spent" }],
-      series: [{}, { label: "Execution" }, { label: "Planning" }],
-      width: cardWidth,
-    };
-
-    const rowsProcessedTimeseries: AlignedData =
+    const rowsProcessedTimeseries =
       generateRowsProcessedTimeseries(statsPerAggregatedTs);
-    const rowsProcessedOps: Partial<Options> = {
-      axes: [{}, { label: "Rows" }],
-      series: [{}, { label: "Rows Read" }, { label: "Rows Written" }],
-      width: cardWidth,
-    };
-
-    const execRetriesTimeseries: AlignedData =
+    const execRetriesTimeseries =
       generateExecRetriesTimeseries(statsPerAggregatedTs);
-    const execRetriesOps: Partial<Options> = {
-      axes: [{}, { label: "Retries" }],
-      series: [{}, { label: "Retries" }],
-      legend: { show: false },
-      width: cardWidth,
-    };
-
-    const execCountTimeseries: AlignedData =
+    const execCountTimeseries =
       generateExecCountTimeseries(statsPerAggregatedTs);
-    const execCountOps: Partial<Options> = {
-      axes: [{}, { label: "Execution Counts" }],
-      series: [{}, { label: "Execution Counts" }],
-      legend: { show: false },
-      width: cardWidth,
-    };
-
-    const contentionTimeseries: AlignedData =
+    const contentionTimeseries =
       generateContentionTimeseries(statsPerAggregatedTs);
-    const contentionOps: Partial<Options> = {
-      axes: [{}, { label: "Contention" }],
-      series: [{}, { label: "Contention" }],
-      legend: { show: false },
-      width: cardWidth,
-    };
-
-    const cpuTimeseries: AlignedData =
-      generateCPUTimeseries(statsPerAggregatedTs);
-    const cpuOps: Partial<Options> = {
-      axes: [{}, { label: "SQL CPU Time" }],
-      series: [{}, { label: "SQL CPU Time" }],
-      legend: { show: false },
-      width: cardWidth,
-    };
-
-    const clientWaitTimeseries: AlignedData =
+    const cpuTimeseries = generateCPUTimeseries(statsPerAggregatedTs);
+    const clientWaitTimeseries =
       generateClientWaitTimeseries(statsPerAggregatedTs);
-    const clientWaitOps: Partial<Options> = {
-      axes: [{}, { label: "Time Spent" }],
-      series: [{}, { label: "Client Wait Time" }],
-      legend: { show: false },
-      width: cardWidth,
-    };
 
-    const isCockroachCloud = useContext(CockroachCloudContext);
+    const canaryVsStableData =
+      generateCanaryVsStableTimeseries(statsPerAggregatedTs);
+    const hasCanaryData = canaryVsStableData.length > 0;
+
     const insightsColumns = makeInsightsColumns(
       isCockroachCloud,
-      this.props.hasAdminRole,
+      hasAdminRole,
       true,
       true,
     );
@@ -697,11 +504,6 @@ export class StatementDetails extends React.Component<
     }
 
     const duration = (v: number) => Duration(v * 1e9);
-    const [chartsStart, chartsEnd] = toRoundedDateRange(this.props.timeScale);
-    const xScale = {
-      graphTsStartMillis: chartsStart.valueOf(),
-      graphTsEndMillis: chartsEnd.valueOf(),
-    } as XScale;
 
     return (
       <>
@@ -709,22 +511,22 @@ export class StatementDetails extends React.Component<
           <PageConfigItem>
             <TimeScaleDropdown
               options={timeScale1hMinOptions}
-              currentScale={this.props.timeScale}
-              setTimeScale={this.changeTimeScale}
+              currentScale={timeScale}
+              setTimeScale={changeTimeScale}
             />
           </PageConfigItem>
         </PageConfig>
         <p className={timeScaleStylesCx("time-label", "label-margin")}>
           <TimeScaleLabel
-            timeScale={this.props.timeScale}
-            requestTime={moment(this.props.requestTime)}
+            timeScale={timeScale}
+            requestTime={moment(requestTime)}
           />
         </p>
         <section className={cx("section")}>
           <Row gutter={24}>
             <Col className="gutter-row" span={24}>
               <SqlBox
-                value={this.state.formattedQuery}
+                value={formattedQuery}
                 size={SqlBoxSize.CUSTOM}
                 format={true}
               />
@@ -774,10 +576,6 @@ export class StatementDetails extends React.Component<
                   label="Vectorized execution?"
                   value={RenderCount(vecCount, totalCount)}
                 />
-                <SummaryCardItem
-                  label="Transaction type"
-                  value={renderTransactionType(implicitTxn)}
-                />
                 <SummaryCardItem label="Last execution time" value={lastExec} />
               </SummaryCard>
             </Col>
@@ -797,8 +595,8 @@ export class StatementDetails extends React.Component<
                     stats?.run_lat.mean,
                     duration,
                   )} /
-                  Planning: 
-                  ${formatNumberForDisplay(stats?.plan_lat.mean, duration)}`}
+                    Planning:
+                    ${formatNumberForDisplay(stats?.plan_lat.mean, duration)}`}
                 </span>
                 <SummaryCardItem
                   label="Rows Processed"
@@ -838,6 +636,20 @@ export class StatementDetails extends React.Component<
                   )}
                 />
                 <SummaryCardItem
+                  label="KV CPU Time"
+                  value={formatNumberForDisplay(
+                    stats?.kv_cpu_time_nanos?.mean,
+                    Duration,
+                  )}
+                />
+                <SummaryCardItem
+                  label="Admission Wait Time"
+                  value={formatNumberForDisplay(
+                    stats?.exec_stats?.admission_wait_time?.mean,
+                    Duration,
+                  )}
+                />
+                <SummaryCardItem
                   label="Client Wait Time"
                   value={formatNumberForDisplay(stats?.idle_lat.mean, duration)}
                 />
@@ -863,69 +675,90 @@ export class StatementDetails extends React.Component<
           <p className={summaryCardStylesCx("summary--card__divider--large")} />
           <Row gutter={24}>
             <Col className="gutter-row" span={12}>
-              <BarGraphTimeSeries
+              <GroupedBarChart
+                data={executionAndPlanningTimeseries}
+                yAxisUnits={AxisUnits.Duration}
                 title="Statement Times"
-                alignedData={executionAndPlanningTimeseries}
-                uPlotOptions={executionAndPlanningOps}
-                yAxisUnits={AxisUnits.Duration}
                 xScale={xScale}
+                aggregationIntervalMillis={aggregationIntervalMillis}
               />
             </Col>
             <Col className="gutter-row" span={12}>
-              <BarGraphTimeSeries
+              <GroupedBarChart
+                data={rowsProcessedTimeseries}
+                yAxisUnits={AxisUnits.Count}
                 title="Rows Processed"
-                alignedData={rowsProcessedTimeseries}
-                uPlotOptions={rowsProcessedOps}
-                yAxisUnits={AxisUnits.Count}
                 xScale={xScale}
+                aggregationIntervalMillis={aggregationIntervalMillis}
               />
             </Col>
           </Row>
+          {hasCanaryData && (
+            <Row gutter={24}>
+              <Col className="gutter-row" span={12}>
+                <GroupedBarChart
+                  data={canaryVsStableData}
+                  yAxisUnits={AxisUnits.Duration}
+                  title="Canary vs Stable Statement Times"
+                  tooltip={
+                    <>
+                      Compares planning and execution latency between canary
+                      (newest) and stable table statistics.
+                    </>
+                  }
+                  xScale={xScale}
+                  aggregationIntervalMillis={aggregationIntervalMillis}
+                />
+              </Col>
+            </Row>
+          )}
           <Row gutter={24}>
             <Col className="gutter-row" span={12}>
-              <BarGraphTimeSeries
+              <GroupedBarChart
+                data={execRetriesTimeseries}
+                yAxisUnits={AxisUnits.Count}
                 title="Execution Retries"
-                alignedData={execRetriesTimeseries}
-                uPlotOptions={execRetriesOps}
-                yAxisUnits={AxisUnits.Count}
                 xScale={xScale}
+                aggregationIntervalMillis={aggregationIntervalMillis}
               />
             </Col>
             <Col className="gutter-row" span={12}>
-              <BarGraphTimeSeries
+              <GroupedBarChart
+                data={execCountTimeseries}
+                yAxisUnits={AxisUnits.Count}
                 title="Execution Count"
-                alignedData={execCountTimeseries}
-                uPlotOptions={execCountOps}
-                yAxisUnits={AxisUnits.Count}
                 xScale={xScale}
+                aggregationIntervalMillis={aggregationIntervalMillis}
               />
             </Col>
           </Row>
           <Row gutter={24}>
             <Col className="gutter-row" span={12}>
-              <BarGraphTimeSeries
+              <GroupedBarChart
+                data={contentionTimeseries}
+                yAxisUnits={AxisUnits.Duration}
                 title={`Contention Time${noSamples}`}
-                alignedData={contentionTimeseries}
-                uPlotOptions={contentionOps}
                 tooltip={unavailableTooltip}
-                yAxisUnits={AxisUnits.Duration}
                 xScale={xScale}
+                aggregationIntervalMillis={aggregationIntervalMillis}
               />
             </Col>
             <Col className="gutter-row" span={12}>
-              <BarGraphTimeSeries
-                title={`SQL CPU Time${noSamples}`}
-                alignedData={cpuTimeseries}
-                uPlotOptions={cpuOps}
-                tooltip={unavailableTooltip}
+              <GroupedBarChart
+                data={cpuTimeseries}
                 yAxisUnits={AxisUnits.Duration}
+                title={`SQL CPU Time${noSamples}`}
+                tooltip={unavailableTooltip}
                 xScale={xScale}
+                aggregationIntervalMillis={aggregationIntervalMillis}
               />
             </Col>
           </Row>
           <Row gutter={24}>
             <Col className="gutter-row" span={12}>
-              <BarGraphTimeSeries
+              <GroupedBarChart
+                data={clientWaitTimeseries}
+                yAxisUnits={AxisUnits.Duration}
                 title="Client Wait Time"
                 tooltip={
                   <>
@@ -942,10 +775,8 @@ export class StatementDetails extends React.Component<
                     {"."}
                   </>
                 }
-                alignedData={clientWaitTimeseries}
-                uPlotOptions={clientWaitOps}
-                yAxisUnits={AxisUnits.Duration}
                 xScale={xScale}
+                aggregationIntervalMillis={aggregationIntervalMillis}
               />
             </Col>
           </Row>
@@ -954,25 +785,46 @@ export class StatementDetails extends React.Component<
     );
   };
 
-  renderExplainPlanTabContent = (
+  const renderExplainPlanTabContent = (
     hasTimeout: boolean,
     hasData: boolean,
   ): React.ReactElement => {
     if (!hasData) {
-      return this.renderNoDataWithTimeScaleAndSqlBoxTabContent(hasTimeout);
+      return renderNoDataWithTimeScaleAndSqlBoxTabContent(hasTimeout);
     }
     const statementStatisticsPerPlanHash =
-      this.props.statementDetails.statement_statistics_per_plan_hash;
-    const formattedQuery =
-      this.props.statementDetails.statement.metadata.formatted_query;
+      statementDetails.statement_statistics_per_plan_hash;
+    const statementStatisticsPerAggregatedTsAndPlanHash =
+      statementDetails.statement_statistics_per_aggregated_ts_and_plan_hash;
+    const formattedQueryValue = resolveQuery(statementDetails);
+    const databaseName = resolveDatabase(statementDetails);
+    const queryValue = resolveQuery(statementDetails);
+
+    // Generate plan distribution data for the chart
+    const { data: planDistData, planGists } =
+      generatePlanDistributionTimeseries(
+        statementStatisticsPerAggregatedTsAndPlanHash || [],
+      );
+
+    // Color-code the canary vs stable chart by per-gist latency.
+    const latencyByGist = computeWeightedAvgLatencyByGist(
+      statementStatisticsPerPlanHash || [],
+    );
+    const { data: canaryPlanDistData, latencyRange: canaryLatencyRange } =
+      generateCanaryVsStablePlanDistribution(
+        statementStatisticsPerAggregatedTsAndPlanHash || [],
+        latencyByGist,
+      );
+    const hasCanaryPlanData = canaryPlanDistData.length > 0;
+
     return (
       <>
         <PageConfig>
           <PageConfigItem>
             <TimeScaleDropdown
               options={timeScale1hMinOptions}
-              currentScale={this.props.timeScale}
-              setTimeScale={this.changeTimeScale}
+              currentScale={timeScale}
+              setTimeScale={changeTimeScale}
             />
           </PageConfigItem>
         </PageConfig>
@@ -980,8 +832,8 @@ export class StatementDetails extends React.Component<
           Showing explain plans from{" "}
           <span className={timeScaleStylesCx("bold")}>
             <FormattedTimescale
-              ts={this.props.timeScale}
-              requestTime={moment(this.props.requestTime)}
+              ts={timeScale}
+              requestTime={moment(requestTime)}
             />
           </span>
         </p>
@@ -989,51 +841,210 @@ export class StatementDetails extends React.Component<
           <Row gutter={24}>
             <Col className="gutter-row" span={24}>
               <SqlBox
-                value={formattedQuery}
+                value={formattedQueryValue}
                 size={SqlBoxSize.CUSTOM}
                 format={true}
               />
             </Col>
           </Row>
           <p className={summaryCardStylesCx("summary--card__divider")} />
+          {planGists.length > 0 && (
+            <Row gutter={24}>
+              <Col className="gutter-row" span={24}>
+                <GroupedBarChart
+                  data={planDistData}
+                  yAxisUnits={AxisUnits.Count}
+                  title="Plan Distribution Over Time"
+                  tooltip={
+                    <>
+                      Shows which execution plans were used during each time
+                      period. Each color represents a different plan hash.
+                      Stacked bars show the total execution count broken down by
+                      plan.
+                    </>
+                  }
+                  xScale={xScale}
+                  aggregationIntervalMillis={aggregationIntervalMillis}
+                />
+              </Col>
+            </Row>
+          )}
+          {hasCanaryPlanData && (
+            <Row gutter={24}>
+              <Col className="gutter-row" span={24}>
+                <div className={cx("canary-chart-wrapper")}>
+                  <GroupedBarChart
+                    data={canaryPlanDistData}
+                    yAxisUnits={AxisUnits.Count}
+                    title="Canary vs Stable Plan Distribution"
+                    tooltip={
+                      <>
+                        Compares plan distribution between canary (newest table
+                        statistics) and stable (second-newest) executions. Left
+                        bars show canary execution counts, right bars show
+                        stable. Color intensity indicates average execution
+                        latency: darker purple = higher latency, lighter purple
+                        = lower latency.
+                      </>
+                    }
+                    xScale={xScale}
+                    aggregationIntervalMillis={aggregationIntervalMillis}
+                  />
+                  {canaryLatencyRange && (
+                    <div
+                      className={cx("latency-legend")}
+                      style={
+                        {
+                          "--latency-gradient": LATENCY_LEGEND_GRADIENT,
+                        } as React.CSSProperties
+                      }
+                    >
+                      <span>{Duration(canaryLatencyRange.maxNanos)}</span>
+                      <div className={cx("latency-legend__bar")} />
+                      <span>{Duration(canaryLatencyRange.minNanos)}</span>
+                      <span className={cx("latency-legend__label")}>
+                        Avg Latency
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </Col>
+            </Row>
+          )}
           <PlanDetails
-            statementFingerprintID={this.props.statementFingerprintID}
+            statementFingerprintID={statementFingerprintID}
             plans={statementStatisticsPerPlanHash}
-            hasAdminRole={this.props.hasAdminRole}
+            hasAdminRole={hasAdminRole}
+            database={databaseName}
+            query={queryValue}
           />
         </section>
       </>
     );
   };
 
-  renderDiagnosticsTabContent = (hasData: boolean): React.ReactElement => {
-    if (!hasData && !this.state.query) {
-      return this.renderNoDataTabContent();
+  const renderDiagnosticsTabContent = (
+    hasData: boolean,
+  ): React.ReactElement => {
+    if (!hasData && !query) {
+      return renderNoDataTabContent();
     }
 
-    const fingerprint =
-      this.props.statementDetails?.statement?.metadata?.query.length === 0
-        ? this.state.formattedQuery
-        : this.props.statementDetails?.statement?.metadata?.query;
+    const fingerprint = resolveQuery(statementDetails) || formattedQuery;
     return (
       <DiagnosticsView
-        activateDiagnosticsRef={this.activateDiagnosticsRef}
-        diagnosticsReports={this.props.diagnosticsReports}
-        dismissAlertMessage={this.props.dismissStatementDiagnosticsAlertMessage}
+        activateDiagnosticsRef={activateDiagnosticsRef}
+        diagnosticsReports={diagnosticsReports}
+        dismissAlertMessage={dismissStatementDiagnosticsAlertMessage}
         statementFingerprint={fingerprint}
-        requestTime={moment(this.props.requestTime)}
-        onDownloadDiagnosticBundleClick={this.props.onDiagnosticBundleDownload}
-        onDiagnosticCancelRequestClick={report =>
-          this.props.onDiagnosticCancelRequest(report)
-        }
-        showDiagnosticsViewLink={
-          this.props.uiConfig?.showStatementDiagnosticsLink
-        }
-        onSortingChange={this.props.onSortingChange}
-        currentScale={this.props.timeScale}
-        onChangeTimeScale={this.changeTimeScale}
-        planGists={this.props.statementDetails.statement.stats.plan_gists}
+        requestTime={moment(requestTime)}
+        onDownloadDiagnosticBundleClick={onDiagnosticBundleDownload}
+        onDiagnosticCancelRequestClick={report => {
+          cancelReport({ requestId: report.id }).catch(() => {});
+          onDiagnosticCancelRequestTracking?.(report);
+        }}
+        onSortingChange={onSortingChange}
+        currentScale={timeScale}
+        onChangeTimeScale={changeTimeScale}
+        planGists={statementDetails?.statement?.stats?.plan_gists}
       />
     );
   };
+
+  const renderTabs = (): React.ReactElement => {
+    const hasTimeout = statementsError?.name?.toLowerCase().includes("timeout");
+    const hasData = Number(statementDetails?.statement?.stats?.count) > 0;
+
+    return (
+      <Tabs
+        defaultActiveKey="1"
+        className={commonStyles("cockroach--tabs")}
+        onChange={onTabChange}
+        activeKey={currentTab}
+      >
+        <TabPane tab="Overview" key="overview">
+          {renderOverviewTabContent(hasTimeout, hasData)}
+        </TabPane>
+        <TabPane tab="Explain Plans" key="explain-plan">
+          {renderExplainPlanTabContent(hasTimeout, hasData)}
+        </TabPane>
+        {!hasViewActivityRedactedRole && (
+          <TabPane
+            tab={`Diagnostics${
+              hasDiagnosticReports()
+                ? ` (${
+                    filterByTimeScale(diagnosticsReports, timeScale).length
+                  })`
+                : ""
+            }`}
+            key="diagnostics"
+          >
+            {renderDiagnosticsTabContent(hasData)}
+          </TabPane>
+        )}
+      </Tabs>
+    );
+  };
+
+  const app = queryByName(location, appAttr);
+  const longLoadingMessage = isLoading &&
+    isNil(statementDetails) &&
+    isNil(getValidErrorsList(statementsError)) && (
+      <Delayed delay={moment.duration(2, "s")}>
+        <InlineAlert
+          intent="info"
+          title="If the selected time interval contains a large amount of data, this page might take a few minutes to load."
+        />
+      </Delayed>
+    );
+
+  const hasTimeout = statementsError?.name?.toLowerCase().includes("timeout");
+  const error = hasTimeout ? null : statementsError;
+
+  return (
+    <div className={cx("root")}>
+      <Helmet title={`Details | ${app ? `${app} App |` : ""} Statements`} />
+      <div className={cx("section", "page--header")}>
+        <Button
+          onClick={backToStatementsClick}
+          type="unstyled-link"
+          size="small"
+          icon={<ArrowLeft fontSize={"10px"} />}
+          iconPosition="left"
+          className="small-margin"
+        >
+          Statements
+        </Button>
+        <h3 className={commonStyles("base-heading", "no-margin-bottom")}>
+          Statement Fingerprint
+        </h3>
+      </div>
+      <section className={cx("section", "section--container")}>
+        <Loading
+          loading={isLoading}
+          page={"statement fingerprint"}
+          error={error}
+          render={renderTabs}
+          renderError={() =>
+            LoadingError({
+              statsType: "statements",
+              error: error,
+            })
+          }
+        />
+        {longLoadingMessage}
+        <ActivateStatementDiagnosticsModal
+          ref={activateDiagnosticsRef}
+          activate={req => {
+            createReport(req)
+              .then(() =>
+                onActivateStatementDiagnosticsAnalytics?.(req.stmtFingerprint),
+              )
+              .catch(() => {});
+          }}
+          onOpenModal={onDiagnosticsModalOpen}
+        />
+      </section>
+    </div>
+  );
 }

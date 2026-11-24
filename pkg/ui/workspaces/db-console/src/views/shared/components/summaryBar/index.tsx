@@ -14,7 +14,7 @@ import * as protos from "src/js/protos";
 import { MetricsDataComponentProps } from "src/views/shared/components/metricQuery";
 import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
 
-import "./summarybar.styl";
+import "./summarybar.scss";
 
 type TSResponse = protos.cockroach.ts.tspb.TimeSeriesQueryResponse;
 
@@ -230,21 +230,21 @@ function aggregateLatestValuesFromMetrics(
  * SummaryHeadlineStat is similar to a normal SummaryStat, but is visually laid
  * out to draw attention to the numerical statistic.
  */
-export class SummaryHeadlineStat extends React.Component<
-  SummaryHeadlineStatProps,
-  {}
-> {
-  render() {
-    return (
-      <div className="summary-headline-stat">
-        <div className="summary-headline-stat__value">
-          {formatNumberForDisplay(this.props.value, this.props.format)}
-        </div>
-        <div className="summary-headline-stat__title">
-          {this.props.title}
-          <InfoTooltip text={this.props.tooltip} />
-        </div>
+export function SummaryHeadlineStat({
+  value,
+  format,
+  title,
+  tooltip,
+}: SummaryHeadlineStatProps): React.ReactElement {
+  return (
+    <div className="summary-headline-stat">
+      <div className="summary-headline-stat__value">
+        {formatNumberForDisplay(value, format)}
       </div>
-    );
-  }
+      <div className="summary-headline-stat__title">
+        {title}
+        <InfoTooltip text={tooltip} />
+      </div>
+    </div>
+  );
 }

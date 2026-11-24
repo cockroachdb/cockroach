@@ -6,18 +6,21 @@ query T
 EXPLAIN SELECT * FROM generate_series(1, 3)
 ----
 distribution: local
-vectorized: true
 ·
 • project set
 │ estimated row count: 10
 │
 └── • emptyrow
 
-query T
+# Duplicate SRF names in FROM without aliases now correctly errors,
+# matching Postgres behavior (#150532).
+query error pgcode 42712 source name "generate_series" specified more than once
 EXPLAIN SELECT * FROM generate_series(1, 2), generate_series(1, 2)
+
+query T
+EXPLAIN SELECT * FROM generate_series(1, 2) AS a, generate_series(1, 2) AS b
 ----
 distribution: local
-vectorized: true
 ·
 • cross join
 │ estimated row count: 100
@@ -36,7 +39,6 @@ query T
 EXPLAIN SELECT * FROM ROWS FROM (cos(1))
 ----
 distribution: local
-vectorized: true
 ·
 • project set
 │ estimated row count: 1
@@ -47,7 +49,6 @@ query T
 EXPLAIN SELECT generate_series(1, 3)
 ----
 distribution: local
-vectorized: true
 ·
 • project set
 │ estimated row count: 10
@@ -61,7 +62,6 @@ query T
 EXPLAIN SELECT generate_series(1, 2), generate_series(1, 2)
 ----
 distribution: local
-vectorized: true
 ·
 • project set
 │ estimated row count: 10
@@ -303,11 +303,19 @@ vectorized: true
                 │ columns: (x, y, unnest)
                 │ estimated row count: 2,000 (missing stats)
                 │
-                └── • scan
-                      columns: (x, y)
-                      estimated row count: 1,000 (missing stats)
-                      table: xy@xy_pkey
-                      spans: FULL SCAN
+                ├── • scan
+                │     columns: (x, y)
+                │     estimated row count: 1,000 (missing stats)
+                │     table: xy@xy_pkey
+                │     spans: FULL SCAN
+                │
+                └── • inner loop (unoptimized)
+                    │ columns: ()
+                    │
+                    └── • values
+                          columns: ()
+                           ├── (xy.x,)
+                           └── (y,)
 
 # Regression test for #24676.
 statement ok

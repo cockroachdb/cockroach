@@ -4,7 +4,6 @@
 // included in the /LICENSE file.
 
 //go:build bazel
-// +build bazel
 
 package main
 
@@ -62,6 +61,7 @@ var (
 	port                    int
 	artifactsDir            string
 	githubPostFormatterName string
+	extraLabels             []string
 
 	rootCmd = &cobra.Command{
 		Use:   "bazci",
@@ -287,6 +287,12 @@ func init() {
 		8998,
 		"port to run the bazci server on",
 	)
+	rootCmd.Flags().StringSliceVar(
+		&extraLabels,
+		"extralabels",
+		[]string{},
+		"comma-separated list of extra labels to add to any filed GitHub issues",
+	)
 }
 
 func getRunEnvForBeaverHub() string {
@@ -314,6 +320,9 @@ func sendBepDataToBeaverHub(bepFilepath string) error {
 }
 
 func bazciImpl(cmd *cobra.Command, args []string) error {
+	if len(args) == 0 {
+		return errors.Newf("must provide some subcommand (`build`, `run`, `test`, `coverage`, `merge-test-xmls`, or `munge-test-xml`)")
+	}
 	if args[0] != buildSubcmd && args[0] != runSubcmd && args[0] != coverageSubcmd &&
 		args[0] != testSubcmd && args[0] != mungeTestXMLSubcmd && args[0] != mergeTestXMLsSubcmd {
 		return errors.Newf("First argument must be `build`, `run`, `test`, `coverage`, `merge-test-xmls`, or `munge-test-xml`; got %v", args[0])
@@ -342,17 +351,20 @@ func bazciImpl(cmd *cobra.Command, args []string) error {
 	}
 	args = append(args, fmt.Sprintf("--build_event_binary_file=%s", bepLoc))
 	args = append(args, fmt.Sprintf("--bes_backend=grpc://127.0.0.1:%d", port))
-	// Insert `--config ci` if it's not already in the args list.
-	hasCiConfig := false
-	for idx, arg := range args {
-		if arg == "--config=ci" || arg == "--config=cinolint" ||
-			(arg == "--config" && idx < len(args)-1 && (args[idx+1] == "ci" || args[idx+1] == "cinolint")) {
-			hasCiConfig = true
-			break
+	// Insert `--config=ci` if it's not already in the args list,
+	// specifically for tests.
+	if args[0] == testSubcmd || args[0] == coverageSubcmd {
+		hasCiConfig := false
+		for idx, arg := range args {
+			if arg == "--config=ci" || arg == "--config=cinolint" ||
+				(arg == "--config" && idx < len(args)-1 && (args[idx+1] == "ci" || args[idx+1] == "cinolint")) {
+				hasCiConfig = true
+				break
+			}
 		}
-	}
-	if !hasCiConfig {
-		args = append(args, "--config", "ci")
+		if !hasCiConfig {
+			args = append(args, "--config", "ci")
+		}
 	}
 	fmt.Println("running bazel w/ args: ", shellescape.QuoteCommand(args))
 	bazelCmd := exec.Command("bazel", args...)
@@ -472,6 +484,9 @@ func removeEmergencyBallasts() {
 }
 
 func processTestXmls(testXmls []string) error {
+	// If any tests failed, we'll have to make sure that all generated code
+	// exists in the workspace (see #107885).
+	var generateCode sync.Once
 	if doPost() {
 		var postErrors []string
 		for _, testXml := range testXmls {
@@ -486,7 +501,18 @@ func processTestXmls(testXmls []string) error {
 				postErrors = append(postErrors, fmt.Sprintf("Failed to parse test.xml file with the following error: %+v", err))
 				continue
 			}
-			if err := githubpost.PostFromTestXMLWithFormatterName(githubPostFormatterName, testSuites); err != nil {
+			if bazelutil.AnyFailures(testSuites) {
+				generateCode.Do(func() {
+					genCmd := exec.Command("bazel", "run", "//pkg/gen:code")
+					genCmd.Stdout = os.Stdout
+					genCmd.Stderr = os.Stderr
+					err := genCmd.Run()
+					if err != nil {
+						fmt.Printf("got error %+v from bazel run //pkg/gen:code; continuing", err)
+					}
+				})
+			}
+			if err := githubpost.PostFromTestXMLWithFormatterName(githubPostFormatterName, testSuites, extraLabels); err != nil {
 				postErrors = append(postErrors, fmt.Sprintf("Failed to process %s with the following error: %+v", testXml, err))
 				continue
 			}

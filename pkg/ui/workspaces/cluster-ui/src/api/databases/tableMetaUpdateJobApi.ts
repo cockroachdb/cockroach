@@ -5,8 +5,8 @@
 
 import moment from "moment-timezone";
 import { useMemo } from "react";
-import useSWR from "swr";
 
+import { useSwrWithClusterId } from "../../util";
 import { fetchDataJSON } from "../fetchData";
 
 import {
@@ -70,7 +70,7 @@ export const convertTableMetaUpdateJobFromServer = (
 // The hook polls the API every 3 seconds if the job status is parsed as and every
 // 10 seconds otherwise.
 export const useTableMetaUpdateJob = () => {
-  const { data, isLoading, mutate } = useSWR(
+  const { data, isLoading, mutate } = useSwrWithClusterId(
     "tableMetaUpdateJob",
     getTableMetaUpdateJobInfo,
     {

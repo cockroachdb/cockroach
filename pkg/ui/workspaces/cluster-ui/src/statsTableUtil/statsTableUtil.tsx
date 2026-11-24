@@ -22,25 +22,25 @@ import {
 // Single place for column names. Used in table columns and in columns selector.
 export const statisticsColumnLabels = {
   actions: "Actions",
+  admissionWaitTime: "Admission Wait Time",
   applicationName: "Application Name",
   bytesRead: "Bytes Read",
   clientAddress: "Client IP Address",
   contention: "Contention Time",
   cpu: "SQL CPU Time",
+  kvCPUTime: "KV CPU Time",
   database: "Database",
   diagnostics: "Diagnostics",
   executionCount: "Execution Count",
   lastExecTimestamp: "Last Execution Time",
   latencyMax: "Max Latency",
   latencyMin: "Min Latency",
-  latencyP50: "P50 Latency",
-  latencyP90: "P90 Latency",
-  latencyP99: "P99 Latency",
   maxMemUsage: "Max Memory",
   maxMemUsed: "Maximum Memory Usage",
   memUsage: "Memory Usage",
   mostRecentStatement: "Most Recent Statement",
   networkBytes: "Network",
+  isolationLevel: "Default Isolation Level",
   numRetries: "Retries",
   numStatements: "Statements Run",
   regions: "Regions",
@@ -57,6 +57,7 @@ export const statisticsColumnLabels = {
   statementsCount: "Statements",
   status: "Status",
   time: "Time",
+  commitLatency: "Commit Latency",
   transactionFingerprintId: "Transaction Fingerprint ID",
   transactions: "Transactions",
   txnDuration: "Transaction Duration",
@@ -234,6 +235,17 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         content={"The user that opened the session."}
       >
         {getLabel("username")}
+      </Tooltip>
+    );
+  },
+  isolationLevel: () => {
+    return (
+      <Tooltip
+        style="tableTitle"
+        placement="bottom"
+        content={"The isolation level of the session."}
+      >
+        {getLabel("isolationLevel")}
       </Tooltip>
     );
   },
@@ -554,6 +566,23 @@ export const statisticsTableTitles: StatisticTableTitleType = {
       </Tooltip>
     );
   },
+  commitLatency: (_statType: StatisticType) => {
+    return (
+      <Tooltip
+        placement="bottom"
+        style="tableTitle"
+        content={
+          <p>
+            Average commit latency of this transaction. The gray bar indicates
+            the mean latency. The blue bar indicates one standard deviation from
+            the mean.
+          </p>
+        }
+      >
+        {getLabel("commitLatency")}
+      </Tooltip>
+    );
+  },
   time: (statType: StatisticType) => {
     let contentModifier = "";
     let fingerprintModifier = "";
@@ -654,6 +683,48 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         }
       >
         {getLabel("cpu")}
+      </Tooltip>
+    );
+  },
+  kvCPUTime: (_: StatisticType) => {
+    return (
+      <Tooltip
+        placement="bottom"
+        style="tableTitle"
+        content={
+          <>
+            <p>
+              Average KV CPU time spent executing within the specified time
+              interval. This can be thought of as KV work that is on the
+              critical path of serving the query. It does not include any
+              asynchronous replication related work. The gray bar indicates mean
+              KV CPU time. The blue bar indicates one standard deviation from
+              the mean.
+            </p>
+          </>
+        }
+      >
+        {getLabel("kvCPUTime")}
+      </Tooltip>
+    );
+  },
+  admissionWaitTime: (_: StatisticType) => {
+    return (
+      <Tooltip
+        placement="bottom"
+        style="tableTitle"
+        content={
+          <>
+            <p>
+              Average time spent waiting in admission control queues within the
+              specified time interval. The gray bar indicates mean admission
+              wait time. The blue bar indicates one standard deviation from the
+              mean.
+            </p>
+          </>
+        }
+      >
+        {getLabel("admissionWaitTime")}
       </Tooltip>
     );
   },
@@ -942,84 +1013,6 @@ export const statisticsTableTitles: StatisticTableTitleType = {
         }
       >
         {getLabel("latencyMin")}
-      </Tooltip>
-    );
-  },
-  latencyP50: (statType: StatisticType) => {
-    let contentModifier = "";
-    switch (statType) {
-      case "transaction":
-        contentModifier = contentModifiers.transaction;
-        break;
-      case "statement":
-        contentModifier = contentModifiers.statement;
-        break;
-    }
-
-    return (
-      <Tooltip
-        placement="bottom"
-        style="tableTitle"
-        content={
-          <p>
-            The 50th latency percentile for sampled {contentModifier} executions
-            with this fingerprint.
-          </p>
-        }
-      >
-        {getLabel("latencyP50")}
-      </Tooltip>
-    );
-  },
-  latencyP90: (statType: StatisticType) => {
-    let contentModifier = "";
-    switch (statType) {
-      case "transaction":
-        contentModifier = contentModifiers.transaction;
-        break;
-      case "statement":
-        contentModifier = contentModifiers.statement;
-        break;
-    }
-
-    return (
-      <Tooltip
-        placement="bottom"
-        style="tableTitle"
-        content={
-          <p>
-            The 90th latency percentile for sampled {contentModifier} executions
-            with this fingerprint.
-          </p>
-        }
-      >
-        {getLabel("latencyP90")}
-      </Tooltip>
-    );
-  },
-  latencyP99: (statType: StatisticType) => {
-    let contentModifier = "";
-    switch (statType) {
-      case "transaction":
-        contentModifier = contentModifiers.transaction;
-        break;
-      case "statement":
-        contentModifier = contentModifiers.statement;
-        break;
-    }
-
-    return (
-      <Tooltip
-        placement="bottom"
-        style="tableTitle"
-        content={
-          <p>
-            The 99th latency percentile for sampled {contentModifier} executions
-            with this fingerprint.
-          </p>
-        }
-      >
-        {getLabel("latencyP99")}
       </Tooltip>
     );
   },

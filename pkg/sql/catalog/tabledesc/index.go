@@ -15,7 +15,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catenumpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/vecindex/vecpb"
 	"github.com/cockroachdb/cockroach/pkg/util/iterutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -45,6 +47,18 @@ func (w index) IndexDesc() *descpb.IndexDescriptor {
 // IndexDescDeepCopy returns a deep copy of the underlying protobuf descriptor.
 func (w index) IndexDescDeepCopy() descpb.IndexDescriptor {
 	return *protoutil.Clone(w.desc).(*descpb.IndexDescriptor)
+}
+
+// Adding returns true if this index is not yet usable for reads. This is
+// the case either when the index is in an ADD mutation (not yet public) or
+// when it is a secondary index being recreated during an ALTER PRIMARY KEY
+// operation and the new primary key has not yet become public. In the
+// latter case, the recreated index may lack key columns from the old
+// primary key and cannot serve correct results.
+func (w index) Adding() bool {
+	// Either the index is adding or is a recreated index that needs
+	// to be temporarily hidden.
+	return w.maybeMutation.Adding() || w.IndexDesc().HideForPrimaryKeyRecreate
 }
 
 // Ordinal returns the ordinal of the index in its parent TableDescriptor.
@@ -92,6 +106,12 @@ func (w index) IsUnique() bool {
 	return w.desc.Unique
 }
 
+// SkipUniqueChecks returns true iff unique checks should be skipped for this
+// index.
+func (w index) SkipUniqueChecks() bool {
+	return w.desc.SkipUniqueChecks
+}
+
 // IsDisabled returns true iff the index is disabled.
 func (w index) IsDisabled() bool {
 	return w.desc.Disabled
@@ -121,12 +141,12 @@ func (w index) IsCreatedExplicitly() bool {
 // GetPredicate returns the empty string when the index is not partial,
 // otherwise it returns the corresponding expression of the partial index.
 // Columns are referred to in the expression by their name.
-func (w index) GetPredicate() string {
+func (w index) GetPredicate() catpb.Expression {
 	return w.desc.Predicate
 }
 
 // GetType returns the type of index, inverted or forward.
-func (w index) GetType() descpb.IndexDescriptor_Type {
+func (w index) GetType() idxtype.T {
 	return w.desc.Type
 }
 
@@ -169,8 +189,10 @@ func (w index) IsValidOriginIndex(fk catalog.ForeignKeyConstraint) bool {
 
 // IsValidReferencedUniqueConstraint implements the catalog.UniqueConstraint
 // interface.
-func (w index) IsValidReferencedUniqueConstraint(fk catalog.ForeignKeyConstraint) bool {
-	return w.desc.IsValidReferencedUniqueConstraint(fk.ForeignKeyDesc().ReferencedColumnIDs)
+func (w index) IsValidReferencedUniqueConstraint(
+	fk catalog.ForeignKeyConstraint, asSubset bool,
+) bool {
+	return w.desc.IsValidReferencedUniqueConstraint(fk.ForeignKeyDesc().ReferencedColumnIDs, asSubset)
 }
 
 // HasOldStoredColumns returns whether the index has stored columns in the old
@@ -211,7 +233,7 @@ func (w index) InvertedColumnKeyType() *types.T {
 //
 // Panics if the index is not inverted.
 func (w index) InvertedColumnKind() catpb.InvertedIndexColumnKind {
-	if w.desc.Type != descpb.IndexDescriptor_INVERTED {
+	if w.desc.Type != idxtype.INVERTED {
 		panic(errors.AssertionFailedf("index is not inverted"))
 	}
 	if len(w.desc.InvertedColumnKinds) == 0 {
@@ -220,6 +242,20 @@ func (w index) InvertedColumnKind() catpb.InvertedIndexColumnKind {
 		return catpb.InvertedIndexColumnKind_DEFAULT
 	}
 	return w.desc.InvertedColumnKinds[0]
+}
+
+// VectorColumnID returns the ColumnID of the vector column of the vector index.
+// This is always the last column in KeyColumnIDs. Panics if the index is not a
+// vector index.
+func (w index) VectorColumnID() descpb.ColumnID {
+	return w.desc.VectorColumnID()
+}
+
+// VectorColumnName returns the name of the vector column of the vector index.
+// This is always the last column in KeyColumnIDs. Panics if the index is not a
+// vector index.
+func (w index) VectorColumnName() string {
+	return w.desc.VectorColumnName()
 }
 
 // CollectKeyColumnIDs creates a new set containing the column IDs in the key
@@ -262,6 +298,11 @@ func (w index) CollectCompositeColumnIDs() catalog.TableColSet {
 // GetGeoConfig returns the geo config in the index descriptor.
 func (w index) GetGeoConfig() geopb.Config {
 	return w.desc.GeoConfig
+}
+
+// GetVecConfig returns the vec config in the index descriptor.
+func (w index) GetVecConfig() vecpb.Config {
+	return w.desc.VecConfig
 }
 
 // GetSharded returns the ShardedDescriptor in the index descriptor
@@ -391,7 +432,7 @@ func (w index) UseDeletePreservingEncoding() bool {
 	return w.desc.UseDeletePreservingEncoding && !w.maybeMutation.DeleteOnly()
 }
 
-// ForcePut forces all writes to use Put rather than CPut or InitPut.
+// ForcePut forces all writes to use Put rather than CPut.
 //
 // Users of this options should take great care as it
 // effectively mean unique constraints are not respected.
@@ -443,12 +484,7 @@ func (w index) CreatedAt() time.Time {
 	return timeutil.Unix(0, w.desc.CreatedAtNanos)
 }
 
-// IsTemporaryIndexForBackfill returns true iff the index is
-// an index being used as the temporary index being used by an
-// in-progress index backfill.
-//
-// TODO(ssd): This could be its own boolean or we could store the ID
-// of the index it is a temporary index for.
+// IsTemporaryIndexForBackfill implements the cat.Index interface.
 func (w index) IsTemporaryIndexForBackfill() bool {
 	return w.desc.UseDeletePreservingEncoding
 }
@@ -638,6 +674,7 @@ type indexCache struct {
 	deletableNonPrimary  []catalog.Index
 	deleteOnlyNonPrimary []catalog.Index
 	partial              []catalog.Index
+	vector               []catalog.Index
 }
 
 // newIndexCache returns a fresh fully-populated indexCache struct for the
@@ -687,12 +724,12 @@ func newIndexCache(desc *descpb.TableDescriptor, mutations *mutationCache) *inde
 		if !idx.Dropped() && (!idx.Primary() || desc.IsPhysicalTable()) {
 			lazyAllocAppendIndex(&c.nonDrop, idx, len(c.all))
 		}
-		// TODO(ssd): We exclude backfilling indexes from
-		// IsPartial() for the unprincipled reason of not
-		// wanting to modify all of the code that assumes
-		// these are always at least delete-only.
+		// Include only deletable indexes.
 		if idx.IsPartial() && !idx.Backfilling() {
 			lazyAllocAppendIndex(&c.partial, idx, len(c.all))
+		}
+		if idx.GetType() == idxtype.VECTOR && !idx.Backfilling() {
+			lazyAllocAppendIndex(&c.vector, idx, len(c.all))
 		}
 	}
 	return &c

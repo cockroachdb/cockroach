@@ -22,7 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/admission"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil/addr"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -64,12 +66,18 @@ func (s *topLevelServer) newTenantServer(
 	portStartHint int,
 	testArgs base.TestSharedProcessTenantArgs,
 ) (onDemandServer, error) {
-	tenantID, err := s.getTenantID(ctx, tenantNameContainer.Get())
+	tenantID, tenantReadOnly, err := s.getTenantID(ctx, tenantNameContainer.Get())
 	if err != nil {
 		return nil, err
 	}
 
-	baseCfg, sqlCfg, err := s.makeSharedProcessTenantConfig(ctx, tenantID, portStartHint, tenantStopper, testArgs.Settings)
+	// Use test override for tenant read-only status if provided.
+	if testArgs.TenantReadOnly {
+		tenantReadOnly = true
+	}
+
+	baseCfg, sqlCfg, err := s.makeSharedProcessTenantConfig(ctx, tenantID, tenantNameContainer.Get(), portStartHint,
+		tenantStopper, testArgs.Settings, tenantReadOnly)
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +85,19 @@ func (s *topLevelServer) newTenantServer(
 	// Apply the TestTenantArgs, if any.
 	baseCfg.TestingKnobs = testArgs.Knobs
 
-	tenantServer, err := newTenantServerInternal(ctx, baseCfg, sqlCfg, tenantStopper, tenantNameContainer)
+	// If we're in a test environment (the parent server has testing knobs), apply unsafe override
+	// for dynamically started tenants to allow access to crdb_internal and system tables.
+	// This is needed because tests might start tenants via SQL (ALTER TENANT ... START SERVICE SHARED)
+	// without explicitly setting up test args.
+	if s.cfg.TestingKnobs != (base.TestingKnobs{}) && baseCfg.TestingKnobs == (base.TestingKnobs{}) {
+		// Only set unsafe override if no testing knobs were provided through testArgs.
+		// This ensures we don't override explicitly set test knobs.
+		serverutils.SetUnsafeOverride(&baseCfg.TestingKnobs)
+	}
+
+	tenantServer, err := newTenantServerInternal(
+		ctx, baseCfg, sqlCfg, tenantStopper, tenantNameContainer, s.db.AdmissionPacerFactory,
+		s.db.SQLCPUProvider)
 	if err != nil {
 		return nil, err
 	}
@@ -99,23 +119,27 @@ var ErrInvalidTenant error = errInvalidTenantMarker{}
 
 func (s *topLevelServer) getTenantID(
 	ctx context.Context, tenantName roachpb.TenantName,
-) (roachpb.TenantID, error) {
+) (roachpb.TenantID, bool, error) {
 	var rec *mtinfopb.TenantInfo
 	if err := s.sqlServer.internalDB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
 		var err error
 		rec, err = sql.GetTenantRecordByName(ctx, s.cfg.Settings, txn, tenantName)
 		return err
 	}); err != nil {
-		return roachpb.TenantID{}, errors.Mark(err, ErrInvalidTenant)
+		return roachpb.TenantID{}, false, errors.Mark(err, ErrInvalidTenant)
 	}
 
 	tenantID, err := roachpb.MakeTenantID(rec.ID)
 	if err != nil {
-		return roachpb.TenantID{}, errors.Mark(
+		return roachpb.TenantID{}, false, errors.Mark(
 			errors.NewAssertionErrorWithWrappedErrf(err, "stored tenant ID %d does not convert to TenantID", rec.ID),
 			ErrInvalidTenant)
 	}
-	return tenantID, nil
+
+	// Check if tenant is read-only (PCR reader tenant).
+	readOnlyTenant := rec.ReadFromTenant != nil
+
+	return tenantID, readOnlyTenant, nil
 }
 
 // newTenantServerInternal instantiates a server for the given target
@@ -129,6 +153,8 @@ func newTenantServerInternal(
 	sqlCfg SQLConfig,
 	stopper *stop.Stopper,
 	tenantNameContainer *roachpb.TenantNameContainer,
+	elastic admission.PacerFactory,
+	sqlCPUProvider admission.SQLCPUProvider,
 ) (*SQLServerWrapper, error) {
 	ambientCtx := baseCfg.AmbientCtx
 	stopper.SetTracer(baseCfg.Tracer)
@@ -137,18 +163,21 @@ func newTenantServerInternal(
 	newCtx := ambientCtx.AnnotateCtx(context.Background())
 
 	// Inform the logs we're starting a new server.
-	log.Infof(newCtx, "creating tenant server")
+	log.Dev.Infof(newCtx, "creating tenant server")
 
 	// Now instantiate the tenant server proper.
-	return newSharedProcessTenantServer(newCtx, stopper, baseCfg, sqlCfg, tenantNameContainer)
+	return newSharedProcessTenantServer(
+		newCtx, stopper, baseCfg, sqlCfg, tenantNameContainer, elastic, sqlCPUProvider)
 }
 
 func (s *topLevelServer) makeSharedProcessTenantConfig(
 	ctx context.Context,
 	tenantID roachpb.TenantID,
+	tenantName roachpb.TenantName,
 	portStartHint int,
 	stopper *stop.Stopper,
 	testSettings *cluster.Settings,
+	tenantReadOnly bool,
 ) (BaseConfig, SQLConfig, error) {
 	// Create a configuration for the new tenant.
 	parentCfg := s.cfg
@@ -164,7 +193,8 @@ func (s *topLevelServer) makeSharedProcessTenantConfig(
 		st.SV.TestingCopyForVirtualCluster(&testSettings.SV)
 	}
 
-	baseCfg, sqlCfg, err := makeSharedProcessTenantServerConfig(ctx, tenantID, portStartHint, parentCfg, localServerInfo, st, stopper, s.recorder)
+	baseCfg, sqlCfg, err := makeSharedProcessTenantServerConfig(ctx, tenantID, tenantName, portStartHint, parentCfg,
+		localServerInfo, st, stopper, s.recorder, tenantReadOnly)
 	if err != nil {
 		return BaseConfig{}, SQLConfig{}, err
 	}
@@ -176,12 +206,14 @@ func (s *topLevelServer) makeSharedProcessTenantConfig(
 func makeSharedProcessTenantServerConfig(
 	ctx context.Context,
 	tenantID roachpb.TenantID,
+	tenantName roachpb.TenantName,
 	portStartHint int,
 	kvServerCfg Config,
 	kvServerInfo LocalKVServerInfo,
 	st *cluster.Settings,
 	stopper *stop.Stopper,
 	nodeMetricsRecorder *status.MetricsRecorder,
+	tenantReadOnly bool,
 ) (baseCfg BaseConfig, sqlCfg SQLConfig, err error) {
 	tr := tracing.NewTracerWithOpt(ctx, tracing.WithClusterSettings(&st.SV))
 
@@ -210,7 +242,7 @@ func makeSharedProcessTenantServerConfig(
 		}
 		stopper.AddCloser(stop.CloserFn(func() {
 			if err := os.RemoveAll(storeDir); err != nil {
-				log.Warningf(context.Background(), "unable to delete tenant directory: %v", err)
+				log.Dev.Warningf(context.Background(), "unable to delete tenant directory: %v", err)
 			}
 		}))
 		storeSpec.Path = storeDir
@@ -221,6 +253,10 @@ func makeSharedProcessTenantServerConfig(
 	baseCfg.Config.Insecure = kvServerCfg.Config.Insecure
 	baseCfg.Config.User = kvServerCfg.Config.User
 	baseCfg.Config.DisableTLSForHTTP = kvServerCfg.Config.DisableTLSForHTTP
+	// Note that since the shared-process tenant doesn't have its own pre-serve
+	// handler, only AcceptSQLWithoutTLS of the _system_ tenant matters, so this
+	// particular inherited value is meaningless, but we choose to keep it for
+	// consistency with the system tenant.
 	baseCfg.Config.AcceptSQLWithoutTLS = kvServerCfg.Config.AcceptSQLWithoutTLS
 	baseCfg.Config.RPCHeartbeatInterval = kvServerCfg.Config.RPCHeartbeatInterval
 	baseCfg.Config.RPCHeartbeatTimeout = kvServerCfg.Config.RPCHeartbeatTimeout
@@ -229,13 +265,13 @@ func makeSharedProcessTenantServerConfig(
 	baseCfg.Config.DisableClusterNameVerification = kvServerCfg.Config.DisableClusterNameVerification
 
 	baseCfg.MaxOffset = kvServerCfg.BaseConfig.MaxOffset
-	baseCfg.StorageEngine = kvServerCfg.BaseConfig.StorageEngine
 	baseCfg.TestingInsecureWebAccess = kvServerCfg.BaseConfig.TestingInsecureWebAccess
 	baseCfg.Locality = kvServerCfg.BaseConfig.Locality
 	baseCfg.EnableDemoLoginEndpoint = kvServerCfg.BaseConfig.EnableDemoLoginEndpoint
 	baseCfg.DefaultZoneConfig = kvServerCfg.BaseConfig.DefaultZoneConfig
 	baseCfg.HeapProfileDirName = kvServerCfg.BaseConfig.HeapProfileDirName
 	baseCfg.CPUProfileDirName = kvServerCfg.BaseConfig.CPUProfileDirName
+	baseCfg.ExecutionTraceDirName = kvServerCfg.BaseConfig.ExecutionTraceDirName
 	baseCfg.GoroutineDumpDirName = kvServerCfg.BaseConfig.GoroutineDumpDirName
 
 	// The ListenerFactory allows us to dynamically choose a
@@ -291,6 +327,7 @@ func makeSharedProcessTenantServerConfig(
 	baseCfg.GoroutineDumpDirName = ""
 	baseCfg.HeapProfileDirName = ""
 	baseCfg.CPUProfileDirName = ""
+	baseCfg.ExecutionTraceDirName = ""
 
 	// Expose the process-wide runtime metrics to the tenant's metric
 	// collector. Since they are process-wide, all tenants can see them.
@@ -311,23 +348,29 @@ func makeSharedProcessTenantServerConfig(
 
 	tempStorageCfg := base.InheritTempStorageConfig(ctx, st, kvServerCfg.SQLConfig.TempStorageConfig)
 	if !tempStorageCfg.InMemory {
-		useStore := tempStorageCfg.Spec
-		// TODO(knz): Make tempDir configurable.
-		tempDir := useStore.Path
-		if tempStorageCfg.Path, err = fs.CreateTempDir(tempDir, TempDirPrefix, stopper); err != nil {
+		// We create another temp directory alongside the existing one.
+		parentDir := filepath.Dir(tempStorageCfg.Path)
+		if parentDir == "" {
+			return BaseConfig{}, SQLConfig{}, errors.Newf("invalid temp storage config path %q", tempStorageCfg.Path)
+		}
+		tmpDir, unlockDirFn, err := fs.CreateTempDir(parentDir, TempDirPrefix)
+		if err != nil {
 			return BaseConfig{}, SQLConfig{}, errors.Wrap(err, "could not create temporary directory for temp storage")
 		}
-		if useStore.Path != "" {
-			recordPath := filepath.Join(useStore.Path, TempDirsRecordFilename)
-			if err := fs.RecordTempDir(recordPath, tempStorageCfg.Path); err != nil {
+		stopper.AddCloser(stop.CloserFn(unlockDirFn))
+		tempStorageCfg.Path = tmpDir
+		if tempStorageCfg.TempDirsRecordPath != "" {
+			if err := fs.RecordTempDir(tempStorageCfg.TempDirsRecordPath, tempStorageCfg.Path); err != nil {
 				return BaseConfig{}, SQLConfig{}, errors.Wrap(err, "could not record temp dir")
 			}
 		}
 	}
 
-	sqlCfg = MakeSQLConfig(tenantID, tempStorageCfg)
-	baseCfg.Settings.ExternalIODir = kvServerCfg.BaseConfig.Settings.ExternalIODir
+	sqlCfg = MakeSQLConfig(tenantID, tenantName, tempStorageCfg)
+	sqlCfg.TenantReadOnly = tenantReadOnly
 	baseCfg.ExternalIODirConfig = kvServerCfg.BaseConfig.ExternalIODirConfig
+
+	baseCfg.ExternalIODir = kvServerCfg.BaseConfig.ExternalIODir
 
 	// Use the internal connector instead of the network.
 	// See: https://github.com/cockroachdb/cockroach/issues/84591
@@ -338,7 +381,6 @@ func makeSharedProcessTenantServerConfig(
 	// of them will be mostly idle.
 	// We might want to reconsider this if we use more than 1 in-memory tenant at a time.
 	sqlCfg.MemoryPoolSize = kvServerCfg.SQLConfig.MemoryPoolSize
-	sqlCfg.TableStatCacheSize = kvServerCfg.SQLConfig.TableStatCacheSize
 	sqlCfg.QueryCacheSize = kvServerCfg.SQLConfig.QueryCacheSize
 
 	// LocalKVServerInfo tells the rpc.Context of the tenant's server
@@ -368,7 +410,7 @@ func (s *SQLServerWrapper) reportTenantInfo(ctx context.Context) error {
 	clientConnOptions, serverParams := MakeServerOptionsForURL(s.cfg.Config)
 	pgURL, err := clientsecopts.MakeURLForServer(clientConnOptions, serverParams, url.User(username.RootUser))
 	if err != nil {
-		log.Errorf(ctx, "failed computing the URL: %v", err)
+		log.Dev.Errorf(ctx, "failed computing the URL: %v", err)
 	} else {
 		buf.Printf("sql:\t%s\n", pgURL.ToPQ())
 		buf.Printf("sql (JDBC):\t%s\n", pgURL.ToJDBC())

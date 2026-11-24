@@ -1,0 +1,367 @@
+# LogicTest: !local-mixed-25.4 !local-mixed-26.1 !local-mixed-26.2
+
+# DDL in PL/pgSQL procedure bodies requires late binding; DCL on its own does
+# not, but enabling it here keeps the mixed DDL/DCL subtests below uniform
+# with procedure_ddl.
+statement ok
+SET CLUSTER SETTING sql.procedures.plpgsql.late_binding.enabled = true
+
+statement ok
+CREATE ROLE r1;
+CREATE ROLE r2;
+
+statement ok
+CREATE TABLE t_dcl (a INT PRIMARY KEY, b TEXT);
+
+subtest dcl_blocked_in_functions
+
+statement error pgcode 0A000 unimplemented: GRANT usage inside a function definition
+CREATE FUNCTION f_grant() RETURNS VOID LANGUAGE PLpgSQL AS $$
+BEGIN
+  GRANT SELECT ON t_dcl TO r1;
+END
+$$;
+
+statement error pgcode 0A000 unimplemented: REVOKE usage inside a function definition
+CREATE FUNCTION f_revoke() RETURNS VOID LANGUAGE PLpgSQL AS $$
+BEGIN
+  REVOKE SELECT ON t_dcl FROM r1;
+END
+$$;
+
+statement error pgcode 0A000 unimplemented: ALTER DEFAULT PRIVILEGES usage inside a function definition
+CREATE FUNCTION f_adp() RETURNS VOID LANGUAGE PLpgSQL AS $$
+BEGIN
+  ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO r1;
+END
+$$;
+
+# VOLATILE does not unlock DCL in functions.
+statement error pgcode 0A000 unimplemented: GRANT usage inside a function definition
+CREATE FUNCTION f_grant_volatile() RETURNS VOID VOLATILE LANGUAGE PLpgSQL AS $$
+BEGIN
+  GRANT SELECT ON t_dcl TO r1;
+END
+$$;
+
+subtest end
+
+
+subtest dcl_blocked_in_do_blocks
+
+statement error pgcode 0A000 unimplemented: GRANT usage inside a function definition
+DO $$
+BEGIN
+  GRANT SELECT ON t_dcl TO r1;
+END
+$$;
+
+statement error pgcode 0A000 unimplemented: REVOKE usage inside a function definition
+DO $$
+BEGIN
+  REVOKE SELECT ON t_dcl FROM r1;
+END
+$$;
+
+statement error pgcode 0A000 unimplemented: ALTER DEFAULT PRIVILEGES usage inside a function definition
+DO $$
+BEGIN
+  ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO r1;
+END
+$$;
+
+subtest end
+
+
+subtest grant_in_procedure
+
+statement ok
+CREATE PROCEDURE p_grant() LANGUAGE PLpgSQL AS $$
+BEGIN
+  GRANT SELECT, INSERT ON t_dcl TO r1;
+END
+$$;
+
+statement ok
+CALL p_grant();
+
+query TTTTTB colnames,rowsort
+SHOW GRANTS ON t_dcl FOR r1
+----
+database_name  schema_name  table_name  grantee  privilege_type  is_grantable
+test           public       t_dcl       r1       INSERT          false
+test           public       t_dcl       r1       SELECT          false
+
+statement ok
+DROP PROCEDURE p_grant;
+
+subtest end
+
+
+subtest revoke_in_procedure
+
+statement ok
+GRANT SELECT, UPDATE ON t_dcl TO r2;
+
+statement ok
+CREATE PROCEDURE p_revoke() LANGUAGE PLpgSQL AS $$
+BEGIN
+  REVOKE UPDATE ON t_dcl FROM r2;
+END
+$$;
+
+statement ok
+CALL p_revoke();
+
+query TTTTTB colnames,rowsort
+SHOW GRANTS ON t_dcl FOR r2
+----
+database_name  schema_name  table_name  grantee  privilege_type  is_grantable
+test           public       t_dcl       r2       SELECT          false
+
+statement ok
+REVOKE ALL ON t_dcl FROM r2;
+
+statement ok
+DROP PROCEDURE p_revoke;
+
+subtest end
+
+
+subtest alter_default_privileges_in_procedure
+
+statement ok
+CREATE PROCEDURE p_alter_default() LANGUAGE PLpgSQL AS $$
+BEGIN
+  ALTER DEFAULT PRIVILEGES GRANT SELECT ON TABLES TO r1;
+END
+$$;
+
+statement ok
+CALL p_alter_default();
+
+# A table created after the procedure runs should pick up the default grant.
+statement ok
+CREATE TABLE t_after_default (a INT);
+
+query TTTTTB colnames,rowsort
+SHOW GRANTS ON t_after_default FOR r1
+----
+database_name  schema_name  table_name       grantee  privilege_type  is_grantable
+test           public       t_after_default  r1       SELECT          false
+
+# Clean up: undo the default privilege (in a procedure too, to cover REVOKE
+# inside ALTER DEFAULT PRIVILEGES).
+statement ok
+CREATE PROCEDURE p_alter_default_revoke() LANGUAGE PLpgSQL AS $$
+BEGIN
+  ALTER DEFAULT PRIVILEGES REVOKE SELECT ON TABLES FROM r1;
+END
+$$;
+
+statement ok
+CALL p_alter_default_revoke();
+
+statement ok
+CREATE TABLE t_after_revoke (a INT);
+
+query TTTTTB colnames
+SHOW GRANTS ON t_after_revoke FOR r1
+----
+database_name  schema_name  table_name  grantee  privilege_type  is_grantable
+
+statement ok
+DROP TABLE t_after_default, t_after_revoke;
+
+statement ok
+DROP PROCEDURE p_alter_default;
+DROP PROCEDURE p_alter_default_revoke;
+
+subtest end
+
+
+subtest multiple_dcl_in_procedure
+
+statement ok
+GRANT SELECT, INSERT, UPDATE ON t_dcl TO r1;
+
+statement ok
+CREATE PROCEDURE p_multi_dcl() LANGUAGE PLpgSQL AS $$
+BEGIN
+  REVOKE UPDATE ON t_dcl FROM r1;
+  GRANT DELETE ON t_dcl TO r2;
+  REVOKE INSERT ON t_dcl FROM r1;
+END
+$$;
+
+statement ok
+CALL p_multi_dcl();
+
+query TTTTTB colnames,rowsort
+SHOW GRANTS ON t_dcl FOR r1, r2
+----
+database_name  schema_name  table_name  grantee  privilege_type  is_grantable
+test           public       t_dcl       r1       SELECT          false
+test           public       t_dcl       r2       DELETE          false
+
+statement ok
+REVOKE ALL ON t_dcl FROM r1, r2;
+
+statement ok
+DROP PROCEDURE p_multi_dcl;
+
+subtest end
+
+
+subtest mixed_ddl_and_dcl
+
+# DDL and DCL mix in the same procedure body. Late-binding behavior for
+# DCL targets that reference a table created earlier in the same body is
+# covered by the grant_on_newly_created_table subtest below.
+statement ok
+CREATE PROCEDURE p_mixed() LANGUAGE PLpgSQL AS $$
+BEGIN
+  GRANT SELECT ON t_dcl TO r1;
+  CREATE TABLE t_mixed (a INT PRIMARY KEY);
+END
+$$;
+
+statement ok
+CALL p_mixed();
+
+query TTTTTB colnames
+SHOW GRANTS ON t_dcl FOR r1
+----
+database_name  schema_name  table_name  grantee  privilege_type  is_grantable
+test           public       t_dcl       r1       SELECT          false
+
+statement ok
+SELECT * FROM t_mixed;
+
+statement ok
+REVOKE SELECT ON t_dcl FROM r1;
+
+statement ok
+DROP TABLE t_mixed;
+
+statement ok
+DROP PROCEDURE p_mixed;
+
+subtest end
+
+
+subtest grant_on_newly_created_table
+
+# With late binding CREATE PROCEDURE accepts a body that creates a table
+# and then GRANTs on it — references are not resolved until CALL time. CALL
+# still fails today because body statements are built (AST -> RelExpr)
+# eagerly at CALL plan time, before the preceding CREATE TABLE has
+# executed. See the analogous CREATE TABLE + INSERT case in procedure_ddl.
+statement ok
+CREATE PROCEDURE p_grant_on_new_table() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CREATE TABLE t_grant_target (a INT PRIMARY KEY);
+  GRANT SELECT ON t_grant_target TO r1;
+END
+$$;
+
+statement error pgcode 42P01 relation "t_grant_target" does not exist
+CALL p_grant_on_new_table();
+
+statement ok
+DROP PROCEDURE p_grant_on_new_table;
+
+subtest end
+
+
+subtest dcl_then_error_in_procedure
+
+# When a procedure errors after performing DCL, the entire transaction
+# (including the DCL) should be rolled back.
+statement ok
+GRANT SELECT ON t_dcl TO r1;
+
+query TTTTTB colnames
+SHOW GRANTS ON t_dcl FOR r1
+----
+database_name  schema_name  table_name  grantee  privilege_type  is_grantable
+test           public       t_dcl       r1       SELECT          false
+
+statement ok
+CREATE PROCEDURE p_dcl_then_error() LANGUAGE PLpgSQL AS $$
+BEGIN
+  REVOKE SELECT ON t_dcl FROM r1;
+  SELECT 1 // 0;
+END
+$$;
+
+statement error division by zero
+CALL p_dcl_then_error();
+
+# The REVOKE should have been rolled back: r1 still has SELECT.
+query TTTTTB colnames
+SHOW GRANTS ON t_dcl FOR r1
+----
+database_name  schema_name  table_name  grantee  privilege_type  is_grantable
+test           public       t_dcl       r1       SELECT          false
+
+statement ok
+REVOKE SELECT ON t_dcl FROM r1;
+
+statement ok
+DROP PROCEDURE p_dcl_then_error;
+
+subtest end
+
+
+subtest nested_procedure_dcl
+
+statement ok
+CREATE PROCEDURE p_inner_dcl() LANGUAGE PLpgSQL AS $$
+BEGIN
+  GRANT SELECT ON t_dcl TO r1;
+END
+$$;
+
+statement ok
+CREATE PROCEDURE p_outer_dcl() LANGUAGE PLpgSQL AS $$
+BEGIN
+  CALL p_inner_dcl();
+END
+$$;
+
+# Under SERIALIZABLE the nested CALL succeeds. Under weak isolation the
+# pre-plan body walker does not recurse into nested CALLs, so the inner
+# GRANT hits the in-routine safety net and the CALL is rejected. See the
+# analogous nested-CALL case in procedure_ddl for the same trade-off.
+skipif config local-read-committed local-repeatable-read
+statement ok
+CALL p_outer_dcl();
+
+skipif config local-read-committed local-repeatable-read
+query TTTTTB colnames
+SHOW GRANTS ON t_dcl FOR r1
+----
+database_name  schema_name  table_name  grantee  privilege_type  is_grantable
+test           public       t_dcl       r1       SELECT          false
+
+skipif config local-read-committed local-repeatable-read
+statement ok
+REVOKE SELECT ON t_dcl FROM r1;
+
+onlyif config local-read-committed local-repeatable-read
+statement error pgcode 0A000 to use multi-statement transactions involving a schema change under weak isolation levels
+CALL p_outer_dcl();
+
+statement ok
+DROP PROCEDURE p_outer_dcl;
+DROP PROCEDURE p_inner_dcl;
+
+subtest end
+
+
+# Cleanup.
+statement ok
+DROP TABLE t_dcl;
+DROP ROLE r1;
+DROP ROLE r2;

@@ -12,35 +12,36 @@ jobs:
   publish_cluster_ui:
     if: github.repository == 'cockroachdb/cockroach'
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write # Required for OIDC
+      contents: write # Required for git tagging
     defaults:
       run:
         working-directory: pkg/ui/workspaces/cluster-ui
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
       with:
         submodules: true
 
     - name: Bazel Cache
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/.cache/bazel
         key: ${{ runner.os }}-bazel-cache
 
-    - uses: pnpm/action-setup@v2
+    - uses: pnpm/action-setup@fc06bc1257f339d1d5d8b3a19a8cae5388b55320 # v4
       with:
-        version: "8.6.10"
+        version: "9.15.5"
 
     - name: Setup NodeJS
-      uses: actions/setup-node@v3
+      uses: actions/setup-node@v4
       with:
-        node-version: 16
+        node-version: 22
         registry-url: 'https://registry.npmjs.org'
         always-auth: true
         cache: 'pnpm'
         cache-dependency-path: "${{ github.workspace }}/pkg/ui/pnpm-lock.yaml"
-      env:
-        NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       # Always install node dependencies. It seems silly to do if we're not
       # going to actually use them, but setup-node's post-run action attempts
@@ -58,7 +59,7 @@ jobs:
       run: |
         PACKAGE_VERSION=$(cat ./package.json | jq -r ".version");
         VERSIONS=$(npm view @cockroachlabs/cluster-ui versions)
-        if [[ $VERSIONS == *"$PACKAGE_VERSION"* ]]; then
+        if [[ $VERSIONS == *\'"$PACKAGE_VERSION"\'* ]]; then
           echo "published=yes" >> $GITHUB_OUTPUT
           echo
           echo "🛑 Cluster UI package version $PACKAGE_VERSION is already published"
@@ -79,7 +80,7 @@ jobs:
       run: |
         bazel build //pkg/ui/workspaces/db-console/src/js:crdb-protobuf-client
         cp ../../../../_bazel/bin/pkg/ui/workspaces/db-console/src/js/protos.* ../db-console/src/js/
-        pnpm build
+        pnpm build:release
 
     - name: Create version tag and push
       if: steps.version-check.outputs.published == 'no'
@@ -89,6 +90,10 @@ jobs:
           git tag $TAGNAME
           git push origin $TAGNAME
         fi
+
+    - name: Upgrade npm for OIDC trusted publishing
+      if: steps.version-check.outputs.published == 'no'
+      run: npm install -g npm@11.5.1
 
     - name: Publish patch version
       if: steps.version-check.outputs.published == 'no'

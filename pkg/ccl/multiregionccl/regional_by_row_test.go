@@ -9,12 +9,11 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/ccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/multiregionccl/multiregionccltestutils"
-	"github.com/cockroachdb/cockroach/pkg/ccl/testutilsccl"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -26,12 +25,14 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scexec"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scop"
+	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltestutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -46,12 +47,12 @@ func TestAlterTableLocalityRegionalByRowCorrectZoneConfigBeforeBackfill(t *testi
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	testCases := []testutilsccl.AlterPrimaryKeyCorrectZoneConfigTestCase{
+	testCases := []sqltestutils.AlterPrimaryKeyCorrectZoneConfigTestCase{
 		{
 			Desc:       "REGIONAL BY TABLE to REGIONAL BY ROW",
 			SetupQuery: `CREATE TABLE t.test (k INT NOT NULL, v INT) LOCALITY REGIONAL BY TABLE`,
 			AlterQuery: `ALTER TABLE t.test SET LOCALITY REGIONAL BY ROW`,
-			ExpectedIntermediateZoneConfigs: []testutilsccl.AlterPrimaryKeyCorrectZoneConfigIntermediateZoneConfig{
+			ExpectedIntermediateZoneConfigs: []sqltestutils.AlterPrimaryKeyCorrectZoneConfigIntermediateZoneConfig{
 				{
 					ShowConfigStatement: `SHOW ZONE CONFIGURATION FOR TABLE t.test`,
 					ExpectedTarget:      `DATABASE t`,
@@ -84,7 +85,7 @@ func TestAlterTableLocalityRegionalByRowCorrectZoneConfigBeforeBackfill(t *testi
 			Desc:       "GLOBAL to REGIONAL BY ROW",
 			SetupQuery: `CREATE TABLE t.test (k INT NOT NULL, v INT) LOCALITY GLOBAL`,
 			AlterQuery: `ALTER TABLE t.test SET LOCALITY REGIONAL BY ROW`,
-			ExpectedIntermediateZoneConfigs: []testutilsccl.AlterPrimaryKeyCorrectZoneConfigIntermediateZoneConfig{
+			ExpectedIntermediateZoneConfigs: []sqltestutils.AlterPrimaryKeyCorrectZoneConfigIntermediateZoneConfig{
 				{
 					ShowConfigStatement: `SHOW ZONE CONFIGURATION FOR TABLE t.test`,
 					ExpectedTarget:      `TABLE t.public.test`,
@@ -119,7 +120,7 @@ func TestAlterTableLocalityRegionalByRowCorrectZoneConfigBeforeBackfill(t *testi
 			Desc:       "REGIONAL BY ROW to REGIONAL BY TABLE",
 			SetupQuery: `CREATE TABLE t.test (k INT NOT NULL, v INT) LOCALITY REGIONAL BY ROW`,
 			AlterQuery: `ALTER TABLE t.test SET LOCALITY REGIONAL BY TABLE`,
-			ExpectedIntermediateZoneConfigs: []testutilsccl.AlterPrimaryKeyCorrectZoneConfigIntermediateZoneConfig{
+			ExpectedIntermediateZoneConfigs: []sqltestutils.AlterPrimaryKeyCorrectZoneConfigIntermediateZoneConfig{
 				{
 					ShowConfigStatement: `SHOW ZONE CONFIGURATION FOR TABLE t.test`,
 					ExpectedTarget:      `DATABASE t`,
@@ -139,7 +140,7 @@ func TestAlterTableLocalityRegionalByRowCorrectZoneConfigBeforeBackfill(t *testi
 			Desc:       "REGIONAL BY ROW to GLOBAL",
 			SetupQuery: `CREATE TABLE t.test (k INT NOT NULL, v INT) LOCALITY REGIONAL BY ROW`,
 			AlterQuery: `ALTER TABLE t.test SET LOCALITY GLOBAL`,
-			ExpectedIntermediateZoneConfigs: []testutilsccl.AlterPrimaryKeyCorrectZoneConfigIntermediateZoneConfig{
+			ExpectedIntermediateZoneConfigs: []sqltestutils.AlterPrimaryKeyCorrectZoneConfigIntermediateZoneConfig{
 				{
 					ShowConfigStatement: `SHOW ZONE CONFIGURATION FOR TABLE t.test`,
 					ExpectedTarget:      `DATABASE t`,
@@ -156,7 +157,7 @@ func TestAlterTableLocalityRegionalByRowCorrectZoneConfigBeforeBackfill(t *testi
 			},
 		},
 	}
-	testutilsccl.AlterPrimaryKeyCorrectZoneConfigTest(
+	sqltestutils.AlterPrimaryKeyCorrectZoneConfigTest(
 		t,
 		`CREATE DATABASE t PRIMARY REGION "ajstorm-1"`,
 		testCases,
@@ -170,15 +171,11 @@ func TestAlterTableLocalityRegionalByRowCorrectZoneConfigBeforeBackfill(t *testi
 func TestAlterTableLocalityRegionalByRowError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	skip.UnderRace(t, "takes >400s under race")
+
+	skip.UnderDuress(t, "too slow")
 
 	var chunkSize int64 = 100
 	var maxValue = 4000
-	if util.RaceEnabled {
-		// Race builds are a lot slower, so use a smaller number of rows.
-		maxValue = 200
-		chunkSize = 5
-	}
 	// BulkInsertIntoTable adds testCase 0 to maxValue inclusive, so
 	// we round (maxValue + 1) / chunkSize to the nearest int.
 	// To round up x / y using integers, we do (x + y - 1) / y.
@@ -324,7 +321,7 @@ func TestAlterTableLocalityRegionalByRowError(t *testing.T) {
 						job_type = 'SCHEMA CHANGE' AND
 						status = $1 AND
 						description NOT LIKE 'ROLL BACK%'
-				)`, jobs.StatusRunning)
+				)`, jobs.StateRunning)
 								return err
 							},
 							errorContains: "job canceled by user",
@@ -343,14 +340,10 @@ func TestAlterTableLocalityRegionalByRowError(t *testing.T) {
 							// to backfill successfully.
 							currentBackfillChunk := -(chunksPerBackfill + 1)
 							var params base.TestServerArgs
+							params.DisableElasticCPUAdmission = true
 							params.Locality.Tiers = []roachpb.Tier{
 								{Key: "region", Value: "ajstorm-1"},
 							}
-							// Need to disable the test tenant here because
-							// when running inside a tenant, for some reason
-							// this test doesn't error when expected. More
-							// investigation is required. Tracked with #76378.
-							params.DefaultTestTenant = base.TODOTestTenantDisabled
 							var sqlDB *gosql.DB
 							params.Knobs = base.TestingKnobs{
 								SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
@@ -374,17 +367,19 @@ func TestAlterTableLocalityRegionalByRowError(t *testing.T) {
 								// Decrease the adopt loop interval so that retries happen quickly.
 								JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
 							}
-							var s serverutils.TestServerInterface
+							var srv serverutils.TestServerInterface
 							var kvDB *kv.DB
-							s, sqlDB, kvDB = serverutils.StartServer(t, params)
+							srv, sqlDB, kvDB = serverutils.StartServer(t, params)
 							db = sqlDB
-							defer s.Stopper().Stop(ctx)
+							defer srv.Stopper().Stop(ctx)
+							s := srv.ApplicationLayer()
 
 							// Disable strict GC TTL enforcement because we're going to shove a zero-value
 							// TTL into the system with AddImmediateGCZoneConfig.
 							defer sqltestutils.DisableGCTTLStrictEnforcement(t, sqlDB)()
 
 							if _, err := sqlDB.Exec(fmt.Sprintf(`
+SET create_table_with_schema_locked=false;
 CREATE DATABASE t PRIMARY REGION "ajstorm-1";
 USE t;
 %s;
@@ -432,7 +427,7 @@ USE t;
 							// that the job did not succeed even though it was canceled.
 							testutils.SucceedsSoon(t, func() error {
 								tableDesc := desctestutils.TestingGetPublicTableDescriptor(
-									kvDB, keys.SystemSQLCodec, "t", "test",
+									kvDB, s.Codec(), "t", "test",
 								)
 								if len(tableDesc.AllMutations()) != 0 {
 									return errors.Errorf(
@@ -488,13 +483,13 @@ USE t;
 								return nil
 							})
 
-							tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "test")
+							tableDesc := desctestutils.TestingGetPublicTableDescriptor(kvDB, s.Codec(), "t", "test")
 							if _, err := sqltestutils.AddImmediateGCZoneConfig(db, tableDesc.GetID()); err != nil {
 								t.Fatal(err)
 							}
 							// Ensure that the writes from the partial new indexes are cleaned up.
 							testutils.SucceedsSoon(t, func() error {
-								return sqltestutils.CheckTableKeyCount(ctx, kvDB, keys.SystemSQLCodec, 1, maxValue)
+								return sqltestutils.CheckTableKeyCount(ctx, kvDB, s.Codec(), 1, maxValue)
 							})
 						})
 					}
@@ -542,6 +537,10 @@ CREATE TABLE db.t(k INT PRIMARY KEY) LOCALITY REGIONAL BY ROW`)
 	if err != nil {
 		t.Error(err)
 	}
+
+	sqlDB.SetMaxOpenConns(1)
+	_, err = sqlDB.Exec(`SET autocommit_before_ddl = false`)
+	require.NoError(t, err)
 
 	_, err = sqlDB.Exec(`BEGIN;
 ALTER DATABASE db ADD REGION "us-east3";
@@ -606,6 +605,7 @@ func TestIndexCleanupAfterAlterFromRegionalByRow(t *testing.T) {
 			defer cleanup()
 
 			sqlRunner := sqlutils.MakeSQLRunner(sqlDB)
+			sqlRunner.Exec(t, "SET create_table_with_schema_locked=false")
 			sqlRunner.Exec(t, `CREATE DATABASE "mr-zone-configs" WITH PRIMARY REGION "us-east1" REGIONS "us-east2","us-east3";`)
 			sqlRunner.Exec(t, `USE "mr-zone-configs";`)
 			sqlRunner.Exec(t, `
@@ -673,21 +673,39 @@ CREATE TABLE regional_by_row (
 					return errors.Wrap(err, "unexepected error querying schema change GC jobs")
 				}
 
-				actualCount := len(rows)
-				if actualCount != expectedCount {
-					return errors.Newf("expected %d jobs with status %q, found %d. Jobs found: %v",
+				// Count total indexes across all GC jobs.
+				// The details JSON has an "indexes" array; count occurrences of "indexId".
+				totalIndexes := 0
+				for _, r := range rows {
+					indexCount := 0
+					detailStr := r.details
+					for i := 0; i < len(detailStr); {
+						idx := strings.Index(detailStr[i:], `"indexId"`)
+						if idx == -1 {
+							break // no more indexIDs in this job
+						}
+						indexCount++
+						i += idx + 1
+					}
+					totalIndexes += indexCount
+				}
+
+				if totalIndexes != expectedCount {
+					return errors.Newf("expected GC on %d indexes with status %q, found %d. Jobs found: %v",
 						expectedCount,
 						status,
-						actualCount,
+						totalIndexes,
 						rows)
 				}
 				return nil
 			}
 
-			expectedGCJobsForDrops := 4
-			expectedGCJobsForTempIndexes := 4
-			// Now check that we have the right number of index GC jobs pending.
-			err := queryIndexGCJobsAndValidateCount(`running`, expectedGCJobsForDrops+expectedGCJobsForTempIndexes)
+			expectedGCIndexesForDrops := 4
+			expectedGCIndexesForTempIndexes := 4
+			// Now check that we have the right number of indexes being cleaned up.
+			// Note: indexes may be batched into multiple GC jobs in the declarative
+			// schema changer, so we count the total number of indexes across all jobs.
+			err := queryIndexGCJobsAndValidateCount(`running`, expectedGCIndexesForDrops+expectedGCIndexesForTempIndexes)
 			require.NoError(t, err)
 			err = queryIndexGCJobsAndValidateCount(`succeeded`, 0)
 			require.NoError(t, err)
@@ -700,7 +718,7 @@ CREATE TABLE regional_by_row (
 			close(blockGC)
 
 			// Validate that indexes are cleaned up.
-			testutils.SucceedsSoon(t, queryAndEnsureThatIndexGCJobsSucceeded(expectedGCJobsForDrops+expectedGCJobsForTempIndexes))
+			testutils.SucceedsSoon(t, queryAndEnsureThatIndexGCJobsSucceeded(expectedGCIndexesForDrops+expectedGCIndexesForTempIndexes))
 			err = queryIndexGCJobsAndValidateCount(`running`, 0)
 			require.NoError(t, err)
 		})
@@ -715,63 +733,81 @@ func TestRegionChangeRacingRegionalByRowChange(t *testing.T) {
 	skip.UnderRace(t, "too slow under race (>10min)")
 
 	regionalByRowChanges := []struct {
+		desc                           string
 		setup                          string
 		cmd                            string
 		errorOnAddOrDropRegionSandwich string
 		errorOnTableChangeSandwich     string
 	}{
 		{
+			desc:                           "set locality rbr",
 			setup:                          `CREATE TABLE t.test (k INT NOT NULL, v INT) LOCALITY GLOBAL`,
 			cmd:                            `ALTER TABLE t.test SET LOCALITY REGIONAL BY ROW`,
 			errorOnAddOrDropRegionSandwich: "pq: cannot perform database region changes while a REGIONAL BY ROW transition is underway",
 			errorOnTableChangeSandwich:     "pq: cannot perform this locality change while a region is being added or dropped on the database",
 		},
 		{
+			desc:                           "set locality global",
 			setup:                          `CREATE TABLE t.test (k INT NOT NULL, v INT) LOCALITY REGIONAL BY ROW`,
 			cmd:                            `ALTER TABLE t.test SET LOCALITY GLOBAL`,
 			errorOnAddOrDropRegionSandwich: "pq: cannot perform database region changes while a REGIONAL BY ROW transition is underway",
 			errorOnTableChangeSandwich:     "pq: cannot perform this locality change while a region is being added or dropped on the database",
 		},
 		{
+			desc:                           "create index",
 			setup:                          `CREATE TABLE t.test (k INT NOT NULL, v INT) LOCALITY REGIONAL BY ROW`,
 			cmd:                            `CREATE INDEX v_idx ON t.test(v)`,
 			errorOnAddOrDropRegionSandwich: "pq: cannot perform database region changes while an index is being created or dropped on a REGIONAL BY ROW table",
 			errorOnTableChangeSandwich:     "pq: cannot CREATE INDEX on a REGIONAL BY ROW table while a region is being added or dropped on the database",
 		},
 		{
+			desc:                           "drop index",
 			setup:                          `CREATE TABLE t.test (k INT NOT NULL, v INT, INDEX v_idx (v)) LOCALITY REGIONAL BY ROW`,
 			cmd:                            `DROP INDEX t.test@v_idx`,
 			errorOnAddOrDropRegionSandwich: "pq: cannot perform database region changes while an index is being created or dropped on a REGIONAL BY ROW table",
 			errorOnTableChangeSandwich:     "pq: cannot DROP INDEX on a REGIONAL BY ROW table while a region is being added or dropped on the database",
 		},
 		{
+			desc:                           "add unique constraint",
 			setup:                          `CREATE TABLE t.test (k INT NOT NULL, v INT) LOCALITY REGIONAL BY ROW`,
 			cmd:                            `ALTER TABLE t.test ADD CONSTRAINT v_uniq UNIQUE (v)`,
 			errorOnAddOrDropRegionSandwich: "pq: cannot perform database region changes while an index is being created or dropped on a REGIONAL BY ROW table",
-			errorOnTableChangeSandwich:     "pq: cannot create an UNIQUE CONSTRAINT on a REGIONAL BY ROW table while a region is being added or dropped on the database",
+			errorOnTableChangeSandwich:     "pq: cannot CREATE INDEX on a REGIONAL BY ROW table while a region is being added or dropped on the database",
 		},
 		{
+			desc:                           "add unique column",
 			setup:                          `CREATE TABLE t.test (k INT NOT NULL, v INT) LOCALITY REGIONAL BY ROW`,
 			cmd:                            `ALTER TABLE t.test ADD COLUMN z INT UNIQUE`,
 			errorOnAddOrDropRegionSandwich: "pq: cannot perform database region changes while an index is being created or dropped on a REGIONAL BY ROW table",
-			errorOnTableChangeSandwich:     "pq: cannot add an UNIQUE COLUMN on a REGIONAL BY ROW table while a region is being added or dropped on the database",
+			errorOnTableChangeSandwich:     "pq: cannot add a UNIQUE COLUMN on a REGIONAL BY ROW table while a region is being added or dropped on the database",
 		},
 		{
+			desc:                           "alter primary key",
 			setup:                          `CREATE TABLE t.test (k INT NOT NULL, v INT NOT NULL) LOCALITY REGIONAL BY ROW`,
 			cmd:                            `ALTER TABLE t.test ALTER PRIMARY KEY USING COLUMNS (v)`,
 			errorOnAddOrDropRegionSandwich: "pq: cannot perform database region changes while a ALTER PRIMARY KEY is underway",
-			errorOnTableChangeSandwich:     "pq: cannot perform a primary key change on a REGIONAL BY ROW table while a region is being added or dropped on the database",
+			errorOnTableChangeSandwich:     "pq: cannot ALTER PRIMARY KEY on a REGIONAL BY ROW table while a region is being added or dropped on the database",
+		},
+		{
+			desc:                           "drop unique constraint",
+			setup:                          `CREATE TABLE t.test (k INT NOT NULL, v INT, CONSTRAINT v_uniq UNIQUE (v)) LOCALITY REGIONAL BY ROW`,
+			cmd:                            `ALTER TABLE t.test DROP CONSTRAINT v_uniq`,
+			errorOnAddOrDropRegionSandwich: "pq: cannot perform database region changes while an index is being created or dropped on a REGIONAL BY ROW table",
+			errorOnTableChangeSandwich:     "pq: cannot ALTER TABLE DROP CONSTRAINT on a REGIONAL BY ROW table while a region is being added or dropped on the database",
 		},
 	}
 
 	regionChanges := []struct {
-		cmd string
+		desc string
+		cmd  string
 	}{
 		{
-			cmd: `ALTER DATABASE t ADD REGION "us-east3"`,
+			desc: "add region",
+			cmd:  `ALTER DATABASE t ADD REGION "us-east3"`,
 		},
 		{
-			cmd: `ALTER DATABASE t DROP REGION "us-east2"`,
+			desc: "drop region",
+			cmd:  `ALTER DATABASE t DROP REGION "us-east2"`,
 		},
 	}
 
@@ -783,6 +819,7 @@ func TestRegionChangeRacingRegionalByRowChange(t *testing.T) {
 		require.NoError(t, err)
 
 		_, err = sqlDB.Exec(fmt.Sprintf(`
+SET create_table_with_schema_locked=false;
 DROP DATABASE IF EXISTS t;
 CREATE DATABASE t PRIMARY REGION "us-east1" REGION "us-east2";
 USE t;
@@ -794,7 +831,7 @@ USE t;
 	// Tests ADD/DROP REGION during a REGIONAL BY ROW index-related change.
 	for _, rbrChange := range regionalByRowChanges {
 		for _, regionChange := range regionChanges {
-			t.Run(fmt.Sprintf("setup %s executing %s with racing %s", rbrChange.setup, rbrChange.cmd, regionChange.cmd), func(t *testing.T) {
+			t.Run(fmt.Sprintf("%s racing %s", rbrChange.desc, regionChange.desc), func(t *testing.T) {
 				defer log.Scope(t).Close(t)
 				interruptStartCh := make(chan struct{})
 				interruptEndCh := make(chan struct{})
@@ -807,6 +844,16 @@ USE t;
 						SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 							RunBeforeBackfill: func() error {
 								if performInterrupt {
+									performInterrupt = false
+									close(interruptStartCh)
+									<-interruptEndCh
+								}
+								return nil
+							},
+						},
+						SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
+							BeforeStage: func(p scplan.Plan, stageIdx int) error {
+								if p.Params.ExecutionPhase == scop.PostCommitPhase && performInterrupt {
 									performInterrupt = false
 									close(interruptStartCh)
 									<-interruptEndCh
@@ -850,7 +897,7 @@ USE t;
 	// Tests REGIONAL BY ROW during a ADD/DROP REGION index-related change.
 	for _, regionChange := range regionChanges {
 		for _, rbrChange := range regionalByRowChanges {
-			t.Run(fmt.Sprintf("setup %s executing %s with racing %s", rbrChange.setup, regionChange.cmd, rbrChange.cmd), func(t *testing.T) {
+			t.Run(fmt.Sprintf("%s racing %s", regionChange.desc, rbrChange.desc), func(t *testing.T) {
 				defer log.Scope(t).Close(t)
 				interruptStartCh := make(chan struct{})
 				interruptEndCh := make(chan struct{})
@@ -860,6 +907,9 @@ USE t;
 					t,
 					3, /* numServers */
 					base.TestingKnobs{
+						// When ADD/DROP region is implemented in the declarative schema
+						// changer, we will need to use SQLDeclarativeSchemaChanger testing
+						// knobs here instead.
 						SQLTypeSchemaChanger: &sql.TypeSchemaChangerTestingKnobs{
 							RunBeforeExec: func() error {
 								if performInterrupt {
@@ -902,13 +952,133 @@ USE t;
 	}
 }
 
+// TestSurvivalGoalAndPrimaryRegionRacingRegionalByRowChange tests that
+// ALTER DATABASE SURVIVE and ALTER DATABASE PRIMARY REGION are blocked when a
+// REGIONAL BY ROW transition (PK swap) is in progress on a table in the
+// database. This guards against a race where the database-level change rewrites
+// zone configs while the async PK swap reads a stale survival goal and writes
+// inconsistent partition zone configs.
+func TestSurvivalGoalAndPrimaryRegionRacingRegionalByRowChange(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	skip.UnderRace(t, "too slow under race")
+
+	regionalByRowChanges := []struct {
+		desc  string
+		setup string
+		cmd   string
+	}{
+		{
+			desc:  "set locality rbr",
+			setup: `CREATE TABLE t.test (k INT NOT NULL, v INT) LOCALITY GLOBAL`,
+			cmd:   `ALTER TABLE t.test SET LOCALITY REGIONAL BY ROW`,
+		},
+		{
+			desc:  "set locality rbt",
+			setup: `CREATE TABLE t.test (k INT NOT NULL, v INT) LOCALITY REGIONAL BY ROW`,
+			cmd:   `ALTER TABLE t.test SET LOCALITY REGIONAL BY TABLE`,
+		},
+	}
+
+	// Database-level changes that should be blocked when a REGIONAL BY ROW
+	// transition is in progress. These are synchronous operations that rewrite
+	// table zone configs, so they only need to be tested in the direction
+	// where the RBR change is started first.
+	dbChanges := []struct {
+		desc string
+		cmd  string
+	}{
+		{
+			desc: "alter survival goal",
+			cmd:  `ALTER DATABASE t SURVIVE REGION FAILURE`,
+		},
+		{
+			desc: "alter primary region",
+			cmd:  `ALTER DATABASE t PRIMARY REGION "us-east2"`,
+		},
+	}
+
+	expectedErr := "pq: cannot perform database region changes while a REGIONAL BY ROW transition is underway"
+
+	for _, rbrChange := range regionalByRowChanges {
+		for _, dbChange := range dbChanges {
+			t.Run(fmt.Sprintf("%s racing %s", rbrChange.desc, dbChange.desc), func(t *testing.T) {
+				defer log.Scope(t).Close(t)
+				interruptStartCh := make(chan struct{})
+				interruptEndCh := make(chan struct{})
+				performInterrupt := false
+
+				_, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
+					t,
+					3, /* numServers */
+					base.TestingKnobs{
+						SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+							RunBeforeBackfill: func() error {
+								if performInterrupt {
+									performInterrupt = false
+									close(interruptStartCh)
+									<-interruptEndCh
+								}
+								return nil
+							},
+						},
+						SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
+							BeforeStage: func(p scplan.Plan, stageIdx int) error {
+								if p.Params.ExecutionPhase == scop.PostCommitPhase && performInterrupt {
+									performInterrupt = false
+									close(interruptStartCh)
+									<-interruptEndCh
+								}
+								return nil
+							},
+						},
+					},
+				)
+				defer cleanup()
+
+				// Set up database with 3 regions (required for SURVIVE REGION FAILURE).
+				_, err := sqlDB.Exec(`
+SET create_table_with_schema_locked=false;
+DROP DATABASE IF EXISTS t;
+CREATE DATABASE t PRIMARY REGION "us-east1" REGIONS "us-east2", "us-east3";
+USE t;
+` + rbrChange.setup)
+				require.NoError(t, err)
+
+				// Perform the RBR change asynchronously; this will be interrupted.
+				rbrErrCh := make(chan error, 1)
+				performInterrupt = true
+				go func(cmd string) {
+					_, err := sqlDB.Exec(cmd)
+					rbrErrCh <- err
+				}(rbrChange.cmd)
+
+				// Wait for the backfill to start.
+				<-interruptStartCh
+
+				// Now attempt the database-level change; it should be blocked.
+				_, err = sqlDB.Exec(dbChange.cmd)
+				close(interruptEndCh)
+				require.Error(t, err)
+				require.EqualError(t, err, expectedErr)
+
+				// Ensure the RBR change completes without error.
+				require.NoError(t, <-rbrErrCh)
+
+				// Validate zone configurations are consistent.
+				_, err = sqlDB.Exec(`SELECT crdb_internal.validate_multi_region_zone_configs()`)
+				require.NoError(t, err)
+			})
+		}
+	}
+}
+
 // TestIndexDescriptorUpdateForImplicitColumns checks that the column ID slices
 // in the indexes of a table descriptor undergoing partitioning changes
 // involving implicit columns are correctly updated.
 func TestIndexDescriptorUpdateForImplicitColumns(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
-	defer ccl.TestingEnableEnterprise()()
 
 	c, sqlDB, cleanup := multiregionccltestutils.TestingCreateMultiRegionCluster(
 		t, 3 /* numServers */, base.TestingKnobs{},
@@ -916,6 +1086,7 @@ func TestIndexDescriptorUpdateForImplicitColumns(t *testing.T) {
 	defer cleanup()
 
 	tdb := sqlutils.MakeSQLRunner(sqlDB)
+	tdb.Exec(t, "SET create_table_with_schema_locked=false")
 	tdb.Exec(t, `CREATE DATABASE test PRIMARY REGION "us-east1" REGIONS "us-east2"`)
 
 	fetchIndexes := func(tableName string) []catalog.Index {

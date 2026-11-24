@@ -15,25 +15,95 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/errors"
 	"github.com/olekukonko/tablewriter"
 )
 
-// ConfigureRoleBasedAuditClusterSettings is a noop global var injected by CCL hook.
-// See corresponding ConfigureRoleBasedAuditClusterSettings in auditloggingccl.
-var ConfigureRoleBasedAuditClusterSettings = func(ctx context.Context, acl *AuditConfigLock, st *cluster.Settings, sv *settings.Values) {
+const auditConfigDefaultValue = ""
+
+// UserAuditLogConfig is a cluster setting that takes a user/role-based audit configuration.
+var UserAuditLogConfig = settings.RegisterStringSetting(
+	settings.ApplicationLevel,
+	"sql.log.user_audit",
+	"user/role-based audit logging configuration",
+	auditConfigDefaultValue,
+	settings.WithValidateString(validateAuditLogConfig),
+	settings.WithPublic,
+)
+
+// UserAuditEnableReducedConfig is a cluster setting that enables/disables a computed
+// reduced configuration. This allows us to compute the audit configuration once at
+// session start, instead of computing at each SQL event. The tradeoff is that changes to
+// the audit configuration (user role memberships or cluster setting configuration) are not
+// reflected within session. Users will need to start a new session to see these changes in their
+// auditing behaviour.
+var UserAuditEnableReducedConfig = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"sql.log.user_audit.reduced_config.enabled",
+	"enables logic to compute a reduced audit configuration, computing the audit "+
+		"configuration only once at session start instead of at each SQL event. The tradeoff "+
+		"with the increase in performance (~5%), is that changes to the audit configuration "+
+		"(user role memberships/cluster setting) are not reflected within session. "+
+		"Users will need to start a new session to see these changes in their auditing behaviour.",
+	false,
+	settings.WithPublic,
+)
+
+func validateAuditLogConfig(_ *settings.Values, input string) error {
+	if input == auditConfigDefaultValue {
+		return nil
+	}
+	conf, err := Parse(input)
+	if err != nil {
+		return err
+	}
+	if len(conf.Settings) == 0 {
+		return errors.WithHint(errors.New("no entries"),
+			"To use the default configuration, assign the empty string ('').")
+	}
+	return nil
 }
 
-// UserAuditEnabled is a noop global var injected by CCL hook.
-var UserAuditEnabled = func(st *cluster.Settings) bool {
-	return false
+// UpdateAuditConfigOnChange initializes the local
+// node's audit configuration each time the cluster setting
+// is updated.
+func UpdateAuditConfigOnChange(ctx context.Context, acl *AuditConfigLock, st *cluster.Settings) {
+	val := UserAuditLogConfig.Get(&st.SV)
+	config, err := Parse(val)
+	if err != nil {
+		log.Ops.Warningf(ctx, "invalid audit log config (sql.log.user_audit): %v\n"+
+			"falling back to empty audit config", err)
+		config = EmptyAuditConfig()
+	}
+	acl.Lock()
+	acl.Config = config
+	acl.Unlock()
 }
 
-// UserAuditReducedConfigEnabled is a noop global var injected by CCL hook.
-var UserAuditReducedConfigEnabled = func(sv *settings.Values) bool {
-	return false
+// ConfigureRoleBasedAuditClusterSettings sets up the on-change hook for the
+// audit logging cluster setting and initializes the audit configuration.
+func ConfigureRoleBasedAuditClusterSettings(
+	ctx context.Context, acl *AuditConfigLock, st *cluster.Settings, sv *settings.Values,
+) {
+	UserAuditLogConfig.SetOnChange(
+		sv, func(ctx context.Context) {
+			UpdateAuditConfigOnChange(ctx, acl, st)
+		})
+	UpdateAuditConfigOnChange(ctx, acl, st)
+}
+
+// UserAuditEnabled returns whether user audit logging is enabled.
+func UserAuditEnabled(st *cluster.Settings) bool {
+	return UserAuditLogConfig.Get(&st.SV) != ""
+}
+
+// UserAuditReducedConfigEnabled returns whether the reduced audit config is enabled.
+func UserAuditReducedConfigEnabled(sv *settings.Values) bool {
+	return UserAuditEnableReducedConfig.Get(sv)
 }
 
 // Auditor is an interface used to check and build different audit events.

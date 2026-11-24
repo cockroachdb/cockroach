@@ -14,15 +14,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	_ "github.com/cockroachdb/cockroach/pkg/ccl/kvccl/kvtenantccl"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlclient"
 	"github.com/cockroachdb/cockroach/pkg/cli/clisqlexec"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security/securityassets"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils/regionlatency"
@@ -57,6 +55,7 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 		joinAddr          string
 		sqlPoolMemorySize int64
 		cacheSize         int64
+		useDRPC           bool // sets demoCtx.UseDRPC
 
 		expected base.TestServerArgs
 	}{
@@ -66,7 +65,8 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 			sqlPoolMemorySize: 2 << 10,
 			cacheSize:         1 << 10,
 			expected: base.TestServerArgs{
-				DefaultTestTenant:             base.TODOTestTenantDisabled,
+				DefaultTenantName:             "demoapp",
+				DefaultTestTenant:             base.TestControlsTenantsExplicitly,
 				PartOfCluster:                 true,
 				JoinAddr:                      "127.0.0.1",
 				DisableTLSForHTTP:             true,
@@ -79,6 +79,7 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 				CacheSize:                     1 << 10,
 				NoAutoInitializeCluster:       true,
 				EnableDemoLoginEndpoint:       true,
+				DefaultDRPCOption:             base.TestDRPCDisabled,
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
 						StickyVFSRegistry: stickyVFSRegistry,
@@ -93,7 +94,8 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 			sqlPoolMemorySize: 4 << 10,
 			cacheSize:         4 << 10,
 			expected: base.TestServerArgs{
-				DefaultTestTenant:             base.TODOTestTenantDisabled,
+				DefaultTenantName:             "demoapp",
+				DefaultTestTenant:             base.TestControlsTenantsExplicitly,
 				PartOfCluster:                 true,
 				JoinAddr:                      "127.0.0.1",
 				Addr:                          "127.0.0.1:1336",
@@ -106,12 +108,43 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 				CacheSize:                     4 << 10,
 				NoAutoInitializeCluster:       true,
 				EnableDemoLoginEndpoint:       true,
+				DefaultDRPCOption:             base.TestDRPCDisabled,
 				Knobs: base.TestingKnobs{
 					Server: &server.TestingKnobs{
 						StickyVFSRegistry: stickyVFSRegistry,
 					},
 				},
 				ExternalIODir: "nodelocal/n3",
+			},
+		},
+		{
+			serverIdx:         0,
+			joinAddr:          "127.0.0.1",
+			sqlPoolMemorySize: 2 << 10,
+			cacheSize:         1 << 10,
+			useDRPC:           true,
+			expected: base.TestServerArgs{
+				DefaultTenantName:             "demoapp",
+				DefaultTestTenant:             base.TestControlsTenantsExplicitly,
+				PartOfCluster:                 true,
+				JoinAddr:                      "127.0.0.1",
+				DisableTLSForHTTP:             true,
+				Addr:                          "127.0.0.1:1334",
+				SQLAddr:                       "127.0.0.1:1234",
+				HTTPAddr:                      "127.0.0.1:4567",
+				ApplicationInternalRPCPortMin: 1332,
+				ApplicationInternalRPCPortMax: 2356,
+				SQLMemoryPoolSize:             2 << 10,
+				CacheSize:                     1 << 10,
+				NoAutoInitializeCluster:       true,
+				EnableDemoLoginEndpoint:       true,
+				DefaultDRPCOption:             base.TestDRPCEnabled,
+				Knobs: base.TestingKnobs{
+					Server: &server.TestingKnobs{
+						StickyVFSRegistry: stickyVFSRegistry,
+					},
+				},
+				ExternalIODir: "nodelocal/n1",
 			},
 		},
 	}
@@ -123,6 +156,7 @@ func TestTestServerArgsForTransientCluster(t *testing.T) {
 			demoCtx.CacheSize = tc.cacheSize
 			demoCtx.SQLPort = 1234
 			demoCtx.HTTPPort = 4567
+			demoCtx.UseDRPC = tc.useDRPC
 			actual := demoCtx.testServerArgsForTransientCluster(unixSocketDetails{}, tc.serverIdx, tc.joinAddr, "", stickyVFSRegistry)
 			stopper := actual.Stopper
 			defer stopper.Stop(context.Background())
@@ -177,8 +211,8 @@ func TestTransientClusterSimulateLatencies(t *testing.T) {
 		stopper:           stop.NewStopper(),
 		demoDir:           certsDir,
 		stickyVFSRegistry: fs.NewStickyRegistry(),
-		infoLog:           log.Infof,
-		warnLog:           log.Warningf,
+		infoLog:           log.Dev.Infof,
+		warnLog:           log.Dev.Warningf,
 		shoutLog:          log.Ops.Shoutf,
 	}
 
@@ -289,8 +323,8 @@ func TestTransientClusterMultitenant(t *testing.T) {
 		stopper:           stop.NewStopper(),
 		demoDir:           certsDir,
 		stickyVFSRegistry: fs.NewStickyRegistry(),
-		infoLog:           log.Infof,
-		warnLog:           log.Warningf,
+		infoLog:           log.Dev.Infof,
+		warnLog:           log.Dev.Warningf,
 		shoutLog:          log.Ops.Shoutf,
 	}
 	// Stop the cluster when the test exits, including when it fails.
@@ -307,9 +341,6 @@ func TestTransientClusterMultitenant(t *testing.T) {
 	ctx, cancel = c.stopper.WithCancelOnQuiesce(ctx)
 	defer cancel()
 
-	// Ensure CREATE TABLE below works properly.
-	sqlclustersettings.RestrictAccessToSystemInterface.Override(ctx, &c.firstServer.SystemLayer().ClusterSettings().SV, false)
-
 	testutils.RunTrueAndFalse(t, "forSecondaryTenant", func(t *testing.T, forSecondaryTenant bool) {
 		url, err := c.getNetworkURLForServer(ctx, 0,
 			true /* includeAppName */, serverSelection(forSecondaryTenant))
@@ -323,7 +354,7 @@ func TestTransientClusterMultitenant(t *testing.T) {
 		// Create a table on each tenant to make sure that the tenants are separate.
 		require.NoError(t, conn.Exec(ctx, "CREATE TABLE a (a int PRIMARY KEY)"))
 
-		log.Infof(ctx, "test succeeded")
+		log.Dev.Infof(ctx, "test succeeded")
 		t.Log("test succeeded")
 	})
 }
@@ -353,8 +384,8 @@ func TestTenantCapabilities(t *testing.T) {
 		stopper:           stop.NewStopper(),
 		demoDir:           certsDir,
 		stickyVFSRegistry: fs.NewStickyRegistry(),
-		infoLog:           log.Infof,
-		warnLog:           log.Warningf,
+		infoLog:           log.Dev.Infof,
+		warnLog:           log.Dev.Warningf,
 		shoutLog:          log.Ops.Shoutf,
 	}
 	// Stop the cluster when the test exits, including when it fails.
@@ -401,9 +432,9 @@ func TestTenantCapabilities(t *testing.T) {
 	}
 
 	var expectedRows [][]string
-	for _, cap := range tenantcapabilities.IDs {
+	for _, cap := range tenantcapabilitiespb.IDs {
 		capValue := `true`
-		if cap == tenantcapabilities.TenantSpanConfigBounds {
+		if cap == tenantcapabilitiespb.TenantSpanConfigBounds {
 			capValue = `{}`
 		}
 		expectedRows = append(expectedRows, []string{`3`, demoTenantName, `ready`, `shared`, cap.String(), capValue})

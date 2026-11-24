@@ -11,7 +11,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
+	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvadmission"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/liveness/livenesspb"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/raft"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -30,7 +32,7 @@ import (
 type replicaInCircuitBreaker interface {
 	Clock() *hlc.Clock
 	Desc() *roachpb.RangeDescriptor
-	Send(context.Context, *kvpb.BatchRequest) (*kvpb.BatchResponse, *kvpb.Error)
+	SenderWithWorkStats
 	slowReplicationThreshold(ba *kvpb.BatchRequest) (time.Duration, bool)
 	replicaUnavailableError(err error) error
 	poisonInflightLatches(err error)
@@ -135,7 +137,7 @@ func newReplicaCircuitBreaker(
 			ambientCtx: ambientCtx,
 			EventHandler: &circuit.EventLogger{
 				Log: func(buf redact.StringBuilder) {
-					log.Infof(ambientCtx.AnnotateCtx(context.Background()), "%s", buf)
+					log.KvExec.Infof(ambientCtx.AnnotateCtx(context.Background()), "%s", buf)
 				},
 			},
 			onTrip:  onTrip,
@@ -157,10 +159,10 @@ func (r replicaCircuitBreakerLogger) OnTrip(b *circuit.Breaker, prev, cur error)
 	if prev == nil {
 		r.onTrip()
 	}
-	// Log directly from this method via log.Errorf.
+	// Log directly from this method via log.KvExec.Errorf.
 	var buf redact.StringBuilder
 	circuit.EventFormatter{}.OnTrip(b, prev, cur, &buf)
-	log.Errorf(r.ambientCtx.AnnotateCtx(context.Background()), "%s", buf)
+	log.KvExec.Errorf(r.ambientCtx.AnnotateCtx(context.Background()), "%s", buf)
 }
 
 func (r replicaCircuitBreakerLogger) OnReset(br *circuit.Breaker, prev error) {
@@ -212,6 +214,8 @@ func sendProbe(ctx context.Context, r replicaInCircuitBreaker) error {
 	ba := &kvpb.BatchRequest{}
 	ba.Timestamp = r.Clock().Now()
 	ba.RangeID = r.Desc().RangeID
+	ba.Header.WorkloadID = uint64(workloadid.WORKLOAD_ID_CIRCUIT_BREAKER_PROBE)
+	ba.Header.WorkloadType = workloadid.WorkloadTypeSystem.ToUint32()
 	probeReq := &kvpb.ProbeRequest{}
 	probeReq.Key = desc.StartKey.AsRawKey()
 	ba.Add(probeReq)
@@ -220,7 +224,9 @@ func sendProbe(ctx context.Context, r replicaInCircuitBreaker) error {
 		// Breakers are disabled now.
 		return nil
 	}
-	_, pErr := r.Send(ctx, ba)
+	// Pass empty AdmissionInfo since this is an internal probe request that
+	// bypasses admission control.
+	_, pErr := r.SendWithWorkStats(ctx, ba, nil /* stats */, kvadmission.AdmissionInfo{})
 	if err := pErr.GoError(); err != nil {
 		return r.replicaUnavailableError(err)
 	}
@@ -268,11 +274,25 @@ func replicaUnavailableError(
 	return kvpb.NewReplicaUnavailableError(errors.Wrapf(err, "%s", buf), desc, replDesc)
 }
 
+// replicaUnavailableError returns a new ReplicaUnavailableError that wraps the
+// provided error.
 func (r *Replica) replicaUnavailableError(err error) error {
-	desc := r.Desc()
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	return r.replicaUnavailableErrorRLocked(err)
+}
+
+// replicaUnavailableLocked is like replicaUnavailableError, except it requires
+// r.mu to be RLocked.
+func (r *Replica) replicaUnavailableErrorRLocked(err error) error {
+	desc := r.shMu.state.Desc
 	replDesc, _ := desc.GetReplicaDescriptor(r.store.StoreID())
 
 	isLiveMap, _ := r.store.livenessMap.Load().(livenesspb.IsLiveMap)
-	ct := r.GetCurrentClosedTimestamp(context.Background())
-	return replicaUnavailableError(err, desc, replDesc, isLiveMap, r.RaftStatus(), ct)
+	ct := r.getCurrentClosedTimestamp(context.Background(), hlc.Timestamp{}, /* sufficient */
+		r.shMu.state.LeaseAppliedIndex, r.shMu.state.Lease.Replica.NodeID,
+		r.shMu.state.RaftClosedTimestamp)
+
+	return replicaUnavailableError(err, desc, replDesc, isLiveMap, r.raftStatusRLocked(), ct)
 }

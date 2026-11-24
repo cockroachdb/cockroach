@@ -14,7 +14,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config/zonepb"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -48,7 +47,7 @@ func TestShowTraceReplica(t *testing.T) {
 					DefaultSystemZoneConfigOverride: &zoneConfig,
 				},
 			},
-			StoreSpecs: []base.StoreSpec{{InMemory: true, Attributes: roachpb.Attributes{Attrs: []string{node}}}},
+			StoreSpecs: []base.StoreSpec{{InMemory: true, Attributes: []string{node}}},
 		}
 	}
 	tcArgs := base.TestClusterArgs{ServerArgsPerNode: map[int]base.TestServerArgs{

@@ -9,9 +9,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/geo"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/oidext"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgrepl/lsn"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
@@ -50,8 +52,8 @@ func MarshalLegacy(colType *types.T, val tree.Datum) (roachpb.Value, error) {
 			return r, nil
 		}
 	case types.IntFamily:
-		if v, ok := tree.AsDInt(val); ok {
-			r.SetInt(int64(v))
+		if v, ok := val.(*tree.DInt); ok {
+			r.SetInt(int64(*v))
 			return r, nil
 		}
 	case types.FloatFamily:
@@ -166,10 +168,13 @@ func MarshalLegacy(colType *types.T, val tree.Datum) (roachpb.Value, error) {
 		}
 	case types.PGVectorFamily:
 		if v, ok := val.(*tree.DPGVector); ok {
-			data, err := vector.Encode(nil, v.T)
-			if err != nil {
-				return r, err
-			}
+			data := vector.Encode(nil, v.T)
+			r.SetBytes(data)
+			return r, nil
+		}
+	case types.LTreeFamily:
+		if v, ok := val.(*tree.DLTree); ok {
+			data := encoding.EncodeUntaggedLTreeValue(nil, v.LTree)
 			r.SetBytes(data)
 			return r, nil
 		}
@@ -195,7 +200,7 @@ func MarshalLegacy(colType *types.T, val tree.Datum) (roachpb.Value, error) {
 			return r, nil
 		}
 	case types.CollatedStringFamily:
-		if v, ok := val.(*tree.DCollatedString); ok {
+		if v, ok := tree.AsDCollatedString(val); ok {
 			if lex.LocaleNamesAreEqual(v.Locale, colType.Locale()) {
 				r.SetString(v.Contents)
 				return r, nil
@@ -286,6 +291,9 @@ func UnmarshalLegacy(a *tree.DatumAlloc, typ *types.T, value roachpb.Value) (tre
 		if typ.Oid() == oid.T_name {
 			return a.NewDName(tree.DString(v)), nil
 		}
+		if typ.Oid() == oid.T_aclitem {
+			return a.NewDACLItem(tree.DString(v))
+		}
 		return a.NewDString(tree.DString(v)), nil
 	case types.BytesFamily:
 		v, err := value.GetBytes()
@@ -354,6 +362,9 @@ func UnmarshalLegacy(a *tree.DatumAlloc, typ *types.T, value roachpb.Value) (tre
 		if err != nil {
 			return nil, err
 		}
+		if typ.Oid() == oidext.T_citext {
+			return a.NewDCIText(string(v))
+		}
 		return a.NewDCollatedString(string(v), typ.Locale())
 	case types.UuidFamily:
 		v, err := value.GetBytes()
@@ -382,6 +393,16 @@ func UnmarshalLegacy(a *tree.DatumAlloc, typ *types.T, value roachpb.Value) (tre
 			return nil, err
 		}
 		return a.NewDOid(tree.MakeDOid(oid.Oid(v), typ)), nil
+	case types.LTreeFamily:
+		v, err := value.GetBytes()
+		if err != nil {
+			return nil, err
+		}
+		_, l, err := encoding.DecodeUntaggedLTreeValue(v)
+		if err != nil {
+			return nil, err
+		}
+		return tree.NewDLTree(l), nil
 	case types.ArrayFamily:
 		v, err := value.GetBytes()
 		if err != nil {
@@ -432,7 +453,7 @@ func UnmarshalLegacy(a *tree.DatumAlloc, typ *types.T, value roachpb.Value) (tre
 		if err != nil {
 			return nil, err
 		}
-		vec, err := vector.Decode(v)
+		_, vec, err := vector.Decode(v)
 		if err != nil {
 			return nil, err
 		}

@@ -20,7 +20,7 @@ const InternalAppNamePrefix = ReportableAppNamePrefix + "internal"
 
 // AttributedToUserInternalAppNamePrefix indicates that the application name
 // identifies an internally-executed query that should be attributed to the
-// user.
+// user. Specifically, this means having the queries show up in SQL activity pages.
 const AttributedToUserInternalAppNamePrefix = ReportableAppNamePrefix + "public-internal"
 
 // DelegatedAppNamePrefix is added to a regular client application
@@ -45,67 +45,79 @@ const SystemTenantName = "system"
 
 // Names of tables in the system database.
 const (
-	NamespaceTableName                     SystemTableName = "namespace"
-	DescriptorTableName                    SystemTableName = "descriptor"
-	UsersTableName                         SystemTableName = "users"
-	ZonesTableName                         SystemTableName = "zones"
-	SettingsTableName                      SystemTableName = "settings"
-	DescIDSequenceTableName                SystemTableName = "descriptor_id_seq"
-	TenantIDSequenceTableName              SystemTableName = "tenant_id_seq"
-	TenantsTableName                       SystemTableName = "tenants"
-	LeaseTableName                         SystemTableName = "lease"
-	EventLogTableName                      SystemTableName = "eventlog"
-	RangeEventTableName                    SystemTableName = "rangelog"
-	UITableName                            SystemTableName = "ui"
-	JobsTableName                          SystemTableName = "jobs"
-	JobsProgressTableName                  SystemTableName = "job_progress"
-	JobsProgressHistoryTableName           SystemTableName = "job_progress_history"
-	JobsStatusTableName                    SystemTableName = "job_status"
-	JobsMessageTableName                   SystemTableName = "job_message"
-	WebSessionsTableName                   SystemTableName = "web_sessions"
-	TableStatisticsTableName               SystemTableName = "table_statistics"
-	LocationsTableName                     SystemTableName = "locations"
-	RoleMembersTableName                   SystemTableName = "role_members"
-	CommentsTableName                      SystemTableName = "comments"
-	ReportsMetaTableName                   SystemTableName = "reports_meta"
-	ReplicationConstraintStatsTableName    SystemTableName = "replication_constraint_stats"
-	ReplicationCriticalLocalitiesTableName SystemTableName = "replication_critical_localities"
-	ReplicationStatsTableName              SystemTableName = "replication_stats"
-	ProtectedTimestampsMetaTableName       SystemTableName = "protected_ts_meta"
-	ProtectedTimestampsRecordsTableName    SystemTableName = "protected_ts_records"
-	RoleOptionsTableName                   SystemTableName = "role_options"
-	StatementBundleChunksTableName         SystemTableName = "statement_bundle_chunks"
-	StatementDiagnosticsRequestsTableName  SystemTableName = "statement_diagnostics_requests"
-	StatementDiagnosticsTableName          SystemTableName = "statement_diagnostics"
-	ScheduledJobsTableName                 SystemTableName = "scheduled_jobs"
-	SqllivenessTableName                   SystemTableName = "sqlliveness"
-	MigrationsTableName                    SystemTableName = "migrations"
-	JoinTokensTableName                    SystemTableName = "join_tokens"
-	StatementStatisticsTableName           SystemTableName = "statement_statistics"
-	TransactionStatisticsTableName         SystemTableName = "transaction_statistics"
-	StatementActivityTableName             SystemTableName = "statement_activity"
-	TransactionActivityTableName           SystemTableName = "transaction_activity"
-	DatabaseRoleSettingsTableName          SystemTableName = "database_role_settings"
-	TenantUsageTableName                   SystemTableName = "tenant_usage"
-	SQLInstancesTableName                  SystemTableName = "sql_instances"
-	SpanConfigurationsTableName            SystemTableName = "span_configurations"
-	TaskPayloadsTableName                  SystemTableName = "task_payloads"
-	TenantSettingsTableName                SystemTableName = "tenant_settings"
-	TenantTasksTableName                   SystemTableName = "tenant_tasks"
-	SpanCountTableName                     SystemTableName = "span_count"
-	SystemPrivilegeTableName               SystemTableName = "privileges"
-	SystemExternalConnectionsTableName     SystemTableName = "external_connections"
-	RoleIDSequenceName                     SystemTableName = "role_id_seq"
-	SystemJobInfoTableName                 SystemTableName = "job_info"
-	SpanStatsUniqueKeys                    SystemTableName = "span_stats_unique_keys"
-	SpanStatsBuckets                       SystemTableName = "span_stats_buckets"
-	SpanStatsSamples                       SystemTableName = "span_stats_samples"
-	SpanStatsTenantBoundaries              SystemTableName = "span_stats_tenant_boundaries"
-	RegionalLiveness                       SystemTableName = "region_liveness"
-	MVCCStatistics                         SystemTableName = "mvcc_statistics"
-	StmtExecInsightsTableName              SystemTableName = "statement_execution_insights"
-	TxnExecInsightsTableName               SystemTableName = "transaction_execution_insights"
-	TableMetadata                          SystemTableName = "table_metadata"
+	NamespaceTableName                      SystemTableName = "namespace"
+	DescriptorTableName                     SystemTableName = "descriptor"
+	UsersTableName                          SystemTableName = "users"
+	ZonesTableName                          SystemTableName = "zones"
+	SettingsTableName                       SystemTableName = "settings"
+	DescIDSequenceTableName                 SystemTableName = "descriptor_id_seq"
+	TenantIDSequenceTableName               SystemTableName = "tenant_id_seq"
+	TenantsTableName                        SystemTableName = "tenants"
+	LeaseTableName                          SystemTableName = "lease"
+	EventLogTableName                       SystemTableName = "eventlog"
+	RangeEventTableName                     SystemTableName = "rangelog"
+	UITableName                             SystemTableName = "ui"
+	JobsTableName                           SystemTableName = "jobs"
+	JobsProgressTableName                   SystemTableName = "job_progress"
+	JobsProgressHistoryTableName            SystemTableName = "job_progress_history"
+	JobsStatusTableName                     SystemTableName = "job_status"
+	JobsMessageTableName                    SystemTableName = "job_message"
+	WebSessionsTableName                    SystemTableName = "web_sessions"
+	TableStatisticsTableName                SystemTableName = "table_statistics"
+	LocationsTableName                      SystemTableName = "locations"
+	RoleMembersTableName                    SystemTableName = "role_members"
+	ClusterMetricsTableName                 SystemTableName = "cluster_metrics"
+	CommentsTableName                       SystemTableName = "comments"
+	ReportsMetaTableName                    SystemTableName = "reports_meta"
+	ReplicationConstraintStatsTableName     SystemTableName = "replication_constraint_stats"
+	ReplicationCriticalLocalitiesTableName  SystemTableName = "replication_critical_localities"
+	ReplicationStatsTableName               SystemTableName = "replication_stats"
+	ProtectedTimestampsMetaTableName        SystemTableName = "protected_ts_meta"
+	ProtectedTimestampsRecordsTableName     SystemTableName = "protected_ts_records"
+	RoleOptionsTableName                    SystemTableName = "role_options"
+	StatementBundleChunksTableName          SystemTableName = "statement_bundle_chunks"
+	StatementDiagnosticsRequestsTableName   SystemTableName = "statement_diagnostics_requests"
+	StatementDiagnosticsTableName           SystemTableName = "statement_diagnostics"
+	TransactionDiagnosticsRequestsTableName SystemTableName = "transaction_diagnostics_requests"
+	TransactionDiagnosticsTableName         SystemTableName = "transaction_diagnostics"
+	ScheduledJobsTableName                  SystemTableName = "scheduled_jobs"
+	SqllivenessTableName                    SystemTableName = "sqlliveness"
+	MigrationsTableName                     SystemTableName = "migrations"
+	JoinTokensTableName                     SystemTableName = "join_tokens"
+	StatementStatisticsTableName            SystemTableName = "statement_statistics"
+	TransactionStatisticsTableName          SystemTableName = "transaction_statistics"
+	StatementActivityTableName              SystemTableName = "statement_activity"
+	TransactionActivityTableName            SystemTableName = "transaction_activity"
+	DatabaseRoleSettingsTableName           SystemTableName = "database_role_settings"
+	TenantUsageTableName                    SystemTableName = "tenant_usage"
+	SQLInstancesTableName                   SystemTableName = "sql_instances"
+	SpanConfigurationsTableName             SystemTableName = "span_configurations"
+	TaskPayloadsTableName                   SystemTableName = "task_payloads"
+	TenantSettingsTableName                 SystemTableName = "tenant_settings"
+	TenantTasksTableName                    SystemTableName = "tenant_tasks"
+	SpanCountTableName                      SystemTableName = "span_count"
+	SystemPrivilegeTableName                SystemTableName = "privileges"
+	SystemExternalConnectionsTableName      SystemTableName = "external_connections"
+	RoleIDSequenceName                      SystemTableName = "role_id_seq"
+	SystemJobInfoTableName                  SystemTableName = "job_info"
+	SpanStatsUniqueKeys                     SystemTableName = "span_stats_unique_keys"
+	SpanStatsBuckets                        SystemTableName = "span_stats_buckets"
+	SpanStatsSamples                        SystemTableName = "span_stats_samples"
+	SpanStatsTenantBoundaries               SystemTableName = "span_stats_tenant_boundaries"
+	RegionalLiveness                        SystemTableName = "region_liveness"
+	MVCCStatistics                          SystemTableName = "mvcc_statistics"
+	StmtExecInsightsTableName               SystemTableName = "statement_execution_insights"
+	TxnExecInsightsTableName                SystemTableName = "transaction_execution_insights"
+	TableMetadata                           SystemTableName = "table_metadata"
+	PreparedTransactionsTableName           SystemTableName = "prepared_transactions"
+	InspectErrorsTableName                  SystemTableName = "inspect_errors"
+	StatementHintsTableName                 SystemTableName = "statement_hints"
+	StatementsTableName                     SystemTableName = "statements"
+	TableStatisticsLocksTableName           SystemTableName = "table_statistics_locks"
+	AdvisoryLocksTableName                  SystemTableName = "advisory_locks"
+	ResourceGroupsTableName                 SystemTableName = "resource_groups"
+	ResourceGroupIDSequenceName             SystemTableName = "resource_group_id_seq"
+	VcpuUsageTableName                      SystemTableName = "vcpu_usage"
 )
 
 // Oid for virtual database and table.
@@ -138,6 +150,7 @@ const (
 	CrdbInternalCreateProcedureStmtsTableID
 	CrdbInternalCreateSchemaStmtsTableID
 	CrdbInternalCreateStmtsTableID
+	CrdbInternalCreateTriggerStmtsTableID
 	CrdbInternalCreateTypeStmtsTableID
 	CrdbInternalDatabasesTableID
 	CrdbInternalFeatureUsageID
@@ -204,9 +217,9 @@ const (
 	CrdbInternalShowTenantCapabilitiesCacheTableID
 	CrdbInternalInheritedRoleMembersTableID
 	CrdbInternalKVSystemPrivilegesViewID
-	CrdbInternalKVFlowControllerID
+	CrdbInternalKVFlowControllerID // obsolete
 	CrdbInternalKVFlowControllerIDV2
-	CrdbInternalKVFlowHandlesID
+	CrdbInternalKVFlowHandlesID // obsolete
 	CrdbInternalKVFlowHandlesIDV2
 	CrdbInternalKVFlowTokenDeductions
 	CrdbInternalKVFlowTokenDeductionsV2
@@ -219,9 +232,16 @@ const (
 	CrdbInternalPCRStreamSpansTableID
 	CrdbInternalPCRStreamCheckpointsTableID
 	CrdbInternalLDRProcessorTableID
+	CrdbInternalPCRProcessorTableID
 	CrdbInternalFullyQualifiedNamesViewID
 	CrdbInternalStoreLivenessSupportFrom
 	CrdbInternalStoreLivenessSupportFor
+	CrdbInternalClusterInspectErrorsViewID
+	CrdbInternalNodeActiveSessionHistoryTableID
+	CrdbInternalClusterActiveSessionHistoryTableID
+	// CrdbInternalTestID is reserved for tests that need to inject virtual tables
+	// into crdb_internal.
+	CrdbInternalTestID
 	InformationSchemaID
 	InformationSchemaAdministrableRoleAuthorizationsID
 	InformationSchemaApplicableRolesID
@@ -309,8 +329,10 @@ const (
 	InformationSchemaViewRoutineUsageTableID
 	InformationSchemaViewTableUsageTableID
 	InformationSchemaViewsTableID
+	InformationSchemaCrdbIndexUsageStatsiticsTableID
 	PgCatalogID
 	PgCatalogAggregateTableID
+	PgCatalogAiosTableID
 	PgCatalogAmTableID
 	PgCatalogAmopTableID
 	PgCatalogAmprocTableID
@@ -320,6 +342,7 @@ const (
 	PgCatalogAuthMembersTableID
 	PgCatalogAvailableExtensionVersionsTableID
 	PgCatalogAvailableExtensionsTableID
+	PgCatalogBackendMemoryContextsTableID
 	PgCatalogCastTableID
 	PgCatalogClassTableID
 	PgCatalogCollationTableID
@@ -341,6 +364,7 @@ const (
 	PgCatalogForeignTableTableID
 	PgCatalogGroupTableID
 	PgCatalogHbaFileRulesTableID
+	PgCatalogIdentFileMappingsTableID
 	PgCatalogIndexTableID
 	PgCatalogIndexesTableID
 	PgCatalogInheritsTableID
@@ -354,12 +378,14 @@ const (
 	PgCatalogOpclassTableID
 	PgCatalogOperatorTableID
 	PgCatalogOpfamilyTableID
+	PgCatalogParameterACLTableID
 	PgCatalogPartitionedTableTableID
 	PgCatalogPoliciesTableID
 	PgCatalogPolicyTableID
 	PgCatalogPreparedStatementsTableID
 	PgCatalogPreparedXactsTableID
 	PgCatalogProcTableID
+	PgCatalogPublicationNamespaceTableID
 	PgCatalogPublicationRelTableID
 	PgCatalogPublicationTableID
 	PgCatalogPublicationTablesTableID
@@ -379,23 +405,30 @@ const (
 	PgCatalogSharedDescriptionTableID
 	PgCatalogSharedSecurityLabelTableID
 	PgCatalogShdependTableID
+	PgCatalogShmemAllocationsNumaTableID
 	PgCatalogShmemAllocationsTableID
 	PgCatalogStatActivityTableID
 	PgCatalogStatAllIndexesTableID
 	PgCatalogStatAllTablesTableID
 	PgCatalogStatArchiverTableID
 	PgCatalogStatBgwriterTableID
+	PgCatalogStatCheckpointerTableID
 	PgCatalogStatDatabaseConflictsTableID
 	PgCatalogStatDatabaseTableID
 	PgCatalogStatGssapiTableID
+	PgCatalogStatIOTableID
 	PgCatalogStatProgressAnalyzeTableID
 	PgCatalogStatProgressBasebackupTableID
 	PgCatalogStatProgressClusterTableID
+	PgCatalogStatProgressCopyTableID
 	PgCatalogStatProgressCreateIndexTableID
 	PgCatalogStatProgressVacuumTableID
+	PgCatalogStatRecoveryPrefetchTableID
+	PgCatalogStatReplicationSlotsTableID
 	PgCatalogStatReplicationTableID
 	PgCatalogStatSlruTableID
 	PgCatalogStatSslTableID
+	PgCatalogStatSubscriptionStatsTableID
 	PgCatalogStatSubscriptionTableID
 	PgCatalogStatSysIndexesTableID
 	PgCatalogStatSysTablesTableID
@@ -403,6 +436,7 @@ const (
 	PgCatalogStatUserIndexesTableID
 	PgCatalogStatUserTablesTableID
 	PgCatalogStatWalReceiverTableID
+	PgCatalogStatWalTableID
 	PgCatalogStatXactAllTablesTableID
 	PgCatalogStatXactSysTablesTableID
 	PgCatalogStatXactUserFunctionsTableID
@@ -419,6 +453,7 @@ const (
 	PgCatalogStatisticExtDataTableID
 	PgCatalogStatisticExtTableID
 	PgCatalogStatisticTableID
+	PgCatalogStatsExtExprsTableID
 	PgCatalogStatsExtTableID
 	PgCatalogStatsTableID
 	PgCatalogSubscriptionRelTableID
@@ -439,11 +474,15 @@ const (
 	PgCatalogUserMappingsTableID
 	PgCatalogUserTableID
 	PgCatalogViewsTableID
+	PgCatalogWaitEventsTableID
 	PgExtensionSchemaID
 	PgExtensionGeographyColumnsTableID
 	PgExtensionGeometryColumnsTableID
 	PgExtensionSpatialRefSysTableID
-	MinVirtualID = PgExtensionSpatialRefSysTableID
+	InformationSchemaCrdbNodeActiveSessionHistoryTableID
+	InformationSchemaCrdbClusterActiveSessionHistoryTableID
+	CrdbInternalClusterHeldAdvisoryLocksTableID
+	MinVirtualID = CrdbInternalClusterHeldAdvisoryLocksTableID
 )
 
 // ConstraintType is used to identify the type of a constraint.

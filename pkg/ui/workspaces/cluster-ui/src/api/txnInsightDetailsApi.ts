@@ -10,7 +10,8 @@ import {
   StmtFailureCodesStr,
   TxnInsightDetails,
 } from "../insights";
-import { maybeError } from "../util";
+import { TimeScale, timeScaleRangeToObj } from "../timeScaleDropdown";
+import { maybeError, useSwrWithClusterId } from "../util";
 
 import { getTxnInsightsContentionDetailsApi } from "./contentionApi";
 import {
@@ -52,6 +53,23 @@ export type TxnInsightDetailsResponse = {
   result: TxnInsightDetails;
   errors: TxnInsightDetailsReqErrs;
 };
+
+export function useTxnInsightDetails(
+  txnExecutionID: string,
+  timeScale: TimeScale,
+) {
+  return useSwrWithClusterId<SqlApiResponse<TxnInsightDetailsResponse>>(
+    txnExecutionID ? { name: "txnInsightDetails", txnExecutionID } : null,
+    () => {
+      const { start, end } = timeScaleRangeToObj(timeScale);
+      return getTxnInsightDetailsApi({ txnExecutionID, start, end });
+    },
+    {
+      revalidateOnFocus: false,
+      revalidateOnReconnect: false,
+    },
+  );
+}
 
 export async function getTxnInsightDetailsApi(
   req: TxnInsightDetailsRequest,

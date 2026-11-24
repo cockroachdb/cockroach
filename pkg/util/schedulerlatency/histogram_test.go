@@ -87,13 +87,18 @@ func TestRuntimeHistogram(t *testing.T) {
 					Buckets: parseBuckets(t, d.Input),
 				}
 				require.True(t, len(his.Buckets) == len(his.Counts)+1)
-				rh.update(his)
+				rh.recordDelta(his)
 				return ""
 
 			case "print":
 				var buf strings.Builder
-				count, sum := rh.CumulativeSnapshot().Total()
-				buf.WriteString(fmt.Sprintf("count=%d sum=%0.2f\n", count, sum))
+				// CumulativeSnapshot returns cumulative counts.
+				cumCount, cumSum := rh.CumulativeSnapshot().Total()
+				buf.WriteString(fmt.Sprintf("cumulative count=%d sum=%0.2f\n", cumCount, cumSum))
+				// WindowedSnapshot returns only the counts from the most recent
+				// update window, not cumulative values.
+				winCount, winSum := rh.WindowedSnapshot().Total()
+				buf.WriteString(fmt.Sprintf("windowed count=%d sum=%0.2f\n", winCount, winSum))
 				hist := rh.ToPrometheusMetric().GetHistogram()
 				require.NotNil(t, hist)
 				buf.WriteString("buckets:\n")

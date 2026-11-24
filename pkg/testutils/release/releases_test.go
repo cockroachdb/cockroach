@@ -9,7 +9,7 @@ import (
 	"math/rand"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/util/version"
+	"github.com/cockroachdb/version"
 	"github.com/stretchr/testify/require"
 )
 
@@ -39,6 +39,9 @@ var (
 		},
 		"24.1": {
 			Predecessor: "23.2",
+		},
+		"24.2": {
+			Predecessor: "24.1", // unreleased predecessor
 		},
 	}
 
@@ -89,6 +92,12 @@ func TestLatestAndRandomPredecessor(t *testing.T) {
 			expectedLatest: "23.2.0-beta.1",
 			expectedRandom: "23.2.0-beta.1",
 		},
+		{
+			name:           "skips unreleased predecessor",
+			v:              "v24.2.0",
+			expectedLatest: "23.2.0-beta.1",
+			expectedRandom: "23.2.0-beta.1",
+		},
 	}
 
 	oldReleaseData := releaseData
@@ -98,8 +107,9 @@ func TestLatestAndRandomPredecessor(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			resetRNG() // deterministic results
-			latestPred, latestErr := LatestPredecessor(version.MustParse(tc.v))
-			randomPred, randomErr := RandomPredecessor(rng, version.MustParse(tc.v))
+			v := version.MustParse(tc.v)
+			latestPred, latestErr := LatestPredecessor(&v)
+			randomPred, randomErr := RandomPredecessor(rng, &v)
 			if tc.expectedErr == "" {
 				require.NoError(t, latestErr)
 				require.NoError(t, randomErr)
@@ -160,8 +170,9 @@ func TestLatestPredecessorHistory(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			resetRNG() // deterministic results
-			latestHistory, latestErr := LatestPredecessorHistory(version.MustParse(tc.v), tc.k)
-			randomHistory, randomErr := RandomPredecessorHistory(rng, version.MustParse(tc.v), tc.k)
+			v := version.MustParse(tc.v)
+			latestHistory, latestErr := LatestPredecessorHistory(&v, tc.k)
+			randomHistory, randomErr := RandomPredecessorHistory(rng, &v, tc.k)
 			if tc.expectedErr == "" {
 				require.NoError(t, latestErr)
 				require.NoError(t, randomErr)
@@ -175,6 +186,30 @@ func TestLatestPredecessorHistory(t *testing.T) {
 			require.Equal(t, tc.expectedRandom, randomHistory)
 		})
 	}
+}
+
+func TestLatestPatch(t *testing.T) {
+	oldReleaseData := releaseData
+	releaseData = testReleaseData
+	defer func() { releaseData = oldReleaseData }()
+
+	t.Run("released series", func(t *testing.T) {
+		patch, err := LatestPatch("22.2")
+		require.NoError(t, err)
+		require.Equal(t, "22.2.8", patch)
+	})
+
+	t.Run("unreleased series returns error", func(t *testing.T) {
+		_, err := LatestPatch("24.1")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "no releases available")
+	})
+
+	t.Run("unknown series returns error", func(t *testing.T) {
+		_, err := LatestPatch("99.9")
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "no release information")
+	})
 }
 
 func TestMajorReleasesBetween(t *testing.T) {
@@ -210,7 +245,13 @@ func TestMajorReleasesBetween(t *testing.T) {
 			name:     "v1 and v2 are multiple major releases apart",
 			v1:       "19.2.3",
 			v2:       "24.1.10",
-			expected: 5,
+			expected: 4, // 24.1 is unreleased and not counted
+		},
+		{
+			name:     "skips unreleased series in count",
+			v1:       "23.2.0",
+			v2:       "24.2.0",
+			expected: 0,
 		},
 	}
 
@@ -221,11 +262,11 @@ func TestMajorReleasesBetween(t *testing.T) {
 
 			// We should get the same result regardless of the order of
 			// arguments.
-			count, err := MajorReleasesBetween(vv1, vv2)
+			count, err := MajorReleasesBetween(&vv1, &vv2)
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, count)
 
-			count, err = MajorReleasesBetween(vv2, vv1)
+			count, err = MajorReleasesBetween(&vv2, &vv1)
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, count)
 		})

@@ -23,6 +23,9 @@ import (
 	"google.golang.org/grpc/credentials"
 	grpcpeer "google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
+	"storj.io/drpc"
+	"storj.io/drpc/drpcctx"
+	"storj.io/drpc/drpcmux"
 )
 
 var errTLSInfoMissing = authError("TLSInfo is not available in request context")
@@ -41,11 +44,14 @@ func authErrorf(format string, a ...interface{}) error {
 type kvAuth struct {
 	sv     *settings.Values
 	tenant tenantAuthorizer
+	isDRPC bool
 }
 
 // kvAuth implements the auth interface.
-func (a kvAuth) AuthUnary() grpc.UnaryServerInterceptor   { return a.unaryInterceptor }
-func (a kvAuth) AuthStream() grpc.StreamServerInterceptor { return a.streamInterceptor }
+func (a kvAuth) AuthUnary() grpc.UnaryServerInterceptor          { return a.unaryInterceptor }
+func (a kvAuth) AuthDRPCUnary() drpcmux.UnaryServerInterceptor   { return a.unaryDRPCInterceptor }
+func (a kvAuth) AuthDRPCStream() drpcmux.StreamServerInterceptor { return a.streamDRPCInterceptor }
+func (a kvAuth) AuthStream() grpc.StreamServerInterceptor        { return a.streamInterceptor }
 
 func (a kvAuth) unaryInterceptor(
 	ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler,
@@ -81,7 +87,41 @@ func (a kvAuth) unaryInterceptor(
 			return nil, err
 		}
 	case authzTenantServerToTenantServer:
-	// Tenant servers can see all of each other's RPCs.
+		// Tenant servers can see all of each other's RPCs.
+	case authzPrivilegedPeerToServer:
+		// Privileged clients (root/node) can see all RPCs.
+	default:
+		return nil, errors.AssertionFailedf("unhandled case: %T", err)
+	}
+	return handler(ctx, req)
+}
+
+func (a kvAuth) unaryDRPCInterceptor(
+	ctx context.Context, req interface{}, rpc string, handler drpcmux.UnaryHandler,
+) (out interface{}, err error) {
+	// Perform authentication and authz selection.
+	authnRes, authz, err := a.authenticateAndSelectAuthzRule(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Enhance the context to ensure the API handler only sees a client tenant ID
+	// via roachpb.ClientTenantFromContext when relevant.
+	ctx = contextForRequest(ctx, authnRes)
+
+	// Handle authorization according to the selected authz method.
+	switch ar := authz.(type) {
+	case authzTenantServerToKVServer:
+		// Clear any leftover incoming RPC metadata, if this call is
+		// originating from a RPC handler function called as a result of a
+		// tenant call. See unaryInterceptor for more details.
+		ctx = grpcutil.ClearIncomingContext(ctx)
+
+		if err := a.tenant.authorize(ctx, a.sv, roachpb.TenantID(ar), rpc, req); err != nil {
+			return nil, err
+		}
+	case authzTenantServerToTenantServer:
+		// Tenant servers can see all of each other's RPCs.
 	case authzPrivilegedPeerToServer:
 		// Privileged clients (root/node) can see all RPCs.
 	default:
@@ -143,13 +183,62 @@ func (a kvAuth) streamInterceptor(
 			},
 		}
 	case authzTenantServerToTenantServer:
-	// Tenant servers can see all of each other's RPCs.
+		// Tenant servers can see all of each other's RPCs.
 	case authzPrivilegedPeerToServer:
 		// Privileged clients (root/node) can see all RPCs.
 	default:
 		return errors.AssertionFailedf("unhandled case: %T", err)
 	}
 	return handler(srv, ss)
+}
+
+func (a kvAuth) streamDRPCInterceptor(
+	stream drpc.Stream, rpc string, handler drpcmux.StreamHandler,
+) (out interface{}, err error) {
+	ctx := stream.Context()
+	// Perform authentication and authz selection.
+	authnRes, authz, err := a.authenticateAndSelectAuthzRule(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Enhance the context to ensure the API handler only sees a client tenant ID
+	// via roachpb.ClientTenantFromContext when relevant.
+	ctx = contextForRequest(ctx, authnRes)
+
+	// Handle authorization according to the selected authz method.
+	switch ar := authz.(type) {
+	case authzTenantServerToKVServer:
+		// Clear any leftover incoming DRPC metadata, if this call is
+		// originating from a RPC handler function called as a result of a
+		// tenant call. See streamInterceptor for more details.
+
+		if rpc == "/cockroach.blobs.Blob/PutStream" {
+			ctx = grpcutil.ClearIncomingContextExcept(ctx, "filename")
+		} else {
+			ctx = grpcutil.ClearIncomingContext(ctx)
+		}
+
+		originalStream := stream
+		stream = &wrappedDRPCServerStream{
+			Stream: originalStream,
+			ctx:    ctx,
+			recv: func(m drpc.Message, enc drpc.Encoding) error {
+				if err := originalStream.MsgRecv(m, enc); err != nil {
+					return err
+				}
+				// 'm' is now populated and contains the request from the client.
+				return a.tenant.authorize(ctx, a.sv, roachpb.TenantID(ar), rpc, m)
+			},
+		}
+	case authzTenantServerToTenantServer:
+		// Tenant servers can see all of each other's RPCs.
+	case authzPrivilegedPeerToServer:
+		// Privileged clients (root/node) can see all RPCs.
+	default:
+		return nil, errors.AssertionFailedf("unhandled case: %T", err)
+	}
+	return handler(stream)
 }
 
 func (a kvAuth) authenticateAndSelectAuthzRule(
@@ -162,7 +251,7 @@ func (a kvAuth) authenticateAndSelectAuthzRule(
 	}
 
 	// Select authorization rules suitable for the peer.
-	authz, err := a.selectAuthzMethod(ctx, authnRes)
+	authz, err := a.selectAuthzMethod(authnRes)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -176,19 +265,30 @@ type authnResult interface {
 	authnResult()
 }
 
-func getClientCert(ctx context.Context) (*x509.Certificate, error) {
-	p, ok := grpcpeer.FromContext(ctx)
-	if !ok {
-		return nil, errTLSInfoMissing
+func (a kvAuth) getClientCert(ctx context.Context) (*x509.Certificate, error) {
+	var certs []*x509.Certificate
+	if a.isDRPC {
+		info, ok := drpcctx.GetPeerConnectionInfo(ctx)
+		if !ok {
+			return nil, errTLSInfoMissing
+		}
+		certs = info.Certificates
+	} else {
+		p, ok := grpcpeer.FromContext(ctx)
+		if !ok {
+			return nil, errTLSInfoMissing
+		}
+		tlsInfo, ok := p.AuthInfo.(credentials.TLSInfo)
+		if !ok {
+			return nil, errTLSInfoMissing
+		}
+		certs = tlsInfo.State.PeerCertificates
 	}
 
-	tlsInfo, ok := p.AuthInfo.(credentials.TLSInfo)
-	if !ok || len(tlsInfo.State.PeerCertificates) == 0 {
+	if len(certs) == 0 {
 		return nil, errTLSInfoMissing
 	}
-
-	clientCert := tlsInfo.State.PeerCertificates[0]
-	return clientCert, nil
+	return certs[0], nil
 }
 
 // authnSuccessPeerIsTenantServer indicates authentication has
@@ -247,7 +347,7 @@ func (a kvAuth) authenticateLocalRequest(
 ) (authnResult, error) {
 	// Sanity check: verify that we do not also have gRPC network credentials
 	// in the context. This would indicate that metadata was improperly propagated.
-	maybeTid, err := tenantIDFromRPCMetadata(ctx)
+	maybeTid, err := a.tenantIDFromRPCMetadata(ctx)
 	if err != nil || maybeTid.IsSet() {
 		logcrash.ReportOrPanic(ctx, a.sv, "programming error: network credentials in internal adapter request (%v, %v)", maybeTid, err)
 		return nil, authErrorf("programming error")
@@ -268,12 +368,12 @@ func (a kvAuth) authenticateLocalRequest(
 func (a kvAuth) authenticateNetworkRequest(ctx context.Context) (authnResult, error) {
 	// We will need to look at the TLS cert in any case, so extract it
 	// first.
-	clientCert, err := getClientCert(ctx)
+	clientCert, err := a.getClientCert(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	tenantIDFromMetadata, err := tenantIDFromRPCMetadata(ctx)
+	tenantIDFromMetadata, err := a.tenantIDFromRPCMetadata(ctx)
 	if err != nil {
 		return nil, authErrorf("client provided invalid tenant ID: %v", err)
 	}
@@ -298,41 +398,96 @@ func (a kvAuth) authenticateNetworkRequest(ctx context.Context) (authnResult, er
 	}
 
 	// We are using TLS, but the peer is not using a client tenant cert.
-	// In that case, we only allow RPCs if the principal is 'node' or
-	// 'root' and the tenant scope in the cert matches this server
-	// (either the cert has scope "global" or its scope tenant ID
-	// matches our own). The client could also present a certificate with subject
-	// DN equalling rootSubject or nodeSubject set using
-	// root-cert-distinguished-name and node-cert-distinguished-name cli flags
-	// respectively. Additionally if subject_required cluster setting is set, both
-	// root and node users must have a valid DN set.
+	// In that case, we only allow RPCs if the client presents a valid root or
+	// node certificate. Identity is validated using one of:
+	//
+	// 1. SAN validation (if ClientCertSANRequired is enabled): validates against
+	//    root-cert-san or node-cert-san CLI flags. If SAN fails and
+	//    ClientCertSubjectRequired is also enabled, falls back to DN.
+	// 2. DN validation: validates against root-cert-distinguished-name or
+	//    node-cert-distinguished-name CLI flags.
+	// 3. Scope-based validation: validates that the principal is 'root' or
+	//    'node' and the tenant scope matches this server. Used when neither
+	//    SAN nor DN is configured.
+	//
+	// In all cases, the cert's tenant scope is verified to ensure the
+	// principal is authorized for this server's tenant.
 	//
 	// TODO(benesch): the vast majority of RPCs should be limited to
 	// just NodeUser. This is not a security concern, as RootUser has
 	// access to read and write all data, merely good hygiene. For
 	// example, there is no reason to permit the root user to send raw
 	// Raft RPCs.
-	rootOrNodeDNSet, certDNMatchesRootOrNodeDN := security.CheckCertDNMatchesRootDNorNodeDN(clientCert)
-	if rootOrNodeDNSet && !certDNMatchesRootOrNodeDN {
-		return nil, authErrorf(
-			"need root or node client cert to perform RPCs on this server: cert dn did not match set root or node dn",
-		)
-	}
-	if !rootOrNodeDNSet {
-		if security.ClientCertSubjectRequired.Get(a.sv) {
-			return nil, authErrorf(
-				"root and node roles do not have valid DNs set which subject_required cluster setting mandates",
-			)
-		}
-		if err := checkRootOrNodeInScope(clientCert, a.tenant.tenantID); err != nil {
-			return nil, err
-		}
+	if err := a.validateRootOrNodeClientCert(clientCert); err != nil {
+		return nil, err
 	}
 
 	if tenantIDFromMetadata.IsSet() {
 		return authnSuccessPeerIsTenantServer(tenantIDFromMetadata), nil
 	}
 	return authnSuccessPeerIsPrivileged{}, nil
+}
+
+// validateRootOrNodeClientCert validates that clientCert is authorized for
+// privileged RPC access as a root or node user. Identity is validated via
+// SAN (if ClientCertSANRequired is enabled), DN, or certificate scope.
+// In all paths, the cert's tenant scope is checked to ensure the principal
+// is authorized for this server's tenant. Returns an error if validation
+// fails.
+func (a kvAuth) validateRootOrNodeClientCert(clientCert *x509.Certificate) error {
+	if security.ClientCertSANRequired.Get(a.sv) {
+		// SAN validation is enabled - try SAN first, then fallback to DN.
+		certSANMatchesRootOrNodeSAN := security.CheckCertSANMatchesRootOrNodeSAN(clientCert)
+		if certSANMatchesRootOrNodeSAN {
+			// Check for root or node in tenant scope if SAN matching is enabled.
+			if err := checkRootOrNodeInScope(clientCert, a.tenant.tenantID); err != nil {
+				return err
+			}
+			return nil
+		}
+
+		// DN not configured
+		if !security.ClientCertSubjectRequired.Get(a.sv) {
+			return authErrorf(
+				"root and node roles do not have valid SANs set and subject_required cluster setting is not enabled",
+			)
+		}
+
+		// SAN didn't match, try DN as fallback
+		_, certDNMatchesRootOrNodeDN := security.CheckCertDNMatchesRootDNorNodeDN(clientCert)
+		if certDNMatchesRootOrNodeDN {
+			// Check for root or node in tenant scope if Subject matching is enabled.
+			if err := checkRootOrNodeInScope(clientCert, a.tenant.tenantID); err != nil {
+				return err
+			}
+			return nil
+		}
+
+		// When SAN is explicitly enabled, we don't fall back to scope-based validation
+		// as scope alone doesn't confirm identity
+		return authErrorf(
+			"need root or node client cert to perform RPCs on this server: SAN and DN validation failed",
+		)
+	}
+
+	// SAN not enabled, use DN-based validation with scope fallback
+	rootOrNodeDNSet, certDNMatchesRootOrNodeDN := security.CheckCertDNMatchesRootDNorNodeDN(clientCert)
+	if rootOrNodeDNSet && !certDNMatchesRootOrNodeDN {
+		return authErrorf(
+			"need root or node client cert to perform RPCs on this server: cert dn did not match set root or node dn",
+		)
+	}
+	if !rootOrNodeDNSet {
+		if security.ClientCertSubjectRequired.Get(a.sv) {
+			return authErrorf(
+				"root and node roles do not have valid DNs set which subject_required cluster setting mandates",
+			)
+		}
+		if err := checkRootOrNodeInScope(clientCert, a.tenant.tenantID); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // requiredAuthzMethod is a sum type that describes which authorization
@@ -357,9 +512,7 @@ func (authzPrivilegedPeerToServer) rpcAuthzMethod()     {}
 
 // selectAuthzMethod selects the authorization rule to use for the
 // given authentication event.
-func (a kvAuth) selectAuthzMethod(
-	ctx context.Context, ar authnResult,
-) (requiredAuthzMethod, error) {
+func (a kvAuth) selectAuthzMethod(ar authnResult) (requiredAuthzMethod, error) {
 	switch res := ar.(type) {
 	case authnSuccessPeerIsTenantServer:
 		// The client is a tenant server. We have two possible cases:
@@ -391,10 +544,18 @@ func (a kvAuth) selectAuthzMethod(
 // checkRootOrNodeInScope checks that the root or node principals are
 // present in the cert user scopes.
 func checkRootOrNodeInScope(clientCert *x509.Certificate, serverTenantID roachpb.TenantID) error {
+	rootLoginDisabledValidate := false
+	debugUserScopedCert := false
+	debugUserLoginNotAllowed := false
+
 	containsFn := func(scope security.CertificateUserScope) bool {
 		// Only consider global scopes or scopes that match this server.
 		if !(scope.Global || scope.TenantID == serverTenantID) {
 			return false
+		}
+
+		if security.CheckRootLoginDisallowed() && scope.Username == username.RootUser {
+			rootLoginDisabledValidate = true
 		}
 
 		// If we get a scope that matches the Node user, immediately return.
@@ -402,10 +563,26 @@ func checkRootOrNodeInScope(clientCert *x509.Certificate, serverTenantID roachpb
 			return true
 		}
 
+		if scope.Username == username.DebugUser {
+			debugUserScopedCert = true
+			// Check if debug user login is allowed
+			if !security.CheckDebugUserLoginAllowed() {
+				debugUserLoginNotAllowed = true
+			}
+		}
+
 		return false
 	}
 	ok, err := security.CertificateUserScopeContainsFunc(clientCert, containsFn)
-	if ok || err != nil {
+	if ok || err != nil || debugUserScopedCert {
+		if rootLoginDisabledValidate {
+			return authError("failed to perform RPC, as root login has been disallowed")
+		}
+
+		if debugUserLoginNotAllowed {
+			return authError("failed to perform RPC, as debug_user login is not allowed")
+		}
+
 		return err
 	}
 	certUserScope, err := security.GetCertificateUserScope(clientCert)
@@ -488,9 +665,13 @@ func newTenantClientCreds(tid roachpb.TenantID) credentials.PerRPCCredentials {
 	}
 }
 
+func newPerRPCTIDMetdata(tid roachpb.TenantID) (string, string) {
+	return clientTIDMetadataHeaderKey, fmt.Sprint(tid)
+}
+
 // tenantIDFromRPCMetadata checks if there is a tenant ID in
 // the incoming gRPC metadata.
-func tenantIDFromRPCMetadata(ctx context.Context) (roachpb.TenantID, error) {
+func (a kvAuth) tenantIDFromRPCMetadata(ctx context.Context) (roachpb.TenantID, error) {
 	val, ok := grpcutil.FastFirstValueFromIncomingContext(ctx, clientTIDMetadataHeaderKey)
 	if !ok {
 		return roachpb.TenantID{}, nil

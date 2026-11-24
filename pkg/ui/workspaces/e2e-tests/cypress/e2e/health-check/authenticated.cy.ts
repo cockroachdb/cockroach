@@ -4,6 +4,7 @@
 // included in the /LICENSE file.
 
 import { SQLPrivilege } from "../../support/types";
+import { isTextGreaterThanZero } from "../../support/utils";
 
 describe("health check: authenticated user", () => {
   it("serves a DB Console overview page", () => {
@@ -22,14 +23,19 @@ describe("health check: authenticated user", () => {
     cy.findByText("Capacity Usage", { selector: "h3>span" });
     cy.findByText("Node Status");
     cy.findByText("Replication Status");
-
+    // Asserts that storage usable from nodes_ui metrics is populated
+    cy.get(".cluster-summary__metric.storage-usable").should(
+      isTextGreaterThanZero,
+    );
+    // Asserts that there is at least 1 live node
+    cy.get(".cluster-summary__metric.live-nodes").should(isTextGreaterThanZero);
     // Check for sidebar contents
     cy.findByRole("navigation").within(() => {
       cy.findByRole("link", { name: "Overview" });
       cy.findByRole("link", { name: "Metrics" });
       cy.findByRole("link", { name: "Databases" });
       cy.findByRole("link", { name: "SQL Activity" });
-      cy.findByRole("link", { name: "Hot Ranges" });
+      cy.findByRole("link", { name: /^(Hot|Top) Ranges$/ });
       cy.findByRole("link", { name: "Jobs" });
       cy.findByRole("link", { name: "Advanced Debug" });
     });

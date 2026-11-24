@@ -113,7 +113,7 @@ func TestReplicaIsBehind(t *testing.T) {
 }
 
 func TestReplicaMayNeedSnapshot(t *testing.T) {
-	const firstIndex = 10
+	const compactedIndex = 9
 	const replicaID = 3
 	makeStatus := func(f func(*raft.Status)) *raft.Status {
 		st := new(raft.Status)
@@ -197,7 +197,7 @@ func TestReplicaMayNeedSnapshot(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			require.Equal(t, tt.expect, ReplicaMayNeedSnapshot(tt.st, firstIndex, replicaID))
+			require.Equal(t, tt.expect, ReplicaMayNeedSnapshot(tt.st, compactedIndex, replicaID))
 		})
 	}
 }

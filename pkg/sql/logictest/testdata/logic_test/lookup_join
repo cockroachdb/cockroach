@@ -1484,6 +1484,113 @@ SELECT a, b, c, d, e, f FROM abc INNER LOOKUP JOIN def ON f < a AND f >= b ORDER
 statement ok
 RESET variable_inequality_lookup_join_enabled
 
+query IIIIII colnames
+SELECT * FROM abc INNER LOOKUP JOIN def ON f = a ORDER BY a, c, e;
+----
+a  b     c  d     e  f
+1  1     2  2     1  1
+1  1     2  NULL  2  1
+2  1     1  1     1  2
+2  NULL  2  1     1  2
+
+query IIIIII colnames
+SELECT * FROM abc INNER LOOKUP JOIN def ON f = a ORDER BY a, c, e DESC;
+----
+a  b     c  d     e  f
+1  1     2  NULL  2  1
+1  1     2  2     1  1
+2  1     1  1     1  2
+2  NULL  2  1     1  2
+
+query IIIIII colnames
+SELECT * FROM abc INNER LOOKUP JOIN def_e_desc ON f = a ORDER BY a, c, e;
+----
+a  b     c  d     e  f
+1  1     2  2     1  1
+1  1     2  NULL  2  1
+2  1     1  1     1  2
+2  NULL  2  1     1  2
+
+query IIIIII colnames
+SELECT * FROM abc INNER LOOKUP JOIN def_e_desc ON f = a ORDER BY a, c, e DESC;
+----
+a  b     c  d     e  f
+1  1     2  NULL  2  1
+1  1     2  2     1  1
+2  1     1  1     1  2
+2  NULL  2  1     1  2
+
+query IIIIII colnames
+SELECT * FROM abc INNER LOOKUP JOIN def ON f = a AND e >= c-1 ORDER BY a, c, e;
+----
+a  b     c  d     e  f
+1  1     2  2     1  1
+1  1     2  NULL  2  1
+2  1     1  1     1  2
+2  NULL  2  1     1  2
+
+query IIIIII colnames
+SELECT * FROM abc INNER LOOKUP JOIN def ON f = a AND e >= c-1 ORDER BY a, c, e DESC;
+----
+a  b     c  d     e  f
+1  1     2  NULL  2  1
+1  1     2  2     1  1
+2  1     1  1     1  2
+2  NULL  2  1     1  2
+
+query IIIIII colnames
+SELECT * FROM abc INNER LOOKUP JOIN def ON f = a AND e <= c ORDER BY a, c, e;
+----
+a  b     c  d     e  f
+1  1     2  2     1  1
+1  1     2  NULL  2  1
+2  1     1  1     1  2
+2  NULL  2  1     1  2
+
+query IIIIII colnames
+SELECT * FROM abc INNER LOOKUP JOIN def ON f = a AND e <= c ORDER BY a, c, e DESC;
+----
+a  b     c  d     e  f
+1  1     2  NULL  2  1
+1  1     2  2     1  1
+2  1     1  1     1  2
+2  NULL  2  1     1  2
+
+query IIIIII colnames
+SELECT * FROM abc INNER LOOKUP JOIN def_e_desc ON f = a AND e >= c-1 ORDER BY a, c, e;
+----
+a  b     c  d     e  f
+1  1     2  2     1  1
+1  1     2  NULL  2  1
+2  1     1  1     1  2
+2  NULL  2  1     1  2
+
+query IIIIII colnames
+SELECT * FROM abc INNER LOOKUP JOIN def_e_desc ON f = a AND e >= c-1 ORDER BY a, c, e DESC;
+----
+a  b     c  d     e  f
+1  1     2  NULL  2  1
+1  1     2  2     1  1
+2  1     1  1     1  2
+2  NULL  2  1     1  2
+
+query IIIIII colnames
+SELECT * FROM abc INNER LOOKUP JOIN def_e_desc ON f = a AND e <= c ORDER BY a, c, e;
+----
+a  b     c  d     e  f
+1  1     2  2     1  1
+1  1     2  NULL  2  1
+2  1     1  1     1  2
+2  NULL  2  1     1  2
+
+query IIIIII colnames
+SELECT * FROM abc INNER LOOKUP JOIN def_e_desc ON f = a AND e <= c ORDER BY a, c, e DESC;
+----
+a  b     c  d     e  f
+1  1     2  NULL  2  1
+1  1     2  2     1  1
+2  1     1  1     1  2
+2  NULL  2  1     1  2
 
 subtest regression_89576
 
@@ -1601,8 +1708,10 @@ SELECT col1_6 FROM table_1_124732 INNER HASH JOIN table_3_124732 ON col3_0 = col
 ----
 -
 
-statement error pgcode XXUUU pq: could not produce a query plan conforming to the LOOKUP JOIN hint
+query T
 SELECT col1_6 FROM table_1_124732 INNER LOOKUP JOIN table_3_124732 ON col3_0 = col1_6;
+----
+-
 
 # Regression test for incorrectly remapping columns in a composite-sensitive
 # expression to produce a lookup join (#124732).

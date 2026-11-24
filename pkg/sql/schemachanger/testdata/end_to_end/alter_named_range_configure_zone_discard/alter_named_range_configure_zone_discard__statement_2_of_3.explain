@@ -1,0 +1,27 @@
+/* setup */
+
+/* test */
+ALTER RANGE meta CONFIGURE ZONE USING num_replicas = 7;
+EXPLAIN (DDL) ALTER RANGE meta CONFIGURE ZONE USING gc.ttlseconds = 10000;
+----
+Schema change plan for ALTER RANGE ‹meta› CONFIGURE ZONE USING ‹"gc.ttlseconds"› = ‹10000›; following ALTER RANGE ‹meta› CONFIGURE ZONE USING ‹num_replicas› = ‹7›;
+ ├── StatementPhase
+ │    └── Stage 1 of 1 in StatementPhase
+ │         ├── 1 element transitioning toward PUBLIC
+ │         │    └── ABSENT → PUBLIC NamedRangeZoneConfig:{DescID: 16 (#16), SeqNum: 2}
+ │         └── 1 Mutation operation
+ │              └── AddNamedRangeZoneConfig {"RangeName":"meta"}
+ └── PreCommitPhase
+      ├── Stage 1 of 2 in PreCommitPhase
+      │    ├── 2 elements transitioning toward PUBLIC
+      │    │    ├── PUBLIC → ABSENT NamedRangeZoneConfig:{DescID: 16 (#16), SeqNum: 1}
+      │    │    └── PUBLIC → ABSENT NamedRangeZoneConfig:{DescID: 16 (#16), SeqNum: 2}
+      │    └── 1 Mutation operation
+      │         └── UndoAllInTxnImmediateMutationOpSideEffects
+      └── Stage 2 of 2 in PreCommitPhase
+           ├── 2 elements transitioning toward PUBLIC
+           │    ├── ABSENT → PUBLIC NamedRangeZoneConfig:{DescID: 16 (#16), SeqNum: 1}
+           │    └── ABSENT → PUBLIC NamedRangeZoneConfig:{DescID: 16 (#16), SeqNum: 2}
+           └── 2 Mutation operations
+                ├── AddNamedRangeZoneConfig {"RangeName":"meta"}
+                └── AddNamedRangeZoneConfig {"RangeName":"meta"}

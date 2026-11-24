@@ -30,7 +30,7 @@ project
       ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) rank:10(int)
       ├── cardinality: [0 - 10]
       ├── key: (1)
-      ├── fd: (1)-->(2-7)
+      ├── fd: (1)-->(2-7,10)
       ├── prune: (1-7,10)
       ├── limit
       │    ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
@@ -70,7 +70,7 @@ project
       ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) rank:10(int)
       ├── cardinality: [0 - 10]
       ├── key: (1)
-      ├── fd: (1)-->(2-7)
+      ├── fd: (1)-->(2-7,10)
       ├── prune: (1,3,5-7,10)
       ├── limit
       │    ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
@@ -138,7 +138,7 @@ project
                      │    ├── outer: (1)
                      │    ├── cardinality: [1 - 1]
                      │    ├── key: ()
-                     │    ├── fd: ()-->(10)
+                     │    ├── fd: ()-->(10,11)
                      │    ├── prune: (10,11)
                      │    ├── project
                      │    │    ├── columns: x:10(int)
@@ -171,7 +171,7 @@ project
       ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) crdb_internal_mvcc_timestamp:8(decimal) tableoid:9(oid) lag:10(string) lag:11(int) lag_1_arg1:12(string!null) lag_1_arg2:13(int!null) lag_1_arg3:14(string) lag_2_arg3:15(int)
       ├── immutable
       ├── key: (1)
-      ├── fd: ()-->(12-15), (1)-->(2-9)
+      ├── fd: ()-->(12-15), (1)-->(2-11)
       ├── prune: (1-11)
       ├── project
       │    ├── columns: lag_1_arg1:12(string!null) lag_1_arg2:13(int!null) lag_1_arg3:14(string) lag_2_arg3:15(int) k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) crdb_internal_mvcc_timestamp:8(decimal) tableoid:9(oid)
@@ -202,3 +202,306 @@ project
                 ├── variable: lag_1_arg2:13 [type=int]
                 ├── variable: lag_1_arg2:13 [type=int]
                 └── variable: lag_2_arg3:15 [type=int]
+
+# Given an unbounded window frame, aggregates, first_value, and last_value
+# are functionally determined by the partition column(s).
+build
+SELECT
+  sum(v) OVER w,
+  array_agg(s) OVER w,
+  first_value(d) OVER w,
+  last_value(f) OVER w
+FROM kv
+WINDOW w AS (
+  PARTITION BY w ORDER BY v, s, d, f
+  ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+)
+----
+project
+ ├── columns: sum:10(decimal) array_agg:11(string[]) first_value:12(decimal) last_value:13(float)
+ ├── prune: (10-13)
+ └── window partition=(3) ordering=+2,+6,+5,+4
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) crdb_internal_mvcc_timestamp:8(decimal) tableoid:9(oid) sum:10(decimal) array_agg:11(string[]) first_value:12(decimal) last_value:13(float)
+      ├── key: (1)
+      ├── fd: (1)-->(2-9), (3)-->(10-13)
+      ├── prune: (1,7-13)
+      ├── scan kv
+      │    ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) crdb_internal_mvcc_timestamp:8(decimal) tableoid:9(oid)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-9)
+      │    ├── prune: (1-9)
+      │    └── interesting orderings: (+1)
+      └── windows
+           ├── sum [as=sum:10, frame="rows from unbounded to unbounded", type=decimal, outer=(2)]
+           │    └── variable: v:2 [type=int]
+           ├── array-agg [as=array_agg:11, frame="rows from unbounded to unbounded", type=string[], outer=(6)]
+           │    └── variable: s:6 [type=string]
+           ├── first-value [as=first_value:12, frame="rows from unbounded to unbounded", type=decimal, outer=(5)]
+           │    └── variable: d:5 [type=decimal]
+           └── last-value [as=last_value:13, frame="rows from unbounded to unbounded", type=float, outer=(4)]
+                └── variable: f:4 [type=float]
+
+# Case with no partition columns.
+build
+SELECT
+  sum(v) OVER w,
+  array_agg(s) OVER w,
+  first_value(d) OVER w,
+  last_value(f) OVER w
+FROM kv
+WINDOW w AS (
+  ORDER BY v, s, d, f
+  ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+)
+----
+project
+ ├── columns: sum:10(decimal) array_agg:11(string[]) first_value:12(decimal) last_value:13(float)
+ ├── fd: ()-->(10-13)
+ ├── prune: (10-13)
+ └── window partition=() ordering=+2,+6,+5,+4
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) crdb_internal_mvcc_timestamp:8(decimal) tableoid:9(oid) sum:10(decimal) array_agg:11(string[]) first_value:12(decimal) last_value:13(float)
+      ├── key: (1)
+      ├── fd: ()-->(10-13), (1)-->(2-9)
+      ├── prune: (1,3,7-13)
+      ├── scan kv
+      │    ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) crdb_internal_mvcc_timestamp:8(decimal) tableoid:9(oid)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-9)
+      │    ├── prune: (1-9)
+      │    └── interesting orderings: (+1)
+      └── windows
+           ├── sum [as=sum:10, frame="rows from unbounded to unbounded", type=decimal, outer=(2)]
+           │    └── variable: v:2 [type=int]
+           ├── array-agg [as=array_agg:11, frame="rows from unbounded to unbounded", type=string[], outer=(6)]
+           │    └── variable: s:6 [type=string]
+           ├── first-value [as=first_value:12, frame="rows from unbounded to unbounded", type=decimal, outer=(5)]
+           │    └── variable: d:5 [type=decimal]
+           └── last-value [as=last_value:13, frame="rows from unbounded to unbounded", type=float, outer=(4)]
+                └── variable: f:4 [type=float]
+
+# Case with multiple partition columns.
+build
+SELECT
+  sum(v) OVER w,
+  array_agg(s) OVER w,
+  first_value(d) OVER w,
+  last_value(f) OVER w
+FROM kv
+WINDOW w AS (
+  PARTITION BY b, w ORDER BY v, s, d, f
+  ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+)
+----
+project
+ ├── columns: sum:10(decimal) array_agg:11(string[]) first_value:12(decimal) last_value:13(float)
+ ├── prune: (10-13)
+ └── window partition=(3,7) ordering=+2,+6,+5,+4
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) crdb_internal_mvcc_timestamp:8(decimal) tableoid:9(oid) sum:10(decimal) array_agg:11(string[]) first_value:12(decimal) last_value:13(float)
+      ├── key: (1)
+      ├── fd: (1)-->(2-9), (3,7)-->(10-13)
+      ├── prune: (1,8-13)
+      ├── scan kv
+      │    ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) crdb_internal_mvcc_timestamp:8(decimal) tableoid:9(oid)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-9)
+      │    ├── prune: (1-9)
+      │    └── interesting orderings: (+1)
+      └── windows
+           ├── sum [as=sum:10, frame="rows from unbounded to unbounded", type=decimal, outer=(2)]
+           │    └── variable: v:2 [type=int]
+           ├── array-agg [as=array_agg:11, frame="rows from unbounded to unbounded", type=string[], outer=(6)]
+           │    └── variable: s:6 [type=string]
+           ├── first-value [as=first_value:12, frame="rows from unbounded to unbounded", type=decimal, outer=(5)]
+           │    └── variable: d:5 [type=decimal]
+           └── last-value [as=last_value:13, frame="rows from unbounded to unbounded", type=float, outer=(4)]
+                └── variable: f:4 [type=float]
+
+# The frame must be unbounded in order to infer an FD from partition columns to
+# window function output.
+build
+SELECT
+  sum(v) OVER w,
+  array_agg(s) OVER w,
+  first_value(d) OVER w,
+  last_value(f) OVER w
+FROM kv
+WINDOW w AS (
+  PARTITION BY w ORDER BY v, s, d, f
+)
+----
+project
+ ├── columns: sum:10(decimal) array_agg:11(string[]) first_value:12(decimal) last_value:13(float)
+ ├── prune: (10-13)
+ └── window partition=(3) ordering=+2,+6,+5,+4
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) crdb_internal_mvcc_timestamp:8(decimal) tableoid:9(oid) sum:10(decimal) array_agg:11(string[]) first_value:12(decimal) last_value:13(float)
+      ├── key: (1)
+      ├── fd: (1)-->(2-13)
+      ├── prune: (1,7-13)
+      ├── scan kv
+      │    ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) crdb_internal_mvcc_timestamp:8(decimal) tableoid:9(oid)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-9)
+      │    ├── prune: (1-9)
+      │    └── interesting orderings: (+1)
+      └── windows
+           ├── sum [as=sum:10, type=decimal, outer=(2)]
+           │    └── variable: v:2 [type=int]
+           ├── array-agg [as=array_agg:11, type=string[], outer=(6)]
+           │    └── variable: s:6 [type=string]
+           ├── first-value [as=first_value:12, type=decimal, outer=(5)]
+           │    └── variable: d:5 [type=decimal]
+           └── last-value [as=last_value:13, type=float, outer=(4)]
+                └── variable: f:4 [type=float]
+
+# The default window frame is unbounded in the absence of ORDER BY.
+# Currently, we cannot see that this is the case, because the window
+# frame is not normalized to unbounded preceding and following.
+# This is tracked in #117716.
+build
+SELECT
+  sum(v) OVER w,
+  array_agg(s) OVER w,
+  first_value(d) OVER w,
+  last_value(f) OVER w
+FROM kv
+WINDOW w AS (
+  PARTITION BY w
+)
+----
+project
+ ├── columns: sum:10(decimal) array_agg:11(string[]) first_value:12(decimal) last_value:13(float)
+ ├── prune: (10-13)
+ └── window partition=(3)
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) crdb_internal_mvcc_timestamp:8(decimal) tableoid:9(oid) sum:10(decimal) array_agg:11(string[]) first_value:12(decimal) last_value:13(float)
+      ├── key: (1)
+      ├── fd: (1)-->(2-13)
+      ├── prune: (1,7-13)
+      ├── scan kv
+      │    ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) crdb_internal_mvcc_timestamp:8(decimal) tableoid:9(oid)
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-9)
+      │    ├── prune: (1-9)
+      │    └── interesting orderings: (+1)
+      └── windows
+           ├── sum [as=sum:10, type=decimal, outer=(2)]
+           │    └── variable: v:2 [type=int]
+           ├── array-agg [as=array_agg:11, type=string[], outer=(6)]
+           │    └── variable: s:6 [type=string]
+           ├── first-value [as=first_value:12, type=decimal, outer=(5)]
+           │    └── variable: d:5 [type=decimal]
+           └── last-value [as=last_value:13, type=float, outer=(4)]
+                └── variable: f:4 [type=float]
+
+# The results of other window functions can depend on things other than the
+# window frame (e.g. position for rank, or the value of a column for nth_value).
+build
+SELECT
+  rank() OVER w,
+  row_number() OVER w,
+  nth_value(v, 2) OVER w,
+  lead(v, 2) OVER w
+FROM kv
+WINDOW w AS (
+  PARTITION BY w ORDER BY v, s, d, f
+  ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING
+)
+----
+project
+ ├── columns: rank:10(int) row_number:11(int) nth_value:12(int) lead:13(int)
+ ├── immutable
+ ├── prune: (10-13)
+ └── window partition=(3) ordering=+2,+6,+5,+4
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) crdb_internal_mvcc_timestamp:8(decimal) tableoid:9(oid) rank:10(int) row_number:11(int) nth_value:12(int) lead:13(int) nth_value_3_arg2:14(int!null) lead_4_arg3:15(int)
+      ├── immutable
+      ├── key: (1)
+      ├── fd: ()-->(14,15), (1)-->(2-13)
+      ├── prune: (1,7-13)
+      ├── project
+      │    ├── columns: nth_value_3_arg2:14(int!null) lead_4_arg3:15(int) k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) crdb_internal_mvcc_timestamp:8(decimal) tableoid:9(oid)
+      │    ├── immutable
+      │    ├── key: (1)
+      │    ├── fd: ()-->(14,15), (1)-->(2-9)
+      │    ├── prune: (1-9,14,15)
+      │    ├── interesting orderings: (+1 opt(14,15))
+      │    ├── scan kv
+      │    │    ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) crdb_internal_mvcc_timestamp:8(decimal) tableoid:9(oid)
+      │    │    ├── key: (1)
+      │    │    ├── fd: (1)-->(2-9)
+      │    │    ├── prune: (1-9)
+      │    │    └── interesting orderings: (+1)
+      │    └── projections
+      │         ├── const: 2 [as=nth_value_3_arg2:14, type=int]
+      │         └── cast: INT8 [as=lead_4_arg3:15, type=int, immutable]
+      │              └── null [type=unknown]
+      └── windows
+           ├── rank [as=rank:10, frame="rows from unbounded to unbounded", type=int]
+           ├── row-number [as=row_number:11, frame="rows from unbounded to unbounded", type=int]
+           ├── nth-value [as=nth_value:12, frame="rows from unbounded to unbounded", type=int, outer=(2,14)]
+           │    ├── variable: v:2 [type=int]
+           │    └── variable: nth_value_3_arg2:14 [type=int]
+           └── lead [as=lead:13, frame="rows from unbounded to unbounded", type=int, outer=(2,14,15)]
+                ├── variable: v:2 [type=int]
+                ├── variable: nth_value_3_arg2:14 [type=int]
+                └── variable: lead_4_arg3:15 [type=int]
+
+# If the partition columns are a strict key over the input, then window frames
+# and functions don't matter - the partition columns are also a strict key over
+# the output.
+build
+SELECT
+  sum(v) OVER w,
+  array_agg(s) OVER w,
+  first_value(d) OVER w,
+  last_value(f) OVER w,
+  rank() OVER w,
+  row_number() OVER w,
+  nth_value(v, 2) OVER w,
+  lead(v, 2) OVER w
+FROM kv
+WINDOW w AS (PARTITION BY k ORDER BY s, d)
+----
+project
+ ├── columns: sum:10(decimal) array_agg:11(string[]) first_value:12(decimal) last_value:13(float) rank:14(int) row_number:15(int) nth_value:16(int) lead:17(int)
+ ├── immutable
+ ├── prune: (10-17)
+ └── window partition=(1) ordering=+6,+5
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) crdb_internal_mvcc_timestamp:8(decimal) tableoid:9(oid) sum:10(decimal) array_agg:11(string[]) first_value:12(decimal) last_value:13(float) rank:14(int) row_number:15(int) nth_value:16(int) lead:17(int) nth_value_7_arg2:18(int!null) lead_8_arg3:19(int)
+      ├── immutable
+      ├── key: (1)
+      ├── fd: ()-->(18,19), (1)-->(2-17)
+      ├── prune: (3,7-17)
+      ├── project
+      │    ├── columns: nth_value_7_arg2:18(int!null) lead_8_arg3:19(int) k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) crdb_internal_mvcc_timestamp:8(decimal) tableoid:9(oid)
+      │    ├── immutable
+      │    ├── key: (1)
+      │    ├── fd: ()-->(18,19), (1)-->(2-9)
+      │    ├── prune: (1-9,18,19)
+      │    ├── interesting orderings: (+1 opt(18,19))
+      │    ├── scan kv
+      │    │    ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) crdb_internal_mvcc_timestamp:8(decimal) tableoid:9(oid)
+      │    │    ├── key: (1)
+      │    │    ├── fd: (1)-->(2-9)
+      │    │    ├── prune: (1-9)
+      │    │    └── interesting orderings: (+1)
+      │    └── projections
+      │         ├── const: 2 [as=nth_value_7_arg2:18, type=int]
+      │         └── cast: INT8 [as=lead_8_arg3:19, type=int, immutable]
+      │              └── null [type=unknown]
+      └── windows
+           ├── sum [as=sum:10, type=decimal, outer=(2)]
+           │    └── variable: v:2 [type=int]
+           ├── array-agg [as=array_agg:11, type=string[], outer=(6)]
+           │    └── variable: s:6 [type=string]
+           ├── first-value [as=first_value:12, type=decimal, outer=(5)]
+           │    └── variable: d:5 [type=decimal]
+           ├── last-value [as=last_value:13, type=float, outer=(4)]
+           │    └── variable: f:4 [type=float]
+           ├── rank [as=rank:14, type=int]
+           ├── row-number [as=row_number:15, type=int]
+           ├── nth-value [as=nth_value:16, type=int, outer=(2,18)]
+           │    ├── variable: v:2 [type=int]
+           │    └── variable: nth_value_7_arg2:18 [type=int]
+           └── lead [as=lead:17, type=int, outer=(2,18,19)]
+                ├── variable: v:2 [type=int]
+                ├── variable: nth_value_7_arg2:18 [type=int]
+                └── variable: lead_8_arg3:19 [type=int]

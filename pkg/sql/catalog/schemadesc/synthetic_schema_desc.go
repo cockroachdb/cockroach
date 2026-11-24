@@ -72,11 +72,11 @@ func (p synthetic) ByteSize() int64 {
 	return 0
 }
 func (p synthetic) NewBuilder() catalog.DescriptorBuilder {
-	log.Fatalf(context.TODO(),
+	log.Dev.Fatalf(context.TODO(),
 		"%s schema cannot create a builder", p.kindName())
 	return nil // unreachable
 }
-func (p synthetic) GetReferencedDescIDs() (catalog.DescriptorIDSet, error) {
+func (p synthetic) GetReferencedDescIDs(catalog.ValidationLevel) (catalog.DescriptorIDSet, error) {
 	return catalog.DescriptorIDSet{}, nil
 }
 func (p synthetic) ValidateSelf(_ catalog.ValidationErrorAccumulator) {
@@ -114,7 +114,7 @@ func (p synthetic) ConcurrentSchemaChangeJobIDs() []catpb.JobID {
 // SkipNamespace implements the descriptor interface.
 // We never store synthetic descriptors.
 func (p synthetic) SkipNamespace() bool {
-	return true
+	return p.SchemaKind() != catalog.SchemaTemporary
 }
 
 // GetObjectType implements the Object interface.

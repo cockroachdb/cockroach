@@ -13,7 +13,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvclient/kvcoord"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
@@ -121,6 +120,10 @@ func (*mockServer) Batch(context.Context, *kvpb.BatchRequest) (*kvpb.BatchRespon
 	panic("unimplemented")
 }
 
+func (m *mockServer) BatchStream(stream kvpb.Internal_BatchStreamServer) error {
+	panic("implement me")
+}
+
 func (m *mockServer) MuxRangeFeed(server kvpb.Internal_MuxRangeFeedServer) error {
 	panic("implement me")
 }
@@ -197,18 +200,6 @@ func gossipEventForStoreDesc(desc *roachpb.StoreDescriptor) *kvpb.GossipSubscrip
 	}
 }
 
-func gossipEventForSystemConfig(cfg *config.SystemConfigEntries) *kvpb.GossipSubscriptionEvent {
-	val, err := protoutil.Marshal(cfg)
-	if err != nil {
-		panic(err)
-	}
-	return &kvpb.GossipSubscriptionEvent{
-		Key:            gossip.KeyDeprecatedSystemConfig,
-		Content:        roachpb.MakeValueFromBytesAndTimestamp(val, hlc.Timestamp{}),
-		PatternMatched: gossip.KeyDeprecatedSystemConfig,
-	}
-}
-
 func waitForNodeDesc(t *testing.T, c *connector, nodeID roachpb.NodeID) {
 	t.Helper()
 	testutils.SucceedsSoon(t, func() error {
@@ -230,7 +221,7 @@ func newConnector(cfg ConnectorConfig, addrs []string) *connector {
 }
 
 // TestConnectorGossipSubscription tests connector's roles as a
-// kvclient.NodeDescStore and as a config.SystemConfigProvider.
+// kvclient.NodeDescStore.
 func TestConnectorGossipSubscription(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
@@ -251,11 +242,10 @@ func TestConnectorGossipSubscription(t *testing.T) {
 	gossipSubC := make(chan *kvpb.GossipSubscriptionEvent)
 	defer close(gossipSubC)
 	gossipSubFn := func(req *kvpb.GossipSubscriptionRequest, stream kvpb.Internal_GossipSubscriptionServer) error {
-		assert.Len(t, req.Patterns, 4)
+		assert.Len(t, req.Patterns, 3)
 		assert.Equal(t, "cluster-id", req.Patterns[0])
 		assert.Equal(t, "node:.*", req.Patterns[1])
 		assert.Equal(t, "store:.*", req.Patterns[2])
-		assert.Equal(t, "system-db", req.Patterns[3])
 		for gossipSub := range gossipSubC {
 			if err := stream.Send(gossipSub); err != nil {
 				return err
@@ -350,42 +340,6 @@ func TestConnectorGossipSubscription(t *testing.T) {
 	desc, err = c.GetNodeDescriptor(3)
 	require.Equal(t, node3, desc)
 	require.NoError(t, err)
-
-	// Test config.SystemConfigProvider impl. Should not have a SystemConfig yet.
-	sysCfg := c.GetSystemConfig()
-	require.Nil(t, sysCfg)
-	sysCfgC, _ := c.RegisterSystemConfigChannel()
-	require.Len(t, sysCfgC, 0)
-
-	// Return first SystemConfig response.
-	sysCfgEntries := &config.SystemConfigEntries{Values: []roachpb.KeyValue{
-		{Key: roachpb.Key("a")},
-		{Key: roachpb.Key("b")},
-	}}
-	gossipSubC <- gossipEventForSystemConfig(sysCfgEntries)
-
-	// Test config.SystemConfigProvider impl. Wait for update first.
-	<-sysCfgC
-	sysCfg = c.GetSystemConfig()
-	require.NotNil(t, sysCfg)
-	require.Equal(t, sysCfgEntries.Values, sysCfg.Values)
-
-	// Return updated SystemConfig response.
-	sysCfgEntriesUp := &config.SystemConfigEntries{Values: []roachpb.KeyValue{
-		{Key: roachpb.Key("a")},
-		{Key: roachpb.Key("c")},
-	}}
-	gossipSubC <- gossipEventForSystemConfig(sysCfgEntriesUp)
-
-	// Test config.SystemConfigProvider impl. Wait for update first.
-	<-sysCfgC
-	sysCfg = c.GetSystemConfig()
-	require.NotNil(t, sysCfg)
-	require.Equal(t, sysCfgEntriesUp.Values, sysCfg.Values)
-
-	// A newly registered SystemConfig channel will be immediately notified.
-	sysCfgC2, _ := c.RegisterSystemConfigChannel()
-	require.Len(t, sysCfgC2, 1)
 }
 
 // TestConnectorGossipSubscription tests connector's role as a
@@ -491,11 +445,10 @@ func TestConnectorRetriesUnreachable(t *testing.T) {
 		gossipEventForNodeDesc(node2),
 	}
 	gossipSubFn := func(req *kvpb.GossipSubscriptionRequest, stream kvpb.Internal_GossipSubscriptionServer) error {
-		assert.Len(t, req.Patterns, 4)
+		assert.Len(t, req.Patterns, 3)
 		assert.Equal(t, "cluster-id", req.Patterns[0])
 		assert.Equal(t, "node:.*", req.Patterns[1])
 		assert.Equal(t, "store:.*", req.Patterns[2])
-		assert.Equal(t, "system-db", req.Patterns[3])
 		for _, event := range gossipSubEvents {
 			if err := stream.Send(event); err != nil {
 				return err
@@ -603,7 +556,6 @@ func TestConnectorRetriesError(t *testing.T) {
 		{codes.FailedPrecondition, true},
 	} {
 		t.Run(fmt.Sprintf("error %v retries %v", spec.code, spec.shouldRetry), func(t *testing.T) {
-
 			gossipSubFn := func(req *kvpb.GossipSubscriptionRequest, stream kvpb.Internal_GossipSubscriptionServer) error {
 				return stream.Send(gossipEventForClusterID(rpcContext.StorageClusterID.Get()))
 			}
@@ -657,4 +609,65 @@ func TestConnectorRetriesError(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestConnectorGossipSubscriptionBreaksOnError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	clock := hlc.NewClockForTesting(nil)
+	rpcContext := rpc.NewInsecureTestingContext(ctx, clock, stopper)
+	s, err := rpc.NewServer(ctx, rpcContext)
+	require.NoError(t, err)
+
+	var gossipSubCalls atomic.Int32
+	gossipSubFn := func(req *kvpb.GossipSubscriptionRequest, stream kvpb.Internal_GossipSubscriptionServer) error {
+		gossipSubCalls.Add(1)
+		if err := stream.Send(gossipEventForClusterID(rpcContext.StorageClusterID.Get())); err != nil {
+			return err
+		}
+		errEvent := &kvpb.GossipSubscriptionEvent{
+			Error: kvpb.NewErrorf("subscription terminated due to slow consumption"),
+		}
+		if err := stream.Send(errEvent); err != nil {
+			return err
+		}
+		<-stream.Context().Done()
+		return stream.Context().Err()
+	}
+	kvpb.RegisterInternalServer(s, &mockServer{gossipSubFn: gossipSubFn})
+	ln, err := net.Listen(util.TestAddr.Network(), util.TestAddr.String())
+	require.NoError(t, err)
+	stopper.AddCloser(stop.CloserFn(s.Stop))
+	err = stopper.RunAsyncTask(ctx, "wait-quiesce", func(context.Context) {
+		<-stopper.ShouldQuiesce()
+		netutil.FatalIfUnexpected(ln.Close())
+	})
+	require.NoError(t, err)
+	err = stopper.RunAsyncTask(ctx, "serve", func(context.Context) {
+		netutil.FatalIfUnexpected(s.Serve(ln))
+	})
+	require.NoError(t, err)
+
+	cfg := ConnectorConfig{
+		AmbientCtx:      log.MakeTestingAmbientContext(stopper.Tracer()),
+		RPCContext:      rpcContext,
+		RPCRetryOptions: rpcRetryOpts,
+	}
+	addrs := []string{ln.Addr().String()}
+	c := newConnector(cfg, addrs)
+	c.rpcDialTimeout = 5 * time.Millisecond
+
+	require.NoError(t, c.Start(ctx))
+
+	testutils.SucceedsSoon(t, func() error {
+		if gossipSubCalls.Load() < 2 {
+			return fmt.Errorf("waiting for reconnection after error event")
+		}
+		return nil
+	})
 }

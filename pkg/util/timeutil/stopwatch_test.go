@@ -21,7 +21,7 @@ import (
 // the internal startedAt time.
 func TestStopWatchStart(t *testing.T) {
 	timeSource := timeutil.NewTestTimeSource()
-	w := timeutil.NewTestStopWatch(timeSource.Now)
+	w := timeutil.NewTestStopWatch(timeSource.NowMono)
 
 	w.Start()
 	timeSource.Advance()
@@ -37,7 +37,7 @@ func TestStopWatchStart(t *testing.T) {
 // state of the stop watch.
 func TestStopWatchStop(t *testing.T) {
 	timeSource := timeutil.NewTestTimeSource()
-	w := timeutil.NewTestStopWatch(timeSource.Now)
+	w := timeutil.NewTestStopWatch(timeSource.NowMono)
 
 	w.Start()
 	timeSource.Advance()
@@ -55,7 +55,7 @@ func TestStopWatchStop(t *testing.T) {
 // correctly.
 func TestStopWatchElapsed(t *testing.T) {
 	timeSource := timeutil.NewTestTimeSource()
-	w := timeutil.NewTestStopWatch(timeSource.Now)
+	w := timeutil.NewTestStopWatch(timeSource.NowMono)
 	expected := time.Duration(10)
 
 	w.Start()

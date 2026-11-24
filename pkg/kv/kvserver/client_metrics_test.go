@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/storageconfig"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
@@ -35,14 +36,14 @@ import (
 )
 
 type gaugeValuer interface {
-	GetName() string
+	GetName(useStaticLabels bool) string
 	Value() int64
 }
 
 func checkGauge(t *testing.T, id string, g gaugeValuer, e int64) {
 	t.Helper()
 	if a := g.Value(); a != e {
-		t.Error(errors.Errorf("%s for store %s: gauge %d != computed %d", g.GetName(), id, a, e))
+		t.Error(errors.Errorf("%s for store %s: gauge %d != computed %d", g.GetName(false /* useStaticLabels */), id, a, e))
 	}
 }
 
@@ -99,7 +100,10 @@ func verifyStatsOnServers(
 		// To recompute the metrics, we need an open engine. Open the
 		// Engine again in read-only mode (leaving the rest of the
 		// Server stopped) to compute MVCC stats.
-		env, err := fs.InitEnvFromStoreSpec(ctx, specs[storeIdx], fs.ReadOnly, stickyRegistry, nil /* statsCollector */)
+		env, err := fs.InitEnvFromStoreSpec(ctx, specs[storeIdx], fs.EnvConfig{
+			RW:      fs.ReadOnly,
+			Version: s.GetStoreConfig().Settings.Version,
+		}, stickyRegistry, nil /* statsCollector */)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -155,7 +159,7 @@ func TestStoreResolveMetrics(t *testing.T) {
 	// them everywhere.
 	{
 		act := fmt.Sprintf("%+v", result.Metrics{})
-		exp := "{LeaseRequestSuccess:0 LeaseRequestError:0 LeaseTransferSuccess:0 LeaseTransferError:0 ResolveCommit:0 ResolveAbort:0 ResolvePoison:0 AddSSTableAsWrites:0 SplitsWithEstimatedStats:0 SplitEstimatedTotalBytesDiff:0}"
+		exp := "{LeaseRequestSuccess:0 LeaseRequestError:0 LeaseTransferSuccess:0 LeaseTransferError:0 LeaseTransferLocksWritten:0 ResolveCommit:0 ResolveAbort:0 ResolvePoison:0 AddSSTableAsWrites:0 SplitsWithEstimatedStats:0 SplitEstimatedTotalBytesDiff:0 SubsumeLocksWritten:0}"
 		if act != exp {
 			t.Errorf("need to update this test due to added fields: %v", act)
 		}
@@ -252,12 +256,10 @@ func TestStoreMetrics(t *testing.T) {
 			InMemory:    true,
 			StickyVFSID: strconv.FormatInt(int64(i), 10),
 			// Specify a size to trigger the BlockCache in Pebble.
-			Size: base.SizeSpec{
-				InBytes: 512 << 20, /* 512 MiB */
-			},
+			Size: storageconfig.BytesSize(512 << 20 /* 512 MiB */),
 		}
 		stickyServerArgs[i] = base.TestServerArgs{
-			CacheSize:  2 << 20, /* 2 MiB */
+			CacheSize:  4 << 20, /* 4 MiB */
 			StoreSpecs: []base.StoreSpec{spec},
 			Knobs: base.TestingKnobs{
 				Server: &server.TestingKnobs{
@@ -271,11 +273,10 @@ func TestStoreMetrics(t *testing.T) {
 		}
 		specs[i] = spec
 	}
-	tc := testcluster.StartTestCluster(t, numServers,
-		base.TestClusterArgs{
-			ReplicationMode:   base.ReplicationManual,
-			ServerArgsPerNode: stickyServerArgs,
-		})
+	tc := testcluster.StartTestCluster(t, numServers, base.TestClusterArgs{
+		ReplicationMode:   base.ReplicationManual,
+		ServerArgsPerNode: stickyServerArgs,
+	})
 	defer tc.Stopper().Stop(ctx)
 
 	initialCount := tc.GetFirstStoreFromServer(t, 0).Metrics().ReplicaCount.Value()
@@ -326,7 +327,10 @@ func TestStoreMetrics(t *testing.T) {
 	verifyStatsOnServers(t, tc, specs, stickyVFSRegistry, 1, 2)
 	checkGauge(t, "store 0", tc.GetFirstStoreFromServer(t, 0).Metrics().ReplicaCount, initialCount+1)
 	tc.RemoveLeaseHolderOrFatal(t, desc, tc.Target(0), tc.Target(1))
+	// The removed replica may never learn about its own removal through raft,
+	// so force the replica GC queue to clean it up.
 	testutils.SucceedsSoon(t, func() error {
+		tc.GetFirstStoreFromServer(t, 0).MustForceReplicaGCScanAndProcess()
 		_, err := tc.GetFirstStoreFromServer(t, 0).GetReplica(desc.RangeID)
 		if err == nil {
 			return fmt.Errorf("replica still exists on dest 0")
@@ -367,7 +371,7 @@ func TestStoreMetrics(t *testing.T) {
 			{m.RdbTableReadersMemEstimate, 50},
 		} {
 			if a := tc.gauge.Value(); a < tc.min {
-				t.Errorf("gauge %s = %d < min %d", tc.gauge.GetName(), a, tc.min)
+				t.Errorf("gauge %s = %d < min %d", tc.gauge.GetName(false /* useStaticLabels */), a, tc.min)
 			}
 		}
 		for _, tc := range []struct {
@@ -381,7 +385,7 @@ func TestStoreMetrics(t *testing.T) {
 			{m.RdbCompactions, 0},
 		} {
 			if a := tc.counter.Count(); a < tc.min {
-				t.Errorf("counter %s = %d < min %d", tc.counter.GetName(), a, tc.min)
+				t.Errorf("counter %s = %d < min %d", tc.counter.GetName(false /* useStaticLabels */), a, tc.min)
 			}
 		}
 	}

@@ -18,7 +18,8 @@ expr
 fake-rel
  ├── columns: a:1(int!null) b:2(int!null) c:3(int)
  ├── stats: [rows=0]
- └── cost: 0.02
+ ├── cost: 0.02
+ └── cost-flags: unbounded-cardinality
 
 expr
 (FakeRel
@@ -92,4 +93,5 @@ expr
 fake-rel
  ├── columns: a:1(int) b:2(int) c:3(int)
  ├── stats: [rows=120, distinct(1)=110, null(1)=0, distinct(2)=22, null(2)=5]
- └── cost: 0.02
+ ├── cost: 0.02
+ └── cost-flags: unbounded-cardinality

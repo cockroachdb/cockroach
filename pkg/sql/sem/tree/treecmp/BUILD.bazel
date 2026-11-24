@@ -8,5 +8,8 @@ go_library(
     ],
     importpath = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treecmp",
     visibility = ["//visibility:public"],
-    deps = ["@com_github_cockroachdb_errors//:errors"],
+    deps = [
+        "@com_github_cockroachdb_errors//:errors",
+        "@com_github_cockroachdb_redact//:redact",
+    ],
 )

@@ -49,3 +49,24 @@ END IF;
 NULL;
 END;
  -- identifiers removed
+
+pretty
+BEGIN
+NULL;
+IF foo THEN
+NULL;
+ELSE
+NULL;
+END IF;
+NULL;
+END
+----
+BEGIN
+	NULL;
+	IF foo THEN
+		NULL;
+	ELSE
+		NULL;
+	END IF;
+	NULL;
+END;

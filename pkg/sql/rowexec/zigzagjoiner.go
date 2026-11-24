@@ -7,6 +7,7 @@ package rowexec
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -255,10 +256,11 @@ type zigzagJoiner struct {
 // be fetched at a time. Increasing this will improve performance for when
 // matched rows are grouped together, but increasing this too much will result
 // in fetching too many rows and therefore skipping less rows.
-var zigzagJoinerBatchSize = rowinfra.RowLimit(metamorphic.ConstantWithTestValue(
+var zigzagJoinerBatchSize = rowinfra.RowLimit(metamorphic.ConstantWithTestRange(
 	"zig-zag-joiner-batch-size",
 	5, /* defaultValue */
-	1, /* metamorphicValue */
+	1, /* min */
+	5, /* max */
 ))
 
 var _ execinfra.Processor = &zigzagJoiner{}
@@ -331,6 +333,9 @@ func newZigzagJoiner(
 
 	collectingStats := false
 	if execstats.ShouldCollectStats(ctx, flowCtx.CollectStats) {
+		if flowTxn := flowCtx.EvalCtx.Txn; flowTxn != nil {
+			z.contentionEventsListener.Init(flowTxn.ID())
+		}
 		collectingStats = true
 		z.ExecStatsForTrace = z.execStatsForTrace
 	}
@@ -473,6 +478,7 @@ func (z *zigzagJoiner) setupInfo(
 			Spec:                       &spec.FetchSpec,
 			TraceKV:                    flowCtx.TraceKV,
 			ForceProductionKVBatchSize: flowCtx.EvalCtx.TestingKnobs.ForceProductionValues,
+			WorkloadID:                 flowCtx.EvalCtx.WorkloadID,
 		},
 	); err != nil {
 		return err
@@ -800,7 +806,7 @@ func (z *zigzagJoiner) maybeFetchInitialRow() error {
 			zigzagJoinerBatchSize,
 		)
 		if err != nil {
-			log.Errorf(z.Ctx(), "scan error: %s", err)
+			log.Dev.Errorf(z.Ctx(), "scan error: %s", err)
 			return err
 		}
 		fetchedRow, err := z.fetchRow(z.Ctx())
@@ -850,7 +856,10 @@ func (z *zigzagJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 		BytesRead:           optional.MakeUint(uint64(z.getBytesRead())),
 		KVPairsRead:         optional.MakeUint(uint64(z.getKVPairsRead())),
 		ContentionTime:      optional.MakeTimeValue(z.contentionEventsListener.GetContentionTime()),
+		LockWaitTime:        optional.MakeTimeValue(z.contentionEventsListener.GetLockWaitTime()),
+		LatchWaitTime:       optional.MakeTimeValue(z.contentionEventsListener.GetLatchWaitTime()),
 		BatchRequestsIssued: optional.MakeUint(uint64(z.getBatchRequestsIssued())),
+		LocalKVCPUTime:      optional.MakeTimeValue(time.Duration(z.getLocalKVCPUTime())),
 	}
 	scanStats := z.scanStatsListener.GetScanStats()
 	execstats.PopulateKVMVCCStats(&kvStats, &scanStats)
@@ -861,7 +870,6 @@ func (z *zigzagJoiner) execStatsForTrace() *execinfrapb.ComponentStats {
 		}
 		kvStats.TuplesRead.MaybeAdd(fis.NumTuples)
 		kvStats.KVTime.MaybeAdd(fis.WaitTime)
-		kvStats.KVCPUTime.MaybeAdd(optional.MakeTimeValue(fis.kvCPUTime))
 	}
 	ret := &execinfrapb.ComponentStats{
 		KV:     kvStats,
@@ -887,6 +895,14 @@ func (z *zigzagJoiner) getKVPairsRead() int64 {
 	return kvPairsRead
 }
 
+func (z *zigzagJoiner) getKVCPUTime() int64 {
+	var kvCPUTime int64
+	for i := range z.infos {
+		kvCPUTime += z.infos[i].fetcher.GetKVCPUTime()
+	}
+	return kvCPUTime
+}
+
 func (z *zigzagJoiner) getRowsRead() int64 {
 	var rowsRead int64
 	for i := range z.infos {
@@ -903,12 +919,22 @@ func (z *zigzagJoiner) getBatchRequestsIssued() int64 {
 	return batchRequestsIssued
 }
 
+func (z *zigzagJoiner) getLocalKVCPUTime() int64 {
+	var localKVCPUTime int64
+	for i := range z.infos {
+		localKVCPUTime += z.infos[i].fetcher.GetLocalKVCPUTime()
+	}
+	return localKVCPUTime
+}
+
 func (z *zigzagJoiner) generateMeta() []execinfrapb.ProducerMetadata {
 	trailingMeta := make([]execinfrapb.ProducerMetadata, 1, 2)
 	meta := &trailingMeta[0]
 	meta.Metrics = execinfrapb.GetMetricsMeta()
 	meta.Metrics.BytesRead = z.getBytesRead()
 	meta.Metrics.RowsRead = z.getRowsRead()
+	meta.Metrics.KVCPUTime = z.getKVCPUTime()
+	meta.Metrics.LocalKVCPUTime = z.getLocalKVCPUTime()
 	if tfs := execinfra.GetLeafTxnFinalState(z.Ctx(), z.FlowCtx.Txn); tfs != nil {
 		trailingMeta = append(trailingMeta, execinfrapb.ProducerMetadata{LeafTxnFinalState: tfs})
 	}

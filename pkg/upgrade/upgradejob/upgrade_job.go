@@ -10,7 +10,6 @@ package upgradejob
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/clusterversion"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
@@ -24,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/upgrade"
 	"github.com/cockroachdb/cockroach/pkg/upgrade/migrationstable"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 )
 
 func init() {
@@ -60,11 +60,9 @@ func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 	v := pl.GetMigration().ClusterVersion.Version
 	db := execCtx.ExecCfg().InternalDB
 	ex := db.Executor()
-	enterpriseEnabled := base.CCLDistributionAndEnterpriseEnabled(
-		execCtx.ExecCfg().Settings)
+
 	alreadyCompleted, err := migrationstable.CheckIfMigrationCompleted(
-		ctx, v, nil /* txn */, ex,
-		enterpriseEnabled, migrationstable.ConsistentRead,
+		ctx, v, nil /* txn */, ex, migrationstable.ConsistentRead,
 	)
 	if alreadyCompleted || err != nil {
 		return errors.Wrapf(err, "checking migration completion for %v", v)
@@ -94,12 +92,13 @@ func (r resumer) Resume(ctx context.Context, execCtxI interface{}) error {
 			SessionData:        execCtx.SessionData(),
 			ClusterID:          execCtx.ExtendedEvalContext().ClusterID,
 			TenantInfoAccessor: mc.SystemDeps().TenantInfoAccessor,
+			OptionalJobID:      r.j.ID(),
 		}
 
 		tenantDeps.SchemaResolverConstructor = func(
 			txn *kv.Txn, descriptors *descs.Collection, currDb string,
 		) (resolver.SchemaResolver, func(), error) {
-			opName := "internal-planner-for-upgrades"
+			opName := redact.SafeString("internal-planner-for-upgrades")
 			sd := execCtx.SessionData().Clone()
 			sd.Database = currDb
 			internalPlanner, cleanup := sql.NewInternalPlanner(

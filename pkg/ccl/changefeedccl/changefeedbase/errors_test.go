@@ -46,7 +46,7 @@ func TestAsTerminalError(t *testing.T) {
 	t.Run("node drain marked as job retry", func(t *testing.T) {
 		cause := errors.New("some error happened")
 		termErr := changefeedbase.AsTerminalError(context.Background(), nodeIsDraining, cause)
-		require.Contains(t, cause.Error(), termErr.Error())
+		require.Contains(t, termErr.Error(), cause.Error())
 		require.True(t, jobs.IsRetryJobError(termErr))
 	})
 
@@ -55,19 +55,19 @@ func TestAsTerminalError(t *testing.T) {
 		cause := changefeedbase.WithTerminalError(
 			changefeedbase.MarkRetryableError(errors.New("confusing error")))
 		termErr := changefeedbase.AsTerminalError(context.Background(), nodeIsNotDraining, cause)
-		require.Contains(t, cause.Error(), termErr.Error())
+		require.Contains(t, termErr.Error(), cause.Error())
 	})
 
 	t.Run("assertion failures are terminal", func(t *testing.T) {
 		// Assertion failures are terminal, even if marked as retry-able.
 		cause := changefeedbase.MarkRetryableError(errors.AssertionFailedf("though shall not pass"))
 		termErr := changefeedbase.AsTerminalError(context.Background(), nodeIsNotDraining, cause)
-		require.Contains(t, cause.Error(), termErr.Error())
+		require.Contains(t, termErr.Error(), cause.Error())
 	})
 
 	t.Run("gc error is terminal", func(t *testing.T) {
 		cause := changefeedbase.MarkRetryableError(&kvpb.BatchTimestampBeforeGCError{})
 		termErr := changefeedbase.AsTerminalError(context.Background(), nodeIsNotDraining, cause)
-		require.Contains(t, cause.Error(), termErr.Error())
+		require.Contains(t, termErr.Error(), cause.Error())
 	})
 }

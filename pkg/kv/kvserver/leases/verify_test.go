@@ -69,7 +69,7 @@ func TestVerify(t *testing.T) {
 				LocalReplicaID: repl1.ReplicaID,
 				Desc:           &descCpy,
 				RaftStatus:     makeRaftStatus(repl1.ReplicaID, raftpb.StateLeader),
-				RaftFirstIndex: 5,
+				RaftCompacted:  4,
 				PrevLease: roachpb.Lease{
 					Replica:  repl2,
 					Epoch:    2,
@@ -196,11 +196,30 @@ func TestVerify(t *testing.T) {
 				expErr:      `\[NotLeaseHolderError\] refusing to acquire lease on follower`,
 				expRedirect: roachpb.ReplicaDescriptor{},
 			},
+			{
+				name: "follower, unknown leader, reject leader lease on leader unknown",
+				st: func() Settings {
+					st := defaultSettings()
+					return st
+				}(),
+				input: func() VerifyInput {
+					in := defaultFollowerInput()
+					// Unknown leader.
+					in.RaftStatus.Lead = raft.None
+					// Leader lease.
+					in.DesiredLeaseType = roachpb.LeaseLeader
+					return in
+				}(),
+				// Rejection if the leader is unknown. However, we don't know who to
+				// redirect to, so we don't include a hint.
+				expErr:      `\[NotLeaseHolderError\] refusing to acquire lease on follower`,
+				expRedirect: roachpb.ReplicaDescriptor{},
+			},
 		})
 	})
 
 	t.Run("transfer", func(t *testing.T) {
-		const repl1RaftFirstIndex = 5
+		const compactedIndex = 4
 		defaultInput := func() VerifyInput {
 			descCpy := desc
 			descCpy.InternalReplicas = append([]roachpb.ReplicaDescriptor(nil), desc.InternalReplicas...)
@@ -209,7 +228,7 @@ func TestVerify(t *testing.T) {
 				LocalReplicaID: repl1.ReplicaID,
 				Desc:           &descCpy,
 				RaftStatus:     nil, // set below
-				RaftFirstIndex: repl1RaftFirstIndex,
+				RaftCompacted:  compactedIndex,
 				PrevLease: roachpb.Lease{
 					Replica:  repl1,
 					Epoch:    2,
@@ -230,7 +249,7 @@ func TestVerify(t *testing.T) {
 			in := defaultInput()
 			in.RaftStatus = makeRaftStatus(repl1.ReplicaID, raftpb.StateLeader)
 			in.RaftStatus.Progress = map[raftpb.PeerID]rafttracker.Progress{
-				raftpb.PeerID(repl1.ReplicaID): {State: rafttracker.StateReplicate, Match: uint64(in.RaftFirstIndex)},
+				raftpb.PeerID(repl1.ReplicaID): {State: rafttracker.StateReplicate, Match: uint64(in.RaftCompacted)},
 			}
 			if targetState != noTargetState {
 				in.RaftStatus.Progress[raftpb.PeerID(repl2.ReplicaID)] = rafttracker.Progress{
@@ -240,51 +259,80 @@ func TestVerify(t *testing.T) {
 			return in
 		}
 
-		const leaseTransferErrPrefix = `refusing to transfer lease to .* because target may need a Raft snapshot: `
+		const leaseTransferSnapshotErrPrefix = `refusing to transfer lease to .* because target may need a Raft snapshot: `
+		const leaseTransferSendQueueErr = `refusing to transfer lease to .* because target has a send queue`
 		runTests(t, []testCase{
 			{
 				name:   "follower",
 				input:  defaultNonLeaderInput(raftpb.StateFollower),
-				expErr: leaseTransferErrPrefix + raftutil.LocalReplicaNotLeader.String(),
+				expErr: leaseTransferSnapshotErrPrefix + raftutil.LocalReplicaNotLeader.String(),
 			},
 			{
 				name:   "candidate",
 				input:  defaultNonLeaderInput(raftpb.StateCandidate),
-				expErr: leaseTransferErrPrefix + raftutil.LocalReplicaNotLeader.String(),
+				expErr: leaseTransferSnapshotErrPrefix + raftutil.LocalReplicaNotLeader.String(),
 			},
 			{
 				name:   "pre-candidate",
 				input:  defaultNonLeaderInput(raftpb.StatePreCandidate),
-				expErr: leaseTransferErrPrefix + raftutil.LocalReplicaNotLeader.String(),
+				expErr: leaseTransferSnapshotErrPrefix + raftutil.LocalReplicaNotLeader.String(),
 			},
 			{
 				name:   "leader, no progress for target",
 				input:  defaultLeaderInput(noTargetState, 0),
-				expErr: leaseTransferErrPrefix + raftutil.ReplicaUnknown.String(),
+				expErr: leaseTransferSnapshotErrPrefix + raftutil.ReplicaUnknown.String(),
 			},
 			{
 				name:   "leader, target state probe",
 				input:  defaultLeaderInput(rafttracker.StateProbe, 0),
-				expErr: leaseTransferErrPrefix + raftutil.ReplicaStateProbe.String(),
+				expErr: leaseTransferSnapshotErrPrefix + raftutil.ReplicaStateProbe.String(),
 			},
 			{
 				name:   "leader, target state snapshot",
 				input:  defaultLeaderInput(rafttracker.StateSnapshot, 0),
-				expErr: leaseTransferErrPrefix + raftutil.ReplicaStateSnapshot.String(),
+				expErr: leaseTransferSnapshotErrPrefix + raftutil.ReplicaStateSnapshot.String(),
 			},
 			{
 				name:   "leader, target state replicate, match+1 < firstIndex",
-				input:  defaultLeaderInput(rafttracker.StateReplicate, repl1RaftFirstIndex-2),
-				expErr: leaseTransferErrPrefix + raftutil.ReplicaMatchBelowLeadersFirstIndex.String(),
+				input:  defaultLeaderInput(rafttracker.StateReplicate, compactedIndex-1),
+				expErr: leaseTransferSnapshotErrPrefix + raftutil.ReplicaMatchBelowLeadersFirstIndex.String(),
 			},
 			{
 				name:   "leader, target state replicate, match+1 == firstIndex",
-				input:  defaultLeaderInput(rafttracker.StateReplicate, repl1RaftFirstIndex-1),
+				input:  defaultLeaderInput(rafttracker.StateReplicate, compactedIndex),
 				expErr: ``,
 			},
 			{
 				name:   "leader, target state replicate, match+1 > firstIndex",
-				input:  defaultLeaderInput(rafttracker.StateReplicate, repl1RaftFirstIndex),
+				input:  defaultLeaderInput(rafttracker.StateReplicate, compactedIndex+1),
+				expErr: ``,
+			},
+			{
+				name: "leader, target has send queue",
+				input: func() VerifyInput {
+					in := defaultLeaderInput(rafttracker.StateReplicate, compactedIndex)
+					in.TargetHasSendQueue = true
+					return in
+				}(),
+				expErr: leaseTransferSendQueueErr,
+			},
+			{
+				name: "leader, target has no send queue",
+				input: func() VerifyInput {
+					in := defaultLeaderInput(rafttracker.StateReplicate, compactedIndex)
+					in.TargetHasSendQueue = false
+					return in
+				}(),
+				expErr: ``,
+			},
+			{
+				name: "leader, target has send queue, bypass safety checks",
+				input: func() VerifyInput {
+					in := defaultLeaderInput(rafttracker.StateReplicate, compactedIndex)
+					in.TargetHasSendQueue = true
+					in.BypassSafetyChecks = true
+					return in
+				}(),
 				expErr: ``,
 			},
 		})

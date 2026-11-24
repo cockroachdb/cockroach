@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
@@ -155,14 +156,22 @@ import (
 // not follow here, although they may be good routes for optimization in the
 // future.
 type plpgsqlBuilder struct {
-	ob *Builder
+	ob      *Builder
+	options plOptions
 
 	// colRefs, if non-nil, tracks the set of columns referenced by scalar
 	// expressions.
 	colRefs *opt.ColSet
 
-	// returnType is the return type of the PL/pgSQL routine.
+	// returnType is the return type of the sub-routines that implement the
+	// PL/pgSQL routine. This is normally the same as the return type of the
+	// routine, but can be different in the case of a set-returning function, in
+	// which case it is types.Void.
 	returnType *types.T
+
+	// setReturnType, if set, is the return type of the set-returning function.
+	// It identifies the type of RETURN NEXT and RETURN QUERY statements.
+	setReturnType *types.T
 
 	// continuations is a stack of sub-routines that are called to resume
 	// execution from a certain point within the PL/pgSQL routine. For example,
@@ -188,10 +197,108 @@ type plpgsqlBuilder struct {
 	// building their body statements.
 	outScope *scope
 
+	// resultBufferID, if nonzero, uniquely identifies the result buffer for the
+	// set-returning PL/pgSQL function that is being built. Sub-routines may use
+	// this ID to add to the result set at arbitrary points during execution. This
+	// is how RETURN NEXT and RETURN QUERY are implemented.
+	resultBufferID memo.RoutineResultBufferID
+
 	routineName  string
-	isProcedure  bool
-	buildSQL     bool
 	identCounter int
+}
+
+// plOptions is a set of options that can be used to modify the behavior of the
+// PLpgSQL builder.
+type plOptions struct {
+	isSetReturning   bool
+	insideDataSource bool
+	isProcedure      bool
+	isTriggerFn      bool
+	isDoBlock        bool
+
+	// skipSQL is true if SQL statements and expressions should not be built.
+	// This is used during trigger function creation and when building a
+	// late-bound PL/pgSQL procedure, where the body is stored verbatim and
+	// references are resolved at CALL time.
+	skipSQL bool
+
+	// securityMode and routineOwner carry the enclosing routine's effective
+	// identity onto every continuation's UDFDefinition. PL/pgSQL COMMIT and
+	// ROLLBACK resume the body via a cached resumeProc memo that bypasses the
+	// optbuilder, so routineGenerator.Start relies on these fields to push the
+	// definer on resume. Zero values (RoutineInvoker, undefined owner) leave
+	// INVOKER and DO-block paths unaffected.
+	securityMode tree.RoutineSecurity
+	routineOwner username.SQLUsername
+}
+
+// basePLOptions returns a new plOptions struct with default values.
+func basePLOptions() plOptions {
+	return plOptions{}
+}
+
+// SetIsSetReturning returns a new plOptions struct with the isSetReturning flag
+// set to the given value.
+func (opts plOptions) SetIsSetReturning(isSetReturning bool) plOptions {
+	opts.isSetReturning = isSetReturning
+	return opts
+}
+
+// SetInsideDataSource returns a new plOptions struct with the insideDataSource
+// flag set to the given value.
+func (opts plOptions) SetInsideDataSource(insideDataSource bool) plOptions {
+	opts.insideDataSource = insideDataSource
+	return opts
+}
+
+// WithIsProcedure returns a new plOptions struct with the isProcedure flag set
+// to true.
+func (opts plOptions) WithIsProcedure() plOptions {
+	opts.isProcedure = true
+	return opts
+}
+
+// SetIsProcedure returns a new plOptions struct with the isProcedure flag set
+// to the given value.
+func (opts plOptions) SetIsProcedure(isProcedure bool) plOptions {
+	opts.isProcedure = isProcedure
+	return opts
+}
+
+// WithIsDoBlock returns a new plOptions struct with the isDoBlock flag set to
+// true.
+func (opts plOptions) WithIsDoBlock() plOptions {
+	opts.isDoBlock = true
+	return opts
+}
+
+// WithIsTriggerFn returns a new plOptions struct with the isTriggerFn flag
+// set to true.
+func (opts plOptions) WithIsTriggerFn() plOptions {
+	opts.isTriggerFn = true
+	return opts
+}
+
+// SetIsTriggerFn returns a new plOptions struct with the isTriggerFn flag set
+// to the given value.
+func (opts plOptions) SetIsTriggerFn(isTriggerFn bool) plOptions {
+	opts.isTriggerFn = isTriggerFn
+	return opts
+}
+
+// SetSkipSQL returns a new plOptions struct with the skipSQL flag set to the
+// given value.
+func (opts plOptions) SetSkipSQL(skipSQL bool) plOptions {
+	opts.skipSQL = skipSQL
+	return opts
+}
+
+// SetSecurity returns a new plOptions struct with the routine's security mode
+// and owner set so that continuations inherit them. See plOptions.securityMode.
+func (opts plOptions) SetSecurity(mode tree.RoutineSecurity, owner username.SQLUsername) plOptions {
+	opts.securityMode = mode
+	opts.routineOwner = owner
+	return opts
 }
 
 // routineParam is similar to tree.RoutineParam but stores the resolved type.
@@ -203,24 +310,32 @@ type routineParam struct {
 
 func newPLpgSQLBuilder(
 	ob *Builder,
+	options plOptions,
 	routineName, rootBlockLabel string,
 	colRefs *opt.ColSet,
 	routineParams []routineParam,
 	returnType *types.T,
-	isProcedure bool,
-	buildSQL bool,
 	outScope *scope,
+	resultBufferID memo.RoutineResultBufferID,
 ) *plpgsqlBuilder {
 	const initialBlocksCap = 2
 	b := &plpgsqlBuilder{
-		ob:          ob,
-		colRefs:     colRefs,
-		returnType:  returnType,
-		blocks:      make([]plBlock, 0, initialBlocksCap),
-		routineName: routineName,
-		isProcedure: isProcedure,
-		buildSQL:    buildSQL,
-		outScope:    outScope,
+		ob:             ob,
+		options:        options,
+		colRefs:        colRefs,
+		returnType:     returnType,
+		blocks:         make([]plBlock, 0, initialBlocksCap),
+		routineName:    routineName,
+		outScope:       outScope,
+		resultBufferID: resultBufferID,
+	}
+	if options.isSetReturning {
+		// The sub-routines for a set-returning PL/pgSQL function return VOID, since
+		// they don't return a value directly. Results are added to the result set
+		// by RETURN NEXT and RETURN QUERY statements instead; see their
+		// implementations in buildPLpgSQLStatements for details.
+		b.returnType = types.Void
+		b.setReturnType = returnType
 	}
 	// Build the initial block for the routine parameters, which are considered
 	// PL/pgSQL variables.
@@ -267,10 +382,11 @@ type plBlock struct {
 	// cursor before it is opened.
 	cursors map[ast.Variable]ast.CursorDeclaration
 
-	// hiddenVars is an ordered list of *hidden* variables that were not declared
-	// by the user, but are used internally by the builder. Hidden variables are
-	// not visible to the user, and are identified by their metadata name. They
-	// can only be assigned to by directly calling assignToHiddenVariable().
+	// hiddenVars lists the names of *hidden* variables that were not declared by
+	// the user, but are used internally by the builder. Hidden variables are
+	// not visible to the user, and are identified only by their ordinal position.
+	// They can only be assigned to by directly calling assignToHiddenVariable().
+	// The name of a hidden variable is only used for display purposes.
 	//
 	// As an example, the internal counter variable for a FOR loop is a
 	// hidden variable.
@@ -280,7 +396,9 @@ type plBlock struct {
 	hiddenVars []string
 
 	// hiddenVarTypes maps from each hidden variable in the scope to its type.
-	hiddenVarTypes map[string]*types.T
+	// It is a list instead of a map because hidden variables are only identified
+	// by their ordinal position.
+	hiddenVarTypes []*types.T
 
 	// hasExceptionHandler tracks whether this block has an exception handler.
 	hasExceptionHandler bool
@@ -316,7 +434,7 @@ func (b *plpgsqlBuilder) buildRootBlock(
 			s, param.name, &tree.CastExpr{Expr: tree.DNull, Type: param.typ}, noIndirection,
 		)
 	}
-	if b.isProcedure {
+	if b.options.isProcedure {
 		var tc transactionControlVisitor
 		ast.Walk(&tc, astBlock)
 		if tc.foundTxnControlStatement {
@@ -327,6 +445,12 @@ func (b *plpgsqlBuilder) buildRootBlock(
 				// when all ancestors are procedures or DO blocks.
 				panic(unimplemented.NewWithIssue(122266,
 					"transaction control statements in nested routines",
+				))
+			}
+			if b.options.isDoBlock {
+				// Disallow transaction control statements in DO blocks for now.
+				panic(unimplemented.NewWithIssue(138704,
+					"transaction control statements in DO blocks",
 				))
 			}
 			// Disable stable folding, since different parts of the routine can be run
@@ -431,7 +555,15 @@ func (b *plpgsqlBuilder) buildBlock(astBlock *ast.Block, s *scope) *scope {
 	// For a RECORD-returning routine, infer the concrete type by examining the
 	// RETURN statements. This has to happen after building the declaration
 	// block because RETURN statements can reference declared variables.
-	if b.returnType.Identical(types.AnyTuple) {
+	returnType := b.returnType
+	if b.options.isSetReturning {
+		returnType = b.setReturnType
+		if !b.ob.insideFuncDef && returnType.Identical(types.AnyTuple) {
+			panic(errors.AssertionFailedf(
+				"set-returning PL/pgSQL function should have a concrete return type by now",
+			))
+		}
+	} else if returnType.Identical(types.AnyTuple) {
 		recordVisitor := newRecordTypeVisitor(b.ob.ctx, b.ob.semaCtx, s, astBlock)
 		ast.Walk(recordVisitor, astBlock)
 		if rtyp := recordVisitor.typ; rtyp == nil || rtyp.Identical(types.AnyTuple) {
@@ -495,31 +627,39 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			}
 			b.appendPlpgSQLStmts(&blockCon, stmts[i+1:])
 			b.pushContinuation(blockCon)
-			defer b.popContinuation()
-			return b.buildBlock(t, s)
+			scope := b.buildBlock(t, s)
+			b.popContinuation()
+			return scope
 
 		case *ast.Return:
-			// If the routine has OUT-parameters or a VOID return type, the RETURN
-			// statement must have no expression. Otherwise, the RETURN statement must
-			// have a non-empty expression.
+			// If the routine has OUT-parameters, a VOID return type, or returns a
+			// set, the RETURN statement must have no expression. Otherwise, the
+			// RETURN statement must have a non-empty expression.
 			expr := t.Expr
-			if b.hasOutParam() {
+			switch {
+			case b.options.isSetReturning:
+				if expr != nil {
+					panic(returnWithReturnsSetErr)
+				}
+				expr = tree.DNull
+			case b.hasOutParam():
 				if expr != nil {
 					panic(returnWithOUTParameterErr)
 				}
 				expr = b.makeReturnForOutParams()
-			} else if b.returnType.Family() == types.VoidFamily {
+			case b.returnType.Family() == types.VoidFamily:
 				if expr != nil {
-					if b.isProcedure {
+					if b.options.isProcedure {
 						panic(returnWithVoidParameterProcedureErr)
 					} else {
 						panic(returnWithVoidParameterErr)
 					}
 				}
 				expr = tree.DNull
-			}
-			if expr == nil {
-				panic(emptyReturnErr)
+			default:
+				if expr == nil {
+					panic(emptyReturnErr)
+				}
 			}
 			// RETURN is handled by projecting a single column with the expression
 			// that is being returned.
@@ -530,6 +670,78 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			b.ob.synthesizeColumn(returnScope, returnColName, b.returnType, nil /* expr */, returnScalar)
 			b.ob.constructProjectForScope(s, returnScope)
 			return returnScope
+
+		case *ast.ReturnNext:
+			if !b.options.isSetReturning {
+				panic(returnNextScalarErr)
+			}
+			expr := t.Expr
+			if b.hasOutParam() {
+				// A set-returning routine with OUT parameters returns those parameters
+				// instead of an expression in a RETURN NEXT statement.
+				if expr != nil {
+					panic(returnNextWithOUTParameterErr)
+				}
+				expr = b.makeReturnForOutParams()
+			}
+			// RETURN NEXT is handled by projecting a single column with the return
+			// expression. This becomes the first body statement of a new continuation
+			// with output redirected to the result buffer.
+			retCon := b.makeContinuation("return_next")
+			retCon.def.FirstStmtOutput.TargetBufferID = b.resultBufferID
+			returnScalar := b.buildSQLExpr(expr, b.setReturnType, retCon.s)
+			retColName := scopeColName("").WithMetadataName(b.makeIdentifier("stmt_return_next"))
+			retNextScope := retCon.s.push()
+			b.ob.synthesizeColumn(retNextScope, retColName, b.setReturnType, nil /* expr */, returnScalar)
+			b.ob.constructProjectForScope(retCon.s, retNextScope)
+			if b.options.insideDataSource && b.setReturnType.Family() == types.TupleFamily {
+				retNextScope = b.ob.expandRoutineTupleIntoCols(retNextScope)
+			}
+			b.appendBodyStmtFromScope(&retCon, retNextScope, nil /* stmt */)
+			b.appendPlpgSQLStmts(&retCon, stmts[i+1:])
+			return b.callContinuation(&retCon, s)
+
+		case *ast.ReturnQuery:
+			if !b.options.isSetReturning {
+				panic(returnQueryScalarErr)
+			}
+			// RETURN QUERY is handled by building the query into the first body
+			// statement of a new continuation. The output of the query is redirected
+			// to the result buffer.
+			retCon := b.makeContinuation("return_next")
+			retCon.def.FirstStmtOutput.TargetBufferID = b.resultBufferID
+			retQueryScope := b.buildSQLStatement(t.SqlStmt, retCon.s)
+			if !b.setReturnType.Identical(types.AnyTuple) {
+				// The query must be validated against the expected return type. Do not
+				// validate during creation of a RECORD-returning function, since the
+				// return type is not known until the function is invoked.
+				var expectedTypes []*types.T
+				if b.setReturnType.Family() == types.TupleFamily {
+					expectedTypes = b.setReturnType.TupleContents()
+				} else {
+					expectedTypes = []*types.T{b.setReturnType}
+				}
+				if len(retQueryScope.cols) != len(expectedTypes) {
+					panic(errors.WithDetailf(returnQueryBaseErr,
+						"Number of returned columns (%d) does not match expected column count (%d).",
+						len(retQueryScope.cols), len(expectedTypes),
+					))
+				}
+				for colIdx := range retQueryScope.cols {
+					colTyp := retQueryScope.cols[colIdx].typ
+					if !colTyp.Identical(expectedTypes[colIdx]) {
+						panic(errors.WithDetailf(returnQueryBaseErr,
+							"Returned type %v does not match expected type %v in column %d.",
+							colTyp.SQLStringForError(), expectedTypes[colIdx].SQLStringForError(), colIdx+1))
+					}
+				}
+			}
+			if !b.options.insideDataSource && b.setReturnType.Family() == types.TupleFamily {
+				retQueryScope = b.ob.combineRoutineColsIntoTuple(retQueryScope)
+			}
+			b.appendBodyStmtFromScope(&retCon, retQueryScope, t.SqlStmt)
+			b.appendPlpgSQLStmts(&retCon, stmts[i+1:])
+			return b.callContinuation(&retCon, s)
 
 		case *ast.Assignment:
 			// Assignment (:=) is handled by projecting a new column with the same
@@ -663,12 +875,13 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			// Build a continuation that will resume execution after the loop.
 			exitCon := b.makeContinuationWithTyp("loop_exit", t.Label, continuationLoopExit)
 			b.appendPlpgSQLStmts(&exitCon, stmts[i+1:])
-			b.pushContinuation(exitCon)
-			defer b.popContinuation()
 			switch c := t.Control.(type) {
 			case *ast.IntForLoopControl:
+				b.pushContinuation(exitCon)
 				// FOR target IN [ REVERSE ] expr .. expr [ BY expr ] LOOP ...
-				return b.handleIntForLoop(s, t, c)
+				scope := b.handleIntForLoop(s, t, c)
+				b.popContinuation()
+				return scope
 			default:
 				panic(errors.WithDetail(unsupportedPLStmtErr,
 					"query and cursor FOR loops are not yet supported",
@@ -755,7 +968,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			// crdb_internal.plpgsql_raise builtin function.
 			con := b.makeContinuation("_stmt_raise")
 			con.def.Volatility = volatility.Volatile
-			b.appendBodyStmt(&con, b.buildPLpgSQLRaise(con.s, b.getRaiseArgs(con.s, t)))
+			b.appendBodyStmtFromScope(&con, b.buildPLpgSQLRaise(con.s, b.getRaiseArgs(con.s, t)), nil /* stmt */)
 			b.appendPlpgSQLStmts(&con, stmts[i+1:])
 			return b.callContinuation(&con, s)
 
@@ -776,7 +989,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			if len(t.Target) == 0 {
 				// When there is no INTO target, build the SQL statement into a body
 				// statement that is only executed for its side effects.
-				b.appendBodyStmt(&execCon, stmtScope)
+				b.appendBodyStmtFromScope(&execCon, stmtScope, t.SqlStmt)
 				b.appendPlpgSQLStmts(&execCon, stmts[i+1:])
 				return b.callContinuation(&execCon, s)
 			}
@@ -806,13 +1019,6 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 				stmtScope.makeOrderingChoice(),
 			)
 
-			// Add an optimization barrier in case the projected variables are never
-			// referenced again, to prevent column-pruning rules from dropping the
-			// side effects of executing the SELECT ... INTO statement.
-			if stmtScope.expr.Relational().VolatilitySet.HasVolatile() {
-				b.ob.addBarrier(stmtScope)
-			}
-
 			if strict {
 				// Check that the expression produces exactly one row.
 				b.addOneRowCheck(stmtScope)
@@ -828,13 +1034,21 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 				)
 			}
 
+			// Add an optimization barrier in case the projected variables are never
+			// referenced again, to prevent column-pruning and join-elimination rules
+			// from dropping the side effects of executing the SELECT ... INTO
+			// statement.
+			if stmtScope.expr.Relational().VolatilitySet.HasVolatile() {
+				b.ob.addBarrier(stmtScope)
+			}
+
 			// Step 2: build the INTO statement into a continuation routine that calls
 			// the previously built continuation.
 			intoScope := b.buildInto(stmtScope, t.Target)
 			intoScope = b.callContinuation(&retCon, intoScope)
 
 			// Step 3: call the INTO continuation from the parent scope.
-			b.appendBodyStmt(&execCon, intoScope)
+			b.appendBodyStmtFromScope(&execCon, intoScope, t.SqlStmt)
 			return b.callContinuation(&execCon, s)
 
 		case *ast.Open:
@@ -864,7 +1078,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			query := b.resolveOpenQuery(t)
 			fmtCtx := b.ob.evalCtx.FmtCtx(tree.FmtSimple)
 			fmtCtx.FormatNode(query)
-			openCon.def.CursorDeclaration = &tree.RoutineOpenCursor{
+			openCon.def.FirstStmtOutput.CursorDeclaration = &tree.RoutineOpenCursor{
 				NameArgIdx: source.(*scopeColumn).getParamOrd(),
 				Scroll:     t.Scroll,
 				CursorSQL:  fmtCtx.CloseAndGetString(),
@@ -874,7 +1088,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 				// Cursors with mutations are invalid.
 				panic(cursorMutationErr)
 			}
-			b.appendBodyStmt(&openCon, openScope)
+			b.appendBodyStmtFromScope(&openCon, openScope, query)
 			b.appendPlpgSQLStmts(&openCon, stmts[i+1:])
 
 			// Build a statement to generate a unique name for the cursor if one
@@ -884,7 +1098,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			nameCon := b.makeContinuation("_gen_cursor_name")
 			nameCon.def.Volatility = volatility.Volatile
 			nameScope := b.buildCursorNameGen(&nameCon, t.CurVar)
-			b.appendBodyStmt(&nameCon, b.callContinuation(&openCon, nameScope))
+			b.appendBodyStmtFromScope(&nameCon, b.callContinuation(&openCon, nameScope), nil /* stmt */)
 			return b.callContinuation(&nameCon, s)
 
 		case *ast.Close:
@@ -924,7 +1138,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			closeScope := closeCon.s.push()
 			b.ob.synthesizeColumn(closeScope, closeColName, types.Int, nil /* expr */, closeCall)
 			b.ob.constructProjectForScope(closeCon.s, closeScope)
-			b.appendBodyStmt(&closeCon, closeScope)
+			b.appendBodyStmtFromScope(&closeCon, closeScope, nil /* stmt */)
 			b.appendPlpgSQLStmts(&closeCon, stmts[i+1:])
 			return b.callContinuation(&closeCon, s)
 
@@ -948,17 +1162,25 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			fetchCon.def.Volatility = volatility.Volatile
 			fetchScope := b.buildFetch(fetchCon.s, t)
 			if t.IsMove {
-				b.appendBodyStmt(&fetchCon, fetchScope)
+				b.appendBodyStmtFromScope(&fetchCon, fetchScope, nil /* stmt */)
 				b.appendPlpgSQLStmts(&fetchCon, stmts[i+1:])
 				return b.callContinuation(&fetchCon, s)
 			}
 			// crdb_internal.plpgsql_fetch will return a tuple with the results of the
-			// FETCH call. Project each element as a PLpgSQL variable.
-			//
-			// Note: The number of tuple elements is equal to the length of the target
-			// list (padded with NULLs), so we can assume each target variable has a
-			// corresponding element.
-			intoScope := b.projectTupleAsIntoTarget(fetchScope, t.Target)
+			// FETCH call. Now we need to assign the results to the target variables.
+			var intoScope *scope
+			if b.targetIsRecordVar(t.Target) {
+				// When the target is a single composite-typed variable, the tuple
+				// result of the fetch is directly assigned to it.
+				intoScope = b.addPLpgSQLAssign(fetchScope, t.Target[0], &fetchScope.cols[0], noIndirection)
+			} else {
+				// Project each element as a PLpgSQL variable.
+				//
+				// Note: The number of tuple elements is equal to the length of the target
+				// list (padded with NULLs), so we can assume each target variable has a
+				// corresponding element.
+				intoScope = b.projectTupleAsIntoTarget(fetchScope, t.Target)
+			}
 
 			// Add a barrier in case the projected variables are never referenced
 			// again, to prevent column-pruning rules from removing the FETCH.
@@ -971,7 +1193,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			intoScope = b.callContinuation(&retCon, intoScope)
 
 			// Add the built statement to the FETCH continuation.
-			b.appendBodyStmt(&fetchCon, intoScope)
+			b.appendBodyStmtFromScope(&fetchCon, intoScope, nil /* stmt */)
 			return b.callContinuation(&fetchCon, s)
 
 		case *ast.Null:
@@ -994,7 +1216,7 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			if b.hasExceptionHandler() {
 				panic(txnControlWithExceptionErr)
 			}
-			if !b.isProcedure {
+			if !b.options.isProcedure {
 				panic(txnInUDFErr)
 			}
 			name := "_stmt_commit"
@@ -1045,6 +1267,9 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 				col.scalar = b.ob.buildRoutine(proc, def, callCon.s, callScope, b.colRefs)
 			})
 			b.ob.constructProjectForScope(callCon.s, callScope)
+			if overload.Volatility == volatility.Volatile {
+				b.ob.addBarrier(callScope)
+			}
 
 			// Collect any target variables in OUT-parameter position. The result of
 			// the procedure will be assigned to these variables, if any.
@@ -1066,11 +1291,11 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 					))
 				}
 			}
-			b.checkDuplicateTargets(target, "CALL")
+			b.checkDuplicateTargets(target, tree.CallStmtTag)
 			if len(target) == 0 {
 				// When there is no INTO target, build the nested procedure call into a
 				// body statement that is only executed for its side effects.
-				b.appendBodyStmt(&callCon, callScope)
+				b.appendBodyStmtFromScope(&callCon, callScope, nil /* stmt */)
 				b.appendPlpgSQLStmts(&callCon, stmts[i+1:])
 				return b.callContinuation(&callCon, s)
 			}
@@ -1085,8 +1310,22 @@ func (b *plpgsqlBuilder) buildPLpgSQLStatements(stmts []ast.Statement, s *scope)
 			intoScope = b.callContinuation(&retCon, intoScope)
 
 			// Add the built statement to the CALL continuation.
-			b.appendBodyStmt(&callCon, intoScope)
+			b.appendBodyStmtFromScope(&callCon, intoScope, nil /* stmt */)
 			return b.callContinuation(&callCon, s)
+
+		case *ast.DoBlock:
+			// DO statements are used to execute an anonymous code block. They are
+			// handled by building the statements in the block into a routine that is
+			// executed immediately.
+			//
+			// Build a continuation that will execute the routine in the first body
+			// statement, and then the following PL/pgSQL statements in the second.
+			doCon := b.makeContinuation("_stmt_do")
+			doCon.def.Volatility = volatility.Volatile
+			bodyScope := b.ob.buildPLpgSQLDoBody(t)
+			b.appendBodyStmtFromScope(&doCon, bodyScope, nil /* stmt */)
+			b.appendPlpgSQLStmts(&doCon, stmts[i+1:])
+			return b.callContinuation(&doCon, s)
 
 		default:
 			panic(errors.WithDetailf(unsupportedPLStmtErr,
@@ -1139,11 +1378,12 @@ func (b *plpgsqlBuilder) handleIntForLoop(
 		stepName    = "_loop_step"
 		counterName = "_loop_counter"
 	)
-	b.addHiddenVariable(lowerName, types.Int)
-	b.addHiddenVariable(upperName, types.Int)
-	b.addHiddenVariable(stepName, types.Int)
-	b.addHiddenVariable(counterName, types.Int)
+	// User-visible variable must be declared before hidden variables in a block.
 	b.addVariable(forLoop.Target[0], types.Int)
+	lowerOrd := b.addHiddenVariable(lowerName, types.Int)
+	upperOrd := b.addHiddenVariable(upperName, types.Int)
+	stepOrd := b.addHiddenVariable(stepName, types.Int)
+	counterOrd := b.addHiddenVariable(counterName, types.Int)
 
 	// Initialize the constant bounds and step size.
 	stepSize := control.Step
@@ -1151,15 +1391,9 @@ func (b *plpgsqlBuilder) handleIntForLoop(
 		// The default step size is 1.
 		stepSize = tree.NewDInt(1)
 	}
-	s = b.assignToHiddenVariable(s, lowerName, control.Lower)
-	s = b.assignToHiddenVariable(s, upperName, control.Upper)
-	s = b.assignToHiddenVariable(s, stepName, stepSize)
-
-	// When referencing a hidden variable, make sure to check the correct scope,
-	// as different columns can represent the variable depending on context.
-	refHiddenVar := func(s *scope, name string) *scopeColumn {
-		return s.findAnonymousColumnWithMetadataName(name)
-	}
+	s = b.assignToHiddenVariable(s, lowerOrd, control.Lower)
+	s = b.assignToHiddenVariable(s, upperOrd, control.Upper)
+	s = b.assignToHiddenVariable(s, stepOrd, stepSize)
 
 	// Add runtime checks for the bounds and step size.
 	branches := make(memo.ScalarListExpr, 0, 4)
@@ -1174,21 +1408,21 @@ func (b *plpgsqlBuilder) handleIntForLoop(
 		message := fmt.Sprintf("%s of FOR loop cannot be null", context)
 		addCheck(message, pgcode.NullValueNotAllowed.String(), checkCond)
 	}
-	addNullCheck("lower bound" /* context */, refHiddenVar(s, lowerName))
-	addNullCheck("upper bound" /* context */, refHiddenVar(s, upperName))
-	addNullCheck("BY value" /* context */, refHiddenVar(s, stepName))
+	addNullCheck("lower bound" /* context */, s.findFuncArgCol(lowerOrd))
+	addNullCheck("upper bound" /* context */, s.findFuncArgCol(upperOrd))
+	addNullCheck("BY value" /* context */, s.findFuncArgCol(stepOrd))
 	addCheck("BY value of FOR loop must be greater than zero", /* message */
 		pgcode.InvalidParameterValue.String(),
 		b.buildSQLExpr(&tree.ComparisonExpr{
 			Operator: treecmp.MakeComparisonOperator(treecmp.LE),
-			Left:     refHiddenVar(s, stepName),
+			Left:     s.findFuncArgCol(stepOrd),
 			Right:    tree.DZero,
 		}, types.Bool, s))
 	b.addRuntimeCheck(s, branches, raiseErrArgs)
 
 	// Initialize the loop counter target variables with the lower bound.
-	s = b.assignToHiddenVariable(s, counterName, refHiddenVar(s, lowerName))
-	s = b.addPLpgSQLAssign(s, forLoop.Target[0], refHiddenVar(s, lowerName), noIndirection)
+	s = b.assignToHiddenVariable(s, counterOrd, s.findFuncArgCol(lowerOrd))
+	s = b.addPLpgSQLAssign(s, forLoop.Target[0], s.findFuncArgCol(lowerOrd), noIndirection)
 
 	// The looping will be implemented by two continuations: one to execute the
 	// loop body, and one to increment the counter variable. The loop body and
@@ -1210,8 +1444,8 @@ func (b *plpgsqlBuilder) handleIntForLoop(
 	}
 	cond := &tree.ComparisonExpr{
 		Operator: cmpOp,
-		Left:     refHiddenVar(loopCon.s, counterName),
-		Right:    refHiddenVar(loopCon.s, upperName),
+		Left:     loopCon.s.findFuncArgCol(counterOrd),
+		Right:    loopCon.s.findFuncArgCol(upperOrd),
 	}
 	ifStmt := &ast.If{Condition: cond, ThenBody: forLoop.Body, ElseBody: []ast.Statement{&ast.Exit{}}}
 	b.appendPlpgSQLStmts(&loopCon, []ast.Statement{ifStmt})
@@ -1230,16 +1464,16 @@ func (b *plpgsqlBuilder) handleIntForLoop(
 	}
 	inc := &tree.BinaryExpr{
 		Operator: binOp,
-		Left:     refHiddenVar(incScope, counterName),
-		Right:    refHiddenVar(incScope, stepName),
+		Left:     incScope.findFuncArgCol(counterOrd),
+		Right:    incScope.findFuncArgCol(stepOrd),
 	}
-	incScope = b.assignToHiddenVariable(incScope, counterName, inc)
+	incScope = b.assignToHiddenVariable(incScope, counterOrd, inc)
 	incScope = b.addPLpgSQLAssign(
-		incScope, forLoop.Target[0], refHiddenVar(incScope, counterName), noIndirection,
+		incScope, forLoop.Target[0], incScope.findFuncArgCol(counterOrd), noIndirection,
 	)
 	// Call recursively into the loop body continuation.
 	incScope = b.callContinuation(&loopCon, incScope)
-	b.appendBodyStmt(&incrementCon, incScope)
+	b.appendBodyStmtFromScope(&incrementCon, incScope, nil /* stmt */)
 
 	// Notably, we call the loop body continuation here, rather than the
 	// increment continuation, because the counter should not be incremented
@@ -1327,7 +1561,7 @@ func (b *plpgsqlBuilder) buildCursorNameGen(nameCon *continuation, nameVar ast.V
 func (b *plpgsqlBuilder) addPLpgSQLAssign(
 	inScope *scope, ident ast.Variable, val ast.Expr, indirection tree.Name,
 ) *scope {
-	typ := b.resolveVariableForAssign(ident)
+	typ, ord := b.resolveVariableForAssign(ident)
 	assignScope := inScope.push()
 	for i := range inScope.cols {
 		col := &inScope.cols[i]
@@ -1350,7 +1584,8 @@ func (b *plpgsqlBuilder) addPLpgSQLAssign(
 		scalar = b.buildSQLExpr(val, typ, inScope)
 	}
 	b.addBarrierIfVolatile(inScope, scalar)
-	b.ob.synthesizeColumn(assignScope, colName, typ, nil, scalar)
+	col := b.ob.synthesizeColumn(assignScope, colName, typ, nil, scalar)
+	col.setParamOrd(ord)
 	b.ob.constructProjectForScope(inScope, assignScope)
 	b.addBarrierIfVolatile(assignScope, scalar)
 	return assignScope
@@ -1358,12 +1593,12 @@ func (b *plpgsqlBuilder) addPLpgSQLAssign(
 
 // assignToHiddenVariable is similar to addPLpgSQLAssign, but it assigns to a
 // hidden variable that is not visible to the user.
-func (b *plpgsqlBuilder) assignToHiddenVariable(inScope *scope, name string, val ast.Expr) *scope {
-	typ := b.resolveHiddenVariableForAssign(name)
+func (b *plpgsqlBuilder) assignToHiddenVariable(inScope *scope, ord int, val ast.Expr) *scope {
+	typ, name := b.resolveVariableForAssignByOrd(ord)
 	assignScope := inScope.push()
 	for i := range inScope.cols {
 		col := &inScope.cols[i]
-		if col.name.MetadataName() == name {
+		if col.getParamOrd() == ord {
 			// Allow the assignment to shadow previous values for this column.
 			continue
 		}
@@ -1371,10 +1606,11 @@ func (b *plpgsqlBuilder) assignToHiddenVariable(inScope *scope, name string, val
 		// column from the previous scope.
 		assignScope.appendColumn(col)
 	}
-	colName := scopeColName("").WithMetadataName(name)
+	colName := scopeColName("").WithMetadataName(string(name))
 	scalar := b.buildSQLExpr(val, typ, inScope)
 	b.addBarrierIfVolatile(inScope, scalar)
-	b.ob.synthesizeColumn(assignScope, colName, typ, nil, scalar)
+	col := b.ob.synthesizeColumn(assignScope, colName, typ, nil, scalar)
+	col.setParamOrd(ord)
 	b.ob.constructProjectForScope(inScope, assignScope)
 	b.addBarrierIfVolatile(assignScope, scalar)
 	return assignScope
@@ -1389,11 +1625,11 @@ const noIndirection = ""
 func (b *plpgsqlBuilder) handleIndirectionForAssign(
 	inScope *scope, typ *types.T, ident ast.Variable, indirection tree.Name, val tree.Expr,
 ) opt.ScalarExpr {
-	elemName := indirection.Normalize()
+	elemName := string(indirection)
 
 	// We do not yet support qualifying a variable with a block label.
 	b.checkBlockLabelReference(elemName)
-	if !b.buildSQL {
+	if b.options.skipSQL {
 		// For lazy SQL evaluation, replace all expressions with NULL.
 		return memo.NullSingleton
 	}
@@ -1441,15 +1677,22 @@ func (b *plpgsqlBuilder) handleIndirectionForAssign(
 func (b *plpgsqlBuilder) buildInto(stmtScope *scope, target []ast.Variable) *scope {
 	var targetTypes []*types.T
 	var targetNames []ast.Variable
-	if b.targetIsRecordVar(target) {
+	var targetOrds []int
+	targetIsRecordVar := b.targetIsRecordVar(target)
+	if targetIsRecordVar {
 		// For a single record-type variable, the SQL statement columns are assigned
 		// as elements of the variable, rather than the variable itself.
-		targetTypes = b.resolveVariableForAssign(target[0]).TupleContents()
+		//
+		// Note that we don't need to get the param ordinal here, since that's
+		// handled in projectRecordVar below.
+		typ, _ := b.resolveVariableForAssign(target[0])
+		targetTypes = typ.TupleContents()
 	} else {
 		targetNames = target
 		targetTypes = make([]*types.T, len(target))
+		targetOrds = make([]int, len(target))
 		for j := range target {
-			targetTypes[j] = b.resolveVariableForAssign(target[j])
+			targetTypes[j], targetOrds[j] = b.resolveVariableForAssign(target[j])
 		}
 	}
 
@@ -1473,10 +1716,14 @@ func (b *plpgsqlBuilder) buildInto(stmtScope *scope, target []ast.Variable) *sco
 			scalar = b.ob.factory.ConstructConstVal(tree.DNull, typ)
 		}
 		scalar = b.coerceType(scalar, typ)
-		b.ob.synthesizeColumn(intoScope, colName, typ, nil /* expr */, scalar)
+		col := b.ob.synthesizeColumn(intoScope, colName, typ, nil /* expr */, scalar)
+		if !targetIsRecordVar {
+			// Setting the param ordinal will be handled in projectRecordVar below.
+			col.setParamOrd(targetOrds[j])
+		}
 	}
 	b.ob.constructProjectForScope(stmtScope, intoScope)
-	if b.targetIsRecordVar(target) {
+	if targetIsRecordVar {
 		// Handle a single record-type variable (see projectRecordVar for details).
 		intoScope = b.projectRecordVar(intoScope, target[0])
 	}
@@ -1758,11 +2005,11 @@ func (b *plpgsqlBuilder) buildExceptions(block *ast.Block) *memo.ExceptionBlock 
 // handleEndOfFunction handles the case when control flow reaches the end of a
 // PL/pgSQL routine without reaching a RETURN statement.
 func (b *plpgsqlBuilder) handleEndOfFunction(inScope *scope) *scope {
-	if b.hasOutParam() || b.returnType.Family() == types.VoidFamily {
-		// Routines with OUT-parameters and VOID return types need not explicitly
-		// specify a RETURN statement.
+	if b.options.isSetReturning || b.hasOutParam() || b.returnType.Family() == types.VoidFamily {
+		// Routines that return VOID, or have OUT parameters, or are set-returning
+		// functions need not explicitly specify a RETURN statement.
 		var returnExpr tree.Expr = tree.DNull
-		if b.hasOutParam() {
+		if b.hasOutParam() && !b.options.isSetReturning {
 			returnExpr = b.makeReturnForOutParams()
 		}
 		returnScope := inScope.push()
@@ -1790,7 +2037,7 @@ func (b *plpgsqlBuilder) buildEndOfFunctionRaise(con *continuation) {
 		pgcode.RoutineExceptionFunctionExecutedNoReturnStatement.String(), /* code */
 	)
 	con.def.Volatility = volatility.Volatile
-	b.appendBodyStmt(con, b.buildPLpgSQLRaise(con.s, args))
+	b.appendBodyStmtFromScope(con, b.buildPLpgSQLRaise(con.s, args), nil /* stmt */)
 
 	// Build a dummy statement that returns NULL. It won't be executed, but
 	// ensures that the continuation routine's return type is correct.
@@ -1799,7 +2046,7 @@ func (b *plpgsqlBuilder) buildEndOfFunctionRaise(con *continuation) {
 	typedNull := b.ob.factory.ConstructNull(b.returnType)
 	b.ob.synthesizeColumn(eofScope, eofColName, b.returnType, nil /* expr */, typedNull)
 	b.ob.constructProjectForScope(con.s, eofScope)
-	b.appendBodyStmt(con, eofScope)
+	b.appendBodyStmtFromScope(con, eofScope, nil /* stmt */)
 }
 
 // addOneRowCheck handles INTO STRICT, where a SQL statement is required to
@@ -1906,11 +2153,12 @@ func (b *plpgsqlBuilder) buildFetch(s *scope, fetch *ast.Fetch) *scope {
 			// If the target is a single record-type variable, the columns of the
 			// FETCH are assigned as its *elements*, rather than directly to the
 			// variable.
-			typs = b.resolveVariableForAssign(fetch.Target[0]).TupleContents()
+			typ, _ := b.resolveVariableForAssign(fetch.Target[0])
+			typs = typ.TupleContents()
 		} else {
 			typs = make([]*types.T, len(fetch.Target))
 			for i := range fetch.Target {
-				typ := b.resolveVariableForAssign(fetch.Target[i])
+				typ, _ := b.resolveVariableForAssign(fetch.Target[i])
 				typs[i] = typ
 			}
 		}
@@ -1946,25 +2194,25 @@ func (b *plpgsqlBuilder) buildFetch(s *scope, fetch *ast.Fetch) *scope {
 	fetchScope := s.push()
 	b.ob.synthesizeColumn(fetchScope, fetchColName, returnType, nil /* expr */, fetchCall)
 	b.ob.constructProjectForScope(s, fetchScope)
-	if !fetch.IsMove && b.targetIsRecordVar(fetch.Target) {
-		// Handle a single record-type variable (see projectRecordVar for details).
-		fetchScope = b.projectRecordVar(fetchScope, fetch.Target[0])
-	}
 	return fetchScope
 }
 
 // targetIsSingleCompositeVar returns true if the given INTO target is a single
 // RECORD-type variable.
 func (b *plpgsqlBuilder) targetIsRecordVar(target []ast.Variable) bool {
-	return len(target) == 1 && b.resolveVariableForAssign(target[0]).Family() == types.TupleFamily
+	if len(target) != 1 {
+		return false
+	}
+	typ, _ := b.resolveVariableForAssign(target[0])
+	return typ.Family() == types.TupleFamily
 }
 
 // projectRecordVar handles the special case when a single RECORD-type variable
-// is the target of an INTO clause or FETCH statement. In this case, the columns
-// from the SQL statement (or FETCH) should be wrapped into a tuple, which is
-// assigned to the RECORD-type variable.
+// is the target of an INTO clause. In this case, the columns from the SQL
+// statement should be wrapped into a tuple, which is assigned to the
+// RECORD-type variable.
 func (b *plpgsqlBuilder) projectRecordVar(s *scope, name ast.Variable) *scope {
-	typ := b.resolveVariableForAssign(name)
+	typ, ord := b.resolveVariableForAssign(name)
 	recordScope := s.push()
 	elems := make(memo.ScalarListExpr, len(s.cols))
 	for j := range elems {
@@ -1972,6 +2220,7 @@ func (b *plpgsqlBuilder) projectRecordVar(s *scope, name ast.Variable) *scope {
 	}
 	tuple := b.ob.factory.ConstructTuple(elems, typ)
 	col := b.ob.synthesizeColumn(recordScope, scopeColName(name), typ, nil /* expr */, tuple)
+	col.setParamOrd(ord)
 	recordScope.expr = b.ob.constructProject(s.expr, []scopeColumn{*col})
 	return recordScope
 }
@@ -1982,12 +2231,13 @@ func (b *plpgsqlBuilder) projectRecordVar(s *scope, name ast.Variable) *scope {
 // continuations will have more parameters than those of its parent.
 func (b *plpgsqlBuilder) makeContinuation(conName string) continuation {
 	s := b.ob.allocScope()
-	params := make(opt.ColList, 0, b.variableCount()+b.hiddenVariableCount())
+	params := make(opt.ColList, 0, b.variableCount(len(b.blocks)))
 	addParam := func(name scopeColumnName, typ *types.T) {
 		col := b.ob.synthesizeColumn(s, name, typ, nil /* expr */, nil /* scalar */)
 		// TODO(mgartner): Lift the 100 parameter restriction for synthesized
 		// continuation UDFs.
-		col.setParamOrd(len(params))
+		paramOrd := len(params)
+		col.setParamOrd(paramOrd)
 		params = append(params, col.id)
 	}
 	// Invariant: the variables of a child block always follow those of a parent
@@ -1999,10 +2249,10 @@ func (b *plpgsqlBuilder) makeContinuation(conName string) continuation {
 		for _, name := range block.vars {
 			addParam(scopeColName(name), block.varTypes[name])
 		}
-		for _, name := range block.hiddenVars {
+		for varIdx, name := range block.hiddenVars {
 			// Do not give the column constructed for a hidden variable a reference
 			// name, since hidden variables cannot be referenced by the user.
-			addParam(scopeColName("").WithMetadataName(name), block.hiddenVarTypes[name])
+			addParam(scopeColName("").WithMetadataName(name), block.hiddenVarTypes[varIdx])
 		}
 	}
 	b.ensureScopeHasExpr(s)
@@ -2015,6 +2265,9 @@ func (b *plpgsqlBuilder) makeContinuation(conName string) continuation {
 			BlockState:        b.block().state,
 			RoutineType:       tree.UDFRoutine,
 			RoutineLang:       tree.RoutineLangPLpgSQL,
+			// See plOptions.securityMode for why continuations carry these.
+			SecurityMode: b.options.securityMode,
+			RoutineOwner: b.options.routineOwner,
 		},
 		typ: continuationDefault,
 		s:   s,
@@ -2032,22 +2285,32 @@ func (b *plpgsqlBuilder) makeContinuationWithTyp(
 	return con
 }
 
-// appendBodyStmt adds a body statement to the definition of a continuation
-// function. Only the last body statement will return results; all others will
-// only be executed for their side effects (e.g. RAISE statement).
+// appendBodyStmtFromScope adds the given body statement and its required
+// properties from the given scope to the definition of a continuation function.
+// Only the last body statement will return results; all others will only be
+// executed for their side effects (e.g. RAISE statement).
 //
-// appendBodyStmt is separate from makeContinuation to allow recursive routine
-// definitions, which need to push the continuation before it is finished. The
-// separation also allows for appending multiple body statements.
-func (b *plpgsqlBuilder) appendBodyStmt(con *continuation, bodyScope *scope) {
+// appendBodyStmtFromScope is separate from makeContinuation to allow recursive
+// routine definitions, which need to push the continuation before it is
+// finished. The separation also allows for appending multiple body statements.
+// If the continuation does not map to an explicit statement in the body, stmt
+// may be nil.
+func (b *plpgsqlBuilder) appendBodyStmtFromScope(
+	con *continuation, bodyScope *scope, stmt tree.Statement,
+) {
 	// Set the volatility of the continuation routine to the least restrictive
 	// volatility level in the Relational properties of the body statements.
-	vol := bodyScope.expr.Relational().VolatilitySet.ToVolatility()
+	bodyExpr := bodyScope.expr
+	vol := bodyExpr.Relational().VolatilitySet.ToVolatility()
 	if con.def.Volatility < vol {
 		con.def.Volatility = vol
 	}
-	con.def.Body = append(con.def.Body, bodyScope.expr)
+	con.def.Body = append(con.def.Body, bodyExpr)
 	con.def.BodyProps = append(con.def.BodyProps, bodyScope.makePhysicalProps())
+	if stmt != nil {
+		con.def.BodyTags = append(con.def.BodyTags, stmt.StatementTag())
+		con.def.BodyASTs = append(con.def.BodyASTs, stmt)
+	}
 }
 
 // appendPlpgSQLStmts builds the given PLpgSQL statements into a relational
@@ -2057,7 +2320,7 @@ func (b *plpgsqlBuilder) appendPlpgSQLStmts(con *continuation, stmts []ast.State
 	// Make sure to push s before constructing the continuation scope to ensure
 	// that the parameter columns are not projected.
 	continuationScope := b.buildPLpgSQLStatements(stmts, con.s.push())
-	b.appendBodyStmt(con, continuationScope)
+	b.appendBodyStmtFromScope(con, continuationScope, nil /* stmt */)
 }
 
 // callContinuation adds a column that projects the result of calling the
@@ -2133,7 +2396,7 @@ func (b *plpgsqlBuilder) makeContinuationArgs(con *continuation, s *scope) memo.
 			args = append(args, b.ob.factory.ConstructVariable(source.(*scopeColumn).id))
 		}
 		for _, name := range block.hiddenVars {
-			col := s.findAnonymousColumnWithMetadataName(name)
+			col := s.findFuncArgCol(len(args))
 			if col == nil {
 				panic(errors.AssertionFailedf("hidden variable %s not found", name))
 			}
@@ -2163,29 +2426,65 @@ func (b *plpgsqlBuilder) addBarrierIfVolatile(s *scope, expr opt.ScalarExpr) {
 // buildSQLExpr type-checks and builds the given SQL expression into a
 // ScalarExpr within the given scope.
 func (b *plpgsqlBuilder) buildSQLExpr(expr ast.Expr, typ *types.T, s *scope) opt.ScalarExpr {
-	if !b.buildSQL {
+	if b.options.skipSQL {
 		// For lazy SQL evaluation, replace all expressions with NULL.
 		return memo.NullSingleton
 	}
+	// Save any outer CTEs before building the expression, which may have
+	// subqueries with inner CTEs. Also set the maxParamOrd to the number of
+	// routine parameters.
+	defer func(prevCTEs cteSources, prevCheckMaxParamOrd bool, prevMaxParamOrd int, prevHook func(*tree.ColumnItem) (tree.Expr, bool)) {
+		b.ob.ctes = prevCTEs
+		s.checkMaxParamOrd = prevCheckMaxParamOrd
+		s.maxParamOrd = prevMaxParamOrd
+		s.plpgsqlVarRef = prevHook
+	}(b.ob.ctes, s.checkMaxParamOrd, s.maxParamOrd, s.plpgsqlVarRef)
+	b.ob.ctes = nil
+	s.checkMaxParamOrd = true
+	s.maxParamOrd = len(b.rootBlock().vars)
+	s.plpgsqlVarRef = b.rewriteCompositeFieldAccess
 	expr, _ = tree.WalkExpr(s, expr)
 	typedExpr, err := expr.TypeCheck(b.ob.ctx, b.ob.semaCtx, typ)
 	if err != nil {
 		panic(err)
 	}
 	scalar := b.ob.buildScalar(typedExpr, s, nil, nil, b.colRefs)
-	return b.coerceType(scalar, typ)
+	scalar = b.coerceType(scalar, typ)
+	if len(b.ob.ctes) == 0 {
+		return scalar
+	}
+	// There was at least one CTE within the scalar expression. It is possible to
+	// "hoist" them above this point, but building them eagerly here means that
+	// callers don't have to worry about CTE handling.
+	f := b.ob.factory
+	valuesCol := f.Metadata().AddColumn("", scalar.DataType())
+	valuesExpr := f.ConstructValues(
+		memo.ScalarListExpr{f.ConstructTuple(memo.ScalarListExpr{scalar}, scalar.DataType())},
+		&memo.ValuesPrivate{Cols: opt.ColList{valuesCol}, ID: f.Metadata().NextUniqueID()},
+	)
+	withExpr := b.ob.buildWiths(valuesExpr, b.ob.ctes)
+	return f.ConstructSubquery(withExpr, &memo.SubqueryPrivate{})
 }
 
 // buildSQLStatement type-checks and builds the given SQL statement into a
 // RelExpr within the given scope.
 func (b *plpgsqlBuilder) buildSQLStatement(stmt tree.Statement, inScope *scope) (outScope *scope) {
-	if !b.buildSQL {
+	if b.options.skipSQL {
 		// For lazy SQL evaluation, replace all statements with a single row without
 		// any columns.
 		outScope = inScope.push()
 		outScope.expr = b.ob.factory.ConstructNoColsRow()
 		return outScope
 	}
+	// Set the maxParamOrd to the number of routine parameters.
+	defer func(prevCheckMaxParamOrd bool, prevMaxParamOrd int, prevHook func(*tree.ColumnItem) (tree.Expr, bool)) {
+		inScope.checkMaxParamOrd = prevCheckMaxParamOrd
+		inScope.maxParamOrd = prevMaxParamOrd
+		inScope.plpgsqlVarRef = prevHook
+	}(inScope.checkMaxParamOrd, inScope.maxParamOrd, inScope.plpgsqlVarRef)
+	inScope.checkMaxParamOrd = true
+	inScope.maxParamOrd = len(b.rootBlock().vars)
+	inScope.plpgsqlVarRef = b.rewriteCompositeFieldAccess
 	return b.ob.buildStmtAtRootWithScope(stmt, nil /* desiredTypes */, inScope)
 }
 
@@ -2215,14 +2514,71 @@ func (b *plpgsqlBuilder) coerceType(scalar opt.ScalarExpr, typ *types.T) opt.Sca
 	return scalar
 }
 
+// lookupPLpgSQLVar searches the active block stack for a PL/pgSQL variable
+// with the given name and returns its declared type. The second return value
+// is false if no such variable exists. Unlike resolveVariableForAssign, this
+// does not panic and does not enforce constness.
+func (b *plpgsqlBuilder) lookupPLpgSQLVar(name ast.Variable) (typ *types.T, found bool) {
+	for i := len(b.blocks) - 1; i >= 0; i-- {
+		if t, ok := b.blocks[i].varTypes[name]; ok {
+			return t, true
+		}
+	}
+	return nil, false
+}
+
+// rewriteCompositeFieldAccess implements the scope.plpgsqlVarRef hook. It
+// rewrites a SQL ColumnItem of the form `var.field` into the equivalent
+// parenthesized field-access expression `(var).field` when `var` names a
+// composite-typed PL/pgSQL variable that has a field with the given name.
+// The second return value indicates whether the prefix names any PL/pgSQL
+// variable in scope (composite or not), so that callers can suppress hints
+// that wouldn't apply. This mirrors the plpgsql_post_column_ref hook in
+// postgres' pl_comp.c.
+func (b *plpgsqlBuilder) rewriteCompositeFieldAccess(
+	t *tree.ColumnItem,
+) (rewritten tree.Expr, knownVar bool) {
+	if t.TableName == nil {
+		return nil, false
+	}
+	prefix := t.TableName.Object()
+	if prefix == "" {
+		return nil, false
+	}
+	varTyp, found := b.lookupPLpgSQLVar(ast.Variable(prefix))
+	if !found {
+		return nil, false
+	}
+	if varTyp.Family() != types.TupleFamily {
+		return nil, true
+	}
+	// The field name must match one of the tuple's labels.
+	var matched bool
+	for _, label := range varTyp.TupleLabels() {
+		if label == string(t.ColumnName) {
+			matched = true
+			break
+		}
+	}
+	if !matched {
+		return nil, true
+	}
+	return &tree.ColumnAccessExpr{
+		Expr:    &tree.UnresolvedName{NumParts: 1, Parts: tree.NameParts{prefix}},
+		ColName: t.ColumnName,
+	}, true
+}
+
 // resolveVariableForAssign attempts to retrieve the type of the variable with
-// the given name, throwing an error if no such variable exists.
-func (b *plpgsqlBuilder) resolveVariableForAssign(name ast.Variable) *types.T {
+// the given name, as well as its ordinal position within the set of all
+// variables in the current scope. It throws an error if no such variable
+// exists.
+func (b *plpgsqlBuilder) resolveVariableForAssign(name ast.Variable) (typ *types.T, ord int) {
 	// Search the blocks in reverse order to ensure that more recent declarations
 	// are encountered first.
 	for i := len(b.blocks) - 1; i >= 0; i-- {
 		block := &b.blocks[i]
-		typ, ok := block.varTypes[name]
+		varTyp, ok := block.varTypes[name]
 		if !ok {
 			continue
 		}
@@ -2231,26 +2587,51 @@ func (b *plpgsqlBuilder) resolveVariableForAssign(name ast.Variable) *types.T {
 				panic(pgerror.Newf(pgcode.ErrorInAssignment, "variable \"%s\" is declared CONSTANT", name))
 			}
 		}
-		return typ
+		// Get the ordinal position of the variable within the set of variables in
+		// the current scope.
+		ord = b.variableCount(i)
+		for j := range block.vars {
+			if block.vars[j] == name {
+				ord += j
+				break
+			}
+		}
+		return varTyp, ord
 	}
 	panic(pgerror.Newf(pgcode.Syntax, "\"%s\" is not a known variable", name))
 }
 
-// resolveHiddenVariableForAssign is similar to resolveVariableForAssign, but
-// applies to hidden variables, which are identified only by their name in the
-// query's metadata. It panics if the hidden variable is not found.
-func (b *plpgsqlBuilder) resolveHiddenVariableForAssign(name string) *types.T {
-	// Search the blocks in reverse order to ensure that more recent declarations
-	// are encountered first.
-	for i := len(b.blocks) - 1; i >= 0; i-- {
+// resolveVariableForAssignByOrd is similar to resolveVariableForAssign, but
+// resolves a variable by its ordinal position in the list of all variables in
+// the current scope. It returns the name and type of the variable. It panics if
+// the variable is not found.
+//
+// NOTE: unlike resolveVariableForAssign, resolveVariableForAssignByOrd is able
+// to resolve hidden variables.
+func (b *plpgsqlBuilder) resolveVariableForAssignByOrd(ord int) (typ *types.T, name ast.Variable) {
+	originalOrd := ord
+	for i := range b.blocks {
 		block := &b.blocks[i]
-		typ, ok := block.hiddenVarTypes[name]
-		if !ok {
-			continue
+		if ord < len(block.vars) {
+			// This is a user-visible variable.
+			name = block.vars[ord]
+			if block.constants != nil {
+				if _, ok := block.constants[name]; ok {
+					panic(pgerror.Newf(pgcode.ErrorInAssignment, "variable \"%s\" is declared CONSTANT", name))
+				}
+			}
+			return block.varTypes[name], name
 		}
-		return typ
+		ord -= len(block.vars)
+		if ord < len(block.hiddenVars) {
+			// This is a hidden variable.
+			return block.hiddenVarTypes[ord], ast.Variable(block.hiddenVars[ord])
+		}
+		ord -= len(block.hiddenVars)
 	}
-	panic(errors.AssertionFailedf("hidden variable %s not found", name))
+	// Increment the ordinal for the error message, since the placeholder syntax
+	// is 1-based.
+	panic(pgerror.Newf(pgcode.Syntax, "\"$%d\" is not a known variable", originalOrd+1))
 }
 
 // projectTupleAsIntoTarget maps from the elements of a tuple column to the
@@ -2263,14 +2644,15 @@ func (b *plpgsqlBuilder) projectTupleAsIntoTarget(inScope *scope, target []ast.V
 	intoScope := inScope.push()
 	tupleCol := inScope.cols[0].id
 	for i := range target {
-		typ := b.resolveVariableForAssign(target[i])
+		typ, ord := b.resolveVariableForAssign(target[i])
 		colName := scopeColName(target[i])
 		scalar := b.ob.factory.ConstructColumnAccess(
 			b.ob.factory.ConstructVariable(tupleCol),
 			memo.TupleOrdinal(i),
 		)
 		scalar = b.coerceType(scalar, typ)
-		b.ob.synthesizeColumn(intoScope, colName, typ, nil /* expr */, scalar)
+		col := b.ob.synthesizeColumn(intoScope, colName, typ, nil /* expr */, scalar)
+		col.setParamOrd(ord)
 	}
 	b.ob.constructProjectForScope(inScope, intoScope)
 	return intoScope
@@ -2353,7 +2735,7 @@ func (b *plpgsqlBuilder) makeReturnForOutParams() tree.Expr {
 			exprs[i] = tree.DNull
 		}
 	}
-	if len(exprs) == 1 && !b.isProcedure {
+	if len(exprs) == 1 && !b.options.isProcedure {
 		// For procedures, even a single column is wrapped in a tuple.
 		return exprs[0]
 	}
@@ -2441,6 +2823,9 @@ func (b *plpgsqlBuilder) getContinuation(
 // PL/pgSQL block scope.
 func (b *plpgsqlBuilder) addVariable(name ast.Variable, typ *types.T) {
 	curBlock := b.block()
+	if len(curBlock.hiddenVars) > 0 {
+		panic(errors.AssertionFailedf("hidden variables must be declared after all visible variables"))
+	}
 	if _, ok := curBlock.varTypes[name]; ok {
 		panic(pgerror.Newf(pgcode.Syntax, "duplicate declaration at or near \"%s\"", name))
 	}
@@ -2458,14 +2843,15 @@ func (b *plpgsqlBuilder) addVariable(name ast.Variable, typ *types.T) {
 }
 
 // addHiddenVariable adds a hidden variable with the given (metadata) name and
-// type to the current PL/pgSQL block scope.
-func (b *plpgsqlBuilder) addHiddenVariable(metadataName string, typ *types.T) {
+// type to the current PL/pgSQL block scope. It returns the ordinal position of
+// the variable within the set of all variables in the current scope. This will
+// be used to uniquely identify the hidden variable going forward.
+func (b *plpgsqlBuilder) addHiddenVariable(metadataName string, typ *types.T) (ord int) {
+	ord = b.variableCount(len(b.blocks))
 	curBlock := b.block()
 	curBlock.hiddenVars = append(curBlock.hiddenVars, metadataName)
-	if curBlock.hiddenVarTypes == nil {
-		curBlock.hiddenVarTypes = make(map[string]*types.T)
-	}
-	curBlock.hiddenVarTypes[metadataName] = typ
+	curBlock.hiddenVarTypes = append(curBlock.hiddenVarTypes, typ)
+	return ord
 }
 
 // block returns the block for the current PL/pgSQL block.
@@ -2512,20 +2898,15 @@ func (b *plpgsqlBuilder) hasExceptionHandler() bool {
 }
 
 // variableCount returns the number of PL/pgSQL variables that are in scope for
-// the current block. Note that this count does not include hidden variables.
-func (b *plpgsqlBuilder) variableCount() int {
-	var count int
-	for i := range b.blocks {
-		count += len(b.blocks[i].vars)
+// the first numBlocks blocks. This count includes hidden variables.
+func (b *plpgsqlBuilder) variableCount(numBlocks int) int {
+	if numBlocks > len(b.blocks) {
+		panic(errors.AssertionFailedf(
+			"numBlocks %d exceeds number of blocks %d", numBlocks, len(b.blocks)))
 	}
-	return count
-}
-
-// variableCountWithHidden returns the number of hidden variables that are in
-// scope for the current block.
-func (b *plpgsqlBuilder) hiddenVariableCount() int {
 	var count int
-	for i := range b.blocks {
+	for i := range numBlocks {
+		count += len(b.blocks[i].vars)
 		count += len(b.blocks[i].hiddenVars)
 	}
 	return count
@@ -2560,7 +2941,7 @@ func (r *recordTypeVisitor) Visit(stmt ast.Statement) (newStmt ast.Statement, re
 			return t, false
 		}
 	case *ast.Return:
-		desired := types.Any
+		desired := types.AnyElement
 		if r.typ != nil && r.typ.Family() != types.UnknownFamily {
 			desired = r.typ
 		}
@@ -2605,6 +2986,84 @@ func (tc *transactionControlVisitor) Visit(
 		return stmt, false
 	}
 	return stmt, !tc.foundTxnControlStatement
+}
+
+// isAllowlistedProcedureDDL reports whether stmt is one of the DDL or DCL
+// statements supported inside stored procedure bodies. The set must be kept
+// in sync with the corresponding case in (*Builder).buildStmtAtRoot.
+func isAllowlistedProcedureDDL(stmt tree.Statement) bool {
+	switch stmt.(type) {
+	case *tree.CreateTable, *tree.DropTable,
+		*tree.CreateSchema, *tree.DropSchema,
+		*tree.CreateRole, *tree.DropRole,
+		*tree.Grant, *tree.Revoke, *tree.AlterDefaultPrivileges:
+		return true
+	}
+	return false
+}
+
+// requiresLateBindingInProcedure reports whether stmt is a DDL statement that
+// introduces or removes a catalog object whose name later statements in the
+// same procedure body might reference. Such statements are unsafe under early
+// binding because the early-bound build cannot resolve references against a
+// catalog object that does not yet exist. DCL (GRANT, REVOKE, ALTER DEFAULT
+// PRIVILEGES) does not introduce new resolvable names and is safe under early
+// binding.
+func requiresLateBindingInProcedure(stmt tree.Statement) bool {
+	switch stmt.(type) {
+	case *tree.CreateTable, *tree.DropTable,
+		*tree.CreateSchema, *tree.DropSchema,
+		*tree.CreateRole, *tree.DropRole:
+		return true
+	}
+	return false
+}
+
+// ddlVisitor walks a PL/pgSQL routine body and classifies any embedded DDL.
+// It inspects the wrapped tree.Statement on each PL/pgSQL node that carries
+// one. DynamicExecute (EXECUTE of a string expression) is not implemented in
+// the optbuilder and is intentionally not inspected here.
+//
+// foundDDLStmt holds the first DDL statement encountered that requires late
+// binding (see requiresLateBindingInProcedure); when non-nil it indicates the
+// body contains DDL whose ordering relative to later statements matters.
+// unsupportedStmt holds the first DDL statement encountered that is not in the
+// procedure allowlist at all (see isAllowlistedProcedureDDL). The two fields
+// drive different error paths in buildCreateFunction: an unsupported statement
+// is reported as an "unimplemented" feature, while a body that contains
+// late-binding-sensitive DDL is gated on the late-binding cluster setting.
+type ddlVisitor struct {
+	foundDDLStmt    tree.Statement
+	unsupportedStmt tree.Statement
+}
+
+var _ ast.StatementVisitor = &ddlVisitor{}
+
+func (dv *ddlVisitor) Visit(stmt ast.Statement) (newStmt ast.Statement, recurse bool) {
+	var sqlStmt tree.Statement
+	switch s := stmt.(type) {
+	case *ast.Execute:
+		sqlStmt = s.SqlStmt
+	case *ast.ReturnQuery:
+		sqlStmt = s.SqlStmt
+	case *ast.CursorDeclaration:
+		sqlStmt = s.Query
+	case *ast.Open:
+		sqlStmt = s.Query
+	}
+	if sqlStmt == nil || !tree.CanModifySchema(sqlStmt) {
+		return stmt, true
+	}
+	if !isAllowlistedProcedureDDL(sqlStmt) {
+		if dv.unsupportedStmt == nil {
+			dv.unsupportedStmt = sqlStmt
+		}
+		return stmt, true
+	}
+	if requiresLateBindingInProcedure(sqlStmt) && dv.foundDDLStmt == nil {
+		dv.foundDDLStmt = sqlStmt
+	}
+	return stmt, true
 }
 
 var (
@@ -2663,6 +3122,21 @@ var (
 	)
 	returnWithVoidParameterProcedureErr = pgerror.New(pgcode.Syntax,
 		"RETURN cannot have a parameter in a procedure")
+	returnWithReturnsSetErr = pgerror.New(pgcode.DatatypeMismatch,
+		"RETURN cannot have a parameter in a function returning set",
+	)
+	returnQueryBaseErr = pgerror.New(pgcode.DatatypeMismatch,
+		"structure of query does not match function result type",
+	)
+	returnNextScalarErr = pgerror.New(pgcode.DatatypeMismatch,
+		"cannot use RETURN NEXT in a non-SETOF function",
+	)
+	returnQueryScalarErr = pgerror.New(pgcode.DatatypeMismatch,
+		"cannot use RETURN QUERY in a non-SETOF function",
+	)
+	returnNextWithOUTParameterErr = pgerror.New(pgcode.DatatypeMismatch,
+		"RETURN NEXT cannot have a parameter in function with OUT parameters",
+	)
 	emptyReturnErr = pgerror.New(pgcode.Syntax,
 		"missing expression at or near \"RETURN;\"",
 	)

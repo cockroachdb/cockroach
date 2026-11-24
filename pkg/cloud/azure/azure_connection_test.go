@@ -10,10 +10,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn"
 	"github.com/cockroachdb/cockroach/pkg/cloud/externalconn/connectionpb"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
 
 func TestAzureStorageConnection(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	require.Equal(t, connectionpb.ConnectionProvider_azure_storage, externalconn.ProviderForURI("azure://test"))
 	require.Equal(t, connectionpb.ConnectionProvider_azure_storage, externalconn.ProviderForURI("azure-storage://test"))
 	require.Equal(t, connectionpb.ConnectionProvider_azure_storage, externalconn.ProviderForURI("azure-blob://test"))

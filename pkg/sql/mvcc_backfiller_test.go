@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"math/rand"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -37,7 +38,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
+	"github.com/cockroachdb/cockroach/pkg/upgrade/upgradebase"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -59,7 +62,7 @@ func TestIndexBackfillMergeRetry(t *testing.T) {
 
 	skip.UnderDuress(t, "this test fails under duress")
 
-	params, _ := createTestServerParams()
+	var params base.TestServerArgs
 
 	writesPopulated := false
 	var writesFn func() error
@@ -128,6 +131,9 @@ func TestIndexBackfillMergeRetry(t *testing.T) {
 			SkipWaitingForMVCCGC: true,
 		},
 		KeyVisualizer: &keyvisualizer.TestingKnobs{SkipJobBootstrap: true},
+		UpgradeManager: &upgradebase.TestingKnobs{
+			SkipHotRangesLoggerJobBootstrap: true,
+		},
 	}
 
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
@@ -135,6 +141,7 @@ func TestIndexBackfillMergeRetry(t *testing.T) {
 	codec := s.ApplicationLayer().Codec()
 
 	if _, err := sqlDB.Exec(`
+SET create_table_with_schema_locked=false;
 SET use_declarative_schema_changer='off';
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
@@ -176,7 +183,7 @@ func TestIndexBackfillFractionTracking(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
-	params, _ := createTestServerParams()
+	var params base.TestServerArgs
 
 	const (
 		rowCount  = 2000
@@ -197,8 +204,13 @@ func TestIndexBackfillFractionTracking(t *testing.T) {
 		require.NoError(t, splitIndex(tc, tableDesc, idx, sps))
 	}
 
+	// Chunks are processed concurrently, so we need to synchronize access to
+	// lastPercentage.
+	var mu syncutil.Mutex
 	var lastPercentage float32
 	assertFractionBetween := func(op string, min float32, max float32) {
+		mu.Lock()
+		defer mu.Unlock()
 		var fraction float32
 		sqlRunner.QueryRow(t, "SELECT fraction_completed FROM [SHOW JOBS] WHERE job_id = $1", jobID).Scan(&fraction)
 		t.Logf("fraction during %s: %f", op, fraction)
@@ -208,12 +220,13 @@ func TestIndexBackfillFractionTracking(t *testing.T) {
 		lastPercentage = fraction
 	}
 
+	var codec keys.SQLCodec
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			BackfillChunkSize: chunkSize,
 			RunBeforeResume: func(id jobspb.JobID) error {
 				jobID = id
-				tableDesc := desctestutils.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "public", "test")
+				tableDesc := desctestutils.TestingGetTableDescriptor(kvDB, codec, "t", "public", "test")
 				split(tableDesc, tableDesc.GetPrimaryIndex())
 				return nil
 			},
@@ -221,7 +234,7 @@ func TestIndexBackfillFractionTracking(t *testing.T) {
 				for i := rowCount + 1; i < (rowCount*2)+1; i++ {
 					sqlRunner.Exec(t, "INSERT INTO t.test VALUES ($1, $1)", i)
 				}
-				tableDesc := desctestutils.TestingGetTableDescriptor(kvDB, keys.SystemSQLCodec, "t", "public", "test")
+				tableDesc := desctestutils.TestingGetTableDescriptor(kvDB, codec, "t", "public", "test")
 				tempIdx, err := findCorrespondingTemporaryIndex(tableDesc, "new_idx")
 				require.NoError(t, err)
 				split(tableDesc, tempIdx)
@@ -249,8 +262,11 @@ func TestIndexBackfillFractionTracking(t *testing.T) {
 	})
 	defer tc.Stopper().Stop(context.Background())
 	kvDB = tc.Server(0).DB()
+	codec = tc.Server(0).Codec()
 	sqlDB := tc.ServerConn(0)
 	_, err := sqlDB.Exec("SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer='off';")
+	require.NoError(t, err)
+	_, err = sqlDB.Exec("SET create_table_with_schema_locked=false")
 	require.NoError(t, err)
 	_, err = sqlDB.Exec("SET use_declarative_schema_changer='off';")
 	require.NoError(t, err)
@@ -284,7 +300,7 @@ func TestRaceWithIndexBackfillMerge(t *testing.T) {
 		maxValue = 200
 	}
 
-	params, _ := createTestServerParams()
+	var params base.TestServerArgs
 	initMergeNotification := func() chan struct{} {
 		mu.Lock()
 		defer mu.Unlock()
@@ -349,7 +365,9 @@ func TestRaceWithIndexBackfillMerge(t *testing.T) {
 	kvDB := tc.Server(0).DB()
 	sqlDB := tc.ServerConn(0)
 	codec := tc.Server(0).ApplicationLayer().Codec()
-	_, err := sqlDB.Exec("SET use_declarative_schema_changer='off'")
+	_, err := sqlDB.Exec("SET create_table_with_schema_locked=false")
+	require.NoError(t, err)
+	_, err = sqlDB.Exec("SET use_declarative_schema_changer='off'")
 	require.NoError(t, err)
 	_, err = sqlDB.Exec("SET CLUSTER SETTING sql.defaults.use_declarative_schema_changer='off'")
 	require.NoError(t, err)
@@ -406,7 +424,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, x DECIMAL DEFAULT (DECIMAL '1.4')
 	if err := sqltestutils.CheckTableKeyCount(ctx, kvDB, codec, 1, maxValue); err != nil {
 		t.Fatal(err)
 	}
-	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
+	if err := sqlutils.RunInspect(sqlDB, "t", "test"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -479,7 +497,7 @@ func TestInvertedIndexMergeEveryStateWrite(t *testing.T) {
 	var initialRows = 10000
 	rowIdx := 0
 
-	params, _ := createTestServerParams()
+	var params base.TestServerArgs
 	var writeMore func() error
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
@@ -548,7 +566,7 @@ func TestIndexBackfillMergeTxnRetry(t *testing.T) {
 		additionalRowsForMerge = 10
 	)
 
-	params, _ := createTestServerParams()
+	var params base.TestServerArgs
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			// Ensure that the temp index has work to do.
@@ -582,6 +600,9 @@ func TestIndexBackfillMergeTxnRetry(t *testing.T) {
 			SkipWaitingForMVCCGC: true,
 		},
 		KeyVisualizer: &keyvisualizer.TestingKnobs{SkipJobBootstrap: true},
+		UpgradeManager: &upgradebase.TestingKnobs{
+			SkipHotRangesLoggerJobBootstrap: true,
+		},
 	}
 
 	s, sqlDB, kvDB = serverutils.StartServer(t, params)
@@ -590,8 +611,10 @@ func TestIndexBackfillMergeTxnRetry(t *testing.T) {
 	var err error
 	scratch, err = s.ScratchRange()
 	require.NoError(t, err)
+	scratch = append(s.Codec().TenantPrefix(), scratch...)
 
 	if _, err := sqlDB.Exec(`
+SET create_table_with_schema_locked=false;
 SET use_declarative_schema_changer='off';
 CREATE DATABASE t;
 CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
@@ -655,7 +678,8 @@ func splitIndex(
 	rkts := make(map[roachpb.RangeID]rangeAndKT)
 	for _, sp := range sps {
 
-		pik, err := randgen.TestingMakeSecondaryIndexKey(desc, index, keys.SystemSQLCodec, sp.Vals...)
+		pik, err := randgen.TestingMakeSecondaryIndexKey(
+			desc, index, tc.Server(0).Codec(), sp.Vals...)
 		if err != nil {
 			return err
 		}
@@ -736,7 +760,7 @@ func TestIndexMergeEveryChunkWrite(t *testing.T) {
 	rowIdx := 0
 	mergeSerializeCh := make(chan struct{}, 1)
 
-	params, _ := createTestServerParams()
+	var params base.TestServerArgs
 	var writeMore func() error
 	params.Knobs = base.TestingKnobs{
 		DistSQL: &execinfra.TestingKnobs{
@@ -780,6 +804,107 @@ func TestIndexMergeEveryChunkWrite(t *testing.T) {
 	require.NoError(t, writeMore(), "initial insert")
 	_, err = sqlDB.Exec("CREATE INDEX ON t.test (v)")
 	require.NoError(t, err)
+}
+
+// TestIndexOverwritesChunksDuringMerge intentionally overwrites as chunks
+// during merge process and confirms those rows are removed.
+func TestIndexOverwritesChunksDuringMerge(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	chunkSize := 10
+	const maxAutoRetries = 10
+	var params base.TestServerArgs
+	var writeMore func(sampleData bool) error
+	retryTracker := struct {
+		limitedPerKey map[string]int
+		syncutil.Mutex
+		commitChannel chan struct{}
+	}{
+		limitedPerKey: make(map[string]int),
+		commitChannel: make(chan struct{}),
+	}
+	var smallerChunkSizeObserved atomic.Int64
+	var nonZeroKeysToSkipObserved atomic.Int64
+
+	params.Knobs = base.TestingKnobs{
+		DistSQL: &execinfra.TestingKnobs{
+			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
+				// Overwrite all rows something exists in the temp index.
+				return writeMore(false)
+			},
+			IndexBackfillMergerTestingKnobs: &backfill.IndexBackfillMergerTestingKnobs{
+				RunBeforeScanChunk: func(startKey roachpb.Key) error {
+					// Modify 1 in 4 rows on each scan chunk, so that those
+					// keys are skipped over.
+					return writeMore(true)
+				},
+				RunBeforeMergeTxn: func(ctx context.Context, txn *kv.Txn, sourceKeys []roachpb.Key, keysToSkip int) error {
+					if len(sourceKeys) < chunkSize {
+						smallerChunkSizeObserved.Add(1)
+					}
+					if keysToSkip > 0 {
+						nonZeroKeysToSkipObserved.Add(1)
+					}
+					return nil
+				},
+				RunDuringMergeTxn: func(ctx context.Context, txn *kv.Txn, startKey, endKey roachpb.Key) error {
+					retryTracker.Lock()
+					defer retryTracker.Unlock()
+					if count := retryTracker.limitedPerKey[string(startKey)]; count >= maxAutoRetries {
+						return nil
+					}
+					retryTracker.limitedPerKey[string(startKey)]++
+					return txn.GenerateForcedRetryableErr(ctx, "forcing a retry error")
+				},
+			},
+		},
+	}
+
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
+
+	var mu syncutil.Mutex
+	var iteration = 0
+	// Upserts rows in the table. If sampleData is false,
+	// then all rows are updated. Otherwise, 1 in 4 rows are
+	// updated.
+	writeMore = func(sampleData bool) error {
+		const rowsPerWrite = 500
+		mu.Lock()
+		defer mu.Unlock()
+		for i := 0; i <= rowsPerWrite; i++ {
+			if sampleData {
+				if i%4 != 0 {
+					continue
+				}
+			}
+			if _, err := sqlDB.Exec("UPSERT INTO t.test VALUES ($1, $2)", i, iteration); err != nil {
+				return err
+			}
+		}
+		iteration += 1
+		return nil
+	}
+	_, err := sqlDB.Exec(fmt.Sprintf(`SET CLUSTER SETTING bulkio.index_backfill.merge_batch_size = %d`, chunkSize))
+	require.NoError(t, err)
+	_, err = sqlDB.Exec(fmt.Sprintf(`SET CLUSTER SETTING kv.transaction.internal.max_auto_retries = %d`, maxAutoRetries))
+	require.NoError(t, err)
+	_, err = sqlDB.Exec(`CREATE DATABASE t; CREATE TABLE t.test (k INT PRIMARY KEY, v int);`)
+	require.NoError(t, err)
+	require.NoError(t, writeMore(false), "initial insert")
+	_, err = sqlDB.Exec("ALTER TABLE t.test ADD COLUMN j INT DEFAULT 32")
+	require.NoError(t, err)
+	require.Greater(t,
+		smallerChunkSizeObserved.Load(),
+		int64(0),
+		"no chunks have decreased in size %d.",
+		smallerChunkSizeObserved.Load())
+	require.Greater(t,
+		nonZeroKeysToSkipObserved.Load(),
+		int64(0),
+		"no chunks have had keys to skip %d.",
+		nonZeroKeysToSkipObserved.Load())
 }
 
 // TestIndexMergeWithSplitsAndDistSQL tests the case where there's an index
@@ -842,7 +967,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v int);`
 	// Wait for the beginning of the Merge step of the schema change.
 	// Write data to the temp index and split it at the hazardous
 	// points.
-	params, _ := createTestServerParams()
+	var params base.TestServerArgs
 	params.Knobs = base.TestingKnobs{
 		SQLDeclarativeSchemaChanger: &scexec.TestingKnobs{
 			BeforeStage: func(p scplan.Plan, stageIdx int) error {
@@ -871,4 +996,84 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v int);`
 	tdb.Exec(t, createStmts)
 	tdb.Exec(t, "CREATE INDEX ON t.test (v)")
 	require.True(t, called)
+}
+
+// TestPartialIndexBackfillWithConcurrentFamilyUpdate validates that concurrent updates
+// with multiple column families still propagate to secondary indexes being constructed.
+func TestPartialIndexBackfillWithConcurrentFamilyUpdate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var (
+		s     serverutils.TestServerInterface
+		sqlDB *gosql.DB
+	)
+
+	var mergeReady chan struct{}
+	var waitForMerge chan struct{}
+
+	params := base.TestServerArgs{}
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			BackfillChunkSize: 100,
+		},
+		DistSQL: &execinfra.TestingKnobs{
+			IndexBackfillMergerTestingKnobs: &backfill.IndexBackfillMergerTestingKnobs{
+				RunBeforeScanChunk: func(startKey roachpb.Key) error {
+					mergeReady <- struct{}{}
+					<-waitForMerge
+					return nil
+				},
+			},
+		},
+		JobsTestingKnobs: jobs.NewTestingKnobsWithShortIntervals(),
+	}
+
+	s, sqlDB, _ = serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.Background())
+
+	mergeReady = make(chan struct{})
+	waitForMerge = make(chan struct{})
+	runner := sqlutils.MakeSQLRunner(sqlDB)
+	runner.Exec(t, `
+CREATE DATABASE t;
+CREATE TABLE t.test (
+    id INT PRIMARY KEY,
+    val STRING,
+    other_val STRING,
+    FAMILY f1(id, val),
+    FAMILY f2(other_val)
+);
+`)
+	// Insert two rows that match predicate for the index we are creating below.
+	runner.Exec(t, `
+INSERT INTO t.test VALUES 
+(1, 'BLAH', 'MEH'), 
+(2, 'BLAH', 'BLEH'),
+(3, 'MEH', 'GLEE'),
+(4, 'BLEH', 'GLAH');`)
+
+	// Run index creation in the background.
+	grp := ctxgroup.WithContext(context.Background())
+	grp.GoCtx(func(ctx context.Context) error {
+		// Create a partial index on values that match some predicate.
+		_, err := sqlDB.Exec("CREATE INDEX idx_test on t.test(val) WHERE val LIKE '%BLAH%'")
+		return err
+	})
+	// Wait for the merge step to start.
+	<-mergeReady
+	// Updates on an unrelated column should still inject updates the new partial index,
+	// while its mutating.
+	runner.Exec(t, `UPDATE t.test SET other_val = 'B' WHERE id IN (1, 2);`)
+	// Also, validate deletions behave correctly.
+	runner.Exec(t, `DELETE FROM t.test WHERE other_val='GLAH';`)
+	// Allow the merge to continue
+	close(waitForMerge)
+	// Wait for schema change to finish
+	require.NoError(t, grp.Wait())
+	// Confirm with a scan of the partial index that everything looks sound.
+	runner.CheckQueryResults(t, `SELECT id, val FROM t.test@idx_test WHERE val LIKE '%BLAH%' ORDER BY id`, [][]string{
+		{"1", "BLAH"},
+		{"2", "BLAH"},
+	})
 }

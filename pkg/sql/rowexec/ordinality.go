@@ -89,7 +89,7 @@ func (o *ordinalityProcessor) Next() (rowenc.EncDatumRow, *execinfrapb.ProducerM
 		}
 
 		// The ordinality should increment even if the row gets filtered out.
-		row = append(row, rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(o.curCnt))))
+		row = append(row, rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(tree.DInt(o.curCnt))))
 		o.curCnt++
 		if outRow := o.ProcessRowHelper(row); outRow != nil {
 			return outRow, nil

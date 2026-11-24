@@ -14,7 +14,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
-	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilities"
+	"github.com/cockroachdb/cockroach/pkg/multitenant/tenantcapabilitiespb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra/execopnode"
@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondatapb"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -41,6 +42,7 @@ import (
 func TestTraceAnalyzer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
+	skip.UnderDuress(t, "slow test; times out under race with external process tenant")
 
 	const (
 		testStmt = "SELECT * FROM test.foo ORDER BY v"
@@ -78,13 +80,10 @@ func TestTraceAnalyzer(t *testing.T) {
 
 	const gatewayNode = 0
 	srv, s := tc.Server(gatewayNode), tc.ApplicationLayer(gatewayNode)
-	if srv.TenantController().StartedDefaultTestTenant() {
-		systemSqlDB := srv.SystemLayer().SQLConn(t, serverutils.DBName("system"))
-		_, err := systemSqlDB.Exec(`ALTER TENANT [$1] GRANT CAPABILITY can_admin_relocate_range=true`, serverutils.TestTenantID().ToUint64())
-		require.NoError(t, err)
-		serverutils.WaitForTenantCapabilities(t, srv, serverutils.TestTenantID(), map[tenantcapabilities.ID]string{
-			tenantcapabilities.CanAdminRelocateRange: "true",
-		}, "")
+	if srv.DeploymentMode().IsExternal() {
+		require.NoError(t, srv.GrantTenantCapabilities(
+			ctx, serverutils.TestTenantID(),
+			map[tenantcapabilitiespb.ID]string{tenantcapabilitiespb.CanAdminRelocateRange: "true"}))
 	}
 	db := s.SQLConn(t)
 	sqlDB := sqlutils.MakeSQLRunner(db)
@@ -164,7 +163,7 @@ func TestTraceAnalyzer(t *testing.T) {
 			// The stats don't count the actual bytes, but they are a synthetic value
 			// based on the number of tuples. In this test 21 tuples flow over the
 			// network.
-			require.Equal(t, int64(21*8), queryLevelStats.NetworkBytesSent)
+			require.Equal(t, int64(21*8), queryLevelStats.DistSQLNetworkBytesSent)
 
 			// Soft check that MaxMemUsage is set to a non-zero value. The actual
 			// value differs between test runs due to metamorphic randomization.
@@ -179,7 +178,7 @@ func TestTraceAnalyzer(t *testing.T) {
 
 			// For tests, network messages is a synthetic value based on the number of
 			// network tuples. In this test 21 tuples flow over the network.
-			require.Equal(t, int64(21/2), queryLevelStats.NetworkMessages)
+			require.Equal(t, int64(21/2), queryLevelStats.DistSQLNetworkMessages)
 		})
 	}
 }
@@ -236,19 +235,22 @@ func TestTraceAnalyzerProcessStats(t *testing.T) {
 func TestQueryLevelStatsAccumulate(t *testing.T) {
 	aEvent := kvpb.ContentionEvent{Duration: 7 * time.Second}
 	a := execstats.QueryLevelStats{
-		NetworkBytesSent:                   1,
+		DistSQLNetworkBytesSent:            1,
 		MaxMemUsage:                        2,
 		KVBytesRead:                        3,
 		KVPairsRead:                        4,
 		KVRowsRead:                         4,
 		KVBatchRequestsIssued:              4,
 		KVTime:                             5 * time.Second,
-		NetworkMessages:                    6,
+		DistSQLNetworkMessages:             6,
 		ContentionTime:                     7 * time.Second,
+		LockWaitTime:                       4 * time.Second,
+		LatchWaitTime:                      3 * time.Second,
+		AdmissionWaitTime:                  1 * time.Second,
 		ContentionEvents:                   []kvpb.ContentionEvent{aEvent},
 		MaxDiskUsage:                       8,
 		RUEstimate:                         9,
-		CPUTime:                            10 * time.Second,
+		SQLCPUTime:                         10 * time.Second,
 		MvccSteps:                          11,
 		MvccStepsInternal:                  12,
 		MvccSeeks:                          13,
@@ -270,19 +272,22 @@ func TestQueryLevelStatsAccumulate(t *testing.T) {
 	}
 	bEvent := kvpb.ContentionEvent{Duration: 14 * time.Second}
 	b := execstats.QueryLevelStats{
-		NetworkBytesSent:                   8,
+		DistSQLNetworkBytesSent:            8,
 		MaxMemUsage:                        9,
 		KVBytesRead:                        10,
 		KVPairsRead:                        11,
 		KVRowsRead:                         11,
 		KVBatchRequestsIssued:              11,
 		KVTime:                             12 * time.Second,
-		NetworkMessages:                    13,
+		DistSQLNetworkMessages:             13,
 		ContentionTime:                     14 * time.Second,
+		LockWaitTime:                       10 * time.Second,
+		LatchWaitTime:                      4 * time.Second,
+		AdmissionWaitTime:                  2 * time.Second,
 		ContentionEvents:                   []kvpb.ContentionEvent{bEvent},
 		MaxDiskUsage:                       15,
 		RUEstimate:                         16,
-		CPUTime:                            17 * time.Second,
+		SQLCPUTime:                         17 * time.Second,
 		MvccSteps:                          18,
 		MvccStepsInternal:                  19,
 		MvccSeeks:                          20,
@@ -303,19 +308,22 @@ func TestQueryLevelStatsAccumulate(t *testing.T) {
 		ClientTime:                         2 * time.Second,
 	}
 	expected := execstats.QueryLevelStats{
-		NetworkBytesSent:                   9,
+		DistSQLNetworkBytesSent:            9,
 		MaxMemUsage:                        9,
 		KVBytesRead:                        13,
 		KVPairsRead:                        15,
 		KVRowsRead:                         15,
 		KVBatchRequestsIssued:              15,
 		KVTime:                             17 * time.Second,
-		NetworkMessages:                    19,
+		DistSQLNetworkMessages:             19,
 		ContentionTime:                     21 * time.Second,
+		LockWaitTime:                       14 * time.Second,
+		LatchWaitTime:                      7 * time.Second,
+		AdmissionWaitTime:                  3 * time.Second,
 		ContentionEvents:                   []kvpb.ContentionEvent{aEvent, bEvent},
 		MaxDiskUsage:                       15,
 		RUEstimate:                         25,
-		CPUTime:                            27 * time.Second,
+		SQLCPUTime:                         27 * time.Second,
 		MvccSteps:                          29,
 		MvccStepsInternal:                  31,
 		MvccSeeks:                          33,

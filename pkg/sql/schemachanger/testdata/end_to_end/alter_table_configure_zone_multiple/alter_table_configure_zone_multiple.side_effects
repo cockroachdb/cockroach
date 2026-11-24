@@ -23,7 +23,15 @@ write *eventpb.SetZoneConfig to event log:
     statement: ALTER TABLE ‹defaultdb›.‹public›.‹t› CONFIGURE ZONE USING ‹num_replicas› = ‹7›
     tag: CONFIGURE ZONE
     user: root
-## StatementPhase stage 1 of 1 with 1 MutationType op
+## StatementPhase stage 1 of 1 with 2 MutationType ops
+upsert descriptor #104
+  ...
+     replacementOf:
+       time: {}
+  -  schemaLocked: true
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
 upsert zone config for #104
 checking for feature: CONFIGURE ZONE
 write *eventpb.SetZoneConfig to event log:
@@ -58,8 +66,125 @@ upsert zone config for #104
 ## PreCommitPhase stage 1 of 2 with 1 MutationType op
 undo all catalog changes within txn #1
 persist all catalog changes to storage
-## PreCommitPhase stage 2 of 2 with 3 MutationType ops
+## PreCommitPhase stage 2 of 2 with 6 MutationType ops
+upsert descriptor #104
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  +  declarativeSchemaChangerState:
+  +    authorization:
+  +      userName: root
+  +    currentStatuses: <redacted>
+  +    jobId: "1"
+  +    nameMapping:
+  +      columns:
+  +        "1": i
+  +        "2": rowid
+  +        "4294967292": crdb_internal_origin_timestamp
+  +        "4294967293": crdb_internal_origin_id
+  +        "4294967294": tableoid
+  +        "4294967295": crdb_internal_mvcc_timestamp
+  +      families:
+  +        "0": primary
+  +      id: 104
+  +      indexes:
+  +        "1": t_pkey
+  +      name: t
+  +    relevantStatements:
+  +    - statement:
+  +        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› CONFIGURE ZONE USING ‹num_replicas› = ‹7›
+  +        statement: ALTER TABLE t CONFIGURE ZONE USING num_replicas = 7
+  +        statementTag: CONFIGURE ZONE
+  +    - statement:
+  +        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› CONFIGURE ZONE USING ‹"gc.ttlseconds"› = ‹10000›
+  +        statement: ALTER TABLE t CONFIGURE ZONE USING "gc.ttlseconds" = 10000
+  +        statementTag: CONFIGURE ZONE
+  +      statementRank: 1
+  +    - statement:
+  +        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› CONFIGURE ZONE USING ‹num_replicas› = ‹10›
+  +        statement: ALTER TABLE t CONFIGURE ZONE USING num_replicas = 10
+  +        statementTag: CONFIGURE ZONE
+  +      statementRank: 2
+  +    revertible: true
+  +    targetRanks: <redacted>
+  +    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+     replacementOf:
+       time: {}
+  -  schemaLocked: true
+     unexposedParentSchemaId: 101
+  -  version: "1"
+  +  version: "2"
 upsert zone config for #104
 persist all catalog changes to storage
+create job #1 (non-cancelable: false): "ALTER TABLE defaultdb.public.t CONFIGURE ZONE USING num_replicas = 7; ALTER TABLE defaultdb.public.t CONFIGURE ZONE USING \"gc.ttlseconds\" = 10000; ALTER TABLE defaultdb.public.t CONFIGURE ZONE USING num_replicas = 10"
+  descriptor IDs: [104]
 # end PreCommitPhase
 commit transaction #1
+notified job registry to adopt jobs: [1]
+# begin PostCommitPhase
+begin transaction #2
+commit transaction #2
+begin transaction #3
+## PostCommitPhase stage 1 of 1 with 3 MutationType ops
+upsert descriptor #104
+  ...
+     createAsOfTime:
+       wallTime: "1640995200000000000"
+  -  declarativeSchemaChangerState:
+  -    authorization:
+  -      userName: root
+  -    currentStatuses: <redacted>
+  -    jobId: "1"
+  -    nameMapping:
+  -      columns:
+  -        "1": i
+  -        "2": rowid
+  -        "4294967292": crdb_internal_origin_timestamp
+  -        "4294967293": crdb_internal_origin_id
+  -        "4294967294": tableoid
+  -        "4294967295": crdb_internal_mvcc_timestamp
+  -      families:
+  -        "0": primary
+  -      id: 104
+  -      indexes:
+  -        "1": t_pkey
+  -      name: t
+  -    relevantStatements:
+  -    - statement:
+  -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› CONFIGURE ZONE USING ‹num_replicas› = ‹7›
+  -        statement: ALTER TABLE t CONFIGURE ZONE USING num_replicas = 7
+  -        statementTag: CONFIGURE ZONE
+  -    - statement:
+  -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› CONFIGURE ZONE USING ‹"gc.ttlseconds"› = ‹10000›
+  -        statement: ALTER TABLE t CONFIGURE ZONE USING "gc.ttlseconds" = 10000
+  -        statementTag: CONFIGURE ZONE
+  -      statementRank: 1
+  -    - statement:
+  -        redactedStatement: ALTER TABLE ‹defaultdb›.‹public›.‹t› CONFIGURE ZONE USING ‹num_replicas› = ‹10›
+  -        statement: ALTER TABLE t CONFIGURE ZONE USING num_replicas = 10
+  -        statementTag: CONFIGURE ZONE
+  -      statementRank: 2
+  -    revertible: true
+  -    targetRanks: <redacted>
+  -    targets: <redacted>
+     families:
+     - columnIds:
+  ...
+     replacementOf:
+       time: {}
+  +  schemaLocked: true
+     unexposedParentSchemaId: 101
+  -  version: "2"
+  +  version: "3"
+persist all catalog changes to storage
+update progress of schema change job #1: "all stages completed"
+set schema change job #1 to non-cancellable
+updated schema change job #1 descriptor IDs to []
+write *eventpb.FinishSchemaChange to event log:
+  sc:
+    descriptorId: 104
+commit transaction #3
+# end PostCommitPhase

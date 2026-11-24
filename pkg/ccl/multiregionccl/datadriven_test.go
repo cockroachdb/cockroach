@@ -208,20 +208,12 @@ func testMultiRegionDataDriven(t *testing.T, testPath string) {
 				tc := testcluster.StartTestCluster(t, numServers, base.TestClusterArgs{
 					ServerArgsPerNode: serverArgs,
 					ServerArgs: base.TestServerArgs{
-						// We need to disable the default test tenant here
-						// because it appears as though operations like
-						// "wait-for-zone-config-changes" only work correctly
-						// when called from the system tenant. More
-						// investigation is required (tracked with #76378).
-						DefaultTestTenant: base.TODOTestTenantDisabled,
+						DefaultTestTenant: base.TestDoesNotWorkWithSecondaryTenantsButWeDontKnowWhyYet(156305),
 					},
 				})
 				ds.tc = tc
 
-				sqlConn, err := ds.getSQLConn(0)
-				if err != nil {
-					return err.Error()
-				}
+				sysConn := tc.SystemLayer(0).SQLConn(t)
 				// Speed up closing of timestamps, in order to sleep less below before
 				// we can use follower_read_timestamp(). follower_read_timestamp() uses
 				// sum of the following settings. Also, disable all kvserver lease
@@ -234,10 +226,11 @@ SET CLUSTER SETTING kv.closed_timestamp.side_transport_interval = '0.1s';
 SET CLUSTER SETTING kv.closed_timestamp.propagation_slack = '0.5s';
 SET CLUSTER SETTING kv.allocator.load_based_rebalancing = 'off';
 SET CLUSTER SETTING kv.allocator.load_based_lease_rebalancing.enabled = false;
-SET CLUSTER SETTING kv.allocator.min_lease_transfer_interval = '5m'
+SET CLUSTER SETTING kv.allocator.min_lease_transfer_interval = '5m';
+SET CLUSTER SETTING kv.closed_timestamp.lead_for_global_reads_auto_tune.enabled = false
 `,
 					";") {
-					_, err = sqlConn.Exec(stmt)
+					_, err := sysConn.Exec(stmt)
 					if err != nil {
 						return err.Error()
 					}
@@ -269,10 +262,13 @@ SET CLUSTER SETTING kv.allocator.min_lease_transfer_interval = '5m'
 
 			case "trace-sql":
 				mustHaveArgOrFatal(t, d, serverIdx)
+				var idx int
+				d.ScanArgs(t, serverIdx, &idx)
+				shouldRetry := d.HasArg(traceSQLRetryArg)
+				retryTimeout := testutils.DefaultSucceedsSoonDuration
+
 				var rec tracingpb.Recording
 				queryFunc := func() (localRead bool, followerRead bool, err error) {
-					var idx int
-					d.ScanArgs(t, serverIdx, &idx)
 					sqlDB, err := ds.getSQLConn(idx)
 					if err != nil {
 						return false, false, err
@@ -299,22 +295,41 @@ SET CLUSTER SETTING kv.allocator.min_lease_transfer_interval = '5m'
 					}
 					return localRead, followerRead, nil
 				}
-				localRead, followerRead, err := queryFunc()
+
+				runOnce := func() (string, error) {
+					localRead, followerRead, err := queryFunc()
+					if err != nil {
+						return "", err
+					}
+					var output strings.Builder
+					output.WriteString(
+						fmt.Sprintf("served locally: %s\n", strconv.FormatBool(localRead)))
+					// Only print follower read information if the query was served locally.
+					if localRead {
+						output.WriteString(
+							fmt.Sprintf("served via follower read: %s\n", strconv.FormatBool(followerRead)))
+					}
+					if d.Expected != output.String() {
+						return "", errors.AssertionFailedf("not a match, trace:\n%s\n", rec)
+					}
+					return output.String(), nil
+				}
+
+				var output string
+				var err error
+				if shouldRetry {
+					err = testutils.SucceedsWithinError(func() error {
+						var attemptErr error
+						output, attemptErr = runOnce()
+						return attemptErr
+					}, retryTimeout)
+				} else {
+					output, err = runOnce()
+				}
 				if err != nil {
 					return err.Error()
 				}
-				var output strings.Builder
-				output.WriteString(
-					fmt.Sprintf("served locally: %s\n", strconv.FormatBool(localRead)))
-				// Only print follower read information if the query was served locally.
-				if localRead {
-					output.WriteString(
-						fmt.Sprintf("served via follower read: %s\n", strconv.FormatBool(followerRead)))
-				}
-				if d.Expected != output.String() {
-					return errors.AssertionFailedf("not a match, trace:\n%s\n", rec).Error()
-				}
-				return output.String()
+				return output
 
 			case "refresh-range-descriptor-cache":
 				mustHaveArgOrFatal(t, d, tableName)
@@ -341,9 +356,10 @@ SET CLUSTER SETTING kv.allocator.min_lease_transfer_interval = '5m'
 				if err != nil {
 					return err.Error()
 				}
-				cache := ds.tc.Server(idx).DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache()
-				tablePrefix := keys.MustAddr(keys.SystemSQLCodec.TablePrefix(tableID))
-				entry, err := cache.TestingGetCached(ctx, tablePrefix, false, roachpb.LAG_BY_CLUSTER_SETTING)
+				s := ds.tc.ApplicationLayer(idx)
+				cache := s.DistSenderI().(*kvcoord.DistSender).RangeDescriptorCache()
+				tablePrefix := keys.MustAddr(s.Codec().TablePrefix(tableID))
+				entry, err := cache.TestingGetCached(ctx, tablePrefix, false, roachpb.LEAD_FOR_GLOBAL_READS)
 				if err != nil {
 					return err.Error()
 				}
@@ -355,6 +371,10 @@ SET CLUSTER SETTING kv.allocator.min_lease_transfer_interval = '5m'
 					return err.Error()
 				}
 				lookupRKey := keys.MustAddr(lookupKey)
+
+				// Rate limiter for diagnostic logging to help diagnose flakes where
+				// replicas intermittently fail to serve local requests. See #160349.
+				logEvery := log.Every(10 * time.Second)
 
 				// There's a lot going on here and things can fail at various steps, for
 				// completely legitimate reasons, which is why this thing needs to be
@@ -372,6 +392,10 @@ SET CLUSTER SETTING kv.allocator.min_lease_transfer_interval = '5m'
 					actualPlacement, err := parseReplicasFromRange(t, ds.tc, desc)
 					if err != nil {
 						return err
+					}
+					if logEvery.ShouldLog() {
+						t.Logf("wait-for-zone-config-changes: initial replica check passed (%d replicas served locally)",
+							len(desc.Replicas().VoterAndNonVoterDescriptors()))
 					}
 
 					leaseHolderNode := ds.tc.Server(actualPlacement.getLeaseholder())
@@ -447,6 +471,10 @@ SET CLUSTER SETTING kv.allocator.min_lease_transfer_interval = '5m'
 					if err != nil {
 						return err
 					}
+					if logEvery.ShouldLog() {
+						t.Logf("wait-for-zone-config-changes: final replica check passed (%d replicas served locally)",
+							len(desc.Replicas().VoterAndNonVoterDescriptors()))
+					}
 					err = actualPlacement.satisfiesExpectedPlacement(expectedPlacement)
 					if err != nil {
 						return err
@@ -470,7 +498,7 @@ SET CLUSTER SETTING kv.allocator.min_lease_transfer_interval = '5m'
 					}
 
 					return nil
-				}, 5*time.Minute); err != nil {
+				}, 7*time.Minute); err != nil {
 					return err.Error()
 				}
 
@@ -491,6 +519,7 @@ const (
 	partitionName    = "partition-name"
 	numVoters        = "num-voters"
 	numNonVoters     = "num-non-voters"
+	traceSQLRetryArg = "retry"
 )
 
 type replicaType int
@@ -654,8 +683,11 @@ func parseReplicasFromInput(
 	return &ret
 }
 
-// parseReplicasFromInput constructs a replicaPlacement from a range descriptor.
-// It also ensures all replicas have the same view of who the leaseholder is.
+// parseReplicasFromRange constructs a replicaPlacement from a range descriptor.
+// In doing so, it:
+//   - verifies that all replicas agree on the current leaseholder
+//   - checks that each replica can serve a lease request locally (using the
+//     QueryLocalNodeOnly policy)
 func parseReplicasFromRange(
 	t *testing.T, tc serverutils.TestClusterInterface, desc roachpb.RangeDescriptor,
 ) (*replicaPlacement, error) {
@@ -738,7 +770,7 @@ func (r *replicaPlacement) satisfiesExpectedPlacement(expected *replicaPlacement
 				continue
 			} else {
 				return errors.Newf(
-					"expected node %s to not be present but had replica type %s",
+					"expected node %d to not be present but had replica type %s",
 					node,
 					actualRt.String())
 			}
@@ -746,14 +778,14 @@ func (r *replicaPlacement) satisfiesExpectedPlacement(expected *replicaPlacement
 
 		if !found {
 			return errors.Newf(
-				"expected node %s to have replica type %s but was not found",
+				"expected node %d to have replica type %s but was not found",
 				node,
 				expectedRt.String())
 		}
 
 		if expectedRt != actualRt {
 			return errors.Newf(
-				"expected node %s to have replica type %s but was %s",
+				"expected node %d to have replica type %s but was %s",
 				node,
 				expectedRt.String(),
 				actualRt.String())
@@ -793,7 +825,8 @@ func getRangeKeyForInput(
 	var db string
 	d.ScanArgs(t, dbName, &db)
 
-	execCfg := tc.Server(0).ExecutorConfig().(sql.ExecutorConfig)
+	s := tc.ApplicationLayer(0)
+	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 
 	tableDesc, err := lookupTable(&execCfg, db, tbName)
 	if err != nil {
@@ -801,7 +834,7 @@ func getRangeKeyForInput(
 	}
 
 	if !d.HasArg(partitionName) {
-		return tableDesc.TableSpan(keys.SystemSQLCodec).Key, nil
+		return tableDesc.TableSpan(s.Codec()).Key, nil
 	}
 
 	var partition string
@@ -831,7 +864,7 @@ func getRangeKeyForInput(
 
 	_, keyPrefix, err := rowenc.DecodePartitionTuple(
 		&tree.DatumAlloc{},
-		keys.SystemSQLCodec,
+		s.Codec(),
 		tableDesc,
 		primaryInd,
 		part,

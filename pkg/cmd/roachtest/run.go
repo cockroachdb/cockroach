@@ -11,65 +11,75 @@ import (
 	"math/rand"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"os/user"
 	"path/filepath"
 	"runtime"
-	"slices"
+	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/DataDog/datadog-api-client-go/v2/api/datadog"
-	"github.com/DataDog/datadog-api-client-go/v2/api/datadogV1"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
+	"github.com/cockroachdb/cockroach/pkg/cmd/bazci/githubpost/issues"
+	roachtestdd "github.com/cockroachdb/cockroach/pkg/cmd/roachtest/datadog"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/dlq"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestflags"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/operations"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
+	"github.com/cockroachdb/cockroach/pkg/internal/team"
 	"github.com/cockroachdb/cockroach/pkg/roachprod"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
 	"github.com/cockroachdb/cockroach/pkg/util/allstacks"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/version"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v2"
-)
-
-type testResult int
-
-const (
-	// NB: These are in a particular order corresponding to the order we
-	// want these tests to appear in the generated Markdown report.
-	testResultFailure testResult = iota
-	testResultSuccess
-	testResultSkip
 )
 
 type ddEventType int
 
 const (
 	eventOpStarted ddEventType = iota
-	eventOpRan
-	eventOpFinishedCleanup
-	eventOpError
+	eventOpCompleted
+	eventCleanupCompleted
+	eventDepCheckFailed
 )
-
-type testReportForGitHub struct {
-	name     string
-	duration time.Duration
-	status   testResult
-}
 
 // runTests is the main function for the run and bench commands.
 // Assumes initRunFlagsBinariesAndLibraries was called.
 func runTests(register func(registry.Registry), filter *registry.TestFilter) error {
+	// On Darwin, start caffeinate to prevent the system from sleeping.
+	if runtime.GOOS == "darwin" && roachtestflags.Caffeinate {
+		pid := os.Getpid()
+		cmd := exec.Command("caffeinate", "-i", "-w", strconv.Itoa(pid))
+		if err := cmd.Start(); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: failed to start caffeinate: %v\n", err)
+		} else {
+			defer func() {
+				if cmd.Process != nil {
+					_ = cmd.Process.Kill()
+				}
+			}()
+		}
+	}
+
+	globalSeed := randutil.NewPseudoSeed()
+	if globalSeedEnv := os.Getenv("ROACHTEST_GLOBAL_SEED"); globalSeedEnv != "" {
+		if parsed, err := strconv.ParseInt(globalSeedEnv, 0, 64); err == nil {
+			globalSeed = parsed
+		} else {
+			return errors.Wrapf(err, "could not parse ROACHTEST_GLOBAL_SEED=%q", globalSeedEnv)
+		}
+	}
 	//lint:ignore SA1019 deprecated
-	rand.Seed(roachtestflags.GlobalSeed)
+	rand.Seed(globalSeed)
 	r := makeTestRegistry()
 
 	// actual registering of tests
@@ -80,7 +90,7 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 	defer stopper.Stop(context.Background())
 	runner := newTestRunner(cr, stopper)
 
-	clusterType := roachprodCluster
+	clusterType := roachprodClusterType
 	bindTo := ""
 	parallelism := roachtestflags.Parallelism
 	if roachtestflags.Cloud == spec.Local {
@@ -115,7 +125,7 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 	runnerDir := filepath.Join(artifactsDir, runnerLogsDir)
 	runnerLogPath := filepath.Join(
 		runnerDir, fmt.Sprintf("test_runner-%d.log", timeutil.Now().Unix()))
-	l, tee := testRunnerLogger(context.Background(), parallelism, runnerLogPath)
+	runnerL, tee := testRunnerLogger(context.Background(), parallelism, runnerLogPath)
 	roachprod.ClearClusterCache = roachtestflags.ClearClusterCache
 
 	if runtime.GOOS == "darwin" {
@@ -124,16 +134,13 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 		bindTo = "localhost"
 	}
 
-	sideEyeToken := runner.maybeInitSideEyeClient(context.Background(), l)
-
 	opt := clustersOpt{
 		typ:         clusterType,
 		clusterName: roachtestflags.ClusterNames,
 		// Precedence for resolving the user: cli arg, env.ROACHPROD_USER, current user.
-		user:         getUser(roachtestflags.Username),
-		cpuQuota:     roachtestflags.CPUQuota,
-		clusterID:    roachtestflags.ClusterID,
-		sideEyeToken: sideEyeToken,
+		user:      getUser(roachtestflags.Username),
+		cpuQuota:  roachtestflags.CPUQuota,
+		clusterID: roachtestflags.ClusterID,
 	}
 	switch {
 	case roachtestflags.DebugAlways:
@@ -153,7 +160,7 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 	}
 
 	lopt := loggingOpt{
-		l:                   l,
+		runnerL:             runnerL,
 		tee:                 tee,
 		stdout:              os.Stdout,
 		stderr:              os.Stderr,
@@ -161,26 +168,35 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 		literalArtifactsDir: literalArtifactsDir,
 		runnerLogPath:       runnerLogPath,
 	}
-	l.Printf("global random seed: %d", roachtestflags.GlobalSeed)
+
+	runnerL.Printf("global random seed: %d", globalSeed)
 	go func() {
 		if err := http.ListenAndServe(
 			fmt.Sprintf(":%d", roachtestflags.PromPort),
 			promhttp.HandlerFor(r.promRegistry, promhttp.HandlerOpts{}),
 		); err != nil {
-			l.Errorf("error serving prometheus: %v", err)
+			runnerL.Errorf("error serving prometheus: %v", err)
 		}
 	}()
 	// We're going to run all the workers (and thus all the tests) in a context
 	// that gets canceled when the Interrupt signal is received.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	CtrlC(ctx, l, cancel, cr)
-	// Install goroutine leak checker and run it at the end of the entire test
-	// run. If a test is leaking a goroutine, then it will likely be still around.
-	// We could diff goroutine snapshots before/after each executed test, but that
-	// could yield false positives; e.g., user-specified test teardown goroutines
-	// may still be running long after the test has completed.
-	defer leaktest.AfterTest(l)()
+	CtrlC(ctx, runnerL, cancel, cr)
+	if false {
+		// Install goroutine leak checker and run it at the end of the entire test
+		// run. If a test is leaking a goroutine, then it will likely be still around.
+		// We could diff goroutine snapshots before/after each executed test, but that
+		// could yield false positives; e.g., user-specified test teardown goroutines
+		// may still be running long after the test has completed.
+		//
+		// NB: we currently don't do this since it's been firing for a long time and
+		// nobody has cleaned up the leaks. While there are leaks, the leaktest
+		// output pollutes stdout and makes roachtest annoying to use.
+		//
+		// Tracking issue: https://github.com/cockroachdb/cockroach/issues/148196
+		defer leaktest.AfterTest(runnerL)()
+	}
 
 	// We allow roachprod users to set a default auth-mode through the
 	// ROACHPROD_DEFAULT_AUTH_MODE env var. However, roachtests shouldn't
@@ -188,6 +204,26 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 	// is being used.
 	if err = os.Unsetenv(install.DefaultAuthModeEnv); err != nil {
 		return err
+	}
+
+	// Wire up GitHub issue posting. If a DLQ bucket is configured, wrap the
+	// poster so failed posts (e.g. during a GitHub outage) are persisted to
+	// GCS for later replay. See pkg/cmd/roachtest/dlq.
+	var issuePoster dlq.PostFunc = issues.Post
+	if bucket := os.Getenv("GITHUB_DLQ_BUCKET"); bucket != "" {
+		wrapped, err := dlq.WrapIssuePoster(ctx, runnerL, bucket, issuePoster)
+		if err != nil {
+			runnerL.Printf("warning: GitHub DLQ writer init failed, DLQ disabled: %v", err)
+		} else {
+			issuePoster = wrapped
+			runnerL.Printf("GitHub DLQ enabled: bucket=%s", bucket)
+		}
+	}
+	github := &githubIssues{
+		disable:     runner.config.disableIssue,
+		dryRun:      runner.config.dryRunIssuePosting,
+		issuePoster: issuePoster,
+		teamLoader:  team.DefaultLoadTeams,
 	}
 
 	err = runner.Run(
@@ -198,25 +234,43 @@ func runTests(register func(registry.Registry), filter *registry.TestFilter) err
 			goCoverEnabled:         roachtestflags.GoCoverEnabled,
 			exportOpenMetrics:      roachtestflags.ExportOpenmetrics,
 		},
-		lopt)
+		lopt,
+		github)
 
 	// Make sure we attempt to clean up. We run with a non-canceled ctx; the
 	// ctx above might be canceled in case a signal was received. If that's
 	// the case, we're running under a 5s timeout until the CtrlC() goroutine
 	// kills the process.
-	l.PrintfCtx(ctx, "runTests destroying all clusters")
-	cr.destroyAllClusters(context.Background(), l)
+	runnerL.PrintfCtx(ctx, "runTests destroying all unsaved clusters")
+	cr.destroyAllClusters(context.Background(), runnerL)
 
 	if roachtestflags.TeamCity {
 		// Collect the runner logs.
 		fmt.Printf("##teamcity[publishArtifacts '%s' => '%s']\n", filepath.Join(literalArtifactsDir, runnerLogsDir), runnerLogsDir)
 	}
+	runner.writeTestReports(ctx, runnerL, artifactsDir)
 
-	if summaryErr := maybeDumpSummaryMarkdown(runner); summaryErr != nil {
-		shout(ctx, l, os.Stdout, "failed to write to GITHUB_STEP_SUMMARY file (%+v)", summaryErr)
+	// Upload runner-level logs to Datadog (best effort).
+	if roachtestdd.ShouldUploadRunnerLogsToDatadog() {
+		m := roachtestdd.NewRunnerLogMetadata(runnerL, roachtestflags.Cloud)
+		runnerDir := filepath.Join(artifactsDir, runnerLogsDir)
+		if uploadErr := roachtestdd.MaybeUploadRunnerLogs(ctx, runnerL, runnerDir, m); uploadErr != nil {
+			runnerL.Printf("error uploading runner logs to Datadog: %v", uploadErr)
+		}
 	}
 
 	return err
+}
+
+func skipDetails(spec *registry.TestSpec) string {
+	if spec.Skip == "" {
+		return ""
+	}
+	details := spec.Skip
+	if spec.SkipDetails != "" {
+		details += " (" + spec.SkipDetails + ")"
+	}
+	return details
 }
 
 // getUser takes the value passed on the command line and comes up with the
@@ -273,17 +327,24 @@ func initRunFlagsBinariesAndLibraries(cmd *cobra.Command) error {
 	// Find and validate all required binaries and libraries.
 	initBinariesAndLibraries()
 
-	if roachtestflags.ARM64Probability > 0 {
-		fmt.Printf("ARM64 clusters will be provisioned with probability %.2f\n", roachtestflags.ARM64Probability)
-	}
-	amd64Probability := 1 - roachtestflags.ARM64Probability
-	if amd64Probability > 0 {
-		fmt.Printf("AMD64 clusters will be provisioned with probability %.2f\n", amd64Probability)
-	}
-	if roachtestflags.FIPSProbability > 0 {
-		// N.B. roachtestflags.ARM64Probability < 1, otherwise roachtestflags.FIPSProbability == 0, as per above check.
-		// Hence, amd64Probability > 0 is implied.
-		fmt.Printf("FIPS clusters will be provisioned with probability %.2f\n", roachtestflags.FIPSProbability*amd64Probability)
+	if roachtestflags.Cloud == spec.IBM {
+		fmt.Printf("S390x clusters will be provisioned with probability 1\n")
+		if roachtestflags.ARM64Probability > 0 || roachtestflags.FIPSProbability > 0 {
+			fmt.Printf("Warning: despite --metamorphic-(arm64|fips)-probability argument, ARM64 and FIPS clusters will not be provisioned on IBM Cloud!\n")
+		}
+	} else {
+		if roachtestflags.ARM64Probability > 0 {
+			fmt.Printf("ARM64 clusters will be provisioned with probability %.2f\n", roachtestflags.ARM64Probability)
+		}
+		amd64Probability := 1 - roachtestflags.ARM64Probability
+		if amd64Probability > 0 {
+			fmt.Printf("AMD64 clusters will be provisioned with probability %.2f\n", amd64Probability)
+		}
+		if roachtestflags.FIPSProbability > 0 {
+			// N.B. roachtestflags.ARM64Probability < 1, otherwise roachtestflags.FIPSProbability == 0, as per above check.
+			// Hence, amd64Probability > 0 is implied.
+			fmt.Printf("FIPS clusters will be provisioned with probability %.2f\n", roachtestflags.FIPSProbability*amd64Probability)
+		}
 	}
 
 	if roachtestflags.SelectProbability > 0 && roachtestflags.SelectProbability < 1 {
@@ -307,7 +368,7 @@ func initRunFlagsBinariesAndLibraries(cmd *cobra.Command) error {
 func CtrlC(ctx context.Context, l *logger.Logger, cancel func(), cr *clusterRegistry) {
 	// Shut down test clusters when interrupted (for example CTRL-C).
 	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, os.Interrupt)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM, syscall.SIGHUP, syscall.SIGQUIT)
 	go func() {
 		select {
 		case <-sig:
@@ -318,12 +379,18 @@ func CtrlC(ctx context.Context, l *logger.Logger, cancel func(), cr *clusterRegi
 			"Signaled received. Canceling workers and waiting up to 5s for them.")
 		// Signal runner.Run() to stop.
 		cancel()
-		<-time.After(5 * time.Second)
 		if cr == nil {
-			shout(ctx, l, os.Stderr, "5s elapsed. No clusters registered; nothing to destroy.")
+			// Operation mode: no clusters to destroy, but operations may need
+			// time to run cleanup (e.g., DROP INDEX, restore license). Wait up
+			// to 2 minutes for workers to finish before force-exiting.
+			shout(ctx, l, os.Stderr,
+				"Signal received in operation mode. Waiting up to 2m for cleanup to finish.")
+			<-time.After(2 * time.Minute)
+			shout(ctx, l, os.Stderr, "2m elapsed. Force exiting.")
 			l.Printf("all stacks:\n\n%s\n", allstacks.Get())
 			os.Exit(2)
 		}
+		<-time.After(5 * time.Second)
 		shout(ctx, l, os.Stderr, "5s elapsed. Will brutally destroy all clusters.")
 		// Make sure there are no leftover clusters.
 		destroyCh := make(chan struct{})
@@ -388,140 +455,6 @@ func redirectCRDBLogger(ctx context.Context, path string) *logger.Logger {
 	}
 	shout(ctx, l, os.Stdout, "fallback runner logs in: %s", path)
 	return l
-}
-
-func maybeDumpSummaryMarkdown(r *testRunner) error {
-	if !roachtestflags.GitHubActions {
-		return nil
-	}
-	summaryPath := os.Getenv("GITHUB_STEP_SUMMARY")
-	if summaryPath == "" {
-		return nil
-	}
-	summaryFile, err := os.OpenFile(summaryPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		return err
-	}
-
-	_, err = summaryFile.WriteString(`| TestName | Status | Duration |
-| --- | --- | --- |
-`)
-	if err != nil {
-		return err
-	}
-
-	var allTests []testReportForGitHub
-	for test := range r.status.pass {
-		allTests = append(allTests, testReportForGitHub{
-			name:     test.Name(),
-			duration: test.duration(),
-			status:   testResultSuccess,
-		})
-	}
-
-	for test := range r.status.fail {
-		allTests = append(allTests, testReportForGitHub{
-			name:     test.Name(),
-			duration: test.duration(),
-			status:   testResultFailure,
-		})
-	}
-
-	for test := range r.status.skip {
-		allTests = append(allTests, testReportForGitHub{
-			name:     test.Name(),
-			duration: test.duration(),
-			status:   testResultSkip,
-		})
-	}
-
-	// Sort the test results: first fails, then successes, then skips, and
-	// within each category sort by test duration in descending order.
-	// Ties are very unlikely to happen but we break them by test name.
-	slices.SortFunc(allTests, func(a, b testReportForGitHub) int {
-		if a.status < b.status {
-			return -1
-		} else if a.status > b.status {
-			return 1
-		} else if a.duration > b.duration {
-			return -1
-		} else if a.duration < b.duration {
-			return 1
-		}
-		return strings.Compare(a.name, b.name)
-	})
-
-	for _, test := range allTests {
-		var statusString string
-		if test.status == testResultFailure {
-			statusString = "❌ FAILED"
-		} else if test.status == testResultSuccess {
-			statusString = "✅ SUCCESS"
-		} else {
-			statusString = "🟨 SKIPPED"
-		}
-		_, err := fmt.Fprintf(summaryFile, "| `%s` | %s | `%s` |\n", test.name, statusString, test.duration.String())
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// maybeEmitDatadogEvent sends an event to Datadog if the passed in ctx has the
-// necessary values to communicate with Datadog.
-func maybeEmitDatadogEvent(
-	ctx context.Context,
-	datadogEventsAPI *datadogV1.EventsApi,
-	opSpec *registry.OperationSpec,
-	clusterName string,
-	eventType ddEventType,
-	operationID uint64,
-	datadogTags []string,
-) {
-	// The passed in context is not configured to communicate with Datadog.
-	_, hasAPIKeys := ctx.Value(datadog.ContextAPIKeys).(map[string]datadog.APIKey)
-	_, hasServerVariables := ctx.Value(datadog.ContextServerVariables).(map[string]string)
-	if !hasAPIKeys || !hasServerVariables {
-		return
-	}
-
-	status := "started"
-	alertType := datadogV1.EVENTALERTTYPE_INFO
-
-	switch eventType {
-	case eventOpStarted:
-		status = "started"
-		alertType = datadogV1.EVENTALERTTYPE_INFO
-	case eventOpRan:
-		status = "finished running; waiting for cleanup"
-		alertType = datadogV1.EVENTALERTTYPE_SUCCESS
-	case eventOpFinishedCleanup:
-		status = "cleaned up its state"
-		alertType = datadogV1.EVENTALERTTYPE_INFO
-	case eventOpError:
-		status = "ran with an error"
-		alertType = datadogV1.EVENTALERTTYPE_ERROR
-	}
-
-	title := fmt.Sprintf("op %s %s", opSpec.Name, status)
-	hostname, _ := os.Hostname()
-
-	// We're within a best effort function so we ignore return values.
-	_, _, _ = datadogEventsAPI.CreateEvent(ctx, datadogV1.EventCreateRequest{
-		AggregationKey: datadog.PtrString(fmt.Sprintf("operation-%d", operationID)),
-		AlertType:      &alertType,
-		DateHappened:   datadog.PtrInt64(timeutil.Now().Unix()),
-		Host:           &hostname,
-		SourceTypeName: datadog.PtrString("roachtest"),
-		Tags: append(datadogTags,
-			fmt.Sprintf("operation-name:%s", opSpec.Name),
-			fmt.Sprintf("operation-status:%s", status),
-		),
-		Text:  fmt.Sprintf("cluster: %s\n", clusterName),
-		Title: title,
-	})
 }
 
 // newDatadogContext adds values to the passed in ctx to configure it to
@@ -589,154 +522,4 @@ func getDatadogTags() []string {
 	}
 
 	return strings.Split(rawTags, ",")
-}
-
-// runOperation sequentially runs one operation matched by the passed-in filter.
-func runOperation(register func(registry.Registry), filter string, clusterName string) error {
-	//lint:ignore SA1019 deprecated
-	rand.Seed(roachtestflags.GlobalSeed)
-	r := makeTestRegistry()
-	// NB: root logger with no path always tees to Stdout.
-	l, err := logger.RootLogger("", logger.NoTee)
-	if err != nil {
-		return err
-	}
-	// Install goroutine leak checker and run it at the end of the entire operation
-	// run. This is good hygiene for operations, as operations can one day be
-	// called from roachtests as well.
-	defer leaktest.AfterTest(l)()
-
-	register(&r)
-	ctx := context.Background()
-	ctx = newDatadogContext(ctx)
-
-	datadogEventsClient := datadogV1.NewEventsApi(datadog.NewAPIClient(datadog.NewConfiguration()))
-	datadogTags := getDatadogTags()
-
-	// TODO(bilal): This is excessive for just getting the number of nodes in the
-	// cluster. We should expose a roachprod.Nodes method or so.
-	nodes, err := roachprod.PgURL(ctx, l, clusterName, roachtestflags.CertsDir, roachprod.PGURLOptions{})
-	if err != nil {
-		return errors.Wrap(err, "roachtest: run-operation: error when getting number of nodes")
-	}
-
-	config := struct {
-		ClusterSettings install.ClusterSettings
-		StartOpts       option.StartOpts
-		ClusterSpec     spec.ClusterSpec
-	}{
-		ClusterSettings: install.MakeClusterSettings(),
-		StartOpts:       option.NewStartOpts(option.NoBackupSchedule),
-		ClusterSpec:     spec.ClusterSpec{NodeCount: len(nodes)},
-	}
-	if roachtestflags.ConfigPath != "" {
-		configFileData, err := os.ReadFile(roachtestflags.ConfigPath)
-		if err != nil {
-			return errors.Wrap(err, "failed to read config")
-		}
-		if err = yaml.UnmarshalStrict(configFileData, &config); err != nil {
-			return errors.Wrapf(err, "failed to unmarshal config: %s", roachtestflags.ConfigPath)
-		}
-	}
-
-	cSpec := spec.ClusterSpec{NodeCount: len(nodes)}
-	op := &operationImpl{
-		clusterSettings: config.ClusterSettings,
-		startOpts:       config.StartOpts,
-		l:               l,
-	}
-	c := &dynamicClusterImpl{
-		&clusterImpl{
-			name:       clusterName,
-			cloud:      roachtestflags.Cloud,
-			spec:       cSpec,
-			f:          op,
-			l:          l,
-			expiration: cSpec.Expiration(),
-			destroyState: destroyState{
-				owned: false,
-			},
-			localCertsDir: roachtestflags.CertsDir,
-		},
-	}
-
-	specs, err := opsToRun(r, filter)
-	if err != nil {
-		return err
-	}
-	var opSpec *registry.OperationSpec
-	if len(specs) > 1 {
-		opSpec = &specs[rand.Intn(len(specs))]
-		l.Printf("more than one operation found for filter %s, randomly selected %s to run", filter, opSpec.Name)
-	} else if len(specs) == 1 {
-		opSpec = &specs[0]
-	} else {
-		return errors.Errorf("no operations found for filter %s", filter)
-	}
-	op.spec = opSpec
-
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	// Cancel this context if we get an interrupt.
-	CtrlC(ctx, l, cancel, nil /* registry */)
-
-	op.mu.cancel = cancel
-	op.Status(fmt.Sprintf("checking if operation %s dependencies are met", opSpec.Name))
-
-	if roachtestflags.SkipDependencyCheck {
-		op.Status("skipping dependency check")
-	} else if ok, err := operations.CheckDependencies(ctx, c, l, opSpec); !ok || err != nil {
-		if err != nil {
-			op.Fatalf("error checking dependencies: %s", err)
-		}
-		op.Status("operation dependencies not met. Use --skip-dependency-check to skip this check.")
-		return nil
-	}
-
-	// operationRunID is used for datadog event aggregation and logging.
-	operationRunID := rand.Uint64()
-	maybeEmitDatadogEvent(ctx, datadogEventsClient, opSpec, clusterName, eventOpStarted, operationRunID, datadogTags)
-	op.Status(fmt.Sprintf("running operation %s with run id %d", opSpec.Name, operationRunID))
-	var cleanup registry.OperationCleanup
-	func() {
-		ctx, cancel := context.WithTimeout(ctx, opSpec.Timeout)
-		defer cancel()
-
-		cleanup = opSpec.Run(ctx, op, c)
-	}()
-	if op.Failed() {
-		op.Status("operation failed")
-		maybeEmitDatadogEvent(ctx, datadogEventsClient, opSpec, clusterName, eventOpError, operationRunID, datadogTags)
-		return op.mu.failures[0]
-	}
-
-	maybeEmitDatadogEvent(ctx, datadogEventsClient, opSpec, clusterName, eventOpRan, operationRunID, datadogTags)
-	if cleanup == nil {
-		op.Status("operation ran successfully")
-		return nil
-	}
-
-	op.Status(fmt.Sprintf("operation ran successfully; waiting %s before cleanup", roachtestflags.WaitBeforeCleanup))
-	select {
-	// Don't exit if the context is done due to a Ctrl-C, instead still run the
-	// cleanup code.
-	case <-ctx.Done():
-	case <-time.After(roachtestflags.WaitBeforeCleanup):
-	}
-	op.Status("running cleanup")
-	func() {
-		ctx, cancel := context.WithTimeout(context.Background(), opSpec.Timeout)
-		defer cancel()
-
-		cleanup.Cleanup(ctx, op, c)
-	}()
-
-	if op.Failed() {
-		op.Status("operation cleanup failed")
-		maybeEmitDatadogEvent(ctx, datadogEventsClient, opSpec, clusterName, eventOpError, operationRunID, datadogTags)
-		return op.mu.failures[0]
-	}
-	maybeEmitDatadogEvent(ctx, datadogEventsClient, opSpec, clusterName, eventOpFinishedCleanup, operationRunID, datadogTags)
-
-	return nil
 }

@@ -20,6 +20,7 @@ limit
  ├── cardinality: [0 - 1]
  ├── stats: [rows=1]
  ├── cost: 160.090001
+ ├── cost-flags: unbounded-cardinality
  ├── key: ()
  ├── fd: ()-->(15-17)
  ├── distribution: test
@@ -30,6 +31,7 @@ limit
  │    ├── right columns: a.x:8 a.y:9 a.z:10
  │    ├── stats: [rows=20]
  │    ├── cost: 160.070001
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── limit hint: 1.00
  │    ├── distribution: test
  │    ├── prune: (15,17)
@@ -37,6 +39,7 @@ limit
  │    │    ├── columns: a.x:1 a.y:2 a.z:3
  │    │    ├── stats: [rows=10, distinct(2)=1, null(2)=0]
  │    │    ├── cost: 80.0200006
+ │    │    ├── cost-flags: unbounded-cardinality
  │    │    ├── key: (1)
  │    │    ├── fd: ()-->(2), (1)-->(3)
  │    │    ├── limit hint: 1.00
@@ -47,6 +50,7 @@ limit
  │    │         ├── constraint: /2/1: [/1 - /1]
  │    │         ├── stats: [rows=10, distinct(2)=1, null(2)=0]
  │    │         ├── cost: 19.1
+ │    │         ├── cost-flags: unbounded-cardinality
  │    │         ├── key: (1)
  │    │         ├── fd: ()-->(2)
  │    │         ├── limit hint: 1.00
@@ -55,6 +59,7 @@ limit
  │         ├── columns: a.x:8 a.y:9 a.z:10
  │         ├── stats: [rows=10, distinct(9)=1, null(9)=0]
  │         ├── cost: 80.0200006
+ │         ├── cost-flags: unbounded-cardinality
  │         ├── key: (8)
  │         ├── fd: ()-->(9), (8)-->(10)
  │         ├── limit hint: 1.00
@@ -65,6 +70,7 @@ limit
  │              ├── constraint: /9/8: [/2 - /2]
  │              ├── stats: [rows=10, distinct(9)=1, null(9)=0]
  │              ├── cost: 19.1
+ │              ├── cost-flags: unbounded-cardinality
  │              ├── key: (8)
  │              ├── fd: ()-->(9)
  │              ├── limit hint: 1.00
@@ -79,15 +85,9 @@ EXPLAIN ANALYZE SELECT * FROM (SELECT * FROM a WHERE y = 1 UNION ALL SELECT * FR
 planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
-vectorized: <hidden>
 plan type: custom
 rows decoded from KV: 2 (16 B, 4 KVs, 2 gRPC calls)
-maximum memory usage: <hidden>
-network usage: <hidden>
 regions: <hidden>
-isolation level: serializable
-priority: normal
-quality of service: regular
 ·
 • limit
 │ count: 1
@@ -95,35 +95,25 @@ quality of service: regular
 └── • union all
     │ sql nodes: <hidden>
     │ regions: <hidden>
+    │ execution time: 0µs
     │ actual row count: 1
     │
     ├── • index join (streamer)
     │   │ sql nodes: <hidden>
     │   │ kv nodes: <hidden>
     │   │ regions: <hidden>
-    │   │ actual row count: 1
     │   │ KV time: 0µs
-    │   │ KV contention time: 0µs
     │   │ KV rows decoded: 1
-    │   │ KV pairs read: 2
-    │   │ KV bytes read: 8 B
-    │   │ KV gRPC calls: 1
-    │   │ estimated max memory allocated: 0 B
-    │   │ estimated max sql temp disk usage: 0 B
+    │   │ actual row count: 1
     │   │ table: a@a_pkey
     │   │
     │   └── • scan
     │         sql nodes: <hidden>
     │         kv nodes: <hidden>
     │         regions: <hidden>
-    │         actual row count: 1
     │         KV time: 0µs
-    │         KV contention time: 0µs
     │         KV rows decoded: 1
-    │         KV pairs read: 2
-    │         KV bytes read: 8 B
-    │         KV gRPC calls: 1
-    │         estimated max memory allocated: 0 B
+    │         actual row count: 1
     │         missing stats
     │         table: a@a_y_idx
     │         spans: [/1 - /1]
@@ -131,26 +121,17 @@ quality of service: regular
     └── • index join (streamer)
         │ sql nodes: <hidden>
         │ regions: <hidden>
-        │ actual row count: 0
         │ KV time: 0µs
-        │ KV contention time: 0µs
         │ KV rows decoded: 0
-        │ KV bytes read: 0 B
-        │ KV gRPC calls: 0
-        │ estimated max memory allocated: 0 B
-        │ estimated max sql temp disk usage: 0 B
+        │ actual row count: 0
         │ table: a@a_pkey
         │
         └── • scan
               sql nodes: <hidden>
               regions: <hidden>
-              actual row count: 0
               KV time: 0µs
-              KV contention time: 0µs
               KV rows decoded: 0
-              KV bytes read: 0 B
-              KV gRPC calls: 0
-              estimated max memory allocated: 0 B
+              actual row count: 0
               missing stats
               table: a@a_y_idx
               spans: [/2 - /2]
@@ -169,12 +150,7 @@ distribution: <hidden>
 vectorized: <hidden>
 plan type: generic, reused
 rows decoded from KV: 2 (16 B, 4 KVs, 2 gRPC calls)
-maximum memory usage: <hidden>
-network usage: <hidden>
 regions: <hidden>
-isolation level: serializable
-priority: normal
-quality of service: regular
 ·
 • limit
 │ count: 1
@@ -188,27 +164,18 @@ quality of service: regular
     │   │ sql nodes: <hidden>
     │   │ kv nodes: <hidden>
     │   │ regions: <hidden>
-    │   │ actual row count: 1
     │   │ KV time: 0µs
-    │   │ KV contention time: 0µs
     │   │ KV rows decoded: 1
-    │   │ KV pairs read: 2
-    │   │ KV bytes read: 8 B
-    │   │ KV gRPC calls: 1
-    │   │ estimated max memory allocated: 0 B
+    │   │ actual row count: 1
     │   │ table: a@a_pkey
     │   │
     │   └── • scan
     │         sql nodes: <hidden>
     │         kv nodes: <hidden>
     │         regions: <hidden>
-    │         actual row count: 1
     │         KV time: 0µs
-    │         KV contention time: 0µs
     │         KV rows decoded: 1
-    │         KV pairs read: 2
-    │         KV bytes read: 8 B
-    │         KV gRPC calls: 1
+    │         actual row count: 1
     │         missing stats
     │         table: a@a_y_idx
     │         spans: [/1 - /1]
@@ -216,24 +183,17 @@ quality of service: regular
     └── • index join (streamer)
         │ sql nodes: <hidden>
         │ regions: <hidden>
-        │ actual row count: 0
         │ KV time: 0µs
-        │ KV contention time: 0µs
         │ KV rows decoded: 0
-        │ KV bytes read: 0 B
-        │ KV gRPC calls: 0
-        │ estimated max memory allocated: 0 B
+        │ actual row count: 0
         │ table: a@a_pkey
         │
         └── • scan
               sql nodes: <hidden>
               regions: <hidden>
-              actual row count: 0
               KV time: 0µs
-              KV contention time: 0µs
               KV rows decoded: 0
-              KV bytes read: 0 B
-              KV gRPC calls: 0
+              actual row count: 0
               missing stats
               table: a@a_y_idx
               spans: [/2 - /2]
@@ -283,6 +243,7 @@ project
  ├── cardinality: [0 - 1]
  ├── stats: [rows=1]
  ├── cost: 29.145
+ ├── cost-flags: unbounded-cardinality
  ├── key: ()
  ├── fd: ()-->(8)
  ├── distribution: test
@@ -292,8 +253,9 @@ project
       ├── cardinality: [0 - 1]
       ├── stats: [rows=1]
       ├── cost: 29.125
+      ├── cost-flags: unbounded-cardinality
       ├── key: ()
-      ├── fd: ()-->(1,8), (8)==(1), (1)==(8)
+      ├── fd: ()-->(1,8), (1)==(8), (8)==(1)
       ├── distribution: test
       ├── inner-join (lookup b)
       │    ├── columns: a.x:1 b.x:8
@@ -301,6 +263,7 @@ project
       │    ├── lookup columns are key
       │    ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(8)=1, null(8)=0]
       │    ├── cost: 29.105
+      │    ├── cost-flags: unbounded-cardinality
       │    ├── key: (8)
       │    ├── fd: (1)==(8), (8)==(1)
       │    ├── limit hint: 1.00
@@ -309,6 +272,7 @@ project
       │    │    ├── columns: a.x:1
       │    │    ├── stats: [rows=1, distinct(1)=1, null(1)=0]
       │    │    ├── cost: 19.035
+      │    │    ├── cost-flags: unbounded-cardinality
       │    │    ├── key: (1)
       │    │    ├── limit hint: 1.00
       │    │    ├── distribution: test
@@ -326,15 +290,9 @@ EXPLAIN ANALYZE SELECT b.x FROM a, b WHERE a.x = b.x LIMIT 1
 planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
-vectorized: <hidden>
 plan type: custom
 rows decoded from KV: 2 (16 B, 4 KVs, 2 gRPC calls)
-maximum memory usage: <hidden>
-network usage: <hidden>
 regions: <hidden>
-isolation level: serializable
-priority: normal
-quality of service: regular
 ·
 • limit
 │ count: 1
@@ -343,14 +301,10 @@ quality of service: regular
     │ sql nodes: <hidden>
     │ kv nodes: <hidden>
     │ regions: <hidden>
-    │ actual row count: 1
     │ KV time: 0µs
-    │ KV contention time: 0µs
     │ KV rows decoded: 1
-    │ KV pairs read: 2
-    │ KV bytes read: 8 B
-    │ KV gRPC calls: 1
-    │ estimated max memory allocated: 0 B
+    │ execution time: 0µs
+    │ actual row count: 1
     │ table: b@b_pkey
     │ equality: (x) = (x)
     │ equality cols are key
@@ -359,14 +313,9 @@ quality of service: regular
           sql nodes: <hidden>
           kv nodes: <hidden>
           regions: <hidden>
-          actual row count: 1
           KV time: 0µs
-          KV contention time: 0µs
           KV rows decoded: 1
-          KV pairs read: 2
-          KV bytes read: 8 B
-          KV gRPC calls: 1
-          estimated max memory allocated: 0 B
+          actual row count: 1
           estimated row count: 1 (100% of the table; stats collected <hidden> ago)
           table: a@a_y_idx
           spans: FULL SCAN (SOFT LIMIT)
@@ -382,6 +331,7 @@ limit
  ├── cardinality: [0 - 2]
  ├── stats: [rows=2]
  ├── cost: 63.99
+ ├── cost-flags: unbounded-cardinality
  ├── key: (8,9)
  ├── fd: (1)-->(2), (1)==(8), (8)==(1)
  ├── ordering: +2,+(1|8) [actual: +2,+1]
@@ -394,6 +344,7 @@ limit
  │    ├── key columns: [1] = [8]
  │    ├── stats: [rows=10, distinct(1)=1, null(1)=0, distinct(8)=1, null(8)=0]
  │    ├── cost: 63.96
+ │    ├── cost-flags: unbounded-cardinality
  │    ├── key: (8,9)
  │    ├── fd: (1)-->(2), (1)==(8), (8)==(1)
  │    ├── ordering: +2,+(1|8) [actual: +2,+1]
@@ -405,6 +356,7 @@ limit
  │    │    ├── columns: a.x:1 a.y:2
  │    │    ├── stats: [rows=1, distinct(1)=1, null(1)=0]
  │    │    ├── cost: 19.04
+ │    │    ├── cost-flags: unbounded-cardinality
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(2)
  │    │    ├── ordering: +2,+1
@@ -424,15 +376,9 @@ EXPLAIN ANALYZE SELECT a.x, a.y, xy.x, xy.y FROM a INNER LOOKUP JOIN xy ON xy.x 
 planning time: 10µs
 execution time: 100µs
 distribution: <hidden>
-vectorized: <hidden>
 plan type: custom
 rows decoded from KV: 4 (32 B, 8 KVs, 4 gRPC calls)
-maximum memory usage: <hidden>
-network usage: <hidden>
 regions: <hidden>
-isolation level: serializable
-priority: normal
-quality of service: regular
 ·
 • limit
 │ count: 2
@@ -441,15 +387,10 @@ quality of service: regular
     │ sql nodes: <hidden>
     │ kv nodes: <hidden>
     │ regions: <hidden>
-    │ actual row count: 2
     │ KV time: 0µs
-    │ KV contention time: 0µs
     │ KV rows decoded: 2
-    │ KV pairs read: 4
-    │ KV bytes read: 16 B
-    │ KV gRPC calls: 2
-    │ estimated max memory allocated: 0 B
-    │ estimated max sql temp disk usage: 0 B
+    │ execution time: 0µs
+    │ actual row count: 2
     │ table: xy@xy_pkey
     │ equality: (x) = (x)
     │
@@ -457,14 +398,9 @@ quality of service: regular
           sql nodes: <hidden>
           kv nodes: <hidden>
           regions: <hidden>
-          actual row count: 2
           KV time: 0µs
-          KV contention time: 0µs
           KV rows decoded: 2
-          KV pairs read: 4
-          KV bytes read: 16 B
-          KV gRPC calls: 2
-          estimated max memory allocated: 0 B
+          actual row count: 2
           estimated row count: 1 (100% of the table; stats collected <hidden> ago)
           table: a@a_y_idx
           spans: FULL SCAN (SOFT LIMIT)

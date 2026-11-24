@@ -58,10 +58,10 @@ func (nsr *NamespaceTableRow) GetID() descpb.ID {
 type NamespaceTable []NamespaceTableRow
 
 // JobsTable represents data read from `system.jobs`.
-type JobsTable []jobs.JobMetadata
+type JobsTable []jobs.DeprecatedJobMetadata
 
 // GetJobMetadata implements the jobs.JobMetadataGetter interface.
-func (jt JobsTable) GetJobMetadata(jobID jobspb.JobID) (*jobs.JobMetadata, error) {
+func (jt JobsTable) GetJobMetadata(jobID jobspb.JobID) (*jobs.DeprecatedJobMetadata, error) {
 	for i := range jt {
 		md := &jt[i]
 		if md.ID == jobID {
@@ -172,7 +172,7 @@ func ExamineDescriptors(
 		desc := descLookupFn(id)
 		if desc == nil {
 			// This should never happen as ids are parsed and inserted from descTable.
-			log.Fatalf(ctx, "Descriptor ID %d not found", row.ID)
+			log.Dev.Fatalf(ctx, "Descriptor ID %d not found", row.ID)
 		}
 		if desc.GetID() != id {
 			problemsFound = true
@@ -271,7 +271,7 @@ func descReport(stdout io.Writer, desc catalog.Descriptor, format string, args .
 // timestamp.
 func DumpSQL(out io.Writer, descTable DescriptorTable, namespaceTable NamespaceTable) error {
 	// Assume the target is an empty cluster with the same binary version
-	ms := bootstrap.MakeMetadataSchema(keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef())
+	ms := bootstrap.MakeMetadataSchema(keys.SystemSQLCodec, zonepb.DefaultZoneConfigRef(), zonepb.DefaultSystemZoneConfigRef(), bootstrap.NoOffset)
 	minUserDescID := ms.FirstNonSystemDescriptorID()
 	minUserCreatedDescID := minUserDescID + descpb.ID(len(catalogkeys.DefaultUserDBs))*2
 	// Print first transaction, which removes all predefined user descriptors.

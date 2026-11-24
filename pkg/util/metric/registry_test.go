@@ -19,7 +19,7 @@ func (r *Registry) findMetricByName(name string) Iterable {
 	r.Lock()
 	defer r.Unlock()
 	for _, metric := range r.tracked {
-		if metric.GetName() == name {
+		if metric.GetName(false /* useStaticLabels */) == name {
 			return metric
 		}
 	}

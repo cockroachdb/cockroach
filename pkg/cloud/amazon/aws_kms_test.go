@@ -239,9 +239,14 @@ func TestKMSAgainstMockAWS(t *testing.T) {
 	tempDir, cleanup := testutils.TempDir(t)
 	defer cleanup()
 	credFile := filepath.Join(tempDir, "credentials")
+	origCredsFile, hasCredsFile := os.LookupEnv("AWS_SHARED_CREDENTIALS_FILE")
 	require.NoError(t, os.Setenv("AWS_SHARED_CREDENTIALS_FILE", credFile))
 	defer func() {
-		require.NoError(t, os.Unsetenv("AWS_SHARED_CREDENTIALS_FILE"))
+		if hasCredsFile {
+			require.NoError(t, os.Setenv("AWS_SHARED_CREDENTIALS_FILE", origCredsFile))
+		} else {
+			require.NoError(t, os.Unsetenv("AWS_SHARED_CREDENTIALS_FILE"))
+		}
 	}()
 	require.NoError(t, os.WriteFile(credFile, []byte(`[default]
 		aws_access_key_id = abc
@@ -354,6 +359,7 @@ func TestAWSKMSDisallowImplicitCredentials(t *testing.T) {
 }
 
 func TestAWSKMSInaccessibleError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
 	q := make(url.Values)
 	expect := map[string]string{
 		"AWS_ACCESS_KEY_ID":     AWSAccessKeyParam,
@@ -454,12 +460,22 @@ func TestAWSKMSImplicitAuthRequiresNoSharedConfigFiles(t *testing.T) {
 	// so in order to circumvent this and test the case where the shared config
 	// files are not present, we need to set the AWS_CONFIG_FILE and
 	// AWS_SHARED_CREDENTIALS_FILE.
+	origConfigFile, hasConfigFile := os.LookupEnv("AWS_CONFIG_FILE")
+	origCredsFile, hasCredsFile := os.LookupEnv("AWS_SHARED_CREDENTIALS_FILE")
 	require.NoError(t, os.Setenv("AWS_CONFIG_FILE", "/tmp/config"))
 	require.NoError(t, os.Setenv("AWS_SHARED_CREDENTIALS_FILE",
 		"/tmp/credentials"))
 	defer func() {
-		require.NoError(t, os.Unsetenv("AWS_CONFIG_FILE"))
-		require.NoError(t, os.Unsetenv("AWS_SHARED_CREDENTIALS_FILE"))
+		if hasConfigFile {
+			require.NoError(t, os.Setenv("AWS_CONFIG_FILE", origConfigFile))
+		} else {
+			require.NoError(t, os.Unsetenv("AWS_CONFIG_FILE"))
+		}
+		if hasCredsFile {
+			require.NoError(t, os.Setenv("AWS_SHARED_CREDENTIALS_FILE", origCredsFile))
+		} else {
+			require.NoError(t, os.Unsetenv("AWS_SHARED_CREDENTIALS_FILE"))
+		}
 	}()
 
 	testEnv := &cloud.TestKMSEnv{

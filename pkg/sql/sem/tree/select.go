@@ -16,7 +16,9 @@ package tree
 
 import (
 	"fmt"
+	"slices"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/lexbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
@@ -212,11 +214,25 @@ type ColumnDef struct {
 
 // Format implements the NodeFormatter interface.
 func (c *ColumnDef) Format(ctx *FmtCtx) {
-	ctx.FormatNode(&c.Name)
+	if !ctx.flags.HasFlags(FmtAnonymize) && needsLexerEscapeAsColName(string(c.Name)) {
+		lexbase.EncodeEscapedSQLIdent(&ctx.Buffer, string(c.Name))
+	} else {
+		ctx.FormatNode(&c.Name)
+	}
 	if c.Type != nil {
 		ctx.WriteByte(' ')
 		ctx.FormatTypeReference(c.Type)
 	}
+}
+
+// needsLexerEscapeAsColName returns true when n must be force-quoted to be
+// recognized as a column name by the parser, even though it is not a reserved
+// keyword. This is necessary for identifiers that the lexer reclassifies into
+// a non-name token based on lookahead (e.g. INDEX followed by an identifier
+// and '(' becomes INDEX_BEFORE_NAME_THEN_PAREN). See the INDEX disambiguation
+// comment in pkg/sql/parser/lexer.go for details.
+func needsLexerEscapeAsColName(n string) bool {
+	return n == "index"
 }
 
 // ColumnDefList represents a list of ColumnDefs.
@@ -239,8 +255,10 @@ type AsOfClause struct {
 
 // Format implements the NodeFormatter interface.
 func (a *AsOfClause) Format(ctx *FmtCtx) {
-	ctx.WriteString("AS OF SYSTEM TIME ")
-	ctx.FormatNode(a.Expr)
+	if !ctx.flags.HasFlags(FmtSkipAsOfSystemTimeClauses) {
+		ctx.WriteString("AS OF SYSTEM TIME ")
+		ctx.FormatNode(a.Expr)
+	}
 }
 
 // From represents a FROM clause.
@@ -311,6 +329,7 @@ type FamilyID = catid.FamilyID
 //   - NO_INDEX_JOIN
 //   - NO_ZIGZAG_JOIN
 //   - NO_FULL_SCAN
+//   - AVOID_FULL_SCAN
 //   - IGNORE_FOREIGN_KEYS
 //   - FORCE_INVERTED_INDEX
 //   - FORCE_ZIGZAG
@@ -330,6 +349,8 @@ type IndexFlags struct {
 	NoZigzagJoin bool
 	// NoFullScan indicates we should constrain this scan.
 	NoFullScan bool
+	// AvoidFullScan indicates we should constrain this scan if possible.
+	AvoidFullScan bool
 	// IgnoreForeignKeys disables optimizations based on outbound foreign key
 	// references from this table. This is useful in particular for scrub queries
 	// used to verify the consistency of foreign key relations.
@@ -372,6 +393,9 @@ func (ih *IndexFlags) CombineWith(other *IndexFlags) error {
 	if ih.NoFullScan && other.NoFullScan {
 		return errors.New("NO_FULL_SCAN specified multiple times")
 	}
+	if ih.AvoidFullScan && other.AvoidFullScan {
+		return errors.New("AVOID_FULL_SCAN specified multiple times")
+	}
 	if ih.IgnoreForeignKeys && other.IgnoreForeignKeys {
 		return errors.New("IGNORE_FOREIGN_KEYS specified multiple times")
 	}
@@ -385,6 +409,7 @@ func (ih *IndexFlags) CombineWith(other *IndexFlags) error {
 	result.NoIndexJoin = ih.NoIndexJoin || other.NoIndexJoin
 	result.NoZigzagJoin = ih.NoZigzagJoin || other.NoZigzagJoin
 	result.NoFullScan = ih.NoFullScan || other.NoFullScan
+	result.AvoidFullScan = ih.AvoidFullScan || other.AvoidFullScan
 	result.IgnoreForeignKeys = ih.IgnoreForeignKeys || other.IgnoreForeignKeys
 	result.IgnoreUniqueWithoutIndexKeys = ih.IgnoreUniqueWithoutIndexKeys ||
 		other.IgnoreUniqueWithoutIndexKeys
@@ -471,6 +496,28 @@ func (ih *IndexFlags) Check() error {
 	return nil
 }
 
+// Equal returns true if these IndexFlags equal the other IndexFlags.
+func (ih *IndexFlags) Equal(other *IndexFlags) bool {
+	if ih == nil || other == nil {
+		return ih == other
+	}
+	return ih.Index == other.Index &&
+		ih.IndexID == other.IndexID &&
+		ih.Direction == other.Direction &&
+		ih.NoIndexJoin == other.NoIndexJoin &&
+		ih.NoZigzagJoin == other.NoZigzagJoin &&
+		ih.NoFullScan == other.NoFullScan &&
+		ih.AvoidFullScan == other.AvoidFullScan &&
+		ih.IgnoreForeignKeys == other.IgnoreForeignKeys &&
+		ih.IgnoreUniqueWithoutIndexKeys == other.IgnoreUniqueWithoutIndexKeys &&
+		ih.ForceInvertedIndex == other.ForceInvertedIndex &&
+		ih.ForceZigzag == other.ForceZigzag &&
+		slices.Equal(ih.ZigzagIndexes, other.ZigzagIndexes) &&
+		slices.Equal(ih.ZigzagIndexIDs, other.ZigzagIndexIDs) &&
+		((ih.FamilyID == nil && other.FamilyID == nil) ||
+			(ih.FamilyID != nil && other.FamilyID != nil && *ih.FamilyID == *other.FamilyID))
+}
+
 var enableFamilyIDIndexHintForTests = false
 
 // TestingEnableFamilyIndexHint enables the use of Family index hint
@@ -485,7 +532,7 @@ func TestingEnableFamilyIndexHint() func() {
 // Format implements the NodeFormatter interface.
 func (ih *IndexFlags) Format(ctx *FmtCtx) {
 	ctx.WriteByte('@')
-	if ih.indexOnlyHint() {
+	if ih.IndexOnlyHint() {
 		if ih.Index != "" {
 			ctx.FormatNode(&ih.Index)
 		} else {
@@ -523,6 +570,11 @@ func (ih *IndexFlags) Format(ctx *FmtCtx) {
 		if ih.NoFullScan {
 			sep()
 			ctx.WriteString("NO_FULL_SCAN")
+		}
+
+		if ih.AvoidFullScan {
+			sep()
+			ctx.WriteString("AVOID_FULL_SCAN")
 		}
 
 		if ih.IgnoreForeignKeys {
@@ -571,10 +623,10 @@ func (ih *IndexFlags) Format(ctx *FmtCtx) {
 	}
 }
 
-func (ih *IndexFlags) indexOnlyHint() bool {
-	return !ih.NoIndexJoin && !ih.NoZigzagJoin && !ih.NoFullScan && !ih.IgnoreForeignKeys &&
-		!ih.IgnoreUniqueWithoutIndexKeys && ih.Direction == 0 && !ih.ForceInvertedIndex &&
-		!ih.zigzagForced() && ih.FamilyID == nil
+func (ih *IndexFlags) IndexOnlyHint() bool {
+	return !ih.NoIndexJoin && !ih.NoZigzagJoin && !ih.NoFullScan && !ih.AvoidFullScan &&
+		!ih.IgnoreForeignKeys && !ih.IgnoreUniqueWithoutIndexKeys && ih.Direction == 0 &&
+		!ih.ForceInvertedIndex && !ih.zigzagForced() && ih.FamilyID == nil
 }
 
 func (ih *IndexFlags) zigzagForced() bool {
@@ -597,7 +649,7 @@ func (node *AliasedTableExpr) Format(ctx *FmtCtx) {
 		ctx.WriteString("LATERAL ")
 	}
 	ctx.FormatNode(node.Expr)
-	if node.IndexFlags != nil {
+	if node.IndexFlags != nil && !ctx.HasFlags(FmtHideHints) {
 		ctx.FormatNode(node.IndexFlags)
 	}
 	if node.Ordinality {
@@ -665,9 +717,11 @@ func (node *JoinTableExpr) Format(ctx *FmtCtx) {
 		ctx.FormatNode(node.Cond)
 		ctx.WriteByte(' ')
 		if node.JoinType != "" {
-			ctx.WriteString(node.JoinType)
-			ctx.WriteByte(' ')
-			if node.Hint != "" {
+			if node.JoinType != AstInner || !ctx.HasFlags(FmtHideHints) {
+				ctx.WriteString(node.JoinType)
+				ctx.WriteByte(' ')
+			}
+			if node.Hint != "" && !ctx.HasFlags(FmtHideHints) {
 				ctx.WriteString(node.Hint)
 				ctx.WriteByte(' ')
 			}
@@ -677,9 +731,11 @@ func (node *JoinTableExpr) Format(ctx *FmtCtx) {
 	} else {
 		// General syntax: "<a> <join_type> [<join_hint>] JOIN <b> <condition>"
 		if node.JoinType != "" {
-			ctx.WriteString(node.JoinType)
-			ctx.WriteByte(' ')
-			if node.Hint != "" {
+			if node.JoinType != AstInner || !ctx.HasFlags(FmtHideHints) {
+				ctx.WriteString(node.JoinType)
+				ctx.WriteByte(' ')
+			}
+			if node.Hint != "" && !ctx.HasFlags(FmtHideHints) {
 				ctx.WriteString(node.Hint)
 				ctx.WriteByte(' ')
 			}

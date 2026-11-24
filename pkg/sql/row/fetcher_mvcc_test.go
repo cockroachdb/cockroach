@@ -15,11 +15,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/bootstrap"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/desctestutils"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/fetchpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/errors"
 )
 
-func slurpUserDataKVs(t testing.TB, e storage.Engine, codec keys.SQLCodec) []roachpb.KeyValue {
+func slurpUserDataKVs(t testing.TB, r storage.Reader, codec keys.SQLCodec) []roachpb.KeyValue {
 	t.Helper()
 
 	// Scan meta keys directly from engine. We put this in a retry loop
@@ -39,7 +39,7 @@ func slurpUserDataKVs(t testing.TB, e storage.Engine, codec keys.SQLCodec) []roa
 	var kvs []roachpb.KeyValue
 	testutils.SucceedsSoon(t, func() error {
 		kvs = nil
-		it, err := e.NewMVCCIterator(context.Background(), storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: codec.TenantEndKey()})
+		it, err := r.NewMVCCIterator(context.Background(), storage.MVCCKeyAndIntentsIterKind, storage.IterOptions{UpperBound: codec.TenantEndKey()})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -74,7 +74,17 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 	defer log.Scope(t).Close(t)
 
 	ctx := context.Background()
-	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
+	srv, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &kvserver.StoreTestingKnobs{
+				// With write buffering enabled on the KV client, we need to
+				// ensure that committing a write to the raft log returns only
+				// when it's applied to pebble (since we scan the engine
+				// directly in slurpUserDataKVs).
+				DisableCanAckBeforeApplication: true,
+			},
+		},
+	})
 	defer srv.Stopper().Stop(ctx)
 	s := srv.ApplicationLayer()
 	codec := s.Codec()
@@ -88,9 +98,13 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 		FAMILY (a, b, c), FAMILY (d)
 	)`)
 	desc := desctestutils.TestingGetPublicTableDescriptor(kvDB, codec, `d`, `parent`)
+	// Request crdb_internal_mvcc_timestamp column in addition to all user
+	// columns from the table.
+	fetchColumnIDs := desc.PublicColumnIDs()
+	fetchColumnIDs = append(fetchColumnIDs, colinfo.MVCCTimestampColumnID)
 	var spec fetchpb.IndexFetchSpec
 	if err := rowenc.InitIndexFetchSpec(
-		&spec, codec, desc, desc.GetPrimaryIndex(), desc.PublicColumnIDs(),
+		&spec, codec, desc, desc.GetPrimaryIndex(), fetchColumnIDs,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -113,7 +127,7 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 	kvsToRows := func(kvs []roachpb.KeyValue) []rowWithMVCCMetadata {
 		t.Helper()
 		for _, kv := range kvs {
-			log.Infof(ctx, "%v %v %v", kv.Key, kv.Value.Timestamp, kv.Value.PrettyPrint())
+			log.Dev.Infof(ctx, "%v %v %v", kv.Key, kv.Value.Timestamp, kv.Value.PrettyPrint())
 		}
 
 		if err := rf.ConsumeKVProvider(ctx, &row.KVProvider{KVs: kvs}); err != nil {
@@ -121,7 +135,7 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 		}
 		var rows []rowWithMVCCMetadata
 		for {
-			datums, err := rf.NextRowDecoded(ctx)
+			datums, _, err := rf.NextRowDecoded(ctx)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -129,12 +143,13 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 				break
 			}
 			row := rowWithMVCCMetadata{
-				RowIsDeleted:    rf.RowIsDeleted(),
-				RowLastModified: eval.TimestampToDecimalDatum(rf.RowLastModified()).String(),
+				RowIsDeleted: rf.RowIsDeleted(),
 			}
 			for _, datum := range datums {
 				if datum == tree.DNull {
 					row.PrimaryKey = append(row.PrimaryKey, `NULL`)
+				} else if d, ok := datum.(*tree.DDecimal); ok {
+					row.RowLastModified = d.String()
 				} else {
 					row.PrimaryKey = append(row.PrimaryKey, string(*datum.(*tree.DString)))
 				}
@@ -150,9 +165,9 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 		SELECT cluster_logical_timestamp();
 	END;`).Scan(&ts1)
 
-	if actual, expected := kvsToRows(slurpUserDataKVs(t, store.TODOEngine(), codec)), []rowWithMVCCMetadata{
-		{[]string{`1`, `a`, `a`, `a`}, false, ts1},
-		{[]string{`2`, `b`, `b`, `b`}, false, ts1},
+	if actual, expected := kvsToRows(slurpUserDataKVs(t, store.StateEngine(), codec)), []rowWithMVCCMetadata{
+		{PrimaryKey: []string{`1`, `a`, `a`, `a`}, RowIsDeleted: false, RowLastModified: ts1},
+		{PrimaryKey: []string{`2`, `b`, `b`, `b`}, RowIsDeleted: false, RowLastModified: ts1},
 	}; !reflect.DeepEqual(expected, actual) {
 		t.Errorf(`expected %v got %v`, expected, actual)
 	}
@@ -164,9 +179,9 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 		SELECT cluster_logical_timestamp();
 	END;`).Scan(&ts2)
 
-	if actual, expected := kvsToRows(slurpUserDataKVs(t, store.TODOEngine(), codec)), []rowWithMVCCMetadata{
-		{[]string{`1`, `NULL`, `NULL`, `NULL`}, false, ts2},
-		{[]string{`2`, `b`, `b`, `NULL`}, false, ts2},
+	if actual, expected := kvsToRows(slurpUserDataKVs(t, store.StateEngine(), codec)), []rowWithMVCCMetadata{
+		{PrimaryKey: []string{`1`, `NULL`, `NULL`, `NULL`}, RowIsDeleted: false, RowLastModified: ts2},
+		{PrimaryKey: []string{`2`, `b`, `b`, `NULL`}, RowIsDeleted: false, RowLastModified: ts2},
 	}; !reflect.DeepEqual(expected, actual) {
 		t.Errorf(`expected %v got %v`, expected, actual)
 	}
@@ -176,9 +191,9 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 		DELETE FROM parent WHERE a = '1';
 		SELECT cluster_logical_timestamp();
 	END;`).Scan(&ts3)
-	if actual, expected := kvsToRows(slurpUserDataKVs(t, store.TODOEngine(), codec)), []rowWithMVCCMetadata{
-		{[]string{`1`, `NULL`, `NULL`, `NULL`}, true, ts3},
-		{[]string{`2`, `b`, `b`, `NULL`}, false, ts2},
+	if actual, expected := kvsToRows(slurpUserDataKVs(t, store.StateEngine(), codec)), []rowWithMVCCMetadata{
+		{PrimaryKey: []string{`1`, `NULL`, `NULL`, `NULL`}, RowIsDeleted: true, RowLastModified: ts3},
+		{PrimaryKey: []string{`2`, `b`, `b`, `NULL`}, RowIsDeleted: false, RowLastModified: ts2},
 	}; !reflect.DeepEqual(expected, actual) {
 		t.Errorf(`expected %v got %v`, expected, actual)
 	}

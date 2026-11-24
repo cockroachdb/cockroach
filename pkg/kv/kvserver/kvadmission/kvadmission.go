@@ -9,7 +9,6 @@ package kvadmission
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -17,8 +16,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/kvflowcontrolpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol/replica_rac2"
-	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/raftlog"
-	"github.com/cockroachdb/cockroach/pkg/raft/raftpb"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
+	"github.com/cockroachdb/cockroach/pkg/obs/workloadid"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -27,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/grunning"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
@@ -53,21 +51,12 @@ var elasticCPUDurationPerInternalLowPriRead = settings.RegisterDurationSetting(
 	settings.DurationInRange(admission.MinElasticCPUDuration, admission.MaxElasticCPUDuration),
 )
 
-// elasticAdmissionAllLowPri determines whether internally
-// submitted low bulk pri requests integrate with elastic CPU control.
-var elasticAdmissionAllLowPri = settings.RegisterBoolSetting(
+// ElasticAdmission determines whether internally
+// submitted bulk pri requests integrate with elastic CPU control.
+var ElasticAdmission = settings.RegisterBoolSetting(
 	settings.SystemOnly,
 	"kvadmission.elastic_control_bulk_low_priority.enabled",
 	"determines whether the all low bulk priority requests integrate with elastic CPU control",
-	true,
-)
-
-// exportRequestElasticControlEnabled determines whether export requests
-// integrate with elastic CPU control.
-var exportRequestElasticControlEnabled = settings.RegisterBoolSetting(
-	settings.SystemOnly,
-	"kvadmission.export_request_elastic_control.enabled",
-	"determines whether the export requests integrate with elastic CPU control",
 	true,
 )
 
@@ -111,7 +100,6 @@ var FlowTokenDropInterval = settings.RegisterDurationSetting(
 	"the interval at which the raft transport checks for pending flow token dispatches "+
 		"to nodes we're no longer connected to, in order to drop them; set to 0 to disable the mechanism",
 	30*time.Second,
-	settings.NonNegativeDuration,
 )
 
 // FlowTokenDispatchInterval determines the frequency at which we check for
@@ -143,29 +131,42 @@ var ConnectedStoreExpiration = settings.RegisterDurationSetting(
 	"kvadmission.raft_transport.connected_store_expiration",
 	"the interval at which the raft transport prunes its set of connected stores; set to 0 to disable the mechanism",
 	5*time.Minute,
-	settings.NonNegativeDuration,
+)
+
+// useRangeTenantIDForNonAdminEnabled determines whether the range's tenant ID
+// is used by admission control when called by the system tenant. When false,
+// the requester's tenant ID (i.e., the system tenant ID) is used.
+var useRangeTenantIDForNonAdminEnabled = settings.RegisterBoolSetting(
+	settings.SystemOnly,
+	"kvadmission.use_range_tenant_id_for_non_admin.enabled",
+	"when true, and the caller is the system tenant, the tenantID used by admission control "+
+		"for non-admin requests is overridden to the range's tenantID",
+	true,
 )
 
 // Controller provides admission control for the KV layer.
 type Controller interface {
 	// AdmitKVWork must be called before performing KV work.
 	// BatchRequest.AdmissionHeader and BatchRequest.Replica.StoreID must be
-	// populated for admission to work correctly. If err is non-nil, the
-	// returned handle can be ignored. If err is nil, AdmittedKVWorkDone must be
-	// called after the KV work is done executing.
-	AdmitKVWork(context.Context, roachpb.TenantID, *kvpb.BatchRequest) (Handle, error)
+	// populated for admission to work correctly. The requestTenantID represents
+	// the authenticated caller and must be populated. The rangeTenantID
+	// represents the tenant of the range on which the work is being performed
+	// -- in rare cases it may be unpopulated.
+	//
+	// If err is non-nil, the returned handle can be ignored. If err is nil,
+	// AdmittedKVWorkDone must be called after the KV work is done executing.
+	AdmitKVWork(
+		_ context.Context, requestTenantID roachpb.TenantID, rangeTenantID roachpb.TenantID,
+		_ *kvpb.BatchRequest,
+	) (Handle, error)
 	// AdmittedKVWorkDone is called after the admitted KV work is done
 	// executing.
-	AdmittedKVWorkDone(Handle, *StoreWriteBytes)
+	AdmittedKVWorkDone(Handle, admission.StoreWorkDoneInfo)
 	// AdmitRangefeedRequest must be called before serving rangefeed requests.
 	// If enabled, it returns a non-nil Pacer that's to be used within rangefeed
 	// catchup scans (typically CPU-intensive and affecting scheduling
 	// latencies).
 	AdmitRangefeedRequest(roachpb.TenantID, *kvpb.RangeFeedRequest) *admission.Pacer
-	// SetTenantWeightProvider is used to set the provider that will be
-	// periodically polled for weights. The stopper should be used to terminate
-	// the periodic polling.
-	SetTenantWeightProvider(TenantWeightProvider, *stop.Stopper)
 	// SnapshotIngestedOrWritten informs admission control about a range
 	// snapshot ingestion or a range snapshot written as a normal write.
 	// writeBytes should roughly correspond to the size of the write when
@@ -175,36 +176,14 @@ type Controller interface {
 	// replicated to a raft follower, that have not been subject to admission
 	// control.
 	FollowerStoreWriteBytes(roachpb.StoreID, FollowerStoreWriteBytes)
-	// AdmitRaftEntry informs admission control of a raft log entry being
-	// written to storage.
-	AdmitRaftEntry(
-		_ context.Context, _ roachpb.TenantID, _ roachpb.StoreID, _ roachpb.RangeID, _ roachpb.ReplicaID,
-		leaderTerm uint64, _ raftpb.Entry)
 	replica_rac2.ACWorkQueue
 	// GetSnapshotQueue returns the SnapshotQueue which is used for ingesting raft
 	// snapshots.
 	GetSnapshotQueue(roachpb.StoreID) *admission.SnapshotQueue
-}
-
-// TenantWeightProvider can be periodically asked to provide the tenant
-// weights.
-type TenantWeightProvider interface {
-	GetTenantWeights() TenantWeights
-}
-
-// TenantWeights contains the various tenant weights.
-type TenantWeights struct {
-	// Node is the node level tenant ID => weight.
-	Node map[uint64]uint32
-	// Stores contains the per-store tenant weights.
-	Stores []TenantWeightsForStore
-}
-
-// TenantWeightsForStore contains the tenant weights for a store.
-type TenantWeightsForStore struct {
-	roachpb.StoreID
-	// Weights is tenant ID => weight.
-	Weights map[uint64]uint32
+	// GetProvisionedBandwidth returns the provisioned disk bandwidth for the
+	// given store in bytes/second, or 0 if the store is not found or bandwidth
+	// is not configured.
+	GetProvisionedBandwidth(roachpb.StoreID) int64
 }
 
 // controllerImpl implements Controller interface.
@@ -213,11 +192,10 @@ type controllerImpl struct {
 
 	// Admission control queues and coordinators. All three should be nil or
 	// non-nil.
-	kvAdmissionQ               *admission.WorkQueue
+	cpuGrantCoords             *admission.CPUGrantCoordinators
 	storeGrantCoords           *admission.StoreGrantCoordinators
 	elasticCPUGrantCoordinator *admission.ElasticCPUGrantCoordinator
-	kvflowController           kvflowcontrol.Controller
-	kvflowHandles              kvflowcontrol.Handles
+	kvflowHandles              kvflowcontrol.ReplicationAdmissionHandles
 
 	settings *cluster.Settings
 	every    log.EveryN
@@ -236,40 +214,54 @@ type Handle struct {
 	storeWorkHandle      admission.StoreWorkHandle
 	elasticCPUWorkHandle *admission.ElasticCPUWorkHandle
 	raftAdmissionMeta    *kvflowcontrolpb.RaftAdmissionMeta
+	ghToUnpause          *admission.GoroutineCPUHandle
 
-	callAdmittedWorkDoneOnKVAdmissionQ bool
-	cpuStart                           time.Duration
+	cpuStart            time.Duration
+	cpuAdmissionQueue   *admission.WorkQueue
+	cpuKVAdmissionQResp admission.AdmitResponse
 }
 
-// AnnotateCtx annotates the given context with request-scoped admission
-// data, plumbed through the KV stack using context.Contexts.
+// AnnotateCtx annotates the given context with the ElasticCPUWorkHandle,
+// which is used deep in the storage layer (e.g., mvccExportToWriter) to pace
+// CPU intensive operations.
 func (h *Handle) AnnotateCtx(ctx context.Context) context.Context {
 	if h.elasticCPUWorkHandle != nil {
 		ctx = admission.ContextWithElasticCPUWorkHandle(ctx, h.elasticCPUWorkHandle)
 	}
-	if h.raftAdmissionMeta != nil {
-		ctx = kvflowcontrol.ContextWithMeta(ctx, h.raftAdmissionMeta)
-	}
 	return ctx
+}
+
+// AdmissionInfo returns admission control state that should be plumbed
+// through the KV layer via explicit function parameters.
+func (h *Handle) AdmissionInfo() AdmissionInfo {
+	return AdmissionInfo{
+		RaftAdmissionMeta: h.raftAdmissionMeta,
+	}
+}
+
+// AdmissionInfo contains admission control state that is plumbed through the
+// KV layer via explicit function parameters rather than context.
+type AdmissionInfo struct {
+	// RaftAdmissionMeta is the metadata used for replication flow control.
+	// It is populated for requests that will be proposed to Raft.
+	RaftAdmissionMeta *kvflowcontrolpb.RaftAdmissionMeta
 }
 
 // MakeController returns a Controller. All three parameters must together be
 // nil or non-nil.
 func MakeController(
 	nodeID *base.NodeIDContainer,
-	kvAdmissionQ *admission.WorkQueue,
+	cpuGrantCoords *admission.CPUGrantCoordinators,
 	elasticCPUGrantCoordinator *admission.ElasticCPUGrantCoordinator,
 	storeGrantCoords *admission.StoreGrantCoordinators,
-	kvflowController kvflowcontrol.Controller,
-	kvflowHandles kvflowcontrol.Handles,
+	kvflowHandles kvflowcontrol.ReplicationAdmissionHandles,
 	settings *cluster.Settings,
 ) Controller {
 	return &controllerImpl{
 		nodeID:                     nodeID,
-		kvAdmissionQ:               kvAdmissionQ,
+		cpuGrantCoords:             cpuGrantCoords,
 		storeGrantCoords:           storeGrantCoords,
 		elasticCPUGrantCoordinator: elasticCPUGrantCoordinator,
-		kvflowController:           kvflowController,
 		kvflowHandles:              kvflowHandles,
 		settings:                   settings,
 		every:                      log.Every(10 * time.Second),
@@ -281,50 +273,16 @@ func MakeController(
 // TODO(irfansharif): There's a fair bit happening here and there's no test
 // coverage. Fix that.
 func (n *controllerImpl) AdmitKVWork(
-	ctx context.Context, tenantID roachpb.TenantID, ba *kvpb.BatchRequest,
-) (handle Handle, retErr error) {
-	ah := Handle{tenantID: tenantID}
-	if n.kvAdmissionQ == nil {
-		return ah, nil
+	ctx context.Context,
+	requestTenantID roachpb.TenantID,
+	rangeTenantID roachpb.TenantID,
+	ba *kvpb.BatchRequest,
+) (_ Handle, retErr error) {
+	if n.cpuGrantCoords == nil {
+		return Handle{}, nil
 	}
-
-	bypassAdmission := ba.IsAdmin()
-	source := ba.AdmissionHeader.Source
-	if !roachpb.IsSystemTenantID(tenantID.ToUint64()) {
-		// Request is from a SQL node.
-		bypassAdmission = false
-		source = kvpb.AdmissionHeader_FROM_SQL
-	}
-	if source == kvpb.AdmissionHeader_OTHER {
-		bypassAdmission = true
-	}
-	// TODO(abaptist): Revisit and deprecate this setting in v23.1.
-	if admission.KVBulkOnlyAdmissionControlEnabled.Get(&n.settings.SV) {
-		if admissionpb.WorkPriority(ba.AdmissionHeader.Priority) >= admissionpb.NormalPri {
-			bypassAdmission = true
-		}
-	}
-	// LeaseInfo requests are used as makeshift replica health probes by
-	// DistSender circuit breakers, make sure they bypass AC.
-	//
-	// TODO(erikgrinaker): the various bypass conditions here should be moved to
-	// one or more request flags.
-	if ba.IsSingleLeaseInfoRequest() {
-		bypassAdmission = true
-	}
-	createTime := ba.AdmissionHeader.CreateTime
-	if !bypassAdmission && createTime == 0 {
-		// TODO(sumeer): revisit this for multi-tenant. Specifically, the SQL use
-		// of zero CreateTime needs to be revisited. It should use high priority.
-		createTime = timeutil.Now().UnixNano()
-	}
-	admissionInfo := admission.WorkInfo{
-		TenantID:        tenantID,
-		Priority:        admissionpb.WorkPriority(ba.AdmissionHeader.Priority),
-		CreateTime:      createTime,
-		BypassAdmission: bypassAdmission,
-	}
-
+	admissionInfo := workInfoForBatch(n.settings, requestTenantID, rangeTenantID, ba)
+	ah := Handle{tenantID: admissionInfo.TenantID}
 	admissionEnabled := true
 	// Don't subject HeartbeatTxnRequest to the storeAdmissionQ. Even though
 	// it would bypass admission, it would consume a slot. When writes are
@@ -335,13 +293,20 @@ func (n *controllerImpl) AdmitKVWork(
 	if ba.IsWrite() && !ba.IsSingleHeartbeatTxnRequest() {
 		var admitted bool
 		attemptFlowControl := kvflowcontrol.Enabled.Get(&n.settings.SV)
-		if attemptFlowControl && !bypassAdmission {
+		if attemptFlowControl && !admissionInfo.BypassAdmission {
 			kvflowHandle, found := n.kvflowHandles.LookupReplicationAdmissionHandle(ba.RangeID)
 			if !found {
 				return Handle{}, nil
 			}
 			var err error
-			admitted, err = kvflowHandle.Admit(ctx, admissionInfo.Priority, timeutil.FromUnixNanos(createTime))
+			admitted, err = kvflowHandle.Admit(
+				ctx, admissionInfo.Priority, timeutil.FromUnixNanos(admissionInfo.CreateTime),
+				ash.WorkloadInfo{
+					WorkloadID:    admissionInfo.WorkloadID,
+					AppNameID:     admissionInfo.AppNameID,
+					GatewayNodeID: admissionInfo.GatewayNodeID,
+					WorkloadType:  admissionInfo.WorkloadType,
+				})
 			if err != nil {
 				return Handle{}, err
 			} else if admitted {
@@ -388,28 +353,20 @@ func (n *controllerImpl) AdmitKVWork(
 			}
 		}
 	}
+	cpuAdmissionQ := n.cpuGrantCoords.GetKVWorkQueue()
 	if admissionEnabled {
-		// - Backups generate batches with single export requests, which we
-		//   admit through the elastic CPU work queue. We grant this
-		//   CPU-intensive work a set amount of CPU time and expect it to
-		//   terminate (cooperatively) once it exceeds its grant. The amount
-		//   disbursed is 100ms, which we've experimentally found to be long
-		//   enough to do enough useful work per-request while not causing too
-		//   much in the way of scheduling delays on individual cores. Within
-		//   admission control we have machinery that observes scheduling
-		//   latencies periodically and reduces the total amount of CPU time
-		//   handed out through this mechanism, as a way to provide latency
-		//   isolation to non-elastic ("latency sensitive") work running on the
-		//   same machine.
-		// - We do the same for internally submitted bulk low priority requests in
-		//   general (notably, for KV work done on the behalf of row-level TTL
-		//   reads or other jobs). Everything admissionpb.UserLowPri and above uses
-		//   the slots mechanism.
-		shouldUseElasticCPU :=
-			(exportRequestElasticControlEnabled.Get(&n.settings.SV) && ba.IsSingleExportRequest()) ||
-				(admissionInfo.Priority <= admissionpb.BulkLowPri && elasticAdmissionAllLowPri.Get(&n.settings.SV))
-
-		if shouldUseElasticCPU {
+		// Bulk jobs such as backups or row-level TTL issue KV requests with a
+		// priority of admissionpb.BulkNormalPri or lower; these are eligible for
+		// "elastic" CPU control, to adaptively utilize more or less CPU capacity
+		// depending on observed scheduling latencies. Requests with priority above
+		// admissionpb.BulkNormalPri uses the normal slots mechanism.
+		//
+		// NB: Background QoS in SQL uses UserLowPri. UserLowPri is currently below
+		// BulkNormalPri, meaning requests sent by background SQL are eligible
+		// for elastic AC. This is intentional: elastic AC is designed
+		// specifically to run "background" work elastically at a rate that doesn't
+		// impact the cluster.
+		if admissionInfo.Priority <= admissionpb.BulkNormalPri && ElasticAdmission.Get(&n.settings.SV) {
 			var admitDuration time.Duration
 			if ba.IsSingleExportRequest() {
 				admitDuration = elasticCPUDurationPerExportRequest.Get(&n.settings.SV)
@@ -423,7 +380,11 @@ func (n *controllerImpl) AdmitKVWork(
 			// reads, so in some sense, the integration is incomplete. This is
 			// probably harmless.
 			elasticWorkHandle, err := n.elasticCPUGrantCoordinator.ElasticCPUWorkQueue.Admit(
-				ctx, admitDuration, admissionInfo,
+				// NB: yieldInHandle is always false at this point, since requests may
+				// subsequently acquire latches, and requests holding latches should
+				// never yield. Later code, that knows about the state of latching,
+				// can revise this decision.
+				ctx, admitDuration, admissionInfo, false,
 			)
 			if err != nil {
 				return Handle{}, err
@@ -437,52 +398,67 @@ func (n *controllerImpl) AdmitKVWork(
 			}()
 		} else {
 			// Use the slots-based mechanism for everything else.
-			callAdmittedWorkDoneOnKVAdmissionQ, err := n.kvAdmissionQ.Admit(ctx, admissionInfo)
+			resp, err := cpuAdmissionQ.Admit(ctx, admissionInfo)
 			if err != nil {
 				return Handle{}, err
 			}
-			if callAdmittedWorkDoneOnKVAdmissionQ {
+			if resp.Enabled {
 				// We include the time to do other activities like intent resolution,
 				// since it is acceptable to charge them to the tenant.
 				ah.cpuStart = grunning.Time()
 			}
-			ah.callAdmittedWorkDoneOnKVAdmissionQ = callAdmittedWorkDoneOnKVAdmissionQ
+			ah.cpuAdmissionQueue = cpuAdmissionQ
+			ah.cpuKVAdmissionQResp = resp
 		}
+	}
+	// Pause CPU measurement for SQL work if it is happening locally on this
+	// goroutine.
+	//
+	// NB: if we never reach this point in the function, either there is an
+	// error, or some aspect of admission is disabled (which is never the case
+	// in production). In the latter case, we will not pause measurement, which
+	// we deem acceptable.
+	//
+	// TODO(sumeer): improve the structure of AdmitKVWork to make the behavior
+	// easier to understand.
+	sqlHandle := admission.SQLCPUHandleFromContext(ctx)
+	if sqlHandle != nil {
+		ah.ghToUnpause = sqlHandle.RegisterGoroutine()
+		ah.ghToUnpause.PauseMeasuring()
 	}
 	return ah, nil
 }
 
 // AdmittedKVWorkDone implements the Controller interface.
-func (n *controllerImpl) AdmittedKVWorkDone(ah Handle, writeBytes *StoreWriteBytes) {
+func (n *controllerImpl) AdmittedKVWorkDone(ah Handle, doneInfo admission.StoreWorkDoneInfo) {
 	n.elasticCPUGrantCoordinator.ElasticCPUWorkQueue.AdmittedWorkDone(ah.elasticCPUWorkHandle)
-	if ah.callAdmittedWorkDoneOnKVAdmissionQ {
+	if ah.cpuKVAdmissionQResp.Enabled {
 		cpuTime := grunning.Time() - ah.cpuStart
 		if cpuTime < 0 {
 			// We sometimes see cpuTime to be negative. We use 1ns here, arbitrarily.
 			// This issue is tracked by
 			// https://github.com/cockroachdb/cockroach/issues/126681.
 			if buildutil.CrdbTestBuild {
-				log.Warningf(context.Background(), "grunning.Time() should be non-decreasing, cpuTime=%s", cpuTime)
+				log.KvDistribution.Warningf(context.Background(), "grunning.Time() should be non-decreasing, cpuTime=%s", cpuTime)
 			}
 			cpuTime = 1
 		}
-		n.kvAdmissionQ.AdmittedWorkDone(ah.tenantID, cpuTime)
+		ah.cpuAdmissionQueue.AdmittedWorkDone(ah.cpuKVAdmissionQResp, cpuTime)
 	}
 	if ah.storeAdmissionQ != nil {
-		var doneInfo admission.StoreWorkDoneInfo
-		if writeBytes != nil {
-			doneInfo = admission.StoreWorkDoneInfo(*writeBytes)
-		}
 		err := ah.storeAdmissionQ.AdmittedWorkDone(ah.storeWorkHandle, doneInfo)
 		if err != nil {
 			// This shouldn't be happening.
 			if buildutil.CrdbTestBuild {
-				log.Fatalf(context.Background(), "%s", errors.WithAssertionFailure(err))
+				log.KvDistribution.Fatalf(context.Background(), "%s", errors.WithAssertionFailure(err))
 			}
 			if n.every.ShouldLog() {
-				log.Errorf(context.Background(), "%s", err)
+				log.KvDistribution.Errorf(context.Background(), "%s", err)
 			}
 		}
+	}
+	if ah.ghToUnpause != nil {
+		ah.ghToUnpause.UnpauseMeasuring()
 	}
 }
 
@@ -501,52 +477,9 @@ func (n *controllerImpl) AdmitRangefeedRequest(
 			Priority:        admissionpb.WorkPriority(request.AdmissionHeader.Priority),
 			CreateTime:      request.AdmissionHeader.CreateTime,
 			BypassAdmission: false,
+			WorkloadID:      uint64(workloadid.WORKLOAD_ID_RANGEFEED),
+			WorkloadType:    workloadid.WorkloadTypeSystem,
 		})
-}
-
-// SetTenantWeightProvider implements the Controller interface.
-func (n *controllerImpl) SetTenantWeightProvider(
-	provider TenantWeightProvider, stopper *stop.Stopper,
-) {
-	// TODO(irfansharif): Use a stopper here instead.
-	go func() {
-		const weightCalculationPeriod = 10 * time.Minute
-		ticker := time.NewTicker(weightCalculationPeriod)
-		// Used for short-circuiting the weights calculation if all weights are
-		// disabled.
-		allWeightsDisabled := false
-		for {
-			select {
-			case <-ticker.C:
-				kvDisabled := !admission.KVTenantWeightsEnabled.Get(&n.settings.SV)
-				kvStoresDisabled := !admission.KVStoresTenantWeightsEnabled.Get(&n.settings.SV)
-				if allWeightsDisabled && kvDisabled && kvStoresDisabled {
-					// Have already transitioned to disabled, so noop.
-					continue
-				}
-				weights := provider.GetTenantWeights()
-				if kvDisabled {
-					weights.Node = nil
-				}
-				n.kvAdmissionQ.SetTenantWeights(weights.Node)
-				n.elasticCPUGrantCoordinator.ElasticCPUWorkQueue.SetTenantWeights(weights.Node)
-
-				for _, storeWeights := range weights.Stores {
-					q := n.storeGrantCoords.TryGetQueueForStore(storeWeights.StoreID)
-					if q != nil {
-						if kvStoresDisabled {
-							storeWeights.Weights = nil
-						}
-						q.SetTenantWeights(storeWeights.Weights)
-					}
-				}
-				allWeightsDisabled = kvDisabled && kvStoresDisabled
-			case <-stopper.ShouldQuiesce():
-				ticker.Stop()
-				return
-			}
-		}
-	}()
 }
 
 // SnapshotIngestedOrWritten implements the Controller interface.
@@ -575,100 +508,24 @@ func (n *controllerImpl) FollowerStoreWriteBytes(
 		followerWriteBytes.NumEntries, followerWriteBytes.StoreWorkDoneInfo)
 }
 
-// AdmitRaftEntry implements the Controller interface. It is only used for the
-// RACv1 protocol.
-func (n *controllerImpl) AdmitRaftEntry(
-	ctx context.Context,
-	tenantID roachpb.TenantID,
-	storeID roachpb.StoreID,
-	rangeID roachpb.RangeID,
-	replicaID roachpb.ReplicaID,
-	leaderTerm uint64,
-	entry raftpb.Entry,
-) {
-	typ, _, err := raftlog.EncodingOf(entry)
-	if err != nil {
-		log.Errorf(ctx, "unable to determine raft command encoding: %v", err)
-		return
-	}
-	if !typ.UsesAdmissionControl() {
-		return // nothing to do
-	}
-	meta, err := raftlog.DecodeRaftAdmissionMeta(entry.Data)
-	if err != nil {
-		log.Errorf(ctx, "unable to decode raft command admission data: %v", err)
-		return
-	}
-
-	if log.V(1) {
-		log.Infof(ctx, "decoded raft admission meta below-raft: pri=%s create-time=%d proposer=n%s receiver=[n%d,s%s] tenant=t%d tokens≈%d sideloaded=%t raft-entry=%d/%d",
-			admissionpb.WorkPriority(meta.AdmissionPriority),
-			meta.AdmissionCreateTime,
-			meta.AdmissionOriginNode,
-			n.nodeID.Get(),
-			storeID,
-			tenantID.ToUint64(),
-			kvflowcontrol.Tokens(len(entry.Data)),
-			typ.IsSideloaded(),
-			entry.Term,
-			entry.Index,
-		)
-	}
-
-	storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(storeID)
-	if storeAdmissionQ == nil {
-		log.Errorf(ctx, "unable to find queue for store: %s", storeID)
-		return // nothing to do
-	}
-
-	if len(entry.Data) == 0 {
-		log.Fatal(ctx, "found (unexpected) empty raft command for below-raft admission")
-	}
-	wi := admission.WorkInfo{
-		TenantID:        tenantID,
-		Priority:        admissionpb.WorkPriority(meta.AdmissionPriority),
-		CreateTime:      meta.AdmissionCreateTime,
-		BypassAdmission: false,
-		RequestedCount:  int64(len(entry.Data)),
-	}
-	wi.ReplicatedWorkInfo = admission.ReplicatedWorkInfo{
-		Enabled:    true,
-		RangeID:    rangeID,
-		ReplicaID:  replicaID,
-		LeaderTerm: leaderTerm,
-		LogPosition: admission.LogPosition{
-			Term:  entry.Term,
-			Index: entry.Index,
-		},
-		Origin:       meta.AdmissionOriginNode,
-		IsV2Protocol: false,
-		Ingested:     typ.IsSideloaded(),
-	}
-
-	handle, err := storeAdmissionQ.Admit(ctx, admission.StoreWriteWorkInfo{
-		WorkInfo: wi,
-	})
-	if err != nil {
-		log.Errorf(ctx, "error while admitting to store admission queue: %v", err)
-		return
-	}
-	if handle.UseAdmittedWorkDone() {
-		log.Fatalf(ctx, "unexpected handle.UseAdmittedWorkDone")
-	}
-}
-
 var _ replica_rac2.ACWorkQueue = &controllerImpl{}
+
+var logUnableToFindQueueForStore = log.Every(time.Second)
 
 // Admit implements replica_rac2.ACWorkQueue. It is only used for the RACv2 protocol.
 func (n *controllerImpl) Admit(ctx context.Context, entry replica_rac2.EntryForAdmission) bool {
 	storeAdmissionQ := n.storeGrantCoords.TryGetQueueForStore(entry.StoreID)
 	if storeAdmissionQ == nil {
-		log.Errorf(ctx, "unable to find queue for store: %s", entry.StoreID)
+		// This can happen during node startup before
+		// StoreGrantCoordinators.SetPebbleMetricsProvider has run.
+		if logUnableToFindQueueForStore.ShouldLog() {
+			log.KvDistribution.VInfof(ctx, 1, "unable to find queue for store: %s", entry.StoreID)
+		}
 		return false // nothing to do
 	}
 
 	if entry.RequestedCount == 0 {
-		log.Fatal(ctx, "found (unexpected) empty raft command for below-raft admission")
+		log.KvDistribution.Fatal(ctx, "found (unexpected) empty raft command for below-raft admission")
 	}
 	wi := admission.WorkInfo{
 		TenantID:        entry.TenantID,
@@ -686,21 +543,19 @@ func (n *controllerImpl) Admit(ctx context.Context, entry replica_rac2.EntryForA
 			Term:  0, // Ignored by callback in RACv2.
 			Index: entry.CallbackState.Mark.Index,
 		},
-		Origin:       0,
-		RaftPri:      entry.CallbackState.Priority,
-		IsV2Protocol: true,
-		Ingested:     entry.Ingested,
+		RaftPri:  entry.CallbackState.Priority,
+		Ingested: entry.Ingested,
 	}
 
 	handle, err := storeAdmissionQ.Admit(ctx, admission.StoreWriteWorkInfo{
 		WorkInfo: wi,
 	})
 	if err != nil {
-		log.Errorf(ctx, "error while admitting to store admission queue: %v", err)
+		log.KvDistribution.Errorf(ctx, "error while admitting to store admission queue: %v", err)
 		return false
 	}
 	if handle.UseAdmittedWorkDone() {
-		log.Fatalf(ctx, "unexpected handle.UseAdmittedWorkDone")
+		log.KvDistribution.Fatalf(ctx, "unexpected handle.UseAdmittedWorkDone")
 	}
 	return true
 }
@@ -711,6 +566,10 @@ func (n *controllerImpl) GetSnapshotQueue(storeID roachpb.StoreID) *admission.Sn
 		return nil
 	}
 	return sq.(*admission.SnapshotQueue)
+}
+
+func (n *controllerImpl) GetProvisionedBandwidth(storeID roachpb.StoreID) int64 {
+	return n.storeGrantCoords.TryGetProvisionedBandwidthForStore(storeID)
 }
 
 // FollowerStoreWriteBytes captures stats about writes done to a store by a
@@ -727,26 +586,61 @@ func (f *FollowerStoreWriteBytes) Merge(from FollowerStoreWriteBytes) {
 	f.IngestedBytes += from.IngestedBytes
 }
 
-// StoreWriteBytes aliases admission.StoreWorkDoneInfo, since the notion of
-// "work is done" is specific to admission control and doesn't need to leak
-// everywhere.
-type StoreWriteBytes admission.StoreWorkDoneInfo
-
-var storeWriteBytesPool = sync.Pool{
-	New: func() interface{} { return &StoreWriteBytes{} },
-}
-
-// NewStoreWriteBytes constructs a new StoreWriteBytes.
-func NewStoreWriteBytes() *StoreWriteBytes {
-	wb := storeWriteBytesPool.Get().(*StoreWriteBytes)
-	*wb = StoreWriteBytes{}
-	return wb
-}
-
-// Release returns the *StoreWriteBytes to the pool.
-func (wb *StoreWriteBytes) Release() {
-	if wb == nil {
-		return
+func workInfoForBatch(
+	st *cluster.Settings,
+	requestTenantID roachpb.TenantID,
+	rangeTenantID roachpb.TenantID,
+	ba *kvpb.BatchRequest,
+) admission.WorkInfo {
+	bypassAdmission := ba.IsAdmin()
+	source := ba.AdmissionHeader.Source
+	tenantID := requestTenantID
+	if requestTenantID.IsSystem() {
+		if useRangeTenantIDForNonAdminEnabled.Get(&st.SV) && !bypassAdmission &&
+			rangeTenantID.IsSet() {
+			tenantID = rangeTenantID
+		}
+		// Else, either it is an admin request (common), or rangeTenantID is not
+		// set (rare), or the cluster setting is disabled, so continue using the
+		// SystemTenantID.
+	} else {
+		// Request is from a SQL node.
+		bypassAdmission = false
+		source = kvpb.AdmissionHeader_FROM_SQL
 	}
-	storeWriteBytesPool.Put(wb)
+	if source == kvpb.AdmissionHeader_OTHER {
+		bypassAdmission = true
+	}
+	// TODO(abaptist): Revisit and deprecate this setting in v23.1.
+	if admission.KVBulkOnlyAdmissionControlEnabled.Get(&st.SV) {
+		if admissionpb.WorkPriority(ba.AdmissionHeader.Priority) >= admissionpb.NormalPri {
+			bypassAdmission = true
+		}
+	}
+	// LeaseInfo requests are used as makeshift replica health probes by
+	// DistSender circuit breakers, make sure they bypass AC.
+	//
+	// TODO(erikgrinaker): the various bypass conditions here should be moved to
+	// one or more request flags.
+	if ba.IsSingleLeaseInfoRequest() {
+		bypassAdmission = true
+	}
+	createTime := ba.AdmissionHeader.CreateTime
+	if !bypassAdmission && createTime == 0 {
+		// TODO(sumeer): revisit this for multi-tenant. Specifically, the SQL use
+		// of zero CreateTime needs to be revisited. It should use high priority.
+		createTime = timeutil.Now().UnixNano()
+	}
+	admissionInfo := admission.WorkInfo{
+		TenantID:        tenantID,
+		Priority:        admissionpb.WorkPriority(ba.AdmissionHeader.Priority),
+		CreateTime:      createTime,
+		BypassAdmission: bypassAdmission,
+		WorkloadID:      ba.Header.WorkloadID,
+		AppNameID:       ba.Header.AppNameID,
+		GatewayNodeID:   ba.Header.GatewayNodeID,
+		WorkloadType:    workloadid.WorkloadType(ba.Header.WorkloadType),
+		ResourceGroupID: admissionpb.ResourceGroupID(ba.AdmissionHeader.ResourceGroupID),
+	}
+	return admissionInfo
 }

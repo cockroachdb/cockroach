@@ -1,6 +1,5 @@
 name: GitHub Actions Essential CI
 on:
-  merge_group:
   pull_request:
     types: [opened, reopened, synchronize]
     branches:
@@ -24,37 +23,14 @@ on:
       - "!staging-v22.2*"
       - "!staging-v23.1*"
       - "!staging-v23.2*"
-  push:
-    branches:
-      - "master"
-      - "release-*"
-      - "staging-*"
-      - "staging"
-      - "trying"
-      - "!release-1.0*"
-      - "!release-1.1*"
-      - "!release-2.0*"
-      - "!release-2.1*"
-      - "!release-19.1*"
-      - "!release-19.2*"
-      - "!release-20.1*"
-      - "!release-20.2*"
-      - "!release-21.1*"
-      - "!release-21.2*"
-      - "!release-22.1*"
-      - "!release-22.2*"
-      - "!release-23.1*"
-      - "!release-23.2*"
-      - "!staging-v22.2*"
-      - "!staging-v23.1*"
-      - "!staging-v23.2*"
+  workflow_dispatch:
 concurrency:
-  group: ${{ github.head_ref || github.run_id }}
+  group: ${{ github.workflow }}-${{ github.head_ref || github.run_id }}
   cancel-in-progress: true
 jobs:
   acceptance:
-    runs-on: [self-hosted, basic_big_runner_group]
-    timeout-minutes: 30
+    runs-on: [self-hosted, ubuntu_big_2404]
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
@@ -74,8 +50,8 @@ jobs:
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
   check_generated_code:
-    runs-on: [self-hosted, basic_runner_group]
-    timeout-minutes: 30
+    runs-on: [self-hosted, ubuntu_2404]
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
@@ -89,8 +65,8 @@ jobs:
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
   docker_image_amd64:
-    runs-on: [self-hosted, basic_runner_group]
-    timeout-minutes: 30
+    runs-on: [self-hosted, ubuntu_2404]
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
@@ -110,8 +86,8 @@ jobs:
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
   examples_orms:
-    runs-on: [self-hosted, basic_big_runner_group]
-    timeout-minutes: 40
+    runs-on: [self-hosted, ubuntu_big_2404]
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
         with:
@@ -121,7 +97,7 @@ jobs:
         with:
           path: examples-orms
           repository: cockroachdb/examples-orms
-          ref: 876b2d52ae2b63aa9cc1741c8d189ff0b66ab0d7
+          ref: 4422aff128585c3e0558b530558daa31972c3a40
       - name: compute metadata
         run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
       - run: ./cockroach/build/github/get-engflow-keys.sh
@@ -130,9 +106,21 @@ jobs:
       - name: clean up
         run: ./cockroach/build/github/cleanup-engflow-keys.sh
         if: always()
+  label_validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check for do-not-merge label
+        run: |
+          if [[ "${{ contains(github.event.pull_request.labels.*.name, 'do-not-merge') }}" == "true" ]]; then
+            echo "Error: PR has 'do-not-merge' label and cannot be merged"
+            exit 1
+          else
+            echo "Label validation passed"
+          fi
   lint:
-    runs-on: [self-hosted, basic_big_runner_group]
-    timeout-minutes: 60
+    runs-on: [self-hosted, ubuntu_huge_2404]
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
         with:
@@ -155,8 +143,8 @@ jobs:
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
   local_roachtest:
-    runs-on: [self-hosted, basic_big_runner_group]
-    timeout-minutes: 60
+    runs-on: [self-hosted, ubuntu_big_2404]
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
         with:
@@ -168,6 +156,10 @@ jobs:
       - name: run local roachtests
         run: ./build/github/local-roachtest.sh crosslinux
       - uses: actions/upload-artifact@v4
+        with:
+          name: local_roachtest_test_summary.tsv
+          path: artifacts/test_summary.tsv
+      - uses: actions/upload-artifact@v4
         if: ${{ failure() }}
         with:
           name: local roachtest artifacts
@@ -176,8 +168,8 @@ jobs:
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
   local_roachtest_fips:
-    runs-on: [self-hosted, basic_runner_group_fips]
-    timeout-minutes: 60
+    runs-on: [self-hosted, ubuntu_big_2404]
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4
         with:
@@ -189,6 +181,10 @@ jobs:
       - name: run local roachtests
         run: ./build/github/local-roachtest.sh crosslinuxfips
       - uses: actions/upload-artifact@v4
+        with:
+          name: local_roachtest_fips_test_summary.tsv
+          path: artifacts/test_summary.tsv
+      - uses: actions/upload-artifact@v4
         if: ${{ failure() }}
         with:
           name: local roachtest (FIPS) artifacts
@@ -197,8 +193,8 @@ jobs:
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
   linux_amd64_build:
-    runs-on: [self-hosted, basic_runner_group]
-    timeout-minutes: 30
+    runs-on: [self-hosted, ubuntu_2404]
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
@@ -218,8 +214,8 @@ jobs:
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
   linux_amd64_fips_build:
-    runs-on: [self-hosted, basic_runner_group]
-    timeout-minutes: 30
+    runs-on: [self-hosted, ubuntu_2404]
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
@@ -238,84 +234,44 @@ jobs:
       - name: clean up
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
-  linux_arm64_build:
-    runs-on: [self-hosted, basic_runner_group]
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.ref }}
-      - name: compute metadata
-        run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
-      - run: ./build/github/get-engflow-keys.sh
-      - run: ./build/github/prepare-summarize-build.sh
-      - name: build
-        run: ./build/github/build.sh crosslinuxarm
-      - name: upload build results
-        run: ./build/github/summarize-build.sh bes.bin
-        if: always()
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: clean up
-        run: ./build/github/cleanup-engflow-keys.sh
-        if: always()
-  macos_amd64_build:
-    runs-on: [self-hosted, basic_runner_group]
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.ref }}
-      - name: compute metadata
-        run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
-      - run: ./build/github/get-engflow-keys.sh
-      - run: ./build/github/prepare-summarize-build.sh
-      - name: build
-        run: ./build/github/build.sh crossmacos
-      - name: upload build results
-        run: ./build/github/summarize-build.sh bes.bin
-        if: always()
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: clean up
-        run: ./build/github/cleanup-engflow-keys.sh
-        if: always()
-  macos_arm64_build:
-    runs-on: [self-hosted, basic_runner_group]
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.ref }}
-      - name: compute metadata
-        run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
-      - run: ./build/github/get-engflow-keys.sh
-      - run: ./build/github/prepare-summarize-build.sh
-      - name: build
-        run: ./build/github/build.sh crossmacosarm
-      - name: upload build results
-        run: ./build/github/summarize-build.sh bes.bin
-        if: always()
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: clean up
-        run: ./build/github/cleanup-engflow-keys.sh
-        if: always()
-  unit_tests:
-    runs-on: [self-hosted, basic_runner_group]
+  race_canary:
+    runs-on: [self-hosted, ubuntu_big_2404]
     timeout-minutes: 60
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.ref }}
+      - name: run race canary test
+        run: ./build/github/race-canary.sh
+  unit_tests:
+    runs-on: [self-hosted, ubuntu_2404]
+    timeout-minutes: 120
+    steps:
+      - name: calculate commit depth
+        if: github.event.pull_request.commits
+        run: echo COMMIT_DEPTH=$(echo '${{ github.event.pull_request.commits }} + 1' | bc) >> "$GITHUB_ENV"
       - uses: actions/checkout@v4
         with:
           # By default, checkout merges the PR into the current master.
           # Instead, we want to check out the PR as is.
           ref: ${{ github.event.pull_request.head.sha || github.ref }}
+          fetch-depth: ${{ env.COMMIT_DEPTH || 1 }}
+      - name: Fetch the base commit
+        if: github.event.pull_request.base.sha
+        run: git fetch origin ${{ github.event.pull_request.base.sha }} --depth 100
       - name: compute metadata
         run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
       - run: ./build/github/get-engflow-keys.sh
       - run: ./build/github/prepare-summarize-build.sh
       - name: run tests
         run: ./build/github/unit-tests.sh
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+      - name: generate code
+        if: failure()
+        # NB: To correctly report test owners, we'll have to make sure all Go
+        # code is generated and hoisted into the workspace (#107885).
+        run: ./build/github/generate-go-code.sh
       - name: upload test results
         run: ./build/github/summarize-build.sh bes.bin
         if: always()
@@ -324,75 +280,3 @@ jobs:
       - name: clean up
         run: ./build/github/cleanup-engflow-keys.sh
         if: always()
-  windows_build:
-    runs-on: [self-hosted, basic_runner_group]
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.ref }}
-      - name: compute metadata
-        run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
-      - run: ./build/github/get-engflow-keys.sh
-      - run: ./build/github/prepare-summarize-build.sh
-      - name: build
-        run: ./build/github/build.sh crosswindows
-      - name: upload build results
-        run: ./build/github/summarize-build.sh bes.bin
-        if: always()
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: clean up
-        run: ./build/github/cleanup-engflow-keys.sh
-        if: always()
-  cockroach-microbench-ci:
-    runs-on: [ self-hosted, basic_runner_group ]
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 1  # Fetch only the latest commit
-
-      - name: Get the latest commit of the target branch
-        id: get_latest_commit_target_branch
-        run: |
-          # Get the target branch name
-          TARGET_BRANCH=${{ github.event.pull_request.base.ref }}
-          
-          # Fetch the latest commit of the target branch
-          git fetch origin $TARGET_BRANCH --depth=1
-          
-          # Get the latest commit hash of the target branch
-          LATEST_COMMIT=$(git rev-parse FETCH_HEAD)
-          
-          # Output the latest commit hash
-          echo "Latest commit on target branch ($TARGET_BRANCH): $LATEST_COMMIT"
-          
-          # Set the latest commit hash as an output variable
-          echo "latest_commit=$LATEST_COMMIT" >> $GITHUB_OUTPUT
-        if: ${{ github.event_name != 'push' }}
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.ref }}
-      - name: compute metadata
-        run: echo GITHUB_ACTIONS_BRANCH=${{ github.event.pull_request.number || github.ref_name}} >> "$GITHUB_ENV"
-      - run: ./build/github/get-engflow-keys.sh
-      - run: ./build/github/prepare-summarize-build.sh
-      - name: run scripts
-        run: ./build/github/cockroach-microbench-ci.sh
-        env:
-          COMPARE_THRESHOLD: "20.00"
-          PUSH_STEP: ${{ github.event_name == 'push' && env.GITHUB_ACTIONS_BRANCH != 'staging' }}
-          BASE_SHA: ${{ steps.get_latest_commit_target_branch.outputs.latest_commit }}
-
-          # TODO(sambhav-jain-16): add Performance note check and use this flag. Currently set to false (https://github.com/cockroachdb/cockroach/issues/106661)
-          SKIP_COMPARISON: ${{ env.GITHUB_ACTIONS_BRANCH == 'staging' }}
-      - name: upload build results
-        run: ./build/github/summarize-build.sh bes.bin
-        if: always()
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      - name: clean up
-        run: ./build/github/cleanup-engflow-keys.sh
-        if: always()
-

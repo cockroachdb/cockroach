@@ -162,7 +162,9 @@ func (c *CustomFuncs) CanInline(scalar opt.ScalarExpr) bool {
 		opt.EqOp, opt.NeOp, opt.LeOp, opt.LtOp, opt.GeOp, opt.GtOp,
 		opt.IsOp, opt.IsNotOp, opt.InOp, opt.NotInOp,
 		opt.VariableOp, opt.ConstOp, opt.NullOp,
-		opt.PlusOp, opt.MinusOp, opt.MultOp:
+		opt.PlusOp, opt.MinusOp, opt.MultOp,
+		opt.CaseOp, opt.WhenOp, opt.ScalarListOp,
+		opt.FetchValOp, opt.FetchTextOp, opt.FetchValPathOp, opt.FetchTextPathOp:
 
 		// Recursively verify that children are also inlinable.
 		for i, n := 0, scalar.ChildCount(); i < n; i++ {
@@ -245,7 +247,7 @@ func (c *CustomFuncs) InlineProjectProject(
 	}
 
 	// Add any outer passthrough columns that refer to inner synthesized columns.
-	newPassthrough := passthrough
+	newPassthrough := passthrough.Copy()
 	if !newPassthrough.Empty() {
 		for i := range innerProjections {
 			item := &innerProjections[i]
@@ -289,13 +291,22 @@ func (c *CustomFuncs) inlineProjections(e opt.Expr, projections memo.Projections
 	return replace(e)
 }
 
+// extractVarEqualsConst extracts a (variable = const) or (variable =
+// placeholder) equality from a filter condition. Placeholder expressions
+// are treated like constants because they are bound to a single value at
+// execution time.
 func (c *CustomFuncs) extractVarEqualsConst(
 	e opt.Expr,
-) (ok bool, left *memo.VariableExpr, right *memo.ConstExpr) {
+) (ok bool, left *memo.VariableExpr, right opt.ScalarExpr) {
 	if eq, ok := e.(*memo.EqExpr); ok {
 		if l, ok := eq.Left.(*memo.VariableExpr); ok {
-			if r, ok := eq.Right.(*memo.ConstExpr); ok {
-				return true, l, r
+			switch eq.Right.(type) {
+			case *memo.ConstExpr:
+				return true, l, eq.Right
+			case *memo.PlaceholderExpr:
+				if c.f.evalCtx.SessionData().OptimizerInlinePlaceholderEqualities {
+					return true, l, eq.Right
+				}
 			}
 		}
 	}
@@ -325,7 +336,7 @@ func (c *CustomFuncs) CanInlineConstVar(f memo.FiltersExpr) bool {
 				// to composite-ness.
 				continue
 			}
-			if !e.Typ.Equivalent(colType) {
+			if !e.DataType().Equivalent(colType) {
 				continue
 			}
 			if !fixedCols.Contains(l.Col) {
@@ -362,7 +373,7 @@ func (c *CustomFuncs) InlineConstVar(f memo.FiltersExpr) memo.FiltersExpr {
 			if colinfo.CanHaveCompositeKeyEncoding(colType) {
 				continue
 			}
-			if !e.Typ.Equivalent(colType) {
+			if !e.DataType().Equivalent(colType) {
 				continue
 			}
 			if _, ok := vals[v.Col]; !ok {
@@ -377,6 +388,16 @@ func (c *CustomFuncs) InlineConstVar(f memo.FiltersExpr) memo.FiltersExpr {
 	replace = func(nd opt.Expr) opt.Expr {
 		if t, ok := nd.(*memo.VariableExpr); ok {
 			if e, ok := vals[t.Col]; ok {
+				// The constant was matched against the variable using Equivalent
+				// (not Identical) above, so its type may differ from the
+				// variable's (e.g. a STRING constant for a NAME column).
+				// Substituting the constant directly would change the result of
+				// type-sensitive expressions such as pg_typeof, so cast the
+				// constant to the variable's type when the two are not identical.
+				colType := c.mem.Metadata().ColumnMeta(t.Col).Type
+				if !e.DataType().Identical(colType) {
+					return c.f.ConstructCast(e, colType)
+				}
 				return e
 			}
 		}

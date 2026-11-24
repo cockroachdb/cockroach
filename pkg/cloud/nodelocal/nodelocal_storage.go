@@ -31,6 +31,21 @@ import (
 
 const scheme = "nodelocal"
 
+// ParseInstanceID parses a nodelocal URI and extracts the SQL instance ID
+// from the host component. Returns an error if the URI is invalid or not a
+// nodelocal URI.
+func ParseInstanceID(uri string) (base.SQLInstanceID, error) {
+	u, err := url.Parse(uri)
+	if err != nil {
+		return 0, errors.Wrapf(err, "failed to parse URI %q", uri)
+	}
+	extStorage, err := parseLocalFileURI(cloud.ExternalStorageURIContext{}, u)
+	if err != nil {
+		return 0, errors.Wrapf(err, "failed to parse nodelocal URI %q", uri)
+	}
+	return base.SQLInstanceID(extStorage.LocalFileConfig.NodeID), nil
+}
+
 func validateLocalFileURI(uri *url.URL) error {
 	if uri.Host == "" {
 		return errors.Newf(
@@ -76,6 +91,7 @@ func parseLocalFileURI(
 	}
 
 	conf.Provider = cloudpb.ExternalStorageProvider_nodelocal
+	conf.URI = uri.String()
 	var err error
 	conf.LocalFileConfig, err = makeLocalFileConfig(uri)
 	return conf, err
@@ -87,6 +103,7 @@ type localFileStorage struct {
 	base       string                                  // relative filepath prefixed with externalIODir, for I/O ops on this node.
 	blobClient blobs.BlobClient                        // inter-node file sharing service
 	settings   *cluster.Settings                       // cluster settings for the ExternalStorage
+	uri        string                                  // original URI used to construct this storage
 }
 
 var _ cloud.ExternalStorage = &localFileStorage{}
@@ -110,21 +127,25 @@ func makeLocalFileStorage(
 		return nil, errors.New("nodelocal storage is not available")
 	}
 	cfg := dest.LocalFileConfig
-	if cfg.Path == "" {
-		return nil, errors.Errorf("local storage requested but path not provided")
-	}
 	client, err := args.BlobClientFactory(ctx, cfg.NodeID)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create blob client")
 	}
-	return &localFileStorage{base: cfg.Path, cfg: cfg, ioConf: args.IOConf, blobClient: client,
-		settings: args.Settings}, nil
+	return &localFileStorage{
+		base:       cfg.Path,
+		cfg:        cfg,
+		ioConf:     args.IOConf,
+		blobClient: client,
+		settings:   args.Settings,
+		uri:        dest.URI,
+	}, nil
 }
 
 func (l *localFileStorage) Conf() cloudpb.ExternalStorage {
 	return cloudpb.ExternalStorage{
 		Provider:        cloudpb.ExternalStorageProvider_nodelocal,
 		LocalFileConfig: l.cfg,
+		URI:             l.uri,
 	}
 }
 
@@ -146,6 +167,12 @@ func joinRelativePath(filePath string, file string) string {
 	return path.Join(".", filePath, file)
 }
 
+// isNotFoundErr checks if the error indicates a file not found condition,
+// handling both local and remote nodelocal store cases.
+func isNotFoundErr(err error) bool {
+	return oserror.IsNotExist(err) || status.Code(err) == codes.NotFound
+}
+
 func (l *localFileStorage) Writer(ctx context.Context, basename string) (io.WriteCloser, error) {
 	return l.blobClient.Writer(ctx, joinRelativePath(l.base, basename))
 }
@@ -154,28 +181,20 @@ func (l *localFileStorage) ReadFile(
 	ctx context.Context, basename string, opts cloud.ReadOptions,
 ) (ioctx.ReadCloserCtx, int64, error) {
 	reader, size, err := l.blobClient.ReadFile(ctx, joinRelativePath(l.base, basename), opts.Offset)
+	if err != nil && isNotFoundErr(err) {
+		return nil, 0, cloud.WrapErrFileDoesNotExist(err, "nodelocal storage file does not exist")
+	}
 	if err != nil {
-		// The format of the error returned by the above ReadFile call differs based
-		// on whether we are reading from a local or remote nodelocal store.
-		// The local store returns a golang native ErrNotFound, whereas the remote
-		// store returns a gRPC native NotFound error.
-		if oserror.IsNotExist(err) || status.Code(err) == codes.NotFound {
-			// nolint:errwrap
-			return nil, 0, errors.WithMessagef(
-				errors.Wrap(cloud.ErrFileDoesNotExist, "nodelocal storage file does not exist"),
-				"%s",
-				err.Error(),
-			)
-		}
 		return nil, 0, err
 	}
 	return reader, size, nil
 }
 
 func (l *localFileStorage) List(
-	ctx context.Context, prefix, delim string, fn cloud.ListingFn,
+	ctx context.Context, prefix string, opts cloud.ListOptions, fn cloud.ListingFn,
 ) error {
 	dest := cloud.JoinPathPreservingTrailingSlash(l.base, prefix)
+	afterKey := opts.CanonicalAfterKey(l.base)
 
 	res, err := l.blobClient.List(ctx, dest)
 	if err != nil {
@@ -187,15 +206,21 @@ func (l *localFileStorage) List(
 	var prevPrefix string
 	for _, f := range res {
 		f = strings.TrimPrefix(f, dest)
-		if delim != "" {
-			if i := strings.Index(f, delim); i >= 0 {
-				f = f[:i+len(delim)]
+		if opts.Delimiter != "" {
+			if i := strings.Index(f, opts.Delimiter); i >= 0 {
+				f = f[:i+len(opts.Delimiter)]
 			}
 			if f == prevPrefix {
 				continue
 			}
 			prevPrefix = f
 		}
+
+		// afterKey is a full key so we must compare against the full file key.
+		if dest+f <= afterKey {
+			continue
+		}
+
 		if err := fn(f); err != nil {
 			return err
 		}
@@ -204,7 +229,11 @@ func (l *localFileStorage) List(
 }
 
 func (l *localFileStorage) Delete(ctx context.Context, basename string) error {
-	return l.blobClient.Delete(ctx, joinRelativePath(l.base, basename))
+	err := l.blobClient.Delete(ctx, joinRelativePath(l.base, basename))
+	if isNotFoundErr(err) {
+		return nil
+	}
+	return err
 }
 
 func (l *localFileStorage) Size(ctx context.Context, basename string) (int64, error) {
@@ -219,6 +248,10 @@ func (*localFileStorage) Close() error {
 	return nil
 }
 
+func parseLocalFileURIEarlyBoot(uri *url.URL) (cloudpb.ExternalStorage, error) {
+	return parseLocalFileURI(cloud.ExternalStorageURIContext{}, uri)
+}
+
 func init() {
 	cloud.RegisterExternalStorageProvider(cloudpb.ExternalStorageProvider_nodelocal,
 		cloud.RegisteredProvider{
@@ -227,4 +260,44 @@ func init() {
 			RedactedParams: cloud.RedactedParams(),
 			Schemes:        []string{scheme},
 		})
+}
+
+// EnableEarlyBootForDemo registers an EarlyBootConstructFn for nodelocal that
+// uses a local blob client rooted at the given directory. This allows demo
+// clusters and other single-machine deployments to use nodelocal with features
+// that require early boot access (like online restore's LinkExternalSSTable).
+//
+// The root directory should be the parent of the per-node directories (e.g.,
+// demoDir/nodelocal). Each node's files are in a subdirectory named "n<nodeID>".
+//
+// The returned function restores the default nodelocal implementation.
+func EnableEarlyBootForDemo(root string) func() {
+	makeFn := func(
+		ctx context.Context, args cloud.EarlyBootExternalStorageContext, es cloudpb.ExternalStorage,
+	) (cloud.ExternalStorage, error) {
+		c, err := blobs.NewLocalClient(root)
+		if err != nil {
+			return nil, err
+		}
+		// In demo mode, each node's files are in a subdirectory named "n<nodeID>".
+		// Construct the base path to include this subdirectory.
+		cfg := es.LocalFileConfig
+		basePath := path.Join(fmt.Sprintf("n%d", cfg.NodeID), cfg.Path)
+		return &localFileStorage{
+			cfg:        cfg,
+			ioConf:     base.ExternalIODirConfig{},
+			base:       basePath,
+			blobClient: c,
+			settings:   args.Settings,
+			uri:        es.URI,
+		}, nil
+	}
+	return cloud.ReplaceProviderForTesting(cloudpb.ExternalStorageProvider_nodelocal, cloud.RegisteredProvider{
+		ConstructFn:          makeLocalFileStorage,
+		ParseFn:              parseLocalFileURI,
+		EarlyBootConstructFn: makeFn,
+		EarlyBootParseFn:     parseLocalFileURIEarlyBoot,
+		RedactedParams:       cloud.RedactedParams(),
+		Schemes:              []string{scheme},
+	})
 }

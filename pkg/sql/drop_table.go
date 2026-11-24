@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/funcdesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/tabledesc"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgnotice"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachanger/scerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -30,6 +31,7 @@ import (
 )
 
 type dropTableNode struct {
+	zeroInputPlanNode
 	n *tree.DropTable
 	// td is a map from table descriptor to toDelete struct, indicating which
 	// tables this operation should delete.
@@ -71,6 +73,10 @@ func (p *planner) DropTable(ctx context.Context, n *tree.DropTable) (planNode, e
 
 	for _, toDel := range td {
 		droppedDesc := toDel.desc
+		// Disallow the DROP if this table's schema is locked.
+		if err := p.checkSchemaChangeIsAllowed(ctx, droppedDesc, n); err != nil {
+			return nil, err
+		}
 		for _, fk := range droppedDesc.InboundForeignKeys() {
 			if _, ok := td[fk.GetOriginTableID()]; !ok {
 				if err := p.canRemoveFKBackreference(ctx, droppedDesc.Name, fk, n.DropBehavior); err != nil {
@@ -230,6 +236,11 @@ func (p *planner) dropTableImpl(
 	if catalog.HasConcurrentDeclarativeSchemaChange(tableDesc) {
 		return nil, scerrors.ConcurrentSchemaChangeError(tableDesc)
 	}
+	// Early out if the table is already dropped. This can happen during a cascade
+	// with a trigger.
+	if tableDesc.Dropped() {
+		return droppedViews, nil
+	}
 	// Remove foreign key back references from tables that this table has foreign
 	// keys to.
 	// Copy out the set of outbound fks as it may be overwritten in the loop.
@@ -273,7 +284,7 @@ func (p *planner) dropTableImpl(
 	for i := range tableDesc.Triggers {
 		trigger := &tableDesc.Triggers[i]
 		for _, id := range trigger.DependsOn {
-			if err := p.removeTriggerBackReference(ctx, tableDesc, id); err != nil {
+			if err := p.removeTriggerBackReference(ctx, tableDesc, id, trigger.ID, trigger.Name); err != nil {
 				return droppedViews, err
 			}
 		}
@@ -294,7 +305,7 @@ func (p *planner) dropTableImpl(
 	dependedOnBy := append([]descpb.TableDescriptor_Reference(nil), tableDesc.DependedOnBy...)
 	for _, ref := range dependedOnBy {
 		depDesc, err := p.getDescForCascade(
-			ctx, string(tableDesc.DescriptorType()), tableDesc.Name, tableDesc.ParentID, ref.ID, tree.DropCascade,
+			ctx, string(tableDesc.DescriptorType()), tableDesc.Name, tableDesc.ParentID, ref.ID, tableDesc.ID, tree.DropCascade,
 		)
 		if err != nil {
 			return droppedViews, err
@@ -306,9 +317,17 @@ func (p *planner) dropTableImpl(
 
 		switch t := depDesc.(type) {
 		case *tabledesc.Mutable:
-			cascadedViews, err := p.dropViewImpl(ctx, t, !droppingParent, "dropping dependent view", tree.DropCascade)
-			if err != nil {
-				return droppedViews, err
+			var cascadedViews []string
+			if t.IsTable() {
+				cascadedViews, err = p.dropTableImpl(ctx, t, !droppingParent, "dropping dependent table", tree.DropCascade)
+				if err != nil {
+					return droppedViews, err
+				}
+			} else {
+				cascadedViews, err = p.dropViewImpl(ctx, t, !droppingParent, "dropping dependent view", tree.DropCascade)
+				if err != nil {
+					return droppedViews, err
+				}
 			}
 
 			qualifiedView, err := p.getQualifiedTableName(ctx, t)
@@ -319,7 +338,7 @@ func (p *planner) dropTableImpl(
 			droppedViews = append(droppedViews, cascadedViews...)
 			droppedViews = append(droppedViews, qualifiedView.FQString())
 		case *funcdesc.Mutable:
-			if err := p.dropFunctionImpl(ctx, t); err != nil {
+			if err := p.dropFunctionImpl(ctx, t, behavior); err != nil {
 				return droppedViews, err
 			}
 		}
@@ -439,28 +458,29 @@ func (p *planner) markTableMutationJobsSuccessful(
 		mutationJob, err := p.execCfg.JobRegistry.LoadJobWithTxn(ctx, jobID, p.InternalSQLTxn())
 		if err != nil {
 			if jobs.HasJobNotFoundError(err) {
-				log.Warningf(ctx, "mutation job %d not found", jobID)
+				log.Dev.Warningf(ctx, "mutation job %d not found", jobID)
 				continue
 			}
 			return err
 		}
-		if err := mutationJob.WithTxn(p.InternalSQLTxn()).Update(ctx, func(
-			txn isql.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater,
+		//lint:ignore SA1019 TODO: migrate to job_info_storage.go API
+		if err := mutationJob.DeprecatedWithTxn(p.InternalSQLTxn()).Update(ctx, func(
+			txn isql.Txn, md jobs.DeprecatedJobMetadata, ju *jobs.DeprecatedJobUpdater,
 		) error {
-			status := md.Status
+			status := md.State
 			switch status {
-			case jobs.StatusSucceeded, jobs.StatusCanceled, jobs.StatusFailed, jobs.StatusRevertFailed:
-				log.Warningf(ctx, "mutation job %d in unexpected state %s", jobID, status)
+			case jobs.StateSucceeded, jobs.StateCanceled, jobs.StateFailed, jobs.StateRevertFailed:
+				log.Dev.Warningf(ctx, "mutation job %d in unexpected state %s", jobID, status)
 				return nil
-			case jobs.StatusRunning, jobs.StatusPending:
-				status = jobs.StatusSucceeded
+			case jobs.StateRunning, jobs.StatePending:
+				status = jobs.StateSucceeded
 			default:
 				// We shouldn't mark jobs as succeeded if they're not in a state where
 				// they're eligible to ever succeed, so mark them as failed.
-				status = jobs.StatusFailed
+				status = jobs.StateFailed
 			}
-			log.Infof(ctx, "marking mutation job %d for dropped table as %s", jobID, status)
-			ju.UpdateStatus(status)
+			log.Dev.Infof(ctx, "marking mutation job %d for dropped table as %s", jobID, status)
+			ju.UpdateState(status)
 			return nil
 		}); err != nil {
 			return errors.Wrap(err, "updating mutation job for dropped table")
@@ -525,9 +545,14 @@ func removeFKForBackReferenceFromTable(
 			"for backreference %v on table %q", backref, originTableDesc.Name)
 	}
 	// Delete our match.
+	removedFK := originTableDesc.OutboundFKs[matchIdx]
 	originTableDesc.OutboundFKs = append(
 		originTableDesc.OutboundFKs[:matchIdx],
 		originTableDesc.OutboundFKs[matchIdx+1:]...)
+	// If the removed FK was referenced by RBRUsingConstraint, clear it.
+	if originTableDesc.RBRUsingConstraint == removedFK.ConstraintID {
+		originTableDesc.RBRUsingConstraint = 0
+	}
 	return nil
 }
 
@@ -664,10 +689,129 @@ func removeFKBackReferenceFromTable(
 	return nil
 }
 
+// triggerDependencyError returns an error indicating that the given object
+// cannot be dropped because the trigger identified by ref depends on it.
+func (p *planner) triggerDependencyError(
+	ctx context.Context, ref descpb.TableDescriptor_Reference, objectType string, objectName string,
+) error {
+	depDesc, err := p.Descriptors().MutableByID(p.txn).Table(ctx, ref.ID)
+	if err != nil {
+		return err
+	}
+	var triggerName string
+	for i := range depDesc.Triggers {
+		if depDesc.Triggers[i].ID == ref.TriggerID {
+			triggerName = depDesc.Triggers[i].Name
+			break
+		}
+	}
+	return sqlerrors.NewDependentObjectErrorf(
+		"cannot drop %s %q because trigger %q on table %q depends on it",
+		objectType, objectName, triggerName, depDesc.Name,
+	)
+}
+
+// removeTriggerDependency removes a trigger from its table and cleans up all
+// associated backreferences. It is used when CASCADE is specified for dropping
+// a column or index that a trigger depends on: rather than dropping the
+// dependent table, we drop only the trigger.
+//
+// tableDesc is the table whose column/index is being dropped. ref is the
+// backreference entry pointing to the trigger's table and trigger ID.
+func (p *planner) removeTriggerDependency(
+	ctx context.Context, tableDesc *tabledesc.Mutable, ref descpb.TableDescriptor_Reference,
+) error {
+	// Load the table that owns the trigger.
+	depDesc, err := p.Descriptors().MutableByID(p.txn).Table(ctx, ref.ID)
+	if err != nil {
+		return err
+	}
+
+	// Find the trigger by ID.
+	triggerIdx := -1
+	for i := range depDesc.Triggers {
+		if depDesc.Triggers[i].ID == ref.TriggerID {
+			triggerIdx = i
+			break
+		}
+	}
+	if triggerIdx == -1 {
+		return errors.AssertionFailedf(
+			"trigger with ID %d not found on table %q (%d)",
+			ref.TriggerID, depDesc.Name, depDesc.ID,
+		)
+	}
+	trigger := depDesc.Triggers[triggerIdx]
+
+	// Remove backreferences from tables the trigger depends on.
+	for _, refID := range trigger.DependsOn {
+		if err := p.removeTriggerBackReference(ctx, depDesc, refID, trigger.ID, trigger.Name); err != nil {
+			return err
+		}
+	}
+
+	// Remove backreferences from functions the trigger depends on.
+	for _, fnID := range trigger.DependsOnRoutines {
+		fnDesc, err := p.Descriptors().MutableByID(p.txn).Function(ctx, fnID)
+		if err != nil {
+			return err
+		}
+		fnDesc.RemoveTriggerReference(depDesc.ID, ref.TriggerID)
+		if err := p.writeFuncSchemaChange(ctx, fnDesc); err != nil {
+			return err
+		}
+	}
+
+	// Remove the trigger from the table descriptor.
+	depDesc.Triggers = append(depDesc.Triggers[:triggerIdx], depDesc.Triggers[triggerIdx+1:]...)
+
+	// Remove the specific backreference from tableDesc.
+	tableDesc.DependedOnBy = removeTriggerReference(tableDesc.DependedOnBy, ref.ID, ref.TriggerID)
+
+	// Send a notice to the client.
+	p.BufferClientNotice(ctx, pgnotice.Newf(
+		"drop cascades to trigger %s on table %s",
+		trigger.Name, depDesc.Name,
+	))
+
+	depName, err := p.getQualifiedTableName(ctx, depDesc)
+	if err != nil {
+		return err
+	}
+	tableName, err := p.getQualifiedTableName(ctx, tableDesc)
+	if err != nil {
+		return err
+	}
+	jobDesc := fmt.Sprintf(
+		"removing trigger %q from table %q which depends on %q",
+		trigger.Name, depName.FQString(), tableName.FQString(),
+	)
+	return p.writeSchemaChange(ctx, depDesc, descpb.InvalidMutationID, jobDesc)
+}
+
+// removeTriggerReference removes the backreference entry matching both the
+// given table ID and trigger ID.
+func removeTriggerReference(
+	refs []descpb.TableDescriptor_Reference, id descpb.ID, triggerID descpb.TriggerID,
+) []descpb.TableDescriptor_Reference {
+	updatedRefs := refs[:0]
+	for _, ref := range refs {
+		if ref.ID == id && ref.TriggerID == triggerID {
+			continue
+		}
+		updatedRefs = append(updatedRefs, ref)
+	}
+	return updatedRefs
+}
+
 // removeTriggerBackReference removes the trigger back reference for the
 // referenced table with the given ID.
 func (p *planner) removeTriggerBackReference(
-	ctx context.Context, tableDesc *tabledesc.Mutable, refID descpb.ID,
+	ctx context.Context,
+	tableDesc *tabledesc.Mutable,
+	refID descpb.ID,
+	triggerID descpb.TriggerID,
+	triggerName string,
 ) error {
 	var refTableDesc *tabledesc.Mutable
 	// We don't want to lookup/edit a second copy of the same table.
@@ -684,8 +828,19 @@ func (p *planner) removeTriggerBackReference(
 		// The referenced table is being dropped. No need to modify it further.
 		return nil
 	}
-	refTableDesc.DependedOnBy = removeMatchingReferences(refTableDesc.DependedOnBy, tableDesc.ID)
-	return nil
+	refTableDesc.DependedOnBy = removeTriggerReference(refTableDesc.DependedOnBy, tableDesc.ID, triggerID)
+
+	name, err := p.getQualifiedTableName(ctx, tableDesc)
+	if err != nil {
+		return err
+	}
+	refName, err := p.getQualifiedTableName(ctx, refTableDesc)
+	if err != nil {
+		return err
+	}
+	jobDesc := fmt.Sprintf("updating table %q after removing trigger %q from table %q",
+		refName.FQString(), triggerName, name.FQString())
+	return p.writeSchemaChange(ctx, refTableDesc, descpb.InvalidMutationID, jobDesc)
 }
 
 // removeMatchingReferences removes all refs from the provided slice that

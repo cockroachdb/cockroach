@@ -29,7 +29,7 @@ func TestEqEstimate(t *testing.T) {
 	evalCtx := eval.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 	emptyHist := &Histogram{}
-	emptyHist.Init(&evalCtx, opt.ColumnID(1), []cat.HistogramBucket{})
+	emptyHist.Init(&evalCtx, opt.ColumnID(1), []cat.HistogramBucket{}, 0 /* resolution */)
 
 	if eq := emptyHist.EqEstimate(ctx, tree.NewDInt(0)); eq != 0 {
 		t.Errorf("expected %f but found %f", 0.0, eq)
@@ -45,7 +45,7 @@ func TestEqEstimate(t *testing.T) {
 		{NumRange: 40, DistinctRange: 7, NumEq: 35, UpperBound: tree.NewDInt(42)},
 	}
 	h := &Histogram{}
-	h.Init(&evalCtx, opt.ColumnID(1), histData)
+	h.Init(&evalCtx, opt.ColumnID(1), histData, 0 /* resolution */)
 
 	testData := []struct {
 		datum    tree.Datum
@@ -79,7 +79,7 @@ func TestCanFilter(t *testing.T) {
 
 	// The histogram column ID is 1 for all test cases. CanFilter should only
 	// return true for constraints in which column ID 1 is part of the exact
-	// prefix or the first column after.
+	// prefix, the first column after, or a constant column.
 	testData := []struct {
 		constraint string
 		canFilter  bool
@@ -111,7 +111,8 @@ func TestCanFilter(t *testing.T) {
 		},
 		{
 			constraint: "/2/-1: [/0/3 - /0/3] [/2/3 - /2/3]",
-			canFilter:  false,
+			canFilter:  true,
+			colIdx:     1,
 		},
 		{
 			constraint: "/2/1: [/0/3 - /0/3] [/0/5 - /0/5]",
@@ -139,7 +140,7 @@ func TestCanFilter(t *testing.T) {
 	}
 
 	h := Histogram{}
-	h.Init(&evalCtx, opt.ColumnID(1), []cat.HistogramBucket{})
+	h.Init(&evalCtx, opt.ColumnID(1), []cat.HistogramBucket{}, 0 /* resolution */)
 	for _, tc := range testData {
 		c := constraint.ParseConstraint(&evalCtx, tc.constraint)
 		colIdx, _, ok := h.CanFilter(ctx, &c)
@@ -170,7 +171,7 @@ func TestHistogram(t *testing.T) {
 		{NumRange: 40, DistinctRange: 7, NumEq: 35, UpperBound: tree.NewDInt(42)},
 	}
 	h := &Histogram{}
-	h.Init(&evalCtx, opt.ColumnID(1), histData)
+	h.Init(&evalCtx, opt.ColumnID(1), histData, 0 /* resolution */)
 	count, expected := h.ValuesCount(), float64(91)
 	if count != expected {
 		t.Fatalf("expected %f but found %f", expected, count)
@@ -183,7 +184,7 @@ func TestHistogram(t *testing.T) {
 	if distinct != expected {
 		t.Fatalf("expected %f but found %f", expected, distinct)
 	}
-	maxFrequency, expected := h.MaxFrequency(), float64(35)
+	maxFrequency, expected := h.MaxFrequency(false /* ignoreNulls */), float64(35)
 	if maxFrequency != expected {
 		t.Fatalf("expected %f but found %f", expected, maxFrequency)
 	}
@@ -198,7 +199,7 @@ func TestHistogram(t *testing.T) {
 	}{
 		{
 			constraint:   "/1: [/0 - /0]",
-			buckets:      []cat.HistogramBucket{},
+			buckets:      nil,
 			count:        0,
 			maxDistinct:  0,
 			distinct:     0,
@@ -206,7 +207,7 @@ func TestHistogram(t *testing.T) {
 		},
 		{
 			constraint:   "/1: [/50 - /100]",
-			buckets:      []cat.HistogramBucket{},
+			buckets:      nil,
 			count:        0,
 			maxDistinct:  0,
 			distinct:     0,
@@ -367,6 +368,18 @@ func TestHistogram(t *testing.T) {
 			distinct:     1,
 			maxFrequency: 5.71,
 		},
+		{
+			constraint: "/2/1: [/0/40 - /0/40] [/2/40 - /2/40]",
+			//   0 5.7143
+			// <---- 40 -
+			buckets: []cat.HistogramBucket{
+				{NumRange: 0, NumEq: 5.71, DistinctRange: 0, UpperBound: tree.NewDInt(40)},
+			},
+			count:        5.71,
+			maxDistinct:  1,
+			distinct:     1,
+			maxFrequency: 5.71,
+		},
 	}
 
 	for i := range testData {
@@ -391,7 +404,7 @@ func TestHistogram(t *testing.T) {
 			if testData[i].distinct != distinct {
 				t.Fatalf("expected %f but found %f", testData[i].distinct, distinct)
 			}
-			maxFrequency := roundVal(filtered.MaxFrequency())
+			maxFrequency := roundVal(filtered.MaxFrequency(false /* ignoreNulls */))
 			if testData[i].maxFrequency != maxFrequency {
 				t.Fatalf("expected %f but found %f", testData[i].maxFrequency, maxFrequency)
 			}
@@ -438,8 +451,8 @@ func TestFilterBucket(t *testing.T) {
 		// the second bucket.
 		iter.setIdx(1)
 		b := getFilteredBucket(&iter, &keyCtx, span, colOffset)
-		roundBucket(b)
-		return b, nil
+		roundBucket(&b)
+		return &b, nil
 	}
 
 	runTest := func(h *Histogram, testData []testCase, colOffset int, typs ...types.Family) {
@@ -1178,10 +1191,9 @@ func BenchmarkHistogram(b *testing.B) {
 		case types.StringFamily:
 			return tree.NewDString(strconv.Itoa(i * 2))
 		case types.ArrayFamily:
-			arr := tree.NewDArray(t.ArrayContents())
-			arr.Array = make(tree.Datums, 1)
-			arr.HasNonNulls = true
-			arr.Array[0] = makeDatum(t.ArrayContents(), i)
+			arr := tree.NewDArrayFromDatums(
+				t.ArrayContents(), tree.Datums{makeDatum(t.ArrayContents(), i)},
+			)
 			return arr
 		}
 		panic(errors.AssertionFailedf("unsupported type"))
@@ -1213,7 +1225,7 @@ func BenchmarkHistogram(b *testing.B) {
 			for _, bucketCount := range bucketCounts {
 				b.Run(fmt.Sprintf("buckets=%v", bucketCount), func(b *testing.B) {
 					h := Histogram{}
-					h.Init(&evalCtx, opt.ColumnID(1), makeBuckets(typ, bucketCount))
+					h.Init(&evalCtx, opt.ColumnID(1), makeBuckets(typ, bucketCount), 0 /* resolution */)
 					c := makeConstraint(typ, bucketCount)
 					b.Run("DistinctValuesCount", func(b *testing.B) {
 						for i := 0; i < b.N; i++ {

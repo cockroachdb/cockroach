@@ -9,55 +9,40 @@ import { Space } from "antd";
 import classNames from "classnames";
 import classnames from "classnames/bind";
 import long from "long";
-import moment from "moment-timezone";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useState } from "react";
 
-import { RequestState } from "src/api";
 import {
-  GetJobProfilerExecutionDetailRequest,
-  GetJobProfilerExecutionDetailResponse,
-  ListJobProfilerExecutionDetailsRequest,
-  ListJobProfilerExecutionDetailsResponse,
+  collectExecutionDetails,
+  getExecutionDetailFile,
+  listExecutionDetailFiles,
 } from "src/api/jobProfilerApi";
 import { DownloadFile, DownloadFileRef } from "src/downloadFile";
 import { EmptyTable } from "src/empty";
 import { ColumnDescriptor, SortSetting, SortedTable } from "src/sortedtable";
 import { SummaryCard, SummaryCardItem } from "src/summaryCard";
 import summaryCardStyles from "src/summaryCard/summaryCard.module.scss";
-import { useScheduleFunction } from "src/util/hooks";
+import {
+  useSwrMutationWithClusterId,
+  useSwrWithClusterId,
+} from "src/util/hooks";
 
+import { ExecutionDetailViewer } from "./executionDetailViewer";
 import styles from "./jobProfilerView.module.scss";
 
 const cardCx = classNames.bind(summaryCardStyles);
 const cx = classnames.bind(styles);
 
-export type JobProfilerStateProps = {
+export interface JobProfilerViewProps {
   jobID: long;
-  executionDetailFilesResponse: RequestState<ListJobProfilerExecutionDetailsResponse>;
-  lastUpdated: moment.Moment;
-  isDataValid: boolean;
-  onDownloadExecutionFileClicked: (
-    req: GetJobProfilerExecutionDetailRequest,
-  ) => Promise<GetJobProfilerExecutionDetailResponse>;
-};
+}
 
-export type JobProfilerDispatchProps = {
-  refreshExecutionDetailFiles: (
-    req: ListJobProfilerExecutionDetailsRequest,
-  ) => void;
-  onRequestExecutionDetails: (jobID: long) => void;
-};
-
-export type JobProfilerViewProps = JobProfilerStateProps &
-  JobProfilerDispatchProps;
-
-export function extractFileExtension(filename: string): string {
+function extractFileExtension(filename: string): string {
   const parts = filename.split(".");
   // The extension is the last part after the last dot (if it exists).
   return parts.length > 1 ? parts[parts.length - 1] : "";
 }
 
-export function getContentTypeForFile(filename: string): string {
+function getContentTypeForFile(filename: string): string {
   const extension = extractFileExtension(filename);
   switch (extension) {
     case "txt":
@@ -71,15 +56,69 @@ export function getContentTypeForFile(filename: string): string {
   }
 }
 
-export function makeJobProfilerViewColumns(
-  jobID: Long,
-  onDownloadExecutionFileClicked: (
-    req: GetJobProfilerExecutionDetailRequest,
-  ) => Promise<GetJobProfilerExecutionDetailResponse>,
-): ColumnDescriptor<string>[] {
+// Files with these extensions can be rendered inline in an iframe.
+const VIEWABLE_EXTENSIONS = new Set(["html", "txt"]);
+
+function isViewableFile(filename: string): boolean {
+  return VIEWABLE_EXTENSIONS.has(extractFileExtension(filename));
+}
+
+export function JobProfilerView({
+  jobID,
+}: JobProfilerViewProps): React.ReactElement {
+  const { data: detailFiles, mutate: refreshFiles } = useSwrWithClusterId(
+    { name: "jobProfilerExecutionFiles", jobID },
+    () => listExecutionDetailFiles({ job_id: jobID }),
+    {
+      refreshInterval: 10 * 1000, // 10s polling interval
+    },
+  );
+  const { trigger } = useSwrMutationWithClusterId(
+    { name: "collectExecutionDetails", jobID },
+    async () => {
+      const resp = await collectExecutionDetails({ job_id: jobID });
+      if (resp.req_resp) {
+        refreshFiles();
+      }
+    },
+  );
+
+  const [viewingFile, setViewingFile] = useState<string | null>(null);
+  const [viewingBlobUrl, setViewingBlobUrl] = useState<string | null>(null);
+
+  const closeViewer = useCallback(() => {
+    if (viewingBlobUrl) {
+      URL.revokeObjectURL(viewingBlobUrl);
+    }
+    setViewingFile(null);
+    setViewingBlobUrl(null);
+  }, [viewingBlobUrl]);
+
+  const openViewer = useCallback(
+    (filename: string) => {
+      setViewingFile(filename);
+      const req =
+        new cockroach.server.serverpb.GetJobProfilerExecutionDetailRequest({
+          job_id: jobID,
+          filename: filename,
+        });
+      getExecutionDetailFile(req)
+        .then(resp => {
+          const contentType = getContentTypeForFile(filename);
+          const blob = new Blob([resp?.data], { type: contentType });
+          setViewingBlobUrl(URL.createObjectURL(blob));
+        })
+        .catch(() => {
+          setViewingFile(null);
+        });
+    },
+    [jobID],
+  );
+
   const downloadRef: React.RefObject<DownloadFileRef> =
     React.createRef<DownloadFileRef>();
-  return [
+
+  const columns: ColumnDescriptor<string>[] = [
     {
       name: "executionDetailFiles",
       title: "Execution Detail Files",
@@ -92,9 +131,22 @@ export function makeJobProfilerViewColumns(
       hideTitleUnderline: true,
       className: cx("column-size-medium"),
       cell: (executionDetailFile: string) => {
+        const viewable = isViewableFile(executionDetailFile);
         return (
           <div className={cx("crl-job-profiler-view__actions-column")}>
             <DownloadFile ref={downloadRef} />
+            {viewable && (
+              <Button
+                as="a"
+                size="small"
+                intent="tertiary"
+                className={cx("view-execution-detail-button")}
+                onClick={() => openViewer(executionDetailFile)}
+              >
+                <Icon iconName="Open" />
+                View
+              </Button>
+            )}
             <Button
               as="a"
               size="small"
@@ -108,7 +160,7 @@ export function makeJobProfilerViewColumns(
                       filename: executionDetailFile,
                     },
                   );
-                onDownloadExecutionFileClicked(req).then(resp => {
+                getExecutionDetailFile(req).then(resp => {
                   const type = getContentTypeForFile(executionDetailFile);
                   const executionFileBytes = new Blob([resp?.data], {
                     type: type,
@@ -130,45 +182,11 @@ export function makeJobProfilerViewColumns(
       },
     },
   ];
-}
 
-export const JobProfilerView: React.FC<JobProfilerViewProps> = ({
-  jobID,
-  executionDetailFilesResponse,
-  lastUpdated,
-  isDataValid,
-  onDownloadExecutionFileClicked,
-  refreshExecutionDetailFiles,
-  onRequestExecutionDetails,
-}: JobProfilerViewProps) => {
-  const columns = makeJobProfilerViewColumns(
-    jobID,
-    onDownloadExecutionFileClicked,
-  );
   const [sortSetting, setSortSetting] = useState<SortSetting>({
     ascending: true,
     columnTitle: "executionDetailFiles",
   });
-  const req = useMemo(
-    () =>
-      new cockroach.server.serverpb.ListJobProfilerExecutionDetailsRequest({
-        job_id: jobID,
-      }),
-    [jobID],
-  );
-  const refresh = useCallback(() => {
-    refreshExecutionDetailFiles(req);
-  }, [refreshExecutionDetailFiles, req]);
-  const [refetch] = useScheduleFunction(
-    refresh,
-    true,
-    10 * 1000, // 10s polling interval
-    lastUpdated,
-  );
-  useEffect(() => {
-    if (!isDataValid) refetch();
-  }, [isDataValid, refetch]);
-
   const onChangeSortSetting = (ss: SortSetting): void => {
     setSortSetting(ss);
   };
@@ -190,23 +208,25 @@ export const JobProfilerView: React.FC<JobProfilerViewProps> = ({
         />
       </SummaryCard>
       <Space direction="vertical" align="end" className={cx("full-width")}>
-        <Button
-          intent="secondary"
-          onClick={() => {
-            onRequestExecutionDetails(jobID);
-          }}
-        >
+        <Button intent="secondary" onClick={trigger}>
           Request Execution Details
         </Button>
       </Space>
       <SortedTable
-        data={executionDetailFilesResponse.data?.files}
+        data={detailFiles?.files}
         columns={columns}
         tableWrapperClassName={cx("sorted-table")}
         sortSetting={sortSetting}
         onChangeSortSetting={onChangeSortSetting}
         renderNoResult={<EmptyTable title="No execution detail files found." />}
       />
+      {viewingFile && viewingBlobUrl && (
+        <ExecutionDetailViewer
+          filename={viewingFile}
+          blobUrl={viewingBlobUrl}
+          onClose={closeViewer}
+        />
+      )}
     </Space>
   );
-};
+}

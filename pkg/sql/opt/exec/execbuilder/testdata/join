@@ -12,7 +12,6 @@ query T
 EXPLAIN SELECT * FROM onecolumn JOIN twocolumn USING(x)
 ----
 distribution: local
-vectorized: true
 ·
 • hash join
 │ equality: (x) = (x)
@@ -31,7 +30,6 @@ query T
 EXPLAIN SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = b.y
 ----
 distribution: local
-vectorized: true
 ·
 • hash join
 │ equality: (x) = (y)
@@ -50,7 +48,6 @@ query T
 EXPLAIN SELECT * FROM twocolumn AS a JOIN twocolumn AS b ON a.x = 44
 ----
 distribution: local
-vectorized: true
 ·
 • cross join
 │
@@ -71,7 +68,6 @@ query T
 EXPLAIN SELECT * FROM onecolumn AS a JOIN twocolumn AS b ON ((a.x)) = ((b.y))
 ----
 distribution: local
-vectorized: true
 ·
 • hash join
 │ equality: (x) = (y)
@@ -90,7 +86,6 @@ query T
 EXPLAIN SELECT * FROM onecolumn JOIN twocolumn ON onecolumn.x = twocolumn.y
 ----
 distribution: local
-vectorized: true
 ·
 • hash join
 │ equality: (x) = (y)
@@ -114,7 +109,6 @@ EXPLAIN SELECT * FROM
 LIMIT 1
 ----
 distribution: local
-vectorized: true
 ·
 • limit
 │ count: 1
@@ -421,7 +415,7 @@ vectorized: true
         │ render relname: relname
         │
         └── • hash join (inner)
-            │ columns: (oid, nspname, oid, relname, relnamespace, attrelid, attname, attnum, attrelid, attname, attnum, objid, refobjid, oid, relname, relkind, oid, conname, contype, condeferrable, condeferred, conrelid, confrelid, confupdtype, confdeltype, conkey, confkey, oid, relname, relnamespace, oid, nspname, generate_series)
+            │ columns: (oid, nspname, oid, relname, relnamespace, attrelid, attname, attnum, attrelid, attname, attnum, objid, refobjid, oid, relname, relkind, oid, relname, relnamespace, oid, conname, contype, condeferrable, condeferred, conrelid, confrelid, confupdtype, confdeltype, conkey, confkey, oid, nspname, generate_series)
             │ estimated row count: 110,908 (missing stats)
             │ equality: (oid) = (attrelid)
             │
@@ -441,7 +435,7 @@ vectorized: true
             │         table: pg_class@primary
             │
             └── • hash join (inner)
-                │ columns: (attrelid, attname, attnum, attrelid, attname, attnum, objid, refobjid, oid, relname, relkind, oid, conname, contype, condeferrable, condeferred, conrelid, confrelid, confupdtype, confdeltype, conkey, confkey, oid, relname, relnamespace, oid, nspname, generate_series)
+                │ columns: (attrelid, attname, attnum, attrelid, attname, attnum, objid, refobjid, oid, relname, relkind, oid, relname, relnamespace, oid, conname, contype, condeferrable, condeferred, conrelid, confrelid, confupdtype, confdeltype, conkey, confkey, oid, nspname, generate_series)
                 │ estimated row count: 1,779 (missing stats)
                 │ equality: (attrelid) = (oid)
                 │ pred: attnum = conkey[generate_series]
@@ -452,12 +446,12 @@ vectorized: true
                 │     table: pg_attribute@primary
                 │
                 └── • cross join (inner)
-                    │ columns: (attrelid, attname, attnum, objid, refobjid, oid, relname, relkind, oid, conname, contype, condeferrable, condeferred, conrelid, confrelid, confupdtype, confdeltype, conkey, confkey, oid, relname, relnamespace, oid, nspname, generate_series)
+                    │ columns: (attrelid, attname, attnum, objid, refobjid, oid, relname, relkind, oid, relname, relnamespace, oid, conname, contype, condeferrable, condeferred, conrelid, confrelid, confupdtype, confdeltype, conkey, confkey, oid, nspname, generate_series)
                     │ estimated row count: 539 (missing stats)
                     │ pred: attnum = confkey[generate_series]
                     │
                     ├── • hash join (inner)
-                    │   │ columns: (attrelid, attname, attnum, objid, refobjid, oid, relname, relkind, oid, conname, contype, condeferrable, condeferred, conrelid, confrelid, confupdtype, confdeltype, conkey, confkey, oid, relname, relnamespace, oid, nspname)
+                    │   │ columns: (attrelid, attname, attnum, objid, refobjid, oid, relname, relkind, oid, relname, relnamespace, oid, conname, contype, condeferrable, condeferred, conrelid, confrelid, confupdtype, confdeltype, conkey, confkey, oid, nspname)
                     │   │ estimated row count: 163 (missing stats)
                     │   │ equality: (attrelid) = (confrelid)
                     │   │
@@ -467,7 +461,7 @@ vectorized: true
                     │   │     table: pg_attribute@primary
                     │   │
                     │   └── • hash join (inner)
-                    │       │ columns: (objid, refobjid, oid, relname, relkind, oid, conname, contype, condeferrable, condeferred, conrelid, confrelid, confupdtype, confdeltype, conkey, confkey, oid, relname, relnamespace, oid, nspname)
+                    │       │ columns: (objid, refobjid, oid, relname, relkind, oid, relname, relnamespace, oid, conname, contype, condeferrable, condeferred, conrelid, confrelid, confupdtype, confdeltype, conkey, confkey, oid, nspname)
                     │       │ estimated row count: 17 (missing stats)
                     │       │ equality: (objid) = (oid)
                     │       │
@@ -492,26 +486,26 @@ vectorized: true
                     │       │             table: pg_class@primary
                     │       │
                     │       └── • hash join (inner)
-                    │           │ columns: (oid, conname, contype, condeferrable, condeferred, conrelid, confrelid, confupdtype, confdeltype, conkey, confkey, oid, relname, relnamespace, oid, nspname)
+                    │           │ columns: (oid, relname, relnamespace, oid, conname, contype, condeferrable, condeferred, conrelid, confrelid, confupdtype, confdeltype, conkey, confkey, oid, nspname)
                     │           │ estimated row count: 11 (missing stats)
                     │           │ equality: (relnamespace) = (oid)
                     │           │
                     │           ├── • virtual table lookup join (inner)
-                    │           │   │ columns: (oid, conname, contype, condeferrable, condeferred, conrelid, confrelid, confupdtype, confdeltype, conkey, confkey, oid, relname, relnamespace)
+                    │           │   │ columns: (oid, relname, relnamespace, oid, conname, contype, condeferrable, condeferred, conrelid, confrelid, confupdtype, confdeltype, conkey, confkey)
                     │           │   │ estimated row count: 10 (missing stats)
-                    │           │   │ table: pg_class@pg_class_oid_idx
-                    │           │   │ equality: (conrelid) = (oid)
-                    │           │   │ pred: relname = 'orders'
+                    │           │   │ table: pg_constraint@pg_constraint_conrelid_idx
+                    │           │   │ equality: (oid) = (conrelid)
+                    │           │   │ pred: contype = 'f'
                     │           │   │
                     │           │   └── • filter
-                    │           │       │ columns: (oid, conname, contype, condeferrable, condeferred, conrelid, confrelid, confupdtype, confdeltype, conkey, confkey)
+                    │           │       │ columns: (oid, relname, relnamespace)
                     │           │       │ estimated row count: 10 (missing stats)
-                    │           │       │ filter: contype = 'f'
+                    │           │       │ filter: relname = 'orders'
                     │           │       │
                     │           │       └── • virtual table
-                    │           │             columns: (oid, conname, contype, condeferrable, condeferred, conrelid, confrelid, confupdtype, confdeltype, conkey, confkey)
+                    │           │             columns: (oid, relname, relnamespace)
                     │           │             estimated row count: 1,000 (missing stats)
-                    │           │             table: pg_constraint@primary
+                    │           │             table: pg_class@primary
                     │           │
                     │           └── • filter
                     │               │ columns: (oid, nspname)
@@ -539,7 +533,6 @@ query T
 EXPLAIN SELECT * FROM cards LEFT OUTER JOIN customers ON customers.id = cards.cust
 ----
 distribution: local
-vectorized: true
 ·
 • render
 │
@@ -561,7 +554,6 @@ query T
 EXPLAIN SELECT * FROM pairs, square WHERE pairs.b = square.n
 ----
 distribution: local
-vectorized: true
 ·
 • hash join
 │ equality: (b) = (n)
@@ -916,7 +908,7 @@ vectorized: true
 │
 └── • merge join (inner)
     │ columns: (a, b, c, d, a, b, c, d)
-    │ estimated row count: 0 (missing stats)
+    │ estimated row count: 1 (missing stats)
     │ equality: (b, a, d, c) = (b, a, d, c)
     │ left cols are key
     │ right cols are key
@@ -1708,7 +1700,6 @@ query T
 EXPLAIN SELECT * FROM abcdef join (select * from abg) USING (a,b) WHERE ((a,b)>(1,2) OR ((a,b)=(1,2) AND c < 6) OR ((a,b,c)=(1,2,6) AND d > 8))
 ----
 distribution: local
-vectorized: true
 ·
 • merge join
 │ equality: (a, b) = (a, b)
@@ -1753,7 +1744,7 @@ vectorized: true
 │
 └── • hash join (inner)
     │ columns: (a, b, c, d, a, b, c, d)
-    │ estimated row count: 0 (missing stats)
+    │ estimated row count: 1 (missing stats)
     │ equality: (a, c) = (a, c)
     │ pred: (b = b) AND (d = d)
     │
@@ -1954,7 +1945,6 @@ query T
 EXPLAIN SELECT * FROM foo JOIN bar USING (a,b) WHERE foo.c = bar.c AND foo.d = bar.d
 ----
 distribution: local
-vectorized: true
 ·
 • hash join
 │ equality: (a, c) = (a, c)
@@ -1987,7 +1977,6 @@ query T
 EXPLAIN SELECT a,b,c FROM zigzag@{NO_ZIGZAG_JOIN} WHERE b = 5 AND c = 6.0
 ----
 distribution: local
-vectorized: true
 ·
 • filter
 │ filter: c = 6.0
@@ -2007,7 +1996,6 @@ query T
 EXPLAIN SELECT a,b,c FROM zigzag WHERE b = 5 AND c = 6.0
 ----
 distribution: local
-vectorized: true
 ·
 • filter
 │ filter: c = 6.0
@@ -2029,7 +2017,6 @@ query T
 EXPLAIN SELECT a,b,c FROM zigzag WHERE b = 5 AND c = 6.0
 ----
 distribution: local
-vectorized: true
 ·
 • zigzag join
   pred: (b = 5) AND (c = 6.0)
@@ -2046,7 +2033,6 @@ query T
 EXPLAIN SELECT a,b,c,d FROM zigzag WHERE b = 5 AND c = 6.0
 ----
 distribution: local
-vectorized: true
 ·
 • lookup join
 │ table: zigzag@zigzag_pkey
@@ -2067,7 +2053,6 @@ query T
 EXPLAIN SELECT a,b,c,d FROM zigzag WHERE b = 5 AND c = 6.0 AND d > 4
 ----
 distribution: local
-vectorized: true
 ·
 • lookup join
 │ table: zigzag@zigzag_pkey
@@ -2102,7 +2087,6 @@ query T
 EXPLAIN SELECT * FROM zigzag2 WHERE a = 1 AND b = 2 AND c IS NULL
 ----
 distribution: local
-vectorized: true
 ·
 • filter
 │ filter: c IS NULL
@@ -2124,7 +2108,6 @@ query T
 EXPLAIN SELECT * FROM onecolumn INNER MERGE JOIN twocolumn USING(x)
 ----
 distribution: local
-vectorized: true
 ·
 • merge join
 │ equality: (x) = (x)
@@ -2150,7 +2133,6 @@ query T
 EXPLAIN SELECT * FROM onecolumn NATURAL INNER MERGE JOIN twocolumn
 ----
 distribution: local
-vectorized: true
 ·
 • merge join
 │ equality: (x) = (x)
@@ -2176,7 +2158,6 @@ query T
 EXPLAIN SELECT * FROM onecolumn CROSS MERGE JOIN twocolumn WHERE onecolumn.x = twocolumn.x
 ----
 distribution: local
-vectorized: true
 ·
 • merge join
 │ equality: (x) = (x)
@@ -2211,7 +2192,6 @@ query T
 EXPLAIN SELECT * FROM cards LEFT OUTER HASH JOIN customers ON customers.id = cards.cust
 ----
 distribution: local
-vectorized: true
 ·
 • render
 │
@@ -2235,7 +2215,7 @@ EXPLAIN (OPT, MEMO)
 SELECT * FROM (VALUES (1, 10), (2, 20), (3, 30)) as v(x, y)
 INNER STRAIGHT JOIN t119035 ON a > x
 ----
-memo (optimized, ~10KB, required=[presentation: info:10] [distribution: test])
+memo (optimized, ~11KB, required=[presentation: info:10] [distribution: test])
  ├── G1: (explain G2 [presentation: x:1,y:2,k:3,a:4,b:5] [distribution: test])
  │    └── [presentation: info:10] [distribution: test]
  │         ├── best: (explain G2="[presentation: x:1,y:2,k:3,a:4,b:5] [distribution: test]" [presentation: x:1,y:2,k:3,a:4,b:5] [distribution: test])

@@ -14,20 +14,15 @@ import {
 } from "src/statementsPage/statementsPage";
 import { statementsSql } from "src/util/docs";
 
-import {
-  ActiveStatementsView,
-  ActiveStatementsViewProps,
-} from "./activeStatementsView";
+import { ActiveStatementsView } from "./activeStatementsView";
 import { StatementViewType } from "./statementPageTypes";
 
 export type StatementsPageRootProps = {
   fingerprintsPageProps: StatementsPageProps;
-  activePageProps: ActiveStatementsViewProps;
 };
 
 export const StatementsPageRoot = ({
   fingerprintsPageProps,
-  activePageProps,
 }: StatementsPageRootProps): React.ReactElement => {
   const statementOptions: Option[] = [
     {
@@ -56,7 +51,7 @@ export const StatementsPageRoot = ({
           {/* TODO (xinhaoz) #78379 add 'Learn More' link to documentation page*/}
         </span>
       ),
-      component: <ActiveStatementsView {...activePageProps} />,
+      component: <ActiveStatementsView />,
     },
   ];
 

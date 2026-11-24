@@ -40,9 +40,17 @@ type BackupOptions struct {
 	EncryptionPassphrase            Expr
 	Detached                        *DBool
 	EncryptionKMSURI                StringOrPlaceholderOptList
-	IncrementalStorage              StringOrPlaceholderOptList
 	ExecutionLocality               Expr
 	UpdatesClusterMonitoringMetrics Expr
+	Strict                          bool
+	// RevisionStream is set when the BACKUP was invoked with the
+	// `WITH REVISION STREAM` option, requesting that a continuous
+	// backup (revlog) job be established for the destination if one
+	// does not already exist. The option takes no value; presence
+	// means true. (The user-facing keyword is `STREAM` rather than
+	// `LOG` to avoid introducing a new unreserved keyword; the
+	// internal subsystem is still named `revlog`.)
+	RevisionStream bool
 }
 
 var _ NodeFormatter = &BackupOptions{}
@@ -119,7 +127,6 @@ type RestoreOptions struct {
 	Detached                         bool
 	SkipLocalitiesCheck              bool
 	NewDBName                        Expr
-	IncrementalStorage               StringOrPlaceholderOptList
 	AsTenant                         Expr
 	ForceTenantID                    Expr
 	SchemaOnly                       bool
@@ -127,7 +134,13 @@ type RestoreOptions struct {
 	UnsafeRestoreIncompatibleVersion bool
 	ExecutionLocality                Expr
 	ExperimentalOnline               bool
+	ExperimentalCopy                 bool
 	RemoveRegions                    bool
+	Grants                           bool
+}
+
+func (opts *RestoreOptions) OnlineImpl() bool {
+	return opts.ExperimentalCopy || opts.ExperimentalOnline
 }
 
 var _ NodeFormatter = &RestoreOptions{}
@@ -147,6 +160,8 @@ type Restore struct {
 	// Subdir may be set by the parser when the SQL query is of the form `RESTORE
 	// ... FROM 'subdir' IN 'from'...`. Alternatively, restore_planning.go will set
 	// it for the query `RESTORE ... FROM LATEST IN 'from'...`
+	// TODO (kev-cao): Once we fully switch to using backup IDs (or LATEST) for
+	// RESTORE, come back and rename this field. (BackupToken?)
 	Subdir Expr
 }
 
@@ -211,7 +226,7 @@ func (o *KVOptions) formatEach(ctx *FmtCtx, formatValue func(*KVOption, *FmtCtx)
 		}
 		// KVOption Key values never contain PII and should be distinguished
 		// for feature tracking purposes.
-		ctx.WithFlags(ctx.flags&^FmtMarkRedactionNode, func() {
+		ctx.WithFlags(ctx.flags&^(FmtAnonymize|FmtMarkRedactionNode), func() {
 			ctx.FormatNode(&n.Key)
 		})
 		if n.Value != nil {
@@ -274,12 +289,6 @@ func (o *BackupOptions) Format(ctx *FmtCtx) {
 		ctx.FormatURIs(o.EncryptionKMSURI)
 	}
 
-	if o.IncrementalStorage != nil {
-		maybeAddSep()
-		ctx.WriteString("incremental_location = ")
-		ctx.FormatURIs(o.IncrementalStorage)
-	}
-
 	if o.ExecutionLocality != nil {
 		maybeAddSep()
 		ctx.WriteString("execution locality = ")
@@ -296,6 +305,14 @@ func (o *BackupOptions) Format(ctx *FmtCtx) {
 		maybeAddSep()
 		ctx.WriteString("updates_cluster_monitoring_metrics = ")
 		ctx.FormatNode(o.UpdatesClusterMonitoringMetrics)
+	}
+	if o.Strict {
+		maybeAddSep()
+		ctx.WriteString("strict storage locality")
+	}
+	if o.RevisionStream {
+		maybeAddSep()
+		ctx.WriteString("revision stream")
 	}
 }
 
@@ -330,12 +347,6 @@ func (o *BackupOptions) CombineWith(other *BackupOptions) error {
 		return errors.New("kms specified multiple times")
 	}
 
-	if o.IncrementalStorage == nil {
-		o.IncrementalStorage = other.IncrementalStorage
-	} else if other.IncrementalStorage != nil {
-		return errors.New("incremental_location option specified multiple times")
-	}
-
 	if o.ExecutionLocality == nil {
 		o.ExecutionLocality = other.ExecutionLocality
 	} else if other.ExecutionLocality != nil {
@@ -357,6 +368,20 @@ func (o *BackupOptions) CombineWith(other *BackupOptions) error {
 	} else {
 		o.UpdatesClusterMonitoringMetrics = other.UpdatesClusterMonitoringMetrics
 	}
+	if o.Strict {
+		if other.Strict {
+			return errors.New("strict storage locality option specified multiple times")
+		}
+	} else {
+		o.Strict = other.Strict
+	}
+	if o.RevisionStream {
+		if other.RevisionStream {
+			return errors.New("revision stream option specified multiple times")
+		}
+	} else {
+		o.RevisionStream = other.RevisionStream
+	}
 	return nil
 }
 
@@ -367,10 +392,11 @@ func (o BackupOptions) IsDefault() bool {
 		(o.Detached == nil || o.Detached == DBoolFalse) &&
 		cmp.Equal(o.EncryptionKMSURI, options.EncryptionKMSURI) &&
 		o.EncryptionPassphrase == options.EncryptionPassphrase &&
-		cmp.Equal(o.IncrementalStorage, options.IncrementalStorage) &&
 		o.ExecutionLocality == options.ExecutionLocality &&
 		o.IncludeAllSecondaryTenants == options.IncludeAllSecondaryTenants &&
-		o.UpdatesClusterMonitoringMetrics == options.UpdatesClusterMonitoringMetrics
+		o.UpdatesClusterMonitoringMetrics == options.UpdatesClusterMonitoringMetrics &&
+		o.Strict == options.Strict &&
+		o.RevisionStream == options.RevisionStream
 }
 
 // Format implements the NodeFormatter interface.
@@ -445,12 +471,6 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 		ctx.FormatNode(o.NewDBName)
 	}
 
-	if o.IncrementalStorage != nil {
-		maybeAddSep()
-		ctx.WriteString("incremental_location = ")
-		ctx.FormatURIs(o.IncrementalStorage)
-	}
-
 	if o.AsTenant != nil {
 		maybeAddSep()
 		ctx.WriteString("virtual_cluster_name = ")
@@ -488,9 +508,19 @@ func (o *RestoreOptions) Format(ctx *FmtCtx) {
 		ctx.WriteString("experimental deferred copy")
 	}
 
+	if o.ExperimentalCopy {
+		maybeAddSep()
+		ctx.WriteString("experimental copy")
+	}
+
 	if o.RemoveRegions {
 		maybeAddSep()
 		ctx.WriteString("remove_regions")
+	}
+
+	if o.Grants {
+		maybeAddSep()
+		ctx.WriteString("grants")
 	}
 }
 
@@ -578,12 +608,6 @@ func (o *RestoreOptions) CombineWith(other *RestoreOptions) error {
 		return errors.New("new_db_name specified multiple times")
 	}
 
-	if o.IncrementalStorage == nil {
-		o.IncrementalStorage = other.IncrementalStorage
-	} else if other.IncrementalStorage != nil {
-		return errors.New("incremental_location option specified multiple times")
-	}
-
 	if o.AsTenant == nil {
 		o.AsTenant = other.AsTenant
 	} else if other.AsTenant != nil {
@@ -633,12 +657,28 @@ func (o *RestoreOptions) CombineWith(other *RestoreOptions) error {
 		o.ExperimentalOnline = other.ExperimentalOnline
 	}
 
+	if o.ExperimentalCopy {
+		if other.ExperimentalCopy {
+			return errors.New("experimental copy specified multiple times")
+		}
+	} else {
+		o.ExperimentalCopy = other.ExperimentalCopy
+	}
+
 	if o.RemoveRegions {
 		if other.RemoveRegions {
 			return errors.New("remove_regions specified multiple times")
 		}
 	} else {
 		o.RemoveRegions = other.RemoveRegions
+	}
+
+	if o.Grants {
+		if other.Grants {
+			return errors.New("grants specified multiple times")
+		}
+	} else {
+		o.Grants = other.Grants
 	}
 
 	return nil
@@ -658,7 +698,6 @@ func (o RestoreOptions) IsDefault() bool {
 		o.Detached == options.Detached &&
 		o.SkipLocalitiesCheck == options.SkipLocalitiesCheck &&
 		o.NewDBName == options.NewDBName &&
-		cmp.Equal(o.IncrementalStorage, options.IncrementalStorage) &&
 		o.AsTenant == options.AsTenant &&
 		o.ForceTenantID == options.ForceTenantID &&
 		o.SchemaOnly == options.SchemaOnly &&
@@ -666,14 +705,15 @@ func (o RestoreOptions) IsDefault() bool {
 		o.UnsafeRestoreIncompatibleVersion == options.UnsafeRestoreIncompatibleVersion &&
 		o.ExecutionLocality == options.ExecutionLocality &&
 		o.ExperimentalOnline == options.ExperimentalOnline &&
-		o.RemoveRegions == options.RemoveRegions
+		o.ExperimentalCopy == options.ExperimentalCopy &&
+		o.RemoveRegions == options.RemoveRegions &&
+		o.Grants == options.Grants
 }
 
 // BackupTargetList represents a list of targets.
 // Only one field may be non-nil.
 type BackupTargetList struct {
 	Databases NameList
-	Schemas   ObjectNamePrefixList
 	Tables    TableAttrs
 	TenantID  TenantID
 }
@@ -683,9 +723,6 @@ func (tl *BackupTargetList) Format(ctx *FmtCtx) {
 	if tl.Databases != nil {
 		ctx.WriteString("DATABASE ")
 		ctx.FormatNode(&tl.Databases)
-	} else if tl.Schemas != nil {
-		ctx.WriteString("SCHEMA ")
-		ctx.FormatNode(&tl.Schemas)
 	} else if tl.TenantID.Specified {
 		ctx.WriteString("VIRTUAL CLUSTER ")
 		ctx.FormatNode(&tl.TenantID)

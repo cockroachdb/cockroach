@@ -569,7 +569,9 @@ func TestReplicaClosedTimestamp(t *testing.T) {
 			// NB: don't release the mutex to make this test a bit more resilient to
 			// problems that could arise should something propose a command to this
 			// replica whose LeaseAppliedIndex we've mutated.
-			require.Equal(t, test.expClosed, tc.repl.getCurrentClosedTimestampLocked(ctx, hlc.Timestamp{} /* sufficient */))
+			require.Equal(t, test.expClosed, tc.repl.getCurrentClosedTimestamp(ctx,
+				hlc.Timestamp{} /* sufficient */, tc.repl.shMu.state.LeaseAppliedIndex,
+				tc.repl.shMu.state.Lease.Replica.NodeID, tc.repl.shMu.state.RaftClosedTimestamp))
 		})
 	}
 }
@@ -1010,7 +1012,7 @@ func TestServerSideBoundedStalenessNegotiation(t *testing.T) {
 				}
 				ba.Add(test.reqs...)
 
-				br, pErr := tc.store.Send(ctx, ba)
+				br, pErr := ToSenderForTesting(tc.store).Send(ctx, ba)
 				if test.expErr == "" {
 					require.Nil(t, pErr)
 					require.NotNil(t, br)
@@ -1174,7 +1176,7 @@ func TestServerSideBoundedStalenessNegotiationWithResumeSpan(t *testing.T) {
 			expRespTS := earliestIntentTS.Prev()
 
 			// Issue the request.
-			br, pErr := tc.store.Send(ctx, ba)
+			br, pErr := ToSenderForTesting(tc.store).Send(ctx, ba)
 			require.Nil(t, pErr)
 			require.NotNil(t, br)
 			require.Equal(t, expRespTS, br.Timestamp)

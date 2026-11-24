@@ -351,3 +351,39 @@ $input
     (FoldIsNullProjectionsItems $projections $input)
     $passthrough
 )
+
+# PushLeakproofProjectionsIntoPermeableBarrier moves a Project below a Barrier
+# when all projection expressions are leakproof and the Barrier is marked as
+# permeable. This is safe because leakproof expressions cannot reveal
+# information through their evaluation, and a permeable Barrier allows such
+# projections to pass through it.
+[PushLeakproofProjectionsIntoPermeableBarrier, Normalize]
+(Project
+    (Barrier
+        $input:*
+        $leakproofPermeable:* & (If $leakproofPermeable)
+    )
+    $projections:* & (HasAllLeakProofProjections $projections)
+    $passthrough:*
+)
+=>
+(Barrier
+    (Project $input $projections $passthrough)
+    $leakproofPermeable
+)
+
+# EliminateZeroCardProject eliminates a Project when its input has zero
+# cardinality. The projection expressions are per-row and will never be
+# evaluated, so it is safe to remove them regardless of volatility. This
+# complements the SimplifyZeroCardinalityGroup rule which requires the entire
+# expression to be leakproof.
+[EliminateZeroCardProject, Normalize]
+(Project
+    $input:* & (HasZeroRows $input) & (IsLeakproof $input)
+    $projections:*
+    $passthrough:*
+)
+=>
+(ConstructEmptyValues
+    (UnionCols $passthrough (ProjectionCols $projections))
+)

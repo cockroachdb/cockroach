@@ -1,3 +1,4 @@
+# LogicTest: !local-prepared
 # Transaction involving schema changes.
 statement ok
 BEGIN TRANSACTION
@@ -174,7 +175,10 @@ BEGIN; COMMIT
 statement ok
 BEGIN; END
 
-# COMMIT/ROLLBACK without a transaction are errors.
+# COMMIT/ROLLBACK without a transaction are errors when autocommit_before_ddl=false.
+
+statement ok
+SET autocommit_before_ddl = false
 
 statement error pgcode 25P01 there is no transaction in progress
 COMMIT TRANSACTION
@@ -182,24 +186,42 @@ COMMIT TRANSACTION
 statement error pgcode 25P01 there is no transaction in progress
 ROLLBACK TRANSACTION
 
-# Set isolation level without a transaction is an error.
+# COMMIT/ROLLBACK without a transaction are allowed when autocommit_before_ddl=true.
+
+statement ok
+SET autocommit_before_ddl = true
+
+statement ok
+COMMIT TRANSACTION
+
+statement ok
+ROLLBACK TRANSACTION
+
+# Set isolation level without a transaction is an error when autocommit_before_ddl=false.
+
+statement ok
+SET autocommit_before_ddl = false
 
 statement error pgcode 25P01 there is no transaction in progress
 SET TRANSACTION ISOLATION LEVEL REPEATABLE READ
 
+# Set isolation level without a transaction is a warning when autocommit_before_ddl=true.
+
+statement ok
+SET autocommit_before_ddl = true
+
+query T noticetrace
+SET TRANSACTION ISOLATION LEVEL REPEATABLE READ
+----
+WARNING: there is no transaction in progress
+SQLSTATE: 25P01
+
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ; COMMIT
 
-onlyif config enterprise-configs
 query T noticetrace
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED
 ----
-
-skipif config enterprise-configs
-query T noticetrace
-BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED
-----
-NOTICE: READ COMMITTED isolation level is not allowed without an enterprise license; upgrading to SERIALIZABLE
 
 statement ok
 COMMIT
@@ -216,16 +238,9 @@ BEGIN TRANSACTION; SET TRANSACTION ISOLATION LEVEL SERIALIZABLE; COMMIT
 statement ok
 BEGIN TRANSACTION
 
-onlyif config enterprise-configs
 query T noticetrace
 SET TRANSACTION ISOLATION LEVEL READ COMMITTED
 ----
-
-skipif config enterprise-configs
-query T noticetrace
-SET TRANSACTION ISOLATION LEVEL READ COMMITTED
-----
-NOTICE: READ COMMITTED isolation level is not allowed without an enterprise license; upgrading to SERIALIZABLE
 
 statement ok
 COMMIT
@@ -238,7 +253,6 @@ BEGIN TRANSACTION
 statement ok
 UPDATE kv SET v = 'b' WHERE k in ('a')
 
-onlyif config enterprise-configs
 skipif config weak-iso-level-configs
 statement error pgcode 25001 cannot change the isolation level of a running transaction
 SET TRANSACTION ISOLATION LEVEL READ COMMITTED
@@ -256,7 +270,6 @@ BEGIN TRANSACTION
 statement ok
 SELECT * FROM kv LIMIT 1
 
-onlyif config enterprise-configs
 skipif config weak-iso-level-configs
 statement error pgcode 25001 cannot change the isolation level of a running transaction
 SET transaction_isolation = 'READ COMMITTED'
@@ -354,32 +367,19 @@ SET CLUSTER SETTING sql.txn.repeatable_read_isolation.enabled = true
 statement ok
 SET default_transaction_isolation = 'read committed'
 
-onlyif config enterprise-configs
 query T
 SHOW default_transaction_isolation
 ----
 repeatable read
-
-skipif config enterprise-configs
-query T
-SHOW default_transaction_isolation
-----
-serializable
 
 statement ok
 SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
 
-onlyif config enterprise-configs
 query T
 SHOW DEFAULT_TRANSACTION_ISOLATION
 ----
 repeatable read
 
-skipif config enterprise-configs
-query T
-SHOW DEFAULT_TRANSACTION_ISOLATION
-----
-serializable
 
 # Since repeatable_read_isolation.enabled is true, REPEATABLE READ can be used.
 statement ok
@@ -388,29 +388,15 @@ BEGIN
 statement ok
 SET TRANSACTION ISOLATION LEVEL REPEATABLE READ
 
-onlyif config enterprise-configs
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
 repeatable read
 
-onlyif config enterprise-configs
 query T
 SHOW transaction_isolation
 ----
 repeatable read
-
-skipif config enterprise-configs
-query T
-SHOW TRANSACTION ISOLATION LEVEL
-----
-serializable
-
-skipif config enterprise-configs
-query T
-SHOW transaction_isolation
-----
-serializable
 
 statement ok
 COMMIT
@@ -424,17 +410,10 @@ SET transaction_isolation = 'this is made up'
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ
 
-onlyif config enterprise-configs
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
 repeatable read
-
-skipif config enterprise-configs
-query T
-SHOW TRANSACTION ISOLATION LEVEL
-----
-serializable
 
 statement ok
 SET TRANSACTION ISOLATION LEVEL SERIALIZABLE
@@ -456,17 +435,10 @@ SET CLUSTER SETTING sql.txn.read_committed_isolation.enabled = true
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED
 
-onlyif config enterprise-configs
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
 read committed
-
-skipif config enterprise-configs
-query T
-SHOW TRANSACTION ISOLATION LEVEL
-----
-serializable
 
 statement ok
 SET TRANSACTION ISOLATION LEVEL SERIALIZABLE
@@ -480,37 +452,35 @@ serializable
 statement ok
 SET transaction_isolation = 'READ COMMITTED'
 
-onlyif config enterprise-configs
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
 read committed
 
-skipif config enterprise-configs
-query T
-SHOW TRANSACTION ISOLATION LEVEL
-----
-serializable
-
-onlyif config enterprise-configs
 query T
 SHOW transaction_isolation
 ----
 read committed
-
-skipif config enterprise-configs
-query T
-SHOW transaction_isolation
-----
-serializable
 
 statement ok
 COMMIT
 
 # User priority.
 
+statement ok
+SET autocommit_before_ddl = false
+
 statement error pgcode 25P01 there is no transaction in progress
 SET TRANSACTION PRIORITY LOW
+
+statement ok
+SET autocommit_before_ddl = true
+
+query T noticetrace
+SET TRANSACTION PRIORITY LOW
+----
+WARNING: there is no transaction in progress
+SQLSTATE: 25P01
 
 statement ok
 BEGIN TRANSACTION PRIORITY LOW; COMMIT
@@ -801,7 +771,6 @@ SET CLUSTER SETTING sql.txn.repeatable_read_isolation.enabled = true
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ, PRIORITY LOW
 
-onlyif config enterprise-configs
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
@@ -829,32 +798,18 @@ statement ok
 COMMIT
 
 # With the repeatable_read_isolation.enabled cluster setting set to true,
-# REPEATABLE READ can be used if there is a valid license.
-onlyif config enterprise-configs
+# REPEATABLE READ can be used.
 query T noticetrace
 SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL REPEATABLE READ
 ----
-
-skipif config enterprise-configs
-query T noticetrace
-SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL REPEATABLE READ
-----
-NOTICE: REPEATABLE READ isolation level is not allowed without an enterprise license; upgrading to SERIALIZABLE
 
 statement ok
 SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL REPEATABLE READ
 
-onlyif config enterprise-configs
 query T
 SHOW DEFAULT_TRANSACTION_ISOLATION
 ----
 repeatable read
-
-skipif config enterprise-configs
-query T
-SHOW DEFAULT_TRANSACTION_ISOLATION
-----
-serializable
 
 statement ok
 SET CLUSTER SETTING sql.txn.repeatable_read_isolation.enabled = false
@@ -862,17 +817,10 @@ SET CLUSTER SETTING sql.txn.repeatable_read_isolation.enabled = false
 statement ok
 SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ UNCOMMITTED
 
-onlyif config enterprise-configs
 query T
 SHOW DEFAULT_TRANSACTION_ISOLATION
 ----
 read committed
-
-skipif config enterprise-configs
-query T
-SHOW DEFAULT_TRANSACTION_ISOLATION
-----
-serializable
 
 statement ok
 SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL REPEATABLE READ
@@ -899,14 +847,12 @@ serializable
 statement ok
 SET SESSION CHARACTERISTICS AS TRANSACTION ISOLATION LEVEL READ COMMITTED
 
-onlyif config enterprise-configs
 query T
 SHOW DEFAULT_TRANSACTION_ISOLATION
 ----
 read committed
 
 # SHOW without a transaction should create an auto-transaction with the new default level
-onlyif config enterprise-configs
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
@@ -923,40 +869,19 @@ serializable
 statement ok
 SET default_transaction_isolation = 'read uncommitted'
 
-onlyif config enterprise-configs
 query T
 SHOW default_transaction_isolation
 ----
 read committed
 
-skipif config enterprise-configs
-query T
-SHOW default_transaction_isolation
-----
-serializable
-
-onlyif config enterprise-configs
 query T noticetrace
 SET default_transaction_isolation = 'read committed'
 ----
 
-skipif config enterprise-configs
-query T noticetrace
-SET default_transaction_isolation = 'read committed'
-----
-NOTICE: READ COMMITTED isolation level is not allowed without an enterprise license; upgrading to SERIALIZABLE
-
-onlyif config enterprise-configs
 query T
 SHOW default_transaction_isolation
 ----
 read committed
-
-skipif config enterprise-configs
-query T
-SHOW default_transaction_isolation
-----
-serializable
 
 statement ok
 SET CLUSTER SETTING sql.txn.repeatable_read_isolation.enabled = true
@@ -966,32 +891,18 @@ SET CLUSTER SETTING sql.txn.repeatable_read_isolation.enabled = true
 statement ok
 SET default_transaction_isolation = 'snapshot'
 
-onlyif config enterprise-configs
 query T
 SHOW default_transaction_isolation
 ----
 repeatable read
-
-skipif config enterprise-configs
-query T
-SHOW default_transaction_isolation
-----
-serializable
 
 statement ok
 SET DEFAULT_TRANSACTION_ISOLATION TO 'REPEATABLE READ'
 
-onlyif config enterprise-configs
 query T
 SHOW DEFAULT_TRANSACTION_ISOLATION
 ----
 repeatable read
-
-skipif config enterprise-configs
-query T
-SHOW default_transaction_isolation
-----
-serializable
 
 statement ok
 SET CLUSTER SETTING sql.txn.repeatable_read_isolation.enabled = false
@@ -1032,7 +943,6 @@ COMMIT
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED
 
-onlyif config enterprise-configs
 query T
 SHOW TRANSACTION ISOLATION LEVEL
 ----
@@ -1144,11 +1054,11 @@ statement ok
 BEGIN TRANSACTION; SAVEPOINT cockroach_restart; SELECT 1
 
 skipif config local-read-committed
-query error pgcode 40001 restart transaction: crdb_internal.force_retry\(\): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\).*\nHINT:.*transaction-retry-error-reference.html
+query error pgcode 40001 restart transaction: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\).*\nHINT:.*transaction-retry-error-reference.html
 SELECT crdb_internal.force_retry('1h':::INTERVAL)
 
 onlyif config local-read-committed
-query error pgcode 40001 pq: restart transaction: read committed retry limit exceeded; set by max_retries_for_read_committed=10: crdb_internal.force_retry\(\): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
+query error pgcode 40001 pq: restart transaction: read committed retry limit exceeded; set by max_retries_for_read_committed=100: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
 SELECT crdb_internal.force_retry('1h':::INTERVAL)
 
 query T
@@ -1286,11 +1196,11 @@ BEGIN TRANSACTION;
   SELECT 1;
 
 skipif config local-read-committed
-query error pgcode 40001 restart transaction: crdb_internal.force_retry\(\): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
+query error pgcode 40001 restart transaction: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
 SELECT crdb_internal.force_retry('1h':::INTERVAL)
 
 onlyif config local-read-committed
-query error pgcode 40001 pq: restart transaction: read committed retry limit exceeded; set by max_retries_for_read_committed=10: crdb_internal.force_retry\(\): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
+query error pgcode 40001 pq: restart transaction: read committed retry limit exceeded; set by max_retries_for_read_committed=100: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
 SELECT crdb_internal.force_retry('1h':::INTERVAL)
 
 statement ok
@@ -1448,7 +1358,10 @@ COMMIT
 
 # BEGIN READ WRITE overrides READ ONLY default
 statement ok
-BEGIN READ WRITE
+BEGIN TRANSACTION ISOLATION LEVEL SERIALIZABLE READ WRITE;
+
+statement ok
+SET LOCAL autocommit_before_ddl = false;
 
 statement ok
 CREATE SEQUENCE a
@@ -1459,8 +1372,33 @@ COMMIT
 statement error cannot execute CREATE TABLE in a read-only transaction
 CREATE TABLE tab (a int)
 
+# EXPLAIN of a DDL is disallowed out of caution.
+statement error cannot execute CREATE TABLE in a read-only transaction
+EXPLAIN CREATE TABLE tab (a int)
+
 statement error cannot execute INSERT in a read-only transaction
 INSERT INTO kv VALUES('foo')
+
+# EXPLAIN of a mutation is allowed even in read-only mode.
+statement ok
+EXPLAIN INSERT INTO kv VALUES('foo')
+
+statement ok
+EXPLAIN (OPT) INSERT INTO kv VALUES('foo')
+
+statement ok
+EXPLAIN (DISTSQL) INSERT INTO kv VALUES('foo')
+
+skipif config local-vec-off fakedist-vec-off
+statement ok
+EXPLAIN (VEC) INSERT INTO kv VALUES('foo')
+
+statement ok
+EXPLAIN (GIST) INSERT INTO kv VALUES('foo')
+
+# EXPLAIN ANALYZE is still disallowed.
+statement error cannot execute INSERT in a read-only transaction
+EXPLAIN ANALYZE INSERT INTO kv VALUES('foo')
 
 statement error cannot execute UPDATE in a read-only transaction
 UPDATE kv SET v = 'foo'
@@ -1480,6 +1418,13 @@ SELECT * FROM kv FOR SHARE
 statement error cannot execute nextval\(\) in a read-only transaction
 SELECT nextval('a')
 
+# This is just a Values with an expression that hasn't been evaluated.
+statement ok
+EXPLAIN SELECT nextval('a')
+
+statement error pgcode 55000 pq: currval of sequence "test.public.a" is not yet defined in this session
+SELECT currval('a')
+
 statement error cannot execute setval\(\) in a read-only transaction
 SELECT setval('a', 2)
 
@@ -1488,6 +1433,10 @@ CREATE ROLE my_user
 
 statement error cannot execute ALTER ROLE in a read-only transaction
 ALTER ROLE testuser SET default_int_size = 4
+
+# EXPLAIN of an ALTER is disallowed out of caution.
+statement error cannot execute ALTER ROLE in a read-only transaction
+EXPLAIN ALTER ROLE testuser SET default_int_size = 4
 
 statement error cannot execute DROP ROLE in a read-only transaction
 DROP ROLE testuser
@@ -1520,12 +1469,15 @@ SET SESSION AUTHORIZATION DEFAULT
 statement ok
 BEGIN
 
-# DECLARE and FETCH CURSOR should work in a read-only txn.
+# DECLARE, FETCH, and CLOSE CURSOR should work in a read-only txn.
 statement ok
 DECLARE foo CURSOR FOR SELECT 1
 
 statement ok
 FETCH 1 foo
+
+statement ok
+CLOSE foo
 
 statement ok
 COMMIT
@@ -1552,11 +1504,11 @@ statement ok
 BEGIN; SELECT 1
 
 skipif config local-read-committed
-query error pgcode 40001 restart transaction: crdb_internal.force_retry\(\): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
+query error pgcode 40001 restart transaction: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
 SELECT crdb_internal.force_retry('1h':::INTERVAL)
 
 onlyif config local-read-committed
-query error pgcode 40001 pq: restart transaction: read committed retry limit exceeded; set by max_retries_for_read_committed=10: crdb_internal.force_retry\(\): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
+query error pgcode 40001 pq: restart transaction: read committed retry limit exceeded; set by max_retries_for_read_committed=100: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
 SELECT crdb_internal.force_retry('1h':::INTERVAL)
 
 statement ok
@@ -1670,8 +1622,15 @@ SHOW intervalstyle
 ----
 iso_8601
 
+
+statement ok
+ALTER TABLE rewind_session_test SET (schema_locked=false)
+
 statement ok
 TRUNCATE rewind_session_test
+
+statement ok
+ALTER TABLE rewind_session_test RESET (schema_locked)
 
 statement ok
 SET intervalstyle = 'postgres'
@@ -1762,8 +1721,7 @@ ROLLBACK
 statement ok
 BEGIN TRANSACTION ISOLATION LEVEL READ COMMITTED;
 
-onlyif config enterprise-configs
-statement error pq: cluster_logical_timestamp\(\): unsupported in READ COMMITTED isolation
+statement error pq: unsupported in READ COMMITTED isolation
 SELECT cluster_logical_timestamp();
 
 statement ok

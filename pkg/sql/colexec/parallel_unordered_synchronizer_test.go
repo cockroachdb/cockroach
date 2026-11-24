@@ -123,7 +123,7 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 	ctx, cancelFn := context.WithCancel(context.Background())
 
 	var wg sync.WaitGroup
-	s := NewParallelUnorderedSynchronizer(&execinfra.FlowCtx{Local: true, Gateway: true}, 0 /* processorID */, testMemAcc, inputs, &wg)
+	s := NewParallelUnorderedSynchronizer(&execinfra.FlowCtx{Local: true, Gateway: true}, 0 /* processorID */, testAllocator, typs, inputs, &wg)
 	s.Init(ctx)
 
 	t.Run(fmt.Sprintf("numInputs=%d/numBatches=%d/terminationScenario=%d", numInputs, numBatches, terminationScenario), func(t *testing.T) {
@@ -142,9 +142,11 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 
 		batchesReturned := 0
 		expectedBatchesReturned := numInputs * numBatches
+		var streamingMeta []execinfrapb.ProducerMetadata
 		for {
 			var b coldata.Batch
-			if err := colexecerror.CatchVectorizedRuntimeError(func() { b = s.Next() }); err != nil {
+			var meta *execinfrapb.ProducerMetadata
+			if err := colexecerror.CatchVectorizedRuntimeError(func() { b, meta = s.Next() }); err != nil {
 				if terminationScenario == synchronizerContextCanceled {
 					require.True(t, testutils.IsError(err, "context canceled"), err)
 					break
@@ -152,10 +154,19 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
+			if meta != nil {
+				// Skip the always-on grunning emission from each worker
+				// goroutine; it is orthogonal to the test-induced metadata
+				// this test exercises.
+				if meta.Metrics == nil {
+					streamingMeta = append(streamingMeta, *meta)
+				}
+				continue
+			}
 			if b.Length() == 0 {
 				if terminationScenario == synchronizerGracefulTermination {
 					// Successful run, check that all inputs have returned metadata.
-					meta := s.DrainMeta()
+					meta := append(streamingMeta, filterMetricsMeta(s.DrainMeta())...)
 					require.Equal(t, len(inputs), len(meta), "metadata length mismatch, returned metadata is: %v", meta)
 				}
 				break
@@ -163,7 +174,7 @@ func TestParallelUnorderedSynchronizer(t *testing.T) {
 			batchesReturned++
 			if terminationScenario == synchronizerPrematureDrainMeta && batchesReturned < expectedBatchesReturned {
 				// Call DrainMeta before the input is finished.
-				meta := s.DrainMeta()
+				meta := append(streamingMeta, filterMetricsMeta(s.DrainMeta())...)
 				// Make sure that all expected metadata is still propagated.
 				// Note that if the last input wasn't pre-emptied, then the
 				// error will not match.
@@ -193,6 +204,7 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 		// This code is unreachable, but the compiler cannot infer that.
 		return nil
 	}}
+	typs := types.OneIntCol
 	for i := 1; i < len(inputs); i++ {
 		acc := testMemMonitor.MakeBoundAccount()
 		defer acc.Close(ctx)
@@ -201,7 +213,7 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 				NextCb: func() coldata.Batch {
 					// All inputs that do not encounter an error will continue to return
 					// batches.
-					b := allocator.NewMemBatchWithMaxCapacity([]*types.T{types.Int})
+					b := allocator.NewMemBatchWithMaxCapacity(typs)
 					b.SetLength(1)
 					return b
 				},
@@ -224,10 +236,17 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
-	s := NewParallelUnorderedSynchronizer(&execinfra.FlowCtx{Local: true, Gateway: true}, 0 /* processorID */, testMemAcc, inputs, &wg)
+	s := NewParallelUnorderedSynchronizer(&execinfra.FlowCtx{Local: true, Gateway: true}, 0 /* processorID */, testAllocator, typs, inputs, &wg)
 	s.Init(ctx)
+	var streamingMeta []execinfrapb.ProducerMetadata
 	for {
-		if err := colexecerror.CatchVectorizedRuntimeError(func() { _ = s.Next() }); err != nil {
+		if err := colexecerror.CatchVectorizedRuntimeError(func() {
+			_, meta := s.Next()
+			// Skip the always-on grunning emission from each worker goroutine.
+			if meta != nil && meta.Metrics == nil {
+				streamingMeta = append(streamingMeta, *meta)
+			}
+		}); err != nil {
 			require.True(t, testutils.IsError(err, expectedErr), err)
 			break
 		}
@@ -239,9 +258,23 @@ func TestUnorderedSynchronizerNoLeaksOnError(t *testing.T) {
 	// properly drain their metadata sources. Notably, the error itself should
 	// not be propagated as metadata (i.e. we don't want it to be duplicated),
 	// but each input should produce a single metadata object.
-	require.Equal(t, len(inputs), len(s.DrainMeta()))
+	require.Equal(t, len(inputs), len(streamingMeta)+len(filterMetricsMeta(s.DrainMeta())))
 	// This is the crux of the test: assert that all inputs have finished.
 	require.Equal(t, len(inputs), int(atomic.LoadUint32(&s.numFinishedInputs)))
+}
+
+// filterMetricsMeta drops the always-on per-goroutine grunning emissions
+// (Metrics-only metadata) so tests that count test-induced metadata don't
+// have to account for the synchronizer's own instrumentation overhead.
+func filterMetricsMeta(meta []execinfrapb.ProducerMetadata) []execinfrapb.ProducerMetadata {
+	filtered := meta[:0]
+	for _, m := range meta {
+		if m.Metrics != nil && m.Err == nil {
+			continue
+		}
+		filtered = append(filtered, m)
+	}
+	return filtered
 }
 
 func BenchmarkParallelUnorderedSynchronizer(b *testing.B) {
@@ -256,12 +289,12 @@ func BenchmarkParallelUnorderedSynchronizer(b *testing.B) {
 	}
 	var wg sync.WaitGroup
 	ctx, cancelFn := context.WithCancel(context.Background())
-	s := NewParallelUnorderedSynchronizer(&execinfra.FlowCtx{Local: true, Gateway: true}, 0 /* processorID */, testMemAcc, inputs, &wg)
+	s := NewParallelUnorderedSynchronizer(&execinfra.FlowCtx{Local: true, Gateway: true}, 0 /* processorID */, testAllocator, typs, inputs, &wg)
 	s.Init(ctx)
 	b.SetBytes(8 * int64(coldata.BatchSize()))
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		s.Next()
+		colexecop.NextNoMeta(s)
 	}
 	b.StopTimer()
 	cancelFn()

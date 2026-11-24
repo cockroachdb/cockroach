@@ -26,6 +26,8 @@ func (op Operation) Result() *Result {
 		return &o.Result
 	case *PutOperation:
 		return &o.Result
+	case *CPutOperation:
+		return &o.Result
 	case *ScanOperation:
 		return &o.Result
 	case *DeleteOperation:
@@ -38,6 +40,8 @@ func (op Operation) Result() *Result {
 		return &o.Result
 	case *BarrierOperation:
 		return &o.Result
+	case *FlushLockTableOperation:
+		return &o.Result
 	case *SplitOperation:
 		return &o.Result
 	case *MergeOperation:
@@ -45,6 +49,8 @@ func (op Operation) Result() *Result {
 	case *ChangeReplicasOperation:
 		return &o.Result
 	case *TransferLeaseOperation:
+		return &o.Result
+	case *ChangeSettingOperation:
 		return &o.Result
 	case *ChangeZoneOperation:
 		return &o.Result
@@ -57,6 +63,20 @@ func (op Operation) Result() *Result {
 	case *SavepointReleaseOperation:
 		return &o.Result
 	case *SavepointRollbackOperation:
+		return &o.Result
+	case *MutateBatchHeaderOperation:
+		return &o.Result
+	case *AddNetworkPartitionOperation:
+		return &o.Result
+	case *RemoveNetworkPartitionOperation:
+		return &o.Result
+	case *StopNodeOperation:
+		return &o.Result
+	case *RestartNodeOperation:
+		return &o.Result
+	case *CrashNodeOperation:
+		return &o.Result
+	case *MvccGCOperation:
 		return &o.Result
 	default:
 		panic(errors.AssertionFailedf(`unknown operation: %T %v`, o, o))
@@ -111,6 +131,14 @@ func formatOps(w *strings.Builder, fctx formatCtx, ops []Operation) {
 	}
 }
 
+func (op Operation) OperationHasResultInBatch() bool {
+	if op.MutateBatchHeader != nil {
+		return false
+	} else {
+		return true
+	}
+}
+
 func (op Operation) String() string {
 	fctx := formatCtx{receiver: `x`, indent: ``}
 	var buf strings.Builder
@@ -124,6 +152,8 @@ func (op Operation) format(w *strings.Builder, fctx formatCtx) {
 		o.format(w, fctx)
 	case *PutOperation:
 		o.format(w, fctx)
+	case *CPutOperation:
+		o.format(w, fctx)
 	case *ScanOperation:
 		o.format(w, fctx)
 	case *DeleteOperation:
@@ -136,6 +166,8 @@ func (op Operation) format(w *strings.Builder, fctx formatCtx) {
 		o.format(w, fctx)
 	case *BarrierOperation:
 		o.format(w, fctx)
+	case *FlushLockTableOperation:
+		o.format(w, fctx)
 	case *SplitOperation:
 		o.format(w, fctx)
 	case *MergeOperation:
@@ -143,6 +175,8 @@ func (op Operation) format(w *strings.Builder, fctx formatCtx) {
 	case *ChangeReplicasOperation:
 		o.format(w, fctx)
 	case *TransferLeaseOperation:
+		o.format(w, fctx)
+	case *ChangeSettingOperation:
 		o.format(w, fctx)
 	case *ChangeZoneOperation:
 		o.format(w, fctx)
@@ -165,23 +199,32 @@ func (op Operation) format(w *strings.Builder, fctx formatCtx) {
 		newFctx := fctx
 		newFctx.indent = fctx.indent + `  `
 		newFctx.receiver = txnName
+
+		txnFuncf := func(fmtStr string, args ...any) {
+			w.WriteString("\n")
+			w.WriteString(newFctx.indent)
+			w.WriteString(newFctx.receiver)
+			fmt.Fprintf(w, fmtStr, args...)
+		}
+
 		w.WriteString(fctx.receiver)
 		fmt.Fprintf(w, `.Txn(ctx, func(ctx context.Context, %s *kv.Txn) error {`, txnName)
-		w.WriteString("\n")
-		w.WriteString(newFctx.indent)
-		w.WriteString(newFctx.receiver)
-		fmt.Fprintf(w, `.SetIsoLevel(isolation.%s)`, o.IsoLevel)
+
+		txnFuncf(`.SetIsoLevel(isolation.%s)`, o.IsoLevel)
+		if o.UserPriority > 0 {
+			txnFuncf(`.SetUserPriority(roachpb.UserPriority(%f))`, float64(o.UserPriority))
+		}
+		txnFuncf(`.SetBufferedWritesEnabled(%v)`, o.BufferedWrites)
+
 		formatOps(w, newFctx, o.Ops)
 		if o.CommitInBatch != nil {
 			newFctx.receiver = `b`
 			o.CommitInBatch.format(w, newFctx)
 			newFctx.receiver = txnName
-			w.WriteString("\n")
-			w.WriteString(newFctx.indent)
-			w.WriteString(newFctx.receiver)
-			w.WriteString(`.CommitInBatch(ctx, b)`)
+			txnFuncf(`.CommitInBatch(ctx, b)`)
 			o.CommitInBatch.Result.format(w)
 		}
+
 		w.WriteString("\n")
 		w.WriteString(newFctx.indent)
 		switch o.Type {
@@ -204,6 +247,20 @@ func (op Operation) format(w *strings.Builder, fctx formatCtx) {
 	case *SavepointReleaseOperation:
 		o.format(w, fctx)
 	case *SavepointRollbackOperation:
+		o.format(w, fctx)
+	case *MutateBatchHeaderOperation:
+		o.format(w, fctx)
+	case *AddNetworkPartitionOperation:
+		o.format(w, fctx)
+	case *RemoveNetworkPartitionOperation:
+		o.format(w, fctx)
+	case *StopNodeOperation:
+		o.format(w, fctx)
+	case *RestartNodeOperation:
+		o.format(w, fctx)
+	case *CrashNodeOperation:
+		o.format(w, fctx)
+	case *MvccGCOperation:
 		o.format(w, fctx)
 	default:
 		fmt.Fprintf(w, "%v", op.GetValue())
@@ -236,7 +293,20 @@ func (op GetOperation) format(w *strings.Builder, fctx formatCtx) {
 }
 
 func (op PutOperation) format(w *strings.Builder, fctx formatCtx) {
-	fmt.Fprintf(w, `%s.Put(%s%s, sv(%d))`, fctx.receiver, fctx.maybeCtx(), fmtKey(op.Key), op.Seq)
+	verb := "Put"
+	if op.MustAcquireExclusiveLock {
+		verb = "PutMustAcquireExclusiveLock"
+	}
+	fmt.Fprintf(w, `%s.%s(%s%s, sv(%d))`, fctx.receiver, verb, fctx.maybeCtx(), fmtKey(op.Key), op.Seq)
+	op.Result.format(w)
+}
+
+func (op CPutOperation) format(w *strings.Builder, fctx formatCtx) {
+	verb := "CPut"
+	if op.AllowIfDoesNotExist {
+		verb = "CPutAllowIfDoesNotExist"
+	}
+	fmt.Fprintf(w, `%s.%s(%s%s, sv(%d), exp(%s))`, fctx.receiver, verb, fctx.maybeCtx(), fmtKey(op.Key), op.Seq, op.ExpVal)
 	op.Result.format(w)
 }
 
@@ -248,6 +318,12 @@ func sv(seq kvnemesisutil.Seq) string {
 // Value returns the value written by this put. This is a function of the
 // sequence number.
 func (op PutOperation) Value() string {
+	return sv(op.Seq)
+}
+
+// Value returns the value written by this cput. This is a function of the
+// sequence number.
+func (op CPutOperation) Value() string {
 	return sv(op.Seq)
 }
 
@@ -281,7 +357,11 @@ func (op ScanOperation) format(w *strings.Builder, fctx formatCtx) {
 }
 
 func (op DeleteOperation) format(w *strings.Builder, fctx formatCtx) {
-	fmt.Fprintf(w, `%s.Del(%s%s /* @%s */)`, fctx.receiver, fctx.maybeCtx(), fmtKey(op.Key), op.Seq)
+	verb := "Del"
+	if op.MustAcquireExclusiveLock {
+		verb = "DelMustAcquireExclusiveLock"
+	}
+	fmt.Fprintf(w, `%s.%s(%s%s /* @%s */)`, fctx.receiver, verb, fctx.maybeCtx(), fmtKey(op.Key), op.Seq)
 	op.Result.format(w)
 }
 
@@ -320,7 +400,7 @@ func (op AddSSTableOperation) format(w *strings.Builder, fctx formatCtx) {
 		if iter.RangeKeyChanged() {
 			hasPoint, hasRange := iter.HasPointAndRange()
 			if hasRange {
-				for _, rkv := range iter.RangeKeys().AsRangeKeyValues() {
+				for rkv := range iter.RangeKeys().AsRangeKeyValues() {
 					mvccValue, err := storage.DecodeMVCCValue(rkv.Value)
 					if err != nil {
 						panic(err)
@@ -360,6 +440,11 @@ func (op BarrierOperation) format(w *strings.Builder, fctx formatCtx) {
 	op.Result.format(w)
 }
 
+func (op FlushLockTableOperation) format(w *strings.Builder, fctx formatCtx) {
+	fmt.Fprintf(w, `%s.FlushLockTable(ctx, %s, %s)`, fctx.receiver, fmtKey(op.Key), fmtKey(op.EndKey))
+	op.Result.format(w)
+}
+
 func (op SplitOperation) format(w *strings.Builder, fctx formatCtx) {
 	fmt.Fprintf(w, `%s.AdminSplit(ctx, %s, hlc.MaxTimestamp)`, fctx.receiver, fmtKey(op.Key))
 	op.Result.format(w)
@@ -393,6 +478,18 @@ func (op TransferLeaseOperation) format(w *strings.Builder, fctx formatCtx) {
 	op.Result.format(w)
 }
 
+func (op ChangeSettingOperation) format(w *strings.Builder, fctx formatCtx) {
+	switch op.Type {
+	case ChangeSettingType_SetLeaseType:
+		fmt.Fprintf(w, `env.SetClusterSetting(ctx, %s, %s)`, op.Type, op.LeaseType)
+	case ChangeSettingType_ToggleVirtualIntentResolution:
+		fmt.Fprintf(w, `env.SetClusterSetting(ctx, %s, %v)`, op.Type, op.VirEnabled)
+	default:
+		panic(errors.AssertionFailedf(`unknown ChangeSettingType: %v`, op.Type))
+	}
+	op.Result.format(w)
+}
+
 func (op ChangeZoneOperation) format(w *strings.Builder, fctx formatCtx) {
 	fmt.Fprintf(w, `env.UpdateZoneConfig(ctx, %s)`, op.Type)
 	op.Result.format(w)
@@ -410,6 +507,51 @@ func (op SavepointReleaseOperation) format(w *strings.Builder, fctx formatCtx) {
 
 func (op SavepointRollbackOperation) format(w *strings.Builder, fctx formatCtx) {
 	fmt.Fprintf(w, `%s.RollbackSavepoint(ctx, %d)`, fctx.receiver, int(op.ID))
+	op.Result.format(w)
+}
+
+func (op MutateBatchHeaderOperation) format(w *strings.Builder, fctx formatCtx) {
+	if op.TargetBytes > 0 {
+		fmt.Fprintf(w, `%s.Header.TargetBytes = %d // MutateBatchHeaderOperation`, fctx.receiver, op.TargetBytes)
+	}
+	if op.MaxSpanRequestKeys > 0 {
+		fmt.Fprintf(w, `%s.Header.MaxSpanRequestKeys = %d // MutateBatchHeaderOperation`, fctx.receiver, op.MaxSpanRequestKeys)
+	}
+}
+
+func (op AddNetworkPartitionOperation) format(w *strings.Builder, fctx formatCtx) {
+	fmt.Fprintf(
+		w, `%s.AddNetworkPartition(fromNode=%d, toNode=%d)`, fctx.receiver, int(op.FromNode),
+		int(op.ToNode),
+	)
+	op.Result.format(w)
+}
+
+func (op RemoveNetworkPartitionOperation) format(w *strings.Builder, fctx formatCtx) {
+	fmt.Fprintf(
+		w, `%s.RemoveNetworkPartition(fromNode=%d, toNode=%d)`, fctx.receiver, int(op.FromNode),
+		int(op.ToNode),
+	)
+	op.Result.format(w)
+}
+
+func (op StopNodeOperation) format(w *strings.Builder, fctx formatCtx) {
+	fmt.Fprintf(w, `env.ServerController.StopNode(%d)`, int(op.NodeId))
+	op.Result.format(w)
+}
+
+func (op RestartNodeOperation) format(w *strings.Builder, fctx formatCtx) {
+	fmt.Fprintf(w, `env.ServerController.RestartNode(%d)`, int(op.NodeId))
+	op.Result.format(w)
+}
+
+func (op CrashNodeOperation) format(w *strings.Builder, fctx formatCtx) {
+	fmt.Fprintf(w, `env.ServerController.CrashNode(%d)`, int(op.NodeId))
+	op.Result.format(w)
+}
+
+func (op MvccGCOperation) format(w *strings.Builder, _ formatCtx) {
+	fmt.Fprintf(w, `env.MvccGCController.MvccGCRangeForKey(%s)`, fmtKey(op.Key))
 	op.Result.format(w)
 }
 

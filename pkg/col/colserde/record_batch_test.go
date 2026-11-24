@@ -186,7 +186,7 @@ func randomDataFromType(rng *rand.Rand, t *types.T, n int, nullProbability float
 		for i := range data {
 			delta := rng.Int63()
 			ts := now.Add(time.Duration(delta))
-			data[i], err = ts.MarshalBinary()
+			data[i], err = ts.AppendBinary(nil /* b */)
 			if err != nil {
 				panic(err)
 			}

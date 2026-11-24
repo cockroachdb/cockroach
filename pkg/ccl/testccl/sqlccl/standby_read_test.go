@@ -10,16 +10,12 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
-	"github.com/cockroachdb/cockroach/pkg/sql/catalog/replication"
-	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/testcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/cockroachdb/errors"
 	"github.com/stretchr/testify/require"
 )
 
@@ -73,33 +69,14 @@ func TestStandbyRead(t *testing.T) {
 
 	srcRunner := sqlutils.MakeSQLRunner(srcDB)
 	dstRunner := sqlutils.MakeSQLRunner(dstDB)
-	dstInternal := dstTenant.InternalDB().(*sql.InternalDB)
 
 	dstRunner.Exec(t, `SET CLUSTER SETTING sql.defaults.distsql = always`)
 	dstRunner.Exec(t, `SET distsql = always`)
 
-	waitForReplication := func() {
-		now := ts.Clock().Now()
-		err := replication.SetupOrAdvanceStandbyReaderCatalog(
-			ctx, serverutils.TestTenantID(), now, dstInternal, dstTenant.ClusterSettings(),
-		)
-		if err != nil {
-			t.Fatal(err)
-		}
-		now = ts.Clock().Now()
-		lm := dstTenant.LeaseManager().(*lease.Manager)
-		testutils.SucceedsSoon(t, func() error {
-			if lm.GetSafeReplicationTS().Less(now) {
-				return errors.AssertionFailedf("waiting for descriptor close timestamp to catch up")
-			}
-			return nil
-		})
-	}
-
 	for _, tc := range testcases {
 		var runner *sqlutils.SQLRunner
 		if tc.standby {
-			waitForReplication()
+			testcluster.WaitForStandbyTenantReplication(t, ctx, ts.Clock(), dstTenant)
 			runner = dstRunner
 		} else {
 			runner = srcRunner

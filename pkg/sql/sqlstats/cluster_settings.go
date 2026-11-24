@@ -29,6 +29,23 @@ var TxnStatsNumStmtFingerprintIDsToRecord = settings.RegisterIntSetting(
 	settings.PositiveInt,
 )
 
+// TxnStatsNumStmtFingerprintStatsToRecord limits the number of recorded
+// statement statistics that may be associated with transaction statistics for
+// a single transaction. If the number of statements executed exceeds this
+// value, SQL Stats will force the ingester to flush the buffered stats. These
+// stats will not be associated with the current transaction. SQL Stats will
+// continue to buffer statements until this limit is reached again. In the case
+// that it isn't reached again, the buffered statements will be flushed when
+// the transaction is committed, and they will be associated with the
+// transaction.
+var TxnStatsNumStmtFingerprintStatsToRecord = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"sql.metrics.transaction_details.max_statement_stats",
+	"max number of statement statistics that may be associated with transaction statistics",
+	100_000,
+	settings.PositiveInt,
+)
+
 // TxnStatsEnable determines whether to collect per-application transaction
 // statistics.
 // TODO(117690): Unify StmtStatsEnable and TxnStatsEnable into a single cluster setting.
@@ -55,25 +72,6 @@ var DumpStmtStatsToLogBeforeReset = settings.RegisterBoolSetting(
 	"dump collected statement statistics to node logs when periodically cleared",
 	false,
 	settings.WithName("sql.metrics.statement_details.dump_to_logs.enabled"),
-	settings.WithPublic)
-
-// SampleLogicalPlans specifies whether we periodically sample the logical plan
-// for each fingerprint.
-var SampleLogicalPlans = settings.RegisterBoolSetting(
-	settings.ApplicationLevel,
-	"sql.metrics.statement_details.plan_collection.enabled",
-	"periodically save a logical plan for each fingerprint",
-	false,
-	settings.WithPublic)
-
-// LogicalPlanCollectionPeriod specifies the interval between collections of
-// logical plans for each fingerprint.
-var LogicalPlanCollectionPeriod = settings.RegisterDurationSetting(
-	settings.ApplicationLevel,
-	"sql.metrics.statement_details.plan_collection.period",
-	"the time until a new logical plan is collected",
-	5*time.Minute,
-	settings.NonNegativeDuration,
 	settings.WithPublic)
 
 // MaxMemSQLStatsStmtFingerprints specifies the maximum of unique statement
@@ -111,41 +109,6 @@ var MaxMemReportedSQLStatsTxnFingerprints = settings.RegisterIntSetting(
 	"the maximum number of reported transaction fingerprints stored in memory",
 	100000,
 	settings.WithPublic)
-
-// MaxSQLStatsStmtFingerprintsPerExplicitTxn specifies the maximum of unique statement
-// fingerprints we store for each explicit transaction.
-//
-// This limit is introduced because when SQL Stats starts to record statement
-// statistics for statements inside an explicit transaction, the transaction
-// fingerprint ID is not known until the transaction is finished. SQL Stats
-// holds those statement statistics in a temporary container until the explicit
-// transaction finishes, then SQL Stats will upsert the statistics held in the
-// temporary container into its in-memory store. However, the temporary
-// container cannot inherit the node-level statement statistics fingerprint limit
-// (that is: sql.metrics.max_mem_stmt_fingerprints). This is because if we count
-// statement fingerprints inside the temporary container towards the total
-// fingerprint count, we would be over-counting the statement fingerprint.
-//
-// For example: let's suppose we execute the following transaction:
-// * BEGIN; SELECT 1; SELECT 1, 1; COMMIT;
-// This results in 4 statement fingerprints and 1 txn fingerprint.
-// Let's suppose currently our statement fingerprint limit is 6.
-// If we are to execute the same statement again:
-//   - BEGIN; <- this increments current statement fingerprint count to 5
-//     since we hold statement stats for explicit transaction in a
-//     temporary container before we can perform the upsert.
-//   - SELECT 1; <- this increments the count to 6
-//   - SELECT 1, 1; <- ERR: this causes the count to exceed our stmt fingerprint
-//     limit before we can perform the upsert.
-//
-// The total amount of memory consumed will still be constrained by the
-// top-level memory monitor created for SQL Stats.
-var MaxSQLStatsStmtFingerprintsPerExplicitTxn = settings.RegisterIntSetting(
-	settings.ApplicationLevel,
-	"sql.metrics.max_stmt_fingerprints_per_explicit_txn",
-	"the maximum number of statement fingerprints stored per explicit transaction",
-	2000,
-)
 
 // MaxSQLStatReset is the cluster setting that controls at what interval SQL
 // statement statistics must be flushed within.
@@ -185,3 +148,16 @@ var GatewayNodeEnabled = settings.RegisterBoolSetting(
 		"be stored as 0.",
 	false,
 	settings.WithPublic)
+
+// SQLStatsAggregationInterval is the cluster setting that controls the
+// aggregation interval for SQL execution statistics. Stats are bucketed
+// into windows of this duration at record time.
+var SQLStatsAggregationInterval = settings.RegisterDurationSetting(
+	settings.ApplicationLevel,
+	"sql.stats.aggregation.interval",
+	"the interval at which SQL execution statistics are aggregated into "+
+		"time windows; this value must be greater than or equal to "+
+		"sql.stats.flush.interval",
+	time.Hour,
+	settings.NonNegativeDurationWithMaximum(time.Hour*24),
+)

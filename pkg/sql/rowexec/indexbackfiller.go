@@ -7,13 +7,18 @@ package rowexec
 
 import (
 	"context"
+	"fmt"
+	"runtime"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/kv/bulk"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvserverbase"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
+	"github.com/cockroachdb/cockroach/pkg/sql/bulksst"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfra"
 	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
@@ -22,22 +27,24 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowenc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
+	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/logtags"
+	gogotypes "github.com/gogo/protobuf/types"
 )
 
 // indexBackfiller is a processor that backfills new indexes.
 type indexBackfiller struct {
 	backfill.IndexBackfiller
-
-	adder kvserverbase.BulkAdder
 
 	desc catalog.TableDescriptor
 
@@ -47,19 +54,53 @@ type indexBackfiller struct {
 	processorID int32
 
 	filter backfill.MutationFilter
+
+	bulkAdderFactory indexBackfillBulkAdderFactory
 }
 
 var _ execinfra.Processor = &indexBackfiller{}
 
 var backfillerBufferSize = settings.RegisterByteSizeSetting(
 	settings.ApplicationLevel,
-	"schemachanger.backfiller.buffer_size", "the initial size of the BulkAdder buffer handling index backfills", 32<<20,
+	"schemachanger.backfiller.buffer_size",
+	"the initial size of the BulkAdder buffer handling index backfills",
+	32<<20,
 )
 
 var backfillerMaxBufferSize = settings.RegisterByteSizeSetting(
 	settings.ApplicationLevel,
-	"schemachanger.backfiller.max_buffer_size", "the maximum size of the BulkAdder buffer handling index backfills", 512<<20,
+	"schemachanger.backfiller.max_buffer_size",
+	"the maximum size of the BulkAdder buffer handling index backfills",
+	512<<20,
 )
+
+// indexBackfillIngestConcurrency controls the number of goroutines for the
+// ingestion step of the index backfiller. When set to 0 (auto), uses
+// GOMAXPROCS/2 for distributed merge, or 2 for the legacy path.
+// When set to a positive value, uses that explicit value.
+var indexBackfillIngestConcurrency = settings.RegisterIntSetting(
+	settings.ApplicationLevel,
+	"bulkio.index_backfill.ingest_concurrency",
+	"the number of goroutines to use for bulk adding index entries: "+
+		"0 assigns a reasonable default based on CPU count for distributed merge "+
+		"or 2 for the legacy path, >0 assigns the setting value",
+	0, // auto mode by default
+	settings.NonNegativeInt,
+)
+
+var indexBackfillElasticCPUControlEnabled = settings.RegisterBoolSetting(
+	settings.ApplicationLevel,
+	"bulkio.index_backfill.elastic_control.enabled",
+	"determines whether index backfill operations integrate with elastic CPU control",
+	true,
+)
+
+// indexBackfillBulkAdderFactory mirrors kvserverbase.BulkAdderFactory but is
+// injected so tests can swap in fakes and future sinks can reuse the backfiller
+// without referencing execinfra.ServerConfig directly.
+type indexBackfillBulkAdderFactory func(
+	ctx context.Context, writeAsOf hlc.Timestamp, opts kvserverbase.BulkAdderOptions,
+) (kvserverbase.BulkAdder, error)
 
 func newIndexBackfiller(
 	ctx context.Context,
@@ -67,18 +108,25 @@ func newIndexBackfiller(
 	processorID int32,
 	spec execinfrapb.BackfillerSpec,
 ) (*indexBackfiller, error) {
-	indexBackfillerMon := execinfra.NewMonitor(ctx, flowCtx.Cfg.BackfillerMonitor,
-		"index-backfill-mon")
+	indexBackfillerMon := execinfra.NewMonitor(
+		ctx, flowCtx.Cfg.BackfillerMonitor, mon.MakeName("index-backfill-mon"),
+	)
 	ib := &indexBackfiller{
 		desc:        flowCtx.TableDescriptor(ctx, &spec.Table),
 		spec:        spec,
 		flowCtx:     flowCtx,
 		processorID: processorID,
 		filter:      backfill.IndexMutationFilter,
+		bulkAdderFactory: func(
+			ctx context.Context, writeAsOf hlc.Timestamp, opts kvserverbase.BulkAdderOptions,
+		) (kvserverbase.BulkAdder, error) {
+			return flowCtx.Cfg.BulkAdder(ctx, flowCtx.Cfg.DB.KV(), writeAsOf, opts)
+		},
 	}
 
-	if err := ib.IndexBackfiller.InitForDistributedUse(ctx, flowCtx, ib.desc,
-		ib.spec.IndexesToBackfill, indexBackfillerMon); err != nil {
+	if err := ib.IndexBackfiller.InitForDistributedUse(
+		ctx, flowCtx, ib.desc, ib.spec.IndexesToBackfill, ib.spec.SourceIndexID, indexBackfillerMon,
+	); err != nil {
 		return nil, err
 	}
 
@@ -119,21 +167,24 @@ func (ib *indexBackfiller) constructIndexEntries(
 		todo := ib.spec.Spans[i]
 		for todo.Key != nil {
 			startKey := todo.Key
-			readAsOf := ib.spec.ReadAsOf
-			if readAsOf.IsEmpty() { // old gateway
+			// Pick an arbitrary timestamp close to now as the read timestamp for the
+			// backfill. It's safe to use this timestamp to read even if we've
+			// partially backfilled at an earlier timestamp because other writing
+			// transactions have been writing at the appropriate timestamps
+			// in-between.
+			readAsOf := ib.flowCtx.Cfg.DB.KV().Clock().Now().AddDuration(-30 * time.Second)
+			if readAsOf.Less(ib.spec.WriteAsOf) {
 				readAsOf = ib.spec.WriteAsOf
 			}
-			todo.Key, entries, memUsedBuildingBatch, err = ib.buildIndexEntryBatch(ctx, todo,
-				readAsOf)
+			todo.Key, entries, memUsedBuildingBatch, err = ib.buildIndexEntryBatch(ctx, todo, readAsOf)
 			if err != nil {
 				return err
 			}
 
 			// Identify the Span for which we have constructed index entries. This is
 			// used for reporting progress and updating the job details.
-			completedSpan := ib.spec.Spans[i]
+			completedSpan := roachpb.Span{Key: startKey, EndKey: ib.spec.Spans[i].EndKey}
 			if todo.Key != nil {
-				completedSpan.Key = startKey
 				completedSpan.EndKey = todo.Key
 			}
 
@@ -160,6 +211,121 @@ func (ib *indexBackfiller) constructIndexEntries(
 	return nil
 }
 
+func (ib *indexBackfiller) maybeReencodeAndWriteVectorIndexEntry(
+	ctx context.Context, tmpEntry *rowenc.IndexEntry, indexEntry *rowenc.IndexEntry,
+) (bool, error) {
+	indexID, _, err := rowenc.DecodeIndexKeyPrefix(ib.flowCtx.EvalCtx.Codec, ib.desc.GetID(), indexEntry.Key)
+	if err != nil {
+		return false, err
+	}
+
+	vih, ok := ib.VectorIndexes[indexID]
+	if !ok {
+		return false, nil
+	}
+
+	// Initialize the tmpEntry. This will store the input entry that we are encoding
+	// so that we can overwrite the indexEntry we were given with the output
+	// encoding. This allows us to preserve the initial template indexEntry across
+	// transaction retries.
+	if tmpEntry.Key == nil {
+		tmpEntry.Key = make(roachpb.Key, len(indexEntry.Key))
+		tmpEntry.Value.RawBytes = make([]byte, len(indexEntry.Value.RawBytes))
+	}
+	tmpEntry.Key = append(tmpEntry.Key[:0], indexEntry.Key...)
+	tmpEntry.Value.RawBytes = append(tmpEntry.Value.RawBytes[:0], indexEntry.Value.RawBytes...)
+	tmpEntry.Family = indexEntry.Family
+
+	firstAttempt := true
+	err = ib.flowCtx.Cfg.DB.Txn(ctx, func(ctx context.Context, txn isql.Txn) error {
+		// If the first attempt failed, we need to provide a new buffer to KV for
+		// subsequent attempts because KV might still be using the previous buffer.
+		var entryBuffer *rowenc.IndexEntry
+		if firstAttempt {
+			entryBuffer = indexEntry
+			firstAttempt = false
+		} else {
+			entryBuffer = &rowenc.IndexEntry{
+				Key: make(roachpb.Key, len(tmpEntry.Key)),
+				Value: roachpb.Value{
+					RawBytes: make([]byte, len(tmpEntry.Value.RawBytes)),
+				},
+				Family: tmpEntry.Family,
+			}
+		}
+		entry, err := vih.ReEncodeVector(ctx, txn.KV(), *tmpEntry, entryBuffer)
+		if err != nil {
+			return err
+		}
+
+		if ib.flowCtx.Cfg.TestingKnobs.RunDuringReencodeVectorIndexEntry != nil {
+			err = ib.flowCtx.Cfg.TestingKnobs.RunDuringReencodeVectorIndexEntry(txn.KV())
+			if err != nil {
+				return err
+			}
+		}
+
+		b := txn.KV().NewBatch()
+		// If the backfill job was interrupted and restarted, we may redo work, so allow
+		// that we may see duplicate keys here.
+		b.CPutAllowingIfNotExists(entry.Key, &entry.Value, entry.Value.TagAndDataBytes())
+		return txn.KV().Run(ctx, b)
+	})
+	if err != nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
+// makeIndexBackfillSink materializes whatever sink the current backfill should
+// use (legacy BulkAdder or distributed-merge sink). The choice is driven by
+// execinfrapb.BackfillerSpec.
+func (ib *indexBackfiller) makeIndexBackfillSink(ctx context.Context) (bulksst.BulkSink, error) {
+	if ib.spec.UseDistributedMergeSink {
+		// Construct the full nodelocal URI using this processor's node ID. The spec
+		// stores just the path portion so that each processor writes to its own
+		// node's local storage.
+		nodeID := ib.flowCtx.NodeID.SQLInstanceID()
+		prefix := fmt.Sprintf("nodelocal://%d/%s", nodeID, ib.spec.DistributedMergeFilePrefix)
+
+		checkDuplicates := ib.ContainsUniqueIndex()
+		return bulksst.NewSSTSink(
+			ctx,
+			ib.flowCtx.Cfg.Settings,
+			ib.flowCtx.Cfg.ExternalStorageFromURI,
+			ib.flowCtx.Cfg.DB.KV().Clock(),
+			prefix,
+			nodeID,
+			ib.spec.WriteAsOf,
+			ib.processorID,
+			checkDuplicates,
+		)
+	}
+
+	minBufferSize := backfillerBufferSize.Get(&ib.flowCtx.Cfg.Settings.SV)
+	maxBufferSize := func() int64 { return backfillerMaxBufferSize.Get(&ib.flowCtx.Cfg.Settings.SV) }
+	opts := kvserverbase.BulkAdderOptions{
+		Name:                     ib.desc.GetName() + " backfill",
+		MinBufferSize:            minBufferSize,
+		MaxBufferSize:            maxBufferSize,
+		SkipDuplicates:           ib.ContainsInvertedIndex(),
+		BatchTimestamp:           ib.spec.WriteAsOf,
+		InitialSplitsIfUnordered: int(ib.spec.InitialSplits),
+		WriteAtBatchTimestamp:    ib.spec.WriteAtBatchTimestamp,
+	}
+
+	adderFactory := ib.bulkAdderFactory
+	if adderFactory == nil {
+		return nil, errors.AssertionFailedf("index backfiller bulk adder factory must be configured")
+	}
+	adder, err := adderFactory(ctx, ib.spec.WriteAsOf, opts)
+	if err != nil {
+		return nil, err
+	}
+	return &bulksst.BulkAdderSink{BulkAdder: adder}, nil
+}
+
 // ingestIndexEntries adds the batches of built index entries to the buffering
 // adder and reports progress back to the coordinator node.
 func (ib *indexBackfiller) ingestIndexEntries(
@@ -170,23 +336,11 @@ func (ib *indexBackfiller) ingestIndexEntries(
 	ctx, span := tracing.ChildSpan(ctx, "ingestIndexEntries")
 	defer span.Finish()
 
-	minBufferSize := backfillerBufferSize.Get(&ib.flowCtx.Cfg.Settings.SV)
-	maxBufferSize := func() int64 { return backfillerMaxBufferSize.Get(&ib.flowCtx.Cfg.Settings.SV) }
-	opts := kvserverbase.BulkAdderOptions{
-		Name:                     ib.desc.GetName() + " backfill",
-		MinBufferSize:            minBufferSize,
-		MaxBufferSize:            maxBufferSize,
-		SkipDuplicates:           ib.ContainsInvertedIndex(),
-		BatchTimestamp:           ib.spec.ReadAsOf,
-		InitialSplitsIfUnordered: int(ib.spec.InitialSplits),
-		WriteAtBatchTimestamp:    ib.spec.WriteAtBatchTimestamp,
-	}
-	adder, err := ib.flowCtx.Cfg.BulkAdder(ctx, ib.flowCtx.Cfg.DB.KV(), ib.spec.WriteAsOf, opts)
+	sink, err := ib.makeIndexBackfillSink(ctx)
 	if err != nil {
 		return err
 	}
-	ib.adder = adder
-	defer ib.adder.Close(ctx)
+	defer sink.Close(ctx)
 
 	// Synchronizes read and write access on completedSpans which is updated on a
 	// BulkAdder flush, but is read when progress is being sent back to the
@@ -195,26 +349,46 @@ func (ib *indexBackfiller) ingestIndexEntries(
 		syncutil.Mutex
 		completedSpans []roachpb.Span
 		addedSpans     []roachpb.Span
+		manifests      []jobspb.BulkSSTManifest
 	}{}
 
 	// When the bulk adder flushes, the spans which were previously marked as
 	// "added" can now be considered "completed", and be sent back to the
 	// coordinator node as part of the next progress report.
-	adder.SetOnFlush(func(_ kvpb.BulkOpSummary) {
+	flushAddedSpansAndSSTManifests := func(_ kvpb.BulkOpSummary) {
 		mu.Lock()
 		defer mu.Unlock()
 		mu.completedSpans = append(mu.completedSpans, mu.addedSpans...)
 		mu.addedSpans = nil
-	})
+		mu.manifests = append(mu.manifests, sink.ConsumeFlushManifests()...)
+	}
+	sink.SetOnFlush(flushAddedSpansAndSSTManifests)
 
-	pushProgress := func() {
+	pushProgress := func() error {
 		mu.Lock()
 		var prog execinfrapb.RemoteProducerMetadata_BulkProcessorProgress
 		prog.CompletedSpans = append(prog.CompletedSpans, mu.completedSpans...)
 		mu.completedSpans = nil
+		manifests := append([]jobspb.BulkSSTManifest(nil), mu.manifests...)
+		mu.manifests = nil
 		mu.Unlock()
 
+		if len(prog.CompletedSpans) == 0 && len(manifests) == 0 {
+			return nil
+		}
+		if len(manifests) > 0 {
+			progress := execinfrapb.BulkMapProgress{
+				SSTManifests: manifests,
+			}
+			any, err := gogotypes.MarshalAny(&progress)
+			if err != nil {
+				return err
+			}
+			prog.ProgressDetails = *any
+		}
+
 		progCh <- prog
+		return nil
 	}
 
 	// stopProgress will be closed when there is no more progress to report.
@@ -231,7 +405,10 @@ func (ib *indexBackfiller) ingestIndexEntries(
 			case <-stopProgress:
 				return nil
 			case <-tick.C:
-				pushProgress()
+				if err := pushProgress(); err != nil {
+					// Log the error but keep going. We don't want to fail the operation.
+					log.Dev.Warningf(ctx, "failed to push progress: %v", err)
+				}
 			}
 		}
 	})
@@ -239,9 +416,36 @@ func (ib *indexBackfiller) ingestIndexEntries(
 	g.GoCtx(func(ctx context.Context) error {
 		defer close(stopProgress)
 
+		// Create a pacer for admission control for index entry processing.
+		pacer := bulk.NewCPUPacer(ctx, ib.flowCtx.Cfg.DB.KV(), indexBackfillElasticCPUControlEnabled)
+		defer pacer.Close()
+
+		var vectorInputEntry rowenc.IndexEntry
 		for indexBatch := range indexEntryCh {
+			addedToVectorIndex := false
 			for _, indexEntry := range indexBatch.indexEntries {
-				if err := ib.adder.Add(ctx, indexEntry.Key, indexEntry.Value.RawBytes); err != nil {
+				// Pace the admission control before processing each index entry.
+				if _, err := pacer.Pace(ctx); err != nil {
+					return err
+				}
+
+				// If there is at least one vector index being written, we need to check to see
+				// if this IndexEntry is going to a vector index and then re-encode it for that
+				// index if so.
+				//
+				// TODO(mw5h): batch up multiple index entries into a single batch.
+				// As is, we insert a single vector per batch, which is very slow.
+				if len(ib.VectorIndexes) > 0 {
+					isVectorIndex, err := ib.maybeReencodeAndWriteVectorIndexEntry(ctx, &vectorInputEntry, &indexEntry)
+					if err != nil {
+						return ib.wrapDupError(ctx, err)
+					} else if isVectorIndex {
+						addedToVectorIndex = true
+						continue
+					}
+				}
+
+				if err := sink.Add(ctx, indexEntry.Key, indexEntry.Value.RawBytes); err != nil {
 					return ib.wrapDupError(ctx, err)
 				}
 			}
@@ -252,6 +456,12 @@ func (ib *indexBackfiller) ingestIndexEntries(
 			mu.Lock()
 			mu.addedSpans = append(mu.addedSpans, indexBatch.completedSpan)
 			mu.Unlock()
+			// Vector indexes don't add to the bulk adder and take a long time to add
+			// entries, so flush progress manually after every indexBatch is processed
+			// that contained vector index entries.
+			if addedToVectorIndex {
+				flushAddedSpansAndSSTManifests(kvpb.BulkOpSummary{})
+			}
 
 			// After the index KVs have been copied to the underlying BulkAdder, we can
 			// free the memory which was accounted when building the index entries of the
@@ -261,10 +471,12 @@ func (ib *indexBackfiller) ingestIndexEntries(
 
 			knobs := &ib.flowCtx.Cfg.TestingKnobs
 			if knobs.BulkAdderFlushesEveryBatch {
-				if err := ib.adder.Flush(ctx); err != nil {
+				if err := sink.Flush(ctx); err != nil {
 					return ib.wrapDupError(ctx, err)
 				}
-				pushProgress()
+				if err := pushProgress(); err != nil {
+					return err
+				}
 			}
 
 			if knobs.RunAfterBackfillChunk != nil {
@@ -282,13 +494,13 @@ func (ib *indexBackfiller) ingestIndexEntries(
 	if err := g.Wait(); err != nil {
 		return err
 	}
-
-	if err := ib.adder.Flush(ctx); err != nil {
+	if err := sink.Flush(ctx); err != nil {
 		return ib.wrapDupError(ctx, err)
 	}
-
 	// Push the final set of completed spans as progress.
-	pushProgress()
+	if err := pushProgress(); err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -296,8 +508,20 @@ func (ib *indexBackfiller) ingestIndexEntries(
 func (ib *indexBackfiller) runBackfill(
 	ctx context.Context, progCh chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress,
 ) error {
+	const indexEntriesChBufferSize = 10
+	ingestConcurrency := indexBackfillIngestConcurrency.Get(&ib.flowCtx.Cfg.Settings.SV)
+	if ingestConcurrency == 0 {
+		if ib.spec.UseDistributedMergeSink {
+			// Auto mode for distributed merge: scale with CPU count.
+			ingestConcurrency = max(1, int64(runtime.GOMAXPROCS(0)/2))
+		} else {
+			// Auto mode for legacy path: use historic default.
+			ingestConcurrency = 2
+		}
+	}
+
 	// Used to send index entries to the KV layer.
-	indexEntriesCh := make(chan indexEntryBatch, 10)
+	indexEntriesCh := make(chan indexEntryBatch, indexEntriesChBufferSize)
 
 	// This group holds the go routines that are responsible for producing index
 	// entries and ingesting the KVs into storage.
@@ -315,14 +539,18 @@ func (ib *indexBackfiller) runBackfill(
 		return nil
 	})
 
-	// Ingest the index entries that are emitted to the chan.
-	group.GoCtx(func(ctx context.Context) error {
-		err := ib.ingestIndexEntries(ctx, indexEntriesCh, progCh)
-		if err != nil {
-			return errors.Wrap(err, "failed to ingest index entries during backfill")
-		}
-		return nil
-	})
+	// Ingest the index entries that are emitted to the chan. We use multiple
+	// goroutines since ingestion is mostly I/O bound, making it easier to
+	// perform the computational work concurrently.
+	for range ingestConcurrency {
+		group.GoCtx(func(ctx context.Context) error {
+			err := ib.ingestIndexEntries(ctx, indexEntriesCh, progCh)
+			if err != nil {
+				return errors.Wrap(err, "failed to ingest index entries during backfill")
+			}
+			return nil
+		})
+	}
 
 	if err := group.Wait(); err != nil {
 		return err
@@ -333,7 +561,6 @@ func (ib *indexBackfiller) runBackfill(
 
 func (ib *indexBackfiller) Run(ctx context.Context, output execinfra.RowReceiver) {
 	opName := "indexBackfillerProcessor"
-	ctx = logtags.AddTag(ctx, "job", ib.spec.JobID)
 	ctx = logtags.AddTag(ctx, opName, int(ib.spec.Table.ID))
 	ctx, span := execinfra.ProcessorSpan(ctx, ib.flowCtx, opName, ib.processorID)
 	defer span.Finish()
@@ -343,12 +570,21 @@ func (ib *indexBackfiller) Run(ctx context.Context, output execinfra.RowReceiver
 
 	progCh := make(chan execinfrapb.RemoteProducerMetadata_BulkProcessorProgress)
 	var err error
-	// We don't have to worry about this go routine leaking because next we loop
-	// over progCh which is closed only after the go routine returns.
-	go func() {
+	// Launch via the stopper so that any panic in runBackfill (or a panic
+	// re-thrown from a ctxgroup worker via Wait) is recovered and reported to
+	// Sentry by the stopper's recover wrapper before it tears down the
+	// process. We don't have to worry about the goroutine leaking because next
+	// we loop over progCh, which is closed only after the goroutine returns.
+	if startErr := ib.flowCtx.Stopper().RunAsyncTaskEx(ctx, stop.TaskOpts{
+		TaskName: "indexBackfiller-runBackfill",
+		SpanOpt:  stop.ChildSpan,
+	}, func(ctx context.Context) {
 		defer close(progCh)
 		err = ib.runBackfill(ctx, progCh)
-	}()
+	}); startErr != nil {
+		close(progCh)
+		err = startErr
+	}
 
 	for prog := range progCh {
 		// Take a copy so that we can send the progress address to the output processor.
@@ -369,17 +605,19 @@ func (ib *indexBackfiller) wrapDupError(ctx context.Context, orig error) error {
 	if orig == nil {
 		return nil
 	}
-	var typed *kvserverbase.DuplicateKeyError
-	if !errors.As(orig, &typed) {
-		return orig
+
+	// Handle DuplicateKeyError from within-batch duplicate detection.
+	var dupErr *kvserverbase.DuplicateKeyError
+	if errors.As(orig, &dupErr) {
+		desc, err := ib.desc.MakeFirstMutationPublic()
+		if err != nil {
+			return err
+		}
+		v := &roachpb.Value{RawBytes: dupErr.Value}
+		return row.NewUniquenessConstraintViolationError(ctx, desc, dupErr.Key, v)
 	}
 
-	desc, err := ib.desc.MakeFirstMutationPublic()
-	if err != nil {
-		return err
-	}
-	v := &roachpb.Value{RawBytes: typed.Value}
-	return row.NewUniquenessConstraintViolationError(ctx, desc, typed.Key, v)
+	return orig
 }
 
 const indexBackfillProgressReportInterval = 10 * time.Second
@@ -393,20 +631,19 @@ func (ib *indexBackfiller) getProgressReportInterval() time.Duration {
 	return indexBackfillProgressReportInterval
 }
 
-// buildIndexEntryBatch constructs the index entries for a single indexBatch.
+// buildIndexEntryBatch constructs the index entries for a single indexBatch for
+// the given span. A non-nil resumeKey is returned when there is still work to
+// be done in this span (sp.Key < resumeKey < sp.EndKey), which happens if the
+// entire span does not fit within the batch size.
 func (ib *indexBackfiller) buildIndexEntryBatch(
 	tctx context.Context, sp roachpb.Span, readAsOf hlc.Timestamp,
-) (roachpb.Key, []rowenc.IndexEntry, int64, error) {
+) (resumeKey roachpb.Key, entries []rowenc.IndexEntry, memUsedBuildingBatch int64, err error) {
 	knobs := &ib.flowCtx.Cfg.TestingKnobs
 	if knobs.RunBeforeBackfillChunk != nil {
 		if err := knobs.RunBeforeBackfillChunk(sp); err != nil {
 			return nil, nil, 0, err
 		}
 	}
-
-	var memUsedBuildingBatch int64
-	var key roachpb.Key
-	var entries []rowenc.IndexEntry
 
 	br := indexBatchRetry{
 		nextChunkSize: ib.spec.ChunkSize,
@@ -446,7 +683,7 @@ func (ib *indexBackfiller) buildIndexEntryBatch(
 
 		// TODO(knz): do KV tracing in DistSQL processors.
 		var err error
-		entries, key, memUsedBuildingBatch, err = ib.BuildIndexEntriesChunk(
+		entries, resumeKey, memUsedBuildingBatch, err = ib.BuildIndexEntriesChunk(
 			ctx, txn.KV(), ib.desc, sp, br.nextChunkSize, false, /* traceKV */
 		)
 		return err
@@ -462,7 +699,7 @@ func (ib *indexBackfiller) buildIndexEntryBatch(
 	log.VEventf(ctx, 3, "index backfill stats: entries %d, prepare %+v",
 		len(entries), prepTime)
 
-	return key, entries, memUsedBuildingBatch, nil
+	return resumeKey, entries, memUsedBuildingBatch, nil
 }
 
 // Resume is part of the execinfra.Processor interface.
@@ -487,7 +724,7 @@ type indexBatchRetry struct {
 func (b *indexBatchRetry) buildBatchWithRetry(ctx context.Context, db isql.DB) error {
 	r := retry.StartWithCtx(ctx, b.retryOpts)
 	for {
-		if err := db.Txn(ctx, b.buildIndexChunk); err != nil {
+		if err := db.Txn(ctx, b.buildIndexChunk, isql.WithPriority(admissionpb.BulkNormalPri)); err != nil {
 			// Retry for any out of memory error. We want to wait for the goroutine
 			// that processes the prior batches of index entries to free memory.
 			if sqlerrors.IsOutOfMemoryError(err) && b.nextChunkSize > 1 {
@@ -501,7 +738,7 @@ func (b *indexBatchRetry) buildBatchWithRetry(ctx context.Context, db isql.DB) e
 					return errors.Wrapf(err, "failed after %d retries", r.CurrentAttempt())
 				}
 				b.nextChunkSize = max(1, b.nextChunkSize/2)
-				log.Infof(ctx,
+				log.Dev.Infof(ctx,
 					"out of memory while building index entries; retrying with batch size %d. Silencing error: %v",
 					b.nextChunkSize, err)
 				continue

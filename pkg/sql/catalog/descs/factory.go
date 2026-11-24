@@ -12,9 +12,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/spanconfig"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/hydrateddesccache"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/internal/catkv"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/lease"
+	"github.com/cockroachdb/cockroach/pkg/sql/catalog/multiregion"
 	"github.com/cockroachdb/cockroach/pkg/sql/isql"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
@@ -82,7 +85,7 @@ func NewCollectionFactory(
 		spanConfigSplitter: spanConfigSplitter,
 		spanConfigLimiter:  spanConfigLimiter,
 		defaultMonitor: mon.NewUnlimitedMonitor(ctx, mon.Options{
-			Name:     "CollectionFactoryDefaultUnlimitedMonitor",
+			Name:     mon.MakeName("CollectionFactoryDefaultUnlimitedMonitor"),
 			Settings: settings,
 		}),
 		defaultDescriptorSessionDataProvider: defaultDescriptorSessionDataProvider,
@@ -101,8 +104,9 @@ func NewBareBonesCollectionFactory(
 }
 
 type constructorConfig struct {
-	dsdp    DescriptorSessionDataProvider
-	monitor *mon.BytesMonitor
+	dsdp                  DescriptorSessionDataProvider
+	monitor               *mon.BytesMonitor
+	forceStorageLookupIDs catalog.DescriptorIDSet
 }
 
 // Option is how optional construction parameters are provided to the
@@ -127,6 +131,17 @@ func WithMonitor(monitor *mon.BytesMonitor) func(b *constructorConfig) {
 	}
 }
 
+// WithForceStorageLookupIDs configures the Collection to bypass all
+// non-storage layers (leased, cached, etc.) for the given descriptor IDs,
+// resolving them directly from KV. This is used when a fresh Collection is
+// created for parallel check workers whose parent Collection has uncommitted
+// descriptors visible only via KV within the same transaction.
+func WithForceStorageLookupIDs(ids catalog.DescriptorIDSet) func(cfg *constructorConfig) {
+	return func(cfg *constructorConfig) {
+		cfg.forceStorageLookupIDs = ids
+	}
+}
+
 // NewCollection constructs a new Collection.
 // When no DescriptorSessionDataProvider is provided, the factory falls back to
 // the default instances which behaves as if the session data stack were empty.
@@ -142,18 +157,25 @@ func (cf *CollectionFactory) NewCollection(ctx context.Context, options ...Optio
 		opt(&cfg)
 	}
 	v := cf.settings.Version.ActiveVersion(ctx)
+	// If the leaseMgr  is nil then ensure we have a nil LeaseManager interface,
+	// otherwise comparisons against a nil implementation will fail.
+	var lm LeaseManager
+	lm = cf.leaseMgr
+	if cf.leaseMgr == nil {
+		lm = nil
+	}
 	return &Collection{
 		settings:                cf.settings,
 		version:                 v,
 		hydrated:                cf.hydrated,
 		virtual:                 makeVirtualDescriptors(cf.virtualSchemas),
-		leased:                  makeLeasedDescriptors(cf.leaseMgr),
+		leased:                  makeLeasedDescriptors(lm),
 		uncommitted:             makeUncommittedDescriptors(cfg.monitor),
-		uncommittedComments:     makeUncommittedComments(),
-		uncommittedZoneConfigs:  makeUncommittedZoneConfigs(),
+		uncommittedMetadata:     makeUncommittedMetadata(),
 		cr:                      catkv.NewCatalogReader(cf.codec, v, cf.systemDatabase, cfg.monitor),
 		temporarySchemaProvider: cfg.dsdp,
 		validationModeProvider:  cfg.dsdp,
+		forceStorageLookupIDs:   cfg.forceStorageLookupIDs,
 	}
 }
 
@@ -164,4 +186,12 @@ type RegionProvider interface {
 	// GetRegions provides access to the set of regions available to the
 	// current tenant.
 	GetRegions(ctx context.Context) (*serverpb.RegionsResponse, error)
+
+	// SynthesizeRegionConfig returns a RegionConfig that describes the
+	// multiregion setup for the given database ID.
+	SynthesizeRegionConfig(
+		ctx context.Context,
+		dbID descpb.ID,
+		opts ...multiregion.SynthesizeRegionConfigOption,
+	) (multiregion.RegionConfig, error)
 }

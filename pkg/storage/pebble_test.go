@@ -17,6 +17,7 @@ import (
 	"runtime"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -29,7 +30,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/fs"
+	"github.com/cockroachdb/cockroach/pkg/storage/mvccencoding"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/datapathutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/skip"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -38,8 +42,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/cockroachdb/datadriven"
 	"github.com/cockroachdb/errors"
 	"github.com/cockroachdb/pebble"
+	"github.com/cockroachdb/pebble/cockroachkvs"
 	"github.com/cockroachdb/pebble/objstorage/objstorageprovider"
 	"github.com/cockroachdb/pebble/sstable"
 	"github.com/cockroachdb/pebble/vfs"
@@ -88,6 +94,8 @@ func TestEngineComparer(t *testing.T) {
 	ts5 := hlc.Timestamp{WallTime: 1}
 
 	syntheticBit := []byte{1}
+	// mvccencoding.mvccEncodedTimeLogicalLen = 4
+	var zeroLogical [4]byte
 	ts2a := appendBytesToTimestamp(ts2, syntheticBit)
 	ts3a := appendBytesToTimestamp(ts3, zeroLogical[:])
 	ts3b := appendBytesToTimestamp(ts3, slices.Concat(zeroLogical[:], syntheticBit))
@@ -189,7 +197,7 @@ func TestEngineComparer(t *testing.T) {
 	for _, v := range []any{ts1, ts2, ts2a, ts3, ts3a, ts3b, ts4, ts5, lock1, lock2} {
 		suffixes = append(suffixes, encodeVersion(v))
 	}
-	require.NoError(t, pebble.CheckComparer(EngineComparer, prefixes, suffixes))
+	require.NoError(t, pebble.CheckComparer(&EngineComparer, prefixes, suffixes))
 }
 
 func TestPebbleIterReuse(t *testing.T) {
@@ -534,7 +542,7 @@ func BenchmarkMVCCKeyCompare(b *testing.B) {
 	keys := makeRandEncodedKeys()
 	b.ResetTimer()
 	for i, j := 0, 0; i < b.N; i, j = i+1, j+3 {
-		_ = EngineKeyCompare(keys[i%len(keys)], keys[j%len(keys)])
+		_ = EngineComparer.Compare(keys[i%len(keys)], keys[j%len(keys)])
 	}
 }
 
@@ -542,7 +550,7 @@ func BenchmarkMVCCKeyEqual(b *testing.B) {
 	keys := makeRandEncodedKeys()
 	b.ResetTimer()
 	for i, j := 0, 0; i < b.N; i, j = i+1, j+3 {
-		_ = EngineKeyEqual(keys[i%len(keys)], keys[j%len(keys)])
+		_ = EngineComparer.Equal(keys[i%len(keys)], keys[j%len(keys)])
 	}
 }
 
@@ -626,7 +634,11 @@ func (l *nonFatalLogger) Fatalf(format string, args ...interface{}) {
 	l.t.Logf(format, args...)
 }
 
-func TestPebbleKeyValidationFunc(t *testing.T) {
+func (l *nonFatalLogger) Infof(format string, args ...interface{}) {
+	l.t.Logf(format, args...)
+}
+
+func TestPebbleValidateKey(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// Capture fatal errors by swapping out the logger.
@@ -635,25 +647,23 @@ func TestPebbleKeyValidationFunc(t *testing.T) {
 	l := &nonFatalLogger{t: t}
 	opt := func(cfg *engineConfig) error {
 		cfg.opts.LoggerAndTracer = l
-		cfg.opts.Experimental.KeyValidationFunc = func(k []byte) error {
+		comparer := *cfg.opts.Comparer
+		comparer.ValidateKey = func(k []byte) error {
 			if bytes.Contains(k, []byte("foo")) {
 				return errors.Errorf("key contains 'foo'")
 			}
 			return nil
 		}
+		cfg.opts.Comparer = &comparer
 		return nil
 	}
 	engine := createTestPebbleEngine(opt).(*Pebble)
 	defer engine.Close()
 
 	ek := EngineKey{Key: roachpb.Key("foo")}
-
-	err := engine.PutEngineKey(ek, []byte("bar"))
-	require.NoError(t, err)
-
+	require.NoError(t, engine.PutEngineKey(ek, []byte("bar")))
 	// Force a flush to trigger the compaction error.
-	err = engine.Flush()
-	require.NoError(t, err)
+	require.NoError(t, engine.Flush())
 
 	// A fatal error was captured by the logger.
 	require.True(t, l.caught.Load().(bool))
@@ -687,62 +697,18 @@ func (fs *errorFS) Create(name string, category vfs.DiskWriteCategory) (vfs.File
 	return fs.FS.Create(name, category)
 }
 
-func TestPebbleMVCCIntervalMapper(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	m := pebbleIntervalMapper{}
-	aKey := roachpb.Key("a")
-	uuid := uuid.Must(uuid.FromString("6ba7b810-9dad-11d1-80b4-00c04fd430c8"))
-
-	for _, tc := range []struct {
-		userKey  []byte
-		expected sstable.BlockInterval
-	}{
-		{
-			userKey: func() []byte {
-				ek, _ := LockTableKey{aKey, lock.Intent, uuid}.ToEngineKey(nil)
-				return ek.Encode()
-			}(),
-			// Lock keys are not MVCC keys.
-			expected: sstable.BlockInterval{},
-		},
-		{
-			userKey:  EncodeMVCCKey(MVCCKey{aKey, hlc.Timestamp{WallTime: 2, Logical: 1}}),
-			expected: sstable.BlockInterval{Lower: 2, Upper: 3},
-		},
-		{
-			userKey:  EncodeMVCCKey(MVCCKey{aKey, hlc.Timestamp{WallTime: 22, Logical: 1}}),
-			expected: sstable.BlockInterval{Lower: 22, Upper: 23},
-		},
-		{
-			userKey:  EncodeMVCCKey(MVCCKey{aKey, hlc.Timestamp{WallTime: 25}}),
-			expected: sstable.BlockInterval{Lower: 25, Upper: 26},
-		},
-	} {
-		i, err := m.MapPointKey(sstable.InternalKey{UserKey: tc.userKey}, nil)
-		require.NoError(t, err)
-		require.Equal(t, tc.expected, i)
-	}
-	// An invalid key (malformed sentinel) results in an error.
-	key := EncodeMVCCKey(MVCCKey{aKey, hlc.Timestamp{WallTime: 2, Logical: 1}})
-	sentinelPos := len(key) - 1 - int(key[len(key)-1])
-	key[sentinelPos] = '\xff'
-	_, err := m.MapPointKey(sstable.InternalKey{UserKey: key}, nil)
-	require.Error(t, err)
-}
-
 func TestPebbleMVCCBlockIntervalSuffixReplacer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	r := MVCCBlockIntervalSuffixReplacer{}
-	suffix := EncodeMVCCTimestampSuffix(hlc.Timestamp{WallTime: 42, Logical: 1})
+	r := cockroachkvs.MVCCBlockIntervalSuffixReplacer{}
+	suffix := mvccencoding.EncodeMVCCTimestampSuffix(hlc.Timestamp{WallTime: 42, Logical: 1})
 	before := sstable.BlockInterval{Lower: 10, Upper: 15}
 	after, err := r.ApplySuffixReplacement(before, suffix)
 	require.NoError(t, err)
 	require.Equal(t, sstable.BlockInterval{Lower: 42, Upper: 43}, after)
 
 	// An invalid suffix (too short) results in an error.
-	suffix = EncodeMVCCTimestampSuffix(hlc.Timestamp{WallTime: 42, Logical: 1})[1:]
+	suffix = mvccencoding.EncodeMVCCTimestampSuffix(hlc.Timestamp{WallTime: 42, Logical: 1})[1:]
 	_, err = r.ApplySuffixReplacement(sstable.BlockInterval{Lower: 1, Upper: 2}, suffix)
 	require.Error(t, err)
 }
@@ -1181,10 +1147,6 @@ func TestPebbleReaderMultipleIterators(t *testing.T) {
 	defer snapshot.Close()
 	require.NoError(t, snapshot.PinEngineStateForIterators(fs.UnknownReadCategory))
 
-	efos := eng.NewEventuallyFileOnlySnapshot([]roachpb.Span{{Key: keys.MinKey, EndKey: keys.MaxKey}})
-	defer efos.Close()
-	require.NoError(t, efos.PinEngineStateForIterators(fs.UnknownReadCategory))
-
 	batch := eng.NewBatch()
 	defer batch.Close()
 	require.NoError(t, batch.PinEngineStateForIterators(fs.UnknownReadCategory))
@@ -1198,7 +1160,6 @@ func TestPebbleReaderMultipleIterators(t *testing.T) {
 		"Engine":   eng,
 		"ReadOnly": readOnly,
 		"Snapshot": snapshot,
-		"EFOS":     efos,
 		"Batch":    batch,
 	}
 	for name, r := range testcases {
@@ -1344,20 +1305,50 @@ func TestIncompatibleVersion(t *testing.T) {
 	p.Close()
 
 	// Overwrite the min version file with an unsupported version.
-	version := roachpb.Version{Major: 21, Minor: 1}
-	b, err := protoutil.Marshal(&version)
+	ver := roachpb.Version{Major: 21, Minor: 1}
+	b, err := protoutil.Marshal(&ver)
 	require.NoError(t, err)
-	require.NoError(t, fs.SafeWriteToFile(memFS, "", MinVersionFilename, b, fs.UnspecifiedWriteCategory))
+	require.NoError(t, fs.SafeWriteToUnencryptedFile(memFS, "", fs.MinVersionFilename, b, fs.UnspecifiedWriteCategory))
 
-	env = mustInitTestEnv(t, memFS, "")
-	_, err = Open(ctx, env, cluster.MakeTestingClusterSettings())
-	require.Error(t, err)
+	settings := cluster.MakeTestingClusterSettings()
+	_, err = fs.InitEnv(context.Background(), memFS, "", fs.EnvConfig{
+		Version: settings.Version,
+	}, nil /* statsCollector */)
 	msg := err.Error()
 	if !strings.Contains(msg, "is too old for running version") &&
 		!strings.Contains(msg, "cannot be opened by development version") {
 		t.Fatalf("unexpected error %v", err)
 	}
-	env.Close()
+}
+
+func TestPebbleClusterVersionTooNew(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	memFS := vfs.NewMem()
+	env := mustInitTestEnv(t, memFS, "")
+
+	p, err := Open(ctx, env, cluster.MakeTestingClusterSettings())
+	require.NoError(t, err)
+	p.Close()
+
+	// Overwrite the min version file with a future version that's newer than the
+	// latest supported version. Use a development version higher than the current
+	// running version to ensure it will be considered "too new". We use a very
+	// high development version to avoid conflicts with the current version.
+	ver := roachpb.Version{Major: 1000030, Minor: 0}
+	b, err := protoutil.Marshal(&ver)
+	require.NoError(t, err)
+	require.NoError(t, fs.SafeWriteToUnencryptedFile(memFS, "", fs.MinVersionFilename, b, fs.UnspecifiedWriteCategory))
+
+	settings := cluster.MakeTestingClusterSettings()
+	_, err = fs.InitEnv(context.Background(), memFS, "", fs.EnvConfig{
+		Version: settings.Version,
+	}, nil /* statsCollector */)
+	require.Error(t, err)
+	msg := err.Error()
+	require.Contains(t, msg, "is too high for running version")
 }
 
 func TestNoMinVerFile(t *testing.T) {
@@ -1373,7 +1364,7 @@ func TestNoMinVerFile(t *testing.T) {
 	p.Close()
 
 	// Remove the min version filename.
-	require.NoError(t, memFS.Remove(MinVersionFilename))
+	require.NoError(t, memFS.Remove(fs.MinVersionFilename))
 
 	// We are still allowed the open the store if we haven't written anything to it.
 	// This is useful in case the initial Open crashes right before writinng the
@@ -1389,7 +1380,7 @@ func TestNoMinVerFile(t *testing.T) {
 	p.Close()
 
 	// Remove the min version filename.
-	require.NoError(t, memFS.Remove(MinVersionFilename))
+	require.NoError(t, memFS.Remove(fs.MinVersionFilename))
 
 	env = mustInitTestEnv(t, memFS, "")
 	_, err = Open(ctx, env, st)
@@ -1439,7 +1430,7 @@ func TestApproximateDiskBytes(t *testing.T) {
 	}
 }
 
-func TestConvertFilesToBatchAndCommit(t *testing.T) {
+func TestIngestAndExciseFilesToWriter(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 	ctx := context.Background()
@@ -1508,11 +1499,16 @@ func TestConvertFilesToBatchAndCommit(t *testing.T) {
 	require.NoError(t, w2.Finish())
 	w2.Close()
 
-	require.NoError(t, engs[batchEngine].ConvertFilesToBatchAndCommit(
+	b := engs[batchEngine].NewWriteBatch()
+	defer b.Close()
+	require.NoError(t, engs[batchEngine].IngestLocalFilesToWriter(
 		ctx, []string{fileName1, fileName2}, []roachpb.Span{
 			{Key: lkStart, EndKey: lkEnd}, {Key: startKey, EndKey: endKey},
-		}))
+		}, b))
+	require.NoError(t, b.Commit(true /* sync */))
+
 	require.NoError(t, engs[ingestEngine].IngestLocalFiles(ctx, []string{fileName1, fileName2}))
+
 	outputState := func(eng Engine) []string {
 		it, err := eng.NewEngineIterator(context.Background(), IterOptions{
 			UpperBound: roachpb.KeyMax,
@@ -1552,69 +1548,86 @@ func TestCompactionConcurrencyEnvVars(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer log.Scope(t).Close(t)
 
+	type testCase struct {
+		cockroachConcurrentCompactions string
+		cockroachRocksDBConcurrency    string
+		want                           int
+	}
+	cases := []testCase{
+		// Default.
+		{want: 0},
+		{cockroachConcurrentCompactions: "5", want: 5},
+		{cockroachConcurrentCompactions: "1", want: 1},
+		{cockroachConcurrentCompactions: "0", want: 0},
+		// COCKROACH_ROCKSDB_CONCURRENCY is deprecated but we still support it. Note
+		// that for this env var, the compaction concurrency is the value minus 1.
+		{cockroachRocksDBConcurrency: "5", want: 4},
+		{cockroachRocksDBConcurrency: "2", want: 1},
+		{cockroachRocksDBConcurrency: "1", want: 1},
+		{cockroachRocksDBConcurrency: "0", want: 0},
+		// The non-deprecated var takes precedence.
+		{cockroachConcurrentCompactions: "10", cockroachRocksDBConcurrency: "5", want: 10},
+	}
+	for _, tc := range cases {
+		t.Run(fmt.Sprintf("old=%q,new=%q", tc.cockroachRocksDBConcurrency, tc.cockroachConcurrentCompactions),
+			func(t *testing.T) {
+				if tc.cockroachRocksDBConcurrency == "" {
+					defer envutil.TestUnsetEnv(t, "COCKROACH_ROCKSDB_CONCURRENCY")()
+				} else {
+					defer envutil.TestSetEnv(t, "COCKROACH_ROCKSDB_CONCURRENCY", tc.cockroachRocksDBConcurrency)()
+				}
+				if tc.cockroachConcurrentCompactions == "" {
+					defer envutil.TestUnsetEnv(t, "COCKROACH_CONCURRENT_COMPACTIONS")()
+				} else {
+					defer envutil.TestSetEnv(t, "COCKROACH_CONCURRENT_COMPACTIONS", tc.cockroachConcurrentCompactions)()
+				}
+				require.Equal(t, tc.want, getMaxConcurrentCompactionsFromEnv())
+			})
+	}
+}
+
+func TestDetermineMaxConcurrentCompactions(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
 	maxProcsBefore := runtime.GOMAXPROCS(0)
 	defer runtime.GOMAXPROCS(maxProcsBefore)
 
 	type testCase struct {
-		maxProcs             int
-		rocksDBConcurrency   string
-		cockroachConcurrency string
-		want                 int
+		maxProcs       int
+		envValue       int
+		clusterSetting int
+		want           int
 	}
 	cases := []testCase{
-		// Defaults
-		{32, "", "", 3},
-		{4, "", "", 3},
-		{3, "", "", 2},
-		{2, "", "", 1},
-		{1, "", "", 1},
-		// Old COCKROACH_ROCKSDB_CONCURRENCY env var is set. The user-provided
-		// value includes 1 slot for flushes, so resulting compaction
-		// concurrency is n-1.
-		{32, "4", "", 3},
-		{4, "4", "", 3},
-		{2, "4", "", 3},
-		{1, "4", "", 3},
-		{32, "8", "", 7},
-		{4, "8", "", 7},
-		{2, "8", "", 7},
-		{1, "8", "", 7},
-		// New COCKROACH_CONCURRENT_COMPACTIONS env var is set.
-		{32, "", "4", 4},
-		{4, "", "4", 4},
-		{2, "", "4", 4},
-		{1, "", "4", 4},
-		{32, "", "8", 8},
-		{4, "", "8", 8},
-		{2, "", "8", 8},
-		{1, "", "8", 8},
-		// Both settings are set; COCKROACH_CONCURRENT_COMPACTIONS supersedes
-		// COCKROACH_ROCKSDB_CONCURRENCY.
-		{32, "8", "4", 4},
-		{4, "1", "4", 4},
-		{2, "2", "4", 4},
-		{1, "5", "4", 4},
-		{32, "1", "8", 8},
-		{4, "2", "8", 8},
-		{2, "4", "8", 8},
-		{1, "1", "8", 8},
+		// Defaults.
+		{maxProcs: 32, want: 3},
+		{maxProcs: 8, want: 3},
+		{maxProcs: 4, want: 3},
+		{maxProcs: 2, want: 1},
+		{maxProcs: 1, want: 1},
+		// Env value override.
+		{maxProcs: 32, envValue: 10, want: 10},
+		{maxProcs: 1, envValue: 10, want: 10},
+		// Cluster setting override.
+		{maxProcs: 32, clusterSetting: 10, want: 10},
+		{maxProcs: 1, clusterSetting: 10, want: 10},
+		// Env value and cluster setting override.
+		{maxProcs: 32, envValue: 15, clusterSetting: 10, want: 15},
+		{maxProcs: 32, envValue: 10, clusterSetting: 15, want: 15},
+		{maxProcs: 1, envValue: 15, clusterSetting: 10, want: 15},
+		{maxProcs: 1, envValue: 10, clusterSetting: 15, want: 15},
 	}
 	for _, tc := range cases {
-		t.Run(fmt.Sprintf("GOMAXPROCS=%d,old=%q,new=%q", tc.maxProcs, tc.rocksDBConcurrency, tc.cockroachConcurrency),
+		t.Run(fmt.Sprintf("GOMAXPROCS=%d,env=%d,setting=%d", tc.maxProcs, tc.envValue, tc.clusterSetting),
 			func(t *testing.T) {
 				runtime.GOMAXPROCS(tc.maxProcs)
-
-				if tc.rocksDBConcurrency == "" {
-					defer envutil.TestUnsetEnv(t, "COCKROACH_ROCKSDB_CONCURRENCY")()
-				} else {
-					defer envutil.TestSetEnv(t, "COCKROACH_ROCKSDB_CONCURRENCY", tc.rocksDBConcurrency)()
-				}
-				if tc.cockroachConcurrency == "" {
-					defer envutil.TestUnsetEnv(t, "COCKROACH_CONCURRENT_COMPACTIONS")()
-				} else {
-					defer envutil.TestSetEnv(t, "COCKROACH_CONCURRENT_COMPACTIONS", tc.cockroachConcurrency)()
-				}
-				require.Equal(t, tc.want, getMaxConcurrentCompactions())
+				actual := determineMaxConcurrentCompactions(
+					getDefaultMaxConcurrentCompactions(),
+					tc.envValue,
+					tc.clusterSetting,
+				)
+				require.Equal(t, tc.want, actual)
 			})
 	}
 }
@@ -1624,6 +1637,60 @@ func TestMinimumSupportedFormatVersion(t *testing.T) {
 
 	require.Equal(t, pebbleFormatVersionMap[clusterversion.MinSupported], MinimumSupportedFormatVersion,
 		"MinimumSupportedFormatVersion must match the format version for %s", clusterversion.MinSupported)
+}
+
+func TestPebbleFormatVersion(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	if len(pebbleFormatVersionMap) == 1 {
+		skip.IgnoreLint(t, "test requires multiple entries in pebbleFormatVersionMap")
+	}
+
+	latestKey := pebbleFormatVersionKeys[0]
+	latestVersion := latestKey.Version()
+	latestFmv := pebbleFormatVersionMap[latestKey]
+
+	require.Equal(t, pebbleFormatVersion(latestVersion), latestFmv)
+	require.Equal(t, minPebbleFormatVersionInCluster(latestVersion), latestFmv)
+
+	// We upgrade the pebble format as soon as we reach the fence version.
+	require.Equal(t, pebbleFormatVersion(latestVersion.FenceVersion()), latestFmv)
+	// But at the fence version, we don't have a guarantee that all nodes have
+	// upgraded.
+	require.Less(t, minPebbleFormatVersionInCluster(latestVersion.FenceVersion()), latestFmv)
+
+	require.Less(t, pebbleFormatVersion((latestKey - 1).Version()), latestFmv)
+	require.Less(t, minPebbleFormatVersionInCluster((latestKey - 1).Version()), latestFmv)
+
+	v := latestVersion
+	v.Minor++
+	require.Equal(t, pebbleFormatVersion(latestVersion), latestFmv)
+	require.Equal(t, minPebbleFormatVersionInCluster(latestVersion), latestFmv)
+
+	require.Equal(t, pebbleFormatVersion(clusterversion.MinSupported.Version()), MinimumSupportedFormatVersion)
+	require.Equal(t, minPebbleFormatVersionInCluster(clusterversion.MinSupported.Version()), MinimumSupportedFormatVersion)
+
+	// Gather all possible versions since MinSupported.
+	var versions []roachpb.Version
+	for k := clusterversion.MinSupported + 1; k <= clusterversion.Latest; k++ {
+		versions = append(versions, k.Version().FenceVersion(), k.Version())
+	}
+
+	prevFMV := MinimumSupportedFormatVersion
+	for i, v := range versions {
+		fmv := pebbleFormatVersion(v)
+		if fmv != prevFMV {
+			require.True(t, v.IsFence())
+			// minPebbleFormatVersionInCluster() should return the previous format.
+			require.Equal(t, prevFMV, minPebbleFormatVersionInCluster(v))
+			// For the next version, minPebbleFormatVersionInCluster() should return
+			// the new format.
+			require.Equal(t, fmv, minPebbleFormatVersionInCluster(versions[i+1]))
+		} else {
+			require.Equal(t, fmv, minPebbleFormatVersionInCluster(v))
+		}
+		prevFMV = fmv
+	}
 }
 
 // delayFS injects a delay on each read.
@@ -1653,9 +1720,7 @@ func TestPebbleLoggingSlowReads(t *testing.T) {
 
 	testFunc := func(t *testing.T, fileStr string) int {
 		s := log.ScopeWithoutShowLogs(t)
-		prevVModule := log.GetVModule()
-		_ = log.SetVModule(fileStr + "=2")
-		defer func() { _ = log.SetVModule(prevVModule) }()
+		testutils.SetVModule(t, fileStr+"=2")
 		defer s.Close(t)
 
 		ctx := context.Background()
@@ -1663,13 +1728,13 @@ func TestPebbleLoggingSlowReads(t *testing.T) {
 
 		memFS := vfs.NewMem()
 		dFS := delayFS{FS: memFS}
-		e, err := fs.InitEnv(context.Background(), dFS, "" /* dir */, fs.EnvConfig{}, nil /* statsCollector */)
+		settings := cluster.MakeTestingClusterSettings()
+		e, err := fs.InitEnv(context.Background(), dFS, "" /* dir */, fs.EnvConfig{
+			Version: settings.Version,
+		}, nil /* statsCollector */)
 		require.NoError(t, err)
-		// No block cache, so all reads go to FS.
-		db, err := Open(ctx, e, cluster.MakeClusterSettings(), func(cfg *engineConfig) error {
-			cfg.cacheSize = nil
-			return nil
-		})
+		// Tiny block cache, so all reads go to FS.
+		db, err := Open(ctx, e, cluster.MakeClusterSettings(), CacheSize(1024))
 		require.NoError(t, err)
 		defer db.Close()
 		// Write some data and flush to disk.
@@ -1709,8 +1774,236 @@ func TestPebbleLoggingSlowReads(t *testing.T) {
 		slowCount := testFunc(t, "pebble_logger_and_tracer")
 		require.Equal(t, 0, slowCount)
 	})
-	t.Run("reader", func(t *testing.T) {
-		slowCount := testFunc(t, "reader")
+	t.Run("block", func(t *testing.T) {
+		slowCount := testFunc(t, "block")
 		require.Less(t, 0, slowCount)
 	})
+}
+
+func TestPebbleSetCompactionConcurrency(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+	ctx := context.Background()
+
+	settings := cluster.MakeTestingClusterSettings()
+	p, err := Open(ctx, InMemory(), settings, CacheSize(1<<20 /* 1 MiB */), MaxConcurrentCompactions(4))
+	require.NoError(t, err)
+	defer p.Close()
+
+	require.Equal(t, "1 4", fmt.Sprint(p.cfg.opts.CompactionConcurrencyRange()))
+
+	p.SetCompactionConcurrency(10)
+	require.Equal(t, "10 10", fmt.Sprint(p.cfg.opts.CompactionConcurrencyRange()))
+
+	p.SetCompactionConcurrency(0)
+	require.Equal(t, "1 4", fmt.Sprint(p.cfg.opts.CompactionConcurrencyRange()))
+}
+
+func TestPebbleCompactCancellation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	ctx := context.Background()
+	mem := vfs.NewMem()
+	bfs := &fs.BlockingWriteFSForTesting{FS: mem}
+	settings := cluster.MakeTestingClusterSettings()
+	e, err := fs.InitEnv(ctx, bfs, "" /* dir */, fs.EnvConfig{
+		Version: settings.Version,
+	}, nil /* statsCollector */)
+	require.NoError(t, err)
+	db, err := Open(
+		ctx, e, cluster.MakeClusterSettings(), CacheSize(1024), MaxConcurrentCompactions(1),
+		func(cfg *engineConfig) error {
+			cfg.opts.DisableAutomaticCompactions = true
+			return nil
+		})
+	require.NoError(t, err)
+	defer db.Close()
+	// Flush 2 sstables to L0.
+	require.NoError(t, db.PutEngineKey(EngineKey{Key: []byte("a")}, []byte("a")))
+	require.NoError(t, db.Flush())
+	require.NoError(t, db.PutEngineKey(EngineKey{Key: []byte("a")}, []byte("a")))
+	require.NoError(t, db.Flush())
+	// Block writes to the engine.
+	bfs.Block()
+	var wg sync.WaitGroup
+	wg.Add(1)
+	// Start a manual compaction that will start and block.
+	go func() {
+		require.NoError(t, db.Compact(ctx))
+		wg.Done()
+	}()
+	// Start 2 manual compactions with cancellable contexts, that will not start
+	// since only 1 concurrent compaction is allowed.
+	var cancelWG sync.WaitGroup
+	cancelWG.Add(1)
+	cctx, cancel := context.WithCancel(ctx)
+	go func() {
+		require.Error(t, db.Compact(cctx))
+		cancelWG.Done()
+	}()
+	cancelWG.Add(1)
+	go func() {
+		require.Error(t, db.CompactRange(cctx, []byte("a"), []byte("b")))
+		cancelWG.Done()
+	}()
+	// Cancel the compactions and wait for the cancellation to be observed.
+	cancel()
+	waitedTooLongTimer := time.AfterFunc(30*time.Second, func() {
+		t.Fatal("timed out waiting for cancellation to be observed")
+	})
+	cancelWG.Wait()
+	waitedTooLongTimer.Stop()
+	// Unblock the first compaction and wait for it to complete.
+	bfs.WaitForBlockAndUnblock()
+	wg.Wait()
+}
+
+func TestPebbleSpanPolicyFunc(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var (
+		localRangeIDEndKey = EncodeMVCCKey(MVCCKey{Key: keys.LocalRangeIDPrefix.AsRawKey().PrefixEnd()})
+		lockTableStartKey  = EncodeMVCCKey(MVCCKey{Key: keys.LocalRangeLockTablePrefix})
+		lockTableEndKey    = EncodeMVCCKey(MVCCKey{Key: keys.LocalRangeLockTablePrefix.PrefixEnd()})
+		localEndKey        = EncodeMVCCKey(MVCCKey{Key: keys.LocalPrefix.PrefixEnd()})
+	)
+
+	type testCase struct {
+		startKey   roachpb.Key
+		wantPolicy pebble.SpanPolicy
+	}
+	cases := []testCase{
+		{
+			startKey: keys.RaftHardStateKey(1),
+			wantPolicy: pebble.SpanPolicy{
+				KeyRange: pebble.KeyRange{
+					Start: nil,
+					End:   localRangeIDEndKey,
+				},
+				PreferFastCompression: true,
+				ValueStoragePolicy:    pebble.ValueStorageLatencyTolerant,
+			},
+		},
+		{
+			startKey: keys.RaftLogKey(9, 2),
+			wantPolicy: pebble.SpanPolicy{
+				KeyRange: pebble.KeyRange{
+					Start: nil,
+					End:   localRangeIDEndKey,
+				},
+				PreferFastCompression: true,
+				ValueStoragePolicy:    pebble.ValueStorageLatencyTolerant,
+			},
+		},
+		{
+			startKey: keys.RangeDescriptorKey(roachpb.RKey("a")),
+			wantPolicy: pebble.SpanPolicy{
+				KeyRange: pebble.KeyRange{
+					Start: localRangeIDEndKey,
+					End:   lockTableStartKey,
+				},
+				PreferFastCompression: true,
+			},
+		},
+		{
+			startKey: func() roachpb.Key {
+				k, _ := keys.LockTableSingleKey(roachpb.Key("a"), nil)
+				return k
+			}(),
+			wantPolicy: pebble.SpanPolicy{
+				KeyRange: pebble.KeyRange{
+					Start: lockTableStartKey,
+					End:   lockTableEndKey,
+				},
+				PreferFastCompression: true,
+				ValueStoragePolicy:    pebble.ValueStorageLowReadLatency,
+			},
+		},
+		{
+			startKey: keys.SystemSQLCodec.IndexPrefix(1, 2),
+			wantPolicy: pebble.SpanPolicy{
+				KeyRange: pebble.KeyRange{
+					Start: localEndKey,
+					End:   nil,
+				},
+			},
+		},
+	}
+
+	for i, tc := range cases {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			ek := EngineKey{Key: tc.startKey}.Encode()
+			var bounds pebble.UserKeyBounds
+			bounds.Start = ek
+			policy, err := spanPolicyFuncFactory(nil /* sv */)(bounds)
+			require.NoError(t, err)
+			require.Equal(t, tc.wantPolicy, policy)
+		})
+	}
+}
+
+func TestDiskUnhealthyTracker(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	defer log.Scope(t).Close(t)
+
+	var b strings.Builder
+	builderStr := func() string {
+		str := b.String()
+		b.Reset()
+		return str
+	}
+	var isClosed atomic.Bool
+	ts := timeutil.NewManualTime(time.Unix(0, 0))
+	st := cluster.MakeTestingClusterSettings()
+	UnhealthyWriteDuration.Override(t.Context(), &st.SV, 5*time.Second)
+	tickReceivedCh := make(chan time.Time, 1)
+	tracker := &diskUnhealthyTracker{
+		st: st,
+		isClosed: func() bool {
+			closed := isClosed.Load()
+			fmt.Fprintf(&b, "asyncRunner.Closed(): %t\n", closed)
+			return closed
+		},
+		runAsync: func(fn func()) {
+			fmt.Fprintf(&b, "asyncRunner.async\n")
+			go fn()
+		},
+		ts:                    ts,
+		testingTickReceivedCh: tickReceivedCh,
+	}
+	datadriven.RunTest(t, datapathutils.TestDataPath(t, "disk_unhealthy_tracker"),
+		func(t *testing.T, d *datadriven.TestData) string {
+			switch d.Cmd {
+			case "slow-event":
+				var durationSec int
+				d.ScanArgs(t, "dur", &durationSec)
+				tracker.onDiskSlow(vfs.DiskSlowInfo{Duration: time.Duration(durationSec) * time.Second})
+				return builderStr()
+
+			case "advance-time":
+				var durationSec int
+				d.ScanArgs(t, "sec", &durationSec)
+				ts.Advance(time.Duration(durationSec) * time.Second)
+				return ""
+
+			case "receive-runner-tick":
+				tickTime := <-tickReceivedCh
+				fmt.Fprintf(&b, "tickTime: %ds\n", tickTime.Unix())
+				return builderStr()
+
+			case "get-state":
+				fmt.Fprintf(&b, "unhealthy: %t, unhealthy-duration: %v\n",
+					tracker.getUnhealthy(), tracker.getUnhealthyDuration())
+				return builderStr()
+
+			case "close":
+				isClosed.Store(true)
+				return ""
+
+			default:
+				return fmt.Sprintf("unknown command: %s", d.Cmd)
+			}
+		})
 }

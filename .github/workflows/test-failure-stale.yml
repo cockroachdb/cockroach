@@ -7,6 +7,7 @@ on:
 
 jobs:
   stale:
+    if: github.repository == 'cockroachdb/cockroach'
     runs-on: ubuntu-latest
     permissions:
       issues: write
@@ -30,6 +31,6 @@ jobs:
         days-before-pr-stale: 99999
         days-before-issue-stale: 30
         days-before-close: 5
-        any-of-labels: 'T-kv,T-sql-foundations'
+        any-of-labels: 'T-kv,T-sql-foundations,T-disaster-recovery'
         only-labels: 'C-test-failure'
         exempt-issue-labels: 'release-blocker,skipped-test,X-nostale'

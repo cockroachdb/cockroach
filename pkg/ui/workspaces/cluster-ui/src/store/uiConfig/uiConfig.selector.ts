@@ -16,12 +16,3 @@ export const selectIsTenant = createSelector(
   selectUIConfig,
   uiConfig => uiConfig?.isTenant,
 );
-
-export const selectHasViewActivityRedactedRole = createSelector(
-  selectUIConfig,
-  uiConfig => uiConfig?.userSQLRoles.includes("VIEWACTIVITYREDACTED"),
-);
-
-export const selectHasAdminRole = createSelector(selectUIConfig, uiConfig =>
-  uiConfig?.userSQLRoles.includes("ADMIN"),
-);

@@ -11,9 +11,7 @@ UPDATE t SET j=-3 WHERE i = -1;
 
 stage-exec phase=PostCommitNonRevertiblePhase stage=2: rollback=true
 INSERT INTO t(i) VALUES(-$stageKey);
-INSERT INTO t(i) VALUES(-$stageKey - 1);
 ----
-
 
 stage-exec phase=PostCommitPhase stage=:
 INSERT INTO t (i, j) VALUES($stageKey, $stageKey);

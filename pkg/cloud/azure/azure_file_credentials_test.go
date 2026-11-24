@@ -158,7 +158,6 @@ func TestAzureFileCredential(t *testing.T) {
 	// reload, there should be no error that bubbles up to the rest of the Azure
 	// SDK and storage.
 	t.Run("reload-on-error", func(t *testing.T) {
-		testSettings := cluster.MakeTestingClusterSettings()
 		ioConf := base.ExternalIODirConfig{}
 		storeURI := cfg.filePathImplicitAuth("backup-test")
 
@@ -183,7 +182,8 @@ func TestAzureFileCredential(t *testing.T) {
 			}
 
 			// Setup a sink for the given args.
-			clientFactory := blobs.TestBlobServiceClient(testSettings.ExternalIODir)
+			clientFactory := blobs.TestBlobServiceClient("")
+			testSettings := cluster.MakeTestingClusterSettings()
 			s, err := cloud.MakeExternalStorage(ctx, conf, ioConf, testSettings, clientFactory,
 				nil, nil, cloud.NilMetrics, cloud.WithAzureStorageTestingKnobs(&knobs))
 			if err != nil {
@@ -204,15 +204,14 @@ func TestAzureFileCredential(t *testing.T) {
 
 			// Despite an error being produced, reloading the file will still
 			// yield a valid token for storage access.
-			require.NoError(t, s.List(ctx, "/", "", func(f string) error {
+			require.NoError(t, s.List(ctx, "/", cloud.ListOptions{}, func(f string) error {
 				return nil
 			}))
 		})
 
 		t.Run("invalid-on-reload", func(t *testing.T) {
 			credFile := path.Join(tmpDir, "reload-on-error-invalid-on-reload")
-			cleanup := envutil.TestSetEnv(t, "COCKROACH_AZURE_APPLICATION_CREDENTIALS_FILE", credFile)
-			defer cleanup()
+			defer envutil.TestSetEnv(t, "COCKROACH_AZURE_APPLICATION_CREDENTIALS_FILE", credFile)()
 
 			require.NoError(t, writeAzureCredentialsFile(credFile, cfg.tenantID, cfg.clientID, cfg.clientSecret))
 
@@ -224,7 +223,7 @@ func TestAzureFileCredential(t *testing.T) {
 			// are loaded.
 			require.NoError(t, writeAzureCredentialsFile(credFile, cfg.tenantID, cfg.clientID, cfg.clientSecret+"garbage"))
 
-			err := s.List(ctx, "/", "", func(f string) error {
+			err := s.List(ctx, "/", cloud.ListOptions{}, func(f string) error {
 				return nil
 			})
 			require.ErrorContains(t, err, "authentication failed")

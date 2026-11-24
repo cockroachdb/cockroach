@@ -112,8 +112,8 @@ func CheckTwoVersionInvariant(
 	// up schema changes there and potentially create a deadlock.
 	descsCol.ReleaseLeases(ctx)
 
-	// Increment the long wait gauge for two version invariant violations, if this
-	// function takes longer than the lease duration.
+	// Increment the long wait gauge if this function takes longer than the
+	// lease duration (the grace period for old versions to expire).
 	decAfterWait := descsCol.leased.lm.IncGaugeAfterLeaseDuration(lease.GaugeWaitForTwoVersionViolation)
 	defer decAfterWait()
 	// Wait until all older version leases have been released or expired.
@@ -125,15 +125,20 @@ func CheckTwoVersionInvariant(
 			return err
 		}
 		if count == 0 {
-			break
+			return &twoVersionInvariantViolationError{ids: withNewVersion}
 		}
 		if onRetryBackoff != nil {
 			onRetryBackoff()
 		}
 	}
-	return &twoVersionInvariantViolationError{
-		ids: withNewVersion,
+	// The retry loop has no max retries or duration, so exiting it implies
+	// ctx was cancelled. Surface ctx.Err() so a statement_timeout is visible
+	// as a timeout rather than the retryable violation sentinel; fall
+	// through to the sentinel defensively.
+	if err := ctx.Err(); err != nil {
+		return err
 	}
+	return &twoVersionInvariantViolationError{ids: withNewVersion}
 }
 
 // CheckSpanCountLimit checks whether committing the set of uncommitted tables

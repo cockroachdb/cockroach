@@ -20,11 +20,10 @@ func (s StmtFingerprintID) String() string {
 }
 
 // ConstructStatementFingerprintID constructs an ID by hashing query with
-// constants redacted, its database, and if it was part of an
-// implicit txn. At the time of writing, these are the axis' we use to bucket
-// queries for stats collection (see stmtKey).
+// constants redacted and its database. At the time of writing, these are
+// the axes we use to bucket queries for stats collection (see stmtKey).
 var ConstructStatementFingerprintID = func(
-	stmtNoConstants string, implicitTxn bool, database string,
+	stmtNoConstants string, database string,
 ) StmtFingerprintID {
 	fnv := util.MakeFNV64()
 	for _, c := range stmtNoConstants {
@@ -32,11 +31,6 @@ var ConstructStatementFingerprintID = func(
 	}
 	for _, c := range database {
 		fnv.Add(uint64(c))
-	}
-	if implicitTxn {
-		fnv.Add('I')
-	} else {
-		fnv.Add('E')
 	}
 	return StmtFingerprintID(fnv.Sum())
 }
@@ -122,15 +116,21 @@ func (t *TransactionStatistics) Add(other *TransactionStatistics) {
 	if other.MaxRetries > t.MaxRetries {
 		t.MaxRetries = other.MaxRetries
 	}
-
-	t.IdleLat.Add(other.IdleLat, t.Count, other.Count)
-	t.CommitLat.Add(other.CommitLat, t.Count, other.Count)
-	t.RetryLat.Add(other.RetryLat, t.Count, other.Count)
-	t.ServiceLat.Add(other.ServiceLat, t.Count, other.Count)
-	t.NumRows.Add(other.NumRows, t.Count, other.Count)
-	t.RowsRead.Add(other.RowsRead, t.Count, other.Count)
-	t.BytesRead.Add(other.BytesRead, t.Count, other.Count)
-	t.RowsWritten.Add(other.RowsWritten, t.Count, other.Count)
+	transactionStatsCount := t.Count
+	if transactionStatsCount == 0 && other.Count == 0 {
+		// If both are zero, artificially set the receiver's count to one to avoid
+		// division by zero in Add.
+		transactionStatsCount = 1
+	}
+	t.IdleLat.Add(other.IdleLat, transactionStatsCount, other.Count)
+	t.CommitLat.Add(other.CommitLat, transactionStatsCount, other.Count)
+	t.RetryLat.Add(other.RetryLat, transactionStatsCount, other.Count)
+	t.ServiceLat.Add(other.ServiceLat, transactionStatsCount, other.Count)
+	t.NumRows.Add(other.NumRows, transactionStatsCount, other.Count)
+	t.RowsRead.Add(other.RowsRead, transactionStatsCount, other.Count)
+	t.BytesRead.Add(other.BytesRead, transactionStatsCount, other.Count)
+	t.RowsWritten.Add(other.RowsWritten, transactionStatsCount, other.Count)
+	t.KVCPUTimeNanos.Add(other.KVCPUTimeNanos, transactionStatsCount, other.Count)
 
 	t.ExecStats.Add(other.ExecStats)
 
@@ -141,7 +141,6 @@ func (t *TransactionStatistics) Add(other *TransactionStatistics) {
 func (s *AggregatedStatementMetadata) Add(other *CollectedStatementStatistics) {
 	// Only set the value if it hasn't already been set.
 	if s.Query == "" || s.QuerySummary == "" {
-		s.ImplicitTxn = other.Key.ImplicitTxn
 		s.Query = other.Key.Query
 		s.QuerySummary = other.Key.QuerySummary
 		s.StmtType = other.Stats.SQLType
@@ -170,17 +169,24 @@ func (s *StatementStatistics) Add(other *StatementStatistics) {
 	if other.MaxRetries > s.MaxRetries {
 		s.MaxRetries = other.MaxRetries
 	}
+	statementStatsCount := s.Count
+	if statementStatsCount == 0 && other.Count == 0 {
+		// If both are zero, artificially set the receiver's count to one to avoid
+		// division by zero in Add.
+		statementStatsCount = 1
+	}
 	s.SQLType = other.SQLType
-	s.NumRows.Add(other.NumRows, s.Count, other.Count)
-	s.IdleLat.Add(other.IdleLat, s.Count, other.Count)
-	s.ParseLat.Add(other.ParseLat, s.Count, other.Count)
-	s.PlanLat.Add(other.PlanLat, s.Count, other.Count)
-	s.RunLat.Add(other.RunLat, s.Count, other.Count)
-	s.ServiceLat.Add(other.ServiceLat, s.Count, other.Count)
-	s.OverheadLat.Add(other.OverheadLat, s.Count, other.Count)
-	s.BytesRead.Add(other.BytesRead, s.Count, other.Count)
-	s.RowsRead.Add(other.RowsRead, s.Count, other.Count)
-	s.RowsWritten.Add(other.RowsWritten, s.Count, other.Count)
+	s.NumRows.Add(other.NumRows, statementStatsCount, other.Count)
+	s.IdleLat.Add(other.IdleLat, statementStatsCount, other.Count)
+	s.ParseLat.Add(other.ParseLat, statementStatsCount, other.Count)
+	s.PlanLat.Add(other.PlanLat, statementStatsCount, other.Count)
+	s.RunLat.Add(other.RunLat, statementStatsCount, other.Count)
+	s.ServiceLat.Add(other.ServiceLat, statementStatsCount, other.Count)
+	s.OverheadLat.Add(other.OverheadLat, statementStatsCount, other.Count)
+	s.BytesRead.Add(other.BytesRead, statementStatsCount, other.Count)
+	s.RowsRead.Add(other.RowsRead, statementStatsCount, other.Count)
+	s.RowsWritten.Add(other.RowsWritten, statementStatsCount, other.Count)
+	s.KVCPUTimeNanos.Add(other.KVCPUTimeNanos, statementStatsCount, other.Count)
 	s.Nodes = util.CombineUnique(s.Nodes, other.Nodes)
 	s.KVNodeIDs = util.CombineUnique(s.KVNodeIDs, other.KVNodeIDs)
 	s.Regions = util.CombineUnique(s.Regions, other.Regions)
@@ -188,7 +194,7 @@ func (s *StatementStatistics) Add(other *StatementStatistics) {
 	s.PlanGists = util.CombineUnique(s.PlanGists, other.PlanGists)
 	s.Indexes = util.CombineUnique(s.Indexes, other.Indexes)
 	s.ExecStats.Add(other.ExecStats)
-	s.LatencyInfo.Add(other.LatencyInfo)
+	s.LatencyInfo.MergeMaxMin(other.LatencyInfo)
 
 	if s.SensitiveInfo.MostRecentPlanTimestamp.Before(other.SensitiveInfo.MostRecentPlanTimestamp) {
 		s.SensitiveInfo = other.SensitiveInfo
@@ -213,6 +219,11 @@ func (s *StatementStatistics) Add(other *StatementStatistics) {
 
 	s.Count += other.Count
 	s.FailureCount += other.FailureCount
+	s.GenericCount += other.GenericCount
+	s.StmtHintsCount += other.StmtHintsCount
+
+	s.CanaryStats.Add(other.CanaryStats)
+	s.StableStats.Add(other.StableStats)
 }
 
 // AlmostEqual compares two StatementStatistics and their contained NumericStats
@@ -231,10 +242,30 @@ func (s *StatementStatistics) AlmostEqual(other *StatementStatistics, eps float6
 		s.SensitiveInfo.Equal(other.SensitiveInfo) &&
 		s.BytesRead.AlmostEqual(other.BytesRead, eps) &&
 		s.RowsRead.AlmostEqual(other.RowsRead, eps) &&
-		s.RowsWritten.AlmostEqual(other.RowsWritten, eps)
+		s.RowsWritten.AlmostEqual(other.RowsWritten, eps) &&
+		s.CanaryStats.AlmostEqual(other.CanaryStats, eps) &&
+		s.StableStats.AlmostEqual(other.StableStats, eps)
 	// s.ExecStats are deliberately ignored since they are subject to sampling
 	// probability and are not fully deterministic (e.g. the number of network
 	// messages depends on the range cache state).
+}
+
+// Add combines other into this ExperimentStatsInfo.
+func (e *ExperimentStatsInfo) Add(other ExperimentStatsInfo) {
+	statsCount := e.Count
+	if statsCount == 0 && other.Count == 0 {
+		statsCount = 1
+	}
+	e.RunLat.Add(other.RunLat, statsCount, other.Count)
+	e.PlanLat.Add(other.PlanLat, statsCount, other.Count)
+	e.Count += other.Count
+}
+
+// AlmostEqual compares two ExperimentStatsInfo within a window of size eps.
+func (e *ExperimentStatsInfo) AlmostEqual(other ExperimentStatsInfo, eps float64) bool {
+	return e.Count == other.Count &&
+		e.RunLat.AlmostEqual(other.RunLat, eps) &&
+		e.PlanLat.AlmostEqual(other.PlanLat, eps)
 }
 
 // Add combines other into this ExecStats.
@@ -252,6 +283,7 @@ func (s *ExecStats) Add(other ExecStats) {
 	s.NetworkMessages.Add(other.NetworkMessages, execStatCollectionCount, other.Count)
 	s.MaxDiskUsage.Add(other.MaxDiskUsage, execStatCollectionCount, other.Count)
 	s.CPUSQLNanos.Add(other.CPUSQLNanos, execStatCollectionCount, other.Count)
+	s.AdmissionWaitTime.Add(other.AdmissionWaitTime, execStatCollectionCount, other.Count)
 
 	s.MVCCIteratorStats.StepCount.Add(other.MVCCIteratorStats.StepCount, execStatCollectionCount, other.Count)
 	s.MVCCIteratorStats.StepCountInternal.Add(other.MVCCIteratorStats.StepCountInternal, execStatCollectionCount, other.Count)
@@ -270,39 +302,12 @@ func (s *ExecStats) Add(other ExecStats) {
 	s.Count += other.Count
 }
 
-// Add combines other into this LatencyInfo.
-func (s *LatencyInfo) Add(other LatencyInfo) {
-	// Use the latest non-zero value.
-	if other.P50 != 0 {
-		s.P50 = other.P50
-		s.P90 = other.P90
-		s.P99 = other.P99
-	}
-
+// MergeMaxMin combines the max and min only into this LatencyInfo.
+func (s *LatencyInfo) MergeMaxMin(other LatencyInfo) {
 	if s.Min == 0 || other.Min < s.Min {
 		s.Min = other.Min
 	}
 	if other.Max > s.Max {
 		s.Max = other.Max
-	}
-	s.checkPercentiles()
-}
-
-// checkPercentiles is a patchy solution and not ideal.
-// When the execution count for a period is smaller than 500,
-// the percentiles sample is including previous aggregation periods,
-// making the p99 possible be greater than the max.
-// For now, we just do a check and update the percentiles to the max
-// possible size.
-// TODO(maryliag): use a proper sample size (#99070)
-func (s *LatencyInfo) checkPercentiles() {
-	if s.P99 > s.Max {
-		s.P99 = s.Max
-	}
-	if s.P90 > s.Max {
-		s.P90 = s.Max
-	}
-	if s.P50 > s.Max {
-		s.P50 = s.Max
 	}
 }

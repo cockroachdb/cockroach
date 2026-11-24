@@ -10,12 +10,14 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/cluster"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/clusterstats"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/option"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
@@ -42,6 +44,7 @@ const (
 type allocationBenchSpec struct {
 	nodes, cpus int
 	load        allocBenchLoad
+	lbrMode     string // see kvserverbase.GetLoadBasedRebalancingMode
 
 	startRecord time.Duration
 	samples     int
@@ -169,8 +172,20 @@ func (r kvAllocBenchEventRunner) run(ctx context.Context, c cluster.Cluster, t t
 	t.Status("running kv workload", runCmd)
 	return c.RunE(ctx, option.WithNodes(c.WorkloadNode()), runCmd)
 }
+
+// registerAllocationBench registers allocation benchmark tests that measure load
+// balancing quality across the cluster under various workload patterns. The tests
+// run multiple samples (iterations of a scenario) and report metrics for CPU
+// imbalance, write I/O imbalance, and rebalancing cost.
+//
+//   - ops=skew: Mixes different operation types with different rates (e.g., high-rate
+//     small operations vs low-rate large operations). Each workload has different
+//     resource characteristics but similar aggregate resource usage.
+//   - access=skew: Uses the same operation type but with a skewed (power-law) key
+//     access distribution, where certain keys are accessed much more frequently
+//     than others.
 func registerAllocationBench(r registry.Registry) {
-	for _, spec := range []allocationBenchSpec{
+	specTemplates := []allocationBenchSpec{
 		// TODO(kvoli): Add a background event runner and implement events for
 		// import and index backfills.
 		{
@@ -240,8 +255,19 @@ func registerAllocationBench(r registry.Registry) {
 				},
 			},
 		},
-	} {
-		registerAllocationBenchSpec(r, spec)
+	}
+	for _, spec := range specTemplates {
+		{
+			spec := spec
+			spec.lbrMode = "leases and replicas"
+			registerAllocationBenchSpec(r, spec)
+		}
+		{
+			spec := spec
+			spec.lbrMode = "multi-metric and count"
+			spec.load.desc += "/lbr=mmc"
+			registerAllocationBenchSpec(r, spec)
+		}
 	}
 }
 
@@ -258,24 +284,34 @@ func registerAllocationBenchSpec(r registry.Registry, allocSpec allocationBenchS
 		Timeout:           time.Duration(allocSpec.samples) * time.Hour,
 		NonReleaseBlocker: true,
 		CompatibleClouds:  registry.AllExceptAWS,
-		Suites:            registry.Suites(registry.Nightly),
+		Suites:            registry.Suites(registry.Weekly),
 		Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
 			runAllocationBench(ctx, t, c, allocSpec)
 		},
 	})
 }
 
+// setupAllocationBench initializes the cluster for an allocation benchmark run.
+// It starts the CockroachDB nodes with the specified load-based rebalancing mode,
+// sets up Prometheus and Grafana for metrics collection, and returns a stat
+// collector and cleanup function.
 func setupAllocationBench(
 	ctx context.Context, t test.Test, c cluster.Cluster, spec allocationBenchSpec,
 ) (clusterstats.StatCollector, func(context.Context)) {
 	t.Status("starting cluster")
 	for i := 1; i <= spec.nodes; i++ {
 		// Don't start a backup schedule as this test reports to roachperf.
+		settings := install.MakeClusterSettings()
 		startOpts := option.NewStartOpts(option.NoBackupSchedule)
 		startOpts.RoachprodOpts.ExtraArgs = append(startOpts.RoachprodOpts.ExtraArgs,
 			"--vmodule=store_rebalancer=2,allocator=2,replicate_queue=2")
-		c.Start(ctx, t.L(), startOpts, install.MakeClusterSettings(), c.Node(i))
+		c.Start(ctx, t.L(), startOpts, settings, c.Node(i))
 	}
+	require.NotEmpty(t, spec.lbrMode, "lbrMode must be set")
+	_, err := c.Conn(ctx, t.L(), 1).ExecContext(ctx, fmt.Sprintf(
+		`SET CLUSTER SETTING kv.allocator.load_based_rebalancing = '%s';`,
+		spec.lbrMode))
+	require.NoError(t, err)
 
 	return setupStatCollector(ctx, t, c, spec)
 }
@@ -318,6 +354,45 @@ func runAllocationBenchEvent(
 	return load.run.run(ctx, c, t)
 }
 
+// runAllocationBench runs the allocation benchmark test. The test measures load
+// balancing quality across the cluster by collecting metrics over multiple sample runs.
+//
+// Metrics are computed by querying Prometheus every 10 seconds (clusterstats/collector.go:
+// defaultScrapeInterval), where each data point aggregates over a 5-minute rolling window via
+// [5m] range vector selectors (rebalance_stats.go: cpuStat, ioWriteStat). This means each
+// 10-second data point represents the average over the previous 5 minutes. After a 10-minute
+// warmup, metrics are collected during the workload (default 30 minutes). At each 10-second
+// data point, the (max - min) imbalance across nodes is calculated, then all these values are
+// averaged to produce the final metric.
+//
+// Metrics Reported to Roachperf:
+//
+//  1. cpu(%): Average of (max - min) CPU utilization across nodes per 5-minute interval.
+//     This measures how well CPU load is balanced. Lower values indicate more evenly
+//     distributed CPU load. For example, if at an interval nodes have CPU utilizations of
+//     [30%, 35%, 40%, 25%, 30%], the spread is calculated as 40% - 25% = 15%. This means
+//     the highest CPU node is 15 percentage points above the lowest on average for that interval.
+//
+//  2. write(%): Average of (max - min) write disk I/O across nodes per 5-minute
+//     interval. Write throughput (MB/s) is normalized by 400 MB/s. This measures how
+//     well write load is balanced. Lower values indicate more evenly distributed I/O.
+//     For example, if at an interval nodes have write throughput of [200 MB/s, 250 MB/s,
+//     300 MB/s, 150 MB/s, 200 MB/s], the spread is 300 - 150 = 150 MB/s. Normalized by
+//     400 MB/s, this becomes 150 / 400 = 37.5%.
+//
+//  3. cost(gb): Total GB of data moved during rebalancing, computed as the difference
+//     between cumulative rebalance snapshot bytes at the end vs the start of recording.
+//     Lower values indicate more efficient rebalancing, but some rebalancing is
+//     necessary to achieve good load distribution. For example, if the cumulative
+//     rebalance bytes are 10 GB at the start and 15 GB at the end, cost(gb) = 5.
+//
+// The test runs multiple samples (default: 5) and selects the "middle run" to
+// export - the sample with minimum sum of pairwise distances to all other
+// samples across all metrics, see findMinDistanceClusterStatRun. Standard
+// deviation metrics (std_*) are computed over the values of each metric across
+// all sample runs (e.g., std_cpu(%) is the standard deviation of cpu(%) values
+// from all 5 runs). These indicate consistency across runs and are indicative
+// of worst/best case outcomes.
 func runAllocationBench(
 	ctx context.Context, t test.Test, c cluster.Cluster, spec allocationBenchSpec,
 ) {
@@ -329,6 +404,10 @@ func runAllocationBench(
 	}
 	samples := make([]*clusterstats.ClusterStatRun, spec.samples)
 
+	t.L().Printf("%s", "cpu(%) means: average of (max-min) node cpu utilization across intervals")
+	t.L().Printf("%s", "write(%) means: average of (max-min) write disk utilization across intervals")
+	t.L().Printf("%s", "cost(gb) means: GBs sent for rebalancing operations between initial and end")
+
 	for i := 0; i < spec.samples; i++ {
 		statCollector, cleanupFunc := setupAllocationBench(ctx, t, c, spec)
 		stats, err := runAllocationBenchSample(ctx, t, c, spec, statCollector)
@@ -336,6 +415,7 @@ func runAllocationBench(
 			t.L().PrintfCtx(ctx, "unable to collect allocation bench sample %s", err.Error())
 		} else {
 			samples[i] = stats
+			t.L().Printf("sample %d: %v", i+1, stats.Total)
 		}
 		// Completely wipe the cluster after each go. This avoid spurious
 		// results where prior information / statistics could influence the
@@ -350,7 +430,20 @@ func runAllocationBench(
 	// worst/best case outcomes.
 	result, sampleStddev := findMinDistanceClusterStatRun(t, samples)
 	for tag, value := range sampleStddev {
-		result.Total[fmt.Sprintf("std_%s", tag)] = value
+		metricName := fmt.Sprintf("std_%s", tag)
+		result.Total[metricName] = value
+
+		// Populate BenchmarkMetrics with metadata if it's initialized
+		// (it will be initialized only when OpenMetrics is enabled)
+		if result.BenchmarkMetrics != nil {
+			result.BenchmarkMetrics[metricName] = roachtestutil.AggregatedMetric{
+				Name:             metricName,
+				Value:            roachtestutil.MetricPoint(value),
+				Unit:             "stddev",
+				IsHigherBetter:   false, // Lower standard deviation is better
+				AdditionalLabels: nil,
+			}
+		}
 	}
 	if result == nil {
 		t.L().PrintfCtx(ctx, "no samples found for allocation bench run, won't put any artifacts")
@@ -361,6 +454,10 @@ func runAllocationBench(
 	}
 }
 
+// runAllocationBenchSample runs a single sample of the allocation benchmark.
+// It executes the workload events, then collects and aggregates metrics from
+// Prometheus for the recording period (after warmup). Returns the collected
+// statistics including cpu(%), write(%), and cost(gb) metrics.
 func runAllocationBenchSample(
 	ctx context.Context,
 	t test.Test,
@@ -374,7 +471,7 @@ func runAllocationBenchSample(
 	// workloads have completed, or one has errored, the monitor will stop
 	// blocking.
 	specLoad := &spec.load
-	m := c.NewMonitor(ctx, c.Nodes(1, spec.nodes))
+	m := c.NewDeprecatedMonitor(ctx, c.Nodes(1, spec.nodes))
 	for i := range spec.load.events {
 		m.Go(func(ctx context.Context) error {
 			return runAllocationBenchEvent(ctx, t, c, specLoad, i)
@@ -395,28 +492,46 @@ func runAllocationBenchSample(
 		true, /* dryRun */
 		startTime, endTime,
 		joinSummaryQueries(resourceMinMaxSummary, overloadMaxSummary, rebalanceCostSummary),
-		func(stats map[string]clusterstats.StatSummary) (string, float64) {
+		func(stats map[string]clusterstats.StatSummary) *roachtestutil.AggregatedMetric {
 			ret, name := 0.0, "cpu(%)"
 			if stat, ok := stats[cpuStat.Query]; ok {
 				ret = roundFraction(arithmeticMean(stat.Value), 1, 2)
 			}
-			return name, ret
+			return &roachtestutil.AggregatedMetric{
+				Name:             name,
+				Value:            roachtestutil.MetricPoint(ret),
+				Unit:             "percent",
+				IsHigherBetter:   false,
+				AdditionalLabels: nil,
+			}
 		},
-		func(stats map[string]clusterstats.StatSummary) (string, float64) {
+		func(stats map[string]clusterstats.StatSummary) *roachtestutil.AggregatedMetric {
 			ret, name := 0.0, "write(%)"
 			if stat, ok := stats[ioWriteStat.Query]; ok {
 				ret = roundFraction(arithmeticMean(stat.Value), 1, 2)
 			}
-			return name, ret
+			return &roachtestutil.AggregatedMetric{
+				Name:             name,
+				Value:            roachtestutil.MetricPoint(ret),
+				Unit:             "percent",
+				IsHigherBetter:   false,
+				AdditionalLabels: nil,
+			}
 		},
-		func(stats map[string]clusterstats.StatSummary) (string, float64) {
+		func(stats map[string]clusterstats.StatSummary) *roachtestutil.AggregatedMetric {
 			rebalanceMb := 0.0
 			values := stats[rebalanceSnapshotSentStat.Query].Value
 			if len(values) > 0 {
 				startMB, endMB := values[0], values[len(values)-1]
 				rebalanceMb = roundFraction(endMB-startMB, 1024, 2)
 			}
-			return "cost(gb)", rebalanceMb
+			return &roachtestutil.AggregatedMetric{
+				Name:             "cost(gb)",
+				Value:            roachtestutil.MetricPoint(rebalanceMb),
+				Unit:             "GB",
+				IsHigherBetter:   false,
+				AdditionalLabels: nil,
+			}
 		},
 	)
 }
@@ -512,11 +627,21 @@ func findMinDistanceClusterStatRun(
 		}
 	}
 
-	t.L().Printf("Selected row(%d) %v from samples (normalized) %v", minSample, samples[minSample].Total, resultMatrix)
-	t.L().Printf("Sample range %v", minMaxs)
-	t.L().Printf("Sample stddev %v", stddevs)
-	for _, sample := range samples {
-		t.L().Printf("%v", sample.Total)
+	t.L().Printf("normalized result matrix:")
+	var buf strings.Builder
+	for i := 0; i < n; i++ {
+		fmt.Fprintf(&buf, "\tsample run %v [", i+1)
+		for j := 0; j < len(resultMatrix[i]); j++ {
+			if j > 0 {
+				fmt.Fprintf(&buf, ", ")
+			}
+			fmt.Fprintf(&buf, "%v: %.3f", tags[j], resultMatrix[i][j])
+		}
+		fmt.Fprintf(&buf, "]\n")
 	}
+	t.L().Printf(buf.String())
+	t.L().Printf("selected sample %v (1-indexed) with total %v", minSample+1, samples[minSample].Total)
+	t.L().Printf("max-min differences across samples per tag: %v", minMaxs)
+	t.L().Printf("standard deviations across samples per tag: %v", stddevs)
 	return samples[minSample], stddevs
 }

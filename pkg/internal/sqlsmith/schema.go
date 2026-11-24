@@ -10,6 +10,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
@@ -18,10 +19,13 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/catid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/idxtype"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree/treebin"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/errors"
 	"github.com/lib/pq/oid"
 )
 
@@ -92,6 +96,13 @@ func WithTableDescriptor(tn tree.TableName, desc descpb.TableDescriptor) Smither
 	}
 }
 
+func (s *Smither) log(format string, args ...any) {
+	if s.logFn != nil {
+		s.logFn("[%s] "+format,
+			append([]any{timeutil.Now().Format(time.RFC3339Nano)}, args...)...)
+	}
+}
+
 // ReloadSchemas loads tables from the database.
 func (s *Smither) ReloadSchemas() error {
 	if s.db == nil {
@@ -101,22 +112,32 @@ func (s *Smither) ReloadSchemas() error {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	var err error
+	s.log("extracting types")
 	s.types, err = s.extractTypes()
 	if err != nil {
 		return err
 	}
+	s.log("extracting tables")
 	s.tables, err = s.extractTables()
 	if err != nil {
 		return err
 	}
+	s.log("extracting implicit record types")
+	s.types.tableImplicitRecordTypes, s.types.tableImplicitRecordTypeNames, err = s.extractTableImplicitRecordTypes()
+	if err != nil {
+		return err
+	}
+	s.log("extracting schemas")
 	s.schemas, err = s.extractSchemas()
 	if err != nil {
 		return err
 	}
+	s.log("extracting sequences")
 	s.sequences, err = s.extractSequences()
 	if err != nil {
 		return err
 	}
+	s.log("extracting indexes")
 	s.indexes, err = s.extractIndexes(s.tables)
 	s.columns = make(map[tree.TableName]map[tree.Name]*tree.ColumnTableDef)
 	for _, ref := range s.tables {
@@ -125,6 +146,8 @@ func (s *Smither) ReloadSchemas() error {
 			s.columns[*ref.TableName][col.Name] = col
 		}
 	}
+	s.log("schema reload complete: %d tables, %d schemas, %d sequences",
+		len(s.tables), len(s.schemas), len(s.sequences))
 	return err
 }
 
@@ -184,7 +207,7 @@ func (s *Smither) getRandTable() (*aliasedTableRef, bool) {
 		var indexFlags tree.IndexFlags
 		indexNames := make([]tree.Name, 0, len(indexes))
 		for _, index := range indexes {
-			if !index.Inverted {
+			if index.Type == idxtype.FORWARD {
 				indexNames = append(indexNames, index.Name)
 			}
 		}
@@ -265,6 +288,7 @@ func (s *Smither) getRandUserDefinedType() (*types.T, *tree.TypeName, bool) {
 	return s.types.udts[idx], &s.types.udtNames[idx], true
 }
 
+// extractTypes should be called before extractTables.
 func (s *Smither) extractTypes() (*typeInfo, error) {
 	rows, err := s.db.Query(`
 SELECT
@@ -329,6 +353,37 @@ FROM
 		scalarTypes: append(udts, types.Scalar...),
 		seedTypes:   append(udts, randgen.SeedTypes...),
 	}, nil
+}
+
+// extractTableImplicitRecordTypes should only be called after extractTables.
+func (s *Smither) extractTableImplicitRecordTypes() (
+	[]*types.T,
+	[]tree.ResolvableTypeReference,
+	error,
+) {
+	var tableImplicitRecordTypes []*types.T
+	var tableImplicitRecordTypeNames []tree.ResolvableTypeReference
+	for _, t := range s.tables {
+		contents := make([]*types.T, 0, len(t.Columns))
+		labels := make([]string, 0, len(t.Columns))
+		for _, col := range t.Columns {
+			if colinfo.IsSystemColumnName(string(col.Name)) {
+				// Ignore system columns since they are inaccessible.
+				continue
+			}
+			typ, ok := col.Type.(*types.T)
+			if !ok {
+				return nil, nil, errors.AssertionFailedf("unexpectedly column type is not *types.T: %T", col.Type)
+			}
+			contents = append(contents, typ)
+			labels = append(labels, string(col.Name))
+		}
+		typ := types.MakeLabeledTuple(contents, labels)
+		tableImplicitRecordTypes = append(tableImplicitRecordTypes, typ)
+		typeName := tree.MakeSchemaQualifiedTypeName(t.TableName.Schema(), t.TableName.Table())
+		tableImplicitRecordTypeNames = append(tableImplicitRecordTypeNames, &typeName)
+	}
+	return tableImplicitRecordTypes, tableImplicitRecordTypeNames, nil
 }
 
 type schemaRef struct {
@@ -499,10 +554,14 @@ func (s *Smither) extractIndexes(
 				return nil, err
 			}
 			if _, ok := indexes[idx]; !ok {
+				indexType := idxtype.FORWARD
+				if inverted {
+					indexType = idxtype.INVERTED
+				}
 				indexes[idx] = &tree.CreateIndex{
-					Name:     idx,
-					Table:    *t.TableName,
-					Inverted: inverted,
+					Name:  idx,
+					Table: *t.TableName,
+					Type:  indexType,
 				}
 			}
 			create := indexes[idx]

@@ -9,6 +9,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/clusterversion"
+	"github.com/cockroachdb/cockroach/pkg/security/username"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/colinfo"
@@ -27,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/cast"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/eval"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlclustersettings"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -155,7 +158,7 @@ func (b *Builder) buildDataSource(
 		switch t := ds.(type) {
 		case cat.Table:
 			tabMeta := b.addTable(t, &resName)
-			locking := b.lockingSpecForTableScan(lockCtx.locking, tabMeta)
+			policyCommandScope, locking := b.prepForTableScan(lockCtx.locking, tabMeta)
 			return b.buildScan(
 				tabMeta,
 				tableOrdinals(t, columnKinds{
@@ -165,6 +168,7 @@ func (b *Builder) buildDataSource(
 				}),
 				indexFlags, locking, inScope,
 				false, /* disableNotVisibleIndex */
+				policyCommandScope,
 			)
 
 		case cat.Sequence:
@@ -204,11 +208,6 @@ func (b *Builder) buildDataSource(
 		// This is the special '[ ... ]' syntax. We treat this as syntactic sugar
 		// for a top-level CTE, so it cannot refer to anything in the input scope.
 		// See #41078.
-		if b.insideFuncDef {
-			panic(unimplemented.NewWithIssue(
-				92961, "statement source (square bracket syntax) within user-defined function",
-			))
-		}
 		emptyScope := b.allocScope()
 		innerScope := b.buildStmt(source.Statement, nil /* desiredTypes */, emptyScope)
 		if len(innerScope.cols) == 0 {
@@ -339,6 +338,8 @@ func (b *Builder) buildView(
 		if !ok {
 			panic(errors.AssertionFailedf("expected SELECT statement"))
 		}
+		// TODO(michae2): We should be checking the statement hints cache here to
+		// find any external statement hints that could apply to the view statement.
 
 		b.views[view] = sel
 
@@ -346,22 +347,49 @@ func (b *Builder) buildView(
 		b.factory.Metadata().AddView(view)
 	}
 
-	// When building the view, we don't want to check for the SELECT privilege
-	// on the underlying tables, just on the view itself. Checking on the
-	// underlying tables as well would defeat the purpose of having separate
-	// SELECT privileges on the view, which is intended to allow for exposing
-	// some subset of a restricted table's data to less privileged users.
-	if !b.skipSelectPrivilegeChecks {
-		b.skipSelectPrivilegeChecks = true
-		defer func() { b.skipSelectPrivilegeChecks = false }()
+	skipUnderlyingPrivilegeChecks := sqlclustersettings.SkipUnderlyingViewPrivilegeChecks.Get(&b.evalCtx.Settings.SV)
+	isActive := b.evalCtx.Settings.Version.ActiveVersion(b.ctx).IsActive(clusterversion.V26_2)
+	// When building the view, we don't want to check the SELECT privilege of
+	// the invoker on the underlying tables. Checking the invoker would defeat
+	// the purpose of having separate SELECT privileges on the view, which is
+	// intended to allow exposing some subset of a restricted table's data to
+	// less privileged users.
+	//
+	// For user-created views, we check the SELECT privilege of the view owner
+	// (definer) on the underlying tables to ensure the view owner still has
+	// access. This also means that the definer's RLS policies are enforced
+	// rather than the invoker's. Additionaly, we check for indirect unsafe
+	// access to crdb_internals through the view.
+	//
+	// For system views (e.g. pg_catalog.pg_description,
+	// crdb_internal.transaction_statistics), we skip SELECT privilege checks
+	// entirely since they are system-defined and always valid.
+	//
+	// The SkipUnderlyingViewPrivilegeChecks cluster setting can be used to revert
+	// to the pre-v26.2 behavior where no privilege checks were performed on the
+	// underlying tables, and the invoker RLS is enforced.
+	if !isActive || skipUnderlyingPrivilegeChecks || view.IsSystemView() {
+		if !b.skipSelectPrivilegeChecks {
+			b.skipSelectPrivilegeChecks = true
+			defer func() { b.skipSelectPrivilegeChecks = false }()
+		}
+	} else {
+		if !view.IsSecurityInvoker() {
+			defer func(dataSourcePrivilegeUserOverride username.SQLUsername) {
+				b.dataSourcePrivilegeUserOverride = dataSourcePrivilegeUserOverride
+			}(b.dataSourcePrivilegeUserOverride)
+			b.dataSourcePrivilegeUserOverride = view.Owner()
+		}
+		if b.skipSelectPrivilegeChecks {
+			b.skipSelectPrivilegeChecks = false
+			defer func() { b.skipSelectPrivilegeChecks = true }()
+		}
 	}
-	trackDeps := b.trackSchemaDeps
-	if trackDeps {
-		// We are only interested in the direct dependency on this view descriptor.
-		// Any further dependency by the view's query should not be tracked.
-		b.trackSchemaDeps = false
-		defer func() { b.trackSchemaDeps = true }()
-	}
+
+	// We are only interested in the direct dependency on this view descriptor.
+	// Any further dependency by the view's query should not be tracked.
+	trackViewDep := b.trackSchemaDeps
+	defer b.DisableSchemaDepTracking()()
 
 	// We don't want the view to be able to refer to any outer scopes in the
 	// query. This shouldn't happen if the view is valid but there may be
@@ -384,7 +412,7 @@ func (b *Builder) buildView(
 		}
 	}
 
-	if trackDeps && !view.IsSystemView() {
+	if trackViewDep && !view.IsSystemView() {
 		dep := opt.SchemaDep{DataSource: view}
 		for i := range outScope.cols {
 			dep.ColumnOrdinals.Add(i)
@@ -400,13 +428,12 @@ func (b *Builder) renameSource(as tree.AliasClause, scope *scope) {
 	if as.Alias != "" {
 		colAlias := as.Cols
 
-		// Special case for Postgres compatibility: if a data source does not
-		// currently have a name, and it is a set-generating function or a scalar
-		// function with just one column, and the AS clause doesn't specify column
-		// names, then use the specified table name both as the column name and
-		// table name.
+		// Special case for Postgres compatibility: if a set-generating function
+		// or a scalar function has just one column, and the AS clause doesn't
+		// specify column names, then use the specified table name both as the
+		// column name and table name.
 		noColNameSpecified := len(colAlias) == 0
-		if scope.isAnonymousTable() && noColNameSpecified && scope.singleSRFColumn {
+		if noColNameSpecified && scope.singleSRFColumn {
 			colAlias = tree.ColumnDefList{tree.ColumnDef{Name: as.Alias}}
 		}
 
@@ -483,9 +510,11 @@ func (b *Builder) buildScanFromTableRef(
 
 	tn := tree.MakeUnqualifiedTableName(tab.Name())
 	tabMeta := b.addTable(tab, &tn)
-	locking = b.lockingSpecForTableScan(locking, tabMeta)
+	var policyCommandScope cat.PolicyCommandScope
+	policyCommandScope, locking = b.prepForTableScan(locking, tabMeta)
 	return b.buildScan(
 		tabMeta, ordinals, indexFlags, locking, inScope, false, /* disableNotVisibleIndex */
+		policyCommandScope,
 	)
 }
 
@@ -495,6 +524,18 @@ func (b *Builder) buildScanFromTableRef(
 func (b *Builder) addTable(tab cat.Table, alias *tree.TableName) *opt.TableMeta {
 	md := b.factory.Metadata()
 	tabID := md.AddTable(tab, alias)
+	// If this is a canary execution and any of the referenced tables has
+	// a canary window with genuinely different canary and stable stats,
+	// disable memo reuse so the canary-built memo is never written to the
+	// query cache or prepared-statement cache. When stats don't actually
+	// differ (e.g., the canary window has expired), the canary plan
+	// equals the stable plan, so caching it is safe.
+	if !b.DisableMemoReuse &&
+		tab.StatsCanaryWindow() > 0 &&
+		tab.CanaryAndStableStatsDiffer() &&
+		b.evalCtx.StatsRollout == eval.StatsRolloutCanary {
+		b.DisableMemoReuse = true
+	}
 	return md.TableMeta(tabID)
 }
 
@@ -528,18 +569,6 @@ func errorOnInvalidMultiregionDB(
 // be in the list (in practice, this coincides with all "ordinary" table columns
 // being in the list).
 //
-// If scanMutationCols is true, then include columns being added or dropped from
-// the table. These are currently required by the execution engine as "fetch
-// columns", when performing mutation DML statements (INSERT, UPDATE, UPSERT,
-// DELETE).
-//
-// NOTE: Callers must take care that mutation columns (columns that are being
-//
-//	added or dropped from the table) are only used when performing mutation
-//	DML statements (INSERT, UPDATE, UPSERT, DELETE). They cannot be used in
-//	any other way because they may not have been initialized yet by the
-//	backfiller!
-//
 // See Builder.buildStmt for a description of the remaining input and return
 // values.
 func (b *Builder) buildScan(
@@ -549,6 +578,7 @@ func (b *Builder) buildScan(
 	locking lockingSpec,
 	inScope *scope,
 	disableNotVisibleIndex bool,
+	policyCommandScope cat.PolicyCommandScope,
 ) (outScope *scope) {
 	if ordinals == nil {
 		panic(errors.AssertionFailedf("no ordinals"))
@@ -606,14 +636,36 @@ func (b *Builder) buildScan(
 	}
 	if tab.IsVirtualTable() {
 		if indexFlags != nil {
-			panic(pgerror.Newf(pgcode.Syntax,
-				"index flags not allowed with virtual tables"))
+			// Only the primary index hint is allowed for virtual tables. It forces
+			// a full scan instead of a virtual table lookup join, which is important
+			// for tables like pg_class and pg_attribute whose virtual indexes are
+			// incomplete.
+			if !indexFlags.IndexOnlyHint() {
+				panic(pgerror.Newf(pgcode.Syntax,
+					"%q hint not allowed with virtual tables, only hinting primary index is allowed",
+					tree.ErrString(indexFlags),
+				))
+			}
+			primaryIdxName := tab.Index(cat.PrimaryIndex).Name()
+			isPrimary := indexFlags.Index == tabledesc.LegacyPrimaryKeyIndexName ||
+				tree.Name(indexFlags.Index) == primaryIdxName
+			if !isPrimary {
+				panic(pgerror.Newf(pgcode.Syntax,
+					"%q hint not allowed with virtual tables, only hinting primary index is allowed",
+					tree.ErrString(indexFlags),
+				))
+			}
 		}
 		if locking.isSet() {
 			panic(pgerror.Newf(pgcode.Syntax,
 				"%s not allowed with virtual tables", locking.get().Strength))
 		}
 		private := memo.ScanPrivate{Table: tabID, Cols: scanColIDs}
+		if indexFlags != nil {
+			// Force primary index to prevent virtual index lookup joins.
+			private.Flags.ForceIndex = true
+			private.Flags.Index = cat.PrimaryIndex
+		}
 		outScope.expr = b.factory.ConstructScan(&private)
 
 		// Add the partial indexes after constructing the scan so we can use the
@@ -653,6 +705,7 @@ func (b *Builder) buildScan(
 		private.Flags.NoIndexJoin = indexFlags.NoIndexJoin
 		private.Flags.NoZigzagJoin = indexFlags.NoZigzagJoin
 		private.Flags.NoFullScan = indexFlags.NoFullScan
+		private.Flags.AvoidFullScan = indexFlags.AvoidFullScan
 		private.Flags.ForceInvertedIndex = indexFlags.ForceInvertedIndex
 		if indexFlags.Index != "" || indexFlags.IndexID != 0 {
 			idx := -1
@@ -782,6 +835,11 @@ func (b *Builder) buildScan(
 		outScope.expr = b.factory.ConstructProject(outScope.expr, proj, scanColIDs)
 	}
 
+	// Apply any filters required to enforce RLS policies. This must be done
+	// after adding projections for virtual columns, in case any policies
+	// reference them.
+	b.addRowLevelSecurityFilter(tabMeta, outScope, policyCommandScope)
+
 	if b.trackSchemaDeps {
 		dep := opt.SchemaDep{DataSource: tab}
 		dep.ColumnIDToOrd = make(map[opt.ColumnID]int)
@@ -812,12 +870,7 @@ func (b *Builder) addCheckConstraintsForTable(tabMeta *opt.TableMeta) {
 	// track view deps here, or else a view depending on a table with a
 	// column that is a UDT will result in a type dependency being added
 	// between the view and the UDT, even if the view does not use that column.
-	if b.trackSchemaDeps {
-		b.trackSchemaDeps = false
-		defer func() {
-			b.trackSchemaDeps = true
-		}()
-	}
+	defer b.DisableSchemaDepTracking()()
 	tab := tabMeta.Table
 
 	// Check if we have any validated check constraints. Only validated
@@ -835,7 +888,7 @@ func (b *Builder) addCheckConstraintsForTable(tabMeta *opt.TableMeta) {
 
 	// Create a scope that can be used for building the scalar expressions.
 	tableScope := b.allocScope()
-	tableScope.appendOrdinaryColumnsFromTable(tabMeta, &tabMeta.Alias)
+	b.appendOrdinaryColumnsFromTable(tableScope, tabMeta, &tabMeta.Alias)
 	// Synthesized CHECK expressions, e.g., for columns of ENUM types, may
 	// reference inaccessible columns. This can happen when the type of an
 	// indexed expression is an ENUM. We make these columns visible so that they
@@ -903,16 +956,11 @@ func (b *Builder) addCheckConstraintsForTable(tabMeta *opt.TableMeta) {
 func (b *Builder) addComputedColsForTable(
 	tabMeta *opt.TableMeta, includeVirtualMutationColOrds intsets.Fast,
 ) {
-	// We do not want to track view deps here, otherwise a view depending
-	// on a table with a computed column of a UDT will result in a
-	// type dependency being added between the view and the UDT,
-	// even if the view does not use that column.
-	if b.trackSchemaDeps {
-		b.trackSchemaDeps = false
-		defer func() {
-			b.trackSchemaDeps = true
-		}()
-	}
+	// We do not want to track view/routine deps here, otherwise a view/routine
+	// depending on a table with a computed column of a UDT will result in a
+	// type dependency being added between the view/routine and the UDT,
+	// even if the view/routine does not use that column.
+	defer b.DisableSchemaDepTracking()()
 	var tableScope *scope
 	tab := tabMeta.Table
 	for i, n := 0, tab.ColumnCount(); i < n; i++ {
@@ -932,7 +980,7 @@ func (b *Builder) addComputedColsForTable(
 
 		if tableScope == nil {
 			tableScope = b.allocScope()
-			tableScope.appendOrdinaryColumnsFromTable(tabMeta, &tabMeta.Alias)
+			b.appendOrdinaryColumnsFromTable(tableScope, tabMeta, &tabMeta.Alias)
 		}
 
 		colType := tabCol.DatumType()
@@ -951,10 +999,7 @@ func (b *Builder) addComputedColsForTable(
 							scalarType, colType, string(tabCol.ColName()),
 						))
 					}
-					// TODO(mgartner): This should be an assignment cast, but
-					// until #81698 is addressed, that could cause reads to
-					// error after adding a virtual computed column to a table.
-					scalar = b.factory.ConstructCast(scalar, colType)
+					scalar = b.factory.ConstructAssignmentCast(scalar, colType)
 				}
 			})
 			// Check if the expression contains non-immutable operators.
@@ -1186,7 +1231,15 @@ func (b *Builder) buildSelectStmtWithoutParens(
 		}
 		orderByScope := b.analyzeOrderBy(orderBy, outScope, projectionsScope, exprKindOrderBy,
 			tree.RejectGenerators|tree.RejectAggregates|tree.RejectWindowApplications)
+		preProjectionScope := b.buildOrderByPreProjection(outScope, projectionsScope, orderByScope)
 		b.buildOrderBy(outScope, projectionsScope, orderByScope)
+
+		// Construct the pre-projection for the ordering expressions.
+		if preProjectionScope != nil {
+			b.constructProjectForScope(outScope, preProjectionScope)
+			outScope.expr = preProjectionScope.expr
+		}
+
 		b.constructProjectForScope(outScope, projectionsScope)
 		outScope = projectionsScope
 	}
@@ -1232,7 +1285,7 @@ func (b *Builder) buildSelectClause(
 	fromScope := b.buildFrom(sel.From, lockCtx, inScope)
 
 	b.processWindowDefs(sel, fromScope)
-	b.buildWhere(sel.Where, fromScope)
+	b.buildWhere(sel.Where, fromScope, nil /* colRefs */)
 
 	projectionsScope := fromScope.replace()
 
@@ -1260,7 +1313,8 @@ func (b *Builder) buildSelectClause(
 		having = b.buildHaving(havingExpr, fromScope)
 	}
 
-	b.buildProjectionList(fromScope, projectionsScope)
+	b.buildProjectionList(fromScope, projectionsScope, nil /* colRefs */)
+	preProjectionScope := b.buildOrderByPreProjection(fromScope, projectionsScope, orderByScope)
 	b.buildOrderBy(fromScope, projectionsScope, orderByScope)
 	b.buildDistinctOnArgs(fromScope, projectionsScope, distinctOnScope)
 	b.buildLockArgs(fromScope, projectionsScope, lockScope)
@@ -1277,6 +1331,12 @@ func (b *Builder) buildSelectClause(
 
 	b.buildWindow(outScope, fromScope)
 	b.validateLockingInFrom(sel, lockCtx.locking, fromScope)
+
+	if preProjectionScope != nil {
+		// Construct the pre-projection for the ordering expressions.
+		b.constructProjectForScope(outScope, preProjectionScope)
+		outScope.expr = preProjectionScope.expr
+	}
 
 	// Construct the projection.
 	b.constructProjectForScope(outScope, projectionsScope)
@@ -1345,9 +1405,13 @@ func (b *Builder) processWindowDefs(sel *tree.SelectClause, fromScope *scope) {
 
 // buildWhere builds a set of memo groups that represent the given WHERE clause.
 //
+// colRefs is an optional output parameter that, if provided, is populated
+// with the columns referenced in the WHERE clause expression. Pass nil if the
+// referenced columns are not needed.
+//
 // See Builder.buildStmt for a description of the remaining input and return
 // values.
-func (b *Builder) buildWhere(where *tree.Where, inScope *scope) {
+func (b *Builder) buildWhere(where *tree.Where, inScope *scope, colRefs *opt.ColSet) {
 	if where == nil {
 		return
 	}
@@ -1358,6 +1422,7 @@ func (b *Builder) buildWhere(where *tree.Where, inScope *scope) {
 		exprKindWhere,
 		tree.RejectGenerators|tree.RejectWindowApplications|tree.RejectProcedures,
 		inScope,
+		colRefs,
 	)
 
 	// Wrap the filter in a FiltersOp.
@@ -1497,6 +1562,16 @@ func (b *Builder) validateAsOf(asOfClause tree.AsOfClause) {
 		panic(err)
 	}
 
+	// We need to look at the original statement to know if the AOST clause was
+	// specified for a backfill, This must be set correctly in order to pass
+	// the validations below.
+	switch s := b.stmt.(type) {
+	case *tree.CreateTable, *tree.RefreshMaterializedView:
+		asOf.ForBackfill = true
+	case *tree.CreateView:
+		asOf.ForBackfill = s.Materialized
+	}
+
 	if b.evalCtx.AsOfSystemTime == nil {
 		panic(pgerror.Newf(pgcode.Syntax,
 			"AS OF SYSTEM TIME must be provided on a top-level statement"))
@@ -1557,4 +1632,28 @@ func (b *Builder) rejectIfLocking(locking lockingSpec, context string) {
 func (b *Builder) raiseLockingContextError(locking lockingSpec, context string) {
 	panic(pgerror.Newf(pgcode.FeatureNotSupported,
 		"%s is not allowed with %s", locking.get().Strength, context))
+}
+
+// getPolicyCommandScopeForScan returns the applicable cat.PolicyCommandScope
+// for the current scan.
+func (b *Builder) getPolicyCommandScopeForScan(lockingSpec lockingSpec) cat.PolicyCommandScope {
+	// For policy enforcement, SELECT ... FOR UPDATE|SHARE is treated as an UPDATE
+	// command. This ensures that only rows subject to UPDATE policies are returned.
+	if lockingSpec.get().IsLocking() {
+		return cat.PolicyScopeUpdate
+	}
+	return cat.PolicyScopeSelect
+}
+
+// prepForTableScan computes the necessary inputs for the buildScan call.
+// This is handled in a helper function because the order in which these
+// inputs are generated is important.
+func (b *Builder) prepForTableScan(
+	locking lockingSpec, tabMeta *opt.TableMeta,
+) (cat.PolicyCommandScope, lockingSpec) {
+	// Determine the policy command scope first, as it can be influenced by
+	// the locking spec. However, since lockingSpecForTableScan may modify
+	// the locking spec, this check must be performed beforehand.
+	policyCommandScope := b.getPolicyCommandScopeForScan(locking)
+	return policyCommandScope, b.lockingSpecForTableScan(locking, tabMeta)
 }

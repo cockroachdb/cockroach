@@ -90,7 +90,7 @@ func TestConn(t *testing.T) {
 		t.Fatal(err)
 	}
 	serverAddr := ln.Addr()
-	log.Infof(context.Background(), "started listener on %s", serverAddr)
+	log.Dev.Infof(context.Background(), "started listener on %s", serverAddr)
 
 	var g errgroup.Group
 	ctx, cancelConn := context.WithCancel(context.Background())
@@ -202,7 +202,7 @@ func TestPipelineMetric(t *testing.T) {
 		t.Fatal(err)
 	}
 	serverAddr := ln.Addr()
-	log.Infof(context.Background(), "started listener on %s", serverAddr)
+	log.Dev.Infof(context.Background(), "started listener on %s", serverAddr)
 
 	ctx, cancelConn := context.WithCancel(context.Background())
 	defer cancelConn()
@@ -555,31 +555,31 @@ func processPgxStartup(ctx context.Context, s serverutils.TestServerInterface, c
 	for {
 		cmd, err := rd.CurCmd()
 		if err != nil {
-			log.Errorf(ctx, "CurCmd error: %v", err)
+			log.Dev.Errorf(ctx, "CurCmd error: %v", err)
 			return err
 		}
 
 		if _, ok := cmd.(sql.Sync); ok {
-			log.Infof(ctx, "advancing Sync")
+			log.Dev.Infof(ctx, "advancing Sync")
 			rd.AdvanceOne()
 			continue
 		}
 
 		exec, ok := cmd.(sql.ExecStmt)
 		if !ok {
-			log.Infof(ctx, "stop wait at: %v", cmd)
+			log.Dev.Infof(ctx, "stop wait at: %v", cmd)
 			return nil
 		}
 		query := exec.AST.String()
 		if !strings.HasPrefix(query, "SELECT t.oid") {
-			log.Infof(ctx, "stop wait at query: %s", query)
+			log.Dev.Infof(ctx, "stop wait at query: %s", query)
 			return nil
 		}
 		if err := execQuery(ctx, query, s, c); err != nil {
-			log.Errorf(ctx, "execQuery %s error: %v", query, err)
+			log.Dev.Errorf(ctx, "execQuery %s error: %v", query, err)
 			return err
 		}
-		log.Infof(ctx, "executed query: %s", query)
+		log.Dev.Infof(ctx, "executed query: %s", query)
 		rd.AdvanceOne()
 	}
 }
@@ -687,8 +687,8 @@ func client(ctx context.Context, serverAddr net.Addr, wg *sync.WaitGroup) error 
 
 func newTestServer() *Server {
 	sqlMetrics := sql.MakeMemMetrics("test" /* endpoint */, time.Second /* histogramWindow */)
-	metrics := newTenantSpecificMetrics(sqlMetrics /* sqlMemMetrics */, metric.TestSampleInterval)
 	st := cluster.MakeTestingClusterSettings()
+	metrics := newTenantSpecificMetrics(sqlMetrics /* sqlMemMetrics */, metric.TestSampleInterval, &st.SV)
 	s := &Server{
 		tenantMetrics: metrics,
 		destinationMetrics: destinationAggMetrics{
@@ -764,7 +764,7 @@ func getSessionArgs(
 			}
 		}()
 		ctx := context.Background()
-		cp, err := parseClientProvidedSessionParameters(ctx, &buf, netConn.RemoteAddr(), trustRemoteAddr,
+		cp, _, err := parseClientProvidedSessionParameters(ctx, &buf, netConn.RemoteAddr(), trustRemoteAddr,
 			false /* acceptTenantName */, false /* acceptSystemIdentityOption */)
 		if err != nil {
 			return netConn, sql.SessionArgs{}, err
@@ -835,10 +835,10 @@ func expectExecStmt(
 		t.Fatalf("expected %s, got %s", expSQL, es.AST.String())
 	}
 
-	if es.ParseStart == (time.Time{}) {
+	if es.ParseStart == 0 {
 		t.Fatalf("ParseStart not filled in")
 	}
-	if es.ParseEnd == (time.Time{}) {
+	if es.ParseEnd == 0 {
 		t.Fatalf("ParseEnd not filled in")
 	}
 	if typ == queryStringComplete {
@@ -1076,7 +1076,7 @@ type pgxTestLogger struct{}
 func (l pgxTestLogger) Log(
 	ctx context.Context, level pgx.LogLevel, msg string, data map[string]interface{},
 ) {
-	log.Infof(ctx, "pgx log [%s] %s - %s", level, msg, data)
+	log.Dev.Infof(ctx, "pgx log [%s] %s - %s", level, msg, data)
 }
 
 // pgxTestLogger implements pgx.Logger.
@@ -1449,8 +1449,11 @@ func TestConnServerAbortsOnRepeatedErrors(t *testing.T) {
 	conn, err := db.Conn(ctx)
 	require.NoError(t, err)
 
+	// Get the current value of the cluster setting.
+	maxErrors := int(maxRepeatedErrorCount.Get(&srv.ClusterSettings().SV))
+
 	atomic.StoreUint32(&shouldError, 1)
-	for i := 0; i < maxRepeatedErrorCount+100; i++ {
+	for i := 0; i < maxErrors+100; i++ {
 		var s int
 		err := conn.QueryRowContext(ctx, "SELECT 1").Scan(&s)
 		if err != nil {
@@ -1459,9 +1462,9 @@ func TestConnServerAbortsOnRepeatedErrors(t *testing.T) {
 			}
 			if errors.Is(err, driver.ErrBadConn) {
 				// The server closed the connection, which is what we want!
-				require.GreaterOrEqualf(t, i, maxRepeatedErrorCount,
+				require.GreaterOrEqualf(t, i, maxErrors,
 					"the server should have aborted after seeing %d errors",
-					maxRepeatedErrorCount,
+					maxErrors,
 				)
 				return
 			}
@@ -1706,7 +1709,7 @@ func TestParseClientProvidedSessionParameters(t *testing.T) {
 			}
 			defer func() { _ = ln.Close() }()
 			serverAddr := ln.Addr()
-			log.Infof(context.Background(), "started listener on %s", serverAddr)
+			log.Dev.Infof(context.Background(), "started listener on %s", serverAddr)
 			baseURL := fmt.Sprintf("postgres://%s/system?sslmode=disable", serverAddr)
 
 			var netConn net.Conn
@@ -2303,6 +2306,8 @@ func TestPublishConnLatencyMetric(t *testing.T) {
 				getHistogramOptionsForIOLatency(AuthGSSConnLatency, time.Hour)),
 			AuthScramConnLatency: metric.NewHistogram(
 				getHistogramOptionsForIOLatency(AuthScramConnLatency, time.Hour)),
+			AuthLDAPConnLatencyInternal: metric.NewHistogram(
+				getHistogramOptionsForIOLatency(AuthLDAPConnLatencyInternal, time.Hour)),
 		},
 	}
 
@@ -2401,4 +2406,54 @@ func TestPublishConnLatencyMetric(t *testing.T) {
 	count, sum = w.Total()
 	require.Equal(t, int64(2), count)
 	require.Equal(t, float64(9), sum)
+}
+
+// write unit tests for the function publishConnLatencyInternalMetric
+func TestPublishConnLatencyInternalMetric(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	c := conn{
+		metrics: &tenantSpecificMetrics{
+			AuthLDAPConnLatency: metric.NewHistogram(
+				getHistogramOptionsForIOLatency(AuthLDAPConnLatency, time.Hour)),
+			AuthLDAPConnLatencyInternal: metric.NewHistogram(
+				getHistogramOptionsForIOLatency(AuthLDAPConnLatencyInternal, time.Hour)),
+		},
+	}
+
+	// LDAP
+	ldapDuration := int64(5)
+	ldapInternalDuration := int64(4)
+	c.publishConnLatencyMetric(ldapDuration, ldapHBAEntry.string())
+	c.publishConnLatencyInternalMetric(ldapInternalDuration, ldapHBAEntry.string())
+	w := c.metrics.AuthLDAPConnLatency.WindowedSnapshot()
+	count, sum := w.Total()
+	require.Equal(t, int64(1), count)
+	require.Equal(t, float64(5), sum)
+
+	wI := c.metrics.AuthLDAPConnLatencyInternal.WindowedSnapshot()
+	countI, sumI := wI.Total()
+	require.Equal(t, int64(1), countI)
+	require.Equal(t, float64(4), sumI)
+
+	// internal latency must be less than total latency.
+	require.Less(t, sumI, sum)
+
+	// republish on LDAP
+	ldapDuration = int64(2)
+	ldapInternalDuration = int64(1)
+	c.publishConnLatencyMetric(ldapDuration, ldapHBAEntry.string())
+	c.publishConnLatencyInternalMetric(ldapInternalDuration, ldapHBAEntry.string())
+	w = c.metrics.AuthLDAPConnLatency.WindowedSnapshot()
+	count, sum = w.Total()
+	require.Equal(t, int64(2), count)
+	require.Equal(t, float64(7), sum)
+
+	wI = c.metrics.AuthLDAPConnLatencyInternal.WindowedSnapshot()
+	countI, sumI = wI.Total()
+	require.Equal(t, int64(2), countI)
+	require.Equal(t, float64(5), sumI)
+
+	// internal latency must be less than total latency.
+	require.Less(t, sumI, sum)
 }

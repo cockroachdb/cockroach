@@ -8,12 +8,13 @@ package kvserver
 import (
 	"context"
 	"fmt"
-	"math"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvpb"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/apply"
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvstorage"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -57,30 +58,47 @@ func (s destroyStatus) Removed() bool {
 	return s.reason == destroyReasonRemoved
 }
 
-// mergedTombstoneReplicaID is the replica ID written into the tombstone
-// for replicas which are part of a range which is known to have been merged.
-// This value should prevent any messages from stale replicas of that range from
-// ever resurrecting merged replicas. Whenever merging or subsuming a replica we
-// know new replicas can never be created so this value is used even if we
-// don't know the current replica ID.
-const mergedTombstoneReplicaID roachpb.ReplicaID = math.MaxInt32
+// setDestroyStatusRemovedRaftMuLocked marks the replica as removed. The caller
+// must hold raftMu; readOnlyCmdMu and mu are acquired internally.
+func (r *Replica) setDestroyStatusRemovedRaftMuLocked() {
+	r.raftMu.AssertHeld()
+	r.readOnlyCmdMu.Lock()
+	defer r.readOnlyCmdMu.Unlock()
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.shMu.destroyStatus.Set(
+		kvpb.NewRangeNotFoundError(r.RangeID, r.StoreID()),
+		destroyReasonRemoved,
+	)
+}
 
-func (r *Replica) postDestroyRaftMuLocked(ctx context.Context, ms enginepb.MVCCStats) error {
-	// TODO(tschottdorf): at node startup, we should remove all on-disk
-	// directories belonging to replicas which aren't present. A crash before a
-	// call to postDestroyRaftMuLocked will currently leave the files around
-	// forever.
+// postDestroyRaftMuLocked is called after the replica destruction is durably
+// written to Pebble.
+func (r *Replica) postDestroyRaftMuLocked(ctx context.Context) {
+	// Clearing sideloaded storage may fail (e.g. due to I/O errors), but we log
+	// and continue. We've already committed the replica removal, and any future
+	// replica instantiation will go through a snapshot path which clears the
+	// sideloaded storage.
+	// Leaking the files is preferable to crashing or having to recover from a
+	// partially-destroyed replica state.
 	//
-	// TODO(tbg): coming back in 2021, the above should be outdated. The ReplicaID
-	// is set on creation and never changes over the lifetime of a Replica. Also,
-	// the replica is always contained in its descriptor. So this code below should
-	// be removable.
-	//
-	// TODO(pavelkalinnikov): coming back in 2023, the above may still happen if:
-	// (1) state machine syncs, (2) OS crashes before (3) sideloaded was able to
-	// sync the files removal. The files should be cleaned up on restart.
-	if err := r.raftMu.sideloaded.Clear(ctx); err != nil {
-		return err
+	// TODO(#136416): at node startup, we could remove all on-disk directories
+	// belonging to replicas which aren't present. A crash before a call to
+	// postDestroyRaftMuLocked or hitting an error below will currently leave the
+	// files around forever.
+	if r.store.EnginesSeparated() {
+		// On separated engines, only delete sideloaded files belonging to the
+		// unapplied suffix of the raft log (entries after RaftAppliedIndex). The
+		// applied prefix's sideloaded files are cleaned up later by WAGTruncator.
+		if err := r.logStorage.ls.Sideload.TruncateAfter(ctx, r.shMu.state.RaftAppliedIndex); err != nil {
+			log.KvDistribution.Warningf(ctx, "failed to truncate sideloaded storage suffix: %v", err)
+			err = nil // ignore intentionally
+		}
+	} else {
+		if err := r.logStorage.ls.Sideload.Clear(ctx); err != nil {
+			log.KvDistribution.Warningf(ctx, "failed to clear sideloaded storage: %v", err)
+			err = nil // ignore intentionally
+		}
 	}
 
 	// Release the reference to this tenant in metrics, we know the tenant ID is
@@ -93,64 +111,98 @@ func (r *Replica) postDestroyRaftMuLocked(ctx context.Context, ms enginepb.MVCCS
 	if r.tenantLimiter != nil {
 		r.store.tenantRateLimiters.Release(r.tenantLimiter)
 	}
-
-	return nil
 }
 
-// destroyRaftMuLocked deletes data associated with a replica, leaving a
-// tombstone. The Replica may not be initialized in which case only the
-// range ID local data is removed.
-func (r *Replica) destroyRaftMuLocked(ctx context.Context, nextReplicaID roachpb.ReplicaID) error {
-	startTime := timeutil.Now()
+// pendingReplicaDestruction holds a staged but uncommitted replica destruction.
+// The engine batch has been populated with all writes needed to destroy the
+// replica's on-disk state and install a tombstone. Call MustCommit to durably
+// apply the destruction.
+type pendingReplicaDestruction struct {
+	batch       kvstorage.Batch[storage.WriteBatch]
+	ms          enginepb.MVCCStats
+	initialized bool
+	stageTime   time.Time
+	clearTime   time.Time
+}
 
-	ms := r.GetMVCCStats()
-	batch := r.store.TODOEngine().NewWriteBatch()
-	defer batch.Close()
-	desc := r.Desc()
-	inited := desc.IsInitialized()
-
-	opts := kvstorage.ClearRangeDataOptions{
-		ClearReplicatedBySpan: desc.RSpan(), // zero if !inited
-		// TODO(tbg): if it's uninitialized, we might as well clear
-		// the replicated state because there isn't any. This seems
-		// like it would be simpler, but needs a code audit to ensure
-		// callers don't call this in in-between states where the above
-		// assumption doesn't hold.
-		ClearReplicatedByRangeID:   inited,
-		ClearUnreplicatedByRangeID: true,
-	}
-	// TODO(sep-raft-log): need both engines separately here.
-	if err := kvstorage.DestroyReplica(ctx, r.RangeID, r.store.TODOEngine(), batch, nextReplicaID, opts); err != nil {
-		return err
-	}
-	preTime := timeutil.Now()
-
-	// We need to sync here because we are potentially deleting sideloaded
-	// proposals from the file system next. We could write the tombstone only in
-	// a synchronous batch first and then delete the data alternatively, but
-	// then need to handle the case in which there is both the tombstone and
-	// leftover replica data.
-	if err := batch.Commit(true); err != nil {
-		return err
+// MustCommit sync-commits the staged destruction batch and logs the result.
+//
+// A batch commit is expected to be infallible (the data is already in memory
+// and just needs to be written to the WAL). Callers rely on this by performing
+// irreversible in-memory state changes (e.g. setting destroyStatus) between
+// staging and committing. Making commit fallible would force callers to handle
+// rollback of those in-memory changes, adding significant complexity. If a
+// commit does fail, we are in an unrecoverable situation and must terminate.
+//
+// We sync here because we are potentially deleting sideloaded proposals from
+// the file system next, and don't want a crash in the middle to leave a log
+// entry with a missing sideloaded file.
+func (p *pendingReplicaDestruction) MustCommit(ctx context.Context) {
+	if err := p.batch.Commit(true /* sync */); err != nil {
+		log.KvDistribution.Fatalf(ctx, "unable to commit replica destruction batch: %v", err)
 	}
 	commitTime := timeutil.Now()
-
-	if err := r.postDestroyRaftMuLocked(ctx, ms); err != nil {
-		return err
-	}
-	if r.IsInitialized() {
-		log.Infof(ctx, "removed %d (%d+%d) keys in %0.0fms [clear=%0.0fms commit=%0.0fms]",
-			ms.KeyCount+ms.SysCount, ms.KeyCount, ms.SysCount,
-			commitTime.Sub(startTime).Seconds()*1000,
-			preTime.Sub(startTime).Seconds()*1000,
-			commitTime.Sub(preTime).Seconds()*1000)
+	if p.initialized {
+		log.KvDistribution.Infof(ctx,
+			"removed %d (%d+%d) keys in %0.0fms [clear=%0.0fms commit=%0.0fms]",
+			p.ms.KeyCount+p.ms.SysCount, p.ms.KeyCount, p.ms.SysCount,
+			commitTime.Sub(p.stageTime).Seconds()*1000,
+			p.clearTime.Sub(p.stageTime).Seconds()*1000,
+			commitTime.Sub(p.clearTime).Seconds()*1000,
+		)
 	} else {
-		log.Infof(ctx, "removed uninitialized range in %0.0fms [clear=%0.0fms commit=%0.0fms]",
-			commitTime.Sub(startTime).Seconds()*1000,
-			preTime.Sub(startTime).Seconds()*1000,
-			commitTime.Sub(preTime).Seconds()*1000)
+		log.KvDistribution.Infof(ctx,
+			"removed uninitialized range in %0.0fms [clear=%0.0fms commit=%0.0fms]",
+			commitTime.Sub(p.stageTime).Seconds()*1000,
+			p.clearTime.Sub(p.stageTime).Seconds()*1000,
+			commitTime.Sub(p.clearTime).Seconds()*1000,
+		)
 	}
-	return nil
+}
+
+// Close must be the last call made on this type.
+func (p *pendingReplicaDestruction) Close() {
+	p.batch.Close()
+}
+
+// stageDestroyRaftMuLocked builds a batch that, when committed, will destroy
+// the replica's on-disk state and install a tombstone. The returned
+// pendingReplicaDestruction must have Close called when it is no longer needed.
+//
+// This method performs engine reads (to validate replica ID and tombstone
+// state) and stages engine writes into a batch, but does not commit. If any
+// engine read fails (e.g. due to context cancellation or I/O error), the error
+// is returned and the caller can abort with no side effects.
+func (r *Replica) stageDestroyRaftMuLocked(
+	ctx context.Context, nextReplicaID roachpb.ReplicaID,
+) (pendingReplicaDestruction, error) {
+	r.raftMu.AssertHeld()
+	if fn := r.store.TestingKnobs().TestingReplicaDestroyErr; fn != nil {
+		if err := fn(); err != nil {
+			return pendingReplicaDestruction{}, err
+		}
+	}
+	stageTime := timeutil.Now()
+	batch := r.store.batchFactory.NewWriteBatch()
+	stateWO, raftWO := kvstorage.StateWO(batch.State()), batch.Raft()
+	if err := kvstorage.DestroyReplica(
+		ctx, kvstorage.ReadWriter{
+			State: kvstorage.State{RO: r.store.StateEngine(), WO: stateWO},
+			Raft:  kvstorage.Raft{RO: r.store.LogEngine(), WO: raftWO},
+		},
+		batch.WagWriter(),
+		r.destroyInfoRaftMuLocked(), nextReplicaID,
+	); err != nil {
+		batch.Close()
+		return pendingReplicaDestruction{}, err
+	}
+	return pendingReplicaDestruction{
+		batch:       batch,
+		ms:          r.GetMVCCStats(),
+		initialized: r.shMu.state.Desc.IsInitialized(),
+		stageTime:   stageTime,
+		clearTime:   timeutil.Now(),
+	}, nil
 }
 
 // disconnectReplicationRaftMuLocked is called when a Replica is being removed.
@@ -168,7 +220,6 @@ func (r *Replica) disconnectReplicationRaftMuLocked(ctx context.Context) {
 	if pq := r.mu.proposalQuota; pq != nil {
 		pq.Close("destroyed")
 	}
-	r.mu.replicaFlowControlIntegration.onDestroyed(ctx)
 	r.mu.proposalBuf.FlushLockedWithoutProposing(ctx)
 	for _, p := range r.mu.proposals {
 		r.cleanupFailedProposalLocked(p)
@@ -177,8 +228,8 @@ func (r *Replica) disconnectReplicationRaftMuLocked(ctx context.Context) {
 		p.finishApplication(ctx, makeProposalResultErr(kvpb.NewAmbiguousResultError(apply.ErrRemoved)))
 	}
 
-	if !r.mu.destroyStatus.Removed() {
-		log.Fatalf(ctx, "removing raft group before destroying replica %s", r)
+	if !r.shMu.destroyStatus.Removed() {
+		log.KvDistribution.Fatalf(ctx, "removing raft group before destroying replica %s", r)
 	}
 	r.mu.internalRaftGroup = nil
 	r.mu.raftTracer.Close()

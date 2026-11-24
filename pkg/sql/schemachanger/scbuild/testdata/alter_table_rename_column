@@ -1,0 +1,161 @@
+setup
+CREATE TABLE defaultdb.foo (i INT PRIMARY KEY, j INT)
+----
+
+build
+ALTER TABLE defaultdb.foo RENAME COLUMN j TO k
+----
+- [[ColumnName:{DescID: 104, Name: j, ColumnID: 2}, ABSENT], PUBLIC]
+  {columnId: 2, name: j, tableId: 104}
+- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 104}
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
+- [[ColumnName:{DescID: 104, Name: k, ColumnID: 2}, PUBLIC], ABSENT]
+  {columnId: 2, name: k, tableId: 104}
+
+build
+ALTER TABLE defaultdb.foo RENAME COLUMN i TO id
+----
+- [[ColumnName:{DescID: 104, Name: i, ColumnID: 1}, ABSENT], PUBLIC]
+  {columnId: 1, name: i, tableId: 104}
+- [[IndexData:{DescID: 104, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 104}
+- [[TableData:{DescID: 104, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 104}
+- [[ColumnName:{DescID: 104, Name: id, ColumnID: 1}, PUBLIC], ABSENT]
+  {columnId: 1, name: id, tableId: 104}
+
+setup
+CREATE TABLE defaultdb.bar (x INT PRIMARY KEY, y INT, z INT, INDEX idx_y (y))
+----
+
+build
+ALTER TABLE defaultdb.bar RENAME COLUMN y TO y_new
+----
+- [[ColumnName:{DescID: 105, Name: y, ColumnID: 2}, ABSENT], PUBLIC]
+  {columnId: 2, name: y, tableId: 105}
+- [[IndexData:{DescID: 105, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 105}
+- [[IndexData:{DescID: 105, IndexID: 2}, PUBLIC], PUBLIC]
+  {indexId: 2, tableId: 105}
+- [[TableData:{DescID: 105, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 105}
+- [[ColumnName:{DescID: 105, Name: y_new, ColumnID: 2}, PUBLIC], ABSENT]
+  {columnId: 2, name: y_new, tableId: 105}
+
+setup
+CREATE TABLE defaultdb.multi (a INT PRIMARY KEY, b INT, c INT, d INT)
+----
+
+build
+ALTER TABLE defaultdb.multi RENAME COLUMN b TO b_renamed, RENAME COLUMN c TO c_renamed
+----
+- [[ColumnName:{DescID: 106, Name: b, ColumnID: 2}, ABSENT], PUBLIC]
+  {columnId: 2, name: b, tableId: 106}
+- [[ColumnName:{DescID: 106, Name: c, ColumnID: 3}, ABSENT], PUBLIC]
+  {columnId: 3, name: c, tableId: 106}
+- [[IndexData:{DescID: 106, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 106}
+- [[TableData:{DescID: 106, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 106}
+- [[ColumnName:{DescID: 106, Name: b_renamed, ColumnID: 2}, PUBLIC], ABSENT]
+  {columnId: 2, name: b_renamed, tableId: 106}
+- [[ColumnName:{DescID: 106, Name: c_renamed, ColumnID: 3}, PUBLIC], ABSENT]
+  {columnId: 3, name: c_renamed, tableId: 106}
+
+setup
+CREATE TABLE defaultdb.with_constraints (
+  id INT PRIMARY KEY,
+  email TEXT UNIQUE,
+  age INT CHECK (age > 0),
+  balance DECIMAL DEFAULT 0.00
+)
+----
+
+build
+ALTER TABLE defaultdb.with_constraints RENAME COLUMN email TO email_address
+----
+- [[ColumnName:{DescID: 107, Name: email, ColumnID: 2}, ABSENT], PUBLIC]
+  {columnId: 2, name: email, tableId: 107}
+- [[IndexData:{DescID: 107, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 107}
+- [[IndexData:{DescID: 107, IndexID: 2}, PUBLIC], PUBLIC]
+  {indexId: 2, tableId: 107}
+- [[TableData:{DescID: 107, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 107}
+- [[ColumnName:{DescID: 107, Name: email_address, ColumnID: 2}, PUBLIC], ABSENT]
+  {columnId: 2, name: email_address, tableId: 107}
+
+build
+ALTER TABLE defaultdb.with_constraints RENAME COLUMN age TO person_age
+----
+- [[ColumnName:{DescID: 107, Name: age, ColumnID: 3}, ABSENT], PUBLIC]
+  {columnId: 3, name: age, tableId: 107}
+- [[IndexData:{DescID: 107, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 107}
+- [[IndexData:{DescID: 107, IndexID: 2}, PUBLIC], PUBLIC]
+  {indexId: 2, tableId: 107}
+- [[TableData:{DescID: 107, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 107}
+- [[ColumnName:{DescID: 107, Name: person_age, ColumnID: 3}, PUBLIC], ABSENT]
+  {columnId: 3, name: person_age, tableId: 107}
+
+build
+ALTER TABLE defaultdb.with_constraints RENAME COLUMN balance TO account_balance
+----
+- [[ColumnName:{DescID: 107, Name: balance, ColumnID: 4}, ABSENT], PUBLIC]
+  {columnId: 4, name: balance, tableId: 107}
+- [[IndexData:{DescID: 107, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 107}
+- [[IndexData:{DescID: 107, IndexID: 2}, PUBLIC], PUBLIC]
+  {indexId: 2, tableId: 107}
+- [[TableData:{DescID: 107, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 107}
+- [[ColumnName:{DescID: 107, Name: account_balance, ColumnID: 4}, PUBLIC], ABSENT]
+  {columnId: 4, name: account_balance, tableId: 107}
+
+setup
+CREATE SCHEMA sc1;
+CREATE TABLE sc1.schema_table (col1 INT PRIMARY KEY, col2 TEXT)
+----
+
+build
+ALTER TABLE sc1.schema_table RENAME COLUMN col2 TO column_two
+----
+- [[ColumnName:{DescID: 109, Name: col2, ColumnID: 2}, ABSENT], PUBLIC]
+  {columnId: 2, name: col2, tableId: 109}
+- [[IndexData:{DescID: 109, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 109}
+- [[TableData:{DescID: 109, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 109}
+- [[ColumnName:{DescID: 109, Name: column_two, ColumnID: 2}, PUBLIC], ABSENT]
+  {columnId: 2, name: column_two, tableId: 109}
+
+setup
+CREATE TABLE defaultdb.computed_col (i INT PRIMARY KEY, j INT, k INT AS (i + j) STORED)
+----
+
+build
+ALTER TABLE defaultdb.computed_col RENAME COLUMN j TO j_new
+----
+- [[ColumnName:{DescID: 110, Name: j, ColumnID: 2}, ABSENT], PUBLIC]
+  {columnId: 2, name: j, tableId: 110}
+- [[IndexData:{DescID: 110, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 110}
+- [[TableData:{DescID: 110, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 110}
+- [[ColumnName:{DescID: 110, Name: j_new, ColumnID: 2}, PUBLIC], ABSENT]
+  {columnId: 2, name: j_new, tableId: 110}
+
+build
+ALTER TABLE defaultdb.computed_col RENAME COLUMN k TO k_renamed
+----
+- [[ColumnName:{DescID: 110, Name: k, ColumnID: 3}, ABSENT], PUBLIC]
+  {columnId: 3, name: k, tableId: 110}
+- [[IndexData:{DescID: 110, IndexID: 1}, PUBLIC], PUBLIC]
+  {indexId: 1, tableId: 110}
+- [[TableData:{DescID: 110, ReferencedDescID: 100}, PUBLIC], PUBLIC]
+  {databaseId: 100, tableId: 110}
+- [[ColumnName:{DescID: 110, Name: k_renamed, ColumnID: 3}, PUBLIC], ABSENT]
+  {columnId: 3, name: k_renamed, tableId: 110}

@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessioninit"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/eventpb"
@@ -53,6 +54,7 @@ import (
 
 // setClusterSettingNode represents a SET CLUSTER SETTING statement.
 type setClusterSettingNode struct {
+	zeroInputPlanNode
 	name    settings.SettingName
 	st      *cluster.Settings
 	setting settings.NonMaskedSetting
@@ -224,12 +226,16 @@ func (p *planner) SetClusterSetting(
 	}
 
 	if st.OverridesInformer != nil && st.OverridesInformer.IsOverridden(setting.InternalKey()) {
-		return nil, errors.Errorf("cluster setting '%s' is currently overridden by the operator", name)
+		return nil, errors.Wrapf(cluster.SettingOverrideErr, "cluster setting '%s' cannot be set", name)
 	}
 
 	value, err := p.getAndValidateTypedClusterSetting(ctx, name, n.Value, setting)
 	if err != nil {
 		return nil, err
+	}
+
+	if name == "sql.ttl.default_delete_rate_limit" || name == "sql.ttl.default_select_rate_limit" {
+		printTTLRateLimitNotice(ctx, p)
 	}
 
 	csNode := setClusterSettingNode{
@@ -239,6 +245,18 @@ func (p *planner) SetClusterSetting(
 		value:   value,
 	}
 	return &csNode, nil
+}
+
+func printTTLRateLimitNotice(ctx context.Context, p eval.ClientNoticeSender) {
+	ttlDocDetail := "See the documentation for additional details: " +
+		docs.URL("row-level-ttl#ttl-storage-parameters")
+	p.BufferClientNotice(
+		ctx,
+		errors.WithDetail(
+			pgnotice.Newf("The TTL rate limit is per node per table."),
+			ttlDocDetail,
+		),
+	)
 }
 
 func (p *planner) getAndValidateTypedClusterSetting(
@@ -264,7 +282,7 @@ func (p *planner) getAndValidateTypedClusterSetting(
 				requiredType = types.Float
 			case settings.AnyEnumSetting:
 				// EnumSettings can be set with either strings or integers.
-				requiredType = types.Any
+				requiredType = types.AnyElement
 			case *settings.DurationSetting:
 				requiredType = types.Interval
 			case *settings.DurationSettingWithExplicitUnit:
@@ -441,14 +459,15 @@ func writeSettingInternal(
 
 		if setting.IsUnsafe() {
 			// Also mention the change in the non-structured DEV log.
-			log.Warningf(ctx, "unsafe setting changed: %q -> %v", name, reportedValue)
+			log.Dev.Warningf(ctx, "unsafe setting changed: %q -> %v", name, reportedValue)
 		}
 
 		return logFn(ctx,
 			0, /* no target */
 			&eventpb.SetClusterSetting{
-				SettingName: string(name),
-				Value:       reportedValue,
+				SettingName:  string(name),
+				Value:        reportedValue,
+				DefaultValue: setting.DefaultString(),
 			})
 	}(); err != nil {
 		return "", err
@@ -683,7 +702,12 @@ func waitForSettingUpdate(
 	}
 	errNotReady := errors.New("setting updated but timed out waiting to read new value")
 	var observed string
-	err := retry.ForDuration(10*time.Second, func() error {
+	defaultDuration := 10 * time.Second
+	// Bench tests maybe more prone to flaking, so use a longer time limit for them.
+	if buildutil.CrdbBenchBuild {
+		defaultDuration *= 3
+	}
+	err := retry.ForDuration(defaultDuration, func() error {
 		observed = setting.Encoded(&execCfg.Settings.SV)
 		if observed != expectedEncodedValue {
 			return errNotReady
@@ -691,7 +715,7 @@ func waitForSettingUpdate(
 		return nil
 	})
 	if err != nil {
-		log.Warningf(
+		log.Dev.Warningf(
 			ctx, "SET CLUSTER SETTING %q timed out waiting for value %q, observed %q",
 			name, expectedEncodedValue, observed,
 		)
@@ -803,6 +827,9 @@ func toSettingString(
 		if i, intOK := d.(*tree.DInt); intOK {
 			v, ok := setting.ParseEnum(settings.EncodeInt(int64(*i)))
 			if ok {
+				if err := setting.Validate(v); err != nil {
+					return "", err
+				}
 				return settings.EncodeInt(v), nil
 			}
 			return "", errors.WithHint(errors.Errorf("invalid integer value '%d' for enum setting", *i), setting.GetAvailableValuesAsHint())
@@ -810,6 +837,9 @@ func toSettingString(
 			str := string(*s)
 			v, ok := setting.ParseEnum(str)
 			if ok {
+				if err := setting.Validate(v); err != nil {
+					return "", err
+				}
 				return settings.EncodeInt(v), nil
 			}
 			return "", errors.WithHint(errors.Errorf("invalid string value '%s' for enum setting", str), setting.GetAvailableValuesAsHint())

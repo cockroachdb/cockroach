@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
+	"github.com/cockroachdb/redact"
 	"github.com/lib/pq/oid"
 )
 
@@ -57,8 +58,8 @@ func maybeMutationStatus(mm catalog.TableElementMaybeMutation) scpb.Status {
 
 // newExpression parses the expression and walks its AST to collect all by-ID
 // type and sequence references into an scpb.Expression expression wrapper.
-func (w *walkCtx) newExpression(expr string) (*scpb.Expression, error) {
-	e, err := parser.ParseExpr(expr)
+func (w *walkCtx) newExpression(expr catpb.Expression) (*scpb.Expression, error) {
+	e, err := parser.ParseExpr(string(expr))
 	if err != nil {
 		return nil, err
 	}
@@ -71,7 +72,8 @@ func (w *walkCtx) newExpression(expr string) (*scpb.Expression, error) {
 		for _, si := range seqIdents {
 			if !si.IsByID() {
 				panic(scerrors.NotImplementedErrorf(nil, /* n */
-					"sequence %q referenced by name", si.SeqName))
+					redact.Sprintf("sequence %q referenced by name", si.SeqName),
+				))
 			}
 			seqIDs.Add(descpb.ID(si.SeqID))
 		}
@@ -108,15 +110,18 @@ func (w *walkCtx) newExpression(expr string) (*scpb.Expression, error) {
 		// newExpression is called only for DEFAULT expressions of function
 		// parameters which cannot have column references. Column references
 		// from the function body are handled in WrapFunctionBody.
+	case catalog.TypeDescriptor:
+		// newExpression is called for DEFAULT and CHECK expressions in domain
+		// types, which cannot have column references.
 	default:
-		return nil, errors.AssertionFailedf("expected either TableDescriptor of FunctionDescriptor, found %T", t)
+		return nil, errors.AssertionFailedf("expected either TableDescriptor, FunctionDescriptor, or TypeDescriptor, found %T", t)
 	}
 	referencedFnIDs, err := schemaexpr.GetUDFIDs(e)
 	if err != nil {
 		return nil, err
 	}
 	return &scpb.Expression{
-		Expr:                catpb.Expression(expr),
+		Expr:                expr,
 		UsesTypeIDs:         typIDs.Ordered(),
 		UsesSequenceIDs:     seqIDs.Ordered(),
 		UsesFunctionIDs:     referencedFnIDs.Ordered(),
@@ -138,7 +143,6 @@ func NewElementCreationMetadata(
 	clusterVersion clusterversion.ClusterVersion,
 ) *scpb.ElementCreationMetadata {
 	return &scpb.ElementCreationMetadata{
-		In_23_1OrLater: true,
-		In_24_3OrLater: clusterVersion.IsActive(clusterversion.V24_3),
+		In_26_1OrLater: clusterVersion.IsActive(clusterversion.V26_1),
 	}
 }

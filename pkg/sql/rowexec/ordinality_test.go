@@ -29,7 +29,7 @@ func TestOrdinality(t *testing.T) {
 
 	v := [15]rowenc.EncDatum{}
 	for i := range v {
-		v[i] = rowenc.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+		v[i] = rowenc.DatumToEncDatumUnsafe(types.Int, tree.NewDInt(tree.DInt(i)))
 	}
 
 	testCases := []struct {

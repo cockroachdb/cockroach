@@ -24,8 +24,8 @@ var djangoCockroachDBReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<
 
 // WARNING: DO NOT MODIFY the name of the below constant/variable without approval from the docs team.
 // This is used by docs automation to produce a list of supported versions for ORM's.
-var djangoSupportedTag = "cockroach-4.1.x"
-var djangoCockroachDBSupportedTag = "4.1.*"
+var djangoSupportedTag = "cockroach-6.0.x"
+var djangoCockroachDBSupportedTag = "6.0.*"
 
 func registerDjango(r registry.Registry) {
 	runDjango := func(
@@ -65,22 +65,22 @@ func registerDjango(r registry.Registry) {
 			c,
 			node,
 			"install dependencies",
-			`sudo apt-get -qq install make python3.10 libpq-dev python3.10-dev gcc python3-virtualenv python3-setuptools python-setuptools build-essential python3.10-distutils python3-apt libmemcached-dev`,
+			`sudo apt-get -qq install make python3.12 libpq-dev python3.12-dev gcc python3-virtualenv python3-setuptools python-setuptools build-essential python3.12-distutils python3-apt libmemcached-dev`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
 		if err := repeatRunE(
-			ctx, t, c, node, "set python3.10 as default", `
-    		sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.10 1
-    		sudo update-alternatives --config python3`,
+			ctx, t, c, node, "set python3.12 as default", `
+			sudo update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1
+			sudo update-alternatives --config python3`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
 		if err := repeatRunE(
 			ctx, t, c, node, "install pip",
-			`curl https://bootstrap.pypa.io/get-pip.py | sudo -H python3.10`,
+			`curl https://bootstrap.pypa.io/get-pip.py | sudo -H python3.12`,
 		); err != nil {
 			t.Fatal(err)
 		}
@@ -148,6 +148,18 @@ func registerDjango(r registry.Registry) {
 
 		if err := repeatRunE(
 			ctx, t, c, node, "install django's dependencies", `
+				if [ $(arch) == "s390x" ]; then
+					# s390x doesn't have a prebuilt wheel for bcrypt, so we need
+					# to build it from source. This requires rust.
+					# Install rust and set the default toolchain to stable.
+					bash -o pipefail -c 'curl https://sh.rustup.rs -sSf | sh -s -- -y'
+					source $HOME/.cargo/env
+					cargo --version
+
+					# s390x doesn't have a prebuilt wheel for pillow, so we need
+					# to build it from source. This requires libjpeg-dev.
+					sudo apt-get install -y libjpeg-dev
+				fi
 				source venv/bin/activate &&
 				cd /mnt/data1/django/tests &&
 				pip3 install -e .. &&
@@ -251,7 +263,6 @@ PASSWORD_HASHERS = [
     'django.contrib.auth.hashers.MD5PasswordHasher',
 ]
 TEST_RUNNER = '.cockroach_settings.NonDescribingDiscoverRunner'
-DEFAULT_AUTO_FIELD = 'django.db.models.AutoField'
 
 class NonDescribingDiscoverRunner(DiscoverRunner):
     def get_test_runner_kwargs(self):

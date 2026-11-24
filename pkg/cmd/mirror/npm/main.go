@@ -19,10 +19,10 @@ import (
 	"strings"
 
 	"cloud.google.com/go/storage"
+	"go.yaml.in/yaml/v4"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/api/googleapi"
 	"google.golang.org/api/iterator"
-	yaml "gopkg.in/yaml.v3"
 )
 
 // getUnmirroredUrls finds packages in each provided pnpm-lock.yaml (each of
@@ -51,12 +51,12 @@ func getUnmirroredUrls(
 
 		for key := range lf.Packages {
 			// Example key:
-			// /@ant-design/create-react-context@0.2.6(prop-types@15.8.1)(react@16.12.0)
+			// @ant-design/create-react-context@0.2.6(prop-types@15.8.1)(react@16.12.0)
 			//  ~~~~~~~~~~~ ~~~~~~~~~~~~~~~~~~~~ ~~~~~
 			//  [NPM scope] package name         version
 
-			// Remove the leading '/' and everything after the first '('.
-			scopedNameAtVersion, _, _ := strings.Cut(key[1:], "(")
+			// Remove everything after the first '('.
+			scopedNameAtVersion, _, _ := strings.Cut(key, "(")
 
 			// Split the scoped name and version apart.
 			lastAt := strings.LastIndex(scopedNameAtVersion, "@")

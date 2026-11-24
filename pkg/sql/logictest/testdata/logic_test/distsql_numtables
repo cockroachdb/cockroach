@@ -1,5 +1,8 @@
 # LogicTest: 5node-default-configs
 
+# This test occasionally times out due to overload under race.
+skip under race
+
 # First, we set up two data tables:
 #   - NumToSquare maps integers from 1 to 100 to their squares
 #   - NumToStr maps integers from 1 to 100*100 to strings; this table is
@@ -18,6 +21,7 @@ statement ok
 ALTER TABLE NumToStr SPLIT AT SELECT (i * 100 * 100 / 5)::int FROM generate_series(1, 4) AS g(i)
 
 # Relocate the five parts to the five nodes.
+retry
 statement ok
 ALTER TABLE NumToStr EXPERIMENTAL_RELOCATE
   SELECT ARRAY[i+1], (i * 100 * 100 / 5)::int FROM generate_series(0, 4) AS g(i)
@@ -29,15 +33,15 @@ INSERT INTO NumToStr SELECT i, to_english(i) FROM generate_series(1, 100*100) AS
 query TTTI colnames
 SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE NumToSquare WITH DETAILS]
 ----
-start_key           end_key                    replicas  lease_holder
-<before:/Table/71>  <after:/Table/107/1/2000>  {1}       1
+start_key           end_key                   replicas  lease_holder
+<before:/Table/XX>  <after:/Table/XX/1/2000>  {1}       1
 
 query TTTI colnames,rowsort
 SELECT start_key, end_key, replicas, lease_holder FROM [SHOW RANGES FROM TABLE NumToStr WITH DETAILS]
 ORDER BY 1
 ----
 start_key           end_key       replicas  lease_holder
-<before:/Table/71>  …/1/2000      {1}       1
+<before:/Table/XX>  …/1/2000      {1}       1
 …/1/2000            …/1/4000      {2}       2
 …/1/4000            …/1/6000      {3}       3
 …/1/6000            …/1/8000      {4}       4

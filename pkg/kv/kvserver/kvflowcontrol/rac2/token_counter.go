@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/kv/kvserver/kvflowcontrol"
+	"github.com/cockroachdb/cockroach/pkg/obs/ash"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/admission/admissionpb"
 	"github.com/cockroachdb/cockroach/pkg/util/buildutil"
@@ -57,6 +59,8 @@ type tokenCounterPerWorkClass struct {
 type deltaStats struct {
 	noTokenDuration                time.Duration
 	tokensDeducted, tokensReturned kvflowcontrol.Tokens
+	// Can only be non-zero for send tokens.
+	tokensDeductedForceFlush, tokensDeductedPreventSendQueue kvflowcontrol.Tokens
 }
 
 func makeTokenCounterPerWorkClass(
@@ -74,7 +78,11 @@ func makeTokenCounterPerWorkClass(
 
 // adjustTokensLocked adjusts the tokens for the given work class by delta.
 func (twc *tokenCounterPerWorkClass) adjustTokensLocked(
-	ctx context.Context, delta kvflowcontrol.Tokens, now time.Time, isReset bool,
+	ctx context.Context,
+	delta kvflowcontrol.Tokens,
+	now time.Time,
+	isReset bool,
+	flag TokenAdjustFlag,
 ) (adjustment, unaccounted kvflowcontrol.Tokens) {
 	before := twc.tokens
 	twc.tokens += delta
@@ -90,12 +98,18 @@ func (twc *tokenCounterPerWorkClass) adjustTokensLocked(
 		}
 	} else {
 		twc.stats.tokensDeducted -= delta
+		switch flag {
+		case AdjForceFlush:
+			twc.stats.tokensDeductedForceFlush -= delta
+		case AdjPreventSendQueue:
+			twc.stats.tokensDeductedPreventSendQueue -= delta
+		}
 		if before > 0 && twc.tokens <= 0 {
 			twc.stats.noTokenStartTime = now
 		}
 	}
 	if buildutil.CrdbTestBuild && !isReset && unaccounted != 0 {
-		log.Fatalf(ctx, "unaccounted[%s]=%d delta=%d limit=%d",
+		log.KvDistribution.Fatalf(ctx, "unaccounted[%s]=%d delta=%d limit=%d",
 			twc.wc, unaccounted, delta, twc.limit)
 	}
 
@@ -108,14 +122,14 @@ func (twc *tokenCounterPerWorkClass) setLimitLocked(
 ) {
 	before := twc.limit
 	twc.limit = limit
-	twc.adjustTokensLocked(ctx, twc.limit-before, now, false /* isReset */)
+	twc.adjustTokensLocked(ctx, twc.limit-before, now, false /* isReset */, AdjNormal)
 }
 
 func (twc *tokenCounterPerWorkClass) resetLocked(ctx context.Context, now time.Time) {
 	if twc.limit <= twc.tokens {
 		return
 	}
-	twc.adjustTokensLocked(ctx, twc.limit-twc.tokens, now, true /* isReset */)
+	twc.adjustTokensLocked(ctx, twc.limit-twc.tokens, now, true /* isReset */, AdjNormal)
 }
 
 func (twc *tokenCounterPerWorkClass) signal() {
@@ -169,6 +183,43 @@ func (f TokenType) SafeFormat(p redact.SafePrinter, _ rune) {
 	}
 }
 
+// Wrapper type to give mutex contention events in mutex profiles a leaf frame
+// that references tokenCounterMu. This makes it easier to look at contention
+// on this mutex specifically.
+type tokenCounterMu syncutil.RWMutex
+
+func (mu *tokenCounterMu) Lock() {
+	(*syncutil.RWMutex)(mu).Lock()
+}
+
+func (mu *tokenCounterMu) TryLock() {
+	(*syncutil.RWMutex)(mu).TryLock()
+}
+
+func (mu *tokenCounterMu) Unlock() {
+	(*syncutil.RWMutex)(mu).Unlock()
+}
+
+func (mu *tokenCounterMu) RLock() {
+	(*syncutil.RWMutex)(mu).RLock()
+}
+
+func (mu *tokenCounterMu) TryRLock() {
+	(*syncutil.RWMutex)(mu).TryRLock()
+}
+
+func (mu *tokenCounterMu) RUnlock() {
+	(*syncutil.RWMutex)(mu).RUnlock()
+}
+
+func (mu *tokenCounterMu) AssertHeld() {
+	(*syncutil.RWMutex)(mu).AssertHeld()
+}
+
+func (mu *tokenCounterMu) AssertRHeld() {
+	(*syncutil.RWMutex)(mu).AssertRHeld()
+}
+
 // tokenCounter holds flow tokens for {regular,elastic} traffic over a
 // kvflowcontrol.Stream. It's used to synchronize handoff between threads
 // returning and waiting for flow tokens.
@@ -182,7 +233,7 @@ type tokenCounter struct {
 	tokenType TokenType
 
 	mu struct {
-		syncutil.RWMutex
+		tokenCounterMu
 
 		counters [admissionpb.NumWorkClasses]tokenCounterPerWorkClass
 	}
@@ -308,15 +359,15 @@ func (t *tokenCounter) TryDeduct(
 		expensiveLog = true
 	}
 	t.mu.Lock()
-	defer t.mu.Unlock()
 
-	tokensAvailable := t.tokensLocked(wc)
+	tokensAvailable := t.tokensLocked(wc) // nolint:deferunlockcheck
 	if tokensAvailable <= 0 {
+		t.mu.Unlock() // nolint:deferunlockcheck
 		return 0
 	}
 
 	adjust := min(tokensAvailable, tokens)
-	t.adjustLocked(ctx, wc, -adjust, now, flag, expensiveLog)
+	t.adjustLockedAndUnlock(ctx, wc, -adjust, now, flag, expensiveLog)
 	return adjust
 }
 
@@ -450,10 +501,12 @@ func WaitForEval(
 	requiredQuorum int,
 	traceIndividualWaits bool,
 	scratch []reflect.SelectCase,
+	tenantID roachpb.TenantID,
+	info ash.WorkloadInfo,
 ) (state WaitEndState, scratch2 []reflect.SelectCase) {
 	scratch = scratch[:0]
 	if len(handles) < requiredQuorum {
-		log.Fatalf(ctx, "%v", errors.AssertionFailedf(
+		log.KvDistribution.Fatalf(ctx, "%v", errors.AssertionFailedf(
 			"invalid arguments to WaitForEval: len(handles)=%d < required_quorum=%d",
 			len(handles), requiredQuorum))
 	}
@@ -479,7 +532,7 @@ func WaitForEval(
 			reflect.SelectCase{Dir: reflect.SelectRecv, Chan: chanValue})
 	}
 	if requiredQuorum == 0 && requiredWaitCount == 0 {
-		log.Fatalf(ctx, "both requiredQuorum and requiredWaitCount are zero")
+		log.KvDistribution.Fatalf(ctx, "both requiredQuorum and requiredWaitCount are zero")
 	}
 
 	// m is the current length of the scratch slice.
@@ -489,6 +542,9 @@ func WaitForEval(
 	// Wait for (1) at least a quorumCount of partOfQuorum handles to be signaled
 	// and have available tokens; as well as (2) all of the required wait handles
 	// to be signaled and have tokens available.
+	cleanup := ash.SetWorkState(
+		tenantID, info, ash.WorkAdmission, "ReplicationFlowControl")
+	defer cleanup()
 	for signaledQuorumCount < requiredQuorum || requiredWaitCount > 0 {
 		chosen, _, _ := reflect.Select(scratch)
 		switch chosen {
@@ -587,15 +643,11 @@ func (t *tokenCounter) adjust(
 	if log.V(2) {
 		expensiveLog = true
 	}
-	func() {
-		t.mu.Lock()
-		defer t.mu.Unlock()
-		t.adjustLocked(ctx, class, delta, now, flag, expensiveLog)
-	}()
-
+	t.mu.Lock()
+	t.adjustLockedAndUnlock(ctx, class, delta, now, flag, expensiveLog) // nolint:deferunlockcheck
 }
 
-func (t *tokenCounter) adjustLocked(
+func (t *tokenCounter) adjustLockedAndUnlock(
 	ctx context.Context,
 	class admissionpb.WorkClass,
 	delta kvflowcontrol.Tokens,
@@ -603,20 +655,33 @@ func (t *tokenCounter) adjustLocked(
 	flag TokenAdjustFlag,
 	expensiveLog bool,
 ) {
+	t.mu.AssertHeld()
 	var adjustment, unaccounted tokensPerWorkClass
-	switch class {
-	case admissionpb.RegularWorkClass:
-		adjustment.regular, unaccounted.regular =
-			t.mu.counters[admissionpb.RegularWorkClass].adjustTokensLocked(ctx, delta, now, false /* isReset */)
+	// Only populated when expensiveLog is true.
+	var regularTokens, elasticTokens kvflowcontrol.Tokens
+	func() {
+		defer t.mu.Unlock()
+		switch class {
+		case regular:
+			adjustment.regular, unaccounted.regular =
+				t.mu.counters[regular].adjustTokensLocked(
+					ctx, delta, now, false /* isReset */, flag)
 			// Regular {deductions,returns} also affect elastic flow tokens.
-		adjustment.elastic, unaccounted.elastic =
-			t.mu.counters[admissionpb.ElasticWorkClass].adjustTokensLocked(ctx, delta, now, false /* isReset */)
+			adjustment.elastic, unaccounted.elastic =
+				t.mu.counters[elastic].adjustTokensLocked(
+					ctx, delta, now, false /* isReset */, flag)
 
-	case admissionpb.ElasticWorkClass:
-		// Elastic {deductions,returns} only affect elastic flow tokens.
-		adjustment.elastic, unaccounted.elastic =
-			t.mu.counters[admissionpb.ElasticWorkClass].adjustTokensLocked(ctx, delta, now, false /* isReset */)
-	}
+		case elastic:
+			// Elastic {deductions,returns} only affect elastic flow tokens.
+			adjustment.elastic, unaccounted.elastic =
+				t.mu.counters[elastic].adjustTokensLocked(
+					ctx, delta, now, false /* isReset */, flag)
+		}
+		if expensiveLog {
+			regularTokens = t.tokensLocked(regular)
+			elasticTokens = t.tokensLocked(elastic)
+		}
+	}()
 
 	// Adjust metrics if any tokens were actually adjusted or unaccounted for
 	// tokens were detected.
@@ -627,8 +692,8 @@ func (t *tokenCounter) adjustLocked(
 		t.metrics.onUnaccounted(unaccounted)
 	}
 	if expensiveLog {
-		log.Infof(ctx, "adjusted %v flow tokens (wc=%v stream=%v delta=%v flag=%v): regular=%v elastic=%v",
-			t.tokenType, class, t.stream, delta, flag, t.tokensLocked(regular), t.tokensLocked(elastic))
+		log.KvDistribution.Infof(ctx, "adjusted %v flow tokens (wc=%v stream=%v delta=%v flag=%v): regular=%v elastic=%v",
+			t.tokenType, class, t.stream, delta, flag, regularTokens, elasticTokens)
 	}
 }
 
@@ -641,7 +706,7 @@ func (t *tokenCounter) testingSetTokens(
 	defer t.mu.Unlock()
 
 	t.mu.counters[wc].adjustTokensLocked(ctx,
-		tokens-t.mu.counters[wc].tokens, t.clock.PhysicalTime(), false /* isReset */)
+		tokens-t.mu.counters[wc].tokens, t.clock.PhysicalTime(), false /* isReset */, AdjNormal)
 }
 
 func (t *tokenCounter) GetAndResetStats(now time.Time) (regularStats, elasticStats deltaStats) {

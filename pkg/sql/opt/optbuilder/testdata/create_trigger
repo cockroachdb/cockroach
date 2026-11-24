@@ -20,7 +20,8 @@ CREATE TRIGGER tr BEFORE INSERT OR UPDATE ON xy FOR EACH ROW EXECUTE FUNCTION f_
 ----
 create-trigger
  ├── CREATE TRIGGER tr BEFORE INSERT OR UPDATE ON xy FOR EACH ROW EXECUTE FUNCTION f_basic()
- └── no dependencies
+ └── dependencies
+      └── [FUNCTION 100057]
 
 # TODO(#126362, #135655): implement this case.
 build
@@ -33,7 +34,8 @@ CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION f_basic();
 ----
 create-trigger
  ├── CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION f_basic()
- └── no dependencies
+ └── dependencies
+      └── [FUNCTION 100057]
 
 exec-ddl
 CREATE FUNCTION f_typ() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
@@ -51,7 +53,8 @@ CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION f_typ();
 create-trigger
  ├── CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION f_typ()
  └── dependencies
-      └── typ
+      ├── typ
+      └── [FUNCTION 100058]
 
 exec-ddl
 CREATE FUNCTION f_relation() RETURNS TRIGGER LANGUAGE PLpgSQL AS $$
@@ -68,4 +71,5 @@ CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION f_relation()
 create-trigger
  ├── CREATE TRIGGER foo AFTER INSERT ON xy FOR EACH ROW EXECUTE FUNCTION f_relation()
  └── dependencies
-      └── ab [columns: a b]
+      ├── ab [columns: a b]
+      └── [FUNCTION 100059]

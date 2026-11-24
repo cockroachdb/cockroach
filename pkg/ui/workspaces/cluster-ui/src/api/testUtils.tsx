@@ -28,7 +28,6 @@ const baseStmt: Partial<Stmt> = {
       query: "SELECT node_id FROM system.statement_statistics",
       app: "$ cockroach sql",
       distSQL: true,
-      implicit_txn: true,
       vec: true,
       full_scan: true,
       database: "defaultdb",

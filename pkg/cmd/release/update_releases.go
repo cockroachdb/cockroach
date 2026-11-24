@@ -9,10 +9,12 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"text/template"
@@ -21,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/testutils/release"
 	"github.com/cockroachdb/cockroach/pkg/util/httputil"
-	"github.com/cockroachdb/cockroach/pkg/util/version"
+	"github.com/cockroachdb/version"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v2"
 )
@@ -78,27 +80,34 @@ func updateReleasesFiles(_ *cobra.Command, _ []string) (retErr error) {
 	result := processReleaseData(data)
 	fmt.Printf("generated data for %d release series\n", len(result))
 
+	// Validate before preserveUnreleasedSeries/addCurrentRelease, which
+	// intentionally add entries with empty Latest that would fail validation.
 	if err := validateReleaseData(result); err != nil {
 		return fmt.Errorf("failed to validate downloaded data: %w", err)
 	}
+
+	// Preserve unreleased series from the existing file before adding
+	// the current release. This prevents losing entries for development
+	// series that have been branched but don't have GA releases yet.
+	existing, err := loadExistingReleaseData()
+	if err != nil {
+		return err
+	}
+	preserveUnreleasedSeries(result, existing)
+
 	currentVersion := version.MustParse(build.BinaryVersion())
-	addCurrentRelease(result, currentVersion)
+	addCurrentRelease(result, &currentVersion)
 
 	fmt.Printf("writing results to %s\n", releaseDataFile)
 	if err := saveResultsInYaml(result); err != nil {
 		return err
 	}
-	currentSeries := fmt.Sprintf("%d.%d", currentVersion.Major(), currentVersion.Minor())
-	predecessor := result[result[currentSeries].Predecessor].Latest
-	if predecessor == "" {
-		return fmt.Errorf("could not determine predecessor version for version %+v", currentVersion)
-	}
-	prePredecessor := result[result[result[currentSeries].Predecessor].Predecessor].Latest
-	if prePredecessor == "" {
-		return fmt.Errorf("could not determine predecessor's predecessor version for version %+v", currentVersion)
+	predecessorVersions, err := findRequiredPredecessorVersions(result, currentVersion)
+	if err != nil {
+		return err
 	}
 	fmt.Printf("writing data to %s\n", logictestReposFile)
-	if err := generateRepositoriesFile(prePredecessor, predecessor); err != nil {
+	if err := generateRepositoriesFile(predecessorVersions...); err != nil {
 		return err
 	}
 	fmt.Printf("done\n")
@@ -129,14 +138,9 @@ func processReleaseData(data []Release) map[string]release.Series {
 		// For the purposes of the cockroach_releases file, we are only interested
 		// in rc pre-releases, as we do not support upgrades from alpha or beta
 		// releases.
-		if pre := v.PreRelease(); pre != "" && !strings.HasPrefix(pre, "rc") {
+		if v.IsPrerelease() && !strings.HasPrefix(v.Format("%P"), "rc") {
 			continue
 		}
-		// Skip cloud-only releases, because the binaries are not yet publicly available.
-		if r.CloudOnly {
-			continue
-		}
-
 		filtered = append(filtered, r)
 	}
 
@@ -179,32 +183,219 @@ func processReleaseData(data []Release) map[string]release.Series {
 	return result
 }
 
-// addCurrentRelease adds an entry to the `data` map corresponding to
-// the binary version of the current build, if one does not exist. The
-// new entry will have no `Latest` information as, in that case, the
-// current release series is still in development.
+// addCurrentRelease adds or updates an entry in the `data` map for the
+// current binary version's release series. If the series already has
+// actual releases (non-empty Latest), it is left unchanged. Otherwise,
+// the predecessor is (re)calculated from the highest series below the
+// current version, which corrects stale predecessors from previous runs
+// and handles newly added entries.
 func addCurrentRelease(data map[string]release.Series, currentVersion *version.Version) {
-	name := fmt.Sprintf("%d.%d", currentVersion.Major(), currentVersion.Minor())
-	if _, ok := data[name]; ok {
+	name := currentVersion.Format("%X.%Y")
+	if s, ok := data[name]; ok && s.Latest != "" {
+		// Series already exists with actual releases; nothing to do.
 		return
 	}
 
-	var latestVersion *version.Version
-	for _, d := range data {
-		v := version.MustParse("v" + d.Latest)
-		if latestVersion == nil {
-			latestVersion = v
-		}
+	currentParsed := version.MustParse("v" + name + ".0")
 
-		if v.AtLeast(latestVersion) {
-			latestVersion = v
+	// Find the highest series below the current version to use as
+	// predecessor. This considers both released and unreleased series,
+	// so that intermediate unreleased series are correctly chained.
+	var predecessorName string
+	for seriesName := range data {
+		v, err := version.Parse("v" + seriesName + ".0")
+		if err != nil {
+			continue
+		}
+		if v.Compare(currentParsed) >= 0 {
+			continue
+		}
+		if predecessorName == "" {
+			predecessorName = seriesName
+			continue
+		}
+		prev := version.MustParse("v" + predecessorName + ".0")
+		if v.Compare(prev) > 0 {
+			predecessorName = seriesName
 		}
 	}
 
-	// Assume that the predecessor of the current version is the latest
-	// released series.
 	data[name] = release.Series{
-		Predecessor: fmt.Sprintf("%d.%d", latestVersion.Major(), latestVersion.Minor()),
+		Predecessor: predecessorName,
+	}
+}
+
+// findLatestReleasedPredecessor walks the predecessor chain of the
+// given series, returning the Latest version of the first released
+// predecessor found. Unreleased series (those with no Latest) are
+// skipped. Returns empty string if none is found.
+func findLatestReleasedPredecessor(data map[string]release.Series, series string) string {
+	visited := map[string]bool{}
+	for cur := series; cur != "" && !visited[cur]; {
+		visited[cur] = true
+		s, ok := data[cur]
+		if !ok {
+			return ""
+		}
+		if cur != series && s.Latest != "" {
+			return s.Latest
+		}
+		cur = s.Predecessor
+	}
+	return ""
+}
+
+// findRequiredPredecessorVersions discovers which released predecessor
+// versions are needed by scanning for cockroach-go-testserver-*
+// directories under the logictest test trees. Each such directory
+// corresponds to a release series that needs a binary in
+// REPOSITORIES.bzl. We walk the predecessor chain from the current
+// version, collecting released versions until all required series are
+// covered.
+func findRequiredPredecessorVersions(
+	data map[string]release.Series, currentVersion version.Version,
+) ([]string, error) {
+	requiredSeries, err := findTestserverSeries()
+	if err != nil {
+		return nil, err
+	}
+	return collectPredecessorVersions(data, currentVersion, requiredSeries)
+}
+
+// collectPredecessorVersions walks the predecessor chain from
+// currentVersion, collecting released versions until all series in
+// requiredSeries are covered. Returns the versions sorted oldest first.
+func collectPredecessorVersions(
+	data map[string]release.Series, currentVersion version.Version, requiredSeries map[string]bool,
+) ([]string, error) {
+	var versions []string
+	covered := map[string]bool{}
+	cur := currentVersion.Format("%X.%Y")
+	visited := map[string]bool{}
+	for len(covered) < len(requiredSeries) {
+		latest := findLatestReleasedPredecessor(data, cur)
+		if latest == "" {
+			break
+		}
+		latestVersion := version.MustParse("v" + latest)
+		series := latestVersion.Format("%X.%Y")
+		if visited[series] {
+			break
+		}
+		visited[series] = true
+		if requiredSeries[series] {
+			versions = append(versions, latest)
+			covered[series] = true
+		}
+		cur = series
+	}
+
+	var missing []string
+	for series := range requiredSeries {
+		if !covered[series] {
+			missing = append(missing, series)
+		}
+	}
+	if len(missing) > 0 {
+		sort.Strings(missing)
+		return nil, fmt.Errorf(
+			"could not find released versions for required testserver series: %s",
+			strings.Join(missing, ", "),
+		)
+	}
+
+	sort.Slice(versions, func(i, j int) bool {
+		return version.MustParse("v"+versions[i]).Compare(version.MustParse("v"+versions[j])) < 0
+	})
+
+	return versions, nil
+}
+
+// testserverDirs lists the directories under the logictest test trees
+// that contain cockroach-go-testserver-* tests. These are relative
+// paths, consistent with releaseDataFile and logictestReposFile; the
+// tool is expected to run from the repository root.
+var testserverDirs = []string{
+	"pkg/sql/logictest/tests",
+}
+
+// findTestserverSeries scans for cockroach-go-testserver-* directories
+// and returns the set of release series they correspond to.
+func findTestserverSeries() (map[string]bool, error) {
+	series := map[string]bool{}
+	for _, dir := range testserverDirs {
+		matches, err := filepath.Glob(
+			filepath.Join(dir, "cockroach-go-testserver-*"),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("error scanning for testserver directories: %w", err)
+		}
+		for _, m := range matches {
+			base := filepath.Base(m)
+			s := strings.TrimPrefix(base, "cockroach-go-testserver-")
+			series[s] = true
+		}
+	}
+	if len(series) == 0 {
+		return nil, fmt.Errorf("no cockroach-go-testserver-* directories found")
+	}
+	return series, nil
+}
+
+// loadExistingReleaseData reads the current cockroach_releases.yaml
+// file and returns the parsed release data. Returns nil if the file
+// does not exist.
+func loadExistingReleaseData() (map[string]release.Series, error) {
+	return loadReleaseDataFromPath(releaseDataFile)
+}
+
+// loadReleaseDataFromPath reads release data from the given file path.
+// Returns nil, nil if the file does not exist.
+func loadReleaseDataFromPath(path string) (map[string]release.Series, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("could not read existing release data: %w", err)
+	}
+
+	var result map[string]release.Series
+	if err := yaml.Unmarshal(data, &result); err != nil { //nolint:yaml
+		return nil, fmt.Errorf("could not parse existing release data: %w", err)
+	}
+	return result, nil
+}
+
+// preserveUnreleasedSeries merges unreleased series entries from the
+// existing release data file into the newly generated data. This
+// prevents losing entries for development series that have been
+// branched but don't have GA releases yet.
+func preserveUnreleasedSeries(data map[string]release.Series, existing map[string]release.Series) {
+	// Iterate until no new entries are added, so that chains of
+	// unreleased series (e.g. 26.2 → 26.3 where neither has releases)
+	// are fully resolved regardless of map iteration order.
+	for changed := true; changed; {
+		changed = false
+		for name, series := range existing {
+			if _, ok := data[name]; ok {
+				continue
+			}
+			if series.Latest != "" {
+				// Has releases; should come from downloaded data.
+				continue
+			}
+			if series.Predecessor == "" {
+				continue
+			}
+			if _, ok := data[series.Predecessor]; !ok {
+				// Predecessor not yet in data; may be added in a
+				// subsequent iteration.
+				continue
+			}
+			data[name] = series
+			changed = true
+		}
 	}
 }
 

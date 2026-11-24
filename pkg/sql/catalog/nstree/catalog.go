@@ -24,6 +24,11 @@ type Catalog struct {
 	byID     byIDMap
 	byName   byNameMap
 	byteSize int64
+	// nsEntryByID is a secondary index for looking up namespace entries by
+	// their ID. Unlike byName (a btree keyed by name), this is a plain map
+	// because only O(1) point lookups are needed, not ordered iteration.
+	// It is maintained by MutableCatalog mutation methods.
+	nsEntryByID map[descpb.ID]*byNameEntry
 }
 
 // CommentCatalog is a limited interface wrapper, which is used for partial
@@ -170,8 +175,8 @@ func (c Catalog) LookupZoneConfig(id descpb.ID) catalog.ZoneConfig {
 }
 
 // LookupNamespaceEntry looks up a descriptor ID by name.
-func (c Catalog) LookupNamespaceEntry(key catalog.NameKey) NamespaceEntry {
-	if !c.IsInitialized() || key == nil {
+func (c Catalog) LookupNamespaceEntry(key descpb.NameInfo) NamespaceEntry {
+	if !c.IsInitialized() {
 		return nil
 	}
 	e := c.byName.getByName(key.GetParentID(), key.GetParentSchemaID(), key.GetName())
@@ -179,6 +184,20 @@ func (c Catalog) LookupNamespaceEntry(key catalog.NameKey) NamespaceEntry {
 		return nil
 	}
 	return e.(NamespaceEntry)
+}
+
+// LookupNamespaceEntryByID looks up a namespace entry by its ID using
+// a secondary index. This is used as a fallback for resolving temporary
+// schemas from other sessions, which have namespace entries but no
+// descriptors.
+func (c Catalog) LookupNamespaceEntryByID(id descpb.ID) NamespaceEntry {
+	if !c.IsInitialized() {
+		return nil
+	}
+	if e := c.nsEntryByID[id]; e != nil {
+		return e
+	}
+	return nil
 }
 
 // OrderedDescriptors returns the descriptors in an ordered fashion.
@@ -257,7 +276,7 @@ func (c Catalog) Validate(
 // ValidateNamespaceEntry returns an error if the specified namespace entry
 // is invalid.
 func (c Catalog) ValidateNamespaceEntry(key catalog.NameKey) error {
-	ne := c.LookupNamespaceEntry(key)
+	ne := c.LookupNamespaceEntry(catalog.MakeNameInfo(key))
 	if ne == nil {
 		return errors.AssertionFailedf("invalid namespace entry")
 	}
@@ -281,7 +300,7 @@ func (c Catalog) ValidateNamespaceEntry(key catalog.NameKey) error {
 		return catalog.NewReferencedDescriptorNotFoundError("schema", ne.GetID())
 	}
 	if desc.Dropped() {
-		return catalog.ErrDescriptorDropped
+		return catalog.NewDescriptorDroppedError(desc)
 	}
 	if ne.GetParentID() == desc.GetParentID() &&
 		ne.GetParentSchemaID() == desc.GetParentSchemaID() &&
@@ -328,6 +347,7 @@ func (c Catalog) FilterByIDs(ids []descpb.ID) Catalog {
 		}
 		e := ret.ensureForName(found)
 		*e = *found.(*byNameEntry)
+		ret.nsEntryByID[e.GetID()] = e
 		return nil
 	})
 	return ret.Catalog
@@ -368,6 +388,7 @@ func (c Catalog) FilterByNames(nameInfos []descpb.NameInfo) Catalog {
 		}
 		e := ret.ensureForName(ni)
 		*e = *found.(*byNameEntry)
+		ret.nsEntryByID[e.GetID()] = e
 		if foundByID := c.byID.get(e.id); foundByID != nil {
 			e := ret.ensureForID(e.id)
 			*e = *foundByID.(*byIDEntry)

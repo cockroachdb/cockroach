@@ -40,8 +40,13 @@ func registerIntentResolutionOverload(r registry.Registry) {
 		// TODO(sumeer): Reduce to weekly after working well.
 		// Tags:      registry.Tags(`weekly`),
 		// Second node is solely for Prometheus.
-		Cluster:          r.MakeClusterSpec(2, spec.CPU(8), spec.WorkloadNode()),
-		RequiresLicense:  true,
+		Cluster: r.MakeClusterSpec(
+			2,
+			spec.CPU(8),
+			spec.WorkloadNode(),
+			spec.RandomizeVolumeType(),
+			spec.RandomlyUseXfs(),
+		),
 		Leases:           registry.MetamorphicLeases,
 		CompatibleClouds: registry.AllExceptAWS,
 		Suites:           registry.Suites(registry.Nightly),
@@ -71,7 +76,7 @@ func registerIntentResolutionOverload(r registry.Registry) {
 
 			roachtestutil.SetAdmissionControl(ctx, t, c, true)
 			t.Status("running txn")
-			m := c.NewMonitor(ctx, c.CRDBNodes())
+			m := c.NewDeprecatedMonitor(ctx, c.CRDBNodes())
 			m.Go(func(ctx context.Context) error {
 				db := c.Conn(ctx, t.L(), len(c.CRDBNodes()))
 				defer db.Close()

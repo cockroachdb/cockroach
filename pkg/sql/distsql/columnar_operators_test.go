@@ -75,6 +75,7 @@ var aggregateFuncToNumArguments = map[execinfrapb.AggregatorSpec_Func]int{
 	execinfrapb.StExtent:                    1,
 	execinfrapb.StUnion:                     1,
 	execinfrapb.StCollect:                   1,
+	execinfrapb.StAsMVT:                     5,
 	execinfrapb.CovarPop:                    2,
 	execinfrapb.CovarSamp:                   2,
 	execinfrapb.RegrIntercept:               2,
@@ -188,6 +189,10 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 				execinfrapb.MergeAggregatedStmtMetadata:
 				// We skip merge statistics functions because they
 				// require custom JSON objects.
+			case execinfrapb.StAsMVT:
+				// We skip ST_AsMVT because it requires a tuple as
+				// its first argument and specific types for its
+				// optional arguments.
 			default:
 				found = true
 			}
@@ -329,7 +334,7 @@ func TestAggregatorAgainstProcessor(t *testing.T) {
 						}
 						if hashAgg {
 							// Let's shuffle the rows for the hash aggregator.
-							rand.Shuffle(nRows, func(i, j int) {
+							rng.Shuffle(nRows, func(i, j int) {
 								rows[i], rows[j] = rows[j], rows[i]
 							})
 						} else {

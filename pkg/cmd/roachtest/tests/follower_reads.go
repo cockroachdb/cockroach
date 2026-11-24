@@ -22,11 +22,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/registry"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/mixedversion"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/roachtestutil/task"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/spec"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachtest/test"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/install"
 	"github.com/cockroachdb/cockroach/pkg/roachprod/logger"
-	"github.com/cockroachdb/cockroach/pkg/roachprod/vm"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/ts/tspb"
@@ -38,8 +38,16 @@ import (
 	"github.com/jackc/pgtype"
 	"github.com/lib/pq"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/sync/errgroup"
 )
+
+func followerReadsVerboseRaftStartOpts() option.StartOpts {
+	opts := option.DefaultStartOpts()
+	// This verbose logging can help us reason about failures that seem related
+	// to an unusually long failover process, such as #153245.
+	opts.RoachprodOpts.ExtraArgs = append(opts.RoachprodOpts.ExtraArgs,
+		"--vmodule=raft=2,support_manager=2,replica_range_lease=2,requester_state=3,supporter_state=3")
+	return opts
+}
 
 func registerFollowerReads(r registry.Registry) {
 	register := func(
@@ -50,23 +58,19 @@ func registerFollowerReads(r registry.Registry) {
 			name = name + "/insufficient-quorum"
 		}
 		r.Add(registry.TestSpec{
-			Name:            name,
-			Owner:           registry.OwnerKV,
-			RequiresLicense: true,
+			Name:  name,
+			Owner: registry.OwnerKV,
 			Cluster: r.MakeClusterSpec(
 				6, /* nodeCount */
 				spec.CPU(4),
 				spec.Geo(),
-				spec.GCEZones("us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b"),
+				spec.GCEZones("us-east1-b,us-east1-b,us-east1-b,us-west1-c,europe-west2-b,europe-west2-b"),
 			),
 			CompatibleClouds: registry.OnlyGCE,
 			Suites:           registry.Suites(registry.Nightly),
 			Leases:           registry.MetamorphicLeases,
 			Run: func(ctx context.Context, t test.Test, c cluster.Cluster) {
-				if c.Cloud() == spec.GCE && c.Spec().Arch == vm.ArchARM64 {
-					t.Skip("arm64 in GCE is available only in us-central1")
-				}
-				c.Start(ctx, t.L(), option.DefaultStartOpts(), install.MakeClusterSettings())
+				c.Start(ctx, t.L(), followerReadsVerboseRaftStartOpts(), install.MakeClusterSettings())
 				topology := topologySpec{
 					multiRegion:       true,
 					locality:          locality,
@@ -99,7 +103,7 @@ func registerFollowerReads(r registry.Registry) {
 
 				rng, _ := randutil.NewPseudoRand()
 				data := initFollowerReadsDB(ctx, t, t.L(), c, connFunc, connFunc, rng, topology)
-				runFollowerReadsTest(ctx, t, t.L(), c, rng, topology, rc, data)
+				runFollowerReadsTest(ctx, t, t.L(), c, connFunc, connFunc, rng, topology, rc, data)
 			},
 		})
 	}
@@ -120,31 +124,31 @@ func registerFollowerReads(r registry.Registry) {
 	}
 
 	r.Add(registry.TestSpec{
-		Name:            "follower-reads/mixed-version/single-region",
-		Owner:           registry.OwnerKV,
-		RequiresLicense: true,
+		Name:  "follower-reads/mixed-version/single-region",
+		Owner: registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(
 			4, /* nodeCount */
 			spec.CPU(2),
 		),
-		CompatibleClouds: registry.AllExceptAWS,
-		Suites:           registry.Suites(registry.Nightly),
+		CompatibleClouds: registry.OnlyGCE,
+		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
+		Monitor:          true,
 		Randomized:       true,
 		Run:              runFollowerReadsMixedVersionSingleRegionTest,
 	})
 
 	r.Add(registry.TestSpec{
-		Name:            "follower-reads/mixed-version/survival=region/locality=global/reads=strong",
-		Owner:           registry.OwnerKV,
-		RequiresLicense: true,
+		Name:  "follower-reads/mixed-version/survival=region/locality=global/reads=strong",
+		Owner: registry.OwnerKV,
 		Cluster: r.MakeClusterSpec(
 			6, /* nodeCount */
 			spec.CPU(4),
 			spec.Geo(),
-			spec.GCEZones("us-east1-b,us-east1-b,us-east1-b,us-west1-b,us-west1-b,europe-west2-b"),
+			spec.GCEZones("us-east1-b,us-east1-b,us-east1-b,us-west1-c,us-west1-c,europe-west2-b"),
 		),
 		CompatibleClouds: registry.OnlyGCE,
-		Suites:           registry.Suites(registry.Nightly),
+		Suites:           registry.Suites(registry.MixedVersion, registry.Nightly),
+		Monitor:          true,
 		Randomized:       true,
 		Run:              runFollowerReadsMixedVersionGlobalTableTest,
 	})
@@ -209,6 +213,7 @@ func runFollowerReadsTest(
 	t test.Test,
 	l *logger.Logger,
 	c cluster.Cluster,
+	connectFunc, systemConnectFunc func(int) *gosql.DB,
 	rng *rand.Rand,
 	topology topologySpec,
 	rc readConsistency,
@@ -220,9 +225,21 @@ func runFollowerReadsTest(
 	// levels in the mixed-version variant of this test than they are on master.
 	isoLevels := []string{"read committed", "snapshot", "serializable"}
 	require.NoError(t, func() error {
-		db := c.Conn(ctx, l, 1)
-		defer db.Close()
-		err := enableIsolationLevels(ctx, t, db)
+		db := connectFunc(1)
+		systemDB := systemConnectFunc(1)
+		err := enableClosedTsAutoTune(ctx, rng, systemDB, t)
+		if err != nil && strings.Contains(err.Error(), "unknown cluster setting") {
+			// Versions v25.1 and earlier do not support these cluster settings and
+			// should ignore them. The cluster will continue operating normally, with
+			// old-version nodes ignoring the settings and newer-version nodes
+			// continuing to run. Auto-tuning of closed timestamps should only start
+			// taking effect when the entire cluster has been upgraded to v25.2.
+			err = nil
+		}
+		if err != nil {
+			return err
+		}
+		err = enableIsolationLevels(ctx, t, db)
 		if err != nil && strings.Contains(err.Error(), "unknown cluster setting") {
 			// v23.1 and below does not have these cluster settings. That's fine, as
 			// all isolation levels will be transparently promoted to "serializable".
@@ -231,11 +248,20 @@ func runFollowerReadsTest(
 		return err
 	}())
 
+	// Bump the login timeout to 60s (from the default 10s) to avoid
+	// authentication timeouts when new SQL connections are opened after possibly
+	// causing failover for system ranges. See #166376.
+	{
+		_, err := systemConnectFunc(1).ExecContext(ctx,
+			"SET CLUSTER SETTING server.user_login.timeout = '60s'")
+		require.NoError(t, err)
+	}
+
 	var conns []*gosql.DB
 	for i := 0; i < c.Spec().NodeCount; i++ {
 		isoLevel := isoLevels[rng.Intn(len(isoLevels))]
 		conn := c.Conn(ctx, l, i+1, option.ConnectionOption("default_transaction_isolation", isoLevel))
-		defer conn.Close()
+		defer conn.Close() //nolint:deferloop
 		conns = append(conns, conn)
 	}
 	db := conns[0]
@@ -282,8 +308,8 @@ func runFollowerReadsTest(
 			return nil
 		}
 	}
-	doSelects := func(ctx context.Context, node int) func() error {
-		return func() error {
+	doSelects := func(node int) task.Func {
+		return func(ctx context.Context, _ *logger.Logger) error {
 			for ctx.Err() == nil {
 				k, v := chooseKV()
 				err := verifySelect(ctx, node, k, v)()
@@ -338,25 +364,24 @@ func runFollowerReadsTest(
 	// 15 seconds to give closed timestamps a chance to propagate and caches time
 	// to warm up.
 	l.Printf("warming up reads")
-	g, gCtx := errgroup.WithContext(ctx)
+	g := t.NewGroup(task.WithContext(ctx))
+
 	k, v := chooseKV()
 	until := timeutil.Now().Add(15 * time.Second)
 	for i := 1; i <= c.Spec().NodeCount; i++ {
-		fn := verifySelect(gCtx, i, k, v)
-		g.Go(func() error {
+		g.Go(func(gCtx context.Context, l *logger.Logger) error {
+			fn := verifySelect(gCtx, i, k, v)
 			for {
 				if timeutil.Now().After(until) {
 					return nil
 				}
 				if err := fn(); err != nil {
-					return err
+					return errors.Wrap(err, "error verifying node values")
 				}
 			}
 		})
 	}
-	if err := g.Wait(); err != nil {
-		t.Fatalf("error verifying node values: %v", err)
-	}
+	g.Wait()
 	// Verify that the follower read count increments on at least two nodes -
 	// which we expect to be in the non-primary regions.
 	expNodesToSeeFollowerReads := 2
@@ -390,27 +415,28 @@ func runFollowerReadsTest(
 
 	l.Printf("starting read load")
 	const loadDuration = 4 * time.Minute
-	timeoutCtx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	g = t.NewGroup(task.ErrorHandler(
+		func(_ context.Context, name string, l *logger.Logger, err error) error {
+			return errors.Wrapf(err, "error reading data")
+		},
+	))
+	defer g.Cancel()
 	time.AfterFunc(loadDuration, func() {
 		l.Printf("stopping load")
-		cancel()
+		g.Cancel()
 	})
-	g, gCtx = errgroup.WithContext(timeoutCtx)
 	const concurrency = 32
 	var cur int
 	for i := 0; cur < concurrency; i++ {
 		node := i%c.Spec().NodeCount + 1
 		if _, ok := liveNodes[node]; ok {
-			g.Go(doSelects(gCtx, node))
+			g.Go(doSelects(node))
 			cur++
 		}
 	}
 	start := timeutil.Now()
 
-	if err := g.Wait(); err != nil && timeoutCtx.Err() == nil {
-		t.Fatalf("error reading data: %v", err)
-	}
+	g.Wait()
 	end := timeutil.Now()
 	l.Printf("load stopped")
 
@@ -503,7 +529,7 @@ func initFollowerReadsDB(
 			expMatrix := [][]string{
 				{"europe-west2", "europe-west2-b"},
 				{"us-east1", "us-east1-b"},
-				{"us-west1", "us-west1-b"},
+				{"us-west1", "us-west1-c"},
 			}
 			if !reflect.DeepEqual(matrix, expMatrix) {
 				return errors.Errorf("unexpected cluster regions: want %+v, got %+v", expMatrix, matrix)
@@ -514,7 +540,9 @@ func initFollowerReadsDB(
 		}
 	}
 
-	// Create a multi-region database and table.
+	// Create a multi-region database and table. Use schema_locked = false
+	// since the test will modify locality on the table, which at the time
+	// of this writing requires the legacy schema changer.
 	_, err = db.ExecContext(ctx, `CREATE DATABASE mr_db`)
 	require.NoError(t, err)
 	if topology.multiRegion {
@@ -527,13 +555,43 @@ func initFollowerReadsDB(
 		_, err = db.ExecContext(ctx, fmt.Sprintf(`ALTER DATABASE mr_db SURVIVE %s FAILURE`, topology.survival))
 		require.NoError(t, err)
 	}
-	_, err = db.ExecContext(ctx, `CREATE TABLE mr_db.test ( k INT8, v INT8, PRIMARY KEY (k) )`)
+	_, err = db.ExecContext(ctx, `CREATE TABLE mr_db.test ( k INT8, v INT8, PRIMARY KEY (k) ) WITH (schema_locked = false)`)
 	require.NoError(t, err)
 	if topology.multiRegion {
 		_, err = db.ExecContext(ctx, fmt.Sprintf(`ALTER TABLE mr_db.test SET LOCALITY %s`, topology.locality))
 		require.NoError(t, err)
 	}
 
+	ensureUpreplicationAndPlacement(ctx, t, l, topology, db)
+
+	const rows = 100
+	const concurrency = 32
+	sem := make(chan struct{}, concurrency)
+	data = make(map[int]int64)
+	insert := func(k int) task.Func {
+		v := rng.Int63()
+		data[k] = v
+		return func(ctx context.Context, _ *logger.Logger) error {
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			_, err := db.ExecContext(ctx, "INSERT INTO mr_db.test VALUES ( $1, $2 )", k, v)
+			return errors.Wrap(err, "failed to insert data")
+		}
+	}
+
+	// Insert the data.
+	g := t.NewGroup(task.WithContext(ctx))
+	for i := 0; i < rows; i++ {
+		g.Go(insert(i))
+	}
+	g.Wait()
+
+	return data
+}
+
+func ensureUpreplicationAndPlacement(
+	ctx context.Context, t test.Test, l *logger.Logger, topology topologySpec, db *gosql.DB,
+) {
 	// Wait until the table has completed up-replication.
 	l.Printf("waiting for up-replication...")
 	retryOpts := retry.Options{MaxBackoff: 15 * time.Second}
@@ -656,32 +714,6 @@ func initFollowerReadsDB(
 			}
 		}
 	}
-
-	const rows = 100
-	const concurrency = 32
-	sem := make(chan struct{}, concurrency)
-	data = make(map[int]int64)
-	insert := func(ctx context.Context, k int) func() error {
-		v := rng.Int63()
-		data[k] = v
-		return func() error {
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			_, err := db.ExecContext(ctx, "INSERT INTO mr_db.test VALUES ( $1, $2 )", k, v)
-			return err
-		}
-	}
-
-	// Insert the data.
-	g, gCtx := errgroup.WithContext(ctx)
-	for i := 0; i < rows; i++ {
-		g.Go(insert(gCtx, i))
-	}
-	if err := g.Wait(); err != nil {
-		t.Fatalf("failed to insert data: %v", err)
-	}
-
-	return data
 }
 
 func computeFollowerReadDuration(ctx context.Context, db *gosql.DB) (time.Duration, error) {
@@ -736,7 +768,7 @@ func verifySQLLatency(
 			SourceAggregator: tspb.TimeSeriesQueryAggregator_MAX.Enum(),
 		}},
 	}
-	client := roachtestutil.DefaultHTTPClient(c, l)
+	client := roachtestutil.DefaultHTTPClient(c, l, roachtestutil.HTTPTimeout(15*time.Second))
 	var response tspb.TimeSeriesQueryResponse
 	if err := client.PostProtobuf(ctx, url, &request, &response); err != nil {
 		t.Fatal(err)
@@ -754,7 +786,8 @@ func verifySQLLatency(
 		}
 	}
 	if permitted := int(.2 * float64(len(perTenSeconds))); len(above) > permitted {
-		t.Fatalf("%d latency values (%v) are above target latency %v, %d permitted",
+		t.Fatalf("%d latency values (%v) are above target latency %v, %d permitted "+
+			`(search the cluster logs for 'SELECT v FROM "".mr_db.test WHERE k = $1' to look at the traces)`,
 			len(above), above, targetLatency, permitted)
 	}
 }
@@ -815,6 +848,7 @@ func verifyHighFollowerReadRatios(
 	// is running on a multitenant deployment.
 	client := roachtestutil.DefaultHTTPClient(
 		c, l, roachtestutil.VirtualCluster(install.SystemInterfaceName),
+		roachtestutil.HTTPTimeout(15*time.Second),
 	)
 	var response tspb.TimeSeriesQueryResponse
 	if err := client.PostProtobuf(ctx, url, &request, &response); err != nil {
@@ -897,10 +931,10 @@ const followerReadsMetric = "follower_reads_success_count"
 // according to the metric.
 func getFollowerReadCounts(ctx context.Context, t test.Test, c cluster.Cluster) ([]int, error) {
 	followerReadCounts := make([]int, c.Spec().NodeCount)
-	getFollowerReadCount := func(ctx context.Context, node int) func() error {
-		return func() error {
+	getFollowerReadCount := func(node int) task.Func {
+		return func(ctx context.Context, l *logger.Logger) error {
 			adminUIAddrs, err := c.ExternalAdminUIAddr(
-				ctx, t.L(), c.Node(node), option.VirtualClusterName(install.SystemInterfaceName),
+				ctx, l, c.Node(node), option.VirtualClusterName(install.SystemInterfaceName),
 			)
 			if err != nil {
 				return err
@@ -909,7 +943,8 @@ func getFollowerReadCounts(ctx context.Context, t test.Test, c cluster.Cluster) 
 			// Make sure to connect to the system tenant in case this test
 			// is running on a multitenant deployment.
 			client := roachtestutil.DefaultHTTPClient(
-				c, t.L(), roachtestutil.VirtualCluster(install.SystemInterfaceName),
+				c, l, roachtestutil.VirtualCluster(install.SystemInterfaceName),
+				roachtestutil.HTTPTimeout(15*time.Second),
 			)
 			resp, err := client.Get(ctx, url)
 			if err != nil {
@@ -935,11 +970,11 @@ func getFollowerReadCounts(ctx context.Context, t test.Test, c cluster.Cluster) 
 			return nil
 		}
 	}
-	g, gCtx := errgroup.WithContext(ctx)
+	g := t.NewErrorGroup(task.WithContext(ctx))
 	for i := 1; i <= c.Spec().NodeCount; i++ {
-		g.Go(getFollowerReadCount(gCtx, i))
+		g.Go(getFollowerReadCount(i), task.Name(fmt.Sprintf("follower-read-count-%d", i)))
 	}
-	if err := g.Wait(); err != nil {
+	if err := g.WaitE(); err != nil {
 		return nil, err
 	}
 	return followerReadCounts, nil
@@ -980,10 +1015,12 @@ func runFollowerReadsMixedVersionSingleRegionTest(
 ) {
 	topology := topologySpec{multiRegion: false}
 	runFollowerReadsMixedVersionTest(ctx, t, c, topology, exactStaleness,
-		// This test does not currently work with shared-process
-		// deployments (#129546), so we do not run it in separate-process
-		// mode either to reduce noise. We should reevaluate once the test
-		// works in shared-process.
+		// This test is incompatible with separate process mode as it queries metrics from
+		// TSDB. Separate process clusters currently do not write to TSDB as serverless uses
+		// third party metrics persistence solutions instead.
+		//
+		// TODO(darrylwong): Once #137625 is complete, we can switch to querying prometheus using
+		// `clusterstats` instead and re-enable separate process.
 		mixedversion.EnabledDeploymentModes(
 			mixedversion.SystemOnlyDeployment,
 			mixedversion.SharedProcessDeployment,
@@ -1016,13 +1053,17 @@ func runFollowerReadsMixedVersionGlobalTableTest(
 		// this issue.
 		mixedversion.MinimumSupportedVersion("v23.2.0"),
 
-		// This test does not currently work with shared-process
-		// deployments (#129167), so we do not run it in separate-process
-		// mode either to reduce noise. We should reevaluate once the test
-		// works in shared-process.
+		// This test is incompatible with separate process mode as it queries metrics from
+		// TSDB. Separate process clusters currently do not write to TSDB as serverless uses
+		// third party metrics persistence solutions instead.
+		//
+		// TODO(darrylwong): Once #137625 is complete, we can switch to querying prometheus using
+		// `clusterstats` instead and re-enable separate process.
+		//
+		// This test is flaky in shared process mode, so it is temporarily disabled to reduce noise.
+		// TODO(server):  #157164 is the tracking issue to re-enable this.
 		mixedversion.EnabledDeploymentModes(
 			mixedversion.SystemOnlyDeployment,
-			mixedversion.SharedProcessDeployment,
 		),
 	)
 }
@@ -1052,7 +1093,8 @@ func runFollowerReadsMixedVersionTest(
 	}
 
 	runFollowerReads := func(ctx context.Context, l *logger.Logger, r *rand.Rand, h *mixedversion.Helper) error {
-		runFollowerReadsTest(ctx, t, l, c, r, topology, rc, data)
+		ensureUpreplicationAndPlacement(ctx, t, l, topology, h.Connect(1))
+		runFollowerReadsTest(ctx, t, l, c, h.Connect, h.System.Connect, r, topology, rc, data)
 		return nil
 	}
 
@@ -1072,4 +1114,21 @@ func enableTenantMultiRegion(l *logger.Logger, r *rand.Rand, h *mixedversion.Hel
 	const setting = "sql.multi_region.allow_abstractions_for_secondary_tenants.enabled"
 	err := setTenantSetting(l, r, h, setting, true)
 	return errors.Wrapf(err, "setting %s", setting)
+}
+
+// enableClosedTsAutoTune metamorphically enables closed timestamp auto-tuning.
+func enableClosedTsAutoTune(ctx context.Context, rng *rand.Rand, db *gosql.DB, t test.Test) error {
+	if rng.Intn(2) == 0 {
+		for _, cmd := range []string{
+			`SET CLUSTER SETTING kv.closed_timestamp.lead_for_global_reads_auto_tune.enabled = 'true';`,
+			`SET CLUSTER SETTING kv.closed_timestamp.policy_refresh_interval = '5s';`,
+			`SET CLUSTER SETTING kv.closed_timestamp.policy_latency_refresh_interval = '4s';`,
+		} {
+			if _, err := db.ExecContext(ctx, cmd); err != nil {
+				return err
+			}
+		}
+		t.L().Printf("metamorphically enabled closed timestamp auto-tuning")
+	}
+	return nil
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/catalog/descpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 // Table is an interface to a database table, exposing only the information
@@ -46,6 +47,9 @@ type Table interface {
 	// that they cannot be mutated.
 	IsMaterializedView() bool
 
+	// LookupColumnOrdinal returns the ordinal of the column with the given ID.
+	LookupColumnOrdinal(colID descpb.ColumnID) (int, error)
+
 	// ColumnCount returns the number of columns in the table. This includes
 	// public columns, write-only columns, etc.
 	ColumnCount() int
@@ -66,6 +70,9 @@ type Table interface {
 	// This method should be used when mutation columns can be ignored (the common
 	// case). The returned indexes include the primary index, so the count is
 	// always >= 1.
+	// This count excludes secondary indexes that are not ready for reads yet.
+	// Those are indexes that are created during a primary index swap and are not
+	// usable until the new primary index goes public.
 	IndexCount() int
 
 	// WritableIndexCount returns the number of public and write-only indexes
@@ -116,7 +123,7 @@ type Table interface {
 	// references (where this is the origin table).
 	OutboundForeignKeyCount() int
 
-	// OutboundForeignKeyCount returns the ith outbound foreign key reference.
+	// OutboundForeignKey returns the ith outbound foreign key reference.
 	OutboundForeignKey(i int) ForeignKeyConstraint
 
 	// InboundForeignKeyCount returns the number of inbound foreign key references
@@ -168,9 +175,20 @@ type Table interface {
 	// different name in a `REGIONAL BY ROW AS` DDL clause.
 	HomeRegionColName() (colName string, ok bool)
 
+	// RegionalByRowUsingConstraint returns the foreign-key constraint that is
+	// used to look up the region for each row in a REGIONAL BY ROW table.
+	// This is only set if the infer_rbr_region_col_using_constraint storage param
+	// is set. If the storage param is not set, or if the table is not
+	// REGIONAL BY ROW, RegionalByRowUsingConstraint returns nil.
+	RegionalByRowUsingConstraint() ForeignKeyConstraint
+
 	// GetDatabaseID returns the owning database id of the table, or zero, if the
 	// owning database could not be determined.
 	GetDatabaseID() descpb.ID
+
+	// GetSchemaID returns the owning schema id of the table, or zero, if the
+	// owning schema could not be determined.
+	GetSchemaID() descpb.ID
 
 	// IsHypothetical returns true if this is a hypothetical table (used when
 	// searching for index recommendations).
@@ -181,6 +199,32 @@ type Table interface {
 
 	// Trigger returns the ith trigger, where i < TriggerCount.
 	Trigger(i int) Trigger
+
+	// IsRowLevelSecurityEnabled is true if policies should be applied during the query.
+	IsRowLevelSecurityEnabled() bool
+
+	// IsRowLevelSecurityForced is true if row-level security policies should be
+	// applied to the table owner.
+	IsRowLevelSecurityForced() bool
+
+	// Policies returns all the policies defined for this table.
+	Policies() *Policies
+
+	// CanaryAndStableStatsDiffer returns true when the canary (newest) and
+	// stable (second-newest) statistics for this table genuinely differ
+	// within the canary window. This is used solely to gate canary/stable
+	// experiment metric recording.
+	CanaryAndStableStatsDiffer() bool
+
+	// StatsCanaryWindow returns the configured canary window duration for
+	// this table. A non-zero value means the table participates in canary
+	// statistics rollout.
+	StatsCanaryWindow() time.Duration
+
+	// CanaryExpiration returns the timestamp at which this table's canary
+	// window expires. Returns the empty timestamp if there is no active
+	// canary window or canary and stable stats are already identical.
+	CanaryExpiration() hlc.Timestamp
 }
 
 // CheckConstraint represents a check constraint on a table. Check constraints
@@ -202,6 +246,10 @@ type CheckConstraint interface {
 	// ColumnOrdinal returns the table column ordinal of the ith column in this
 	// constraint.
 	ColumnOrdinal(i int) int
+
+	// IsRLSConstraint is true if this is a constraint used to enforce
+	// row-level security policies.
+	IsRLSConstraint() bool
 }
 
 // TableStatistic is an interface to a table statistic. Each statistic is
@@ -243,10 +291,8 @@ type TableStatistic interface {
 	// inverted index histograms, this will always return types.Bytes.
 	HistogramType() *types.T
 
-	// IsPartial returns true if this statistic was collected with a where
-	// clause. (If the where clause was something like "WHERE 1 = 1" or "WHERE
-	// true" this could technically be a full statistic rather than a partial
-	// statistic, but this function does not check for this.)
+	// IsPartial returns true if this statistic was collected with USING EXTREMES
+	// or with a WHERE clause.
 	IsPartial() bool
 
 	// IsMerged returns true if this statistic was created by merging a partial
@@ -274,7 +320,7 @@ type HistogramBucket struct {
 
 	// DistinctRange is the estimated number of distinct values between the upper
 	// bound of the previous bucket and UpperBound (both boundaries are
-	// exclusive).
+	// exclusive). The first bucket should always have DistinctRange=0.
 	DistinctRange float64
 
 	// UpperBound is the upper bound of the bucket.
@@ -363,9 +409,11 @@ type UniqueConstraint interface {
 	// WithoutIndex is true if this unique constraint is not enforced by an index.
 	WithoutIndex() bool
 
-	// CanUseTombstones is true if this unique constraint can be enforced by
-	// writing tombstones to all partitions.
-	CanUseTombstones() bool
+	// TombstoneIndexOrdinal returns the index ordinal of the index into which to write
+	// tombstones for the enforcement of this uniqueness constraint, or -1 if this
+	// constraint is not enforceable with tombstones. 'ok' is true if this constraint is
+	// enforceable with tombstones, false otherwise.
+	TombstoneIndexOrdinal() (_ IndexOrdinal, ok bool)
 
 	// Validated is true if the constraint is validated (i.e. we know that the
 	// existing data satisfies the constraint). It is possible to set up a unique
@@ -374,12 +422,14 @@ type UniqueConstraint interface {
 	// needs to be enforced on new mutations.
 	Validated() bool
 
-	// UniquenessGuaranteedByAnotherIndex returns true when WithoutIndex() returns
-	// true and the uniqueness of the constraint is guaranteed by another index.
-	// When true, the optimizer will always consider the constraint to be
-	// satisfied when building functional dependencies for the table. This enables
-	// additional optimizations, such as omission of uniqueness checks.
-	UniquenessGuaranteedByAnotherIndex() bool
+	// CanElideUniqueCheck returns true when WithoutIndex() returns
+	// true and the uniqueness check for the constraint can be elided. This can
+	// happen when the uniqueness is guaranteed by another index, or when the
+	// skip_unique_checks storage parameter is set on the index. When true, the
+	// optimizer will not plan uniqueness checks for mutations, and will assume
+	// the unique constraint is satisfied when calculating functional
+	// dependencies.
+	CanElideUniqueCheck() bool
 }
 
 // UniqueOrdinal identifies a unique constraint (in the context of a Table).

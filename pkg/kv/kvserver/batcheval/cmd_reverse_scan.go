@@ -62,6 +62,7 @@ func ReverseScan(
 		DontInterleaveIntents:   cArgs.DontInterleaveIntents,
 		ReadCategory:            readCategory,
 		ReturnRawMVCCValues:     args.ReturnRawMVCCValues,
+		WorkloadID:              h.WorkloadID,
 	}
 
 	switch args.ScanFormat {

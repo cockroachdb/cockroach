@@ -1,0 +1,144 @@
+# Companion to rebalance_lease_stale_topk.txt for #170112. That test exercises
+# the lease-shed loop's "found local replica but !IsLeaseholder" skip. This
+# test exercises:
+#  - the lease-shed loop's "local store no longer in rs.replicas" skip
+#    (topK[localStoreID] retains a phantom entry after the local store's
+#    replica was removed); and
+#  - the replica-shed loop's replicaRole-returns-(false,false) skip
+#    (constraints rebuilt from current rs.replicas no longer place the
+#    shedding store in the replica set).
+#
+# Both fire from the same scenario in a single rebalance pass: lease-shed
+# skips r44 (no local replica), returns 0 transfers, then replica-shed runs
+# on the same topK entry and skips r44 (replicaRole false on shedding store).
+
+set-store
+  store-id=1 node-id=1
+  store-id=8 node-id=8
+----
+node-id=1 locality-tiers=node=1
+  store-id=1 attrs=
+node-id=8 locality-tiers=node=8
+  store-id=8 attrs=
+
+store-load-msg
+  store-id=1 node-id=1 load=[0,0,0] capacity=[1000,1000,1000] secondary-load=0 load-time=0s
+  store-id=8 node-id=8 load=[0,0,0] capacity=[1000,1000,1000] secondary-load=0 load-time=0s
+----
+
+# r44 with replicas {s8 leader, s1}. Spanconf provided so
+# ensureAnalyzedConstraints can run.
+store-leaseholder-msg
+store-id=8
+  range-id=44 load=[100,0,0] raft-cpu=10
+  config=num_replicas=2 constraints={} voter_constraints={}
+    store-id=1 replica-id=1 type=VOTER_FULL
+    store-id=8 replica-id=2 type=VOTER_FULL leaseholder=true
+----
+
+# topK[s8] now lists r44 across stores. Confirm.
+get-load-info
+----
+store-id=1 node-id=1 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=0 node-adjusted-cpu=0 seq=1
+  top-k-ranges (local-store-id=8) dim=WriteBandwidth: r44
+store-id=8 node-id=8 status=ok accepting all reported=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] adjusted=[cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B] node-reported-cpu=0 node-adjusted-cpu=0 seq=1
+  top-k-ranges (local-store-id=8) dim=CPURate: r44
+
+# Move the lease s8->s1 first (preCheckOnApplyReplicaChanges requires
+# exactly one leaseholder after the change set, so we cannot remove the
+# leader replica directly).
+make-pending-changes range-id=44
+  transfer-lease: remove-store-id=8 add-store-id=1
+----
+pending(2)
+change-id=1 store-id=8 node-id=8 range-id=44 load-delta=[cpu:-90ns/s, write-bandwidth:0 B/s, byte-size:0 B] start=0s gc=1m0s
+  prev=(replica-id=2 type=VOTER_FULL leaseholder=true)
+  next=(replica-id=2 type=VOTER_FULL)
+change-id=2 store-id=1 node-id=1 range-id=44 load-delta=[cpu:99ns/s, write-bandwidth:0 B/s, byte-size:0 B] start=0s gc=1m0s
+  prev=(replica-id=1 type=VOTER_FULL)
+  next=(replica-id=1 type=VOTER_FULL leaseholder=true)
+
+enact-pending-changes change-ids=(1,2)
+----
+pending(2)
+change-id=1 store-id=8 node-id=8 range-id=44 load-delta=[cpu:-90ns/s, write-bandwidth:0 B/s, byte-size:0 B] start=0s gc=1m0s enacted=0s
+  prev=(replica-id=2 type=VOTER_FULL leaseholder=true)
+  next=(replica-id=2 type=VOTER_FULL)
+change-id=2 store-id=1 node-id=1 range-id=44 load-delta=[cpu:99ns/s, write-bandwidth:0 B/s, byte-size:0 B] start=0s gc=1m0s enacted=0s
+  prev=(replica-id=1 type=VOTER_FULL)
+  next=(replica-id=1 type=VOTER_FULL leaseholder=true)
+
+# Now remove s8 entirely. preCheck passes since s1 is the leader after.
+make-pending-changes range-id=44
+  remove-replica: remove-store-id=8
+----
+pending(3)
+change-id=1 store-id=8 node-id=8 range-id=44 load-delta=[cpu:-90ns/s, write-bandwidth:0 B/s, byte-size:0 B] start=0s gc=1m0s enacted=0s
+  prev=(replica-id=2 type=VOTER_FULL leaseholder=true)
+  next=(replica-id=2 type=VOTER_FULL)
+change-id=2 store-id=1 node-id=1 range-id=44 load-delta=[cpu:99ns/s, write-bandwidth:0 B/s, byte-size:0 B] start=0s gc=1m0s enacted=0s
+  prev=(replica-id=1 type=VOTER_FULL)
+  next=(replica-id=1 type=VOTER_FULL leaseholder=true)
+change-id=3 store-id=8 node-id=8 range-id=44 load-delta=[cpu:-10ns/s, write-bandwidth:0 B/s, byte-size:0 B] start=0s gc=5m0s
+  prev=(replica-id=2 type=VOTER_FULL)
+  next=(replica-id=none type=VOTER_FULL)
+
+enact-pending-changes change-ids=(3)
+----
+pending(3)
+change-id=1 store-id=8 node-id=8 range-id=44 load-delta=[cpu:-90ns/s, write-bandwidth:0 B/s, byte-size:0 B] start=0s gc=1m0s enacted=0s
+  prev=(replica-id=2 type=VOTER_FULL leaseholder=true)
+  next=(replica-id=2 type=VOTER_FULL)
+change-id=2 store-id=1 node-id=1 range-id=44 load-delta=[cpu:99ns/s, write-bandwidth:0 B/s, byte-size:0 B] start=0s gc=1m0s enacted=0s
+  prev=(replica-id=1 type=VOTER_FULL)
+  next=(replica-id=1 type=VOTER_FULL leaseholder=true)
+change-id=3 store-id=8 node-id=8 range-id=44 load-delta=[cpu:-10ns/s, write-bandwidth:0 B/s, byte-size:0 B] start=0s gc=5m0s enacted=0s
+  prev=(replica-id=2 type=VOTER_FULL)
+  next=(replica-id=none type=VOTER_FULL)
+
+# rs.replicas now reflects [s1 leader] only; s8 entirely gone.
+ranges
+----
+range-id=44 local-store=8 load=[cpu:100ns/s, write-bandwidth:0 B/s, byte-size:0 B] raft-cpu=10
+  store-id=1 replica-id=1 type=VOTER_FULL leaseholder=true
+
+# Advance the clock so loadPendingChanges entries get GC'd by the next
+# store-load-msg (mirror of the rebalance_lease_stale_topk.txt setup).
+tick seconds=15
+----
+t=15s
+
+store-load-msg
+  store-id=8 node-id=8 load=[1000,0,0] capacity=[1000,1000,1000] secondary-load=0 load-time=15s
+----
+
+# s8's pass:
+#  1. lease-shed reads topK[s8], finds r44, iterates rs.replicas, doesn't
+#     find s8 → "stale topK[s%d] entry, s%d no longer a replica" skip;
+#  2. lease-shed returns 0 transfers, replica-shed runs on the same topK
+#     entry. ensureAnalyzedConstraints rebuilds from current rs.replicas
+#     (which lacks s8). replicaRole(s8) returns (false,false) → "stale
+#     topK[s%d] or stale constraints, s%d not in cached replica set" skip.
+# Pass completes without panic; the per-pass summary attributes both skips.
+rebalance-stores store-id=8 vmodule=1
+----
+[mmaid=1] rebalanceStores begins
+[mmaid=1] cluster means: (stores-load [cpu:0s/s, write-bandwidth:0 B/s, byte-size:0 B]) (stores-capacity [cpu:1µs/s, write-bandwidth:1.0 kB/s, byte-size:1.0 kB]) (nodes-cpu-load 0) (nodes-cpu-capacity 1000)
+[mmaid=1] evaluating s1: node load overloadSlow, store load overloadSlow, worst dim CPURate
+[mmaid=1] overload-continued s1 ((store=overloadSlow worst=CPURate cpu=overloadSlow writes=loadNormal bytes=loadNormal node=overloadSlow frac_pending=1000.00,1000.00(false))) - within grace period
+[mmaid=1] adding overloaded store s1 to shedding list (worst dim: CPURate, cannotShed: true, pending decrease 1000.00 vs threshold 0.10, pending increase 1000.00 vs epsilon 0.00); pending: (none)
+[mmaid=1] evaluating s8: node load overloadUrgent, store load overloadUrgent, worst dim CPURate
+[mmaid=1] overload-continued s8 ((store=overloadUrgent worst=CPURate cpu=overloadUrgent writes=loadNormal bytes=loadNormal node=overloadUrgent frac_pending=0.00,0.00(true))) - within grace period
+[mmaid=1] adding overloaded store s8 to shedding list (worst dim: CPURate, cannotShed: false, pending decrease 0.00 vs threshold 0.10, pending increase 0.00 vs epsilon 0.00); pending: (none)
+[mmaid=1] sorted shedding stores: (s8: overloadUrgent, cannotShed: false) (s1: overloadSlow, cannotShed: true)
+[mmaid=1] skipping r44: stale topK[s8] entry, s8 no longer a replica
+[mmaid=1] skipping r44: stale topK[s8] or stale constraints, s8 not in cached replica set
+[mmaid=1] rebalancing pass summary [local=s8]:
+	overloaded:
+		lease-grace: [s1, s8]
+	failure: [{s8, total: 2, range-transient:2}]
+	skipped: [s1]
+pending(1)
+change-id=2 store-id=1 node-id=1 range-id=44 load-delta=[cpu:99ns/s, write-bandwidth:0 B/s, byte-size:0 B] start=0s gc=1m0s enacted=0s
+  prev=(replica-id=1 type=VOTER_FULL)
+  next=(replica-id=1 type=VOTER_FULL leaseholder=true)

@@ -10,9 +10,9 @@ EXPLAIN (DDL) DROP INDEX idx CASCADE;
 Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx› CASCADE;
  ├── StatementPhase
  │    └── Stage 1 of 1 in StatementPhase
- │         ├── 32 elements transitioning toward ABSENT
- │         │    ├── PUBLIC → VALIDATED SecondaryIndex:{DescID: 105 (v2), IndexID: 2 (idx-), RecreateSourceIndexID: 0}
- │         │    ├── PUBLIC → ABSENT    Namespace:{DescID: 106 (v3-), Name: "v3", ReferencedDescID: 100 (defaultdb)}
+ │         ├── 37 elements transitioning toward ABSENT
+ │         │    ├── PUBLIC → VALIDATED SecondaryIndex:{DescID: 105 (v2), IndexID: 2 (idx-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
+ │         │    ├── PUBLIC → ABSENT    Namespace:{DescID: 106 (v3-), Name: "v3", ReferencedDescID: 100 (defaultdb), IntValue: 101}
  │         │    ├── PUBLIC → ABSENT    Owner:{DescID: 106 (v3-)}
  │         │    ├── PUBLIC → ABSENT    UserPrivileges:{DescID: 106 (v3-), Name: "admin"}
  │         │    ├── PUBLIC → ABSENT    UserPrivileges:{DescID: 106 (v3-), Name: "root"}
@@ -25,25 +25,30 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
  │         │    ├── PUBLIC → ABSENT    Column:{DescID: 106 (v3-), ColumnID: 2 (rowid-)}
  │         │    ├── PUBLIC → ABSENT    ColumnName:{DescID: 106 (v3-), Name: "rowid", ColumnID: 2 (rowid-)}
  │         │    ├── PUBLIC → ABSENT    ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 2 (rowid-), TypeName: "INT8"}
+ │         │    ├── PUBLIC → ABSENT    ColumnHidden:{DescID: 106 (v3-), ColumnID: 2 (rowid-)}
  │         │    ├── PUBLIC → ABSENT    ColumnNotNull:{DescID: 106 (v3-), ColumnID: 2 (rowid-), IndexID: 0}
  │         │    ├── PUBLIC → ABSENT    ColumnDefaultExpression:{DescID: 106 (v3-), ColumnID: 2 (rowid-), Expr: unique_rowid()}
  │         │    ├── PUBLIC → ABSENT    Column:{DescID: 106 (v3-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
  │         │    ├── PUBLIC → ABSENT    ColumnName:{DescID: 106 (v3-), Name: "crdb_internal_mvcc_timestamp", ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
  │         │    ├── PUBLIC → ABSENT    ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-), TypeName: "DECIMAL"}
+ │         │    ├── PUBLIC → ABSENT    ColumnHidden:{DescID: 106 (v3-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
  │         │    ├── PUBLIC → ABSENT    Column:{DescID: 106 (v3-), ColumnID: 4294967294 (tableoid-)}
  │         │    ├── PUBLIC → ABSENT    ColumnName:{DescID: 106 (v3-), Name: "tableoid", ColumnID: 4294967294 (tableoid-)}
  │         │    ├── PUBLIC → ABSENT    ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-), TypeName: "OID"}
+ │         │    ├── PUBLIC → ABSENT    ColumnHidden:{DescID: 106 (v3-), ColumnID: 4294967294 (tableoid-)}
  │         │    ├── PUBLIC → ABSENT    Column:{DescID: 106 (v3-), ColumnID: 4294967293 (crdb_internal_origin_id-)}
  │         │    ├── PUBLIC → ABSENT    ColumnName:{DescID: 106 (v3-), Name: "crdb_internal_origin_id", ColumnID: 4294967293 (crdb_internal_origin_id-)}
  │         │    ├── PUBLIC → ABSENT    ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967293 (crdb_internal_origin_id-), TypeName: "INT4"}
+ │         │    ├── PUBLIC → ABSENT    ColumnHidden:{DescID: 106 (v3-), ColumnID: 4294967293 (crdb_internal_origin_id-)}
  │         │    ├── PUBLIC → ABSENT    Column:{DescID: 106 (v3-), ColumnID: 4294967292 (crdb_internal_origin_timestamp-)}
  │         │    ├── PUBLIC → ABSENT    ColumnName:{DescID: 106 (v3-), Name: "crdb_internal_origin_timestamp", ColumnID: 4294967292 (crdb_internal_origin_timestamp-)}
  │         │    ├── PUBLIC → ABSENT    ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967292 (crdb_internal_origin_timestamp-), TypeName: "DECIMAL"}
+ │         │    ├── PUBLIC → ABSENT    ColumnHidden:{DescID: 106 (v3-), ColumnID: 4294967292 (crdb_internal_origin_timestamp-)}
  │         │    ├── PUBLIC → ABSENT    IndexColumn:{DescID: 106 (v3-), ColumnID: 2 (rowid-), IndexID: 1 (v3_pkey-)}
  │         │    ├── PUBLIC → ABSENT    IndexColumn:{DescID: 106 (v3-), ColumnID: 1 (j-), IndexID: 1 (v3_pkey-)}
  │         │    ├── PUBLIC → ABSENT    PrimaryIndex:{DescID: 106 (v3-), IndexID: 1 (v3_pkey-), ConstraintID: 1}
  │         │    └── PUBLIC → ABSENT    IndexName:{DescID: 106 (v3-), Name: "v3_pkey", IndexID: 1 (v3_pkey-)}
- │         └── 42 Mutation operations
+ │         └── 47 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":106}
  │              ├── RemoveBackReferencesInRelations {"BackReferencedID":106}
  │              ├── RemoveObjectParent {"ObjectID":106,"ParentSchemaID":101}
@@ -52,17 +57,21 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
  │              ├── MakePublicColumnNotNullValidated {"ColumnID":2,"TableID":106}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967295,"TableID":106}
  │              ├── SetColumnName {"ColumnID":4294967295,"Name":"crdb_internal_co...","TableID":106}
+ │              ├── MakeColumnVisible {"ColumnID":4294967295,"TableID":106}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967294,"TableID":106}
  │              ├── SetColumnName {"ColumnID":4294967294,"Name":"crdb_internal_co...","TableID":106}
+ │              ├── MakeColumnVisible {"ColumnID":4294967294,"TableID":106}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967293,"TableID":106}
  │              ├── SetColumnName {"ColumnID":4294967293,"Name":"crdb_internal_co...","TableID":106}
+ │              ├── MakeColumnVisible {"ColumnID":4294967293,"TableID":106}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967292,"TableID":106}
  │              ├── SetColumnName {"ColumnID":4294967292,"Name":"crdb_internal_co...","TableID":106}
+ │              ├── MakeColumnVisible {"ColumnID":4294967292,"TableID":106}
  │              ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":106}
  │              ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":106}
  │              ├── MakePublicSecondaryIndexWriteOnly {"IndexID":2,"TableID":105}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":106,"Name":"v3","SchemaID":101}}
- │              ├── NotImplementedForPublicObjects {"DescID":106,"ElementType":"scpb.Owner"}
+ │              ├── RemoveOwner {"DescriptorID":106}
  │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"admin"}
  │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"root"}
  │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":1,"TableID":106}
@@ -73,6 +82,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
  │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967292,"TableID":106}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":2,"TableID":106}
  │              ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":106}
+ │              ├── MakeColumnVisible {"ColumnID":2,"TableID":106}
  │              ├── RemoveColumnDefaultExpression {"ColumnID":2,"TableID":106}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967295,"TableID":106}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967294,"TableID":106}
@@ -88,9 +98,9 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
  │              └── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":106}
  ├── PreCommitPhase
  │    ├── Stage 1 of 2 in PreCommitPhase
- │    │    ├── 32 elements transitioning toward ABSENT
- │    │    │    ├── VALIDATED → PUBLIC SecondaryIndex:{DescID: 105 (v2), IndexID: 2 (idx-), RecreateSourceIndexID: 0}
- │    │    │    ├── ABSENT    → PUBLIC Namespace:{DescID: 106 (v3-), Name: "v3", ReferencedDescID: 100 (defaultdb)}
+ │    │    ├── 37 elements transitioning toward ABSENT
+ │    │    │    ├── VALIDATED → PUBLIC SecondaryIndex:{DescID: 105 (v2), IndexID: 2 (idx-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
+ │    │    │    ├── ABSENT    → PUBLIC Namespace:{DescID: 106 (v3-), Name: "v3", ReferencedDescID: 100 (defaultdb), IntValue: 101}
  │    │    │    ├── ABSENT    → PUBLIC Owner:{DescID: 106 (v3-)}
  │    │    │    ├── ABSENT    → PUBLIC UserPrivileges:{DescID: 106 (v3-), Name: "admin"}
  │    │    │    ├── ABSENT    → PUBLIC UserPrivileges:{DescID: 106 (v3-), Name: "root"}
@@ -103,20 +113,25 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
  │    │    │    ├── ABSENT    → PUBLIC Column:{DescID: 106 (v3-), ColumnID: 2 (rowid-)}
  │    │    │    ├── ABSENT    → PUBLIC ColumnName:{DescID: 106 (v3-), Name: "rowid", ColumnID: 2 (rowid-)}
  │    │    │    ├── ABSENT    → PUBLIC ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 2 (rowid-), TypeName: "INT8"}
+ │    │    │    ├── ABSENT    → PUBLIC ColumnHidden:{DescID: 106 (v3-), ColumnID: 2 (rowid-)}
  │    │    │    ├── ABSENT    → PUBLIC ColumnNotNull:{DescID: 106 (v3-), ColumnID: 2 (rowid-), IndexID: 0}
  │    │    │    ├── ABSENT    → PUBLIC ColumnDefaultExpression:{DescID: 106 (v3-), ColumnID: 2 (rowid-), Expr: unique_rowid()}
  │    │    │    ├── ABSENT    → PUBLIC Column:{DescID: 106 (v3-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
  │    │    │    ├── ABSENT    → PUBLIC ColumnName:{DescID: 106 (v3-), Name: "crdb_internal_mvcc_timestamp", ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
  │    │    │    ├── ABSENT    → PUBLIC ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-), TypeName: "DECIMAL"}
+ │    │    │    ├── ABSENT    → PUBLIC ColumnHidden:{DescID: 106 (v3-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
  │    │    │    ├── ABSENT    → PUBLIC Column:{DescID: 106 (v3-), ColumnID: 4294967294 (tableoid-)}
  │    │    │    ├── ABSENT    → PUBLIC ColumnName:{DescID: 106 (v3-), Name: "tableoid", ColumnID: 4294967294 (tableoid-)}
  │    │    │    ├── ABSENT    → PUBLIC ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-), TypeName: "OID"}
+ │    │    │    ├── ABSENT    → PUBLIC ColumnHidden:{DescID: 106 (v3-), ColumnID: 4294967294 (tableoid-)}
  │    │    │    ├── ABSENT    → PUBLIC Column:{DescID: 106 (v3-), ColumnID: 4294967293 (crdb_internal_origin_id-)}
  │    │    │    ├── ABSENT    → PUBLIC ColumnName:{DescID: 106 (v3-), Name: "crdb_internal_origin_id", ColumnID: 4294967293 (crdb_internal_origin_id-)}
  │    │    │    ├── ABSENT    → PUBLIC ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967293 (crdb_internal_origin_id-), TypeName: "INT4"}
+ │    │    │    ├── ABSENT    → PUBLIC ColumnHidden:{DescID: 106 (v3-), ColumnID: 4294967293 (crdb_internal_origin_id-)}
  │    │    │    ├── ABSENT    → PUBLIC Column:{DescID: 106 (v3-), ColumnID: 4294967292 (crdb_internal_origin_timestamp-)}
  │    │    │    ├── ABSENT    → PUBLIC ColumnName:{DescID: 106 (v3-), Name: "crdb_internal_origin_timestamp", ColumnID: 4294967292 (crdb_internal_origin_timestamp-)}
  │    │    │    ├── ABSENT    → PUBLIC ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967292 (crdb_internal_origin_timestamp-), TypeName: "DECIMAL"}
+ │    │    │    ├── ABSENT    → PUBLIC ColumnHidden:{DescID: 106 (v3-), ColumnID: 4294967292 (crdb_internal_origin_timestamp-)}
  │    │    │    ├── ABSENT    → PUBLIC IndexColumn:{DescID: 106 (v3-), ColumnID: 2 (rowid-), IndexID: 1 (v3_pkey-)}
  │    │    │    ├── ABSENT    → PUBLIC IndexColumn:{DescID: 106 (v3-), ColumnID: 1 (j-), IndexID: 1 (v3_pkey-)}
  │    │    │    ├── ABSENT    → PUBLIC PrimaryIndex:{DescID: 106 (v3-), IndexID: 1 (v3_pkey-), ConstraintID: 1}
@@ -124,9 +139,9 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
  │    │    └── 1 Mutation operation
  │    │         └── UndoAllInTxnImmediateMutationOpSideEffects
  │    └── Stage 2 of 2 in PreCommitPhase
- │         ├── 32 elements transitioning toward ABSENT
- │         │    ├── PUBLIC → VALIDATED SecondaryIndex:{DescID: 105 (v2), IndexID: 2 (idx-), RecreateSourceIndexID: 0}
- │         │    ├── PUBLIC → ABSENT    Namespace:{DescID: 106 (v3-), Name: "v3", ReferencedDescID: 100 (defaultdb)}
+ │         ├── 37 elements transitioning toward ABSENT
+ │         │    ├── PUBLIC → VALIDATED SecondaryIndex:{DescID: 105 (v2), IndexID: 2 (idx-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
+ │         │    ├── PUBLIC → ABSENT    Namespace:{DescID: 106 (v3-), Name: "v3", ReferencedDescID: 100 (defaultdb), IntValue: 101}
  │         │    ├── PUBLIC → ABSENT    Owner:{DescID: 106 (v3-)}
  │         │    ├── PUBLIC → ABSENT    UserPrivileges:{DescID: 106 (v3-), Name: "admin"}
  │         │    ├── PUBLIC → ABSENT    UserPrivileges:{DescID: 106 (v3-), Name: "root"}
@@ -139,25 +154,30 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
  │         │    ├── PUBLIC → ABSENT    Column:{DescID: 106 (v3-), ColumnID: 2 (rowid-)}
  │         │    ├── PUBLIC → ABSENT    ColumnName:{DescID: 106 (v3-), Name: "rowid", ColumnID: 2 (rowid-)}
  │         │    ├── PUBLIC → ABSENT    ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 2 (rowid-), TypeName: "INT8"}
+ │         │    ├── PUBLIC → ABSENT    ColumnHidden:{DescID: 106 (v3-), ColumnID: 2 (rowid-)}
  │         │    ├── PUBLIC → ABSENT    ColumnNotNull:{DescID: 106 (v3-), ColumnID: 2 (rowid-), IndexID: 0}
  │         │    ├── PUBLIC → ABSENT    ColumnDefaultExpression:{DescID: 106 (v3-), ColumnID: 2 (rowid-), Expr: unique_rowid()}
  │         │    ├── PUBLIC → ABSENT    Column:{DescID: 106 (v3-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
  │         │    ├── PUBLIC → ABSENT    ColumnName:{DescID: 106 (v3-), Name: "crdb_internal_mvcc_timestamp", ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
  │         │    ├── PUBLIC → ABSENT    ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-), TypeName: "DECIMAL"}
+ │         │    ├── PUBLIC → ABSENT    ColumnHidden:{DescID: 106 (v3-), ColumnID: 4294967295 (crdb_internal_mvcc_timestamp-)}
  │         │    ├── PUBLIC → ABSENT    Column:{DescID: 106 (v3-), ColumnID: 4294967294 (tableoid-)}
  │         │    ├── PUBLIC → ABSENT    ColumnName:{DescID: 106 (v3-), Name: "tableoid", ColumnID: 4294967294 (tableoid-)}
  │         │    ├── PUBLIC → ABSENT    ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967294 (tableoid-), TypeName: "OID"}
+ │         │    ├── PUBLIC → ABSENT    ColumnHidden:{DescID: 106 (v3-), ColumnID: 4294967294 (tableoid-)}
  │         │    ├── PUBLIC → ABSENT    Column:{DescID: 106 (v3-), ColumnID: 4294967293 (crdb_internal_origin_id-)}
  │         │    ├── PUBLIC → ABSENT    ColumnName:{DescID: 106 (v3-), Name: "crdb_internal_origin_id", ColumnID: 4294967293 (crdb_internal_origin_id-)}
  │         │    ├── PUBLIC → ABSENT    ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967293 (crdb_internal_origin_id-), TypeName: "INT4"}
+ │         │    ├── PUBLIC → ABSENT    ColumnHidden:{DescID: 106 (v3-), ColumnID: 4294967293 (crdb_internal_origin_id-)}
  │         │    ├── PUBLIC → ABSENT    Column:{DescID: 106 (v3-), ColumnID: 4294967292 (crdb_internal_origin_timestamp-)}
  │         │    ├── PUBLIC → ABSENT    ColumnName:{DescID: 106 (v3-), Name: "crdb_internal_origin_timestamp", ColumnID: 4294967292 (crdb_internal_origin_timestamp-)}
  │         │    ├── PUBLIC → ABSENT    ColumnType:{DescID: 106 (v3-), ColumnFamilyID: 0 (primary-), ColumnID: 4294967292 (crdb_internal_origin_timestamp-), TypeName: "DECIMAL"}
+ │         │    ├── PUBLIC → ABSENT    ColumnHidden:{DescID: 106 (v3-), ColumnID: 4294967292 (crdb_internal_origin_timestamp-)}
  │         │    ├── PUBLIC → ABSENT    IndexColumn:{DescID: 106 (v3-), ColumnID: 2 (rowid-), IndexID: 1 (v3_pkey-)}
  │         │    ├── PUBLIC → ABSENT    IndexColumn:{DescID: 106 (v3-), ColumnID: 1 (j-), IndexID: 1 (v3_pkey-)}
  │         │    ├── PUBLIC → ABSENT    PrimaryIndex:{DescID: 106 (v3-), IndexID: 1 (v3_pkey-), ConstraintID: 1}
  │         │    └── PUBLIC → ABSENT    IndexName:{DescID: 106 (v3-), Name: "v3_pkey", IndexID: 1 (v3_pkey-)}
- │         └── 45 Mutation operations
+ │         └── 50 Mutation operations
  │              ├── MarkDescriptorAsDropped {"DescriptorID":106}
  │              ├── RemoveBackReferencesInRelations {"BackReferencedID":106}
  │              ├── RemoveObjectParent {"ObjectID":106,"ParentSchemaID":101}
@@ -166,17 +186,21 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
  │              ├── MakePublicColumnNotNullValidated {"ColumnID":2,"TableID":106}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967295,"TableID":106}
  │              ├── SetColumnName {"ColumnID":4294967295,"Name":"crdb_internal_co...","TableID":106}
+ │              ├── MakeColumnVisible {"ColumnID":4294967295,"TableID":106}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967294,"TableID":106}
  │              ├── SetColumnName {"ColumnID":4294967294,"Name":"crdb_internal_co...","TableID":106}
+ │              ├── MakeColumnVisible {"ColumnID":4294967294,"TableID":106}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967293,"TableID":106}
  │              ├── SetColumnName {"ColumnID":4294967293,"Name":"crdb_internal_co...","TableID":106}
+ │              ├── MakeColumnVisible {"ColumnID":4294967293,"TableID":106}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":4294967292,"TableID":106}
  │              ├── SetColumnName {"ColumnID":4294967292,"Name":"crdb_internal_co...","TableID":106}
+ │              ├── MakeColumnVisible {"ColumnID":4294967292,"TableID":106}
  │              ├── MakePublicPrimaryIndexWriteOnly {"IndexID":1,"TableID":106}
  │              ├── SetIndexName {"IndexID":1,"Name":"crdb_internal_in...","TableID":106}
  │              ├── MakePublicSecondaryIndexWriteOnly {"IndexID":2,"TableID":105}
  │              ├── DrainDescriptorName {"Namespace":{"DatabaseID":100,"DescriptorID":106,"Name":"v3","SchemaID":101}}
- │              ├── NotImplementedForPublicObjects {"DescID":106,"ElementType":"scpb.Owner"}
+ │              ├── RemoveOwner {"DescriptorID":106}
  │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"admin"}
  │              ├── RemoveUserPrivileges {"DescriptorID":106,"User":"root"}
  │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":1,"TableID":106}
@@ -187,6 +211,7 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
  │              ├── MakeWriteOnlyColumnDeleteOnly {"ColumnID":4294967292,"TableID":106}
  │              ├── MakePublicColumnWriteOnly {"ColumnID":2,"TableID":106}
  │              ├── SetColumnName {"ColumnID":2,"Name":"crdb_internal_co...","TableID":106}
+ │              ├── MakeColumnVisible {"ColumnID":2,"TableID":106}
  │              ├── RemoveColumnDefaultExpression {"ColumnID":2,"TableID":106}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967295,"TableID":106}
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":4294967294,"TableID":106}
@@ -202,13 +227,13 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
  │              ├── MakeDeleteOnlyColumnAbsent {"ColumnID":2,"TableID":106}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":105,"Initialize":true}
  │              ├── SetJobStateOnDescriptor {"DescriptorID":106,"Initialize":true}
- │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+ │              └── CreateSchemaChangerJob {"NonCancelable":true,"RunningStatus":"Pending: Updatin..."}
  └── PostCommitNonRevertiblePhase
       ├── Stage 1 of 2 in PostCommitNonRevertiblePhase
       │    ├── 7 elements transitioning toward ABSENT
       │    │    ├── PUBLIC    → ABSENT      IndexColumn:{DescID: 105 (v2), ColumnID: 2 (j), IndexID: 2 (idx-)}
       │    │    ├── PUBLIC    → ABSENT      IndexColumn:{DescID: 105 (v2), ColumnID: 3 (rowid), IndexID: 2 (idx-)}
-      │    │    ├── VALIDATED → DELETE_ONLY SecondaryIndex:{DescID: 105 (v2), IndexID: 2 (idx-), RecreateSourceIndexID: 0}
+      │    │    ├── VALIDATED → DELETE_ONLY SecondaryIndex:{DescID: 105 (v2), IndexID: 2 (idx-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
       │    │    ├── PUBLIC    → ABSENT      IndexName:{DescID: 105 (v2), Name: "idx", IndexID: 2 (idx-)}
       │    │    ├── DROPPED   → ABSENT      View:{DescID: 106 (v3-)}
       │    │    ├── PUBLIC    → ABSENT      IndexData:{DescID: 106 (v3-), IndexID: 1 (v3_pkey-)}
@@ -221,10 +246,10 @@ Schema change plan for DROP INDEX ‹defaultdb›.‹public›.‹v2›@‹idx�
       │         ├── RemoveColumnFromIndex {"ColumnID":2,"IndexID":2,"TableID":105}
       │         ├── RemoveColumnFromIndex {"ColumnID":3,"IndexID":2,"Kind":1,"TableID":105}
       │         ├── SetJobStateOnDescriptor {"DescriptorID":105}
-      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"PostCommitNonRev..."}
+      │         └── UpdateSchemaChangerJob {"IsNonCancelable":true,"RunningStatus":"Pending: Updatin..."}
       └── Stage 2 of 2 in PostCommitNonRevertiblePhase
            ├── 2 elements transitioning toward ABSENT
-           │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 105 (v2), IndexID: 2 (idx-), RecreateSourceIndexID: 0}
+           │    ├── DELETE_ONLY → ABSENT SecondaryIndex:{DescID: 105 (v2), IndexID: 2 (idx-), RecreateSourceIndexID: 0, RecreateTargetIndexID: 0}
            │    └── PUBLIC      → ABSENT IndexData:{DescID: 105 (v2), IndexID: 2 (idx-)}
            └── 4 Mutation operations
                 ├── MakeIndexAbsent {"IndexID":2,"TableID":105}

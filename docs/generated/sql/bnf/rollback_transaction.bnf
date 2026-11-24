@@ -1,5 +1,7 @@
 rollback_stmt ::=
-	'ROLLBACK' 
-	| 'ROLLBACK' 
+	'ROLLBACK'  opt_transaction_chain
+	| 'ROLLBACK' 'WORK' opt_transaction_chain
+	| 'ROLLBACK'  opt_transaction_chain
 	| 'ROLLBACK'  'TO' 'SAVEPOINT' savepoint_name
+	| 'ROLLBACK' 'WORK' 'TO' 'SAVEPOINT' savepoint_name
 	| 'ROLLBACK'  'TO' 'SAVEPOINT' savepoint_name

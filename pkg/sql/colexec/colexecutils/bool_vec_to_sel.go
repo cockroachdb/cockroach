@@ -10,6 +10,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/col/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/colexecop"
+	"github.com/cockroachdb/cockroach/pkg/sql/execinfrapb"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/errors"
 )
@@ -50,14 +51,17 @@ type BoolVecToSelOp struct {
 var _ colexecop.ResettableOperator = &BoolVecToSelOp{}
 
 // Next implements the colexecop.Operator interface.
-func (p *BoolVecToSelOp) Next() coldata.Batch {
+func (p *BoolVecToSelOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
 	// Loop until we have non-zero amount of output to return, or our input's been
 	// exhausted.
 	for {
-		batch := p.Input.Next()
+		batch, meta := p.Input.Next()
+		if meta != nil {
+			return nil, meta
+		}
 		n := batch.Length()
 		if n == 0 {
-			return batch
+			return batch, nil
 		}
 		outputCol := p.OutputCol
 
@@ -96,7 +100,7 @@ func (p *BoolVecToSelOp) Next() coldata.Batch {
 
 		if idx > 0 || p.ProcessOnlyOneBatch {
 			batch.SetLength(idx)
-			return batch
+			return batch, nil
 		}
 	}
 }
@@ -133,11 +137,14 @@ type selBoolOp struct {
 	colIdx         int
 }
 
-func (d *selBoolOp) Next() coldata.Batch {
-	batch := d.Input.Next()
+func (d *selBoolOp) Next() (coldata.Batch, *execinfrapb.ProducerMetadata) {
+	batch, meta := d.Input.Next()
+	if meta != nil {
+		return nil, meta
+	}
 	n := batch.Length()
 	if n == 0 {
-		return batch
+		return batch, nil
 	}
 	inputCol := batch.ColVec(d.colIdx)
 	d.boolVecToSelOp.OutputCol = inputCol.Bool()
@@ -168,5 +175,5 @@ func (d *selBoolOp) Next() coldata.Batch {
 			}
 		}
 	}
-	return batch
+	return batch, nil
 }
