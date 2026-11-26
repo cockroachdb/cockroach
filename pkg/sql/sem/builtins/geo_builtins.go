@@ -1995,6 +1995,44 @@ Options is a flag that can be bitmasked. The options are:
 			Volatility: volatility.Immutable,
 		},
 	),
+	"st_aslatlontext": makeBuiltin(
+		defProps(),
+		geometryOverload1(
+			func(_ context.Context, _ *eval.Context, g *tree.DGeometry) (tree.Datum, error) {
+				s, err := geo.GeometryToLatLonText(g.Geometry, "")
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDString(s), nil
+			},
+			types.String,
+			infoBuilder{
+				info: "Returns the degrees, minutes, seconds representation of a given Point geometry using the default format (`D°M'S.SSS\"C`).",
+			},
+			volatility.Immutable,
+		),
+		tree.Overload{
+			Types: tree.ParamTypes{
+				{Name: "geometry", Typ: types.Geometry},
+				{Name: "format", Typ: types.String},
+			},
+			ReturnType: tree.FixedReturnType(types.String),
+			Fn: func(_ context.Context, _ *eval.Context, args tree.Datums) (tree.Datum, error) {
+				g := tree.MustBeDGeometry(args[0])
+				format := string(tree.MustBeDString(args[1]))
+				s, err := geo.GeometryToLatLonText(g.Geometry, format)
+				if err != nil {
+					return nil, err
+				}
+				return tree.NewDString(s), nil
+			},
+			Info: infoBuilder{
+				info: "Returns the degrees, minutes, seconds representation of a given Point geometry formatted according to the format template.\n\n" +
+					"Supported tokens are D (degrees), M (minutes), S (seconds), and C (cardinal direction: N, S, E, W). If format is empty, the default format (`D°M'S.SSS\"C`) is used.",
+			}.String(),
+			Volatility: volatility.Immutable,
+		},
+	),
 	"st_project": makeBuiltin(
 		defProps(),
 		tree.Overload{
@@ -7636,7 +7674,6 @@ Can be used to define the tile bounds required by ST_AsMVTGeom to convert geomet
 	//
 
 	"st_asgml":               makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48877}),
-	"st_aslatlontext":        makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48882}),
 	"st_assvg":               makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48883}),
 	"st_boundingdiagonal":    makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48889}),
 	"st_buildarea":           makeBuiltin(tree.FunctionProperties{UnsupportedWithIssue: 48892}),
