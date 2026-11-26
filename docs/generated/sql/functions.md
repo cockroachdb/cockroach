@@ -2044,6 +2044,11 @@ Precision specifies how many decimal places will be preserved in Encoded Polylin
 <tr><td><a name="st_askml"></a><code>st_askml(geometry_str: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the KML representation of a given Geometry.</p>
 <p>This variant will cast all geometry_str arguments into Geometry types.</p>
 </span></td><td>Immutable</td></tr>
+<tr><td><a name="st_aslatlontext"></a><code>st_aslatlontext(geometry: geometry) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the degrees, minutes, seconds representation of a given Point geometry using the default format (<code>D°M'S.SSS&quot;C</code>).</p>
+</span></td><td>Immutable</td></tr>
+<tr><td><a name="st_aslatlontext"></a><code>st_aslatlontext(geometry: geometry, format: <a href="string.html">string</a>) &rarr; <a href="string.html">string</a></code></td><td><span class="funcdesc"><p>Returns the degrees, minutes, seconds representation of a given Point geometry formatted according to the format template.</p>
+<p>Supported tokens are D (degrees), M (minutes), S (seconds), and C (cardinal direction: N, S, E, W). If format is empty, the default format (<code>D°M'S.SSS&quot;C</code>) is used.</p>
+</span></td><td>Immutable</td></tr>
 <tr><td><a name="st_asmvtgeom"></a><code>st_asmvtgeom(geometry: geometry, bbox: box2d) &rarr; geometry</code></td><td><span class="funcdesc"><p>Transforms a geometry into the coordinate space of a MVT (Mapbox Vector Tile) tile, clipping it to the tile bounds.
 Uses 256 as the buffer size in tile coordinate space for geometry clipping.
 Uses 4096 as the tile extent size in tile coordinate space.</p>

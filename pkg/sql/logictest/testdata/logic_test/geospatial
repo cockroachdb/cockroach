@@ -7794,3 +7794,59 @@ statement ok
 DROP TABLE mvt_win_test
 
 subtest end
+
+subtest st_aslatlontext
+
+query T
+SELECT ST_AsLatLonText(NULL::GEOMETRY);
+----
+NULL
+
+query T
+SELECT ST_AsLatLonText('POINT(-3.2342342 -2.32498)'::GEOMETRY, NULL);
+----
+NULL
+
+query T
+SELECT ST_AsLatLonText('POINT(-3.2342342 -2.32498)');
+----
+2°19'29.928"S 3°14'3.243"W
+
+query T
+SELECT ST_AsLatLonText('POINT(-3.2342342 -2.32498)', '');
+----
+2°19'29.928"S 3°14'3.243"W
+
+query T
+SELECT ST_AsLatLonText('POINT(-3.2342342 -2.32498)', 'D degrees, M minutes, S seconds to the C');
+----
+2 degrees, 19 minutes, 30 seconds to the S 3 degrees, 14 minutes, 3 seconds to the W
+
+query T
+SELECT ST_AsLatLonText('POINT(-3.2342342 -2.32498)', 'D°M''S.SSS"');
+----
+-2°19'29.928" -3°14'3.243"
+
+query T
+SELECT ST_AsLatLonText('POINT(-3.2342342 -2.32498)', 'D.DDDD degrees C');
+----
+2.3250 degrees S 3.2342 degrees W
+
+query T
+SELECT ST_AsLatLonText('POINT(181 91)');
+----
+89°0'0.000"N 1°0'0.000"E
+
+statement error pgcode 22023 pq: only points are supported, got LineString
+SELECT ST_AsLatLonText('LINESTRING(0 0, 1 1)');
+
+statement error pgcode 22023 pq: cannot convert an empty point into formatted text
+SELECT ST_AsLatLonText('POINT EMPTY');
+
+statement error pgcode 22023 pq: invalid coordinate
+SELECT ST_AsLatLonText('0101000020E6100000000000000000F07F000000000000F07F'::GEOMETRY);
+
+statement error pgcode 22023 pq: bad format, cannot include seconds \(SS\.SSS\) without including minutes \(MM\.MMM\)
+SELECT ST_AsLatLonText('POINT(1 2)', 'D S');
+
+subtest end
